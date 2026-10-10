@@ -853,5 +853,19 @@ readiness or PostgreSQL runtime parity.
 - [~] Rust-free self-hosted installation is available for published Linux and
   Windows x86_64 assets; more platforms remain open.
 
+## Proposed release milestone 0.6.0
+
+The separate [0.6.0 plan](release-plans/0.6.0.en.md) proposes a native pooled
+PostgreSQL runtime for one narrow, end-to-end tested CRUD path. It depends on
+published 0.5.0 passing human acceptance. Complete PostgreSQL parity,
+MySQL/SQL Server support, and universal SQL are not 0.6.0 promises.
+
+The later direction assigns tenant context to 0.7.0, a local durable task
+interface and outbox to 0.8.0, optional WebAuthn/OAuth2/OIDC authentication to
+0.9.0, and stabilization plus another human acceptance to 1.0.0. Mandatory
+cloud services, external AI providers, and telemetry remain excluded;
+compiler self-hosting and a native backend are not planned for 1.0.0. Each later
+item still needs its own threat, scope, and evidence work.
+
 This file must be updated whenever a milestone changes status or a design
 decision creates a new required or optional work item.
