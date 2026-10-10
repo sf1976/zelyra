@@ -231,6 +231,14 @@ cd maschinenverwaltung
 
 Dadurch entstehen `main.zyl`, `.env.example`, `Dockerfile` und `docker-compose.mariadb.yml` sowie direkt eine geschützte `.env` mit sicheren Zufallspasswörtern.
 
+Ein mit `zelyra init` ohne `--mariadb` angelegtes Minimalprojekt braucht
+`zelyra setup` nicht: `zelyra run main.zyl` genügt. Der Setup-Befehl legt die
+MariaDB-Umgebung für ein entsprechend konfiguriertes Projekt an. Verzeichnisse
+werden relativ zum aktuellen Ordner angegeben, zum Beispiel
+`zelyra setup ./maschinenverwaltung`. Ein Pfad wie `/maschinenverwaltung` ist
+auf Linux ein absoluter Pfad ab dem Dateisystemstamm. Existiert stattdessen
+`./maschinenverwaltung`, weist die CLI auf diesen wahrscheinlichen Pfad hin.
+
 **Automatische Portvergabe bei Konflikten:**
 Sind die Standardports `3000` (Web) oder `3306` (MariaDB) auf dem Rechner belegt, ermitteln `zelyra new`, `zelyra init` und `zelyra setup` automatisch den nächsten freien Host-Port und tragen ihn in die neue `.env` ein. Mit den optionalen Flags `--web-port <p>`, `--host-port <p>` und `--db-host-port <p>` können Ports verbindlich vorgegeben werden.
 

@@ -192,6 +192,13 @@ cd machine-management
 
 This creates `main.zyl`, `.env.example`, `Dockerfile`, `docker-compose.mariadb.yml`, and a protected `.env` with random passwords.
 
+A minimal project created with `zelyra init` without `--mariadb` does not need
+`zelyra setup`; `zelyra run main.zyl` is enough. The setup command prepares the
+MariaDB environment for a project configured for it. Paths are resolved from
+the current directory, for example `zelyra setup ./machine-management`. On
+Linux, `/machine-management` is an absolute path from the filesystem root. If
+`./machine-management` exists instead, the CLI suggests that likely path.
+
 **Automatic Port Selection on Conflict:**
 If default ports `3000` (web) or `3306` (MariaDB) are occupied, `zelyra new`, `zelyra init`, and `zelyra setup` automatically select the next free host ports and record them in `.env`. The optional `--web-port <p>`, `--host-port <p>`, and `--db-host-port <p>` flags enforce exact ports.
 
