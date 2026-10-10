@@ -63,6 +63,8 @@ before release.
 Since 0.8, Studio provides a read-only database map for MariaDB and PostgreSQL,
 identifies relationships, and can produce a CRUD draft with compiler checking,
 source preview, and explicit apply. It does not silently create tables. Schema
-changes continue through a reviewed migration plan. Version 0.9 expands guided
-business workflows, route and file impact, and reviewed text plans. See the
-[invoice tutorial](tutorials/invoice.en.md).
+changes continue through a reviewed migration plan. The 0.9 preview also lists
+the affected source file, table, declared relationships, and generated routes
+before CRUD source is applied. `zelyra text edit` provides preview-bound plans
+for repeatable regex changes; neither workflow writes until explicitly applied.
+See the [invoice tutorial](tutorials/invoice.en.md).

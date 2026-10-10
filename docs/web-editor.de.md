@@ -66,6 +66,8 @@ Seit 0.8 zeigt Studio eine schreibgeschützte Datenbankkarte für MariaDB und
 PostgreSQL, erkennt Beziehungen und kann einen CRUD-Entwurf mit Compilerprüfung,
 Quelltextvorschau und ausdrücklicher Übernahme erzeugen. Die Anwendung legt
 keine Tabellen stillschweigend an. Schemaänderungen laufen weiterhin über einen
-geprüften Migrationsplan. Bis 0.9 werden Geschäftsabläufe, Auswirkungen auf
-Routen und Dateien sowie die Bearbeitung mit geprüften Textplänen ausgebaut.
-Siehe das [Rechnungstutorial](tutorials/invoice.de.md).
+geprüften Migrationsplan. Die 0.9-Vorschau zeigt zusätzlich die betroffene
+Quelldatei, Tabelle, deklarierten Beziehungen und erzeugten Routen, bevor du
+CRUD-Quelltext übernimmst. Für wiederkehrende Regex-Änderungen gibt es den
+Vorschauplan `zelyra text edit`; Studio und CLI schreiben ohne ausdrückliches
+Anwenden nichts. Siehe das [Rechnungstutorial](tutorials/invoice.de.md).
