@@ -514,12 +514,13 @@ Die menschliche Abnahme bleibt auf 1.0.0 verschoben.
 
 ## Release 0.7.0
 
-- [🧪] **Umfang:** echter MySQL-Serverpfad, begrenzter Mandantenkontext,
-  lokales Entwicklungsstudio, Rechnungstutorial und Durchsetzung der erklärten
-  Sprachkompatibilitätslinie. Für Editor, begrenzte MySQL-Abfragen, Linienprüfung,
-  erstes Sprachkorpus und Tutorial gibt es lokale Implementierungsnachweise.
-- [🗺️] **Offene Release-Gates:** Migrations-/Backfill-/Rollback-Review und
-  unabhängiges Sicherheitsreview. Details im [0.7.0-Plan](release-plans/0.7.0.de.md).
+- [🧪] **Experimentelles Release:** lokales Studio, begrenztes typisiertes
+  MySQL-8.4.11-SQL, Rechnungstutorial, erstes Sprachkorpus für 0.1 und ein
+  MariaDB-Mandanten-CRUD-Pfad für eine deklarierte Tabelle. Maintainer-
+  Sicherheitsprüfung und Mutation-Rollback-E2E sind im 0.7-Plan dokumentiert.
+  Es gibt keine Mandantenmigration oder Backfill. Unabhängiges Sicherheitsreview
+  und menschliche Abnahme bleiben Gates vor Produktiveinsatz in 0.99.0/1.0.0.
+  Details im [0.7.0-Plan](release-plans/0.7.0.de.md).
 
 ## Release 0.8.0
 

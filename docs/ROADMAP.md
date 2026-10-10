@@ -548,12 +548,12 @@ Independent human acceptance remains deferred to 1.0.0.
 
 ## Release 0.7.0
 
-- [🧪] **Scope:** real MySQL server path, bounded tenant context, local
-  developer studio, invoice tutorial, and enforcement of the declared language
-  compatibility line. The editor, bounded MySQL query path, line check, initial
-  conformance corpus, and tutorial have local implementation evidence.
-- [🗺️] **Open release gates:** migration/backfill/rollback review and independent
-  security review. See the [0.7.0 plan](release-plans/0.7.0.en.md).
+- [🧪] **Experimental release:** local Studio, bounded typed MySQL 8.4.11 SQL,
+  invoice tutorial, initial language-0.1 corpus, and a MariaDB tenant CRUD path
+  for one declared table. The maintainer security review and mutation rollback
+  E2E are recorded in the 0.7 plan. No tenant migration or backfill is added.
+  Independent security review and human acceptance remain pre-production gates
+  for 0.99.0/1.0.0. See the [0.7.0 plan](release-plans/0.7.0.en.md).
 
 ## Release 0.8.0
 

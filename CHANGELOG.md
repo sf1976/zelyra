@@ -6,6 +6,30 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+## 0.7.0 — 2026-10-10
+
+- Add local Zelyra Studio with a safe project file tree, syntax highlighting,
+  completion, search/replace, conflict-checked writes, diagnostics, and explicit
+  formatting. / Lokales Zelyra Studio mit sicherem Projektdateibaum,
+  Syntaxfarben, Vervollständigung, Suche/Ersetzen, konfliktgeprüftem Speichern,
+  Diagnosen und expliziter Formatierung ergänzen.
+- Add the guided `zelyra --tutorial invoice` flow for customer entry, item entry,
+  a dashboard, and invoice creation. / Den geführten Ablauf
+  `zelyra --tutorial invoice` für Kunden, Artikel, Dashboard und
+  Rechnungserstellung ergänzen.
+- Add a bounded, parameterized MySQL query path tested on MySQL Server 8.4.11;
+  unsupported schema/admin paths fail closed. / Begrenzten, parametrisierten
+  MySQL-Abfragepfad ergänzen, geprüft auf MySQL Server 8.4.11; nicht
+  unterstützte Schema-/Administrationspfade brechen sicher ab.
+- Add an experimental MariaDB tenant CRUD path for one declared table, with
+  per-request membership checks and scoped generated reads and writes. This is
+  not full multi-tenancy. / Experimentellen MariaDB-Mandanten-CRUD-Pfad für
+  eine deklarierte Tabelle mit Membership-Prüfung pro Request und gefilterten
+  generierten Lese-/Schreibvorgängen ergänzen; keine vollständige Multi-Tenancy.
+- Keep 0.7.0 experimental and not production-approved; defer independent human
+  acceptance to 1.0.0. / 0.7.0 bleibt experimentell und nicht für Produktion
+  freigegeben; unabhängige menschliche Abnahme erfolgt erst für 1.0.0.
+
 ## 0.6.0 — 2026-10-10
 
 - Add `zelyra routes <entry.zyl>` with human and JSON output, source locations,
