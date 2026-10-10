@@ -1,11 +1,14 @@
 # Checking invoices and inventory as separate Docker applications
 
-🧪 Development behavior for 0.4.0, not a general export guarantee.
+🧪 Experimental module-export rehearsal for 0.5.0; not a general export guarantee.
 [Deutsch](module-docker-acceptance.de.md)
 
-✅ This bounded rehearsal passed locally on 2026-10-09, including writable
-CRUD in both exports and the negative checks listed below. The main generated
-application and both export images used compiler commit
+✅ This bounded rehearsal passed locally on 2026-10-10, including writable
+CRUD in both exports and the negative checks listed below. The rehearsal source
+was `c7718d5774b3ed10ca0ff1984a545acf35c6341f`; the generated application used
+the published `v0.4.0` runtime, and both export images built their compiler
+from published commit `507c29e95084a59029d6b436bd69d9132c3a8937`. An earlier
+rehearsal passed on 2026-10-09 with commit
 `917e8c707e49332b323e51e4dcbd39a4f37ced96`.
 
 The reference test generates a combined application with two business modules
@@ -39,14 +42,15 @@ From the repository root:
 
 ```bash
 cargo build --locked -p zelyra-cli
-ZELYRA_DOCKER_E2E_REF=feature/0.4-reversible-migrations \
-ZELYRA_DOCKER_E2E_MODULE_COMMIT=917e8c707e49332b323e51e4dcbd39a4f37ced96 \
+ZELYRA_DOCKER_E2E_REF=v0.4.0 \
+ZELYRA_DOCKER_E2E_MODULE_COMMIT=507c29e95084a59029d6b436bd69d9132c3a8937 \
 bash tests/generated-project-docker-e2e.sh
 ```
 
-The commit pins the compiler for both exports. The combined application uses
-the specified branch in this development rehearsal. Release acceptance must
-pin both to the published candidate.
+These values pin the runtime compiler and the compiler built into both export
+images to the published `v0.4.0` commit. The current 0.5 branch generates the
+application and export packages; a 0.5.0 release rehearsal must pin both
+compiler references to the exact candidate.
 
 The script creates a temporary project, its own Compose project names and a
 disposable MariaDB volume. It creates test data and credentials exclusively
