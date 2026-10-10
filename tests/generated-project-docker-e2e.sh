@@ -474,6 +474,63 @@ PY
         return 1
     fi
 
+    if [[ "${resource}" == "customers" ]]; then
+        local concurrent_name="${updated}-concurrent" lock_pid lock_count
+        curl --silent --show-error --fail "${cookie_args[@]}" \
+            "${origin}/${resource}/${record_id}/edit" -o "${form_file}"
+        token="$(extract_csrf_token "${form_file}")"
+        snapshot="$(extract_form_snapshot "${form_file}")"
+        docker compose --project-name "${compose_project}" \
+            --env-file "${project_dir}/.env" \
+            -f "${project_dir}/docker-compose.mariadb.yml" \
+            exec -T mariadb sh -c \
+            'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb --user=root --database=zelyra_app --execute="$1"' \
+            sh "START TRANSACTION; UPDATE customers SET name='${concurrent_name}' WHERE id=${record_id}; SELECT SLEEP(4); COMMIT;" \
+            >"${project_root}/concurrent-write.log" 2>&1 &
+        lock_pid=$!
+        lock_count=0
+        for _ in $(seq 1 80); do
+            lock_count="$(docker compose --project-name "${compose_project}" \
+                --env-file "${project_dir}/.env" \
+                -f "${project_dir}/docker-compose.mariadb.yml" \
+                exec -T mariadb sh -c \
+                'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb --user=root --batch --skip-column-names --execute="$1"' \
+                sh "SELECT COUNT(*) FROM information_schema.PROCESSLIST WHERE DB='zelyra_app' AND INFO LIKE 'SELECT SLEEP(4)%';" \
+                2>/dev/null | tr -d '\r' || true)"
+            [[ "${lock_count}" == "1" ]] && break
+            if ! kill -0 "${lock_pid}" 2>/dev/null; then
+                cat "${project_root}/concurrent-write.log" >&2
+                echo "error: concurrent MariaDB write ended before holding the row lock" >&2
+                return 1
+            fi
+            sleep 0.1
+        done
+        if [[ "${lock_count}" != "1" ]]; then
+            kill "${lock_pid}" 2>/dev/null || true
+            wait "${lock_pid}" 2>/dev/null || true
+            echo "error: could not observe the concurrent MariaDB transaction" >&2
+            return 1
+        fi
+        status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            "${cookie_args[@]}" --header "Origin: ${origin}" \
+            --data-urlencode "_zelyra_csrf=${token}" \
+            --data-urlencode "_zelyra_snapshot=${snapshot}" \
+            --data-urlencode "${field}=${updated}-overwritten" "${origin}/${resource}/${record_id}/edit")"
+        wait "${lock_pid}"
+        if [[ "${status}" != 409 ]]; then
+            echo "error: concurrent generated CRUD update returned ${status}, expected 409" >&2
+            return 1
+        fi
+        curl --silent --show-error --fail "${cookie_args[@]}" \
+            "${origin}/${resource}" -o "${list_file}"
+        assert_file_contains "${list_file}" "${concurrent_name}" \
+            "concurrent customer update after stale form rejection"
+        if grep -Fq -- "${updated}-overwritten" "${list_file}"; then
+            echo "error: stale in-flight customer edit overwrote the concurrent update" >&2
+            return 1
+        fi
+    fi
+
     last_crud_record_id="${record_id}"
     if [[ "${6:-false}" == "true" ]]; then
         return 0
