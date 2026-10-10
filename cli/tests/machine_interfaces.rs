@@ -1686,6 +1686,58 @@ fn setup_rejects_a_directory_without_a_mariadb_scaffold() {
 }
 
 #[test]
+fn setup_guides_the_reported_absolute_path_typo_and_minimal_init_flow() {
+    let working_directory = std::env::temp_dir();
+    let directory = temporary_directory("setup-human-onboarding");
+    let relative_directory = format!("./{}", directory.file_name().unwrap().to_string_lossy());
+    let project = directory.join("test_a");
+    fs::create_dir_all(&directory).unwrap();
+    fs::create_dir_all(&project).unwrap();
+    let run_from = |working_directory: &Path, arguments: &[&str]| {
+        Command::new(binary())
+            .current_dir(working_directory)
+            .args(arguments)
+            .output()
+            .expect("zelyra binary should run")
+    };
+
+    let mistaken_absolute = format!(
+        "/{}/test_a",
+        directory.file_name().unwrap().to_string_lossy()
+    );
+    let relative_project = format!("{relative_directory}/test_a");
+    let setup_typo = run_from(&working_directory, &["setup", &mistaken_absolute]);
+    assert_eq!(setup_typo.status.code(), Some(1));
+    let typo_error = String::from_utf8_lossy(&setup_typo.stderr);
+    assert!(typo_error.contains("does not exist"), "{typo_error}");
+    assert!(typo_error.contains("zelyra setup ./"), "{typo_error}");
+
+    let init = run_from(&working_directory, &["init", &relative_project]);
+    assert!(
+        init.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&init.stdout),
+        String::from_utf8_lossy(&init.stderr)
+    );
+
+    let setup_typo_after_init = run_from(&working_directory, &["setup", &mistaken_absolute]);
+    assert_eq!(setup_typo_after_init.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&setup_typo_after_init.stderr).contains("zelyra setup ./"));
+
+    let setup_minimal_project = run_from(&project, &["setup"]);
+    assert_eq!(setup_minimal_project.status.code(), Some(1));
+    let setup_error = String::from_utf8_lossy(&setup_minimal_project.stderr);
+    assert!(setup_error.contains("runs without setup"), "{setup_error}");
+    assert!(
+        setup_error.contains("zelyra init <directory> --mariadb"),
+        "{setup_error}"
+    );
+    assert!(!project.join(".env").exists());
+
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn invalid_check_json_keeps_human_logs_off_stdout() {
     let invalid_sql = example("invalid_sql.zyl");
     let output = run(&["check", invalid_sql.to_str().unwrap(), "--format", "json"]);
