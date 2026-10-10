@@ -407,34 +407,30 @@ Der Clean-Onboardingpfad mit installierter CLI ist außerdem im [CI-Lauf
 
 Das stabile `v0.4.0` ist veröffentlicht und die Artefakte wurden technisch
 geprüft. Der [Releaseplan 0.4.0](release-plans/0.4.0.de.md) bleibt dennoch
-offen: Die unabhängige menschliche Einsteigerabnahme wurde auf ausdrückliche
-Entscheidung des Projektverantwortlichen auf 1.0.0 verschoben und ist nicht
-durchgeführt. Eine manuelle Rückmeldung mit dem veröffentlichten
+offen: Die unabhängige menschliche Einsteigerabnahme wurde zuerst auf 0.5.0
+verschoben und ist durch die neuere Entscheidung des Projektverantwortlichen
+auf 1.0.0 verschoben. Sie wurde nicht durchgeführt. Eine manuelle Rückmeldung
+mit dem veröffentlichten
 0.4.0-CLI deckte außerdem eine falsche absolute Pfadangabe bei `setup` sowie
 unklare Erwartungen an `setup` für minimale `init`-Projekte auf. Die Diagnose
 und Dokumentation wurden für die 0.5.0-Vorbereitung korrigiert und Regressionen
 geprüft; die veröffentlichten 0.4.0-Artefakte enthalten diese Korrekturen
 nicht. Details und Grenzen stehen im zweisprachigen 0.5.0-
-[Studienprotokoll](release-readiness/0.5.0-onboarding-study.de.md).
+[Studienprotokoll](release-readiness/0.5.0-onboarding-study.de.md). Es ist kein
+Nachweis menschlicher Abnahme.
 
-## Vorgeschlagener Release-Meilenstein 0.5.0
+## Release-Meilenstein 0.5.0 (veröffentlicht)
 
-Der zweisprachige [0.5.0-Roadmapplan](release-plans/0.5.0.de.md) führt die
-offene 0.4.0-Abnahme und deren Rückmeldungen weiter; er ist keine
-Releasezusage. Voraussetzung sind das finale 0.3.0-Release und die
-veröffentlichte 0.4.0-Basis. Der eingegrenzte
-0.5.0-Kandidat bietet experimentelle Docker-Bundles für eine statisch erkannte
-Teilmenge mit getrennten Schemas und Datenbankkonten mit minimalen Rechten.
-Vollständige Abhängigkeits-/Effektauflösung, gemeinsames Schemaeigentum und ein
-wiederverwendbares Mehrverbindungs-Datenbankmodul sind ausdrücklich vertagt.
-Bundles melden weiterhin eine unvollständige Schließung und erfordern eine
-Betreiberprüfung; Produktionsreife oder PostgreSQL-Runtime-Parität wird nicht
-behauptet.
-Die eingegrenzte Implementierung und die technischen Gates bestanden auf
-Code-Stand `cae59e2` (vollständige CI 514 und Paketprüfung 234). Vor dem stabilen
-`v0.5.0` sind weiterhin ein veröffentlichter, unveränderlicher RC und dessen
-Installations-/Update-/Rollback-Probe erforderlich. Die unabhängige menschliche
-Abnahme ist auf 1.0.0 verschoben und kein 0.5.0-Gate.
+Das stabile `v0.5.0` ist auf Commit `6c0c0e6` veröffentlicht. Es liefert
+experimentelle Docker-Bundles für eine statisch erkannte Teilmenge,
+getrennte Schemas und Datenbankkonten mit minimalen Rechten sowie einen
+modularen Kunden-/Auftragsablauf. Vollständige Abhängigkeits-/Effektauflösung,
+gemeinsames Schemaeigentum und ein wiederverwendbares Mehrverbindungs-
+Datenbankmodul sind nicht enthalten. Die technischen Release-Gates,
+Artefaktprüfungen und der Installations-/Update-/Rollback-Smoke bestanden.
+Menschliche Abnahme fand nicht statt und ist auf 1.0.0 verschoben. Siehe
+[Release-Notizen](release-notes/0.5.0.de.md) und
+[Verifikationsnachweis](release-readiness/0.5.0-candidate-verification.md).
 
 - [🧪] Im unveröffentlichten 0.4-Zweig erzeugt `zelyra module bundle` nun auf
   Wunsch ein commit-gepinntes Dockerfile, eine Compose-App und ein
@@ -507,26 +503,39 @@ Abnahme ist auf 1.0.0 verschoben und kein 0.5.0-Gate.
 ## Vorgeschlagener Release-Meilenstein 0.6.0
 
 Die eingegrenzte [0.6.0-Roadmap](release-plans/0.6.0.de.md) ergänzt einen
-nativen, gepoolten PostgreSQL-16-Pfad für direkte SQL-Abfragen mit einer
-begrenzten Menge an Parametertypen und Transaktionen. Vollständige
-PostgreSQL-Parität und generierte Web-/CRUD-Unterstützung werden nicht
-versprochen. Auf Merge-Stand `715ecc2` bestehen CI 518 und Paketprüfung 238;
-gezielte Transaktions- und Runtime-Dispatch-Tests bestehen auch lokal gegen
-PostgreSQL 16. Der spätere Dokumentations-Head `04cf026` bestand CI 523,
-einschließlich PostgreSQL-Schema-Safety und parametrisierter Runtime-Tests,
-sowie Paketprüfung 242. Die geprüften Pakete melden noch `zelyra 0.5.0`;
-Versionssprung und Kandidat für 0.6.0 bleiben bis zur stabilen Veröffentlichung
-von 0.5.0 zurückgestellt. Die menschliche Abnahme ist auf 1.0.0 verschoben und
-keine Voraussetzung für 0.6.0. Den 0.6-PR bis zur Veröffentlichung von 0.5.0
-getrennt und ungemergt lassen.
+nativen, gepoolten PostgreSQL-16-Pfad für direkte SQL-Abfragen mit begrenzten
+Parametertypen und Transaktionen. Vollständige PostgreSQL-Parität und
+generierte Web-/CRUD-Unterstützung werden nicht versprochen. Ergänzt werden
+eine deterministische Routenübersicht samt Kollisionsfehlern sowie
+`zelyra db map`: eine schreibgeschützte Zuordnung von Tabellen und
+Beziehungen zum Quellmodul, die Abweichungen zur Live-Datenbank zeigt.
+Modulzuordnung bleibt ein Hinweis und ändert weder Schema noch Berechtigungen.
+Die menschliche Abnahme ist auf 1.0.0 verschoben und keine Voraussetzung für
+0.6.0.
 
-Nach 0.6 sind begrenzter Mandantenkontext in 0.7, lokale dauerhafte Aufgaben
-und Outbox-Semantik in 0.8, optionale MFA/WebAuthn- und OIDC-Unterstützung in
-0.9 sowie Vertragsstabilisierung und unabhängige Abnahme für 1.0.0 geplant.
-Vollständige SQL-Parität, allgemeine visuelle Bearbeitung, beliebige
-Client-Hydration, Compiler-Self-Hosting, ein natives Backend, verpflichtende
-Cloud-/KI-Dienste, Telemetrie und unbelegte Leistungsversprechen bleiben
-ausgeschlossen; Details und Grenzen stehen in der 0.6-Roadmap.
+Nach 0.6 sind ein echter MySQL-Serverpfad, lokales Entwicklungsstudio und das
+Rechnungstutorial in 0.7 geplant. 0.8 ergänzt dauerhafte Aufgaben, Outbox und
+kontrollierte Textänderungen mit benannten Regex-Mustern, Vorschau und
+ausdrücklichem Anwenden. 0.9 prüft die Kernabläufe für MariaDB, MySQL und
+PostgreSQL und kann optionale MFA/WebAuthn sowie OIDC aufnehmen. 0.99 friert
+Funktionen ein; danach bleiben bis zur ersten produktiven Version 1.0.0 nur
+die unabhängigen menschlichen Abnahmetests. Vollständige SQL-Parität,
+allgemeine visuelle Bearbeitung, beliebige Client-Hydration, Compiler-
+Self-Hosting, ein natives Backend, verpflichtende Cloud-/KI-Dienste,
+Telemetrie und unbelegte Leistungsversprechen bleiben ausgeschlossen.
+## Großer Release-Meilenstein 1.0.0
+
+`v1.0.0` ist die erste große Veröffentlichung und das verpflichtende Ziel für
+alle unabhängigen menschlichen Einsteiger- und Abnahmestudien, die aus 0.3.0,
+0.4.0 und 0.5.0 verschoben wurden. Kein früheres Release darf behaupten, diese
+Studien seien abgeschlossen. Vor dem stabilen `v1.0.0` muss nach bestandenen
+technischen Gates ein unveränderlicher Release Candidate veröffentlicht werden.
+Unabhängige Personen ohne Entwicklerrolle prüfen den Kandidaten und die
+mitgelieferte Dokumentation. Blocker werden behoben und erneut geprüft;
+redigierte Beobachtungen und die Entscheidung des Projektverantwortlichen
+werden dem exakt getesteten Commit zugeordnet. Der Studienumfang muss zum
+endgültigen 1.0.0-Produkt passen. Automatisierte CI, interne Rehearsals und
+Rückmeldungen des Projektverantwortlichen ersetzen keinen Teilnehmertest.
 
 ## Akzeptanzanwendungen aus der Praxis
 
