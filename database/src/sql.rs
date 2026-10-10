@@ -79,10 +79,27 @@ pub fn analyze_table_access(
         .iter()
         .any(|token| matches!(token, SqlToken::Word(word) if word.eq_ignore_ascii_case("JOIN")));
     let add_at = |index: usize, mode: SqlAccessMode, modes: &mut HashMap<String, SqlAccessMode>| {
-        let Some(SqlToken::Word(name)) = tokens.get(index + 1) else {
-            return;
+        let candidate = match (
+            tokens.get(index + 1),
+            tokens.get(index + 2),
+            tokens.get(index + 3),
+        ) {
+            (Some(SqlToken::Word(_schema)), Some(SqlToken::Dot), Some(SqlToken::Word(name))) => {
+                name
+            }
+            (Some(SqlToken::Word(name)), _, _) => name,
+            (Some(SqlToken::String), _, _) => {
+                modes
+                    .entry(String::new())
+                    .and_modify(|existing| {
+                        *existing = merge_access(*existing, SqlAccessMode::Unknown)
+                    })
+                    .or_insert(SqlAccessMode::Unknown);
+                return;
+            }
+            _ => return,
         };
-        let normalized = name.to_ascii_lowercase();
+        let normalized = candidate.to_ascii_lowercase();
         let Some(canonical) = known.get(&normalized) else {
             return;
         };
@@ -1160,6 +1177,18 @@ fn tokenize(query: &str) -> Vec<SqlToken> {
             }
             continue;
         }
+        if byte == b'`' || byte == b'[' {
+            let closing_quote = if byte == b'`' { b'`' } else { b']' };
+            index += 1;
+            while index < bytes.len() && bytes[index] != closing_quote {
+                index += 1;
+            }
+            if index < bytes.len() {
+                index += 1;
+            }
+            tokens.push(SqlToken::String);
+            continue;
+        }
         if byte.is_ascii_digit() {
             index += 1;
             while index < bytes.len() && (bytes[index].is_ascii_digit() || bytes[index] == b'.') {
@@ -1309,6 +1338,31 @@ mod tests {
         assert!(accesses
             .iter()
             .all(|access| access.mode == SqlAccessMode::Unknown));
+
+        let (_, accesses) =
+            analyze_table_access("SELECT id FROM billing.invoices", &["invoices".to_owned()]);
+        assert_eq!(
+            accesses,
+            vec![SqlTableAccess {
+                table: "invoices".into(),
+                mode: SqlAccessMode::Read
+            }]
+        );
+
+        for query in [
+            "SELECT id FROM \"invoices\"",
+            "SELECT id FROM `invoices`",
+            "SELECT id FROM [invoices]",
+        ] {
+            let (_, accesses) = analyze_table_access(query, &["invoices".to_owned()]);
+            assert_eq!(
+                accesses,
+                vec![SqlTableAccess {
+                    table: String::new(),
+                    mode: SqlAccessMode::Unknown
+                }]
+            );
+        }
     }
 
     #[test]

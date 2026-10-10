@@ -6,6 +6,31 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+## 0.6.0 — 2026-10-10
+
+- Add `zelyra routes <entry.zyl>` with human and JSON output, source locations,
+  generated route inventory, and `E-ROUTE-001` diagnostics for overlapping
+  routes that use the same HTTP method. / `zelyra routes <entry.zyl>` mit
+  menschenlesbarer und JSON-Ausgabe, Fundstellen, generierten Routen sowie
+  `E-ROUTE-001` für überlappende Routen derselben HTTP-Methode ergänzen.
+- Add read-only `zelyra db map <file.zyl>` output to compare declarations by
+  source module with live tables, columns, and foreign keys. Module ownership is
+  advisory; no schema changes or authorization rules are inferred. / Eine
+  schreibgeschützte Ausgabe `zelyra db map <file.zyl>` ergänzen, die
+  Deklarationen je Quellmodul mit Live-Tabellen, Spalten und Fremdschlüsseln
+  vergleicht. Modulzuordnung ist unverbindlich; Schemaänderungen oder
+  Autorisierungsregeln werden nicht abgeleitet.
+- Include a bounded native PostgreSQL runtime for direct parameterized SQL and
+  transactions. Tested scope and unsupported paths are stated in the release
+  notes; this is not full PostgreSQL parity. / Eine begrenzte native
+  PostgreSQL-Runtime für direkte parametrisierte SQL-Abfragen und Transaktionen
+  aufnehmen. Geprüfter Umfang und nicht unterstützte Pfade stehen in den
+  Release-Notizen; vollständige PostgreSQL-Parität ist nicht enthalten.
+- Keep the release experimental. Human acceptance, production approval, and
+  MySQL Server support are not claimed. / Das Release bleibt experimentell.
+  Menschliche Abnahme, Produktivfreigabe und MySQL-Server-Unterstützung werden
+  nicht behauptet.
+
 ## 0.5.0-rc.1 — 2026-10-10 (pre-release candidate)
 
 - Add experimental Docker bundles for statically recognized module subsets.

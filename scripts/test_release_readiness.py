@@ -10,6 +10,7 @@ from pathlib import Path
 from check_release_readiness import (
     REQUIRED_GATES_040,
     REQUIRED_GATES_050,
+    REQUIRED_GATES_100,
     candidate_tag,
     unfinished_gates,
 )
@@ -100,7 +101,7 @@ class ReleaseReadinessTests(unittest.TestCase):
             failures = unfinished_gates(root, "0.4.0")
             self.assertTrue(any("contains placeholders" in item for item in failures))
 
-    def test_050_human_acceptance_requires_a_real_candidate_record(self) -> None:
+    def test_050_human_acceptance_deferral_requires_a_real_candidate_record(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             for relative_path, gates in REQUIRED_GATES_050.items():
@@ -109,18 +110,17 @@ class ReleaseReadinessTests(unittest.TestCase):
                 path.write_text("\n".join(f"- [x] {marker}" for _, marker in gates), encoding="utf-8")
             records = {
                 "docs/release-readiness/0.5.0-human-acceptance.en.md": (
+                    "Decision: deferred to 1.0.0\nNot conducted; not a test result.\n"
                     "Candidate tag: v0.5.0-rc.1\nCandidate commit: "
                     + "a" * 40
-                    + "\nCompleted on: 2026-10-09\n"
-                    "Observations: redacted\nBlockers: none\n"
-                    "Decision: accepted\nDecision authority: project owner\n"
+                    + "\nDecision authority: project owner\n"
                 ),
                 "docs/release-readiness/0.5.0-human-acceptance.de.md": (
+                    "Entscheidung: auf 1.0.0 verschoben\n"
+                    "Nicht durchgeführt; kein Testergebnis.\n"
                     "Kandidaten-Tag: v0.5.0-rc.1\nKandidaten-Commit: "
                     + "a" * 40
-                    + "\nAbgeschlossen am: 2026-10-09\n"
-                    "Beobachtungen: redigiert\nBlockaden: keine\n"
-                    "Entscheidung: akzeptiert\nEntscheidungsträger: Projektverantwortlicher\n"
+                    + "\nEntscheidungsträger: Projektverantwortlicher\n"
                 ),
             }
             for relative_path, content in records.items():
@@ -137,6 +137,44 @@ class ReleaseReadinessTests(unittest.TestCase):
             )
             (root / "docs/release-readiness/0.5.0-human-acceptance.en.md").unlink()
             self.assertTrue(any("record missing" in failure for failure in unfinished_gates(root, "0.5.0")))
+
+    def test_100_human_acceptance_requires_exact_candidate_record(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for relative_path, gates in REQUIRED_GATES_100.items():
+                path = root / relative_path
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("\n".join(f"- [x] {marker}" for _, marker in gates), encoding="utf-8")
+            records = {
+                "docs/release-readiness/1.0.0-human-acceptance.en.md": (
+                    "Candidate tag: v1.0.0-rc.1\nCandidate commit: "
+                    + "a" * 40
+                    + "\nStudy completed on: 2026-10-10\nParticipant count: 3\n"
+                    "Task outcomes: passed\nInterventions: none\n"
+                    "Redacted observations: recorded\nBlockers: none\n"
+                    "Decision: accepted\nDecision authority: project owner\n"
+                ),
+                "docs/release-readiness/1.0.0-human-acceptance.de.md": (
+                    "Kandidaten-Tag: v1.0.0-rc.1\nKandidaten-Commit: "
+                    + "a" * 40
+                    + "\nStudie abgeschlossen am: 10.10.2026\nAnzahl Teilnehmende: 3\n"
+                    "Aufgabenergebnisse: bestanden\nEingriffe: keine\n"
+                    "Redigierte Beobachtungen: erfasst\nBlockaden: keine\n"
+                    "Entscheidung: akzeptiert\nEntscheidungsträger: Projektverantwortlicher\n"
+                ),
+            }
+            for relative_path, content in records.items():
+                path = root / relative_path
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content, encoding="utf-8")
+            self.assertEqual(candidate_tag(root, "1.0.0"), "v1.0.0-rc.1")
+            self.assertEqual(unfinished_gates(root, "1.0.0", "a" * 40), [])
+            self.assertTrue(
+                any(
+                    "different candidate commit" in failure
+                    for failure in unfinished_gates(root, "1.0.0", "b" * 40)
+                )
+            )
 
     def test_all_required_gates_can_be_checked(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -245,7 +283,7 @@ class ReleaseReadinessTests(unittest.TestCase):
             workflow,
         )
         self.assertIn("No independent human acceptance study was conducted for 0.4.0", workflow)
-        self.assertIn("mandatory 0.5.0", workflow)
+        self.assertIn("deferred to the first major release, 1.0.0", workflow)
         self.assertIn('"${package_version}" == "0.5.0"', workflow)
         self.assertIn("docs/release-readiness/0.5.0-human-acceptance.en.md", workflow)
         self.assertIn(
@@ -254,6 +292,12 @@ class ReleaseReadinessTests(unittest.TestCase):
         )
         self.assertIn(
             "blob/v0.5.0/docs/release-readiness/0.5.0-human-acceptance.de.md",
+            workflow,
+        )
+        self.assertIn('"${package_version}" == "1.0.0"', workflow)
+        self.assertIn("docs/release-readiness/1.0.0-human-acceptance.en.md", workflow)
+        self.assertIn(
+            "blob/v1.0.0/docs/release-readiness/1.0.0-human-acceptance.en.md",
             workflow,
         )
 

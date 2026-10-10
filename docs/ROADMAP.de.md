@@ -407,33 +407,30 @@ Der Clean-Onboardingpfad mit installierter CLI ist außerdem im [CI-Lauf
 
 Das stabile `v0.4.0` ist veröffentlicht und die Artefakte wurden technisch
 geprüft. Der [Releaseplan 0.4.0](release-plans/0.4.0.de.md) bleibt dennoch
-offen: Die unabhängige menschliche Einsteigerabnahme wurde auf 0.5.0 verschoben
-und ist nicht durchgeführt. Eine manuelle Rückmeldung mit dem veröffentlichten
+offen: Die unabhängige menschliche Einsteigerabnahme wurde zuerst auf 0.5.0
+verschoben und ist durch die neuere Entscheidung des Projektverantwortlichen
+auf 1.0.0 verschoben. Sie wurde nicht durchgeführt. Eine manuelle Rückmeldung
+mit dem veröffentlichten
 0.4.0-CLI deckte außerdem eine falsche absolute Pfadangabe bei `setup` sowie
 unklare Erwartungen an `setup` für minimale `init`-Projekte auf. Die Diagnose
 und Dokumentation wurden für die 0.5.0-Vorbereitung korrigiert und Regressionen
 geprüft; die veröffentlichten 0.4.0-Artefakte enthalten diese Korrekturen
 nicht. Details und Grenzen stehen im zweisprachigen 0.5.0-
-[Studienprotokoll](release-readiness/0.5.0-onboarding-study.de.md).
+[Studienprotokoll](release-readiness/0.5.0-onboarding-study.de.md). Es ist kein
+Nachweis menschlicher Abnahme.
 
-## Vorgeschlagener Release-Meilenstein 0.5.0
+## Release-Meilenstein 0.5.0 (veröffentlicht)
 
-Der zweisprachige [0.5.0-Roadmapplan](release-plans/0.5.0.de.md) führt die
-offene 0.4.0-Abnahme und deren Rückmeldungen weiter; er ist keine
-Releasezusage. Voraussetzung sind das finale 0.3.0-Release und die
-veröffentlichte 0.4.0-Basis. Der eingegrenzte
-0.5.0-Kandidat bietet experimentelle Docker-Bundles für eine statisch erkannte
-Teilmenge mit getrennten Schemas und Datenbankkonten mit minimalen Rechten.
-Vollständige Abhängigkeits-/Effektauflösung, gemeinsames Schemaeigentum und ein
-wiederverwendbares Mehrverbindungs-Datenbankmodul sind ausdrücklich vertagt.
-Bundles melden weiterhin eine unvollständige Schließung und erfordern eine
-Betreiberprüfung; Produktionsreife oder PostgreSQL-Runtime-Parität wird nicht
-behauptet.
-Die eingegrenzte Implementierung und die technischen Gates bestanden auf
-Code-Stand `cae59e2` (vollständige CI 514 und Paketprüfung 234). Vor dem stabilen
-`v0.5.0` sind weiterhin ein veröffentlichter, unveränderlicher RC, dessen
-Installations-/Update-/Rollback-Probe und die unabhängige menschliche Abnahme
-erforderlich.
+Das stabile `v0.5.0` ist auf Commit `6c0c0e6` veröffentlicht. Es liefert
+experimentelle Docker-Bundles für eine statisch erkannte Teilmenge,
+getrennte Schemas und Datenbankkonten mit minimalen Rechten sowie einen
+modularen Kunden-/Auftragsablauf. Vollständige Abhängigkeits-/Effektauflösung,
+gemeinsames Schemaeigentum und ein wiederverwendbares Mehrverbindungs-
+Datenbankmodul sind nicht enthalten. Die technischen Release-Gates,
+Artefaktprüfungen und der Installations-/Update-/Rollback-Smoke bestanden.
+Menschliche Abnahme fand nicht statt und ist auf 1.0.0 verschoben. Siehe
+[Release-Notizen](release-notes/0.5.0.de.md) und
+[Verifikationsnachweis](release-readiness/0.5.0-candidate-verification.md).
 
 - [🧪] Im unveröffentlichten 0.4-Zweig erzeugt `zelyra module bundle` nun auf
   Wunsch ein commit-gepinntes Dockerfile, eine Compose-App und ein
@@ -467,7 +464,8 @@ erforderlich.
   Dateien schreibt. Das Manifest
   weist weiterhin `source_closure_complete: false` und
   `complete_deployment: false` aus. Vollständige Abhängigkeitsanalyse,
-  modulare Datenbankschnittstelle und vollständige 0.5.0-Abnahme bleiben offen.
+  modulare Datenbankschnittstelle und technische Kandidatenprüfung bleiben
+  offen. Die menschliche Abnahme ist auf 1.0.0 verschoben.
   `module plan` verfolgt jetzt auch Funktionsaufrufe in Formular- und
   CRUD-Aktionen bis zu den aufgerufenen Deklarationen und deren Quelldateien;
   ein Mehrmodul-Integrationstest prüft beide Fälle. Das erweitert die bekannte
@@ -502,42 +500,82 @@ erforderlich.
   wegwerfbare MariaDB-11-Fixture begrenzt; vollständige Modulschließung und
   Schemaeigentumsdurchsetzung bleiben offen.
 
-## Vorgeschlagener Release-Meilenstein 0.6.0
+## Release 0.6.0
 
-Die eingegrenzte [0.6.0-Roadmap](release-plans/0.6.0.de.md) ergänzt einen
-nativen, gepoolten PostgreSQL-16-Pfad für direkte SQL-Abfragen mit einer
-begrenzten Menge an Parametertypen und Transaktionen. Vollständige
-PostgreSQL-Parität und generierte Web-/CRUD-Unterstützung werden nicht
-versprochen. Auf Merge-Stand `715ecc2` bestehen CI 518 und Paketprüfung 238;
-gezielte Transaktions- und Runtime-Dispatch-Tests bestehen auch lokal gegen
-PostgreSQL 16. Der spätere Dokumentations-Head `04cf026` bestand CI 523,
-einschließlich PostgreSQL-Schema-Safety und parametrisierter Runtime-Tests,
-sowie Paketprüfung 242. Die geprüften Pakete melden noch `zelyra 0.5.0`;
-Versionssprung und Kandidat für 0.6.0 bleiben bis zur Veröffentlichung und
-unabhängigen menschlichen Abnahme von 0.5.0 zurückgestellt. Den 0.6-PR getrennt
-und bis zu dieser Abnahme ungemergt lassen.
+Das stabile [0.6.0-Release](release-plans/0.6.0.de.md) ergänzt einen
+nativen, gepoolten PostgreSQL-16-Pfad für direkte SQL-Abfragen mit begrenzten
+Parametertypen und Transaktionen. Vollständige PostgreSQL-Parität und
+generierte Web-/CRUD-Unterstützung werden nicht versprochen. Das Release
+ergänzt eine deterministische Routenübersicht samt Kollisionsfehlern sowie
+`zelyra db map`: eine schreibgeschützte Zuordnung von Tabellen und
+Beziehungen zum Quellmodul, die Abweichungen zur Live-Datenbank zeigt.
+Modulzuordnung bleibt ein Hinweis und ändert weder Schema noch Berechtigungen.
+Die menschliche Abnahme bleibt auf 1.0.0 verschoben.
 
-Der 0.7-Branch ergänzt experimentellen Mandantenkontext für generiertes
-MariaDB-CRUD. Er ermittelt den Principal aus einer geprüften Session, prüft
-Membership pro Request, behandelt Tenant-Selector als nicht vertrauenswürdige
-Eingabe und begrenzt generierte CRUD-Lese- und Schreibabfragen auf den
-Mandanten. Beliebiges SQL, APIs, TableViews, Exporte und eigene Aktionen werden
-nicht geschützt; Migrationen, Backfill und ein unabhängiges Sicherheitsreview
-bleiben Release-Gates. Siehe die [0.7-Roadmap](release-plans/0.7.0.de.md).
+## Release 0.7.0
 
-Der 0.8-Branch implementiert eine experimentelle lokale MariaDB-Outbox:
-transaktionsgebundenes Einfügen, zustellbare Leases mit begrenzten Retries
-sowie ausdrückliche Setup-, Metadaten-, Recovery- und Worker-Befehle. CI auf
-dem exakten Head, Crash-/Konkurrenzabnahme und unabhängiges Sicherheitsreview
-sind noch offen; siehe die [0.8-Roadmap](release-plans/0.8.0.de.md). Als
-nächster Schritt ist optionale lokale TOTP-MFA mit Wiederherstellungscodes in
-0.9 vorgesehen. WebAuthn/Passkeys und OAuth2/OIDC werden für separate
-Protokoll- und Sicherheitsreviews zurückgestellt; danach folgen
-Vertragsstabilisierung und unabhängige menschliche Abnahme für 1.0.0.
-Vollständige SQL-Parität, allgemeine visuelle Bearbeitung, beliebige
-Client-Hydration, Compiler-Self-Hosting, ein natives Backend, verpflichtende
+- [🧪] **Umfang:** echter MySQL-Serverpfad, begrenzter Mandantenkontext,
+  lokales Entwicklungsstudio, Rechnungstutorial und Durchsetzung der erklärten
+  Sprachkompatibilitätslinie. Für Editor, begrenzte MySQL-Abfragen, Linienprüfung,
+  erstes Sprachkorpus und Tutorial gibt es lokale Implementierungsnachweise.
+- [🗺️] **Offene Release-Gates:** Migrations-/Backfill-/Rollback-Review und
+  unabhängiges Sicherheitsreview. Details im [0.7.0-Plan](release-plans/0.7.0.de.md).
+
+## Release 0.8.0
+
+- [🗺️] Eine schreibgeschützte visuelle Datenbankkarte und einen geführten
+  CRUD-Assistenten ergänzen. Entwickler wählen Verbindung und Tabelle, prüfen
+  Felder und Beziehungen, sehen compilergeprüften Quelltext und übernehmen die
+  Änderung ausdrücklich. Sprach-Fixtures für Grammatik, Typprüfung und Formatter
+  ausbauen. Dazu kommt die bereits in Prüfung befindliche begrenzte lokale
+  MariaDB-Outbox mit ausdrücklich gestartetem Worker und At-least-once-Zustellung.
+  Siehe [0.8.0-Plan](release-plans/0.8.0.de.md).
+
+## Release 0.9.0
+
+- [🗺️] Geführte Geschäftsabläufe und Hilfe zum Erweitern erzeugter Anwendungen
+  ergänzen. Die zugesagten MariaDB-, MySQL- und PostgreSQL-Abläufe auf echten
+  Servern prüfen sowie Laufzeit-, Modul-, Effekt-, Vertrags- und SQL-Fixtures
+  ausbauen. Siehe [0.9.0-Plan](release-plans/0.9.0.de.md).
+
+## Release 0.95.0
+
+- [🗺️] Den geplanten Produktumfang stabilisieren: technische, Sicherheits-,
+  Upgrade-, Rollback-, Abhängigkeits-, Artefakt- und Dokumentationslücken
+  schließen. Sprachreferenz und Korpus prüfen, ohne ein großes Teilsystem
+  hinzuzufügen. Siehe [0.95.0-Plan](release-plans/0.95.0.de.md).
+
+## Release 0.99.0
+
+- [🗺️] Produkt- und Sprachfunktionen einfrieren, alle technischen Gates am
+  unveränderlichen Kandidaten prüfen und Materialien für die menschliche
+  Abnahme an genau diesem Stand vorbereiten. Vor dem ersten Produktivrelease
+  bleibt nur die unabhängige menschliche Abnahme offen. Siehe
+  [0.99.0-Plan](release-plans/0.99.0.de.md).
+
+Eine allgemeine Queue-Plattform bleibt hinter 1.0.0. Die Outbox in 0.8 ist
+lokal und auf MariaDB begrenzt; sie bietet weder Scheduler noch verteilte
+Worker oder Exactly-once-Zustellung. Vollständige SQL-Parität, beliebige
+Client-Hydration, Compiler-Self-Hosting, natives Backend, verpflichtende
 Cloud-/KI-Dienste, Telemetrie und unbelegte Leistungsversprechen bleiben
-ausgeschlossen; Details und Grenzen stehen in der 0.6-Roadmap.
+ausgeschlossen.
+
+Die detaillierten Abnahmekriterien stehen in den Plänen für [0.8.0](release-plans/0.8.0.de.md),
+[0.9.0](release-plans/0.9.0.de.md), [0.95.0 Stabilisierung](release-plans/0.95.0.de.md),
+[0.99.0 Freeze](release-plans/0.99.0.de.md) und [1.0.0](release-plans/1.0.0.de.md).
+## Erste produktive Veröffentlichung 1.0.0
+
+`v1.0.0` ist die erste produktive Veröffentlichung und das verpflichtende Ziel für
+alle unabhängigen menschlichen Einsteiger- und Abnahmestudien, die aus 0.3.0,
+0.4.0 und 0.5.0 verschoben wurden. Kein früheres Release darf behaupten, diese
+Studien seien abgeschlossen. Vor dem stabilen `v1.0.0` muss nach bestandenen
+technischen Gates ein unveränderlicher Release Candidate veröffentlicht werden.
+Unabhängige Personen ohne Entwicklerrolle prüfen den Kandidaten und die
+mitgelieferte Dokumentation. Blocker werden behoben und erneut geprüft;
+redigierte Beobachtungen und die Entscheidung des Projektverantwortlichen
+werden dem exakt getesteten Commit zugeordnet. Der Studienumfang muss zum
+endgültigen 1.0.0-Produkt passen. Automatisierte CI, interne Rehearsals und
+Rückmeldungen des Projektverantwortlichen ersetzen keinen Teilnehmertest.
 
 ## Akzeptanzanwendungen aus der Praxis
 

@@ -37,3 +37,33 @@ Rust itself is generally dual-licensed under MIT and Apache-2.0. See the
 official Rust license policy:
 
 https://rust-lang.org/policies/licenses/
+
+## Zelyra Studio browser editor
+
+The CLI bundles CodeMirror and Lezer browser components. These packages are
+MIT-licensed; esbuild is a build-time-only MIT-licensed dependency. Exact
+versions are recorded in `editor/package-lock.json`. No browser code is loaded
+from a third-party host at runtime.
+
+| Package | Version | License |
+| --- | ---: | --- |
+| @codemirror/autocomplete | 6.20.3 | MIT |
+| @codemirror/commands | 6.11.1 | MIT |
+| @codemirror/language | 6.13.1 | MIT |
+| @codemirror/lint | 6.9.7 | MIT |
+| @codemirror/search | 6.7.2 | MIT |
+| @codemirror/state | 6.7.6 | MIT |
+| @codemirror/streamparser | 6.0.0 | MIT |
+| @codemirror/view | 6.43.14 | MIT |
+| @lezer/common | 1.5.3 | MIT |
+| @lezer/highlight | 1.2.5 | MIT |
+| @lezer/lr | 1.4.11 | MIT |
+| @marijn/find-cluster-break | 1.0.4 | MIT |
+| crelt | 1.0.7 | MIT |
+| esbuild (build time only) | 0.25.12 | MIT |
+| esbuild platform binary (build time only) | 0.25.12 | MIT |
+| style-mod | 4.1.4 | MIT |
+| w3c-keyname | 2.2.8 | MIT |
+
+The original license text for each package is included in its npm package.
+The bundled editor remains subject to those MIT notices.

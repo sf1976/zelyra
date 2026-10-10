@@ -250,7 +250,18 @@ architecture requirement for every phase, not a provider-specific feature.
 
 ## 2. Language and compiler
 
-- [ ] Stable grammar specification and versioned compatibility rules.
+- [🧪] **Language compatibility:** the initial enforcement in 0.7 accepts
+  `zelyra = "0.1"`, rejects unsupported explicit lines with `E-LANG-001`, and
+  preserves older projects without the field. The language line remains `0.1` through 0.99.0; compiler
+  release numbers do not change it automatically. 0.7 now includes the first
+  runnable accepted/rejected/runtime corpus. Version 0.8 expands grammar,
+  typing, and formatter coverage; 0.9 adds runtime, module, effect, contract,
+  and SQL fixtures; 0.95 audits reference and corpus gaps. Version 0.99 freezes
+  grammar and semantics as a release candidate and allows only documented
+  corrections. Only 1.0.0, after its independent human acceptance gate, makes
+  the contract production-ready.
+  See the [language compatibility guide](language-compatibility.en.md) for the
+  rules and acceptance criteria.
 - [~] Experimental function/type/record/table/view/component imports and project-wide database
   configuration in the current development
   branch support project-root-relative imports, `pub` declarations, qualified
@@ -438,30 +449,27 @@ The clean installed-CLI onboarding path is also green in [CI run
 
 Stable `v0.4.0` is published and its artifacts passed technical verification.
 The [0.4.0 release plan](release-plans/0.4.0.en.md) remains open: independent
-human onboarding acceptance was deferred to 0.5.0 and has not been conducted.
+human onboarding acceptance was deferred first to 0.5.0 and, by the newer
+project-owner decision, is now deferred to 1.0.0. It has not been conducted.
 Manual feedback using the published 0.4.0 CLI also exposed an incorrect
 absolute-path invocation for `setup` and unclear expectations for `setup` in a
 minimal `init` project. The diagnosis and documentation were corrected for
 0.5.0 preparation and regression-checked; published 0.4.0 artifacts do not
 contain these corrections. See the bilingual 0.5.0
 [study protocol](release-readiness/0.5.0-onboarding-study.en.md) for the record
-and its limits.
+and its limits. It is not evidence of human acceptance.
 
-## Proposed release milestone 0.5.0
+## Release milestone 0.5.0 (published)
 
-The bilingual [0.5.0 roadmap](release-plans/0.5.0.en.md) carries forward the
-open 0.4.0 acceptance and its feedback; it is not a release promise. It is
-gated on the final 0.3.0 release and published 0.4.0 baseline. The scoped 0.5.0 candidate
-provides experimental Docker bundles for a statically recognized subset, with
-separate schemas and least-privilege accounts. Complete dependency/effect
-closure, shared schema ownership, and a reusable multi-connection database
-module are explicitly deferred. Bundles continue to report incomplete closure
-and require operator review; the roadmap makes no claim of production
-readiness or PostgreSQL runtime parity.
-The scoped implementation and technical gates have passed on code head
-`cae59e2` (full CI #514 and release package validation #234). A published,
-immutable RC, its install/update/rollback rehearsal, and independent human
-acceptance are still required before stable `v0.5.0`.
+Stable `v0.5.0` is published from commit `6c0c0e6`. It delivers experimental
+Docker bundles for a statically recognized subset, separate schemas and
+least-privilege database accounts, and a modular customer/order workflow.
+Complete dependency/effect closure, shared schema ownership, and a reusable
+multi-connection database module are not included. Technical release gates,
+artifact verification, and published install/update/rollback smoke passed.
+Human acceptance was not conducted and remains deferred to 1.0.0. See the
+[release notes](release-notes/0.5.0.en.md) and
+[verification record](release-readiness/0.5.0-candidate-verification.md).
 
 - [🧪] The unreleased 0.4 branch can now generate a commit-pinned Dockerfile,
   a Compose app, and a secret-free `.env.example` from `zelyra module bundle`;
@@ -494,7 +502,8 @@ acceptance are still required before stable `v0.5.0`.
   files; only one project-wide connection is supported. The manifest still
   records `source_closure_complete: false` and
   `complete_deployment: false`. Complete dependency analysis, a modular
-  database interface, and full 0.5.0 acceptance remain open. The same
+  database interface, and technical candidate verification remain open. Human
+  acceptance is deferred to 1.0.0. The same
   dependency preview now follows named function calls in form and CRUD action
   bodies to their declarations and source modules; a multi-module integration
   test covers both cases. This expands known edges but does not establish
@@ -526,39 +535,73 @@ acceptance are still required before stable `v0.5.0`.
   disposable MariaDB 11 fixture; complete module closure and schema ownership
   enforcement remain open.
 
-## Proposed release milestone 0.6.0
+## Release 0.6.0
 
-The scoped [0.6.0 roadmap](release-plans/0.6.0.en.md) adds a native, pooled
+The scoped [0.6.0 release](release-plans/0.6.0.en.md) shipped a native, pooled
 PostgreSQL 16 direct-SQL path for a bounded set of parameter types and
 transactions. It does not promise complete PostgreSQL parity or generated
-web/CRUD support. On merged branch head `715ecc2`, CI #518 and package
-validation #238 pass; focused transaction and runtime-dispatch tests also pass
-locally against PostgreSQL 16. The later documentation head `04cf026` passed
-CI #523, including PostgreSQL schema-safety and parameterized runtime tests,
-and release validation #242. The validation packages still identify as
-`zelyra 0.5.0`; the 0.6 version bump and candidate remain gated on publication
-and independent acceptance of 0.5.0. Keep the 0.6 PR separate and unmerged
-until that gate passes.
+web/CRUD support. The release also added a deterministic route inventory with
+collision errors and `zelyra db map`, a read-only mapping of tables and
+relationships to source modules that shows differences from the live database.
+Module ownership remains advisory and changes neither schema nor permissions.
+Independent human acceptance remains deferred to 1.0.0.
 
-The 0.7 branch adds experimental tenant context to generated MariaDB CRUD.
-It resolves the principal from a validated session, checks membership per
-request, treats tenant selectors as untrusted input, and scopes generated CRUD
-reads and mutations. It does not protect arbitrary SQL, APIs, TableViews,
-exports, or custom actions; migrations, backfill, and independent security
-review remain release gates. See the [0.7 roadmap](release-plans/0.7.0.en.md).
+## Release 0.7.0
 
-The 0.8 branch implements an experimental local MariaDB transactional outbox:
-transaction-bound enqueue, leased delivery with bounded retries, and explicit
-setup, metadata inspection, recovery, and worker commands. Exact-head CI,
-crash/concurrency acceptance, and independent security review remain open; see
-the [0.8 roadmap](release-plans/0.8.0.en.md). The planned next milestone is
-optional local TOTP MFA with recovery codes in 0.9. WebAuthn/passkeys and
-OAuth2/OIDC are deferred for separate protocol and security reviews, followed
-by contract stabilization and independent human acceptance for 1.0.0.
-Complete SQL parity, broad visual editing, arbitrary client hydration,
+- [🧪] **Scope:** real MySQL server path, bounded tenant context, local
+  developer studio, invoice tutorial, and enforcement of the declared language
+  compatibility line. The editor, bounded MySQL query path, line check, initial
+  conformance corpus, and tutorial have local implementation evidence.
+- [🗺️] **Open release gates:** migration/backfill/rollback review and independent
+  security review. See the [0.7.0 plan](release-plans/0.7.0.en.md).
+
+## Release 0.8.0
+
+- [🗺️] Add a read-only visual database map and guided CRUD builder. A developer
+  selects a connection and table, inspects fields and relationships, previews
+  compiler-checked source, and explicitly applies the change. Expand language
+  fixtures across grammar, typing, and formatting. Include the bounded local
+  MariaDB transactional outbox already under review, with explicit worker
+  invocation and at-least-once delivery semantics. See the
+  [0.8.0 plan](release-plans/0.8.0.en.md).
+
+## Release 0.9.0
+
+- [🗺️] Add guided business workflows and help for extending generated apps.
+  Verify the promised MariaDB, MySQL, and PostgreSQL workflows on real servers;
+  expand runtime, module, effect, contract, and SQL language fixtures. See the
+  [0.9.0 plan](release-plans/0.9.0.en.md).
+
+## Release 0.95.0
+
+- [🗺️] Stabilize the planned production scope: close technical, security,
+  upgrade, rollback, dependency, release-artifact, and documentation gaps. Audit
+  the language reference and corpus without adding a large subsystem. See the
+  [0.95.0 plan](release-plans/0.95.0.en.md).
+
+## Release 0.99.0
+
+- [🗺️] Freeze product and language features, verify all technical gates on an
+  immutable candidate, and prepare the exact 1.0.0 human-study materials. Only
+  independent human acceptance remains before the first productive release.
+  See the [0.99.0 plan](release-plans/0.99.0.en.md).
+
+A general queue platform remains beyond 1.0.0. The 0.8 outbox is a bounded,
+local MariaDB feature and does not imply a scheduler, distributed workers, or
+exactly-once delivery. Complete SQL parity, arbitrary client hydration,
 compiler self-hosting, native backend, mandatory cloud/AI services, telemetry,
-and unsupported performance claims remain excluded; see the 0.6 roadmap for
-scope and limits.
+and unsupported performance claims remain excluded.
+## First productive release 1.0.0
+
+`v1.0.0` is the first productive publication and the mandatory target for all
+independent human onboarding and acceptance studies deferred from 0.3.0,
+0.4.0, and 0.5.0. No earlier release may imply those studies were completed.
+Before stable `v1.0.0`, publish an immutable release candidate after the
+technical gates pass, have independent non-developer participants use the
+candidate and shipped documentation, fix and re-verify any blockers, and record
+redacted observations and the owner decision against the exact tested commit.
+The study scope must match the final 1.0.0 product; automated CI, internal
+rehearsals, and owner feedback do not substitute for participant testing.
 
 ## Real-world acceptance applications
 
