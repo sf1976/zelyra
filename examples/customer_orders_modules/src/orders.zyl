@@ -7,7 +7,7 @@ table orders {
     customer: customers::Customer required
     order_number: String(40) required unique
     status: String(20) default "open"
-    total: Decimal required
+    total: Money required
     access {
         read: ["src/reporting.zyl"]
     }
