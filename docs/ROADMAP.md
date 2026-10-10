@@ -769,6 +769,10 @@ closure, shared schema ownership, and a reusable multi-connection database
 module are explicitly deferred. Bundles continue to report incomplete closure
 and require operator review; the roadmap makes no claim of production
 readiness or PostgreSQL runtime parity.
+The scoped implementation and technical gates have passed on code head
+`cae59e2` (full CI #514 and release package validation #234). A published,
+immutable RC, its install/update/rollback rehearsal, and independent human
+acceptance are still required before stable `v0.5.0`.
 
 - [🧪] The unreleased 0.4 branch can now generate a commit-pinned Dockerfile,
   a Compose app, and a secret-free `.env.example` from `zelyra module bundle`;

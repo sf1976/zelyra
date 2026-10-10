@@ -838,6 +838,11 @@ wiederverwendbares Mehrverbindungs-Datenbankmodul sind ausdrücklich vertagt.
 Bundles melden weiterhin eine unvollständige Schließung und erfordern eine
 Betreiberprüfung; Produktionsreife oder PostgreSQL-Runtime-Parität wird nicht
 behauptet.
+Die eingegrenzte Implementierung und die technischen Gates bestanden auf
+Code-Stand `cae59e2` (vollständige CI 514 und Paketprüfung 234). Vor dem stabilen
+`v0.5.0` sind weiterhin ein veröffentlichter, unveränderlicher RC, dessen
+Installations-/Update-/Rollback-Probe und die unabhängige menschliche Abnahme
+erforderlich.
 
 - [🧪] Im unveröffentlichten 0.4-Zweig erzeugt `zelyra module bundle` nun auf
   Wunsch ein commit-gepinntes Dockerfile, eine Compose-App und ein
