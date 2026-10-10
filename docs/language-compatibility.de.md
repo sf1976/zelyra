@@ -56,7 +56,7 @@ Der Ausbau erfolgt in prüfbaren Stufen:
 | `0.8.0` | Korpus für Lexer, Parser, Typprüfung und Formatter systematisch ausbauen. Jede Grammatikfamilie erhält positive und negative Fixtures; Formatter-Ausgaben werden auf Idempotenz geprüft. |
 | `0.9.0` | Laufzeit- und Modul-Fixtures ergänzen: Operator- und Built-in-Semantik, Fehlerpfade, Effekte, Verträge, Imports und SQL-Typprüfung. Jede unterstützte Datenbank wird für die zugesagte Teilmenge separat geprüft. |
 | `0.95.0` | Sprachreferenz und Korpus gegen den geplanten 1.0-Umfang abgleichen. Baseline-Fixtures für verschachtelte Records, Arrays, typisierte Maps, deterministische Ausgabe und verweigerte Capabilities ergänzen. Offene Semantik, bekannte Abweichungen und Migrationsfälle dokumentieren; ungeprüfte Bereiche nicht als stabil bezeichnen. |
-| `0.99.0` | Sprach-Feature-Freeze. Grammatik, Typregeln und Semantik von `0.1` als Release-Kandidat einfrieren; nur Korrekturen, Sicherheitskorrekturen und notwendige Kompatibilitätsfehlerbehebungen zulassen. Jede Ausnahme braucht Begründung und Regressionstest. |
+| `0.99.0` | Sprach-Feature-Freeze. Grammatik, Typregeln und Semantik von `0.1` als Release-Kandidat einfrieren und erforderliche gültige, ungültige und Laufzeit-Fixtures verbindlich erhalten. Nur Korrekturen, Sicherheitskorrekturen und notwendige Kompatibilitätsfehlerbehebungen zulassen. Jede Ausnahme braucht Begründung und Regressionstest. |
 | `1.0.0` | Nach unabhängiger menschlicher Abnahme den geprüften Vertrag, das Korpus und die Supportmatrix gemeinsam als erste produktive Sprachveröffentlichung markieren. |
 
 Diese Stufen sind Abnahmekriterien und keine Behauptung, dass geplante Arbeit

@@ -16,5 +16,8 @@ and invoke the built CLI so the corpus exercises the same command users run.
 
 Changing a fixture or its expected result is a language-contract change. The
 review must explain why the expected result changed and identify its affected
-compatibility rule. This corpus is an initial baseline, not a complete 1.0
-conformance claim.
+compatibility rule. The test harness pins required baseline fixture names so
+an empty or accidentally reduced directory cannot pass as a compatibility
+check. New fixtures are additive unless an explicitly reviewed language
+contract change removes one. This corpus is not a complete 1.0 conformance
+claim.

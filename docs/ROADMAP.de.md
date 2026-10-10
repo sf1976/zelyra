@@ -550,10 +550,11 @@ Die menschliche Abnahme bleibt auf 1.0.0 verschoben.
 
 ## Release 0.99.0
 
-- [🗺️] Produkt- und Sprachfunktionen einfrieren, alle technischen Gates am
-  unveränderlichen Kandidaten prüfen und Materialien für die menschliche
-  Abnahme an genau diesem Stand vorbereiten. Vor dem ersten Produktivrelease
-  bleibt nur die unabhängige menschliche Abnahme offen. Siehe
+- [🗺️] Produkt- und Sprachfunktionen einfrieren, die erforderlichen
+  Baseline-Fixtures erhalten, alle technischen Gates am unveränderlichen
+  Kandidaten prüfen und Materialien für die menschliche Abnahme an genau diesem
+  Stand vorbereiten. Die unabhängige menschliche Abnahme bleibt dem exakten
+  1.0.0-Kandidaten vorbehalten. Siehe
   [0.99.0-Plan](release-plans/0.99.0.de.md).
 
 Eine allgemeine Queue-Plattform bleibt hinter 1.0.0. Die Outbox in 0.8 ist

@@ -587,8 +587,9 @@ Independent human acceptance remains deferred to 1.0.0.
 ## Release 0.99.0
 
 - [🗺️] Freeze product and language features, verify all technical gates on an
-  immutable candidate, and prepare the exact 1.0.0 human-study materials. Only
-  independent human acceptance remains before the first productive release.
+  immutable candidate, require the baseline compatibility fixtures to remain
+  present, and prepare the exact 1.0.0 human-study materials. Independent
+  human acceptance is reserved for that exact 1.0.0 candidate.
   See the [0.99.0 plan](release-plans/0.99.0.en.md).
 
 A general queue platform remains beyond 1.0.0. The 0.8 outbox is a bounded,

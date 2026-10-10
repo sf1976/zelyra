@@ -50,8 +50,32 @@ fn source_files(directory: &Path) -> Vec<PathBuf> {
     files
 }
 
+fn assert_required_fixtures(category: &str, required: &[&str]) {
+    let directory = corpus().join(category);
+    let available: Vec<_> = source_files(&directory)
+        .into_iter()
+        .filter_map(|path| path.file_name()?.to_str().map(str::to_owned))
+        .collect();
+    for fixture in required {
+        assert!(
+            available.iter().any(|name| name == fixture),
+            "frozen 0.1 compatibility fixture {category}/{fixture} is missing"
+        );
+    }
+}
+
 #[test]
 fn accepted_line_0_1_sources_check_and_format_idempotently() {
+    assert_required_fixtures(
+        "accepted",
+        &[
+            "basic.zyl",
+            "typed_function.zyl",
+            "unicode_source.zyl",
+            "nested_records_arrays.zyl",
+            "typed_maps.zyl",
+        ],
+    );
     for fixture in source_files(&corpus().join("accepted")) {
         let project = temporary_project(fixture.file_stem().unwrap().to_str().unwrap());
         let source = project.join("main.zyl");
@@ -95,6 +119,15 @@ fn accepted_line_0_1_sources_check_and_format_idempotently() {
 
 #[test]
 fn rejected_line_0_1_sources_keep_their_diagnostic_codes() {
+    assert_required_fixtures(
+        "rejected",
+        &[
+            "disabled_network_capability.zyl",
+            "incompatible_operands.zyl",
+            "incomplete_function.zyl",
+            "unknown_variable.zyl",
+        ],
+    );
     for fixture in source_files(&corpus().join("rejected")) {
         let project = temporary_project(fixture.file_stem().unwrap().to_str().unwrap());
         let source = project.join("main.zyl");
@@ -120,6 +153,16 @@ fn rejected_line_0_1_sources_keep_their_diagnostic_codes() {
 
 #[test]
 fn line_0_1_runtime_fixtures_preserve_their_output() {
+    assert_required_fixtures(
+        "runtime",
+        &[
+            "arithmetic.zyl",
+            "print_value.zyl",
+            "unicode_output.zyl",
+            "nested_records_arrays.zyl",
+            "typed_maps.zyl",
+        ],
+    );
     for fixture in source_files(&corpus().join("runtime")) {
         let project = temporary_project(fixture.file_stem().unwrap().to_str().unwrap());
         let source = project.join("main.zyl");

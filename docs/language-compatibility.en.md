@@ -54,7 +54,7 @@ The work proceeds through verifiable stages:
 | `0.8.0` | Systematically expand the corpus for lexing, parsing, type checking, and formatting. Each grammar family gets positive and negative fixtures; formatter output is checked for idempotence. |
 | `0.9.0` | Add runtime and module fixtures for operator and built-in semantics, error paths, effects, contracts, imports, and SQL typing. Check each supported database separately for the subset it claims. |
 | `0.95.0` | Audit the language reference and corpus against the planned 1.0 scope. Expand baseline fixtures for nested records, arrays, typed maps, deterministic output, and denied capabilities. Document unresolved semantics, known gaps, and migration cases; do not label unchecked areas stable. |
-| `0.99.0` | Freeze language features. Freeze the grammar, type rules, and semantics of `0.1` as a release candidate; allow only fixes, security corrections, and required compatibility fixes. Document and regression-test every exception. |
+| `0.99.0` | Freeze language features. Freeze the grammar, type rules, and semantics of `0.1` as a release candidate; assert that required accepted, rejected, and runtime fixtures remain present. Allow only fixes, security corrections, and required compatibility fixes. Document and regression-test every exception. |
 | `1.0.0` | After independent human acceptance, publish the checked contract, corpus, and support matrix together as the first production language release. |
 
 These stages are acceptance criteria, not claims that planned work is already
