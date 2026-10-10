@@ -2919,8 +2919,12 @@ fn bind_named_parameters_for(
             bound.push(byte as char);
             if byte == b'\\' && (active_quote == b'\'' || active_quote == b'"') {
                 if let Some(next) = bytes.get(index + 1) {
-                    bound.push(*next as char);
-                    index += 2;
+                    if next.is_ascii() {
+                        bound.push(*next as char);
+                        index += 2;
+                    } else {
+                        index += 1;
+                    }
                     continue;
                 }
             }
@@ -3972,6 +3976,19 @@ mod tests {
     use super::*;
 
     include!("../../tests/support/bounded_mutations.rs");
+
+    #[test]
+    fn sql_binder_keeps_utf8_after_backslash_in_quoted_text() {
+        let mut input = b"SELECT '\\".to_vec();
+        input.push(0xd7);
+        input.extend_from_slice(b"', :value");
+        let sql = String::from_utf8_lossy(&input).into_owned();
+
+        let (bound, names) = bind_named_parameters(&sql).unwrap();
+
+        assert_eq!(bound, sql.replace(":value", "?"));
+        assert_eq!(names, ["value"]);
+    }
 
     #[test]
     fn mariadb_sql_binder_handles_reproducible_mutated_queries() {
