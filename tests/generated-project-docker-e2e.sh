@@ -311,10 +311,30 @@ print(parser.token)
 PY
 }
 
+extract_form_snapshot() {
+    python3 - "$1" <<'PY'
+from html.parser import HTMLParser
+import sys
+
+class SnapshotParser(HTMLParser):
+    snapshot = None
+    def handle_starttag(self, tag, attrs):
+        attributes = dict(attrs)
+        if tag == "input" and attributes.get("name") == "_zelyra_snapshot":
+            self.snapshot = attributes.get("value")
+
+parser = SnapshotParser()
+parser.feed(open(sys.argv[1], encoding="utf-8").read())
+if not parser.snapshot:
+    raise SystemExit("edit snapshot missing from generated form")
+print(parser.snapshot)
+PY
+}
+
 assert_bundle_crud() {
     local port="$1" resource="$2" field="$3" created="$4" updated="$5"
     local origin="http://127.0.0.1:${port}" form_file="${project_root}/write-form.html"
-    local token status list_file="${project_root}/write-list.html" record_id
+    local token snapshot stale_snapshot status list_file="${project_root}/write-list.html" record_id
 
     curl --silent --show-error --fail "${origin}/${resource}/new" -o "${form_file}"
     token="$(extract_csrf_token "${form_file}")"
@@ -371,8 +391,11 @@ PY
 
     curl --silent --show-error --fail "${origin}/${resource}/${record_id}/edit" -o "${form_file}"
     token="$(extract_csrf_token "${form_file}")"
+    snapshot="$(extract_form_snapshot "${form_file}")"
+    stale_snapshot="${snapshot}"
     status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
         --header "Origin: ${origin}" --data-urlencode "_zelyra_csrf=${token}" \
+        --data-urlencode "_zelyra_snapshot=${snapshot}" \
         --data-urlencode "${field}=${updated}" \
         "${origin}/${resource}/${record_id}/edit")"
     if [[ "${status}" != 303 ]]; then
@@ -381,6 +404,22 @@ PY
     fi
     curl --silent --show-error --fail "${origin}/${resource}" -o "${list_file}"
     assert_file_contains "${list_file}" "${updated}" "updated row from generated CRUD update"
+
+    status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+        --header "Origin: ${origin}" --data-urlencode "_zelyra_csrf=${token}" \
+        --data-urlencode "_zelyra_snapshot=${stale_snapshot}" \
+        --data-urlencode "${field}=${created}-stale" \
+        "${origin}/${resource}/${record_id}/edit")"
+    if [[ "${status}" != 409 ]]; then
+        echo "error: stale generated CRUD update returned ${status}, expected 409" >&2
+        return 1
+    fi
+    curl --silent --show-error --fail "${origin}/${resource}" -o "${list_file}"
+    assert_file_contains "${list_file}" "${updated}" "current row after stale update rejection"
+    if grep -Fq -- "${created}-stale" "${list_file}"; then
+        echo "error: stale generated CRUD update overwrote the current row" >&2
+        return 1
+    fi
 
     curl --silent --show-error --fail "${origin}/${resource}/${record_id}" -o "${form_file}"
     token="$(extract_csrf_token "${form_file}")"

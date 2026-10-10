@@ -1079,6 +1079,15 @@ Beispiel mit `name email active`), verlinkt Zelyra in generierten CRUD-Listen
 automatisch das erste angezeigte Feld (`name`) mit der Detailseite des
 Datensatzes. Das gilt sowohl für Tabellen- als auch für Kachel-Layouts.
 
+🧪 Edit-Formulare, deren Name auf `Edit` endet, enthalten nun einen signierten
+Stand der angezeigten Werte. Beim Absenden sperrt Zelyra die Zeile in derselben
+MariaDB-Transaktion wie Formularaktion und Audit-Einträge. Wurde ein Wert seit
+dem Laden geändert, antwortet Zelyra mit `409 Conflict` und führt die Aktion
+nicht aus. Dies schützt den erzeugten Bearbeitungspfad vor veralteten
+Übermittlungen; Schreibzugriffe außerhalb der Formularaktion sind davon nicht
+abgedeckt, und es entsteht kein allgemeiner Transaktionsvertrag für die
+Anwendung.
+
 Eigene fachliche Aktionen bleiben POST-only, parametrisiert und geschützt:
 
 ~~~zelyra

@@ -75,6 +75,7 @@
   "http.503_short": "Service Unavailable",
   "http.500_short": "Internal Server Error",
   "error.authentication_required": "Authentication is required.",
+  "error.concurrent_edit": "This record changed while you were editing it. Reload the form and review the latest values.",
   "error.missing_permission": "Missing permission: {permission}",
   "error.invalid_csrf": "Invalid CSRF token.",
   "error.host_not_allowed": "This request host is not allowed.",

@@ -205,6 +205,7 @@ pub(crate) fn framework_text_key(value: &str) -> Option<&'static str> {
         "503 Service Unavailable" => "http.503",
         "Authentication is required." => "error.authentication_required",
         "Invalid CSRF token." => "error.invalid_csrf",
+        "This record changed while you were editing it. Reload the form and review the latest values." => "error.concurrent_edit",
         "Email and password are required." => "error.email_password_required",
         "Too many failed login attempts. Try again later." => "error.login_throttled",
         "Invalid credentials." => "error.invalid_credentials",

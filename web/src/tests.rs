@@ -118,6 +118,38 @@ fn form_route() -> FormRoute {
     }
 }
 
+#[test]
+fn edit_form_snapshots_are_signed_and_bound_to_csrf_key_and_field_set() {
+    let csrf = CsrfProtection::new("session-specific-csrf-secret");
+    let form = form_route().form;
+    let values = HashMap::from([("name".to_owned(), "original".to_owned())]);
+    let token = sign_form_snapshot(&csrf, &values).unwrap();
+    let signature = verify_form_snapshot(&token).unwrap();
+
+    assert!(form_snapshot_matches(&csrf, &signature, &values));
+    assert!(!form_snapshot_matches(
+        &CsrfProtection::new("other-session"),
+        &signature,
+        &values
+    ));
+    assert!(!form_snapshot_matches(
+        &csrf,
+        &signature,
+        &HashMap::from([("name".to_owned(), "modified".to_owned())])
+    ));
+    assert!(verify_form_snapshot(&format!("{token}00")).is_none());
+
+    let mut mismatched_form = form.clone();
+    mismatched_form.fields[0].name = "email".into();
+    let mismatched_values = HashMap::from([("email".to_owned(), "original".to_owned())]);
+    assert!(!form_snapshot_matches(
+        &csrf,
+        &signature,
+        &mismatched_values
+    ));
+    assert!(attach_form_snapshot("<form></form>", &token).contains("name=\"_zelyra_snapshot\""));
+}
+
 fn default_shell_crud(layout_html: Option<String>) -> CrudRoute {
     CrudRoute {
         path: "/machines".into(),
@@ -3268,6 +3300,21 @@ fn form_post_requires_csrf_and_reports_validation_errors() {
         )
         .unwrap();
     assert_eq!(app.dispatch(&cross_origin).status, 403);
+}
+
+#[test]
+fn edit_form_rejects_posts_without_a_signed_record_snapshot() {
+    let mut route = form_route();
+    route.form.name = "CustomerEdit".into();
+    let app = WebApp::new(Vec::new(), vec![route]);
+    let request = parse_request(
+        "POST /forms/CustomerCreate HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\n\r\n_zelyra_csrf=csrf-token&name=Anna",
+    )
+    .unwrap();
+
+    let response = app.dispatch(&request);
+    assert_eq!(response.status, 409);
+    assert!(response.body.contains("Reload the form"));
 }
 
 #[test]

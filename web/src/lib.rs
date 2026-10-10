@@ -2,7 +2,8 @@ use argon2::password_hash::SaltString;
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use blake2::{Blake2s256, Digest};
 use rand_core::{OsRng, RngCore};
-use std::collections::{HashMap, HashSet};
+use ring::hmac;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 use std::io::{self, Read, Write};
 use std::net::{SocketAddr, TcpStream};
@@ -4054,10 +4055,15 @@ fn dispatch_form_with_language(
         } else {
             HashMap::new()
         };
-        return Response::html(
-            200,
-            render_form_with_language(&rendered_form, &values, &[], None, &options, language),
-        );
+        let mut html =
+            render_form_with_language(&rendered_form, &values, &[], None, &options, language);
+        if is_edit_form(form) {
+            let Some(snapshot) = sign_form_snapshot(&form.csrf, &values) else {
+                return Response::html(500, "<h1>500 Internal Server Error</h1>");
+            };
+            html = attach_form_snapshot(&html, &snapshot);
+        }
+        return Response::html(200, html);
     }
     if request.method != "POST" {
         return Response::html(405, "<h1>405 Method Not Allowed</h1>");
@@ -4077,6 +4083,20 @@ fn dispatch_form_with_language(
     }
     let mut values = input;
     values.remove("_zelyra_csrf");
+    let expected_snapshot = if is_edit_form(form) {
+        let Some(snapshot) = values
+            .remove("_zelyra_snapshot")
+            .and_then(|token| verify_form_snapshot(&token))
+        else {
+            return Response::html(
+                409,
+                "<main><h1>409 Conflict</h1><p>This record changed while you were editing it. Reload the form and review the latest values.</p></main>",
+            );
+        };
+        Some(snapshot)
+    } else {
+        None
+    };
     for field in &rendered_form.form.fields {
         if input_type(&rendered_form, field) == "checkbox" {
             values
@@ -4118,18 +4138,6 @@ fn dispatch_form_with_language(
                 "DATABASE_URL is required for this form action.",
             );
         };
-        let before_values = if form.audit_table.is_some()
-            && form
-                .audit_event
-                .as_deref()
-                .is_some_and(|event| event == "crud.update" || event.starts_with("crud.action."))
-        {
-            load_existing_form_values(form, path_params, Some(database_url))
-                .ok()
-                .flatten()
-        } else {
-            None
-        };
         if let Err(error) = execute_form_action(
             form,
             action,
@@ -4137,9 +4145,17 @@ fn dispatch_form_with_language(
             path_params,
             database_url,
             actor_user_id,
-            before_values.as_ref(),
+            expected_snapshot.as_deref(),
         ) {
             eprintln!("zelyra web: form action failed: {error}");
+            if error.starts_with("ZELYRA_CONFLICT:") {
+                return action_error_response(
+                    action,
+                    409,
+                    "409 Conflict",
+                    "This record changed while you were editing it. Reload the form and review the latest values.",
+                );
+            }
             return action_error_response(
                 action,
                 500,
@@ -4281,21 +4297,7 @@ fn load_existing_form_values(
         .as_ref()
         .and_then(|schema| schema.tables.iter().find(|table| table.name == table_name))
         .ok_or_else(|| format!("edit form table `{table_name}` is missing from schema"))?;
-    let columns = form
-        .form
-        .fields
-        .iter()
-        .map(|field| {
-            schema_table
-                .columns
-                .iter()
-                .find(|column| {
-                    column.name == field.name || column.name == format!("{}_id", field.name)
-                })
-                .map(|column| column.name.clone())
-                .unwrap_or_else(|| field.name.clone())
-        })
-        .collect::<Vec<_>>();
+    let columns = form_value_columns(form, schema_table);
     let query = format!(
         "SELECT {} FROM {} WHERE {} = :id",
         columns
@@ -4323,6 +4325,78 @@ fn load_existing_form_values(
         .map(|(field, value)| (field.name.clone(), value.clone()))
         .collect();
     Ok(Some(values))
+}
+
+fn form_value_columns(form: &FormRoute, schema_table: &zelyra_database::Table) -> Vec<String> {
+    form.form
+        .fields
+        .iter()
+        .map(|field| {
+            schema_table
+                .columns
+                .iter()
+                .find(|column| {
+                    column.name == field.name || column.name == format!("{}_id", field.name)
+                })
+                .map(|column| column.name.clone())
+                .unwrap_or_else(|| field.name.clone())
+        })
+        .collect()
+}
+
+fn is_edit_form(form: &FormRoute) -> bool {
+    form.form.name.ends_with("Edit")
+}
+
+fn sign_form_snapshot(csrf: &CsrfProtection, values: &HashMap<String, String>) -> Option<String> {
+    let signature = form_snapshot_signature(csrf, values)?;
+    Some(hex_encode(&signature))
+}
+
+fn form_snapshot_signature(
+    csrf: &CsrfProtection,
+    values: &HashMap<String, String>,
+) -> Option<Vec<u8>> {
+    let snapshot = values.iter().collect::<BTreeMap<_, _>>();
+    let payload = serde_json::to_vec(&snapshot).ok()?;
+    let key = hmac::Key::new(hmac::HMAC_SHA256, csrf.token.as_bytes());
+    Some(hmac::sign(&key, &payload).as_ref().to_vec())
+}
+
+fn verify_form_snapshot(token: &str) -> Option<Vec<u8>> {
+    if token.len() != 64 {
+        return None;
+    }
+    let signature = hex_decode(token)?;
+    if signature.len() != 32 {
+        return None;
+    }
+    Some(signature)
+}
+
+fn form_snapshot_matches(
+    csrf: &CsrfProtection,
+    expected_signature: &[u8],
+    values: &HashMap<String, String>,
+) -> bool {
+    let Some(snapshot) = form_snapshot_signature(csrf, values) else {
+        return false;
+    };
+    constant_time_equal(expected_signature, &snapshot)
+}
+
+fn attach_form_snapshot(html: &str, snapshot: &str) -> String {
+    let hidden =
+        format!("<input type=\"hidden\" name=\"_zelyra_snapshot\" value=\"{snapshot}\" />");
+    if let Some(index) = html.rfind("</form>") {
+        let mut output = String::with_capacity(html.len() + hidden.len());
+        output.push_str(&html[..index]);
+        output.push_str(&hidden);
+        output.push_str(&html[index..]);
+        output
+    } else {
+        html.to_owned()
+    }
 }
 
 fn crud_foreign_key<'a>(
@@ -6762,7 +6836,7 @@ fn execute_form_action(
     path_params: &HashMap<String, String>,
     database_url: &str,
     actor_user_id: Option<i64>,
-    before_values: Option<&HashMap<String, String>>,
+    expected_snapshot: Option<&[u8]>,
 ) -> Result<(), String> {
     let mut parameters = form_query_parameters(form, values)?;
     for (name, value) in path_params {
@@ -6789,23 +6863,93 @@ fn execute_form_action(
     if queries.is_empty() {
         return Err("form action must contain at least one SQL statement".into());
     }
-    if let (Some(audit_table), Some(audit_event)) =
-        (form.audit_table.as_deref(), form.audit_event.as_deref())
-    {
-        let (record_id, details) =
-            form_audit_details(form, audit_event, path_params, before_values, values);
-        queries.extend(audit_insert_queries(
-            audit_table,
-            form.audit_chain,
-            actor_user_id,
-            audit_event,
-            record_id,
-            &details,
-        ));
-    }
-    zelyra_database::execute_mariadb_queries(database_url, &queries, true)
-        .map(|_| ())
-        .map_err(|error| error.to_string())
+    zelyra_database::with_mariadb_transaction(database_url, |transaction| {
+        let before_values = if let Some(expected_snapshot) = expected_snapshot {
+            let table_name =
+                form.form
+                    .table
+                    .as_deref()
+                    .ok_or_else(|| zelyra_database::DatabaseError {
+                        message: "edit form has no source table".into(),
+                    })?;
+            let table = form
+                .schema
+                .as_ref()
+                .and_then(|schema| schema.tables.iter().find(|table| table.name == table_name))
+                .ok_or_else(|| zelyra_database::DatabaseError {
+                    message: "edit form table is missing from schema".into(),
+                })?;
+            let id = path_params
+                .get("id")
+                .and_then(|id| id.parse::<i64>().ok())
+                .ok_or_else(|| zelyra_database::DatabaseError {
+                    message: "edit form path parameter `id` is not an integer".into(),
+                })?;
+            let columns = form_value_columns(form, table);
+            let query = zelyra_database::Query {
+                sql: format!(
+                    "SELECT {} FROM {} WHERE {} = :id FOR UPDATE",
+                    columns
+                        .iter()
+                        .map(|column| quote_identifier(column))
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    quote_identifier(table_name),
+                    quote_identifier("id")
+                ),
+                params: vec![("id".into(), zelyra_database::QueryValue::Int(id))],
+            };
+            let result = transaction.execute(&query)?;
+            let Some(row) = result.rows.first() else {
+                return Err(zelyra_database::DatabaseError {
+                    message: "ZELYRA_CONFLICT: edited record no longer exists".into(),
+                });
+            };
+            let current_values = form
+                .form
+                .fields
+                .iter()
+                .zip(row)
+                .map(|(field, value)| (field.name.clone(), value.clone()))
+                .collect::<HashMap<_, _>>();
+            if !form_snapshot_matches(&form.csrf, expected_snapshot, &current_values) {
+                return Err(zelyra_database::DatabaseError {
+                    message: "ZELYRA_CONFLICT: edited record changed after the form was loaded"
+                        .into(),
+                });
+            }
+            Some(current_values)
+        } else {
+            None
+        };
+
+        for query in &queries {
+            transaction.execute(query)?;
+        }
+        if let (Some(audit_table), Some(audit_event)) =
+            (form.audit_table.as_deref(), form.audit_event.as_deref())
+        {
+            let (record_id, details) = form_audit_details(
+                form,
+                audit_event,
+                path_params,
+                before_values.as_ref(),
+                values,
+            );
+            for query in audit_insert_queries(
+                audit_table,
+                form.audit_chain,
+                actor_user_id,
+                audit_event,
+                record_id,
+                &details,
+            ) {
+                transaction.execute(&query)?;
+            }
+        }
+        Ok(())
+    })
+    .map_err(|error| error.to_string())
 }
 
 fn form_query_parameters(
@@ -7772,6 +7916,17 @@ fn hex_encode(bytes: &[u8]) -> String {
         result.push(HEX[(byte & 0x0f) as usize] as char);
     }
     result
+}
+
+fn hex_decode(value: &str) -> Option<Vec<u8>> {
+    if value.len() % 2 != 0 {
+        return None;
+    }
+    value
+        .as_bytes()
+        .chunks_exact(2)
+        .map(|pair| Some((hex_value(pair[0])? << 4) | hex_value(pair[1])?))
+        .collect()
 }
 
 fn session_token_hash(token: &str) -> String {

@@ -983,6 +983,14 @@ visible `fields` (as in `name email active` above), Zelyra automatically links
 the first displayed field (`name`) to the record detail page for both table and
 card layouts.
 
+🧪 Edit forms whose name ends in `Edit` now carry a signed snapshot of their
+displayed values. On submit, Zelyra locks the row in the same MariaDB
+transaction as the form action and audit entries. If a value changed since the
+form loaded, it returns `409 Conflict` and does not run the action. This guards
+the generated edit path against stale submissions; it does not cover writes
+that bypass the form action or establish a general transaction contract for
+the application.
+
 Domain actions remain POST-only, parameterized, and protected:
 
 ~~~zelyra
