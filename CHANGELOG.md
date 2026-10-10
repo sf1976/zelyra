@@ -6,6 +6,31 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+## 0.5.0-rc.1 — 2026-10-10 (pre-release candidate)
+
+- Add experimental Docker bundles for statically recognized module subsets.
+  Each exported app uses its own schema and least-privilege database account;
+  completeness flags remain false and operator review is required. Complete
+  dependency/effect closure, shared schema ownership, and multiple named
+  connections in one process remain out of scope. / Experimentelle Docker-
+  Bundles für statisch erkannte Modul-Teilmengen ergänzen. Jede exportierte
+  App nutzt ein eigenes Schema und ein Datenbankkonto mit minimalen Rechten;
+  Vollständigkeitsflags bleiben `false` und eine Betreiberprüfung ist nötig.
+  Vollständige Abhängigkeits-/Effektauflösung, gemeinsames Schemaeigentum und
+  mehrere benannte Verbindungen in einem Prozess bleiben außerhalb des
+  Umfangs.
+- Verify customer/order authorization, stale and concurrent edit conflicts,
+  MariaDB backup/restore, additive schema migration, and recovery after an
+  interrupted business-row transaction on disposable Docker fixtures. / Die
+  Kunden-/Auftragsberechtigungen, Konflikte bei veralteten/parallelen
+  Formularen, MariaDB-Backup/Restore, additive Schema-Migration und Recovery
+  nach einem abgebrochenen Geschäftsdatensatz-Update mit wegwerfbaren
+  Docker-Fixtures prüfen.
+- Defer the independent human onboarding acceptance to the published 0.5.0
+  candidate; no human result is claimed by this pre-release. / Die unabhängige
+  menschliche Einsteigerabnahme bleibt dem veröffentlichten 0.5.0-Kandidaten
+  vorbehalten; dieses Vorab-Release behauptet kein menschliches Testergebnis.
+
 ## 0.4.0 — 2026-10-10
 
 - Coverage-guided fuzzing found a parser stack overflow after deeply nested

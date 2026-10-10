@@ -23,8 +23,17 @@ on:
       - 'docs/release-readiness/0.4.0-candidate-verification.md'
       - 'docs/release-plans/0.5.0.en.md'
       - 'docs/release-plans/0.5.0.de.md'
+      - 'docs/release-notes/0.5.0.en.md'
+      - 'docs/release-notes/0.5.0.de.md'
       - 'docs/release-readiness/0.5.0-human-acceptance.en.md'
       - 'docs/release-readiness/0.5.0-human-acceptance.de.md'
+      - 'docs/release-readiness/0.5.0-onboarding-study.en.md'
+      - 'docs/release-readiness/0.5.0-onboarding-study.de.md'
+      - 'docs/release-readiness/0.5.0-candidate-verification.md'
+      - 'docs/release-readiness/0.5.0-risk-register.en.md'
+      - 'docs/release-readiness/0.5.0-risikoregister.de.md'
+      - 'docs/handbook/en/textbook-foundations.md'
+      - 'docs/handbook/de/lehrbuch-grundlagen.md'
   workflow_dispatch:
     inputs:
       release_tag:
