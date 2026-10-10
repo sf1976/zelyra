@@ -2316,6 +2316,52 @@ fn setup_accepts_mariadb_project_without_env_example() {
 }
 
 #[test]
+fn setup_suggests_relative_path_when_absolute_path_is_probably_mistyped() {
+    let leaf = format!(
+        "zelyra-setup-path-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    );
+    let current = env::temp_dir().join(format!("{leaf}-cwd"));
+    let candidate = current.join(&leaf);
+    fs::create_dir_all(&candidate).unwrap();
+    let absolute = format!("/{leaf}");
+
+    let error = setup_directory_from(&absolute, Some(&current)).unwrap_err();
+    assert!(error.contains(&format!("`./{leaf}` exists in the current directory")));
+    assert!(error.contains(&format!("zelyra setup ./{leaf}")));
+
+    fs::remove_dir_all(current).unwrap();
+}
+
+#[test]
+fn setup_does_not_create_mariadb_credentials_for_minimal_init_project() {
+    let path = env::temp_dir().join(format!(
+        "zelyra-cli-setup-minimal-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&path).unwrap();
+    fs::write(path.join("zelyra.toml"), "[project]\nname = \"minimal\"\n").unwrap();
+
+    let error = match ensure_local_env_file(&path, &SetupOptions::default()) {
+        Ok(_) => panic!("minimal projects must not get MariaDB credentials"),
+        Err(error) => error,
+    };
+    assert!(error.contains("A project created with `zelyra init` runs without setup"));
+    assert!(error.contains("zelyra init <directory> --mariadb"));
+    assert!(!path.join(".env").exists());
+
+    fs::remove_dir_all(path).unwrap();
+}
+
+#[test]
 fn setup_action_prepare_is_idempotent_and_does_not_replace_credentials() {
     let path = env::temp_dir().join(format!(
         "zelyra-cli-setup-action-{}-{}",

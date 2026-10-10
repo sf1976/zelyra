@@ -677,8 +677,10 @@ remaining roadmap items below.
   permission guidance, and a printed application URL exist. The generated
   CRUD stack has passed an isolated first-run and repeat-setup test, including
   schema-backed HTTP pages, unchanged credentials, secret-free setup output,
-  ports, and cleanup. Clean-host installation and recovery coverage across
-  supported platforms remain open.
+  ports, and cleanup. Setup also explains that minimal `init` projects need no
+  database and suggests a likely relative path when an absolute path is
+  missing. Clean-host installation and recovery coverage across supported
+  platforms remain open.
 - [~] **Database safety:** MariaDB is the reference runtime and SQLite has
   end-to-end paths. The schema-safety test exercises both backends: destructive
   drops require approval; required columns without defaults, new unique

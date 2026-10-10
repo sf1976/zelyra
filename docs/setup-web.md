@@ -18,6 +18,12 @@ zelyra setup --host-port 18080 --db-host-port 3308
 generated MariaDB Compose project, `--schema` starts it and applies the
 `main.zyl` schema, and `--all` performs both operations. Existing `.env` files
 are never overwritten.
+A plain `zelyra init <directory>` creates a minimal project that runs without
+a database or setup. For MariaDB, use `zelyra init <directory> --mariadb` or
+`zelyra new <directory> --mariadb`. Absolute paths stay absolute:
+`zelyra setup /test_a` looks for `/test_a`; use `zelyra setup ./test_a` for a
+directory under the current directory. If `/test_a` is missing while
+`./test_a` exists, the error suggests the relative path.
 After starting the application, console setup also prints its local URL. It
 uses the effective `ZELYRA_HOST_PORT`, including a port selected during
 scaffolding, and does not include database credentials in the message.
