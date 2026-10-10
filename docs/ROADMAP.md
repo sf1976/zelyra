@@ -250,12 +250,16 @@ architecture requirement for every phase, not a provider-specific feature.
 
 ## 2. Language and compiler
 
-- [~] Versioned language compatibility has an initial enforcement step: the
-  compiler accepts `zelyra = "0.1"`, rejects unsupported explicit lines with
-  `E-LANG-001`, and treats a missing declaration as legacy 0.1. See the
-  [language compatibility guide](language-compatibility.en.md). A complete
-  grammar reference, release-to-release conformance corpus, and frozen
-  production guarantee remain open for 1.0.0.
+- [🧪] **Language compatibility:** the initial enforcement in 0.7 accepts
+  `zelyra = "0.1"`, rejects unsupported explicit lines with `E-LANG-001`, and
+  preserves older projects without the field. The language line remains `0.1` through 0.99.0; compiler
+  release numbers do not change it automatically. Version 0.8 plans a versioned
+  corpus for lexing, parsing, type checking, and formatting; 0.9 adds runtime,
+  module, effect, contract, and SQL fixtures. Version 0.99 freezes grammar and
+  semantics as a release candidate and allows only documented corrections.
+  Only 1.0.0 makes the independently human-accepted contract production-ready.
+  See the [language compatibility guide](language-compatibility.en.md) for the
+  rules and acceptance criteria.
 - [~] Experimental function/type/record/table/view/component imports and project-wide database
   configuration in the current development
   branch support project-root-relative imports, `pub` declarations, qualified
