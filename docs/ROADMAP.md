@@ -555,11 +555,12 @@ the [0.8 roadmap](release-plans/0.8.0.en.md).
 
 The [0.9 branch](release-plans/0.9.0.en.md) now implements optional local TOTP
 MFA, encrypted factor storage, password-plus-MFA login, replay protection,
-throttling, and one-time recovery codes. Local locked compile checks pass. CI
-run #549 and release validation #262 are queued for head
-`e76615c389cacbd30e232b5e9df596cbcf0f8f93`; integration coverage, a rehearsed
-operator recovery procedure, independent security review, and candidate
-acceptance remain open. WebAuthn/passkeys and OAuth2/OIDC are deferred for
+throttling, and one-time recovery codes. All eight CI jobs passed on exact head
+`5a37bfcf43deb754b2f029ba3b3ed34a431bcb50` in [CI #556](https://github.com/sf1976/zelyra/actions/runs/38041496904);
+Linux/Windows package validation passed in [release run #268](https://github.com/sf1976/zelyra/actions/runs/38041496914).
+MFA-specific integration coverage, a rehearsed operator recovery procedure,
+independent security review, and candidate acceptance remain open.
+WebAuthn/passkeys and OAuth2/OIDC are deferred for
 separate protocol and security reviews, followed by contract stabilization and
 independent human acceptance for 1.0.0.
 
