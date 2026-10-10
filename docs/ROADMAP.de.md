@@ -500,18 +500,17 @@ Menschliche Abnahme fand nicht statt und ist auf 1.0.0 verschoben. Siehe
   wegwerfbare MariaDB-11-Fixture begrenzt; vollständige Modulschließung und
   Schemaeigentumsdurchsetzung bleiben offen.
 
-## Vorgeschlagener Release-Meilenstein 0.6.0
+## Release 0.6.0
 
-Die eingegrenzte [0.6.0-Roadmap](release-plans/0.6.0.de.md) ergänzt einen
+Das stabile [0.6.0-Release](release-plans/0.6.0.de.md) ergänzt einen
 nativen, gepoolten PostgreSQL-16-Pfad für direkte SQL-Abfragen mit begrenzten
 Parametertypen und Transaktionen. Vollständige PostgreSQL-Parität und
-generierte Web-/CRUD-Unterstützung werden nicht versprochen. Ergänzt werden
-eine deterministische Routenübersicht samt Kollisionsfehlern sowie
+generierte Web-/CRUD-Unterstützung werden nicht versprochen. Das Release
+ergänzt eine deterministische Routenübersicht samt Kollisionsfehlern sowie
 `zelyra db map`: eine schreibgeschützte Zuordnung von Tabellen und
 Beziehungen zum Quellmodul, die Abweichungen zur Live-Datenbank zeigt.
 Modulzuordnung bleibt ein Hinweis und ändert weder Schema noch Berechtigungen.
-Die menschliche Abnahme ist auf 1.0.0 verschoben und keine Voraussetzung für
-0.6.0.
+Die menschliche Abnahme bleibt auf 1.0.0 verschoben.
 
 Nach 0.6 sind ein echter MySQL-Serverpfad, begrenzter Mandantenkontext,
 lokales Entwicklungsstudio und das Rechnungstutorial in 0.7 geplant. 0.8

@@ -524,16 +524,16 @@ Human acceptance was not conducted and remains deferred to 1.0.0. See the
   disposable MariaDB 11 fixture; complete module closure and schema ownership
   enforcement remain open.
 
-## Proposed release milestone 0.6.0
+## Release 0.6.0
 
-The scoped [0.6.0 roadmap](release-plans/0.6.0.en.md) adds a native, pooled
+The scoped [0.6.0 release](release-plans/0.6.0.en.md) shipped a native, pooled
 PostgreSQL 16 direct-SQL path for a bounded set of parameter types and
 transactions. It does not promise complete PostgreSQL parity or generated
-web/CRUD support. The milestone also adds a deterministic route inventory
-with collision errors and `zelyra db map`, a read-only mapping of tables and
+web/CRUD support. The release also added a deterministic route inventory with
+collision errors and `zelyra db map`, a read-only mapping of tables and
 relationships to source modules that shows differences from the live database.
 Module ownership remains advisory and changes neither schema nor permissions.
-Independent human acceptance is deferred to 1.0.0 and is not a 0.6 prerequisite.
+Independent human acceptance remains deferred to 1.0.0.
 
 After 0.6, 0.7 plans a real MySQL server path, bounded tenant context, local
 developer studio, and the invoice tutorial. Version 0.8 adds durable tasks,

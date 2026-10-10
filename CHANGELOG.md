@@ -6,7 +6,7 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
-## 0.6.0 — 2026-10-10 (release candidate)
+## 0.6.0 — 2026-10-10
 
 - Add `zelyra routes <entry.zyl>` with human and JSON output, source locations,
   generated route inventory, and `E-ROUTE-001` diagnostics for overlapping
