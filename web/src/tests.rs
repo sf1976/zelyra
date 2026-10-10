@@ -349,6 +349,8 @@ fn generated_login_page_uses_the_localized_default_shell() {
         reset_tokens_table: None,
         reset_rate_limit: DEFAULT_RESET_RATE_LIMIT,
         reset_block_seconds: DEFAULT_RESET_BLOCK_SECONDS,
+        mfa_table: None,
+        mfa_recovery_table: None,
         schema: Schema {
             database: None,
             tables: Vec::new(),
@@ -704,6 +706,8 @@ fn project_catalogs_override_generated_ui_and_parameterized_labels() {
         reset_tokens_table: None,
         reset_rate_limit: DEFAULT_RESET_RATE_LIMIT,
         reset_block_seconds: DEFAULT_RESET_BLOCK_SECONDS,
+        mfa_table: None,
+        mfa_recovery_table: None,
         schema: Schema {
             database: None,
             tables: Vec::new(),
@@ -788,6 +792,8 @@ fn framework_errors_auth_labels_and_validation_use_the_locale_catalog() {
         reset_tokens_table: None,
         reset_rate_limit: DEFAULT_RESET_RATE_LIMIT,
         reset_block_seconds: DEFAULT_RESET_BLOCK_SECONDS,
+        mfa_table: None,
+        mfa_recovery_table: None,
         schema: Schema {
             database: None,
             tables: Vec::new(),
@@ -1340,6 +1346,8 @@ fn logout_clears_session_cookie_with_the_matching_secure_attribute() {
         reset_tokens_table: None,
         reset_rate_limit: DEFAULT_RESET_RATE_LIMIT,
         reset_block_seconds: DEFAULT_RESET_BLOCK_SECONDS,
+        mfa_table: None,
+        mfa_recovery_table: None,
         schema: Schema {
             database: None,
             tables: Vec::new(),
@@ -1907,6 +1915,8 @@ fn logout_requires_csrf() {
         reset_tokens_table: None,
         reset_rate_limit: DEFAULT_RESET_RATE_LIMIT,
         reset_block_seconds: DEFAULT_RESET_BLOCK_SECONDS,
+        mfa_table: None,
+        mfa_recovery_table: None,
         schema: Schema {
             database: None,
             tables: Vec::new(),
@@ -2041,6 +2051,8 @@ fn rotating_memory_session_invalidates_previous_token() {
         reset_tokens_table: None,
         reset_rate_limit: DEFAULT_RESET_RATE_LIMIT,
         reset_block_seconds: DEFAULT_RESET_BLOCK_SECONDS,
+        mfa_table: None,
+        mfa_recovery_table: None,
         schema: Schema {
             database: None,
             tables: Vec::new(),
@@ -2131,6 +2143,8 @@ fn session_administration_preserves_legacy_tables_and_escapes_rows() {
         reset_tokens_table: None,
         reset_rate_limit: DEFAULT_RESET_RATE_LIMIT,
         reset_block_seconds: DEFAULT_RESET_BLOCK_SECONDS,
+        mfa_table: None,
+        mfa_recovery_table: None,
         schema: Schema {
             database: None,
             tables: vec![zelyra_database::Table {
@@ -2950,6 +2964,8 @@ fn database_capability_denies_persistent_login() {
         reset_tokens_table: None,
         reset_rate_limit: DEFAULT_RESET_RATE_LIMIT,
         reset_block_seconds: DEFAULT_RESET_BLOCK_SECONDS,
+        mfa_table: None,
+        mfa_recovery_table: None,
         schema: Schema {
             database: None,
             tables: Vec::new(),

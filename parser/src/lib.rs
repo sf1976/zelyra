@@ -422,6 +422,8 @@ impl<'a> Parser<'a> {
         let mut reset_tokens_table = None;
         let mut reset_rate_limit = None;
         let mut reset_block_seconds = None;
+        let mut mfa_table = None;
+        let mut mfa_recovery_table = None;
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
             let field = match self.current().kind.clone() {
                 TokenKind::Table => "table",
@@ -440,6 +442,8 @@ impl<'a> Parser<'a> {
                 TokenKind::Ident(name) if name == "memberships" => "memberships",
                 TokenKind::ResetRateLimit => "reset_rate_limit",
                 TokenKind::ResetBlockSeconds => "reset_block_seconds",
+                TokenKind::Ident(name) if name == "mfa" => "mfa",
+                TokenKind::Ident(name) if name == "mfa_recovery" => "mfa_recovery",
                 _ => return self.error("expected authentication option"),
             };
             self.advance();
@@ -533,6 +537,8 @@ impl<'a> Parser<'a> {
                 "admin_permission" => admin_permission = Some(value),
                 "admin_role" => admin_role = Some(value),
                 "reset_tokens" => reset_tokens_table = Some(value),
+                "mfa" => mfa_table = Some(value),
+                "mfa_recovery" => mfa_recovery_table = Some(value),
                 _ => return self.error("unknown authentication option"),
             }
             self.skip_newlines();
@@ -562,6 +568,8 @@ impl<'a> Parser<'a> {
             reset_tokens_table,
             reset_rate_limit,
             reset_block_seconds,
+            mfa_table,
+            mfa_recovery_table,
             span: start.join(end),
         })
     }
