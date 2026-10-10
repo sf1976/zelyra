@@ -54,3 +54,16 @@ page "/" {
         <main><h1>Private account</h1><p>Only verified sessions can see this page.</p></main>
     }
 }
+
+fn private_status() -> String {
+    return "verified"
+}
+
+api GET "/api/private" {
+    handler private_status
+    requires auth
+    output String
+}
+
+fn main() {
+}

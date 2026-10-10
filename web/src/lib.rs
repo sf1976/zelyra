@@ -2601,7 +2601,7 @@ fn confirm_mfa_enrollment(context: MfaAccountContext<'_>, code: &str) -> Respons
         let Some(step) = step else {
             transaction.execute(&zelyra_database::Query {
                 sql: format!(
-                    "UPDATE {} SET failed_attempts = failed_attempts + 1, locked_until = IF(failed_attempts + 1 >= 5, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 15 MINUTE), locked_until) WHERE user_id = :user_id AND enabled_at IS NULL",
+                    "UPDATE {} SET locked_until = IF(failed_attempts + 1 >= 5, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 15 MINUTE), locked_until), failed_attempts = failed_attempts + 1 WHERE user_id = :user_id AND enabled_at IS NULL",
                     quote_identifier(mfa_table)
                 ),
                 params: vec![("user_id".into(), QueryValue::Int(user_id))],
@@ -2793,7 +2793,7 @@ fn update_mfa_security(
         let Some(step) = matched_step else {
             transaction.execute(&zelyra_database::Query {
                 sql: format!(
-                    "UPDATE {} SET failed_attempts = failed_attempts + 1, locked_until = IF(failed_attempts + 1 >= 5, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 15 MINUTE), locked_until) WHERE user_id = :user_id AND enabled_at IS NOT NULL",
+                    "UPDATE {} SET locked_until = IF(failed_attempts + 1 >= 5, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 15 MINUTE), locked_until), failed_attempts = failed_attempts + 1 WHERE user_id = :user_id AND enabled_at IS NOT NULL",
                     quote_identifier(mfa_table)
                 ),
                 params: vec![("user_id".into(), QueryValue::Int(user_id))],
@@ -3066,7 +3066,7 @@ fn dispatch_login_mfa(
                 if matched_step.is_none() && recovery_id.is_none() {
                     transaction.execute(&zelyra_database::Query {
                         sql: format!(
-                            "UPDATE {} SET failed_attempts = failed_attempts + 1, locked_until = IF(failed_attempts + 1 >= 5, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 15 MINUTE), locked_until) WHERE user_id = :user_id AND enabled_at IS NOT NULL",
+                            "UPDATE {} SET locked_until = IF(failed_attempts + 1 >= 5, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 15 MINUTE), locked_until), failed_attempts = failed_attempts + 1 WHERE user_id = :user_id AND enabled_at IS NOT NULL",
                             quote_identifier(mfa_table)
                         ),
                         params: vec![("user_id".into(), QueryValue::Int(pending_user))],
