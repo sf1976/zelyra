@@ -408,3 +408,41 @@ jobs:
         run: bash ./tests/mariadb-backup-restore-e2e.sh
       - name: Validate Handbook Code Snippets
         run: python3 scripts/validate_handbook.py
+  mysql-compatibility:
+    name: MySQL 8.4.11 parameterized runtime
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: public.ecr.aws/docker/library/mysql:8.4.11
+        env:
+          MYSQL_DATABASE: zelyra_ci
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install MySQL client
+        run: sudo apt-get update && sudo apt-get install --yes default-mysql-client
+      - name: Verify MySQL server version
+        env:
+          MYSQL_PWD: root
+        run: |
+          server_version="$(mysql --protocol=tcp --host=127.0.0.1 --port=3306 --user=root --batch --skip-column-names -e 'SELECT VERSION()')"
+          case "${server_version}" in
+            8.4.11*) ;;
+            *) echo "Expected MySQL 8.4.11, got ${server_version}" >&2; exit 1 ;;
+          esac
+          echo "Testing MySQL ${server_version}"
+          docker image inspect public.ecr.aws/docker/library/mysql:8.4.11 --format '{{json .RepoDigests}}'
+      - name: Run parameterized Zelyra SQL against MySQL
+        env:
+          DATABASE_URL: mysql://root:root@127.0.0.1:3306/zelyra_ci
+        run: bash ./tests/mysql-runtime-e2e.sh
