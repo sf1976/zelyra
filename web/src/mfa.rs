@@ -78,7 +78,7 @@ pub(crate) fn matching_totp_step(
         current.checked_add(1),
     ];
     for candidate in candidates.into_iter().flatten() {
-        let expected = totp_for_step(secret.as_ref(), candidate)?;
+        let expected = Zeroizing::new(totp_for_step(secret.as_ref(), candidate)?);
         if bool::from(expected.as_bytes().ct_eq(supplied_code.as_bytes())) {
             return Ok(Some(candidate));
         }
@@ -155,7 +155,7 @@ pub(crate) fn generate_recovery_codes() -> Result<Vec<Zeroizing<String>>, MfaErr
         OsRng
             .try_fill_bytes(random.as_mut())
             .map_err(|_| MfaError::EntropyUnavailable)?;
-        let encoded = hex_encode(random.as_ref());
+        let encoded = Zeroizing::new(hex_encode(random.as_ref()));
         codes.push(Zeroizing::new(format!(
             "{}-{}-{}-{}",
             &encoded[..8],
