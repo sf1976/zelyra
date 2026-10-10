@@ -545,6 +545,9 @@ zelyra db inspect src/main.zyl
 Die native SQL-Runtime wird weiterhin hauptsächlich mit MariaDB eingesetzt.
 Ein vorhandenes Schema-Backend ist daher nicht automatisch ein Beleg dafür,
 dass jede Runtime-Abfrage mit jedem Backend gleich funktioniert.
+Die versionierten Server und konkret geprüften Abläufe stehen in der
+[Datenbankmatrix](../../database-support.de.md); sie unterscheidet bewusst
+zwischen getestetem Teilausschnitt und vollständiger Laufzeitparität.
 
 ## 8. Schema prüfen und anwenden
 

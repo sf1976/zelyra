@@ -494,6 +494,9 @@ zelyra db inspect src/main.zyl
 The native SQL runtime is still primarily exercised with MariaDB. A supported
 schema backend therefore does not automatically mean that every runtime query
 behaves identically on every backend.
+See the [database matrix](../../database-support.en.md) for the exact tested
+servers and workflows; it distinguishes a verified subset from full runtime
+parity.
 
 ## 8. Inspecting and applying schemas
 
