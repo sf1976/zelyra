@@ -175,12 +175,23 @@ echo "[3/10] starting the protected CRUD and API server"
 "${zelyra_bin}" serve "${project_file}" "${address}" >"${temp_dir}/server.log" 2>&1 &
 server_pid=$!
 for _ in $(seq 1 30); do
-    if curl --silent --show-error --fail "${base_url}/login" -o "${temp_dir}/login.html"; then
+    if curl --silent --fail "${base_url}/login" -o "${temp_dir}/login.html" 2>/dev/null; then
         break
+    fi
+    if ! kill -0 "${server_pid}" 2>/dev/null; then
+        echo "error: protected CRUD/API server exited before becoming ready" >&2
+        sed -E 's#(mariadb|mysql|postgresql)://[^[:space:]]+#\1://[redacted]#g' \
+            "${temp_dir}/server.log" | head -n 40 >&2
+        exit 1
     fi
     sleep 1
 done
-curl --silent --show-error --fail "${base_url}/login" -o "${temp_dir}/login.html"
+if ! curl --silent --show-error --fail "${base_url}/login" -o "${temp_dir}/login.html"; then
+    echo "error: protected CRUD/API server did not become ready at ${base_url}/login" >&2
+    sed -E 's#(mariadb|mysql|postgresql)://[^[:space:]]+#\1://[redacted]#g' \
+        "${temp_dir}/server.log" | head -n 40 >&2
+    exit 1
+fi
 
 if [[ -n "${readiness_path}" ]]; then
     echo "[3a/10] checking generated application readiness against MariaDB"
