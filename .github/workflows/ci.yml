@@ -231,7 +231,6 @@ jobs:
       - name: Run password-reset MariaDB and SMTP end-to-end test
         env:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
-          ZELYRA_PASSWORD_RESET_ADDRESS: 127.0.0.1:38540
           ZELYRA_BIN: target/debug/zelyra
         run: bash ./tests/password-reset-e2e.sh
       - name: Run generated machine authorization end-to-end test

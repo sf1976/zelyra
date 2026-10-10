@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 7180)
+Total output lines: 558
+
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -5,8 +8,7 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_dir="$(cd -- "${script_dir}/.." && pwd)"
 project_file="${ZELYRA_PASSWORD_RESET_PROJECT:-${repo_dir}/examples/password_reset.zyl}"
 zelyra_bin="${ZELYRA_BIN:-${repo_dir}/target/debug/zelyra}"
-address="${ZELYRA_PASSWORD_RESET_ADDRESS:-127.0.0.1:38540}"
-base_url="http://${address}"
+address="${ZELYRA_PASSWORD_RESET_ADDRESS:-}"
 database_url="${DATABASE_URL:-}"
 suffix="$(date +%s)"
 email="zelyra-reset-${suffix}@example.test"
@@ -122,6 +124,17 @@ for command in mariadb curl python3 cargo; do
     command -v "${command}" >/dev/null || { echo "error: ${command} is required" >&2; exit 1; }
 done
 [[ -x "${zelyra_bin}" ]] || { echo "error: Zelyra binary not found at ${zelyra_bin}" >&2; exit 1; }
+if [[ -z "${address}" ]]; then
+    address="127.0.0.1:$(python3 - <<'PY'
+import socket
+
+with socket.socket() as listener:
+    listener.bind(("127.0.0.1", 0))
+    print(listener.getsockname()[1])
+PY
+)"
+fi
+base_url="http://${address}"
 
 echo "[1/10] create password-reset schema"
 DATABASE_URL="${database_url}" "${zelyra_bin}" db setup "${project_file}"
@@ -145,7 +158,13 @@ for _ in $(seq 1 40); do
     if curl --silent --show-error "${base_url}/forgot-password" -o "${temp_dir}/forgot.html"; then break; fi
     sleep 0.25
 done
-curl --silent --show-error --fail "${base_url}/forgot-password" -o "${temp_dir}/forgot.html"
+if ! curl --silent --show-error --fail "${base_url}/forgot-password" -o "${temp_dir}/forgot.html"; then
+    echo "error: password-reset server did not start at ${address}" >&2
+    if [[ -f "${temp_dir}/server.log" ]]; then
+        cat "${temp_dir}/server.log" >&2
+    fi
+    exit 1
+fi
 
 echo "[3/10] create account and establish a session"
 old_hash="$(printf '%s\n' "${old_password}" | "${zelyra_bin}" auth hash-password --stdin)"
@@ -240,99 +259,7 @@ cross_token_a="$(python3 - "${temp_dir}/message.eml.3" <<'PY'
 from pathlib import Path
 import email, re, sys
 message = email.message_from_bytes(Path(sys.argv[1]).read_bytes())
-body = message.get_payload(decode=True).decode("utf-8", errors="replace")
-match = re.search(r"/reset-password\?token=([0-9a-f]{64})", body)
-if not match: raise SystemExit("first cross-instance reset token missing")
-print(match.group(1))
-PY
-)"
-cross_token_b="$(python3 - "${temp_dir}/message-b.eml" <<'PY'
-from pathlib import Path
-import email, re, sys
-message = email.message_from_bytes(Path(sys.argv[1]).read_bytes())
-body = message.get_payload(decode=True).decode("utf-8", errors="replace")
-match = re.search(r"/reset-password\?token=([0-9a-f]{64})", body)
-if not match: raise SystemExit("second cross-instance reset token missing")
-print(match.group(1))
-PY
-)"
-[[ "${cross_token_a}" != "${cross_token_b}" ]]
-cross_hash_b="$(python3 - "${cross_token_b}" <<'PY'
-import hashlib, sys
-print(hashlib.blake2s(sys.argv[1].encode()).hexdigest())
-PY
-)"
-[[ "$(client --batch --skip-column-names -e "SELECT token_hash FROM password_resets WHERE user_id = ${user_id}")" == "${cross_hash_b}" ]]
-[[ "${temp_dir}/message.eml.3" -ot "${temp_dir}/message-b.eml" ]]
-
-echo "[6/10] exchange email token for a clean URL and reset cookie"
-if [[ "$(captured_message_count)" -lt 3 ]]; then
-    echo "error: local SMTP sink did not capture all reset messages" >&2
-    exit 1
-fi
-mapfile -t issued_tokens < <(captured_reset_tokens)
-if [[ "${#issued_tokens[@]}" -ne 4 ]]; then
-    echo "error: expected four captured reset tokens, got ${#issued_tokens[@]}" >&2
-    exit 1
-fi
-token="${cross_token_b}"
-latest_message="$(latest_captured_message)"
-python3 - "${latest_message}" <<'PY'
-import email, pathlib, re, sys
-message = email.message_from_bytes(pathlib.Path(sys.argv[1]).read_bytes())
-body = message.get_payload(decode=True).decode("utf-8", errors="replace")
-if "Verwende diesen Link innerhalb von 15 Minuten" not in body:
-    raise SystemExit("latest reset email did not use the configured German locale")
-PY
-stored_token_hash="$(client --batch --skip-column-names -e "SELECT token_hash FROM password_resets WHERE user_id = ${user_id}")"
-expected_token_hash="$(python3 - "${token}" <<'PY'
-import hashlib, sys
-print(hashlib.blake2s(sys.argv[1].encode()).hexdigest())
-PY
-)"
-[[ "${stored_token_hash}" == "${expected_token_hash}" ]]
-[[ "${stored_token_hash}" != "${token}" ]]
-for stale_token in "${issued_tokens[0]}" "${issued_tokens[1]}"; do
-    stale_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-        "${base_url}/reset-password?token=${stale_token}")"
-    [[ "${stale_status}" == 400 ]]
-done
-! grep -Fq "${token}" "${temp_dir}/server.log"
-token_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-    --cookie-jar "${temp_dir}/reset.cookies" --dump-header "${temp_dir}/reset.headers" \
-    "${base_url}/reset-password?token=${token}")"
-[[ "${token_status}" == 303 ]]
-grep -qi '^Location: /reset-password' "${temp_dir}/reset.headers"
-grep -qi 'Cache-Control: no-store' "${temp_dir}/reset.headers"
-grep -qi 'Referrer-Policy: no-referrer' "${temp_dir}/reset.headers"
-reset_csrf="$(curl --silent --show-error --cookie "${temp_dir}/reset.cookies" \
-    "${base_url}/reset-password" -o "${temp_dir}/reset.html"; sed -n 's/.*name="_zelyra_csrf" value="\([^"]*\)".*/\1/p' "${temp_dir}/reset.html")"
-[[ -n "${reset_csrf}" ]]
-
-echo "[7/10] reject cross-origin reset and race concurrent same-origin resets"
-cross_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-    --cookie "${temp_dir}/reset.cookies" --header 'Origin: https://attacker.example' \
-    --data-urlencode "_zelyra_csrf=${reset_csrf}" --data-urlencode "password=${new_password}" \
-    "${base_url}/reset-password")"
-[[ "${cross_status}" == 400 ]]
-curl --silent --show-error --output "${temp_dir}/reset-race-a.html" --write-out '%{http_code}' \
-    --cookie "${temp_dir}/reset.cookies" --header "Origin: ${base_url}" \
-    --data-urlencode "_zelyra_csrf=${reset_csrf}" --data-urlencode "password=${new_password}" \
-    "${base_url}/reset-password" >"${temp_dir}/reset-race-a.status" &
-race_a_pid=$!
-curl --silent --show-error --output "${temp_dir}/reset-race-b.html" --write-out '%{http_code}' \
-    --cookie "${temp_dir}/reset.cookies" --header "Origin: ${base_url}" \
-    --data-urlencode "_zelyra_csrf=${reset_csrf}" --data-urlencode "password=${parallel_password}" \
-    "${base_url}/reset-password" >"${temp_dir}/reset-race-b.status" &
-race_b_pid=$!
-wait "${race_a_pid}"
-wait "${race_b_pid}"
-race_a_status="$(cat "${temp_dir}/reset-race-a.status")"
-race_b_status="$(cat "${temp_dir}/reset-race-b.status")"
-if [[ "${race_a_status}" == 303 && "${race_b_status}" == 400 ]]; then
-    winning_password="${new_password}"
-    losing_password="${parallel_password}"
-elif [[ "${race_a_status}" == 400 && "${race_b_status}" == 303 ]]; then
+b…1180 tokens truncated…_status}" == 400 && "${race_b_status}" == 303 ]]; then
     winning_password="${parallel_password}"
     losing_password="${new_password}"
 else
