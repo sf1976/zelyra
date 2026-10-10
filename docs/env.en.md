@@ -212,10 +212,11 @@ CSRF or origin checks.
 In the 0.4 development branch, each accepted HTTP connection has a fixed
 30-second deadline for reading the complete request and writing the response.
 A timeout closes the connection; there is no configurable retry. During
-request dispatch, MariaDB pool checkout and each statement use the smaller of
-their configured timeout and the remaining request deadline. MariaDB aborts a
-statement that reaches that limit; transactional batches roll back and discard
-the connection after an error. The synchronous handler then unwinds. CPU-bound
+request dispatch, MariaDB and the bounded PostgreSQL SQL runtime use the
+smaller of their configured pool/statement timeout and the remaining request
+deadline. The database cancels a statement that reaches that limit;
+transactional batches roll back after an error. The synchronous handler then
+unwinds. Disconnecting the client does not interrupt the handler. CPU-bound
 or other blocking application code is not interrupted; a late response is
 discarded, and that handler can occupy a worker until it returns. External TLS
 proxies should also set their own deadlines and connection limits.
@@ -357,8 +358,8 @@ For the PostgreSQL runtime pool, rustls verifies the certificate chain and host
 name using the Mozilla Web PKI roots plus the optional PEM CA. `required` enforces verified TLS even locally. `disabled` explicitly turns TLS
 off and is intended only for isolated local networks; TLS failures never fall
 back to an insecure connection. Without a custom CA, the Rustls driver uses its
-bundled public roots. An optional CA file must be an absolute PEM/DER path
-readable by the process. For schema inspection and DDL, the MariaDB client gets
+bundled public roots. A PostgreSQL CA file must be absolute, readable, and PEM
+encoded; the MariaDB client supports PEM/DER. For schema inspection and DDL, the MariaDB client gets
 the same TLS policy through `--ssl` and `--ssl-verify-server-cert`, plus
 `--ssl-ca` when configured. With Docker, mount a private CA into the container
 and make it readable at the configured path. The full MariaDB project template
@@ -368,8 +369,8 @@ Docker module connects to an external database and therefore defaults to
 database network.
 
 The MariaDB client also receives `--skip-reconnect`, so a lost connection
-cannot silently reconnect or replay a statement. The runtime SQL path in the
-0.4 development branch uses a process-wide bounded pool. Connections are
+cannot silently reconnect or replay a statement. MariaDB runtime SQL and the
+bounded PostgreSQL API use process-wide bounded pools. Connections are
 checked on checkout; after statement errors they are discarded, and a rollback
 is attempted inside a transaction. There are no automatic retries. A process
 can use only one database URL and one pool configuration; changes require a

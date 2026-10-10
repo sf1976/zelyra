@@ -227,11 +227,12 @@ die Host-Allowlist; sie deaktiviert weder CSRF- noch Origin-Prüfungen.
 Jede angenommene HTTP-Verbindung hat im 0.4-Entwicklungszweig eine feste
 30-Sekunden-Frist für das vollständige Lesen der Anfrage und das Schreiben der
 Antwort. Ein Timeout schließt die Verbindung; es gibt keinen konfigurierbaren
-Retry. Während der Anfrageverarbeitung verwenden MariaDB-Poolabruf und jedes
-Statement den kleineren Wert aus konfigurierter Frist und verbleibender
-Request-Frist. MariaDB bricht ein Statement bei Fristablauf ab;
-transaktionale Abfragen werden zurückgerollt und die Verbindung nach einem
-Fehler verworfen. Danach läuft der synchrone Handler regulär aus. CPU-lastiger
+Retry. Während der Anfrageverarbeitung verwenden MariaDB und die begrenzte
+PostgreSQL-SQL-Runtime den kleineren Wert aus konfigurierter Pool-/Statement-
+Frist und verbleibender Request-Frist. Die Datenbank bricht ein Statement bei
+Fristablauf ab; Transaktionen werden bei Fehlern zurückgerollt. Ein
+Clientabbruch unterbricht den Handler nicht. Danach läuft der synchrone Handler
+regulär aus. CPU-lastiger
 oder anderer blockierender Anwendungscode wird nicht unterbrochen; eine
 verspätete Antwort wird verworfen und der Handler kann bis zu seiner Rückkehr
 einen Worker belegen. Externe TLS-Proxys sollten zusätzlich eigene Fristen und
@@ -384,8 +385,9 @@ und den Hostnamen; Mozilla-Web-PKI-Wurzeln werden durch die optionale PEM-CA erg
 `required` erzwingt geprüfte TLS-Verbindungen auch lokal. `disabled`
 schaltet TLS ausdrücklich ab und ist nur für isolierte lokale Netze gedacht;
 bei TLS-Fehlern gibt es keinen unsicheren Rückfall. Ohne eigene CA verwendet der
-Rustls-Treiber die mitgelieferten öffentlichen Stammzertifikate. Eine optionale
-CA-Datei muss als absoluter, im Prozess lesbarer PEM-/DER-Pfad angegeben sein.
+Rustls-Treiber die mitgelieferten öffentlichen Stammzertifikate. Eine
+PostgreSQL-CA-Datei muss absolut, lesbar und PEM-kodiert sein; der
+MariaDB-Client unterstützt PEM/DER.
 Für Schema-Inspektion und DDL erhält der MariaDB-Client dieselben TLS-Vorgaben
 mit `--ssl` und `--ssl-verify-server-cert` sowie optional `--ssl-ca`.
 In Docker muss eine private CA in den Container eingebunden und dort unter dem
@@ -398,8 +400,8 @@ verbindet sich dagegen mit einer externen Datenbank und startet deshalb mit
 
 Der MariaDB-Client erhält außerdem `--skip-reconnect`, damit ein
 Verbindungsverlust nicht unbemerkt zu einem Wiederverbinden oder automatischen
-Wiederholen führt. Der Runtime-SQL-Pfad verwendet im 0.4-Entwicklungszweig einen
-prozessweiten, begrenzten Pool. Beim Checkout wird die Verbindung geprüft; nach
+Wiederholen führt. MariaDB-Runtime-SQL und die begrenzte PostgreSQL-API verwenden
+prozessweite, begrenzte Pools. Beim Checkout wird die Verbindung geprüft; nach
 Statementfehlern wird sie verworfen, und innerhalb einer Transaktion wird ein
 Rollback versucht. Es gibt keine automatischen Retries. Ein Prozess kann nur
 eine Datenbank-URL und eine Poolkonfiguration verwenden; Änderungen erfordern

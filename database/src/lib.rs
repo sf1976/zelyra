@@ -2375,16 +2375,38 @@ fn execute_postgres_batch(
     transaction: bool,
 ) -> Result<Vec<QueryResult>, DatabaseError> {
     let pool = postgres_pool(database_url, settings, tls)?;
+    let pool_wait = postgres_pool_wait_timeout(settings)?;
     match &pool {
         PostgresPool::Plain(pool) => {
-            let mut client = pool.get().map_err(postgres_pool_error)?;
+            let mut client = pool.get_timeout(pool_wait).map_err(postgres_pool_error)?;
             execute_postgres_prepared_batch(&mut client, settings, prepared, transaction)
         }
         PostgresPool::Tls(pool) => {
-            let mut client = pool.get().map_err(postgres_pool_error)?;
+            let mut client = pool.get_timeout(pool_wait).map_err(postgres_pool_error)?;
             execute_postgres_prepared_batch(&mut client, settings, prepared, transaction)
         }
     }
+}
+
+fn postgres_pool_wait_timeout(settings: MariaDbTimeouts) -> Result<Duration, DatabaseError> {
+    let configured = Duration::from_secs(u64::from(settings.pool_wait_seconds));
+    remaining_query_budget()
+        .map(|budget| budget.map_or(configured, |remaining| configured.min(remaining)))
+}
+
+fn postgres_statement_timeout_millis(settings: MariaDbTimeouts) -> Result<u32, DatabaseError> {
+    let configured = settings.query_seconds.saturating_mul(1000);
+    let Some(remaining) = remaining_query_budget()? else {
+        return Ok(configured);
+    };
+    let remaining_millis = u32::try_from(remaining.as_millis()).unwrap_or(u32::MAX);
+    let timeout = configured.min(remaining_millis);
+    if timeout == 0 {
+        return Err(DatabaseError {
+            message: "request deadline exceeded before database statement".into(),
+        });
+    }
+    Ok(timeout)
 }
 
 fn execute_postgres_prepared_batch(
@@ -2400,10 +2422,18 @@ fn execute_postgres_prepared_batch(
     }
     let mut results = Vec::with_capacity(prepared.len());
     for (sql, params) in prepared {
-        if let Err(error) = client.batch_execute(&format!(
-            "SET statement_timeout = {}",
-            settings.query_seconds.saturating_mul(1000)
-        )) {
+        let timeout_millis = match postgres_statement_timeout_millis(settings) {
+            Ok(timeout) => timeout,
+            Err(error) => {
+                if transaction {
+                    let _ = client.batch_execute("ROLLBACK");
+                }
+                return Err(error);
+            }
+        };
+        if let Err(error) =
+            client.batch_execute(&format!("SET statement_timeout = {timeout_millis}"))
+        {
             if transaction {
                 let _ = client.batch_execute("ROLLBACK");
             }
@@ -4075,6 +4105,14 @@ mod tests {
             "the configured statement timeout must interrupt a long query"
         );
 
+        let started = Instant::now();
+        let request_deadline = set_query_deadline(Instant::now() + Duration::from_millis(300));
+        let deadline_result =
+            execute_postgres_query(&database_url, "SELECT pg_sleep(2)", Vec::new());
+        drop(request_deadline);
+        assert!(deadline_result.is_err());
+        assert!(started.elapsed() < Duration::from_millis(900));
+
         let pool_settings =
             MariaDbTimeouts::parse(Some("5"), Some("1"), Some("1"), Some("1")).unwrap();
         let no_tls = MariaDbTlsSettings::parse("disabled", None).unwrap();
@@ -4083,6 +4121,14 @@ mod tests {
             PostgresPool::Tls(_) => panic!("TLS was disabled for this pool exhaustion check"),
         };
         let held = pool.get().unwrap();
+        {
+            let request_deadline = set_query_deadline(Instant::now() + Duration::from_millis(300));
+            let wait = postgres_pool_wait_timeout(pool_settings).unwrap();
+            let started = Instant::now();
+            assert!(pool.get_timeout(wait).is_err());
+            assert!(started.elapsed() < Duration::from_millis(900));
+            drop(request_deadline);
+        }
         let started = Instant::now();
         let saturated = match pool.get() {
             Ok(_) => panic!("a size-one PostgreSQL pool returned a second connection"),
