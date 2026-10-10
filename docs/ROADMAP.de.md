@@ -502,6 +502,14 @@ Menschliche Abnahme fand nicht statt und ist auf 1.0.0 verschoben. Siehe
 
 ## Release 0.6.0
 
+- [~] Die Sprachkompatibilität erhält eine erste Durchsetzung: Der Compiler
+  akzeptiert `zelyra = "0.1"`, lehnt nicht unterstützte explizite Linien mit
+  `E-LANG-001` ab und behandelt fehlende Angaben als historischen Standard 0.1.
+  Details stehen im
+  [Leitfaden zur Sprachkompatibilität](language-compatibility.de.md).
+  Vollständige Grammatikreferenz, releaseübergreifende Konformitätssammlung und
+  ein eingefrorenes Produktivversprechen bleiben für 1.0.0 offen.
+
 Das stabile [0.6.0-Release](release-plans/0.6.0.de.md) ergänzt einen
 nativen, gepoolten PostgreSQL-16-Pfad für direkte SQL-Abfragen mit begrenzten
 Parametertypen und Transaktionen. Vollständige PostgreSQL-Parität und
@@ -515,7 +523,9 @@ Die menschliche Abnahme bleibt auf 1.0.0 verschoben.
 Der [0.7-Releaseplan](release-plans/0.7.0.de.md) umfasst einen echten
 MySQL-Serverpfad, begrenzten Mandantenkontext, lokales Entwicklungsstudio und
 das Rechnungstutorial. Für Editor, begrenzte MySQL-Abfragen und Tutorial gibt
-es lokale Implementierungsnachweise im Feature-Branch; kombinierte Branch-CI,
+es lokale Implementierungsnachweise im Feature-Branch. Zusätzlich erzwingt es
+die erklärte Sprachkompatibilitätslinie. Für die Sprachlinienprüfung gibt es
+ebenfalls lokale Implementierungsnachweise; kombinierte Branch-CI,
 Migrations-/Rollback-Review und unabhängiges Sicherheitsreview sind noch offen. 0.8
 priorisiert eine visuelle Datenbanklandkarte und einen geführten CRUD-Assistenten:
 Verbindung/Tabelle auswählen, Felder und Beziehungen ansehen, Zelyra-Quelltext

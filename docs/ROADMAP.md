@@ -250,7 +250,12 @@ architecture requirement for every phase, not a provider-specific feature.
 
 ## 2. Language and compiler
 
-- [ ] Stable grammar specification and versioned compatibility rules.
+- [~] Versioned language compatibility has an initial enforcement step: the
+  compiler accepts `zelyra = "0.1"`, rejects unsupported explicit lines with
+  `E-LANG-001`, and treats a missing declaration as legacy 0.1. See the
+  [language compatibility guide](language-compatibility.en.md). A complete
+  grammar reference, release-to-release conformance corpus, and frozen
+  production guarantee remain open for 1.0.0.
 - [~] Experimental function/type/record/table/view/component imports and project-wide database
   configuration in the current development
   branch support project-root-relative imports, `pub` declarations, qualified
@@ -537,7 +542,8 @@ Independent human acceptance remains deferred to 1.0.0.
 
 The [0.7 release plan](release-plans/0.7.0.en.md) includes a real MySQL
 server path, bounded tenant context, local developer studio, and the invoice
-tutorial. The editor, bounded MySQL query path, and tutorial have local
+tutorial. It also enforces the declared language compatibility line. The
+editor, bounded MySQL query path, language-line check, and tutorial have local
 implementation evidence on the feature branch; combined-head CI, migration
 and rollback review, and independent security review remain open. Version 0.8 prioritizes a
 visual database map and guided CRUD builder: choose a connection/table, inspect

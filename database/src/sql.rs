@@ -79,10 +79,18 @@ pub fn analyze_table_access(
         .iter()
         .any(|token| matches!(token, SqlToken::Word(word) if word.eq_ignore_ascii_case("JOIN")));
     let add_at = |index: usize, mode: SqlAccessMode, modes: &mut HashMap<String, SqlAccessMode>| {
-        let Some(SqlToken::Word(name)) = tokens.get(index + 1) else {
-            return;
+        let candidate = match (
+            tokens.get(index + 1),
+            tokens.get(index + 2),
+            tokens.get(index + 3),
+        ) {
+            (Some(SqlToken::Word(_schema)), Some(SqlToken::Dot), Some(SqlToken::Word(name))) => {
+                name
+            }
+            (Some(SqlToken::Word(name)), _, _) => name,
+            _ => return,
         };
-        let normalized = name.to_ascii_lowercase();
+        let normalized = candidate.to_ascii_lowercase();
         let Some(canonical) = known.get(&normalized) else {
             return;
         };
@@ -1309,6 +1317,16 @@ mod tests {
         assert!(accesses
             .iter()
             .all(|access| access.mode == SqlAccessMode::Unknown));
+
+        let (_, accesses) =
+            analyze_table_access("SELECT id FROM billing.invoices", &["invoices".to_owned()]);
+        assert_eq!(
+            accesses,
+            vec![SqlTableAccess {
+                table: "invoices".into(),
+                mode: SqlAccessMode::Read
+            }]
+        );
     }
 
     #[test]

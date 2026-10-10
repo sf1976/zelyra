@@ -307,6 +307,102 @@ fn mysql_schema_commands_fail_closed_while_typed_sql_is_the_only_supported_path(
 }
 
 #[test]
+fn tenant_projects_reject_unscoped_tableviews_of_tenant_owned_tables() {
+    let directory = temporary_directory("tenant-unscoped-tableview");
+    fs::create_dir_all(&directory).unwrap();
+    let mut source = fs::read_to_string(example("tenant_crud.zyl")).unwrap();
+    source.push_str(
+        r#"
+
+struct InvoiceSummary {
+    id: Id
+    title: String
+}
+
+tableview InvoiceSummaryView {
+    source sql<InvoiceSummary[]> {
+        SELECT id, title FROM invoices
+    }
+    columns { id title }
+}
+"#,
+    );
+    let path = directory.join("main.zyl");
+    fs::write(&path, &source).unwrap();
+
+    let check = run(&["check", path.to_str().unwrap()]);
+    assert!(!check.status.success());
+    assert!(String::from_utf8_lossy(&check.stderr).contains("E-TENANT-003"));
+    assert!(String::from_utf8_lossy(&check.stderr).contains("invoices"));
+
+    let qualified = source.replace("FROM invoices", "FROM billing.invoices");
+    fs::write(&path, qualified).unwrap();
+    let check = run(&["check", path.to_str().unwrap()]);
+    assert!(!check.status.success());
+    assert!(String::from_utf8_lossy(&check.stderr).contains("E-TENANT-003"));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn language_compatibility_line_is_enforced_and_legacy_projects_stay_supported() {
+    let directory = temporary_directory("language-compatibility-line");
+    fs::create_dir_all(&directory).unwrap();
+    fs::write(
+        directory.join("main.zyl"),
+        "fn main() { print(\"compatible\") }\n",
+    )
+    .unwrap();
+    let config = directory.join("zelyra.toml");
+    fs::write(
+        &config,
+        "[project]\nname = \"compatibility-fixture\"\nversion = \"0.1.0\"\nzelyra = \"0.1\"\n",
+    )
+    .unwrap();
+    let supported = run(&["check", directory.join("main.zyl").to_str().unwrap()]);
+    assert!(
+        supported.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&supported.stdout),
+        String::from_utf8_lossy(&supported.stderr)
+    );
+
+    fs::write(
+        &config,
+        "[project]\nname = \"compatibility-fixture\"\nversion = \"0.1.0\"\nzelyra = \"0.1\" # supported line\n",
+    )
+    .unwrap();
+    let commented = run(&["check", directory.join("main.zyl").to_str().unwrap()]);
+    assert!(commented.status.success());
+
+    fs::write(
+        &config,
+        "[project]\nname = \"compatibility-fixture\"\nversion = \"0.1.0\"\nzelyra = \"0.1#unsupported\"\n",
+    )
+    .unwrap();
+    let hash_in_value = run(&["check", directory.join("main.zyl").to_str().unwrap()]);
+    assert!(!hash_in_value.status.success());
+    assert!(String::from_utf8_lossy(&hash_in_value.stderr).contains("E-LANG-001"));
+
+    fs::write(
+        &config,
+        "[project]\nname = \"compatibility-fixture\"\nversion = \"0.1.0\"\nzelyra = \"0.2\"\n",
+    )
+    .unwrap();
+    let unsupported = run(&["check", directory.join("main.zyl").to_str().unwrap()]);
+    assert!(!unsupported.status.success());
+    assert!(String::from_utf8_lossy(&unsupported.stderr).contains("E-LANG-001"));
+
+    fs::write(
+        &config,
+        "[project]\nname = \"legacy-fixture\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    let legacy = run(&["check", directory.join("main.zyl").to_str().unwrap()]);
+    assert!(legacy.status.success());
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn new_mariadb_project_propagates_the_selected_web_port() {
     let directory = temporary_directory("new-web-port");
     let database_host_port = free_test_port();
