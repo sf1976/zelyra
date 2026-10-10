@@ -837,6 +837,26 @@ acceptance are still required before stable `v0.5.0`.
   disposable MariaDB 11 fixture; complete module closure and schema ownership
   enforcement remain open.
 
+## Proposed release milestone 0.6.0
+
+The scoped [0.6.0 roadmap](release-plans/0.6.0.en.md) adds a native, pooled
+PostgreSQL 16 direct-SQL path for a bounded set of parameter types and
+transactions. It does not promise complete PostgreSQL parity or generated
+web/CRUD support. On merged branch head `715ecc2`, CI #518 and package
+validation #238 pass; focused transaction and runtime-dispatch tests also pass
+locally against PostgreSQL 16. The validation packages still identify as
+`zelyra 0.5.0`; the 0.6 version bump and candidate remain gated on publication
+and independent acceptance of 0.5.0. Keep the 0.6 PR separate and unmerged
+until that gate passes.
+
+The planned path after 0.6 is bounded tenant context in 0.7, local durable
+tasks and outbox semantics in 0.8, optional MFA/WebAuthn and OIDC in 0.9, then
+contract stabilization and independent acceptance for 1.0.0. Complete SQL
+parity, broad visual editing, arbitrary client hydration, compiler
+self-hosting, native backend, mandatory cloud/AI services, telemetry, and
+unsupported performance claims remain excluded; see the 0.6 roadmap for
+scope and limits.
+
 ## Real-world acceptance applications
 
 - [~] The machine-management application is available as a MariaDB template

@@ -911,6 +911,27 @@ erforderlich.
   wegwerfbare MariaDB-11-Fixture begrenzt; vollständige Modulschließung und
   Schemaeigentumsdurchsetzung bleiben offen.
 
+## Vorgeschlagener Release-Meilenstein 0.6.0
+
+Die eingegrenzte [0.6.0-Roadmap](release-plans/0.6.0.de.md) ergänzt einen
+nativen, gepoolten PostgreSQL-16-Pfad für direkte SQL-Abfragen mit einer
+begrenzten Menge an Parametertypen und Transaktionen. Vollständige
+PostgreSQL-Parität und generierte Web-/CRUD-Unterstützung werden nicht
+versprochen. Auf Merge-Stand `715ecc2` bestehen CI 518 und Paketprüfung 238;
+gezielte Transaktions- und Runtime-Dispatch-Tests bestehen auch lokal gegen
+PostgreSQL 16. Die geprüften Pakete melden noch `zelyra 0.5.0`; Versionssprung
+und Kandidat für 0.6.0 bleiben bis zur Veröffentlichung und unabhängigen
+menschlichen Abnahme von 0.5.0 zurückgestellt. Den 0.6-PR getrennt und bis zu
+dieser Abnahme ungemergt lassen.
+
+Nach 0.6 sind begrenzter Mandantenkontext in 0.7, lokale dauerhafte Aufgaben
+und Outbox-Semantik in 0.8, optionale MFA/WebAuthn- und OIDC-Unterstützung in
+0.9 sowie Vertragsstabilisierung und unabhängige Abnahme für 1.0.0 geplant.
+Vollständige SQL-Parität, allgemeine visuelle Bearbeitung, beliebige
+Client-Hydration, Compiler-Self-Hosting, ein natives Backend, verpflichtende
+Cloud-/KI-Dienste, Telemetrie und unbelegte Leistungsversprechen bleiben
+ausgeschlossen; Details und Grenzen stehen in der 0.6-Roadmap.
+
 ## Akzeptanzanwendungen aus der Praxis
 
 - [~] Die Maschinenverwaltung ist ein MariaDB-Template mit lokalisierten
