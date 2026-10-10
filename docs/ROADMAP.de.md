@@ -407,8 +407,9 @@ Der Clean-Onboardingpfad mit installierter CLI ist außerdem im [CI-Lauf
 
 Das stabile `v0.4.0` ist veröffentlicht und die Artefakte wurden technisch
 geprüft. Der [Releaseplan 0.4.0](release-plans/0.4.0.de.md) bleibt dennoch
-offen: Die unabhängige menschliche Einsteigerabnahme wurde auf 0.5.0 verschoben
-und ist nicht durchgeführt. Eine manuelle Rückmeldung mit dem veröffentlichten
+offen: Die unabhängige menschliche Einsteigerabnahme wurde auf ausdrückliche
+Entscheidung des Projektverantwortlichen auf 1.0.0 verschoben und ist nicht
+durchgeführt. Eine manuelle Rückmeldung mit dem veröffentlichten
 0.4.0-CLI deckte außerdem eine falsche absolute Pfadangabe bei `setup` sowie
 unklare Erwartungen an `setup` für minimale `init`-Projekte auf. Die Diagnose
 und Dokumentation wurden für die 0.5.0-Vorbereitung korrigiert und Regressionen
@@ -431,9 +432,9 @@ Betreiberprüfung; Produktionsreife oder PostgreSQL-Runtime-Parität wird nicht
 behauptet.
 Die eingegrenzte Implementierung und die technischen Gates bestanden auf
 Code-Stand `cae59e2` (vollständige CI 514 und Paketprüfung 234). Vor dem stabilen
-`v0.5.0` sind weiterhin ein veröffentlichter, unveränderlicher RC, dessen
-Installations-/Update-/Rollback-Probe und die unabhängige menschliche Abnahme
-erforderlich.
+`v0.5.0` sind weiterhin ein veröffentlichter, unveränderlicher RC und dessen
+Installations-/Update-/Rollback-Probe erforderlich. Die unabhängige menschliche
+Abnahme ist auf 1.0.0 verschoben und kein 0.5.0-Gate.
 
 - [🧪] Im unveröffentlichten 0.4-Zweig erzeugt `zelyra module bundle` nun auf
   Wunsch ein commit-gepinntes Dockerfile, eine Compose-App und ein
@@ -467,7 +468,8 @@ erforderlich.
   Dateien schreibt. Das Manifest
   weist weiterhin `source_closure_complete: false` und
   `complete_deployment: false` aus. Vollständige Abhängigkeitsanalyse,
-  modulare Datenbankschnittstelle und vollständige 0.5.0-Abnahme bleiben offen.
+  modulare Datenbankschnittstelle und technische Kandidatenprüfung bleiben
+  offen. Die menschliche Abnahme ist auf 1.0.0 verschoben.
   `module plan` verfolgt jetzt auch Funktionsaufrufe in Formular- und
   CRUD-Aktionen bis zu den aufgerufenen Deklarationen und deren Quelldateien;
   ein Mehrmodul-Integrationstest prüft beide Fälle. Das erweitert die bekannte
@@ -513,9 +515,10 @@ gezielte Transaktions- und Runtime-Dispatch-Tests bestehen auch lokal gegen
 PostgreSQL 16. Der spätere Dokumentations-Head `04cf026` bestand CI 523,
 einschließlich PostgreSQL-Schema-Safety und parametrisierter Runtime-Tests,
 sowie Paketprüfung 242. Die geprüften Pakete melden noch `zelyra 0.5.0`;
-Versionssprung und Kandidat für 0.6.0 bleiben bis zur Veröffentlichung und
-unabhängigen menschlichen Abnahme von 0.5.0 zurückgestellt. Den 0.6-PR getrennt
-und bis zu dieser Abnahme ungemergt lassen.
+Versionssprung und Kandidat für 0.6.0 bleiben bis zur stabilen Veröffentlichung
+von 0.5.0 zurückgestellt. Die menschliche Abnahme ist auf 1.0.0 verschoben und
+keine Voraussetzung für 0.6.0. Den 0.6-PR bis zur Veröffentlichung von 0.5.0
+getrennt und ungemergt lassen.
 
 Nach 0.6 sind begrenzter Mandantenkontext in 0.7, lokale dauerhafte Aufgaben
 und Outbox-Semantik in 0.8, optionale MFA/WebAuthn- und OIDC-Unterstützung in

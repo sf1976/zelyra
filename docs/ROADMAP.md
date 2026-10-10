@@ -438,7 +438,8 @@ The clean installed-CLI onboarding path is also green in [CI run
 
 Stable `v0.4.0` is published and its artifacts passed technical verification.
 The [0.4.0 release plan](release-plans/0.4.0.en.md) remains open: independent
-human onboarding acceptance was deferred to 0.5.0 and has not been conducted.
+human onboarding acceptance was deferred to 1.0.0 by project-owner decision
+and has not been conducted.
 Manual feedback using the published 0.4.0 CLI also exposed an incorrect
 absolute-path invocation for `setup` and unclear expectations for `setup` in a
 minimal `init` project. The diagnosis and documentation were corrected for
@@ -460,8 +461,9 @@ and require operator review; the roadmap makes no claim of production
 readiness or PostgreSQL runtime parity.
 The scoped implementation and technical gates have passed on code head
 `cae59e2` (full CI #514 and release package validation #234). A published,
-immutable RC, its install/update/rollback rehearsal, and independent human
-acceptance are still required before stable `v0.5.0`.
+immutable RC and its install/update/rollback rehearsal are still required
+before stable `v0.5.0`. Independent human acceptance is deferred to 1.0.0 and
+is not a 0.5.0 gate.
 
 - [🧪] The unreleased 0.4 branch can now generate a commit-pinned Dockerfile,
   a Compose app, and a secret-free `.env.example` from `zelyra module bundle`;
@@ -494,7 +496,8 @@ acceptance are still required before stable `v0.5.0`.
   files; only one project-wide connection is supported. The manifest still
   records `source_closure_complete: false` and
   `complete_deployment: false`. Complete dependency analysis, a modular
-  database interface, and full 0.5.0 acceptance remain open. The same
+  database interface, and technical candidate verification remain open. Human
+  acceptance is deferred to 1.0.0. The same
   dependency preview now follows named function calls in form and CRUD action
   bodies to their declarations and source modules; a multi-module integration
   test covers both cases. This expands known edges but does not establish
@@ -536,9 +539,10 @@ validation #238 pass; focused transaction and runtime-dispatch tests also pass
 locally against PostgreSQL 16. The later documentation head `04cf026` passed
 CI #523, including PostgreSQL schema-safety and parameterized runtime tests,
 and release validation #242. The validation packages still identify as
-`zelyra 0.5.0`; the 0.6 version bump and candidate remain gated on publication
-and independent acceptance of 0.5.0. Keep the 0.6 PR separate and unmerged
-until that gate passes.
+`zelyra 0.5.0`; the 0.6 version bump and candidate remain gated on stable
+publication of 0.5.0. Independent human acceptance is deferred to 1.0.0 and is
+not a 0.6 prerequisite. Keep the 0.6 PR separate and unmerged until 0.5.0 is
+published.
 
 The planned path after 0.6 is bounded tenant context in 0.7, local durable
 tasks and outbox semantics in 0.8, optional MFA/WebAuthn and OIDC in 0.9, then
