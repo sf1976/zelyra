@@ -1652,6 +1652,8 @@ fn rejects_duplicate_security_sensitive_request_headers() {
         "X-Forwarded-Proto",
         "Cookie",
         "Authorization",
+        "X-Zelyra-Tenant",
+        "X-Zelyra-Editor-Token",
     ] {
         let raw = format!("GET / HTTP/1.1\r\n{header}: first\r\n{header}: second\r\n\r\n");
         let error = parse_request(&raw).unwrap_err();

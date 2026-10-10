@@ -57,6 +57,8 @@ pub fn parse_request(raw: &str) -> Result<Request, HttpError> {
                 | "cookie"
                 | "authorization"
                 | "x-request-id"
+                | "x-zelyra-tenant"
+                | "x-zelyra-editor-token"
         ) && headers.contains_key(&name)
         {
             return Err(HttpError {
