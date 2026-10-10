@@ -16,10 +16,14 @@ web pages, forms, CRUD, authentication, capabilities, and contracts. This
 handbook builds a small machine-management application, starting with the first
 program and ending with a database-backed web application.
 
-> **Project status:** Zelyra 0.3.0 is experimental and not approved for
-> production use. Its human onboarding study was explicitly deferred and is
-> mandatory before the final 0.4.0 release. See the [decision
-> record](../../release-readiness/0.3.0-human-gate-decision.en.md).
+Create a new local learning project for customers, items, and invoices with
+[`zelyra --tutorial invoice`](../../tutorials/invoice.en.md).
+
+> **Project status:** Zelyra 0.6.0 is stably published, remains experimental,
+> and is not approved for production use. Independent human acceptance for
+> earlier releases is deferred to 1.0.0. See the
+> [roadmap](../../ROADMAP.md) and
+> [acceptance decision](../../release-readiness/1.0.0-human-acceptance.en.md).
 
 The binding product goals for digital sovereignty and evidence-based
 correctness claims are described in the [Zelyra manifesto](../../MANIFESTO.md).

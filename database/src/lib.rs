@@ -3402,9 +3402,9 @@ fn build_mariadb_pool(
             settings.connect_seconds,
         ))))
         .read_timeout(Some(Duration::from_secs(u64::from(settings.query_seconds))))
-        .init(vec![format!(
-            "SET SESSION max_statement_time={}",
-            settings.query_seconds
+        .init(vec![mysql_session_timeout_statement(
+            database_url,
+            settings.query_seconds,
         )]);
     let options = match ssl_opts {
         Some(ssl_opts) => options.ssl_opts(Some(ssl_opts)),
@@ -3425,6 +3425,14 @@ fn build_mariadb_pool(
         })
 }
 
+fn mysql_session_timeout_statement(database_url: &str, query_seconds: u32) -> String {
+    if database_url.starts_with("mysql://") {
+        format!("SET SESSION max_execution_time={}", query_seconds * 1000)
+    } else {
+        format!("SET SESSION max_statement_time={query_seconds}")
+    }
+}
+
 fn acquire_mariadb_connection(
     pool: &MariaDbPool,
     settings: MariaDbTimeouts,
@@ -3440,11 +3448,11 @@ fn acquire_mariadb_connection(
 fn mariadb_pool_acquisition_message(detail: &str) -> &'static str {
     let detail = detail.to_ascii_lowercase();
     if detail.contains("certificate") || detail.contains("tls") || detail.contains("ssl") {
-        "could not establish a verified MariaDB TLS connection; check CA trust, the certificate hostname, and server TLS configuration"
+        "could not establish a verified MariaDB/MySQL TLS connection; check CA trust, the certificate hostname, and server TLS configuration"
     } else if detail.contains("access denied") {
-        "MariaDB rejected authentication; check the database username and grants"
+        "the MariaDB/MySQL server rejected authentication; check the database username and grants"
     } else {
-        "timed out obtaining a MariaDB connection; check connectivity and pool saturation"
+        "timed out obtaining a MariaDB/MySQL connection; check connectivity and pool saturation"
     }
 }
 
@@ -4707,11 +4715,23 @@ mod tests {
     #[test]
     fn mariadb_pool_connection_failures_use_safe_actionable_diagnostics() {
         assert!(mariadb_pool_acquisition_message("invalid peer certificate")
-            .contains("verified MariaDB TLS"));
+            .contains("verified MariaDB/MySQL TLS"));
         assert!(mariadb_pool_acquisition_message("Access denied for user")
             .contains("rejected authentication"));
         assert!(mariadb_pool_acquisition_message("timed out").contains("pool saturation"));
         assert!(!mariadb_pool_acquisition_message("password=secret").contains("secret"));
+    }
+
+    #[test]
+    fn mysql_and_mariadb_session_timeouts_use_their_server_variables() {
+        assert_eq!(
+            mysql_session_timeout_statement("mysql://user:pass@localhost/app", 12),
+            "SET SESSION max_execution_time=12000"
+        );
+        assert_eq!(
+            mysql_session_timeout_statement("mariadb://user:pass@localhost/app", 12),
+            "SET SESSION max_statement_time=12"
+        );
     }
 
     #[test]

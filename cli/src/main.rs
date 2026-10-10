@@ -46,6 +46,7 @@ mod command_dispatch;
 mod database_cli;
 mod docs;
 mod edit;
+mod editor;
 mod formatter;
 mod holes;
 mod impact;
@@ -54,6 +55,7 @@ mod project;
 mod route_cli;
 #[cfg(test)]
 mod tests;
+mod tutorial;
 mod updater;
 use account_cli::{audit_command, auth_command};
 #[cfg(test)]
@@ -120,6 +122,8 @@ Token reference: https://github.com/sf1976/zelyra/blob/main/docs/env.md
 "#;
 
 fn usage() {
+    eprintln!("  zelyra --tutorial invoice [directory] creates the guided invoice application");
+    eprintln!("  zelyra editor [directory] [--port <port>] starts the local browser editor");
     eprintln!("  routes: `zelyra routes <entry.zyl> [--format human|json]` lists declared routes and generated resource routes");
     eprintln!("  impact focus: use `--symbol <kind:name>` to inspect one known node");
     eprintln!("  module plan: `zelyra module plan <entry.zyl> <module.zyl|resource-id>` previews known dependencies");
@@ -1468,6 +1472,9 @@ fn validate_program(
             return Err(());
         }
         if !validate_cruds(path, &program, &schema) {
+            return Err(());
+        }
+        if !validate_tenant_access_boundaries(path, &program, &schema) {
             return Err(());
         }
         if !validate_tableviews(path, &program, &schema) {
@@ -5120,11 +5127,103 @@ fn project_features(path: &str) -> Result<ProjectFeatures, String> {
     Ok(features)
 }
 
+const LANGUAGE_COMPATIBILITY_LINE: &str = "0.1";
+
+fn project_language_line(path: &str) -> Result<Option<String>, String> {
+    let Some(config_path) = project_config_path(path)? else {
+        return Ok(None);
+    };
+    let contents = fs::read_to_string(&config_path)
+        .map_err(|error| format!("cannot read {}: {error}", config_path.display()))?;
+    let mut in_project = false;
+    let mut language_line = None;
+    for (line_index, raw_line) in contents.lines().enumerate() {
+        let line = strip_toml_comment(raw_line).trim();
+        if line.is_empty() {
+            continue;
+        }
+        if line.starts_with('[') && line.ends_with(']') {
+            in_project = line == "[project]";
+            continue;
+        }
+        if !in_project {
+            continue;
+        }
+        let Some((key, raw_value)) = line.split_once('=') else {
+            continue;
+        };
+        if key.trim() != "zelyra" {
+            continue;
+        }
+        if language_line.is_some() {
+            return Err(format!(
+                "language compatibility line is configured more than once on line {}",
+                line_index + 1
+            ));
+        }
+        let value = raw_value.trim();
+        let Some(value) = value
+            .strip_prefix('"')
+            .and_then(|value| value.strip_suffix('"'))
+            .or_else(|| {
+                raw_value
+                    .trim()
+                    .strip_prefix('\'')
+                    .and_then(|value| value.strip_suffix('\''))
+            })
+        else {
+            return Err(format!(
+                "language compatibility line on line {} must be a quoted string",
+                line_index + 1
+            ));
+        };
+        language_line = Some(value.to_owned());
+    }
+    Ok(language_line)
+}
+
+fn strip_toml_comment(line: &str) -> &str {
+    let mut quote = None;
+    let mut escaped = false;
+    for (index, character) in line.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match (quote, character) {
+            (Some('"'), '\\') => escaped = true,
+            (Some(current), value) if current == value => quote = None,
+            (None, '"' | '\'') => quote = Some(character),
+            (None, '#') => return &line[..index],
+            _ => {}
+        }
+    }
+    line
+}
+
+fn validate_language_compatibility(path: &str) -> Result<(), String> {
+    let language_line = project_language_line(path)?.unwrap_or_else(|| {
+        // Projects predating the explicit declaration continue on the original line.
+        LANGUAGE_COMPATIBILITY_LINE.to_owned()
+    });
+    if language_line == LANGUAGE_COMPATIBILITY_LINE {
+        Ok(())
+    } else {
+        Err(format!(
+            "project requests language compatibility line `{language_line}`, but this compiler supports `{LANGUAGE_COMPATIBILITY_LINE}`"
+        ))
+    }
+}
+
 fn feature_enabled(features: &ProjectFeatures, feature: &str) -> bool {
     features.get(feature).is_none_or(|setting| setting.enabled)
 }
 
 fn validate_project_features(path: &str, program: &zelyra_ast::Program) -> Result<(), ()> {
+    if let Err(error) = validate_language_compatibility(path) {
+        diagnostic(path, "E-LANG-001", &error, 1, 1);
+        return Err(());
+    }
     if project_uses_reserved_health_route(program) {
         diagnostic(
             path,
@@ -5610,6 +5709,105 @@ fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> 
                     auth.span.column,
                 );
                 valid = false;
+            }
+        }
+        if let Some(membership_table_name) = &auth.membership_table {
+            if membership_table_name == &auth.table
+                || auth.session_table.as_ref() == Some(membership_table_name)
+            {
+                diagnostic_with_span(
+                    path,
+                    "E-TENANT-001",
+                    "tenant memberships must use a dedicated table separate from users and sessions",
+                    auth.span,
+                );
+                valid = false;
+            }
+            if schema.backend() != Backend::MariaDb {
+                diagnostic_with_span(
+                    path,
+                    "E-TENANT-001",
+                    "tenant memberships currently require the MariaDB runtime",
+                    auth.span,
+                );
+                valid = false;
+            }
+            if auth.session_table.is_none() {
+                diagnostic_with_span(
+                    path,
+                    "E-TENANT-001",
+                    "tenant memberships require database-backed authentication sessions",
+                    auth.span,
+                );
+                valid = false;
+            }
+            let Some(membership_table) = schema
+                .tables
+                .iter()
+                .find(|candidate| candidate.name == *membership_table_name)
+            else {
+                diagnostic_with_span(
+                    path,
+                    "E-TENANT-001",
+                    &format!("unknown tenant membership table `{membership_table_name}`"),
+                    auth.span,
+                );
+                valid = false;
+                continue;
+            };
+            for required_column in ["user_id", "tenant_id", "active"] {
+                if !membership_table
+                    .columns
+                    .iter()
+                    .any(|column| column.name == required_column)
+                {
+                    diagnostic_with_span(
+                        path,
+                        "E-TENANT-001",
+                        &format!(
+                            "tenant membership table `{membership_table_name}` requires column `{required_column}`"
+                        ),
+                        auth.span,
+                    );
+                    valid = false;
+                }
+            }
+            for numeric_column in ["user_id", "tenant_id"] {
+                if let Some(column) = membership_table
+                    .columns
+                    .iter()
+                    .find(|column| column.name == numeric_column)
+                {
+                    if !tenant_sql_type_is_integer(&column.sql_type) || column.nullable {
+                        diagnostic_with_span(
+                            path,
+                            "E-TENANT-001",
+                            &format!(
+                                "tenant membership column `{membership_table_name}.{numeric_column}` must be a non-null integer"
+                            ),
+                            auth.span,
+                        );
+                        valid = false;
+                    }
+                }
+            }
+            if let Some(column) = membership_table
+                .columns
+                .iter()
+                .find(|column| column.name == "active")
+            {
+                let sql_type = column.sql_type.to_ascii_uppercase();
+                if column.nullable || !(sql_type.contains("BOOL") || sql_type.contains("TINYINT")) {
+                    diagnostic_with_span(
+                        path,
+                        "E-TENANT-001",
+                        &format!(
+                            "tenant membership column `{membership_table_name}.active` must be a non-null boolean"
+                        ),
+                        auth.span,
+                    );
+                    valid = false;
+                }
             }
         }
         if let Some(session_table_name) = &auth.session_table {
@@ -6226,6 +6424,73 @@ fn validate_cruds(path: &str, program: &zelyra_ast::Program, schema: &Schema) ->
                 valid = false;
             }
         }
+        if let Some(tenant_column) = crud.tenant_column.as_deref() {
+            let fail_tenant = |message: &str| {
+                diagnostic_with_span(path, "E-TENANT-002", message, crud.span);
+            };
+            if !crud.requires_auth {
+                fail_tenant("tenant-scoped CRUD must declare `requires auth`");
+                valid = false;
+            }
+            if !program
+                .auth
+                .iter()
+                .any(|auth| auth.membership_table.is_some() && auth.session_table.is_some())
+            {
+                fail_tenant(
+                    "tenant-scoped CRUD requires auth with database sessions and `memberships`",
+                );
+                valid = false;
+            }
+            let table = schema
+                .tables
+                .iter()
+                .find(|table| table.name == crud.table)
+                .expect("CRUD table existence was checked above");
+            match table
+                .columns
+                .iter()
+                .find(|column| column.name == tenant_column)
+            {
+                Some(column)
+                    if tenant_sql_type_is_integer(&column.sql_type) && !column.nullable => {}
+                Some(_) => {
+                    fail_tenant("tenant key column must be a non-null integer");
+                    valid = false;
+                }
+                None => {
+                    fail_tenant(&format!(
+                        "tenant key column `{tenant_column}` does not exist in table `{}`",
+                        crud.table
+                    ));
+                    valid = false;
+                }
+            }
+            if !table.foreign_keys.is_empty() {
+                fail_tenant(
+                    "tenant-scoped CRUD does not yet support relations; remove foreign keys from this table",
+                );
+                valid = false;
+            }
+            if !crud.actions.is_empty() {
+                fail_tenant(
+                    "tenant-scoped CRUD does not support custom actions because their SQL is not tenant-scoped",
+                );
+                valid = false;
+            }
+            if crud
+                .view
+                .fields
+                .iter()
+                .chain(&crud.list)
+                .chain(&crud.search)
+                .chain(&crud.filters)
+                .any(|column| column == tenant_column)
+            {
+                fail_tenant("tenant key must not be exposed as a CRUD field, list, search, or filter column");
+                valid = false;
+            }
+        }
         if let Some(soft_delete) = &crud.soft_delete {
             let Some(column) = schema
                 .tables
@@ -6270,6 +6535,13 @@ fn validate_cruds(path: &str, program: &zelyra_ast::Program, schema: &Schema) ->
     valid
 }
 
+fn tenant_sql_type_is_integer(sql_type: &str) -> bool {
+    let sql_type = sql_type.to_ascii_uppercase();
+    ["TINYINT", "SMALLINT", "MEDIUMINT", "INT", "BIGINT"]
+        .iter()
+        .any(|kind| sql_type.contains(kind))
+}
+
 fn crud_column_exists(
     program: &zelyra_ast::Program,
     schema: &Schema,
@@ -6305,6 +6577,256 @@ fn crud_column_exists(
                 .iter()
                 .any(|candidate| candidate.name == storage)
         })
+}
+
+fn validate_tenant_access_boundaries(
+    path: &str,
+    program: &zelyra_ast::Program,
+    schema: &Schema,
+) -> bool {
+    let tenant_tables = program
+        .cruds
+        .iter()
+        .filter(|crud| crud.tenant_column.is_some())
+        .map(|crud| crud.table.clone())
+        .collect::<HashSet<_>>();
+    if tenant_tables.is_empty() {
+        return true;
+    }
+    let protected_tables = program
+        .auth
+        .iter()
+        .filter_map(|auth| auth.membership_table.clone())
+        .chain(tenant_tables.iter().cloned())
+        .collect::<HashSet<_>>();
+    let known_tables = schema
+        .tables
+        .iter()
+        .map(|table| table.name.clone())
+        .collect::<Vec<_>>();
+    let mut valid = true;
+    let check_query = |query: &str, span: zelyra_ast::Span| -> bool {
+        let (operation, accesses) =
+            zelyra_database::sql::analyze_table_access(query, &known_tables);
+        if operation.is_none() {
+            diagnostic_with_span(
+                path,
+                "E-TENANT-003",
+                "tenant-enabled projects may use only SQL forms whose table access can be checked",
+                span,
+            );
+            return false;
+        }
+        let mut query_valid = true;
+        for access in accesses {
+            if access.table.is_empty() {
+                diagnostic_with_span(
+                    path,
+                    "E-TENANT-003",
+                    "quoted SQL table references cannot be verified in a tenant-enabled project",
+                    span,
+                );
+                query_valid = false;
+                continue;
+            }
+            if protected_tables
+                .iter()
+                .any(|table| table.eq_ignore_ascii_case(&access.table))
+            {
+                diagnostic_with_span(
+                    path,
+                    "E-TENANT-003",
+                    &format!(
+                        "unscoped SQL access to `{}` is not allowed in a tenant-enabled project; use its generated tenant CRUD route",
+                        access.table
+                    ),
+                    span,
+                );
+                query_valid = false;
+            }
+        }
+        query_valid
+    };
+
+    for form in &program.forms {
+        if form.table.as_ref().is_some_and(|table| {
+            protected_tables
+                .iter()
+                .any(|protected| protected.eq_ignore_ascii_case(table))
+        }) {
+            diagnostic_with_span(
+                path,
+                "E-TENANT-003",
+                "forms cannot access tenant-owned or membership tables outside the generated tenant CRUD route",
+                form.span,
+            );
+            valid = false;
+        }
+        for action in &form.actions {
+            visit_block_sql(
+                &zelyra_ast::Block {
+                    statements: action.statements.clone(),
+                    span: action.span,
+                },
+                &mut |query, span| valid &= check_query(query, span),
+            );
+        }
+    }
+    for crud in &program.cruds {
+        if tenant_tables
+            .iter()
+            .any(|table| table.eq_ignore_ascii_case(&crud.table))
+            && crud.tenant_column.is_none()
+        {
+            diagnostic_with_span(
+                path,
+                "E-TENANT-003",
+                "every CRUD resource for a tenant-owned table must use its declared tenant column",
+                crud.span,
+            );
+            valid = false;
+        }
+        for action in &crud.actions {
+            visit_block_sql(
+                &zelyra_ast::Block {
+                    statements: action.statements.clone(),
+                    span: action.span,
+                },
+                &mut |query, span| valid &= check_query(query, span),
+            );
+        }
+    }
+    for page in &program.pages {
+        for data in &page.data {
+            valid &= check_query(&data.query, data.span);
+        }
+    }
+    for tableview in &program.tableviews {
+        valid &= check_query(&tableview.source, tableview.span);
+    }
+    for function in &program.functions {
+        for expression in function.requires.iter().chain(&function.ensures) {
+            visit_expression_sql(expression, &mut |query, span| {
+                valid &= check_query(query, span)
+            });
+        }
+        visit_block_sql(&function.body, &mut |query, span| {
+            valid &= check_query(query, span)
+        });
+    }
+    valid
+}
+
+fn visit_expression_sql<'a>(
+    expression: &'a zelyra_ast::Expr,
+    visitor: &mut impl FnMut(&'a str, zelyra_ast::Span),
+) {
+    use zelyra_ast::ExprKind;
+    match &expression.kind {
+        ExprKind::Array(values) => {
+            for value in values {
+                visit_expression_sql(value, visitor);
+            }
+        }
+        ExprKind::Map(entries) => {
+            for (key, value) in entries {
+                visit_expression_sql(key, visitor);
+                visit_expression_sql(value, visitor);
+            }
+        }
+        ExprKind::Record { fields, .. } => {
+            for (_, value) in fields {
+                visit_expression_sql(value, visitor);
+            }
+        }
+        ExprKind::Index { target, index } => {
+            visit_expression_sql(target, visitor);
+            visit_expression_sql(index, visitor);
+        }
+        ExprKind::Field { target, .. }
+        | ExprKind::Unary { expr: target, .. }
+        | ExprKind::Await(target) => visit_expression_sql(target, visitor),
+        ExprKind::Call { args, .. } => {
+            for argument in args {
+                visit_expression_sql(argument, visitor);
+            }
+        }
+        ExprKind::Binary { left, right, .. } => {
+            visit_expression_sql(left, visitor);
+            visit_expression_sql(right, visitor);
+        }
+        ExprKind::Sql { query, .. } => visitor(query, expression.span),
+        ExprKind::Int(_)
+        | ExprKind::UInt(_)
+        | ExprKind::Float(_)
+        | ExprKind::Bool(_)
+        | ExprKind::String(_)
+        | ExprKind::Char(_)
+        | ExprKind::Variable(_) => {}
+    }
+}
+
+fn visit_block_sql<'a>(
+    block: &'a zelyra_ast::Block,
+    visitor: &mut impl FnMut(&'a str, zelyra_ast::Span),
+) {
+    use zelyra_ast::Stmt;
+    for statement in &block.statements {
+        match statement {
+            Stmt::Let { value, .. }
+            | Stmt::BindOrAssign { value, .. }
+            | Stmt::Expr(value)
+            | Stmt::Return {
+                value: Some(value), ..
+            } => visit_expression_sql(value, visitor),
+            Stmt::Return { value: None, .. } | Stmt::Break { .. } | Stmt::Continue { .. } => {}
+            Stmt::If {
+                condition,
+                then_block,
+                else_block,
+                ..
+            } => {
+                visit_expression_sql(condition, visitor);
+                visit_block_sql(then_block, visitor);
+                if let Some(else_block) = else_block {
+                    visit_block_sql(else_block, visitor);
+                }
+            }
+            Stmt::While {
+                condition,
+                invariants,
+                body,
+                ..
+            } => {
+                visit_expression_sql(condition, visitor);
+                for invariant in invariants {
+                    visit_expression_sql(invariant, visitor);
+                }
+                visit_block_sql(body, visitor);
+            }
+            Stmt::For { iterable, body, .. } => {
+                visit_expression_sql(iterable, visitor);
+                visit_block_sql(body, visitor);
+            }
+            Stmt::Loop {
+                invariants, body, ..
+            } => {
+                for invariant in invariants {
+                    visit_expression_sql(invariant, visitor);
+                }
+                visit_block_sql(body, visitor);
+            }
+            Stmt::Match { value, arms, .. } => {
+                visit_expression_sql(value, visitor);
+                for arm in arms {
+                    visit_block_sql(&arm.body, visitor);
+                }
+            }
+            Stmt::Transaction { body, .. } | Stmt::Parallel { body, .. } => {
+                visit_block_sql(body, visitor)
+            }
+        }
+    }
 }
 
 fn validate_tableviews(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> bool {
@@ -6766,6 +7288,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         };
         Some(AuthRoute {
             table: auth.table.clone(),
+            membership_table: auth.membership_table.clone(),
             session_table: auth.session_table.clone(),
             permissions_table: auth.permissions_table.clone(),
             roles_table: auth.roles_table.clone(),
@@ -6836,6 +7359,8 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             form: form.clone(),
             table,
             schema: Some(schema.clone()),
+            tenant_column: None,
+            tenant_membership_table: None,
             requires_auth: false,
             permissions: Vec::new(),
             csrf,
@@ -6864,6 +7389,9 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                 CrudGenerationContext {
                     layout_html: crud_layout_html(&program, crud),
                     csrf,
+                    membership_table: auth_route
+                        .as_ref()
+                        .and_then(|auth| auth.membership_table.clone()),
                     audit_table: auth_route
                         .as_ref()
                         .and_then(|auth| auth.audit_table.clone()),
@@ -6932,6 +7460,9 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                     CrudGenerationContext {
                         layout_html: crud_layout_html(&program, crud),
                         csrf: csrf.clone(),
+                        membership_table: auth_route
+                            .as_ref()
+                            .and_then(|auth| auth.membership_table.clone()),
                         audit_table: auth_route
                             .as_ref()
                             .and_then(|auth| auth.audit_table.clone()),
@@ -6947,6 +7478,10 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                 .clone()
                 .unwrap_or_else(|| zelyra_web::localized_identifier(ui_language, &crud.name)),
             table: crud.table.clone(),
+            tenant_column: crud
+                .tenant_column
+                .as_deref()
+                .map(|column| storage_column_name(&schema, &crud.table, column)),
             list_columns,
             search_columns,
             filter_columns,
@@ -7062,6 +7597,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
 struct CrudGenerationContext {
     layout_html: Option<String>,
     csrf: CsrfProtection,
+    membership_table: Option<String>,
     audit_table: Option<String>,
     audit_chain: bool,
 }
@@ -7083,6 +7619,7 @@ fn generated_crud_form(
         .columns
         .iter()
         .filter(|column| !column.primary_key && !column.auto)
+        .filter(|column| crud.tenant_column.as_deref() != Some(column.name.as_str()))
         .filter(|column| {
             configured_fields.is_none_or(|fields| fields.iter().any(|name| name == &column.name))
         })
@@ -7107,6 +7644,12 @@ fn generated_crud_form(
         .iter()
         .map(|field| storage_column_name(schema, &crud.table, &field.name))
         .collect::<Vec<_>>();
+    let membership_guard = context.membership_table.as_deref().map(|membership_table| {
+        format!(
+            " AND EXISTS (SELECT 1 FROM {} AS zelyra_membership WHERE zelyra_membership.user_id = :zelyra_user_id AND zelyra_membership.tenant_id = :zelyra_tenant_id AND zelyra_membership.active = true)",
+            quote_identifier(membership_table)
+        )
+    });
     let query = if edit {
         let assignments = storage_columns
             .iter()
@@ -7115,25 +7658,48 @@ fn generated_crud_form(
             .collect::<Vec<_>>()
             .join(", ");
         format!(
-            "UPDATE {} SET {} WHERE {} = :id",
+            "UPDATE {} SET {} WHERE {} = :id{}{}",
             quote_identifier(&crud.table),
             assignments,
-            quote_identifier("id")
+            quote_identifier("id"),
+            crud.tenant_column
+                .as_deref()
+                .map_or_else(String::new, |column| {
+                    format!(
+                        " AND {} = :zelyra_tenant_id",
+                        quote_identifier(&storage_column_name(schema, &crud.table, column))
+                    )
+                }),
+            membership_guard.clone().unwrap_or_default()
         )
     } else {
+        let mut insert_columns = storage_columns.clone();
+        let mut insert_values = fields
+            .iter()
+            .map(|field| format!(":{}", field.name))
+            .collect::<Vec<_>>();
+        if let Some(tenant_column) = crud.tenant_column.as_deref() {
+            insert_columns.push(storage_column_name(schema, &crud.table, tenant_column));
+            insert_values.push(":zelyra_tenant_id".into());
+        }
+        let insert_select = if crud.tenant_column.is_some() {
+            format!(
+                " SELECT {} WHERE true{}",
+                insert_values.join(", "),
+                membership_guard.unwrap_or_default()
+            )
+        } else {
+            format!(" VALUES ({})", insert_values.join(", "))
+        };
         format!(
-            "INSERT INTO {} ({}) VALUES ({})",
+            "INSERT INTO {} ({}){}",
             quote_identifier(&crud.table),
-            storage_columns
+            insert_columns
                 .iter()
                 .map(|column| quote_identifier(column))
                 .collect::<Vec<_>>()
                 .join(", "),
-            fields
-                .iter()
-                .map(|field| format!(":{}", field.name))
-                .collect::<Vec<_>>()
-                .join(", ")
+            insert_select
         )
     };
     let path = if edit {
@@ -7174,6 +7740,11 @@ fn generated_crud_form(
         },
         table: Some(table.clone()),
         schema: Some(schema.clone()),
+        tenant_column: crud
+            .tenant_column
+            .as_deref()
+            .map(|column| storage_column_name(schema, &crud.table, column)),
+        tenant_membership_table: context.membership_table,
         requires_auth: crud.requires_auth,
         permissions,
         csrf: context.csrf,
@@ -7220,6 +7791,11 @@ fn generated_crud_action(
             },
             table: Some(table.clone()),
             schema: Some(schema.clone()),
+            tenant_column: crud
+                .tenant_column
+                .as_deref()
+                .map(|column| storage_column_name(schema, &crud.table, column)),
+            tenant_membership_table: context.membership_table,
             requires_auth: crud.requires_auth || action.requires_auth,
             permissions,
             csrf: context.csrf,

@@ -28,6 +28,9 @@ pub(super) fn run() -> ExitCode {
         };
         return updater::command(check_only);
     }
+    if command == "--tutorial" {
+        return tutorial::command(args);
+    }
     if command == "db" {
         return database_command(args);
     }
@@ -39,6 +42,9 @@ pub(super) fn run() -> ExitCode {
     }
     if command == "audit" {
         return audit_command(args);
+    }
+    if command == "editor" {
+        return editor::command(args);
     }
     if command == "setup" {
         let mut path = ".".to_owned();

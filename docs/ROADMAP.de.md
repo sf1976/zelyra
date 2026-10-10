@@ -502,6 +502,14 @@ Menschliche Abnahme fand nicht statt und ist auf 1.0.0 verschoben. Siehe
 
 ## Release 0.6.0
 
+- [~] Die Sprachkompatibilität erhält eine erste Durchsetzung: Der Compiler
+  akzeptiert `zelyra = "0.1"`, lehnt nicht unterstützte explizite Linien mit
+  `E-LANG-001` ab und behandelt fehlende Angaben als historischen Standard 0.1.
+  Details stehen im
+  [Leitfaden zur Sprachkompatibilität](language-compatibility.de.md).
+  Vollständige Grammatikreferenz, releaseübergreifende Konformitätssammlung und
+  ein eingefrorenes Produktivversprechen bleiben für 1.0.0 offen.
+
 Das stabile [0.6.0-Release](release-plans/0.6.0.de.md) ergänzt einen
 nativen, gepoolten PostgreSQL-16-Pfad für direkte SQL-Abfragen mit begrenzten
 Parametertypen und Transaktionen. Vollständige PostgreSQL-Parität und
@@ -512,15 +520,25 @@ Beziehungen zum Quellmodul, die Abweichungen zur Live-Datenbank zeigt.
 Modulzuordnung bleibt ein Hinweis und ändert weder Schema noch Berechtigungen.
 Die menschliche Abnahme bleibt auf 1.0.0 verschoben.
 
-Nach 0.6 sind ein echter MySQL-Serverpfad, begrenzter Mandantenkontext,
-lokales Entwicklungsstudio und das Rechnungstutorial in 0.7 geplant. 0.8
-ergänzt dauerhafte Aufgaben, Outbox, kontrollierte Studio-Bearbeitung und
-Textänderungen mit benannten Regex-Mustern, Vorschau und ausdrücklichem
-Anwenden. 0.9 prüft die Kernabläufe für MariaDB, MySQL und PostgreSQL und kann
-optionale MFA/WebAuthn sowie OIDC aufnehmen. 0.99 friert Funktionen ein;
+Der [0.7-Releaseplan](release-plans/0.7.0.de.md) umfasst einen echten
+MySQL-Serverpfad, begrenzten Mandantenkontext, lokales Entwicklungsstudio und
+das Rechnungstutorial. Für Editor, begrenzte MySQL-Abfragen und Tutorial gibt
+es lokale Implementierungsnachweise im Feature-Branch. Zusätzlich erzwingt es
+die erklärte Sprachkompatibilitätslinie. Für die Sprachlinienprüfung gibt es
+ebenfalls lokale Implementierungsnachweise; kombinierte Branch-CI,
+Migrations-/Rollback-Review und unabhängiges Sicherheitsreview sind noch offen. 0.8
+priorisiert eine visuelle Datenbanklandkarte und einen geführten CRUD-Assistenten:
+Verbindung/Tabelle auswählen, Felder und Beziehungen ansehen, Zelyra-Quelltext
+anzeigen und eine compilergeprüfte Änderung ausdrücklich übernehmen. Die erste
+Datenansicht bleibt schreibgeschützt. 0.9 ergänzt geführte Geschäftsabläufe und
+Hilfe zum Erweitern erzeugter Anwendungen und prüft die unterstützten
+MariaDB-, MySQL- und PostgreSQL-Pfade Ende-zu-Ende. Optionale MFA/WebAuthn und
+OIDC benötigen weiterhin ein Sicherheitsreview. Eine allgemeine Queue und
+transaktionale Outbox werden hinter 1.0.0 verschoben, damit Editor und die drei
+geforderten Datenbankpfade fokussierte Releases erhalten. 0.99 friert Funktionen ein;
 danach bleiben bis zur ersten produktiven Version 1.0.0 nur die unabhängigen
 menschlichen Abnahmetests. Vollständige SQL-Parität,
-allgemeine visuelle Bearbeitung, beliebige Client-Hydration, Compiler-
+beliebige Client-Hydration, Compiler-
 Self-Hosting, ein natives Backend, verpflichtende Cloud-/KI-Dienste,
 Telemetrie und unbelegte Leistungsversprechen bleiben ausgeschlossen.
 ## Erste produktive Veröffentlichung 1.0.0

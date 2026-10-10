@@ -121,7 +121,7 @@ if cargo test -p zelyra-database \
     echo "error: MariaDB TLS unexpectedly accepted an untrusted CA certificate" >&2
     exit 1
 fi
-if ! grep -Fq 'could not establish a verified MariaDB TLS connection' "${temp_dir}/untrusted-ca.log"; then
+if ! grep -Fq 'could not establish a verified MariaDB/MySQL TLS connection' "${temp_dir}/untrusted-ca.log"; then
     echo "error: untrusted CA failed without the expected safe TLS diagnostic" >&2
     cat "${temp_dir}/untrusted-ca.log" >&2
     exit 1
