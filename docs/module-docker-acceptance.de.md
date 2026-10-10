@@ -3,12 +3,14 @@
 🧪 Experimentelle Modulexport-Rehearsal für 0.5.0; keine allgemeine Exportgarantie.
 [English](module-docker-acceptance.en.md)
 
-✅ Diese begrenzte Probe bestand lokal am 10.10.2026 einschließlich schreibendem
-CRUD in beiden Exporten und aller unten genannten Negativtests. Der Quellstand
-der Probe war `c7718d5774b3ed10ca0ff1984a545acf35c6341f`; die erzeugte
-Gesamtanwendung nutzte den veröffentlichten `v0.4.0`-Compiler und beide
-Exportimages bauten ihren Compiler aus dem veröffentlichten Commit
-`507c29e95084a59029d6b436bd69d9132c3a8937`. Eine frühere Probe bestand am
+✅ Die letzte begrenzte Probe bestand lokal am 10.10.2026 mit Vorbereitungsstand
+`749bde28d8e5f7624efa082734fdde4f504893da`, einschließlich schreibendem CRUD
+in beiden Exporten und aller unten genannten Negativtests. Außerdem prüfte sie
+Laufzeitblocker im Bundle-Manifest und den generierten Einstieg. Die erzeugte
+Gesamtanwendung und die Compiler beider Exportimages nutzten den
+veröffentlichten Commit `507c29e95084a59029d6b436bd69d9132c3a8937`
+(`v0.4.0`). Eine frühere Probe am selben Tag bestand mit Quellstand
+`c7718d5774b3ed10ca0ff1984a545acf35c6341f`; die erste Probe bestand am
 09.10.2026 mit Commit `917e8c707e49332b323e51e4dcbd39a4f37ced96`.
 
 Die Referenzprüfung erzeugt eine Gesamtanwendung mit zwei Fachmodulen und

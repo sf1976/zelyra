@@ -3,12 +3,14 @@
 🧪 Experimental module-export rehearsal for 0.5.0; not a general export guarantee.
 [Deutsch](module-docker-acceptance.de.md)
 
-✅ This bounded rehearsal passed locally on 2026-10-10, including writable
-CRUD in both exports and the negative checks listed below. The rehearsal source
-was `c7718d5774b3ed10ca0ff1984a545acf35c6341f`; the generated application used
-the published `v0.4.0` runtime, and both export images built their compiler
-from published commit `507c29e95084a59029d6b436bd69d9132c3a8937`. An earlier
-rehearsal passed on 2026-10-09 with commit
+✅ The latest bounded rehearsal passed locally on 2026-10-10 with preparation
+source `749bde28d8e5f7624efa082734fdde4f504893da`, including writable CRUD in
+both exports and the negative checks listed below. It also exercised the
+bundle manifest's runtime blockers and generated entry. The generated
+application and both export-image compilers used published commit
+`507c29e95084a59029d6b436bd69d9132c3a8937` (`v0.4.0`). An earlier rehearsal
+that day passed with source `c7718d5774b3ed10ca0ff1984a545acf35c6341f`; an
+initial rehearsal passed on 2026-10-09 with commit
 `917e8c707e49332b323e51e4dcbd39a4f37ced96`.
 
 The reference test generates a combined application with two business modules
