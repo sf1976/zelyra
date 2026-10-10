@@ -25,6 +25,19 @@ impl Drop for EditorConnection {
     }
 }
 
+fn acquire_editor_connection(active: &AtomicUsize) -> bool {
+    let mut count = active.load(Ordering::Acquire);
+    loop {
+        if count >= EDITOR_MAX_CONNECTIONS {
+            return false;
+        }
+        match active.compare_exchange_weak(count, count + 1, Ordering::AcqRel, Ordering::Acquire) {
+            Ok(_) => return true,
+            Err(current) => count = current,
+        }
+    }
+}
+
 #[derive(Clone)]
 struct EditorState {
     root: PathBuf,
@@ -112,12 +125,7 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
                 if !peer.is_some_and(|address| address.ip().is_loopback()) {
                     continue;
                 }
-                if active
-                    .fetch_update(Ordering::AcqRel, Ordering::Acquire, |count| {
-                        (count < EDITOR_MAX_CONNECTIONS).then_some(count + 1)
-                    })
-                    .is_err()
-                {
+                if !acquire_editor_connection(&active) {
                     continue;
                 }
                 let state = Arc::clone(&state);
@@ -721,6 +729,15 @@ mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
 
     static NEXT_DIRECTORY: AtomicU64 = AtomicU64::new(0);
+
+    #[test]
+    fn editor_connection_limit_uses_atomic_compare_exchange() {
+        let active = AtomicUsize::new(EDITOR_MAX_CONNECTIONS - 1);
+        assert!(acquire_editor_connection(&active));
+        assert_eq!(active.load(Ordering::Acquire), EDITOR_MAX_CONNECTIONS);
+        assert!(!acquire_editor_connection(&active));
+        assert_eq!(active.load(Ordering::Acquire), EDITOR_MAX_CONNECTIONS);
+    }
 
     fn project() -> EditorState {
         let directory = std::env::temp_dir().join(format!(
