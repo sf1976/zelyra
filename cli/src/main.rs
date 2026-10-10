@@ -5807,6 +5807,15 @@ fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> 
                 );
                 valid = false;
             }
+            if auth.audit_table.is_none() {
+                diagnostic_with_span(
+                    path,
+                    "E-AUTH-035",
+                    "local MFA requires an audit table for authentication and factor changes",
+                    auth.span,
+                );
+                valid = false;
+            }
             let (Some(mfa_table_name), Some(recovery_table_name)) =
                 (&auth.mfa_table, &auth.mfa_recovery_table)
             else {

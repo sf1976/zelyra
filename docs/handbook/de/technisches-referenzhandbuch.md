@@ -1157,6 +1157,7 @@ Wiederherstellungscodes haben eine eigene Primärschlüsselspalte `id`:
 auth users {
     table: users
     sessions: auth_sessions
+    audit: auth_audit_log
     mfa: user_mfa
     mfa_recovery: user_mfa_recovery
 }
@@ -1185,6 +1186,15 @@ table user_mfa_recovery {
     code_hash: String(255) required
     used_at: Timestamp?
 }
+
+table auth_audit_log {
+    id: Id primary auto
+    actor_user_id: Int?
+    event: String(100) required
+    target_user_id: Int?
+    details: String(1000) required
+    created_at: Timestamp default now
+}
 ~~~
 
 Setze `ZELYRA_MFA_ENCRYPTION_KEY` in der Serverprozess-Umgebung auf 64
@@ -1195,7 +1205,8 @@ Unix-Shell die Datei vor dem Serverstart exportieren: `set -a; . ./.env; set
 auf die die Anwendungsdatenbank Zugriff hat. Geht der Schlüssel verloren, sind die
 gespeicherten Faktoren nicht lesbar; bei einer Datenbankwiederherstellung muss
 derselbe Schlüssel ebenfalls wiederhergestellt werden. MFA benötigt persistente
-MariaDB-Sessions. Passwort-Sessions gelten bis zu einem gültigen TOTP- oder
+MariaDB-Sessions und eine Audit-Tabelle für Login- und Faktoränderungsereignisse.
+Passwort-Sessions gelten bis zu einem gültigen TOTP- oder
 unbenutzten Wiederherstellungscode als ungeprüft. Einrichtung, Deaktivierung
 und Erneuerung der Codes verlangen Passwort und einen aktuellen TOTP-Code.
 Wiederherstellungscodes werden einmal angezeigt und nur als Argon2-Hashes

@@ -1059,6 +1059,7 @@ recovery-code rows have their own primary `id`:
 auth users {
     table: users
     sessions: auth_sessions
+    audit: auth_audit_log
     mfa: user_mfa
     mfa_recovery: user_mfa_recovery
 }
@@ -1087,6 +1088,15 @@ table user_mfa_recovery {
     code_hash: String(255) required
     used_at: Timestamp?
 }
+
+table auth_audit_log {
+    id: Id primary auto
+    actor_user_id: Int?
+    event: String(100) required
+    target_user_id: Int?
+    details: String(1000) required
+    created_at: Timestamp default now
+}
 ~~~
 
 Set `ZELYRA_MFA_ENCRYPTION_KEY` in the server process environment to 64
@@ -1096,8 +1106,8 @@ shell, export the file before starting the server with `set -a; . ./.env;
 set +a`. Keep the key out of source control and backups that are accessible to
 the application database. Losing it makes enrolled factors unreadable;
 restoring a database backup therefore also requires restoring the matching
-key. MFA requires
-persistent MariaDB sessions. Password-only sessions remain unverified until a
+key. MFA requires persistent MariaDB sessions and an audit table for login and
+factor-change events. Password-only sessions remain unverified until a
 valid TOTP or unused recovery code is accepted. Enrollment, disable, and code
 replacement require a password and a recent TOTP code. Recovery codes are
 shown once and only their Argon2 hashes are stored.
