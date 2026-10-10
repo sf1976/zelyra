@@ -825,6 +825,13 @@ PostgreSQL runtime parity or production readiness.
   component, and CRUD slot HTML require a public declaration plus an explicit
   import path (`E-MOD-007` / `E-MOD-020`). This is a tested visibility
   increment, not a complete HTML namespace or module contract system.
+- [🧪] The generated customer/order Docker rehearsal now backs up and restores
+  its business rows with scoped MariaDB accounts, applies an additive schema
+  migration, then kills MariaDB during an uncommitted customer update. After
+  restart it verifies the committed customer/order rows and migrated table
+  remain while the interrupted update is rolled back. This is bounded to a
+  disposable MariaDB 11 fixture; complete module closure and schema ownership
+  enforcement remain open.
 
 ## Real-world acceptance applications
 

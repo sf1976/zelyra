@@ -779,6 +779,86 @@ if [[ "${business_data_after_migration}" != \
 fi
 echo "[MariaDB] additive business-schema migration preserved customer/order data"
 
+echo "[MariaDB] recover a committed customer/order workflow after an interrupted row update"
+interrupted_customer_name="${customer_updated}-interrupted"
+interrupted_transaction_log="${project_root}/interrupted-business-transaction.log"
+docker compose --project-name "${compose_project}" \
+    --env-file "${project_dir}/.env" \
+    -f "${project_dir}/docker-compose.mariadb.yml" \
+    exec -T mariadb sh -c \
+    'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb --user=root --database=zelyra_app --execute="$1"' \
+    sh "START TRANSACTION; UPDATE customers SET name='${interrupted_customer_name}' WHERE id=${customer_id}; SELECT SLEEP(60); COMMIT;" \
+    >"${interrupted_transaction_log}" 2>&1 &
+interrupted_transaction_pid=$!
+interrupted_transaction_seen=false
+for _ in $(seq 1 80); do
+    interrupted_transaction_count="$(docker compose --project-name "${compose_project}" \
+        --env-file "${project_dir}/.env" \
+        -f "${project_dir}/docker-compose.mariadb.yml" \
+        exec -T mariadb sh -c \
+        'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb --user=root --batch --skip-column-names --execute="$1"' \
+        sh "SELECT COUNT(*) FROM information_schema.PROCESSLIST WHERE DB='zelyra_app' AND INFO LIKE 'SELECT SLEEP(60)%';" \
+        2>/dev/null | tr -d '\r' || true)"
+    if [[ "${interrupted_transaction_count}" == "1" ]]; then
+        interrupted_transaction_seen=true
+        break
+    fi
+    if ! kill -0 "${interrupted_transaction_pid}" 2>/dev/null; then
+        cat "${interrupted_transaction_log}" >&2
+        echo "error: customer update transaction ended before the crash point" >&2
+        exit 1
+    fi
+    sleep 0.1
+done
+if [[ "${interrupted_transaction_seen}" != true ]]; then
+    kill "${interrupted_transaction_pid}" 2>/dev/null || true
+    wait "${interrupted_transaction_pid}" 2>/dev/null || true
+    echo "error: could not observe the uncommitted business-row update" >&2
+    exit 1
+fi
+docker compose --project-name "${compose_project}" \
+    -f "${project_dir}/docker-compose.mariadb.yml" kill --signal SIGKILL mariadb >/dev/null
+set +e
+wait "${interrupted_transaction_pid}"
+interrupted_transaction_status=$?
+set -e
+if [[ "${interrupted_transaction_status}" == "0" ]]; then
+    echo "error: interrupted customer update unexpectedly committed" >&2
+    exit 1
+fi
+docker compose --project-name "${compose_project}" \
+    --env-file "${project_dir}/.env" \
+    -f "${project_dir}/docker-compose.mariadb.yml" up --detach mariadb >/dev/null
+for _ in $(seq 1 90); do
+    if docker compose --project-name "${compose_project}" \
+        --env-file "${project_dir}/.env" \
+        -f "${project_dir}/docker-compose.mariadb.yml" \
+        exec -T mariadb sh -c \
+        'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb-admin --user=root ping' \
+        >/dev/null 2>&1; then
+        break
+    fi
+    sleep 1
+done
+docker compose --project-name "${compose_project}" \
+    --env-file "${project_dir}/.env" \
+    -f "${project_dir}/docker-compose.mariadb.yml" \
+    exec -T mariadb sh -c \
+    'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb-admin --user=root ping' >/dev/null
+business_data_after_crash="$(docker compose --project-name "${compose_project}" \
+    --env-file "${project_dir}/.env" \
+    -f "${project_dir}/docker-compose.mariadb.yml" \
+    exec -T mariadb sh -c \
+    'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb --user=root --database=zelyra_app --batch --skip-column-names --execute="$1"' \
+    sh "SELECT CONCAT((SELECT name FROM customers WHERE id=${customer_id}), ':', (SELECT order_number FROM orders WHERE order_number='${order_number}'), ':', (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='zelyra_app' AND TABLE_NAME='business_migration_marker'))" \
+    | tr -d '\r')"
+if [[ "${business_data_after_crash}" != \
+    "${customer_updated}-concurrent:${order_number}:1" ]]; then
+    echo "error: database restart did not preserve committed workflow rows and roll back the interrupted update" >&2
+    exit 1
+fi
+echo "[MariaDB] interrupted business-row transaction recovered with committed workflow data intact"
+
 docker compose --project-name "${compose_project}" \
     --env-file "${project_dir}/.env" \
     -f "${project_dir}/docker-compose.mariadb.yml" stop web >/dev/null

@@ -895,6 +895,14 @@ unterstellt.
   eine öffentliche Deklaration und einen ausdrücklichen Importpfad
   (`E-MOD-007` / `E-MOD-020`). Dies ist ein getesteter Sichtbarkeitsschritt,
   kein vollständiges HTML-Namespace- oder Modulvertragssystem.
+- [🧪] Das generierte Kunden-/Auftrags-Docker-Rehearsal sichert und restauriert
+  Geschäftszeilen nun mit begrenzt berechtigten MariaDB-Konten, wendet eine
+  additive Schema-Migration an und beendet danach MariaDB während einer nicht
+  bestätigten Kundenänderung hart. Nach dem Neustart prüft es, dass bestätigte
+  Kunden-/Auftragszeilen und die migrierte Tabelle erhalten bleiben, während
+  die abgebrochene Änderung zurückgerollt wurde. Der Nachweis ist auf eine
+  wegwerfbare MariaDB-11-Fixture begrenzt; vollständige Modulschließung und
+  Schemaeigentumsdurchsetzung bleiben offen.
 
 ## Akzeptanzanwendungen aus der Praxis
 
