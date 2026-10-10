@@ -2477,8 +2477,8 @@ fn execute_prepared_postgres_query(
         .iter()
         .map(|parameter| parameter.as_ref() as &(dyn PostgresToSql + Sync))
         .collect::<Vec<_>>();
-    if postgres_returns_rows(sql) {
-        let statement = client.prepare(sql).map_err(postgres_driver_error)?;
+    let statement = client.prepare(sql).map_err(postgres_driver_error)?;
+    if !statement.columns().is_empty() {
         let columns = statement
             .columns()
             .iter()
@@ -2494,140 +2494,10 @@ fn execute_prepared_postgres_query(
         Ok(QueryResult { columns, rows })
     } else {
         client
-            .execute(sql, &params)
+            .execute(&statement, &params)
             .map_err(postgres_driver_error)?;
         Ok(QueryResult::default())
     }
-}
-
-fn postgres_returns_rows(sql: &str) -> bool {
-    match postgres_first_keyword(sql).as_deref() {
-        Some("select" | "values" | "show" | "explain" | "table") => true,
-        Some("insert" | "update" | "delete") => postgres_contains_keyword(sql, "returning"),
-        _ => false,
-    }
-}
-
-fn postgres_first_keyword(sql: &str) -> Option<String> {
-    let bytes = sql.as_bytes();
-    let mut index = 0;
-    loop {
-        while bytes.get(index).is_some_and(u8::is_ascii_whitespace) {
-            index += 1;
-        }
-        if bytes.get(index..index + 2) == Some(b"--") {
-            index += 2;
-            while bytes.get(index).is_some_and(|byte| *byte != b'\n') {
-                index += 1;
-            }
-            continue;
-        }
-        if bytes.get(index..index + 2) == Some(b"/*") {
-            let rest = sql.get(index + 2..)?;
-            index += 2 + rest.find("*/")? + 2;
-            continue;
-        }
-        break;
-    }
-    let start = index;
-    while bytes
-        .get(index)
-        .is_some_and(|byte| byte.is_ascii_alphabetic())
-    {
-        index += 1;
-    }
-    (index > start).then(|| sql[start..index].to_ascii_lowercase())
-}
-
-fn postgres_contains_keyword(sql: &str, expected: &str) -> bool {
-    let bytes = sql.as_bytes();
-    let mut index = 0;
-    let mut quote = None;
-    let mut line_comment = false;
-    let mut block_comment = false;
-    let mut dollar_quote: Option<Vec<u8>> = None;
-    while index < bytes.len() {
-        let byte = bytes[index];
-        if line_comment {
-            line_comment = byte != b'\n';
-            index += 1;
-            continue;
-        }
-        if block_comment {
-            if bytes.get(index..index + 2) == Some(b"*/") {
-                block_comment = false;
-                index += 2;
-            } else {
-                index += 1;
-            }
-            continue;
-        }
-        if let Some(delimiter) = &dollar_quote {
-            if bytes[index..].starts_with(delimiter) {
-                index += delimiter.len();
-                dollar_quote = None;
-            } else {
-                index += 1;
-            }
-            continue;
-        }
-        if let Some(active_quote) = quote {
-            if byte == b'\\' && bytes.get(index + 1).is_some() {
-                index += 2;
-            } else if byte == active_quote {
-                if bytes.get(index + 1) == Some(&active_quote) {
-                    index += 2;
-                } else {
-                    quote = None;
-                    index += 1;
-                }
-            } else {
-                index += 1;
-            }
-            continue;
-        }
-        if bytes.get(index..index + 2) == Some(b"--") {
-            line_comment = true;
-            index += 2;
-            continue;
-        }
-        if bytes.get(index..index + 2) == Some(b"/*") {
-            block_comment = true;
-            index += 2;
-            continue;
-        }
-        if byte == b'\'' || byte == b'"' {
-            quote = Some(byte);
-            index += 1;
-            continue;
-        }
-        if byte == b'$' {
-            let mut end = index + 1;
-            while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_') {
-                end += 1;
-            }
-            if bytes.get(end) == Some(&b'$') {
-                dollar_quote = Some(bytes[index..=end].to_vec());
-                index = end + 1;
-                continue;
-            }
-        }
-        if byte.is_ascii_alphabetic() || byte == b'_' {
-            let start = index;
-            index += 1;
-            while index < bytes.len()
-                && (bytes[index].is_ascii_alphanumeric() || bytes[index] == b'_')
-            {
-                index += 1;
-            }
-            if sql[start..index].eq_ignore_ascii_case(expected) {
-                return true;
-            }
-            continue;
-        }
-        index += 1;
-    }
-    false
 }
 
 fn postgres_row_strings(row: &r2d2_postgres::postgres::Row) -> Result<Vec<String>, DatabaseError> {
@@ -4123,13 +3993,6 @@ mod tests {
             bind_named_parameters_for("SELECT value FROM items WHERE key=:key", true).unwrap();
         assert_eq!(sql, "SELECT value FROM items WHERE key=$1");
         assert_eq!(names, ["key"]);
-        assert!(postgres_returns_rows("/* heading */ SELECT 1"));
-        assert!(postgres_returns_rows(
-            "UPDATE items SET id = 1 RETURNING id"
-        ));
-        assert!(!postgres_returns_rows(
-            "INSERT INTO items (label) VALUES ('RETURNING')"
-        ));
     }
 
     #[test]
@@ -4147,7 +4010,7 @@ mod tests {
                 params: vec![("value".into(), QueryValue::Int(42))],
             },
             Query {
-                sql: "SELECT value::bigint, true AS active, 'ok'::text AS label FROM zelyra_runtime_probe WHERE value = :value".into(),
+                sql: "WITH selected AS (SELECT value FROM zelyra_runtime_probe WHERE value = :value) SELECT value::bigint, true AS active, 'ok'::text AS label FROM selected".into(),
                 params: vec![("value".into(), QueryValue::Int(42))],
             },
             Query {
