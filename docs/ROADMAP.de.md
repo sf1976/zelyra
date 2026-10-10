@@ -513,19 +513,20 @@ Modulzuordnung bleibt ein Hinweis und ändert weder Schema noch Berechtigungen.
 Die menschliche Abnahme ist auf 1.0.0 verschoben und keine Voraussetzung für
 0.6.0.
 
-Nach 0.6 sind ein echter MySQL-Serverpfad, lokales Entwicklungsstudio und das
-Rechnungstutorial in 0.7 geplant. 0.8 ergänzt dauerhafte Aufgaben, Outbox und
-kontrollierte Textänderungen mit benannten Regex-Mustern, Vorschau und
-ausdrücklichem Anwenden. 0.9 prüft die Kernabläufe für MariaDB, MySQL und
-PostgreSQL und kann optionale MFA/WebAuthn sowie OIDC aufnehmen. 0.99 friert
-Funktionen ein; danach bleiben bis zur ersten produktiven Version 1.0.0 nur
-die unabhängigen menschlichen Abnahmetests. Vollständige SQL-Parität,
+Nach 0.6 sind ein echter MySQL-Serverpfad, begrenzter Mandantenkontext,
+lokales Entwicklungsstudio und das Rechnungstutorial in 0.7 geplant. 0.8
+ergänzt dauerhafte Aufgaben, Outbox, kontrollierte Studio-Bearbeitung und
+Textänderungen mit benannten Regex-Mustern, Vorschau und ausdrücklichem
+Anwenden. 0.9 prüft die Kernabläufe für MariaDB, MySQL und PostgreSQL und kann
+optionale MFA/WebAuthn sowie OIDC aufnehmen. 0.99 friert Funktionen ein;
+danach bleiben bis zur ersten produktiven Version 1.0.0 nur die unabhängigen
+menschlichen Abnahmetests. Vollständige SQL-Parität,
 allgemeine visuelle Bearbeitung, beliebige Client-Hydration, Compiler-
 Self-Hosting, ein natives Backend, verpflichtende Cloud-/KI-Dienste,
 Telemetrie und unbelegte Leistungsversprechen bleiben ausgeschlossen.
-## Großer Release-Meilenstein 1.0.0
+## Erste produktive Veröffentlichung 1.0.0
 
-`v1.0.0` ist die erste große Veröffentlichung und das verpflichtende Ziel für
+`v1.0.0` ist die erste produktive Veröffentlichung und das verpflichtende Ziel für
 alle unabhängigen menschlichen Einsteiger- und Abnahmestudien, die aus 0.3.0,
 0.4.0 und 0.5.0 verschoben wurden. Kein früheres Release darf behaupten, diese
 Studien seien abgeschlossen. Vor dem stabilen `v1.0.0` muss nach bestandenen

@@ -385,6 +385,9 @@ pub(super) fn run() -> ExitCode {
     if command == "check" {
         return check_command(args);
     }
+    if command == "routes" {
+        return route_cli::command(args);
+    }
     if command == "fmt" {
         return fmt_command(args);
     }

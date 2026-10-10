@@ -51,6 +51,7 @@ mod holes;
 mod impact;
 mod module_cli;
 mod project;
+mod route_cli;
 #[cfg(test)]
 mod tests;
 mod updater;
@@ -119,13 +120,14 @@ Token reference: https://github.com/sf1976/zelyra/blob/main/docs/env.md
 "#;
 
 fn usage() {
+    eprintln!("  routes: `zelyra routes <entry.zyl> [--format human|json]` lists declared routes and generated resource routes");
     eprintln!("  impact focus: use `--symbol <kind:name>` to inspect one known node");
     eprintln!("  module plan: `zelyra module plan <entry.zyl> <module.zyl|resource-id>` previews known dependencies");
     eprintln!("  module bundle: `zelyra module bundle <entry.zyl> <module.zyl|resource-id> --output <dir> [--dry-run] [--docker --compiler-ref <40-char-commit>]` plans or writes a checked experimental bundle");
     eprintln!("  module bundle --dry-run emits a machine-readable file plan without publishing the bundle");
     eprintln!("  doctor supports `--env-file <path>` for generated MariaDB projects");
     eprintln!("  setup supports `--database`, `--schema`, `--all`, `--host-port`, `--db-host-port`, and `--web [--port <port>]`");
-    eprintln!("Zelyra {}\n\nUsage:\n  zelyra --version\n  zelyra version\n  zelyra update [--check]\n  zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] [--database|--schema|--all] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] --web [--port <port>]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra config <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra module plan <entry.zyl> <module.zyl|resource-id>\n  zelyra module bundle <entry.zyl> <module.zyl|resource-id> --output <dir> [--docker --compiler-ref <40-character-commit>]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>", env!("CARGO_PKG_VERSION"));
+    eprintln!("Zelyra {}\n\nUsage:\n  zelyra --version\n  zelyra version\n  zelyra update [--check]\n  zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] [--database|--schema|--all] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] --web [--port <port>]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra config <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra module plan <entry.zyl> <module.zyl|resource-id>\n  zelyra module bundle <entry.zyl> <module.zyl|resource-id> --output <dir> [--docker --compiler-ref <40-character-commit>]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|map|plan|apply> <file.zyl>", env!("CARGO_PKG_VERSION"));
 }
 
 fn version_command() -> ExitCode {
@@ -149,7 +151,7 @@ thread_local! {
 
 fn database_usage() {
     eprintln!(
-        "Usage:\n  zelyra db create <file.zyl>\n  zelyra db setup <file.zyl>\n  zelyra db bootstrap <file.zyl>\n  zelyra db inspect <file.zyl>\n  zelyra db plan <file.zyl> [--format=text|json]\n  zelyra db apply <file.zyl> [--plan-id <sha256:...>] [--allow-risky]\n  zelyra db history <file.zyl> [--format=text|json]\n\nUse a plan id from `db plan --format=json` to refuse applying a plan if the database schema changed after review.\nMariaDB migrations are journaled; use `db history` to inspect progress and interrupted runs.\n--allow-destructive remains available for DESTRUCTIVE plans only.\nA project database uses ZELYRA_DATABASE_<NAME>_URL (for example ZELYRA_DATABASE_MAIN_URL); DATABASE_URL remains a compatibility fallback."
+        "Usage:\n  zelyra db create <file.zyl>\n  zelyra db setup <file.zyl>\n  zelyra db bootstrap <file.zyl>\n  zelyra db inspect <file.zyl>\n  zelyra db map <file.zyl> [--format=text|json]\n  zelyra db plan <file.zyl> [--format=text|json]\n  zelyra db apply <file.zyl> [--plan-id <sha256:...>] [--allow-risky]\n  zelyra db history <file.zyl> [--format=text|json]\n\nUse a plan id from `db plan --format=json` to refuse applying a plan if the database schema changed after review.\nThe read-only database map groups declared tables by source module and reports live tables without a declaration; module ownership is advisory.\nMariaDB migrations are journaled; use `db history` to inspect progress and interrupted runs.\n--allow-destructive remains available for DESTRUCTIVE plans only.\nA project database uses ZELYRA_DATABASE_<NAME>_URL (for example ZELYRA_DATABASE_MAIN_URL); DATABASE_URL remains a compatibility fallback."
     );
 }
 
@@ -1435,6 +1437,9 @@ fn validate_program(
         for error in errors {
             diagnostic_with_span(path, "E-API-001", &error.message, error.span);
         }
+        return Err(());
+    }
+    if !route_cli::validate_no_collisions(path, &program) {
         return Err(());
     }
     if !validate_views(path, &program) {

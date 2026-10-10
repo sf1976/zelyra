@@ -535,18 +535,18 @@ relationships to source modules that shows differences from the live database.
 Module ownership remains advisory and changes neither schema nor permissions.
 Independent human acceptance is deferred to 1.0.0 and is not a 0.6 prerequisite.
 
-After 0.6, 0.7 plans a real MySQL server path, local developer studio, and the
-invoice tutorial. Version 0.8 adds durable tasks, outbox, and controlled text
-changes with named regex patterns, preview, and explicit application. Version
-0.9 verifies core workflows for MariaDB, MySQL, and PostgreSQL and may add
-optional MFA/WebAuthn and OIDC. Version 0.99 freezes features; only independent
-human acceptance remains before 1.0.0, the first productive release. Complete
-SQL parity, broad visual editing, arbitrary client hydration, compiler
+After 0.6, 0.7 plans a real MySQL server path, bounded tenant context, local
+developer studio, and the invoice tutorial. Version 0.8 adds durable tasks,
+outbox, controlled studio editing, and text changes with named regex patterns,
+preview, and explicit application. Version 0.9 verifies core workflows for
+MariaDB, MySQL, and PostgreSQL and may add optional MFA/WebAuthn and OIDC.
+Version 0.99 freezes features; only independent human acceptance remains before
+1.0.0, the first productive release. Complete SQL parity, broad visual editing, arbitrary client hydration, compiler
 self-hosting, native backend, mandatory cloud/AI services, telemetry, and
 unsupported performance claims remain excluded.
-## Major release milestone 1.0.0
+## First productive release 1.0.0
 
-`v1.0.0` is the first major publication and the mandatory target for all
+`v1.0.0` is the first productive publication and the mandatory target for all
 independent human onboarding and acceptance studies deferred from 0.3.0,
 0.4.0, and 0.5.0. No earlier release may imply those studies were completed.
 Before stable `v1.0.0`, publish an immutable release candidate after the

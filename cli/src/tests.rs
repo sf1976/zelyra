@@ -30,6 +30,95 @@ fn migration_fixture_column(name: &str, sql_type: &str, nullable: bool) -> zelyr
 }
 
 #[test]
+fn database_map_json_groups_source_tables_and_reports_unmapped_live_tables() {
+    let declared = Schema {
+        database: Some(zelyra_database::DatabaseConfig {
+            name: "main".into(),
+            engine: "mariadb".into(),
+            database: Some("zelyra_test".into()),
+        }),
+        tables: vec![
+            zelyra_database::Table {
+                name: "customers".into(),
+                columns: vec![migration_fixture_column("id", "BIGINT", false)],
+                foreign_keys: vec![zelyra_database::ForeignKey {
+                    name: None,
+                    column: "group_id".into(),
+                    referenced_table: "customer_groups".into(),
+                    referenced_column: "id".into(),
+                }],
+                indexes: Vec::new(),
+                uniques: Vec::new(),
+            },
+            zelyra_database::Table {
+                name: "invoices".into(),
+                columns: vec![migration_fixture_column("id", "BIGINT", false)],
+                foreign_keys: Vec::new(),
+                indexes: Vec::new(),
+                uniques: Vec::new(),
+            },
+        ],
+    };
+    let mut live_customer = declared.tables[0].clone();
+    live_customer.columns.push(migration_fixture_column(
+        "display_name",
+        "VARCHAR(120)",
+        false,
+    ));
+    let live = Schema {
+        database: declared.database.clone(),
+        tables: vec![
+            live_customer,
+            zelyra_database::Table {
+                name: "legacy_notes".into(),
+                columns: vec![migration_fixture_column("body", "TEXT", false)],
+                foreign_keys: Vec::new(),
+                indexes: Vec::new(),
+                uniques: Vec::new(),
+            },
+        ],
+    };
+    let owners = HashMap::from([
+        ("table:customers".into(), "src/customers.zyl".into()),
+        ("table:invoices".into(), "src/billing.zyl".into()),
+    ]);
+
+    let mapped = database_cli::database_map_json(&declared, &live, &owners);
+    assert_eq!(mapped["read_only"], true);
+    assert_eq!(mapped["ownership_enforced"], false);
+    assert_eq!(mapped["modules"][0]["source_module"], "src/billing.zyl");
+    assert_eq!(
+        mapped["modules"][0]["tables"][0]["status"],
+        "declared_missing_live"
+    );
+    assert_eq!(mapped["modules"][1]["source_module"], "src/customers.zyl");
+    assert_eq!(mapped["modules"][1]["tables"][0]["status"], "matched");
+    assert_eq!(
+        mapped["modules"][1]["tables"][0]["declared_columns"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        mapped["modules"][1]["tables"][0]["live_columns"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    assert_eq!(
+        mapped["modules"][1]["tables"][0]["foreign_keys"][0]["references_table"],
+        "customer_groups"
+    );
+    assert_eq!(mapped["unmapped_live_tables"][0]["name"], "legacy_notes");
+    assert_eq!(
+        serde_json::to_string(&mapped).unwrap(),
+        serde_json::to_string(&database_cli::database_map_json(&declared, &live, &owners)).unwrap()
+    );
+}
+
+#[test]
 fn schema_plan_json_is_versioned_deterministic_and_emits_reviewed_reverse_plan() {
     let current = migration_fixture_schema(vec![migration_fixture_column("id", "BIGINT", false)]);
     let desired = migration_fixture_schema(vec![

@@ -449,6 +449,45 @@ Container bleibt MariaDB auf `3306`. Von einem anderen Compose-Service ist der
 Host der Servicename `mariadb` und der Port weiterhin `3306`; vom Host ist es
 `127.0.0.1` plus der veröffentlichte Port.
 
+### Eine übersichtliche Datenbankstruktur planen
+
+Ordne Tabellen nach fachlichen Bereichen und halte ihre Zelyra-Deklarationen
+bei den Modulen, die diese Daten fachlich besitzen. Beispielsweise können
+Kunden, Aufträge und Lager jeweils eigene Module bilden. Ein Modul darf die
+Tabellen anderer Bereiche verwenden, sollte diese aber nicht nebenbei neu
+deklarieren. So bleiben Tabellen, SQL und Zuständigkeit im Quellcode auffindbar.
+
+Verwende eine einheitliche Sprache und Benennung, aussagekräftige Tabellen- und
+Spaltennamen, explizite Primär- und Fremdschlüssel sowie nur tatsächlich
+benötigte Indizes. Vermeide technische Präfixe wie `tbl_`, Sammel-Tabellen für
+verschiedene Fachbereiche und eine Aufteilung allein nach Webseiten oder
+Formularen. Ergänze Zeitstempel oder Statusfelder nur mit klarer fachlicher
+Bedeutung. Kleine Lookup-Tabellen und Zuordnungstabellen sind sinnvoll, wenn
+die Datenbeziehung sie erfordert.
+
+Nutze zunächst eine Datenbankverbindung für die Anwendung und Module als
+Ordnung im Zelyra-Quellcode. Datenbankschemas oder getrennte Datenbanken pro
+Bereich sind eine bewusste Betriebsentscheidung, keine automatische Folge der
+Modulaufteilung; ihre Bedeutung unterscheidet sich außerdem zwischen
+Datenbank-Backends. Vorhandene Tabellen müssen nicht umbenannt werden, um sie
+in Zelyra zu verwenden.
+
+`zelyra db map src/main.zyl` bietet eine schreibgeschützte Übersicht der nach
+Quellmodul gruppierten Tabellendeklarationen, erkannten Fremdschlüssel,
+deklarierten, aber in der Live-Datenbank fehlenden Tabellen und Live-Tabellen
+ohne Quelldeklaration. Bei zugeordneten Tabellen stellt er deklarierte und live
+gefundene Spalten und Fremdschlüssel gegenüber. `--format=json` liefert
+deterministische strukturierte Ausgabe. Der Befehl zeigt niemals die
+Verbindungs-URL und ändert das Schema nicht. Eine Modulzuordnung ist ein
+organisatorischer Hinweis, keine Datenbankberechtigung und keine erzwungene
+Eigentumsregel. `db inspect` liest; `db plan` zeigt Unterschiede; Änderungen
+erfolgen weiterhin nur über den ausdrücklich geprüften `db apply`-Ablauf.
+
+~~~bash
+zelyra db map src/main.zyl
+zelyra db map src/main.zyl --format=json
+~~~
+
 ### Das Adressschema kontrollieren
 
 Für das Beispiel erzeugt `zelyra db create src/main.zyl` derzeit sinngemäß:
@@ -1351,6 +1390,25 @@ JSON-Fehler beantwortet; bei einem Methodenfehler enthält die Antwort den
 Ein ausgeblendeter Button ist keine Sicherheitsgrenze. Berechtigungen müssen
 serverseitig an der Aktion geprüft werden. Der Browser ist kreativ, besonders
 wenn man ihm vertraut.
+
+### Routenübersicht
+
+`zelyra routes` prüft ein Projekt und zeigt deklarierte Seiten und APIs sowie
+die daraus erzeugten Formular-, CRUD-, Tableview- und Authentifizierungsrouten
+mit Methode, Pfad und Quelldatei/Zeile. Die JSON-Ausgabe ist deterministisch
+und eignet sich für Werkzeuge:
+
+~~~bash
+zelyra routes src/main.zyl
+zelyra routes src/main.zyl --format=json
+~~~
+
+Gleiche Routenmuster mit derselben HTTP-Methode werden bereits von
+`zelyra check`, `build`, `run` und `serve` mit `E-ROUTE-001` abgelehnt. Derselbe
+Pfad mit verschiedenen Methoden ist zulässig. Dynamische Parameternamen werden
+normalisiert: `/customers/{id}` und `/customers/{slug}` sind dasselbe
+Routenmuster. Importierte
+Ressourcen erscheinen ebenfalls in der Übersicht.
 
 ### API-Eingaben und sichere Antwort-Defaults
 

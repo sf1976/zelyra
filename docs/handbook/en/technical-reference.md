@@ -402,6 +402,43 @@ then `3307`, while MariaDB remains on `3306` inside the container. Another
 Compose service connects to host `mariadb` and port `3306`; a host process uses
 `127.0.0.1` and the published port.
 
+### Organize a database for clarity
+
+Group tables by business domain and keep each Zelyra declaration with the
+module that owns the data conceptually. For example, customers, orders, and
+inventory can have separate modules. A module may use another domain's tables,
+but should not redeclare them as a side effect. This keeps tables, SQL, and
+responsibility discoverable in source.
+
+Use consistent language and naming, descriptive table and column names,
+explicit primary and foreign keys, and only indexes that serve a real query.
+Avoid technical prefixes such as `tbl_`, catch-all tables spanning unrelated
+domains, and grouping tables only by web page or form. Add timestamps and
+status fields only when they have a clear business meaning. Lookup and join
+tables are useful when the data relationship calls for them.
+
+Start with one application database connection and use Zelyra modules to
+organize the source. Separate database schemas or databases per domain are an
+operational choice, not an automatic consequence of module boundaries; their
+meaning also differs between database backends. Existing tables do not need to
+be renamed to work with Zelyra.
+
+`zelyra db map src/main.zyl` provides a read-only overview of declared tables
+grouped by their source module, recognized foreign-key relationships, declared
+tables missing from the live database, and live tables without a source
+declaration. For matched tables, it shows declared and live columns and
+foreign keys side by side. Add `--format=json` for deterministic structured
+output. It never prints the connection URL and never changes the schema.
+Module ownership is an organizational hint, not a database permission or
+enforced ownership rule.
+`db inspect` reads; `db plan` shows differences; changes still go through the
+explicitly reviewed `db apply` workflow.
+
+~~~bash
+zelyra db map src/main.zyl
+zelyra db map src/main.zyl --format=json
+~~~
+
 ### Inspect the address schema
 
 For the example, `zelyra db create src/main.zyl` currently produces, in essence:
@@ -1234,6 +1271,23 @@ return structured JSON errors; method errors include the `Allow` header.
 
 A hidden button is not a security boundary. Authorization must be enforced on
 the server-side action. Browsers become remarkably creative when trusted.
+
+### Route inventory
+
+`zelyra routes` checks a project and lists declared pages and APIs plus the
+generated form, CRUD, tableview, and authentication routes with method, path,
+and source file/line. The deterministic JSON output is suitable for tools:
+
+~~~bash
+zelyra routes src/main.zyl
+zelyra routes src/main.zyl --format=json
+~~~
+
+Duplicate route patterns with the same HTTP method are rejected by `zelyra check`,
+`build`, `run`, and `serve` with `E-ROUTE-001`. The same path with different
+methods is allowed. Dynamic parameter names are normalized, so
+`/customers/{id}` and `/customers/{slug}` are the same route pattern. Imported resources are
+included in the inventory.
 
 ### API input and secure response defaults
 
