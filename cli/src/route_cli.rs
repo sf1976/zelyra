@@ -83,7 +83,7 @@ fn route_entries(program: &zelyra_ast::Program) -> Vec<RouteEntry> {
         ] {
             for method in methods {
                 entries.push(RouteEntry {
-                    method: method.into(),
+                    method: (*method).into(),
                     path: path.into(),
                     kind: "authentication".into(),
                     span: auth.span,
