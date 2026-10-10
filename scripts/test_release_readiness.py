@@ -25,6 +25,9 @@ class ReleaseReadinessTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         for version, plans in RELEASE_PLAN_CHECKLISTS.items():
             failures = unfinished_gates(root, version)
+            if version == "0.7.0":
+                self.assertEqual(failures, [], "0.7.0 gates are complete for publication")
+                continue
             self.assertTrue(failures, f"{version} must stay blocked while its gates are open")
             for relative_path, _heading in plans:
                 self.assertTrue(
