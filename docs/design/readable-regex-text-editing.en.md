@@ -28,14 +28,18 @@ Run it from the project root:
 
 ```sh
 zelyra text edit names.zedit
-zelyra text edit names.zedit --apply
+# The preview prints a SHA-256 plan id that covers the rules and input files.
+zelyra text edit names.zedit --apply --plan-id sha256:<id-from-preview>
 ```
 
-The first command prints each file, match count, and proposed diff without
-changing files. The second applies the reviewed plan. If the actual number of
-matches differs from `expect`, application stops and reports the files and
-counts. A deliberately broad edit therefore cannot silently touch a new set
-of code after the preview was reviewed.
+The first command prints each file, match count, proposed diff, and a SHA-256
+plan id without changing files. The second applies that exact reviewed plan.
+Zelyra recomputes the id from the rules and current file contents; if anything
+has changed since preview, application stops. If a match count differs from
+`expect`, application also stops and reports the files and counts. A
+deliberately broad edit therefore cannot silently touch a new set of code
+after the preview was reviewed. Applying without the printed plan id is an
+error.
 
 ## Language and safety rules
 

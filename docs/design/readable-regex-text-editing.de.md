@@ -29,14 +29,18 @@ Vom Projektstamm ausführen:
 
 ```sh
 zelyra text edit namen.zedit
-zelyra text edit namen.zedit --apply
+# Die Vorschau gibt eine SHA-256-Plan-ID für Regeln und Eingabedateien aus.
+zelyra text edit namen.zedit --apply --plan-id sha256:<id-aus-der-vorschau>
 ```
 
-Der erste Befehl zeigt jede Datei, die Trefferzahl und den vorgeschlagenen
-Diff, ohne Dateien zu ändern. Der zweite wendet den geprüften Plan an. Weicht
-die tatsächliche Trefferzahl von `expect` ab, wird abgebrochen; die CLI nennt
-Dateien und Trefferzahlen. Eine zu breite Regel kann dadurch nach der Vorschau
-nicht unbemerkt eine andere Menge Code ändern.
+Der erste Befehl zeigt jede Datei, die Trefferzahl, den vorgeschlagenen Diff
+und eine SHA-256-Plan-ID, ohne Dateien zu ändern. Der zweite wendet genau
+diesen geprüften Plan an. Zelyra berechnet die ID aus Regeln und aktuellem
+Dateiinhalt neu; wurde seit der Vorschau etwas geändert, wird abgebrochen.
+Weicht die Trefferzahl von `expect` ab, wird ebenfalls abgebrochen; die CLI
+nennt Dateien und Trefferzahlen. Das Anwenden ohne die ausgegebene Plan-ID
+wird abgelehnt. Eine breite Regel kann so nach der Vorschau nicht unbemerkt
+eine andere Menge Code ändern.
 
 ## Sprach- und Sicherheitsregeln
 
