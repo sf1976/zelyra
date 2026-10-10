@@ -1898,6 +1898,12 @@ undeclared file scopes, outbound network contracts, process dependencies,
 environment variable names, and unresolved static references. `ready` remains
 `false`; implicit resource effects are not fully modeled, and this is not a
 complete deployment proof.
+For included auth modules with `reset_tokens`,
+`external_service_contracts` describes the public base URL, SMTP settings, the
+encrypted outbox key, secret variable names, and at-least-once delivery. Docker
+bundles expose corresponding `.env.example` fields with the existing
+`implicit_tls`/465 default and never copy credentials. This service contract
+does not make the source or deployment closure complete.
 `additional_declarations_in_included_source_files` lists code that
 is present only because an included source file contains it. This analyzes only
 the known graph: `complete` remains `false`, and unrecognized dependencies may

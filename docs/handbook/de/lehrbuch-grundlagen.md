@@ -1880,6 +1880,12 @@ nicht deklarierte Datei-Umfänge, ausgehende Netzwerkverträge,
 Prozessabhängigkeiten, Umgebungsvariablennamen und nicht aufgelöste statische
 Verweise. `ready` bleibt `false`; implizite Ressourceneffekte sind noch nicht
 vollständig modelliert, und der Plan beweist kein vollständiges Deployment.
+Für einbezogene Auth-Module mit `reset_tokens` beschreibt
+`external_service_contracts` öffentliche Basis-URL, SMTP-Einstellungen,
+Schlüssel der verschlüsselten Outbox, Geheimnis-Variablen und die Zustellung
+„at least once“. Docker-Bundles zeigen die passenden Felder in `.env.example`
+mit dem bestehenden Standard `implicit_tls`/465; Zugangsdaten werden nie
+kopiert. Der Dienstvertrag vervollständigt weder Quell- noch Deploymentgraph.
 `additional_declarations_in_included_source_files`
 führt Deklarationen auf, die wegen der einbezogenen Dateien zusätzlich
 auftauchen. Das ist nur eine Analyse des bekannten Graphen: `complete` bleibt

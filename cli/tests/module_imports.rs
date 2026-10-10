@@ -412,6 +412,8 @@ fn module_bundle_can_generate_a_pinned_experimental_docker_package() {
     assert!(env_example.contains("ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS=10"));
     assert!(!env_example.contains("must-not-be-copied"));
     assert!(!env_example.contains("example-secret"));
+    assert!(!env_example.contains("ZELYRA_SMTP_"));
+    assert!(!env_example.contains("ZELYRA_RESET_DELIVERY_KEY"));
 
     let manifest: Value =
         serde_json::from_slice(&fs::read(bundle.join("zelyra.bundle.json")).unwrap()).unwrap();
