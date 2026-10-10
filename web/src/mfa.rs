@@ -293,3 +293,79 @@ fn hex_nibble(byte: u8) -> Option<u8> {
         _ => None,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn totp_matches_rfc_6238_sha1_vector_and_time_window() {
+        // RFC 6238 Appendix B uses this SHA-1 secret and timestamp (59 s).
+        let secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
+        let code = totp_for_step(&base32_decode(secret).unwrap(), 1).unwrap();
+        assert_eq!(code, "287082");
+        assert_eq!(matching_totp_step(secret, &code, 59).unwrap(), Some(1));
+
+        let previous = totp_for_step(&base32_decode(secret).unwrap(), 0).unwrap();
+        assert_eq!(matching_totp_step(secret, &previous, 59).unwrap(), Some(0));
+        assert_eq!(matching_totp_step(secret, "000000", 59).unwrap(), None);
+        assert_eq!(
+            matching_totp_step(secret, "12345", 59),
+            Err(MfaError::InvalidCode)
+        );
+    }
+
+    #[test]
+    fn encrypted_totp_secret_authenticates_ciphertext_and_key() {
+        let key = [0x5a; 32];
+        let secret = generate_totp_secret().unwrap();
+        let encrypted = encrypt_totp_secret(&key, &secret).unwrap();
+        assert_ne!(encrypted, secret);
+        assert_eq!(*decrypt_totp_secret(&key, &encrypted).unwrap(), secret);
+
+        let mut tampered = encrypted.into_bytes();
+        let last = tampered.last_mut().unwrap();
+        *last = if *last == b'0' { b'1' } else { b'0' };
+        let tampered = String::from_utf8(tampered).unwrap();
+        assert_eq!(
+            decrypt_totp_secret(&key, &tampered),
+            Err(MfaError::EncryptionFailed)
+        );
+        assert_eq!(
+            decrypt_totp_secret(&[0xa5; 32], &encrypt_totp_secret(&key, &secret).unwrap()),
+            Err(MfaError::EncryptionFailed)
+        );
+    }
+
+    #[test]
+    fn recovery_codes_are_unique_hashed_and_single_verifier_only() {
+        let codes = generate_recovery_codes().unwrap();
+        assert_eq!(codes.len(), 10);
+        let unique: std::collections::HashSet<_> = codes.iter().map(|code| &**code).collect();
+        assert_eq!(unique.len(), codes.len());
+
+        let code = codes[0].to_string();
+        let hash = hash_recovery_code(&code).unwrap();
+        assert!(!hash.contains(&code));
+        assert!(verify_recovery_code(&code, &hash));
+        assert!(verify_recovery_code(&code.to_lowercase(), &hash));
+        assert!(!verify_recovery_code(
+            "00000000-00000000-00000000-00000000",
+            &hash
+        ));
+        assert!(!verify_recovery_code("invalid", &hash));
+    }
+
+    #[test]
+    fn encryption_key_requires_exact_hexadecimal_material() {
+        assert!(encryption_key_from_hex(&"ab".repeat(32)).is_ok());
+        assert_eq!(
+            encryption_key_from_hex(&"ab".repeat(31)),
+            Err(MfaError::InvalidEncryptionKey)
+        );
+        assert_eq!(
+            encryption_key_from_hex(&format!("{}gg", "ab".repeat(31))),
+            Err(MfaError::InvalidEncryptionKey)
+        );
+    }
+}
