@@ -547,7 +547,11 @@ reads and mutations. It does not protect arbitrary SQL, APIs, TableViews,
 exports, or custom actions; migrations, backfill, and independent security
 review remain release gates. See the [0.7 roadmap](release-plans/0.7.0.en.md).
 
-The planned path after 0.7 is a local MariaDB transactional outbox in 0.8 and
+The 0.8 branch implements an experimental local MariaDB transactional outbox:
+transaction-bound enqueue, leased delivery with bounded retries, and explicit
+setup, metadata inspection, recovery, and worker commands. Exact-head CI,
+crash/concurrency acceptance, and independent security review remain open; see
+the [0.8 roadmap](release-plans/0.8.0.en.md). The planned next milestone is
 optional local TOTP MFA with recovery codes in 0.9. WebAuthn/passkeys and
 OAuth2/OIDC are deferred for separate protocol and security reviews, followed
 by contract stabilization and independent human acceptance for 1.0.0.

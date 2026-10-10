@@ -40,6 +40,9 @@ pub(super) fn run() -> ExitCode {
     if command == "audit" {
         return audit_command(args);
     }
+    if command == "outbox" {
+        return outbox_cli::outbox_command(args);
+    }
     if command == "setup" {
         let mut path = ".".to_owned();
         let mut path_given = false;

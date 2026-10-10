@@ -50,6 +50,7 @@ mod formatter;
 mod holes;
 mod impact;
 mod module_cli;
+mod outbox_cli;
 mod project;
 #[cfg(test)]
 mod tests;
@@ -125,6 +126,7 @@ fn usage() {
     eprintln!("  module bundle --dry-run emits a machine-readable file plan without publishing the bundle");
     eprintln!("  doctor supports `--env-file <path>` for generated MariaDB projects");
     eprintln!("  setup supports `--database`, `--schema`, `--all`, `--host-port`, `--db-host-port`, and `--web [--port <port>]`");
+    eprintln!("  outbox: `setup [file.zyl]`, `list [file.zyl] [--limit <1..200>] [--format text|json]`, `requeue <event-id> [file.zyl]`, or `run [file.zyl] --handler <event.type=function_name> [--once] [--lease-seconds <5..3600>]");
     eprintln!("Zelyra {}\n\nUsage:\n  zelyra --version\n  zelyra version\n  zelyra update [--check]\n  zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] [--database|--schema|--all] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] --web [--port <port>]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra config <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra module plan <entry.zyl> <module.zyl|resource-id>\n  zelyra module bundle <entry.zyl> <module.zyl|resource-id> --output <dir> [--docker --compiler-ref <40-character-commit>]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>", env!("CARGO_PKG_VERSION"));
 }
 
