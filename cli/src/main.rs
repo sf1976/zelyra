@@ -4010,6 +4010,11 @@ fn project_uses_reserved_mfa_route(program: &zelyra_ast::Program) -> bool {
                             zelyra_web::route_pattern_matches_path(&pattern, reserved_path)
                         })
                 })
+                || program.auth.iter().any(|auth| {
+                    auth.admin_path.as_deref().is_some_and(|path| {
+                        zelyra_web::route_pattern_matches_path(path, reserved_path)
+                    })
+                })
         })
 }
 
