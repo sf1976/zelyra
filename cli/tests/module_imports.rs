@@ -1005,6 +1005,14 @@ fn module_plan_reports_runtime_effects_in_its_source_closure() {
             "source_modules": ["src/storage.zyl"]
         }])
     );
+    assert_eq!(
+        document["plan"]["runtime_effects"]["explicit_function_capabilities_complete"],
+        true
+    );
+    assert_eq!(
+        document["plan"]["runtime_effects"]["implicit_resource_effects_complete"],
+        false
+    );
     assert_eq!(document["plan"]["deployment_readiness"]["ready"], false);
     assert_eq!(
         document["plan"]["deployment_readiness"]["status"],
@@ -1022,6 +1030,50 @@ fn module_plan_reports_runtime_effects_in_its_source_closure() {
         "file_system_paths_are_not_declared_in_the_bundle_manifest"
     );
     fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn module_plan_blocks_effects_without_declared_runtime_contracts() {
+    for (capability, reason) in [
+        (
+            "Network",
+            "outbound_network_service_contract_is_not_declared",
+        ),
+        (
+            "Process",
+            "process_executable_and_runtime_dependencies_are_not_declared",
+        ),
+        ("Environment", "environment_variable_names_are_not_declared"),
+    ] {
+        let source =
+            format!("pub fn external_effect() uses {capability} {{ print(\"effect\") }}\n");
+        let directory = project(&[
+            (
+                "main.zyl",
+                "import \"src/effects.zyl\" as effects\nfn main() {}\n",
+            ),
+            ("src/effects.zyl", &source),
+        ]);
+        let result = run(
+            &directory,
+            &["module", "plan", "main.zyl", "src/effects.zyl"],
+        );
+        assert!(
+            result.status.success(),
+            "{capability}: {}",
+            String::from_utf8_lossy(&result.stdout)
+        );
+        let document: Value = serde_json::from_slice(&result.stdout).unwrap();
+        assert_eq!(
+            document["plan"]["runtime_effects"]["effects"][0]["capability"],
+            capability
+        );
+        assert_eq!(
+            document["plan"]["deployment_readiness"]["blockers"][0]["reason"],
+            reason
+        );
+        fs::remove_dir_all(directory).unwrap();
+    }
 }
 
 #[test]

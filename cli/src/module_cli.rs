@@ -837,7 +837,8 @@ fn module_plan_command(mut arguments: impl Iterator<Item = String>) -> ExitCode 
                     "runtime_effects": {
                         "model": "capabilities_declared_by_functions_in_included_source_modules",
                         "effects": runtime_effects,
-                        "complete": true
+                        "explicit_function_capabilities_complete": true,
+                        "implicit_resource_effects_complete": false
                     },
                     "deployment_readiness": {
                         "status": "incomplete",
