@@ -656,6 +656,129 @@ curl --silent --show-error --fail --cookie "${admin_cookie}" \
 assert_file_contains "${project_root}/customer-order-report.html" "${customer_updated}" \
     "modular customer-order report row"
 
+business_restore_database="zelyra_business_restore"
+business_backup_user="business_backup_$$"
+business_restore_user="business_restore_$$"
+business_backup_password="backup-$$-readonly"
+business_restore_password="restore-$$-scoped"
+docker compose --project-name "${compose_project}" \
+    --env-file "${project_dir}/.env" \
+    -f "${project_dir}/docker-compose.mariadb.yml" \
+    exec -T mariadb sh -c \
+    'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb --user=root --execute="$1"' sh \
+    "CREATE DATABASE ${business_restore_database} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER '${business_backup_user}'@'%' IDENTIFIED BY '${business_backup_password}';
+GRANT SELECT, SHOW VIEW, TRIGGER ON zelyra_app.* TO '${business_backup_user}'@'%';
+CREATE USER '${business_restore_user}'@'%' IDENTIFIED BY '${business_restore_password}';
+GRANT ALL PRIVILEGES ON ${business_restore_database}.* TO '${business_restore_user}'@'%';"
+business_backup_file="${project_root}/customer-order-business.sql"
+docker compose --project-name "${compose_project}" \
+    --env-file "${project_dir}/.env" \
+    -f "${project_dir}/docker-compose.mariadb.yml" \
+    exec -T mariadb sh -c \
+    'MYSQL_PWD="$1" mariadb-dump --user="$2" --host=127.0.0.1 --single-transaction --skip-lock-tables --no-tablespaces zelyra_app' \
+    sh "${business_backup_password}" "${business_backup_user}" >"${business_backup_file}"
+chmod 600 "${business_backup_file}"
+docker compose --project-name "${compose_project}" \
+    --env-file "${project_dir}/.env" \
+    -f "${project_dir}/docker-compose.mariadb.yml" \
+    exec -T mariadb sh -c \
+    'MYSQL_PWD="$1" mariadb --user="$2" --host=127.0.0.1 --database="$3"' \
+    sh "${business_restore_password}" "${business_restore_user}" \
+    "${business_restore_database}" <"${business_backup_file}"
+restored_business_row="$(docker compose --project-name "${compose_project}" \
+    --env-file "${project_dir}/.env" \
+    -f "${project_dir}/docker-compose.mariadb.yml" \
+    exec -T mariadb sh -c \
+    'MYSQL_PWD="$1" mariadb --user="$2" --host=127.0.0.1 --database="$3" --batch --skip-column-names --execute="$4"' \
+    sh "${business_restore_password}" "${business_restore_user}" \
+    "${business_restore_database}" \
+    "SELECT CONCAT((SELECT name FROM customers WHERE id=${customer_id}), ':', (SELECT order_number FROM orders WHERE order_number='${order_number}'))" \
+    | tr -d '\r')"
+if [[ "${restored_business_row}" != "${customer_updated}-concurrent:${order_number}" ]]; then
+    echo "error: business backup restore did not preserve the customer/order workflow data" >&2
+    exit 1
+fi
+if docker compose --project-name "${compose_project}" \
+    --env-file "${project_dir}/.env" \
+    -f "${project_dir}/docker-compose.mariadb.yml" \
+    exec -T mariadb sh -c \
+    'MYSQL_PWD="$1" mariadb --user="$2" --host=127.0.0.1 --database=zelyra_app --execute="$3"' \
+    sh "${business_backup_password}" "${business_backup_user}" \
+    "INSERT INTO customers(name) VALUES ('unauthorized-backup-write')" \
+    >/dev/null 2>&1; then
+    echo "error: business backup account unexpectedly wrote to the source application database" >&2
+    exit 1
+fi
+if docker compose --project-name "${compose_project}" \
+    --env-file "${project_dir}/.env" \
+    -f "${project_dir}/docker-compose.mariadb.yml" \
+    exec -T mariadb sh -c \
+    'MYSQL_PWD="$1" mariadb --user="$2" --host=127.0.0.1 --database=zelyra_app --execute="SELECT 1"' \
+    sh "${business_restore_password}" "${business_restore_user}" \
+    >/dev/null 2>&1; then
+    echo "error: business restore account unexpectedly accessed the source application database" >&2
+    exit 1
+fi
+docker compose --project-name "${compose_project}" \
+    --env-file "${project_dir}/.env" \
+    -f "${project_dir}/docker-compose.mariadb.yml" \
+    exec -T mariadb sh -c \
+    'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb --user=root --execute="$1"' sh \
+    "DROP DATABASE ${business_restore_database};
+DROP USER '${business_backup_user}'@'%';
+DROP USER '${business_restore_user}'@'%';"
+echo "[MariaDB] business workflow backup restored the customer and order with scoped accounts"
+
+cat >"${project_dir}/src/business-migration.zyl" <<'ZYL'
+import "src/database.zyl" as storage
+
+table business_migration_marker {
+    id: Id primary auto
+    note: String(80) required
+}
+ZYL
+sed -i '1i import "src/business-migration.zyl" as business_migration' \
+    "${project_dir}/main.zyl"
+business_database_url="$(python3 - "${project_dir}/.env" <<'PY'
+from pathlib import Path
+import sys
+
+values = {}
+for line in Path(sys.argv[1]).read_text(encoding="utf-8").splitlines():
+    if line and not line.startswith("#") and "=" in line:
+        key, value = line.split("=", 1)
+        values[key] = value
+url = values["ZELYRA_DATABASE_MAIN_URL"]
+port = values["ZELYRA_DB_HOST_PORT"]
+print(url.replace("${ZELYRA_DB_HOST_PORT:-3306}", port))
+PY
+)"
+business_migration_plan="${project_root}/business-migration-plan.json"
+DATABASE_URL="${business_database_url}" "${zelyra_bin}" db plan \
+    "${project_dir}/main.zyl" --format=json >"${business_migration_plan}"
+business_migration_plan_id="$(python3 -c \
+    'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["plan_id"])' \
+    "${business_migration_plan}")"
+DATABASE_URL="${business_database_url}" "${zelyra_bin}" db apply \
+    "${project_dir}/main.zyl" --plan-id "${business_migration_plan_id}" \
+    >"${project_root}/business-migration-apply.log"
+DATABASE_URL="${business_database_url}" "${zelyra_bin}" db plan \
+    "${project_dir}/main.zyl" | grep -Fq "No schema changes."
+business_data_after_migration="$(docker compose --project-name "${compose_project}" \
+    --env-file "${project_dir}/.env" \
+    -f "${project_dir}/docker-compose.mariadb.yml" \
+    exec -T mariadb sh -c \
+    'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb --user=root --database=zelyra_app --batch --skip-column-names --execute="$1"' \
+    sh "SELECT CONCAT((SELECT name FROM customers WHERE id=${customer_id}), ':', (SELECT order_number FROM orders WHERE order_number='${order_number}'), ':', (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='zelyra_app' AND TABLE_NAME='business_migration_marker'))" \
+    | tr -d '\r')"
+if [[ "${business_data_after_migration}" != \
+    "${customer_updated}-concurrent:${order_number}:1" ]]; then
+    echo "error: reviewed schema update did not preserve customer/order business data" >&2
+    exit 1
+fi
+echo "[MariaDB] additive business-schema migration preserved customer/order data"
+
 docker compose --project-name "${compose_project}" \
     --env-file "${project_dir}/.env" \
     -f "${project_dir}/docker-compose.mariadb.yml" stop web >/dev/null
