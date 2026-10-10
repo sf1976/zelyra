@@ -2066,12 +2066,14 @@ Auch diese Docker-Paketierung ist noch kein vollständiger Modul-Export:
 statische Abhängigkeitsgraph noch nicht alle Laufzeit- und Asset-Abhängigkeiten
 beweist. Ein erfolgreicher `zelyra check` ersetzt diesen Nachweis nicht.
 Der Docker-End-to-End-Test exportiert zwei CRUD-Ressourcen aus getrennten
-Quelldateien in separate Compose-Projekte. Beide Pakete enthalten automatisch
-das Datenbank-Konfigurationsmodul, erhalten eigene `DATABASE_URL`-Werte und
-lesen jeweils ihren Testdatensatz mit einem MariaDB-Benutzer, der nur auf die
-jeweilige Tabelle lesend zugreifen darf. Das ist ein begrenzter CRUD- und
-Datenbanknachweis für diese Testanwendung, nicht für vollständige Fachmodule
-oder beliebige Projekte.
+Quelldateien in separate Compose-Projekte. Jedes Paket erhält eine eigene
+`DATABASE_URL`, ein separat bereitgestelltes Schema und ein MariaDB-Konto mit
+minimalen Rechten. Die Apps führen schreibendes CRUD aus und bestehen negative
+Datenbank-Berechtigungstests. Das ist ein begrenzter Nachweis für diese
+Testressourcen, nicht für vollständige Fachmodule oder beliebige Projekte.
+Gemeinsames Schemaeigentum und modulübergreifender Datenbankzugriff werden von
+diesem experimentellen Bundle nicht unterstützt. Prüfe das Manifest und erfülle
+vor der Nutzung die aufgeführten Laufzeitanforderungen.
 
 Importierte Oberflächenbausteine können von einer Seite der Einstiegsdatei
 verwendet werden. Der Alias bindet die Datei ein; View- und Komponentennamen

@@ -2071,11 +2071,13 @@ This Docker package is still not a complete module export:
 static dependency graph does not yet prove every runtime and asset dependency.
 A successful `zelyra check` is not that proof. The Docker end-to-end test
 exports two CRUD resources from separate source files into separate Compose
-projects. Both packages automatically include the database configuration
-module, receive their own `DATABASE_URL`, and read their respective test row
-using a MariaDB user with read-only access to that table. This is bounded CRUD
-and database evidence for this test application, not proof that complete
-business modules or arbitrary projects can be extracted.
+projects. Each package gets its own `DATABASE_URL`, separately provisioned
+schema, and least-privilege MariaDB account. The apps complete writable CRUD
+and fail negative database-permission checks. This is bounded evidence for
+these test resources, not proof that complete business modules or arbitrary
+projects can be extracted. Shared schema ownership and cross-module database
+access are not supported by this experimental bundle. Inspect its manifest and
+resolve the listed runtime requirements before use.
 
 Imported UI resources can be used by a page in the entry file. The alias
 includes the file; view and component names are currently unqualified in HTML:

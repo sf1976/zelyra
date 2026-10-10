@@ -762,13 +762,13 @@ register and acceptance gates.
 
 The bilingual [0.5.0 roadmap proposal](release-plans/0.5.0.en.md) is a
 forward-looking plan, not an implementation or release claim. It is gated on
-the final 0.3.0 release and an accepted 0.4.0 baseline. Its primary product
-goal is automatic module wiring and verified export of complete application
-slices as independent Docker deployments. A reusable, separately configurable
-database module, explicit schema ownership, reproducible extraction, and
-end-to-end independent startup are P0 acceptance requirements. The plan keeps
-unimplemented features clearly marked and excludes any presumption of
-PostgreSQL runtime parity or production readiness.
+the final 0.3.0 release and published 0.4.0 baseline. The scoped 0.5.0 candidate
+provides experimental Docker bundles for a statically recognized subset, with
+separate schemas and least-privilege accounts. Complete dependency/effect
+closure, shared schema ownership, and a reusable multi-connection database
+module are explicitly deferred. Bundles continue to report incomplete closure
+and require operator review; the roadmap makes no claim of production
+readiness or PostgreSQL runtime parity.
 
 - [🧪] The unreleased 0.4 branch can now generate a commit-pinned Dockerfile,
   a Compose app, and a secret-free `.env.example` from `zelyra module bundle`;

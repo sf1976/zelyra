@@ -828,14 +828,14 @@ Risikoregister und den Abnahme-Gates des Plans unterstellt.
 
 Der zweisprachige [0.5.0-Roadmapentwurf](release-plans/0.5.0.de.md) ist ein
 Ausblick, keine Implementierungs- oder Releasezusage. Voraussetzung sind das
-finale 0.3.0-Release und eine akzeptierte 0.4.0-Basis. Zentrales Produktziel
-sind automatisch verdrahtete Module und der geprüfte Export vollständiger
-Anwendungsteile als eigenständige Docker-Deployments. Ein wiederverwendbares,
-je Anwendung separat konfigurierbares Datenbankmodul, ausdrückliches
-Schemaeigentum, reproduzierbare Extraktion und unabhängiger Ende-zu-Ende-Start
-sind P0-Abnahmeanforderungen. Nicht umgesetzte Funktionen bleiben als geplant
-gekennzeichnet; PostgreSQL-Runtime-Parität oder Produktionsreife werden nicht
-unterstellt.
+finale 0.3.0-Release und die veröffentlichte 0.4.0-Basis. Der eingegrenzte
+0.5.0-Kandidat bietet experimentelle Docker-Bundles für eine statisch erkannte
+Teilmenge mit getrennten Schemas und Datenbankkonten mit minimalen Rechten.
+Vollständige Abhängigkeits-/Effektauflösung, gemeinsames Schemaeigentum und ein
+wiederverwendbares Mehrverbindungs-Datenbankmodul sind ausdrücklich vertagt.
+Bundles melden weiterhin eine unvollständige Schließung und erfordern eine
+Betreiberprüfung; Produktionsreife oder PostgreSQL-Runtime-Parität wird nicht
+behauptet.
 
 - [🧪] Im unveröffentlichten 0.4-Zweig erzeugt `zelyra module bundle` nun auf
   Wunsch ein commit-gepinntes Dockerfile, eine Compose-App und ein
