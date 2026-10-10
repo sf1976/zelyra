@@ -1,6 +1,8 @@
 # Readable regex text editing
 
-**Status:** design for the planned 0.8.0 milestone; not an implemented CLI contract.
+**Status:** Implemented as a 0.9.0 CLI contract. This specification defines
+the current scope; the implementation is local and requires a preview, match
+count, and plan ID before any file is changed.
 
 Zelyra should make repeated source edits understandable at a glance. A change
 plan names its purpose, target files, regular expression, replacement, and

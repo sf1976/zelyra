@@ -1214,7 +1214,7 @@ table auth_sessions {
     user: User required
     token_hash: String(64) required unique
     expires_at: Timestamp required
-    mfa_verified: Bool default false
+    mfa_verified: Bool required default false
 }
 
 table user_mfa {
@@ -1222,7 +1222,7 @@ table user_mfa {
     secret_ciphertext: String(1024) required
     enabled_at: Timestamp?
     last_totp_step: Int?
-    failed_attempts: Int default 0
+    failed_attempts: Int required default 0
     locked_until: Timestamp?
     enrollment_expires_at: Timestamp?
 }

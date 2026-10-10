@@ -56,6 +56,7 @@ mod project;
 mod route_cli;
 #[cfg(test)]
 mod tests;
+mod text_edit;
 mod tutorial;
 mod updater;
 use account_cli::{audit_command, auth_command};
@@ -125,6 +126,7 @@ Token reference: https://github.com/sf1976/zelyra/blob/main/docs/env.md
 fn usage() {
     eprintln!("  zelyra --tutorial invoice [directory] creates the guided invoice application");
     eprintln!("  zelyra editor [directory] [--port <port>] starts the local browser editor");
+    eprintln!("  zelyra text edit <plan.zedit> [--apply --plan-id sha256:<id>] previews or applies checked text edits");
     eprintln!("  routes: `zelyra routes <entry.zyl> [--format human|json]` lists declared routes and generated resource routes");
     eprintln!("  impact focus: use `--symbol <kind:name>` to inspect one known node");
     eprintln!("  module plan: `zelyra module plan <entry.zyl> <module.zyl|resource-id>` previews known dependencies");

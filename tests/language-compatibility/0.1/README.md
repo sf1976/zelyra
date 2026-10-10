@@ -6,13 +6,14 @@ semantic area. Rust integration tests copy each source into a temporary project
 and invoke the built CLI so the corpus exercises the same command users run.
 
 - `accepted/*.zyl` must pass `zelyra check` and remain stable under repeated
-  `zelyra fmt` runs. Fixture names identify lexer/string escaping,
-  parser/pattern matching, and typing/Option coverage.
+  `zelyra fmt` runs. Fixtures cover lexer/string escaping, parser/pattern
+  matching, typing/Option, typed API errors, and a complete database-backed
+  business application.
 - `rejected/*.zyl` must fail with the stable diagnostic code in its sibling
   `.code` file.
 - `runtime/*.zyl` must pass checking and produce the exact bytes recorded in
   its sibling `.out` file when run with the fixture project's declared
-  capabilities.
+  capabilities. This includes arithmetic, Unicode, and Result success paths.
 
 Changing a fixture or its expected result is a language-contract change. The
 review must explain why the expected result changed and identify its affected

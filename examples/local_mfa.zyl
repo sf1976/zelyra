@@ -1,0 +1,56 @@
+auth users {
+    table: users
+    sessions: auth_sessions
+    audit: auth_audit_log
+    mfa: user_mfa
+    mfa_recovery: user_mfa_recovery
+}
+
+table users {
+    id: Id primary auto
+    email: Email required unique
+    password_hash: String(255) required
+    active: Bool default true
+}
+
+table auth_sessions {
+    id: Id primary auto
+    user: User required
+    token_hash: String(64) required unique
+    expires_at: Timestamp required
+    mfa_verified: Bool required default false
+}
+
+table auth_audit_log {
+    id: Id primary auto
+    actor_user_id: Int?
+    event: String(100) required
+    target_user_id: Int?
+    details: String(1000) required
+    created_at: Timestamp default now
+}
+
+table user_mfa {
+    user_id: Int primary
+    secret_ciphertext: String(1024) required
+    enabled_at: Timestamp?
+    last_totp_step: Int?
+    failed_attempts: Int required default 0
+    locked_until: Timestamp?
+    enrollment_expires_at: Timestamp?
+}
+
+table user_mfa_recovery {
+    id: Id primary auto
+    user_id: Int required
+    code_hash: String(255) required
+    used_at: Timestamp?
+}
+
+page "/" {
+    requires auth
+
+    html {
+        <main><h1>Private account</h1><p>Only verified sessions can see this page.</p></main>
+    }
+}

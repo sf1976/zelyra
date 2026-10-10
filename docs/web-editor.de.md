@@ -1,6 +1,7 @@
 # Zelyra Studio: lokaler Webeditor
 
-**Zielversion:** Zelyra 0.7.0 · **Status:** experimenteller Ausbau
+**Zielversion:** Zelyra 0.8.0 · **Status:** lokales Studio, Datenbankkarte und
+geführte CRUD-Vorschau stabil veröffentlicht; weiterer Ausbau bis 1.0 geplant
 
 Zelyra Studio ist die integrierte Browseroberfläche zum Bearbeiten eines
 Zelyra-Projekts. Sie läuft als Bestandteil der CLI und bündelt alle benötigten
@@ -61,11 +62,10 @@ werden vor dem Release lokal gebündelt.
 
 ## Geplanter Weg zum visuellen Datenbankassistenten
 
-Der Editor in 0.7 ist die Grundlage zum Schreiben und Prüfen. Für 0.8 ist ein
-schreibgeschützter Datenbankbrowser mit Beziehungskarte und anschließend ein
-geführter CRUD-Assistent geplant: Tabelle auswählen, sichtbare Felder und Views
-festlegen, den erzeugten Zelyra-Quelltext-Diff prüfen, den Compiler ausführen
-und die Änderung ausdrücklich übernehmen. Schemaänderungen laufen weiterhin
-über einen geprüften Migrationsplan. 0.9 soll Rechnungen und weitere kleine
-Geschäftsabläufe führen und beim Ergänzen von Geschäftsregeln helfen. Siehe das
-[Rechnungstutorial](tutorials/invoice.de.md).
+Seit 0.8 zeigt Studio eine schreibgeschützte Datenbankkarte für MariaDB und
+PostgreSQL, erkennt Beziehungen und kann einen CRUD-Entwurf mit Compilerprüfung,
+Quelltextvorschau und ausdrücklicher Übernahme erzeugen. Die Anwendung legt
+keine Tabellen stillschweigend an. Schemaänderungen laufen weiterhin über einen
+geprüften Migrationsplan. Bis 0.9 werden Geschäftsabläufe, Auswirkungen auf
+Routen und Dateien sowie die Bearbeitung mit geprüften Textplänen ausgebaut.
+Siehe das [Rechnungstutorial](tutorials/invoice.de.md).

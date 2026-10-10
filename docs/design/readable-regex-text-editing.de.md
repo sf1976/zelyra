@@ -1,7 +1,8 @@
 # Lesbare Textbearbeitung mit regulären Ausdrücken
 
-**Status:** Entwurf für den geplanten Meilenstein 0.8.0; noch kein
-implementierter CLI-Vertrag.
+**Status:** In 0.9.0 als CLI-Vertrag umgesetzt. Diese Spezifikation definiert
+den aktuellen Umfang; die Implementierung ist lokal und erfordert Vorschau,
+Trefferzahl und Plan-ID vor jeder Änderung.
 
 Wiederkehrende Quelltextänderungen sollen auf einen Blick verständlich sein.
 Ein Änderungsplan benennt Zweck, Zieldateien, regulären Ausdruck, Ersetzung und

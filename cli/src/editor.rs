@@ -549,6 +549,49 @@ fn build_crud_preview(state: &EditorState, value: &Value) -> Result<Value, (u16,
         .map(|line| format!("+ {line}"))
         .collect::<Vec<_>>()
         .join("\n");
+    let incoming_relationships = declared
+        .tables
+        .iter()
+        .flat_map(|source| {
+            source
+                .foreign_keys
+                .iter()
+                .filter(move |key| key.referenced_table == table_name)
+                .map(move |key| {
+                    json!({
+                        "fromTable": source.name,
+                        "fromColumn": key.column,
+                        "toTable": key.referenced_table,
+                        "toColumn": key.referenced_column,
+                    })
+                })
+        })
+        .collect::<Vec<_>>();
+    let relationships = table
+        .foreign_keys
+        .iter()
+        .map(|key| {
+            json!({
+                "fromTable": table_name,
+                "fromColumn": key.column,
+                "toTable": key.referenced_table,
+                "toColumn": key.referenced_column,
+            })
+        })
+        .chain(incoming_relationships)
+        .collect::<Vec<_>>();
+    let base_route = format!("/{table_name}");
+    let id_route = format!("{base_route}/{{id}}");
+    let affected_routes = [
+        ("GET", base_route.clone()),
+        ("GET", format!("{base_route}/new")),
+        ("POST", format!("{base_route}/new")),
+        ("GET", id_route.clone()),
+        ("GET", format!("{id_route}/edit")),
+        ("POST", format!("{id_route}/edit")),
+        ("POST", format!("{id_route}/delete")),
+        ("POST", format!("{id_route}/restore")),
+    ];
     Ok(json!({
         "success": success,
         "path": target,
@@ -560,6 +603,12 @@ fn build_crud_preview(state: &EditorState, value: &Value) -> Result<Value, (u16,
         "table": table_name,
         "resourceName": resource_name,
         "fields": fields,
+        "impact": {
+            "files": [target],
+            "tables": [table_name],
+            "relationships": relationships,
+            "routes": affected_routes.iter().map(|(method, path)| json!({"method": method, "path": path})).collect::<Vec<_>>(),
+        },
     }))
 }
 
