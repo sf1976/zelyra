@@ -22,7 +22,6 @@ crud Customer -> customers {
 
     view {
         fields { name email }
-        list { mode: cards }
         detail { mode: cards }
         form { mode: cards }
     }

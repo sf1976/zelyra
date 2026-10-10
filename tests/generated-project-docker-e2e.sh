@@ -72,6 +72,10 @@ echo "[1/5] generating a fresh MariaDB CRUD project"
 sed -i '/^database main {/,/^}/d' "${project_dir}/main.zyl"
 sed -i '1i import "src/invoices.zyl" as invoices' "${project_dir}/main.zyl"
 sed -i '1i import "src/inventory.zyl" as inventory' "${project_dir}/main.zyl"
+sed -i '1i import "src/customers.zyl" as customers' "${project_dir}/main.zyl"
+sed -i '1i import "src/orders.zyl" as orders' "${project_dir}/main.zyl"
+sed -i '1i import "src/reporting.zyl" as reporting' "${project_dir}/main.zyl"
+sed -i '1i import "src/shell.zyl" as customer_order_ui' "${project_dir}/main.zyl"
 sed -i '1i import "src/docker-smoke.zyl" as docker_smoke' "${project_dir}/main.zyl"
 sed -i '1i import "src/inventory-smoke.zyl" as inventory_smoke' "${project_dir}/main.zyl"
 printf 'database main { engine: mariadb database: "zelyra_app" }\n' \
@@ -84,6 +88,10 @@ printf 'page "/docker-module" { html { <h1>Imported Docker module</h1> } }\n' \
     > "${project_dir}/src/docker-smoke.zyl"
 printf 'page "/inventory-module" { html { <h1>Imported inventory module</h1> } }\n' \
     > "${project_dir}/src/inventory-smoke.zyl"
+cp "${repo_dir}/examples/customer_orders_modules/src/customers.zyl" "${project_dir}/src/customers.zyl"
+cp "${repo_dir}/examples/customer_orders_modules/src/orders.zyl" "${project_dir}/src/orders.zyl"
+cp "${repo_dir}/examples/customer_orders_modules/src/reporting.zyl" "${project_dir}/src/reporting.zyl"
+cp "${repo_dir}/examples/customer_orders_modules/src/shell.zyl" "${project_dir}/src/shell.zyl"
 if [[ ! -f "${project_dir}/.env" ]]; then
     echo "error: zelyra new did not create the protected local .env file" >&2
     exit 1
@@ -331,6 +339,37 @@ print(parser.snapshot)
 PY
 }
 
+extract_relation_option() {
+    python3 - "$1" "$2" <<'PY'
+from html.parser import HTMLParser
+import sys
+
+class RelationParser(HTMLParser):
+    def __init__(self, expected):
+        super().__init__()
+        self.expected = expected
+        self.in_select = False
+        self.value = None
+    def handle_starttag(self, tag, attrs):
+        attributes = dict(attrs)
+        if tag == "select" and attributes.get("name") == self.expected:
+            self.in_select = True
+        elif self.in_select and tag == "option":
+            value = attributes.get("value", "")
+            if value:
+                self.value = value
+    def handle_endtag(self, tag):
+        if tag == "select" and self.in_select:
+            self.in_select = False
+
+parser = RelationParser(sys.argv[2])
+parser.feed(open(sys.argv[1], encoding="utf-8").read())
+if not parser.value:
+    raise SystemExit(f"relation option missing for {parser.expected}")
+print(parser.value)
+PY
+}
+
 assert_bundle_crud() {
     local port="$1" resource="$2" field="$3" created="$4" updated="$5"
     local origin="http://127.0.0.1:${port}" form_file="${project_root}/write-form.html"
@@ -421,6 +460,11 @@ PY
         return 1
     fi
 
+    last_crud_record_id="${record_id}"
+    if [[ "${6:-false}" == "true" ]]; then
+        return 0
+    fi
+
     curl --silent --show-error --fail "${origin}/${resource}/${record_id}" -o "${form_file}"
     token="$(extract_csrf_token "${form_file}")"
     status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
@@ -450,6 +494,68 @@ write_bundle_environment() {
             > "${directory}/.env"
     )
 }
+
+echo "[4/5] testing the modular customer-order workflow"
+docker compose --project-name "${compose_project}" \
+    --env-file "${project_dir}/.env" \
+    -f "${project_dir}/docker-compose.mariadb.yml" up --no-build --detach web >/dev/null
+for _ in $(seq 1 60); do
+    if curl --silent --show-error --fail "http://${address}/customers" \
+        -o "${project_root}/customers.html"; then
+        break
+    fi
+    sleep 1
+done
+if ! curl --silent --show-error --fail "http://${address}/customers" \
+    -o "${project_root}/customers.html"; then
+    docker compose --project-name "${compose_project}" \
+        --env-file "${project_dir}/.env" \
+        -f "${project_dir}/docker-compose.mariadb.yml" logs web >&2 || true
+    echo "error: modular customer route did not start" >&2
+    exit 1
+fi
+customer_name="E2E-Module-Customer-$$"
+customer_updated="${customer_name}-updated"
+assert_bundle_crud "${host_port}" customers name "${customer_name}" "${customer_updated}" true
+customer_id="${last_crud_record_id}"
+curl --silent --show-error --fail "http://${address}/orders/new" \
+    -o "${project_root}/order-form.html"
+assert_file_contains "${project_root}/order-form.html" 'name="customer"' \
+    "customer relationship input on the order form"
+order_csrf="$(extract_csrf_token "${project_root}/order-form.html")"
+relation_id="$(extract_relation_option "${project_root}/order-form.html" customer)"
+if [[ "${relation_id}" != "${customer_id}" ]]; then
+    echo "error: order form did not expose the newly created customer relation" >&2
+    exit 1
+fi
+order_number="E2E-MODULE-ORDER-$$"
+status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+    --header "Origin: http://${address}" --data-urlencode "_zelyra_csrf=${order_csrf}" \
+    --data-urlencode "customer=${customer_id}" --data-urlencode "order_number=${order_number}" \
+    --data-urlencode 'total=123.45' "http://${address}/orders/new")"
+if [[ "${status}" != 303 ]]; then
+    echo "error: valid customer order returned ${status}, expected 303" >&2
+    exit 1
+fi
+status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+    --header "Origin: http://${address}" --data-urlencode "_zelyra_csrf=${order_csrf}" \
+    --data-urlencode 'customer=999999999' --data-urlencode "order_number=${order_number}-invalid" \
+    --data-urlencode 'total=1.00' "http://${address}/orders/new")"
+if [[ "${status}" != 422 ]]; then
+    echo "error: order with an unknown customer returned ${status}, expected 422" >&2
+    exit 1
+fi
+curl --silent --show-error --fail "http://${address}/orders" \
+    -o "${project_root}/orders.html"
+assert_file_contains "${project_root}/orders.html" "${order_number}" "new modular order"
+curl --silent --show-error --fail "http://${address}/views/customerorderoverview" \
+    -o "${project_root}/customer-order-report.html"
+assert_file_contains "${project_root}/customer-order-report.html" "${customer_updated}" \
+    "modular customer-order report row"
+
+docker compose --project-name "${compose_project}" \
+    --env-file "${project_dir}/.env" \
+    -f "${project_dir}/docker-compose.mariadb.yml" stop web >/dev/null
 
 if ! "${zelyra_bin}" module bundle "${project_dir}/main.zyl" crud:Invoice \
     --output "${bundle_dir}" --docker --compiler-ref "${bundle_compiler_commit}"; then
