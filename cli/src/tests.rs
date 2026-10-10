@@ -1715,6 +1715,7 @@ fn shared_crud_view_fields_drive_list_and_form_defaults() {
         CrudGenerationContext {
             layout_html: None,
             csrf: CsrfProtection::new("test-csrf"),
+            membership_table: None,
             audit_table: None,
             audit_chain: false,
         },
@@ -1735,6 +1736,124 @@ fn shared_crud_view_fields_drive_list_and_form_defaults() {
             .collect()
     });
     assert_eq!(list, ["name", "email", "active"]);
+}
+
+#[test]
+fn tenant_crud_forms_hide_and_server_bind_tenant_key() {
+    let source = r#"
+        table users {
+            id: Id primary auto
+            email: Email required
+            password_hash: String(255) required
+        }
+        table auth_sessions {
+            id: Id primary auto
+            user_id: Id required
+            token_hash: String(64) required
+            expires_at: Timestamp required
+        }
+        table memberships {
+            id: Id primary auto
+            user_id: Id required
+            tenant_id: Id required
+            active: Bool required
+        }
+        table invoices {
+            id: Id primary auto
+            tenant_id: Id required
+            title: String(100) required
+        }
+        auth users {
+            table: users
+            sessions: auth_sessions
+            memberships: memberships
+        }
+        crud Invoice -> invoices {
+            tenant: tenant_id
+            requires auth
+            view { fields { title } }
+        }
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    let schema = build_schema(&program).unwrap();
+    assert!(validate_auth("tenant.zyl", &program, &schema));
+    assert!(validate_cruds("tenant.zyl", &program, &schema));
+    let crud = &program.cruds[0];
+    let table = program
+        .tables
+        .iter()
+        .find(|table| table.name == "invoices")
+        .unwrap();
+    let make_form = |edit| {
+        generated_crud_form(
+            crud,
+            table,
+            &schema,
+            edit,
+            CrudGenerationContext {
+                layout_html: None,
+                csrf: CsrfProtection::new("tenant-test-csrf"),
+                membership_table: Some("memberships".into()),
+                audit_table: None,
+                audit_chain: false,
+            },
+        )
+    };
+    let create = make_form(false);
+    assert_eq!(
+        create
+            .form
+            .fields
+            .iter()
+            .map(|field| field.name.as_str())
+            .collect::<Vec<_>>(),
+        ["title"]
+    );
+    let create_sql = match &create.form.actions[0].statements[0] {
+        zelyra_ast::Stmt::Expr(expression) => match &expression.kind {
+            zelyra_ast::ExprKind::Sql { query, .. } => query,
+            _ => panic!("generated create form must use SQL"),
+        },
+        _ => panic!("generated create form must use SQL"),
+    };
+    assert!(create_sql.contains("`title`, `tenant_id`"), "{create_sql}");
+    assert!(create_sql.contains(":zelyra_tenant_id"), "{create_sql}");
+    assert!(create_sql.contains("`memberships`"), "{create_sql}");
+    assert!(create_sql.contains(":zelyra_user_id"), "{create_sql}");
+
+    let edit = make_form(true);
+    let edit_sql = match &edit.form.actions[0].statements[0] {
+        zelyra_ast::Stmt::Expr(expression) => match &expression.kind {
+            zelyra_ast::ExprKind::Sql { query, .. } => query,
+            _ => panic!("generated edit form must use SQL"),
+        },
+        _ => panic!("generated edit form must use SQL"),
+    };
+    assert!(edit_sql.contains("WHERE `id` = :id AND `tenant_id` = :zelyra_tenant_id"));
+    assert!(edit_sql.contains("`memberships`"), "{edit_sql}");
+}
+
+#[test]
+fn tenant_crud_rejects_unscoped_custom_actions_and_missing_memberships() {
+    let source = r#"
+        table users { id: Id primary auto email: Email required password_hash: String(255) required }
+        table auth_sessions { id: Id primary auto user_id: Id required token_hash: String(64) required expires_at: Timestamp required }
+        table invoices { id: Id primary auto tenant_id: Id required title: String(100) required }
+        auth users { table: users sessions: auth_sessions }
+        crud Invoice -> invoices {
+            tenant: tenant_id
+            requires auth
+            action mark_paid {
+                field title: String { required }
+                sql {
+                    UPDATE invoices SET title = :title WHERE id = :id
+                }
+            }
+        }
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    let schema = build_schema(&program).unwrap();
+    assert!(!validate_cruds("tenant.zyl", &program, &schema));
 }
 
 #[test]

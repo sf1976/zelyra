@@ -517,9 +517,18 @@ Versionssprung und Kandidat für 0.6.0 bleiben bis zur Veröffentlichung und
 unabhängigen menschlichen Abnahme von 0.5.0 zurückgestellt. Den 0.6-PR getrennt
 und bis zu dieser Abnahme ungemergt lassen.
 
-Nach 0.6 sind begrenzter Mandantenkontext in 0.7, lokale dauerhafte Aufgaben
-und Outbox-Semantik in 0.8, optionale MFA/WebAuthn- und OIDC-Unterstützung in
-0.9 sowie Vertragsstabilisierung und unabhängige Abnahme für 1.0.0 geplant.
+Der 0.7-Branch ergänzt experimentellen Mandantenkontext für generiertes
+MariaDB-CRUD. Er ermittelt den Principal aus einer geprüften Session, prüft
+Membership pro Request, behandelt Tenant-Selector als nicht vertrauenswürdige
+Eingabe und begrenzt generierte CRUD-Lese- und Schreibabfragen auf den
+Mandanten. Beliebiges SQL, APIs, TableViews, Exporte und eigene Aktionen werden
+nicht geschützt; Migrationen, Backfill und ein unabhängiges Sicherheitsreview
+bleiben Release-Gates. Siehe die [0.7-Roadmap](release-plans/0.7.0.de.md).
+
+Nach 0.7 folgen eine lokale MariaDB-Outbox in 0.8 und optionale lokale
+TOTP-MFA mit Wiederherstellungscodes in 0.9. WebAuthn/Passkeys und OAuth2/OIDC
+werden für separate Protokoll- und Sicherheitsreviews zurückgestellt; danach
+folgen Vertragsstabilisierung und unabhängige menschliche Abnahme für 1.0.0.
 Vollständige SQL-Parität, allgemeine visuelle Bearbeitung, beliebige
 Client-Hydration, Compiler-Self-Hosting, ein natives Backend, verpflichtende
 Cloud-/KI-Dienste, Telemetrie und unbelegte Leistungsversprechen bleiben

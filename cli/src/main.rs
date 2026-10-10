@@ -5607,6 +5607,105 @@ fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> 
                 valid = false;
             }
         }
+        if let Some(membership_table_name) = &auth.membership_table {
+            if membership_table_name == &auth.table
+                || auth.session_table.as_ref() == Some(membership_table_name)
+            {
+                diagnostic_with_span(
+                    path,
+                    "E-TENANT-001",
+                    "tenant memberships must use a dedicated table separate from users and sessions",
+                    auth.span,
+                );
+                valid = false;
+            }
+            if schema.backend() != Backend::MariaDb {
+                diagnostic_with_span(
+                    path,
+                    "E-TENANT-001",
+                    "tenant memberships currently require the MariaDB runtime",
+                    auth.span,
+                );
+                valid = false;
+            }
+            if auth.session_table.is_none() {
+                diagnostic_with_span(
+                    path,
+                    "E-TENANT-001",
+                    "tenant memberships require database-backed authentication sessions",
+                    auth.span,
+                );
+                valid = false;
+            }
+            let Some(membership_table) = schema
+                .tables
+                .iter()
+                .find(|candidate| candidate.name == *membership_table_name)
+            else {
+                diagnostic_with_span(
+                    path,
+                    "E-TENANT-001",
+                    &format!("unknown tenant membership table `{membership_table_name}`"),
+                    auth.span,
+                );
+                valid = false;
+                continue;
+            };
+            for required_column in ["user_id", "tenant_id", "active"] {
+                if !membership_table
+                    .columns
+                    .iter()
+                    .any(|column| column.name == required_column)
+                {
+                    diagnostic_with_span(
+                        path,
+                        "E-TENANT-001",
+                        &format!(
+                            "tenant membership table `{membership_table_name}` requires column `{required_column}`"
+                        ),
+                        auth.span,
+                    );
+                    valid = false;
+                }
+            }
+            for numeric_column in ["user_id", "tenant_id"] {
+                if let Some(column) = membership_table
+                    .columns
+                    .iter()
+                    .find(|column| column.name == numeric_column)
+                {
+                    if !tenant_sql_type_is_integer(&column.sql_type) || column.nullable {
+                        diagnostic_with_span(
+                            path,
+                            "E-TENANT-001",
+                            &format!(
+                                "tenant membership column `{membership_table_name}.{numeric_column}` must be a non-null integer"
+                            ),
+                            auth.span,
+                        );
+                        valid = false;
+                    }
+                }
+            }
+            if let Some(column) = membership_table
+                .columns
+                .iter()
+                .find(|column| column.name == "active")
+            {
+                let sql_type = column.sql_type.to_ascii_uppercase();
+                if column.nullable || !(sql_type.contains("BOOL") || sql_type.contains("TINYINT")) {
+                    diagnostic_with_span(
+                        path,
+                        "E-TENANT-001",
+                        &format!(
+                            "tenant membership column `{membership_table_name}.active` must be a non-null boolean"
+                        ),
+                        auth.span,
+                    );
+                    valid = false;
+                }
+            }
+        }
         if let Some(session_table_name) = &auth.session_table {
             let Some(session_table) = schema
                 .tables
@@ -6221,6 +6320,73 @@ fn validate_cruds(path: &str, program: &zelyra_ast::Program, schema: &Schema) ->
                 valid = false;
             }
         }
+        if let Some(tenant_column) = crud.tenant_column.as_deref() {
+            let fail_tenant = |message: &str| {
+                diagnostic_with_span(path, "E-TENANT-002", message, crud.span);
+            };
+            if !crud.requires_auth {
+                fail_tenant("tenant-scoped CRUD must declare `requires auth`");
+                valid = false;
+            }
+            if !program
+                .auth
+                .iter()
+                .any(|auth| auth.membership_table.is_some() && auth.session_table.is_some())
+            {
+                fail_tenant(
+                    "tenant-scoped CRUD requires auth with database sessions and `memberships`",
+                );
+                valid = false;
+            }
+            let table = schema
+                .tables
+                .iter()
+                .find(|table| table.name == crud.table)
+                .expect("CRUD table existence was checked above");
+            match table
+                .columns
+                .iter()
+                .find(|column| column.name == tenant_column)
+            {
+                Some(column)
+                    if tenant_sql_type_is_integer(&column.sql_type) && !column.nullable => {}
+                Some(_) => {
+                    fail_tenant("tenant key column must be a non-null integer");
+                    valid = false;
+                }
+                None => {
+                    fail_tenant(&format!(
+                        "tenant key column `{tenant_column}` does not exist in table `{}`",
+                        crud.table
+                    ));
+                    valid = false;
+                }
+            }
+            if !table.foreign_keys.is_empty() {
+                fail_tenant(
+                    "tenant-scoped CRUD does not yet support relations; remove foreign keys from this table",
+                );
+                valid = false;
+            }
+            if !crud.actions.is_empty() {
+                fail_tenant(
+                    "tenant-scoped CRUD does not support custom actions because their SQL is not tenant-scoped",
+                );
+                valid = false;
+            }
+            if crud
+                .view
+                .fields
+                .iter()
+                .chain(&crud.list)
+                .chain(&crud.search)
+                .chain(&crud.filters)
+                .any(|column| column == tenant_column)
+            {
+                fail_tenant("tenant key must not be exposed as a CRUD field, list, search, or filter column");
+                valid = false;
+            }
+        }
         if let Some(soft_delete) = &crud.soft_delete {
             let Some(column) = schema
                 .tables
@@ -6263,6 +6429,13 @@ fn validate_cruds(path: &str, program: &zelyra_ast::Program, schema: &Schema) ->
         }
     }
     valid
+}
+
+fn tenant_sql_type_is_integer(sql_type: &str) -> bool {
+    let sql_type = sql_type.to_ascii_uppercase();
+    ["TINYINT", "SMALLINT", "MEDIUMINT", "INT", "BIGINT"]
+        .iter()
+        .any(|kind| sql_type.contains(kind))
 }
 
 fn crud_column_exists(
@@ -6761,6 +6934,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         };
         Some(AuthRoute {
             table: auth.table.clone(),
+            membership_table: auth.membership_table.clone(),
             session_table: auth.session_table.clone(),
             permissions_table: auth.permissions_table.clone(),
             roles_table: auth.roles_table.clone(),
@@ -6831,6 +7005,8 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             form: form.clone(),
             table,
             schema: Some(schema.clone()),
+            tenant_column: None,
+            tenant_membership_table: None,
             requires_auth: false,
             permissions: Vec::new(),
             csrf,
@@ -6859,6 +7035,9 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                 CrudGenerationContext {
                     layout_html: crud_layout_html(&program, crud),
                     csrf,
+                    membership_table: auth_route
+                        .as_ref()
+                        .and_then(|auth| auth.membership_table.clone()),
                     audit_table: auth_route
                         .as_ref()
                         .and_then(|auth| auth.audit_table.clone()),
@@ -6927,6 +7106,9 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                     CrudGenerationContext {
                         layout_html: crud_layout_html(&program, crud),
                         csrf: csrf.clone(),
+                        membership_table: auth_route
+                            .as_ref()
+                            .and_then(|auth| auth.membership_table.clone()),
                         audit_table: auth_route
                             .as_ref()
                             .and_then(|auth| auth.audit_table.clone()),
@@ -6942,6 +7124,10 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                 .clone()
                 .unwrap_or_else(|| zelyra_web::localized_identifier(ui_language, &crud.name)),
             table: crud.table.clone(),
+            tenant_column: crud
+                .tenant_column
+                .as_deref()
+                .map(|column| storage_column_name(&schema, &crud.table, column)),
             list_columns,
             search_columns,
             filter_columns,
@@ -7057,6 +7243,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
 struct CrudGenerationContext {
     layout_html: Option<String>,
     csrf: CsrfProtection,
+    membership_table: Option<String>,
     audit_table: Option<String>,
     audit_chain: bool,
 }
@@ -7078,6 +7265,7 @@ fn generated_crud_form(
         .columns
         .iter()
         .filter(|column| !column.primary_key && !column.auto)
+        .filter(|column| crud.tenant_column.as_deref() != Some(column.name.as_str()))
         .filter(|column| {
             configured_fields.is_none_or(|fields| fields.iter().any(|name| name == &column.name))
         })
@@ -7102,6 +7290,12 @@ fn generated_crud_form(
         .iter()
         .map(|field| storage_column_name(schema, &crud.table, &field.name))
         .collect::<Vec<_>>();
+    let membership_guard = context.membership_table.as_deref().map(|membership_table| {
+        format!(
+            " AND EXISTS (SELECT 1 FROM {} AS zelyra_membership WHERE zelyra_membership.user_id = :zelyra_user_id AND zelyra_membership.tenant_id = :zelyra_tenant_id AND zelyra_membership.active = true)",
+            quote_identifier(membership_table)
+        )
+    });
     let query = if edit {
         let assignments = storage_columns
             .iter()
@@ -7110,25 +7304,48 @@ fn generated_crud_form(
             .collect::<Vec<_>>()
             .join(", ");
         format!(
-            "UPDATE {} SET {} WHERE {} = :id",
+            "UPDATE {} SET {} WHERE {} = :id{}{}",
             quote_identifier(&crud.table),
             assignments,
-            quote_identifier("id")
+            quote_identifier("id"),
+            crud.tenant_column
+                .as_deref()
+                .map_or_else(String::new, |column| {
+                    format!(
+                        " AND {} = :zelyra_tenant_id",
+                        quote_identifier(&storage_column_name(schema, &crud.table, column))
+                    )
+                }),
+            membership_guard.clone().unwrap_or_default()
         )
     } else {
+        let mut insert_columns = storage_columns.clone();
+        let mut insert_values = fields
+            .iter()
+            .map(|field| format!(":{}", field.name))
+            .collect::<Vec<_>>();
+        if let Some(tenant_column) = crud.tenant_column.as_deref() {
+            insert_columns.push(storage_column_name(schema, &crud.table, tenant_column));
+            insert_values.push(":zelyra_tenant_id".into());
+        }
+        let insert_select = if crud.tenant_column.is_some() {
+            format!(
+                " SELECT {} WHERE true{}",
+                insert_values.join(", "),
+                membership_guard.unwrap_or_default()
+            )
+        } else {
+            format!(" VALUES ({})", insert_values.join(", "))
+        };
         format!(
-            "INSERT INTO {} ({}) VALUES ({})",
+            "INSERT INTO {} ({}){}",
             quote_identifier(&crud.table),
-            storage_columns
+            insert_columns
                 .iter()
                 .map(|column| quote_identifier(column))
                 .collect::<Vec<_>>()
                 .join(", "),
-            fields
-                .iter()
-                .map(|field| format!(":{}", field.name))
-                .collect::<Vec<_>>()
-                .join(", ")
+            insert_select
         )
     };
     let path = if edit {
@@ -7169,6 +7386,11 @@ fn generated_crud_form(
         },
         table: Some(table.clone()),
         schema: Some(schema.clone()),
+        tenant_column: crud
+            .tenant_column
+            .as_deref()
+            .map(|column| storage_column_name(schema, &crud.table, column)),
+        tenant_membership_table: context.membership_table,
         requires_auth: crud.requires_auth,
         permissions,
         csrf: context.csrf,
@@ -7215,6 +7437,11 @@ fn generated_crud_action(
             },
             table: Some(table.clone()),
             schema: Some(schema.clone()),
+            tenant_column: crud
+                .tenant_column
+                .as_deref()
+                .map(|column| storage_column_name(schema, &crud.table, column)),
+            tenant_membership_table: context.membership_table,
             requires_auth: crud.requires_auth || action.requires_auth,
             permissions,
             csrf: context.csrf,

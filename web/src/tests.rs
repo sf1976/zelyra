@@ -106,6 +106,8 @@ fn form_route() -> FormRoute {
         },
         table: None,
         schema: None,
+        tenant_column: None,
+        tenant_membership_table: None,
         requires_auth: false,
         permissions: Vec::new(),
         csrf: CsrfProtection::new("csrf-token"),
@@ -155,6 +157,7 @@ fn default_shell_crud(layout_html: Option<String>) -> CrudRoute {
         path: "/machines".into(),
         title: "Maschinen".into(),
         table: "machines".into(),
+        tenant_column: None,
         list_columns: Vec::new(),
         search_columns: Vec::new(),
         filter_columns: Vec::new(),
@@ -331,6 +334,7 @@ fn default_shell_covers_standalone_forms_and_tableviews_but_not_custom_pages() {
 fn generated_login_page_uses_the_localized_default_shell() {
     let auth = AuthRoute {
         table: "users".into(),
+        membership_table: None,
         session_table: None,
         permissions_table: None,
         roles_table: None,
@@ -685,6 +689,7 @@ fn project_catalogs_override_markers_escape_html_and_fall_back_to_english() {
 fn project_catalogs_override_generated_ui_and_parameterized_labels() {
     let auth = AuthRoute {
         table: "users".into(),
+        membership_table: None,
         session_table: None,
         permissions_table: None,
         roles_table: None,
@@ -768,6 +773,7 @@ fn framework_errors_auth_labels_and_validation_use_the_locale_catalog() {
 
     let auth = AuthRoute {
         table: "users".into(),
+        membership_table: None,
         session_table: None,
         permissions_table: None,
         roles_table: None,
@@ -1319,6 +1325,7 @@ fn secure_session_cookie_is_set_when_tls_terminates_at_a_proxy() {
 fn logout_clears_session_cookie_with_the_matching_secure_attribute() {
     let auth = AuthRoute {
         table: "users".into(),
+        membership_table: None,
         session_table: None,
         permissions_table: None,
         roles_table: None,
@@ -1885,6 +1892,7 @@ fn password_hash_rejects_empty_password() {
 fn logout_requires_csrf() {
     let auth = AuthRoute {
         table: "users".into(),
+        membership_table: None,
         session_table: None,
         permissions_table: None,
         roles_table: None,
@@ -2018,6 +2026,7 @@ fn rotating_memory_session_invalidates_previous_token() {
     );
     let auth = AuthRoute {
         table: "users".into(),
+        membership_table: None,
         session_table: None,
         permissions_table: None,
         roles_table: None,
@@ -2107,6 +2116,7 @@ fn session_device_metadata_is_bounded_and_escaped_in_self_service_view() {
 fn session_administration_preserves_legacy_tables_and_escapes_rows() {
     let mut auth = AuthRoute {
         table: "users".into(),
+        membership_table: None,
         session_table: Some("sessions".into()),
         permissions_table: None,
         roles_table: None,
@@ -2410,6 +2420,7 @@ fn renders_crud_list_with_escaped_rows_and_pagination() {
         path: "/machines".into(),
         title: "Machines".into(),
         table: "machines".into(),
+        tenant_column: None,
         list_columns: Vec::new(),
         search_columns: Vec::new(),
         filter_columns: Vec::new(),
@@ -2690,6 +2701,7 @@ fn renders_relationship_labels_in_crud_views() {
         path: "/machines".into(),
         title: "Machines".into(),
         table: "machines".into(),
+        tenant_column: None,
         list_columns: Vec::new(),
         search_columns: Vec::new(),
         filter_columns: Vec::new(),
@@ -2742,6 +2754,7 @@ fn crud_requires_database_url() {
         path: "/machines".into(),
         title: "Machines".into(),
         table: "machines".into(),
+        tenant_column: None,
         list_columns: Vec::new(),
         search_columns: Vec::new(),
         filter_columns: Vec::new(),
@@ -2780,6 +2793,7 @@ fn database_capability_denies_crud_before_connecting() {
         path: "/machines".into(),
         title: "Machines".into(),
         table: "machines".into(),
+        tenant_column: None,
         list_columns: Vec::new(),
         search_columns: Vec::new(),
         filter_columns: Vec::new(),
@@ -2806,6 +2820,79 @@ fn database_capability_denies_crud_before_connecting() {
     let response = app.dispatch(&request);
     assert_eq!(response.status, 403);
     assert!(response.body.contains("Database capability is not granted"));
+}
+
+#[test]
+fn tenant_scoped_crud_fails_closed_without_a_database_session_identity() {
+    let mut crud = default_shell_crud(None);
+    crud.tenant_column = Some("tenant_id".into());
+    let app = WebApp::new(Vec::new(), Vec::new()).with_cruds(vec![crud]);
+    let request = parse_request("GET /machines HTTP/1.1\r\nX-Zelyra-Tenant: 41\r\n\r\n").unwrap();
+    let response = app.dispatch(&request);
+    assert_eq!(response.status, 403);
+}
+
+#[test]
+fn static_bearer_does_not_supply_a_tenant_principal() {
+    let mut crud = default_shell_crud(None);
+    crud.tenant_column = Some("tenant_id".into());
+    let app = WebApp::new(Vec::new(), Vec::new())
+        .with_auth(Some("shared-token".into()), vec!["invoices.view".into()])
+        .with_cruds(vec![crud]);
+    let request =
+        parse_request("GET /machines HTTP/1.1\r\nAuthorization: Bearer shared-token\r\n\r\n")
+            .unwrap();
+    let response = app.dispatch(&request);
+    assert_eq!(response.status, 403);
+}
+
+#[test]
+fn tenant_selector_accepts_header_or_url_and_rejects_conflicts() {
+    let query = parse_request("GET /invoices?tenant_id=41 HTTP/1.1\r\n\r\n").unwrap();
+    assert_eq!(tenant_selector(&query).unwrap().as_deref(), Some("41"));
+
+    let header = parse_request("GET /invoices HTTP/1.1\r\nX-Zelyra-Tenant: 41\r\n\r\n").unwrap();
+    assert_eq!(tenant_selector(&header).unwrap().as_deref(), Some("41"));
+
+    let conflict =
+        parse_request("GET /invoices?tenant_id=41 HTTP/1.1\r\nX-Zelyra-Tenant: 42\r\n\r\n")
+            .unwrap();
+    assert_eq!(tenant_selector(&conflict).unwrap_err(), 400);
+
+    let duplicate =
+        parse_request("GET /invoices?tenant_id=41&tenant_id=42 HTTP/1.1\r\n\r\n").unwrap();
+    assert_eq!(tenant_selector(&duplicate).unwrap_err(), 400);
+
+    let encoded_duplicate =
+        parse_request("GET /invoices?tenant_id=41&tenant%5Fid=42 HTTP/1.1\r\n\r\n").unwrap();
+    assert_eq!(tenant_selector(&encoded_duplicate).unwrap_err(), 400);
+}
+
+#[test]
+fn tenant_urls_are_preserved_in_generated_links_forms_and_redirects() {
+    assert_eq!(
+        append_tenant_selector("/invoices", 41),
+        "/invoices?tenant_id=41"
+    );
+    assert_eq!(
+        append_tenant_selector("/invoices?page=2", 41),
+        "/invoices?page=2&tenant_id=41"
+    );
+    assert_eq!(
+        append_tenant_selector("/invoices?tenant_id=41", 41),
+        "/invoices?tenant_id=41"
+    );
+    assert_eq!(
+        append_tenant_selector("https://example.test/x", 41),
+        "https://example.test/x"
+    );
+
+    let html = preserve_tenant_selector_in_html(
+        "<a href=\"/invoices/3/edit\">Edit</a><form action=\"/invoices/new\"></form>",
+        41,
+    );
+    assert!(html.contains("href=\"/invoices/3/edit?tenant_id=41\""));
+    assert!(html.contains("action=\"/invoices/new?tenant_id=41\""));
 }
 
 #[test]
@@ -2848,6 +2935,7 @@ fn database_capability_denies_page_data_before_database_access() {
 fn database_capability_denies_persistent_login() {
     let auth = AuthRoute {
         table: "users".into(),
+        membership_table: None,
         session_table: Some("sessions".into()),
         permissions_table: None,
         roles_table: None,
@@ -2958,6 +3046,7 @@ fn protects_crud_delete_with_delete_permission() {
         path: "/customers".into(),
         title: "Customers".into(),
         table: "customers".into(),
+        tenant_column: None,
         list_columns: Vec::new(),
         search_columns: Vec::new(),
         filter_columns: Vec::new(),
@@ -3088,6 +3177,7 @@ fn crud_delete_requires_csrf() {
         path: "/machines".into(),
         title: "Machines".into(),
         table: "machines".into(),
+        tenant_column: None,
         list_columns: Vec::new(),
         search_columns: Vec::new(),
         filter_columns: Vec::new(),
@@ -3123,6 +3213,7 @@ fn renders_crud_delete_confirmation_form() {
         path: "/machines".into(),
         title: "Machines".into(),
         table: "machines".into(),
+        tenant_column: None,
         list_columns: Vec::new(),
         search_columns: Vec::new(),
         filter_columns: Vec::new(),

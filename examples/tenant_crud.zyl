@@ -1,0 +1,59 @@
+auth users {
+    table: users
+    sessions: auth_sessions
+    permissions: user_permissions
+    memberships: tenant_memberships
+}
+
+table users {
+    id: Id primary auto
+    email: Email required unique
+    password_hash: String(255) required
+    active: Bool default true
+}
+
+table auth_sessions {
+    id: Id primary auto
+    user: User required
+    token_hash: String(64) required unique
+    expires_at: Timestamp required
+    device_label: String(255)
+}
+
+table user_permissions {
+    id: Id primary auto
+    user_id: Int required
+    permission: String(100) required
+}
+
+table tenant_memberships {
+    id: Id primary auto
+    user_id: Int required
+    tenant_id: Int required
+    active: Bool required
+}
+
+table invoices {
+    id: Id primary auto
+    tenant_id: Int required
+    title: String(100) required
+    deleted_at: Timestamp?
+}
+
+crud Invoice -> invoices {
+    requires auth
+    permits "invoices.view"
+    tenant: tenant_id
+
+    soft_delete {
+        column: deleted_at
+    }
+
+    list {
+        id
+        title
+    }
+}
+
+fn main() {
+}

@@ -540,12 +540,20 @@ and release validation #242. The validation packages still identify as
 and independent acceptance of 0.5.0. Keep the 0.6 PR separate and unmerged
 until that gate passes.
 
-The planned path after 0.6 is bounded tenant context in 0.7, local durable
-tasks and outbox semantics in 0.8, optional MFA/WebAuthn and OIDC in 0.9, then
-contract stabilization and independent acceptance for 1.0.0. Complete SQL
-parity, broad visual editing, arbitrary client hydration, compiler
-self-hosting, native backend, mandatory cloud/AI services, telemetry, and
-unsupported performance claims remain excluded; see the 0.6 roadmap for
+The 0.7 branch adds experimental tenant context to generated MariaDB CRUD.
+It resolves the principal from a validated session, checks membership per
+request, treats tenant selectors as untrusted input, and scopes generated CRUD
+reads and mutations. It does not protect arbitrary SQL, APIs, TableViews,
+exports, or custom actions; migrations, backfill, and independent security
+review remain release gates. See the [0.7 roadmap](release-plans/0.7.0.en.md).
+
+The planned path after 0.7 is a local MariaDB transactional outbox in 0.8 and
+optional local TOTP MFA with recovery codes in 0.9. WebAuthn/passkeys and
+OAuth2/OIDC are deferred for separate protocol and security reviews, followed
+by contract stabilization and independent human acceptance for 1.0.0.
+Complete SQL parity, broad visual editing, arbitrary client hydration,
+compiler self-hosting, native backend, mandatory cloud/AI services, telemetry,
+and unsupported performance claims remain excluded; see the 0.6 roadmap for
 scope and limits.
 
 ## Real-world acceptance applications
