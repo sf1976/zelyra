@@ -2771,7 +2771,7 @@ fn update_mfa_security(
         let matched_step = mfa::matching_totp_step(&secret, &supplied_code, now)
             .ok()
             .flatten()
-            .filter(|step| last_step.map_or(true, |last| *step > last));
+            .filter(|step| last_step.is_some_and(|last| *step > last));
         let Some(step) = matched_step else {
             transaction.execute(&zelyra_database::Query {
                 sql: format!(
@@ -3028,7 +3028,7 @@ fn dispatch_login_mfa(
                 let matched_step = mfa::matching_totp_step(&secret, &code, now)
                     .ok()
                     .flatten()
-                    .filter(|step| last_step.map_or(true, |last| *step > last));
+                    .filter(|step| last_step.is_some_and(|last| *step > last));
                 let recovery_id = if matched_step.is_none() {
                     let recovery_rows = transaction.execute(&zelyra_database::Query {
                         sql: format!(
