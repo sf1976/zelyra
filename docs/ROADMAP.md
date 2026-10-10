@@ -769,6 +769,10 @@ closure, shared schema ownership, and a reusable multi-connection database
 module are explicitly deferred. Bundles continue to report incomplete closure
 and require operator review; the roadmap makes no claim of production
 readiness or PostgreSQL runtime parity.
+The scoped implementation and technical gates have passed on code head
+`cae59e2` (full CI #514 and release package validation #234). A published,
+immutable RC, its install/update/rollback rehearsal, and independent human
+acceptance are still required before stable `v0.5.0`.
 
 - [🧪] The unreleased 0.4 branch can now generate a commit-pinned Dockerfile,
   a Compose app, and a secret-free `.env.example` from `zelyra module bundle`;
@@ -852,26 +856,6 @@ readiness or PostgreSQL runtime parity.
   web port is tested; production hardening remains open.
 - [~] Rust-free self-hosted installation is available for published Linux and
   Windows x86_64 assets; more platforms remain open.
-
-## Proposed release milestone 0.6.0
-
-The separate [0.6.0 plan](release-plans/0.6.0.en.md) proposes a native pooled
-PostgreSQL runtime for one narrow, end-to-end tested CRUD path. It depends on
-published 0.5.0 passing human acceptance. Complete PostgreSQL parity,
-MySQL/SQL Server support, and universal SQL are not 0.6.0 promises.
-
-Implementation has started in `release/0.6.0`: direct SQL queries and
-transaction batches in the synchronous language runtime now dispatch to a
-bounded Rustls PostgreSQL pool. The scalar result subset and PostgreSQL 16
-local integration test are experimental; generated web/CRUD paths, broader
-type coverage, CI evidence, and release gates remain open.
-
-The later direction assigns tenant context to 0.7.0, a local durable task
-interface and outbox to 0.8.0, optional WebAuthn/OAuth2/OIDC authentication to
-0.9.0, and stabilization plus another human acceptance to 1.0.0. Mandatory
-cloud services, external AI providers, and telemetry remain excluded;
-compiler self-hosting and a native backend are not planned for 1.0.0. Each later
-item still needs its own threat, scope, and evidence work.
 
 This file must be updated whenever a milestone changes status or a design
 decision creates a new required or optional work item.

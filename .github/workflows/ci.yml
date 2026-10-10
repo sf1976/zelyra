@@ -231,7 +231,6 @@ jobs:
       - name: Run password-reset MariaDB and SMTP end-to-end test
         env:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
-          ZELYRA_PASSWORD_RESET_ADDRESS: 127.0.0.1:38540
           ZELYRA_BIN: target/debug/zelyra
         run: bash ./tests/password-reset-e2e.sh
       - name: Run generated machine authorization end-to-end test
@@ -255,7 +254,6 @@ jobs:
         env:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
           ZELYRA_BIN: target/debug/zelyra
-          ZELYRA_E2E_ADDRESS: 127.0.0.1:38500
         run: ./tests/mariadb-e2e.sh
       - name: Run SQLite schema integration test
         env:
@@ -275,14 +273,6 @@ jobs:
           DATABASE_URL: postgres://zelyra_ci:zelyra_ci@127.0.0.1:5432/zelyra_ci
           ZELYRA_BIN: target/debug/zelyra
         run: bash ./tests/postgres-schema-safety-e2e.sh
-      - name: Run PostgreSQL parameterized runtime integration test
-        env:
-          ZELYRA_POSTGRES_RUNTIME_TEST_URL: postgres://zelyra_ci:zelyra_ci@127.0.0.1:5432/zelyra_ci
-          ZELYRA_DB_TLS_MODE: disabled
-          ZELYRA_DB_QUERY_TIMEOUT_SECS: 1
-        run: |
-          cargo test -p zelyra-database postgres_runtime_executes_a_parameterized_transaction_when_configured -- --exact tests::postgres_runtime_executes_a_parameterized_transaction_when_configured
-          cargo test -p zelyra-runtime postgres_runtime_dispatches_queries_by_connection_url -- --exact tests::postgres_runtime_dispatches_queries_by_connection_url
       - name: Create isolated tableview test database
         env:
           MYSQL_PWD: root
@@ -376,7 +366,6 @@ jobs:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
           ZELYRA_E2E_DB_PASSWORD: root
           ZELYRA_BIN: target/debug/zelyra
-          ZELYRA_E2E_ADDRESS: 127.0.0.1:38500
         run: ./tests/mariadb-e2e.sh
       - name: Run destructive schema approval integration
         env:

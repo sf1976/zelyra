@@ -5,8 +5,7 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_dir="$(cd -- "${script_dir}/.." && pwd)"
 project_file="${ZELYRA_PASSWORD_RESET_PROJECT:-${repo_dir}/examples/password_reset.zyl}"
 zelyra_bin="${ZELYRA_BIN:-${repo_dir}/target/debug/zelyra}"
-address="${ZELYRA_PASSWORD_RESET_ADDRESS:-127.0.0.1:38540}"
-base_url="http://${address}"
+address="${ZELYRA_PASSWORD_RESET_ADDRESS:-}"
 database_url="${DATABASE_URL:-}"
 suffix="$(date +%s)"
 email="zelyra-reset-${suffix}@example.test"
@@ -122,6 +121,17 @@ for command in mariadb curl python3 cargo; do
     command -v "${command}" >/dev/null || { echo "error: ${command} is required" >&2; exit 1; }
 done
 [[ -x "${zelyra_bin}" ]] || { echo "error: Zelyra binary not found at ${zelyra_bin}" >&2; exit 1; }
+if [[ -z "${address}" ]]; then
+    address="127.0.0.1:$(python3 - <<'PY'
+import socket
+
+with socket.socket() as listener:
+    listener.bind(("127.0.0.1", 0))
+    print(listener.getsockname()[1])
+PY
+)"
+fi
+base_url="http://${address}"
 
 echo "[1/10] create password-reset schema"
 DATABASE_URL="${database_url}" "${zelyra_bin}" db setup "${project_file}"
@@ -145,7 +155,11 @@ for _ in $(seq 1 40); do
     if curl --silent --show-error "${base_url}/forgot-password" -o "${temp_dir}/forgot.html"; then break; fi
     sleep 0.25
 done
-curl --silent --show-error --fail "${base_url}/forgot-password" -o "${temp_dir}/forgot.html"
+if ! curl --silent --show-error --fail "${base_url}/forgot-password" -o "${temp_dir}/forgot.html"; then
+    echo "error: application did not start at ${address}" >&2
+    cat "${temp_dir}/server.log" >&2
+    exit 1
+fi
 
 echo "[3/10] create account and establish a session"
 old_hash="$(printf '%s\n' "${old_password}" | "${zelyra_bin}" auth hash-password --stdin)"
@@ -204,7 +218,14 @@ python3 "${script_dir}/smtp_capture.py" "${temp_dir}/message-b.eml" "${temp_dir}
 smtp_b_pid=$!
 for _ in $(seq 1 50); do [[ -s "${temp_dir}/smtp-b.port" ]] && break; sleep 0.1; done
 [[ -s "${temp_dir}/smtp-b.port" ]]
-address_b="127.0.0.1:$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')"
+address_b="127.0.0.1:$(python3 - <<'PY'
+import socket
+
+with socket.socket() as listener:
+    listener.bind(("127.0.0.1", 0))
+    print(listener.getsockname()[1])
+PY
+)"
 base_url_b="http://${address_b}"
 env ZELYRA_PUBLIC_BASE_URL="${base_url_b}" ZELYRA_SMTP_HOST=127.0.0.1 \
     ZELYRA_SMTP_PORT="$(cat "${temp_dir}/smtp-b.port")" ZELYRA_SMTP_SECURITY=local_plaintext \
@@ -399,7 +420,14 @@ wait "${server_pid}" 2>/dev/null || true
 wait "${server_b_pid}" 2>/dev/null || true
 server_pid=""
 server_b_pid=""
-address_c="127.0.0.1:$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')"
+address_c="127.0.0.1:$(python3 - <<'PY'
+import socket
+
+with socket.socket() as listener:
+    listener.bind(("127.0.0.1", 0))
+    print(listener.getsockname()[1])
+PY
+)"
 base_url_c="http://${address_c}"
 smtp_dead_port="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')"
 env ZELYRA_PUBLIC_BASE_URL="${base_url_c}" ZELYRA_SMTP_HOST=127.0.0.1 \
@@ -496,7 +524,14 @@ python3 "${script_dir}/smtp_capture.py" "${temp_dir}/message-d.eml" "${temp_dir}
 smtp_c_pid=$!
 for _ in $(seq 1 50); do [[ -s "${temp_dir}/smtp-d.port" ]] && break; sleep 0.1; done
 [[ -s "${temp_dir}/smtp-d.port" ]]
-address_d="127.0.0.1:$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')"
+address_d="127.0.0.1:$(python3 - <<'PY'
+import socket
+
+with socket.socket() as listener:
+    listener.bind(("127.0.0.1", 0))
+    print(listener.getsockname()[1])
+PY
+)"
 base_url_d="http://${address_d}"
 env ZELYRA_PUBLIC_BASE_URL="${base_url_c}" ZELYRA_SMTP_HOST=127.0.0.1 \
     ZELYRA_SMTP_PORT="$(cat "${temp_dir}/smtp-d.port")" ZELYRA_SMTP_SECURITY=local_plaintext \

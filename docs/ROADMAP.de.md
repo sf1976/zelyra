@@ -838,6 +838,11 @@ wiederverwendbares Mehrverbindungs-Datenbankmodul sind ausdrücklich vertagt.
 Bundles melden weiterhin eine unvollständige Schließung und erfordern eine
 Betreiberprüfung; Produktionsreife oder PostgreSQL-Runtime-Parität wird nicht
 behauptet.
+Die eingegrenzte Implementierung und die technischen Gates bestanden auf
+Code-Stand `cae59e2` (vollständige CI 514 und Paketprüfung 234). Vor dem stabilen
+`v0.5.0` sind weiterhin ein veröffentlichter, unveränderlicher RC, dessen
+Installations-/Update-/Rollback-Probe und die unabhängige menschliche Abnahme
+erforderlich.
 
 - [🧪] Im unveröffentlichten 0.4-Zweig erzeugt `zelyra module bundle` nun auf
   Wunsch ein commit-gepinntes Dockerfile, eine Compose-App und ein
@@ -925,29 +930,6 @@ behauptet.
   Web-Port ist getestet; Produktionshärtung bleibt offen.
 - [~] Rust-freie Self-Hosted-Installation ist für veröffentlichte Linux- und
   Windows-x86_64-Assets verfügbar; weitere Plattformen bleiben offen.
-
-## Vorgeschlagener Release-Meilenstein 0.6.0
-
-Der getrennte [0.6.0-Plan](release-plans/0.6.0.de.md) schlägt eine native,
-gepoolte PostgreSQL-Laufzeit für einen eng begrenzten, Ende-zu-Ende-geprüften
-CRUD-Pfad vor. Voraussetzung ist die veröffentlichte und menschlich abgenommene
-Version 0.5.0. Vollständige PostgreSQL-Parität, MySQL-/SQL-Server-Unterstützung
-und universelles SQL sind keine 0.6.0-Zusagen.
-
-Die Umsetzung hat auf `release/0.6.0` begonnen: Direkte SQL-Abfragen und
-Transaktionsbatches der synchronen Sprach-Runtime werden an einen begrenzten
-PostgreSQL-Pool mit Rustls weitergeleitet. Die skalare Ergebnis-Teilmenge und
-der lokale PostgreSQL-16-Integrationstest sind experimentell; generierte
-Web-/CRUD-Pfade, breitere Typabdeckung, CI-Nachweis und Releasekriterien sind
-noch offen.
-
-Die spätere Richtung ordnet Mandantenkontext 0.7.0, eine lokale dauerhafte
-Aufgabenschnittstelle und Outbox 0.8.0, optionale WebAuthn-/OAuth2-/OIDC-
-Anmeldung 0.9.0 und die Stabilisierung samt erneuter menschlicher Abnahme
-1.0.0 zu. Cloudzwang, externe KI-Anbieter und Telemetrie bleiben ausgeschlossen;
-Self-Hosting des Compilers und ein natives Backend sind nicht für 1.0.0
-vorgesehen. Alle späteren Punkte müssen eigene Bedrohungs-, Umfangs- und
-Nachweisschritte durchlaufen.
 
 Diese Datei wird bei jeder Statusänderung eines Meilensteins und bei jeder
 neuen verpflichtenden oder optionalen Architekturentscheidung aktualisiert.
