@@ -168,6 +168,10 @@ extract_csrf() {
     sed -n 's/.*name="_zelyra_csrf" value="\([^"]*\)".*/\1/p' "$1"
 }
 
+extract_snapshot() {
+    sed -n 's/.*name="_zelyra_snapshot" value="\([^"]*\)".*/\1/p' "$1"
+}
+
 post_form() {
     local response_file="$1"
     shift
@@ -505,8 +509,11 @@ verify_ui_mode de learn 'Maschinenpark' 'Produktionsbereiche' 'Lernhilfe' 'Deine
 echo "[10/11] editing and deleting through CSRF-protected CRUD"
 curl --silent --show-error --fail "${base_url}/machines/${machine_id}/edit" -o "${temp_dir}/machine-edit.html"
 edit_csrf="$(extract_csrf "${temp_dir}/machine-edit.html")"
+edit_snapshot="$(extract_snapshot "${temp_dir}/machine-edit.html")"
+[[ -n "${edit_snapshot}" ]]
 edit_status="$(post_form "${temp_dir}/machine-edit-response.html" \
     --data-urlencode "_zelyra_csrf=${edit_csrf}" \
+    --data-urlencode "_zelyra_snapshot=${edit_snapshot}" \
     --data-urlencode "number=${machine_number}" \
     --data-urlencode "name=${updated_machine_name}" \
     --data-urlencode "manufacturer=Zelyra Testworks" \
