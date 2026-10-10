@@ -1885,7 +1885,10 @@ Für einbezogene Auth-Module mit `reset_tokens` beschreibt
 Schlüssel der verschlüsselten Outbox, Geheimnis-Variablen und die Zustellung
 „at least once“. Docker-Bundles zeigen die passenden Felder in `.env.example`
 mit dem bestehenden Standard `implicit_tls`/465; Zugangsdaten werden nie
-kopiert. Der Dienstvertrag vervollständigt weder Quell- noch Deploymentgraph.
+kopiert. Vertragsversion 1 weist außerdem 30 Sekunden Wiederholungsfrist und
+mögliche doppelte Zustellung aus. Die Vorlage zeigt, wie ein stabiler
+Outbox-Schlüssel erzeugt wird. Der Dienstvertrag vervollständigt weder Quell-
+noch Deploymentgraph.
 `additional_declarations_in_included_source_files`
 führt Deklarationen auf, die wegen der einbezogenen Dateien zusätzlich
 auftauchen. Das ist nur eine Analyse des bekannten Graphen: `complete` bleibt

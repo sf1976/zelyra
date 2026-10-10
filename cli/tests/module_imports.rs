@@ -1017,6 +1017,18 @@ fn module_plan_and_docker_bundle_export_password_reset_smtp_contracts() {
         document["plan"]["external_service_contracts"][0]["required_when"],
         "auth_reset_tokens_enabled"
     );
+    assert_eq!(
+        document["plan"]["external_service_contracts"][0]["contract_version"],
+        1
+    );
+    assert_eq!(
+        document["plan"]["external_service_contracts"][0]["retry_delay_seconds"],
+        30
+    );
+    assert_eq!(
+        document["plan"]["external_service_contracts"][0]["duplicate_delivery_possible"],
+        true
+    );
 
     let bundle = directory.with_extension("smtp-docker-bundle");
     let bundle_arg = bundle.to_string_lossy().into_owned();
@@ -1063,6 +1075,10 @@ fn module_plan_and_docker_bundle_export_password_reset_smtp_contracts() {
     assert_eq!(
         manifest["external_service_contracts"][0]["delivery_semantics"],
         "at_least_once"
+    );
+    assert_eq!(
+        manifest["external_service_contracts"][0]["contract_version"],
+        1
     );
     assert!(!env_example.contains("must-not-be-copied"));
     fs::remove_dir_all(bundle).unwrap();

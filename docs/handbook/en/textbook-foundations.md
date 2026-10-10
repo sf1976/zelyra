@@ -1902,7 +1902,9 @@ For included auth modules with `reset_tokens`,
 `external_service_contracts` describes the public base URL, SMTP settings, the
 encrypted outbox key, secret variable names, and at-least-once delivery. Docker
 bundles expose corresponding `.env.example` fields with the existing
-`implicit_tls`/465 default and never copy credentials. This service contract
+`implicit_tls`/465 default and never copy credentials. Contract version 1 also
+reports the 30-second retry delay and that duplicate delivery is possible.
+The template shows how to generate a stable outbox key. This service contract
 does not make the source or deployment closure complete.
 `additional_declarations_in_included_source_files` lists code that
 is present only because an included source file contains it. This analyzes only
