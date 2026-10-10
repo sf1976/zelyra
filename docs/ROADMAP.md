@@ -749,14 +749,15 @@ The clean installed-CLI onboarding path is also green in [CI run
 
 Stable `v0.4.0` is published and its artifacts passed technical verification.
 The [0.4.0 release plan](release-plans/0.4.0.en.md) remains open: independent
-human onboarding acceptance was deferred to 0.5.0 and has not been conducted.
+human onboarding acceptance was deferred first to 0.5.0 and, by the newer
+project-owner decision, is now deferred to 1.0.0. It has not been conducted.
 Manual feedback using the published 0.4.0 CLI also exposed an incorrect
 absolute-path invocation for `setup` and unclear expectations for `setup` in a
 minimal `init` project. The diagnosis and documentation were corrected for
 0.5.0 preparation and regression-checked; published 0.4.0 artifacts do not
 contain these corrections. See the bilingual 0.5.0
 [study protocol](release-readiness/0.5.0-onboarding-study.en.md) for the record
-and its limits.
+and its limits. It is not evidence of human acceptance.
 
 ## Proposed release milestone 0.5.0
 
@@ -769,10 +770,11 @@ closure, shared schema ownership, and a reusable multi-connection database
 module are explicitly deferred. Bundles continue to report incomplete closure
 and require operator review; the roadmap makes no claim of production
 readiness or PostgreSQL runtime parity.
-The scoped implementation and technical gates have passed on code head
-`cae59e2` (full CI #514 and release package validation #234). A published,
-immutable RC, its install/update/rollback rehearsal, and independent human
-acceptance are still required before stable `v0.5.0`.
+The scoped implementation and technical gates passed on candidate head
+`56b2adcb` (CI #566 and release package validation #276). A published,
+immutable RC and its install/update/rollback rehearsal remain required before
+stable `v0.5.0`. By explicit project-owner decision, no human study is required
+for 0.5.0; all independent human acceptance is a mandatory gate for 1.0.0.
 
 - [🧪] The unreleased 0.4 branch can now generate a commit-pinned Dockerfile,
   a Compose app, and a secret-free `.env.example` from `zelyra module bundle`;
@@ -836,6 +838,18 @@ acceptance are still required before stable `v0.5.0`.
   remain while the interrupted update is rolled back. This is bounded to a
   disposable MariaDB 11 fixture; complete module closure and schema ownership
   enforcement remain open.
+
+## Major release milestone 1.0.0
+
+`v1.0.0` is the first major publication and the mandatory target for all
+independent human onboarding and acceptance studies deferred from 0.3.0,
+0.4.0, and 0.5.0. No earlier release may imply those studies were completed.
+Before stable `v1.0.0`, publish an immutable release candidate after the
+technical gates pass, have independent non-developer participants use the
+candidate and shipped documentation, fix and re-verify any blockers, and record
+redacted observations and the owner decision against the exact tested commit.
+The study scope must match the final 1.0.0 product; automated CI, internal
+rehearsals, and owner feedback do not substitute for participant testing.
 
 ## Real-world acceptance applications
 

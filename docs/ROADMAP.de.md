@@ -816,14 +816,16 @@ Der Clean-Onboardingpfad mit installierter CLI ist außerdem im [CI-Lauf
 
 Das stabile `v0.4.0` ist veröffentlicht und die Artefakte wurden technisch
 geprüft. Der [Releaseplan 0.4.0](release-plans/0.4.0.de.md) bleibt dennoch
-offen: Die unabhängige menschliche Einsteigerabnahme wurde auf 0.5.0 verschoben
-und ist nicht durchgeführt. Eine manuelle Rückmeldung mit dem veröffentlichten
+offen: Die unabhängige menschliche Einsteigerabnahme wurde zuerst auf 0.5.0
+verschoben und ist durch die neuere Entscheidung des Projektverantwortlichen
+nun für 1.0.0 vorgesehen. Sie wurde nicht durchgeführt. Eine manuelle Rückmeldung mit dem veröffentlichten
 0.4.0-CLI deckte außerdem eine falsche absolute Pfadangabe bei `setup` sowie
 unklare Erwartungen an `setup` für minimale `init`-Projekte auf. Die Diagnose
 und Dokumentation wurden für die 0.5.0-Vorbereitung korrigiert und Regressionen
 geprüft; die veröffentlichten 0.4.0-Artefakte enthalten diese Korrekturen
 nicht. Details und Grenzen stehen im zweisprachigen 0.5.0-
-[Studienprotokoll](release-readiness/0.5.0-onboarding-study.de.md).
+[Studienprotokoll](release-readiness/0.5.0-onboarding-study.de.md). Es ist kein
+Nachweis menschlicher Abnahme.
 
 ## Vorgeschlagener Release-Meilenstein 0.5.0
 
@@ -839,10 +841,12 @@ Bundles melden weiterhin eine unvollständige Schließung und erfordern eine
 Betreiberprüfung; Produktionsreife oder PostgreSQL-Runtime-Parität wird nicht
 behauptet.
 Die eingegrenzte Implementierung und die technischen Gates bestanden auf
-Code-Stand `cae59e2` (vollständige CI 514 und Paketprüfung 234). Vor dem stabilen
-`v0.5.0` sind weiterhin ein veröffentlichter, unveränderlicher RC, dessen
-Installations-/Update-/Rollback-Probe und die unabhängige menschliche Abnahme
-erforderlich.
+Kandidaten-Stand `56b2adcb` (CI 566 und Paketprüfung 276). Vor dem stabilen
+`v0.5.0` sind weiterhin ein veröffentlichter, unveränderlicher RC und dessen
+Installations-/Update-/Rollback-Probe erforderlich. Auf ausdrückliche
+Entscheidung des Projektverantwortlichen ist für 0.5.0 keine menschliche Studie
+erforderlich; alle unabhängigen menschlichen Abnahmen sind ein verpflichtendes
+Gate für 1.0.0.
 
 - [🧪] Im unveröffentlichten 0.4-Zweig erzeugt `zelyra module bundle` nun auf
   Wunsch ein commit-gepinntes Dockerfile, eine Compose-App und ein
@@ -910,6 +914,20 @@ erforderlich.
   die abgebrochene Änderung zurückgerollt wurde. Der Nachweis ist auf eine
   wegwerfbare MariaDB-11-Fixture begrenzt; vollständige Modulschließung und
   Schemaeigentumsdurchsetzung bleiben offen.
+
+## Großer Release-Meilenstein 1.0.0
+
+`v1.0.0` ist die erste große Veröffentlichung und das verpflichtende Ziel für
+alle unabhängigen menschlichen Einsteiger- und Abnahmestudien, die aus 0.3.0,
+0.4.0 und 0.5.0 verschoben wurden. Kein früheres Release darf behaupten, diese
+Studien seien abgeschlossen. Vor dem stabilen `v1.0.0` muss nach bestandenen
+technischen Gates ein unveränderlicher Release Candidate veröffentlicht werden.
+Unabhängige Personen ohne Entwicklerrolle prüfen den Kandidaten und die
+mitgelieferte Dokumentation. Blocker werden behoben und erneut geprüft;
+redigierte Beobachtungen und die Entscheidung des Projektverantwortlichen
+werden dem exakt getesteten Commit zugeordnet. Der Studienumfang muss zum
+endgültigen 1.0.0-Produkt passen. Automatisierte CI, interne Rehearsals und
+Rückmeldungen des Projektverantwortlichen ersetzen keinen Teilnehmertest.
 
 ## Akzeptanzanwendungen aus der Praxis
 
