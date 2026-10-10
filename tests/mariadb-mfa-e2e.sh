@@ -52,7 +52,7 @@ MYSQL_PWD="${password}" mariadb --protocol=tcp --host="${db_host}" --port="${db_
   --execute="INSERT INTO users (email, password_hash) VALUES ('${email}', '${password_hash}')"
 
 port="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')"
-DATABASE_URL="${test_url}" ZELYRA_MFA_ENCRYPTION_KEY="${key}" "${zelyra_bin}" serve "${repo_dir}/examples/local_mfa.zyl" "127.0.0.1:${port}" >"${work}/server.log" 2>&1 &
+DATABASE_URL="${test_url}" ZELYRA_LANGUAGE=de ZELYRA_MFA_ENCRYPTION_KEY="${key}" "${zelyra_bin}" serve "${repo_dir}/examples/local_mfa.zyl" "127.0.0.1:${port}" >"${work}/server.log" 2>&1 &
 server_pid=$!
 base="http://127.0.0.1:${port}"
 for _ in $(seq 1 100); do
@@ -94,6 +94,7 @@ def csrf(html):
 
 def login():
     _, _, page = get("/login")
+    assert "Anmelden" in page, "login language setting was not applied"
     status, url, body = post("/login", {"_zelyra_csrf": csrf(page), "email": email, "password": password})
     assert status == 200 and url.endswith("/login/mfa"), (status, url, body[:200])
     return csrf(body)
@@ -111,7 +112,7 @@ status, url, body = post("/login", {"_zelyra_csrf": csrf(page), "email": email, 
 assert status == 200 and url.endswith("/"), (status, url, body[:200])
 _, _, security = get("/account/security")
 status, _, enrollment = post("/account/security", {"_zelyra_csrf": csrf(security), "action": "begin", "password": password})
-assert status == 200 and "Set up authenticator" in enrollment
+assert status == 200 and "Authenticator einrichten" in enrollment
 secret_match = re.search(r"<code>([A-Z2-7]+)</code>", enrollment)
 assert secret_match, "enrollment secret missing"
 secret = secret_match.group(1)
@@ -119,11 +120,12 @@ enrollment_step = int(time.time() // 30)
 status, _, codes_page = post("/account/security", {
     "_zelyra_csrf": csrf(enrollment), "action": "confirm", "password": password, "code": code(secret, enrollment_step)
 })
-assert status == 200 and "MFA enabled" in codes_page
+assert status == 200 and "MFA aktiviert" in codes_page
 recovery = re.findall(r"<li><code>([^<]+)</code></li>", codes_page)
 assert len(recovery) == 10
 
 _, _, security = get("/account/security")
+assert "Kontosicherheit" in security
 post("/logout", {"_zelyra_csrf": csrf(security)})
 
 challenge_csrf = login()
@@ -160,7 +162,7 @@ def make_pending_challenge():
     _, _, challenge = send("/login", {
         "_zelyra_csrf": csrf(login_page), "email": email, "password": password,
     })
-    assert challenge, "login challenge page missing"
+assert "Zusätzliche Bestätigung" in challenge, "German MFA challenge copy missing"
     return isolated, csrf(challenge)
 
 challenges = [make_pending_challenge(), make_pending_challenge()]
