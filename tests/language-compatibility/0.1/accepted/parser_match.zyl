@@ -1,0 +1,14 @@
+fn describe(value: Int) -> String {
+    match value {
+        0 => {
+            return "zero"
+        }
+        _ => {
+            return "other"
+        }
+    }
+}
+
+fn main() {
+    print(describe(0))
+}

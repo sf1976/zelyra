@@ -8,6 +8,7 @@ license.workspace = true
 fuzzing = []
 
 [dependencies]
+serde_json.workspace = true
 mysql.workspace = true
 r2d2.workspace = true
 r2d2_postgres.workspace = true

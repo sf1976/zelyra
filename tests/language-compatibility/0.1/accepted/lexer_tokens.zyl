@@ -1,0 +1,4 @@
+// Comments and escaped string delimiters belong to the 0.1 source contract.
+fn main() {
+    print("quote: \" and slash: \\")
+}

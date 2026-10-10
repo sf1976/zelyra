@@ -6,7 +6,8 @@ semantic area. Rust integration tests copy each source into a temporary project
 and invoke the built CLI so the corpus exercises the same command users run.
 
 - `accepted/*.zyl` must pass `zelyra check` and remain stable under repeated
-  `zelyra fmt` runs.
+  `zelyra fmt` runs. Fixture names identify lexer/string escaping,
+  parser/pattern matching, and typing/Option coverage.
 - `rejected/*.zyl` must fail with the stable diagnostic code in its sibling
   `.code` file.
 - `runtime/*.zyl` must pass checking and produce the exact bytes recorded in

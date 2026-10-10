@@ -15,6 +15,10 @@ const EDITOR_MAX_CONNECTIONS: usize = 16;
 const EDITOR_MAX_FILE_BYTES: usize = 1_048_576;
 const EDITOR_MAX_FILES: usize = 2_000;
 const EDITOR_MAX_DEPTH: usize = 8;
+const EDITOR_DATABASE_MAX_TABLES: usize = 500;
+const EDITOR_DATABASE_MAX_COLUMNS: usize = 500;
+const EDITOR_DATABASE_MAX_TOTAL_COLUMNS: usize = 10_000;
+const EDITOR_DATABASE_MAX_FOREIGN_KEYS: usize = 5_000;
 const EDITOR_TIMEOUT: Duration = Duration::from_secs(30);
 
 struct EditorConnection(Arc<AtomicUsize>);
@@ -253,6 +257,7 @@ fn editor_response(
     }
     match (request.method.as_str(), operation) {
         ("GET", "tree") => tree_response(state),
+        ("GET", "database-schema") => database_schema_response(state),
         ("GET", "file") => {
             let query = request
                 .target
@@ -268,8 +273,492 @@ fn editor_response(
         ("POST", "file") => write_existing_file(state, parse_json_body(&request.body)?, true),
         ("POST", "check") => check_project(state, &parse_json_body(&request.body)?),
         ("POST", "format") => format_editor_file(state, &parse_json_body(&request.body)?),
+        ("POST", "crud-preview") => preview_crud_resource(state, &parse_json_body(&request.body)?),
+        ("POST", "crud-apply") => apply_crud_resource(state, &parse_json_body(&request.body)?),
         _ => Err((404, "not found".into())),
     }
+}
+
+fn editor_database_schemas(
+    state: &EditorState,
+) -> Result<(zelyra_database::Schema, zelyra_database::Schema, Value), (u16, String)> {
+    let entry = state.root.join("main.zyl");
+    if !entry.is_file() {
+        return Err((
+            422,
+            "database tools need a project entry file named main.zyl".into(),
+        ));
+    }
+    let entry_text = entry.to_string_lossy().into_owned();
+    let declared = database_cli::load_schema(&entry_text).map_err(|_| {
+        (
+            422,
+            "the project schema could not be read; fix project diagnostics first".into(),
+        )
+    })?;
+    if declared
+        .database
+        .as_ref()
+        .is_some_and(|database| database.engine.eq_ignore_ascii_case("mysql"))
+    {
+        return Err((501, "MySQL schema introspection is not supported yet; the current MySQL runtime is limited to typed parameterized queries".into()));
+    }
+    let database_name = declared
+        .database
+        .as_ref()
+        .map(|database| database.name.as_str());
+    let environment_file = state.root.join(".env");
+    let from_environment = super::database_url_from_schema(&declared);
+    let from_file = if from_environment.is_none() && environment_file.is_file() {
+        super::database_url_from_env_file(&environment_file.to_string_lossy(), database_name)
+            .map_err(|_| (422, "the project environment file could not be read".into()))?
+            .map(|(url, _)| url)
+    } else {
+        None
+    };
+    let database_url = from_environment.or(from_file).ok_or((
+        422,
+        "database connection is not configured; set DATABASE_URL in the environment or project .env file".into(),
+    ))?;
+    let live =
+        database_cli::inspect_for_backend(declared.backend(), &database_url).map_err(|_| {
+            (
+                502,
+                "database metadata could not be loaded; check the local database connection".into(),
+            )
+        })?;
+    let total_columns = declared
+        .tables
+        .iter()
+        .chain(&live.tables)
+        .map(|table| table.columns.len())
+        .sum::<usize>();
+    let total_foreign_keys = declared
+        .tables
+        .iter()
+        .chain(&live.tables)
+        .map(|table| table.foreign_keys.len())
+        .sum::<usize>();
+    if declared.tables.len() > EDITOR_DATABASE_MAX_TABLES
+        || live.tables.len() > EDITOR_DATABASE_MAX_TABLES
+        || total_columns > EDITOR_DATABASE_MAX_TOTAL_COLUMNS
+        || total_foreign_keys > EDITOR_DATABASE_MAX_FOREIGN_KEYS
+        || declared
+            .tables
+            .iter()
+            .chain(&live.tables)
+            .any(|table| table.columns.len() > EDITOR_DATABASE_MAX_COLUMNS)
+    {
+        return Err((
+            413,
+            "database schema exceeds the Studio display limit of 500 tables, 500 columns per table, 10,000 columns, or 5,000 relationships"
+                .into(),
+        ));
+    }
+    let project = load_project(&entry_text)
+        .map_err(|_| (422, "the project modules could not be loaded".into()))?;
+    let owners = module_declaration_owners(&project.program);
+    let mut map = database_cli::database_map_json(&declared, &live, &owners);
+    map["crud_resources"] = json!(project
+        .program
+        .cruds
+        .iter()
+        .map(|crud| json!({"table": crud.table, "name": crud.name}))
+        .collect::<Vec<_>>());
+    let mut crud_targets = vec!["main.zyl".to_owned()];
+    crud_targets.extend(project.modules.iter().map(|module| module.path.clone()));
+    crud_targets.sort();
+    crud_targets.dedup();
+    map["crud_targets"] = json!(crud_targets);
+    Ok((declared, live, map))
+}
+
+fn database_schema_response(
+    state: &EditorState,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let (_declared, _live, map) = editor_database_schemas(state)?;
+    Ok((200, "application/json; charset=utf-8", map.to_string()))
+}
+
+fn preview_crud_resource(
+    state: &EditorState,
+    value: &Value,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let preview = build_crud_preview(state, value)?;
+    Ok((200, "application/json; charset=utf-8", preview.to_string()))
+}
+
+fn apply_crud_resource(
+    state: &EditorState,
+    value: &Value,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let preview = build_crud_preview(state, value)?;
+    if !preview["success"].as_bool().unwrap_or(false) {
+        return Err((
+            422,
+            "generated CRUD source did not pass the project compiler".into(),
+        ));
+    }
+    let path = preview["path"]
+        .as_str()
+        .ok_or((500, "generated preview is missing its target path".into()))?;
+    let candidate = preview["candidate"]
+        .as_str()
+        .ok_or((500, "generated preview is missing its source".into()))?;
+    let base_hash = preview["baseHash"]
+        .as_str()
+        .ok_or((500, "generated preview is missing its file hash".into()))?;
+    let saved = write_existing_file(
+        state,
+        json!({"path": path, "content": candidate, "baseHash": base_hash}),
+        false,
+    )?;
+    let mut response: Value = serde_json::from_str(&saved.2)
+        .map_err(|_| (500, "saved editor response could not be encoded".into()))?;
+    response["applied"] = Value::Bool(true);
+    Ok((200, "application/json; charset=utf-8", response.to_string()))
+}
+
+fn build_crud_preview(state: &EditorState, value: &Value) -> Result<Value, (u16, String)> {
+    let target = value
+        .get("path")
+        .and_then(Value::as_str)
+        .unwrap_or("main.zyl");
+    if !target.ends_with(".zyl") {
+        return Err((400, "CRUD source must be added to a .zyl file".into()));
+    }
+    let target_path = safe_editor_path(&state.root, target, false)?;
+    let current = fs::read_to_string(&target_path)
+        .map_err(|_| (415, "target source is not UTF-8 text".into()))?;
+    let base_hash = content_hash(current.as_bytes());
+    if value.get("baseHash").and_then(Value::as_str) != Some(base_hash.as_str()) {
+        return Err((
+            409,
+            "target file changed; reload it before creating the preview".into(),
+        ));
+    }
+    let table_name = value
+        .get("table")
+        .and_then(Value::as_str)
+        .ok_or((400, "table is required".into()))?;
+    let fields = value
+        .get("fields")
+        .and_then(Value::as_array)
+        .ok_or((400, "choose at least one field".into()))?
+        .iter()
+        .map(|field| {
+            field
+                .as_str()
+                .map(str::to_owned)
+                .ok_or((400, "field names must be text".into()))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    if fields.is_empty() || fields.len() > EDITOR_DATABASE_MAX_COLUMNS {
+        return Err((400, "choose between 1 and 500 fields".into()));
+    }
+    let (declared, live, _) = editor_database_schemas(state)?;
+    let table = declared
+        .tables
+        .iter()
+        .find(|table| table.name == table_name)
+        .ok_or((404, "table is not declared in the project".into()))?;
+    let live_table = live
+        .tables
+        .iter()
+        .find(|table| table.name == table_name)
+        .ok_or((
+            409,
+            "table is declared in source but missing from the live database".into(),
+        ))?;
+    let live_columns = live_table
+        .columns
+        .iter()
+        .map(|column| column.name.as_str())
+        .collect::<HashSet<_>>();
+    let mut unique_fields = HashSet::new();
+    for field in &fields {
+        if !unique_fields.insert(field.as_str())
+            || !table.columns.iter().any(|column| column.name == *field)
+            || !live_columns.contains(field.as_str())
+            || !is_zelyra_identifier(field)
+        {
+            return Err((
+                400,
+                format!("field `{field}` is not a unique, declared live column"),
+            ));
+        }
+    }
+    let project = load_project(&state.root.join("main.zyl").to_string_lossy())
+        .map_err(|_| (422, "project modules could not be loaded".into()))?;
+    if target != "main.zyl" && !project.modules.iter().any(|module| module.path == target) {
+        return Err((
+            400,
+            "choose a Zelyra source file imported by main.zyl".into(),
+        ));
+    }
+    if project
+        .program
+        .cruds
+        .iter()
+        .any(|crud| crud.table == table_name)
+    {
+        return Err((
+            409,
+            "this table already has a generated CRUD resource".into(),
+        ));
+    }
+    let default_name = resource_name_from_table(table_name);
+    let resource_name = value
+        .get("resourceName")
+        .and_then(Value::as_str)
+        .unwrap_or(&default_name);
+    if !is_zelyra_identifier(resource_name)
+        || project
+            .program
+            .cruds
+            .iter()
+            .any(|crud| crud.name == resource_name)
+    {
+        return Err((
+            400,
+            "resource name must be a unique Zelyra identifier".into(),
+        ));
+    }
+    let title = value
+        .get("title")
+        .and_then(Value::as_str)
+        .filter(|title| !title.trim().is_empty())
+        .unwrap_or(resource_name);
+    if title.len() > 120 || title.chars().any(char::is_control) {
+        return Err((400, "title must be at most 120 printable characters".into()));
+    }
+    let snippet = generated_crud_source(resource_name, table_name, title, &fields);
+    let candidate = format!(
+        "{}{}{}",
+        current,
+        if current.ends_with('\n') {
+            "\n"
+        } else {
+            "\n\n"
+        },
+        snippet
+    );
+    let (success, diagnostics) = validate_editor_candidate(state, target, &candidate)?;
+    let diff = snippet
+        .lines()
+        .map(|line| format!("+ {line}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    Ok(json!({
+        "success": success,
+        "path": target,
+        "baseHash": base_hash,
+        "snippet": snippet,
+        "candidate": candidate,
+        "diff": diff,
+        "diagnostics": diagnostics,
+        "table": table_name,
+        "resourceName": resource_name,
+        "fields": fields,
+    }))
+}
+
+fn validate_editor_candidate(
+    state: &EditorState,
+    target: &str,
+    candidate: &str,
+) -> Result<(bool, Vec<Value>), (u16, String)> {
+    let cleanup = create_editor_preview_directory()?;
+    let temporary_root = cleanup.0.clone();
+    let mut file_count = 0;
+    copy_editor_sources(
+        &state.root,
+        &state.root,
+        &temporary_root,
+        0,
+        &mut file_count,
+    )?;
+    let relative = Path::new(target);
+    let candidate_path = temporary_root.join(relative);
+    let parent = candidate_path
+        .parent()
+        .ok_or((400, "invalid preview path".into()))?;
+    fs::create_dir_all(parent)
+        .map_err(|_| (500, "could not prepare the compiler preview".into()))?;
+    fs::write(&candidate_path, candidate)
+        .map_err(|_| (500, "could not write the private compiler preview".into()))?;
+    let entry = temporary_root.join("main.zyl");
+    if !entry.is_file() {
+        return Err((422, "project entry file main.zyl is missing".into()));
+    }
+    let entry_source = fs::read_to_string(&entry)
+        .map_err(|_| (415, "project entry file is not UTF-8 text".into()))?;
+    begin_json_diagnostics(&entry.to_string_lossy(), &entry_source);
+    let success = validate(&entry.to_string_lossy()).is_ok();
+    let diagnostics = finish_json_diagnostics()
+        .into_iter()
+        .map(|mut item| {
+            if let Some(file) = item.get("file").and_then(Value::as_str) {
+                let relative = Path::new(file)
+                    .strip_prefix(&temporary_root)
+                    .map(|path| path.to_string_lossy().replace('\\', "/"))
+                    .unwrap_or_else(|_| "main.zyl".into());
+                item["file"] = Value::String(relative);
+            }
+            item
+        })
+        .collect();
+    drop(cleanup);
+    Ok((success, diagnostics))
+}
+
+fn copy_editor_sources(
+    root: &Path,
+    directory: &Path,
+    destination: &Path,
+    depth: usize,
+    file_count: &mut usize,
+) -> Result<(), (u16, String)> {
+    if depth > EDITOR_MAX_DEPTH {
+        return Err((
+            413,
+            "project exceeds the compiler preview depth limit".into(),
+        ));
+    }
+    let entries = fs::read_dir(directory).map_err(|_| {
+        (
+            500,
+            "could not read project sources for compiler preview".into(),
+        )
+    })?;
+    for entry in entries {
+        let entry = entry.map_err(|_| (500, "could not read project source entry".into()))?;
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else { continue };
+        if name.starts_with('.')
+            || matches!(
+                name,
+                "target" | "node_modules" | "vendor" | "dist" | "build"
+            )
+        {
+            continue;
+        }
+        let metadata = fs::symlink_metadata(entry.path())
+            .map_err(|_| (500, "could not inspect project source entry".into()))?;
+        if metadata.file_type().is_symlink() {
+            continue;
+        }
+        if metadata.is_dir() {
+            copy_editor_sources(root, &entry.path(), destination, depth + 1, file_count)?;
+            continue;
+        }
+        if !metadata.is_file()
+            || entry.path().extension().and_then(|value| value.to_str()) != Some("zyl")
+        {
+            continue;
+        }
+        if metadata.len() > EDITOR_MAX_FILE_BYTES as u64 {
+            return Err((
+                413,
+                "a source file exceeds the 1 MiB compiler preview limit".into(),
+            ));
+        }
+        *file_count += 1;
+        if *file_count > EDITOR_MAX_FILES {
+            return Err((
+                413,
+                "project exceeds the compiler preview file limit".into(),
+            ));
+        }
+        let relative = entry
+            .path()
+            .strip_prefix(root)
+            .map_err(|_| (403, "project source resolves outside the project".into()))?
+            .to_path_buf();
+        let target = destination.join(relative);
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|_| (500, "could not prepare compiler preview directories".into()))?;
+        }
+        fs::copy(entry.path(), target).map_err(|_| {
+            (
+                500,
+                "could not copy project source into compiler preview".into(),
+            )
+        })?;
+    }
+    Ok(())
+}
+
+struct EditorPreviewDirectory(PathBuf);
+
+fn create_editor_preview_directory() -> Result<EditorPreviewDirectory, (u16, String)> {
+    for _ in 0..8 {
+        let mut random = [0_u8; 16];
+        OsRng
+            .try_fill_bytes(&mut random)
+            .map_err(|_| (500, "could not create a private compiler preview".into()))?;
+        let name = random
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        let path = std::env::temp_dir().join(format!(
+            "zelyra-studio-preview-{}-{name}",
+            std::process::id()
+        ));
+        let mut builder = fs::DirBuilder::new();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
+        }
+        match builder.create(&path) {
+            Ok(()) => return Ok(EditorPreviewDirectory(path)),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(_) => return Err((500, "could not create a private compiler preview".into())),
+        }
+    }
+    Err((500, "could not create a private compiler preview".into()))
+}
+
+impl Drop for EditorPreviewDirectory {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
+fn generated_crud_source(resource: &str, table: &str, title: &str, fields: &[String]) -> String {
+    let fields = fields
+        .iter()
+        .map(|field| format!("            {field}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!(
+        "crud {resource} -> {table} {{\n    title: \"{}\"\n\n    view {{\n        fields {{\n{fields}\n        }}\n\n        list {{\n            mode: cards\n        }}\n\n        detail {{\n            mode: cards\n        }}\n\n        form {{\n            mode: cards\n        }}\n    }}\n}}",
+        title.replace('\\', "\\\\").replace('"', "\\\"")
+    )
+}
+
+fn is_zelyra_identifier(value: &str) -> bool {
+    let mut characters = value.chars();
+    characters
+        .next()
+        .is_some_and(|first| first == '_' || first.is_ascii_alphabetic())
+        && characters.all(|character| character == '_' || character.is_ascii_alphanumeric())
+}
+
+fn resource_name_from_table(table: &str) -> String {
+    table
+        .split('_')
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            let mut characters = part.chars();
+            characters
+                .next()
+                .map(|first| first.to_ascii_uppercase().to_string() + characters.as_str())
+                .unwrap_or_default()
+        })
+        .collect()
 }
 
 fn parse_json_body(body: &str) -> Result<Value, (u16, String)> {
@@ -489,8 +978,11 @@ fn write_existing_file(
                     (500, "could not create file".into())
                 }
             })?;
-        file.write_all(content.as_bytes())
-            .map_err(|_| (500, "could not write file".into()))?;
+        if file.write_all(content.as_bytes()).is_err() {
+            drop(file);
+            let _ = fs::remove_file(&path);
+            return Err((500, "could not write file".into()));
+        }
     } else {
         let base_hash = value
             .get("baseHash")
@@ -503,13 +995,8 @@ fn write_existing_file(
                 "file changed on disk since it was opened; reload it before saving".into(),
             ));
         }
-        let mut file = fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .open(&path)
-            .map_err(|_| (500, "could not open file for writing".into()))?;
-        file.write_all(content.as_bytes())
-            .map_err(|_| (500, "could not write file".into()))?;
+        super::edit::apply_atomically(&path.to_string_lossy(), content)
+            .map_err(|_| (500, "could not atomically replace file".into()))?;
     }
     let hash = content_hash(content.as_bytes());
     Ok((
@@ -714,6 +1201,8 @@ fn write_editor_response(
         409 => "Conflict",
         413 => "Payload Too Large",
         415 => "Unsupported Media Type",
+        501 => "Not Implemented",
+        502 => "Bad Gateway",
         422 => "Unprocessable Content",
         _ => "Internal Server Error",
     };
@@ -796,6 +1285,52 @@ mod tests {
     }
 
     #[test]
+    fn database_endpoints_require_token_before_inspecting_project() {
+        let state = project();
+        for path in [
+            "/__zelyra/editor/api/database-schema",
+            "/__zelyra/editor/api/crud-preview",
+            "/__zelyra/editor/api/crud-apply",
+        ] {
+            let request = request("GET", path, &[]);
+            let error = editor_response(&request, &state).expect_err("API token is required");
+            assert_eq!(error.0, 403, "endpoint {path} must be protected");
+        }
+        let _ = fs::remove_dir_all(state.root);
+    }
+
+    #[test]
+    fn mysql_schema_introspection_is_reported_as_unsupported_without_secret_details() {
+        let state = project();
+        fs::write(
+            state.root.join("main.zyl"),
+            "database main {\n    engine: mysql\n}\n",
+        )
+        .expect("write MySQL project fixture");
+        let request = request(
+            "GET",
+            "/__zelyra/editor/api/database-schema",
+            &[("x-zelyra-editor-token", "local-session-token")],
+        );
+        let error = editor_response(&request, &state).expect_err("MySQL introspection is bounded");
+        assert_eq!(error.0, 501);
+        assert!(error
+            .1
+            .contains("MySQL schema introspection is not supported"));
+        assert!(!error.1.contains("password") && !error.1.contains("DATABASE_URL"));
+        let _ = fs::remove_dir_all(state.root);
+    }
+
+    #[test]
+    fn crud_preview_rejects_stale_source_before_database_access() {
+        let state = project();
+        let error = build_crud_preview(&state, &json!({"path":"main.zyl", "baseHash":"stale"}))
+            .expect_err("stale source must block preview");
+        assert_eq!(error.0, 409);
+        let _ = fs::remove_dir_all(state.root);
+    }
+
+    #[test]
     fn editor_paths_reject_traversal_and_secrets() {
         let state = project();
         for path in [
@@ -869,5 +1404,63 @@ mod tests {
         assert_eq!(byte_to_utf16(source, 3), 2);
         assert_eq!(byte_to_utf16(source, 7), 4);
         assert_eq!(byte_to_utf16(source, usize::MAX), 5);
+    }
+
+    #[test]
+    fn crud_builder_uses_valid_identifiers_and_escapes_display_text() {
+        assert!(is_zelyra_identifier("InvoiceLine"));
+        assert!(is_zelyra_identifier("_private"));
+        assert!(!is_zelyra_identifier("1Invoice"));
+        assert!(!is_zelyra_identifier("Invoice Line"));
+        assert_eq!(resource_name_from_table("invoice_lines"), "InvoiceLines");
+
+        let source = generated_crud_source(
+            "InvoiceLines",
+            "invoice_lines",
+            "Line \"one\"",
+            &["description".into(), "quantity".into()],
+        );
+        assert!(source.contains("crud InvoiceLines -> invoice_lines"));
+        assert!(source.contains("title: \"Line \\\"one\\\"\""));
+        assert!(source.contains("            description\n            quantity"));
+    }
+
+    #[test]
+    fn generated_crud_source_passes_the_project_compiler() {
+        let state = project();
+        let path = state.root.join("main.zyl");
+        let base = "database main {\n    engine: mariadb\n}\n\ntable customers {\n    id: Id primary auto\n    name: String(100) required\n}\n";
+        fs::write(&path, base).expect("write compiler fixture");
+        let snippet = generated_crud_source("Customer", "customers", "Customers", &["name".into()]);
+        let candidate = format!("{base}\n{snippet}\n");
+        let (success, diagnostics) = validate_editor_candidate(&state, "main.zyl", &candidate)
+            .expect("private compiler preview should run");
+        assert!(success, "generated source diagnostics: {diagnostics:?}");
+        assert!(diagnostics.is_empty(), "diagnostics: {diagnostics:?}");
+        assert_eq!(
+            fs::read_to_string(path).expect("original remains intact"),
+            base,
+            "preview must not modify the project source"
+        );
+        let _ = fs::remove_dir_all(state.root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn compiler_preview_directory_is_private_and_removed_after_use() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let preview = create_editor_preview_directory().expect("create private preview");
+        let path = preview.0.clone();
+        assert_eq!(
+            fs::metadata(&path)
+                .expect("inspect preview permissions")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o700
+        );
+        drop(preview);
+        assert!(!path.exists(), "preview directory is cleaned up");
     }
 }

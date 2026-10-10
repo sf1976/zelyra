@@ -121,11 +121,16 @@ der [Setup-Anleitung](setup-web.de.md) und den
   auf `127.0.0.1` mit Dateibaum, Tabs, Suche/Ersetzen, Vervollständigung,
   Compilerdiagnosen und Formatierung. Schreibzugriffe benötigen Sitzungstoken
   und denselben Browser-Origin; Shell und externe Dienste werden nicht genutzt.
+  0.8.0 ergänzt eine lesende, anklickbare Beziehungskarte für unterstützte
+  MariaDB-/PostgreSQL-Schemata sowie einen geführten CRUD-Quelltextassistenten.
+  Er prüft den Kandidaten mit dem Compiler,
+  zeigt den Diff und schreibt erst nach ausdrücklichem Anwenden mit erneutem
+  Hashvergleich. MySQL-Live-Introspektion und Änderungen an Schema oder
+  Datensätzen sind hier nicht enthalten. Einzelheiten: [Studio-Anleitung](studio.de.md).
 - ✅ `zelyra --tutorial invoice` führt Schritt für Schritt durch Kunden,
   Artikel, Dashboard und Rechnungserstellung. Es ist ein Lernpfad, keine
   Produktions- oder Deploymentfreigabe.
-- Studio ist noch keine vollständige IDE und enthält keinen visuellen
-  Datenbankbrowser oder CRUD-Designer.
+- Studio ist noch keine vollständige IDE oder beliebiger Datenbankdesigner.
 
 ## APIs, Authentifizierung, Berechtigungen und Audit
 

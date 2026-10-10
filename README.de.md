@@ -11,23 +11,24 @@ Business-, Datenbank- und Webanwendungen. Schemaabhängiges SQL, Formulare,
 CRUD, Views und Geschäftslogik greifen ineinander; gewöhnlicher Programmcode
 und natives SQL bleiben jederzeit möglich.
 
-> **Aktueller stabiler Compilerstand: 0.7.0 · Sprachkompatibilitätslinie: 0.1 · experimentell**
+> **Aktueller stabiler Compilerstand: 0.8.0 · Sprachkompatibilitätslinie: 0.1 · experimentell**
 >
-> Zelyra 0.7.0 ist nicht für den Produktiveinsatz freigegeben. „Korrektheit
+> Zelyra 0.8.0 ist nicht für den Produktiveinsatz freigegeben. „Korrektheit
 > beweisen“ ist ein Entwicklungsziel: Der aktuelle Verifier deckt nur einen
 > begrenzten Teil ab und beweist nicht die Korrektheit beliebiger Anwendungen.
 
-Das stabile [`v0.7.0`-Release](https://github.com/sf1976/zelyra/releases/tag/v0.7.0) ist experimentell und nicht für den Produktiveinsatz freigegeben. Die unabhängige menschliche Abnahme früherer Versionen wurde auf die erste produktive Version 1.0.0 verschoben; dieses README ist kein Abnahmenachweis. Siehe die [Release-Notizen 0.7.0](docs/release-notes/0.7.0.de.md) und den [1.0.0-Releaseplan](docs/release-plans/1.0.0.de.md).
+Das stabile [`v0.8.0`-Release](https://github.com/sf1976/zelyra/releases/tag/v0.8.0) ist experimentell und nicht für den Produktiveinsatz freigegeben. Die unabhängige menschliche Abnahme früherer Versionen wurde auf die erste produktive Version 1.0.0 verschoben; dieses README ist kein Abnahmenachweis. Siehe die [Release-Notizen 0.8.0](docs/release-notes/0.8.0.de.md) und den [1.0.0-Releaseplan](docs/release-plans/1.0.0.de.md).
 
-## Was ist neu in 0.7.0?
+## Was ist neu in 0.8.0?
 
-Zelyra 0.7.0 ergänzt das lokale Browserstudio `zelyra editor`, ein geführtes
-Rechnungstutorial, parametrisierte MySQL-8.4.11-Abfragen und einen begrenzten
-experimentellen Mandanten-CRUD-Pfad für MariaDB. MySQL bietet damit keine
-Schemaänderungen oder generierten CRUD-Routen; der Mandantenpfad ist keine
-vollständige Multi-Tenancy. Linux- und Windows-x86_64-Release-Artefakte
-enthalten Prüfsummen, SPDX-SBOMs und GitHub-Attestierungen. Details und Grenzen
-stehen in den [Release-Notizen](docs/release-notes/0.7.0.de.md).
+Zelyra 0.8.0 erweitert das lokale Studio um eine anklickbare MariaDB-/
+PostgreSQL-Schemkarte und einen geführten CRUD-Quelltextassistenten. Erzeugter
+Code wird vom Compiler geprüft, als Diff gezeigt und erst nach ausdrücklichem
+Anwenden geschrieben; Schema und Datensätze bleiben schreibgeschützt. Das
+Release ergänzt außerdem eine begrenzte MariaDB-Transaktions-Outbox mit
+ausdrücklichem CLI-Worker und erweitert das Sprachkompatibilitätskorpus.
+MySQL-Live-Introspektion und eine allgemeine Queue sind nicht enthalten. Siehe
+[Release-Notizen](docs/release-notes/0.8.0.de.md) und [Studio-Anleitung](docs/studio.de.md).
 
 Die [Roadmap](docs/ROADMAP.de.md) hält Implementierungsstand und Grenzen fest.
 Das README ist ein Projektüberblick und kein zweites Handbuch oder Changelog.
@@ -76,7 +77,7 @@ unter Unix nur Besitzerrechte (`0600`). Unter Windows gelten die ACLs des
 Verzeichnisses; vorhandene `.env`-Dateien werden nicht nachträglich mit neuen
 Rechten versehen. Die Datei darf nicht committet oder geteilt werden. Für den
 Produktiveinsatz geeignete Secret-Verwaltung und eigene Zugangsdaten nutzen;
-0.7.0 ist nicht für den Produktiveinsatz freigegeben.
+0.8.0 ist nicht für den Produktiveinsatz freigegeben.
 
 Ein neu erzeugtes MariaDB-Projekt verwendet standardmäßig Deutsch und den
 Lernmodus. Mit `ZELYRA_LANGUAGE=de|en` und `ZELYRA_LEVEL=learn|work` in der
@@ -88,12 +89,12 @@ weitere Einstellungen stehen in der Umgebungsreferenz.
 | Wenn du … | lies … |
 | --- | --- |
 | Zelyra Schritt für Schritt lernen möchtest | [Getting Started](docs/getting-started.de.md) · [Deutsches Handbuch](docs/handbook/de/handbuch.md) · [English handbook](docs/handbook/en/handbook.md) |
-| sehen möchtest, was Compiler 0.7.0 tatsächlich kann | [Umgesetzte Funktionen](docs/implemented.de.md) · [English](docs/implemented.en.md) |
+| sehen möchtest, was Compiler 0.8.0 tatsächlich kann | [Umgesetzte Funktionen](docs/implemented.de.md) · [English](docs/implemented.en.md) |
 | wissen möchtest, was die Sprache spezifiziert | [Sprachspezifikation](docs/specification.de.md) · [Quellenlandkarte und Prüfanleitung](docs/source-authority.de.md) |
 | Projekt oder Umgebung konfigurieren möchtest | [Umgebung und Konfiguration](docs/env.md) · [English reference](docs/env.en.md) |
 | Datenbankunterstützung prüfen möchtest | [MariaDB-Kompatibilitätsmatrix](docs/database-compatibility.de.md) · [English](docs/database-compatibility.en.md) |
-| aktuelle und geplante Arbeiten prüfen möchtest | [Roadmap](docs/ROADMAP.de.md) · [Releaseplan 0.7.0](docs/release-plans/0.7.0.de.md) · [Releaseplan 1.0.0](docs/release-plans/1.0.0.de.md) |
-| die Entwicklungsrichtung verstehen möchtest | [Manifest](docs/MANIFESTO.de.md) · [KI-native Architektur](docs/architecture/ai-native-development.de.md) |
+| aktuelle und geplante Arbeiten prüfen möchtest | [Roadmap](docs/ROADMAP.de.md) · [Releaseplan 0.8.0](docs/release-plans/0.8.0.de.md) · [Releaseplan 1.0.0](docs/release-plans/1.0.0.de.md) |
+| die Entwicklungsrichtung verstehen möchtest | [Manifest](docs/MANIFESTO.de.md) · [KI-native Architektur](docs/architecture/ai-native-development.de.md) · [Entwurf lesbarer Regex-Textbearbeitung](docs/design/readable-regex-text-editing.de.md) |
 | konkrete Release-Änderungen suchst | [Changelog](CHANGELOG.md) · [GitHub-Releases](https://github.com/sf1976/zelyra/releases) |
 
 Das Handbuch enthält Lernkapitel und detaillierte Sprach-/Laufzeitbeispiele.

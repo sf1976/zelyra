@@ -6,6 +6,27 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+## 0.8.0 — 2026-10-11
+
+- Expand local Zelyra Studio with a clickable, read-only MariaDB/PostgreSQL
+  relationship map and source/live schema comparison. / Lokales Zelyra Studio
+  um eine anklickbare, schreibgeschützte MariaDB-/PostgreSQL-Beziehungskarte
+  und den Vergleich von Quell- und Live-Schema erweitern.
+- Add a guided CRUD source builder with compiler preview, visible diff,
+  optimistic conflict checks, and atomic explicit apply. / Geführten
+  CRUD-Quelltextassistenten mit Compiler-Vorschau, sichtbarem Diff,
+  Konfliktprüfung und atomarem, ausdrücklichem Anwenden ergänzen.
+- Add bounded transactional MariaDB outbox primitives and explicit CLI
+  inspection/worker commands; keep at-least-once delivery limits clear. /
+  Begrenzte transaktionale MariaDB-Outbox und ausdrückliche CLI-Befehle für
+  Inspektion und Worker ergänzen; Grenzen der mindestens einmaligen Zustellung
+  dokumentieren.
+- Expand language line 0.1 lexer, parser, type, and formatter fixtures. / Die
+  Lexer-, Parser-, Typ- und Formatter-Fixtures der Sprachlinie 0.1 erweitern.
+- Keep 0.8.0 experimental. Independent human acceptance remains a required
+  1.0.0 gate. / 0.8.0 bleibt experimentell; unabhängige menschliche Abnahme
+  bleibt ein verpflichtendes Gate für 1.0.0.
+
 ## 0.7.0 — 2026-10-10
 
 - Add local Zelyra Studio with a safe project file tree, syntax highlighting,

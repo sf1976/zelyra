@@ -168,6 +168,20 @@ jobs:
         run: |
           cargo build -p zelyra-cli
           python3 scripts/check_release_metadata.py --binary target/debug/zelyra
+      - name: Exercise Zelyra Studio against MariaDB
+        env:
+          ZELYRA_STUDIO_E2E_BACKEND: mariadb
+          ZELYRA_STUDIO_E2E_DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+          ZELYRA_STUDIO_E2E_ROOT_PASSWORD: root
+          ZELYRA_BIN: target/debug/zelyra
+        run: bash ./tests/editor-studio-e2e.sh
+      - name: Exercise Zelyra Studio against PostgreSQL
+        env:
+          ZELYRA_STUDIO_E2E_BACKEND: postgres
+          ZELYRA_STUDIO_E2E_DATABASE_URL: postgres://zelyra_ci:zelyra_ci@127.0.0.1:5432/zelyra_ci
+          ZELYRA_STUDIO_E2E_POSTGRES_PASSWORD: zelyra_ci
+          ZELYRA_BIN: target/debug/zelyra
+        run: bash ./tests/editor-studio-e2e.sh
       - name: Test imported tableviews through composed project schema
         env:
           ZELYRA_MODULE_IMPORTS_DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
@@ -392,6 +406,13 @@ jobs:
           esac
           echo "Testing MariaDB ${server_version}"
           docker image inspect "public.ecr.aws/docker/library/mariadb:${expected_version}" --format '{{json .RepoDigests}}'
+      - name: Exercise Zelyra Studio against this MariaDB version
+        env:
+          ZELYRA_STUDIO_E2E_BACKEND: mariadb
+          ZELYRA_STUDIO_E2E_DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+          ZELYRA_STUDIO_E2E_ROOT_PASSWORD: root
+          ZELYRA_BIN: target/debug/zelyra
+        run: bash ./tests/editor-studio-e2e.sh
       - name: Verify MariaDB database tests, pool limits, and statement timeouts
         env:
           ZELYRA_DB_TIMEOUT_TEST_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
