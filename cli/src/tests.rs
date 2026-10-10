@@ -633,6 +633,137 @@ fn doctor_rejects_invalid_port() {
 }
 
 #[test]
+fn outbox_cli_rejects_invalid_inspection_options_before_loading_a_project() {
+    let arguments = ["list".to_owned(), "--limit".to_owned(), "0".to_owned()];
+    assert_eq!(
+        outbox_cli::outbox_command(arguments.into_iter()),
+        ExitCode::from(2)
+    );
+    let arguments = ["list".to_owned(), "--limit".to_owned(), "201".to_owned()];
+    assert_eq!(
+        outbox_cli::outbox_command(arguments.into_iter()),
+        ExitCode::from(2)
+    );
+    let arguments = ["list".to_owned(), "--format".to_owned(), "yaml".to_owned()];
+    assert_eq!(
+        outbox_cli::outbox_command(arguments.into_iter()),
+        ExitCode::from(2)
+    );
+}
+
+#[test]
+fn outbox_cli_requires_an_explicit_handler_for_run() {
+    let arguments = ["run".to_owned()];
+    assert_eq!(
+        outbox_cli::outbox_command(arguments.into_iter()),
+        ExitCode::from(2)
+    );
+    let arguments = [
+        "run".to_owned(),
+        "--handler".to_owned(),
+        "orders.created".to_owned(),
+    ];
+    assert_eq!(
+        outbox_cli::outbox_command(arguments.into_iter()),
+        ExitCode::from(2)
+    );
+    let arguments = [
+        "run".to_owned(),
+        "--handler".to_owned(),
+        "orders.created=handle_order".to_owned(),
+        "--lease-seconds".to_owned(),
+        "3601".to_owned(),
+    ];
+    assert_eq!(
+        outbox_cli::outbox_command(arguments.into_iter()),
+        ExitCode::from(2)
+    );
+}
+
+#[test]
+fn outbox_cli_run_invokes_zelyra_handler_and_skips_unmapped_event_types() {
+    let Ok(database_url) = env::var("ZELYRA_DB_TIMEOUT_TEST_URL") else {
+        eprintln!("skipping outbox CLI integration test: database URL is not configured");
+        return;
+    };
+    let suffix = format!(
+        "{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    );
+    let handled_id = format!("outbox-cli-handled-{suffix}");
+    let unmapped_id = format!("outbox-cli-unmapped-{suffix}");
+    zelyra_database::outbox::ensure_mariadb_outbox(&database_url).unwrap();
+    let handled_event = zelyra_database::outbox::OutboxEvent::new(
+        &handled_id,
+        "cli.test",
+        &json!({"source": "cli-test"}),
+    )
+    .unwrap();
+    let unmapped_event = zelyra_database::outbox::OutboxEvent::new(
+        &unmapped_id,
+        "cli.unmapped",
+        &json!({"source": "cli-test"}),
+    )
+    .unwrap();
+    zelyra_database::with_mariadb_transaction(&database_url, |transaction| {
+        zelyra_database::outbox::enqueue_mariadb_event(transaction, &unmapped_event)?;
+        zelyra_database::outbox::enqueue_mariadb_event(transaction, &handled_event)
+    })
+    .unwrap();
+
+    let directory = env::temp_dir().join(format!("zelyra-outbox-cli-{suffix}"));
+    fs::create_dir_all(&directory).unwrap();
+    let source_path = directory.join("main.zyl");
+    fs::write(
+        &source_path,
+        "fn main() {}\npub fn handle_event(event_id: String, event_type: String, payload_json: String) -> Bool {\n    return true\n}\n",
+    )
+    .unwrap();
+    let handler_specs = [("cli.test".to_owned(), "handle_event".to_owned())];
+    assert_eq!(
+        outbox_cli::run_outbox_worker(
+            source_path.to_str().unwrap(),
+            &database_url,
+            &handler_specs,
+            true,
+            30
+        ),
+        ExitCode::SUCCESS
+    );
+
+    for (event_id, expected_delivered, expected_attempts) in
+        [(&handled_id, true, "1"), (&unmapped_id, false, "0")]
+    {
+        let row = zelyra_database::execute_mariadb_query(
+            &database_url,
+            "SELECT `delivered_at`, `attempts` FROM `_zelyra_outbox` WHERE `event_id` = :event_id",
+            vec![("event_id".into(), QueryValue::String(event_id.clone()))],
+        )
+        .unwrap()
+        .rows
+        .into_iter()
+        .next()
+        .expect("outbox event should remain present");
+        assert_eq!(row[0] != "\\N", expected_delivered);
+        assert_eq!(row[1], expected_attempts);
+    }
+    zelyra_database::execute_mariadb_query(
+        &database_url,
+        "DELETE FROM `_zelyra_outbox` WHERE `event_id` IN (:handled_id, :unmapped_id)",
+        vec![
+            ("handled_id".into(), QueryValue::String(handled_id)),
+            ("unmapped_id".into(), QueryValue::String(unmapped_id)),
+        ],
+    )
+    .unwrap();
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn reads_database_url_from_an_env_file_without_normalizing_secrets() {
     let path = env::temp_dir().join(format!(
         "zelyra-doctor-env-{}-{}",

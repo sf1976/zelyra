@@ -525,10 +525,15 @@ Mandanten. Beliebiges SQL, APIs, TableViews, Exporte und eigene Aktionen werden
 nicht geschützt; Migrationen, Backfill und ein unabhängiges Sicherheitsreview
 bleiben Release-Gates. Siehe die [0.7-Roadmap](release-plans/0.7.0.de.md).
 
-Nach 0.7 folgen eine lokale MariaDB-Outbox in 0.8 und optionale lokale
-TOTP-MFA mit Wiederherstellungscodes in 0.9. WebAuthn/Passkeys und OAuth2/OIDC
-werden für separate Protokoll- und Sicherheitsreviews zurückgestellt; danach
-folgen Vertragsstabilisierung und unabhängige menschliche Abnahme für 1.0.0.
+Der 0.8-Branch implementiert eine experimentelle lokale MariaDB-Outbox:
+transaktionsgebundenes Einfügen, zustellbare Leases mit begrenzten Retries
+sowie ausdrückliche Setup-, Metadaten-, Recovery- und Worker-Befehle. CI auf
+dem exakten Head, Crash-/Konkurrenzabnahme und unabhängiges Sicherheitsreview
+sind noch offen; siehe die [0.8-Roadmap](release-plans/0.8.0.de.md). Als
+nächster Schritt ist optionale lokale TOTP-MFA mit Wiederherstellungscodes in
+0.9 vorgesehen. WebAuthn/Passkeys und OAuth2/OIDC werden für separate
+Protokoll- und Sicherheitsreviews zurückgestellt; danach folgen
+Vertragsstabilisierung und unabhängige menschliche Abnahme für 1.0.0.
 Vollständige SQL-Parität, allgemeine visuelle Bearbeitung, beliebige
 Client-Hydration, Compiler-Self-Hosting, ein natives Backend, verpflichtende
 Cloud-/KI-Dienste, Telemetrie und unbelegte Leistungsversprechen bleiben

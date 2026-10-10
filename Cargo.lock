@@ -1973,6 +1973,7 @@ dependencies = [
  "r2d2_postgres",
  "rustls",
  "rustls-pemfile",
+ "serde_json",
  "sha2 0.10.9",
  "tokio-postgres-rustls",
  "webpki-roots",
