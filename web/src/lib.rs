@@ -3095,23 +3095,22 @@ fn dispatch_login_mfa(
                         ("user_id".into(), QueryValue::Int(pending_user)),
                     ],
                 })?;
+                if let Some(audit_table) = auth.audit_table.as_deref() {
+                    for query in audit_insert_queries(
+                        audit_table,
+                        auth.audit_chain,
+                        Some(pending_user),
+                        "auth.login",
+                        Some(pending_user),
+                        "mfa=verified",
+                    ) {
+                        transaction.execute(&query)?;
+                    }
+                }
                 Ok(MfaChallengeResult::Verified)
             });
             match result {
                 Ok(MfaChallengeResult::Verified) => {
-                    if auth.audit_table.is_some() {
-                        if let Err(error) = execute_auth_admin_mutation(
-                            auth,
-                            database_url,
-                            Vec::new(),
-                            Some(pending_user),
-                            "auth.login",
-                            Some(pending_user),
-                            "mfa=verified",
-                        ) {
-                            eprintln!("zelyra web: MFA login audit write failed: {error}");
-                        }
-                    }
                     Response::redirect("/").with_header("Cache-Control", "no-store")
                 }
                 Ok(MfaChallengeResult::Locked) => Response::html(
