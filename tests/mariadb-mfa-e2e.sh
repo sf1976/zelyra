@@ -63,6 +63,7 @@ done
 
 MFA_E2E_BASE="${base}" MFA_E2E_EMAIL="${email}" MFA_E2E_PASSWORD="${test_password}" python3 <<'PY'
 import base64, hashlib, hmac, http.cookiejar, os, re, time, urllib.error, urllib.parse, urllib.request
+from concurrent.futures import ThreadPoolExecutor
 
 base = os.environ["MFA_E2E_BASE"]
 email = os.environ["MFA_E2E_EMAIL"]
@@ -141,5 +142,51 @@ post("/logout", {"_zelyra_csrf": csrf(security)})
 challenge_csrf = login()
 status, _, _ = post("/login/mfa", {"_zelyra_csrf": challenge_csrf, "code": recovery[0]})
 assert status == 401, "a used recovery code must be rejected"
-print("MariaDB local TOTP enrollment, MFA session gate, replay rejection, and single-use recovery passed")
+
+def make_pending_challenge():
+    isolated = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+    def send(path, values=None):
+        data = None if values is None else urllib.parse.urlencode(values).encode()
+        req = urllib.request.Request(base + path, data=data, headers={
+            "Origin": origin, "Referer": base + path,
+            "Content-Type": "application/x-www-form-urlencoded",
+        }, method="GET" if values is None else "POST")
+        try:
+            with isolated.open(req, timeout=10) as response:
+                return response.status, response.geturl(), response.read().decode()
+        except urllib.error.HTTPError as error:
+            return error.code, error.geturl(), error.read().decode()
+    _, _, login_page = send("/login")
+    _, _, challenge = send("/login", {
+        "_zelyra_csrf": csrf(login_page), "email": email, "password": password,
+    })
+    assert challenge, "login challenge page missing"
+    return isolated, csrf(challenge)
+
+challenges = [make_pending_challenge(), make_pending_challenge()]
+fresh_step = int(time.time() // 30) + 1
+fresh_code = code(secret, fresh_step)
+
+def submit_concurrent_challenge(pair):
+    isolated, token = pair
+    req = urllib.request.Request(base + "/login/mfa", data=urllib.parse.urlencode({
+        "_zelyra_csrf": token, "code": fresh_code,
+    }).encode(), headers={
+        "Origin": origin, "Referer": base + "/login/mfa",
+        "Content-Type": "application/x-www-form-urlencoded",
+    }, method="POST")
+    try:
+        with isolated.open(req, timeout=10) as response:
+            response.read()
+            return response.status
+    except urllib.error.HTTPError as error:
+        error.read()
+        return error.code
+
+with ThreadPoolExecutor(max_workers=2) as executor:
+    concurrent_statuses = sorted(executor.map(submit_concurrent_challenge, challenges))
+assert concurrent_statuses == [200, 401], (
+    "exactly one concurrent session may consume a TOTP step", concurrent_statuses
+)
+print("MariaDB local TOTP enrollment, MFA session gate, sequential and concurrent replay rejection, and single-use recovery passed")
 PY
