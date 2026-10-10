@@ -342,7 +342,11 @@ jobs:
         run: ./tests/mariadb-tenant-crud-e2e.sh
       - name: Run guided invoice tutorial integration test
         env:
-          DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+          MYSQL_PWD: root
+        run: mariadb --protocol=tcp --host=127.0.0.1 --port=3306 --user=root --batch --skip-column-names -e "CREATE DATABASE IF NOT EXISTS zelyra_invoice_tutorial_ci"
+      - name: Verify guided invoice tutorial integration test
+        env:
+          DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_invoice_tutorial_ci
           ZELYRA_BIN: target/debug/zelyra
         run: bash ./tests/invoice-tutorial-e2e.sh
   mariadb-compatibility:
