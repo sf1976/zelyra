@@ -1048,6 +1048,83 @@ same normalized e-mail address within 15 minutes trigger a 60-second HTTP 429
 lockout. A successful login rotates and invalidates the previous browser
 session token.
 
+### Optional local TOTP MFA (0.9.0 work in progress)
+
+The current 0.9.0 branch adds opt-in TOTP for MariaDB-backed authentication.
+Declare both dedicated MFA tables and add a non-null `mfa_verified` boolean to
+the persistent session table. The account's factor row is keyed by `user_id`;
+recovery-code rows have their own primary `id`:
+
+~~~zelyra
+auth users {
+    table: users
+    sessions: auth_sessions
+    mfa: user_mfa
+    mfa_recovery: user_mfa_recovery
+}
+
+table auth_sessions {
+    id: Id primary auto
+    user: User required
+    token_hash: String(64) required unique
+    expires_at: Timestamp required
+    mfa_verified: Bool default true
+}
+
+table user_mfa {
+    user_id: Int primary
+    secret_ciphertext: String(1024) required
+    enabled_at: Timestamp?
+    last_totp_step: Int?
+    failed_attempts: Int default 0
+    locked_until: Timestamp?
+    enrollment_expires_at: Timestamp?
+}
+
+table user_mfa_recovery {
+    id: Id primary auto
+    user_id: Int required
+    code_hash: String(255) required
+    used_at: Timestamp?
+}
+~~~
+
+Set `ZELYRA_MFA_ENCRYPTION_KEY` in the server process environment to 64
+hexadecimal characters from an operator-managed secret source (for example
+`openssl rand -hex 32`). When loading it from the project `.env` on a Unix
+shell, export the file before starting the server with `set -a; . ./.env;
+set +a`. Keep the key out of source control and backups that are accessible to
+the application database. Losing it makes enrolled factors unreadable;
+restoring a database backup therefore also requires restoring the matching
+key. MFA requires
+persistent MariaDB sessions. Password-only sessions remain unverified until a
+valid TOTP or unused recovery code is accepted. Enrollment, disable, and code
+replacement require a password and a recent TOTP code. Recovery codes are
+shown once and only their Argon2 hashes are stored.
+
+Emergency recovery for a user who has lost both authenticator and recovery
+codes is an operator database procedure, not an application screen. Record the
+approval and affected account, then use the configured table names and numeric
+user ID in a maintenance window:
+
+~~~sql
+START TRANSACTION;
+DELETE FROM user_mfa_recovery WHERE user_id = 123;
+DELETE FROM user_mfa WHERE user_id = 123;
+DELETE FROM auth_sessions WHERE user_id = 123;
+COMMIT;
+~~~
+
+This removes the factor and recovery verifiers and revokes that account's
+sessions; the account can then log in with its password and enroll again. If
+the encryption key is lost, apply the same removal to every affected account.
+Preserve an operator audit record. Do not copy or export encrypted factors as a
+recovery method.
+
+This branch is still under implementation. Integration coverage, a rehearsal
+of the operator recovery procedure, and independent security review remain
+release gates; do not treat this section as a production security guarantee.
+
 Login throttling can be tuned on the `auth` definition with
 `login_rate_limit: attempts per seconds` and `login_block_seconds: seconds`.
 The defaults are `5 per 900` and `60`. The in-memory limiter is process-local

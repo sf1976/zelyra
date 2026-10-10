@@ -3977,6 +3977,42 @@ fn project_uses_reserved_account_sessions_route(program: &zelyra_ast::Program) -
         }))
 }
 
+fn project_uses_reserved_mfa_route(program: &zelyra_ast::Program) -> bool {
+    let reserved_paths = [
+        zelyra_web::LOGIN_MFA_PATH,
+        zelyra_web::ACCOUNT_SECURITY_PATH,
+    ];
+    !program.auth.is_empty()
+        && program.auth.iter().any(|auth| auth.mfa_table.is_some())
+        && reserved_paths.iter().any(|reserved_path| {
+            program
+                .pages
+                .iter()
+                .any(|page| zelyra_web::route_pattern_matches_path(&page.path, reserved_path))
+                || program
+                    .apis
+                    .iter()
+                    .any(|api| zelyra_web::route_pattern_matches_path(&api.path, reserved_path))
+                || program.cruds.iter().any(|crud| {
+                    let base = format!("/{}", crud.table);
+                    [
+                        base.clone(),
+                        format!("{base}/new"),
+                        format!("{base}/{{id}}"),
+                        format!("{base}/{{id}}/edit"),
+                        format!("{base}/{{id}}/delete"),
+                        format!("{base}/{{id}}/restore"),
+                    ]
+                    .iter()
+                    .any(|pattern| zelyra_web::route_pattern_matches_path(pattern, reserved_path))
+                        || crud.actions.iter().any(|action| {
+                            let pattern = format!("{base}/{{id}}/{}", action.name);
+                            zelyra_web::route_pattern_matches_path(&pattern, reserved_path)
+                        })
+                })
+        })
+}
+
 fn docker_compose_check() -> DoctorCheck {
     if let Some(command) = detect_docker_compose() {
         return DoctorCheck {
@@ -5747,6 +5783,202 @@ fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> 
                 }
             }
         }
+        if auth.mfa_table.is_some() || auth.mfa_recovery_table.is_some() {
+            if schema.backend() != Backend::MariaDb {
+                diagnostic_with_span(
+                    path,
+                    "E-AUTH-035",
+                    "local MFA currently requires the MariaDB runtime",
+                    auth.span,
+                );
+                valid = false;
+            }
+            if auth.session_table.is_none() {
+                diagnostic_with_span(
+                    path,
+                    "E-AUTH-035",
+                    "local MFA requires database-backed sessions",
+                    auth.span,
+                );
+                valid = false;
+            }
+            let (Some(mfa_table_name), Some(recovery_table_name)) =
+                (&auth.mfa_table, &auth.mfa_recovery_table)
+            else {
+                diagnostic_with_span(
+                    path,
+                    "E-AUTH-035",
+                    "local MFA requires both `mfa` and `mfa_recovery` tables",
+                    auth.span,
+                );
+                valid = false;
+                continue;
+            };
+            let mut names = HashSet::from([auth.table.as_str()]);
+            if let Some(session_table_name) = &auth.session_table {
+                names.insert(session_table_name.as_str());
+            }
+            if !names.insert(mfa_table_name.as_str())
+                || !names.insert(recovery_table_name.as_str())
+                || mfa_table_name == recovery_table_name
+            {
+                diagnostic_with_span(
+                    path,
+                    "E-AUTH-035",
+                    "MFA factors and recovery codes require dedicated tables",
+                    auth.span,
+                );
+                valid = false;
+            }
+            if let Some(session_table_name) = &auth.session_table {
+                let session_has_mfa_flag = schema
+                    .tables
+                    .iter()
+                    .find(|table| table.name == *session_table_name)
+                    .is_some_and(|table| {
+                        table.columns.iter().any(|column| {
+                            column.name == "mfa_verified"
+                                && !column.nullable
+                                && (column.sql_type.to_ascii_uppercase().contains("BOOL")
+                                    || column.sql_type.to_ascii_uppercase().contains("TINYINT"))
+                        })
+                    });
+                if !session_has_mfa_flag {
+                    diagnostic_with_span(
+                        path,
+                        "E-AUTH-035",
+                        &format!(
+                            "MFA session table `{session_table_name}` requires non-null boolean column `mfa_verified`"
+                        ),
+                        auth.span,
+                    );
+                    valid = false;
+                }
+            }
+            for (table_name, required_columns) in [
+                (
+                    mfa_table_name,
+                    &[
+                        "user_id",
+                        "secret_ciphertext",
+                        "enabled_at",
+                        "last_totp_step",
+                        "failed_attempts",
+                        "locked_until",
+                        "enrollment_expires_at",
+                    ][..],
+                ),
+                (
+                    recovery_table_name,
+                    &["id", "user_id", "code_hash", "used_at"][..],
+                ),
+            ] {
+                let Some(table) = schema.tables.iter().find(|table| table.name == *table_name)
+                else {
+                    diagnostic_with_span(
+                        path,
+                        "E-AUTH-035",
+                        &format!("unknown MFA table `{table_name}`"),
+                        auth.span,
+                    );
+                    valid = false;
+                    continue;
+                };
+                for required_column in required_columns {
+                    if !table
+                        .columns
+                        .iter()
+                        .any(|column| column.name == *required_column)
+                    {
+                        diagnostic_with_span(
+                            path,
+                            "E-AUTH-035",
+                            &format!(
+                                "MFA table `{table_name}` requires column `{required_column}`"
+                            ),
+                            auth.span,
+                        );
+                        valid = false;
+                    }
+                }
+                let expected_types: &[(&str, &str, bool)] = if table_name == mfa_table_name {
+                    &[
+                        ("user_id", "integer", false),
+                        ("secret_ciphertext", "text", false),
+                        ("enabled_at", "timestamp", true),
+                        ("last_totp_step", "integer", true),
+                        ("failed_attempts", "integer", false),
+                        ("locked_until", "timestamp", true),
+                        ("enrollment_expires_at", "timestamp", true),
+                    ]
+                } else {
+                    &[
+                        ("id", "integer", false),
+                        ("user_id", "integer", false),
+                        ("code_hash", "text", false),
+                        ("used_at", "timestamp", true),
+                    ]
+                };
+                for (column_name, expected_type, may_be_nullable) in expected_types {
+                    let Some(column) = table
+                        .columns
+                        .iter()
+                        .find(|column| column.name == *column_name)
+                    else {
+                        continue;
+                    };
+                    let sql_type = column.sql_type.to_ascii_uppercase();
+                    let type_matches = match *expected_type {
+                        "integer" => sql_type.contains("INT"),
+                        "text" => {
+                            sql_type.contains("CHAR")
+                                || sql_type.contains("TEXT")
+                                || sql_type.contains("CLOB")
+                        }
+                        "timestamp" => sql_type.contains("TIMESTAMP") || sql_type == "DATETIME",
+                        _ => false,
+                    };
+                    if !type_matches || (!may_be_nullable && column.nullable) {
+                        diagnostic_with_span(
+                            path,
+                            "E-AUTH-035",
+                            &format!(
+                                "MFA column `{table_name}.{column_name}` must be a {}{}",
+                                expected_type,
+                                if *may_be_nullable {
+                                    ""
+                                } else {
+                                    " non-null column"
+                                }
+                            ),
+                            auth.span,
+                        );
+                        valid = false;
+                    }
+                }
+                let key_column = if table_name == mfa_table_name {
+                    "user_id"
+                } else {
+                    "id"
+                };
+                if !table
+                    .columns
+                    .iter()
+                    .find(|column| column.name == key_column)
+                    .is_some_and(|column| column.primary_key || column.unique)
+                {
+                    diagnostic_with_span(
+                        path,
+                        "E-AUTH-035",
+                        &format!(
+                            "MFA table `{table_name}` requires `{key_column}` to be a primary or unique key"
+                        ),
+                        auth.span,
+                    );
+                    valid = false;
+                }
+            }
+        }
         if let Some(reset_table_name) = &auth.reset_tokens_table {
             if schema.backend() != Backend::MariaDb {
                 diagnostic(
@@ -6802,6 +7034,16 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         );
         return ExitCode::from(1);
     }
+    if project_uses_reserved_mfa_route(&program) {
+        diagnostic(
+            &path,
+            "E-AUTH-035",
+            "routes `/login/mfa` and `/account/security` are reserved when local MFA is configured",
+            1,
+            1,
+        );
+        return ExitCode::from(1);
+    }
     let source = fs::read_to_string(&path).unwrap_or_default();
     if !reject_typed_holes(&source, &path, &program) {
         return ExitCode::from(1);
@@ -6958,6 +7200,8 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             reset_block_seconds: auth
                 .reset_block_seconds
                 .unwrap_or(zelyra_web::DEFAULT_RESET_BLOCK_SECONDS),
+            mfa_table: auth.mfa_table.clone(),
+            mfa_recovery_table: auth.mfa_recovery_table.clone(),
             schema: schema.clone(),
             csrf,
         })
