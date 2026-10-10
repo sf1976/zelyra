@@ -502,7 +502,8 @@ order_number="E2E-MODULE-ORDER-$$"
 status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
     --header "Origin: http://${address}" --data-urlencode "_zelyra_csrf=${order_csrf}" \
     --data-urlencode "customer=${customer_id}" --data-urlencode "order_number=${order_number}" \
-    --data-urlencode 'total=123.45' "http://${address}/orders/new")"
+    --data-urlencode 'status=open' --data-urlencode 'total=123.45' \
+    "http://${address}/orders/new")"
 if [[ "${status}" != 303 ]]; then
     echo "error: valid customer order returned ${status}, expected 303" >&2
     exit 1
@@ -510,7 +511,8 @@ fi
 status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
     --header "Origin: http://${address}" --data-urlencode "_zelyra_csrf=${order_csrf}" \
     --data-urlencode 'customer=999999999' --data-urlencode "order_number=${order_number}-invalid" \
-    --data-urlencode 'total=1.00' "http://${address}/orders/new")"
+    --data-urlencode 'status=open' --data-urlencode 'total=1.00' \
+    "http://${address}/orders/new")"
 if [[ "${status}" != 422 ]]; then
     echo "error: order with an unknown customer returned ${status}, expected 422" >&2
     exit 1
