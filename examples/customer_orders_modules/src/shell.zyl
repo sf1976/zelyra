@@ -1,0 +1,24 @@
+pub view CustomerOrderShell {
+    html {
+        <!doctype html>
+        <html>
+            <head>
+                <meta charset="utf-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <title>Customer Orders</title>
+            </head>
+            <body>
+                <header>
+                    <h1>Customer Orders</h1>
+                    <nav>
+                        <a href="/">Overview</a>
+                        <a href="/customers">Customers</a>
+                        <a href="/orders">Orders</a>
+                        <a href="/views/customerorderoverview">Customer summary</a>
+                    </nav>
+                </header>
+                <main><slot /></main>
+            </body>
+        </html>
+    }
+}

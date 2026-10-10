@@ -355,6 +355,104 @@ pub(super) fn module_declaration_owners(program: &zelyra_ast::Program) -> HashMa
     owners
 }
 
+fn module_runtime_effects(
+    program: &zelyra_ast::Program,
+    owners: &HashMap<String, String>,
+    included: &BTreeSet<String>,
+) -> (Vec<Value>, Vec<Value>) {
+    let mut functions_by_capability = BTreeMap::<String, BTreeSet<String>>::new();
+    for function in &program.functions {
+        let declaration = format!("function:{}", function.name);
+        if !owners
+            .get(&declaration)
+            .is_some_and(|module| included.contains(module))
+        {
+            continue;
+        }
+        for capability in &function.capabilities {
+            functions_by_capability
+                .entry(capability.clone())
+                .or_default()
+                .insert(declaration.clone());
+        }
+    }
+
+    let effects = functions_by_capability
+        .iter()
+        .map(|(capability, functions)| {
+            json!({
+                "capability": capability,
+                "declared_by": functions,
+                "source_modules": functions.iter().filter_map(|function| {
+                    owners.get(function).cloned()
+                }).collect::<BTreeSet<_>>()
+            })
+        })
+        .collect::<Vec<_>>();
+    let blockers = functions_by_capability
+        .iter()
+        .filter_map(|(capability, functions)| {
+            let reason = match capability.as_str() {
+                "FileSystem" => Some("file_system_paths_are_not_declared_in_the_bundle_manifest"),
+                "Network" => Some("outbound_network_service_contract_is_not_declared"),
+                "Process" => Some("process_executable_and_runtime_dependencies_are_not_declared"),
+                "Environment" => Some("environment_variable_names_are_not_declared"),
+                _ => None,
+            }?;
+            Some(json!({
+                "kind": "runtime_capability",
+                "capability": capability,
+                "reason": reason,
+                "declared_by": functions
+            }))
+        })
+        .collect::<Vec<_>>();
+    (effects, blockers)
+}
+
+fn module_external_service_contracts(
+    program: &zelyra_ast::Program,
+    owners: &HashMap<String, String>,
+    included: &BTreeSet<String>,
+) -> Vec<Value> {
+    program
+        .auth
+        .iter()
+        .filter(|auth| auth.reset_tokens_table.is_some())
+        .filter(|auth| {
+            owners
+                .get(&format!("auth:{}", auth.name))
+                .is_some_and(|module| included.contains(module))
+        })
+        .map(|auth| {
+            json!({
+                "kind": "smtp",
+                "contract_version": 1,
+                "used_by": format!("auth:{}", auth.name),
+                "required_when": "auth_reset_tokens_enabled",
+                "environment_variables": [
+                    "ZELYRA_PUBLIC_BASE_URL",
+                    "ZELYRA_SMTP_HOST",
+                    "ZELYRA_SMTP_PORT",
+                    "ZELYRA_SMTP_SECURITY",
+                    "ZELYRA_SMTP_FROM",
+                    "ZELYRA_SMTP_USERNAME",
+                    "ZELYRA_SMTP_PASSWORD",
+                    "ZELYRA_RESET_DELIVERY_KEY"
+                ],
+                "secret_environment_variables": [
+                    "ZELYRA_SMTP_USERNAME",
+                    "ZELYRA_SMTP_PASSWORD",
+                    "ZELYRA_RESET_DELIVERY_KEY"
+                ],
+                "delivery_semantics": "at_least_once",
+                "retry_delay_seconds": 30,
+                "duplicate_delivery_possible": true
+            })
+        })
+        .collect()
+}
+
 pub(super) fn module_uses_database(
     program: &zelyra_ast::Program,
     module_path: &str,
@@ -736,6 +834,17 @@ fn module_plan_command(mut arguments: impl Iterator<Item = String>) -> ExitCode 
                         })
                     })
                     .collect::<BTreeMap<_, _>>();
+                let (runtime_effects, mut deployment_blockers) =
+                    module_runtime_effects(&program, &owners, &included);
+                let external_service_contracts =
+                    module_external_service_contracts(&program, &owners, &included);
+                if !unresolved_references.is_empty() {
+                    deployment_blockers.push(json!({
+                        "kind": "unresolved_reference",
+                        "count": unresolved_references.len(),
+                        "reason": "one_or_more_static_references_have_no_declaration_owner"
+                    }));
+                }
                 plan = Some(json!({
                     "kind": "known-semantic-dependency-closure",
                     "closure_semantics": "explicit-imports-plus-statically-recognized-references",
@@ -770,6 +879,23 @@ fn module_plan_command(mut arguments: impl Iterator<Item = String>) -> ExitCode 
                         "declarations": module.declarations
                     })).collect::<Vec<_>>(),
                     "resource_dependencies": resource_dependencies.values().cloned().collect::<Vec<_>>(),
+                    "runtime_effects": {
+                        "model": "capabilities_declared_by_functions_in_included_source_modules",
+                        "effects": runtime_effects,
+                        "explicit_function_capabilities_complete": true,
+                        "implicit_resource_effects_complete": false
+                    },
+                    "external_service_contracts": external_service_contracts,
+                    "deployment_readiness": {
+                        "status": "incomplete",
+                        "ready": false,
+                        "blockers": deployment_blockers,
+                        "unverified_requirements": [
+                            "resource-level effects and service contracts are not fully modeled",
+                            "runtime and asset dependencies are not proven complete"
+                        ],
+                        "note": "A complete source import closure does not prove that external runtime effects or service contracts are deployable."
+                    },
                     "schema_ownership": {
                         "model": "inferred_from_table_declaration_source_module",
                         "enforced": false,
@@ -1160,7 +1286,7 @@ fn module_bundle_command(mut arguments: impl Iterator<Item = String>) -> ExitCod
                 .collect::<Vec<_>>();
             fs::write(
                 staging.join("main.zyl"),
-                format!("{}\n", imports.join("\n")),
+                format!("{}\n\nfn main() {{}}\n", imports.join("\n")),
             )
             .map_err(|error| format!("cannot write generated entry: {error}"))?;
             copied.push("main.zyl".to_owned());
@@ -1235,6 +1361,19 @@ fn module_bundle_command(mut arguments: impl Iterator<Item = String>) -> ExitCod
             .first()
             .and_then(|configuration| configuration["connection_environment"].as_str())
             .unwrap_or("DATABASE_URL");
+        let external_service_contracts = plan
+            .get("external_service_contracts")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let smtp_environment_example = if external_service_contracts
+            .iter()
+            .any(|contract| contract["kind"] == "smtp")
+        {
+            "\n# Required when auth declares reset_tokens; put secrets only in the local .env or a secret store.\nZELYRA_PUBLIC_BASE_URL=https://app.example.test\nZELYRA_SMTP_HOST=\nZELYRA_SMTP_PORT=465\nZELYRA_SMTP_SECURITY=implicit_tls\nZELYRA_SMTP_FROM=\nZELYRA_SMTP_USERNAME=\nZELYRA_SMTP_PASSWORD=\n# Generate a 32-byte key with: python3 -c 'import secrets; print(secrets.token_hex(32))'\n# Keep this key stable and identical across every app instance.\nZELYRA_RESET_DELIVERY_KEY=\n"
+        } else {
+            ""
+        };
         if docker {
             let compiler_ref = compiler_ref.as_deref().expect("validated compiler ref");
             let dockerfile = format!(
@@ -1287,6 +1426,7 @@ ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS=10
 # Remote database connections use verified TLS automatically.
 ZELYRA_DB_TLS_MODE=auto
 # ZELYRA_DB_TLS_CA_CERT_FILE=/absolute/path/to/your/database-ca.pem
+{smtp_environment_example}
 "#
             );
             let dockerignore = ".git\n.env\n.env.*\ntarget/\nbuild/\ndist/\n*.log\n*.sqlite*\n*.db\n*.pem\n*.key\n*.p12\n*.pfx\n";
@@ -1311,6 +1451,15 @@ ZELYRA_DB_TLS_MODE=auto
             "source_files": copied,
             "support_files": support_files,
             "database": database,
+            "runtime_effects": plan
+                .get("runtime_effects")
+                .cloned()
+                .unwrap_or(Value::Null),
+            "deployment_readiness": plan
+                .get("deployment_readiness")
+                .cloned()
+                .unwrap_or(Value::Null),
+            "external_service_contracts": external_service_contracts,
             "source_closure_complete": false,
             "complete_deployment": false,
             "docker": if docker {

@@ -734,8 +734,13 @@ Arbeiten abgeschlossen sind.
   und die Ausgabe der App-Adresse sind vorhanden. Der erzeugte CRUD-Stack hat
   einen isolierten Erststart- und Wiederholungstest bestanden, einschließlich
   schemaabhängiger HTTP-Seiten, unveränderter Zugangsdaten, geheimnisfreier
-  Setup-Ausgabe, Portzuordnungen und Bereinigung. Prüfungen auf sauberen Hosts
-  und Wiederherstellungsfälle über diesen Docker-Ablauf hinaus bleiben offen.
+  Setup-Ausgabe, Portzuordnungen und Bereinigung. Setup erklärt außerdem, dass
+  minimale `init`-Projekte keine Datenbank benötigen, und schlägt bei einem
+  fehlenden absoluten Pfad einen wahrscheinlichen relativen Pfad vor. Generierte
+  Docker-Builds können einen veröffentlichten Tag, Branch oder Commit festlegen;
+  die Referenz wird geholt und detached ausgecheckt. Prüfungen auf sauberen
+  Hosts und Wiederherstellungsfälle über diesen Docker-Ablauf hinaus bleiben
+  offen.
 - [~] **Datenbanksicherheit:** MariaDB ist die Runtime-Referenz; für SQLite
   gibt es End-to-End-Pfade. Der Schema-Sicherheitstest prüft auf beiden
   Backends: destruktive Löschungen benötigen Freigabe; Pflichtspalten ohne
@@ -807,35 +812,41 @@ Workflow waren erfolgreich.
 Der Clean-Onboardingpfad mit installierter CLI ist außerdem im [CI-Lauf
 35573616419](https://github.com/sf1976/zelyra/actions/runs/35573616419) grün.
 
-## Vorgeschlagener Release-Meilenstein 0.4.0
+## Release-Meilenstein 0.4.0 (veröffentlicht, nicht vollständig abgeschlossen)
 
-Der separate [Releaseplan 0.4.0](release-plans/0.4.0.de.md) ist ein
-Arbeitsvorschlag für den nächsten Meilenstein nach dem finalen 0.3.0-Release.
-Er priorisiert Module und deterministische Mehrdateiprojekte, einen
-zuverlässigen Datenbank-/Runtime-Lebenszyklus, sicherere Konto- und
-API-Lebenszyklen, granulare AI-native Effekte sowie Nachweise für Lieferkette
-und Barrierefreiheit. PostgreSQL-Runtime-Parität, Multi-Tenancy,
-Hintergrundjobs, MFA, OIDC oder ein visueller Editor werden dadurch bewusst
-nicht automatisch zu 0.4.0-Versprechen.
-
-Das stabile `v0.3.0` wurde am 03.10.2026 veröffentlicht. Der Projektverantwortliche
-hat den menschlichen Einsteigertest für 0.3.0 ausdrücklich auf 0.4.0 vertagt;
-dies ist eine Risikoakzeptanz, kein Testnachweis. Der 0.4.0-Plan verlangt diese
-unabhängige Abnahme vor seinem finalen Release. Umfang und Status bleiben dem
-Risikoregister und den Abnahme-Gates des Plans unterstellt.
+Das stabile `v0.4.0` ist veröffentlicht und die Artefakte wurden technisch
+geprüft. Der [Releaseplan 0.4.0](release-plans/0.4.0.de.md) bleibt dennoch
+offen: Die unabhängige menschliche Einsteigerabnahme wurde zuerst auf 0.5.0
+verschoben und ist durch die neuere Entscheidung des Projektverantwortlichen
+nun für 1.0.0 vorgesehen. Sie wurde nicht durchgeführt. Eine manuelle Rückmeldung mit dem veröffentlichten
+0.4.0-CLI deckte außerdem eine falsche absolute Pfadangabe bei `setup` sowie
+unklare Erwartungen an `setup` für minimale `init`-Projekte auf. Die Diagnose
+und Dokumentation wurden für die 0.5.0-Vorbereitung korrigiert und Regressionen
+geprüft; die veröffentlichten 0.4.0-Artefakte enthalten diese Korrekturen
+nicht. Details und Grenzen stehen im zweisprachigen 0.5.0-
+[Studienprotokoll](release-readiness/0.5.0-onboarding-study.de.md). Es ist kein
+Nachweis menschlicher Abnahme.
 
 ## Vorgeschlagener Release-Meilenstein 0.5.0
 
-Der zweisprachige [0.5.0-Roadmapentwurf](release-plans/0.5.0.de.md) ist ein
-Ausblick, keine Implementierungs- oder Releasezusage. Voraussetzung sind das
-finale 0.3.0-Release und eine akzeptierte 0.4.0-Basis. Zentrales Produktziel
-sind automatisch verdrahtete Module und der geprüfte Export vollständiger
-Anwendungsteile als eigenständige Docker-Deployments. Ein wiederverwendbares,
-je Anwendung separat konfigurierbares Datenbankmodul, ausdrückliches
-Schemaeigentum, reproduzierbare Extraktion und unabhängiger Ende-zu-Ende-Start
-sind P0-Abnahmeanforderungen. Nicht umgesetzte Funktionen bleiben als geplant
-gekennzeichnet; PostgreSQL-Runtime-Parität oder Produktionsreife werden nicht
-unterstellt.
+Der zweisprachige [0.5.0-Roadmapplan](release-plans/0.5.0.de.md) führt die
+offene 0.4.0-Abnahme und deren Rückmeldungen weiter; er ist keine
+Releasezusage. Voraussetzung sind das finale 0.3.0-Release und die
+veröffentlichte 0.4.0-Basis. Der eingegrenzte
+0.5.0-Kandidat bietet experimentelle Docker-Bundles für eine statisch erkannte
+Teilmenge mit getrennten Schemas und Datenbankkonten mit minimalen Rechten.
+Vollständige Abhängigkeits-/Effektauflösung, gemeinsames Schemaeigentum und ein
+wiederverwendbares Mehrverbindungs-Datenbankmodul sind ausdrücklich vertagt.
+Bundles melden weiterhin eine unvollständige Schließung und erfordern eine
+Betreiberprüfung; Produktionsreife oder PostgreSQL-Runtime-Parität wird nicht
+behauptet.
+Die eingegrenzte Implementierung und die technischen Gates bestanden auf
+Kandidaten-Stand `56b2adcb` (CI 566 und Paketprüfung 276). Vor dem stabilen
+`v0.5.0` sind weiterhin ein veröffentlichter, unveränderlicher RC und dessen
+Installations-/Update-/Rollback-Probe erforderlich. Auf ausdrückliche
+Entscheidung des Projektverantwortlichen ist für 0.5.0 keine menschliche Studie
+erforderlich; alle unabhängigen menschlichen Abnahmen sind ein verpflichtendes
+Gate für 1.0.0.
 
 - [🧪] Im unveröffentlichten 0.4-Zweig erzeugt `zelyra module bundle` nun auf
   Wunsch ein commit-gepinntes Dockerfile, eine Compose-App und ein
@@ -869,7 +880,8 @@ unterstellt.
   Dateien schreibt. Das Manifest
   weist weiterhin `source_closure_complete: false` und
   `complete_deployment: false` aus. Vollständige Abhängigkeitsanalyse,
-  modulare Datenbankschnittstelle und vollständige 0.5.0-Abnahme bleiben offen.
+  modulare Datenbankschnittstelle und technische Kandidatenprüfung bleiben
+  offen. Die menschliche Abnahme ist auf 1.0.0 verschoben.
   `module plan` verfolgt jetzt auch Funktionsaufrufe in Formular- und
   CRUD-Aktionen bis zu den aufgerufenen Deklarationen und deren Quelldateien;
   ein Mehrmodul-Integrationstest prüft beide Fälle. Das erweitert die bekannte
@@ -895,6 +907,28 @@ unterstellt.
   eine öffentliche Deklaration und einen ausdrücklichen Importpfad
   (`E-MOD-007` / `E-MOD-020`). Dies ist ein getesteter Sichtbarkeitsschritt,
   kein vollständiges HTML-Namespace- oder Modulvertragssystem.
+- [🧪] Das generierte Kunden-/Auftrags-Docker-Rehearsal sichert und restauriert
+  Geschäftszeilen nun mit begrenzt berechtigten MariaDB-Konten, wendet eine
+  additive Schema-Migration an und beendet danach MariaDB während einer nicht
+  bestätigten Kundenänderung hart. Nach dem Neustart prüft es, dass bestätigte
+  Kunden-/Auftragszeilen und die migrierte Tabelle erhalten bleiben, während
+  die abgebrochene Änderung zurückgerollt wurde. Der Nachweis ist auf eine
+  wegwerfbare MariaDB-11-Fixture begrenzt; vollständige Modulschließung und
+  Schemaeigentumsdurchsetzung bleiben offen.
+
+## Großer Release-Meilenstein 1.0.0
+
+`v1.0.0` ist die erste große Veröffentlichung und das verpflichtende Ziel für
+alle unabhängigen menschlichen Einsteiger- und Abnahmestudien, die aus 0.3.0,
+0.4.0 und 0.5.0 verschoben wurden. Kein früheres Release darf behaupten, diese
+Studien seien abgeschlossen. Vor dem stabilen `v1.0.0` muss nach bestandenen
+technischen Gates ein unveränderlicher Release Candidate veröffentlicht werden.
+Unabhängige Personen ohne Entwicklerrolle prüfen den Kandidaten und die
+mitgelieferte Dokumentation. Blocker werden behoben und erneut geprüft;
+redigierte Beobachtungen und die Entscheidung des Projektverantwortlichen
+werden dem exakt getesteten Commit zugeordnet. Der Studienumfang muss zum
+endgültigen 1.0.0-Produkt passen. Automatisierte CI, interne Rehearsals und
+Rückmeldungen des Projektverantwortlichen ersetzen keinen Teilnehmertest.
 
 ## Akzeptanzanwendungen aus der Praxis
 

@@ -189,6 +189,49 @@ fn checked_in_multifile_example_checks_and_runs_without_external_services() {
 }
 
 #[test]
+fn checked_in_customer_orders_module_example_checks_and_plans_its_boundaries() {
+    let example = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("examples/customer_orders_modules");
+
+    let check = run(&example, &["check", "main.zyl"]);
+    assert!(
+        check.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&check.stdout),
+        String::from_utf8_lossy(&check.stderr)
+    );
+
+    let plan = run(
+        &example,
+        &["module", "plan", "main.zyl", "src/reporting.zyl"],
+    );
+    assert!(
+        plan.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&plan.stdout),
+        String::from_utf8_lossy(&plan.stderr)
+    );
+    let document: Value = serde_json::from_slice(&plan.stdout).unwrap();
+    let source_files = document["plan"]["source_files"].as_array().unwrap();
+    for source in [
+        "src/customers.zyl",
+        "src/database.zyl",
+        "src/orders.zyl",
+        "src/reporting.zyl",
+    ] {
+        assert!(source_files.iter().any(|path| path == source), "{source}");
+    }
+    assert_eq!(document["plan"]["complete_deployment"], false);
+    assert_eq!(document["plan"]["deployment_readiness"]["ready"], false);
+    assert!(document["plan"]["unresolved_references"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+}
+
+#[test]
 fn module_bundle_materializes_a_checked_source_closure_without_secrets() {
     let directory = project(&[
         (
@@ -412,6 +455,8 @@ fn module_bundle_can_generate_a_pinned_experimental_docker_package() {
     assert!(env_example.contains("ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS=10"));
     assert!(!env_example.contains("must-not-be-copied"));
     assert!(!env_example.contains("example-secret"));
+    assert!(!env_example.contains("ZELYRA_SMTP_"));
+    assert!(!env_example.contains("ZELYRA_RESET_DELIVERY_KEY"));
 
     let manifest: Value =
         serde_json::from_slice(&fs::read(bundle.join("zelyra.bundle.json")).unwrap()).unwrap();
@@ -973,6 +1018,247 @@ fn module_plan_lists_only_the_selected_modules_source_dependency_closure() {
     );
     assert_eq!(document["plan"]["complete_deployment"], false);
     fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn module_plan_and_docker_bundle_export_password_reset_smtp_contracts() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/auth.zyl\" as account_data\nfn main() {}\n",
+        ),
+        (
+            "src/auth.zyl",
+            "auth users { table: users sessions: auth_sessions reset_tokens: password_resets audit: auth_audit_log }\ntable users { id: Id primary auto email: Email required unique password_hash: String(255) required }\ntable auth_sessions { id: Id primary auto user: User required token_hash: String(64) required unique expires_at: Timestamp required }\ntable password_resets { id: Id primary auto user: User required token_hash: String(64) required unique expires_at: Timestamp required consumed_at: Timestamp? delivery_payload: String(2048) delivery_retry_at: Timestamp? }\ntable auth_audit_log { id: Id primary auto actor_user_id: Int? event: String(100) required target_user_id: Int? details: String(1000) required created_at: Timestamp default now }\n",
+        ),
+    ]);
+    let plan = run(&directory, &["module", "plan", "main.zyl", "src/auth.zyl"]);
+    assert!(
+        plan.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&plan.stdout),
+        String::from_utf8_lossy(&plan.stderr)
+    );
+    let document: Value = serde_json::from_slice(&plan.stdout).unwrap();
+    assert_eq!(
+        document["plan"]["external_service_contracts"][0]["kind"],
+        "smtp"
+    );
+    assert_eq!(
+        document["plan"]["external_service_contracts"][0]["used_by"],
+        "auth:users"
+    );
+    assert_eq!(
+        document["plan"]["external_service_contracts"][0]["secret_environment_variables"],
+        serde_json::json!([
+            "ZELYRA_SMTP_USERNAME",
+            "ZELYRA_SMTP_PASSWORD",
+            "ZELYRA_RESET_DELIVERY_KEY"
+        ])
+    );
+    assert_eq!(
+        document["plan"]["external_service_contracts"][0]["required_when"],
+        "auth_reset_tokens_enabled"
+    );
+    assert_eq!(
+        document["plan"]["external_service_contracts"][0]["contract_version"],
+        1
+    );
+    assert_eq!(
+        document["plan"]["external_service_contracts"][0]["retry_delay_seconds"],
+        30
+    );
+    assert_eq!(
+        document["plan"]["external_service_contracts"][0]["duplicate_delivery_possible"],
+        true
+    );
+
+    let bundle = directory.with_extension("smtp-docker-bundle");
+    let bundle_arg = bundle.to_string_lossy().into_owned();
+    let compiler_ref = "a".repeat(40);
+    let result = run(
+        &directory,
+        &[
+            "module",
+            "bundle",
+            "main.zyl",
+            "src/auth.zyl",
+            "--output",
+            &bundle_arg,
+            "--docker",
+            "--compiler-ref",
+            &compiler_ref,
+        ],
+    );
+    assert!(
+        result.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&result.stdout),
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let env_example = fs::read_to_string(bundle.join(".env.example")).unwrap();
+    for variable in [
+        "ZELYRA_PUBLIC_BASE_URL=https://app.example.test",
+        "ZELYRA_SMTP_HOST=",
+        "ZELYRA_SMTP_PORT=465",
+        "ZELYRA_SMTP_SECURITY=implicit_tls",
+        "ZELYRA_SMTP_FROM=",
+        "ZELYRA_SMTP_USERNAME=",
+        "ZELYRA_SMTP_PASSWORD=",
+        "ZELYRA_RESET_DELIVERY_KEY=",
+    ] {
+        assert!(
+            env_example.lines().any(|line| line == variable),
+            "{variable}"
+        );
+    }
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(bundle.join("zelyra.bundle.json")).unwrap()).unwrap();
+    assert_eq!(manifest["external_service_contracts"][0]["kind"], "smtp");
+    assert_eq!(
+        manifest["external_service_contracts"][0]["delivery_semantics"],
+        "at_least_once"
+    );
+    assert_eq!(
+        manifest["external_service_contracts"][0]["contract_version"],
+        1
+    );
+    assert!(!env_example.contains("must-not-be-copied"));
+    fs::remove_dir_all(bundle).unwrap();
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn module_plan_reports_runtime_effects_in_its_source_closure() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/storage.zyl\" as storage\nfn main() {}\n",
+        ),
+        (
+            "src/storage.zyl",
+            "pub fn read_customer_file(path: String) -> String uses FileSystem { return read_text(path) }\n",
+        ),
+    ]);
+    let result = run(
+        &directory,
+        &["module", "plan", "main.zyl", "src/storage.zyl"],
+    );
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stdout)
+    );
+    let document: Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(
+        document["plan"]["runtime_effects"]["effects"],
+        serde_json::json!([{
+            "capability": "FileSystem",
+            "declared_by": ["function:src/storage.zyl::read_customer_file"],
+            "source_modules": ["src/storage.zyl"]
+        }])
+    );
+    assert_eq!(
+        document["plan"]["runtime_effects"]["explicit_function_capabilities_complete"],
+        true
+    );
+    assert_eq!(
+        document["plan"]["runtime_effects"]["implicit_resource_effects_complete"],
+        false
+    );
+    assert_eq!(document["plan"]["deployment_readiness"]["ready"], false);
+    assert_eq!(
+        document["plan"]["deployment_readiness"]["status"],
+        "incomplete"
+    );
+    assert_eq!(
+        document["plan"]["deployment_readiness"]["unverified_requirements"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    assert_eq!(
+        document["plan"]["deployment_readiness"]["blockers"][0]["reason"],
+        "file_system_paths_are_not_declared_in_the_bundle_manifest"
+    );
+    let bundle = directory.with_extension("effect-bundle");
+    let bundle_arg = bundle.to_string_lossy().into_owned();
+    let bundled = run(
+        &directory,
+        &[
+            "module",
+            "bundle",
+            "main.zyl",
+            "src/storage.zyl",
+            "--output",
+            &bundle_arg,
+        ],
+    );
+    assert!(
+        bundled.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&bundled.stdout),
+        String::from_utf8_lossy(&bundled.stderr)
+    );
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(bundle.join("zelyra.bundle.json")).unwrap()).unwrap();
+    assert_eq!(manifest["complete_deployment"], false);
+    assert_eq!(manifest["deployment_readiness"]["ready"], false);
+    assert_eq!(
+        manifest["deployment_readiness"]["blockers"][0]["reason"],
+        "file_system_paths_are_not_declared_in_the_bundle_manifest"
+    );
+    assert_eq!(
+        manifest["runtime_effects"]["effects"][0]["capability"],
+        "FileSystem"
+    );
+    fs::remove_dir_all(bundle).unwrap();
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn module_plan_blocks_effects_without_declared_runtime_contracts() {
+    for (capability, reason) in [
+        (
+            "Network",
+            "outbound_network_service_contract_is_not_declared",
+        ),
+        (
+            "Process",
+            "process_executable_and_runtime_dependencies_are_not_declared",
+        ),
+        ("Environment", "environment_variable_names_are_not_declared"),
+    ] {
+        let source =
+            format!("pub fn external_effect() uses {capability} {{ print(\"effect\") }}\n");
+        let directory = project(&[
+            (
+                "main.zyl",
+                "import \"src/effects.zyl\" as effects\nfn main() {}\n",
+            ),
+            ("src/effects.zyl", &source),
+        ]);
+        let result = run(
+            &directory,
+            &["module", "plan", "main.zyl", "src/effects.zyl"],
+        );
+        assert!(
+            result.status.success(),
+            "{capability}: {}",
+            String::from_utf8_lossy(&result.stdout)
+        );
+        let document: Value = serde_json::from_slice(&result.stdout).unwrap();
+        assert_eq!(
+            document["plan"]["runtime_effects"]["effects"][0]["capability"],
+            capability
+        );
+        assert_eq!(
+            document["plan"]["deployment_readiness"]["blockers"][0]["reason"],
+            reason
+        );
+        fs::remove_dir_all(directory).unwrap();
+    }
 }
 
 #[test]

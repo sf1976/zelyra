@@ -1,0 +1,47 @@
+import "src/database.zyl" as storage
+import "src/auth.zyl" as identity
+import "src/customers.zyl" as customers
+import "src/orders.zyl" as orders
+
+struct CustomerOrderOverview {
+    id: Id
+    name: String
+    email: Email?
+    orders: Int
+    turnover: Decimal?
+}
+
+tableview CustomerOrderOverview {
+    requires auth
+    permits "reporting.view"
+
+    source sql<CustomerOrderOverview[]> {
+        SELECT
+            c.id,
+            c.name,
+            c.email,
+            COUNT(o.id) AS orders,
+            SUM(o.total) AS turnover
+        FROM customers c
+        LEFT JOIN orders o ON o.customer_id = c.id
+        GROUP BY c.id, c.name, c.email
+    }
+
+    columns {
+        id
+        name
+        email
+        orders
+        turnover
+    }
+
+    filter {
+        name
+        orders
+        turnover
+    }
+
+    searchable
+    sortable
+    paginated 25
+}

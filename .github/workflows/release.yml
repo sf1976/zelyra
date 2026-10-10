@@ -23,8 +23,23 @@ on:
       - 'docs/release-readiness/0.4.0-candidate-verification.md'
       - 'docs/release-plans/0.5.0.en.md'
       - 'docs/release-plans/0.5.0.de.md'
+      - 'docs/release-notes/0.5.0.en.md'
+      - 'docs/release-notes/0.5.0.de.md'
       - 'docs/release-readiness/0.5.0-human-acceptance.en.md'
       - 'docs/release-readiness/0.5.0-human-acceptance.de.md'
+      - 'docs/release-readiness/0.5.0-onboarding-study.en.md'
+      - 'docs/release-readiness/0.5.0-onboarding-study.de.md'
+      - 'docs/release-readiness/0.5.0-candidate-verification.md'
+      - 'docs/release-readiness/0.5.0-risk-register.en.md'
+      - 'docs/release-readiness/0.5.0-risikoregister.de.md'
+      - 'docs/release-plans/1.0.0.en.md'
+      - 'docs/release-plans/1.0.0.de.md'
+      - 'docs/release-readiness/1.0.0-human-acceptance.en.md'
+      - 'docs/release-readiness/1.0.0-human-acceptance.de.md'
+      - 'docs/release-readiness/1.0.0-onboarding-study.en.md'
+      - 'docs/release-readiness/1.0.0-onboarding-study.de.md'
+      - 'docs/handbook/en/textbook-foundations.md'
+      - 'docs/handbook/de/lehrbuch-grundlagen.md'
   workflow_dispatch:
     inputs:
       release_tag:
@@ -85,7 +100,7 @@ jobs:
 
           python3 scripts/check_release_metadata.py --tag "${release_tag}"
           if [[ "${release_tag}" == "v${package_version}" && "${EVENT_NAME}" != "pull_request" ]]; then
-            if [[ "${package_version}" == "0.4.0" || "${package_version}" == "0.5.0" ]]; then
+            if [[ "${package_version}" == "0.4.0" || "${package_version}" == "0.5.0" || "${package_version}" == "1.0.0" ]]; then
               candidate_tag="$(python3 scripts/check_release_readiness.py \
                 --version "${package_version}" --print-candidate-tag)"
               candidate_commit="$(git rev-parse "refs/tags/${candidate_tag}^{commit}")"
@@ -333,6 +348,8 @@ jobs:
             ${{ needs.validate.outputs.release_tag == 'v0.3.0' && 'Für 0.3.0 wurde keine unabhängige menschliche Einsteigerstudie durchgeführt. Der Projektverantwortliche hat sie ausdrücklich auf 0.4.0 vertagt; dies ist kein Nachweis der Nutzerfreundlichkeit. Siehe das [Entscheidungsprotokoll](https://github.com/sf1976/zelyra/blob/v0.3.0/docs/release-readiness/0.3.0-human-gate-decision.de.md).' || '' }}
             ${{ needs.validate.outputs.release_tag == 'v0.4.0' && 'No independent human acceptance study was conducted for 0.4.0. The project owner explicitly deferred it to mandatory 0.5.0; this is not acceptance evidence. See the [tag-pinned decision record](https://github.com/sf1976/zelyra/blob/v0.4.0/docs/release-readiness/0.4.0-human-acceptance.en.md).' || '' }}
             ${{ needs.validate.outputs.release_tag == 'v0.4.0' && 'Für 0.4.0 wurde keine unabhängige menschliche Abnahmestudie durchgeführt. Der Projektverantwortliche hat sie ausdrücklich auf das verpflichtende 0.5.0 verschoben; dies ist kein Abnahmenachweis. Siehe das [taggebundene Entscheidungsprotokoll](https://github.com/sf1976/zelyra/blob/v0.4.0/docs/release-readiness/0.4.0-human-acceptance.de.md).' || '' }}
-            ${{ needs.validate.outputs.release_tag == 'v0.5.0' && 'Independent human acceptance was completed for the published 0.5.0 candidate. See the [tag-pinned acceptance record](https://github.com/sf1976/zelyra/blob/v0.5.0/docs/release-readiness/0.5.0-human-acceptance.en.md).' || '' }}
-            ${{ needs.validate.outputs.release_tag == 'v0.5.0' && 'Die unabhängige menschliche Abnahme wurde für den veröffentlichten 0.5.0-Kandidaten abgeschlossen. Siehe das [taggebundene Abnahmeprotokoll](https://github.com/sf1976/zelyra/blob/v0.5.0/docs/release-readiness/0.5.0-human-acceptance.de.md).' || '' }}
+            ${{ needs.validate.outputs.release_tag == 'v0.5.0' && 'By explicit project-owner decision, independent human acceptance was deferred to the first major release, 1.0.0. No human study was conducted for 0.5.0; the [tag-pinned decision record](https://github.com/sf1976/zelyra/blob/v0.5.0/docs/release-readiness/0.5.0-human-acceptance.en.md) is not test evidence.' || '' }}
+            ${{ needs.validate.outputs.release_tag == 'v0.5.0' && 'Auf ausdrückliche Entscheidung des Projektverantwortlichen wurde die unabhängige menschliche Abnahme auf die erste große Veröffentlichung 1.0.0 verschoben. Für 0.5.0 fand keine menschliche Studie statt; der [taggebundene Entscheidungsnachweis](https://github.com/sf1976/zelyra/blob/v0.5.0/docs/release-readiness/0.5.0-human-acceptance.de.md) ist kein Testnachweis.' || '' }}
+            ${{ needs.validate.outputs.release_tag == 'v1.0.0' && 'Independent human acceptance was completed against the published 1.0.0 candidate. See the [tag-pinned acceptance record](https://github.com/sf1976/zelyra/blob/v1.0.0/docs/release-readiness/1.0.0-human-acceptance.en.md).' || '' }}
+            ${{ needs.validate.outputs.release_tag == 'v1.0.0' && 'Die unabhängige menschliche Abnahme wurde anhand des veröffentlichten 1.0.0-Kandidaten abgeschlossen. Siehe das [taggebundene Abnahmeprotokoll](https://github.com/sf1976/zelyra/blob/v1.0.0/docs/release-readiness/1.0.0-human-acceptance.de.md).' || '' }}
           files: release-assets/*

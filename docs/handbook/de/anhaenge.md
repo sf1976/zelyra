@@ -170,7 +170,7 @@ page "/items" {
 | `zelyra auth hash-password` | `[--stdin]` | Erzeugt sichere Argon2-Passworthashes |
 | `zelyra form validate <file> <Form>` | | Prüft Formulare mit Testwerten auf der Konsole |
 | `zelyra context <file.zyl>` | `[--format json]` | Gibt den semantischen Quellcode-Kontext für Tools aus |
-| `zelyra module plan <entry> <module-or-resource-id>` | | Zeigt bekannte Abhängigkeiten ab Quelldatei oder Anwendungsressource; kein Deploymentexport |
+| `zelyra module plan <entry> <module-or-resource-id>` | | Zeigt bekannte Quellabhängigkeiten und deklarierte Laufzeiteffekte; Blocker bleiben sichtbar, kein Deploymentexport |
 
 ---
 

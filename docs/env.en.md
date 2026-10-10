@@ -294,8 +294,9 @@ scaffold file, and reserved route; web tests cover inclusion, MIME type, cache
 policy, and request method. No environment variable was added.
 
 `ZELYRA_REF` in the generated Dockerfile is a Docker `ARG` containing a
-published tag, not a `.env` variable loaded by Zelyra. Set it explicitly during
-the Docker build with `--build-arg ZELYRA_REF=...` if needed.
+published tag, branch, or commit, not a `.env` variable loaded by Zelyra. The
+build fetches the reference and checks it out detached. Set it explicitly
+during the Docker build with `--build-arg ZELYRA_REF=...` if needed.
 
 Ports can be changed independently:
 

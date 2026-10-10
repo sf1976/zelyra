@@ -314,8 +314,10 @@ MIME-Typ, Cache-Regel und Zugriffsmethode. Es wurde keine neue
 Umgebungsvariable hinzugefügt.
 
 `ZELYRA_REF` im generierten Dockerfile ist ein Docker-`ARG` mit einem
-veröffentlichten Tag, keine von Zelyra geladene `.env`-Variable. Es kann beim
-Docker-Build ausdrücklich über `--build-arg ZELYRA_REF=...` gesetzt werden.
+veröffentlichten Tag, Branch oder Commit, keine von Zelyra geladene
+`.env`-Variable. Der Build lädt die Referenz mit `git fetch` und checkt sie
+detached aus. Er kann ausdrücklich über `--build-arg ZELYRA_REF=...` gesetzt
+werden.
 
 Ports können unabhängig geändert werden:
 

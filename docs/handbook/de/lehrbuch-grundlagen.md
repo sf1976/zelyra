@@ -1874,6 +1874,21 @@ Laufzeitvariable. Der Plan kennzeichnet außerdem `connection_model` als
 `false`. Die Deklaration beschreibt also Schema-/Backend-Konfiguration; sie ist
 noch keine separat adressierbare Datenbankschnittstelle. Zugangsdaten werden
 nicht in den Plan aufgenommen.
+`runtime_effects.effects` listet ausdrücklich deklarierte Funktions-Capabilities
+in den einbezogenen Quellmodulen auf. `deployment_readiness.blockers` nennt
+nicht deklarierte Datei-Umfänge, ausgehende Netzwerkverträge,
+Prozessabhängigkeiten, Umgebungsvariablennamen und nicht aufgelöste statische
+Verweise. `ready` bleibt `false`; implizite Ressourceneffekte sind noch nicht
+vollständig modelliert, und der Plan beweist kein vollständiges Deployment.
+Für einbezogene Auth-Module mit `reset_tokens` beschreibt
+`external_service_contracts` öffentliche Basis-URL, SMTP-Einstellungen,
+Schlüssel der verschlüsselten Outbox, Geheimnis-Variablen und die Zustellung
+„at least once“. Docker-Bundles zeigen die passenden Felder in `.env.example`
+mit dem bestehenden Standard `implicit_tls`/465; Zugangsdaten werden nie
+kopiert. Vertragsversion 1 weist außerdem 30 Sekunden Wiederholungsfrist und
+mögliche doppelte Zustellung aus. Die Vorlage zeigt, wie ein stabiler
+Outbox-Schlüssel erzeugt wird. Der Dienstvertrag vervollständigt weder Quell-
+noch Deploymentgraph.
 `additional_declarations_in_included_source_files`
 führt Deklarationen auf, die wegen der einbezogenen Dateien zusätzlich
 auftauchen. Das ist nur eine Analyse des bekannten Graphen: `complete` bleibt
@@ -1998,7 +2013,8 @@ zelyra module bundle examples/modules/main.zyl 'page:/invoices' --output ../invo
 ~~~
 
 Der Befehl materialisiert die im Plan bekannten Quelldateien in einem neuen
-Zielordner, erzeugt einen Einstieg, prüft das Ergebnis mit `zelyra check` und
+Zielordner, erzeugt einen Einstieg, der diese Module importiert und das nötige
+leere `fn main()` enthält, prüft das Ergebnis mit `zelyra check` und
 veröffentlicht den Ordner erst nach erfolgreicher Prüfung. Er kopiert außerdem
 `zelyra.toml`, `zelyra.theme.css` und JSON-Sprachkataloge, sofern vorhanden.
 Ein vorhandenes Ziel, ein nicht auflösbarer Verweis oder eine Abhängigkeit vom
@@ -2015,6 +2031,11 @@ Compiler-Binärdatei, Datenbankdienst noch `.env`; Zugangsdaten werden nicht
 kopiert. Für Betrieb und Datenbank sind weiterhin eine passende Zelyra-Version,
 eine externe Laufzeitkonfiguration und gegebenenfalls eine MariaDB nötig. Ein
 eigenständiger Dockerexport ist damit noch nicht erreicht.
+Das Manifest übernimmt außerdem `runtime_effects`, ausdrückliche
+`external_service_contracts` und `deployment_readiness`-Blocker aus dem Plan,
+damit modellierte Effekte mit fehlender Laufzeitkonfiguration sichtbar bleiben.
+`ready: false` und die beiden Vollständigkeitsfelder bleiben `false`; das
+experimentelle Bundle ist weiterhin keine vollständige Deploymentbeschreibung.
 
 Eine experimentelle Docker-Paketierung lässt sich zusätzlich erzeugen:
 
@@ -2045,12 +2066,14 @@ Auch diese Docker-Paketierung ist noch kein vollständiger Modul-Export:
 statische Abhängigkeitsgraph noch nicht alle Laufzeit- und Asset-Abhängigkeiten
 beweist. Ein erfolgreicher `zelyra check` ersetzt diesen Nachweis nicht.
 Der Docker-End-to-End-Test exportiert zwei CRUD-Ressourcen aus getrennten
-Quelldateien in separate Compose-Projekte. Beide Pakete enthalten automatisch
-das Datenbank-Konfigurationsmodul, erhalten eigene `DATABASE_URL`-Werte und
-lesen jeweils ihren Testdatensatz mit einem MariaDB-Benutzer, der nur auf die
-jeweilige Tabelle lesend zugreifen darf. Das ist ein begrenzter CRUD- und
-Datenbanknachweis für diese Testanwendung, nicht für vollständige Fachmodule
-oder beliebige Projekte.
+Quelldateien in separate Compose-Projekte. Jedes Paket erhält eine eigene
+`DATABASE_URL`, ein separat bereitgestelltes Schema und ein MariaDB-Konto mit
+minimalen Rechten. Die Apps führen schreibendes CRUD aus und bestehen negative
+Datenbank-Berechtigungstests. Das ist ein begrenzter Nachweis für diese
+Testressourcen, nicht für vollständige Fachmodule oder beliebige Projekte.
+Gemeinsames Schemaeigentum und modulübergreifender Datenbankzugriff werden von
+diesem experimentellen Bundle nicht unterstützt. Prüfe das Manifest und erfülle
+vor der Nutzung die aufgeführten Laufzeitanforderungen.
 
 Importierte Oberflächenbausteine können von einer Seite der Einstiegsdatei
 verwendet werden. Der Alias bindet die Datei ein; View- und Komponentennamen

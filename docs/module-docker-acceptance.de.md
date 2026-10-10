@@ -1,12 +1,17 @@
 # Rechnungen und Inventar getrennt per Docker prüfen
 
-🧪 Entwicklungsstand für 0.4.0, keine allgemeine Exportgarantie.
+🧪 Experimentelle Modulexport-Rehearsal für 0.5.0; keine allgemeine Exportgarantie.
 [English](module-docker-acceptance.en.md)
 
-✅ Diese begrenzte Probe bestand lokal am 09.10.2026 einschließlich schreibendem
-CRUD in beiden Exporten und aller unten genannten Negativtests. Die
-Gesamtanwendung und beide Exportimages nutzten Compiler-Commit
-`917e8c707e49332b323e51e4dcbd39a4f37ced96`.
+✅ Die letzte begrenzte Probe bestand lokal am 10.10.2026 mit Vorbereitungsstand
+`749bde28d8e5f7624efa082734fdde4f504893da`, einschließlich schreibendem CRUD
+in beiden Exporten und aller unten genannten Negativtests. Außerdem prüfte sie
+Laufzeitblocker im Bundle-Manifest und den generierten Einstieg. Die erzeugte
+Gesamtanwendung und die Compiler beider Exportimages nutzten den
+veröffentlichten Commit `507c29e95084a59029d6b436bd69d9132c3a8937`
+(`v0.4.0`). Eine frühere Probe am selben Tag bestand mit Quellstand
+`c7718d5774b3ed10ca0ff1984a545acf35c6341f`; die erste Probe bestand am
+09.10.2026 mit Commit `917e8c707e49332b323e51e4dcbd39a4f37ced96`.
 
 Die Referenzprüfung erzeugt eine Gesamtanwendung mit zwei Fachmodulen und
 einem gemeinsamen Datenbankmodul. Anschließend exportiert sie beide Fachmodule
@@ -40,14 +45,16 @@ Im Repository-Stamm:
 
 ```bash
 cargo build --locked -p zelyra-cli
-ZELYRA_DOCKER_E2E_REF=feature/0.4-reversible-migrations \
-ZELYRA_DOCKER_E2E_MODULE_COMMIT=917e8c707e49332b323e51e4dcbd39a4f37ced96 \
+ZELYRA_DOCKER_E2E_REF=v0.4.0 \
+ZELYRA_DOCKER_E2E_MODULE_COMMIT=507c29e95084a59029d6b436bd69d9132c3a8937 \
 bash tests/generated-project-docker-e2e.sh
 ```
 
-Der Commit pinnt den Compiler für beide Exporte. Die Gesamtanwendung verwendet
-in dieser Entwicklungsprobe den angegebenen Branch. Für eine Releaseabnahme
-müssen beide auf den veröffentlichten Kandidaten festgelegt werden.
+Die Befehle pinnen den Runtime-Compiler und den Compiler in beiden Exportimages
+auf den veröffentlichten `v0.4.0`-Commit. So lässt sich die Probe unverändert
+wiederholen. Der aktuelle 0.5-Branch wird zum Generieren der Anwendung und
+Exportpakete verwendet; eine 0.5.0-Releaseabnahme muss beide Compiler-Refs auf
+den exakten Kandidaten setzen.
 
 Das Skript erstellt ein temporäres Projekt, eigene Compose-Projektnamen und
 ein entbehrliches MariaDB-Volume. Es erzeugt Testdaten und ausschließlich für

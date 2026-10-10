@@ -1892,6 +1892,20 @@ source file, and current runtime variable `DATABASE_URL`. The plan also marks
 `supports_multiple_connections` as `false`. A declaration therefore describes
 schema/backend configuration; it is not yet a separately addressable database
 interface. Credentials are not included in the plan.
+`runtime_effects.effects` lists explicitly declared function capabilities in
+the included source modules. `deployment_readiness.blockers` identifies
+undeclared file scopes, outbound network contracts, process dependencies,
+environment variable names, and unresolved static references. `ready` remains
+`false`; implicit resource effects are not fully modeled, and this is not a
+complete deployment proof.
+For included auth modules with `reset_tokens`,
+`external_service_contracts` describes the public base URL, SMTP settings, the
+encrypted outbox key, secret variable names, and at-least-once delivery. Docker
+bundles expose corresponding `.env.example` fields with the existing
+`implicit_tls`/465 default and never copy credentials. Contract version 1 also
+reports the 30-second retry delay and that duplicate delivery is possible.
+The template shows how to generate a stable outbox key. This service contract
+does not make the source or deployment closure complete.
 `additional_declarations_in_included_source_files` lists code that
 is present only because an included source file contains it. This analyzes only
 the known graph: `complete` remains `false`, and unrecognized dependencies may
@@ -2007,8 +2021,9 @@ zelyra module bundle examples/modules/main.zyl 'page:/invoices' --output ../invo
 ~~~
 
 It materializes the source files known to the plan in a new output directory,
-generates an entry file, validates the result with `zelyra check`, and only
-publishes the directory after that check succeeds. It also copies
+generates an entry file that imports those modules and supplies the required
+empty `fn main()`, validates the result with `zelyra check`, and only publishes
+the directory after that check succeeds. It also copies
 `zelyra.toml`, `zelyra.theme.css`, and JSON locale catalogs when present. An
 existing destination, unresolved reference, or dependency on the original
 entry is rejected. The selected source file is included in full.
@@ -2022,6 +2037,11 @@ The result is explicitly only an experimental source bundle:
 binary, database service, or `.env`; credentials are not copied. Running it
 still requires a compatible Zelyra build, external runtime configuration, and
 MariaDB when applicable. This is not yet an independent Docker export.
+The manifest also carries the plan's declared `runtime_effects`, explicit
+`external_service_contracts`, and `deployment_readiness` blockers so operators
+can see modeled effects that still need runtime configuration. A `ready: false`
+status and the two false completeness flags do not turn this experimental
+bundle into a complete deployment description.
 
 An experimental Docker package can additionally be generated:
 
@@ -2051,11 +2071,13 @@ This Docker package is still not a complete module export:
 static dependency graph does not yet prove every runtime and asset dependency.
 A successful `zelyra check` is not that proof. The Docker end-to-end test
 exports two CRUD resources from separate source files into separate Compose
-projects. Both packages automatically include the database configuration
-module, receive their own `DATABASE_URL`, and read their respective test row
-using a MariaDB user with read-only access to that table. This is bounded CRUD
-and database evidence for this test application, not proof that complete
-business modules or arbitrary projects can be extracted.
+projects. Each package gets its own `DATABASE_URL`, separately provisioned
+schema, and least-privilege MariaDB account. The apps complete writable CRUD
+and fail negative database-permission checks. This is bounded evidence for
+these test resources, not proof that complete business modules or arbitrary
+projects can be extracted. Shared schema ownership and cross-module database
+access are not supported by this experimental bundle. Inspect its manifest and
+resolve the listed runtime requirements before use.
 
 Imported UI resources can be used by a page in the entry file. The alias
 includes the file; view and component names are currently unqualified in HTML:

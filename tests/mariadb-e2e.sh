@@ -6,8 +6,21 @@ repo_dir="$(cd -- "${script_dir}/.." && pwd)"
 project_file="${ZELYRA_E2E_PROJECT:-${repo_dir}/examples/machine_form.zyl}"
 demo_fixture="${ZELYRA_E2E_DEMO_FIXTURE:-}"
 zelyra_bin="${ZELYRA_BIN:-${repo_dir}/target/debug/zelyra}"
-address="${ZELYRA_E2E_ADDRESS:-127.0.0.1:38500}"
-german_address="${ZELYRA_E2E_GERMAN_ADDRESS:-127.0.0.1:38501}"
+if ! command -v python3 >/dev/null 2>&1; then
+    echo "error: python3 is required to select free loopback ports for the MariaDB web integration test" >&2
+    exit 1
+fi
+available_loopback_port() {
+    python3 -c 'import socket; sock = socket.socket(); sock.bind(("127.0.0.1", 0)); print(sock.getsockname()[1]); sock.close()'
+}
+address="${ZELYRA_E2E_ADDRESS:-}"
+german_address="${ZELYRA_E2E_GERMAN_ADDRESS:-}"
+if [[ -z "${address}" ]]; then
+    address="127.0.0.1:$(available_loopback_port)"
+fi
+if [[ -z "${german_address}" ]]; then
+    german_address="127.0.0.1:$(available_loopback_port)"
+fi
 base_url="http://${address}"
 database_url="${DATABASE_URL:-}"
 if [[ "${database_url}" == mariadb://* ]]; then
@@ -166,6 +179,10 @@ fi
 
 extract_csrf() {
     sed -n 's/.*name="_zelyra_csrf" value="\([^"]*\)".*/\1/p' "$1"
+}
+
+extract_snapshot() {
+    sed -n 's/.*name="_zelyra_snapshot" value="\([^"]*\)".*/\1/p' "$1"
 }
 
 post_form() {
@@ -505,8 +522,11 @@ verify_ui_mode de learn 'Maschinenpark' 'Produktionsbereiche' 'Lernhilfe' 'Deine
 echo "[10/11] editing and deleting through CSRF-protected CRUD"
 curl --silent --show-error --fail "${base_url}/machines/${machine_id}/edit" -o "${temp_dir}/machine-edit.html"
 edit_csrf="$(extract_csrf "${temp_dir}/machine-edit.html")"
+edit_snapshot="$(extract_snapshot "${temp_dir}/machine-edit.html")"
+[[ -n "${edit_snapshot}" ]]
 edit_status="$(post_form "${temp_dir}/machine-edit-response.html" \
     --data-urlencode "_zelyra_csrf=${edit_csrf}" \
+    --data-urlencode "_zelyra_snapshot=${edit_snapshot}" \
     --data-urlencode "number=${machine_number}" \
     --data-urlencode "name=${updated_machine_name}" \
     --data-urlencode "manufacturer=Zelyra Testworks" \

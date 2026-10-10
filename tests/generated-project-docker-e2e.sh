@@ -24,7 +24,7 @@ for command in docker curl; do
     fi
 done
 if [[ -n "${zelyra_ref}" && ( ! "${zelyra_ref}" =~ ^[A-Za-z0-9._/-]+$ || "${zelyra_ref}" == *..* ) ]]; then
-    echo "error: ZELYRA_DOCKER_E2E_REF must be a simple Git branch or tag name" >&2
+    echo "error: ZELYRA_DOCKER_E2E_REF must be a simple Git branch, tag, or commit ref" >&2
     exit 1
 fi
 
@@ -70,8 +70,13 @@ echo "[1/5] generating a fresh MariaDB CRUD project"
     --host-port "${host_port}" \
     --db-host-port "${database_host_port}"
 sed -i '/^database main {/,/^}/d' "${project_dir}/main.zyl"
+sed -i '1i import "src/auth.zyl" as identity' "${project_dir}/main.zyl"
 sed -i '1i import "src/invoices.zyl" as invoices' "${project_dir}/main.zyl"
 sed -i '1i import "src/inventory.zyl" as inventory' "${project_dir}/main.zyl"
+sed -i '1i import "src/customers.zyl" as customers' "${project_dir}/main.zyl"
+sed -i '1i import "src/orders.zyl" as orders' "${project_dir}/main.zyl"
+sed -i '1i import "src/reporting.zyl" as reporting' "${project_dir}/main.zyl"
+sed -i '1i import "src/shell.zyl" as customer_order_ui' "${project_dir}/main.zyl"
 sed -i '1i import "src/docker-smoke.zyl" as docker_smoke' "${project_dir}/main.zyl"
 sed -i '1i import "src/inventory-smoke.zyl" as inventory_smoke' "${project_dir}/main.zyl"
 printf 'database main { engine: mariadb database: "zelyra_app" }\n' \
@@ -84,6 +89,11 @@ printf 'page "/docker-module" { html { <h1>Imported Docker module</h1> } }\n' \
     > "${project_dir}/src/docker-smoke.zyl"
 printf 'page "/inventory-module" { html { <h1>Imported inventory module</h1> } }\n' \
     > "${project_dir}/src/inventory-smoke.zyl"
+cp "${repo_dir}/examples/customer_orders_modules/src/customers.zyl" "${project_dir}/src/customers.zyl"
+cp "${repo_dir}/examples/customer_orders_modules/src/auth.zyl" "${project_dir}/src/auth.zyl"
+cp "${repo_dir}/examples/customer_orders_modules/src/orders.zyl" "${project_dir}/src/orders.zyl"
+cp "${repo_dir}/examples/customer_orders_modules/src/reporting.zyl" "${project_dir}/src/reporting.zyl"
+cp "${repo_dir}/examples/customer_orders_modules/src/shell.zyl" "${project_dir}/src/shell.zyl"
 if [[ ! -f "${project_dir}/.env" ]]; then
     echo "error: zelyra new did not create the protected local .env file" >&2
     exit 1
@@ -230,8 +240,25 @@ docker compose --project-name "${compose_project}" \
     --env-file "${project_dir}/.env" \
     -f "${project_dir}/docker-compose.mariadb.yml" ps
 echo "[5/5] exporting two database-backed CRUD modules as independent Docker apps"
+auth_password="E2E-Module-Auth-$$-Password"
+auth_password_hash="$(printf '%s\n' "${auth_password}" | "${zelyra_bin}" auth hash-password --stdin)"
+auth_admin_email="e2e-module-admin-$$@example.test"
+auth_viewer_email="e2e-module-viewer-$$@example.test"
 database_test_sql="INSERT INTO zelyra_app.invoices (number) VALUES ('INV-COMBINED');
 INSERT INTO zelyra_app.inventory (sku) VALUES ('SKU-COMBINED');
+INSERT INTO zelyra_app.users (email, password_hash, active)
+VALUES ('${auth_admin_email}', '${auth_password_hash}', TRUE),
+       ('${auth_viewer_email}', '${auth_password_hash}', TRUE);
+SET @e2e_admin_user = (SELECT id FROM zelyra_app.users WHERE email='${auth_admin_email}');
+SET @e2e_viewer_user = (SELECT id FROM zelyra_app.users WHERE email='${auth_viewer_email}');
+INSERT INTO zelyra_app.role_permissions (role, permission) VALUES
+    ('e2e_admin', 'customers.view'), ('e2e_admin', 'customers.create'),
+    ('e2e_admin', 'customers.edit'), ('e2e_admin', 'customers.delete'),
+    ('e2e_admin', 'orders.view'), ('e2e_admin', 'orders.create'),
+    ('e2e_admin', 'orders.edit'), ('e2e_admin', 'orders.delete'),
+    ('e2e_admin', 'reporting.view'), ('e2e_viewer', 'customers.view');
+INSERT INTO zelyra_app.user_roles (user_id, role)
+VALUES (@e2e_admin_user, 'e2e_admin'), (@e2e_viewer_user, 'e2e_viewer');
 CREATE DATABASE zelyra_invoice CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE TABLE zelyra_invoice.invoices LIKE zelyra_app.invoices;
 INSERT INTO zelyra_invoice.invoices (number) VALUES ('INV-MODULE-ONLY');
@@ -311,21 +338,67 @@ print(parser.token)
 PY
 }
 
+login_fixture_user() {
+    local email="$1" cookie_file="$2" csrf status
+    curl --silent --show-error --fail "http://${address}/login" \
+        -o "${project_root}/login-form.html"
+    csrf="$(extract_csrf_token "${project_root}/login-form.html")"
+    status="$(curl --silent --show-error --output "${project_root}/login-response.html" \
+        --write-out '%{http_code}' --header "Origin: http://${address}" \
+        --cookie-jar "${cookie_file}" --data-urlencode "_zelyra_csrf=${csrf}" \
+        --data-urlencode "email=${email}" --data-urlencode "password=${auth_password}" \
+        "http://${address}/login")"
+    if [[ "${status}" != 303 ]]; then
+        echo "error: fixture login returned ${status}, expected 303" >&2
+        return 1
+    fi
+}
+
+extract_form_snapshot() {
+    python3 - "$1" <<'PY'
+from html.parser import HTMLParser
+import sys
+
+class SnapshotParser(HTMLParser):
+    snapshot = None
+    def handle_starttag(self, tag, attrs):
+        attributes = dict(attrs)
+        if tag == "input" and attributes.get("name") == "_zelyra_snapshot":
+            self.snapshot = attributes.get("value")
+
+parser = SnapshotParser()
+parser.feed(open(sys.argv[1], encoding="utf-8").read())
+if not parser.snapshot:
+    raise SystemExit("edit snapshot missing from generated form")
+print(parser.snapshot)
+PY
+}
+
 assert_bundle_crud() {
     local port="$1" resource="$2" field="$3" created="$4" updated="$5"
     local origin="http://127.0.0.1:${port}" form_file="${project_root}/write-form.html"
-    local token status list_file="${project_root}/write-list.html" record_id
+    local token snapshot stale_snapshot status list_file="${project_root}/write-list.html" record_id
+    local extra_data="${7:-}"
+    local cookie_file="${8:-}"
+    local extra_args=()
+    local cookie_args=()
+    if [[ -n "${cookie_file}" ]]; then
+        cookie_args+=(--cookie "${cookie_file}")
+    fi
+    if [[ -n "${extra_data}" ]]; then
+        extra_args+=(--data-urlencode "${extra_data}")
+    fi
 
-    curl --silent --show-error --fail "${origin}/${resource}/new" -o "${form_file}"
+    curl --silent --show-error --fail "${cookie_args[@]}" "${origin}/${resource}/new" -o "${form_file}"
     token="$(extract_csrf_token "${form_file}")"
     status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-        --header "Origin: ${origin}" --data-urlencode "_zelyra_csrf=${token}" \
-        --data-urlencode "${field}=${created}" "${origin}/${resource}/new")"
+        "${cookie_args[@]}" --header "Origin: ${origin}" --data-urlencode "_zelyra_csrf=${token}" \
+        --data-urlencode "${field}=${created}" "${extra_args[@]}" "${origin}/${resource}/new")"
     if [[ "${status}" != 303 ]]; then
         echo "error: generated CRUD create returned ${status}, expected 303" >&2
         return 1
     fi
-    curl --silent --show-error --fail "${origin}/${resource}" -o "${list_file}"
+    curl --silent --show-error --fail "${cookie_args[@]}" "${origin}/${resource}" -o "${list_file}"
     assert_file_contains "${list_file}" "${created}" "new row from generated CRUD create"
     record_id="$(python3 - "${list_file}" "${resource}" "${created}" <<'PY'
 from html.parser import HTMLParser
@@ -369,29 +442,110 @@ print(parser.record_id)
 PY
 )"
 
-    curl --silent --show-error --fail "${origin}/${resource}/${record_id}/edit" -o "${form_file}"
+    curl --silent --show-error --fail "${cookie_args[@]}" "${origin}/${resource}/${record_id}/edit" -o "${form_file}"
     token="$(extract_csrf_token "${form_file}")"
+    snapshot="$(extract_form_snapshot "${form_file}")"
+    stale_snapshot="${snapshot}"
     status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-        --header "Origin: ${origin}" --data-urlencode "_zelyra_csrf=${token}" \
-        --data-urlencode "${field}=${updated}" \
+        "${cookie_args[@]}" --header "Origin: ${origin}" --data-urlencode "_zelyra_csrf=${token}" \
+        --data-urlencode "_zelyra_snapshot=${snapshot}" \
+        --data-urlencode "${field}=${updated}" "${extra_args[@]}" \
         "${origin}/${resource}/${record_id}/edit")"
     if [[ "${status}" != 303 ]]; then
         echo "error: generated CRUD update returned ${status}, expected 303" >&2
         return 1
     fi
-    curl --silent --show-error --fail "${origin}/${resource}" -o "${list_file}"
+    curl --silent --show-error --fail "${cookie_args[@]}" "${origin}/${resource}" -o "${list_file}"
     assert_file_contains "${list_file}" "${updated}" "updated row from generated CRUD update"
 
-    curl --silent --show-error --fail "${origin}/${resource}/${record_id}" -o "${form_file}"
+    status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+        "${cookie_args[@]}" --header "Origin: ${origin}" --data-urlencode "_zelyra_csrf=${token}" \
+        --data-urlencode "_zelyra_snapshot=${stale_snapshot}" \
+        --data-urlencode "${field}=${created}-stale" "${extra_args[@]}" \
+        "${origin}/${resource}/${record_id}/edit")"
+    if [[ "${status}" != 409 ]]; then
+        echo "error: stale generated CRUD update returned ${status}, expected 409" >&2
+        return 1
+    fi
+    curl --silent --show-error --fail "${cookie_args[@]}" "${origin}/${resource}" -o "${list_file}"
+    assert_file_contains "${list_file}" "${updated}" "current row after stale update rejection"
+    if grep -Fq -- "${created}-stale" "${list_file}"; then
+        echo "error: stale generated CRUD update overwrote the current row" >&2
+        return 1
+    fi
+
+    if [[ "${resource}" == "customers" ]]; then
+        local concurrent_name="${updated}-concurrent" lock_pid lock_count
+        curl --silent --show-error --fail "${cookie_args[@]}" \
+            "${origin}/${resource}/${record_id}/edit" -o "${form_file}"
+        token="$(extract_csrf_token "${form_file}")"
+        snapshot="$(extract_form_snapshot "${form_file}")"
+        docker compose --project-name "${compose_project}" \
+            --env-file "${project_dir}/.env" \
+            -f "${project_dir}/docker-compose.mariadb.yml" \
+            exec -T mariadb sh -c \
+            'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb --user=root --database=zelyra_app --execute="$1"' \
+            sh "START TRANSACTION; UPDATE customers SET name='${concurrent_name}' WHERE id=${record_id}; SELECT SLEEP(4); COMMIT;" \
+            >"${project_root}/concurrent-write.log" 2>&1 &
+        lock_pid=$!
+        lock_count=0
+        for _ in $(seq 1 80); do
+            lock_count="$(docker compose --project-name "${compose_project}" \
+                --env-file "${project_dir}/.env" \
+                -f "${project_dir}/docker-compose.mariadb.yml" \
+                exec -T mariadb sh -c \
+                'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb --user=root --batch --skip-column-names --execute="$1"' \
+                sh "SELECT COUNT(*) FROM information_schema.PROCESSLIST WHERE DB='zelyra_app' AND INFO LIKE 'SELECT SLEEP(4)%';" \
+                2>/dev/null | tr -d '\r' || true)"
+            [[ "${lock_count}" == "1" ]] && break
+            if ! kill -0 "${lock_pid}" 2>/dev/null; then
+                cat "${project_root}/concurrent-write.log" >&2
+                echo "error: concurrent MariaDB write ended before holding the row lock" >&2
+                return 1
+            fi
+            sleep 0.1
+        done
+        if [[ "${lock_count}" != "1" ]]; then
+            kill "${lock_pid}" 2>/dev/null || true
+            wait "${lock_pid}" 2>/dev/null || true
+            echo "error: could not observe the concurrent MariaDB transaction" >&2
+            return 1
+        fi
+        status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            "${cookie_args[@]}" --header "Origin: ${origin}" \
+            --data-urlencode "_zelyra_csrf=${token}" \
+            --data-urlencode "_zelyra_snapshot=${snapshot}" \
+            --data-urlencode "${field}=${updated}-overwritten" "${origin}/${resource}/${record_id}/edit")"
+        wait "${lock_pid}"
+        if [[ "${status}" != 409 ]]; then
+            echo "error: concurrent generated CRUD update returned ${status}, expected 409" >&2
+            return 1
+        fi
+        curl --silent --show-error --fail "${cookie_args[@]}" \
+            "${origin}/${resource}" -o "${list_file}"
+        assert_file_contains "${list_file}" "${concurrent_name}" \
+            "concurrent customer update after stale form rejection"
+        if grep -Fq -- "${updated}-overwritten" "${list_file}"; then
+            echo "error: stale in-flight customer edit overwrote the concurrent update" >&2
+            return 1
+        fi
+    fi
+
+    last_crud_record_id="${record_id}"
+    if [[ "${6:-false}" == "true" ]]; then
+        return 0
+    fi
+
+    curl --silent --show-error --fail "${cookie_args[@]}" "${origin}/${resource}/${record_id}" -o "${form_file}"
     token="$(extract_csrf_token "${form_file}")"
     status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-        --header "Origin: ${origin}" --data-urlencode "_zelyra_csrf=${token}" \
+        "${cookie_args[@]}" --header "Origin: ${origin}" --data-urlencode "_zelyra_csrf=${token}" \
         "${origin}/${resource}/${record_id}/delete")"
     if [[ "${status}" != 303 ]]; then
         echo "error: generated CRUD delete returned ${status}, expected 303" >&2
         return 1
     fi
-    curl --silent --show-error --fail "${origin}/${resource}" -o "${list_file}"
+    curl --silent --show-error --fail "${cookie_args[@]}" "${origin}/${resource}" -o "${list_file}"
     if grep -Fq -- "${updated}" "${list_file}"; then
         echo "error: generated CRUD delete left the removed row visible" >&2
         return 1
@@ -411,6 +565,303 @@ write_bundle_environment() {
             > "${directory}/.env"
     )
 }
+
+echo "[4/5] testing the modular customer-order workflow"
+docker compose --project-name "${compose_project}" \
+    --env-file "${project_dir}/.env" \
+    -f "${project_dir}/docker-compose.mariadb.yml" up --no-build --detach web >/dev/null
+for _ in $(seq 1 60); do
+    if curl --silent --show-error --fail "http://${address}/login" \
+        -o "${project_root}/login.html"; then
+        break
+    fi
+    sleep 1
+done
+if ! curl --silent --show-error --fail "http://${address}/login" \
+    -o "${project_root}/login.html"; then
+    docker compose --project-name "${compose_project}" \
+        --env-file "${project_dir}/.env" \
+        -f "${project_dir}/docker-compose.mariadb.yml" logs web >&2 || true
+    echo "error: modular customer route did not start" >&2
+    exit 1
+fi
+anonymous_customer_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+    "http://${address}/customers")"
+if [[ "${anonymous_customer_status}" != 401 ]]; then
+    echo "error: anonymous customer access returned ${anonymous_customer_status}, expected 401" >&2
+    exit 1
+fi
+admin_cookie="${project_root}/module-admin.cookies"
+viewer_cookie="${project_root}/module-viewer.cookies"
+login_fixture_user "${auth_admin_email}" "${admin_cookie}"
+login_fixture_user "${auth_viewer_email}" "${viewer_cookie}"
+viewer_list_status="$(curl --silent --show-error --output "${project_root}/viewer-customers.html" \
+    --write-out '%{http_code}' --cookie "${viewer_cookie}" "http://${address}/customers")"
+if [[ "${viewer_list_status}" != 200 ]]; then
+    echo "error: viewer customer list returned ${viewer_list_status}, expected 200" >&2
+    exit 1
+fi
+viewer_create_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+    --cookie "${viewer_cookie}" "http://${address}/customers/new")"
+if [[ "${viewer_create_status}" != 403 ]]; then
+    echo "error: viewer customer create returned ${viewer_create_status}, expected 403" >&2
+    exit 1
+fi
+viewer_report_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+    --cookie "${viewer_cookie}" "http://${address}/views/customerorderoverview")"
+if [[ "${viewer_report_status}" != 403 ]]; then
+    echo "error: viewer report access returned ${viewer_report_status}, expected 403" >&2
+    exit 1
+fi
+customer_name="E2E-Module-Customer-$$"
+customer_updated="${customer_name}-updated"
+assert_bundle_crud "${host_port}" customers name "${customer_name}" "${customer_updated}" true \
+    "email=${customer_name}@example.test" "${admin_cookie}"
+customer_id="${last_crud_record_id}"
+curl --silent --show-error --fail --cookie "${admin_cookie}" "http://${address}/orders/new" \
+    -o "${project_root}/order-form.html"
+assert_file_contains "${project_root}/order-form.html" \
+    '<select id="customer" name="customer" required>' \
+    "customer relationship selector on the order form"
+assert_file_contains "${project_root}/order-form.html" "value=\"${customer_id}\"" \
+    "newly created customer option on the order form"
+order_csrf="$(extract_csrf_token "${project_root}/order-form.html")"
+order_number="E2E-MODULE-ORDER-$$"
+status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+    --cookie "${admin_cookie}" --header "Origin: http://${address}" \
+    --data-urlencode "_zelyra_csrf=${order_csrf}" \
+    --data-urlencode "customer=${customer_id}" --data-urlencode "order_number=${order_number}" \
+    --data-urlencode 'status=open' --data-urlencode 'total=123.45' \
+    "http://${address}/orders/new")"
+if [[ "${status}" != 303 ]]; then
+    echo "error: valid customer order returned ${status}, expected 303" >&2
+    exit 1
+fi
+status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+    --cookie "${admin_cookie}" --header "Origin: http://${address}" \
+    --data-urlencode "_zelyra_csrf=${order_csrf}" \
+    --data-urlencode 'customer=999999999' --data-urlencode "order_number=${order_number}-invalid" \
+    --data-urlencode 'status=open' --data-urlencode 'total=1.00' \
+    "http://${address}/orders/new")"
+if [[ "${status}" != 422 ]]; then
+    echo "error: order with an unknown customer returned ${status}, expected 422" >&2
+    exit 1
+fi
+curl --silent --show-error --fail --cookie "${admin_cookie}" "http://${address}/orders" \
+    -o "${project_root}/orders.html"
+assert_file_contains "${project_root}/orders.html" "${order_number}" "new modular order"
+curl --silent --show-error --fail --cookie "${admin_cookie}" \
+    "http://${address}/views/customerorderoverview" \
+    -o "${project_root}/customer-order-report.html"
+assert_file_contains "${project_root}/customer-order-report.html" "${customer_updated}" \
+    "modular customer-order report row"
+
+business_restore_database="zelyra_business_restore"
+business_backup_user="business_backup_$$"
+business_restore_user="business_restore_$$"
+business_backup_password="backup-$$-readonly"
+business_restore_password="restore-$$-scoped"
+docker compose --project-name "${compose_project}" \
+    --env-file "${project_dir}/.env" \
+    -f "${project_dir}/docker-compose.mariadb.yml" \
+    exec -T mariadb sh -c \
+    'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb --user=root --execute="$1"' sh \
+    "CREATE DATABASE ${business_restore_database} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER '${business_backup_user}'@'%' IDENTIFIED BY '${business_backup_password}';
+GRANT SELECT, SHOW VIEW, TRIGGER ON zelyra_app.* TO '${business_backup_user}'@'%';
+CREATE USER '${business_restore_user}'@'%' IDENTIFIED BY '${business_restore_password}';
+GRANT ALL PRIVILEGES ON ${business_restore_database}.* TO '${business_restore_user}'@'%';"
+business_backup_file="${project_root}/customer-order-business.sql"
+docker compose --project-name "${compose_project}" \
+    --env-file "${project_dir}/.env" \
+    -f "${project_dir}/docker-compose.mariadb.yml" \
+    exec -T mariadb sh -c \
+    'MYSQL_PWD="$1" mariadb-dump --user="$2" --host=127.0.0.1 --single-transaction --skip-lock-tables --no-tablespaces zelyra_app' \
+    sh "${business_backup_password}" "${business_backup_user}" >"${business_backup_file}"
+chmod 600 "${business_backup_file}"
+docker compose --project-name "${compose_project}" \
+    --env-file "${project_dir}/.env" \
+    -f "${project_dir}/docker-compose.mariadb.yml" \
+    exec -T mariadb sh -c \
+    'MYSQL_PWD="$1" mariadb --user="$2" --host=127.0.0.1 --database="$3"' \
+    sh "${business_restore_password}" "${business_restore_user}" \
+    "${business_restore_database}" <"${business_backup_file}"
+restored_business_row="$(docker compose --project-name "${compose_project}" \
+    --env-file "${project_dir}/.env" \
+    -f "${project_dir}/docker-compose.mariadb.yml" \
+    exec -T mariadb sh -c \
+    'MYSQL_PWD="$1" mariadb --user="$2" --host=127.0.0.1 --database="$3" --batch --skip-column-names --execute="$4"' \
+    sh "${business_restore_password}" "${business_restore_user}" \
+    "${business_restore_database}" \
+    "SELECT CONCAT((SELECT name FROM customers WHERE id=${customer_id}), ':', (SELECT order_number FROM orders WHERE order_number='${order_number}'))" \
+    | tr -d '\r')"
+if [[ "${restored_business_row}" != "${customer_updated}-concurrent:${order_number}" ]]; then
+    echo "error: business backup restore did not preserve the customer/order workflow data" >&2
+    exit 1
+fi
+if docker compose --project-name "${compose_project}" \
+    --env-file "${project_dir}/.env" \
+    -f "${project_dir}/docker-compose.mariadb.yml" \
+    exec -T mariadb sh -c \
+    'MYSQL_PWD="$1" mariadb --user="$2" --host=127.0.0.1 --database=zelyra_app --execute="$3"' \
+    sh "${business_backup_password}" "${business_backup_user}" \
+    "INSERT INTO customers(name) VALUES ('unauthorized-backup-write')" \
+    >/dev/null 2>&1; then
+    echo "error: business backup account unexpectedly wrote to the source application database" >&2
+    exit 1
+fi
+if docker compose --project-name "${compose_project}" \
+    --env-file "${project_dir}/.env" \
+    -f "${project_dir}/docker-compose.mariadb.yml" \
+    exec -T mariadb sh -c \
+    'MYSQL_PWD="$1" mariadb --user="$2" --host=127.0.0.1 --database=zelyra_app --execute="SELECT 1"' \
+    sh "${business_restore_password}" "${business_restore_user}" \
+    >/dev/null 2>&1; then
+    echo "error: business restore account unexpectedly accessed the source application database" >&2
+    exit 1
+fi
+docker compose --project-name "${compose_project}" \
+    --env-file "${project_dir}/.env" \
+    -f "${project_dir}/docker-compose.mariadb.yml" \
+    exec -T mariadb sh -c \
+    'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb --user=root --execute="$1"' sh \
+    "DROP DATABASE ${business_restore_database};
+DROP USER '${business_backup_user}'@'%';
+DROP USER '${business_restore_user}'@'%';"
+echo "[MariaDB] business workflow backup restored the customer and order with scoped accounts"
+
+cat >"${project_dir}/src/business-migration.zyl" <<'ZYL'
+import "src/database.zyl" as storage
+
+table business_migration_marker {
+    id: Id primary auto
+    note: String(80) required
+}
+ZYL
+sed -i '1i import "src/business-migration.zyl" as business_migration' \
+    "${project_dir}/main.zyl"
+business_database_url="$(python3 - "${project_dir}/.env" <<'PY'
+from pathlib import Path
+import sys
+
+values = {}
+for line in Path(sys.argv[1]).read_text(encoding="utf-8").splitlines():
+    if line and not line.startswith("#") and "=" in line:
+        key, value = line.split("=", 1)
+        values[key] = value
+url = values["ZELYRA_DATABASE_MAIN_URL"]
+port = values["ZELYRA_DB_HOST_PORT"]
+print(url.replace("${ZELYRA_DB_HOST_PORT:-3306}", port))
+PY
+)"
+business_migration_plan="${project_root}/business-migration-plan.json"
+DATABASE_URL="${business_database_url}" "${zelyra_bin}" db plan \
+    "${project_dir}/main.zyl" --format=json >"${business_migration_plan}"
+business_migration_plan_id="$(python3 -c \
+    'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["plan_id"])' \
+    "${business_migration_plan}")"
+DATABASE_URL="${business_database_url}" "${zelyra_bin}" db apply \
+    "${project_dir}/main.zyl" --plan-id "${business_migration_plan_id}" \
+    >"${project_root}/business-migration-apply.log"
+DATABASE_URL="${business_database_url}" "${zelyra_bin}" db plan \
+    "${project_dir}/main.zyl" | grep -Fq "No schema changes."
+business_data_after_migration="$(docker compose --project-name "${compose_project}" \
+    --env-file "${project_dir}/.env" \
+    -f "${project_dir}/docker-compose.mariadb.yml" \
+    exec -T mariadb sh -c \
+    'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb --user=root --database=zelyra_app --batch --skip-column-names --execute="$1"' \
+    sh "SELECT CONCAT((SELECT name FROM customers WHERE id=${customer_id}), ':', (SELECT order_number FROM orders WHERE order_number='${order_number}'), ':', (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='zelyra_app' AND TABLE_NAME='business_migration_marker'))" \
+    | tr -d '\r')"
+if [[ "${business_data_after_migration}" != \
+    "${customer_updated}-concurrent:${order_number}:1" ]]; then
+    echo "error: reviewed schema update did not preserve customer/order business data" >&2
+    exit 1
+fi
+echo "[MariaDB] additive business-schema migration preserved customer/order data"
+
+echo "[MariaDB] recover a committed customer/order workflow after an interrupted row update"
+interrupted_customer_name="${customer_updated}-interrupted"
+interrupted_transaction_log="${project_root}/interrupted-business-transaction.log"
+docker compose --project-name "${compose_project}" \
+    --env-file "${project_dir}/.env" \
+    -f "${project_dir}/docker-compose.mariadb.yml" \
+    exec -T mariadb sh -c \
+    'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb --user=root --database=zelyra_app --execute="$1"' \
+    sh "START TRANSACTION; UPDATE customers SET name='${interrupted_customer_name}' WHERE id=${customer_id}; SELECT SLEEP(60); COMMIT;" \
+    >"${interrupted_transaction_log}" 2>&1 &
+interrupted_transaction_pid=$!
+interrupted_transaction_seen=false
+for _ in $(seq 1 80); do
+    interrupted_transaction_count="$(docker compose --project-name "${compose_project}" \
+        --env-file "${project_dir}/.env" \
+        -f "${project_dir}/docker-compose.mariadb.yml" \
+        exec -T mariadb sh -c \
+        'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb --user=root --batch --skip-column-names --execute="$1"' \
+        sh "SELECT COUNT(*) FROM information_schema.PROCESSLIST WHERE DB='zelyra_app' AND INFO LIKE 'SELECT SLEEP(60)%';" \
+        2>/dev/null | tr -d '\r' || true)"
+    if [[ "${interrupted_transaction_count}" == "1" ]]; then
+        interrupted_transaction_seen=true
+        break
+    fi
+    if ! kill -0 "${interrupted_transaction_pid}" 2>/dev/null; then
+        cat "${interrupted_transaction_log}" >&2
+        echo "error: customer update transaction ended before the crash point" >&2
+        exit 1
+    fi
+    sleep 0.1
+done
+if [[ "${interrupted_transaction_seen}" != true ]]; then
+    kill "${interrupted_transaction_pid}" 2>/dev/null || true
+    wait "${interrupted_transaction_pid}" 2>/dev/null || true
+    echo "error: could not observe the uncommitted business-row update" >&2
+    exit 1
+fi
+docker compose --project-name "${compose_project}" \
+    -f "${project_dir}/docker-compose.mariadb.yml" kill --signal SIGKILL mariadb >/dev/null
+set +e
+wait "${interrupted_transaction_pid}"
+interrupted_transaction_status=$?
+set -e
+if [[ "${interrupted_transaction_status}" == "0" ]]; then
+    echo "error: interrupted customer update unexpectedly committed" >&2
+    exit 1
+fi
+docker compose --project-name "${compose_project}" \
+    --env-file "${project_dir}/.env" \
+    -f "${project_dir}/docker-compose.mariadb.yml" up --detach mariadb >/dev/null
+for _ in $(seq 1 90); do
+    if docker compose --project-name "${compose_project}" \
+        --env-file "${project_dir}/.env" \
+        -f "${project_dir}/docker-compose.mariadb.yml" \
+        exec -T mariadb sh -c \
+        'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb-admin --user=root ping' \
+        >/dev/null 2>&1; then
+        break
+    fi
+    sleep 1
+done
+docker compose --project-name "${compose_project}" \
+    --env-file "${project_dir}/.env" \
+    -f "${project_dir}/docker-compose.mariadb.yml" \
+    exec -T mariadb sh -c \
+    'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb-admin --user=root ping' >/dev/null
+business_data_after_crash="$(docker compose --project-name "${compose_project}" \
+    --env-file "${project_dir}/.env" \
+    -f "${project_dir}/docker-compose.mariadb.yml" \
+    exec -T mariadb sh -c \
+    'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb --user=root --database=zelyra_app --batch --skip-column-names --execute="$1"' \
+    sh "SELECT CONCAT((SELECT name FROM customers WHERE id=${customer_id}), ':', (SELECT order_number FROM orders WHERE order_number='${order_number}'), ':', (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='zelyra_app' AND TABLE_NAME='business_migration_marker'))" \
+    | tr -d '\r')"
+if [[ "${business_data_after_crash}" != \
+    "${customer_updated}-concurrent:${order_number}:1" ]]; then
+    echo "error: database restart did not preserve committed workflow rows and roll back the interrupted update" >&2
+    exit 1
+fi
+echo "[MariaDB] interrupted business-row transaction recovered with committed workflow data intact"
+
+docker compose --project-name "${compose_project}" \
+    --env-file "${project_dir}/.env" \
+    -f "${project_dir}/docker-compose.mariadb.yml" stop web >/dev/null
 
 if ! "${zelyra_bin}" module bundle "${project_dir}/main.zyl" crud:Invoice \
     --output "${bundle_dir}" --docker --compiler-ref "${bundle_compiler_commit}"; then

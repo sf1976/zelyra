@@ -17,7 +17,7 @@ und natives SQL bleiben jederzeit möglich.
 > beweisen“ ist ein Entwicklungsziel: Der aktuelle Verifier deckt nur einen
 > begrenzten Teil ab und beweist nicht die Korrektheit beliebiger Anwendungen.
 
-Das stabile [`v0.4.0`-Release](https://github.com/sf1976/zelyra/releases/tag/v0.4.0) wurde am 10.10.2026 veröffentlicht. Es bleibt experimentell und ist nicht für den Produktiveinsatz freigegeben. Für 0.4.0 wurde keine unabhängige menschliche Abnahmestudie durchgeführt; der Projektverantwortliche hat sie ausdrücklich auf das verpflichtende 0.5.0-Gate verschoben. Dies ist kein Abnahmenachweis. Siehe das [Entscheidungsprotokoll](docs/release-readiness/0.4.0-human-acceptance.de.md).
+Das stabile [`v0.4.0`-Release](https://github.com/sf1976/zelyra/releases/tag/v0.4.0) wurde am 10.10.2026 veröffentlicht. Es bleibt experimentell und ist nicht für den Produktiveinsatz freigegeben. Für 0.4.0 wurde keine unabhängige menschliche Abnahmestudie durchgeführt; der Projektverantwortliche hat alle unabhängigen menschlichen Tests ausdrücklich auf die große Version 1.0.0 verschoben. Dies ist kein Abnahmenachweis. Siehe das [Entscheidungsprotokoll](docs/release-readiness/0.4.0-human-acceptance.de.md).
 
 ## Was ist neu in 0.4.0?
 

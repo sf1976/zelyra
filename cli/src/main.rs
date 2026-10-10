@@ -496,7 +496,7 @@ fn local_mariadb_template(directory: &std::path::Path) -> Result<String, String>
         .is_some_and(|config| config.contains("engine = \"mariadb\""));
     if !is_mariadb_project {
         return Err(format!(
-            "`{}` has no `.env.example` and no MariaDB project configuration; run `zelyra new <directory> --mariadb` first",
+            "`{}` is not configured for MariaDB. A project created with `zelyra init` runs without setup; to use MariaDB, create a project with `zelyra init <directory> --mariadb` or `zelyra new <directory> --mariadb`",
             directory.display()
         ));
     }
@@ -505,6 +505,38 @@ fn local_mariadb_template(directory: &std::path::Path) -> Result<String, String>
         DEFAULT_WEB_PORT,
         DEFAULT_DATABASE_HOST_PORT,
     ))
+}
+
+fn setup_directory(path: &str) -> Result<PathBuf, String> {
+    let current = std::env::current_dir().ok();
+    setup_directory_from(path, current.as_deref())
+}
+
+fn setup_directory_from(
+    path: &str,
+    current_directory: Option<&std::path::Path>,
+) -> Result<PathBuf, String> {
+    let directory = std::path::Path::new(path);
+    if directory.is_dir() {
+        return Ok(directory.to_path_buf());
+    }
+
+    // A leading slash is often added accidentally when a relative directory
+    // name is copied into the command. Keep absolute-path semantics, but point
+    // out the likely relative path when it exists from the current directory.
+    if directory.is_absolute() {
+        if let Ok(relative) = directory.strip_prefix(std::path::Path::new("/")) {
+            let candidate = current_directory.map(|current| current.join(relative));
+            if candidate.is_some_and(|candidate| candidate.is_dir()) {
+                let suggestion = format!("./{}", relative.display());
+                return Err(format!(
+                    "project directory `{path}` does not exist; `{suggestion}` exists in the current directory, so use `zelyra setup {suggestion}` if that is the intended project"
+                ));
+            }
+        }
+    }
+
+    Err(format!("project directory `{path}` does not exist"))
 }
 
 fn ensure_local_env_file(
@@ -533,17 +565,16 @@ fn ensure_local_env_file(
 }
 
 fn setup_project(path: &str, options: &SetupOptions) -> ExitCode {
-    let directory = std::path::Path::new(path);
-    if !directory.is_dir() {
-        eprintln!("error[E-SETUP-001]: project directory `{path}` does not exist");
-        return ExitCode::from(1);
-    }
+    let directory = match setup_directory(path) {
+        Ok(directory) => directory,
+        Err(error) => {
+            eprintln!("error[E-SETUP-001]: {error}");
+            return ExitCode::from(1);
+        }
+    };
     let env_file = directory.join(".env");
     let existed = env_file.exists();
-    if !existed && !directory.join(".env.example").is_file() {
-        println!("`.env.example` not found; using the safe built-in MariaDB defaults for `{path}`");
-    }
-    let setup = match ensure_local_env_file(directory, options) {
+    let setup = match ensure_local_env_file(&directory, options) {
         Ok(setup) => setup,
         Err(error) => {
             eprintln!("error[E-SETUP-001]: {error}");
@@ -763,7 +794,10 @@ ARG ZELYRA_REF=__ZELYRA_DEFAULT_REF__
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates git \
     && rm -rf /var/lib/apt/lists/*
-RUN git clone --depth 1 --branch __ZELYRA_REF__ https://github.com/sf1976/zelyra.git /zelyra
+RUN git init /zelyra \
+    && git -C /zelyra remote add origin https://github.com/sf1976/zelyra.git \
+    && git -C /zelyra fetch --depth=1 origin "$ZELYRA_REF" \
+    && git -C /zelyra checkout --detach FETCH_HEAD
 RUN cargo install --locked --path /zelyra/cli --root /out
 
 FROM debian:bookworm-slim
@@ -4190,11 +4224,8 @@ fn run_container_schema_setup(directory: &std::path::Path) -> Result<(), String>
 }
 
 fn setup_action(path: &str, action: &str, options: &SetupOptions) -> Result<String, String> {
-    let directory = std::path::Path::new(path);
-    if !directory.is_dir() {
-        return Err(format!("project directory `{path}` does not exist"));
-    }
-    let setup = ensure_local_env_file(directory, options)?;
+    let directory = setup_directory(path)?;
+    let setup = ensure_local_env_file(&directory, options)?;
     let mut messages = setup
         .port_notes
         .into_iter()
@@ -4206,15 +4237,15 @@ fn setup_action(path: &str, action: &str, options: &SetupOptions) -> Result<Stri
         "kept existing .env; credentials were not changed".to_owned()
     });
     if matches!(action, "database" | "schema" | "all") {
-        let web_url = project_web_url(directory)?;
-        messages.push(start_mariadb_compose(directory)?);
+        let web_url = project_web_url(&directory)?;
+        messages.push(start_mariadb_compose(&directory)?);
         messages.push(format!("open: {web_url}"));
     }
     if matches!(action, "schema" | "all") {
         let schema_result = if directory.join("docker-compose.mariadb.yml").is_file() {
-            run_container_schema_setup(directory)
+            run_container_schema_setup(&directory)
         } else {
-            run_local_schema_setup(directory)
+            run_local_schema_setup(&directory)
         };
         schema_result?;
         messages.push("database schema setup completed".into());
@@ -4327,11 +4358,13 @@ fn setup_web_response(
 }
 
 fn setup_web_command(path: &str, port: u16, port_given: bool) -> ExitCode {
-    let directory = std::path::Path::new(path);
-    if !directory.is_dir() {
-        eprintln!("error[E-SETUP-001]: project directory `{path}` does not exist");
-        return ExitCode::from(1);
-    }
+    let directory = match setup_directory(path) {
+        Ok(directory) => directory,
+        Err(error) => {
+            eprintln!("error[E-SETUP-001]: {error}");
+            return ExitCode::from(1);
+        }
+    };
     let (port, port_note) = match resolve_host_port(port, port_given, "setup web", true, &[]) {
         Ok(result) => result,
         Err(error) => {

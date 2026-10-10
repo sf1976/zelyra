@@ -770,6 +770,11 @@ EOF
     grep -Fq "No schema changes." <<<"${reverse_plan}"
     echo "[MariaDB] process interruption between DDL steps is journaled; lock release and recovery with a freshly reviewed plan pass"
     echo "[MariaDB] reviewed reverse plan requires explicit approval, drops only selected columns, and preserves unrelated row data"
+    ZELYRA_BACKUP_RESTORE_MARIADB_URL="${configured_url}" \
+        bash "${script_dir}/mariadb-backup-restore-e2e.sh"
+    echo "[MariaDB] backup/restore rehearsal follows interrupted-update recovery on the same disposable server"
+    bash "${script_dir}/mariadb-crash-recovery-e2e.sh"
+    echo "[MariaDB] separate disposable-server crash recovery covers the DDL/journal boundary"
 }
 
 assert_sqlite_safety
