@@ -544,8 +544,8 @@ The [0.7 release plan](release-plans/0.7.0.en.md) includes a real MySQL
 server path, bounded tenant context, local developer studio, and the invoice
 tutorial. It also enforces the declared language compatibility line. The
 editor, bounded MySQL query path, language-line check, and tutorial have local
-implementation evidence on the feature branch; combined-head CI, migration
-and rollback review, and independent security review remain open. Version 0.8 prioritizes a
+implementation evidence, and exact-head CI/release builds are green. Migration
+and rollback review and independent security review remain open. Version 0.8 prioritizes a
 visual database map and guided CRUD builder: choose a connection/table, inspect
 fields and relationships, preview generated Zelyra source, and apply the
 compiler-checked change explicitly. The first data browser is read-only. Version

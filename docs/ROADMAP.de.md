@@ -525,7 +525,7 @@ MySQL-Serverpfad, begrenzten Mandantenkontext, lokales Entwicklungsstudio und
 das Rechnungstutorial. Für Editor, begrenzte MySQL-Abfragen und Tutorial gibt
 es lokale Implementierungsnachweise im Feature-Branch. Zusätzlich erzwingt es
 die erklärte Sprachkompatibilitätslinie. Für die Sprachlinienprüfung gibt es
-ebenfalls lokale Implementierungsnachweise; kombinierte Branch-CI,
+ebenfalls lokale Nachweise; exakte Branch-CI und Release-Builds sind grün.
 Migrations-/Rollback-Review und unabhängiges Sicherheitsreview sind noch offen. 0.8
 priorisiert eine visuelle Datenbanklandkarte und einen geführten CRUD-Assistenten:
 Verbindung/Tabelle auswählen, Felder und Beziehungen ansehen, Zelyra-Quelltext
