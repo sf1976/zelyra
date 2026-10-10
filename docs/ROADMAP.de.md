@@ -529,11 +529,19 @@ Der 0.8-Branch implementiert eine experimentelle lokale MariaDB-Outbox:
 transaktionsgebundenes Einfügen, zustellbare Leases mit begrenzten Retries
 sowie ausdrückliche Setup-, Metadaten-, Recovery- und Worker-Befehle. CI auf
 dem exakten Head, Crash-/Konkurrenzabnahme und unabhängiges Sicherheitsreview
-sind noch offen; siehe die [0.8-Roadmap](release-plans/0.8.0.de.md). Als
-nächster Schritt ist optionale lokale TOTP-MFA mit Wiederherstellungscodes in
-0.9 vorgesehen. WebAuthn/Passkeys und OAuth2/OIDC werden für separate
-Protokoll- und Sicherheitsreviews zurückgestellt; danach folgen
+sind noch offen; siehe die [0.8-Roadmap](release-plans/0.8.0.de.md).
+
+Der [0.9-Branch](release-plans/0.9.0.de.md) implementiert jetzt optionale
+lokale TOTP-MFA, verschlüsselte Faktorspeicherung, Passwort-plus-MFA-Login,
+Replay-Schutz, Drosselung und einmalige Wiederherstellungscodes. Lokale
+Compile-Checks mit gesperrter Lockdatei sind erfolgreich. CI-Lauf #549 und
+Release-Prüfung #262 stehen für Head
+`e76615c389cacbd30e232b5e9df596cbcf0f8f93` noch aus; Integrationstests, eine
+geprobte Betreiber-Recovery, unabhängiges Sicherheitsreview und
+Kandidatenabnahme bleiben offen. WebAuthn/Passkeys und OAuth2/OIDC werden für
+separate Protokoll- und Sicherheitsreviews zurückgestellt; danach folgen
 Vertragsstabilisierung und unabhängige menschliche Abnahme für 1.0.0.
+
 Vollständige SQL-Parität, allgemeine visuelle Bearbeitung, beliebige
 Client-Hydration, Compiler-Self-Hosting, ein natives Backend, verpflichtende
 Cloud-/KI-Dienste, Telemetrie und unbelegte Leistungsversprechen bleiben
