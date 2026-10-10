@@ -929,6 +929,16 @@ pub(super) fn database_command(mut args: impl Iterator<Item = String>) -> ExitCo
         Ok(schema) => schema,
         Err(()) => return ExitCode::from(1),
     };
+    if schema
+        .database
+        .as_ref()
+        .is_some_and(|database| database.engine.eq_ignore_ascii_case("mysql"))
+    {
+        eprintln!(
+            "error[E-DB-019]: MySQL schema inspection, migrations, and database administration are not supported in this release; the experimental MySQL path is limited to typed, parameterized SQL queries"
+        );
+        return ExitCode::from(1);
+    }
     if schema.tables.iter().any(|table| {
         table
             .name

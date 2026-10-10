@@ -107,7 +107,8 @@ The 0.7 branch adds an explicitly declared `engine: mysql` path for typed,
 parameterized SQL queries using a `mysql://` URL. The CI job uses the official
 `mysql:8.4.11` image, checks the server version, and runs
 `tests/mysql-runtime-e2e.sh`. MySQL 8.4.11 is an exact tested point, not a
-general MySQL compatibility promise. This slice excludes migrations, schema
+general MySQL compatibility promise. `zelyra db` schema and administration
+commands fail closed with `E-DB-019`; this slice excludes migrations, schema
 inspection, generated CRUD/web routes, and untested SQL features. See the
 [MySQL 8.4 release notes](https://dev.mysql.com/doc/relnotes/mysql/8.4/en/news-8-4-11.html)
 and [official MySQL container image](https://hub.docker.com/_/mysql).

@@ -295,6 +295,18 @@ fn invoice_tutorial_creates_a_checkable_project_without_overwriting() {
 }
 
 #[test]
+fn mysql_schema_commands_fail_closed_while_typed_sql_is_the_only_supported_path() {
+    let path = example("mysql_runtime.zyl");
+    let check = run(&["check", path.to_str().unwrap()]);
+    assert!(check.status.success());
+
+    let schema = run(&["db", "create", path.to_str().unwrap()]);
+    assert!(!schema.status.success());
+    assert!(String::from_utf8_lossy(&schema.stderr).contains("E-DB-019"));
+    assert!(String::from_utf8_lossy(&schema.stderr).contains("typed, parameterized SQL"));
+}
+
+#[test]
 fn new_mariadb_project_propagates_the_selected_web_port() {
     let directory = temporary_directory("new-web-port");
     let database_host_port = free_test_port();
