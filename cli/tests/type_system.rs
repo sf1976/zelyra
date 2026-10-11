@@ -75,7 +75,7 @@ fn type_coverage_program_passes_supported_tests_and_reports_expected_failures() 
         "PASS records, nested fields",
         "PASS Unit type, function return",
         "PASS Option, Result, records",
-        "Report: 7 expected compiler errors and 18 expected runtime errors",
+        "Report: 8 positive type groups; 7 expected compiler errors and 18 expected runtime errors",
         "alle ausführbaren Typprüfungen bestanden",
     ] {
         assert!(

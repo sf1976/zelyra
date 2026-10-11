@@ -78,8 +78,11 @@ Der CLI-Integrationstest erwartet zusätzlich **7 Compilerfehler** und
 Date-/Time-/Bytes-/Decimal-Werte, falsche Tuple-Länge, nicht-endliche
 JSON-Zahl, nicht-stringbasierte Map-Serialisierung sowie nicht unterstützte
 `Result`-Decodierung). Ein erwarteter Fehler ist dabei ein
-positives Testergebnis. Bei erfolgreichem Integrationstest sind alle 7
-positiven Testgruppen bestanden und es gibt 0 unerwartete Fehler.
+positives Testergebnis. Bei erfolgreichem Integrationstest sind alle 8
+positiven Testgruppen bestanden und es gibt 0 unerwartete Fehler. Die
+Sprachmatrix weist noch nicht verfügbare Enumerationen, Funktionswerte und
+benutzerdefinierte Generics ausdrücklich aus. Records verwenden bewusst
+Wertsemantik; eigene Klassen-/Referenzidentität ist nicht implementiert.
 
 Das ist eine Abdeckung der vorhandenen Sprachoberfläche, keine Behauptung, dass
 alle Typen oder Konvertierungen bereits implementiert sind.
