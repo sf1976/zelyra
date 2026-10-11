@@ -1685,6 +1685,15 @@ The complete `examples/csv_catalog` project creates a UTF-8 file, imports and
 validates articles, exports valid rows and errors separately, and tests the
 export/import round trip.
 
+Use `assert(condition)` or `assert(condition, message)` for executable checks.
+When the condition is false, the program run ends with a runtime error. Example
+and application checks therefore cannot report success after only printing a
+`FAIL` line.
+
+`text_trim(text)` removes Unicode whitespace at the beginning and end of text
+without changing interior content. It is useful for normalizing CSV input
+before conversion and rejecting required fields that contain only whitespace.
+
 For a complete typed JSON request/response flow, use `http_json` with separate
 request and response type arguments:
 

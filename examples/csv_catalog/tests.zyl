@@ -1,6 +1,7 @@
 import "src/app.zyl" as app
 import "src/model.zyl" as model
 import "src/importer.zyl" as importer
+import "src/validation.zyl" as validation
 pub fn main() uses FileSystem {
     print("Automatisierte CSV-Anwendungstests")
     mutable passed = 0
@@ -128,6 +129,9 @@ pub fn main() uses FileSystem {
     print("Testergebnis bestanden / fehlgeschlagen:")
     print(passed)
     print(failed)
+    whitespace_name = validation::check_row(["501", "   ", " ", "1.00", "2", "true"], 1, [])
+    assert(!whitespace_name.valid && len(whitespace_name.issues) == 1 && whitespace_name.issues[0].field_name == "Name" && whitespace_name.article.category == "Allgemein", "Leerzeichen gelten nicht als Pflichtfeldwert; leere Kategorie erhält Standardwert")
+    assert(failed == 0, "CSV-Katalogtests fehlgeschlagen")
 }
 pub fn same_articles(left: model::Article[], right: model::Article[]) -> Bool {
     if len(left) != len(right) {

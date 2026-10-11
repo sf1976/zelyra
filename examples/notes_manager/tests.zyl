@@ -2,11 +2,9 @@ import "src/model.zyl" as model
 import "src/storage.zyl" as storage
 import "src/text_tools.zyl" as text_tools
 fn require(condition: Bool, message: String) {
+    assert(condition, message)
     if condition {
         print("PASS " + message)
-    }
-    else {
-        print("FEHLER: " + message)
     }
 }
 pub fn run() uses Console, FileSystem, Clock {
@@ -22,7 +20,7 @@ pub fn run() uses Console, FileSystem, Clock {
     require(!model::matches_search("kunde", sample, "nicht vorhanden"), "Suche ohne Treffer")
     match text_replace_result("Text", "", "x") {
         Ok(_) => {
-            print("FEHLER leere Ersetzungssuche wurde akzeptiert")
+            require(false, "leere Ersetzungssuche wird abgelehnt")
         }
         Err(_) => {
             print("PASS leere Ersetzungssuche abgelehnt")
@@ -30,7 +28,7 @@ pub fn run() uses Console, FileSystem, Clock {
     }
     match text_split_result("Text", "") {
         Ok(_) => {
-            print("FEHLER leerer Trenntext wurde akzeptiert")
+            require(false, "leerer Trenntext wird abgelehnt")
         }
         Err(_) => {
             print("PASS leerer Trenntext abgelehnt")
@@ -51,7 +49,7 @@ pub fn run() uses Console, FileSystem, Clock {
     }
     match storage::load("__zelyra_missing_note") {
         Ok(_) => {
-            print("FEHLER fehlende Notiz wurde gefunden")
+            require(false, "fehlende Notiz wird nicht gefunden")
         }
         Err(_) => {
             print("PASS verständlicher Fehler bei fehlender Notiz")
@@ -68,13 +66,13 @@ pub fn run() uses Console, FileSystem, Clock {
                     require(note.content == "", "leere Notiz erstellen und lesen")
                 }
                 Err(message) => {
-                    print("FEHLER leere Notiz lesen: " + message)
+                    require(false, "leere Notiz lesen: " + message)
                 }
             }
             delete_file("data/notes/__zelyra_test_empty.note.json")
         }
         Err(message) => {
-            print("FEHLER leere Notiz erstellen: " + message)
+            require(false, "leere Notiz erstellen: " + message)
         }
     }
     match storage::save_new("__zelyra_test_note", sample) {
@@ -82,12 +80,12 @@ pub fn run() uses Console, FileSystem, Clock {
             print("PASS Erstellen ohne Überschreiben")
         }
         Err(message) => {
-            print("FEHLER Erstellen: " + message)
+            require(false, "Erstellen: " + message)
         }
     }
     match storage::save_new("__zelyra_test_note", sample) {
         Ok(_) => {
-            print("FEHLER: vorhandene Datei wurde überschrieben")
+            require(false, "vorhandene Datei wurde überschrieben")
         }
         Err(_) => {
             print("PASS Überschreiben verhindert")
@@ -98,7 +96,7 @@ pub fn run() uses Console, FileSystem, Clock {
             require(note == sample, "Lesen und UTF-8-Roundtrip")
         }
         Err(message) => {
-            print("FEHLER Lesen: " + message)
+            require(false, "Lesen: " + message)
         }
     }
     match storage::update_content("__zelyra_test_note", sample.content + "\n\nAngehängt") {
@@ -106,7 +104,7 @@ pub fn run() uses Console, FileSystem, Clock {
             print("PASS Anhängen mit Sicherung und atomarem Speichern")
         }
         Err(message) => {
-            print("FEHLER Anhängen: " + message)
+            require(false, "Anhängen: " + message)
         }
     }
     match storage::load("__zelyra_test_note") {
@@ -119,7 +117,7 @@ pub fn run() uses Console, FileSystem, Clock {
                             require(unchanged == updated, "Suchtext fehlt; Text bleibt unverändert")
                         }
                         Err(message) => {
-                            print("FEHLER Ersetzen ohne Treffer: " + message)
+                            require(false, "Ersetzen ohne Treffer: " + message)
                         }
                     }
                     match text_tools::remove_paragraph(updated, 2) {
@@ -127,17 +125,17 @@ pub fn run() uses Console, FileSystem, Clock {
                             require(!text_contains(without_second, "Zweiter Absatz"), "Absatz entfernen")
                         }
                         Err(message) => {
-                            print("FEHLER Absatz entfernen: " + message)
+                            require(false, "Absatz entfernen: " + message)
                         }
                     }
                 }
                 Err(message) => {
-                    print("FEHLER Ersetzen: " + message)
+                    require(false, "Ersetzen: " + message)
                 }
             }
         }
         Err(message) => {
-            print("FEHLER erneutes Lesen: " + message)
+            require(false, "erneutes Lesen: " + message)
         }
     }
     match storage::backup("__zelyra_test_note") {
@@ -156,32 +154,32 @@ pub fn run() uses Console, FileSystem, Clock {
                                                     require(restored_note.content == sample.content + "\n\nAngehängt", "wiederhergestellter Dateiinhalt stimmt")
                                                 }
                                                 Err(message) => {
-                                                    print("FEHLER wiederhergestellte Notiz lesen: " + message)
+                                                    require(false, "wiederhergestellte Notiz lesen: " + message)
                                                 }
                                             }
                                         }
                                         Err(message) => {
-                                            print("FEHLER Wiederherstellen: " + message)
+                                            require(false, "Wiederherstellen: " + message)
                                         }
                                     }
                                 }
                                 Err(message) => {
-                                    print("FEHLER vorbereitende Änderung: " + message)
+                                    require(false, "vorbereitende Änderung: " + message)
                                 }
                             }
                         }
                         Err(message) => {
-                            print("FEHLER Backup-JSON lesen: " + message)
+                            require(false, "Backup-JSON lesen: " + message)
                         }
                     }
                 }
                 Err(message) => {
-                    print("FEHLER Backup lesen: " + message)
+                    require(false, "Backup lesen: " + message)
                 }
             }
         }
         Err(message) => {
-            print("FEHLER Backup anlegen: " + message)
+            require(false, "Backup anlegen: " + message)
         }
     }
     match rename_file_result(first_file, renamed_file) {
@@ -189,7 +187,7 @@ pub fn run() uses Console, FileSystem, Clock {
             print("PASS Umbenennen ohne Überschreiben")
         }
         Err(message) => {
-            print("FEHLER Umbenennen: " + message)
+            require(false, "Umbenennen: " + message)
         }
     }
     match copy_file_new_result(renamed_file, copied_file) {
@@ -197,7 +195,7 @@ pub fn run() uses Console, FileSystem, Clock {
             print("PASS Kopieren ohne Überschreiben")
         }
         Err(message) => {
-            print("FEHLER Kopieren: " + message)
+            require(false, "Kopieren: " + message)
         }
     }
     match delete_file_result(copied_file) {
@@ -205,7 +203,7 @@ pub fn run() uses Console, FileSystem, Clock {
             print("PASS Löschen")
         }
         Err(message) => {
-            print("FEHLER Löschen: " + message)
+            require(false, "Löschen: " + message)
         }
     }
     mutable large = ""
@@ -221,12 +219,12 @@ pub fn run() uses Console, FileSystem, Clock {
                     require(roundtrip == large, "großer Inhalt bleibt vollständig erhalten")
                 }
                 Err(message) => {
-                    print("FEHLER großen Inhalt lesen: " + message)
+                    require(false, "großen Inhalt lesen: " + message)
                 }
             }
         }
         Err(message) => {
-            print("FEHLER großen Inhalt schreiben: " + message)
+            require(false, "großen Inhalt schreiben: " + message)
         }
     }
     require(!model::valid_name("../outside"), "Pfadzugriff außerhalb des Notizordners")
@@ -250,4 +248,7 @@ pub fn run() uses Console, FileSystem, Clock {
         }
     }
     print("Notizverwaltungs-Tests abgeschlossen; Details siehe PASS/FEHLER-Zeilen.")
+}
+pub fn main() uses Console, FileSystem, Clock {
+    run()
 }

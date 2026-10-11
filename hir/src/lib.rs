@@ -561,6 +561,7 @@ impl<'a> Resolver<'a> {
                     && !matches!(
                         name.as_str(),
                         "print"
+                            | "assert"
                             | "len"
                             | "append"
                             | "contains"
@@ -586,6 +587,7 @@ impl<'a> Resolver<'a> {
                             | "csv_decode_result"
                             | "csv_encode"
                             | "text_contains"
+                            | "text_trim"
                             | "text_replace_result"
                             | "text_split_result"
                             | "decimal_scaled_result"

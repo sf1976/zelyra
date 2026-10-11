@@ -32,6 +32,9 @@ cargo run -p zelyra-cli -- run examples/inventory_orders/tests.zyl
 ```
 
 Die Geschaeftstests pruefen Rabatt und 19% Steuer, Bestandsgrenzen und Stornierung einschliesslich Schutz vor doppelter Einlagerung.
+Zusaetzlich wird ein Spielstand mit Zelyras atomarer Datei-API als JSON
+gespeichert und wieder eingelesen. `assert` beendet den Lauf mit einem Fehler,
+wenn eine Pruefung fehlschlaegt.
 
 ## Fehlerbehandlung und Protokoll
 

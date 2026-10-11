@@ -1,6 +1,9 @@
 import "src/model.zyl" as model
 pub fn load_state() -> Result<model::State, String>uses FileSystem {
-    match read_text_result("data/state.json") {
+    return load_state_from("data/state.json")
+}
+pub fn load_state_from(path: String) -> Result<model::State, String>uses FileSystem {
+    match read_text_result(path) {
         Ok(contents) => {
             match json_decode_result<model::State>(contents) {
                 Ok(state) => {
@@ -17,8 +20,11 @@ pub fn load_state() -> Result<model::State, String>uses FileSystem {
     }
 }
 pub fn save_state(state: model::State) -> Bool uses FileSystem {
+    return save_state_to("data/state.json", state)
+}
+pub fn save_state_to(path: String, state: model::State) -> Bool uses FileSystem {
     encoded = json_encode(state)
-    match write_text_result("data/state.json", encoded) {
+    match atomic_write_text_result(path, encoded) {
         Ok(_) => {
             return true
         }

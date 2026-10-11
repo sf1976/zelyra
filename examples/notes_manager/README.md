@@ -17,6 +17,8 @@ zelyra run main.zyl
 Das Menü bietet Anlegen, Lesen, Anhängen, wörtliches Ersetzen, Entfernen eines
 Absatzes, Umbenennen, Kopieren, bestätigtes Löschen, Suche und Wiederherstellen.
 Wähle `12`, um die automatisierten Beispieltests laufen zu lassen.
+Die Tests verwenden Zelyras `assert`; ein fehlgeschlagener Test liefert damit
+auch einen fehlgeschlagenen Programmlauf statt nur einer Fehlerzeile.
 
 ## Dateisicherheit
 

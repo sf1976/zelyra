@@ -4105,6 +4105,24 @@ impl<'a> Checker<'a> {
                         self.check_expr(arg, scopes);
                     }
                     Type::Unit
+                } else if name == "assert" {
+                    if !type_args.is_empty() {
+                        self.error(expr.span, "`assert` does not accept type arguments");
+                    }
+                    if !(1..=2).contains(&args.len()) {
+                        self.error(
+                            expr.span,
+                            "`assert` expects a Bool condition and an optional String message",
+                        );
+                        return Type::Unknown;
+                    }
+                    let condition = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::Bool, &condition, args[0].span);
+                    if let Some(message) = args.get(1) {
+                        let message_type = self.check_expr(message, scopes);
+                        self.expect_type(&Type::String, &message_type, message.span);
+                    }
+                    Type::Unit
                 } else if name == "len" {
                     if args.len() != 1 {
                         self.error(expr.span, "`len` expects exactly one argument");
@@ -4176,6 +4194,14 @@ impl<'a> Checker<'a> {
                     self.expect_type(&Type::String, &text, args[0].span);
                     self.expect_type(&Type::String, &search, args[1].span);
                     Type::Bool
+                } else if name == "text_trim" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "text_trim expects exactly one String");
+                        return Type::Unknown;
+                    }
+                    let text = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::String, &text, args[0].span);
+                    Type::String
                 } else if name == "text_replace_result" {
                     if args.len() != 3 {
                         self.error(
@@ -6617,6 +6643,39 @@ impl Interpreter {
                     )?;
                     self.output.push(value.output());
                     Ok(Value::Unit)
+                } else if name == "assert" {
+                    if !(1..=2).contains(&args.len()) {
+                        return Err(self.runtime_error(
+                            expr.span,
+                            "`assert` expects a Bool condition and an optional String message",
+                        ));
+                    }
+                    let condition = self.eval(&args[0], env)?;
+                    let Value::Bool(condition) = condition else {
+                        return Err(
+                            self.runtime_error(args[0].span, "`assert` expects a Bool condition")
+                        );
+                    };
+                    let message = if let Some(message_expr) = args.get(1) {
+                        let value = self.eval(message_expr, env)?;
+                        let Value::String(message) = value else {
+                            return Err(self.runtime_error(
+                                message_expr.span,
+                                "`assert` message must be a String",
+                            ));
+                        };
+                        Some(message)
+                    } else {
+                        None
+                    };
+                    if condition {
+                        Ok(Value::Unit)
+                    } else {
+                        Err(self.runtime_error(
+                            expr.span,
+                            message.unwrap_or_else(|| "assertion failed".into()),
+                        ))
+                    }
                 } else if name == "len" {
                     if args.len() != 1 {
                         return Err(
@@ -6686,6 +6745,16 @@ impl Interpreter {
                             Err(self
                                 .runtime_error(expr.span, "text_contains expects String arguments"))
                         }
+                    }
+                } else if name == "text_trim" {
+                    if args.len() != 1 {
+                        return Err(
+                            self.runtime_error(expr.span, "text_trim expects exactly one String")
+                        );
+                    }
+                    match self.eval(&args[0], env)? {
+                        Value::String(text) => Ok(Value::String(text.trim().to_owned())),
+                        _ => Err(self.runtime_error(args[0].span, "text_trim expects a String")),
                     }
                 } else if name == "text_replace_result" {
                     if args.len() != 3 {

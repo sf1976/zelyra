@@ -382,6 +382,7 @@ impl Collector {
 fn visible_functions(program: &zelyra_ast::Program) -> Vec<String> {
     let mut functions = vec![
         "print",
+        "assert",
         "now",
         "env",
         "random_int",
@@ -398,6 +399,7 @@ fn visible_functions(program: &zelyra_ast::Program) -> Vec<String> {
         "json_decode",
         "run_process",
         "len",
+        "text_trim",
         "append",
         "contains",
         "get",

@@ -9,12 +9,12 @@ pub fn check_row(row: String[], record_number: Int, existing: model::Article[]) 
             issues: issues,
         }
     }
-    number_text = row[0]
-    name = row[1]
-    category_text = row[2]
-    price_text = row[3]
-    stock_text = row[4]
-    active_text = row[5]
+    number_text = text_trim(row[0])
+    name = text_trim(row[1])
+    category_text = text_trim(row[2])
+    price_text = text_trim(row[3])
+    stock_text = text_trim(row[4])
+    active_text = text_trim(row[5])
     mutable number = 0
     mutable price_cents = 0
     mutable stock = 0

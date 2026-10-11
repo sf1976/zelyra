@@ -653,6 +653,13 @@ its source evidence and reason.
   search, replacement, and splitting support the multi-file console notes
   manager in `examples/notes_manager`, including pre-change backups, restore,
   filesystem boundaries, action logging, and automated regression tests.
+- [✅] Add the type-checked `assert(condition[, message])` runtime intrinsic.
+  A false condition becomes a runtime error, so the inventory/orders, CSV, and
+  notes-manager suites produce a failing process status instead of only printing
+  a failure line. Inventory state uses atomic replacement and has a Zelyra-level
+  save/load round-trip check. `text_trim` removes Unicode whitespace at text
+  boundaries; CSV import uses it to reject required fields containing only
+  whitespace.
 
 - [🧪] The guided tutorial command starts MariaDB and the web app, then applies
   the schema. The Compose web app gets its database URL from project setup, so
@@ -698,7 +705,8 @@ its source evidence and reason.
   `examples/csv_catalog` project creates source data, validates fields, logs
   errors, sorts/exports valid records, and automatically checks the round trip.
   CSV is processed as a complete UTF-8 string in memory; streaming is not
-  included.
+  included. The Zelyra tests use `assert` so failures are reflected in process
+  status.
 
 - [🧪] Fix the invoice tutorial startup defect found after 0.9.2: declarative
   web layouts must load the project theme; the CLI prints the local browser

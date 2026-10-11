@@ -626,6 +626,13 @@ manuell umzusetzen.
   mehrteilige Konsolen-Notizverwaltung unter `examples/notes_manager` mit
   Sicherungen vor Änderungen, Wiederherstellung, Dateigrenzen, Aktionsprotokoll
   und automatisierten Regressionstests.
+- [✅] `assert(condition[, message])` typgeprüft ausführen und falsche
+  Bedingungen als Laufzeitfehler melden. Die Tests für Lager/Bestellungen,
+  CSV-Import und Notizverwaltung verwenden Assertions; `zelyra run tests.zyl`
+  liefert bei fehlgeschlagener Prüfung einen Fehlerstatus. Der Lager-Spielstand
+  wird über atomaren Dateiaustausch gespeichert und im Beispiel wieder geladen.
+  `text_trim` entfernt Unicode-Leerraum am Rand; der CSV-Import weist damit
+  Pflichtfelder zurück, die nur aus Leerraum bestehen.
 
 - [🧪] Der geführte Tutorialbefehl startet MariaDB und Webanwendung und wendet
   das Schema an. Die Compose-Webanwendung bezieht die Datenbank-URL aus der
@@ -685,7 +692,9 @@ manuell umzusetzen.
   skalierte Integer umwandeln. Das Beispiel `examples/csv_catalog` erstellt
   Quelldaten, validiert Felder, protokolliert Fehler, sortiert/exportiert
   gültige Datensätze und prüft den Roundtrip automatisiert. CSV wird als
-  vollständiger UTF-8-Text im Speicher verarbeitet, nicht gestreamt.
+  vollständiger UTF-8-Text im Speicher verarbeitet, nicht gestreamt. Die
+  Zelyra-Tests verwenden `assert`, damit Fehlschläge im Prozessstatus sichtbar
+  werden.
 
 - [🧪] Den im 0.9.2-Rechnungstutorial gefundenen Startfehler beheben: Das
   deklarative Weblayout muss das Projekt-Theme laden; die CLI zeigt die lokale

@@ -12,6 +12,37 @@ fn run(source: &str) -> Vec<String> {
 }
 
 #[test]
+fn assert_is_type_checked_and_fails_execution_with_message() {
+    let passing =
+        run("fn main() { assert(2 + 2 == 4) assert(true, \"expected true\") print(\"done\") }");
+    assert_eq!(passing, ["done"]);
+
+    let program =
+        parse(&lex("fn main() { assert(false, \"inventory stock invariant\") }").unwrap()).unwrap();
+    check(&program).unwrap();
+    let error = execute(&program).expect_err("a failed assertion must fail the run");
+    assert!(error.message.contains("inventory stock invariant"));
+
+    let program = parse(&lex("fn main() { assert(1) }").unwrap()).unwrap();
+    assert!(check(&program)
+        .unwrap_err()
+        .iter()
+        .any(|error| error.message.contains("expected `Bool`, found `Int`")));
+}
+
+#[test]
+fn text_trim_removes_unicode_whitespace_without_changing_interior_text() {
+    let output = run("fn main() { print(text_trim(\"  Grüße\u{00a0}\")) }");
+    assert_eq!(output, ["Grüße"]);
+
+    let program = parse(&lex("fn main() { text_trim(5) }").unwrap()).unwrap();
+    assert!(check(&program)
+        .unwrap_err()
+        .iter()
+        .any(|error| error.message.contains("expected `String`, found `Int`")));
+}
+
+#[test]
 fn fibonacci_acceptance_test() {
     let output = run("fn fibonacci(n: Int) -> Int { if n <= 1 { return n } return fibonacci(n - 1) + fibonacci(n - 2) } fn main() { print(fibonacci(10)) }");
     assert_eq!(output, ["55"]);

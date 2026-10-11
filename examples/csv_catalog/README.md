@@ -29,7 +29,9 @@ ausschließlich im Ordner `data/`.
 
 Die Kopfzeile lautet `Artikelnummer;Name;Kategorie;Preis;Lagerbestand;Aktiv`.
 Artikelnummer, Name, Preis, Bestand und Aktivstatus sind Pflichtfelder. Die
-Artikelnummer muss eine positive Ganzzahl und innerhalb der importierten Daten
+Feldwerte werden an den Rändern von Unicode-Leerraum befreit; ein Name aus
+nur Leerzeichen ist dadurch ungültig.
+Die Artikelnummer muss eine positive Ganzzahl und innerhalb der importierten Daten
 eindeutig sein. Ein leerer Kategorienwert wird zu `Allgemein`. Für Aktiv sind
 `true` und `false` erlaubt. Preise akzeptieren Punkt oder Komma und höchstens
 zwei Nachkommastellen; sie werden ohne binäre Gleitkommazahlen in Cent
@@ -54,4 +56,5 @@ Streaming ist nicht Teil dieses Beispiels.
 `tests.zyl` führt zehn Anwendungstests aus. Sie prüfen erzeugte Beispieldaten,
 Sonderzeichen und UTF-8, Default-Kategorie, Feldvalidierung, Duplikate, Sortierung,
 Fehlerexport, Dateifehler und den Export-/Import-Roundtrip. Rust-Tests ergänzen
-die CSV-Parser- und Festkomma-Randfälle.
+die CSV-Parser- und Festkomma-Randfälle. Die Zelyra-Tests verwenden `assert`,
+damit ein fehlgeschlagener Test auch den Prozess mit einem Fehler beendet.

@@ -70,7 +70,19 @@ fn inventory_orders_example_checks_tests_and_persists_cancelled_orders() {
     assert!(test_output.contains("PASS Preisberechnung"));
     assert!(test_output.contains("PASS Bestandspruefung"));
     assert!(test_output.contains("PASS Stornierung"));
-    assert!(test_output.contains("\n4\n0\n"));
+    assert!(test_output.contains("PASS JSON-Spielstand atomar gespeichert"));
+    assert!(test_output.contains("\n5\n0\n"));
+
+    let assertion_path = project.join("assert_failure.zyl");
+    fs::write(
+        &assertion_path,
+        "pub fn main() { assert(false, \"exercise assertion failed\") }",
+    )
+    .expect("assertion fixture should be written");
+    let assertion = cli(&project, &["run", "assert_failure.zyl"]);
+    assert!(!assertion.status.success());
+    assert!(String::from_utf8_lossy(&assertion.stderr).contains("exercise assertion failed"));
+    fs::remove_file(assertion_path).expect("assertion fixture should be removed");
 
     let mut application = Command::new(binary())
         .args(["run", "main.zyl"])

@@ -1,6 +1,7 @@
 import "src/model.zyl" as model
 import "src/orders.zyl" as orders
-pub fn run() uses Clock {
+import "src/storage.zyl" as storage
+pub fn run() uses Clock, FileSystem {
     mutable passed = 0
     mutable failed = 0
     calculation = model::calculate_order(10000, 10)
@@ -43,9 +44,34 @@ pub fn run() uses Clock {
     else {
         print("FAIL Stornierung") failed = failed + 1
     }
+    persistence_path = "data/__zelyra_test_state.json"
+    if contains(list_dir("data"), "__zelyra_test_state.json") {
+        delete_file(persistence_path)
+    }
+    if storage::save_state_to(persistence_path, state) {
+        match storage::load_state_from(persistence_path) {
+            Ok(reloaded) => {
+                if reloaded == state {
+                    print("PASS JSON-Spielstand atomar gespeichert und wieder geladen")
+                    passed = passed + 1
+                }
+                else {
+                    print("FAIL gespeicherter Spielstand weicht ab") failed = failed + 1
+                }
+            }
+            Err(message) => {
+                print("FAIL gespeicherten Spielstand lesen: " + message) failed = failed + 1
+            }
+        }
+    }
+    else {
+        print("FAIL Spielstand speichern") failed = failed + 1
+    }
+    delete_file(persistence_path)
     print("Testergebnis (bestanden / fehlgeschlagen):") print(passed) print(failed)
+    assert(failed == 0, "Lager- und Bestelltests fehlgeschlagen")
 }
-pub fn main() uses Clock {
+pub fn main() uses Clock, FileSystem {
     print("Lager- und Bestellverwaltung: Geschaeftstests")
     run()
 }

@@ -1819,6 +1819,17 @@ Das vollständige Beispiel `examples/csv_catalog` erzeugt eine UTF-8-Datei,
 importiert und validiert Artikel, schreibt gültige und fehlerhafte Datensätze
 getrennt zurück und testet den Export-/Import-Roundtrip.
 
+`assert(bedingung)` und `assert(bedingung, nachricht)` sind für ausführbare
+Prüfungen gedacht. Ist die Bedingung falsch, bricht der Programmlauf mit einem
+Laufzeitfehler ab. Dadurch können Beispiel- und Anwendungstests nicht mehr
+fälschlich erfolgreich enden, nachdem sie nur eine `FAIL`-Zeile ausgegeben
+haben.
+
+`text_trim(text)` entfernt Unicode-Leerraum am Anfang und Ende eines Textes,
+ohne Inhalte dazwischen zu verändern. Das ist hilfreich, um CSV-Eingaben vor
+der Typumwandlung zu normalisieren und nur aus Leerraum bestehende Pflichtfelder
+abzuweisen.
+
 Für einen vollständigen typisierten JSON-Request-/Response-Ablauf gibt es
 `http_json` mit getrennten Request- und Response-Typargumenten:
 
