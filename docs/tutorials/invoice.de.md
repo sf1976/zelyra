@@ -13,8 +13,11 @@ startet `cd invoice-tutorial && zelyra setup --all` Datenbank, Anwendung und
 Schema gemeinsam. Bei einem anderen Zielordner verwende den entsprechenden
 Pfad, zum Beispiel `zelyra --tutorial invoice ./meine-rechnungen`.
 Für reine Projektgenerierung ohne Docker-Start kannst du `--no-start`
-anhängen; die Ausgabe nennt dann den kombinierten Startbefehl `zelyra setup
---all` und die vorgesehene Browseradresse. Auch `zelyra new ... --mariadb`
+anhängen. Auch dann erzeugt Zelyra bereits eine geschützte lokale `.env` mit
+`ZELYRA_DATABASE_MAIN_URL` und dem kompatiblen `DATABASE_URL`-Fallback; die
+Zugangsdaten werden nicht in der Ausgabe gezeigt. Die Datenbank und Anwendung
+starten erst mit `zelyra setup --all`. Die Ausgabe nennt den Startbefehl und
+die vorgesehene Browseradresse. Auch `zelyra new ... --mariadb`
 zeigt schon beim Anlegen die Adresse an, die nach dem Start erreichbar ist.
 Wenn der Schema-Schritt nach dem Start fehlschlägt, bleibt die Adresse in der
 Fehlermeldung sichtbar.

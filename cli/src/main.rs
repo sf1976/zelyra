@@ -326,6 +326,8 @@ ZELYRA_DB_TLS_MODE=disabled
 # ZELYRA_SMTP_PASSWORD=
 # ZELYRA_RESET_DELIVERY_KEY=replace-with-64-hex-characters
 ZELYRA_DATABASE_MAIN_URL=mariadb://zelyra:change-me@127.0.0.1:${{ZELYRA_DB_HOST_PORT:-3306}}/zelyra_app
+# Compatibility fallback used by CRUD routes and tools that do not select a named database.
+DATABASE_URL=mariadb://zelyra:change-me@127.0.0.1:${{ZELYRA_DB_HOST_PORT:-3306}}/zelyra_app
 MARIADB_DATABASE=zelyra_app
 MARIADB_USER=zelyra
 MARIADB_PASSWORD=change-me

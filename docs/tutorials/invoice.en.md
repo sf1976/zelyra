@@ -13,11 +13,13 @@ project files remain in place; after fixing Docker, run
 application and apply the schema together. For a different target directory,
 pass its path, for example `zelyra --tutorial invoice ./my-invoices`.
 Append `--no-start` to generate the project without starting Docker; the command
-then prints the combined `zelyra setup --all` startup instruction.
-It also prints the expected browser address. `zelyra new ... --mariadb` shows
-the address when creating a MariaDB project; it is reachable after startup. If
-schema setup fails after the app starts, the error output still includes the
-address.
+still creates a protected local `.env` with `ZELYRA_DATABASE_MAIN_URL` and the
+compatible `DATABASE_URL` fallback; it does not print the credentials. The
+database and app start later with `zelyra setup --all`. The command prints this
+startup instruction and the expected browser address. `zelyra new ...
+--mariadb` shows the address when creating a MariaDB project; it is reachable
+after startup. If schema setup fails after the app starts, the error output
+still includes the address.
 
 The ready application runs at the local address printed by the command
 (`http://127.0.0.1:3000` by default). It contains five connected areas:

@@ -112,6 +112,16 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         return ExitCode::FAILURE;
     }
 
+    // CRUD routes need a connection string even when the user only asks for
+    // the scaffold. Generate the local, protected credentials now; --no-start
+    // skips Docker, not the project's database configuration.
+    if let Err(error) = setup_action(&directory, "prepare", &SetupOptions::default()) {
+        eprintln!(
+            "error[E-TUTORIAL-005]: could not configure the invoice tutorial database: {error}"
+        );
+        return ExitCode::FAILURE;
+    }
+
     let english =
         env::var("ZELYRA_LANGUAGE").is_ok_and(|language| language.eq_ignore_ascii_case("en"));
     println!();
@@ -138,7 +148,7 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         println!("  4. Invoice: create a draft at /invoices and select its customer (`src/invoices.zyl`).");
         println!("  5. Lines: add invoice items at /invoice_lines (`src/invoices.zyl`).");
         if no_start {
-            println!("\nAutomatic startup was skipped. To start the database, apply the schema, and launch the app, run:");
+            println!("\nA protected `.env` with local MariaDB credentials was created. Automatic startup was skipped. To start the database, apply the schema, and launch the app, run:");
             println!("  cd {directory} && zelyra setup --all");
             if let Ok(url) = project_web_url(std::path::Path::new(&directory)) {
                 println!("  application URL after startup: {url}");
@@ -184,7 +194,7 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         println!("  4. Rechnung: unter /invoices einen Entwurf anlegen und Kunden auswählen (`src/invoices.zyl`).");
         println!("  5. Positionen: unter /invoice_lines Artikel zur Rechnung hinzufügen (`src/invoices.zyl`).");
         if no_start {
-            println!("\nAutomatischer Start übersprungen. Mit diesem Befehl startest du Datenbank und Anwendung und richtest das Schema ein:");
+            println!("\nEine geschützte `.env` mit lokalen MariaDB-Zugangsdaten wurde angelegt. Der automatische Start wurde übersprungen. Mit diesem Befehl startest du Datenbank und Anwendung und richtest das Schema ein:");
             println!("  cd {directory} && zelyra setup --all");
             if let Ok(url) = project_web_url(std::path::Path::new(&directory)) {
                 println!("  Anwendung nach dem Start erreichbar unter: {url}");

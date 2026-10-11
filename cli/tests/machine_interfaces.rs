@@ -408,6 +408,16 @@ fn invoice_tutorial_creates_a_checkable_project_without_overwriting() {
     }
     assert!(directory.join("src/database.zyl").is_file());
     assert!(directory.join("src/shell.zyl").is_file());
+    let local_env = fs::read_to_string(directory.join(".env")).unwrap();
+    assert!(local_env.contains("ZELYRA_DATABASE_MAIN_URL=mariadb://zelyra:"));
+    assert!(local_env.contains("DATABASE_URL=mariadb://zelyra:"));
+    assert!(!String::from_utf8_lossy(&tutorial.stdout).contains("MARIADB_PASSWORD="));
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let permissions = fs::metadata(directory.join(".env")).unwrap().permissions();
+        assert_eq!(permissions.mode() & 0o777, 0o600);
+    }
     assert!(feature_sources.contains("customers::Customer"));
     assert!(String::from_utf8_lossy(&tutorial.stdout).contains("zelyra setup --all"));
     assert!(String::from_utf8_lossy(&tutorial.stdout).contains("http://127.0.0.1:3000"));

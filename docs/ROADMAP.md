@@ -813,6 +813,11 @@ Scope and technical gates are in the [0.9.3 release plan](release-plans/0.9.3.en
 
 ## Release 0.9.4 — visual CRUD design
 
+- [🧪] Make the guided invoice tutorial generate its protected local `.env`
+  whenever it creates the project, including with `--no-start`. Include both
+  the declared `ZELYRA_DATABASE_MAIN_URL` and the `DATABASE_URL` fallback used
+  by CRUD routes and tools. Never print credentials; `--no-start` still skips
+  starting Docker. Verify the generated configuration and Studio preview path.
 - [🗺️] Close the type-system gaps tracked by `examples/type_system` before
   0.9.9: add nominal enum variants with exhaustive matching and typed JSON
   round trips; add safe, statically typed function values and user-defined
