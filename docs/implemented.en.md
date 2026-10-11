@@ -196,7 +196,7 @@ workflow #38060275164 built Linux and Windows packages, verified checksums and
 228-package SPDX SBOMs, and published GitHub attestations. Downloaded release assets passed checksum and
 SBOM verification; the Linux binary reports `zelyra 0.6.0`. See the
 [release verification record](release-readiness/0.6.0-candidate-verification.md).
-The 0.9 feature scope was merged in commit `407c81f8e75fa568797fc163d3416748214a6f19`; PR CI covered Linux/Windows, MariaDB, MySQL, PostgreSQL, Studio, MFA, editor, tutorial, fuzzing, and dependency checks. Exact version-bumped candidate and release asset verification will be recorded in the [0.9.0 release verification record](release-readiness/0.9.0-candidate-verification.md) after the tag and GitHub artifacts are verified. Independent human acceptance remains reserved for 1.0.0.
+The 0.9 feature scope was merged in commit `407c81f8e75fa568797fc163d3416748214a6f19`; PR CI covered Linux/Windows, MariaDB, MySQL, PostgreSQL, Studio, MFA, editor, tutorial, fuzzing, and dependency checks. Exact version-bumped candidate and release artifact verification is documented in the [0.9.0 release verification record](release-readiness/0.9.0-candidate-verification.md). Independent human acceptance remains reserved for 1.0.0.
 
 This page is updated when a delivered capability or its evidence changes. It
 does not turn a specification or roadmap entry into an implementation claim.
