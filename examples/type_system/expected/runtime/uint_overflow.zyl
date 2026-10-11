@@ -1,0 +1,6 @@
+fn main() {
+    maximum = json_decode<UInt>("18446744073709551615")
+    one = json_decode<UInt>("1")
+    value = maximum + one
+    print(value)
+}

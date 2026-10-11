@@ -483,11 +483,12 @@ Die wichtigsten Datentypen in Zelyra:
 - **`Int`**: Ganze Zahlen mit Vorzeichen (64-Bit), z. B. `-5`, `0`, `42`.
 - **`UInt`**: Ganze Zahlen ohne Vorzeichen (nur `>= 0`), z. B. IDs oder Zähler.
 - **`Float`**: Fließkommazahlen für wissenschaftliche Berechnungen, z. B. `3.1415`.
-- **`Decimal`**: Festkommazahlen mit garantierter Exaktheit – unverzichtbar für Geldbeträge, um Rundungsfehler von Fließkommazahlen zu vermeiden!
+- **`Decimal`**: Festkommazahl mit neun Nachkommastellen und exakter Basis-10-Arithmetik. Schreibe Werte als `decimal("19.99")`; mehr als neun Nachkommastellen werden abgewiesen. Eine Division, die mehr Stellen erzeugt, kürzt Richtung null auf neun Stellen. JSON speichert Decimal als Zeichenkette, damit keine Präzision verloren geht.
 - **`Bool`**: Wahrheitswerte. Es gibt exakt zwei Zustände: `true` (wahr) oder `false` (falsch).
 - **`String`**: Zeichenketten (Text) in doppelten Anführungszeichen: `"Hallo Welt"`.
 - **`Char`**: Einzelne Zeichen in einfachen Anführungszeichen: `'A'`, `'z'`, `'✓'`.
 - **`Unit`**: Steht für „kein Wert“, ähnlich wie `void` in anderen Sprachen. Wenn eine Funktion nur etwas ausgibt und nichts zurückliefert, ist ihr Typ `Unit`.
+- **`Date`, `Time`, `Duration`, `Bytes`**: Erzeuge Datum und Uhrzeit mit `date("2026-10-11")` und `time("09:30:00")`, Dauern mit `duration_ms(1500)` und Bytes mit `bytes([65, 66])`. Die Laufzeit prüft die Werte und erhält sie beim JSON-Roundtrip.
 
 ### 4. Kleine, aufeinander aufbauende Beispiele
 
@@ -2796,6 +2797,7 @@ In diesem Kapitel lernst du:
 - Wie du mit Zelyra Textdateien erstellst, liest, auflistest und löschst.
 - Warum Dateizugriffe in Zelyra zwingend die Fähigkeit (*Capability*) `uses FileSystem` verlangen.
 - Die wichtigsten Bibliotheksfunktionen: `read_text`, `write_text`, `delete_file`, `list_dir`.
+- Wie die Result-Varianten erwartbare Datei- und JSON-Fehler zurückgeben.
 - Wie du Aufgabenlisten persistent als Datei auf der Festplatte speicherst.
 
 ### 2. Warum ist das Thema wichtig?
@@ -2863,6 +2865,57 @@ fn main() uses FileSystem {
 }
 ```
 
+**Beispiel 4: JSON- und Datei-Fehler verständlich behandeln**
+
+`read_text` und `json_decode` melden Fehler direkt als Laufzeitfehler. Wenn eine
+Anwendung auf fehlende oder beschädigte Dateien reagieren soll, verwende
+`read_text_result`, `write_text_result` und `json_decode_result<T>`:
+
+```zelyra
+struct Einstellungen {
+    thema: String
+}
+
+fn lade_thema() uses FileSystem {
+    match read_text_result("settings.json") {
+        Ok(text) => {
+            match json_decode_result<Einstellungen>(text) {
+                Ok(einstellungen) => { print("Thema: " + einstellungen.thema) }
+                Err(fehler) => { print("JSON-Datei ungueltig: " + fehler) }
+            }
+        }
+        Err(fehler) => { print("Datei konnte nicht gelesen werden: " + fehler) }
+    }
+}
+
+fn main() uses FileSystem {
+    lade_thema()
+}
+```
+
+Fehlende Projektfreigaben und verweigerte Capabilities bleiben Sicherheitsfehler.
+Die Result-Varianten fangen gewöhnliche Pfad-, Lese-, Schreib- und JSON-Fehler ab.
+
+Für sichere Textdatei-Änderungen gibt es außerdem `write_text_new_result`,
+`atomic_write_text_result`, `append_text_result`, `copy_file_new_result`,
+`rename_file_result` und `delete_file_result`. `write_text_new_result` legt
+Dateien exklusiv an und meldet einen Konflikt, wenn der Zielname bereits
+existiert. `atomic_write_text_result` schreibt zuerst eine temporäre Datei im
+gleichen Verzeichnis und ersetzt das Ziel erst nach erfolgreichem Schreiben.
+`rename_file_result` und `copy_file_new_result` überschreiben ebenfalls keine
+vorhandene Zieldatei. Alle Dateioperationen bleiben auf die in der
+Projektkonfiguration freigegebenen Wurzelverzeichnisse beschränkt.
+
+`text_contains` sucht eine wörtliche Zeichenfolge. `text_replace_result` ersetzt
+alle Vorkommen eines nicht leeren Suchtexts; `text_split_result` teilt an einem
+nicht leeren Trenntext und erhält auch leere Teile am Anfang oder Ende. Diese
+Funktionen arbeiten mit UTF-8-Strings und interpretieren den Suchtext nicht als
+regulären Ausdruck.
+
+Ein vollständiges, mehrteiliges Beispiel mit Notizverwaltung, Backups,
+Protokoll, Restore und Tests liegt unter
+[`examples/notes_manager`](../../../examples/notes_manager/README.md).
+
 ### 5. Typische Fehler und deren Ursachen
 - **Fehler:** Aufruf von `read_text` oder `write_text` ohne Deklaration von `uses FileSystem`.
   *Ursache:* Zelyras Sicherheitssystem (`E-CAP-001`) verhindert jeden unberechtigten Zugriff auf die Festplatte.
@@ -2873,6 +2926,7 @@ fn main() uses FileSystem {
 1. Jede Funktion, die Dateien berührt, muss `uses FileSystem` deklarieren.
 2. `write_text` legt Dateien an oder überschreibt sie vollständig.
 3. `read_text` liefert den gesamten Dateiinhalt als `String`.
+4. `*_result`-Funktionen machen erwartbare Fehler zu normalen `Err`-Werten.
 
 ### 7. Übungsaufgaben
 - **Stufe 1 (Leicht):** Schreibe ein Programm, das eine Begrüßungsnachricht in `hallo.txt` schreibt.
@@ -2908,6 +2962,7 @@ fn main() uses FileSystem {
 
 ### 1. Was lerne ich in diesem Kapitel?
 - Wie du mit `now()` den aktuellen Zeitstempel abfragst (`uses Clock`).
+- Wie `format_timestamp` Zeitstempel als UTC-Datum mit Uhrzeit darstellt.
 - Wie Zufallswerte mit `random_int(min, max)` erzeugt werden (`uses Random`).
 - Wie Datenstrukturen mit `json_encode` in universelles JSON umgewandelt werden.
 - Wie JSON-Text mit `json_decode<T>` wieder typisiert zurückgewandelt wird.
@@ -2923,7 +2978,7 @@ Praktisch jede reale Software benötigt Zeitangaben: Wann wurde eine Aufgabe ers
 ```zelyra
 fn zeige_zeit() uses Clock {
     jetzt = now()
-    print("Aktuelle Systemzeit erfasst")
+    print(format_timestamp(jetzt))
 }
 
 fn main() uses Clock {

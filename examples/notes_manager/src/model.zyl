@@ -1,0 +1,62 @@
+pub struct Note {
+    display_title: String
+    content: String
+    created_at: Timestamp
+    updated_at: Timestamp
+}
+pub struct LogEntry {
+    at: Timestamp
+    operation: String
+    file: String
+    outcome: String
+}
+pub struct NoteBackup {
+    original_name: String
+    note_text: String
+}
+pub fn valid_name(name: String) -> Bool {
+    return name != ""
+    &&!text_contains(name, "..")
+    &&!text_contains(name, "/")
+    &&!text_contains(name, "\\")
+    &&!text_contains(name, "\n")
+    &&!text_contains(name, "\r")
+}
+pub fn note_path(name: String) -> String {
+    return "data/notes/" + name + ".note.json"
+}
+pub fn matches_search(file_name: String, note: Note, query: String) -> Bool {
+    return text_contains(file_name, query) || text_contains(note.display_title, query) || text_contains(note.content, query)
+}
+pub fn parse_positive_int(raw: String) -> Int? {
+    match json_decode_result<Int>(raw) {
+        Ok(value) => {
+            if value > 0 {
+                return Some(value)
+            }
+            return None
+        }
+        Err(_) => {
+            return None
+        }
+    }
+}
+pub fn empty_note(display_title: String) -> Note uses Clock {
+    stamp = now()
+    return Note {
+        display_title: display_title, content: "", created_at: stamp, updated_at: stamp
+    }
+}
+pub fn log(operation: String, file: String, outcome: String) uses Clock, FileSystem {
+    entry = LogEntry {
+        at: now(), operation: operation, file: file, outcome: outcome
+    }
+    line = json_encode(entry) + "\n"
+    match append_text_result("data/notes/actions.jsonl", line) {
+        Ok(_) => {
+        }
+        Err(message) => {
+            print("Warnung: Protokoll konnte nicht ergänzt werden: " + message)
+        }
+    }
+}

@@ -955,6 +955,12 @@ fn collect_function_expression(
             collect_function_expression(left, name, spans);
             collect_function_expression(right, name, spans);
         }
+        zelyra_ast::ExprKind::Match { value, arms } => {
+            collect_function_expression(value, name, spans);
+            for arm in arms {
+                collect_function_expression(&arm.value, name, spans);
+            }
+        }
         zelyra_ast::ExprKind::Int(_)
         | zelyra_ast::ExprKind::UInt(_)
         | zelyra_ast::ExprKind::Float(_)

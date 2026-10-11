@@ -50,6 +50,11 @@ let databaseMap = null;
 let databaseTables = [];
 let selectedDatabaseTable = null;
 let databaseFilter = "";
+let databaseRecordOffset = 0;
+let databaseRecordOffsets = [0];
+let databaseRecordRequest = 0;
+let databaseRecordBusy = false;
+let schemaColumnPreview = null;
 let crudPreviewValid = false;
 let lastCrudPreviewRequest = null;
 const editorRoot = $("editor-root");
@@ -64,10 +69,10 @@ const messages = {
     taskSaveHelp: "Ungespeicherte Änderungen übernehmen", taskSaveAll: "Alle Dateien speichern", taskSaveAllHelp: "Alle geänderten Dateien übernehmen",
     taskFormat: "Datei formatieren", taskFormatHelp: "Zelyra-Quelldatei kanonisch formatieren", taskCheck: "Projekt prüfen",
     taskCheckHelp: "Compilerdiagnosen für das Projekt anzeigen", taskDatabase: "Datenbank öffnen", taskDatabaseHelp: "Tabellen und Beziehungen ansehen",
-    taskRun: "Programm ausführen", taskRunHelp: "main.zyl mit Zelyras Laufzeit starten; konfigurierte Datenbank-, Netzwerk- und Prozesseffekte sind möglich, interaktive Eingabe fehlt",
+    taskRun: "Programm oder Web-App starten", taskRunHelp: "Konsolenprogramme mit Zelyras Laufzeit ausführen oder Webanwendungen lokal starten; konfigurierte Effekte sind möglich, interaktive Eingabe fehlt",
     projectMap: "Projektkarte", projectMapTitle: "Projektbeziehungen", projectMapOpenSource: "Quelltext öffnen", projectMapLoading: "Compiler-Projektmodell wird geladen …", projectMapUnavailable: "Projektkarte konnte nicht erstellt werden.", projectMapIncomplete: "Die Karte ist unvollständig. Nicht auflösbare oder begrenzte Beziehungen werden nicht geraten.", projectMapEmpty: "Noch keine unterstützten Beziehungen im Projekt.", projectMapModules: "Module", projectMapData: "Daten und Ansichten", projectMapWeb: "Routen und APIs", projectMapLogic: "Funktionen",
-    runButton: "Starten", runButtonTitle: "main.zyl ausführen",
-    runOutputTitle: "Programmausgabe", runStarting: "main.zyl wird ausgeführt …", runSuccess: "Programm erfolgreich beendet", runFailure: "Programm mit Fehler beendet", runTimeout: "Ausführung nach 15 Sekunden beendet", runOutputTruncated: "Die Ausgabe ist auf 64 KiB je Stream begrenzt.", runNoOutput: "Keine Ausgabe.", runStdout: "AUSGABE", runStderr: "FEHLER", runInputUnavailable: "Studio stellt dem Programm keine interaktive Eingabe bereit.",
+    runButton: "Starten", runButtonTitle: "main.zyl ausführen oder Webanwendung starten",
+    runOutputTitle: "Programmausgabe", runStarting: "main.zyl wird ausgeführt …", runSuccess: "Programm erfolgreich beendet", runFailure: "Programm mit Fehler beendet", runTimeout: "Ausführung nach 15 Sekunden beendet", runOutputTruncated: "Die Ausgabe ist auf 64 KiB je Stream begrenzt.", runNoOutput: "Keine Ausgabe.", runStdout: "AUSGABE", runStderr: "FEHLER", runInputUnavailable: "Studio stellt dem Programm keine interaktive Eingabe bereit.", runWebReady: "Webanwendung läuft lokal:", runWebOpen: "Anwendung im Browser öffnen", runWebStop: "Vorschau beenden", runWebStopped: "Lokale Vorschau wurde beendet.",
     taskHelp: "Kontexthilfe öffnen", taskHelpHelp: "Hilfe zum Begriff am Cursor anzeigen", taskProperties: "Dateieigenschaften öffnen",
     taskPropertiesHelp: "Informationen und Aktionen zur aktuellen Datei anzeigen", taskSearch: "Text suchen", taskSearchHelp: "Im aktuellen Dokument suchen",
     taskGoToDefinition: "Zur Definition springen", taskGoToDefinitionHelp: "Zur Funktion oder zum Typ am Cursor springen (F12)",
@@ -119,11 +124,30 @@ const messages = {
     required: "Pflichtfeld", autoIncrement: "Automatische ID", unique: "Eindeutig",
     relation: "Beziehung", relationTo: "Verweist auf", declaredOnly: "Nur in Quelle",
     liveOnly: "Nur in Datenbank", typeMismatch: "Abweichender Typ", noRelationships: "Keine Beziehungen deklariert",
+    recordPreviewEyebrow: "DATEN VORSCHAU", recordPreviewTitle: "Datensätze ansehen",
+    recordPreviewHint: "Nur-Leseansicht · bis zu 25 Zeilen pro Seite · Laden erst nach deiner Auswahl.",
+    recordPreviewLoad: "Datensätze laden", recordPreviewPrevious: "Zurück", recordPreviewNext: "Weiter",
+    recordPreviewIdle: "Wähle eine Tabelle und lade die Vorschau bewusst.", recordPreviewLoading: "Lese Datensätze …",
+    recordPreviewPage: "Zeilen {0}–{1}", recordPreviewEmpty: "Keine Datensätze auf dieser Seite.",
+    recordPreviewIncomplete: "Die Vorschau ist begrenzt. Lange Werte oder zusätzliche Spalten wurden gekürzt.",
+    recordPreviewFailed: "Datensätze konnten nicht geladen werden.",
+    createDatabase: "MariaDB-Datenbank anlegen", databaseTargetLoading: "Prüfe Projektziel …",
+    databaseTargetMissing: "Kein unterstütztes MariaDB-Ziel mit Verbindung konfiguriert.",
+    databaseTargetReady: "MariaDB-Ziel {0} · Verbindung konfiguriert",
+    databaseCreateConfirm: "Die MariaDB-Datenbank {0} anlegen oder sicherstellen, dass sie existiert? Die Zugangsdaten werden nur serverseitig verwendet.",
+    databaseCreated: "Datenbank vorhanden. Prüfe den Schema-Plan und wende ihn separat an.",
     tableNotDeclared: "Diese Live-Tabelle ist noch nicht in Zelyra deklariert. Lege zuerst eine geprüfte Tabellendeklaration an.",
     existingCrud: "Für diese Tabelle existiert bereits eine CRUD-Ressource.",
     previewRunning: "Prüfe erzeugten Code …", previewPassed: "Compilerprüfung bestanden · Änderung noch nicht übernommen",
     previewFailed: "Compilerprüfung fehlgeschlagen", previewRequired: "Erstelle zuerst eine gültige Vorschau.",
     applySuccess: "CRUD-Änderung übernommen", selectOneField: "Wähle mindestens ein Feld.",
+    schemaColumnTitle: "Tabellenspalten bearbeiten", schemaColumnHint: "Erzeugt und prüft eine Änderung im Zelyra-Quelltext. Die Datenbank wird dabei nicht geändert.",
+    schemaColumnOperation: "Aktion", schemaColumnAdd: "Hinzufügen", schemaColumnEdit: "Bearbeiten", schemaColumnExisting: "Vorhandenes Feld",
+    schemaColumnName: "Feldname", schemaColumnType: "Datentyp", schemaColumnRequired: "Pflichtfeld",
+    schemaColumnPreview: "Änderung prüfen", schemaColumnApply: "Quelltext übernehmen",
+    schemaColumnRunning: "Prüfe Tabellendeklaration …", schemaColumnPassed: "Compilerprüfung bestanden · Datenbank unverändert",
+    schemaColumnFailed: "Compilerprüfung fehlgeschlagen", schemaColumnConfirm: "Feld {0} im Projektquelltext ändern? Die Datenbank bleibt unverändert. Prüfe danach den Schema-Plan.",
+    schemaColumnApplied: "Quelltext geändert. Prüfe `zelyra db plan main.zyl`, bevor du eine Datenbankänderung anwendest.",
     table: "Tabelle", field: "Feld", moduleUnknown: "Quellmodul unbekannt", selectTarget: "Quelldatei auswählen"
   },
   en: {
@@ -136,10 +160,10 @@ const messages = {
     taskSaveHelp: "Write the current changes", taskSaveAll: "Save all files", taskSaveAllHelp: "Write all changed files",
     taskFormat: "Format file", taskFormatHelp: "Format a Zelyra source file", taskCheck: "Check project",
     taskCheckHelp: "Show compiler diagnostics for the project", taskDatabase: "Open database", taskDatabaseHelp: "Inspect tables and relationships",
-    taskRun: "Run program", taskRunHelp: "Run main.zyl with Zelyra; configured database, network, and process effects are possible, and interactive input is unavailable",
+    taskRun: "Run program or web app", taskRunHelp: "Run console programs with Zelyra or start web applications locally; configured effects are possible, and interactive input is unavailable",
     projectMap: "Project map", projectMapTitle: "Project relationships", projectMapOpenSource: "Open source location", projectMapLoading: "Loading the compiler project model …", projectMapUnavailable: "Could not create the project map.", projectMapIncomplete: "The map is incomplete. Unresolved or limited relationships are not guessed.", projectMapEmpty: "No supported relationships in this project yet.", projectMapModules: "Modules", projectMapData: "Data and views", projectMapWeb: "Routes and APIs", projectMapLogic: "Functions",
-    runButton: "Run", runButtonTitle: "Run main.zyl",
-    runOutputTitle: "Program output", runStarting: "Running main.zyl …", runSuccess: "Program finished successfully", runFailure: "Program finished with an error", runTimeout: "Execution stopped after 15 seconds", runOutputTruncated: "Output is limited to 64 KiB per stream.", runNoOutput: "No output.", runStdout: "OUTPUT", runStderr: "ERROR", runInputUnavailable: "Studio does not provide interactive input to the program.",
+    runButton: "Run", runButtonTitle: "Run main.zyl or start the web application",
+    runOutputTitle: "Program output", runStarting: "Running main.zyl …", runSuccess: "Program finished successfully", runFailure: "Program finished with an error", runTimeout: "Execution stopped after 15 seconds", runOutputTruncated: "Output is limited to 64 KiB per stream.", runNoOutput: "No output.", runStdout: "OUTPUT", runStderr: "ERROR", runInputUnavailable: "Studio does not provide interactive input to the program.", runWebReady: "Web application is running locally:", runWebOpen: "Open application in browser", runWebStop: "Stop preview", runWebStopped: "Local preview stopped.",
     taskHelp: "Open contextual help", taskHelpHelp: "Show help for the term at the cursor", taskProperties: "Open file properties",
     taskPropertiesHelp: "Show information and actions for the active file", taskSearch: "Find text", taskSearchHelp: "Search in the active document",
     taskGoToDefinition: "Go to definition", taskGoToDefinitionHelp: "Go to the function or type at the cursor (F12)",
@@ -191,11 +215,30 @@ const messages = {
     required: "Required", autoIncrement: "Auto increment", unique: "Unique",
     relation: "Relation", relationTo: "References", declaredOnly: "Source only",
     liveOnly: "Database only", typeMismatch: "Type differs", noRelationships: "No declared relations",
+    recordPreviewEyebrow: "DATA PREVIEW", recordPreviewTitle: "Browse records",
+    recordPreviewHint: "Read only · up to 25 rows per page · loaded only when you choose.",
+    recordPreviewLoad: "Load records", recordPreviewPrevious: "Previous", recordPreviewNext: "Next",
+    recordPreviewIdle: "Choose a table, then explicitly load its preview.", recordPreviewLoading: "Reading records …",
+    recordPreviewPage: "Rows {0}–{1}", recordPreviewEmpty: "No records on this page.",
+    recordPreviewIncomplete: "The preview is bounded. Long values or additional columns were shortened.",
+    recordPreviewFailed: "Could not load records.",
+    createDatabase: "Create MariaDB database", databaseTargetLoading: "Checking project target …",
+    databaseTargetMissing: "No supported MariaDB target with a configured connection.",
+    databaseTargetReady: "MariaDB target {0} · connection configured",
+    databaseCreateConfirm: "Create the MariaDB database {0}, or ensure that it exists? Credentials are used only on the local server.",
+    databaseCreated: "Database exists. Review and apply the schema plan separately.",
     tableNotDeclared: "This live table is not declared in Zelyra yet. Add a reviewed table declaration first.",
     existingCrud: "A CRUD resource already exists for this table.",
     previewRunning: "Checking generated source …", previewPassed: "Compiler check passed · change not yet applied",
     previewFailed: "Compiler check failed", previewRequired: "Create a valid preview first.",
     applySuccess: "CRUD change applied", selectOneField: "Choose at least one field.",
+    schemaColumnTitle: "Edit table columns", schemaColumnHint: "Creates and checks a Zelyra source change. It does not change the database.",
+    schemaColumnOperation: "Action", schemaColumnAdd: "Add", schemaColumnEdit: "Edit", schemaColumnExisting: "Existing field",
+    schemaColumnName: "Field name", schemaColumnType: "Data type", schemaColumnRequired: "Required",
+    schemaColumnPreview: "Check change", schemaColumnApply: "Apply source change",
+    schemaColumnRunning: "Checking table declaration …", schemaColumnPassed: "Compiler check passed · database unchanged",
+    schemaColumnFailed: "Compiler check failed", schemaColumnConfirm: "Change field {0} in project source? The database stays unchanged. Review the schema plan afterwards.",
+    schemaColumnApplied: "Source updated. Review `zelyra db plan main.zyl` before applying a database change.",
     table: "Table", field: "Field", moduleUnknown: "Source module unknown", selectTarget: "Choose source file"
   }
 };
@@ -965,6 +1008,48 @@ async function loadDatabaseSchema() {
   }
 }
 
+async function loadDatabaseTarget() {
+  const status = $("database-target-state");
+  const button = $("database-create");
+  status.textContent = t("databaseTargetLoading");
+  button.hidden = true;
+  try {
+    const target = await api("database-target");
+    if (target.creationSupported) {
+      status.textContent = t("databaseTargetReady", target.database || "main");
+      button.hidden = false;
+    } else {
+      status.textContent = t("databaseTargetMissing");
+    }
+  } catch (error) {
+    status.textContent = error.message;
+  }
+}
+
+async function createDatabaseFromStudio() {
+  const status = $("database-target-state");
+  const button = $("database-create");
+  try {
+    const target = await api("database-target");
+    if (!target.creationSupported) throw new Error(t("databaseTargetMissing"));
+    if (!window.confirm(t("databaseCreateConfirm", target.database || "main"))) return;
+    button.disabled = true;
+    const result = await api("database-create", {
+      method: "POST",
+      body: JSON.stringify({ confirm: true }),
+    });
+    status.textContent = t("databaseCreated");
+    announce(result.message || t("databaseCreated"), "success");
+    databaseMap = null;
+    await loadDatabaseSchema();
+  } catch (error) {
+    status.textContent = error.message;
+    announce(error.message, "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
 function statusLabel(status) {
   return ({ matched: t("matched"), schema_drift: t("schemaDrift"), declared_missing_live: t("declaredMissingLive"), live_unmapped: t("liveUnmapped") })[status] || status;
 }
@@ -1110,6 +1195,7 @@ function showDatabaseWelcome(message = t("databaseChooseHint")) {
 
 function selectDatabaseTable(name) {
   selectedDatabaseTable = databaseTables.find((table) => table.name === name) || null;
+  resetDatabaseRecordPreview();
   if (!selectedDatabaseTable) return showDatabaseWelcome();
   $("database-welcome").hidden = true;
   $("database-table-view").hidden = false;
@@ -1120,9 +1206,227 @@ function selectDatabaseTable(name) {
   badge.textContent = statusLabel(tableStatus(selectedDatabaseTable));
   badge.dataset.state = tableStatus(selectedDatabaseTable);
   renderDatabaseColumns(selectedDatabaseTable);
+  renderSchemaColumnEditor(selectedDatabaseTable);
   renderCrudBuilder(selectedDatabaseTable);
   renderDatabaseTables();
   renderDatabaseGraph();
+}
+
+function resetSchemaColumnPreview() {
+  schemaColumnPreview = null;
+  $("schema-column-preview-grid").hidden = true;
+  $("schema-column-diagnostics").replaceChildren();
+  $("schema-column-diagnostics").hidden = true;
+  $("schema-column-apply").disabled = true;
+  $("schema-column-state").textContent = "";
+  $("schema-column-state").dataset.kind = "";
+}
+
+function renderSchemaColumnEditor(table) {
+  resetSchemaColumnPreview();
+  const owner = table.module;
+  const controls = $("schema-column-editor");
+  controls.hidden = !owner || table.status === "live_unmapped";
+  $("schema-column-name").value = "";
+  const existing = $("schema-column-existing");
+  existing.replaceChildren();
+  for (const column of table.declared_columns || []) {
+    if (column.primary_key || column.auto_increment || column.unique) continue;
+    const option = document.createElement("option"); option.value = column.name; option.textContent = column.name; existing.append(option);
+  }
+  $("schema-column-operation").value = "add";
+  $("schema-column-existing-wrap").hidden = true;
+  $("schema-column-name").readOnly = false;
+  $("schema-column-type").value = "String(120)";
+  $("schema-column-required").checked = false;
+}
+
+function updateSchemaColumnOperation() {
+  const editing = $("schema-column-operation").value === "edit";
+  $("schema-column-existing-wrap").hidden = !editing;
+  $("schema-column-name").readOnly = editing;
+  if (editing) updateSchemaColumnField();
+  resetSchemaColumnPreview();
+}
+
+function updateSchemaColumnField() {
+  const field = $("schema-column-existing").value;
+  const column = (selectedDatabaseTable?.declared_columns || []).find((item) => item.name === field);
+  if (!column) return;
+  $("schema-column-name").value = column.name;
+  $("schema-column-required").checked = column.zelyra_required === true;
+  const type = column.zelyra_type;
+  if (type) {
+    const select = $("schema-column-type");
+    let option = [...select.options].find((item) => item.value === type);
+    if (!option) { option = document.createElement("option"); option.value = type; option.textContent = type; select.append(option); }
+    select.value = type;
+  }
+}
+
+function schemaColumnRequest() {
+  if (!selectedDatabaseTable?.module) throw new Error(t("schemaColumnFailed"));
+  const column = $("schema-column-name").value.trim();
+  if (!column) throw new Error(`${t("schemaColumnName")} is required`);
+  return {
+    path: selectedDatabaseTable.module,
+    table: selectedDatabaseTable.name,
+    column,
+    operation: $("schema-column-operation").value,
+    type: $("schema-column-type").value,
+    required: $("schema-column-required").checked,
+  };
+}
+
+async function previewSchemaColumn() {
+  resetSchemaColumnPreview();
+  $("schema-column-state").textContent = t("schemaColumnRunning");
+  $("schema-column-state").dataset.kind = "pending";
+  try {
+    const request = schemaColumnRequest();
+    const file = await api(`file?path=${encodeURIComponent(request.path)}`);
+    request.baseHash = file.hash;
+    const result = await api("schema-column-preview", { method: "POST", body: JSON.stringify(request) });
+    $("schema-column-diff").textContent = result.diff || "";
+    $("schema-column-impact").textContent = JSON.stringify(result.impact || {}, null, 2);
+    $("schema-column-preview-grid").hidden = false;
+    const diagnostics = $("schema-column-diagnostics");
+    diagnostics.replaceChildren();
+    for (const item of result.diagnostics || []) {
+      const row = document.createElement("div"); row.className = "crud-diagnostic";
+      const code = document.createElement("strong"); code.textContent = item.code || "Compiler";
+      const message = document.createElement("span"); message.textContent = item.message || "";
+      row.append(code, message); diagnostics.append(row);
+    }
+    diagnostics.hidden = !diagnostics.childElementCount;
+    if (result.success) {
+      schemaColumnPreview = { ...request, candidateHash: result.candidateHash };
+      $("schema-column-apply").disabled = false;
+      $("schema-column-state").textContent = t("schemaColumnPassed");
+      $("schema-column-state").dataset.kind = "success";
+    } else {
+      $("schema-column-state").textContent = t("schemaColumnFailed");
+      $("schema-column-state").dataset.kind = "error";
+    }
+  } catch (error) {
+    $("schema-column-state").textContent = error.message;
+    $("schema-column-state").dataset.kind = "error";
+  }
+}
+
+async function applySchemaColumn() {
+  if (!schemaColumnPreview) return;
+  const message = t("schemaColumnConfirm", schemaColumnPreview.column);
+  if (!window.confirm(message)) return;
+  try {
+    const result = await api("schema-column-apply", {
+      method: "POST",
+      body: JSON.stringify({ ...schemaColumnPreview, confirm: true }),
+    });
+    const tab = tabs.get(result.path);
+    if (tab) {
+      tab.saved = result.content;
+      tab.hash = result.hash;
+      tab.state = EditorState.create({ doc: result.content });
+      if (activePath === result.path && editor) { editor.setState(tab.state); tab.state = editor.state; }
+      renderTabs();
+    } else await openFile(result.path);
+    resetSchemaColumnPreview();
+    await refreshTree();
+    await loadDatabaseSchema();
+    announce(t("schemaColumnApplied"), "success");
+  } catch (error) {
+    $("schema-column-state").textContent = error.message;
+    $("schema-column-state").dataset.kind = "error";
+    announce(error.message, "error");
+  }
+}
+
+function resetDatabaseRecordPreview() {
+  databaseRecordRequest += 1;
+  databaseRecordBusy = false;
+  databaseRecordOffset = 0;
+  databaseRecordOffsets = [0];
+  const wrap = $("database-record-table-wrap");
+  wrap.replaceChildren();
+  wrap.hidden = true;
+  $("database-record-page").textContent = "";
+  $("database-record-status").textContent = t("recordPreviewIdle");
+  $("database-record-status").dataset.kind = "";
+  $("database-record-previous").disabled = true;
+  $("database-record-next").disabled = true;
+}
+
+function renderDatabaseRecords(result) {
+  const wrap = $("database-record-table-wrap");
+  const columns = Array.isArray(result.columns) ? result.columns : [];
+  const rows = Array.isArray(result.rows) ? result.rows : [];
+  if (result.readOnly !== true) throw new Error("Studio received an unexpected writable data response");
+  wrap.replaceChildren();
+  if (!rows.length || !columns.length) {
+    wrap.hidden = true;
+    $("database-record-status").textContent = t("recordPreviewEmpty");
+  } else {
+    const table = document.createElement("table");
+    table.className = "database-record-table";
+    const heading = table.createTHead().insertRow();
+    for (const name of columns) {
+      const cell = document.createElement("th");
+      cell.scope = "col";
+      cell.textContent = String(name);
+      heading.append(cell);
+    }
+    const body = table.createTBody();
+    for (const values of rows) {
+      const row = body.insertRow();
+      for (let index = 0; index < columns.length; index += 1) {
+        const cell = row.insertCell();
+        cell.textContent = String(values[index] ?? "");
+        cell.title = cell.textContent;
+      }
+    }
+    wrap.append(table);
+    wrap.hidden = false;
+    $("database-record-status").textContent = result.truncated ? t("recordPreviewIncomplete") : "";
+    $("database-record-status").dataset.kind = result.truncated ? "warning" : "";
+  }
+  $("database-record-page").textContent = rows.length
+    ? t("recordPreviewPage", `${databaseRecordOffset + 1}–${databaseRecordOffset + rows.length}`)
+    : "";
+  $("database-record-previous").disabled = databaseRecordOffsets.length <= 1;
+  $("database-record-next").disabled = !Number.isInteger(result.nextOffset);
+}
+
+async function loadDatabaseRecords(offset = 0) {
+  if (!selectedDatabaseTable || databaseRecordBusy) return;
+  const table = selectedDatabaseTable.name;
+  const requestId = ++databaseRecordRequest;
+  databaseRecordOffset = offset;
+  databaseRecordBusy = true;
+  $("database-record-load").disabled = true;
+  $("database-record-previous").disabled = true;
+  $("database-record-next").disabled = true;
+  $("database-record-status").textContent = t("recordPreviewLoading");
+  $("database-record-status").dataset.kind = "pending";
+  try {
+    const result = await api(`database-rows?table=${encodeURIComponent(table)}&limit=25&offset=${offset}`);
+    if (requestId !== databaseRecordRequest || selectedDatabaseTable?.name !== table) return;
+    renderDatabaseRecords(result);
+    if (offset === 0) databaseRecordOffsets = [0];
+    else if (databaseRecordOffsets.at(-1) !== offset) databaseRecordOffsets.push(offset);
+  } catch (error) {
+    if (requestId !== databaseRecordRequest) return;
+    $("database-record-table-wrap").replaceChildren();
+    $("database-record-table-wrap").hidden = true;
+    $("database-record-status").textContent = `${t("recordPreviewFailed")} ${error.message}`;
+    $("database-record-status").dataset.kind = "error";
+  } finally {
+    if (requestId === databaseRecordRequest) {
+      databaseRecordBusy = false;
+      $("database-record-load").disabled = false;
+      $("database-record-previous").disabled = databaseRecordOffsets.length <= 1;
+    }
+  }
 }
 
 function columnSignature(column) {
@@ -1322,6 +1626,7 @@ function openDatabaseWorkbench() {
   $("editor-stage").hidden = true;
   $("database-workbench").hidden = false;
   $("database-button").classList.add("active");
+  void loadDatabaseTarget();
   if (!databaseMap) void loadDatabaseSchema();
 }
 
@@ -1399,10 +1704,23 @@ async function runProject() {
   state.textContent = t("runStarting");
   state.dataset.kind = "pending";
   output.textContent = "";
+  $("run-output-web-link").hidden = true;
+  $("run-output-web-url").removeAttribute("href");
   if (!dialog.open) dialog.showModal();
   announce(t("runStarting"));
   try {
     const result = await api("run", { method: "POST", body: JSON.stringify({ path: "main.zyl" }) });
+    const webLink = $("run-output-web-link");
+    if (result.webApp && result.webUrl) {
+      state.textContent = t("runWebReady");
+      state.dataset.kind = "success";
+      webLink.hidden = false;
+      $("run-output-web-url").href = result.webUrl;
+      output.textContent = result.webUrl;
+      announce(`${t("runWebReady")} ${result.webUrl}`, "success");
+      return;
+    }
+    webLink.hidden = true;
     const statusText = result.timedOut ? t("runTimeout") : result.success ? t("runSuccess") : t("runFailure");
     state.textContent = `${statusText}${result.exitCode === null ? "" : ` · exit ${result.exitCode}`} · ${result.durationMs} ms`;
     state.dataset.kind = result.success ? "success" : "error";
@@ -1417,6 +1735,21 @@ async function runProject() {
   } catch (error) {
     state.textContent = error.message;
     state.dataset.kind = "error";
+    announce(error.message, "error");
+  }
+}
+
+async function stopWebPreview() {
+  try {
+    await api("stop-web-preview", { method: "POST", body: "{}" });
+    $("run-output-web-link").hidden = true;
+    $("run-output-state").textContent = t("runWebStopped");
+    $("run-output-state").dataset.kind = "success";
+    $("run-output-web-url").removeAttribute("href");
+    announce(t("runWebStopped"), "success");
+  } catch (error) {
+    $("run-output-state").textContent = error.message;
+    $("run-output-state").dataset.kind = "error";
     announce(error.message, "error");
   }
 }
@@ -1583,6 +1916,7 @@ $("delete-file-button").addEventListener("click", deleteActiveFile);
 $("save-all-button").addEventListener("click", saveAll);
 $("check-button").addEventListener("click", checkProject);
 $("run-button").addEventListener("click", runProject);
+$("run-output-web-stop").addEventListener("click", stopWebPreview);
 $("format-button").addEventListener("click", formatActive);
 $("database-button").addEventListener("click", openDatabaseWorkbench);
 $("assistant-toggle").addEventListener("click", () => toggleAssistant());
@@ -1631,7 +1965,26 @@ $("task-finder-input").addEventListener("keydown", (event) => {
 $("code-button").addEventListener("click", openCodeWorkbench);
 $("database-refresh").addEventListener("click", loadDatabaseSchema);
 $("database-start").addEventListener("click", loadDatabaseSchema);
+$("database-create").addEventListener("click", createDatabaseFromStudio);
 $("database-filter").addEventListener("input", (event) => { databaseFilter = event.target.value; renderDatabaseTables(); });
+$("database-record-load").addEventListener("click", () => { void loadDatabaseRecords(0); });
+$("database-record-previous").addEventListener("click", () => {
+  if (databaseRecordOffsets.length <= 1 || databaseRecordBusy) return;
+  databaseRecordOffsets.pop();
+  void loadDatabaseRecords(databaseRecordOffsets.at(-1));
+});
+$("database-record-next").addEventListener("click", () => {
+  if (databaseRecordBusy || $("database-record-next").disabled) return;
+  void loadDatabaseRecords(databaseRecordOffset + 25);
+});
+$("schema-column-preview").addEventListener("click", previewSchemaColumn);
+$("schema-column-apply").addEventListener("click", applySchemaColumn);
+$("schema-column-operation").addEventListener("change", updateSchemaColumnOperation);
+$("schema-column-existing").addEventListener("change", () => { updateSchemaColumnField(); resetSchemaColumnPreview(); });
+for (const id of ["schema-column-name", "schema-column-type", "schema-column-required"]) {
+  $(id).addEventListener("input", resetSchemaColumnPreview);
+  $(id).addEventListener("change", resetSchemaColumnPreview);
+}
 $("crud-preview-button").addEventListener("click", previewCrud);
 $("crud-apply-button").addEventListener("click", applyCrud);
 $("new-file-button").addEventListener("click", createFile);

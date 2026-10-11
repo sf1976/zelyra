@@ -1,0 +1,234 @@
+import "src/model.zyl" as model
+import "src/inventory.zyl" as inventory
+pub fn create(state: model::State) -> model::State uses Console, Clock {
+    if len(state.customers) == 0 || len(state.articles) == 0 {
+        print("Bitte zuerst mindestens einen Kunden und Artikel erfassen.") return state
+    }
+    customers_list(state)
+    customer_raw = read_console("Kunden-ID: ")
+    match customer_raw {
+        Some(raw) => {
+            match model::parse_int(raw) {
+                Some(customer_id) => {
+                    mutable customer_name = ""
+                    mutable customer_found = false
+                    for customer in state.customers {
+                        if customer.id == customer_id {
+                            customer_name = customer.name customer_found = true
+                        }
+                    }
+                    if!customer_found {
+                        print("Kunde nicht gefunden.") return state
+                    }
+                    inventory::show_articles(state)
+                    mutable lines: model::OrderLine[] = []
+                    mutable subtotal = 0
+                    mutable adding = true
+                    while adding {
+                        article_raw = read_console("Artikelnummer (leer beendet Positionen): ")
+                        match article_raw {
+                            Some("") => {
+                                adding = false
+                            }
+                            Some(article_text) => {
+                                match model::parse_int(article_text) {
+                                    Some(number) => {
+                                        quantity_raw = read_console("Menge: ")
+                                        match quantity_raw {
+                                            Some(quantity_text) => {
+                                                match model::parse_int(quantity_text) {
+                                                    Some(quantity) => {
+                                                        mutable found: model::Article? = None
+                                                        for article in state.articles {
+                                                            if article.number == number {
+                                                                found = Some(article)
+                                                            }
+                                                        }
+                                                        match found {
+                                                            Some(article) => {
+                                                                if!model::valid_article_values(article.price_cents, article.stock) {
+                                                                    print("Artikelpreis oder Bestand liegt ausserhalb des erlaubten Bereichs.")
+                                                                }
+                                                                else {
+                                                                    if!model::enough_stock(article.stock, quantity) {
+                                                                        print("Nicht genug Lagerbestand oder Menge ungueltig.")
+                                                                    }
+                                                                    else {
+                                                                        if has_line(lines, number) {
+                                                                            print("Artikelnummer bereits in der Bestellung; Menge bitte in einer Position zusammenfassen.")
+                                                                        }
+                                                                        else {
+                                                                            if len(lines) >= model::max_order_lines() {
+                                                                                print("Eine Bestellung darf hoechstens 50 verschiedene Artikel enthalten.")
+                                                                            }
+                                                                            else {
+                                                                                lines = append(lines, model::OrderLine {
+                                                                                    article_number: number, article_name: article.name, quantity: quantity, unit_price_cents: article.price_cents
+                                                                                }
+                                                                                )
+                                                                                subtotal = subtotal + article.price_cents * quantity
+                                                                                print("Position aufgenommen. Zwischensumme Cent:") print(subtotal)
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                            None => {
+                                                                print("Artikel nicht gefunden.")
+                                                            }
+                                                        }
+                                                    }
+                                                    None => {
+                                                        print("Menge muss eine Ganzzahl sein.")
+                                                    }
+                                                }
+                                            }
+                                            None => {
+                                                adding = false
+                                            }
+                                        }
+                                    }
+                                    None => {
+                                        print("Artikelnummer muss eine Ganzzahl sein.")
+                                    }
+                                }
+                            }
+                            None => {
+                                adding = false
+                            }
+                        }
+                    }
+                    if len(lines) == 0 {
+                        print("Keine Bestellpositionen; Bestellung verworfen.") return state
+                    }
+                    discount_raw = read_console("Rabatt in Prozent (0 bis 100): ")
+                    match discount_raw {
+                        Some(discount_text) => {
+                            match model::parse_int(discount_text) {
+                                Some(discount) => {
+                                    if discount<0 || discount>100 {
+                                        print("Rabatt muss zwischen 0 und 100 liegen.") return state
+                                    }
+                                    result = model::calculate_order(subtotal, discount)
+                                    mutable articles: model::Article[] = state.articles
+                                    for line in lines {
+                                        articles = change_stock(articles, line.article_number,-line.quantity)
+                                    }
+                                    order = model::Order {
+                                        id: state.next_id, customer_id: customer_id, customer_name: customer_name, lines: lines, discount_percent: discount, subtotal_cents: result[0], discount_cents: result[1], tax_cents: result[2], total_cents: result[3], created_at: now(), status: "open"
+                                    }
+                                    print("Bestellung erstellt. ID / Brutto Cent:") print(order.id) print(order.total_cents)
+                                    return model::State {
+                                        articles: articles, customers: state.customers, orders: append(state.orders, order), activities: state.activities, next_id: state.next_id + 1
+                                    }
+                                }
+                                None => {
+                                    print("Rabatt muss eine Ganzzahl sein.")
+                                }
+                            }
+                        }
+                        None => {
+                            print("Eingabe abgebrochen.")
+                        }
+                    }
+                }
+                None => {
+                    print("Ungueltige Kunden-ID.")
+                }
+            }
+        }
+        None => {
+            print("Eingabe abgebrochen.")
+        }
+    }
+    return state
+}
+pub fn customers_list(state: model::State) {
+    for customer in state.customers {
+        print(customer.id) print(customer.name)
+    }
+}
+pub fn has_line(lines: model::OrderLine[], number: Int) -> Bool {
+    for line in lines {
+        if line.article_number == number {
+            return true
+        }
+    }
+    return false
+}
+pub fn change_stock(articles: model::Article[], number: Int, amount: Int) -> model::Article[] {
+    mutable updated: model::Article[] = []
+    for article in articles {
+        if article.number == number {
+            updated = append(updated, model::Article {
+                number: article.number, name: article.name, price_cents: article.price_cents, stock: article.stock + amount, category: article.category
+            }
+            )
+        }
+        else {
+            updated = append(updated, article)
+        }
+    }
+    return updated
+}
+pub fn show_orders(state: model::State) -> model::State uses Console, Clock {
+    for order in state.orders {
+        print("Bestellung:") print(order.id) print(order.customer_name + " | " + order.status) print("Netto Cent / Rabatt Cent / Steuer 19% Cent / Brutto Cent:") print(order.subtotal_cents) print(order.discount_cents) print(order.tax_cents) print(order.total_cents) print("Erstellt (UTC):") print(format_timestamp(order.created_at)) for line in order.lines {
+            print(line.article_name) print(line.quantity) print(line.unit_price_cents)
+        }
+    }
+    if len(state.orders) == 0 {
+        print("Noch keine Bestellungen.")
+    }
+    cancel_input = read_console("Bestellung stornieren? ID eingeben, sonst leer: ")
+    match cancel_input {
+        Some("") => {
+            return state
+        }
+        Some(raw) => {
+            match model::parse_int(raw) {
+                Some(id) => {
+                    return cancel(state, id)
+                }
+                None => {
+                    print("Ungueltige ID.")
+                }
+            }
+        }
+        None => {
+            return state
+        }
+    }
+    return state
+}
+pub fn cancel(state: model::State, id: Int) -> model::State uses Clock {
+    mutable articles: model::Article[] = state.articles
+    mutable orders: model::Order[] = []
+    mutable found = false
+    for order in state.orders {
+        if order.id == id {
+            found = true
+            if order.status == "open" {
+                for line in order.lines {
+                    articles = change_stock(articles, line.article_number, line.quantity)
+                }
+                orders = append(orders, model::Order {
+                    id: order.id, customer_id: order.customer_id, customer_name: order.customer_name, lines: order.lines, discount_percent: order.discount_percent, subtotal_cents: order.subtotal_cents, discount_cents: order.discount_cents, tax_cents: order.tax_cents, total_cents: order.total_cents, created_at: order.created_at, status: "cancelled"
+                }
+                )
+                print("Bestellung storniert; Waren wurden wieder eingelagert.")
+            } else {
+                orders = append(orders, order) print("Bestellung war bereits storniert; Lagerbestand bleibt unveraendert.")
+            }
+        } else {
+            orders = append(orders, order)
+        }
+    }
+    if!found {
+        print("Bestellung nicht gefunden.") return state
+    }
+    next_state = model::State {
+        articles: articles, customers: state.customers, orders: orders, activities: state.activities, next_id: state.next_id
+    }
+    return model::record_action(next_state, "Bestellung storniert")
+}

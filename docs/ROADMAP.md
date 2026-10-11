@@ -93,7 +93,10 @@ principles; the roadmap below tracks what is actually implemented.
 
 - [x] Language core: lexer, parser, AST, functions, expressions, control flow,
   immutable-by-default bindings, arrays, deterministic typed maps, records,
-  Option, Result, and pattern matching.
+  Option, Result, and exhaustive pattern matching as statements and expressions.
+  `Int`/`UInt` overflow and division by zero return controlled runtime errors;
+  `Unit` is usable in type signatures. `examples/type_system` records tested
+  coverage and unsupported areas.
 - [x] Static checking, nominal domain types, capabilities, contracts, runtime
   checks, and an initial verifier.
 - [x] MariaDB-first schema definitions, inspection, DDL planning, schema
@@ -648,6 +651,19 @@ its source evidence and reason.
 
 ## Release 0.9.2 — IDE language services
 
+- [✅] Add safe UTF-8 text-file operations for exclusive creation, atomic file
+  replacement, append, copy, rename, and Result-based deletion. Literal text
+  search, replacement, and splitting support the multi-file console notes
+  manager in `examples/notes_manager`, including pre-change backups, restore,
+  filesystem boundaries, action logging, and automated regression tests.
+- [✅] Add the type-checked `assert(condition[, message])` runtime intrinsic.
+  A false condition becomes a runtime error, so the inventory/orders, CSV, and
+  notes-manager suites produce a failing process status instead of only printing
+  a failure line. Inventory state uses atomic replacement and has a Zelyra-level
+  save/load round-trip check. `text_trim` removes Unicode whitespace at text
+  boundaries; CSV import uses it to reject required fields containing only
+  whitespace.
+
 - [🧪] The guided tutorial command starts MariaDB and the web app, then applies
   the schema. The Compose web app gets its database URL from project setup, so
   beginners need not set `DATABASE_URL` or run separate `db setup` and `serve`
@@ -686,20 +702,60 @@ its source evidence and reason.
 
 ## Release 0.9.3 — database workbench
 
-- [🗺️] Start a read-only Laravel project analyzer in the Zelyra CLI:
-  `zelyra migrate laravel <project> --report <path>`. It statically inventories
+Scope and technical gates are in the [0.9.3 release plan](release-plans/0.9.3.en.md).
+
+- [✅] Add CSV foundations for import and export: parse `String[][]` as a
+  nested type, correctly decode and encode quoted delimiters/quotes/newlines,
+  and convert decimal text to scaled integers without Float. The
+  `examples/csv_catalog` project creates source data, validates fields, logs
+  errors, sorts/exports valid records, and automatically checks the round trip.
+  CSV is processed as a complete UTF-8 string in memory; streaming is not
+  included. The Zelyra tests use `assert` so failures are reflected in process
+  status.
+- [✅] Add `text_chars(text)` to return Unicode code points as `String[]`. The
+  multi-file `examples/labyrinth_solver` uses it to load and validate variable-
+  sized grids, run breadth-first search for a shortest path, render results and
+  counters, and verify a file round trip.
+
+- [🧪] Fix the invoice tutorial startup defect found after 0.9.2: declarative
+  web layouts must load the project theme; the CLI prints the local browser
+  address when scaffolding and preserves it when schema setup fails. Studio's
+  **Run** action executes console programs and starts a local preview for web
+  projects with a clickable address. A new preview replaces the prior one and
+  Studio stops the active preview when it closes; **Stop preview** ends it
+  immediately. Databases still start explicitly and separately. The tutorial
+  is generated as a real imported multi-file project with separate database,
+  customer, item, invoice, layout, and dashboard modules. CLI and Studio
+  browser E2E evidence covers the web workflow; human acceptance remains for
+  1.0.0.
+- [🧪] Expand CLI help: `zelyra <command> --help` and nested calls such as
+  `zelyra db plan --help` explain purpose, options, examples, and prerequisites
+  in German or English without running the command.
+- [🧪] Start a read-only Laravel project analyzer in the Zelyra CLI:
+  `zelyra migrate laravel <project> --report <path>`. The first static inventory
+  already detects
   Laravel/package versions, routes and middleware, controllers, models,
   migrations, validation, views, jobs, and integrations, and links findings to
   source locations. It must not boot the application, invoke Artisan, connect to
   a database, or read `.env` files. Reports distinguish directly mappable,
   partially mappable, manual, and unresolved items and identify a safe next
   step. Start with a documented supported-pattern subset; ambiguous matches
-  remain unresolved rather than guessed.
-- [🗺️] Grow the IDE database view into a safe workbench: inspect tables,
+  remain unresolved rather than guessed. The first release scans Composer
+  constraints, routes, models, controllers, schema creation, relationships,
+  validation entry points, queued jobs, Blade views, and selected integrations
+  with source locations in Markdown or JSON. It creates only a new report
+  outside the source project. Versioned compatibility mapping, linked project
+  graph, package/rule analysis, and scaffold generation continue in 0.9.4–0.9.8.
+- [🧪] Grow the IDE database view into a safe workbench: inspect tables,
   columns, indexes, and declared relationships; browse records read-only by
   default; show how source modules own each object. Make the ER diagram
   filterable and navigable so selecting a field or relationship reveals its
-  declaration module and using resources.
+  declaration module and using resources. Studio now offers a session-protected
+  read-only data browser capped at 25 rows per request and a compiler-checked
+  helper to add/edit simple source columns. A declared MariaDB database can be
+  created after confirmation when a connection is already configured.
+  Connection selection, PostgreSQL/MySQL database creation, and the complete
+  reviewed plan/risk view remain open.
 - [🗺️] Deliver foreign-key relationships as an end-to-end database feature by
   1.0.0: declare references in Zelyra table fields, validate target table and
   column types in the compiler, create and inspect real constraints, and show
@@ -721,12 +777,16 @@ its source evidence and reason.
   at compile time. Exit evidence includes two-tenant positive and negative
   integration cases for every mutation and read path, including membership
   revocation and forged/conflicting selectors.
-- [🗺️] Let users add and edit table columns through the properties sidebar.
+- [🧪] Let users add and edit table columns through the properties sidebar.
   Show the complete schema plan, impact, and risks; run compiler checks and
   require explicit confirmation before applying changes. Let users choose the
   database backend and connection, then create the project database from Studio
   where the backend and granted privileges support it. Clearly explain
   unsupported combinations and never store or print credentials in the browser.
+  Add/Edit for simple source columns is compiler-checked, hash-bound, and
+  explicitly confirmed. Key, unique, and defaulted columns cannot be edited
+  visually. Backend/connection selection and PostgreSQL/MySQL database
+  creation remain open; MariaDB creation uses an existing configured URL.
 - [🗺️] Prepare typed, read-only data sources for metrics so 0.9.4 can offer
   selections without free-form SQL. Mutations and generated schema changes
   require a reviewed plan and explicit confirmation.
@@ -744,6 +804,19 @@ its source evidence and reason.
 
 ## Release 0.9.4 — visual CRUD design
 
+- [🗺️] Close the type-system gaps tracked by `examples/type_system` before
+  0.9.9: add nominal enum variants with exhaustive matching and typed JSON
+  round trips; add safe, statically typed function values and user-defined
+  generic functions/records in bounded, documented forms; and define a
+  Zelyra-native identity-bearing business entity if real object identity is
+  needed alongside value-based records. Preserve Zelyra's explicit `Int`/
+  `UInt` and `Float`/`Decimal` model rather than adding width variants without
+  demonstrated business need. Each feature must update compiler/runtime,
+  diagnostics, compatibility fixtures, Studio help, and the type coverage
+  matrix. The 0.9.9 gate reruns positive, expected-compiler-error, expected-
+  runtime-error, and serialization checks and must report zero unexpected
+  failures; any unsupported item needs an explicit product decision, not a
+  silent omission.
 - [🗺️] Expand Laravel analysis into an evidence-linked project graph:
   route → middleware/controller → model/relation → migration/table → view,
   with validation rules, package dependencies, file and line locations, and

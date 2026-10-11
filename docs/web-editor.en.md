@@ -24,8 +24,11 @@ zelyra editor ./invoices --port 4177
 The CLI opens the default browser automatically. If that is unavailable, it
 prints the local URL containing the session token for manual use. Pass
 `--no-open` to skip browser launch, for example over SSH or without a graphical
-desktop. Studio needs neither a database nor a running web application; start
-those only when you want to use them separately. Stop Studio with `Ctrl+C`.
+desktop. Studio does not start a database. **Run** executes console programs or
+starts a local web application and shows its browser address with an open link.
+The application's database must already be reachable. Starting a web app again
+replaces the previous preview. **Stop preview** ends it immediately; closing
+Studio also stops the active preview. Stop Studio with `Ctrl+C`.
 
 ## Workspace
 

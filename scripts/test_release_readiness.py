@@ -18,6 +18,22 @@ from check_release_readiness import (
 
 
 class ReleaseReadinessTests(unittest.TestCase):
+    def test_093_requires_complete_bilingual_release_plan_gates(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            version = "0.9.3"
+            for relative_path, heading in RELEASE_PLAN_CHECKLISTS[version]:
+                path = root / relative_path
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(f"{heading}\n\n- [x] Gate passed\n", encoding="utf-8")
+
+            self.assertEqual(unfinished_gates(root, version), [])
+            german_path = root / RELEASE_PLAN_CHECKLISTS[version][1][0]
+            german_path.write_text("## Release-Gates\n\n- [ ] Gate pending\n", encoding="utf-8")
+            self.assertTrue(
+                any("release gate is incomplete" in item for item in unfinished_gates(root, version))
+            )
+
     def test_non_030_version_has_no_final_gate(self) -> None:
         self.assertEqual(unfinished_gates(Path("."), "0.2.0"), [])
 
@@ -25,7 +41,7 @@ class ReleaseReadinessTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         for version, plans in RELEASE_PLAN_CHECKLISTS.items():
             failures = unfinished_gates(root, version)
-            if version in {"0.7.0", "0.8.0", "0.9.0"}:
+            if version in {"0.7.0", "0.8.0", "0.9.0", "0.9.3"}:
                 self.assertEqual(
                     failures,
                     [],

@@ -1,0 +1,475 @@
+import "src/model.zyl" as model
+import "src/storage.zyl" as storage
+import "src/text_tools.zyl" as text_tools
+fn note_exists(name: String) -> Bool uses FileSystem {
+    files = list_dir("data/notes")
+    return contains(files, name + ".note.json")
+}
+pub fn create_note() uses Console, FileSystem, Clock {
+    name_input = read_console("Dateiname (ohne Endung): ")
+    title_input = read_console("Titel: ")
+    match name_input {
+        Some(name) => {
+            match title_input {
+                Some(note_title) => {
+                    if!model::valid_name(name) || note_title == "" {
+                        print("Dateiname oder Titel ist ungültig.")
+                        model::log("Erstellen", name, "abgelehnt: ungültige Eingabe")
+                    }
+                    else {
+                        if note_exists(name) {
+                            print("Diese Notizdatei ist bereits vorhanden; sie wurde nicht überschrieben.")
+                            model::log("Erstellen", name, "abgelehnt: Datei existiert")
+                        }
+                        else {
+                            note = model::empty_note(note_title)
+                            match storage::save_new(name, note) {
+                                Ok(_) => {
+                                    print("Notiz wurde erstellt.")
+                                    model::log("Erstellen", name, "erfolgreich")
+                                }
+                                Err(message) => {
+                                    print(message)
+                                    model::log("Erstellen", name, message)
+                                }
+                            }
+                        }
+                    }
+                }
+                None => {
+                    print("Eingabe abgebrochen.")
+                }
+            }
+        }
+        None => {
+            print("Eingabe abgebrochen.")
+        }
+    }
+}
+pub fn read_note() uses Console, FileSystem, Clock {
+    name_input = read_console("Dateiname: ")
+    match name_input {
+        Some(name) => {
+            match storage::load(name) {
+                Ok(note) => {
+                    print("Titel: " + note.display_title)
+                    print("Erstellt: " + format_timestamp(note.created_at))
+                    print("Geändert: " + format_timestamp(note.updated_at))
+                    print("")
+                    print(note.content)
+                    model::log("Lesen", name, "erfolgreich")
+                }
+                Err(message) => {
+                    print(message)
+                    model::log("Lesen", name, message)
+                }
+            }
+        }
+        None => {
+            print("Eingabe abgebrochen.")
+        }
+    }
+}
+pub fn append_paragraph() uses Console, FileSystem, Clock {
+    name_input = read_console("Dateiname: ")
+    paragraph_input = read_console("Absatz: ")
+    match name_input {
+        Some(name) => {
+            match paragraph_input {
+                Some(paragraph) => {
+                    match storage::load(name) {
+                        Ok(note) => {
+                            mutable content = ""
+                            if note.content == "" {
+                                content = paragraph
+                            }
+                            else {
+                                content = note.content + "\n\n" + paragraph
+                            }
+                            report_save("Absatz anhängen", name, storage::update_content(name, content))
+                        }
+                        Err(message) => {
+                            print(message) model::log("Absatz anhängen", name, message)
+                        }
+                    }
+                }
+                None => {
+                    print("Eingabe abgebrochen.")
+                }
+            }
+        }
+        None => {
+            print("Eingabe abgebrochen.")
+        }
+    }
+}
+pub fn replace_text() uses Console, FileSystem, Clock {
+    name_input = read_console("Dateiname: ")
+    search_input = read_console("Zu ersetzender Text: ")
+    replacement_input = read_console("Neuer Text: ")
+    match name_input {
+        Some(name) => {
+            match search_input {
+                Some(search_text) => {
+                    match replacement_input {
+                        Some(replacement) => {
+                            match storage::load(name) {
+                                Ok(note) => {
+                                    if search_text == "" {
+                                        print("Der Suchtext darf nicht leer sein.")
+                                    }
+                                    else {
+                                        if!text_contains(note.content, search_text) {
+                                            print("Suchtext wurde nicht gefunden; die Notiz blieb unverändert.")
+                                            model::log("Text ersetzen", name, "Suchtext nicht gefunden")
+                                        }
+                                        else {
+                                            match text_replace_result(note.content, search_text, replacement) {
+                                                Ok(updated_content) => {
+                                                    report_save("Text ersetzen", name, storage::update_content(name, updated_content))
+                                                }
+                                                Err(message) => {
+                                                    print(message) model::log("Text ersetzen", name, message)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                Err(message) => {
+                                    print(message) model::log("Text ersetzen", name, message)
+                                }
+                            }
+                        }
+                        None => {
+                            print("Eingabe abgebrochen.")
+                        }
+                    }
+                }
+                None => {
+                    print("Eingabe abgebrochen.")
+                }
+            }
+        }
+        None => {
+            print("Eingabe abgebrochen.")
+        }
+    }
+}
+pub fn remove_paragraph() uses Console, FileSystem, Clock {
+    name_input = read_console("Dateiname: ")
+    number_input = read_console("Absatznummer (ab 1): ")
+    match name_input {
+        Some(name) => {
+            match number_input {
+                Some(raw) => {
+                    match model::parse_positive_int(raw) {
+                        Some(number) => {
+                            match storage::load(name) {
+                                Ok(note) => {
+                                    match text_tools::remove_paragraph(note.content, number) {
+                                        Ok(result) => {
+                                            report_save("Absatz entfernen", name, storage::update_content(name, result))
+                                        }
+                                        Err(message) => {
+                                            print(message)
+                                        }
+                                    }
+                                }
+                                Err(message) => {
+                                    print(message) model::log("Absatz entfernen", name, message)
+                                }
+                            }
+                        }
+                        None => {
+                            print("Bitte eine positive ganze Zahl eingeben.")
+                        }
+                    }
+                }
+                None => {
+                    print("Eingabe abgebrochen.")
+                }
+            }
+        }
+        None => {
+            print("Eingabe abgebrochen.")
+        }
+    }
+}
+pub fn rename_note() uses Console, FileSystem, Clock {
+    old_input = read_console("Bisheriger Dateiname: ")
+    new_input = read_console("Neuer Dateiname: ")
+    match old_input {
+        Some(old_name) => {
+            match new_input {
+                Some(new_name) => {
+                    if!model::valid_name(new_name) {
+                        print("Der neue Dateiname ist ungültig.")
+                    }
+                    else {
+                        if!note_exists(old_name) {
+                            print("Die Notiz wurde nicht gefunden.")
+                        }
+                        else {
+                            if note_exists(new_name) {
+                                print("Der Zieldateiname ist bereits vergeben.")
+                            }
+                            else {
+                                match storage::backup(old_name) {
+                                    Ok(_) => {
+                                        match rename_file_result(model::note_path(old_name), model::note_path(new_name)) {
+                                            Ok(_) => {
+                                                print("Notiz wurde umbenannt.") model::log("Umbenennen", old_name + " -> " + new_name, "erfolgreich")
+                                            }
+                                            Err(message) => {
+                                                print("Umbenennen fehlgeschlagen: " + message) model::log("Umbenennen", old_name, message)
+                                            }
+                                        }
+                                    }
+                                    Err(message) => {
+                                        print(message) model::log("Umbenennen", old_name, message)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                None => {
+                    print("Eingabe abgebrochen.")
+                }
+            }
+        }
+        None => {
+            print("Eingabe abgebrochen.")
+        }
+    }
+}
+pub fn copy_note() uses Console, FileSystem, Clock {
+    source_input = read_console("Quelldateiname: ")
+    target_input = read_console("Neuer Dateiname: ")
+    match source_input {
+        Some(source_name) => {
+            match target_input {
+                Some(target_name) => {
+                    if!model::valid_name(target_name) {
+                        print("Der neue Dateiname ist ungültig.")
+                    }
+                    else {
+                        match storage::load(source_name) {
+                            Ok(note) => {
+                                match storage::save_new(target_name, note) {
+                                    Ok(_) => {
+                                        print("Notiz wurde kopiert.") model::log("Kopieren", source_name + " -> " + target_name, "erfolgreich")
+                                    }
+                                    Err(message) => {
+                                        print(message) model::log("Kopieren", target_name, message)
+                                    }
+                                }
+                            }
+                            Err(message) => {
+                                print(message) model::log("Kopieren", source_name, message)
+                            }
+                        }
+                    }
+                }
+                None => {
+                    print("Eingabe abgebrochen.")
+                }
+            }
+        }
+        None => {
+            print("Eingabe abgebrochen.")
+        }
+    }
+}
+pub fn delete_note() uses Console, FileSystem, Clock {
+    name_input = read_console("Dateiname: ")
+    match name_input {
+        Some(name) => {
+            confirmation = read_console("Zum Löschen exakt LOESCHEN eingeben: ")
+            match confirmation {
+                Some("LOESCHEN") => {
+                    match storage::backup(name) {
+                        Ok(_) => {
+                            match delete_file_result(model::note_path(name)) {
+                                Ok(_) => {
+                                    print("Notiz gelöscht; eine Sicherung liegt im Backup-Ordner.")
+                                    model::log("Löschen", name, "bestätigt und gelöscht")
+                                }
+                                Err(message) => {
+                                    print("Löschen fehlgeschlagen: " + message)
+                                    model::log("Löschen", name, message)
+                                }
+                            }
+                        }
+                        Err(message) => {
+                            print(message) model::log("Löschen", name, message)
+                        }
+                    }
+                }
+                Some(_) => {
+                    print("Löschen abgebrochen.") model::log("Löschen", name, "Bestätigung fehlte")
+                }
+                None => {
+                    print("Eingabe abgebrochen.")
+                }
+            }
+        }
+        None => {
+            print("Eingabe abgebrochen.")
+        }
+    }
+}
+pub fn search_notes() uses Console, FileSystem, Clock {
+    query_input = read_console("Suchtext in Name oder Inhalt: ")
+    match query_input {
+        Some(query) => {
+            match storage::names() {
+                Ok(files) => {
+                    mutable found = 0
+                    for file in files {
+                        if text_contains(file, ".note.json") {
+                            prefix = text_replace_result(file, ".note.json", "")
+                            match prefix {
+                                Ok(name) => {
+                                    match storage::load(name) {
+                                        Ok(note) => {
+                                            if model::matches_search(name, note, query) {
+                                                print(name + " — " + note.display_title)
+                                                found = found + 1
+                                            }
+                                        }
+                                        Err(message) => {
+                                            print(message)
+                                        }
+                                    }
+                                }
+                                Err(_) => {
+                                }
+                            }
+                        }
+                    }
+                    if found == 0 {
+                        print("Keine passende Notiz gefunden.")
+                    }
+                    model::log("Suche", query, "abgeschlossen")
+                }
+                Err(message) => {
+                    print(message) model::log("Suche", query, message)
+                }
+            }
+        }
+        None => {
+            print("Eingabe abgebrochen.")
+        }
+    }
+}
+pub fn list_notes() uses FileSystem, Clock {
+    match storage::names() {
+        Ok(files) => {
+            mutable found = 0
+            for file in files {
+                if text_contains(file, ".note.json") {
+                    match text_replace_result(file, ".note.json", "") {
+                        Ok(name) => {
+                            match storage::load(name) {
+                                Ok(note) => {
+                                    print(name + " — " + note.display_title + " (geändert " + format_timestamp(note.updated_at) + ")") found = found + 1
+                                }
+                                Err(message) => {
+                                    print(message)
+                                }
+                            }
+                        }
+                        Err(_) => {
+                        }
+                    }
+                }
+            }
+            if found == 0 {
+                print("Noch keine Notizen vorhanden.")
+            }
+            model::log("Liste anzeigen", "", "abgeschlossen")
+        }
+        Err(message) => {
+            print(message) model::log("Liste anzeigen", "", message)
+        }
+    }
+}
+pub fn restore_backup() uses Console, FileSystem, Clock {
+    backups = list_dir("data/notes/backups")
+    print("Vorhandene Backups:")
+    for backup in backups {
+        print(backup)
+    }
+    backup_input = read_console("Exakter Backup-Dateiname: ")
+    match backup_input {
+        Some(file) => {
+            if text_contains(file, "/") || text_contains(file, "\\") || text_contains(file, "..") || text_contains(file, "\n") {
+                print("Ungültiger Backup-Dateiname.")
+            }
+            else {
+                if!contains(backups, file) {
+                    print("Backup nicht gefunden.")
+                }
+                else {
+                    match read_text_result("data/notes/backups/" + file) {
+                        Ok(backup_text) => {
+                            match json_decode_result<model::NoteBackup>(backup_text) {
+                                Ok(saved_backup) => {
+                                    name = saved_backup.original_name
+                                    target = model::note_path(name)
+                                    if note_exists(name) {
+                                        match storage::backup(name) {
+                                            Ok(_) => {
+                                                match atomic_write_text_result(target, saved_backup.note_text) {
+                                                    Ok(_) => {
+                                                        print("Vorherige Version wiederhergestellt.") model::log("Wiederherstellen", name, "erfolgreich")
+                                                    }
+                                                    Err(message) => {
+                                                        print(message) model::log("Wiederherstellen", name, message)
+                                                    }
+                                                }
+                                            }
+                                            Err(message) => {
+                                                print(message)
+                                            }
+                                        }
+                                    }
+                                    else {
+                                        match write_text_new_result(target, saved_backup.note_text) {
+                                            Ok(_) => {
+                                                print("Notiz aus Backup wiederhergestellt.") model::log("Wiederherstellen", name, "erfolgreich")
+                                            }
+                                            Err(message) => {
+                                                print(message) model::log("Wiederherstellen", name, message)
+                                            }
+                                        }
+                                    }
+                                }
+                                Err(message) => {
+                                    print("Backup ist beschädigt: " + message)
+                                }
+                            }
+                        }
+                        Err(message) => {
+                            print("Backup konnte nicht gelesen werden: " + message)
+                        }
+                    }
+                }
+            }
+        }
+        None => {
+            print("Eingabe abgebrochen.")
+        }
+    }
+}
+fn report_save(operation_label: String, file_label: String, outcome: Result<Bool, String>) uses Console, FileSystem, Clock {
+    match outcome {
+        Ok(_) => {
+            print("Änderung gespeichert; die vorherige Version wurde gesichert.") model::log(operation_label, file_label, "erfolgreich")
+        }
+        Err(message) => {
+            print("Änderung fehlgeschlagen: " + message) model::log(operation_label, file_label, message)
+        }
+    }
+}

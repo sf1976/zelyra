@@ -54,6 +54,8 @@ pub enum Type {
     Option(Box<Type>),
     Result(Box<Type>, Box<Type>),
     Array(Box<Type>),
+    Tuple(Vec<Type>),
+    Set(Box<Type>),
     Map(Box<Type>, Box<Type>),
     HttpResult(Box<Type>),
     Named(String),
@@ -79,6 +81,18 @@ impl fmt::Display for Type {
             Type::Option(inner) => return write!(f, "Option<{inner}>"),
             Type::Result(ok, err) => return write!(f, "Result<{ok}, {err}>"),
             Type::Array(inner) => return write!(f, "{inner}[]"),
+            Type::Tuple(items) => {
+                return write!(
+                    f,
+                    "Tuple<{}>",
+                    items
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
+            Type::Set(inner) => return write!(f, "Set<{inner}>"),
             Type::Map(key, value) => return write!(f, "Map<{key}, {value}>"),
             Type::HttpResult(inner) => return write!(f, "HttpResult<{inner}>"),
             Type::Named(name) => name,
@@ -610,6 +624,13 @@ pub struct MatchArm {
 }
 
 #[derive(Clone, Debug)]
+pub struct MatchExprArm {
+    pub pattern: Pattern,
+    pub value: Expr,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
 pub struct Pattern {
     pub kind: PatternKind,
     pub span: Span,
@@ -677,6 +698,10 @@ pub enum ExprKind {
         query: String,
     },
     Await(Box<Expr>),
+    Match {
+        value: Box<Expr>,
+        arms: Vec<MatchExprArm>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

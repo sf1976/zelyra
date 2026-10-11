@@ -1,0 +1,11 @@
+[project]
+name = "csv-catalog"
+version = "0.1.0"
+zelyra = "0.1"
+
+[capabilities]
+filesystem = true
+
+[filesystem]
+read_roots = ["data"]
+write_roots = ["data"]

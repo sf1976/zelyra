@@ -1179,8 +1179,16 @@ impl TypeLinker<'_> {
                     ));
                 }
             }
-            Type::Option(inner) | Type::Array(inner) | Type::HttpResult(inner) => {
+            Type::Option(inner)
+            | Type::Array(inner)
+            | Type::Set(inner)
+            | Type::HttpResult(inner) => {
                 self.ensure_exported_type_is_public(inner, span)?;
+            }
+            Type::Tuple(items) => {
+                for item in items {
+                    self.ensure_exported_type_is_public(item, span)?;
+                }
             }
             Type::Result(ok, error) | Type::Map(ok, error) => {
                 self.ensure_exported_type_is_public(ok, span)?;
@@ -1249,8 +1257,16 @@ impl TypeLinker<'_> {
                     *name = internal_type_name(self.current_name, name);
                 }
             }
-            Type::Option(inner) | Type::Array(inner) | Type::HttpResult(inner) => {
+            Type::Option(inner)
+            | Type::Array(inner)
+            | Type::Set(inner)
+            | Type::HttpResult(inner) => {
                 self.rewrite_type(inner, span)?;
+            }
+            Type::Tuple(items) => {
+                for item in items {
+                    self.rewrite_type(item, span)?;
+                }
             }
             Type::Result(ok, error) | Type::Map(ok, error) => {
                 self.rewrite_type(ok, span)?;
@@ -1349,6 +1365,12 @@ impl TypeLinker<'_> {
             }
             ExprKind::Sql { result_type, .. } => {
                 self.rewrite_type(result_type, expression.span)?;
+            }
+            ExprKind::Match { value, arms } => {
+                self.rewrite_expression_types(value)?;
+                for arm in arms {
+                    self.rewrite_expression_types(&mut arm.value)?;
+                }
             }
             ExprKind::Int(_)
             | ExprKind::UInt(_)
@@ -1876,6 +1898,34 @@ fn rewrite_expr(
             for argument in args {
                 rewrite_expr(
                     argument,
+                    module_path,
+                    module_name,
+                    imports,
+                    local_functions,
+                    function_sets,
+                    module_names,
+                    root_functions,
+                    display_path,
+                    is_root,
+                )?;
+            }
+        }
+        ExprKind::Match { value, arms } => {
+            rewrite_expr(
+                value,
+                module_path,
+                module_name,
+                imports,
+                local_functions,
+                function_sets,
+                module_names,
+                root_functions,
+                display_path,
+                is_root,
+            )?;
+            for arm in arms {
+                rewrite_expr(
+                    &mut arm.value,
                     module_path,
                     module_name,
                     imports,

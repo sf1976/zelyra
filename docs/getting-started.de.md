@@ -858,6 +858,21 @@ MariaDB-Tableview-Integrationstest kann dieselbe Anwendung mit
 
 ## 11. Nützliche Befehle
 
+Die vollständige Übersicht zeigt `zelyra --help`. Für Optionen, Beispiele und
+Voraussetzungen eines einzelnen Befehls rufst du die Hilfe direkt daran auf:
+
+~~~bash
+zelyra fmt --help
+zelyra init --help
+zelyra setup --help
+zelyra routes --help
+zelyra db plan --help
+~~~
+
+`--help` funktioniert auch bei Unterbefehlen und startet die jeweilige Aktion
+nicht. Die Detailhilfe ist auf Deutsch voreingestellt; mit
+`ZELYRA_LANGUAGE=en` wird sie auf Englisch ausgegeben.
+
 ~~~text
 zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
                                          Projekt erstellen und Ports wählen

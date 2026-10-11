@@ -489,11 +489,12 @@ The core data types in Zelyra:
 - **`Int`**: 64-bit signed integers, e.g., `-5`, `0`, `42`.
 - **`UInt`**: Unsigned integers (`>= 0`), ideal for record IDs and positive counters.
 - **`Float`**: Floating-point numbers for scientific calculations, e.g., `3.1415`.
-- **`Decimal`**: Fixed-point numbers with guaranteed precision—indispensable for financial amounts to eliminate floating-point rounding artifacts!
+- **`Decimal`**: Fixed-point values with nine fractional digits and exact base-10 arithmetic. Write values as `decimal("19.99")`; values with more than nine fractional digits are rejected. Division truncates toward zero when it produces more than nine fractional digits. JSON stores Decimal as a string to preserve precision.
 - **`Bool`**: Boolean values representing truth. Exactly two states exist: `true` or `false`.
 - **`String`**: UTF-8 character text enclosed in double quotation marks: `"Hello World"`.
 - **`Char`**: Individual characters enclosed in single quotation marks: `'A'`, `'z'`.
 - **`Unit`**: Represents "no meaningful value", analogous to `void` in other languages. When a function only performs side effects and returns nothing, its type is `Unit`.
+- **`Date`, `Time`, `Duration`, `Bytes`**: Create dates and times with `date("2026-10-11")` and `time("09:30:00")`, durations with `duration_ms(1500)`, and bytes with `bytes([65, 66])`. Runtime constructors validate these values, and JSON round trips preserve them.
 
 ### 4. Small, progressive examples
 
@@ -2804,6 +2805,7 @@ In this chapter, you will learn:
 - How to create, read, list, and delete text files using Zelyra.
 - Why file operations in Zelyra strictly require the `uses FileSystem` capability.
 - The most important standard library functions: `read_text`, `write_text`, `delete_file`, and `list_dir`.
+- How the Result variants return expected file and JSON errors.
 - How to persist task lists to disk as files.
 
 ### 2. Why is this topic important?
@@ -2871,6 +2873,56 @@ fn main() uses FileSystem {
 }
 ```
 
+**Example 4: Handling JSON and file errors**
+
+`read_text` and `json_decode` report failures as runtime errors. Use
+`read_text_result`, `write_text_result`, and `json_decode_result<T>` when an
+application should handle a missing or damaged file and continue:
+
+```zelyra
+struct Settings {
+    theme: String
+}
+
+fn load_theme() uses FileSystem {
+    match read_text_result("settings.json") {
+        Ok(text) => {
+            match json_decode_result<Settings>(text) {
+                Ok(settings) => { print("Theme: " + settings.theme) }
+                Err(message) => { print("Invalid JSON file: " + message) }
+            }
+        }
+        Err(message) => { print("Could not read file: " + message) }
+    }
+}
+
+fn main() uses FileSystem {
+    load_theme()
+}
+```
+
+Missing project grants and denied capabilities remain security errors. The
+Result variants catch ordinary path, read, write, and JSON errors.
+
+Safe text-file changes also have `write_text_new_result`,
+`atomic_write_text_result`, `append_text_result`, `copy_file_new_result`,
+`rename_file_result`, and `delete_file_result`. `write_text_new_result` creates
+files exclusively and reports a conflict if the destination already exists.
+`atomic_write_text_result` first writes a temporary file in the same directory
+and replaces the destination only after the write succeeds. Rename and copy
+also refuse to overwrite an existing destination. File operations stay inside
+the root directories allowed by the project configuration.
+
+`text_contains` searches for a literal string. `text_replace_result` replaces
+all occurrences of a non-empty search string; `text_split_result` splits on a
+non-empty separator and preserves empty parts at the start or end. These
+functions operate on UTF-8 strings and do not interpret the search text as a
+regular expression.
+
+A complete multi-file notes manager with backups, an action log, restore, and
+automated tests is in
+[`examples/notes_manager`](../../../examples/notes_manager/README.md).
+
 ### 5. Typical errors and their causes
 - **Error:** Calling `read_text` or `write_text` without declaring `uses FileSystem`.
   *Cause:* Zelyra's capability system (`E-CAP-001`) prevents any unauthorized access to secondary storage.
@@ -2881,6 +2933,7 @@ fn main() uses FileSystem {
 1. Any function interacting with the file system must declare `uses FileSystem`.
 2. `write_text` creates a new file or completely overwrites an existing one.
 3. `read_text` returns the entire contents of a file as a `String`.
+4. `*_result` functions make expected failures ordinary `Err` values.
 
 ### 7. Exercises (Level 1 Easy, Level 2 Medium, Level 3 Challenging)
 - **Level 1 (Easy):** Write a program that writes a greeting message into `hello.txt`.
@@ -2917,6 +2970,7 @@ fn main() uses FileSystem {
 ### 1. What will I learn in this chapter?
 In this chapter, you will learn:
 - How to retrieve current timestamps with `now()` (`uses Clock`).
+- How `format_timestamp` renders a timestamp as a UTC date and time.
 - How to generate pseudo-random values using `random_int(min, max)` (`uses Random`).
 - How to serialize data structures into universal JSON with `json_encode`.
 - How to parse JSON strings back into strongly typed structures using `json_decode<T>`.
@@ -2932,7 +2986,7 @@ Virtually every real-world application requires handling temporal events: When w
 ```zelyra
 fn show_time() uses Clock {
     current_time = now()
-    print("Current system time recorded")
+    print(format_timestamp(current_time))
 }
 
 fn main() uses Clock {

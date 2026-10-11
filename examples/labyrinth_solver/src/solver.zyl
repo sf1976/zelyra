@@ -1,0 +1,109 @@
+import "src/maze.zyl" as maze
+struct SearchState {
+    queue: Int[]
+    parents: Map<Int, Int>
+}
+pub fn shortest_path(grid: maze::Maze) -> maze::SolveResult {
+    start = grid.start_y * grid.width + grid.start_x
+    goal = grid.goal_y * grid.width + grid.goal_x
+    initial_parents: Map<Int, Int> = Map {
+        start: start
+    }
+    mutable state = SearchState {
+        queue: [start],
+        parents: put(initial_parents, start, start),
+    }
+    mutable cursor = 0
+    mutable examined = 0
+    mutable found = false
+    while cursor < len(state.queue) &&!found {
+        current = state.queue[cursor]
+        cursor = cursor + 1
+        examined = examined + 1
+        if current == goal {
+            found = true
+        }
+        else {
+            x = current % grid.width
+            y = current / grid.width
+            if x > 0 {
+                state = add_neighbor(grid, state, current, current - 1)
+            }
+            if x + 1 < grid.width {
+                state = add_neighbor(grid, state, current, current + 1)
+            }
+            if y > 0 {
+                state = add_neighbor(grid, state, current, current - grid.width)
+            }
+            if y + 1 < grid.height {
+                state = add_neighbor(grid, state, current, current + grid.width)
+            }
+        }
+    }
+    if!found {
+        return maze::SolveResult {
+            found: false,
+            path: [],
+            steps: 0,
+            examined: examined,
+        }
+    }
+    mutable reversed: Int[] = [goal]
+    mutable current = goal
+    mutable valid_chain = true
+    while current != start && valid_chain {
+        match get(state.parents, current) {
+            Some(previous) => {
+                current = previous
+                reversed = append(reversed, current)
+            }
+            None => {
+                valid_chain = false
+            }
+        }
+    }
+    if!valid_chain {
+        return maze::SolveResult {
+            found: false,
+            path: [],
+            steps: 0,
+            examined: examined,
+        }
+    }
+    mutable path: Int[] = []
+    mutable reverse_index = len(reversed) - 1
+    while reverse_index >= 0 {
+        path = append(path, reversed[reverse_index])
+        reverse_index = reverse_index - 1
+    }
+    return maze::SolveResult {
+        found: true,
+        path: path,
+        steps: len(path) - 1,
+        examined: examined,
+    }
+}
+fn add_neighbor(
+grid: maze::Maze,
+state: SearchState,
+current: Int,
+neighbor: Int
+) -> SearchState {
+    if contains(state.parents, neighbor) {
+        return state
+    }
+    x = neighbor % grid.width
+    y = neighbor / grid.width
+    cell = grid.cells[y][x]
+    updated_parents = put(state.parents, neighbor, current)
+    if cell == "#" {
+        return SearchState {
+            queue: state.queue,
+            parents: updated_parents,
+        }
+    }
+    return SearchState {
+        queue: append(state.queue, neighbor),
+        parents: updated_parents,
+    }
+}

@@ -1,0 +1,5 @@
+fn main() {
+    value = match true {
+        true => 1
+    }
+}

@@ -480,6 +480,12 @@ fn check_expr(
         }
         ExprKind::Field { target, .. } => check_expr(target, schema, environment, errors),
         ExprKind::Await(inner) => check_expr(inner, schema, environment, errors),
+        ExprKind::Match { value, arms } => {
+            check_expr(value, schema, environment, errors);
+            for arm in arms {
+                check_expr(&arm.value, schema, environment, errors);
+            }
+        }
         ExprKind::Int(_)
         | ExprKind::UInt(_)
         | ExprKind::Float(_)
@@ -524,6 +530,10 @@ fn expr_type(expression: &Expr) -> Type {
         | ExprKind::Unary { .. }
         | ExprKind::Binary { .. } => Type::Unknown,
         ExprKind::Await(inner) => expr_type(inner),
+        ExprKind::Match { arms, .. } => arms
+            .first()
+            .map(|arm| expr_type(&arm.value))
+            .unwrap_or(Type::Unknown),
     }
 }
 

@@ -1,0 +1,4 @@
+fn main() {
+    value: Tuple<Int> = tuple(1, 2)
+    print(value)
+}

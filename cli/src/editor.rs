@@ -20,6 +20,7 @@ const EDITOR_DATABASE_MAX_TABLES: usize = 500;
 const EDITOR_DATABASE_MAX_COLUMNS: usize = 500;
 const EDITOR_DATABASE_MAX_TOTAL_COLUMNS: usize = 10_000;
 const EDITOR_DATABASE_MAX_FOREIGN_KEYS: usize = 5_000;
+const EDITOR_DATABASE_PREVIEW_MAX_COLUMNS: usize = 40;
 const EDITOR_TIMEOUT: Duration = Duration::from_secs(30);
 
 struct EditorConnection(Arc<AtomicUsize>);
@@ -48,6 +49,21 @@ struct EditorState {
     root: PathBuf,
     token: String,
     authority: String,
+    web_process: Arc<std::sync::Mutex<Option<std::process::Child>>>,
+}
+
+impl Drop for EditorState {
+    fn drop(&mut self) {
+        if Arc::strong_count(&self.web_process) != 1 {
+            return;
+        }
+        if let Ok(mut process) = self.web_process.lock() {
+            if let Some(mut child) = process.take() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
+    }
 }
 
 pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
@@ -121,6 +137,7 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         root,
         token: token.clone(),
         authority: authority.clone(),
+        web_process: Arc::new(std::sync::Mutex::new(None)),
     });
     let active = Arc::new(AtomicUsize::new(0));
     println!("Zelyra Studio ist lokal erreichbar: http://{authority}{EDITOR_PATH}/#{token}");
@@ -140,9 +157,7 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
             "Browserstart übersprungen. Öffne die URL oben selbst. Mit Ctrl+C beendest du Studio."
         );
     }
-    println!(
-        "Studio akzeptiert ausschließlich Verbindungen von diesem Rechner. Es startet weder Datenbank noch Webanwendung."
-    );
+    println!("Studio akzeptiert ausschließlich Verbindungen von diesem Rechner.");
     for incoming in listener.incoming() {
         match incoming {
             Ok(stream) => {
@@ -354,6 +369,8 @@ fn editor_response(
         }
         ("GET", "project-map") => editor_project_map(state),
         ("GET", "database-schema") => database_schema_response(state),
+        ("GET", "database-target") => database_target_response(state),
+        ("GET", "database-rows") => database_rows_response(state, request),
         ("GET", "symbols") => {
             let query = request
                 .target
@@ -385,9 +402,19 @@ fn editor_response(
         ("DELETE", "file") => delete_editor_file(state, parse_json_body(&request.body)?),
         ("POST", "check") => check_project(state, &parse_json_body(&request.body)?),
         ("POST", "run") => run_editor_program(state, &parse_json_body(&request.body)?),
+        ("POST", "stop-web-preview") => stop_editor_web_app(state),
         ("POST", "format") => format_editor_file(state, &parse_json_body(&request.body)?),
         ("POST", "crud-preview") => preview_crud_resource(state, &parse_json_body(&request.body)?),
         ("POST", "crud-apply") => apply_crud_resource(state, &parse_json_body(&request.body)?),
+        ("POST", "schema-column-preview") => {
+            preview_schema_column(state, &parse_json_body(&request.body)?)
+        }
+        ("POST", "schema-column-apply") => {
+            apply_schema_column(state, &parse_json_body(&request.body)?)
+        }
+        ("POST", "database-create") => {
+            create_project_database(state, &parse_json_body(&request.body)?)
+        }
         _ => Err((404, "not found".into())),
     }
 }
@@ -1042,6 +1069,37 @@ fn editor_database_schemas(
         .map_err(|_| (422, "the project modules could not be loaded".into()))?;
     let owners = module_declaration_owners(&project.program);
     let mut map = database_cli::database_map_json(&declared, &live, &owners);
+    if let Some(modules) = map.get_mut("modules").and_then(Value::as_array_mut) {
+        for source_table in &project.program.tables {
+            let mapped_table = modules
+                .iter_mut()
+                .flat_map(|module| module["tables"].as_array_mut().into_iter().flatten())
+                .find(|table| table["name"].as_str() == Some(source_table.name.as_str()));
+            let Some(mapped_table) = mapped_table else {
+                continue;
+            };
+            for source_column in &source_table.columns {
+                let Some(mapped_column) =
+                    mapped_table["declared_columns"]
+                        .as_array_mut()
+                        .and_then(|columns| {
+                            columns.iter_mut().find(|column| {
+                                column["name"].as_str() == Some(source_column.name.as_str())
+                            })
+                        })
+                else {
+                    continue;
+                };
+                let zelyra_type = if let Some(length) = source_column.length {
+                    format!("{}({length})", source_column.ty)
+                } else {
+                    source_column.ty.to_string()
+                };
+                mapped_column["zelyra_type"] = Value::String(zelyra_type);
+                mapped_column["zelyra_required"] = Value::Bool(source_column.required);
+            }
+        }
+    }
     map["crud_resources"] = json!(project
         .program
         .cruds
@@ -1061,6 +1119,301 @@ fn database_schema_response(
 ) -> Result<(u16, &'static str, String), (u16, String)> {
     let (_declared, _live, map) = editor_database_schemas(state)?;
     Ok((200, "application/json; charset=utf-8", map.to_string()))
+}
+
+fn database_target_response(
+    state: &EditorState,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let entry = state.root.join("main.zyl");
+    let declared = database_cli::load_schema(&entry.to_string_lossy()).map_err(|_| {
+        (
+            422,
+            "the project database declaration could not be read".into(),
+        )
+    })?;
+    let database = declared.database.as_ref();
+    let database_url = if let Some(url) = super::database_url_from_schema(&declared) {
+        Some(url)
+    } else {
+        let environment_file = state.root.join(".env");
+        if environment_file.is_file() {
+            super::database_url_from_env_file(
+                &environment_file.to_string_lossy(),
+                database.map(|database| database.name.as_str()),
+            )
+            .map_err(|_| (422, "the project environment file could not be read".into()))?
+            .map(|(url, _)| url)
+        } else {
+            None
+        }
+    };
+    let configured = database_url.is_some();
+    let engine = database
+        .map(|database| database.engine.as_str())
+        .unwrap_or("none");
+    let target_database = database
+        .and_then(|database| database.database.clone())
+        .or_else(|| {
+            database_url.as_deref().and_then(|value| {
+                url::Url::parse(value)
+                    .ok()
+                    .and_then(|url| url.path_segments()?.next_back().map(str::to_owned))
+            })
+        });
+    let response = json!({
+        "engine": engine,
+        "database": target_database,
+        "configured": configured,
+        "creationSupported": engine.eq_ignore_ascii_case("mariadb") && configured,
+    });
+    Ok((200, "application/json; charset=utf-8", response.to_string()))
+}
+
+fn create_project_database(
+    state: &EditorState,
+    value: &Value,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    if value.get("confirm").and_then(Value::as_bool) != Some(true) {
+        return Err((
+            400,
+            "explicit confirmation is required to create the project database".into(),
+        ));
+    }
+    let entry = state.root.join("main.zyl");
+    let declared = database_cli::load_schema(&entry.to_string_lossy()).map_err(|_| {
+        (
+            422,
+            "the project database declaration could not be read".into(),
+        )
+    })?;
+    let database = declared.database.as_ref().ok_or((
+        422,
+        "declare a MariaDB database in the project first".into(),
+    ))?;
+    if !database.engine.eq_ignore_ascii_case("mariadb") {
+        return Err((
+            501,
+            "Studio database creation currently supports MariaDB projects with existing connection configuration".into(),
+        ));
+    }
+    let database_url = if let Some(url) = super::database_url_from_schema(&declared) {
+        url
+    } else {
+        let environment_file = state.root.join(".env");
+        if !environment_file.is_file() {
+            return Err((
+                422,
+                "configure the MariaDB URL in the process environment or project .env file first"
+                    .into(),
+            ));
+        }
+        super::database_url_from_env_file(
+            &environment_file.to_string_lossy(),
+            Some(database.name.as_str()),
+        )
+        .map_err(|_| (422, "the project environment file could not be read".into()))?
+        .map(|(url, _)| url)
+        .ok_or((
+            422,
+            "configure the MariaDB URL in the process environment or project .env file first"
+                .into(),
+        ))?
+    };
+    zelyra_database::create_mariadb_database(&database_url).map_err(|_| {
+        (
+            502,
+            "MariaDB could not create or verify the declared database; check server access and privileges".into(),
+        )
+    })?;
+    let target_database = database.database.clone().or_else(|| {
+        url::Url::parse(&database_url)
+            .ok()
+            .and_then(|url| url.path_segments()?.next_back().map(str::to_owned))
+    });
+    let response = json!({
+        "created": true,
+        "database": target_database,
+        "message": "The declared MariaDB database now exists. Review and apply its schema separately.",
+    });
+    Ok((200, "application/json; charset=utf-8", response.to_string()))
+}
+
+fn database_rows_response(
+    state: &EditorState,
+    request: &Request,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    const MAX_ROWS: usize = 25;
+    const MAX_CELL_CHARACTERS: usize = 512;
+    const MAX_OFFSET: usize = 100_000;
+
+    let query = request
+        .target
+        .split_once('?')
+        .map(|(_, query)| query)
+        .unwrap_or_default();
+    let values = zelyra_web::parse_urlencoded(query).map_err(|error| (400, error.message))?;
+    let table_name = values
+        .get("table")
+        .filter(|table| !table.is_empty())
+        .ok_or((400, "table is required".into()))?;
+    let parse_bounded = |key: &str, default: usize, maximum: usize| {
+        values.get(key).map_or(Ok(default), |value| {
+            value
+                .parse::<usize>()
+                .ok()
+                .filter(|value| *value <= maximum)
+                .ok_or_else(|| (400, format!("{key} must be from 0 to {maximum}")))
+        })
+    };
+    let limit = parse_bounded("limit", MAX_ROWS, MAX_ROWS)?;
+    if limit == 0 {
+        return Err((400, "limit must be from 1 to 25".into()));
+    }
+    let offset = parse_bounded("offset", 0, MAX_OFFSET)?;
+
+    let (declared, live, _) = editor_database_schemas(state)?;
+    if !declared
+        .tables
+        .iter()
+        .any(|table| table.name == *table_name)
+        && !live.tables.iter().any(|table| table.name == *table_name)
+    {
+        return Err((
+            404,
+            "table is not present in the declared or live schema".into(),
+        ));
+    }
+    let live_table = live
+        .tables
+        .iter()
+        .find(|table| table.name == *table_name)
+        .ok_or((
+            409,
+            "table is declared but missing from the live database".into(),
+        ))?;
+    if live_table.columns.is_empty() {
+        return Err((422, "table has no readable columns".into()));
+    }
+
+    let backend = declared.backend();
+    if backend == zelyra_database::Backend::Sqlite {
+        return Err((
+            501,
+            "Studio data browsing currently supports MariaDB and PostgreSQL projects".into(),
+        ));
+    }
+    let columns = live_table
+        .columns
+        .iter()
+        .take(EDITOR_DATABASE_PREVIEW_MAX_COLUMNS)
+        .cloned()
+        .collect::<Vec<_>>();
+    let sql = database_rows_sql(
+        table_name,
+        &live_table.columns,
+        backend,
+        limit.saturating_add(1),
+        offset,
+    );
+
+    let database_name = declared
+        .database
+        .as_ref()
+        .map(|database| database.name.as_str());
+    let from_environment = super::database_url_from_schema(&declared);
+    let environment_file = state.root.join(".env");
+    let from_file = if from_environment.is_none() && environment_file.is_file() {
+        super::database_url_from_env_file(&environment_file.to_string_lossy(), database_name)
+            .map_err(|_| (422, "the project environment file could not be read".into()))?
+            .map(|(url, _)| url)
+    } else {
+        None
+    };
+    let database_url = from_environment.or(from_file).ok_or((
+        422,
+        "database connection is not configured; set DATABASE_URL in the environment or project .env file".into(),
+    ))?;
+    let result = zelyra_database::execute_query(&database_url, &sql, Vec::new()).map_err(|_| {
+        (
+            502,
+            "table rows could not be loaded; check the local database connection".into(),
+        )
+    })?;
+    let has_next = result.rows.len() > limit;
+    let mut truncated = live_table.columns.len() > columns.len();
+    let rows = result
+        .rows
+        .into_iter()
+        .take(limit)
+        .map(|row| {
+            row.into_iter()
+                .map(|cell| {
+                    let mut characters = cell.chars();
+                    let shown = characters
+                        .by_ref()
+                        .take(MAX_CELL_CHARACTERS)
+                        .collect::<String>();
+                    if characters.next().is_some() {
+                        truncated = true;
+                        format!("{shown}…")
+                    } else {
+                        shown
+                    }
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    let column_names = columns
+        .iter()
+        .map(|column| column.name.as_str())
+        .collect::<Vec<_>>();
+    let response = json!({
+        "readOnly": true,
+        "table": table_name,
+        "columns": column_names,
+        "rows": rows,
+        "limit": limit,
+        "offset": offset,
+        "nextOffset": has_next.then_some(offset + limit),
+        "truncated": truncated,
+    });
+    Ok((200, "application/json; charset=utf-8", response.to_string()))
+}
+
+fn database_rows_sql(
+    table: &str,
+    columns: &[zelyra_database::Column],
+    backend: zelyra_database::Backend,
+    limit: usize,
+    offset: usize,
+) -> String {
+    let quote = |identifier: &str| match backend {
+        zelyra_database::Backend::Postgres => {
+            format!("\"{}\"", identifier.replace('\"', "\"\""))
+        }
+        zelyra_database::Backend::MariaDb => format!("`{}`", identifier.replace('`', "``")),
+        zelyra_database::Backend::Sqlite => unreachable!(),
+    };
+    let select = columns
+        .iter()
+        .take(EDITOR_DATABASE_PREVIEW_MAX_COLUMNS)
+        .map(|column| quote(&column.name))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let order = columns
+        .iter()
+        .filter(|column| column.primary_key)
+        .map(|column| quote(&column.name))
+        .collect::<Vec<_>>();
+    let order = if order.is_empty() {
+        String::new()
+    } else {
+        format!(" ORDER BY {}", order.join(", "))
+    };
+    format!(
+        "SELECT {select} FROM {}{order} LIMIT {limit} OFFSET {offset}",
+        quote(table)
+    )
 }
 
 fn preview_crud_resource(
@@ -1100,6 +1453,281 @@ fn apply_crud_resource(
         .map_err(|_| (500, "saved editor response could not be encoded".into()))?;
     response["applied"] = Value::Bool(true);
     Ok((200, "application/json; charset=utf-8", response.to_string()))
+}
+
+fn preview_schema_column(
+    state: &EditorState,
+    value: &Value,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let preview = build_schema_column_preview(state, value)?;
+    Ok((200, "application/json; charset=utf-8", preview.to_string()))
+}
+
+fn apply_schema_column(
+    state: &EditorState,
+    value: &Value,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    if value.get("confirm").and_then(Value::as_bool) != Some(true) {
+        return Err((
+            400,
+            "explicit confirmation is required to apply this source change".into(),
+        ));
+    }
+    let preview = build_schema_column_preview(state, value)?;
+    if !preview["success"].as_bool().unwrap_or(false) {
+        return Err((
+            422,
+            "the table change did not pass the project compiler".into(),
+        ));
+    }
+    let candidate_hash = preview["candidateHash"]
+        .as_str()
+        .ok_or((500, "schema preview is missing its candidate hash".into()))?;
+    if value.get("candidateHash").and_then(Value::as_str) != Some(candidate_hash) {
+        return Err((
+            409,
+            "schema preview changed; review the current preview again".into(),
+        ));
+    }
+    let path = preview["path"]
+        .as_str()
+        .ok_or((500, "schema preview is missing its source path".into()))?;
+    let candidate = preview["candidate"]
+        .as_str()
+        .ok_or((500, "schema preview is missing its candidate source".into()))?;
+    let base_hash = preview["baseHash"]
+        .as_str()
+        .ok_or((500, "schema preview is missing its base hash".into()))?;
+    let saved = write_existing_file(
+        state,
+        json!({"path": path, "content": candidate, "baseHash": base_hash}),
+        false,
+    )?;
+    let mut response: Value = serde_json::from_str(&saved.2)
+        .map_err(|_| (500, "saved editor response could not be encoded".into()))?;
+    response["applied"] = Value::Bool(true);
+    response["requiresDatabasePlan"] = Value::Bool(true);
+    Ok((200, "application/json; charset=utf-8", response.to_string()))
+}
+
+fn build_schema_column_preview(state: &EditorState, value: &Value) -> Result<Value, (u16, String)> {
+    let table_name = value
+        .get("table")
+        .and_then(Value::as_str)
+        .ok_or((400, "table is required".into()))?;
+    let column_name = value
+        .get("column")
+        .and_then(Value::as_str)
+        .ok_or((400, "column name is required".into()))?;
+    let type_name = value
+        .get("type")
+        .and_then(Value::as_str)
+        .ok_or((400, "column type is required".into()))?;
+    let required = value
+        .get("required")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let operation = value
+        .get("operation")
+        .and_then(Value::as_str)
+        .unwrap_or("add");
+    if !matches!(operation, "add" | "edit") {
+        return Err((400, "operation must be `add` or `edit`".into()));
+    }
+    if !is_zelyra_identifier(table_name) || !is_zelyra_identifier(column_name) {
+        return Err((
+            400,
+            "table and column names must be valid Zelyra identifiers".into(),
+        ));
+    }
+    let supported_types = [
+        "String",
+        "String(120)",
+        "Int",
+        "UInt",
+        "Float",
+        "Decimal",
+        "Bool",
+        "Char",
+        "Timestamp",
+        "Date",
+        "Time",
+        "Duration",
+        "Bytes",
+    ];
+    let supported_string_length = type_name
+        .strip_prefix("String(")
+        .and_then(|length| length.strip_suffix(')'))
+        .and_then(|length| length.parse::<u32>().ok())
+        .is_some_and(|length| (1..=65_535).contains(&length));
+    if !supported_types.contains(&type_name) && !supported_string_length {
+        return Err((400, "choose a supported scalar database field type".into()));
+    }
+    let entry = state.root.join("main.zyl");
+    let project = load_project(&entry.to_string_lossy())
+        .map_err(|_| (422, "the project modules could not be loaded".into()))?;
+    let table = project
+        .program
+        .tables
+        .iter()
+        .find(|table| table.name == table_name)
+        .ok_or((404, "table is not declared in the project".into()))?;
+    let existing_column = if operation == "edit" {
+        Some(
+            table
+                .columns
+                .iter()
+                .find(|column| column.name == column_name)
+                .ok_or((404, "the selected source column does not exist".into()))?,
+        )
+    } else {
+        if table
+            .columns
+            .iter()
+            .any(|column| column.name == column_name)
+        {
+            return Err((409, format!("column `{column_name}` already exists")));
+        }
+        None
+    };
+    if existing_column.is_some_and(|column| {
+        column.primary_key || column.auto || column.unique || column.default.is_some()
+    }) {
+        return Err((
+            422,
+            "visual editing is limited to plain columns without key, unique, or default rules"
+                .into(),
+        ));
+    }
+    let source = project
+        .sources
+        .get(table.span.source_id as usize)
+        .ok_or((422, "the table source file could not be located".into()))?;
+    let source_path = safe_editor_path(&state.root, &source.path, false)?;
+    let current = fs::read_to_string(&source_path)
+        .map_err(|_| (415, "table source is not UTF-8 text".into()))?;
+    if current.len() > EDITOR_MAX_FILE_BYTES {
+        return Err((
+            413,
+            "table source exceeds the editor file size limit".into(),
+        ));
+    }
+    if value
+        .get("path")
+        .and_then(Value::as_str)
+        .is_some_and(|path| path != source.path)
+    {
+        return Err((
+            409,
+            "table declarations can only be changed in their owning source module".into(),
+        ));
+    }
+    let base_hash = content_hash(current.as_bytes());
+    if value.get("baseHash").and_then(Value::as_str) != Some(base_hash.as_str()) {
+        return Err((
+            409,
+            "table source changed; reload it before creating a preview".into(),
+        ));
+    }
+    let close_offset = table
+        .span
+        .end
+        .checked_sub(1)
+        .filter(|offset| *offset < current.len() && current.is_char_boundary(*offset))
+        .ok_or((
+            422,
+            "could not locate the end of the table declaration".into(),
+        ))?;
+    if current.as_bytes().get(close_offset) != Some(&b'}') {
+        return Err((
+            422,
+            "table must use a closing brace on its own line for visual editing".into(),
+        ));
+    }
+    let line_start = current[..close_offset]
+        .rfind('\n')
+        .map_or(0, |index| index + 1);
+    if !current[line_start..close_offset].trim().is_empty() {
+        return Err((
+            422,
+            "table must use a closing brace on its own line for visual editing".into(),
+        ));
+    }
+    let indent = table
+        .columns
+        .first()
+        .map(|column| {
+            let start = column.span.start.min(current.len());
+            let start_of_line = current[..start].rfind('\n').map_or(0, |index| index + 1);
+            current[start_of_line..start].to_owned()
+        })
+        .filter(|indent| indent.chars().all(char::is_whitespace))
+        .unwrap_or_else(|| "    ".into());
+    let (candidate, diff) = if let Some(column) = existing_column {
+        let start = column.span.start.min(current.len());
+        let field_line_start = current[..start].rfind('\n').map_or(0, |index| index + 1);
+        let field_line_end = current[start..]
+            .find('\n')
+            .map_or(current.len(), |index| start + index);
+        let line = &current[field_line_start..field_line_end];
+        let field_offset = start - field_line_start;
+        let field_indent = &line[..field_offset];
+        if !field_indent.chars().all(char::is_whitespace) {
+            return Err((
+                422,
+                "column must start on its own line for visual editing".into(),
+            ));
+        }
+        let comment = line.find('#').map(|index| line[index..].trim());
+        let suffix = comment.map_or(String::new(), |comment| format!(" {comment}"));
+        let previous = line.to_owned();
+        let replacement = format!(
+            "{field_indent}{column_name}: {type_name}{}{suffix}",
+            if required { " required" } else { "" }
+        );
+        let candidate = format!(
+            "{}{}{}",
+            &current[..field_line_start],
+            replacement,
+            &current[field_line_end..]
+        );
+        let diff = format!("- {previous}\n+ {replacement}");
+        (candidate, diff)
+    } else {
+        let declaration = format!(
+            "{indent}{column_name}: {type_name}{}\n",
+            if required { " required" } else { "" }
+        );
+        let candidate = format!(
+            "{}{}{}",
+            &current[..line_start],
+            declaration,
+            &current[line_start..]
+        );
+        let diff = format!("+ {declaration}");
+        (candidate, diff)
+    };
+    let (success, diagnostics) = validate_editor_candidate(state, &source.path, &candidate)?;
+    Ok(json!({
+        "success": success,
+        "path": source.path,
+        "baseHash": base_hash,
+        "candidateHash": content_hash(candidate.as_bytes()),
+        "candidate": candidate,
+        "diff": diff,
+        "diagnostics": diagnostics,
+        "table": table_name,
+        "column": column_name,
+        "type": type_name,
+        "required": required,
+        "operation": operation,
+        "impact": {
+            "files": [source.path],
+            "tables": [table_name],
+            "requiresDatabasePlan": true,
+            "note": "The source declaration changed only. Review `zelyra db plan main.zyl` before applying any database migration.",
+        },
+    }))
 }
 
 fn build_crud_preview(state: &EditorState, value: &Value) -> Result<Value, (u16, String)> {
@@ -2118,6 +2746,21 @@ fn run_editor_program(
     {
         return Err((413, "entry file exceeds the 1 MiB editor limit".into()));
     }
+    if let Ok(project) = project::load(&path.to_string_lossy()) {
+        let program = project.program;
+        let database_name = program
+            .databases
+            .first()
+            .map(|database| database.name.clone());
+        if !program.pages.is_empty()
+            || !program.forms.is_empty()
+            || !program.cruds.is_empty()
+            || !program.tableviews.is_empty()
+            || !program.apis.is_empty()
+        {
+            return start_editor_web_app(state, relative, database_name.as_deref());
+        }
+    }
     let executable =
         env::current_exe().map_err(|_| (500, "could not locate the running Zelyra CLI".into()))?;
     let mut child = Command::new(executable)
@@ -2176,6 +2819,111 @@ fn run_editor_program(
             "truncated": stdout_truncated || stderr_truncated,
         })
         .to_string(),
+    ))
+}
+
+fn start_editor_web_app(
+    state: &EditorState,
+    relative: &str,
+    database_name: Option<&str>,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let executable =
+        env::current_exe().map_err(|_| (500, "could not locate the running Zelyra CLI".into()))?;
+    let listener = std::net::TcpListener::bind("127.0.0.1:0")
+        .map_err(|_| (500, "could not reserve a local preview port".into()))?;
+    let address = listener
+        .local_addr()
+        .map_err(|_| (500, "could not read the local preview port".into()))?;
+    drop(listener);
+
+    let mut current = state
+        .web_process
+        .lock()
+        .map_err(|_| (500, "could not access the local web preview".into()))?;
+    if let Some(mut previous) = current.take() {
+        let _ = previous.kill();
+        let _ = previous.wait();
+    }
+    let mut command = Command::new(executable);
+    command
+        .arg("serve")
+        .arg(relative)
+        .arg(address.to_string())
+        .current_dir(&state.root)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    if database_url_from_environment(database_name).is_none() {
+        if let Ok(database_url) = expanded_database_url(&state.root) {
+            command.env("DATABASE_URL", &database_url);
+            if let Some(database_name) = database_name {
+                command.env(database_url_environment_name(database_name), &database_url);
+            }
+        }
+    }
+    let mut child = command
+        .spawn()
+        .map_err(|_| (500, "could not start the local web application".into()))?;
+
+    let preview_url = format!("http://{address}");
+    let ready_by = std::time::Instant::now() + Duration::from_secs(10);
+    loop {
+        if let Some(status) = child
+            .try_wait()
+            .map_err(|_| (500, "could not read the web application status".into()))?
+        {
+            return Err((
+                422,
+                format!("web application exited with {status}; check the project and database configuration"),
+            ));
+        }
+        if TcpStream::connect_timeout(&address, Duration::from_millis(100)).is_ok() {
+            *current = Some(child);
+            return Ok((
+                200,
+                "application/json; charset=utf-8",
+                json!({
+                    "success": true,
+                    "webApp": true,
+                    "webUrl": preview_url,
+                    "stdout": "",
+                    "stderr": "",
+                    "durationMs": 0,
+                    "truncated": false,
+                })
+                .to_string(),
+            ));
+        }
+        if std::time::Instant::now() >= ready_by {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err((
+                504,
+                "web application did not become ready within 10 seconds".into(),
+            ));
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+}
+
+fn stop_editor_web_app(state: &EditorState) -> Result<(u16, &'static str, String), (u16, String)> {
+    let mut current = state
+        .web_process
+        .lock()
+        .map_err(|_| (500, "could not access the local web preview".into()))?;
+    let stopped = if let Some(mut child) = current.take() {
+        if child.try_wait().ok().flatten().is_none() {
+            let _ = child.kill();
+        }
+        let _ = child.wait();
+        true
+    } else {
+        false
+    };
+    Ok((
+        200,
+        "application/json; charset=utf-8",
+        json!({"success": true, "stopped": stopped}).to_string(),
     ))
 }
 
@@ -2440,6 +3188,7 @@ mod tests {
             root: directory.canonicalize().expect("canonical project root"),
             token: "local-session-token".into(),
             authority: "127.0.0.1:4177".into(),
+            web_process: Arc::new(std::sync::Mutex::new(None)),
         }
     }
 
@@ -2463,7 +3212,180 @@ mod tests {
         let request = request("GET", "/__zelyra/editor/api/tree", &[]);
         let error = editor_response(&request, &state).expect_err("missing token must fail");
         assert_eq!(error.0, 403);
-        let _ = fs::remove_dir_all(state.root);
+        let _ = fs::remove_dir_all(state.root.clone());
+    }
+
+    #[test]
+    fn database_record_browser_is_explicit_read_only_and_uses_session_protected_api() {
+        let state = project();
+        let page = editor_response(&request("GET", EDITOR_PATH, &[]), &state)
+            .expect("Studio page should load");
+        assert!(page.2.contains("database-record-browser"));
+        let script = editor_response(
+            &request("GET", "/__zelyra/editor/assets/editor.js", &[]),
+            &state,
+        )
+        .expect("Studio application bundle should load");
+        assert!(script.2.contains("database-rows?table="));
+        let rows = request("GET", "/__zelyra/editor/api/database-rows?table=users", &[]);
+        let error = editor_response(&rows, &state).expect_err("database data requires token");
+        assert_eq!(error.0, 403);
+        let _ = fs::remove_dir_all(state.root.clone());
+    }
+
+    #[test]
+    fn database_rows_queries_quote_identifiers_and_order_by_primary_key() {
+        let columns = vec![
+            zelyra_database::Column {
+                name: "id\"key".into(),
+                sql_type: "BIGINT".into(),
+                nullable: false,
+                primary_key: true,
+                auto: false,
+                unique: false,
+                default: None,
+            },
+            zelyra_database::Column {
+                name: "display`name".into(),
+                sql_type: "TEXT".into(),
+                nullable: true,
+                primary_key: false,
+                auto: false,
+                unique: false,
+                default: None,
+            },
+        ];
+        let postgres = database_rows_sql(
+            "invoice\"items",
+            &columns,
+            zelyra_database::Backend::Postgres,
+            25,
+            50,
+        );
+        assert_eq!(
+            postgres,
+            "SELECT \"id\"\"key\", \"display`name\" FROM \"invoice\"\"items\" ORDER BY \"id\"\"key\" LIMIT 25 OFFSET 50"
+        );
+        let mariadb = database_rows_sql(
+            "invoice`items",
+            &columns,
+            zelyra_database::Backend::MariaDb,
+            25,
+            0,
+        );
+        assert_eq!(
+            mariadb,
+            "SELECT `id\"key`, `display``name` FROM `invoice``items` ORDER BY `id\"key` LIMIT 25 OFFSET 0"
+        );
+    }
+
+    #[test]
+    fn schema_column_preview_is_compiler_checked_and_apply_requires_confirmation() {
+        let state = project();
+        let source = "table customers {\n    id: Id primary auto\n    name: String(100) required\n}\n\nfn main() {}\n";
+        fs::write(state.root.join("main.zyl"), source).expect("write source fixture");
+        let request = json!({
+            "path": "main.zyl",
+            "table": "customers",
+            "column": "active",
+            "type": "Bool",
+            "required": true,
+            "baseHash": content_hash(source.as_bytes()),
+        });
+        let preview = build_schema_column_preview(&state, &request).expect("build schema preview");
+        assert_eq!(preview["success"], true);
+        assert!(preview["candidate"]
+            .as_str()
+            .unwrap()
+            .contains("active: Bool required"));
+        assert_eq!(preview["impact"]["requiresDatabasePlan"], true);
+        assert_eq!(
+            fs::read_to_string(state.root.join("main.zyl")).unwrap(),
+            source
+        );
+
+        let mut apply = request.clone();
+        apply["candidateHash"] = preview["candidateHash"].clone();
+        let missing_confirmation =
+            apply_schema_column(&state, &apply).expect_err("explicit confirmation is required");
+        assert_eq!(missing_confirmation.0, 400);
+
+        apply["confirm"] = Value::Bool(true);
+        let applied = apply_schema_column(&state, &apply).expect("apply reviewed source change");
+        let body: Value = serde_json::from_str(&applied.2).unwrap();
+        assert_eq!(body["applied"], true);
+        assert_eq!(body["requiresDatabasePlan"], true);
+        assert!(fs::read_to_string(state.root.join("main.zyl"))
+            .unwrap()
+            .contains("active: Bool required"));
+        let _ = fs::remove_dir_all(state.root.clone());
+    }
+
+    #[test]
+    fn schema_column_preview_rejects_duplicate_fields_and_stale_source() {
+        let state = project();
+        let source = "table customers {\n    id: Id primary auto\n    name: String(100) required\n}\n\nfn main() {}\n";
+        fs::write(state.root.join("main.zyl"), source).expect("write source fixture");
+        let base = json!({
+            "path": "main.zyl",
+            "table": "customers",
+            "column": "name",
+            "type": "String(120)",
+            "baseHash": content_hash(source.as_bytes()),
+        });
+        assert_eq!(
+            build_schema_column_preview(&state, &base).unwrap_err().0,
+            409
+        );
+
+        let mut add = base;
+        add["column"] = Value::String("active".into());
+        let preview = build_schema_column_preview(&state, &add).expect("build preview");
+        fs::write(
+            state.root.join("main.zyl"),
+            format!("{source}// external edit\n"),
+        )
+        .expect("change source after preview");
+        add["candidateHash"] = preview["candidateHash"].clone();
+        add["confirm"] = Value::Bool(true);
+        assert_eq!(apply_schema_column(&state, &add).unwrap_err().0, 409);
+        let _ = fs::remove_dir_all(state.root.clone());
+    }
+
+    #[test]
+    fn schema_column_editor_can_edit_plain_fields_and_rejects_key_changes() {
+        let state = project();
+        let source = "table customers {\n    id: Id primary auto\n    name: String(100) required\n}\n\nfn main() {}\n";
+        fs::write(state.root.join("main.zyl"), source).expect("write source fixture");
+        let request = json!({
+            "path": "main.zyl",
+            "table": "customers",
+            "column": "name",
+            "operation": "edit",
+            "type": "String(120)",
+            "required": false,
+            "baseHash": content_hash(source.as_bytes()),
+        });
+        let preview = build_schema_column_preview(&state, &request).expect("build edit preview");
+        assert_eq!(preview["success"], true);
+        assert!(preview["candidate"]
+            .as_str()
+            .unwrap()
+            .contains("    name: String(120)\n"));
+        assert!(!preview["candidate"]
+            .as_str()
+            .unwrap()
+            .contains("name: String(120) required"));
+
+        let mut protected = request;
+        protected["column"] = Value::String("id".into());
+        assert_eq!(
+            build_schema_column_preview(&state, &protected)
+                .unwrap_err()
+                .0,
+            422
+        );
+        let _ = fs::remove_dir_all(state.root.clone());
     }
 
     #[test]
@@ -2473,6 +3395,7 @@ mod tests {
             ("POST", "/__zelyra/editor/api/file"),
             ("POST", "/__zelyra/editor/api/file-rename"),
             ("DELETE", "/__zelyra/editor/api/file"),
+            ("POST", "/__zelyra/editor/api/database-create"),
         ] {
             let request = request(
                 method,
@@ -2486,7 +3409,7 @@ mod tests {
                 editor_response(&request, &state).expect_err("cross-origin mutation must fail");
             assert_eq!(error.0, 403, "{method} {path} must be protected");
         }
-        let _ = fs::remove_dir_all(state.root);
+        let _ = fs::remove_dir_all(state.root.clone());
     }
 
     #[test]
@@ -2494,6 +3417,9 @@ mod tests {
         let state = project();
         for path in [
             "/__zelyra/editor/api/database-schema",
+            "/__zelyra/editor/api/database-target",
+            "/__zelyra/editor/api/database-rows?table=users",
+            "/__zelyra/editor/api/database-create",
             "/__zelyra/editor/api/crud-preview",
             "/__zelyra/editor/api/crud-apply",
         ] {
@@ -2501,7 +3427,57 @@ mod tests {
             let error = editor_response(&request, &state).expect_err("API token is required");
             assert_eq!(error.0, 403, "endpoint {path} must be protected");
         }
-        let _ = fs::remove_dir_all(state.root);
+        let _ = fs::remove_dir_all(state.root.clone());
+    }
+
+    #[test]
+    fn database_target_reports_only_safe_mariadb_configuration_metadata() {
+        let state = project();
+        fs::write(
+            state.root.join("main.zyl"),
+            "database main {\n    engine: mariadb\n}\nfn main() {}\n",
+        )
+        .expect("write MariaDB project source");
+        fs::write(
+            state.root.join(".env"),
+            "DATABASE_URL=mysql://studio_user:studio_secret@127.0.0.1:3306/studio_db\n",
+        )
+        .expect("write local connection configuration");
+        let (status, _, body) = database_target_response(&state).expect("inspect target metadata");
+        let value: Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(status, 200);
+        assert_eq!(value["engine"], "mariadb");
+        assert_eq!(value["database"], "studio_db");
+        assert_eq!(value["configured"], true);
+        assert_eq!(value["creationSupported"], true);
+        assert!(!body.contains("studio_secret"));
+        let _ = fs::remove_dir_all(state.root.clone());
+    }
+
+    #[test]
+    fn studio_database_create_requires_confirmation_and_rejects_unavailable_backend() {
+        let state = project();
+        fs::write(
+            state.root.join("main.zyl"),
+            "database main {\n    engine: mariadb\n}\nfn main() {}\n",
+        )
+        .expect("write MariaDB project source");
+        assert_eq!(
+            create_project_database(&state, &json!({})).unwrap_err().0,
+            400
+        );
+        fs::write(
+            state.root.join("main.zyl"),
+            "database main {\n    engine: postgres\n}\nfn main() {}\n",
+        )
+        .expect("write PostgreSQL project source");
+        assert_eq!(
+            create_project_database(&state, &json!({"confirm": true}))
+                .unwrap_err()
+                .0,
+            501
+        );
+        let _ = fs::remove_dir_all(state.root.clone());
     }
 
     #[test]
@@ -2523,7 +3499,7 @@ mod tests {
             .1
             .contains("MySQL schema introspection is not supported"));
         assert!(!error.1.contains("password") && !error.1.contains("DATABASE_URL"));
-        let _ = fs::remove_dir_all(state.root);
+        let _ = fs::remove_dir_all(state.root.clone());
     }
 
     #[test]
@@ -2532,7 +3508,7 @@ mod tests {
         let error = build_crud_preview(&state, &json!({"path":"main.zyl", "baseHash":"stale"}))
             .expect_err("stale source must block preview");
         assert_eq!(error.0, 409);
-        let _ = fs::remove_dir_all(state.root);
+        let _ = fs::remove_dir_all(state.root.clone());
     }
 
     #[test]
@@ -2552,7 +3528,7 @@ mod tests {
         }
         assert!(editor_file_allowed(Path::new("src/invoice.zyl")));
         assert!(!editor_file_allowed(Path::new(".env")));
-        let _ = fs::remove_dir_all(state.root);
+        let _ = fs::remove_dir_all(state.root.clone());
     }
 
     #[test]
@@ -2577,7 +3553,7 @@ mod tests {
             fs::read_to_string(&path).expect("read saved source"),
             updated
         );
-        let _ = fs::remove_dir_all(state.root);
+        let _ = fs::remove_dir_all(state.root.clone());
     }
 
     #[test]
@@ -2598,7 +3574,7 @@ mod tests {
                 .0,
             409
         );
-        let _ = fs::remove_dir_all(state.root);
+        let _ = fs::remove_dir_all(state.root.clone());
     }
 
     #[test]
@@ -2641,7 +3617,7 @@ mod tests {
             "module old\n"
         );
 
-        let _ = fs::remove_dir_all(state.root);
+        let _ = fs::remove_dir_all(state.root.clone());
     }
 
     #[test]
@@ -2667,7 +3643,7 @@ mod tests {
             200
         );
         assert!(!file.exists());
-        let _ = fs::remove_dir_all(state.root);
+        let _ = fs::remove_dir_all(state.root.clone());
     }
 
     #[test]
@@ -2716,7 +3692,7 @@ mod tests {
             base,
             "preview must not modify the project source"
         );
-        let _ = fs::remove_dir_all(state.root);
+        let _ = fs::remove_dir_all(state.root.clone());
     }
 
     #[test]
@@ -2739,7 +3715,7 @@ mod tests {
             fs::read_to_string(path).expect("source remains untouched"),
             original
         );
-        let _ = fs::remove_dir_all(state.root);
+        let _ = fs::remove_dir_all(state.root.clone());
     }
 
     #[test]
@@ -2760,7 +3736,7 @@ mod tests {
             .collect::<Vec<_>>();
         assert!(names.contains(&"main"));
         assert!(names.contains(&"calculate_total"));
-        let _ = fs::remove_dir_all(state.root);
+        let _ = fs::remove_dir_all(state.root.clone());
     }
 
     #[cfg(unix)]

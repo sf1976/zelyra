@@ -1,0 +1,13 @@
+[project]
+name = "notes-manager"
+version = "0.1.0"
+zelyra = "0.1"
+
+[capabilities]
+console = true
+filesystem = true
+clock = true
+
+[filesystem]
+read_roots = ["data"]
+write_roots = ["data"]

@@ -1,0 +1,171 @@
+import "src/model.zyl" as model
+pub fn menu(state: model::State) -> model::State uses Console {
+    print("Kunden: 1 Liste 2 anlegen 3 bearbeiten 4 suchen 5 loeschen")
+    choice = read_console("Aktion: ")
+    match choice {
+        Some("2") => {
+            return add(state)
+        }
+        Some("3") => {
+            return edit(state)
+        }
+        Some("4") => {
+            lookup_customer(state)
+        }
+        Some("5") => {
+            return delete(state)
+        }
+        Some(_) => {
+            show_customers(state)
+        }
+        None => {
+        }
+    }
+    return state
+}
+pub fn show_customers(state: model::State) {
+    for customer in state.customers {
+        print(customer.id) print(customer.name + " | " + customer.email)
+    }
+    if len(state.customers) == 0 {
+        print("Noch keine Kunden.")
+    }
+}
+pub fn add(state: model::State) -> model::State uses Console {
+    name = read_console("Name: ")
+    email = read_console("E-Mail: ")
+    match name {
+        Some(customer_name) => {
+            match email {
+                Some(customer_email) => {
+                    if customer_name == "" || customer_email == "" {
+                        print("Name und E-Mail duerfen nicht leer sein.") return state
+                    }
+                    customer = model::Customer {
+                        id: state.next_id, name: customer_name, email: customer_email
+                    }
+                    print("Kunde angelegt mit ID:") print(state.next_id)
+                    return model::State {
+                        articles: state.articles, customers: append(state.customers, customer), orders: state.orders, activities: state.activities, next_id: state.next_id + 1
+                    }
+                }
+                None => {
+                    print("Eingabe abgebrochen.")
+                }
+            }
+        }
+        None => {
+            print("Eingabe abgebrochen.")
+        }
+    }
+    return state
+}
+pub fn edit(state: model::State) -> model::State uses Console {
+    id_raw = read_console("Kunden-ID: ")
+    name = read_console("Neuer Name: ")
+    email = read_console("Neue E-Mail: ")
+    match id_raw {
+        Some(raw) => {
+            match name {
+                Some(customer_name) => {
+                    match email {
+                        Some(customer_email) => {
+                            match model::parse_int(raw) {
+                                Some(id) => {
+                                    mutable found = false
+                                    mutable customers: model::Customer[] = []
+                                    for customer in state.customers {
+                                        if customer.id == id {
+                                            customers = append(customers, model::Customer {
+                                                id: id, name: customer_name, email: customer_email
+                                            }
+                                            ) found = true
+                                        }
+                                        else {
+                                            customers = append(customers, customer)
+                                        }
+                                    }
+                                    if found {
+                                        return model::State {
+                                            articles: state.articles, customers: customers, orders: state.orders, activities: state.activities, next_id: state.next_id
+                                        }
+                                    }
+                                    print("Kunde nicht gefunden.")
+                                }
+                                None => {
+                                    print("Ungueltige ID.")
+                                }
+                            }
+                        }
+                        None => {
+                            print("Eingabe abgebrochen.")
+                        }
+                    }
+                }
+                None => {
+                    print("Eingabe abgebrochen.")
+                }
+            }
+        }
+        None => {
+            print("Eingabe abgebrochen.")
+        }
+    }
+    return state
+}
+pub fn lookup_customer(state: model::State) uses Console {
+    query = read_console("Name oder E-Mail (exakt): ")
+    match query {
+        Some(value) => {
+            mutable found = false for customer in state.customers {
+                if customer.name == value || customer.email == value {
+                    print(customer.id) print(customer.name + " | " + customer.email) found = true
+                }
+            }
+            if!found {
+                print("Kein passender Kunde.")
+            }
+        }
+        None => {
+            print("Eingabe abgebrochen.")
+        }
+    }
+}
+pub fn delete(state: model::State) -> model::State uses Console {
+    id_raw = read_console("Kunden-ID zum Loeschen: ")
+    match id_raw {
+        Some(raw) => {
+            match model::parse_int(raw) {
+                Some(id) => {
+                    for order in state.orders {
+                        if order.customer_id == id {
+                            print("Kunde hat Bestellungen und kann nicht geloescht werden.") return state
+                        }
+                    }
+                    mutable customers: model::Customer[] = []
+                    mutable removed = false
+                    for customer in state.customers {
+                        if customer.id == id {
+                            removed = true
+                        } else {
+                            customers = append(customers, customer)
+                        }
+                    }
+                    if removed {
+                        return model::State {
+                            articles: state.articles, customers: customers, orders: state.orders, activities: state.activities, next_id: state.next_id
+                        }
+                    }
+                    print("Kunde nicht gefunden.")
+                }
+                None => {
+                    print("Ungueltige ID.")
+                }
+            }
+        }
+        None => {
+            print("Eingabe abgebrochen.")
+        }
+    }
+    return state
+}

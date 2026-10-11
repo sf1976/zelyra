@@ -1,9 +1,9 @@
-# In Zelyra 0.9.1 umgesetzt
+# In Zelyra 0.9.3 umgesetzt
 
-**Stand:** stabiles Release 0.9.1 · Sprachkompatibilitätslinie `0.1` · 2026-10-11
+**Stand:** stabiles Release 0.9.3 · Sprachkompatibilitätslinie `0.1` · 2026-10-11
 **Reifegrad:** experimentell; nicht für den Produktiveinsatz freigegeben
 
-Diese Übersicht führt Funktionen auf, die im stabilen Release Zelyra 0.9.1
+Diese Übersicht führt Funktionen auf, die im stabilen Release Zelyra 0.9.3
 tatsächlich implementiert sind. Eine menschliche Abnahme wird nicht behauptet;
 sie bleibt bis 1.0.0 offen. Sie beschreibt den ausgelieferten Umfang,
 nicht die gesamte Sprachvision oder zukünftige Vorhaben. Die
@@ -11,6 +11,56 @@ nicht die gesamte Sprachvision oder zukünftige Vorhaben. Die
 [Changelog](../CHANGELOG.md) hält die Änderungen der Releases fest. Die Links
 führen zu ausführlichen Anleitungen und Testnachweisen, damit diese Seite das
 Handbuch nicht doppelt wiedergibt.
+
+## Änderungen in 0.9.3
+
+- ✅ Das mehrteilige `examples/type_system` prüft jetzt auch native
+  Festkomma-, Kalender-, Zeit-, Dauer-, Byte-, Tupel- und Mengenwerte. Der
+  Bericht trennt unterstützte, teilweise und nicht verfügbare Konzepte.
+  Enumtypen, Funktionswerte und benutzerdefinierte Generics fehlen weiterhin;
+  Records folgen Wertsemantik ohne beobachtbare Klassenidentität. Siehe das
+  [Typinventar](../examples/type_system/README.md).
+- ✅ `examples/csv_catalog` verarbeitet UTF-8-CSV mit Semikolon, Quotes und
+  Zeilenumbrüchen, prüft Datensätze, exportiert Fehler und gültige Artikel und
+  berechnet Dezimalpreise ohne Float.
+- ✅ `examples/labyrinth_solver` prüft und lädt Rasterdateien, sucht mit
+  Breitensuche einen kürzesten Weg und gibt Weg, Schritte und Suchzähler aus.
+- ✅ Das Studio erhält einen sitzungsgeschützten schreibgeschützten
+  Datenbrowser, compilergeprüfte und bestätigte Quellspaltenänderungen sowie
+  die bestätigte Anlage einer MariaDB-Datenbank bei vorhandener Verbindung.
+  Es wendet dabei keine Tabellenmigration an.
+- 🧪 `zelyra migrate laravel <projekt> --report <pfad>` erstellt ein
+  schreibgeschütztes Markdown-/JSON-Inventar mit Quellpositionen und offenen
+  Befunden. Der musterbasierte Scanner ist noch kein PHP-Parser oder
+  automatischer Migrator.
+- ✅ Tutorial- und Studio-Startabläufe sowie die gestaffelte CLI-Detailhilfe
+  sind ergänzt. Unabhängige menschliche Produkt- und Barrierefreiheitsabnahme
+  bleibt für 1.0.0 vorgesehen.
+
+## Änderungen in 0.9.2
+
+- ✅ Studio zeigt Kontexthilfe und einen durchsuchbaren Aktionsfinder. Die
+  Vervollständigung berücksichtigt deklarierte Projektbegriffe und lokale
+  Bindungen aus dem Compiler-AST; Live-Diagnosen prüfen auch ungespeicherte
+  Änderungen, ohne Projektdateien zu verändern.
+- ✅ F12 öffnet eindeutige Definitionen im aktuellen oder direkt importierten
+  Modul. Umschalt+F12 findet lexikalisch gleiche Bezeichner in gespeicherten
+  `.zyl`-Dateien; die Suche löst keine Gültigkeitsbereiche auf.
+- ✅ Die deterministische Projektkarte zeigt Compiler-erfasste Module,
+  Importe, Tabellen, Views, CRUD-Ressourcen, Seiten, APIs und Funktionen mit
+  Quellpositionen. Mehrdeutige, dynamische oder begrenzungsbedingt fehlende
+  Beziehungen werden nicht geraten.
+- ✅ Die ausdrückliche Studio-Aktion **Starten** begrenzt Programme auf
+  15 Sekunden und 64 KiB je Ausgabekanal und redigiert erkannte Geheimnisse aus
+  Prozessumgebung und `.env`. Studio startet nichts selbstständig; interaktive
+  stdin-Eingabe ist nicht verfügbar.
+- ✅ `zelyra --tutorial invoice` erzeugt das Rechnungstutorial, startet die
+  MariaDB-/Web-Compose-Anwendung und richtet ihr Schema ein. `--no-start`
+  überspringt den Docker-Start. Das Beispiel berechnet Netto, 19% Umsatzsteuer
+  und Brutto und stellt eine druckbare Browseransicht bereit.
+- ✅ Automatisierte Browser- und Tastaturprüfungen ergänzen die Editor-
+  Sprachdienste; unabhängige Screenreader-, Kontrast- und Produktabnahme bleibt
+  für 1.0.0 vorgesehen.
 
 ## Änderungen in 0.9.1
 
@@ -43,7 +93,30 @@ den Beweis, dass beliebige Anwendungen korrekt sind.
   Veränderlichkeit muss ausdrücklich markiert werden.
 - ✅ Nominale Fachdaten-Typen, Records mit geprüftem Feldzugriff, Arrays mit
   gebräuchlichen Operationen, deterministische typisierte Maps, `Option`,
-  `Result` und Pattern Matching im implementierten Sprachumfang.
+  `Result` und exhaustives Pattern Matching als Anweisung oder Ausdruck; ein
+  `match`-Ausdruck liefert einen einheitlich typgeprüften Wert.
+- ✅ `Int` und `UInt` rechnen innerhalb ihrer 64-Bit-Bereiche; Überlauf,
+  Unterlauf und Division durch null werden als Runtimefehler gemeldet. Das
+  mehrteilige `examples/type_system` prüft unterstützte Typen, erwartete
+  Compiler-/Runtimefehler und dokumentiert partielle sowie fehlende Typen.
+  `Unit` ist in Typsignaturen und JSON-`null`-Roundtrips nutzbar. `Decimal`
+  verwendet nun Festkomma mit neun Nachkommastellen und exakter Basis-10-
+  Arithmetik; für verlustfreie JSON-Roundtrips wird es als Dezimalstring
+  serialisiert. `Date`, `Time`, `Duration` und `Bytes` haben jetzt echte
+  Runtimewerte, geprüfte Konstruktoren und JSON-Roundtrips. `List<T>` ist ein
+  Alias für `T[]`; heterogene `Tuple<A, B, ...>`-Werte und deterministische
+  `Set<T>`-Werte lassen sich erstellen, prüfen, iterieren und als JSON
+  austauschen. Benutzerdefinierte Enums/Generics und beobachtbare
+  Klassenidentität bleiben offen.
+- ✅ Stringwerte lassen sich lexikografisch vergleichen. `json_decode_result<T>`,
+  `read_text_result` und `write_text_result` geben erwartbare Parse- und
+  Dateifehler als `Result` zurück. `format_timestamp` zeigt UTC-Zeitstempel als
+  ISO-8601; Capability- und Projektgrenzen bleiben aktiv. Exklusive
+  Dateierstellung, temporäres Schreiben mit atomarem Austausch, Anhängen,
+  Kopieren, Umbenennen und Result-basiertes Löschen sind verfügbar. Wörtliche
+  Textsuche, Ersetzen und Teilen unterstützen mehrteilige Textdateiabläufe.
+  `examples/notes_manager` demonstriert UTF-8-Notizen, Sicherungen vor
+  Änderungen, Wiederherstellung, Protokollierung und automatisierte Tests.
 - ✅ `zelyra check`, `build`, `run` und `serve`; menschenlesbare Diagnosen,
   stabile Diagnosecodes in unterstützten Maschinenformaten und Quellpositionen.
 - ✅ Kanonische Formatierung mit `zelyra fmt` und nicht veränderndem
@@ -141,8 +214,21 @@ der [Setup-Anleitung](setup-web.de.md) und den
   0.9.0 zeigt dazu betroffene Dateien, Tabellen, deklarierte Beziehungen und
   Routen. Der Kandidat wird mit dem Compiler geprüft, als Diff angezeigt und
   erst nach ausdrücklichem Anwenden mit erneutem Hashvergleich geschrieben.
-  MySQL-Live-Introspektion und Änderungen an Schema oder Datensätzen sind hier
-  nicht enthalten. Einzelheiten: [Studio-Anleitung](studio.de.md).
+  0.9.2 ergänzt Kontexthilfe, Aktionsfinder, AST-basierte lokale
+  Vervollständigung, Live-Diagnosen, F12-Definitionen, lexikalische
+  Umschalt+F12-Fundstellen, eine deterministische Compiler-Projektkarte und
+  einen begrenzten ausdrücklichen Run-Befehl. Typinferenz, vollständige
+  semantische Referenzen und dynamische Projektbeziehungen sind nicht enthalten.
+  MySQL-Live-Introspektion ist hier nicht enthalten. 0.9.3 ergänzt den
+  expliziten schreibgeschützten Datenbrowser (höchstens 25 Datensätze pro
+  Anfrage) sowie compilergeprüftes Ergänzen und Bearbeiten einfacher
+  Tabellenspalten im Quelltext. Schlüssel-, eindeutige und Default-Felder sind
+  vom visuellen Edit ausgeschlossen; jede Änderung verlangt Hashprüfung und
+  Bestätigung und wendet keine Migration an. Eine deklarierte MariaDB kann
+  nach Bestätigung angelegt werden, sofern ihre Verbindung bereits konfiguriert
+  ist; Schemaanwendung bleibt getrennt. Backend-/Verbindungswahl, PostgreSQL-/
+  MySQL-Datenbankanlage und ein vollständiger Plan-/Risikoeditor fehlen noch.
+  Einzelheiten: [Studio-Anleitung](studio.de.md).
 - ✅ `zelyra text edit <plan.zedit>` bietet vorschau-basierte Textänderungen aus
   TOML-Plänen mit linearen regulären Ausdrücken, erwarteter Trefferzahl,
   quellgebundener Plan-ID und ausdrücklichem Anwenden. Projektgrenzen und
@@ -153,8 +239,10 @@ der [Setup-Anleitung](setup-web.de.md) und den
   Vorschaupfad ohne unabhängige Produktionsfreigabe.
 - Das Sprachkompatibilitätskorpus 0.1 umfasst in 0.9 zusätzliche typisierte
   API-Fehler sowie Laufzeitfälle der Rechnungsanwendung und von `Result`.
-- 🧪 Die aktuelle Erweiterung von `zelyra --tutorial invoice` führt durch
-  Kunden, Artikel, Dashboard und Rechnungserstellung. Die Rechnungsansicht addiert
+- 🧪 `zelyra --tutorial invoice` erzeugt jetzt die Anwendung und startet ihre
+  lokale MariaDB-/Web-Compose-Umgebung einschließlich Schema. `--no-start`
+  erstellt nur das Projektgerüst. Das Tutorial führt durch Kunden, Artikel,
+  Dashboard und Rechnungserstellung. Die Rechnungsansicht addiert
   Positionspreise netto, berechnet im Lernbeispiel 19% Umsatzsteuer und zeigt
   den Bruttobetrag. Unter `/invoices/RECHNUNGSNUMMER/print` kann der Browser
   die druckoptimierte Rechnung als PDF speichern. Es ist ein Lernpfad, keine
@@ -165,6 +253,24 @@ der [Setup-Anleitung](setup-web.de.md) und den
   Erklärung ihres Zwecks. `zelyra editor` ist als direkter Start im aktuellen
   Projektordner ausgewiesen.
 - Studio ist noch keine vollständige IDE oder beliebiger Datenbankdesigner.
+- ✅ `examples/inventory_orders/` enthält ein mehrteiliges Konsolenprojekt für
+  Lager, Kunden und Bestellungen mit JSON-Speicherung, Cent-genauer
+  Rabatt-/Umsatzsteuerberechnung, Stornierung, Aktionsprotokoll und ausführbaren
+  Geschäftsprüfungen.
+
+## Laravel-Migrator
+
+- 🧪 `zelyra migrate laravel <projekt> --report <pfad>` inventarisiert in
+  0.9.3 erkannte Laravel-Muster ausschließlich statisch. PHP, Artisan,
+  Datenbanken und `.env`-Dateien werden nicht ausgeführt, verbunden oder
+  gelesen. Der neue Bericht liegt außerhalb des Quellprojekts und enthält
+  Fundstellen, Status und nächste Prüfschritte als Markdown oder JSON. Der
+  erste Scanner deckt Composer-Vorgaben, einfache Routen, Models, Controller,
+  `Schema::create`, ausgewählte Beziehungen, Validierungseinstiege, Jobs,
+  Blade-Views und Integrationsaufrufe ab. Er ist ein experimenteller
+  Muster-Scanner, kein PHP-Parser und kein Nachweis für Geschäftslogik- oder
+  Sicherheitsparität. Der verknüpfte Projektgraph und optionale Gerüste folgen
+  später. [Details zum Migrator](laravel-migrator.de.md).
 
 ## APIs, Authentifizierung, Berechtigungen und Audit
 

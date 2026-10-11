@@ -112,7 +112,11 @@ den tatsächlich implementierten Stand.
 
 - [x] Sprachkern mit Lexer, Parser, AST, Funktionen, Ausdrücken, Kontrollfluss,
   unveränderlichen Bindings als Standard, Arrays, deterministischen typisierten
-  Maps, Records, Option, Result und Pattern Matching.
+  Maps, Records, Option, Result und exhaustivem Pattern Matching als Anweisung
+  und Ausdruck. `Int`/`UInt`-Überläufe und Division durch null liefern
+  kontrollierte Runtimefehler; `Unit` ist in Typsignaturen nutzbar.
+  `examples/type_system` hält die geprüfte Typabdeckung und nicht unterstützte
+  Bereiche fest.
 - [x] Statische Prüfung, nominale Fachdaten-Typen, Capabilities, Contracts,
   Runtime-Prüfungen und ein erster Verifier.
 - [x] MariaDB als primäres Schema-Backend, Inspektion, DDL-Planung,
@@ -620,6 +624,20 @@ manuell umzusetzen.
 
 ## Release 0.9.2 — Sprachdienste der IDE
 
+- [✅] Sichere UTF-8-Textdateioperationen für exklusive Erstellung, atomaren
+  Dateiaustausch, Anhängen, Kopieren, Umbenennen und Result-basiertes Löschen
+  ergänzen. Wörtliche Textsuche, Ersetzen und Teilen unterstützen die
+  mehrteilige Konsolen-Notizverwaltung unter `examples/notes_manager` mit
+  Sicherungen vor Änderungen, Wiederherstellung, Dateigrenzen, Aktionsprotokoll
+  und automatisierten Regressionstests.
+- [✅] `assert(condition[, message])` typgeprüft ausführen und falsche
+  Bedingungen als Laufzeitfehler melden. Die Tests für Lager/Bestellungen,
+  CSV-Import und Notizverwaltung verwenden Assertions; `zelyra run tests.zyl`
+  liefert bei fehlgeschlagener Prüfung einen Fehlerstatus. Der Lager-Spielstand
+  wird über atomaren Dateiaustausch gespeichert und im Beispiel wieder geladen.
+  `text_trim` entfernt Unicode-Leerraum am Rand; der CSV-Import weist damit
+  Pflichtfelder zurück, die nur aus Leerraum bestehen.
+
 - [🧪] Der geführte Tutorialbefehl startet MariaDB und Webanwendung und wendet
   das Schema an. Die Compose-Webanwendung bezieht die Datenbank-URL aus der
   Projekteinstellung; Einsteiger müssen weder `DATABASE_URL` setzen noch
@@ -672,8 +690,39 @@ manuell umzusetzen.
 
 ## Release 0.9.3 — Datenbankwerkbank
 
-- [🗺️] Einen schreibgeschützten Laravel-Projektanalysator in der Zelyra-CLI
-  beginnen: `zelyra migrate laravel <projekt> --report <pfad>`. Er erfasst
+Arbeitsumfang und technische Gates stehen im [Releaseplan 0.9.3](release-plans/0.9.3.de.md).
+
+- [✅] CSV-Grundlagen für Import und Export ergänzen: `String[][]` als
+  verschachtelten Typ parsen, zitierte Trennzeichen/Quotes/Zeilenumbrüche
+  korrekt decodieren und encodieren sowie Dezimaltexte ohne Float exakt in
+  skalierte Integer umwandeln. Das Beispiel `examples/csv_catalog` erstellt
+  Quelldaten, validiert Felder, protokolliert Fehler, sortiert/exportiert
+  gültige Datensätze und prüft den Roundtrip automatisiert. CSV wird als
+  vollständiger UTF-8-Text im Speicher verarbeitet, nicht gestreamt. Die
+  Zelyra-Tests verwenden `assert`, damit Fehlschläge im Prozessstatus sichtbar
+  werden.
+- [✅] `text_chars(text)` liefert Unicode-Codepoints als `String[]`. Das
+  mehrteilige Beispiel `examples/labyrinth_solver` nutzt es, um unterschiedlich
+  große Raster einzulesen, zu validieren und per Breitensuche einen kürzesten
+  Weg mit Anzeige, Zählern und Datei-Roundtrip zu berechnen.
+
+- [🧪] Den im 0.9.2-Rechnungstutorial gefundenen Startfehler beheben: Das
+  deklarative Weblayout muss das Projekt-Theme laden; die CLI zeigt die lokale
+  Browseradresse schon beim Anlegen und behält sie auch bei fehlgeschlagenem
+  Schema-Setup bei. Studios **Starten** führt Konsolenprogramme aus und startet
+  bei Webprojekten eine lokale Vorschau mit anklickbarer Adresse. Der Start
+  beendet eine vorherige Vorschau und Studio beendet die aktive Vorschau beim
+  Schließen; **Vorschau beenden** stoppt sie sofort. Datenbanken werden weiterhin
+  ausdrücklich separat gestartet. Das Tutorial wird als echtes importiertes
+  Mehrdateienprojekt mit eigenem Datenbank-, Kunden-, Artikel-, Rechnungs-,
+  Layout- und Dashboard-Modul erzeugt. Der CLI- und Browser-E2E-Nachweis für
+  den Studio-Webablauf ist ergänzt; menschliche Abnahme bleibt für 1.0.0.
+- [🧪] Die CLI-Hilfe ausbauen: `zelyra <befehl> --help` und verschachtelte
+  Aufrufe wie `zelyra db plan --help` erklären Zweck, Optionen, Beispiele und
+  Voraussetzungen in Deutsch oder Englisch, ohne den Befehl auszuführen.
+- [🧪] Einen schreibgeschützten Laravel-Projektanalysator in der Zelyra-CLI
+  beginnen: `zelyra migrate laravel <projekt> --report <pfad>`. Der erste
+  statische Inventarlauf erfasst
   Laravel-/Paketversionen, Routen und Middleware, Controller, Models,
   Migrationen, Validierungen, Views, Jobs und Integrationen statisch und
   verknüpft die Funde mit Quellpositionen. Er darf die Anwendung nicht starten,
@@ -681,12 +730,24 @@ manuell umzusetzen.
   Dateien lesen. Berichte unterscheiden direkt abbildbare, teilweise
   abbildbare, manuell umzusetzen und nicht sicher zuordenbare Elemente und
   nennen den nächsten sicheren Schritt. Der unterstützte Musterumfang wird
-  dokumentiert; mehrdeutige Funde bleiben offen statt erraten zu werden.
-- [🗺️] Die Datenbankansicht der IDE zur sicheren Werkbank ausbauen: Tabellen,
+  dokumentiert; mehrdeutige Funde bleiben offen statt erraten zu werden. Die
+  erste Fassung erfasst bereits Composer-Versionen, Routen, Models,
+  Controller, Schema-Erstellungen, Beziehungen, Validierungsaufrufe, Queued
+  Jobs, Views und ausgewählte Integrationen mit Fundstellen in Markdown oder
+  JSON. Sie bearbeitet ausschließlich einen neuen Bericht außerhalb des
+  Quellprojekts. Versionsmatrix, verknüpfter Projektgraph, Paket-/Regelabgleich
+  und Gerüstgenerierung folgen in 0.9.4–0.9.8.
+- [🧪] Die Datenbankansicht der IDE zur sicheren Werkbank ausbauen: Tabellen,
   Spalten, Indizes und deklarierte Beziehungen ansehen, Datensätze standardmäßig
   schreibgeschützt durchsuchen und den zuständigen Quellmodulen zuordnen. Das
   ER-Diagramm wird filterbar und navigierbar; Auswahl eines Feldes oder einer
-  Beziehung zeigt Definition, Quellmodul und verwendende Ressourcen.
+  Beziehung zeigt Definition, Quellmodul und verwendende Ressourcen. Studio
+  bietet nun einen sitzungsgeschützten, schreibgeschützten Datenbrowser mit
+  höchstens 25 Zeilen je Abruf sowie einen compilergeprüften Assistenten zum
+  Ergänzen und Bearbeiten einfacher Quellspalten. Eine deklarierte MariaDB
+  lässt sich mit vorhandener Verbindung nach Bestätigung anlegen. Die Auswahl
+  der Verbindung, PostgreSQL-/MySQL-Anlage und die vollständige Plan-/Risiko-
+  Ansicht bleiben offen.
 - [🗺️] Fremdschlüssel bis 1.0.0 als durchgängige Datenbankfunktion liefern:
   Referenzen in Zelyra-Tabellenfeldern deklarieren, Zieltabellen und Feldtypen
   im Compiler prüfen, echte Constraints anlegen und auslesen sowie Beziehungen
@@ -710,14 +771,18 @@ manuell umzusetzen.
   abgelehnt werden. Der Nachweis umfasst positive und negative Integrationstests
   für zwei Mandanten, alle Lese- und Änderungswege, entzogene Mitgliedschaften
   sowie manipulierte oder widersprüchliche Mandantenauswahl.
-- [🗺️] Tabellenspalten über die Eigenschaftsseitenleiste grafisch ergänzen und
+- [🧪] Tabellenspalten über die Eigenschaftsseitenleiste grafisch ergänzen und
   bearbeiten. Studio zeigt den vollständigen Schema-Plan mit Auswirkungen und
   Risiken, lässt den Compiler prüfen und verlangt vor jeder Anwendung eine
   ausdrückliche Bestätigung. Außerdem kann der Nutzer den gewählten Datenbanktyp
   und die Verbindung einstellen und — soweit Backend und Rechte es unterstützen
   — die Projektdatenbank aus Studio anlegen. Nicht unterstützte Kombinationen
   werden klar benannt; Zugangsdaten werden nie im Browser gespeichert oder
-  ausgegeben.
+  ausgegeben. Add/Edit für einfache Quellspalten ist compilergeprüft,
+  hashgebunden und ausdrücklich bestätigt. Schlüssel-, eindeutige und
+  Default-Felder sind vom visuellen Edit ausgeschlossen. Datenbanktyp,
+  Verbindungsdialog sowie PostgreSQL-/MySQL-Datenbankanlage sind noch nicht
+  umgesetzt; MariaDB-Anlage nutzt eine bereits konfigurierte Verbindung.
 - [🗺️] Lesende, typisierte Datenquellen für Kennzahlen vorbereiten, damit sie
   in 0.9.4 ohne frei formulierte SQL-Ausdrücke gewählt werden können.
 - [🗺️] Wiederverwendbare JavaScript-ES-Module als Projektdateien planen:
@@ -736,6 +801,19 @@ manuell umzusetzen.
 
 ## Release 0.9.4 — Visueller CRUD-Entwurf
 
+- [🗺️] Die in `examples/type_system` erfassten Lücken vor 0.9.9 schließen:
+  nominale Enum-Varianten mit exhaustivem Matching und typisierten JSON-
+  Roundtrips einführen; sicher typisierte Funktionswerte und benutzerdefinierte
+  generische Funktionen/Records in klar begrenzter, dokumentierter Form
+  ergänzen; und einen Zelyra-eigenen identitätsbehafteten Geschäftsentitätstyp
+  definieren, falls neben wertbasierten Records echte Objektidentität gebraucht
+  wird. Zelyras ausdrückliches `Int`/`UInt`- und `Float`/`Decimal`-Modell bleibt
+  bestehen; Breitenvarianten werden nur bei belegtem Geschäftsnutzen ergänzt.
+  Jede Erweiterung aktualisiert Compiler/Runtime, Diagnosen,
+  Kompatibilitätsfixtures, Studio-Hilfe und Typmatrix. Das 0.9.9-Gate führt
+  positive Prüfungen, erwartete Compiler-/Runtimefehler und Serialisierung
+  erneut aus und muss null unerwartete Fehler melden. Für jeden dann noch
+  fehlenden Punkt ist eine ausdrückliche Produktentscheidung nötig.
 - [🗺️] Die Laravel-Analyse zu einem belegbaren Projektgraphen ausbauen:
   Route → Middleware/Controller → Model/Beziehung → Migration/Tabelle → View,
   einschließlich Validierungsregeln, Paketabhängigkeiten, Datei- und

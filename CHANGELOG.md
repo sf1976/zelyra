@@ -4,6 +4,36 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language compatibility line remains `0.1`. Compiler and repository
 releases follow Semantic Versioning independently of the language line.
 
+## 0.9.3 — 2026-10-11
+
+- Add a compiler-checked Studio database workbench with a session-protected,
+  read-only row browser, safe column source editing, and confirmed MariaDB
+  database creation when a connection is already configured. Database schema
+  application remains a separate reviewed operation. / Eine compilergeprüfte
+  Studio-Datenbankwerkbank mit sitzungsgeschütztem schreibgeschütztem
+  Datenbrowser, sicherer Quellspaltenbearbeitung und bestätigter MariaDB-
+  Datenbankanlage bei vorhandener Verbindung ergänzen. Die Schemaanwendung
+  bleibt ein separater, geprüfter Vorgang.
+- Add the first static Laravel migration inventory with Markdown/JSON reports,
+  source locations, explicit unresolved findings, and source-project
+  protection. It does not execute PHP/Artisan, read `.env`, or connect to a
+  database. / Den ersten statischen Laravel-Migrationsinventarlauf mit
+  Markdown-/JSON-Berichten, Fundstellen, offenen Befunden und Schutz des
+  Quellprojekts ergänzen. Er führt weder PHP/Artisan aus noch liest er `.env`
+  oder verbindet sich mit einer Datenbank.
+- Add native Decimal, Date, Time, Duration, Bytes, List, Tuple, and Set values;
+  CSV and labyrinth examples exercise validation, persistence, and expected
+  failures. The type matrix still records unsupported and partial concepts. /
+  Native Werte für Decimal, Date, Time, Duration, Bytes, List, Tuple und Set
+  ergänzen; CSV- und Labyrinthbeispiele prüfen Validierung, Speicherung und
+  erwartete Fehler. Die Typmatrix weist weiterhin teilweise und nicht
+  unterstützte Konzepte aus.
+- Fix tutorial and Studio startup, add detailed nested CLI help, and improve
+  local database setup and schema editing flows. Human acceptance remains
+  reserved for 1.0.0. / Tutorial- und Studio-Startfehler beheben, gestaffelte
+  CLI-Detailhilfe sowie lokale Datenbank- und Schemaabläufe ergänzen. Die
+  menschliche Abnahme bleibt 1.0.0 vorbehalten.
+
 ## Unreleased
 
 _Changes for the next release go here._

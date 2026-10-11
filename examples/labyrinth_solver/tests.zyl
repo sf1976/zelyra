@@ -1,0 +1,123 @@
+import "src/maze.zyl" as maze
+import "src/solver.zyl" as solver
+import "src/display.zyl" as display
+fn parse_fails(contents: String, reason: String) -> Bool {
+    match maze::parse(contents) {
+        Ok(_) => {
+            return false
+        }
+        Err(message) => {
+            return text_contains(message, reason)
+        }
+    }
+}
+fn parse_or_fail(contents: String, context: String) -> maze::Maze {
+    match maze::parse(contents) {
+        Ok(value) => {
+            return value
+        }
+        Err(message) => {
+            assert(false, context + ": " + message)
+            return maze::Maze {
+                cells: [], width: 0, height: 0,
+                start_x: 0, start_y: 0, goal_x: 0, goal_y: 0,
+            }
+        }
+    }
+}
+fn load_or_fail(path: String) -> maze::Maze uses FileSystem {
+    match maze::load(path) {
+        Ok(value) => {
+            return value
+        }
+        Err(message) => {
+            assert(false, "gespeichertes Raster konnte nicht geladen werden: " + message)
+            return maze::Maze {
+                cells: [], width: 0, height: 0,
+                start_x: 0, start_y: 0, goal_x: 0, goal_y: 0,
+            }
+        }
+    }
+}
+fn valid_path(grid: maze::Maze, solution: maze::SolveResult) -> Bool {
+    if!solution.found || len(solution.path) == 0 {
+        return false
+    }
+    expected_start = grid.start_y * grid.width + grid.start_x
+    expected_goal = grid.goal_y * grid.width + grid.goal_x
+    if solution.path[0] != expected_start || solution.path[len(solution.path) - 1] != expected_goal {
+        return false
+    }
+    mutable step_number = 1
+    while step_number < len(solution.path) {
+        previous = solution.path[step_number - 1]
+        current = solution.path[step_number]
+        previous_x = previous % grid.width
+        previous_y = previous / grid.width
+        current_x = current % grid.width
+        current_y = current / grid.width
+        horizontal = (current_x == previous_x + 1 || current_x + 1 == previous_x) && current_y == previous_y
+        vertical = (current_y == previous_y + 1 || current_y + 1 == previous_y) && current_x == previous_x
+        if!horizontal &&!vertical {
+            return false
+        }
+        if grid.cells[current_y][current_x] == "#" {
+            return false
+        }
+        step_number = step_number + 1
+    }
+    return true
+}
+pub fn main() uses FileSystem {
+    open_grid = parse_or_fail("S..\n...\n..G", "offenes Raster konnte nicht gelesen werden")
+    open_solution = solver::shortest_path(open_grid)
+    assert(open_solution.found, "offenes Raster hat einen Weg")
+    assert(open_solution.steps == 4, "Breitensuche liefert kuerzesten Weg mit vier Schritten")
+    assert(open_solution.path[0] == 0 && open_solution.path[len(open_solution.path) - 1] == 8, "Pfad beginnt an S und endet bei G")
+    assert(valid_path(open_grid, open_solution), "Pfad bewegt sich nur orthogonal auf freien Feldern")
+    assert(open_solution.examined <= 9, "kein Feld wird mehrfach untersucht")
+    assert(text_contains(display::render(open_grid, open_solution), "*"), "Pfad wird im Raster angezeigt")
+    mutable unique_positions: Int[] = []
+    for position in open_solution.path {
+        assert(!contains(unique_positions, position), "Pfad enthaelt keine doppelte Position")
+        unique_positions = append(unique_positions, position)
+    }
+    print("PASS kuerzester Weg, Randstart, Grenzen und eindeutige Untersuchung")
+    dead_end_grid = parse_or_fail("..#G\nS.#.\n....", "Sackgassenraster konnte nicht gelesen werden")
+    dead_end_solution = solver::shortest_path(dead_end_grid)
+    assert(dead_end_solution.found && dead_end_solution.steps == 6, "Sackgasse wird ignoriert und kuerzester Umweg gefunden")
+    assert(valid_path(dead_end_grid, dead_end_solution), "Pfad aus der Sackgasse bleibt gueltig")
+    assert(dead_end_solution.examined <= dead_end_grid.width * dead_end_grid.height, "Sackgasse wird hoechstens einmal untersucht")
+    print("PASS Sackgasse und Breitensuche")
+    closed_grid = parse_or_fail("S#G\n###\n...", "geschlossenes Raster konnte nicht gelesen werden")
+    closed_solution = solver::shortest_path(closed_grid)
+    assert(!closed_solution.found && len(closed_solution.path) == 0, "geschlossenes Ziel wird als unerreichbar gemeldet")
+    assert(closed_solution.examined == 1, "abgetrennter Start untersucht nur sein Startfeld")
+    assert(text_contains(display::render(closed_grid, closed_solution), "Kein Weg"), "Unerreichbarkeit wird verstaendlich dargestellt")
+    print("PASS unerreichbares Ziel und geschlossener Bereich")
+    assert(parse_fails("S.\n.G.", "andere Laenge"), "ungleiche Zeilenlaengen werden abgewiesen")
+    assert(parse_fails("SxG", "Ungueltiges Zeichen"), "unbekannte Rasterzeichen werden abgewiesen")
+    assert(parse_fails("S.G\nS..", "genau einen Startpunkt"), "doppelte Startpunkte werden abgewiesen")
+    assert(parse_fails("S..", "genau ein Ziel"), "fehlendes Ziel wird abgewiesen")
+    assert(parse_fails("S..\n\n..G", "ist leer"), "leere Innenzeilen werden abgewiesen")
+    assert(parse_fails("..G", "genau einen Startpunkt"), "fehlender Start wird abgewiesen")
+    assert(parse_fails("S.G\n..G", "genau ein Ziel"), "doppelte Ziele werden abgewiesen")
+    print("PASS Rasterformat und Start-/Zielvalidierung")
+    sample = parse_or_fail("S.\r\n.G\r\n", "CRLF-Raster konnte nicht gelesen werden")
+    test_path = "data/__zelyra_labyrinth_roundtrip.txt"
+    if contains(list_dir("data"), "__zelyra_labyrinth_roundtrip.txt") {
+        delete_file(test_path)
+    }
+    match maze::save(test_path, sample) {
+        Ok(_) => {
+            loaded = load_or_fail(test_path)
+            assert(maze::encode(loaded) == "S.\n.G", "gespeichertes Raster bleibt beim erneuten Laden erhalten")
+            delete_file(test_path)
+        }
+        Err(message) => {
+            assert(false, "Labyrinthdatei konnte nicht atomar gespeichert werden: " + message)
+        }
+    }
+    print("PASS UTF-8-Datei, CRLF und Speichern/Laden")
+    print("Alle Labyrinthtests bestanden.")
+}

@@ -1,0 +1,11 @@
+import "src/app.zyl" as app
+pub fn main() uses FileSystem {
+    print("Zelyra CSV Artikelimport und Auswertung")
+    print("CSV verwendet UTF-8, eine Kopfzeile und Semikolon als Trennzeichen.")
+    if app::run() {
+        print("CSV-Verarbeitung abgeschlossen.")
+    }
+    else {
+        print("CSV-Verarbeitung wurde wegen eines Datei- oder Strukturfehlers beendet.")
+    }
+}

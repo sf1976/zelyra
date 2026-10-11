@@ -318,6 +318,16 @@ match email {
 Pattern matching must be exhaustive, preventing the forgotten case that would
 otherwise introduce itself during a Friday deployment.
 
+`match` is also an expression. Every arm must return a compatible value type;
+pattern bindings exist only inside their arm:
+
+~~~zelyra
+status = match load_order(order_id) {
+    Ok(order) => "Order " + json_encode(order.id)
+    Err(_) => "Order not found"
+}
+~~~
+
 Functions expose failures through their return type. The current language core
 uses `Result<T, E>` with `Ok` or `Err`:
 
@@ -1646,6 +1656,63 @@ records, nested records, arrays, options, and scalar values. `json_encode`
 serializes the same value families. Malformed JSON, type mismatches, unknown
 record fields, and missing required fields are explicit runtime errors.
 
+The 0.9.3 development branch adds nested array types such as `String[][]` and
+typed CSV and fixed-point APIs for delimited text files:
+
+~~~zelyra
+fn parse_catalog(text: String) -> Result<String[][], String> {
+    return csv_decode_result(text, ';')
+}
+
+fn read_price(text: String) -> Result<Int, String> {
+    return decimal_scaled_result(text, 2)
+}
+~~~
+
+`csv_decode_result(text, delimiter)` returns each CSV row as `String[]` and
+preserves distinct columns, doubled quotes, UTF-8, LF/CRLF, and newlines inside
+quoted fields. A UTF-8 BOM at the start of a file is accepted. Unclosed quotes,
+quotes in unquoted fields, characters after a closing quote, and lone CR
+characters outside a quoted field return `Err(String)`. An empty file returns
+an empty row list; the application is responsible for checking headers and
+field counts.
+
+`csv_encode(rows, delimiter)` quotes delimiters, quotes, and line breaks, and
+doubles quotes inside quoted fields. Both CSV functions return `Result` so an
+invalid delimiter is reported as data rather than hidden. They process the
+whole text in memory and are not streaming APIs.
+
+For exact money calculations, keep amounts as integer units such as cents.
+`decimal_scaled_result(text, scale)` converts decimal text to a scaled `Int`
+without binary floating point. It accepts either a period or comma as the one
+decimal separator and at most `scale` fractional digits.
+`format_scaled_result(value, scale)` returns a fixed decimal representation for
+export. Both functions accept scales from 0 through 9 and return `Err(String)`
+for invalid text, excess precision, or overflow. The application checks domain
+rules such as nonnegative prices after conversion.
+
+The complete `examples/csv_catalog` project creates a UTF-8 file, imports and
+validates articles, exports valid rows and errors separately, and tests the
+export/import round trip.
+
+Use `assert(condition)` or `assert(condition, message)` for executable checks.
+When the condition is false, the program run ends with a runtime error. Example
+and application checks therefore cannot report success after only printing a
+`FAIL` line.
+
+`text_trim(text)` removes Unicode whitespace at the beginning and end of text
+without changing interior content. It is useful for normalizing CSV input
+before conversion and rejecting required fields that contain only whitespace.
+
+`text_chars(text)` returns a text's Unicode code points as `String[]`. This lets
+programs process grids and other character-oriented text formats with ordinary
+typed Zelyra arrays. Splitting uses Unicode code points, not composed grapheme
+clusters.
+
+The multi-file labyrinth example at
+[`examples/labyrinth_solver`](../../../examples/labyrinth_solver/README.md)
+shows grid handling with file APIs, maps, arrays, and breadth-first search.
+
 For a complete typed JSON request/response flow, use `http_json` with separate
 request and response type arguments:
 
@@ -2156,7 +2223,7 @@ and was checked with the installed Rust toolchain or Zelyra CLI. `🧪`, `🗺�
 | Immutable variable | `value = 1` | `let value = 1;` | Zelyra is immutable without `mutable` | ✅ |
 | Mutable variable | `mutable value = 1` | `let mut value = 1;` | different marker for mutation | ✅ |
 | Integer | `Int` or `UInt` | `i32`, `i64`, `u32`, `u64` | Rust requires a concrete width; Zelyra abstracts it today | ✅ |
-| Decimal | `Float` or `Decimal` | `f64` or `f32` | Zelyra width and exact overflow rules are not fully specified | 🧪 |
+| Decimal | `Float` or `Decimal` | `f64` or fixed point | `Decimal` has nine fractional digits; division truncates toward zero; overflow returns a runtime error | ✅ |
 | Boolean | `true`, `false`, `Bool` | `true`, `false`, `bool` | own base-type model | ✅ |
 | String | `String` and character literals | `String`, `&str`, character literals | Rust distinguishes ownership and borrowing | ✅ |
 | Optional value | `Email?` or `Option<String>` | `Option<String>` | `?` is Zelyra's Option shorthand | ✅ |

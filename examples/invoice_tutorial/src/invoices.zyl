@@ -1,0 +1,142 @@
+import "src/database.zyl" as storage
+import "src/customers.zyl" as customers
+import "src/items.zyl" as items
+import "src/shell.zyl" as shell
+
+pub struct Invoice {
+    id: Id
+    invoice_number: String
+    customer: customers::Customer
+    issued_at: Timestamp
+    status: String
+}
+
+pub struct InvoiceLine {
+    id: Id
+    invoice: Invoice
+    item: items::Item
+    quantity: Int
+    unit_price: Decimal
+}
+
+table invoices {
+    id: Id primary auto
+    invoice_number: String(40) required unique
+    customer: customers::Customer required
+    issued_at: Timestamp required default now
+    status: String(20) default "draft"
+    access {
+        read: ["src/dashboard.zyl"]
+    }
+}
+
+table invoice_lines {
+    id: Id primary auto
+    invoice: Invoice required
+    item: items::Item required
+    quantity: Int required
+    unit_price: Decimal required
+    access {
+        read: ["src/dashboard.zyl"]
+    }
+}
+
+crud Invoice -> invoices {
+    layout: InvoiceTutorialShell
+    title: "Rechnungen"
+    view {
+        fields { invoice_number customer issued_at status }
+        list { mode: cards }
+        detail { mode: cards }
+        form { mode: cards }
+    }
+    list { invoice_number customer issued_at status }
+    search { invoice_number status }
+    filter { status }
+}
+
+crud InvoiceLine -> invoice_lines {
+    layout: InvoiceTutorialShell
+    title: "Rechnungspositionen"
+    view {
+        fields { invoice item quantity unit_price }
+        list { mode: cards }
+        detail { mode: cards }
+        form { mode: cards }
+    }
+    list { invoice item quantity unit_price }
+}
+
+struct InvoicePrintSummary {
+    id: Id
+    invoice_number: String
+    customer_name: String
+    issued_at: Timestamp
+    status: String?
+    net_total: Decimal
+    tax_amount: Decimal
+    gross_total: Decimal
+}
+
+struct InvoicePrintLine {
+    name: String
+    sku: String
+    quantity: Int
+    unit_price: Decimal
+    line_net: Decimal
+}
+
+page "/invoices/{invoice_number}/print" {
+    view: InvoiceTutorialShell
+    load invoice = sql<InvoicePrintSummary> {
+        SELECT
+            invoices.id,
+            invoices.invoice_number,
+            customers.name AS customer_name,
+            invoices.issued_at,
+            invoices.status,
+            ROUND(COALESCE(SUM(invoice_lines.quantity * invoice_lines.unit_price), 0), 2) AS net_total,
+            ROUND(COALESCE(SUM(invoice_lines.quantity * invoice_lines.unit_price), 0) * 0.19, 2) AS tax_amount,
+            ROUND(COALESCE(SUM(invoice_lines.quantity * invoice_lines.unit_price), 0) + COALESCE(SUM(invoice_lines.quantity * invoice_lines.unit_price), 0) * 0.19, 2) AS gross_total
+        FROM invoices
+        JOIN customers ON customers.id = invoices.customer_id
+        LEFT JOIN invoice_lines ON invoice_lines.invoice_id = invoices.id
+        WHERE invoices.invoice_number = :invoice_number
+        GROUP BY invoices.id, invoices.invoice_number, customers.name, invoices.issued_at, invoices.status
+    }
+    load lines = sql<InvoicePrintLine[]> {
+        SELECT
+            items.name,
+            items.sku,
+            invoice_lines.quantity,
+            invoice_lines.unit_price,
+            ROUND(invoice_lines.quantity * invoice_lines.unit_price, 2) AS line_net
+        FROM invoice_lines
+        JOIN items ON items.id = invoice_lines.item_id
+        JOIN invoices ON invoices.id = invoice_lines.invoice_id
+        WHERE invoices.invoice_number = :invoice_number
+        ORDER BY invoice_lines.id
+    }
+    html {
+        <main class="invoice">
+            <p class="no-print"><button onclick="window.print()">Rechnung drucken oder als PDF speichern</button></p>
+            <h1>Rechnung {invoice.invoice_number}</h1>
+            <p>Kunde: {invoice.customer_name}</p>
+            <p>Ausgestellt am: {invoice.issued_at}</p>
+            <table>
+                <thead><tr><th>Artikel</th><th>Artikelnummer</th><th class="amount">Menge</th><th class="amount">Einzelpreis netto</th><th class="amount">Summe netto</th></tr></thead>
+                <tbody>
+                    for line in lines {
+                        <tr><td>{line.name}</td><td>{line.sku}</td><td class="amount">{line.quantity}</td><td class="amount">{line.unit_price} €</td><td class="amount">{line.line_net} €</td></tr>
+                    }
+                </tbody>
+            </table>
+            <section class="invoice-totals">
+                <p><span>Nettobetrag</span><strong>{invoice.net_total} €</strong></p>
+                <p><span>Umsatzsteuer 19%</span><strong>{invoice.tax_amount} €</strong></p>
+                <p><span>Rechnungsbetrag brutto</span><strong>{invoice.gross_total} €</strong></p>
+            </section>
+            <p>Die Beispielrechnung verwendet den allgemeinen Umsatzsteuersatz von 19%.</p>
+        </main>
+    }
+}

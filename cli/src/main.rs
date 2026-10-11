@@ -48,8 +48,10 @@ mod docs;
 mod edit;
 mod editor;
 mod formatter;
+mod help;
 mod holes;
 mod impact;
+mod laravel_migrator;
 mod module_cli;
 mod outbox_cli;
 mod project;
@@ -126,8 +128,8 @@ Token reference: https://github.com/sf1976/zelyra/blob/main/docs/env.md
 fn usage() {
     eprintln!("  zelyra --tutorial invoice [directory] [--no-start] creates the guided invoice app (Docker required to start)");
     eprintln!("  zelyra editor [directory] [--port <port>] [--no-open] starts local Studio and opens the default browser");
+    eprintln!("  zelyra migrate laravel <project> --report <path> creates a read-only migration inventory");
     eprintln!("  zelyra text edit <plan.zedit> [--apply --plan-id sha256:<id>] previews or applies checked text edits");
-    eprintln!("  routes: `zelyra routes <entry.zyl> [--format human|json]` lists declared routes and generated resource routes");
     eprintln!("  impact focus: use `--symbol <kind:name>` to inspect one known node");
     eprintln!("  module plan: `zelyra module plan <entry.zyl> <module.zyl|resource-id>` previews known dependencies");
     eprintln!("  module bundle: `zelyra module bundle <entry.zyl> <module.zyl|resource-id> --output <dir> [--dry-run] [--docker --compiler-ref <40-char-commit>]` plans or writes a checked experimental bundle");
@@ -135,7 +137,8 @@ fn usage() {
     eprintln!("  doctor supports `--env-file <path>` for generated MariaDB projects");
     eprintln!("  setup supports `--database`, `--schema`, `--all`, `--host-port`, `--db-host-port`, and `--web [--port <port>]`");
     eprintln!("  outbox: `setup [file.zyl]`, `list [file.zyl] [--limit <1..200>] [--format text|json]`, `requeue <event-id> [file.zyl]`, or `run [file.zyl] --handler <event.type=function_name> [--once] [--lease-seconds <5..3600>]");
-    eprintln!("Zelyra {}\n\nUsage:\n  zelyra --help\n  zelyra --version\n  zelyra version\n  zelyra update [--check]\n  zelyra --tutorial invoice [directory] [--no-start]\n  zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] [--database|--schema|--all] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] --web [--port <port>]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra config <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra editor [directory] [--port <port>] [--no-open]\n  zelyra module plan <entry.zyl> <module.zyl|resource-id>\n  zelyra module bundle <entry.zyl> <module.zyl|resource-id> --output <dir> [--docker --compiler-ref <40-character-commit>]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|map|plan|apply> <file.zyl>\n\nSchnelleinstieg\n  Geführtes Rechnungstutorial:\n    zelyra --tutorial invoice                 Erstellt Projekt, Datenbank und Schema und startet die Anwendung.\n    Browseradresse aus der Ausgabe öffnen     Die fertige Anwendung ist sofort verwendbar.\n    zelyra editor invoice-tutorial            Öffnet Studio für das Tutorialprojekt.\n  Kleines eigenes Projekt:\n    zelyra init ./mein-projekt                Erstellt ein minimales Projekt ohne Datenbank.\n    cd mein-projekt && zelyra run main.zyl    Startet das Programm direkt.\n    zelyra editor                              Startet Studio im aktuellen Ordner und öffnet den Standardbrowser.\n\nWichtige Befehle\n  init/new  Projektgerüst erstellen; init ist der kurze Einstieg, new bietet Vorlagen und Optionen.\n  check     Datei oder Projekt auf Syntax- und Compilerfehler prüfen.\n  run       Ein Zelyra-Programm direkt ausführen.\n  serve     Eine Webanwendung lokal starten.\n  setup     MariaDB-Projekt vorbereiten; Datenbankkonfiguration muss vorhanden sein. `.` bedeutet aktuelles Verzeichnis, `./test_a` einen Unterordner.\n  db plan   Schemaänderungen zuerst nur anzeigen; db apply setzt einen geprüften Plan um.\n  routes    Deklarierte und erzeugte Webrouten übersichtlich auflisten.\n  editor    Startet den lokalen Studio-Server und öffnet den Standardbrowser; ohne Argument gilt der aktuelle Ordner. `--no-open` überspringt den Browserstart.\n\nGetting started\n  Guided invoice tutorial:\n    zelyra --tutorial invoice                 Creates the project, database, and schema, then starts the app.\n    Open the browser address printed above    The application is ready to use.\n    zelyra editor invoice-tutorial            Opens Studio for the tutorial project.\n  Small project of your own:\n    zelyra init ./my-project                  Creates a minimal project without a database.\n    cd my-project && zelyra run main.zyl      Runs the program directly.\n    zelyra editor                              Starts Studio in the current folder and opens the default browser.\n\nKey commands\n  init/new  Create a project; init is the short path, new offers templates and options.\n  check     Check a file or project for syntax and compiler errors.\n  run       Execute a Zelyra program directly.\n  serve     Start a web application locally.\n  setup     Prepare a MariaDB project; its database configuration must exist. `.` is the current folder, `./test_a` a subfolder.\n  db plan   Preview schema changes; db apply applies a reviewed plan.\n  routes    List declared and generated web routes.\n  editor    Start the local Studio server and open the default browser; defaults to the current folder. Use `--no-open` to skip browser launch.", env!("CARGO_PKG_VERSION"));
+    eprintln!("  Detailhilfe / detailed help: `zelyra fmt --help`, `zelyra init --help`, or `zelyra db plan --help` shows options and examples");
+    eprintln!("Zelyra {}\n\nUsage:\n  zelyra --help\n  zelyra --version\n  zelyra version\n  zelyra update [--check]\n  zelyra --tutorial invoice [directory] [--no-start]\n  zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] [--database|--schema|--all] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] --web [--port <port>]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra config <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra routes <entry.zyl> [--format human|json]\n  zelyra editor [directory] [--port <port>] [--no-open]\n  zelyra migrate laravel <project> --report <path> [--format markdown|json]\n  zelyra module plan <entry.zyl> <module.zyl|resource-id>\n  zelyra module bundle <entry.zyl> <module.zyl|resource-id> --output <dir> [--docker --compiler-ref <40-character-commit>]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|map|plan|apply> <file.zyl>\n\nSchnelleinstieg\n  Geführtes Rechnungstutorial:\n    zelyra --tutorial invoice                 Erstellt Projekt, Datenbank und Schema und startet die Anwendung.\n    Browseradresse aus der Ausgabe öffnen     Die fertige Anwendung ist sofort verwendbar.\n    zelyra editor invoice-tutorial            Öffnet Studio für das Tutorialprojekt.\n  Kleines eigenes Projekt:\n    zelyra init ./mein-projekt                Erstellt ein minimales Projekt ohne Datenbank.\n    cd mein-projekt && zelyra run main.zyl    Startet das Programm direkt.\n    zelyra editor                              Startet Studio im aktuellen Ordner und öffnet den Standardbrowser.\n\nWichtige Befehle\n  init/new  Projektgerüst erstellen; init ist der kurze Einstieg, new bietet Vorlagen und Optionen.\n  check     Datei oder Projekt auf Syntax- und Compilerfehler prüfen.\n  run       Ein Zelyra-Programm direkt ausführen.\n  serve     Eine Webanwendung lokal starten.\n  setup     MariaDB-Projekt vorbereiten; Datenbankkonfiguration muss vorhanden sein. `.` bedeutet aktuelles Verzeichnis, `./test_a` einen Unterordner.\n  db plan   Schemaänderungen zuerst nur anzeigen; db apply setzt einen geprüften Plan um.\n  routes    `zelyra routes main.zyl` listet deklarierte Seiten, APIs und erzeugte Ressourcenrouten; `--format json` liefert maschinenlesbare Ausgabe.\n  editor    Startet den lokalen Studio-Server und öffnet den Standardbrowser; ohne Argument gilt der aktuelle Ordner. `--no-open` überspringt den Browserstart.\n\nGetting started\n  Guided invoice tutorial:\n    zelyra --tutorial invoice                 Creates the project, database, and schema, then starts the app.\n    Open the browser address printed above    The application is ready to use.\n    zelyra editor invoice-tutorial            Opens Studio for the tutorial project.\n  Small project of your own:\n    zelyra init ./my-project                  Creates a minimal project without a database.\n    cd my-project && zelyra run main.zyl      Runs the program directly.\n    zelyra editor                              Starts Studio in the current folder and opens the default browser.\n\nKey commands\n  init/new  Create a project; init is the short path, new offers templates and options.\n  check     Check a file or project for syntax and compiler errors.\n  run       Execute a Zelyra program directly.\n  serve     Start a web application locally.\n  setup     Prepare a MariaDB project; its database configuration must exist. `.` is the current folder, `./test_a` a subfolder.\n  db plan   Preview schema changes; db apply applies a reviewed plan.\n  routes    `zelyra routes main.zyl` lists declared pages, APIs, and generated resource routes; use `--format json` for machine-readable output.\n  editor    Start the local Studio server and open the default browser; defaults to the current folder. Use `--no-open` to skip browser launch.", env!("CARGO_PKG_VERSION"));
 }
 
 fn version_command() -> ExitCode {
@@ -875,6 +878,10 @@ CMD ["zelyra", "serve", "main.zyl", "0.0.0.0:__WEB_PORT__"]
     }
     println!("created Zelyra project in {}", directory.display());
     if options.with_mariadb {
+        println!(
+            "application URL after startup: http://127.0.0.1:{}",
+            options.host_port
+        );
         let env_file = directory.join(".env");
         let env_example = directory.join(".env.example");
         match write_local_env_file(
@@ -4312,7 +4319,10 @@ fn setup_action(path: &str, action: &str, options: &SetupOptions) -> Result<Stri
     });
     if matches!(action, "database" | "schema" | "all") {
         let web_url = project_web_url(&directory)?;
-        messages.push(start_mariadb_compose(&directory)?);
+        messages.push(
+            start_mariadb_compose(&directory)
+                .map_err(|error| format!("{error}\napplication URL after startup: {web_url}"))?,
+        );
         messages.push(format!("open: {web_url}"));
     }
     if matches!(action, "schema" | "all") {
@@ -4321,7 +4331,10 @@ fn setup_action(path: &str, action: &str, options: &SetupOptions) -> Result<Stri
         } else {
             run_local_schema_setup(&directory)
         };
-        schema_result?;
+        schema_result.map_err(|error| {
+            let web_url = project_web_url(&directory).unwrap_or_else(|_| "unknown".into());
+            format!("{error}\napplication URL: {web_url}")
+        })?;
         messages.push("database schema setup completed".into());
     }
     Ok(messages.join("\n"))
@@ -7023,6 +7036,12 @@ fn visit_expression_sql<'a>(
             visit_expression_sql(right, visitor);
         }
         ExprKind::Sql { query, .. } => visitor(query, expression.span),
+        ExprKind::Match { value, arms } => {
+            visit_expression_sql(value, visitor);
+            for arm in arms {
+                visit_expression_sql(&arm.value, visitor);
+            }
+        }
         ExprKind::Int(_)
         | ExprKind::UInt(_)
         | ExprKind::Float(_)
@@ -8429,11 +8448,28 @@ fn api_json_value_node(value: &RuntimeValue) -> serde_json::Value {
         RuntimeValue::Float(value) => serde_json::Number::from_f64(*value)
             .map(serde_json::Value::Number)
             .unwrap_or(serde_json::Value::Null),
+        RuntimeValue::Decimal(value) => {
+            serde_json::Value::String(RuntimeValue::Decimal(*value).output())
+        }
         RuntimeValue::Bool(value) => serde_json::Value::from(*value),
         RuntimeValue::String(value) => serde_json::Value::String(value.clone()),
         RuntimeValue::Char(value) => serde_json::Value::String(value.to_string()),
         RuntimeValue::Timestamp(value) => serde_json::Value::from(*value),
+        RuntimeValue::Date(value) | RuntimeValue::Time(value) => {
+            serde_json::Value::String(value.clone())
+        }
+        RuntimeValue::Duration(value) => serde_json::Value::from(*value),
+        RuntimeValue::Bytes(values) => serde_json::Value::Array(
+            values
+                .iter()
+                .copied()
+                .map(serde_json::Value::from)
+                .collect(),
+        ),
         RuntimeValue::Array(values) => {
+            serde_json::Value::Array(values.iter().map(api_json_value_node).collect())
+        }
+        RuntimeValue::Tuple(values) | RuntimeValue::Set(values) => {
             serde_json::Value::Array(values.iter().map(api_json_value_node).collect())
         }
         RuntimeValue::Map(entries) => {

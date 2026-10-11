@@ -1,0 +1,50 @@
+import "src/maze.zyl" as maze
+pub fn render(grid: maze::Maze, solution: maze::SolveResult) -> String {
+    mutable rendered = ""
+    mutable y = 0
+    while y < grid.height {
+        mutable line = ""
+        mutable x = 0
+        while x < grid.width {
+            mutable cell = grid.cells[y][x]
+            position = y * grid.width + x
+            if cell == "." && solution.found && contains(solution.path, position) {
+                cell = "*"
+            }
+            line = line + cell
+            x = x + 1
+        }
+        rendered = rendered + line
+        if y + 1 < grid.height {
+            rendered = rendered + "\n"
+        }
+        y = y + 1
+    }
+    rendered = rendered + "\nStart: (" + json_encode(grid.start_x) + ", " + json_encode(grid.start_y) + ")"
+    rendered = rendered + "\nZiel: (" + json_encode(grid.goal_x) + ", " + json_encode(grid.goal_y) + ")"
+    if solution.found {
+        rendered = rendered + "\nKuerzester Weg: " + json_encode(solution.steps) + " Schritte"
+        rendered = rendered + "\nUntersuchte Felder: " + json_encode(solution.examined)
+        rendered = rendered + "\nPfad: " + path_text(grid, solution.path)
+    }
+    else {
+        rendered = rendered + "\nKein Weg vom Start zum Ziel gefunden."
+        rendered = rendered + "\nUntersuchte Felder: " + json_encode(solution.examined)
+    }
+    return rendered
+}
+fn path_text(grid: maze::Maze, path: Int[]) -> String {
+    mutable path_output = ""
+    mutable step_number = 0
+    while step_number < len(path) {
+        position = path[step_number]
+        x = position % grid.width
+        y = position / grid.width
+        if step_number > 0 {
+            path_output = path_output + " -> "
+        }
+        path_output = path_output + "(" + json_encode(x) + ", " + json_encode(y) + ")"
+        step_number = step_number + 1
+    }
+    return path_output
+}

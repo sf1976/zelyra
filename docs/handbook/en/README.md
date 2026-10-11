@@ -495,6 +495,16 @@ match email {
 Pattern matching must be exhaustive, preventing the forgotten case that would
 otherwise introduce itself during a Friday deployment.
 
+`match` can also return a value directly. Every arm must produce the same
+compatible type:
+
+~~~zelyra
+status = match load_order(order_id) {
+    Ok(order) => "Order " + json_encode(order.id)
+    Err(_) => "Order not found"
+}
+~~~
+
 Functions can expose expected failures:
 
 ~~~zelyra

@@ -1,0 +1,17 @@
+import "src/model.zyl" as model
+pub fn sales(state: model::State) {
+    mutable turnover = 0
+    mutable count = 0
+    for order in state.orders {
+        if order.status == "open" {
+            turnover = turnover + order.total_cents count = count + 1
+        }
+    }
+    print("Umsatzbericht (nur offene Bestellungen, Brutto inkl. 19% USt.)")
+    print("Anzahl Bestellungen:") print(count)
+    print("Umsatz in Cent:") print(turnover)
+    print("Aktionsprotokoll (UTC):")
+    for event in state.activities {
+        print(format_timestamp(event.at)) print(event.description)
+    }
+}

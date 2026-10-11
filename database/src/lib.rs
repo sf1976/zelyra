@@ -363,6 +363,8 @@ fn column_mapping(
         | Type::Option(_)
         | Type::Result(_, _)
         | Type::Array(_)
+        | Type::Tuple(_)
+        | Type::Set(_)
         | Type::Map(_, _)
         | Type::HttpResult(_)
         | Type::Unit

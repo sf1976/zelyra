@@ -17,6 +17,11 @@ pub(super) fn run() -> ExitCode {
         }
         return version_command();
     }
+    let arguments = args.collect::<Vec<_>>();
+    if help::print_if_requested(&command, &arguments) {
+        return ExitCode::SUCCESS;
+    }
+    let mut args = arguments.into_iter();
     if command == "update" {
         let check_only = match (args.next(), args.next()) {
             (None, None) => false,
@@ -48,6 +53,9 @@ pub(super) fn run() -> ExitCode {
     }
     if command == "editor" {
         return editor::command(args);
+    }
+    if command == "migrate" {
+        return laravel_migrator::command(args);
     }
     if command == "setup" {
         let mut path = ".".to_owned();

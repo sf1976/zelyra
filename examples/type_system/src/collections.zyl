@@ -1,0 +1,60 @@
+pub fn identity_numbers(value: Int[]) -> Int[] {
+    return value
+}
+pub fn identity_labels(value: Map<String, Int>) -> Map<String, Int> {
+    return value
+}
+pub fn run() {
+    pair: Tuple<String, Int> = tuple("Rechnung", 7)
+    assert(pair[0] == "Rechnung" && pair[1] == 7, "Tuple keeps heterogeneous item types and supports constant index access")
+    restored_pair = json_decode<Tuple<String, Int>>(json_encode(pair))
+    assert(restored_pair == pair, "Tuple JSON round trip preserves item types and order")
+    values: List<Int> = [1, 2, 3]
+    assert(values[1] == 2 && len(values) == 3, "List is the named spelling of Zelyra's ordered array type")
+    tags: Set<Int> = set([3, 1, 3, 2])
+    assert(len(tags) == 3 && contains(tags, 1), "Set removes duplicate elements and supports membership")
+    changed_tags = set_remove(set_add(tags, 4), 2)
+    assert(changed_tags == set([1, 3, 4]), "Set add and remove return deterministic values")
+    restored_tags = json_decode<Set<Int>>(json_encode(tags))
+    assert(restored_tags == tags, "Set JSON round trip preserves unique membership")
+    mutable total = 0
+    for tag in tags { total = total + tag }
+    assert(total == 6, "Set iteration visits each member once")
+    print("PASS List, Tuple and Set construction, typing, operations and JSON")
+    empty: Int[] = []
+    assert(len(empty) == 0, "typed empty arrays")
+    mutable numbers = identity_numbers(append(empty, 4))
+    numbers = append(numbers, 4)
+    numbers = append(numbers, 9)
+    assert(len(numbers) == 3, "arrays allow duplicate elements")
+    assert(numbers[0] == 4 && numbers[2] == 9, "array indexing")
+    nested: Int[][] = [[1, 2], [], [3]]
+    assert(nested[0][1] == 2 && len(nested[1]) == 0, "nested and empty arrays")
+    combined = numbers + [12]
+    assert(len(combined) == 4 && len(numbers) == 3, "array concatenation returns a new value")
+    empty_map: Map<String, Int> = Map {
+    }
+    assert(len(empty_map) == 0, "typed empty Map")
+    pairs: Map<String, Int> = identity_labels(Map {
+        "eins": 1
+        "zwei": 2
+        "eins": 3
+    }
+    )
+    assert(len(pairs) == 2, "duplicate Map keys keep one entry")
+    first_duplicate = match get(pairs, "eins") {
+        Some(value) => value == 3
+        None => false
+    }
+    assert(first_duplicate, "last duplicate Map value wins")
+    missing_key = match get(pairs, "fehlt") {
+        Some(_) => false
+        None => true
+    }
+    assert(missing_key, "missing Map key is represented by None")
+    mutable changed = put(pairs, "zwei", 20)
+    changed = put(changed, "drei", 3)
+    assert(len(changed) == 3, "put updates or adds one Map key")
+    assert(contains(changed, "drei"), "Map key lookup")
+    print("PASS Arrays, nested collections, duplicates, indexing and Map lookup")
+}

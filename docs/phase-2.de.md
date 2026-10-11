@@ -87,7 +87,8 @@ Sprachwerte, werden aber bei der JSON-Konvertierung abgelehnt.
 ## Pattern Matching
 
 Match-Arme binden innere Werte und müssen für `Option`, `Result` und `Bool`
-vollständig sein:
+vollständig sein. `match` ist sowohl eine Anweisung als auch ein Ausdruck; als
+Ausdruck liefert jeder Zweig einen Wert desselben geprüften Typs:
 
 ```zelyra
 match find_number(true) {
@@ -97,6 +98,13 @@ match find_number(true) {
     None => {
         print(0)
     }
+}
+```
+
+```zelyra
+label = match lookup_number(true) {
+    Ok(number) => "Nummer " + json_encode(number)
+    Err(_) => "Nicht gefunden"
 }
 ```
 

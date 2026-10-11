@@ -2038,6 +2038,7 @@ impl<'a> Parser<'a> {
             "Date" => Type::Date,
             "Time" => Type::Time,
             "Duration" => Type::Duration,
+            "Unit" => Type::Unit,
             "Option" => {
                 self.expect(TokenKind::Less, "`<` after `Option`")?;
                 let inner = self.type_name()?;
@@ -2060,6 +2061,31 @@ impl<'a> Parser<'a> {
                 self.expect(TokenKind::Greater, "`>` after Map value type")?;
                 Type::Map(Box::new(key), Box::new(value))
             }
+            "List" => {
+                self.expect(TokenKind::Less, "`<` after `List`")?;
+                let inner = self.type_name()?;
+                self.expect(TokenKind::Greater, "`>` after List element type")?;
+                Type::Array(Box::new(inner))
+            }
+            "Set" => {
+                self.expect(TokenKind::Less, "`<` after `Set`")?;
+                let inner = self.type_name()?;
+                self.expect(TokenKind::Greater, "`>` after Set element type")?;
+                Type::Set(Box::new(inner))
+            }
+            "Tuple" => {
+                self.expect(TokenKind::Less, "`<` after `Tuple`")?;
+                let mut items = vec![self.type_name()?];
+                while self.at(&TokenKind::Comma) {
+                    self.advance();
+                    items.push(self.type_name()?);
+                }
+                self.expect(TokenKind::Greater, "`>` after Tuple item types")?;
+                if items.len() < 2 {
+                    return self.error("Tuple requires at least two item types");
+                }
+                Type::Tuple(items)
+            }
             "HttpResult" => {
                 self.expect(TokenKind::Less, "`<` after `HttpResult`")?;
                 let response = self.type_name()?;
@@ -2072,7 +2098,7 @@ impl<'a> Parser<'a> {
             self.advance();
             ty = Type::Option(Box::new(ty));
         }
-        if self.at(&TokenKind::LBracket) {
+        while self.at(&TokenKind::LBracket) {
             self.advance();
             self.expect(TokenKind::RBracket, "`]` after array type")?;
             ty = Type::Array(Box::new(ty));
@@ -2474,6 +2500,38 @@ impl<'a> Parser<'a> {
                 kind: ExprKind::Bool(false),
                 span: token.span,
             }),
+            TokenKind::Match => {
+                let value = self.expression()?;
+                self.expect(TokenKind::LBrace, "`{` after match value")?;
+                let mut arms = Vec::new();
+                self.skip_newlines();
+                while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                    let pattern = self.pattern()?;
+                    self.expect(TokenKind::FatArrow, "`=>` after match pattern")?;
+                    let arm_value = self.expression()?;
+                    let span = pattern.span.join(arm_value.span);
+                    arms.push(MatchExprArm {
+                        pattern,
+                        value: arm_value,
+                        span,
+                    });
+                    if self.at(&TokenKind::Comma) {
+                        self.advance();
+                    }
+                    self.skip_newlines();
+                }
+                if arms.is_empty() {
+                    return self.error("match expression must contain at least one arm");
+                }
+                let end = self.expect(TokenKind::RBrace, "`}` after match arms")?;
+                Ok(Expr {
+                    kind: ExprKind::Match {
+                        value: Box::new(value),
+                        arms,
+                    },
+                    span: token.span.join(end),
+                })
+            }
             TokenKind::LBracket => {
                 let mut values = Vec::new();
                 self.skip_newlines();
@@ -2506,24 +2564,25 @@ impl<'a> Parser<'a> {
                     name.push_str("::");
                     name.push_str(&segment);
                 }
-                let type_args =
-                    if matches!(name.as_str(), "json_decode" | "http_json" | "http_result")
-                        && self.at(&TokenKind::Less)
-                    {
-                        self.advance();
-                        let mut type_args = Vec::new();
-                        loop {
-                            type_args.push(self.type_name()?);
-                            if !self.at(&TokenKind::Comma) {
-                                break;
-                            }
-                            self.advance();
+                let type_args = if matches!(
+                    name.as_str(),
+                    "json_decode" | "json_decode_result" | "http_json" | "http_result"
+                ) && self.at(&TokenKind::Less)
+                {
+                    self.advance();
+                    let mut type_args = Vec::new();
+                    loop {
+                        type_args.push(self.type_name()?);
+                        if !self.at(&TokenKind::Comma) {
+                            break;
                         }
-                        self.expect(TokenKind::Greater, "`>` after call type arguments")?;
-                        type_args
-                    } else {
-                        Vec::new()
-                    };
+                        self.advance();
+                    }
+                    self.expect(TokenKind::Greater, "`>` after call type arguments")?;
+                    type_args
+                } else {
+                    Vec::new()
+                };
                 if self.at(&TokenKind::LParen) {
                     self.advance();
                     let mut args = Vec::new();
@@ -2665,6 +2724,18 @@ mod tests {
         let program = parse(&lex("fn main() { print(1 + 2 * 3) }").unwrap()).unwrap();
         assert_eq!(program.functions.len(), 1);
         assert_eq!(program.functions[0].name, "main");
+    }
+    #[test]
+    fn parses_nested_array_types_for_tabular_text_data() {
+        let program = parse(
+            &lex("fn rows() -> String[][] { return [[\"one\", \"two\"], [\"three\", \"four\"]] }")
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            program.functions[0].return_type,
+            Some(Type::Array(Box::new(Type::Array(Box::new(Type::String)))))
+        );
     }
     #[test]
     fn incomplete_expression_at_end_of_input_returns_a_parse_error() {
@@ -3662,6 +3733,24 @@ mod tests {
             panic!("expected typed call");
         };
         assert_eq!(name, "json_decode");
+        assert_eq!(type_args, &[Type::Named("Customer".into())]);
+    }
+
+    #[test]
+    fn parses_result_typed_json_calls() {
+        let program =
+            parse(&lex("fn main() { value = json_decode_result<Customer>(body) }").unwrap())
+                .unwrap();
+        let Stmt::BindOrAssign { value, .. } = &program.functions[0].body.statements[0] else {
+            panic!("expected binding");
+        };
+        let ExprKind::Call {
+            name, type_args, ..
+        } = &value.kind
+        else {
+            panic!("expected typed call");
+        };
+        assert_eq!(name, "json_decode_result");
         assert_eq!(type_args, &[Type::Named("Customer".into())]);
     }
 

@@ -201,6 +201,17 @@ pub enum HirExprKind {
         query: String,
     },
     Await(Box<HirExpr>),
+    Match {
+        value: Box<HirExpr>,
+        arms: Vec<HirMatchExprArm>,
+    },
+}
+
+#[derive(Clone, Debug)]
+pub struct HirMatchExprArm {
+    pub pattern: HirPattern,
+    pub value: HirExpr,
+    pub span: Span,
 }
 
 pub fn lower(program: &Program) -> Result<HirProgram, Vec<ResolveError>> {
@@ -561,8 +572,13 @@ impl<'a> Resolver<'a> {
                     && !matches!(
                         name.as_str(),
                         "print"
+                            | "assert"
                             | "len"
                             | "append"
+                            | "tuple"
+                            | "set"
+                            | "set_add"
+                            | "set_remove"
                             | "contains"
                             | "get"
                             | "put"
@@ -574,6 +590,12 @@ impl<'a> Resolver<'a> {
                             | "Ok"
                             | "Err"
                             | "now"
+                            | "date"
+                            | "decimal"
+                            | "time"
+                            | "duration_ms"
+                            | "bytes"
+                            | "format_timestamp"
                             | "env"
                             | "random_int"
                             | "read_console"
@@ -581,11 +603,29 @@ impl<'a> Resolver<'a> {
                             | "http_request"
                             | "json_encode"
                             | "json_decode"
+                            | "json_decode_result"
+                            | "csv_decode_result"
+                            | "csv_encode"
+                            | "text_contains"
+                            | "text_trim"
+                            | "text_chars"
+                            | "text_replace_result"
+                            | "text_split_result"
+                            | "decimal_scaled_result"
+                            | "format_scaled_result"
                             | "http_json"
                             | "http_result"
                             | "run_process"
                             | "read_text"
+                            | "read_text_result"
                             | "write_text"
+                            | "write_text_result"
+                            | "write_text_new_result"
+                            | "atomic_write_text_result"
+                            | "append_text_result"
+                            | "copy_file_new_result"
+                            | "rename_file_result"
+                            | "delete_file_result"
                             | "delete_file"
                             | "list_dir"
                     )
@@ -621,6 +661,23 @@ impl<'a> Resolver<'a> {
                 query: query.clone(),
             },
             ExprKind::Await(inner) => HirExprKind::Await(Box::new(self.expr(inner))),
+            ExprKind::Match { value, arms } => HirExprKind::Match {
+                value: Box::new(self.expr(value)),
+                arms: arms
+                    .iter()
+                    .map(|arm| {
+                        self.scopes.push(HashMap::new());
+                        let pattern = self.pattern(&arm.pattern);
+                        let value = self.expr(&arm.value);
+                        self.scopes.pop();
+                        HirMatchExprArm {
+                            pattern,
+                            value,
+                            span: arm.span,
+                        }
+                    })
+                    .collect(),
+            },
         };
         HirExpr {
             kind,
@@ -754,6 +811,16 @@ mod tests {
         };
         assert_eq!(name, "json_decode");
         assert_eq!(type_args, &[Type::Named("Customer".into())]);
+    }
+
+    #[test]
+    fn lowers_result_filesystem_and_json_builtins() {
+        let program = parse(
+            &lex("fn main() uses FileSystem { decoded = json_decode_result<Int>(\"1\") content = read_text_result(\"state.json\") saved = write_text_result(\"state.json\", \"{}\") }").unwrap(),
+        )
+        .unwrap();
+        let hir = lower(&program).unwrap();
+        assert_eq!(hir.functions.len(), 1);
     }
 
     #[test]

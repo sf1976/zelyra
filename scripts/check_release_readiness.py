@@ -176,6 +176,10 @@ RELEASE_PLAN_CHECKLISTS = {
         ("docs/release-plans/0.9.0.en.md", "## Release gates"),
         ("docs/release-plans/0.9.0.de.md", "## Release-Gates"),
     ),
+    "0.9.3": (
+        ("docs/release-plans/0.9.3.en.md", "## Release gates"),
+        ("docs/release-plans/0.9.3.de.md", "## Release-Gates"),
+    ),
     "0.9.5": (
         ("docs/release-plans/0.9.5.en.md", "## Exit criteria"),
         ("docs/release-plans/0.9.5.de.md", "## Abschlusskriterien"),

@@ -475,7 +475,15 @@ fn typescript_type(ty: &Type) -> String {
         Type::Unit => "void".into(),
         Type::Option(inner) => format!("{} | null", typescript_type(inner)),
         Type::Result(ok, _) => typescript_type(ok),
-        Type::Array(inner) => format!("Array<{}>", typescript_type(inner)),
+        Type::Array(inner) | Type::Set(inner) => format!("Array<{}>", typescript_type(inner)),
+        Type::Tuple(items) => format!(
+            "[{}]",
+            items
+                .iter()
+                .map(typescript_type)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
         Type::Map(_, value) => format!("Record<string, {}>", typescript_type(value)),
         Type::HttpResult(inner) => format!("HttpResult<{}>", typescript_type(inner)),
         Type::Named(name) => match name.as_str() {

@@ -256,6 +256,124 @@ fn customer_order_acceptance_example_is_valid() {
 }
 
 #[test]
+fn help_lists_the_route_inventory_command_and_syntax() {
+    let output = run(&["--help"]);
+    assert!(output.status.success());
+    let help = String::from_utf8_lossy(&output.stderr);
+    assert!(help.contains("zelyra routes <entry.zyl> [--format human|json]"));
+    assert!(help.contains("lists declared pages, APIs, and generated resource routes"));
+}
+
+#[test]
+fn command_help_explains_options_without_running_the_command() {
+    let fmt = run(&["fmt", "--help"]);
+    assert!(fmt.status.success());
+    let fmt_help = String::from_utf8_lossy(&fmt.stdout);
+    assert!(fmt_help.contains("zelyra fmt <datei.zyl> [--check]"));
+    assert!(fmt_help.contains("schreibt nichts"));
+
+    let init = run(&["init", "--help"]);
+    assert!(init.status.success());
+    let init_help = String::from_utf8_lossy(&init.stdout);
+    assert!(init_help.contains("zelyra init [ordner] [Optionen]"));
+    assert!(init_help.contains("--template minimal|mariadb-crud|mariadb-auth|mariadb-business"));
+
+    let database = run(&["db", "plan", "--help"]);
+    assert!(database.status.success());
+    assert!(String::from_utf8_lossy(&database.stdout).contains("zelyra db plan <datei.zyl>"));
+
+    let database_group = run(&["db", "--help"]);
+    assert!(database_group.status.success());
+    let database_help = String::from_utf8_lossy(&database_group.stdout);
+    assert!(database_help.contains("ZELYRA_DATABASE_<NAME>_URL"));
+    assert!(database_help.contains("DATABASE_URL"));
+
+    let migrator = run(&["migrate", "laravel", "--help"]);
+    assert!(migrator.status.success());
+    let migrator_help = String::from_utf8_lossy(&migrator.stdout);
+    assert!(migrator_help.contains("zelyra migrate laravel <projekt> --report <pfad>"));
+    assert!(migrator_help.contains("`.env`-Dateien werden nicht"));
+
+    let migration_group = run(&["migrate", "--help"]);
+    assert!(migration_group.status.success());
+    assert!(
+        String::from_utf8_lossy(&migration_group.stdout).contains("zelyra migrate laravel --help")
+    );
+}
+
+#[test]
+fn command_help_is_available_in_english() {
+    let output = Command::new(binary())
+        .args(["fmt", "--help"])
+        .env("ZELYRA_LANGUAGE", "en")
+        .output()
+        .expect("zelyra binary should run");
+    assert!(output.status.success());
+    let help = String::from_utf8_lossy(&output.stdout);
+    assert!(help.contains("Command: zelyra fmt <file.zyl> [--check]"));
+    assert!(help.contains("do not write changes"));
+
+    let database = Command::new(binary())
+        .args(["db", "--help"])
+        .env("ZELYRA_LANGUAGE", "en")
+        .output()
+        .expect("database help command should run");
+    assert!(database.status.success());
+    let database_help = String::from_utf8_lossy(&database.stdout);
+    assert!(database_help.contains("ZELYRA_DATABASE_<NAME>_URL"));
+    assert!(database_help.contains("DATABASE_URL"));
+}
+
+#[test]
+fn laravel_migrator_cli_writes_machine_report_outside_read_only_source() {
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock is available")
+        .as_nanos();
+    let project = std::env::temp_dir().join(format!("zelyra-laravel-cli-{unique}"));
+    let reports = std::env::temp_dir().join(format!("zelyra-laravel-output-{unique}"));
+    fs::create_dir_all(project.join("routes")).expect("project fixture is created");
+    fs::create_dir_all(&reports).expect("report directory is created");
+    fs::write(project.join(".env"), "APP_KEY=private-test-value").expect("env fixture is written");
+    fs::write(
+        project.join("routes/web.php"),
+        "<?php\nRoute::post('/orders', [OrderController::class, 'store']);\n",
+    )
+    .expect("Laravel route fixture is written");
+    let report = reports.join("migration.json");
+    let output = Command::new(binary())
+        .args([
+            "migrate",
+            "laravel",
+            project.to_str().unwrap(),
+            "--report",
+            report.to_str().unwrap(),
+            "--format",
+            "json",
+        ])
+        .output()
+        .expect("migrator command should run");
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let result: serde_json::Value = serde_json::from_slice(&fs::read(&report).unwrap()).unwrap();
+    assert_eq!(result["env_files_read"], false);
+    assert_eq!(result["findings"][0]["file"], "routes/web.php");
+    let contents = fs::read_to_string(&report).unwrap();
+    assert!(!contents.contains("private-test-value"));
+    assert_eq!(
+        fs::read_to_string(project.join(".env")).unwrap(),
+        "APP_KEY=private-test-value"
+    );
+    assert!(!project.join("report.json").exists());
+    let _ = fs::remove_dir_all(project);
+    let _ = fs::remove_dir_all(reports);
+}
+
+#[test]
 fn invoice_tutorial_creates_a_checkable_project_without_overwriting() {
     let directory = temporary_directory("invoice-tutorial");
     let tutorial = run(&[
@@ -271,6 +389,11 @@ fn invoice_tutorial_creates_a_checkable_project_without_overwriting() {
         String::from_utf8_lossy(&tutorial.stderr)
     );
     let source = fs::read_to_string(directory.join("main.zyl")).unwrap();
+    assert!(source.contains("import \"src/customers.zyl\" as customers"));
+    assert!(source.contains("import \"src/invoices.zyl\" as invoices"));
+    let feature_sources = ["customers", "items", "invoices", "dashboard"]
+        .map(|name| fs::read_to_string(directory.join(format!("src/{name}.zyl"))).unwrap())
+        .join("\n");
     for section in [
         "table customers",
         "table items",
@@ -279,11 +402,17 @@ fn invoice_tutorial_creates_a_checkable_project_without_overwriting() {
         "tableview InvoiceDashboard",
     ] {
         assert!(
-            source.contains(section),
+            feature_sources.contains(section),
             "tutorial source omitted {section}"
         );
     }
+    assert!(directory.join("src/database.zyl").is_file());
+    assert!(directory.join("src/shell.zyl").is_file());
+    assert!(feature_sources.contains("customers::Customer"));
     assert!(String::from_utf8_lossy(&tutorial.stdout).contains("zelyra setup --all"));
+    assert!(String::from_utf8_lossy(&tutorial.stdout).contains("http://127.0.0.1:3000"));
+    let shell = fs::read_to_string(directory.join("src/shell.zyl")).unwrap();
+    assert!(shell.contains("<html class=\"zelyra-app\">"));
 
     let overwrite = run(&["--tutorial", "invoice", directory.to_str().unwrap()]);
     assert!(!overwrite.status.success());
@@ -473,6 +602,8 @@ fn new_mariadb_project_propagates_the_selected_web_port() {
     assert!(env_file.contains("ZELYRA_DATABASE_MAIN_URL=mariadb://zelyra:"));
     assert!(env_file.contains("ZELYRA_LANGUAGE=de"));
     assert!(env_file.contains("ZELYRA_LEVEL=learn"));
+    assert!(String::from_utf8_lossy(&output.stdout)
+        .contains(&format!("http://127.0.0.1:{web_host_port}")));
     assert!(env_file.contains("ZELYRA_ALLOWED_HOSTS=localhost,127.0.0.1,[::1]"));
     assert!(env_file.contains("# ZELYRA_WEB_PORT=8080"));
     assert!(env_file.contains(&format!("# ZELYRA_HOST_PORT={web_host_port}")));

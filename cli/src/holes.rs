@@ -367,6 +367,18 @@ impl Collector {
             ExprKind::Await(inner) => {
                 self.expression(inner, expected_type, scope, capabilities, contract_spans)
             }
+            ExprKind::Match { value, arms } => {
+                self.expression(value, None, scope, capabilities, contract_spans);
+                for arm in arms {
+                    self.expression(
+                        &arm.value,
+                        expected_type.clone(),
+                        scope,
+                        capabilities,
+                        contract_spans,
+                    );
+                }
+            }
             ExprKind::Int(_)
             | ExprKind::UInt(_)
             | ExprKind::Float(_)
@@ -382,7 +394,13 @@ impl Collector {
 fn visible_functions(program: &zelyra_ast::Program) -> Vec<String> {
     let mut functions = vec![
         "print",
+        "assert",
         "now",
+        "date",
+        "decimal",
+        "time",
+        "duration_ms",
+        "bytes",
         "env",
         "random_int",
         "read_console",
@@ -398,7 +416,13 @@ fn visible_functions(program: &zelyra_ast::Program) -> Vec<String> {
         "json_decode",
         "run_process",
         "len",
+        "text_trim",
+        "text_chars",
         "append",
+        "tuple",
+        "set",
+        "set_add",
+        "set_remove",
         "contains",
         "get",
         "put",

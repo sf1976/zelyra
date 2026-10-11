@@ -1,0 +1,4 @@
+fn main() {
+    values: Map<Int, String> = Map { 1: "value" }
+    print(json_encode(values))
+}

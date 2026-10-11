@@ -1,0 +1,14 @@
+import "src/maze.zyl" as maze
+import "src/solver.zyl" as solver
+import "src/display.zyl" as display
+pub fn main() uses FileSystem {
+    match maze::load("data/maze.txt") {
+        Ok(grid) => {
+            solution = solver::shortest_path(grid)
+            print(display::render(grid, solution))
+        }
+        Err(message) => {
+            print("Labyrinthfehler: " + message)
+        }
+    }
+}

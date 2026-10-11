@@ -1,0 +1,29 @@
+import "src/model.zyl" as model
+pub fn articles_csv(articles: model::Article[]) -> Result<String, String> {
+    mutable rows: String[][] = [["Artikelnummer", "Name", "Kategorie", "Preis", "Lagerbestand", "Aktiv"]]
+    for article in articles {
+        match format_scaled_result(article.price_cents, 2) {
+            Ok(price_text) => {
+                mutable active_text = "false"
+                if article.active {
+                    active_text = "true"
+                }
+                row: String[] = [json_encode(article.number), article.name, article.category, price_text, json_encode(article.stock), active_text,]
+                rows = append(rows, row)
+            }
+            Err(message) => {
+                return Err("Preis konnte nicht als Dezimalzahl ausgegeben werden: " + message)
+            }
+        }
+    }
+    return csv_encode(rows, ';')
+}
+pub fn issues_csv(issues: model::ImportIssue[]) -> Result<String, String> {
+    mutable rows: String[][] = [["Datensatznummer", "Feld", "Fehlergrund"]]
+    for issue in issues {
+        record_text = json_encode(issue.record_number)
+        row: String[] = [record_text, issue.field_name, issue.reason]
+        rows = append(rows, row)
+    }
+    return csv_encode(rows, ';')
+}

@@ -14,6 +14,10 @@ application and apply the schema together. For a different target directory,
 pass its path, for example `zelyra --tutorial invoice ./my-invoices`.
 Append `--no-start` to generate the project without starting Docker; the command
 then prints the combined `zelyra setup --all` startup instruction.
+It also prints the expected browser address. `zelyra new ... --mariadb` shows
+the address when creating a MariaDB project; it is reachable after startup. If
+schema setup fails after the app starts, the error output still includes the
+address.
 
 The ready application runs at the local address printed by the command
 (`http://127.0.0.1:3000` by default). It contains five connected areas:
@@ -28,6 +32,30 @@ The ready application runs at the local address printed by the command
 5. **Invoice lines** — select an invoice and item, then enter quantity and net
    unit price at `/invoice_lines`. The invoice view calculates net, 19% VAT,
    and gross amounts from these lines.
+
+## Project structure: one responsibility per file
+
+The tutorial is a real multi-file project. `main.zyl` is the entry point and
+imports the feature modules. Each business area has its own source file:
+
+~~~text
+invoice-tutorial/
+├── main.zyl                 entry point and home page
+├── zelyra.toml              project and runtime configuration
+├── zelyra.theme.css         design overrides
+└── src/
+    ├── database.zyl         shared MariaDB declaration
+    ├── shell.zyl            reusable page layout
+    ├── customers.zyl        customer model, table, and CRUD pages
+    ├── items.zyl            item model, table, and CRUD pages
+    ├── invoices.zyl          invoices, lines, and print view
+    └── dashboard.zyl        totals query and invoice overview
+~~~
+
+This lets a beginner read or change one part at a time while the compiler and
+runtime check the complete imported project together. Run `zelyra check
+main.zyl` and `zelyra routes main.zyl` from the project directory. Studio shows
+the same source files in its project tree.
 
 The responsive theme styles navigation, forms, buttons, tables, and a dedicated
 print view. Run `zelyra editor invoice-tutorial` to open Studio and inspect or

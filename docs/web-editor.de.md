@@ -25,9 +25,12 @@ zelyra editor ./rechnung --port 4177
 Die CLI öffnet automatisch den Standardbrowser. Falls das auf dem System nicht
 möglich ist, zeigt sie die lokale URL mit dem Sitzungstoken zum manuellen Öffnen
 an. Mit `--no-open` überspringst du den Browserstart, etwa per SSH oder ohne
-grafische Oberfläche. Studio braucht weder Datenbank noch laufende Webanwendung;
-diese startest du nur, wenn du sie separat verwenden möchtest. Beende Studio mit
-`Ctrl+C`.
+grafische Oberfläche. Studio startet keine Datenbank. Mit **Starten** führt es
+Konsolenprogramme aus oder startet eine lokale Webanwendung und zeigt ihre
+Browseradresse mit einem Öffnen-Link an. Die Datenbank einer Webanwendung muss
+bereits erreichbar sein. Ein erneuter Webstart ersetzt die vorherige Vorschau.
+**Vorschau beenden** stoppt sie sofort; beim Beenden von Studio wird die aktive
+Vorschau ebenfalls beendet. Beende Studio mit `Ctrl+C`.
 
 ## Arbeitsoberfläche
 

@@ -1,0 +1,86 @@
+pub struct Article {
+    number: Int
+    name: String
+    price_cents: Int
+    stock: Int
+    category: String
+}
+pub struct Customer {
+    id: Int
+    name: String
+    email: String
+}
+pub struct OrderLine {
+    article_number: Int
+    article_name: String
+    quantity: Int
+    unit_price_cents: Int
+}
+pub struct Order {
+    id: Int
+    customer_id: Int
+    customer_name: String
+    lines: OrderLine[]
+    discount_percent: Int
+    subtotal_cents: Int
+    discount_cents: Int
+    tax_cents: Int
+    total_cents: Int
+    created_at: Timestamp
+    status: String
+}
+pub struct Activity {
+    at: Timestamp
+    description: String
+}
+pub struct State {
+    articles: Article[]
+    customers: Customer[]
+    orders: Order[]
+    activities: Activity[]
+    next_id: Int
+}
+pub fn empty_state() -> State {
+    return State {
+        articles: [], customers: [], orders: [], activities: [], next_id: 1
+    }
+}
+pub fn record_action(state: State, description: String) -> State uses Clock {
+    event = Activity {
+        at: now(), description: description
+    }
+    return State {
+        articles: state.articles, customers: state.customers, orders: state.orders, activities: append(state.activities, event), next_id: state.next_id
+    }
+}
+pub fn parse_int(raw_text: String) -> Int? {
+    match json_decode_result<Int>(raw_text) {
+        Ok(value) => {
+            return Some(value)
+        }
+        Err(_) => {
+            return None
+        }
+    }
+}
+pub fn calculate_order(subtotal_cents: Int, discount_percent: Int) -> Int[] {
+    discount_cents = (subtotal_cents * discount_percent + 50) / 100
+    taxable_cents = subtotal_cents - discount_cents
+    tax_cents = (taxable_cents * 19 + 50) / 100
+    return[subtotal_cents, discount_cents, tax_cents, taxable_cents + tax_cents]
+}
+pub fn max_article_price_cents() -> Int {
+    return 100000000
+}
+pub fn max_stock() -> Int {
+    return 1000000
+}
+pub fn max_order_lines() -> Int {
+    return 50
+}
+pub fn valid_article_values(price_cents: Int, stock: Int) -> Bool {
+    return price_cents >= 0 && price_cents <= max_article_price_cents() && stock >= 0 && stock <= max_stock()
+}
+pub fn enough_stock(available: Int, requested: Int) -> Bool {
+    return available >= 0 && available <= max_stock() && requested > 0 && requested <= max_stock() && available >= requested
+}

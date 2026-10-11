@@ -12,6 +12,107 @@ fn run(source: &str) -> Vec<String> {
 }
 
 #[test]
+fn assert_is_type_checked_and_fails_execution_with_message() {
+    let passing =
+        run("fn main() { assert(2 + 2 == 4) assert(true, \"expected true\") print(\"done\") }");
+    assert_eq!(passing, ["done"]);
+
+    let program =
+        parse(&lex("fn main() { assert(false, \"inventory stock invariant\") }").unwrap()).unwrap();
+    check(&program).unwrap();
+    let error = execute(&program).expect_err("a failed assertion must fail the run");
+    assert!(error.message.contains("inventory stock invariant"));
+
+    let program = parse(&lex("fn main() { assert(1) }").unwrap()).unwrap();
+    assert!(check(&program)
+        .unwrap_err()
+        .iter()
+        .any(|error| error.message.contains("expected `Bool`, found `Int`")));
+}
+
+#[test]
+fn match_expressions_bind_patterns_and_return_typed_values() {
+    let output = run(
+        "fn unwrap(value: Result<Int, String>) -> Int { return match value { Ok(number) => number Err(_) => 0 } } fn main() { answer = match true { true => unwrap(Ok(42)) false => 0 } print(answer) }",
+    );
+    assert_eq!(output, ["42"]);
+
+    let program =
+        parse(&lex("fn main() { answer = match true { true => 1 false => \"wrong\" } }").unwrap())
+            .unwrap();
+    assert!(check(&program)
+        .unwrap_err()
+        .iter()
+        .any(|error| error.message.contains("expected `Int`, found `String`")));
+
+    let program = parse(&lex("fn main() { answer = match true { true => 1 } }").unwrap()).unwrap();
+    assert!(check(&program)
+        .unwrap_err()
+        .iter()
+        .any(|error| error.message.contains("non-exhaustive match")));
+}
+
+#[test]
+fn unsigned_integer_arithmetic_comparisons_and_overflow_are_consistent() {
+    let output = run(
+        "fn increment(value: UInt) -> UInt { return value + json_decode<UInt>(\"1\") } fn main() { one = json_decode<UInt>(\"1\") two = increment(one) maximum = json_decode<UInt>(\"18446744073709551615\") assert(two > one) assert(maximum > two) print(json_encode(two)) print(json_encode(maximum)) }",
+    );
+    assert_eq!(output, ["2", "18446744073709551615"]);
+
+    for (source, expected) in [
+        (
+            "fn main() { value = json_decode<Int>(\"9223372036854775807\") + 1 }",
+            "Int overflow",
+        ),
+        (
+            "fn main() { value = json_decode<UInt>(\"18446744073709551615\") + json_decode<UInt>(\"1\") }",
+            "UInt overflow",
+        ),
+        (
+            "fn main() { value = json_decode<UInt>(\"0\") - json_decode<UInt>(\"1\") }",
+            "UInt underflow",
+        ),
+        (
+            "fn main() { value = json_decode<Int>(\"-9223372036854775808\") / -1 }",
+            "Int overflow",
+        ),
+        (
+            "fn main() { value = -json_decode<Int>(\"-9223372036854775808\") }",
+            "Int overflow",
+        ),
+    ] {
+        let program = parse(&lex(source).unwrap()).unwrap();
+        check(&program).unwrap();
+        let error = execute(&program).expect_err("overflow must return a runtime error");
+        assert!(error.message.contains(expected), "{}", error.message);
+    }
+}
+
+#[test]
+fn text_trim_removes_unicode_whitespace_without_changing_interior_text() {
+    let output = run("fn main() { print(text_trim(\"  Grüße\u{00a0}\")) }");
+    assert_eq!(output, ["Grüße"]);
+
+    let program = parse(&lex("fn main() { text_trim(5) }").unwrap()).unwrap();
+    assert!(check(&program)
+        .unwrap_err()
+        .iter()
+        .any(|error| error.message.contains("expected `String`, found `Int`")));
+}
+
+#[test]
+fn text_chars_splits_unicode_scalars_into_strings() {
+    let output = run("fn main() { chars = text_chars(\"Aä🧭\") print(len(chars)) print(chars[1]) print(chars[2]) }");
+    assert_eq!(output, ["3", "ä", "🧭"]);
+
+    let program = parse(&lex("fn main() { text_chars(false) }").unwrap()).unwrap();
+    assert!(check(&program)
+        .unwrap_err()
+        .iter()
+        .any(|error| error.message.contains("expected `String`, found `Bool`")));
+}
+
+#[test]
 fn fibonacci_acceptance_test() {
     let output = run("fn fibonacci(n: Int) -> Int { if n <= 1 { return n } return fibonacci(n - 1) + fibonacci(n - 2) } fn main() { print(fibonacci(10)) }");
     assert_eq!(output, ["55"]);
@@ -37,6 +138,91 @@ fn supports_array_for_iteration_and_loop_control() {
             "fn main() { mutable total = 0 for value in [1, 2, 3, 4] { if value == 2 { continue } if value == 4 { break } total = total + value } print(total) }",
         );
     assert_eq!(output, ["4"]);
+}
+
+#[test]
+fn compares_strings_lexicographically() {
+    let output = run(
+        "fn main() { print(\"Apfel\" < \"Birne\") print(\"Birne\" > \"Apfel\") print(\"Apfel\" <= \"Apfel\") }",
+    );
+    assert_eq!(output, ["true", "true", "true"]);
+}
+
+#[test]
+fn formats_timestamps_as_utc_iso8601() {
+    assert_eq!(format_timestamp_utc(0), "1970-01-01T00:00:00.000Z");
+    assert_eq!(format_timestamp_utc(-1), "1969-12-31T23:59:59.999Z");
+    let output = run("fn main() uses Clock { print(format_timestamp(now())) }");
+    assert!(output[0].contains('T'));
+    assert!(output[0].ends_with('Z'));
+}
+
+#[test]
+fn result_apis_report_json_and_file_errors_without_aborting() {
+    let program = parse(
+        &lex(
+            "fn main() uses FileSystem { match json_decode_result<Int>(\"kaputt\") { Ok(value) => { print(value) } Err(message) => { print(\"JSON: \" + message) } } match read_text_result(\"/zelyra-result-api-no-such-file/state.json\") { Ok(value) => { print(value) } Err(message) => { print(\"Datei: \" + message) } } match write_text_result(\"/zelyra-result-api-no-such-dir/state.json\", \"{}\") { Ok(_) => { print(\"write ok\") } Err(message) => { print(\"Schreiben: \" + message) } } }",
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    check(&program).unwrap();
+    check_capabilities(&program).unwrap();
+    let grants = HashSet::from([String::from("FileSystem")]);
+    let output = execute_with_capabilities(&program, Some(&grants)).unwrap();
+    assert!(output[0].starts_with("JSON: json_decode received invalid JSON"));
+    assert!(output[1].starts_with("Datei: file-system read failed"));
+    assert!(output[2].starts_with("Schreiben: file-system write failed"));
+}
+
+#[test]
+fn csv_and_fixed_point_builtins_preserve_data_and_report_errors() {
+    let output = run(r#"fn main() {
+            source_text = "number;name;note\n42;\"Äpfel; \"\"Bio\"\"\";\"erste Zeile\nzweite Zeile\""
+            match csv_decode_result(source_text, ';') {
+                Ok(rows) => {
+                    print(len(rows))
+                    print(rows[1][1])
+                    print(rows[1][2])
+                    match csv_encode(rows, ';') {
+                        Ok(encoded) => { print(encoded == source_text) }
+                        Err(message) => { print(message) }
+                    }
+                }
+                Err(message) => { print(message) }
+            }
+            match decimal_scaled_result("12,34", 2) {
+                Ok(cents) => {
+                    print(cents)
+                    match format_scaled_result(cents, 2) {
+                        Ok(text) => { print(text) }
+                        Err(message) => { print(message) }
+                    }
+                }
+                Err(message) => { print(message) }
+            }
+            match decimal_scaled_result("1.234", 2) {
+                Ok(_) => { print("unexpected precision success") }
+                Err(message) => { print(message) }
+            }
+            match csv_decode_result("a;b\n\"unfinished", ';') {
+                Ok(_) => { print("unexpected CSV success") }
+                Err(message) => { print(message) }
+            }
+        }"#);
+    assert_eq!(
+        output,
+        [
+            "2",
+            "Äpfel; \"Bio\"",
+            "erste Zeile\nzweite Zeile",
+            "true",
+            "1234",
+            "12.34",
+            "at most 2 fractional digits are allowed",
+            "unterminated quoted field at end of input near line 2",
+        ]
+    );
 }
 
 #[test]
@@ -1171,6 +1357,108 @@ fn writes_lists_and_deletes_with_a_file_system_policy() {
     .unwrap();
     assert!(!root.join("note.txt").exists());
     std::fs::remove_dir(&root).unwrap();
+}
+
+#[test]
+fn safe_text_file_apis_preserve_utf8_and_reject_overwrites_and_path_escape() {
+    let root = std::env::temp_dir().join(format!(
+        "zelyra-safe-text-files-{}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let notes = root.join("notes");
+    std::fs::create_dir_all(&notes).unwrap();
+    let program = parse(
+        &lex(r#"fn main() uses FileSystem {
+                match write_text_new_result("notes/a.note", "Grüße; \"Zitat\"\nzweite Zeile") {
+                    Ok(_) => { print("created") }
+                    Err(message) => { print("create error: " + message) }
+                }
+                match write_text_new_result("notes/a.note", "overwrite") {
+                    Ok(_) => { print("overwrite allowed") }
+                    Err(_) => { print("overwrite refused") }
+                }
+                match atomic_write_text_result("notes/a.note", "neue Version äöü") {
+                    Ok(_) => { print("updated") }
+                    Err(message) => { print("update error: " + message) }
+                }
+                match read_text_result("notes/a.note") {
+                    Ok(text) => { print(text) }
+                    Err(message) => { print("read error: " + message) }
+                }
+                match append_text_result("notes/log.jsonl", "{\"event\":\"edit\"}\n") {
+                    Ok(_) => { print("appended") }
+                    Err(message) => { print("append error: " + message) }
+                }
+                match copy_file_new_result("notes/a.note", "notes/b.note") {
+                    Ok(_) => { print("copied") }
+                    Err(message) => { print("copy error: " + message) }
+                }
+                match rename_file_result("notes/b.note", "notes/c.note") {
+                    Ok(_) => { print("renamed") }
+                    Err(message) => { print("rename error: " + message) }
+                }
+                match delete_file_result("notes/c.note") {
+                    Ok(_) => { print("deleted") }
+                    Err(message) => { print("delete error: " + message) }
+                }
+                match write_text_new_result("../outside.note", "blocked") {
+                    Ok(_) => { print("path escape allowed") }
+                    Err(_) => { print("path escape refused") }
+                }
+            }"#)
+        .unwrap(),
+    )
+    .unwrap();
+    check(&program).unwrap();
+    check_capabilities(&program).unwrap();
+    let policy = FileSystemPolicy {
+        base_dir: root.clone(),
+        read_roots: vec![notes.clone()],
+        write_roots: vec![notes.clone()],
+    };
+    let grants = HashSet::from([String::from("FileSystem")]);
+    let output =
+        execute_with_capabilities_and_filesystem_policy(&program, Some(&grants), Some(&policy))
+            .unwrap();
+    assert_eq!(
+        output,
+        [
+            "created",
+            "overwrite refused",
+            "updated",
+            "neue Version äöü",
+            "appended",
+            "copied",
+            "renamed",
+            "deleted",
+            "path escape refused"
+        ]
+    );
+    assert_eq!(
+        std::fs::read_to_string(notes.join("a.note")).unwrap(),
+        "neue Version äöü"
+    );
+    assert_eq!(
+        std::fs::read_to_string(notes.join("log.jsonl")).unwrap(),
+        "{\"event\":\"edit\"}\n"
+    );
+    assert!(!notes.join("b.note").exists());
+    assert!(!notes.join("c.note").exists());
+    assert!(!root.join("outside.note").exists());
+    std::fs::remove_dir_all(root).unwrap();
+
+    let ungranted = parse(
+        &lex("fn main() { match write_text_new_result(\"data.txt\", \"text\") { Ok(_) => {} Err(_) => {} } }").unwrap(),
+    )
+    .unwrap();
+    check(&ungranted).unwrap();
+    assert!(check_capabilities(&ungranted)
+        .unwrap_err()
+        .iter()
+        .any(|error| error.message.contains("FileSystem")));
 }
 
 #[test]

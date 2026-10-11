@@ -1,0 +1,24 @@
+pub fn remove_paragraph(content: String, paragraph_number: Int) -> Result<String, String> {
+    match text_split_result(content, "\n\n") {
+        Ok(paragraphs) => {
+            if paragraph_number<1 || paragraph_number>len(paragraphs) {
+                return Err("Diese Absatznummer gibt es nicht.")
+            }
+            mutable output_text = ""
+            mutable paragraph_index = 1
+            for paragraph in paragraphs {
+                if paragraph_index != paragraph_number {
+                    if output_text != "" {
+                        output_text = output_text + "\n\n"
+                    }
+                    output_text = output_text + paragraph
+                }
+                paragraph_index = paragraph_index + 1
+            }
+            return Ok(output_text)
+        }
+        Err(message) => {
+            return Err(message)
+        }
+    }
+}

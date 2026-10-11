@@ -360,6 +360,16 @@ match email {
 Pattern Matching muss vollständig sein. Sonst erinnert dich der Compiler an
 den Fall, den der Freitagabend-Deploy vermutlich gefunden hätte.
 
+`match` ist auch ein Ausdruck. Alle Zweige müssen einen kompatiblen Werttyp
+liefern; Pattern-Bindings gelten nur innerhalb ihres Zweigs:
+
+~~~zelyra
+status = match load_order(order_id) {
+    Ok(order) => "Bestellung " + json_encode(order.id)
+    Err(_) => "Bestellung nicht gefunden"
+}
+~~~
+
 Fehler werden als Teil der Funktionssignatur sichtbar. Der aktuelle Sprachkern
 verwendet dafür `Result<T, E>` mit `Ok` oder `Err`:
 
@@ -1779,6 +1789,67 @@ Records, verschachtelte Records, Arrays, Optionen und Skalarwerte.
 unbekannte Record-Felder und fehlende Pflichtfelder werden als ausdrückliche
 Laufzeitfehler gemeldet.
 
+Der Entwicklungszweig 0.9.3 ergänzt für tabellarische Textdateien
+verschachtelte Arraytypen wie `String[][]` sowie typisierte CSV- und
+Festkomma-APIs:
+
+~~~zelyra
+fn parse_catalog(text: String) -> Result<String[][], String> {
+    return csv_decode_result(text, ';')
+}
+
+fn read_price(text: String) -> Result<Int, String> {
+    return decimal_scaled_result(text, 2)
+}
+~~~
+
+`csv_decode_result(text, delimiter)` liefert jede CSV-Zeile als `String[]` und
+erhält getrennte Spalten, doppelte Anführungszeichen, UTF-8, LF/CRLF und
+Zeilenumbrüche innerhalb zitierter Felder. Ein UTF-8-BOM am Dateianfang wird
+akzeptiert. Nicht geschlossene Quotes, Quotes in unzitierten Feldern, Zeichen
+nach einem schließenden Quote und einzelne CR-Zeichen außerhalb eines zitierten
+Felds ergeben `Err(String)`. Eine leere Datei ergibt eine leere Zeilenliste;
+die Anwendung prüft Kopfzeilen und Feldanzahl selbst.
+
+`csv_encode(rows, delimiter)` maskiert Trennzeichen, Quotes und Zeilenumbrüche
+und verdoppelt Quotes innerhalb zitierter Felder. Beide CSV-Funktionen liefern
+`Result`, damit ungültige Trennzeichen als Datenfehler behandelt werden können.
+Sie verarbeiten den gesamten Text im Speicher und sind keine Streaming-API.
+
+Geldwerte bleiben für exakte Berechnungen ganzzahlige Einheiten, zum Beispiel
+Cent. `decimal_scaled_result(text, scale)` konvertiert eine Dezimalzahl ohne
+binäre Gleitkommazahl in eine skalierte `Int`; Punkt oder Komma sind als
+einzelnes Dezimaltrennzeichen zulässig, höchstens `scale` Nachkommastellen.
+`format_scaled_result(value, scale)` erzeugt die feste Dezimalschreibweise für
+den Export. Beide Funktionen erlauben Skalen von 0 bis 9 und melden ungültige
+Texte, zu viele Stellen oder Überläufe als `Err(String)`. Fachliche Regeln wie
+„Preis darf nicht negativ sein“ prüft die Anwendung nach der Konvertierung.
+
+Das vollständige Beispiel `examples/csv_catalog` erzeugt eine UTF-8-Datei,
+importiert und validiert Artikel, schreibt gültige und fehlerhafte Datensätze
+getrennt zurück und testet den Export-/Import-Roundtrip.
+
+`assert(bedingung)` und `assert(bedingung, nachricht)` sind für ausführbare
+Prüfungen gedacht. Ist die Bedingung falsch, bricht der Programmlauf mit einem
+Laufzeitfehler ab. Dadurch können Beispiel- und Anwendungstests nicht mehr
+fälschlich erfolgreich enden, nachdem sie nur eine `FAIL`-Zeile ausgegeben
+haben.
+
+`text_trim(text)` entfernt Unicode-Leerraum am Anfang und Ende eines Textes,
+ohne Inhalte dazwischen zu verändern. Das ist hilfreich, um CSV-Eingaben vor
+der Typumwandlung zu normalisieren und nur aus Leerraum bestehende Pflichtfelder
+abzuweisen.
+
+`text_chars(text)` liefert die Unicode-Codepoints eines Textes als `String[]`.
+So lassen sich Raster und andere zeichenweise Textformate mit normalen,
+typisierten Zelyra-Arrays verarbeiten. Die Aufteilung erfolgt nach Unicode-
+Codepoints, nicht nach zusammengesetzten Graphem-Clustern.
+
+Das mehrteilige Labyrinthbeispiel
+[`examples/labyrinth_solver`](../../../examples/labyrinth_solver/README.md)
+zeigt die Rasterverarbeitung zusammen mit Datei-APIs, Maps, Arrays und einer
+Breitensuche.
+
 Für einen vollständigen typisierten JSON-Request-/Response-Ablauf gibt es
 `http_json` mit getrennten Request- und Response-Typargumenten:
 
@@ -2319,7 +2390,7 @@ geplante oder derzeit nicht verfügbare Sprachmerkmale.
 | unveränderliche Variable | `value = 1` | `let value = 1;` | Zelyra bindet ohne `mutable` unveränderlich | ✅ |
 | veränderliche Variable | `mutable value = 1` | `let mut value = 1;` | Veränderbarkeit wird anders markiert | ✅ |
 | Ganzzahl | `Int` oder `UInt` | `i32`, `i64`, `u32`, `u64` | Rust verlangt konkrete Breite; Zelyra abstrahiert derzeit | ✅ |
-| Dezimalzahl | `Float` oder `Decimal` | `f64` oder `f32` | Größe und genaue Überlaufregeln von Zelyra sind noch nicht vollständig spezifiziert | 🧪 |
+| Dezimalzahl | `Float` oder `Decimal` | `f64` oder Festkomma | `Decimal` hat neun Nachkommastellen; Division kürzt Richtung null; Überläufe liefern Runtimefehler | ✅ |
 | Boolean | `true`, `false`, `Bool` | `true`, `false`, `bool` | eigenes Zelyra-Basistypmodell | ✅ |
 | Zeichenkette | `String` und Zeichenliterale | `String`, `&str`, Zeichenliterale | Rust unterscheidet Besitz und Borrowing | ✅ |
 | optionale Werte | `Email?` oder `Option<String>` | `Option<String>` | `?` ist Zelyras Kurzform für Option | ✅ |
