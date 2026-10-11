@@ -722,47 +722,47 @@ async function goToDefinition() {
 }
 
 function createView(path, state) {
+  const extensions = [
+    lineNumbers(), highlightActiveLineGutter(), foldGutter(), undoRedoHistory(), drawSelection(),
+    rectangularSelection(), crosshairCursor(), highlightActiveLine(), bracketMatching(),
+    indentOnInput(), highlightSelectionMatches(), zelyraLanguage,
+    syntaxHighlighting(defaultHighlightStyle, { fallback: true }), zelyraHighlight,
+    autocompletion({ override: [completionSource], activateOnTyping: true }),
+    linter(() => diagnostics.filter((item) => !item.file || item.file.endsWith(path)).map((item) => ({
+      from: Math.max(0, Math.min(state.doc.length, item.from)),
+      to: Math.max(0, Math.min(state.doc.length, item.to)),
+      severity: item.severity || "error",
+      message: `${item.code ? `${item.code}: ` : ""}${item.message}`,
+    }))),
+    keymap.of([
+      { key: "Mod-s", run: () => { saveActive(); return true; } },
+      { key: "Ctrl-Space", run: startCompletion },
+      { key: "Mod-Space", run: startCompletion },
+      { key: "F12", run: () => { void goToDefinition(); return true; } },
+      { key: "Shift-F12", run: () => { void findIdentifierOccurrences(); return true; } },
+      { key: "F1", run: () => { toggleAssistant("help"); return true; } },
+      ...defaultKeymap, ...historyKeymap, ...searchKeymap, ...foldKeymap,
+    ]),
+    EditorView.updateListener.of((update) => {
+      const tab = tabs.get(path);
+      if (!tab) return;
+      tab.state = update.state;
+      if (update.docChanged) {
+        renderTabs();
+        announce(t("unsaved"), "warning");
+        queueMicrotask(() => {
+          if (editor === update.view) editor.dispatch(setDiagnostics(editor.state, []));
+        });
+      }
+      if (update.selectionSet || update.docChanged) renderContextHelp(update.state, path);
+    }),
+    EditorView.lineWrapping,
+    zelyraTheme,
+    EditorView.contentAttributes.of({ "aria-label": `${path} im Zelyra-Webeditor` }),
+  ];
   return new EditorView({
-    state,
+    state: state.reconfigure({ extensions }),
     parent: editorRoot,
-    extensions: [
-      lineNumbers(), highlightActiveLineGutter(), foldGutter(), undoRedoHistory(), drawSelection(),
-      rectangularSelection(), crosshairCursor(), highlightActiveLine(), bracketMatching(),
-      indentOnInput(), highlightSelectionMatches(), zelyraLanguage,
-      syntaxHighlighting(defaultHighlightStyle, { fallback: true }), zelyraHighlight,
-      autocompletion({ override: [completionSource], activateOnTyping: true }),
-      linter(() => diagnostics.filter((item) => !item.file || item.file.endsWith(path)).map((item) => ({
-        from: Math.max(0, Math.min(state.doc.length, item.from)),
-        to: Math.max(0, Math.min(state.doc.length, item.to)),
-        severity: item.severity || "error",
-        message: `${item.code ? `${item.code}: ` : ""}${item.message}`,
-      }))),
-      keymap.of([
-        { key: "Mod-s", run: () => { saveActive(); return true; } },
-        { key: "Ctrl-Space", run: startCompletion },
-        { key: "Mod-Space", run: startCompletion },
-        { key: "F12", run: () => { void goToDefinition(); return true; } },
-        { key: "Shift-F12", run: () => { void findIdentifierOccurrences(); return true; } },
-        { key: "F1", run: () => { toggleAssistant("help"); return true; } },
-        ...defaultKeymap, ...historyKeymap, ...searchKeymap, ...foldKeymap,
-      ]),
-      EditorView.updateListener.of((update) => {
-        const tab = tabs.get(path);
-        if (!tab) return;
-        tab.state = update.state;
-        if (update.docChanged) {
-          renderTabs();
-          announce(t("unsaved"), "warning");
-          queueMicrotask(() => {
-            if (editor === update.view) editor.dispatch(setDiagnostics(editor.state, []));
-          });
-        }
-        if (update.selectionSet || update.docChanged) renderContextHelp(update.state, path);
-      }),
-      EditorView.lineWrapping,
-      zelyraTheme,
-      EditorView.contentAttributes.of({ "aria-label": `${path} im Zelyra-Webeditor` }),
-    ],
   });
 }
 
