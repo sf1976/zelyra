@@ -588,6 +588,7 @@ impl<'a> Resolver<'a> {
                             | "csv_encode"
                             | "text_contains"
                             | "text_trim"
+                            | "text_chars"
                             | "text_replace_result"
                             | "text_split_result"
                             | "decimal_scaled_result"

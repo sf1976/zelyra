@@ -1694,6 +1694,15 @@ and application checks therefore cannot report success after only printing a
 without changing interior content. It is useful for normalizing CSV input
 before conversion and rejecting required fields that contain only whitespace.
 
+`text_chars(text)` returns a text's Unicode code points as `String[]`. This lets
+programs process grids and other character-oriented text formats with ordinary
+typed Zelyra arrays. Splitting uses Unicode code points, not composed grapheme
+clusters.
+
+The multi-file labyrinth example at
+[`examples/labyrinth_solver`](../../../examples/labyrinth_solver/README.md)
+shows grid handling with file APIs, maps, arrays, and breadth-first search.
+
 For a complete typed JSON request/response flow, use `http_json` with separate
 request and response type arguments:
 

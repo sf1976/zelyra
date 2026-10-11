@@ -707,6 +707,10 @@ its source evidence and reason.
   CSV is processed as a complete UTF-8 string in memory; streaming is not
   included. The Zelyra tests use `assert` so failures are reflected in process
   status.
+- [✅] Add `text_chars(text)` to return Unicode code points as `String[]`. The
+  multi-file `examples/labyrinth_solver` uses it to load and validate variable-
+  sized grids, run breadth-first search for a shortest path, render results and
+  counters, and verify a file round trip.
 
 - [🧪] Fix the invoice tutorial startup defect found after 0.9.2: declarative
   web layouts must load the project theme; the CLI prints the local browser

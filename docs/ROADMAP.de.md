@@ -695,6 +695,10 @@ manuell umzusetzen.
   vollständiger UTF-8-Text im Speicher verarbeitet, nicht gestreamt. Die
   Zelyra-Tests verwenden `assert`, damit Fehlschläge im Prozessstatus sichtbar
   werden.
+- [✅] `text_chars(text)` liefert Unicode-Codepoints als `String[]`. Das
+  mehrteilige Beispiel `examples/labyrinth_solver` nutzt es, um unterschiedlich
+  große Raster einzulesen, zu validieren und per Breitensuche einen kürzesten
+  Weg mit Anzeige, Zählern und Datei-Roundtrip zu berechnen.
 
 - [🧪] Den im 0.9.2-Rechnungstutorial gefundenen Startfehler beheben: Das
   deklarative Weblayout muss das Projekt-Theme laden; die CLI zeigt die lokale

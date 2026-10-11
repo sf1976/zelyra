@@ -1830,6 +1830,16 @@ ohne Inhalte dazwischen zu verändern. Das ist hilfreich, um CSV-Eingaben vor
 der Typumwandlung zu normalisieren und nur aus Leerraum bestehende Pflichtfelder
 abzuweisen.
 
+`text_chars(text)` liefert die Unicode-Codepoints eines Textes als `String[]`.
+So lassen sich Raster und andere zeichenweise Textformate mit normalen,
+typisierten Zelyra-Arrays verarbeiten. Die Aufteilung erfolgt nach Unicode-
+Codepoints, nicht nach zusammengesetzten Graphem-Clustern.
+
+Das mehrteilige Labyrinthbeispiel
+[`examples/labyrinth_solver`](../../../examples/labyrinth_solver/README.md)
+zeigt die Rasterverarbeitung zusammen mit Datei-APIs, Maps, Arrays und einer
+Breitensuche.
+
 Für einen vollständigen typisierten JSON-Request-/Response-Ablauf gibt es
 `http_json` mit getrennten Request- und Response-Typargumenten:
 

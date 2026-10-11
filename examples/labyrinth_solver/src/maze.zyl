@@ -1,0 +1,153 @@
+pub struct Maze {
+    cells: String[][]
+    width: Int
+    height: Int
+    start_x: Int
+    start_y: Int
+    goal_x: Int
+    goal_y: Int
+}
+pub struct SolveResult {
+    found: Bool
+    path: Int[]
+    steps: Int
+    examined: Int
+}
+pub fn load(path: String) -> Result<Maze, String>uses FileSystem {
+    match read_text_result(path) {
+        Ok(contents) => {
+            return parse(contents)
+        }
+        Err(message) => {
+            return Err("Labyrinthdatei konnte nicht gelesen werden: " + message)
+        }
+    }
+}
+pub fn save(path: String, maze: Maze) -> Result<Bool, String>uses FileSystem {
+    match atomic_write_text_result(path, encode(maze)) {
+        Ok(_) => {
+            return Ok(true)
+        }
+        Err(message) => {
+            return Err(message)
+        }
+    }
+}
+pub fn parse(contents: String) -> Result<Maze, String> {
+    match text_replace_result(contents, "\r\n", "\n") {
+        Ok(normalized) => {
+            return parse_normalized(normalized)
+        }
+        Err(message) => {
+            return Err("Zeilenenden konnten nicht normalisiert werden: " + message)
+        }
+    }
+}
+fn parse_normalized(contents: String) -> Result<Maze, String> {
+    match text_split_result(contents, "\n") {
+        Ok(raw_rows) => {
+            return parse_rows(raw_rows)
+        }
+        Err(message) => {
+            return Err("Labyrinth konnte nicht getrennt werden: " + message)
+        }
+    }
+}
+fn parse_rows(raw_rows: String[]) -> Result<Maze, String> {
+    mutable cells: String[][] = []
+    mutable width = 0
+    mutable height = 0
+    mutable start_count = 0
+    mutable goal_count = 0
+    mutable start_x = 0
+    mutable start_y = 0
+    mutable goal_x = 0
+    mutable goal_y = 0
+    mutable row_index = 0
+    for raw_row in raw_rows {
+        if raw_row == "" {
+            if row_index != len(raw_rows) - 1 {
+                return Err("Labyrinthzeile " + json_encode(row_index + 1) + " ist leer.")
+            }
+        }
+        else {
+            row = text_chars(raw_row)
+            if len(row) == 0 {
+                return Err("Labyrinthzeile darf nicht leer sein.")
+            }
+            if len(row) > 100 {
+                return Err("Labyrinth darf hoechstens 100 Spalten haben.")
+            }
+            if height == 0 {
+                width = len(row)
+            }
+            else {
+                if len(row) != width {
+                    return Err("Labyrinthzeile " + json_encode(row_index + 1) + " hat eine andere Laenge als die erste Zeile.")
+                }
+            }
+            mutable column = 0
+            for cell in row {
+                if cell == "S" {
+                    start_count = start_count + 1
+                    start_x = column
+                    start_y = height
+                }
+                else {
+                    if cell == "G" {
+                        goal_count = goal_count + 1
+                        goal_x = column
+                        goal_y = height
+                    }
+                    else {
+                        if cell != "." && cell != "#" {
+                            return Err("Ungueltiges Zeichen `" + cell + "` in Zeile " + json_encode(row_index + 1) + ", Spalte " + json_encode(column + 1) + ". Erlaubt sind S, G, . und #.")
+                        }
+                    }
+                }
+                column = column + 1
+            }
+            cells = append(cells, row)
+            height = height + 1
+            if height > 100 {
+                return Err("Labyrinth darf hoechstens 100 Zeilen haben.")
+            }
+        }
+        row_index = row_index + 1
+    }
+    if height == 0 {
+        return Err("Labyrinthdatei enthaelt kein Raster.")
+    }
+    if start_count != 1 {
+        return Err("Labyrinth muss genau einen Startpunkt `S` enthalten.")
+    }
+    if goal_count != 1 {
+        return Err("Labyrinth muss genau ein Ziel `G` enthalten.")
+    }
+    return Ok(Maze {
+        cells: cells,
+        width: width,
+        height: height,
+        start_x: start_x,
+        start_y: start_y,
+        goal_x: goal_x,
+        goal_y: goal_y,
+    }
+    )
+}
+pub fn encode(maze: Maze) -> String {
+    mutable contents = ""
+    mutable y = 0
+    while y < maze.height {
+        mutable x = 0
+        while x < maze.width {
+            contents = contents + maze.cells[y][x]
+            x = x + 1
+        }
+        if y + 1 < maze.height {
+            contents = contents + "\n"
+        }
+        y = y + 1
+    }
+    return contents
+}

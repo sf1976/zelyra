@@ -400,6 +400,7 @@ fn visible_functions(program: &zelyra_ast::Program) -> Vec<String> {
         "run_process",
         "len",
         "text_trim",
+        "text_chars",
         "append",
         "contains",
         "get",

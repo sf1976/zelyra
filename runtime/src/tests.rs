@@ -43,6 +43,18 @@ fn text_trim_removes_unicode_whitespace_without_changing_interior_text() {
 }
 
 #[test]
+fn text_chars_splits_unicode_scalars_into_strings() {
+    let output = run("fn main() { chars = text_chars(\"Aä🧭\") print(len(chars)) print(chars[1]) print(chars[2]) }");
+    assert_eq!(output, ["3", "ä", "🧭"]);
+
+    let program = parse(&lex("fn main() { text_chars(false) }").unwrap()).unwrap();
+    assert!(check(&program)
+        .unwrap_err()
+        .iter()
+        .any(|error| error.message.contains("expected `String`, found `Bool`")));
+}
+
+#[test]
 fn fibonacci_acceptance_test() {
     let output = run("fn fibonacci(n: Int) -> Int { if n <= 1 { return n } return fibonacci(n - 1) + fibonacci(n - 2) } fn main() { print(fibonacci(10)) }");
     assert_eq!(output, ["55"]);

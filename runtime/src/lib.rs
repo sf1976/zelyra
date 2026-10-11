@@ -4202,6 +4202,14 @@ impl<'a> Checker<'a> {
                     let text = self.check_expr(&args[0], scopes);
                     self.expect_type(&Type::String, &text, args[0].span);
                     Type::String
+                } else if name == "text_chars" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "text_chars expects exactly one String");
+                        return Type::Unknown;
+                    }
+                    let text = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::String, &text, args[0].span);
+                    Type::Array(Box::new(Type::String))
                 } else if name == "text_replace_result" {
                     if args.len() != 3 {
                         self.error(
@@ -6755,6 +6763,20 @@ impl Interpreter {
                     match self.eval(&args[0], env)? {
                         Value::String(text) => Ok(Value::String(text.trim().to_owned())),
                         _ => Err(self.runtime_error(args[0].span, "text_trim expects a String")),
+                    }
+                } else if name == "text_chars" {
+                    if args.len() != 1 {
+                        return Err(
+                            self.runtime_error(expr.span, "text_chars expects exactly one String")
+                        );
+                    }
+                    match self.eval(&args[0], env)? {
+                        Value::String(text) => Ok(Value::Array(
+                            text.chars()
+                                .map(|character| Value::String(character.to_string()))
+                                .collect(),
+                        )),
+                        _ => Err(self.runtime_error(args[0].span, "text_chars expects a String")),
                     }
                 } else if name == "text_replace_result" {
                     if args.len() != 3 {
