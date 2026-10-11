@@ -247,14 +247,22 @@ jobs:
           ZELYRA_GENERATED_E2E_ADDRESS: 127.0.0.1:38520
           ZELYRA_BIN: target/debug/zelyra
         run: ./tests/generated-project-mariadb-e2e.sh
-      - name: Cache Docker Official Images through Google mirror
+      - name: Cache Docker Official Images, falling back to Docker Hub
         run: |
-          docker pull mirror.gcr.io/library/rust:1-bookworm
-          docker tag mirror.gcr.io/library/rust:1-bookworm rust:1-bookworm
-          docker pull mirror.gcr.io/library/debian:bookworm-slim
-          docker tag mirror.gcr.io/library/debian:bookworm-slim debian:bookworm-slim
-          docker pull mirror.gcr.io/library/mariadb:11
-          docker tag mirror.gcr.io/library/mariadb:11 mariadb:11
+          cache_image() {
+            image="$1"
+            mirror_image="mirror.gcr.io/library/${image}"
+            if docker pull "$mirror_image"; then
+              docker tag "$mirror_image" "$image"
+            else
+              echo "Google mirror unavailable for ${image}; pulling from Docker Hub"
+              docker pull "$image"
+            fi
+          }
+
+          cache_image rust:1-bookworm
+          cache_image debian:bookworm-slim
+          cache_image mariadb:11
       - name: Run generated-project Docker end-to-end test
         env:
           ZELYRA_DOCKER_E2E_DB_HOST_PORT: 3309
