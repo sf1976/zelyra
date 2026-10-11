@@ -1,0 +1,45 @@
+import "src/model.zyl" as model
+import "src/orders.zyl" as orders
+pub fn run() uses Clock {
+    mutable passed = 0
+    mutable failed = 0
+    calculation = model::calculate_order(10000, 10)
+    if calculation[0] == 10000 && calculation[1] == 1000 && calculation[2] == 1710 && calculation[3] == 10710 {
+        print("PASS Preisberechnung: Rabatt und 19% USt.") passed = passed + 1
+    }
+    else {
+        print("FAIL Preisberechnung") failed = failed + 1
+    }
+    if model::enough_stock(5, 5) &&!model::enough_stock(4, 5) &&!model::enough_stock(5, 0) {
+        print("PASS Bestandspruefung: Grenze, Fehlbestand, Nullmenge") passed = passed + 1
+    }
+    else {
+        print("FAIL Bestandspruefung") failed = failed + 1
+    }
+    article = model::Article {
+        number: 7, name: "Testartikel", price_cents: 250, stock: 2, category: "Test"
+    }
+    line = model::OrderLine {
+        article_number: 7, article_name: "Testartikel", quantity: 3, unit_price_cents: 250
+    }
+    order = model::Order {
+        id: 1, customer_id: 1, customer_name: "Testkunde", lines: [line], discount_percent: 0, subtotal_cents: 750, discount_cents: 0, tax_cents: 143, total_cents: 893, created_at: now(), status: "open"
+    }
+    state = model::State {
+        articles: [article], customers: [], orders: [order], activities: [], next_id: 2
+    }
+    returned = orders::cancel(state, 1)
+    cancelled_stock = returned.articles[0].stock
+    returned_again = orders::cancel(returned, 1)
+    if cancelled_stock == 5 && returned_again.articles[0].stock == 5 && returned_again.orders[0].status == "cancelled" {
+        print("PASS Stornierung: Bestand wiederhergestellt, keine doppelte Einlagerung") passed = passed + 1
+    }
+    else {
+        print("FAIL Stornierung") failed = failed + 1
+    }
+    print("Testergebnis (bestanden / fehlgeschlagen):") print(passed) print(failed)
+}
+pub fn main() uses Clock {
+    print("Lager- und Bestellverwaltung: Geschaeftstests")
+    run()
+}

@@ -1,0 +1,63 @@
+import "src/inventory.zyl" as inventory
+import "src/customers.zyl" as customers
+import "src/orders.zyl" as orders
+import "src/reports.zyl" as reports
+import "src/storage.zyl" as storage
+import "tests.zyl" as tests
+import "src/model.zyl" as model
+pub fn main() uses Console, FileSystem, Clock {
+    mutable state = model::empty_state()
+    mutable persistence_enabled = true
+    match storage::load_state() {
+        Ok(loaded) => {
+            state = loaded
+        }
+        Err(message) => {
+            print(message)
+            print("Die Sitzung startet leer; die vorhandene Datei wird nicht automatisch ueberschrieben.")
+            persistence_enabled = false
+        }
+    }
+    print("Zelyra Lager- und Bestellverwaltung")
+    print("Preise werden in Cent eingegeben, damit Berechnungen exakt bleiben.")
+    mutable running = true
+    while running {
+        print("")
+        print("1 Artikel  2 Kunden  3 Bestellung  4 Bestellungen  5 Umsatzbericht")
+        print("6 Geschaeftstests  0 Beenden")
+        choice = read_console("Auswahl: ")
+        match choice {
+            Some("1") => {
+                state = inventory::menu(state) state = model::record_action(state, "Artikelverwaltung")
+            }
+            Some("2") => {
+                state = customers::menu(state) state = model::record_action(state, "Kundenverwaltung")
+            }
+            Some("3") => {
+                state = orders::create(state) state = model::record_action(state, "Bestellung")
+            }
+            Some("4") => {
+                state = orders::show_orders(state) state = model::record_action(state, "Bestelluebersicht")
+            }
+            Some("5") => {
+                reports::sales(state) state = model::record_action(state, "Umsatzbericht")
+            }
+            Some("6") => {
+                tests::run() state = model::record_action(state, "Geschaeftstests")
+            }
+            Some("0") => {
+                state = model::record_action(state, "Programmende") running = false
+            }
+            Some(_) => {
+                print("Ungueltige Auswahl.") state = model::record_action(state, "Ungueltige Menueeingabe")
+            }
+            None => {
+                state = model::record_action(state, "Konsoleneingabe beendet") running = false
+            }
+        }
+        if persistence_enabled {
+            storage::save_state(state)
+        }
+    }
+    print("Daten gespeichert. Auf Wiedersehen.")
+}

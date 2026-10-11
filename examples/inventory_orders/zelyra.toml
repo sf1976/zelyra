@@ -1,0 +1,13 @@
+[project]
+name = "inventory-orders"
+version = "0.1.0"
+zelyra = "0.1"
+
+[capabilities]
+console = true
+filesystem = true
+clock = true
+
+[filesystem]
+read_roots = ["."]
+write_roots = ["data"]

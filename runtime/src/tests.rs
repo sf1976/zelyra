@@ -40,6 +40,41 @@ fn supports_array_for_iteration_and_loop_control() {
 }
 
 #[test]
+fn compares_strings_lexicographically() {
+    let output = run(
+        "fn main() { print(\"Apfel\" < \"Birne\") print(\"Birne\" > \"Apfel\") print(\"Apfel\" <= \"Apfel\") }",
+    );
+    assert_eq!(output, ["true", "true", "true"]);
+}
+
+#[test]
+fn formats_timestamps_as_utc_iso8601() {
+    assert_eq!(format_timestamp_utc(0), "1970-01-01T00:00:00.000Z");
+    assert_eq!(format_timestamp_utc(-1), "1969-12-31T23:59:59.999Z");
+    let output = run("fn main() uses Clock { print(format_timestamp(now())) }");
+    assert!(output[0].contains('T'));
+    assert!(output[0].ends_with('Z'));
+}
+
+#[test]
+fn result_apis_report_json_and_file_errors_without_aborting() {
+    let program = parse(
+        &lex(
+            "fn main() uses FileSystem { match json_decode_result<Int>(\"kaputt\") { Ok(value) => { print(value) } Err(message) => { print(\"JSON: \" + message) } } match read_text_result(\"/zelyra-result-api-no-such-file/state.json\") { Ok(value) => { print(value) } Err(message) => { print(\"Datei: \" + message) } } match write_text_result(\"/zelyra-result-api-no-such-dir/state.json\", \"{}\") { Ok(_) => { print(\"write ok\") } Err(message) => { print(\"Schreiben: \" + message) } } }",
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    check(&program).unwrap();
+    check_capabilities(&program).unwrap();
+    let grants = HashSet::from([String::from("FileSystem")]);
+    let output = execute_with_capabilities(&program, Some(&grants)).unwrap();
+    assert!(output[0].starts_with("JSON: json_decode received invalid JSON"));
+    assert!(output[1].starts_with("Datei: file-system read failed"));
+    assert!(output[2].starts_with("Schreiben: file-system write failed"));
+}
+
+#[test]
 fn executes_parallel_await_bindings_and_merges_results() {
     let output = run(
             "fn load_customer() -> String { return \"customer\" } fn load_orders() -> Int { return 3 } fn main() { parallel { customer = await load_customer() orders = await load_orders() } print(customer) print(orders) }",

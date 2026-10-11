@@ -574,6 +574,7 @@ impl<'a> Resolver<'a> {
                             | "Ok"
                             | "Err"
                             | "now"
+                            | "format_timestamp"
                             | "env"
                             | "random_int"
                             | "read_console"
@@ -581,11 +582,14 @@ impl<'a> Resolver<'a> {
                             | "http_request"
                             | "json_encode"
                             | "json_decode"
+                            | "json_decode_result"
                             | "http_json"
                             | "http_result"
                             | "run_process"
                             | "read_text"
+                            | "read_text_result"
                             | "write_text"
+                            | "write_text_result"
                             | "delete_file"
                             | "list_dir"
                     )
@@ -754,6 +758,16 @@ mod tests {
         };
         assert_eq!(name, "json_decode");
         assert_eq!(type_args, &[Type::Named("Customer".into())]);
+    }
+
+    #[test]
+    fn lowers_result_filesystem_and_json_builtins() {
+        let program = parse(
+            &lex("fn main() uses FileSystem { decoded = json_decode_result<Int>(\"1\") content = read_text_result(\"state.json\") saved = write_text_result(\"state.json\", \"{}\") }").unwrap(),
+        )
+        .unwrap();
+        let hir = lower(&program).unwrap();
+        assert_eq!(hir.functions.len(), 1);
     }
 
     #[test]

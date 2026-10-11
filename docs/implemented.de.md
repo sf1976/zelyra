@@ -69,6 +69,10 @@ den Beweis, dass beliebige Anwendungen korrekt sind.
 - ✅ Nominale Fachdaten-Typen, Records mit geprüftem Feldzugriff, Arrays mit
   gebräuchlichen Operationen, deterministische typisierte Maps, `Option`,
   `Result` und Pattern Matching im implementierten Sprachumfang.
+- ✅ Stringwerte lassen sich lexikografisch vergleichen. `json_decode_result<T>`,
+  `read_text_result` und `write_text_result` geben erwartbare Parse- und
+  Dateifehler als `Result` zurück. `format_timestamp` zeigt UTC-Zeitstempel als
+  ISO-8601; Capability- und Projektgrenzen bleiben aktiv.
 - ✅ `zelyra check`, `build`, `run` und `serve`; menschenlesbare Diagnosen,
   stabile Diagnosecodes in unterstützten Maschinenformaten und Quellpositionen.
 - ✅ Kanonische Formatierung mit `zelyra fmt` und nicht veränderndem
@@ -197,6 +201,10 @@ der [Setup-Anleitung](setup-web.de.md) und den
   Erklärung ihres Zwecks. `zelyra editor` ist als direkter Start im aktuellen
   Projektordner ausgewiesen.
 - Studio ist noch keine vollständige IDE oder beliebiger Datenbankdesigner.
+- ✅ `examples/inventory_orders/` enthält ein mehrteiliges Konsolenprojekt für
+  Lager, Kunden und Bestellungen mit JSON-Speicherung, Cent-genauer
+  Rabatt-/Umsatzsteuerberechnung, Stornierung, Aktionsprotokoll und ausführbaren
+  Geschäftsprüfungen.
 
 ## APIs, Authentifizierung, Berechtigungen und Audit
 

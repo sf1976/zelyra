@@ -67,6 +67,10 @@ proof that arbitrary applications are correct.
 - ✅ Nominal domain types, records and checked field access, arrays and common
   array operations, deterministic typed maps, `Option`, `Result`, and pattern
   matching in the implemented language subset.
+- ✅ Strings support lexicographic comparisons. `json_decode_result<T>`,
+  `read_text_result`, and `write_text_result` return expected parse and file
+  errors as `Result`. `format_timestamp` renders UTC timestamps as ISO 8601;
+  capability grants and project filesystem boundaries still apply.
 - ✅ `zelyra check`, `build`, `run`, and `serve`; human-readable diagnostics,
   stable diagnostic codes in supported machine output, and source locations.
 - ✅ Canonical formatting with `zelyra fmt` and non-mutating `--check` mode.
@@ -183,6 +187,9 @@ For usage details see the [web and database quickstart](getting-started.md),
   purpose of key commands. `zelyra editor` is shown as a direct launch in the
   current project folder.
 - Studio is not yet a complete IDE or unrestricted database designer.
+- ✅ `examples/inventory_orders/` provides a modular console project for stock,
+  customers, and orders with JSON persistence, cent-exact discount/VAT
+  calculations, cancellation, an action log, and runnable business checks.
 
 ## APIs, authentication, permissions, and audit
 

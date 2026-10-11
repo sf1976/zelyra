@@ -3220,7 +3220,7 @@ fn check_capability_expr(
                     declared,
                     errors,
                 );
-            } else if name == "read_text" {
+            } else if name == "read_text" || name == "read_text_result" {
                 require_capability(
                     "FileSystem",
                     "file-system read access",
@@ -3229,7 +3229,7 @@ fn check_capability_expr(
                     declared,
                     errors,
                 );
-            } else if name == "write_text" {
+            } else if name == "write_text" || name == "write_text_result" {
                 require_capability(
                     "FileSystem",
                     "file-system write access",
@@ -4251,6 +4251,14 @@ impl<'a> Checker<'a> {
                         self.error(expr.span, "now expects no arguments");
                     }
                     Type::Timestamp
+                } else if name == "format_timestamp" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "format_timestamp expects exactly one Timestamp");
+                        return Type::Unknown;
+                    }
+                    let timestamp = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::Timestamp, &timestamp, args[0].span);
+                    Type::String
                 } else if name == "env" {
                     if args.len() != 1 {
                         self.error(expr.span, "env expects exactly one argument");
@@ -4303,6 +4311,28 @@ impl<'a> Checker<'a> {
                     let source = self.check_expr(&args[0], scopes);
                     self.expect_type(&Type::String, &source, args[0].span);
                     type_args.first().cloned().unwrap_or(Type::Unknown)
+                } else if name == "json_decode_result" {
+                    if type_args.len() != 1 {
+                        self.error(
+                            expr.span,
+                            "json_decode_result expects exactly one type argument",
+                        );
+                    } else {
+                        self.check_type(&type_args[0], expr.span);
+                    }
+                    if args.len() != 1 {
+                        self.error(
+                            expr.span,
+                            "json_decode_result expects exactly one String value",
+                        );
+                        return Type::Unknown;
+                    }
+                    let source = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::String, &source, args[0].span);
+                    Type::Result(
+                        Box::new(type_args.first().cloned().unwrap_or(Type::Unknown)),
+                        Box::new(Type::String),
+                    )
                 } else if name == "http_json" {
                     if type_args.len() != 2 {
                         self.error(
@@ -4409,6 +4439,17 @@ impl<'a> Checker<'a> {
                     let path = self.check_expr(&args[0], scopes);
                     self.expect_type(&Type::String, &path, args[0].span);
                     Type::String
+                } else if name == "read_text_result" {
+                    if args.len() != 1 {
+                        self.error(
+                            expr.span,
+                            "read_text_result expects exactly one String path",
+                        );
+                        return Type::Unknown;
+                    }
+                    let path = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::String, &path, args[0].span);
+                    Type::Result(Box::new(Type::String), Box::new(Type::String))
                 } else if name == "write_text" {
                     if args.len() != 2 {
                         self.error(
@@ -4422,6 +4463,19 @@ impl<'a> Checker<'a> {
                     self.expect_type(&Type::String, &path, args[0].span);
                     self.expect_type(&Type::String, &content, args[1].span);
                     Type::Unit
+                } else if name == "write_text_result" {
+                    if args.len() != 2 {
+                        self.error(
+                            expr.span,
+                            "write_text_result expects a String path and String content",
+                        );
+                        return Type::Unknown;
+                    }
+                    let path = self.check_expr(&args[0], scopes);
+                    let content = self.check_expr(&args[1], scopes);
+                    self.expect_type(&Type::String, &path, args[0].span);
+                    self.expect_type(&Type::String, &content, args[1].span);
+                    Type::Result(Box::new(Type::Unit), Box::new(Type::String))
                 } else if name == "delete_file" {
                     if args.len() != 1 {
                         self.error(expr.span, "delete_file expects one String path");
@@ -4539,8 +4593,12 @@ impl<'a> Checker<'a> {
                     | BinaryOp::LessEqual
                     | BinaryOp::Greater
                     | BinaryOp::GreaterEqual => {
-                        self.numeric_result(&left_ty, &right_ty, expr.span);
-                        Type::Bool
+                        if left_ty == Type::String && right_ty == Type::String {
+                            Type::Bool
+                        } else {
+                            self.numeric_result(&left_ty, &right_ty, expr.span);
+                            Type::Bool
+                        }
                     }
                     BinaryOp::And | BinaryOp::Or => {
                         self.expect_type(&Type::Bool, &left_ty, left.span);
@@ -6562,6 +6620,22 @@ impl Interpreter {
                         self.runtime_error(expr.span, "clock access failed: timestamp overflow")
                     })?;
                     Ok(Value::Timestamp(timestamp))
+                } else if name == "format_timestamp" {
+                    if args.len() != 1 {
+                        return Err(self.runtime_error(
+                            expr.span,
+                            "format_timestamp expects exactly one Timestamp",
+                        ));
+                    }
+                    match self.eval(&args[0], env)? {
+                        Value::Timestamp(timestamp) => {
+                            Ok(Value::String(format_timestamp_utc(timestamp)))
+                        }
+                        value => Err(self.runtime_error(
+                            args[0].span,
+                            format!("format_timestamp expects a Timestamp, found {}", value.ty()),
+                        )),
+                    }
                 } else if name == "env" {
                     if args.len() != 1 {
                         return Err(
@@ -6666,6 +6740,26 @@ impl Interpreter {
                         );
                     };
                     self.json_decode(&source, &type_args[0], expr.span)
+                } else if name == "json_decode_result" {
+                    if type_args.len() != 1 || args.len() != 1 {
+                        return Err(self.runtime_error(
+                            expr.span,
+                            "json_decode_result expects one type argument and one String value",
+                        ));
+                    }
+                    let value = self.eval(&args[0], env)?;
+                    let Value::String(source) = value else {
+                        return Err(self.runtime_error(
+                            args[0].span,
+                            "json_decode_result expects a String value",
+                        ));
+                    };
+                    Ok(Value::Result(
+                        match self.json_decode(&source, &type_args[0], expr.span) {
+                            Ok(value) => Ok(Box::new(value)),
+                            Err(error) => Err(Box::new(Value::String(error.message))),
+                        },
+                    ))
                 } else if name == "http_json" {
                     if type_args.len() != 2 || args.len() != 4 {
                         return Err(self.runtime_error(
@@ -6918,6 +7012,41 @@ impl Interpreter {
                             )
                         })
                         .map(Value::String)
+                } else if name == "read_text_result" {
+                    if args.len() != 1 {
+                        return Err(self.runtime_error(
+                            expr.span,
+                            "read_text_result expects exactly one String path",
+                        ));
+                    }
+                    self.require_runtime_capability(
+                        "FileSystem",
+                        "file-system read access",
+                        expr.span,
+                    )?;
+                    let path_value = self.eval(&args[0], env)?;
+                    let outcome = match path_value {
+                        Value::String(path) if !path.is_empty() => {
+                            let roots = self
+                                .filesystem_policy
+                                .as_ref()
+                                .map_or_else(Vec::new, |policy| policy.read_roots.clone());
+                            match self
+                                .resolve_filesystem_path(&path, &roots, "read", expr.span, false)
+                            {
+                                Ok(path) => std::fs::read_to_string(path)
+                                    .map_err(|error| format!("file-system read failed: {error}")),
+                                Err(error) => Err(error.message),
+                            }
+                        }
+                        Value::String(_) => Err("read_text_result expects a non-empty path".into()),
+                        _ => Err("read_text_result expects a String path".into()),
+                    };
+                    Ok(Value::Result(
+                        outcome
+                            .map(|value| Box::new(Value::String(value)))
+                            .map_err(|error| Box::new(Value::String(error))),
+                    ))
                 } else if name == "write_text" {
                     if args.len() != 2 {
                         return Err(self.runtime_error(
@@ -6952,6 +7081,44 @@ impl Interpreter {
                         self.runtime_error(expr.span, format!("file-system write failed: {error}"))
                     })?;
                     Ok(Value::Unit)
+                } else if name == "write_text_result" {
+                    if args.len() != 2 {
+                        return Err(self.runtime_error(
+                            expr.span,
+                            "write_text_result expects a String path and String content",
+                        ));
+                    }
+                    self.require_runtime_capability(
+                        "FileSystem",
+                        "file-system write access",
+                        expr.span,
+                    )?;
+                    let path_value = self.eval(&args[0], env)?;
+                    let content_value = self.eval(&args[1], env)?;
+                    let outcome = match (path_value, content_value) {
+                        (Value::String(path), Value::String(content)) if !path.is_empty() => {
+                            let roots = self
+                                .filesystem_policy
+                                .as_ref()
+                                .map_or_else(Vec::new, |policy| policy.write_roots.clone());
+                            match self
+                                .resolve_filesystem_path(&path, &roots, "write", expr.span, true)
+                            {
+                                Ok(path) => std::fs::write(path, content)
+                                    .map_err(|error| format!("file-system write failed: {error}")),
+                                Err(error) => Err(error.message),
+                            }
+                        }
+                        (Value::String(_), Value::String(_)) => {
+                            Err("write_text_result expects a non-empty path".into())
+                        }
+                        _ => Err("write_text_result expects String arguments".into()),
+                    };
+                    Ok(Value::Result(
+                        outcome
+                            .map(|_| Box::new(Value::Unit))
+                            .map_err(|error| Box::new(Value::String(error))),
+                    ))
                 } else if name == "delete_file" {
                     if args.len() != 1 {
                         return Err(
@@ -7167,6 +7334,10 @@ impl Interpreter {
             (Value::Float(a), LessEqual, Value::Float(b)) => Ok(Value::Bool(a <= b)),
             (Value::Float(a), Greater, Value::Float(b)) => Ok(Value::Bool(a > b)),
             (Value::Float(a), GreaterEqual, Value::Float(b)) => Ok(Value::Bool(a >= b)),
+            (Value::String(a), Less, Value::String(b)) => Ok(Value::Bool(a < b)),
+            (Value::String(a), LessEqual, Value::String(b)) => Ok(Value::Bool(a <= b)),
+            (Value::String(a), Greater, Value::String(b)) => Ok(Value::Bool(a > b)),
+            (Value::String(a), GreaterEqual, Value::String(b)) => Ok(Value::Bool(a >= b)),
             (Value::Bool(a), And, Value::Bool(b)) => Ok(Value::Bool(a && b)),
             (Value::Bool(a), Or, Value::Bool(b)) => Ok(Value::Bool(a || b)),
             (left, op, right) => Err(self.runtime_error(
@@ -7179,6 +7350,36 @@ impl Interpreter {
             )),
         }
     }
+}
+
+fn format_timestamp_utc(timestamp_millis: i64) -> String {
+    let seconds = timestamp_millis.div_euclid(1_000);
+    let millis = timestamp_millis.rem_euclid(1_000);
+    let days = seconds.div_euclid(86_400);
+    let seconds_in_day = seconds.rem_euclid(86_400);
+
+    let shifted_days = days + 719_468;
+    let era = shifted_days.div_euclid(146_097);
+    let day_of_era = shifted_days - era * 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let mut year = year_of_era + era * 400;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_part = (5 * day_of_year + 2) / 153;
+    let day = day_of_year - (153 * month_part + 2) / 5 + 1;
+    let month = if month_part < 10 {
+        month_part + 3
+    } else {
+        month_part - 9
+    };
+    if month <= 2 {
+        year += 1;
+    }
+
+    let hour = seconds_in_day / 3_600;
+    let minute = (seconds_in_day % 3_600) / 60;
+    let second = seconds_in_day % 60;
+    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}.{millis:03}Z")
 }
 
 fn query_parameters(

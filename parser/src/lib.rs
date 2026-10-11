@@ -2506,24 +2506,25 @@ impl<'a> Parser<'a> {
                     name.push_str("::");
                     name.push_str(&segment);
                 }
-                let type_args =
-                    if matches!(name.as_str(), "json_decode" | "http_json" | "http_result")
-                        && self.at(&TokenKind::Less)
-                    {
-                        self.advance();
-                        let mut type_args = Vec::new();
-                        loop {
-                            type_args.push(self.type_name()?);
-                            if !self.at(&TokenKind::Comma) {
-                                break;
-                            }
-                            self.advance();
+                let type_args = if matches!(
+                    name.as_str(),
+                    "json_decode" | "json_decode_result" | "http_json" | "http_result"
+                ) && self.at(&TokenKind::Less)
+                {
+                    self.advance();
+                    let mut type_args = Vec::new();
+                    loop {
+                        type_args.push(self.type_name()?);
+                        if !self.at(&TokenKind::Comma) {
+                            break;
                         }
-                        self.expect(TokenKind::Greater, "`>` after call type arguments")?;
-                        type_args
-                    } else {
-                        Vec::new()
-                    };
+                        self.advance();
+                    }
+                    self.expect(TokenKind::Greater, "`>` after call type arguments")?;
+                    type_args
+                } else {
+                    Vec::new()
+                };
                 if self.at(&TokenKind::LParen) {
                     self.advance();
                     let mut args = Vec::new();
@@ -3662,6 +3663,24 @@ mod tests {
             panic!("expected typed call");
         };
         assert_eq!(name, "json_decode");
+        assert_eq!(type_args, &[Type::Named("Customer".into())]);
+    }
+
+    #[test]
+    fn parses_result_typed_json_calls() {
+        let program =
+            parse(&lex("fn main() { value = json_decode_result<Customer>(body) }").unwrap())
+                .unwrap();
+        let Stmt::BindOrAssign { value, .. } = &program.functions[0].body.statements[0] else {
+            panic!("expected binding");
+        };
+        let ExprKind::Call {
+            name, type_args, ..
+        } = &value.kind
+        else {
+            panic!("expected typed call");
+        };
+        assert_eq!(name, "json_decode_result");
         assert_eq!(type_args, &[Type::Named("Customer".into())]);
     }
 

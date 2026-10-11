@@ -1,0 +1,388 @@
+import "src/model.zyl" as model
+pub fn menu(state: model::State) -> model::State uses Console {
+    print("Artikel: 1 Liste 2 erfassen 3 suchen 4 nach Name/Preis/Bestand sortieren 5 filtern 6 bearbeiten 7 loeschen")
+    choice = read_console("Aktion: ")
+    match choice {
+        Some("2") => {
+            return add(state)
+        }
+        Some("3") => {
+            lookup_article(state)
+        }
+        Some("4") => {
+            sort_and_list(state)
+        }
+        Some("5") => {
+            filter_articles(state)
+        }
+        Some("6") => {
+            return edit(state)
+        }
+        Some("7") => {
+            return delete(state)
+        }
+        Some(_) => {
+            show_articles(state)
+        }
+        None => {
+        }
+    }
+    return state
+}
+pub fn edit(state: model::State) -> model::State uses Console {
+    number_text = read_console("Artikelnummer zum Bearbeiten: ")
+    match number_text {
+        Some(raw) => {
+            match model::parse_int(raw) {
+                Some(number) => {
+                    if!find(state.articles, number) {
+                        print("Artikel nicht gefunden.") return state
+                    }
+                    name = read_console("Neuer Name: ")
+                    price_text = read_console("Neuer Preis in Cent: ")
+                    stock_text = read_console("Neuer Lagerbestand: ")
+                    category = read_console("Neue Kategorie: ")
+                    match name {
+                        Some(article_name) => {
+                            match price_text {
+                                Some(price_raw) => {
+                                    match stock_text {
+                                        Some(stock_raw) => {
+                                            match category {
+                                                Some(article_category) => {
+                                                    return edit_values(state, number, article_name, price_raw, stock_raw, article_category)
+                                                }
+                                                None => {
+                                                    print("Eingabe abgebrochen.")
+                                                }
+                                            }
+                                        }
+                                        None => {
+                                            print("Eingabe abgebrochen.")
+                                        }
+                                    }
+                                }
+                                None => {
+                                    print("Eingabe abgebrochen.")
+                                }
+                            }
+                        }
+                        None => {
+                            print("Eingabe abgebrochen.")
+                        }
+                    }
+                }
+                None => {
+                    print("Artikelnummer muss eine Ganzzahl sein.")
+                }
+            }
+        }
+        None => {
+            print("Eingabe abgebrochen.")
+        }
+    }
+    return state
+}
+pub fn edit_values(state: model::State, number: Int, article_name: String, price_raw: String, stock_raw: String, article_category: String) -> model::State {
+    match model::parse_int(price_raw) {
+        Some(price) => {
+            match model::parse_int(stock_raw) {
+                Some(stock) => {
+                    if price < 0 || stock < 0 || article_name == "" || article_category == "" {
+                        print("Preis und Bestand muessen >= 0 sein; Textfelder duerfen nicht leer sein.") return state
+                    }
+                    mutable articles: model::Article[] = []
+                    for article in state.articles {
+                        if article.number == number {
+                            articles = append(articles, model::Article {
+                                number: number, name: article_name, price_cents: price, stock: stock, category: article_category
+                            }
+                            )
+                        }
+                        else {
+                            articles = append(articles, article)
+                        }
+                    }
+                    return model::State {
+                        articles: articles, customers: state.customers, orders: state.orders, activities: state.activities, next_id: state.next_id
+                    }
+                }
+                None => {
+                    print("Bestand muss eine Ganzzahl sein.")
+                }
+            }
+        }
+        None => {
+            print("Preis muss eine Ganzzahl sein.")
+        }
+    }
+    return state
+}
+pub fn delete(state: model::State) -> model::State uses Console {
+    number_text = read_console("Artikelnummer zum Loeschen: ")
+    match number_text {
+        Some(raw) => {
+            match model::parse_int(raw) {
+                Some(number) => {
+                    for order in state.orders {
+                        for line in order.lines {
+                            if line.article_number == number {
+                                print("Artikel ist in einer Bestellung referenziert und bleibt erhalten.") return state
+                            }
+                        }
+                    }
+                    mutable articles: model::Article[] = []
+                    mutable removed = false
+                    for article in state.articles {
+                        if article.number == number {
+                            removed = true
+                        } else {
+                            articles = append(articles, article)
+                        }
+                    }
+                    if removed {
+                        return model::State {
+                            articles: articles, customers: state.customers, orders: state.orders, activities: state.activities, next_id: state.next_id
+                        }
+                    }
+                    print("Artikel nicht gefunden.")
+                }
+                None => {
+                    print("Artikelnummer muss eine Ganzzahl sein.")
+                }
+            }
+        }
+        None => {
+            print("Eingabe abgebrochen.")
+        }
+    }
+    return state
+}
+pub fn show_articles(state: model::State) {
+    if len(state.articles) == 0 {
+        print("Noch keine Artikel.")
+    }
+    for article in state.articles {
+        print(article.number)
+        print(article.name + " | Kategorie: " + article.category)
+        print("Preis in Cent:")
+        print(article.price_cents)
+        print("Lagerbestand:")
+        print(article.stock)
+    }
+}
+pub fn add(state: model::State) -> model::State uses Console {
+    number_text = read_console("Artikelnummer (positive Ganzzahl): ")
+    name = read_console("Name: ")
+    price_text = read_console("Preis in Cent (Ganzzahl): ")
+    stock_text = read_console("Lagerbestand (Ganzzahl): ")
+    category = read_console("Kategorie: ")
+    match number_text {
+        Some(number_raw) => {
+            match name {
+                Some(article_name) => {
+                    match price_text {
+                        Some(price_raw) => {
+                            match stock_text {
+                                Some(stock_raw) => {
+                                    match category {
+                                        Some(article_category) => {
+                                            return add_values(state, number_raw, article_name, price_raw, stock_raw, article_category)
+                                        }
+                                        None => {
+                                            print("Eingabe abgebrochen.")
+                                        }
+                                    }
+                                }
+                                None => {
+                                    print("Eingabe abgebrochen.")
+                                }
+                            }
+                        }
+                        None => {
+                            print("Eingabe abgebrochen.")
+                        }
+                    }
+                }
+                None => {
+                    print("Eingabe abgebrochen.")
+                }
+            }
+        }
+        None => {
+            print("Eingabe abgebrochen.")
+        }
+    }
+    return state
+}
+pub fn add_values(state: model::State, number_raw: String, article_name: String, price_raw: String, stock_raw: String, article_category: String) -> model::State {
+    match model::parse_int(number_raw) {
+        Some(number) => {
+            match model::parse_int(price_raw) {
+                Some(price) => {
+                    match model::parse_int(stock_raw) {
+                        Some(stock) => {
+                            if number <= 0 || price < 0 || stock < 0 || article_name == "" || article_category == "" {
+                                print("Eingaben ungueltig: Nummer > 0, Preis und Bestand >= 0, Textfelder nicht leer.") return state
+                            }
+                            if find(state.articles, number) {
+                                print("Diese Artikelnummer ist bereits vergeben.") return state
+                            }
+                            article = model::Article {
+                                number: number, name: article_name, price_cents: price, stock: stock, category: article_category
+                            }
+                            return model::State {
+                                articles: append(state.articles, article), customers: state.customers, orders: state.orders, activities: state.activities, next_id: state.next_id
+                            }
+                        }
+                        None => {
+                            print("Bestand muss eine Ganzzahl sein.")
+                        }
+                    }
+                }
+                None => {
+                    print("Preis muss eine Ganzzahl sein.")
+                }
+            }
+        }
+        None => {
+            print("Artikelnummer muss eine Ganzzahl sein.")
+        }
+    }
+    return state
+}
+pub fn find(articles: model::Article[], number: Int) -> Bool {
+    for article in articles {
+        if article.number == number {
+            return true
+        }
+    }
+    return false
+}
+pub fn lookup_article(state: model::State) uses Console {
+    query_text = read_console("Artikelnummer: ")
+    match query_text {
+        Some(raw) => {
+            match model::parse_int(raw) {
+                Some(number) => {
+                    for article in state.articles {
+                        if article.number == number {
+                            print(article.name + " | Kategorie: " + article.category) print("Preis Cent / Bestand:") print(article.price_cents) print(article.stock) return
+                        }
+                    }
+                    print("Artikel nicht gefunden.")
+                }
+                None => {
+                    print("Ungueltige Ganzzahl.")
+                }
+            }
+        }
+        None => {
+            print("Eingabe abgebrochen.")
+        }
+    }
+}
+pub fn sort_and_list(state: model::State) uses Console {
+    choice = read_console("Sortierung: 1 Name 2 Preis 3 Bestand: ")
+    mutable selected: Int[] = []
+    mutable sorted = []
+    while len(sorted) < len(state.articles) {
+        mutable best: model::Article? = None
+        for article in state.articles {
+            if!contains(selected, article.number) {
+                match best {
+                    None => {
+                        best = Some(article)
+                    }
+                    Some(current) => {
+                        if choice == Some("1") && article.name < current.name {
+                            best = Some(article)
+                        }
+                        if choice == Some("2") && article.price_cents < current.price_cents {
+                            best = Some(article)
+                        }
+                        if choice != Some("1") && choice != Some("2") && article.stock < current.stock {
+                            best = Some(article)
+                        }
+                    }
+                }
+            }
+        }
+        match best {
+            Some(article) => {
+                sorted = append(sorted, article) selected = append(selected, article.number)
+            }
+            None => {
+                break
+            }
+        }
+    }
+    for article in sorted {
+        print(article.name + " | Nummer:") print(article.number) print("Preis Cent / Bestand:") print(article.price_cents) print(article.stock)
+    }
+}
+pub fn filter_articles(state: model::State) uses Console {
+    choice = read_console("Filter: 1 exakter Name 2 Preis bis Cent 3 Bestand bis: ")
+    value = read_console("Filterwert: ")
+    match choice {
+        Some("1") => {
+            match value {
+                Some(name) => {
+                    for article in state.articles {
+                        if article.name == name {
+                            print(article.name) print(article.number)
+                        }
+                    }
+                }
+                None => {
+                    print("Filter abgebrochen.")
+                }
+            }
+        }
+        Some("2") => {
+            match value {
+                Some(raw) => {
+                    match model::parse_int(raw) {
+                        Some(maximum) => {
+                            for article in state.articles {
+                                if article.price_cents <= maximum {
+                                    print(article.name) print(article.price_cents)
+                                }
+                            }
+                        }
+                        None => {
+                            print("Ungueltige Ganzzahl.")
+                        }
+                    }
+                }
+                None => {
+                    print("Filter abgebrochen.")
+                }
+            }
+        }
+        Some("3") => {
+            match value {
+                Some(raw) => {
+                    match model::parse_int(raw) {
+                        Some(maximum) => {
+                            for article in state.articles {
+                                if article.stock <= maximum {
+                                    print(article.name) print(article.stock)
+                                }
+                            }
+                        }
+                        None => {
+                            print("Ungueltige Ganzzahl.")
+                        }
+                    }
+                }
+                None => {
+                    print("Filter abgebrochen.")
+                }
+            }
+        }
+        _ => {
+            print("Filter abgebrochen oder unbekannt.")
+        }
+    }
+}

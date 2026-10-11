@@ -1,0 +1,28 @@
+import "src/model.zyl" as model
+pub fn load_state() -> Result<model::State, String>uses FileSystem {
+    match read_text_result("data/state.json") {
+        Ok(contents) => {
+            match json_decode_result<model::State>(contents) {
+                Ok(state) => {
+                    return Ok(state)
+                }
+                Err(message) => {
+                    return Err("Die JSON-Datei ist ungueltig: " + message)
+                }
+            }
+        }
+        Err(message) => {
+            return Err("Die Datendatei konnte nicht gelesen werden: " + message)
+        }
+    }
+}
+pub fn save_state(state: model::State) uses FileSystem {
+    encoded = json_encode(state)
+    match write_text_result("data/state.json", encoded) {
+        Ok(_) => {
+        }
+        Err(message) => {
+            print("Speichern fehlgeschlagen: " + message)
+        }
+    }
+}

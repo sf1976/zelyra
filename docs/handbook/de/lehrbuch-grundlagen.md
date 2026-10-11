@@ -2796,6 +2796,7 @@ In diesem Kapitel lernst du:
 - Wie du mit Zelyra Textdateien erstellst, liest, auflistest und löschst.
 - Warum Dateizugriffe in Zelyra zwingend die Fähigkeit (*Capability*) `uses FileSystem` verlangen.
 - Die wichtigsten Bibliotheksfunktionen: `read_text`, `write_text`, `delete_file`, `list_dir`.
+- Wie die Result-Varianten erwartbare Datei- und JSON-Fehler zurückgeben.
 - Wie du Aufgabenlisten persistent als Datei auf der Festplatte speicherst.
 
 ### 2. Warum ist das Thema wichtig?
@@ -2863,6 +2864,37 @@ fn main() uses FileSystem {
 }
 ```
 
+**Beispiel 4: JSON- und Datei-Fehler verständlich behandeln**
+
+`read_text` und `json_decode` melden Fehler direkt als Laufzeitfehler. Wenn eine
+Anwendung auf fehlende oder beschädigte Dateien reagieren soll, verwende
+`read_text_result`, `write_text_result` und `json_decode_result<T>`:
+
+```zelyra
+struct Einstellungen {
+    thema: String
+}
+
+fn lade_thema() uses FileSystem {
+    match read_text_result("settings.json") {
+        Ok(text) => {
+            match json_decode_result<Einstellungen>(text) {
+                Ok(einstellungen) => { print("Thema: " + einstellungen.thema) }
+                Err(fehler) => { print("JSON-Datei ungueltig: " + fehler) }
+            }
+        }
+        Err(fehler) => { print("Datei konnte nicht gelesen werden: " + fehler) }
+    }
+}
+
+fn main() uses FileSystem {
+    lade_thema()
+}
+```
+
+Fehlende Projektfreigaben und verweigerte Capabilities bleiben Sicherheitsfehler.
+Die Result-Varianten fangen gewöhnliche Pfad-, Lese-, Schreib- und JSON-Fehler ab.
+
 ### 5. Typische Fehler und deren Ursachen
 - **Fehler:** Aufruf von `read_text` oder `write_text` ohne Deklaration von `uses FileSystem`.
   *Ursache:* Zelyras Sicherheitssystem (`E-CAP-001`) verhindert jeden unberechtigten Zugriff auf die Festplatte.
@@ -2873,6 +2905,7 @@ fn main() uses FileSystem {
 1. Jede Funktion, die Dateien berührt, muss `uses FileSystem` deklarieren.
 2. `write_text` legt Dateien an oder überschreibt sie vollständig.
 3. `read_text` liefert den gesamten Dateiinhalt als `String`.
+4. `*_result`-Funktionen machen erwartbare Fehler zu normalen `Err`-Werten.
 
 ### 7. Übungsaufgaben
 - **Stufe 1 (Leicht):** Schreibe ein Programm, das eine Begrüßungsnachricht in `hallo.txt` schreibt.
@@ -2908,6 +2941,7 @@ fn main() uses FileSystem {
 
 ### 1. Was lerne ich in diesem Kapitel?
 - Wie du mit `now()` den aktuellen Zeitstempel abfragst (`uses Clock`).
+- Wie `format_timestamp` Zeitstempel als UTC-Datum mit Uhrzeit darstellt.
 - Wie Zufallswerte mit `random_int(min, max)` erzeugt werden (`uses Random`).
 - Wie Datenstrukturen mit `json_encode` in universelles JSON umgewandelt werden.
 - Wie JSON-Text mit `json_decode<T>` wieder typisiert zurückgewandelt wird.
@@ -2923,7 +2957,7 @@ Praktisch jede reale Software benötigt Zeitangaben: Wann wurde eine Aufgabe ers
 ```zelyra
 fn zeige_zeit() uses Clock {
     jetzt = now()
-    print("Aktuelle Systemzeit erfasst")
+    print(format_timestamp(jetzt))
 }
 
 fn main() uses Clock {
