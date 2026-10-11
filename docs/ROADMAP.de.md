@@ -607,8 +607,9 @@ Auswirkungen und eine ausdrückliche Bestätigung. Die Roadmap staffelt diese Zi
   gültige Eigenschaften einstellen. Beim Schreiben können Beschreibung,
   Optionen und Beispiele zum Befehl am Cursor gezielt aufgerufen werden; Nutzer
   müssen die API nicht auswendig lernen. Die aktuelle Arbeitsfassung ergänzt
-  bereits Dateieigenschaften, Hilfe zu zentralen Sprachbegriffen per F1 und
-  compilergeprüfte Diagnosen während der Eingabe; Aufgabenfinder und
+  bereits Dateieigenschaften, Hilfe zu zentralen Sprachbegriffen per F1, einen
+  filterbaren Aktionsfinder per Strg+Umschalt+P und compilergeprüfte Diagnosen
+  während der Eingabe; eine vollständige Aufgabenabdeckung und
   symbolbezogene Eigenschaften bleiben offen.
 - [🗺️] Compiler-gestützte Vervollständigung, Symbolnavigation, Suche/Referenzen,
   Formatierung, handlungsorientierte und während der Eingabe aktualisierte

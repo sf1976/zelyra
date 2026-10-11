@@ -52,6 +52,14 @@ let lastCrudPreviewRequest = null;
 const editorRoot = $("editor-root");
 const messages = {
   de: {
+    taskFinder: "Aktionen", taskFinderTitle: "Was möchtest du tun?", taskFinderPlaceholder: "Aktion oder Befehl suchen",
+    chooseAction: "Aktion auswählen", noMatchingTasks: "Keine passende Aktion gefunden.", taskOpenFile: "Datei öffnen", taskOpenFileHelp: "Projektdatei nach Namen suchen",
+    taskNewFile: "Datei erstellen", taskNewFileHelp: "Neue Datei im Projekt anlegen", taskSave: "Aktive Datei speichern",
+    taskSaveHelp: "Ungespeicherte Änderungen übernehmen", taskSaveAll: "Alle Dateien speichern", taskSaveAllHelp: "Alle geänderten Dateien übernehmen",
+    taskFormat: "Datei formatieren", taskFormatHelp: "Zelyra-Quelldatei kanonisch formatieren", taskCheck: "Projekt prüfen",
+    taskCheckHelp: "Compilerdiagnosen für das Projekt anzeigen", taskDatabase: "Datenbank öffnen", taskDatabaseHelp: "Tabellen und Beziehungen ansehen",
+    taskHelp: "Kontexthilfe öffnen", taskHelpHelp: "Hilfe zum Begriff am Cursor anzeigen", taskProperties: "Dateieigenschaften öffnen",
+    taskPropertiesHelp: "Informationen und Aktionen zur aktuellen Datei anzeigen", taskSearch: "Text suchen", taskSearchHelp: "Im aktuellen Dokument suchen",
     assistant: "Hilfe und Eigenschaften", helpTab: "Hilfe", propertiesTab: "Eigenschaften", contextHelp: "KONTEXT-HILFE",
     selectLanguageItem: "Wähle einen Zelyra-Begriff", contextHelpHint: "Bewege den Cursor auf einen Begriff. F1 öffnet diese Hilfe.",
     fileProperties: "DATEIEIGENSCHAFTEN", fileType: "Dateityp", filePath: "Projektpfad", fileStatus: "Status",
@@ -103,6 +111,14 @@ const messages = {
     table: "Tabelle", field: "Feld", moduleUnknown: "Quellmodul unbekannt", selectTarget: "Quelldatei auswählen"
   },
   en: {
+    taskFinder: "Actions", taskFinderTitle: "What would you like to do?", taskFinderPlaceholder: "Search actions or commands",
+    chooseAction: "Choose action", noMatchingTasks: "No matching action found.", taskOpenFile: "Open file", taskOpenFileHelp: "Find a project file by name",
+    taskNewFile: "Create file", taskNewFileHelp: "Add a new file to the project", taskSave: "Save active file",
+    taskSaveHelp: "Write the current changes", taskSaveAll: "Save all files", taskSaveAllHelp: "Write all changed files",
+    taskFormat: "Format file", taskFormatHelp: "Format a Zelyra source file", taskCheck: "Check project",
+    taskCheckHelp: "Show compiler diagnostics for the project", taskDatabase: "Open database", taskDatabaseHelp: "Inspect tables and relationships",
+    taskHelp: "Open contextual help", taskHelpHelp: "Show help for the term at the cursor", taskProperties: "Open file properties",
+    taskPropertiesHelp: "Show information and actions for the active file", taskSearch: "Find text", taskSearchHelp: "Search in the active document",
     assistant: "Help and properties", helpTab: "Help", propertiesTab: "Properties", contextHelp: "CONTEXT HELP",
     selectLanguageItem: "Select a Zelyra term", contextHelpHint: "Place the cursor on a term. Press F1 to open this help.",
     fileProperties: "FILE PROPERTIES", fileType: "File type", filePath: "Project path", fileStatus: "Status",
@@ -380,6 +396,55 @@ function toggleAssistant(tab = "help") {
   panel.hidden = !panel.hidden;
   if (!panel.hidden) showAssistantTab(tab);
   requestAnimationFrame(() => editor?.requestMeasure());
+}
+
+const studioTasks = [
+  ["taskOpenFile", "taskOpenFileHelp", ["file", "open"], () => { const query = prompt(t("chooseFile")); if (query) { const match = treeFiles.find((file) => file.toLowerCase().includes(query.toLowerCase())); if (match) void openFile(match); } }],
+  ["taskNewFile", "taskNewFileHelp", ["file", "create", "new"], () => void createFile()],
+  ["taskSave", "taskSaveHelp", ["save", "write"], () => void saveActive()],
+  ["taskSaveAll", "taskSaveAllHelp", ["save", "all"], () => void saveAll()],
+  ["taskFormat", "taskFormatHelp", ["format", "formatter"], () => void formatActive()],
+  ["taskCheck", "taskCheckHelp", ["check", "compiler", "error", "diagnostic"], () => void checkProject()],
+  ["taskDatabase", "taskDatabaseHelp", ["database", "table", "relation", "schema"], () => openDatabaseWorkbench()],
+  ["taskHelp", "taskHelpHelp", ["help", "documentation", "f1"], () => toggleAssistant("help")],
+  ["taskProperties", "taskPropertiesHelp", ["properties", "file", "settings"], () => toggleAssistant("properties")],
+  ["taskSearch", "taskSearchHelp", ["find", "search", "text"], () => findInDocument()],
+];
+let selectedTaskIndex = 0;
+
+function renderTaskFinder() {
+  const query = $("task-finder-input").value.trim().toLocaleLowerCase();
+  const results = $("task-finder-results"); results.replaceChildren();
+  const matches = studioTasks.filter(([title, description, terms]) =>
+    [t(title), t(description), ...terms].join(" ").toLocaleLowerCase().includes(query));
+  $("task-finder-empty").hidden = matches.length > 0;
+  if (!matches.length) { selectedTaskIndex = -1; return; }
+  selectedTaskIndex = Math.max(0, Math.min(selectedTaskIndex, matches.length - 1));
+  matches.forEach(([title, description, , action], index) => {
+    const row = document.createElement("button"); row.type = "button"; row.className = "task-finder-item";
+    row.setAttribute("role", "option"); row.setAttribute("aria-selected", String(index === selectedTaskIndex));
+    const name = document.createElement("strong"); name.textContent = t(title);
+    const hint = document.createElement("span"); hint.textContent = t(description);
+    row.append(name, hint); row.addEventListener("click", () => runStudioTask(action)); results.append(row);
+  });
+}
+
+function runStudioTask(action) {
+  $("task-finder").close();
+  action();
+}
+
+function openTaskFinder() {
+  const dialog = $("task-finder");
+  if (!dialog.open) dialog.showModal();
+  $("task-finder-input").value = ""; selectedTaskIndex = 0; renderTaskFinder();
+  $("task-finder-input").focus();
+}
+
+function findInDocument() {
+  if (!editor) return;
+  editor.focus();
+  import("@codemirror/search").then(({ openSearchPanel }) => openSearchPanel(editor));
 }
 
 function createView(path, state) {
@@ -1066,6 +1131,20 @@ $("assistant-help-tab").addEventListener("click", () => showAssistantTab("help")
 $("assistant-properties-tab").addEventListener("click", () => showAssistantTab("properties"));
 $("assistant-format").addEventListener("click", formatActive);
 $("assistant-check").addEventListener("click", checkProject);
+$("task-finder-button").addEventListener("click", openTaskFinder);
+$("task-finder-close").addEventListener("click", () => $("task-finder").close());
+$("task-finder-input").addEventListener("input", () => { selectedTaskIndex = 0; renderTaskFinder(); });
+$("task-finder-input").addEventListener("keydown", (event) => {
+  const rows = [...$("task-finder-results").querySelectorAll(".task-finder-item")];
+  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    event.preventDefault();
+    selectedTaskIndex = rows.length ? (selectedTaskIndex + (event.key === "ArrowDown" ? 1 : -1) + rows.length) % rows.length : -1;
+    rows.forEach((row, index) => row.setAttribute("aria-selected", String(index === selectedTaskIndex)));
+    rows[selectedTaskIndex]?.scrollIntoView({ block: "nearest" });
+  } else if (event.key === "Enter" && rows[selectedTaskIndex]) {
+    event.preventDefault(); rows[selectedTaskIndex].click();
+  }
+});
 $("code-button").addEventListener("click", openCodeWorkbench);
 $("database-refresh").addEventListener("click", loadDatabaseSchema);
 $("database-start").addEventListener("click", loadDatabaseSchema);
@@ -1083,11 +1162,13 @@ $("language-button").addEventListener("click", () => setLanguage(language === "d
 $("sidebar-toggle").addEventListener("click", () => document.body.classList.toggle("sidebar-hidden"));
 $("problems-toggle").addEventListener("click", () => { $("problems-panel").hidden = !$("problems-panel").hidden; });
 $("problems-close").addEventListener("click", () => { $("problems-panel").hidden = true; });
-$("open-search").addEventListener("click", () => { if (editor) { editor.focus(); import("@codemirror/search").then(({ openSearchPanel }) => openSearchPanel(editor)); } });
+$("open-search").addEventListener("click", findInDocument);
 window.addEventListener("beforeunload", (event) => {
   if (dirtyCount()) { event.preventDefault(); event.returnValue = ""; }
 });
 window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && $("task-finder").open) { event.preventDefault(); $("task-finder").close(); }
+  if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "p") { event.preventDefault(); openTaskFinder(); }
   if (event.key === "F1") { event.preventDefault(); toggleAssistant("help"); }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); saveActive(); }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "p") {

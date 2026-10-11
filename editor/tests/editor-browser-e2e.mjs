@@ -21,6 +21,15 @@ try {
   assert.equal(new URL(page.url()).hash, "", "the session token must be removed from the address bar");
   await page.locator(".cm-content[contenteditable=true]").waitFor({ timeout: 10_000 });
   await page.locator('.tree-item.file[title="main.zyl"]').waitFor();
+  await page.locator("#task-finder-button").click();
+  await page.locator("#task-finder-input").fill("no such studio action");
+  await page.locator("#task-finder-empty").waitFor();
+  await page.locator("#task-finder-input").clear();
+  await page.locator("#task-finder-input").fill("format");
+  assert.ok(await page.locator(".task-finder-item").count() >= 1, "task finder must show matching actions");
+  assert.ok(await page.locator(".task-finder-item").allTextContents().then((items) => items.some((item) => /format/i.test(item))));
+  await page.keyboard.press("Escape");
+  await page.locator("#task-finder").waitFor({ state: "hidden" });
 
   const editor = page.locator(".cm-content[contenteditable=true]");
   await editor.focus();

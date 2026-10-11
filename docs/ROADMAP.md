@@ -637,8 +637,9 @@ released 0.9.0.
   properties instead of requiring users to memorize commands or chart APIs.
   While writing, users can request the description and options for the current
   command. The current work already adds file properties, F1 help for core
-  language terms, and compiler-checked diagnostics while typing; task discovery
-  and symbol-level properties remain open.
+  language terms, a filterable action finder on Ctrl+Shift+P, and
+  compiler-checked diagnostics while typing; full task coverage and symbol-level
+  properties remain open.
 - [🗺️] Add compiler-backed completion, symbol navigation, find/references,
   formatting, actionable diagnostics updated while typing, and integrated
   check/run/test tasks. Show clear task progress and output without exposing
