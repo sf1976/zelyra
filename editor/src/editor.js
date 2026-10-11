@@ -65,6 +65,8 @@ const messages = {
     taskCheckHelp: "Compilerdiagnosen für das Projekt anzeigen", taskDatabase: "Datenbank öffnen", taskDatabaseHelp: "Tabellen und Beziehungen ansehen",
     taskHelp: "Kontexthilfe öffnen", taskHelpHelp: "Hilfe zum Begriff am Cursor anzeigen", taskProperties: "Dateieigenschaften öffnen",
     taskPropertiesHelp: "Informationen und Aktionen zur aktuellen Datei anzeigen", taskSearch: "Text suchen", taskSearchHelp: "Im aktuellen Dokument suchen",
+    taskGoToDefinition: "Zur Definition springen", taskGoToDefinitionHelp: "Zur Funktion oder zum Typ am Cursor springen (F12)",
+    definitionNotFound: "Keine passende Definition im Projekt gefunden.", definitionSaveFirst: "Speichere die Datei vor dem Sprung, damit die Quellposition stimmt.", definitionOpened: "Definition geöffnet: {0}",
     assistant: "Hilfe und Eigenschaften", helpTab: "Hilfe", propertiesTab: "Eigenschaften", contextHelp: "KONTEXT-HILFE",
     selectLanguageItem: "Wähle einen Zelyra-Begriff", contextHelpHint: "Bewege den Cursor auf einen Begriff. F1 öffnet diese Hilfe.",
     fileProperties: "DATEIEIGENSCHAFTEN", fileType: "Dateityp", filePath: "Projektpfad", fileStatus: "Status",
@@ -127,6 +129,8 @@ const messages = {
     taskCheckHelp: "Show compiler diagnostics for the project", taskDatabase: "Open database", taskDatabaseHelp: "Inspect tables and relationships",
     taskHelp: "Open contextual help", taskHelpHelp: "Show help for the term at the cursor", taskProperties: "Open file properties",
     taskPropertiesHelp: "Show information and actions for the active file", taskSearch: "Find text", taskSearchHelp: "Search in the active document",
+    taskGoToDefinition: "Go to definition", taskGoToDefinitionHelp: "Go to the function or type at the cursor (F12)",
+    definitionNotFound: "No matching project definition was found.", definitionSaveFirst: "Save this file before jumping so source positions stay accurate.", definitionOpened: "Opened definition: {0}",
     assistant: "Help and properties", helpTab: "Help", propertiesTab: "Properties", contextHelp: "CONTEXT HELP",
     selectLanguageItem: "Select a Zelyra term", contextHelpHint: "Place the cursor on a term. Press F1 to open this help.",
     fileProperties: "FILE PROPERTIES", fileType: "File type", filePath: "Project path", fileStatus: "Status",
@@ -496,6 +500,7 @@ const studioTasks = [
   ["taskHelp", "taskHelpHelp", ["help", "documentation", "f1"], () => toggleAssistant("help")],
   ["taskProperties", "taskPropertiesHelp", ["properties", "file", "settings"], () => toggleAssistant("properties")],
   ["taskSearch", "taskSearchHelp", ["find", "search", "text"], () => findInDocument()],
+  ["taskGoToDefinition", "taskGoToDefinitionHelp", ["definition", "symbol", "function", "type", "f12"], () => void goToDefinition()],
 ];
 let selectedTaskIndex = 0;
 
@@ -534,6 +539,33 @@ function findInDocument() {
   import("@codemirror/search").then(({ openSearchPanel }) => openSearchPanel(editor));
 }
 
+async function goToDefinition() {
+  if (!editor || !activePath?.endsWith(".zyl")) return;
+  if (isDirty(tabs.get(activePath), activePath)) {
+    announce(t("definitionSaveFirst"), "warning");
+    return;
+  }
+  const wordRange = editor.state.wordAt(editor.state.selection.main.head);
+  const word = wordRange ? editor.state.sliceDoc(wordRange.from, wordRange.to) : "";
+  if (!word) { announce(t("definitionNotFound"), "warning"); return; }
+  try {
+    const symbols = await loadProjectSymbols(activePath);
+    const symbol = symbols.find((item) => item.label === word && item.path === activePath && Number.isInteger(item.position))
+      || symbols.find((item) => item.label === word && item.path && Number.isInteger(item.position));
+    if (!symbol) { announce(t("definitionNotFound"), "warning"); return; }
+    const targetTab = tabs.get(symbol.path);
+    if (targetTab && isDirty(targetTab, symbol.path)) {
+      announce(t("definitionSaveFirst"), "warning");
+      return;
+    }
+    await openFile(symbol.path);
+    if (activePath !== symbol.path || !editor) return;
+    editor.dispatch({ selection: { anchor: symbol.position, head: symbol.position + word.length }, scrollIntoView: true });
+    editor.focus();
+    announce(t("definitionOpened", word), "success");
+  } catch (error) { announce(error.message, "error"); }
+}
+
 function createView(path, state) {
   return new EditorView({
     state,
@@ -553,6 +585,7 @@ function createView(path, state) {
       keymap.of([
         { key: "Mod-s", run: () => { saveActive(); return true; } },
         { key: "Mod-Space", run: startCompletion },
+        { key: "F12", run: () => { void goToDefinition(); return true; } },
         { key: "F1", run: () => { toggleAssistant("help"); return true; } },
         ...defaultKeymap, ...historyKeymap, ...searchKeymap, ...foldKeymap,
       ]),
@@ -632,6 +665,7 @@ async function savePath(path) {
     const result = await api("file", { method: "PUT", body: JSON.stringify({ path, content: tab.state.doc.toString(), baseHash: tab.hash }) });
     tab.saved = result.content;
     tab.hash = result.hash;
+    symbolCache.delete(path);
     renderTabs();
     announce(t("saved", path), "success");
     return true;

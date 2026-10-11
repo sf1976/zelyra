@@ -296,124 +296,197 @@ fn editor_response(
 
 fn editor_symbols(
     state: &EditorState,
-    _relative_entry: &str,
+    relative_entry: &str,
 ) -> Result<(u16, &'static str, String), (u16, String)> {
     let entry = safe_editor_path(&state.root, "main.zyl", false)?;
+    let requested = safe_editor_path(&state.root, relative_entry, false)?;
+    let relative_path = requested
+        .strip_prefix(&state.root)
+        .map_err(|_| (400, "symbol path must stay inside the project".into()))?
+        .to_string_lossy()
+        .replace('\\', "/");
     let loaded = project::load(&entry.to_string_lossy()).map_err(|_| {
         (
             422,
             "project symbols are unavailable until the imported source parses".into(),
         )
     })?;
-    let source = loaded
-        .sources
-        .iter()
-        .find(|source| source.path == "main.zyl")
-        .map(|source| source.text.as_str())
-        .ok_or((422, "project entry source is unavailable".into()))?;
-    let tokens =
-        lex(source).map_err(|_| (422, "project declarations are not parseable yet".into()))?;
-    let local =
-        parse(&tokens).map_err(|_| (422, "project declarations are not parseable yet".into()))?;
-    let linked = loaded.program;
-    let root_module = loaded
-        .modules
-        .iter()
-        .find(|module| module.path == "main.zyl")
-        .ok_or((422, "project entry module is unavailable".into()))?;
-    let imported_paths = root_module
+    let active_source = fs::read_to_string(&requested)
+        .map_err(|_| (415, "active Zelyra source is not UTF-8 text".into()))?;
+    let active_tokens = lex(&active_source).map_err(|_| {
+        (
+            422,
+            "active source declarations are not parseable yet".into(),
+        )
+    })?;
+    let active_program = parse(&active_tokens).map_err(|_| {
+        (
+            422,
+            "active source declarations are not parseable yet".into(),
+        )
+    })?;
+    let imported_paths = active_program
         .imports
         .iter()
         .map(|import| import.path.as_str())
         .collect::<BTreeSet<_>>();
+    let mut project_sources = loaded.sources.clone();
+    if !project_sources
+        .iter()
+        .any(|source| source.path == relative_path)
+    {
+        project_sources.push(project::ProjectSource {
+            path: relative_path.clone(),
+            text: active_source,
+        });
+    }
     let mut symbols = Vec::new();
+
+    for source in project_sources.iter().filter(|source| {
+        source.path == relative_path || imported_paths.contains(source.path.as_str())
+    }) {
+        let is_local = source.path == relative_path;
+        let tokens = lex(&source.text)
+            .map_err(|_| (422, "project declarations are not parseable yet".into()))?;
+        let parsed = parse(&tokens)
+            .map_err(|_| (422, "project declarations are not parseable yet".into()))?;
+        for item in &parsed.functions {
+            if is_local || item.is_public {
+                push_editor_symbol(
+                    &mut symbols,
+                    &source.path,
+                    &source.text,
+                    &item.name,
+                    "function",
+                    "function",
+                    item.span,
+                );
+            }
+        }
+        for item in &parsed.types {
+            if is_local || item.is_public {
+                push_editor_symbol(
+                    &mut symbols,
+                    &source.path,
+                    &source.text,
+                    &item.name,
+                    "type",
+                    "type",
+                    item.span,
+                );
+            }
+        }
+        for item in &parsed.records {
+            if is_local || item.is_public {
+                push_editor_symbol(
+                    &mut symbols,
+                    &source.path,
+                    &source.text,
+                    &item.name,
+                    "type",
+                    "type",
+                    item.span,
+                );
+            }
+        }
+        for item in &parsed.views {
+            if is_local || item.is_public {
+                push_editor_symbol(
+                    &mut symbols,
+                    &source.path,
+                    &source.text,
+                    &item.name,
+                    "class",
+                    "view",
+                    item.span,
+                );
+            }
+        }
+        for item in &parsed.components {
+            if is_local || item.is_public {
+                push_editor_symbol(
+                    &mut symbols,
+                    &source.path,
+                    &source.text,
+                    &item.name,
+                    "class",
+                    "component",
+                    item.span,
+                );
+            }
+        }
+        if is_local {
+            symbols.extend(
+                parsed
+                    .forms
+                    .iter()
+                    .map(|item| json!({"label": item.name, "kind": "class", "detail": "form"})),
+            );
+            symbols.extend(
+                parsed
+                    .cruds
+                    .iter()
+                    .map(|item| json!({"label": item.name, "kind": "class", "detail": "crud"})),
+            );
+            symbols.extend(
+                parsed
+                    .pages
+                    .iter()
+                    .map(|item| json!({"label": item.path, "kind": "class", "detail": "page"})),
+            );
+            symbols.extend(
+                parsed
+                    .apis
+                    .iter()
+                    .map(|item| json!({"label": item.path, "kind": "class", "detail": "api"})),
+            );
+            symbols.extend(
+                parsed.tableviews.iter().map(
+                    |item| json!({"label": item.name, "kind": "class", "detail": "tableview"}),
+                ),
+            );
+        }
+    }
     symbols.extend(
-        local
-            .functions
-            .iter()
-            .map(|item| json!({"label": item.name, "kind": "function", "detail": "function"})),
-    );
-    symbols.extend(
-        local
-            .types
-            .iter()
-            .map(|item| json!({"label": item.name, "kind": "type", "detail": "type"})),
-    );
-    symbols.extend(
-        local
-            .records
-            .iter()
-            .map(|item| json!({"label": item.name, "kind": "type", "detail": "type"})),
-    );
-    symbols.extend(
-        local
-            .views
-            .iter()
-            .map(|item| json!({"label": item.name, "kind": "class", "detail": "view"})),
-    );
-    symbols.extend(
-        local
-            .components
-            .iter()
-            .map(|item| json!({"label": item.name, "kind": "class", "detail": "component"})),
-    );
-    symbols.extend(
-        local
-            .forms
-            .iter()
-            .map(|item| json!({"label": item.name, "kind": "class", "detail": "form"})),
-    );
-    symbols.extend(
-        local
-            .cruds
-            .iter()
-            .map(|item| json!({"label": item.name, "kind": "class", "detail": "crud"})),
-    );
-    symbols.extend(
-        local
-            .pages
-            .iter()
-            .map(|item| json!({"label": item.path, "kind": "class", "detail": "page"})),
-    );
-    symbols.extend(
-        local
-            .apis
-            .iter()
-            .map(|item| json!({"label": item.path, "kind": "class", "detail": "api"})),
-    );
-    symbols.extend(
-        local
-            .tableviews
-            .iter()
-            .map(|item| json!({"label": item.name, "kind": "class", "detail": "tableview"})),
-    );
-    symbols.extend(
-        linked
+        loaded
+            .program
             .tables
             .iter()
             .map(|item| json!({"label": item.name, "kind": "class", "detail": "table"})),
     );
-    for module in loaded
-        .modules
-        .iter()
-        .filter(|module| imported_paths.contains(module.path.as_str()))
-    {
-        for export in &module.exports {
-            let (kind, detail) = match export.kind.as_str() {
-                "function" => ("function", "function"),
-                "record" | "type" => ("type", "type"),
-                "view" => ("class", "view"),
-                "component" => ("class", "component"),
-                _ => continue,
-            };
-            symbols.push(json!({"label": export.name, "kind": kind, "detail": detail}));
-        }
-    }
     Ok((
         200,
         "application/json; charset=utf-8",
         json!({"symbols": symbols}).to_string(),
     ))
+}
+
+fn push_editor_symbol(
+    symbols: &mut Vec<Value>,
+    path: &str,
+    source: &str,
+    name: &str,
+    kind: &str,
+    detail: &str,
+    span: zelyra_ast::Span,
+) {
+    let Some(declaration) = source.get(span.start..span.end.min(source.len())) else {
+        return;
+    };
+    let Some(offset) = declaration.find(name) else {
+        return;
+    };
+    let byte_position = span.start + offset;
+    let Some(prefix) = source.get(..byte_position) else {
+        return;
+    };
+    symbols.push(json!({
+        "label": name,
+        "kind": kind,
+        "detail": detail,
+        "path": path,
+        "position": prefix.encode_utf16().count(),
+    }));
 }
 
 fn editor_database_schemas(
