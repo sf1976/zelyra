@@ -39,6 +39,8 @@ const tabs = new Map();
 let activePath = null;
 let editor = null;
 let diagnostics = [];
+let liveCheckTimer = null;
+let liveCheckSequence = 0;
 let treeFiles = [];
 let activeFilter = "";
 let databaseMap = null;
@@ -50,6 +52,10 @@ let lastCrudPreviewRequest = null;
 const editorRoot = $("editor-root");
 const messages = {
   de: {
+    assistant: "Hilfe und Eigenschaften", helpTab: "Hilfe", propertiesTab: "Eigenschaften", contextHelp: "KONTEXT-HILFE",
+    selectLanguageItem: "Wähle einen Zelyra-Begriff", contextHelpHint: "Bewege den Cursor auf einen Begriff. F1 öffnet diese Hilfe.",
+    fileProperties: "DATEIEIGENSCHAFTEN", fileType: "Dateityp", filePath: "Projektpfad", fileStatus: "Status",
+    sourceKind: "Zelyra-Quelltext", configFile: "Projektkonfiguration", otherFile: "Projektdatei", savedState: "Gespeichert", unsavedState: "Ungespeichert",
     subtitle: "Lokale Entwicklungsumgebung", local: "LOKAL", files: "DATEIEN", newFile: "Neue Datei",
     refresh: "Aktualisieren", filterFiles: "Dateien filtern", saveAll: "Alle speichern", save: "Speichern",
     renameFile: "Umbenennen", deleteFile: "Löschen", renamePrompt: "Neuer Projektpfad (zum Beispiel src/customer-new.zyl)",
@@ -97,6 +103,10 @@ const messages = {
     table: "Tabelle", field: "Feld", moduleUnknown: "Quellmodul unbekannt", selectTarget: "Quelldatei auswählen"
   },
   en: {
+    assistant: "Help and properties", helpTab: "Help", propertiesTab: "Properties", contextHelp: "CONTEXT HELP",
+    selectLanguageItem: "Select a Zelyra term", contextHelpHint: "Place the cursor on a term. Press F1 to open this help.",
+    fileProperties: "FILE PROPERTIES", fileType: "File type", filePath: "Project path", fileStatus: "Status",
+    sourceKind: "Zelyra source", configFile: "Project configuration", otherFile: "Project file", savedState: "Saved", unsavedState: "Unsaved",
     subtitle: "Local development environment", local: "LOCAL", files: "FILES", newFile: "New file",
     refresh: "Refresh", filterFiles: "Filter files", saveAll: "Save all", save: "Save",
     renameFile: "Rename", deleteFile: "Delete", renamePrompt: "New project path (for example src/customer-new.zyl)",
@@ -161,6 +171,8 @@ function setLanguage(next) {
     if (selectedDatabaseTable) selectDatabaseTable(selectedDatabaseTable.name);
     else renderDatabaseGraph();
   }
+  if (editor && activePath) renderContextHelp(editor.state, activePath);
+  if (!$("studio-assistant").hidden) renderFileProperties(activePath);
 }
 
 const keywords = new Set((
@@ -168,6 +180,46 @@ const keywords = new Set((
   "table view component layout slot page api form crud tableview auth database " +
   "sql uses capability requires ensures invariant true false null none some ok err"
 ).split(/\s+/));
+const languageHelp = {
+  fn: ["Funktion", "Definiert einen benannten, wiederverwendbaren Ablauf.", "fn begruessung(name: Text) -> Text", "return \"Hallo \" + name"],
+  let: ["Wert", "Legt einen veränderlichen Wert im aktuellen Gültigkeitsbereich an.", "let anzahl = 0", "anzahl = anzahl + 1"],
+  mut: ["Veränderlicher Wert", "Kennzeichnet einen Wert, der später neu gesetzt werden darf.", "let mut status = \"offen\"", "status = \"bezahlt\""],
+  table: ["Datenbanktabelle", "Beschreibt Tabellenfelder und ihre Eigenschaften in der Projektstruktur.", "table kunden {\n  name: Text\n  email: Text unique\n}", "Studio kann die erkannte Tabellenstruktur anzeigen und CRUD vorbereiten."],
+  form: ["Eingabeformular", "Erstellt ein Formular aus definierten Feldern und bindet es an eine Ressource.", "form kunde {\n  name: Text required\n  email: Text\n}", "Felder prüfen und CRUD-Ansicht über das Datenbank Studio ergänzen."],
+  crud: ["Datenansicht", "Verknüpft eine Ressource mit typischen Listen- und Bearbeitungsabläufen.", "crud kunden {\n  title: \"Kunden\"\n}", "Das Studio kann eine geprüfte Vorschau mit Auswirkungen auf Routen zeigen."],
+  view: ["Ansicht", "Beschreibt eine serverseitig gerenderte Seite.", "view kunden {\n  title: \"Kunden\"\n}", "Die Eigenschaften richten sich nach dem Ansichtsblock."],
+  route: ["Route", "Ordnet eine Adresse und HTTP-Methode einem Handler zu.", "route GET /kunden { ... }", "Doppelte Routen erkennt die Projektprüfung."],
+  component: ["Komponente", "Bündelt wiederverwendbare Darstellung und Verhalten.", "component Hinweis { ... }", "Eine Komponente kann in Ansichten wiederverwendet werden."],
+  if: ["Bedingung", "Führt einen Block aus, wenn der Ausdruck wahr ist.", "if kunde.aktiv { ... }", "Mit else lässt sich ein Alternativpfad beschreiben."],
+  for: ["Wiederholung", "Verarbeitet jedes Element einer Liste in einem Block.", "for artikel in artikel { ... }", "Der Name nach `for` bezeichnet das aktuelle Element."],
+  match: ["Fallunterscheidung", "Wählt einen passenden Zweig anhand eines Wertes.", "match status { ... }", "Hilft, alle bekannten Fälle sichtbar abzudecken."],
+  record: ["Datensatztyp", "Definiert zusammengehörige typisierte Werte.", "record Adresse {\n  ort: Text\n  plz: Text\n}", "Datensatztypen machen Datenformen im Code sichtbar."],
+  type: ["Typ", "Definiert einen eigenen Typnamen oder Typverbund.", "type KundenId = Zahl", "Typen helfen der IDE, Werte und Fehler einzuordnen."],
+  sql: ["SQL-Abfrage", "Führt eine parameterisierte Datenbankabfrage im deklarierten Kontext aus.", "sql \"SELECT ... WHERE id = ?\"", "Nutze Parameter für Werte; füge Eingaben nicht in SQL-Text ein."],
+  requires: ["Vorbedingung", "Beschreibt, was vor einem Funktionsaufruf gelten muss.", "requires betrag >= 0", "Vorbedingungen werden bei der Projektprüfung berücksichtigt."],
+  ensures: ["Nachbedingung", "Beschreibt eine Garantie nach erfolgreicher Ausführung.", "ensures result >= 0", "Hilft, Absichten für Menschen und Werkzeuge sichtbar zu machen."],
+  invariant: ["Invariante", "Formuliert eine Bedingung, die dauerhaft gelten soll.", "invariant saldo >= 0", "Geeignet für wichtige Regeln eines Datenmodells."],
+};
+const languageHelpEn = {
+  fn: ["function", "Defines a named, reusable operation.", "fn greet(name: Text) -> Text", "return \"Hello \" + name"],
+  let: ["value", "Creates a value in the current scope.", "let count = 0", "count = count + 1"],
+  mut: ["mutable value", "Marks a value that may be assigned again later.", "let mut status = \"open\"", "status = \"paid\""],
+  table: ["database table", "Describes fields and their properties in the project schema.", "table customers {\n  name: Text\n  email: Text unique\n}", "Studio can inspect the declared table and prepare a checked CRUD preview."],
+  form: ["input form", "Creates a form from declared fields and binds it to a resource.", "form customer {\n  name: Text required\n  email: Text\n}", "Use the database studio to inspect fields and prepare a CRUD view."],
+  crud: ["data view", "Connects a resource to common list and edit workflows.", "crud customers {\n  title: \"Customers\"\n}", "Studio can preview the source and show affected routes."],
+  view: ["view", "Describes a server-rendered page.", "view customers {\n  title: \"Customers\"\n}", "Available properties depend on the view block."],
+  route: ["route", "Maps an address and HTTP method to a handler.", "route GET /customers { ... }", "Project checks report duplicate routes."],
+  component: ["component", "Groups reusable presentation and behavior.", "component Notice { ... }", "Components can be reused in views."],
+  if: ["condition", "Runs a block when its expression is true.", "if customer.active { ... }", "Use else to describe an alternative path."],
+  for: ["iteration", "Processes each item in a list inside a block.", "for item in items { ... }", "The name after `for` refers to the current item."],
+  match: ["pattern match", "Selects a branch based on a value.", "match status { ... }", "Makes known cases visible in the source."],
+  record: ["record type", "Defines a group of related, typed values.", "record Address {\n  city: Text\n  zip: Text\n}", "Record types make data shapes explicit."],
+  type: ["type", "Defines a type alias or a named type.", "type CustomerId = Number", "Types help Studio and the compiler identify values and errors."],
+  sql: ["SQL query", "Runs a parameterized database query in its declared context.", "sql \"SELECT ... WHERE id = ?\"", "Use parameters for values; do not concatenate user input into SQL."],
+  requires: ["precondition", "States what must be true before a function call.", "requires amount >= 0", "Preconditions are included in project checks."],
+  ensures: ["postcondition", "States a guarantee after successful execution.", "ensures result >= 0", "Makes intended outcomes clear to people and tools."],
+  invariant: ["invariant", "States a condition that should remain true.", "invariant balance >= 0", "Useful for important rules in a data model."],
+};
 const zelyraLanguage = StreamLanguage.define({
   startState: () => ({ inBlockComment: false }),
   languageData: { commentTokens: { line: "#", block: { open: "##", close: "##" } } },
@@ -268,12 +320,66 @@ function renderTabs() {
   const protectedFile = activePath === "main.zyl" || activePath === "zelyra.toml";
   $("rename-file-button").disabled = !activePath || protectedFile;
   $("delete-file-button").disabled = !activePath || protectedFile;
+  if (!$("studio-assistant").hidden) renderFileProperties(activePath);
 }
 
 function completionSource(context) {
   const word = context.matchBefore(/[\w]+/);
   if (!word && !context.explicit) return null;
   return { from: word ? word.from : context.pos, options: [...keywords].map((label) => ({ label, type: "keyword" })) };
+}
+
+function selectedLanguageWord(state) {
+  const selection = state.selection.main;
+  const line = state.doc.lineAt(selection.head).text;
+  const offset = selection.head - state.doc.lineAt(selection.head).from;
+  const match = [...line.matchAll(/[A-Za-z_][\w]*/g)].find((item) => item.index <= offset && item.index + item[0].length >= offset);
+  return match?.[0]?.toLowerCase() || "";
+}
+
+function renderContextHelp(state, path) {
+  if ($("studio-assistant").hidden || !path?.endsWith(".zyl")) return;
+  const word = selectedLanguageWord(state);
+  const help = (language === "en" ? languageHelpEn[word] : null) || languageHelp[word];
+  $("assistant-help-title").textContent = help ? `${word} · ${help[0]}` : (word || t("selectLanguageItem"));
+  $("assistant-help-description").textContent = help ? help[1] : t("contextHelpHint");
+  const details = $("assistant-help-details"); details.replaceChildren();
+  if (!help) return;
+  const syntaxTitle = document.createElement("strong"); syntaxTitle.textContent = language === "de" ? "Schreibweise" : "Syntax";
+  const syntax = document.createElement("pre"); syntax.textContent = help[2];
+  const exampleTitle = document.createElement("strong"); exampleTitle.textContent = language === "de" ? "Hinweis" : "Tip";
+  const example = document.createElement("p"); example.textContent = help[3];
+  details.append(syntaxTitle, syntax, exampleTitle, example);
+}
+
+function renderFileProperties(path) {
+  if (!path || $("studio-assistant").hidden) return;
+  const tab = tabs.get(path);
+  const extension = path.split(".").pop()?.toLowerCase() || "";
+  const kind = extension === "zyl" ? t("sourceKind") : path === "zelyra.toml" ? t("configFile") : t("otherFile");
+  $("assistant-file-name").textContent = path.split("/").pop();
+  const details = $("assistant-file-details"); details.replaceChildren();
+  for (const [label, value] of [[t("fileType"), kind], [t("filePath"), path], [t("fileStatus"), tab && isDirty(tab, path) ? t("unsavedState") : t("savedState")]]) {
+    const term = document.createElement("dt"); term.textContent = label;
+    const description = document.createElement("dd"); description.textContent = value;
+    details.append(term, description);
+  }
+}
+
+function showAssistantTab(tab) {
+  $("assistant-help-tab").classList.toggle("selected", tab === "help");
+  $("assistant-properties-tab").classList.toggle("selected", tab === "properties");
+  $("assistant-help-view").hidden = tab !== "help";
+  $("assistant-properties-view").hidden = tab !== "properties";
+  if (tab === "properties") renderFileProperties(activePath);
+  else if (editor) renderContextHelp(editor.state, activePath);
+}
+
+function toggleAssistant(tab = "help") {
+  const panel = $("studio-assistant");
+  panel.hidden = !panel.hidden;
+  if (!panel.hidden) showAssistantTab(tab);
+  requestAnimationFrame(() => editor?.requestMeasure());
 }
 
 function createView(path, state) {
@@ -294,6 +400,7 @@ function createView(path, state) {
       }))),
       keymap.of([
         { key: "Mod-s", run: () => { saveActive(); return true; } },
+        { key: "F1", run: () => { toggleAssistant("help"); return true; } },
         ...defaultKeymap, ...historyKeymap, ...searchKeymap, ...foldKeymap,
       ]),
       EditorView.updateListener.of((update) => {
@@ -307,6 +414,7 @@ function createView(path, state) {
             if (editor === update.view) editor.dispatch(setDiagnostics(editor.state, []));
           });
         }
+        if (update.selectionSet || update.docChanged) renderContextHelp(update.state, path);
       }),
       EditorView.lineWrapping,
       zelyraTheme,
@@ -322,6 +430,7 @@ editorRoot.addEventListener("input", () => {
   tab.state = editor.state;
   renderTabs();
   announce(t("unsaved"), "warning");
+  scheduleLiveCheck(activePath);
 });
 
 async function openFile(path) {
@@ -860,7 +969,7 @@ function openCodeWorkbench() {
   if (editor) editor.focus();
 }
 
-function renderDiagnostics(items, success) {
+function renderDiagnostics(items, success, options = {}) {
   diagnostics = items.map((item) => {
     const start = item.span?.start || {};
     return { ...item, from: item.editorSpan?.start ?? start.offset ?? 0, to: item.editorSpan?.end ?? item.editorSpan?.start ?? start.offset ?? 0 };
@@ -889,7 +998,25 @@ function renderDiagnostics(items, success) {
   $("problems-count-status").textContent = String(items.length);
   $("problems-panel").hidden = false;
   $("problems-empty").hidden = items.length > 0;
-  announce(success ? t("checkPassed") : t("problemsFound", items.length), success ? "success" : "error");
+  if (!options.silent) announce(success ? t("checkPassed") : t("problemsFound", items.length), success ? "success" : "error");
+}
+
+function scheduleLiveCheck(path) {
+  if (!path?.endsWith(".zyl")) return;
+  clearTimeout(liveCheckTimer);
+  const sequence = ++liveCheckSequence;
+  liveCheckTimer = setTimeout(async () => {
+    if (sequence !== liveCheckSequence || activePath !== path) return;
+    try {
+      const source = editor?.state.doc.toString();
+      if (typeof source !== "string") return;
+      const result = await api("check", { method: "POST", body: JSON.stringify({ path, source }) });
+      if (sequence !== liveCheckSequence || activePath !== path || editor?.state.doc.toString() !== source) return;
+      renderDiagnostics(result.diagnostics || [], result.success, { silent: true });
+    } catch {
+      // Live checks are advisory; explicit project checks report request failures.
+    }
+  }, 700);
 }
 
 async function checkProject() {
@@ -934,6 +1061,11 @@ $("save-all-button").addEventListener("click", saveAll);
 $("check-button").addEventListener("click", checkProject);
 $("format-button").addEventListener("click", formatActive);
 $("database-button").addEventListener("click", openDatabaseWorkbench);
+$("assistant-toggle").addEventListener("click", () => toggleAssistant());
+$("assistant-help-tab").addEventListener("click", () => showAssistantTab("help"));
+$("assistant-properties-tab").addEventListener("click", () => showAssistantTab("properties"));
+$("assistant-format").addEventListener("click", formatActive);
+$("assistant-check").addEventListener("click", checkProject);
 $("code-button").addEventListener("click", openCodeWorkbench);
 $("database-refresh").addEventListener("click", loadDatabaseSchema);
 $("database-start").addEventListener("click", loadDatabaseSchema);
@@ -956,6 +1088,7 @@ window.addEventListener("beforeunload", (event) => {
   if (dirtyCount()) { event.preventDefault(); event.returnValue = ""; }
 });
 window.addEventListener("keydown", (event) => {
+  if (event.key === "F1") { event.preventDefault(); toggleAssistant("help"); }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); saveActive(); }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "p") {
     event.preventDefault();

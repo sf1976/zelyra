@@ -594,11 +594,14 @@ Independent human acceptance remains deferred to 1.0.0.
 ## Product direction: language, compiler, database, and Studio
 
 Zelyra's core product idea is one connected path from readable source through
-the compiler and database to a finished business application. Diagrams should
-come from checked project information and link directly to source, diagnostics,
-and workflows. Presentations should use the same typed, explicitly approved
-data sources and remain reviewable as readable Zelyra source. The roadmap stages
-this work across 0.9.2–0.9.8; these are not capabilities of the released 0.9.0.
+the compiler and database to a finished business application. Studio should
+take on as many common, safely modelled language and framework tasks as possible:
+explain valid choices, guide workflows, show errors, and generate checked,
+readable Zelyra source. Diagrams and presentations are examples of that broader
+direction. Shared JavaScript modules should remain ordinary reusable project
+files, with cross-file navigation and diagnostics from Studio. The roadmap
+stages these goals across 0.9.2–0.9.8; they are not capabilities of the
+released 0.9.0.
 
 ## Release 0.9.1 — IDE foundation
 
@@ -628,17 +631,26 @@ this work across 0.9.2–0.9.8; these are not capabilities of the released 0.9.0
 
 ## Release 0.9.2 — IDE language services
 
+- [🧪] Grow Studio into an IDE with a context-sensitive properties sidebar.
+  Selecting a file, route, table, field, or diagram element shows the relevant
+  valid settings in clear language. Common workflows should use selection and
+  properties instead of requiring users to memorize commands or chart APIs.
+  While writing, users can request the description and options for the current
+  command. The current work already adds file properties, F1 help for core
+  language terms, and compiler-checked diagnostics while typing; task discovery
+  and symbol-level properties remain open.
 - [🗺️] Add compiler-backed completion, symbol navigation, find/references,
-  formatting, actionable diagnostics, and integrated check/run/test tasks. Show
-  clear task progress and output without exposing secrets or hiding compiler
-  errors. Keep features scoped to documented language 0.1 constructs. Also
-  derive trustworthy architecture diagrams for modules/imports, routes, and
-  resource relationships from the compiler's project model. Nodes and edges
-  link back to source files and diagnostics; unknown or dynamic relationships
-  are marked incomplete.
-- Exit evidence: positive and negative multi-file projects verify completions,
-  source spans, navigation, formatter idempotence, task output, and deterministic
-  diagram data; unsupported syntax is identified instead of guessed.
+  formatting, actionable diagnostics updated while typing, and integrated
+  check/run/test tasks. Show clear task progress and output without exposing
+  secrets or hiding compiler errors. Keep features scoped to documented
+  language 0.1 constructs. Also derive trustworthy architecture diagrams for
+  modules/imports, routes, and resource relationships from the compiler's
+  project model. Nodes and edges link back to source files and diagnostics;
+  unknown or dynamic relationships are marked incomplete.
+- Exit evidence: positive and negative multi-file projects verify contextual
+  properties and help, completions, live diagnostic ranges, navigation,
+  formatter idempotence, task output, and deterministic diagram data;
+  unsupported syntax is identified instead of guessed.
 
 ## Release 0.9.3 — database workbench
 
@@ -646,17 +658,34 @@ this work across 0.9.2–0.9.8; these are not capabilities of the released 0.9.0
   columns, indexes, and declared relationships; browse records read-only by
   default; show how source modules own each object. Make the ER diagram
   filterable and navigable so selecting a field or relationship reveals its
-  declaration module and using resources. Prepare typed, read-only data sources
-  for metrics so 0.9.4 can offer selections without free-form SQL. Mutations and
-  generated schema changes require a reviewed plan and explicit confirmation.
+  declaration module and using resources.
+- [🗺️] Let users add and edit table columns through the properties sidebar.
+  Show the complete schema plan, impact, and risks; run compiler checks and
+  require explicit confirmation before applying changes. Let users choose the
+  database backend and connection, then create the project database from Studio
+  where the backend and granted privileges support it. Clearly explain
+  unsupported combinations and never store or print credentials in the browser.
+- [🗺️] Prepare typed, read-only data sources for metrics so 0.9.4 can offer
+  selections without free-form SQL. Mutations and generated schema changes
+  require a reviewed plan and explicit confirmation.
+- [🗺️] Plan reusable JavaScript ES modules as project files: keep shared
+  functions once in a clear asset/client area and import them from multiple
+  pages. Studio should find imports and exports, show cross-file references,
+  and provide relevant help and error locations. Common browser tasks can also
+  have simple Zelyra building blocks; those must not replace normal JavaScript
+  or existing JS libraries. Specify module wiring, asset output, security
+  boundaries, and interoperability before implementation.
 - Exit evidence: separate MariaDB, MySQL, and PostgreSQL tests match the published
-  database matrix. Read-only browsing is enforced, and credentials never enter
-  editor output, URLs, diagnostics, or browser storage.
+  database matrix. Unsupported schema actions fail closed, stale plan hashes or
+  database state block apply, read-only browsing is enforced, and credentials
+  never enter editor output, URLs, diagnostics, or browser storage.
 
 ## Release 0.9.4 — visual CRUD design
 
-- [🗺️] Make relational CRUD workflows understandable in Studio: choose tables
-  and relationships, design fields and forms, preview routes and generated source,
+- [🗺️] Make relational CRUD and business-chart workflows understandable in
+  Studio: choose tables and relationships, design fields and forms, and configure
+  metrics through the properties sidebar instead of chart commands. Preview
+  routes and generated source,
   inspect the full change set, run compiler checks, then explicitly apply or
   discard it. Make diagrams actionable entry points into these workflows. Add a
   guided metric/chart designer: choose a declared data source, metric (such as

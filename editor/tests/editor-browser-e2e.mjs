@@ -10,15 +10,25 @@ try {
   const page = await browser.newPage();
   page.setDefaultTimeout(5_000);
   const browserErrors = [];
+  const liveChecks = [];
   const base = `http://127.0.0.1:${port}/__zelyra/editor`;
   const url = `${base}/#${token}`;
   page.on("pageerror", (error) => browserErrors.push(error.message));
+  page.on("response", async (response) => {
+    if (response.url().endsWith("/api/check")) liveChecks.push({ status: response.status(), body: await response.text() });
+  });
   await page.goto(url);
   assert.equal(new URL(page.url()).hash, "", "the session token must be removed from the address bar");
   await page.locator(".cm-content[contenteditable=true]").waitFor({ timeout: 10_000 });
   await page.locator('.tree-item.file[title="main.zyl"]').waitFor();
 
   const editor = page.locator(".cm-content[contenteditable=true]");
+  await editor.focus();
+  await page.keyboard.press("F1");
+  await page.locator("#studio-assistant:not([hidden])").waitFor();
+  await page.locator("#assistant-properties-tab").click();
+  await page.getByRole("heading", { name: "main.zyl" }).waitFor();
+  await page.locator("#assistant-help-tab").click();
   await editor.focus();
   await page.keyboard.press("Control+A");
   await page.keyboard.type('fn main() { print("unsaved browser edit"); }\n');
@@ -37,6 +47,9 @@ try {
   await current.focus();
   await page.keyboard.press("Control+A");
   await page.keyboard.type("fn main( {\n");
+  await page.locator("#problems-panel:not([hidden])").waitFor();
+  assert.ok(liveChecks.some((check) => check.status === 200 && JSON.parse(check.body).success === false), "unsaved invalid source must be checked by the compiler");
+  assert.ok(await page.locator(".tab-state.dirty").count(), "live checking must leave unsaved source untouched");
   await current.press("Control+S");
   await page.locator(".tab-state.dirty").waitFor({ state: "detached" });
   await page.getByRole("button", { name: /Projekt prüfen|Check project/ }).click();

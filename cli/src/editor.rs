@@ -654,7 +654,28 @@ fn validate_editor_candidate(
                     .strip_prefix(&temporary_root)
                     .map(|path| path.to_string_lossy().replace('\\', "/"))
                     .unwrap_or_else(|_| "main.zyl".into());
-                item["file"] = Value::String(relative);
+                item["file"] = Value::String(relative.clone());
+                let diagnostic_source = if relative == target {
+                    Some(candidate.to_owned())
+                } else {
+                    safe_editor_path(&state.root, &relative, false)
+                        .ok()
+                        .and_then(|path| fs::read_to_string(path).ok())
+                };
+                if let Some(diagnostic_source) = diagnostic_source {
+                    let start = item
+                        .pointer("/span/start/offset")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0) as usize;
+                    let end = item
+                        .pointer("/span/end/offset")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(start as u64) as usize;
+                    item["editorSpan"] = json!({
+                        "start": byte_to_utf16(&diagnostic_source, start),
+                        "end": byte_to_utf16(&diagnostic_source, end),
+                    });
+                }
             }
             item
         })
@@ -1169,8 +1190,22 @@ fn check_project(
         .or_else(|| state.root.join("main.zyl").is_file().then_some("main.zyl"))
         .ok_or((400, "choose a Zelyra entry file to check".into()))?;
     let path = safe_editor_path(&state.root, entry, false)?;
-    let source =
-        fs::read_to_string(&path).map_err(|_| (415, "entry file is not UTF-8 text".into()))?;
+    let source = value
+        .get("source")
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+        .map(Ok)
+        .unwrap_or_else(|| {
+            fs::read_to_string(&path).map_err(|_| (415, "entry file is not UTF-8 text".into()))
+        })?;
+    if value.get("source").and_then(Value::as_str).is_some() {
+        let (success, diagnostics) = validate_editor_candidate(state, entry, &source)?;
+        return Ok((
+            200,
+            "application/json; charset=utf-8",
+            json!({"success": success, "diagnostics": diagnostics}).to_string(),
+        ));
+    }
     begin_json_diagnostics(&path.to_string_lossy(), &source);
     let success = validate(&path.to_string_lossy()).is_ok();
     let diagnostics = finish_json_diagnostics()
@@ -1669,6 +1704,29 @@ mod tests {
             fs::read_to_string(path).expect("original remains intact"),
             base,
             "preview must not modify the project source"
+        );
+        let _ = fs::remove_dir_all(state.root);
+    }
+
+    #[test]
+    fn editor_live_check_validates_unsaved_source_without_writing_it() {
+        let state = project();
+        let path = state.root.join("main.zyl");
+        let original = fs::read_to_string(&path).expect("read original source");
+        let response = check_project(
+            &state,
+            &json!({
+                "path": "main.zyl",
+                "source": "fn main( {\n"
+            }),
+        )
+        .expect("unsaved source can be checked");
+        let payload: Value = serde_json::from_str(&response.2).expect("decode check result");
+        assert_eq!(payload["success"], false);
+        assert!(!payload["diagnostics"].as_array().unwrap().is_empty());
+        assert_eq!(
+            fs::read_to_string(path).expect("source remains untouched"),
+            original
         );
         let _ = fs::remove_dir_all(state.root);
     }

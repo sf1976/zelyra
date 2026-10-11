@@ -562,10 +562,12 @@ Die menschliche Abnahme bleibt auf 1.0.0 verschoben.
 
 Zelyras zentrale Produktidee ist ein zusammenhängender Weg von verständlichem
 Quelltext über Compiler und Datenbank bis zur fertigen Geschäftsanwendung.
-Diagramme sollen aus geprüften Projektinformationen entstehen und direkt zu
-Quelltext, Diagnosen und Arbeitsabläufen führen. Präsentationen sollen dieselben
-typisierten, ausdrücklich freigegebenen Datenquellen nutzen und als lesbarer
-Zelyra-Quelltext überprüfbar bleiben. Die Roadmap staffelt diese Ziele über
+Studio soll möglichst alle häufigen, sicher modellierbaren Aufgaben der Sprache
+und des Frameworks übernehmen: Eigenschaften auswählen, Abläufe führen, gültige
+Optionen erklären, Fehler zeigen und geprüften Quelltext erzeugen. Diagramme und
+Präsentationen sind nur Beispiele dafür. Jede generierte Änderung bleibt als
+lesbarer Zelyra-Quelltext überprüfbar; folgenreicher Datenzugriff zeigt Plan,
+Auswirkungen und eine ausdrückliche Bestätigung. Die Roadmap staffelt diese Ziele über
 0.9.2–0.9.8; sie sind noch keine Fähigkeiten des veröffentlichten 0.9.0.
 
 ## Release 0.9.1 — IDE-Grundlage
@@ -599,19 +601,28 @@ Zelyra-Quelltext überprüfbar bleiben. Die Roadmap staffelt diese Ziele über
 
 ## Release 0.9.2 — Sprachdienste der IDE
 
+- [🧪] Studio zur IDE mit einer kontextabhängigen Eigenschaftsseitenleiste und
+  Aufgaben-/Befehlsfinder ausbauen. Häufige Abläufe zu Dateien, Symbolen, Routen,
+  Views, Formularen, Ressourcen und Diagrammen lassen sich durch Auswahl und
+  gültige Eigenschaften einstellen. Beim Schreiben können Beschreibung,
+  Optionen und Beispiele zum Befehl am Cursor gezielt aufgerufen werden; Nutzer
+  müssen die API nicht auswendig lernen. Die aktuelle Arbeitsfassung ergänzt
+  bereits Dateieigenschaften, Hilfe zu zentralen Sprachbegriffen per F1 und
+  compilergeprüfte Diagnosen während der Eingabe; Aufgabenfinder und
+  symbolbezogene Eigenschaften bleiben offen.
 - [🗺️] Compiler-gestützte Vervollständigung, Symbolnavigation, Suche/Referenzen,
-  Formatierung, handlungsorientierte Diagnosen sowie integrierte Check-, Run-
-  und Test-Aufgaben ergänzen. Fortschritt und Ausgabe bleiben sichtbar und
-  geheimnisfrei. Die Funktionen decken die dokumentierten Sprach-0.1-Konstrukte
-  ab. Zusätzlich entstehen aus dem Compiler-Projektmodell verlässliche
-  Architekturdiagramme für Module/Importe, Routen und Ressourcenbeziehungen.
-  Knoten und Kanten führen zur passenden Quelldatei und Diagnose zurück;
-  unbekannte oder dynamische Beziehungen werden sichtbar als unvollständig
-  markiert.
-- Nachweis: Positive und negative Mehrdateiprojekte prüfen Vorschläge,
-  Quellpositionen, Navigation, idempotente Formatierung, Aufgabenausgabe und
-  deterministische Diagrammdaten; unbekannte Syntax wird kenntlich gemacht
-  statt erraten.
+  Formatierung, handlungsorientierte und während der Eingabe aktualisierte
+  Diagnosen sowie integrierte Check-, Run- und Test-Aufgaben ergänzen.
+  Fortschritt und Ausgabe bleiben sichtbar und geheimnisfrei. Die Funktionen
+  decken dokumentierte Sprach-0.1-Konstrukte ab. Zusätzlich entstehen aus dem
+  Compiler-Projektmodell verlässliche Architekturdiagramme für Module/Importe,
+  Routen und Ressourcenbeziehungen. Knoten und Kanten führen zur passenden
+  Quelldatei und Diagnose zurück; unbekannte oder dynamische Beziehungen werden
+  sichtbar als unvollständig markiert.
+- Nachweis: Positive und negative Mehrdateiprojekte prüfen kontextuelle
+  Eigenschaften, Hilfetexte, Vorschläge, Live-Fehlerpositionen, Navigation,
+  idempotente Formatierung, Aufgabenausgabe und deterministische Diagrammdaten;
+  unbekannte Syntax wird kenntlich gemacht statt erraten.
 
 ## Release 0.9.3 — Datenbankwerkbank
 
@@ -620,14 +631,29 @@ Zelyra-Quelltext überprüfbar bleiben. Die Roadmap staffelt diese Ziele über
   schreibgeschützt durchsuchen und den zuständigen Quellmodulen zuordnen. Das
   ER-Diagramm wird filterbar und navigierbar; Auswahl eines Feldes oder einer
   Beziehung zeigt Definition, Quellmodul und verwendende Ressourcen.
-  Lesende, typisierte Datenquellen für Kennzahlen werden so vorbereitet, dass
-  sie in 0.9.4 ohne frei formulierte SQL-Ausdrücke gewählt werden können.
-  Änderungen und Schemaerzeugung erfordern einen geprüften Plan und
-  ausdrückliche Bestätigung.
+- [🗺️] Tabellenspalten über die Eigenschaftsseitenleiste grafisch ergänzen und
+  bearbeiten. Studio zeigt den vollständigen Schema-Plan mit Auswirkungen und
+  Risiken, lässt den Compiler prüfen und verlangt vor jeder Anwendung eine
+  ausdrückliche Bestätigung. Außerdem kann der Nutzer den gewählten Datenbanktyp
+  und die Verbindung einstellen und — soweit Backend und Rechte es unterstützen
+  — die Projektdatenbank aus Studio anlegen. Nicht unterstützte Kombinationen
+  werden klar benannt; Zugangsdaten werden nie im Browser gespeichert oder
+  ausgegeben.
+- [🗺️] Lesende, typisierte Datenquellen für Kennzahlen vorbereiten, damit sie
+  in 0.9.4 ohne frei formulierte SQL-Ausdrücke gewählt werden können.
+- [🗺️] Wiederverwendbare JavaScript-ES-Module als Projektdateien planen:
+  gemeinsame Funktionen liegen einmalig in einem klaren Asset-/Client-Bereich
+  und können von mehreren Seiten importiert werden. Studio soll Import-/Export-
+  Verwendungen auffindbar machen, Referenzen über Dateien hinweg zeigen und
+  passende Hilfe und Fehlerstellen anbieten. Häufige Browseraufgaben können
+  zusätzlich als einfache Zelyra-Bausteine bereitstehen; sie ersetzen weder
+  normales JavaScript noch bestehende JS-Bibliotheken. Die genaue Einbindung,
+  Asset-Ausgabe, Sicherheitsgrenzen und Interoperabilität werden vor der
+  Implementierung spezifiziert.
 - Nachweis: Separate MariaDB-, MySQL- und PostgreSQL-Tests entsprechen der
-  veröffentlichten Datenbankmatrix. Schreibgeschütztes Browsen wird erzwungen;
-  Zugangsdaten erscheinen nie in Editor-Ausgabe, URLs, Diagnosen oder Browser-
-  Speicherung.
+  veröffentlichten Datenbankmatrix. Nicht verfügbare Schemaoperationen werden
+  abgewiesen; Änderungen sind gegen Vorschau-Hash und aktuellen Datenbankstand
+  geschützt. Schreibgeschütztes Browsen ist der Standard.
 
 ## Release 0.9.4 — Visueller CRUD-Entwurf
 

@@ -17,6 +17,7 @@
         <button class="icon-button" id="sidebar-toggle" aria-label="Dateiübersicht umschalten" title="Dateiübersicht umschalten" data-i18n-title="toggleExplorer" data-i18n-aria="toggleExplorer">☰</button>
         <button class="toolbar-button" id="open-search" title="Suchen (Strg+F)" data-i18n-title="search">⌕ <span data-i18n="search">Suchen</span></button>
         <button class="toolbar-button" id="database-button" title="Datenbankübersicht öffnen" data-i18n-title="database">▤ <span data-i18n="database">Datenbank</span></button>
+        <button class="toolbar-button" id="assistant-toggle" title="Hilfe und Eigenschaften" data-i18n-title="assistant">ⓘ <span data-i18n="assistant">Hilfe</span></button>
         <button class="icon-button language-button" id="language-button" aria-label="Sprache wechseln" title="Sprache wechseln" data-i18n-title="switchLanguage" data-i18n-aria="switchLanguage">DE</button>
         <button class="icon-button" id="theme-button" aria-label="Farbschema wechseln" title="Farbschema wechseln">◐</button>
         <a class="icon-button help-link" href="https://siedelmann.com/handbuch" target="_blank" rel="noreferrer" aria-label="Handbuch" data-i18n-aria="handbook">?</a>
@@ -45,6 +46,11 @@
         <div class="tabbar" id="tabs" role="tablist" aria-label="Geöffnete Dateien"></div>
         <section class="editor-stage">
           <div id="editor-root" class="editor-root"></div>
+          <aside class="studio-assistant" id="studio-assistant" hidden>
+            <div class="assistant-tabs"><button id="assistant-help-tab" class="selected" data-i18n="helpTab">Hilfe</button><button id="assistant-properties-tab" data-i18n="propertiesTab">Eigenschaften</button></div>
+            <section id="assistant-help-view" class="assistant-view"><span class="database-eyebrow" data-i18n="contextHelp">KONTEXT-HILFE</span><h2 id="assistant-help-title" data-i18n="selectLanguageItem">Wähle einen Zelyra-Begriff</h2><p id="assistant-help-description" data-i18n="contextHelpHint">Bewege den Cursor auf einen Begriff. F1 öffnet diese Hilfe.</p><div id="assistant-help-details"></div></section>
+            <section id="assistant-properties-view" class="assistant-view" hidden><span class="database-eyebrow" data-i18n="fileProperties">DATEIEIGENSCHAFTEN</span><h2 id="assistant-file-name">—</h2><dl id="assistant-file-details"></dl><div class="assistant-property-actions"><button class="toolbar-button" id="assistant-format" data-i18n="format">Formatieren</button><button class="toolbar-button" id="assistant-check" data-i18n="check">Projekt prüfen</button></div></section>
+          </aside>
           <div id="empty-state" class="empty-state">
             <div class="empty-mark">Z</div><h1 data-i18n="welcome">Willkommen in Zelyra Studio</h1>
             <p data-i18n="welcomeHint">Öffne links eine Datei und entwickle direkt in deinem Projekt.</p>
