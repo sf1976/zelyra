@@ -1,0 +1,63 @@
+body {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 1rem;
+    color: #172033;
+    font-family: sans-serif;
+}
+
+header,
+nav,
+main {
+    margin-bottom: 1.5rem;
+}
+
+nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th,
+td {
+    padding: 0.6rem;
+    border-bottom: 1px solid #ccd2dc;
+    text-align: left;
+}
+
+.amount {
+    text-align: right;
+}
+
+.invoice-totals {
+    max-width: 24rem;
+    margin: 1rem 0 1rem auto;
+}
+
+.invoice-totals p {
+    display: flex;
+    justify-content: space-between;
+}
+
+@media print {
+    body {
+        max-width: none;
+        padding: 0;
+        color: #000;
+    }
+
+    header,
+    nav,
+    .no-print {
+        display: none !important;
+    }
+
+    .invoice {
+        border: 0;
+    }
+}

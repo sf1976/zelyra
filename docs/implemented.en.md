@@ -124,9 +124,13 @@ For usage details see the [web and database quickstart](getting-started.md),
   independent production approval.
 - The 0.1 language compatibility corpus adds typed API errors and runtime
   cases for the invoice application and `Result`.
-- ✅ `zelyra --tutorial invoice` guides users through customers, items, a
-  dashboard, and invoice creation. It is a learning path, not production or
-  deployment approval.
+- 🧪 The current `zelyra --tutorial invoice` update guides users through
+  customers, items, a dashboard, and invoice creation. The invoice page totals net line prices,
+  calculates 19% VAT in this learning example, and shows the gross amount.
+  At `/invoices/INVOICE-NUMBER/print`, the browser can save the print-ready
+  invoice as a PDF. This is a learning path, not production or deployment
+  approval; see the [invoice tutorial](tutorials/invoice.en.md) for its scope
+  and limits.
 - Studio is not yet a complete IDE or unrestricted database designer.
 
 ## APIs, authentication, permissions, and audit

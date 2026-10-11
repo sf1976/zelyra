@@ -1,6 +1,7 @@
 use super::*;
 
 const INVOICE_SOURCE: &str = include_str!("../../examples/invoice_tutorial.zyl");
+const INVOICE_THEME: &str = include_str!("../../examples/invoice_tutorial.theme.css");
 
 pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     let Some(name) = arguments.next() else {
@@ -44,6 +45,14 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         );
         return ExitCode::FAILURE;
     }
+    let theme_path = PathBuf::from(&directory).join("zelyra.theme.css");
+    if let Err(error) = fs::write(&theme_path, INVOICE_THEME) {
+        eprintln!(
+            "error[E-TUTORIAL-004]: could not write tutorial theme `{}`: {error}",
+            theme_path.display()
+        );
+        return ExitCode::FAILURE;
+    }
     let source_path = main_path.to_string_lossy();
     if validate(&source_path).is_err() {
         eprintln!(
@@ -69,7 +78,8 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         println!("  zelyra db setup main.zyl");
         println!("  zelyra serve main.zyl");
         println!("\nOpen http://127.0.0.1:3000. Use `zelyra editor .` to inspect the source.");
-        println!("Learning scope: this starter records a user-entered total. Tax calculation, PDF output, sending, and production accounting rules are not included.");
+        println!("The invoice page calculates net, 19% VAT, and gross totals from its lines. Open /invoices/INVOICE-NUMBER/print and use the browser print dialog to save a PDF.");
+        println!("The example assumes the German standard rate; it is not a complete legally compliant invoicing or accounting system.");
     } else {
         println!("Rechnungstutorial — deine Anwendung kann erkundet werden.");
         println!(
@@ -89,7 +99,8 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         println!(
             "\nÖffne http://127.0.0.1:3000. Mit `zelyra editor .` kannst du den Quelltext ansehen."
         );
-        println!("Lernumfang: Der Gesamtbetrag wird eingetragen. Steuerberechnung, PDF, Versand und produktive Buchhaltungsregeln sind nicht enthalten.");
+        println!("Die Rechnungsseite berechnet Netto, 19% Umsatzsteuer und Brutto aus den Positionen. Öffne /invoices/RECHNUNGSNUMMER/print und speichere über den Druckdialog des Browsers als PDF.");
+        println!("Das Beispiel nimmt den allgemeinen deutschen Steuersatz an und ist kein vollständiges gesetzeskonformes Rechnungs- oder Buchhaltungssystem.");
     }
     ExitCode::SUCCESS
 }

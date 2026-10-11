@@ -2727,13 +2727,20 @@ change a project's language line.
   queue platform.
 - **0.9.0 (experimental, published):** Guided CRUD preview shows affected
   files, tables, relationships, and routes. The invoice tutorial covers
-  customers, items, the dashboard, and linked invoice lines. `zelyra text edit`
+  customers, items, the dashboard, and linked invoice lines. See the
+  [invoice tutorial](../../tutorials/invoice.en.md) for its existing scope.
+  `zelyra text edit`
   uses named TOML plans, preview, match counts, and explicit apply. Local TOTP
   for MariaDB is an optional security preview. MySQL/PostgreSQL workflows stay
   within the published support matrix.
 - **0.9.1–0.9.2 (planned):** Grow Studio into an IDE with a multi-file
   project tree, tabs, safe saving, diagnostics, completion, navigation,
   formatting, and integrated compiler tasks.
+- **Invoice tutorial (0.9.1 in development):** The invoice view totals net
+  prices, calculates 19% VAT in the German learning example, and shows the
+  gross amount. A print-ready page can be saved as PDF through the browser's
+  print dialog. This is not native PDF generation; the tutorial documents its
+  tax assumptions and limits.
 - **0.9.3–0.9.4 (planned):** Add a database workbench and relational CRUD
   design with reviewable previews, compiler checks, and explicit apply.
 - **0.9.5–0.9.6 (planned):** Implement complete local mail/SMTP support and a

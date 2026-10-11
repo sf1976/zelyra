@@ -802,6 +802,16 @@ fn projection_type(
         if matches!(expression.get(1), Some(SqlToken::OpenParen)) {
             return match function.to_ascii_uppercase().as_str() {
                 "COUNT" => (Type::Int, false),
+                "ROUND" => {
+                    let inner = expression.get(2..expression.len().saturating_sub(1));
+                    let (_, nullable) = inner
+                        .and_then(|inner| {
+                            inner.split(|token| matches!(token, SqlToken::Comma)).next()
+                        })
+                        .map(|amount| projection_type(amount, tables, schema))
+                        .unwrap_or((Type::Unknown, true));
+                    (Type::Decimal, nullable)
+                }
                 "SUM" | "AVG" | "MIN" | "MAX" => {
                     let inner = expression.get(2..expression.len().saturating_sub(1));
                     let (ty, _) = inner
@@ -811,14 +821,15 @@ fn projection_type(
                 }
                 "COALESCE" | "IFNULL" => {
                     let inner = expression.get(2..expression.len().saturating_sub(1));
-                    inner
+                    let (ty, _) = inner
                         .and_then(|inner| {
                             inner
                                 .split(|token| matches!(token, SqlToken::Comma))
                                 .next()
                                 .map(|part| projection_type(part, tables, schema))
                         })
-                        .unwrap_or((Type::Unknown, false))
+                        .unwrap_or((Type::Unknown, false));
+                    (ty, false)
                 }
                 _ => (Type::Unknown, true),
             };
@@ -826,6 +837,47 @@ fn projection_type(
     }
     if let Some(column) = projection_source_column(expression, tables, schema) {
         return (sql_type_to_type(&column.sql_type), column.nullable);
+    }
+    if expression
+        .iter()
+        .any(|token| matches!(token, SqlToken::Operator | SqlToken::Star))
+    {
+        let mut inferred = Type::Unknown;
+        for pair in expression.windows(3) {
+            let [SqlToken::Word(table), SqlToken::Dot, SqlToken::Word(_)] = pair else {
+                continue;
+            };
+            let Some(table_name) = tables.get(&table.to_ascii_lowercase()) else {
+                continue;
+            };
+            let Some(SqlToken::Word(column_name)) = pair.get(2) else {
+                continue;
+            };
+            if let Some(column) = schema
+                .tables
+                .iter()
+                .find(|candidate| candidate.name == *table_name)
+                .and_then(|candidate| {
+                    candidate
+                        .columns
+                        .iter()
+                        .find(|candidate| candidate.name.eq_ignore_ascii_case(column_name))
+                })
+            {
+                let column_type = sql_type_to_type(&column.sql_type);
+                if matches!(column_type, Type::Decimal | Type::Float) {
+                    inferred = column_type;
+                    if matches!(inferred, Type::Decimal) {
+                        break;
+                    }
+                } else if matches!(column_type, Type::Int) && matches!(inferred, Type::Unknown) {
+                    inferred = Type::Int;
+                }
+            }
+        }
+        if !matches!(inferred, Type::Unknown) {
+            return (inferred, false);
+        }
     }
     match expression.first() {
         Some(SqlToken::Number) => (Type::Int, false),
