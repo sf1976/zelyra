@@ -48,7 +48,9 @@ try {
   await editor.focus();
   await page.locator("#complete-button").click();
   await page.locator(".cm-tooltip-autocomplete").waitFor();
-  await page.locator(".cm-tooltip-autocomplete .cm-completionLabel", { hasText: /^main$/ }).waitFor();
+  const mainCompletions = page.locator(".cm-tooltip-autocomplete .cm-completionLabel", { hasText: /^main$/ });
+  await mainCompletions.first().waitFor();
+  assert.equal(await mainCompletions.count(), 1, "completion must deduplicate the project entry point");
   await page.keyboard.press("Escape");
 
   const callSite = page.locator(".cm-line", { hasText: "math::sum" });

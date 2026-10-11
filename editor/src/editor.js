@@ -447,7 +447,11 @@ function completionSource(context) {
     return [...localOptions, ...projectOptions];
   });
   const fast = { from, options: basicOptions };
-  const complete = projectOptions.then((options) => ({ from, options: [...basicOptions, ...options] }));
+  const complete = projectOptions.then((options) => {
+    const merged = new Map(basicOptions.map((item) => [item.label, item]));
+    for (const item of options) merged.set(item.label, item);
+    return { from, options: [...merged.values()] };
+  });
   const fallback = new Promise((resolve) => setTimeout(() => resolve(fast), 300));
   return Promise.race([complete, fallback]);
 }
