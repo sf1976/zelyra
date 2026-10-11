@@ -89,7 +89,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       mariadb:
-        image: public.ecr.aws/docker/library/mariadb:11
+        image: mariadb:11
         env:
           MARIADB_DATABASE: zelyra_ci
           MARIADB_ROOT_PASSWORD: root
@@ -101,7 +101,7 @@ jobs:
           --health-timeout=5s
           --health-retries=30
       postgres:
-        image: public.ecr.aws/docker/library/postgres:16
+        image: postgres:16
         env:
           POSTGRES_DB: zelyra_ci
           POSTGRES_USER: zelyra_ci
@@ -400,7 +400,7 @@ jobs:
         version: ["10.11.19", "11.4.13", "11.8.9", "12.3.3"]
     services:
       mariadb:
-        image: public.ecr.aws/docker/library/mariadb:${{ matrix.version }}
+        image: mariadb:${{ matrix.version }}
         env:
           MARIADB_DATABASE: zelyra_ci
           MARIADB_ROOT_PASSWORD: root
@@ -432,7 +432,7 @@ jobs:
             *) echo "Expected MariaDB ${expected_version}, got ${server_version}" >&2; exit 1 ;;
           esac
           echo "Testing MariaDB ${server_version}"
-          docker image inspect "public.ecr.aws/docker/library/mariadb:${expected_version}" --format '{{json .RepoDigests}}'
+          docker image inspect "mariadb:${expected_version}" --format '{{json .RepoDigests}}'
       - name: Exercise Zelyra Studio against this MariaDB version
         env:
           ZELYRA_STUDIO_E2E_BACKEND: mariadb
@@ -452,7 +452,7 @@ jobs:
         run: cargo test -p zelyra-database
       - name: Verify MariaDB TLS handshake and certificate rejection
         env:
-          MARIADB_TLS_TEST_IMAGE: public.ecr.aws/docker/library/mariadb:${{ matrix.version }}
+          MARIADB_TLS_TEST_IMAGE: mariadb:${{ matrix.version }}
         run: bash ./tests/mariadb-tls-e2e.sh
       - name: Run MariaDB database and CRUD HTTP integration
         env:
