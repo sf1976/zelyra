@@ -147,7 +147,8 @@ For usage details see the [web and database quickstart](getting-started.md),
   and limits.
 - 🧪 `zelyra --help` ends with German and English getting-started paths for a
   minimal project or invoice tutorial, followed by short explanations of the
-  purpose of key commands.
+  purpose of key commands. `zelyra editor` is shown as a direct launch in the
+  current project folder.
 - Studio is not yet a complete IDE or unrestricted database designer.
 
 ## APIs, authentication, permissions, and audit

@@ -16,6 +16,7 @@
       <div class="top-actions">
         <button class="icon-button" id="sidebar-toggle" aria-label="Dateiübersicht umschalten" title="Dateiübersicht umschalten" data-i18n-title="toggleExplorer" data-i18n-aria="toggleExplorer">☰</button>
         <button class="toolbar-button" id="open-search" title="Suchen (Strg+F)" data-i18n-title="search">⌕ <span data-i18n="search">Suchen</span></button>
+        <button class="toolbar-button" id="project-search-button" title="Projekt durchsuchen (Strg+Umschalt+F)" data-i18n-title="projectSearch">⌕ <span data-i18n="projectSearch">Projekt</span></button>
         <button class="toolbar-button" id="task-finder-button" title="Aktion suchen (Strg+Umschalt+P)" data-i18n-title="taskFinder">⌘ <span data-i18n="taskFinder">Aktionen</span></button>
         <button class="toolbar-button" id="database-button" title="Datenbankübersicht öffnen" data-i18n-title="database">▤ <span data-i18n="database">Datenbank</span></button>
         <button class="toolbar-button" id="assistant-toggle" title="Hilfe und Eigenschaften" data-i18n-title="assistant">ⓘ <span data-i18n="assistant">Hilfe</span></button>
@@ -119,6 +120,13 @@
     <div id="task-finder-results" class="task-finder-results" role="listbox" aria-label="Aktionen"></div>
     <p id="task-finder-empty" class="task-finder-empty" hidden data-i18n="noMatchingTasks">Keine passende Aktion gefunden.</p>
     <footer><kbd>↑</kbd><kbd>↓</kbd><kbd>Enter</kbd><span data-i18n="chooseAction">Aktion auswählen</span><kbd>Esc</kbd><span data-i18n="close">Schließen</span></footer>
+  </dialog>
+  <dialog id="project-search" class="task-finder" aria-labelledby="project-search-title">
+    <header><h2 id="project-search-title" data-i18n="projectSearchTitle">Projekt durchsuchen</h2><button id="project-search-close" aria-label="Schließen" data-i18n-aria="close">×</button></header>
+    <label class="task-finder-search"><span>⌕</span><input id="project-search-input" type="search" autocomplete="off" placeholder="Text in Zelyra-Dateien suchen" data-i18n-placeholder="projectSearchPlaceholder"></label>
+    <div id="project-search-results" class="task-finder-results" role="listbox" aria-label="Suchergebnisse" data-i18n-aria="projectSearchResults"></div>
+    <p id="project-search-empty" class="task-finder-empty" hidden data-i18n="projectSearchEmpty">Keine Treffer gefunden.</p>
+    <footer><kbd>Enter</kbd><span data-i18n="projectSearchSubmit">Suchen</span><kbd>Esc</kbd><span data-i18n="close">Schließen</span></footer>
   </dialog>
 </body>
 </html>

@@ -161,7 +161,8 @@ der [Setup-Anleitung](setup-web.de.md) und den
   [Rechnungstutorial](tutorials/invoice.de.md).
 - 🧪 `zelyra --help` schließt mit einem deutschen und englischen Schnelleinstieg:
   minimales Projekt oder Rechnungstutorial, gefolgt von Befehlen mit kurzer
-  Erklärung ihres Zwecks.
+  Erklärung ihres Zwecks. `zelyra editor` ist als direkter Start im aktuellen
+  Projektordner ausgewiesen.
 - Studio ist noch keine vollständige IDE oder beliebiger Datenbankdesigner.
 
 ## APIs, Authentifizierung, Berechtigungen und Audit

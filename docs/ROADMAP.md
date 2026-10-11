@@ -646,9 +646,10 @@ released 0.9.0.
   command. The current work already adds file properties, F1 help for core
   language terms, a filterable action finder on Ctrl+Shift+P, and
   compiler-checked diagnostics while typing, suggestions from the compiler
-  project model, and F12 navigation to definitions in saved project files; full
-  task coverage, local/type-aware completion, project-wide search, and
-  symbol-level properties remain open.
+  project model, and F12 navigation to definitions in saved project files. A
+  basic literal search across saved `.zyl` files is also being added. Symbol
+  references, local/type-aware completion, and symbol-level properties remain
+  open.
 - [🗺️] Add compiler-backed completion, symbol navigation, find/references,
   formatting, actionable diagnostics updated while typing, and integrated
   check/run/test tasks. Show clear task progress and output without exposing

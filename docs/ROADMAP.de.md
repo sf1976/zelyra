@@ -618,8 +618,9 @@ Auswirkungen und eine ausdrückliche Bestätigung. Die Roadmap staffelt diese Zi
   filterbaren Aktionsfinder per Strg+Umschalt+P und compilergeprüfte Diagnosen
   während der Eingabe sowie Vorschläge für Deklarationen aus dem Compiler-
   Projektmodell und F12-Sprünge zu Definitionen aus gespeicherten Projektdateien;
-  projektweite Suche, lokale/typisierte Vervollständigung und symbolbezogene
-  Eigenschaften bleiben offen.
+  eine einfache literale Suche über gespeicherte `.zyl`-Dateien kommt hinzu.
+  Symbolsuche/Referenzen, lokale/typisierte Vervollständigung und
+  symbolbezogene Eigenschaften bleiben offen.
 - [🗺️] Compiler-gestützte Vervollständigung, Symbolnavigation, Suche/Referenzen,
   Formatierung, handlungsorientierte und während der Eingabe aktualisierte
   Diagnosen sowie integrierte Check-, Run- und Test-Aufgaben ergänzen.

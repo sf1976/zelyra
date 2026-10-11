@@ -257,6 +257,16 @@ fn editor_response(
     }
     match (request.method.as_str(), operation) {
         ("GET", "tree") => tree_response(state),
+        ("GET", "search") => {
+            let query = request
+                .target
+                .split_once('?')
+                .map(|(_, query)| query)
+                .unwrap_or_default();
+            let values =
+                zelyra_web::parse_urlencoded(query).map_err(|error| (400, error.message))?;
+            search_editor_project(state, values.get("q").map(String::as_str).unwrap_or(""))
+        }
         ("GET", "database-schema") => database_schema_response(state),
         ("GET", "symbols") => {
             let query = request
@@ -1053,6 +1063,65 @@ fn tree_response(state: &EditorState) -> Result<(u16, &'static str, String), (u1
         200,
         "application/json; charset=utf-8",
         json!({"files": files}).to_string(),
+    ))
+}
+
+fn search_editor_project(
+    state: &EditorState,
+    query: &str,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let query = query.trim();
+    if query.is_empty() || query.chars().count() > 120 {
+        return Err((400, "search text must contain 1 to 120 characters".into()));
+    }
+    let mut files = Vec::new();
+    collect_editor_files(&state.root, &state.root, 0, &mut files)?;
+    files.sort();
+    let mut matches = Vec::new();
+    let mut truncated = false;
+    'files: for relative in files.iter().filter(|path| path.ends_with(".zyl")) {
+        let path = safe_editor_path(&state.root, relative, false)?;
+        let source = match fs::read_to_string(path) {
+            Ok(source) => source,
+            Err(_) => continue,
+        };
+        for (line_index, line) in source.lines().enumerate() {
+            for (byte_column, _) in line.match_indices(query) {
+                if matches.len() == 500 {
+                    truncated = true;
+                    break 'files;
+                }
+                let prefix = &line[..byte_column];
+                let mut snippet_start = byte_column.saturating_sub(100);
+                while !line.is_char_boundary(snippet_start) {
+                    snippet_start += 1;
+                }
+                let mut snippet_end = byte_column
+                    .saturating_add(query.len())
+                    .saturating_add(140)
+                    .min(line.len());
+                while !line.is_char_boundary(snippet_end) {
+                    snippet_end -= 1;
+                }
+                let snippet = format!(
+                    "{}{}{}",
+                    if snippet_start > 0 { "…" } else { "" },
+                    &line[snippet_start..snippet_end],
+                    if snippet_end < line.len() { "…" } else { "" }
+                );
+                matches.push(json!({
+                    "path": relative,
+                    "line": line_index + 1,
+                    "column": prefix.encode_utf16().count() + 1,
+                    "snippet": snippet,
+                }));
+            }
+        }
+    }
+    Ok((
+        200,
+        "application/json; charset=utf-8",
+        json!({"matches": matches, "truncated": truncated}).to_string(),
     ))
 }
 

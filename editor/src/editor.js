@@ -67,6 +67,7 @@ const messages = {
     taskPropertiesHelp: "Informationen und Aktionen zur aktuellen Datei anzeigen", taskSearch: "Text suchen", taskSearchHelp: "Im aktuellen Dokument suchen",
     taskGoToDefinition: "Zur Definition springen", taskGoToDefinitionHelp: "Zur Funktion oder zum Typ am Cursor springen (F12)",
     definitionNotFound: "Keine passende Definition im Projekt gefunden.", definitionSaveFirst: "Speichere die Datei vor dem Sprung, damit die Quellposition stimmt.", definitionOpened: "Definition geöffnet: {0}",
+    projectSearch: "Projekt durchsuchen", projectSearchTitle: "Projekt durchsuchen", projectSearchHelp: "Alle gespeicherten Zelyra-Dateien durchsuchen", projectSearchPlaceholder: "Text in Zelyra-Dateien suchen", projectSearchResults: "Suchergebnisse", projectSearchEmpty: "Keine Treffer gefunden.", projectSearchLoading: "Projekt wird durchsucht …", projectSearchSaveFirst: "Speichere offene Änderungen, bevor du das Projekt durchsuchst.", projectSearchTruncated: "Die Anzeige ist auf die ersten 500 Treffer begrenzt.", projectSearchSubmit: "Suchen",
     assistant: "Hilfe und Eigenschaften", helpTab: "Hilfe", propertiesTab: "Eigenschaften", contextHelp: "KONTEXT-HILFE",
     selectLanguageItem: "Wähle einen Zelyra-Begriff", contextHelpHint: "Bewege den Cursor auf einen Begriff. F1 öffnet diese Hilfe.",
     fileProperties: "DATEIEIGENSCHAFTEN", fileType: "Dateityp", filePath: "Projektpfad", fileStatus: "Status",
@@ -131,6 +132,7 @@ const messages = {
     taskPropertiesHelp: "Show information and actions for the active file", taskSearch: "Find text", taskSearchHelp: "Search in the active document",
     taskGoToDefinition: "Go to definition", taskGoToDefinitionHelp: "Go to the function or type at the cursor (F12)",
     definitionNotFound: "No matching project definition was found.", definitionSaveFirst: "Save this file before jumping so source positions stay accurate.", definitionOpened: "Opened definition: {0}",
+    projectSearch: "Search project", projectSearchTitle: "Search project", projectSearchHelp: "Search all saved Zelyra files", projectSearchPlaceholder: "Search text in Zelyra files", projectSearchResults: "Search results", projectSearchEmpty: "No matches found.", projectSearchLoading: "Searching the project …", projectSearchSaveFirst: "Save open changes before searching the project.", projectSearchTruncated: "Showing the first 500 matches only.", projectSearchSubmit: "Search",
     assistant: "Help and properties", helpTab: "Help", propertiesTab: "Properties", contextHelp: "CONTEXT HELP",
     selectLanguageItem: "Select a Zelyra term", contextHelpHint: "Place the cursor on a term. Press F1 to open this help.",
     fileProperties: "FILE PROPERTIES", fileType: "File type", filePath: "Project path", fileStatus: "Status",
@@ -501,6 +503,7 @@ const studioTasks = [
   ["taskProperties", "taskPropertiesHelp", ["properties", "file", "settings"], () => toggleAssistant("properties")],
   ["taskSearch", "taskSearchHelp", ["find", "search", "text"], () => findInDocument()],
   ["taskGoToDefinition", "taskGoToDefinitionHelp", ["definition", "symbol", "function", "type", "f12"], () => void goToDefinition()],
+  ["projectSearch", "projectSearchHelp", ["project", "search", "find", "all files"], () => openProjectSearch()],
 ];
 let selectedTaskIndex = 0;
 
@@ -537,6 +540,65 @@ function findInDocument() {
   if (!editor) return;
   editor.focus();
   import("@codemirror/search").then(({ openSearchPanel }) => openSearchPanel(editor));
+}
+
+function openProjectSearch() {
+  if (dirtyCount()) { announce(t("projectSearchSaveFirst"), "warning"); return; }
+  const dialog = $("project-search");
+  if (!dialog.open) dialog.showModal();
+  $("project-search-input").value = "";
+  $("project-search-results").replaceChildren();
+  $("project-search-empty").hidden = true;
+  $("project-search-input").focus();
+}
+
+async function performProjectSearch() {
+  if (dirtyCount()) { announce(t("projectSearchSaveFirst"), "warning"); $("project-search").close(); return; }
+  const query = $("project-search-input").value.trim();
+  if (!query) return;
+  const results = $("project-search-results");
+  results.replaceChildren();
+  const empty = $("project-search-empty");
+  empty.textContent = t("projectSearchLoading");
+  empty.hidden = false;
+  try {
+    const response = await api(`search?q=${encodeURIComponent(query)}`);
+    const matches = response.matches || [];
+    empty.textContent = t("projectSearchEmpty");
+    empty.hidden = matches.length > 0;
+    for (const match of matches) {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "task-finder-item";
+      row.setAttribute("role", "option");
+      const file = document.createElement("strong");
+      file.textContent = `${match.path}:${match.line}:${match.column}`;
+      const snippet = document.createElement("span");
+      snippet.textContent = match.snippet;
+      row.append(file, snippet);
+      row.addEventListener("click", () => {
+        void openFile(match.path).then(() => {
+          if (activePath !== match.path || !editor) return;
+          const lineNumber = Math.max(1, Math.min(match.line, editor.state.doc.lines));
+          const line = editor.state.doc.line(lineNumber);
+          const position = Math.min(line.from + Math.max(0, match.column - 1), line.to);
+          editor.dispatch({ selection: { anchor: position }, scrollIntoView: true });
+          editor.focus();
+          $("project-search").close();
+        });
+      });
+      results.append(row);
+    }
+    if (response.truncated) {
+      const note = document.createElement("p");
+      note.className = "task-finder-empty";
+      note.textContent = t("projectSearchTruncated");
+      results.append(note);
+    }
+  } catch (error) {
+    empty.textContent = error.message;
+    empty.hidden = false;
+  }
 }
 
 async function goToDefinition() {
@@ -1255,6 +1317,11 @@ $("assistant-format").addEventListener("click", formatActive);
 $("assistant-check").addEventListener("click", checkProject);
 $("task-finder-button").addEventListener("click", openTaskFinder);
 $("task-finder-close").addEventListener("click", () => $("task-finder").close());
+$("project-search-button").addEventListener("click", openProjectSearch);
+$("project-search-close").addEventListener("click", () => $("project-search").close());
+$("project-search-input").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") { event.preventDefault(); void performProjectSearch(); }
+});
 $("task-finder-input").addEventListener("input", () => { selectedTaskIndex = 0; renderTaskFinder(); });
 $("task-finder-input").addEventListener("keydown", (event) => {
   const rows = [...$("task-finder-results").querySelectorAll(".task-finder-item")];
@@ -1290,7 +1357,9 @@ window.addEventListener("beforeunload", (event) => {
 });
 window.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && $("task-finder").open) { event.preventDefault(); $("task-finder").close(); }
+  if (event.key === "Escape" && $("project-search").open) { event.preventDefault(); $("project-search").close(); }
   if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "p") { event.preventDefault(); openTaskFinder(); }
+  if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "f") { event.preventDefault(); openProjectSearch(); }
   if (event.key === "F1") { event.preventDefault(); toggleAssistant("help"); }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); saveActive(); }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "p") {
