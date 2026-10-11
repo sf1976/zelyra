@@ -663,6 +663,16 @@ Auswirkungen und eine ausdrückliche Bestätigung. Die Roadmap staffelt diese Zi
 
 ## Release 0.9.3 — Datenbankwerkbank
 
+- [🗺️] Einen schreibgeschützten Laravel-Projektanalysator in der Zelyra-CLI
+  beginnen: `zelyra migrate laravel <projekt> --report <pfad>`. Er erfasst
+  Laravel-/Paketversionen, Routen und Middleware, Controller, Models,
+  Migrationen, Validierungen, Views, Jobs und Integrationen statisch und
+  verknüpft die Funde mit Quellpositionen. Er darf die Anwendung nicht starten,
+  Artisan nicht aufrufen, keine Datenbankverbindung öffnen und keine `.env`-
+  Dateien lesen. Berichte unterscheiden direkt abbildbare, teilweise
+  abbildbare, manuell umzusetzen und nicht sicher zuordenbare Elemente und
+  nennen den nächsten sicheren Schritt. Der unterstützte Musterumfang wird
+  dokumentiert; mehrdeutige Funde bleiben offen statt erraten zu werden.
 - [🗺️] Die Datenbankansicht der IDE zur sicheren Werkbank ausbauen: Tabellen,
   Spalten, Indizes und deklarierte Beziehungen ansehen, Datensätze standardmäßig
   schreibgeschützt durchsuchen und den zuständigen Quellmodulen zuordnen. Das
@@ -717,6 +727,13 @@ Auswirkungen und eine ausdrückliche Bestätigung. Die Roadmap staffelt diese Zi
 
 ## Release 0.9.4 — Visueller CRUD-Entwurf
 
+- [🗺️] Die Laravel-Analyse zu einem belegbaren Projektgraphen ausbauen:
+  Route → Middleware/Controller → Model/Beziehung → Migration/Tabelle → View,
+  einschließlich Validierungsregeln, Paketabhängigkeiten, Datei- und
+  Zeilenpositionen sowie ausdrücklich unaufgelöster Verbindungen. Lesbare
+  Markdown- und maschinenlesbare JSON-Berichte ausgeben. Versionierte
+  Kompatibilitätsregeln beschreiben Auswirkungen und nötige manuelle Arbeit;
+  ähnliche Syntax belegt kein gleiches Verhalten.
 - [🗺️] Verständliche relationale CRUD-Abläufe in Studio ermöglichen: Tabellen
   und Beziehungen wählen, Felder und Formulare entwerfen, Routen und Quelltext
   vorschauen, den gesamten Änderungsumfang prüfen, Compilerchecks ausführen und
@@ -751,6 +768,12 @@ Auswirkungen und eine ausdrückliche Bestätigung. Die Roadmap staffelt diese Zi
 
 ## Release 0.9.5 — Eigene Mail- und SMTP-Unterstützung
 
+- [🗺️] Eine versionierte Kompatibilitätsanalyse für Laravel-Authentifizierung,
+  Policies/Berechtigungen, Geschäftslogik, Transaktionen, Geldfelder, Jobs,
+  Integrationen, Dateiablage und Views ergänzen. Sicherheitskritische oder
+  verhaltensabhängige Funde müssen zur menschlichen Prüfung markiert werden,
+  darunter Statuswechsel, Summen, Nebenwirkungen und Fehlerbehandlung. Die
+  Analyse muss ohne PHP-Pakete und laufende Laravel-Umgebung funktionieren.
 - [🗺️] Explizite Mailunterstützung ohne verpflichtenden Anbieter vervollständigen:
   MIME-Text/HTML, kodierte Header, SMTP-Authentifizierung, implizites TLS,
   STARTTLS, Timeouts, begrenzte Wiederholungen und Anbindung an die vorhandene
@@ -763,6 +786,15 @@ Auswirkungen und eine ausdrückliche Bestätigung. Die Roadmap staffelt diese Zi
 
 ## Release 0.9.6 — Benachrichtigungszentrum
 
+- [🗺️] Eine ausdrücklich angeforderte Gerüsterzeugung mit
+  `zelyra migrate laravel <projekt> --output <ziel>` ergänzen; `--report` und
+  `--output` dürfen gemeinsam verwendet werden. Nur auf Wunsch ein separates
+  Zelyra-Projekt erzeugen, Quellfundstellen und IDs der Zuordnungsregeln in
+  generierten Dateien erhalten und niemals Geheimnisse, `.env`-Werte,
+  personenbezogene Einträge oder Produktionsdaten kopieren. Überlappende
+  Quell-/Berichts-/Zielpfade und unsichere bestehende Ziele ablehnen. Der Bericht
+  muss Gerüst und tatsächlich übertragene Geschäftslogik unterscheiden; jedes
+  erzeugte Projekt muss mit dem passenden Zelyra-Compiler geprüft werden.
 - [🗺️] Ein persistentes, mandantengebundenes In-App-Benachrichtigungszentrum mit
   ungelesener Anzahl, Gelesen-/Archiviert-Aktionen, Seitennavigation,
   Einstellungen und klaren Aufbewahrungsregeln bauen. Anwendungsereignisse
@@ -776,6 +808,15 @@ Auswirkungen und eine ausdrückliche Bestätigung. Die Roadmap staffelt diese Zi
 
 ## Release 0.9.7 — Datenbank- und Sicherheitshärtung
 
+- [🗺️] Die Laravel-Analyse für Mandantengrenzen, Autorisierung,
+  Datei-Downloads/-Uploads, Zahlungs-/Buchhaltungsabläufe und öffentliche
+  Endpunkte härten. Soweit die unterstützte Syntax reicht, Belege über Routen,
+  Middleware, Controller, Models und Beziehungen verfolgen und manipulierte
+  IDs sowie Mandantenüberschreitungen markieren. Bei fehlenden oder mehrdeutigen
+  statischen Belegen ist eine manuelle Prüfung erforderlich; Verhalten darf
+  nicht stillschweigend ausgelassen werden. Test-Fixtures für Mandantentrennung,
+  Fremdschlüssel, Transaktionen, Dezimal-Geldbeträge, Berechtigungen und
+  Dateiablage ergänzen.
 - [🗺️] Die für 1.0 zugesagte MariaDB-, MySQL- und PostgreSQL-Ablaufmatrix
   schließen: Schemaansicht, Migrationen, CRUD, Transaktionen, TLS, Backup und
   Restore, soweit ein Backend diese Funktion beansprucht. Unabhängige Reviews
@@ -796,6 +837,14 @@ Auswirkungen und eine ausdrückliche Bestätigung. Die Roadmap staffelt diese Zi
 
 ## Release 0.9.8 — Probe der Produktionsreife
 
+- [🗺️] Den unterstützten Umfang des Laravel-Migrators und seine versionierte
+  Kompatibilitätsmatrix abschließen. Schreibgeschützte Analyse,
+  Geheimnis-/PII-Redaktion, Quellpositionsgenauigkeit, Routen-Daten-Beziehungen,
+  Behandlung von Mehrdeutigkeiten, Pfadtrennung, Herkunftsverweise in
+  generierten Dateien und compilergeprüfte Ausgabe an repräsentativen Laravel-
+  Fixtures prüfen. Unterstützte Laravel-/Paketmuster und Grenzen dokumentieren.
+  Keine automatische Geschäftslogik- oder Sicherheitsparität behaupten; das
+  Werkzeug liefert einen überprüfbaren Migrationsstartpunkt.
 - [🗺️] Saubere Installation, Upgrade, Rollback, Migration, Backup und Restore
   auf unterstützten Betriebssystemen und Datenbanken proben. Betreiber- und
   Nutzerdokumentation, Lizenz-/Abhängigkeitsreview, Ressourcenlimits,

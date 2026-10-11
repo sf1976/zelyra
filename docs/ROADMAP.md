@@ -678,6 +678,15 @@ released 0.9.0.
 
 ## Release 0.9.3 — database workbench
 
+- [🗺️] Start a read-only Laravel project analyzer in the Zelyra CLI:
+  `zelyra migrate laravel <project> --report <path>`. It statically inventories
+  Laravel/package versions, routes and middleware, controllers, models,
+  migrations, validation, views, jobs, and integrations, and links findings to
+  source locations. It must not boot the application, invoke Artisan, connect to
+  a database, or read `.env` files. Reports distinguish directly mappable,
+  partially mappable, manual, and unresolved items and identify a safe next
+  step. Start with a documented supported-pattern subset; ambiguous matches
+  remain unresolved rather than guessed.
 - [🗺️] Grow the IDE database view into a safe workbench: inspect tables,
   columns, indexes, and declared relationships; browse records read-only by
   default; show how source modules own each object. Make the ER diagram
@@ -727,6 +736,13 @@ released 0.9.0.
 
 ## Release 0.9.4 — visual CRUD design
 
+- [🗺️] Expand Laravel analysis into an evidence-linked project graph:
+  route → middleware/controller → model/relation → migration/table → view,
+  with validation rules, package dependencies, file and line locations, and
+  explicit unresolved edges. Produce readable Markdown and machine-readable
+  JSON reports. Version compatibility mappings and describe the behavioral
+  impact and required manual work; matching syntax is not proof of equivalent
+  behavior.
 - [🗺️] Make relational CRUD and business-chart workflows understandable in
   Studio: choose tables and relationships, design fields and forms, and configure
   metrics through the properties sidebar instead of chart commands. Preview
@@ -759,6 +775,12 @@ released 0.9.0.
 
 ## Release 0.9.5 — first-party mail and SMTP
 
+- [🗺️] Add versioned compatibility analysis for Laravel authentication,
+  policies/permissions, business logic, transactions, money fields, jobs,
+  integrations, file handling, and views. Mark security-sensitive or
+  behavior-dependent findings for human review, including status changes,
+  totals, side effects, and failure handling. Keep this analyzer useful without
+  PHP packages or a running Laravel environment.
 - [🗺️] Complete explicit application mail support without a mandatory provider:
   MIME text/HTML messages, encoded headers, SMTP authentication, implicit TLS,
   STARTTLS, timeouts, bounded retries, and integration with the existing
@@ -771,6 +793,14 @@ released 0.9.0.
 
 ## Release 0.9.6 — notification center
 
+- [🗺️] Add opt-in scaffold generation with
+  `zelyra migrate laravel <project> --output <target>`; allow `--report` and
+  `--output` together. Generate a separate Zelyra project only when requested,
+  preserve source attribution and mapping-rule identifiers in generated files,
+  and never copy secrets, `.env` values, personal records, or production data.
+  Refuse overlapping source/report/output paths and unsafe existing targets.
+  The report must distinguish generated scaffolding from transferred business
+  behavior, and every generated project must pass the matching Zelyra compiler.
 - [🗺️] Add a persistent, tenant-scoped in-app notification center with unread
   counts, read/archive actions, pagination, preferences, and clear retention
   rules. Connect application events to optional email through the 0.9.5 SMTP
@@ -783,6 +813,13 @@ released 0.9.0.
 
 ## Release 0.9.7 — database and security hardening
 
+- [🗺️] Harden Laravel migration analysis for tenant boundaries, authorization,
+  downloads/uploads, payments/accounting, and public endpoints. Trace evidence
+  through routes, middleware, controllers, models, and relations where the
+  supported syntax permits; flag manipulated-ID and cross-tenant risks. When
+  static evidence is missing or ambiguous, require manual review and never
+  silently omit the behavior. Add fixtures for tenant isolation, foreign keys,
+  transactions, decimal money, permissions, and file storage.
 - [🗺️] Close the promised MariaDB, MySQL, and PostgreSQL workflow matrix for
   1.0, including schema inspection, migrations, CRUD, transactions, TLS, backup,
   and restore where each backend claims support. Complete independent review
@@ -802,6 +839,13 @@ released 0.9.0.
 
 ## Release 0.9.8 — production-readiness rehearsal
 
+- [🗺️] Complete the supported Laravel Migrator scope and its versioned
+  compatibility matrix. Verify read-only analysis, secret/PII redaction,
+  source-location accuracy, route-to-data relationship reports, ambiguity
+  handling, path separation, provenance in generated files, and compiler-valid
+  output on representative Laravel fixtures. Document supported Laravel and
+  package patterns plus known limits. No automatic business-logic or security
+  parity claim is made; the tool supplies an auditable migration starting point.
 - [🗺️] Rehearse clean installation, upgrades, rollback, migration, backup and
   restore on supported operating systems and databases. Finish operator and
   user documentation, dependency/license review, resource limits, error
