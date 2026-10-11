@@ -657,7 +657,6 @@ async function performProjectSearch() {
       const row = document.createElement("button");
       row.type = "button";
       row.className = "task-finder-item";
-      row.setAttribute("role", "option");
       const file = document.createElement("strong");
       file.textContent = `${match.path}:${match.line}:${match.column}`;
       const snippet = document.createElement("span");
@@ -882,18 +881,31 @@ function renderTree() {
   const draw = (node, target, depth = 0) => {
     [...node.children.entries()].sort((a, b) => Number(a[1].file) - Number(b[1].file) || a[0].localeCompare(b[0])).forEach(([name, item]) => {
       const row = document.createElement("button");
+      row.type = "button";
       row.className = `tree-item${item.file ? " file" : " folder"}${item.path === activePath ? " selected" : ""}`;
       row.style.setProperty("--depth", depth);
       row.title = item.path;
-      const icon = document.createElement("span"); icon.className = "tree-icon"; icon.textContent = item.file ? fileIcon(name) : "▸";
+      const icon = document.createElement("span"); icon.className = "tree-icon"; icon.setAttribute("aria-hidden", "true"); icon.textContent = item.file ? fileIcon(name) : "▸";
       const label = document.createElement("span"); label.className = "tree-label"; label.textContent = name;
       row.append(icon, label);
-      row.addEventListener("click", () => item.file ? openFile(item.path) : row.classList.toggle("collapsed"));
+      if (item.file) {
+        if (item.path === activePath) row.setAttribute("aria-current", "page");
+        row.addEventListener("click", () => openFile(item.path));
+      } else {
+        const childrenId = `tree-folder-${encodeURIComponent(item.path)}`;
+        row.setAttribute("aria-expanded", "true");
+        row.setAttribute("aria-controls", childrenId);
+        row.addEventListener("click", () => {
+          const collapsed = !row.classList.contains("collapsed");
+          row.classList.toggle("collapsed", collapsed);
+          row.setAttribute("aria-expanded", String(!collapsed));
+          children.hidden = collapsed;
+        });
+      }
       target.append(row);
       if (!item.file) {
-        const children = document.createElement("div"); children.className = "tree-children";
+        const children = document.createElement("div"); children.className = "tree-children"; children.id = `tree-folder-${encodeURIComponent(item.path)}`;
         row.after(children); draw(item, children, depth + 1);
-        row.addEventListener("click", () => { children.hidden = row.classList.contains("collapsed"); });
       }
     });
   };
