@@ -1,6 +1,6 @@
 # Implemented in Zelyra 0.9.3
 
-**Snapshot:** stable 0.9.3 · language compatibility line `0.1` · 2026-10-11
+**Snapshot:** stable 0.9.3 · language compatibility line `0.1` · 2026-10-12
 **Maturity:** experimental; not approved for production use
 
 This is an inventory of capabilities implemented in the stable Zelyra 0.9.3
