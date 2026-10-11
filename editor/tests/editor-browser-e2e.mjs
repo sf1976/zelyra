@@ -12,6 +12,7 @@ try {
   const browserErrors = [];
   const liveChecks = [];
   const databaseRowRequests = [];
+  let databaseCreateRequest = null;
   let schemaApplyRequest = null;
   let schemaSourceHash = "";
   let schemaCandidateContent = "";
@@ -37,6 +38,20 @@ try {
       }] }], unmapped_live_tables: [], crud_resources: [{ table: "customers", name: "CustomerResource" }], crud_targets: ["main.zyl"],
     }),
   }));
+  await page.route("**/__zelyra/editor/api/database-target", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ engine: "mariadb", database: "studio_db", configured: true, creationSupported: true }),
+  }));
+  await page.route("**/__zelyra/editor/api/database-create", async (route) => {
+    databaseCreateRequest = route.request().postDataJSON();
+    assert.equal(route.request().headers()["x-zelyra-editor-token"], token);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ created: true, database: "studio_db", message: "The declared MariaDB database now exists." }),
+    });
+  });
   await page.route("**/__zelyra/editor/api/database-rows?**", async (route) => {
     const request = route.request();
     assert.equal(request.headers()["x-zelyra-editor-token"], token, "row browsing must use the local editor session token");
@@ -151,6 +166,14 @@ try {
   await page.waitForFunction(() => document.querySelector("#active-file")?.textContent === "main.zyl");
 
   await page.locator("#database-button").click();
+  await page.locator("#database-create").waitFor({ state: "visible" });
+  page.once("dialog", async (dialog) => {
+    assert.match(dialog.message(), /studio_db/);
+    await dialog.accept();
+  });
+  await page.locator("#database-create").click();
+  await page.waitForFunction(() => document.querySelector("#database-target-state")?.textContent.includes("Datenbank vorhanden"));
+  assert.equal(databaseCreateRequest.confirm, true, "database creation must require explicit confirmation");
   const customerTable = page.locator(".database-table-item", { hasText: "customers" });
   await customerTable.waitFor();
   await customerTable.click();

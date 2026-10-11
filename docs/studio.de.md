@@ -83,6 +83,13 @@ Diagnosen und den Hinweis auf den erforderlichen Schema-Plan. Die Übernahme
 Nutzer `zelyra db plan main.zyl` prüfen und die Datenbankaktion separat
 ausführen.
 
+Für ein MariaDB-Projekt mit bereits konfigurierter Verbindung kann **MariaDB-
+Datenbank anlegen** die deklarierte Datenbank ausdrücklich anlegen oder ihre
+Existenz sicherstellen. Studio fragt vorher nach Bestätigung und verwendet die
+Verbindung nur serverseitig. Die Aktion wendet keine Tabellenmigration an.
+Backend- und Zugangsdaten lassen sich in dieser Version noch nicht in Studio
+konfigurieren; PostgreSQL- und MySQL-Datenbankanlage sind nicht enthalten.
+
 In dieser Version unterstützt die visuelle Live-Introspektion MariaDB und
 PostgreSQL entsprechend der geprüften `db map`-Unterstützung. Für MySQL zeigt
 Studio ausdrücklich an, dass die Schema-Introspektion noch nicht unterstützt
@@ -111,6 +118,6 @@ Datenbank und verändert keine Datensätze.
 ## Umfang
 
 Studio ist eine lokale IDE-Grundlage und noch keine vollständige IDE.
-Die Datenbankansicht ist ein lesender Schemaüberblick, kein beliebiger
-Datenbankdesigner. Die CRUD-Erzeugung arbeitet mit bereits deklarierten
-Tabellen und prüft den erzeugten Code vor dem Schreiben.
+Die Datenbankwerkbank unterstützt ausgewählte Schema-/Datenbankaktionen, aber
+keinen beliebigen Datenbankdesigner. Die CRUD-Erzeugung arbeitet mit bereits
+deklarierten Tabellen und prüft den erzeugten Code vor dem Schreiben.

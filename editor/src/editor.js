@@ -131,6 +131,11 @@ const messages = {
     recordPreviewPage: "Zeilen {0}–{1}", recordPreviewEmpty: "Keine Datensätze auf dieser Seite.",
     recordPreviewIncomplete: "Die Vorschau ist begrenzt. Lange Werte oder zusätzliche Spalten wurden gekürzt.",
     recordPreviewFailed: "Datensätze konnten nicht geladen werden.",
+    createDatabase: "MariaDB-Datenbank anlegen", databaseTargetLoading: "Prüfe Projektziel …",
+    databaseTargetMissing: "Kein unterstütztes MariaDB-Ziel mit Verbindung konfiguriert.",
+    databaseTargetReady: "MariaDB-Ziel {0} · Verbindung konfiguriert",
+    databaseCreateConfirm: "Die MariaDB-Datenbank {0} anlegen oder sicherstellen, dass sie existiert? Die Zugangsdaten werden nur serverseitig verwendet.",
+    databaseCreated: "Datenbank vorhanden. Prüfe den Schema-Plan und wende ihn separat an.",
     tableNotDeclared: "Diese Live-Tabelle ist noch nicht in Zelyra deklariert. Lege zuerst eine geprüfte Tabellendeklaration an.",
     existingCrud: "Für diese Tabelle existiert bereits eine CRUD-Ressource.",
     previewRunning: "Prüfe erzeugten Code …", previewPassed: "Compilerprüfung bestanden · Änderung noch nicht übernommen",
@@ -217,6 +222,11 @@ const messages = {
     recordPreviewPage: "Rows {0}–{1}", recordPreviewEmpty: "No records on this page.",
     recordPreviewIncomplete: "The preview is bounded. Long values or additional columns were shortened.",
     recordPreviewFailed: "Could not load records.",
+    createDatabase: "Create MariaDB database", databaseTargetLoading: "Checking project target …",
+    databaseTargetMissing: "No supported MariaDB target with a configured connection.",
+    databaseTargetReady: "MariaDB target {0} · connection configured",
+    databaseCreateConfirm: "Create the MariaDB database {0}, or ensure that it exists? Credentials are used only on the local server.",
+    databaseCreated: "Database exists. Review and apply the schema plan separately.",
     tableNotDeclared: "This live table is not declared in Zelyra yet. Add a reviewed table declaration first.",
     existingCrud: "A CRUD resource already exists for this table.",
     previewRunning: "Checking generated source …", previewPassed: "Compiler check passed · change not yet applied",
@@ -998,6 +1008,48 @@ async function loadDatabaseSchema() {
   }
 }
 
+async function loadDatabaseTarget() {
+  const status = $("database-target-state");
+  const button = $("database-create");
+  status.textContent = t("databaseTargetLoading");
+  button.hidden = true;
+  try {
+    const target = await api("database-target");
+    if (target.creationSupported) {
+      status.textContent = t("databaseTargetReady", target.database || "main");
+      button.hidden = false;
+    } else {
+      status.textContent = t("databaseTargetMissing");
+    }
+  } catch (error) {
+    status.textContent = error.message;
+  }
+}
+
+async function createDatabaseFromStudio() {
+  const status = $("database-target-state");
+  const button = $("database-create");
+  try {
+    const target = await api("database-target");
+    if (!target.creationSupported) throw new Error(t("databaseTargetMissing"));
+    if (!window.confirm(t("databaseCreateConfirm", target.database || "main"))) return;
+    button.disabled = true;
+    const result = await api("database-create", {
+      method: "POST",
+      body: JSON.stringify({ confirm: true }),
+    });
+    status.textContent = t("databaseCreated");
+    announce(result.message || t("databaseCreated"), "success");
+    databaseMap = null;
+    await loadDatabaseSchema();
+  } catch (error) {
+    status.textContent = error.message;
+    announce(error.message, "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
 function statusLabel(status) {
   return ({ matched: t("matched"), schema_drift: t("schemaDrift"), declared_missing_live: t("declaredMissingLive"), live_unmapped: t("liveUnmapped") })[status] || status;
 }
@@ -1574,6 +1626,7 @@ function openDatabaseWorkbench() {
   $("editor-stage").hidden = true;
   $("database-workbench").hidden = false;
   $("database-button").classList.add("active");
+  void loadDatabaseTarget();
   if (!databaseMap) void loadDatabaseSchema();
 }
 
@@ -1912,6 +1965,7 @@ $("task-finder-input").addEventListener("keydown", (event) => {
 $("code-button").addEventListener("click", openCodeWorkbench);
 $("database-refresh").addEventListener("click", loadDatabaseSchema);
 $("database-start").addEventListener("click", loadDatabaseSchema);
+$("database-create").addEventListener("click", createDatabaseFromStudio);
 $("database-filter").addEventListener("input", (event) => { databaseFilter = event.target.value; renderDatabaseTables(); });
 $("database-record-load").addEventListener("click", () => { void loadDatabaseRecords(0); });
 $("database-record-previous").addEventListener("click", () => {

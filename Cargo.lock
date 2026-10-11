@@ -2050,6 +2050,7 @@ dependencies = [
  "similar",
  "toml",
  "ureq",
+ "url",
  "zelyra-ast",
  "zelyra-database",
  "zelyra-forms",

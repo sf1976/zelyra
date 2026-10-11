@@ -73,6 +73,13 @@ and shows a diff, diagnostics, and a reminder to review the schema plan. The
 operation changes only the Zelyra source file. Review `zelyra db plan main.zyl`
 and apply any database migration separately.
 
+For a MariaDB project with an existing connection configuration, **Create
+MariaDB database** can explicitly create or ensure the declared database
+exists. Studio asks for confirmation first and uses the connection only on the
+local server. The action does not apply table migrations. Backend and
+credentials cannot yet be configured in Studio; PostgreSQL and MySQL database
+creation are not included.
+
 In this release, visual live introspection supports MariaDB and PostgreSQL as
 covered by the tested `db map` support. Studio clearly reports that MySQL
 schema introspection is not yet supported. This is separate from the MySQL
@@ -97,7 +104,7 @@ does not migrate the database or change records.
 
 ## Scope
 
-Studio is a local IDE foundation, not yet a complete IDE. Its database view
-is a read-only schema overview, not an unrestricted database designer. CRUD
-generation works from existing declared tables and validates generated code
-before writing it.
+Studio is a local IDE foundation, not yet a complete IDE. The database
+workbench supports selected schema and database actions, not unrestricted
+database design. CRUD generation works from existing declared tables and
+validates generated code before writing it.

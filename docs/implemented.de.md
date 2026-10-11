@@ -199,8 +199,10 @@ der [Setup-Anleitung](setup-web.de.md) und den
   Anfrage) sowie compilergeprüftes Ergänzen und Bearbeiten einfacher
   Tabellenspalten im Quelltext. Schlüssel-, eindeutige und Default-Felder sind
   vom visuellen Edit ausgeschlossen; jede Änderung verlangt Hashprüfung und
-  Bestätigung und wendet keine Migration an. Backend-/Verbindungswahl,
-  Datenbankanlage und ein vollständiger Plan-/Risikoeditor fehlen noch.
+  Bestätigung und wendet keine Migration an. Eine deklarierte MariaDB kann
+  nach Bestätigung angelegt werden, sofern ihre Verbindung bereits konfiguriert
+  ist; Schemaanwendung bleibt getrennt. Backend-/Verbindungswahl, PostgreSQL-/
+  MySQL-Datenbankanlage und ein vollständiger Plan-/Risikoeditor fehlen noch.
   Einzelheiten: [Studio-Anleitung](studio.de.md).
 - ✅ `zelyra text edit <plan.zedit>` bietet vorschau-basierte Textänderungen aus
   TOML-Plänen mit linearen regulären Ausdrücken, erwarteter Trefferzahl,

@@ -68,7 +68,7 @@
         <section class="database-workbench" id="database-workbench" hidden aria-label="Datenbank Studio">
           <header class="database-header">
             <div><span class="database-eyebrow" data-i18n="databaseStudio">DATENBANK STUDIO</span><h1 data-i18n="databaseTitle">Datenbank verstehen</h1><p data-i18n="databaseIntro">Schemaüberblick und compilergeprüfte CRUD-Vorschau.</p></div>
-            <div class="database-header-actions"><span class="database-connection-state" id="database-state" data-i18n="databaseNotLoaded">Noch nicht verbunden</span><button class="toolbar-button" id="database-refresh" data-i18n="refreshSchema">Schema laden</button><button class="primary-button" id="code-button" data-i18n="backToCode">Zurück zum Code</button></div>
+            <div class="database-header-actions"><span class="database-connection-state" id="database-state" data-i18n="databaseNotLoaded">Noch nicht verbunden</span><span class="database-connection-state" id="database-target-state" role="status" aria-live="polite"></span><button class="toolbar-button" id="database-create" type="button" hidden data-i18n="createDatabase">MariaDB-Datenbank anlegen</button><button class="toolbar-button" id="database-refresh" data-i18n="refreshSchema">Schema laden</button><button class="primary-button" id="code-button" data-i18n="backToCode">Zurück zum Code</button></div>
           </header>
           <div class="database-layout">
             <aside class="database-table-rail">

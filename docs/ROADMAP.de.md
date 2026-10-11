@@ -744,8 +744,10 @@ Arbeitsumfang und technische Gates stehen im [Releaseplan 0.9.3](release-plans/0
   Beziehung zeigt Definition, Quellmodul und verwendende Ressourcen. Studio
   bietet nun einen sitzungsgeschützten, schreibgeschützten Datenbrowser mit
   höchstens 25 Zeilen je Abruf sowie einen compilergeprüften Assistenten zum
-  Ergänzen und Bearbeiten einfacher Quellspalten. Datenbankeinstellungen,
-  Datenbankanlage und die vollständige Plan-/Risikoansicht bleiben offen.
+  Ergänzen und Bearbeiten einfacher Quellspalten. Eine deklarierte MariaDB
+  lässt sich mit vorhandener Verbindung nach Bestätigung anlegen. Die Auswahl
+  der Verbindung, PostgreSQL-/MySQL-Anlage und die vollständige Plan-/Risiko-
+  Ansicht bleiben offen.
 - [🗺️] Fremdschlüssel bis 1.0.0 als durchgängige Datenbankfunktion liefern:
   Referenzen in Zelyra-Tabellenfeldern deklarieren, Zieltabellen und Feldtypen
   im Compiler prüfen, echte Constraints anlegen und auslesen sowie Beziehungen
@@ -779,7 +781,8 @@ Arbeitsumfang und technische Gates stehen im [Releaseplan 0.9.3](release-plans/0
   ausgegeben. Add/Edit für einfache Quellspalten ist compilergeprüft,
   hashgebunden und ausdrücklich bestätigt. Schlüssel-, eindeutige und
   Default-Felder sind vom visuellen Edit ausgeschlossen. Datenbanktyp,
-  Verbindungsdialog und Datenbankanlage sind noch nicht umgesetzt.
+  Verbindungsdialog sowie PostgreSQL-/MySQL-Datenbankanlage sind noch nicht
+  umgesetzt; MariaDB-Anlage nutzt eine bereits konfigurierte Verbindung.
 - [🗺️] Lesende, typisierte Datenquellen für Kennzahlen vorbereiten, damit sie
   in 0.9.4 ohne frei formulierte SQL-Ausdrücke gewählt werden können.
 - [🗺️] Wiederverwendbare JavaScript-ES-Module als Projektdateien planen:

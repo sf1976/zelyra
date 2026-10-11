@@ -752,8 +752,10 @@ Scope and technical gates are in the [0.9.3 release plan](release-plans/0.9.3.en
   filterable and navigable so selecting a field or relationship reveals its
   declaration module and using resources. Studio now offers a session-protected
   read-only data browser capped at 25 rows per request and a compiler-checked
-  helper to add/edit simple source columns. Backend setup, database creation,
-  and the complete reviewed plan/risk view remain open.
+  helper to add/edit simple source columns. A declared MariaDB database can be
+  created after confirmation when a connection is already configured.
+  Connection selection, PostgreSQL/MySQL database creation, and the complete
+  reviewed plan/risk view remain open.
 - [🗺️] Deliver foreign-key relationships as an end-to-end database feature by
   1.0.0: declare references in Zelyra table fields, validate target table and
   column types in the compiler, create and inspect real constraints, and show
@@ -783,7 +785,8 @@ Scope and technical gates are in the [0.9.3 release plan](release-plans/0.9.3.en
   unsupported combinations and never store or print credentials in the browser.
   Add/Edit for simple source columns is compiler-checked, hash-bound, and
   explicitly confirmed. Key, unique, and defaulted columns cannot be edited
-  visually. Backend and connection setup plus database creation remain open.
+  visually. Backend/connection selection and PostgreSQL/MySQL database
+  creation remain open; MariaDB creation uses an existing configured URL.
 - [🗺️] Prepare typed, read-only data sources for metrics so 0.9.4 can offer
   selections without free-form SQL. Mutations and generated schema changes
   require a reviewed plan and explicit confirmation.

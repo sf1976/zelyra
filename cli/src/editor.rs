@@ -369,6 +369,7 @@ fn editor_response(
         }
         ("GET", "project-map") => editor_project_map(state),
         ("GET", "database-schema") => database_schema_response(state),
+        ("GET", "database-target") => database_target_response(state),
         ("GET", "database-rows") => database_rows_response(state, request),
         ("GET", "symbols") => {
             let query = request
@@ -410,6 +411,9 @@ fn editor_response(
         }
         ("POST", "schema-column-apply") => {
             apply_schema_column(state, &parse_json_body(&request.body)?)
+        }
+        ("POST", "database-create") => {
+            create_project_database(state, &parse_json_body(&request.body)?)
         }
         _ => Err((404, "not found".into())),
     }
@@ -1115,6 +1119,123 @@ fn database_schema_response(
 ) -> Result<(u16, &'static str, String), (u16, String)> {
     let (_declared, _live, map) = editor_database_schemas(state)?;
     Ok((200, "application/json; charset=utf-8", map.to_string()))
+}
+
+fn database_target_response(
+    state: &EditorState,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let entry = state.root.join("main.zyl");
+    let declared = database_cli::load_schema(&entry.to_string_lossy()).map_err(|_| {
+        (
+            422,
+            "the project database declaration could not be read".into(),
+        )
+    })?;
+    let database = declared.database.as_ref();
+    let database_url = if let Some(url) = super::database_url_from_schema(&declared) {
+        Some(url)
+    } else {
+        let environment_file = state.root.join(".env");
+        if environment_file.is_file() {
+            super::database_url_from_env_file(
+                &environment_file.to_string_lossy(),
+                database.map(|database| database.name.as_str()),
+            )
+            .map_err(|_| (422, "the project environment file could not be read".into()))?
+            .map(|(url, _)| url)
+        } else {
+            None
+        }
+    };
+    let configured = database_url.is_some();
+    let engine = database
+        .map(|database| database.engine.as_str())
+        .unwrap_or("none");
+    let target_database = database
+        .and_then(|database| database.database.clone())
+        .or_else(|| {
+            database_url.as_deref().and_then(|value| {
+                url::Url::parse(value)
+                    .ok()
+                    .and_then(|url| url.path_segments()?.next_back().map(str::to_owned))
+            })
+        });
+    let response = json!({
+        "engine": engine,
+        "database": target_database,
+        "configured": configured,
+        "creationSupported": engine.eq_ignore_ascii_case("mariadb") && configured,
+    });
+    Ok((200, "application/json; charset=utf-8", response.to_string()))
+}
+
+fn create_project_database(
+    state: &EditorState,
+    value: &Value,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    if value.get("confirm").and_then(Value::as_bool) != Some(true) {
+        return Err((
+            400,
+            "explicit confirmation is required to create the project database".into(),
+        ));
+    }
+    let entry = state.root.join("main.zyl");
+    let declared = database_cli::load_schema(&entry.to_string_lossy()).map_err(|_| {
+        (
+            422,
+            "the project database declaration could not be read".into(),
+        )
+    })?;
+    let database = declared.database.as_ref().ok_or((
+        422,
+        "declare a MariaDB database in the project first".into(),
+    ))?;
+    if !database.engine.eq_ignore_ascii_case("mariadb") {
+        return Err((
+            501,
+            "Studio database creation currently supports MariaDB projects with existing connection configuration".into(),
+        ));
+    }
+    let database_url = if let Some(url) = super::database_url_from_schema(&declared) {
+        url
+    } else {
+        let environment_file = state.root.join(".env");
+        if !environment_file.is_file() {
+            return Err((
+                422,
+                "configure the MariaDB URL in the process environment or project .env file first"
+                    .into(),
+            ));
+        }
+        super::database_url_from_env_file(
+            &environment_file.to_string_lossy(),
+            Some(database.name.as_str()),
+        )
+        .map_err(|_| (422, "the project environment file could not be read".into()))?
+        .map(|(url, _)| url)
+        .ok_or((
+            422,
+            "configure the MariaDB URL in the process environment or project .env file first"
+                .into(),
+        ))?
+    };
+    zelyra_database::create_mariadb_database(&database_url).map_err(|_| {
+        (
+            502,
+            "MariaDB could not create or verify the declared database; check server access and privileges".into(),
+        )
+    })?;
+    let target_database = database.database.clone().or_else(|| {
+        url::Url::parse(&database_url)
+            .ok()
+            .and_then(|url| url.path_segments()?.next_back().map(str::to_owned))
+    });
+    let response = json!({
+        "created": true,
+        "database": target_database,
+        "message": "The declared MariaDB database now exists. Review and apply its schema separately.",
+    });
+    Ok((200, "application/json; charset=utf-8", response.to_string()))
 }
 
 fn database_rows_response(
@@ -3274,6 +3395,7 @@ mod tests {
             ("POST", "/__zelyra/editor/api/file"),
             ("POST", "/__zelyra/editor/api/file-rename"),
             ("DELETE", "/__zelyra/editor/api/file"),
+            ("POST", "/__zelyra/editor/api/database-create"),
         ] {
             let request = request(
                 method,
@@ -3295,7 +3417,9 @@ mod tests {
         let state = project();
         for path in [
             "/__zelyra/editor/api/database-schema",
+            "/__zelyra/editor/api/database-target",
             "/__zelyra/editor/api/database-rows?table=users",
+            "/__zelyra/editor/api/database-create",
             "/__zelyra/editor/api/crud-preview",
             "/__zelyra/editor/api/crud-apply",
         ] {
@@ -3303,6 +3427,56 @@ mod tests {
             let error = editor_response(&request, &state).expect_err("API token is required");
             assert_eq!(error.0, 403, "endpoint {path} must be protected");
         }
+        let _ = fs::remove_dir_all(state.root.clone());
+    }
+
+    #[test]
+    fn database_target_reports_only_safe_mariadb_configuration_metadata() {
+        let state = project();
+        fs::write(
+            state.root.join("main.zyl"),
+            "database main {\n    engine: mariadb\n}\nfn main() {}\n",
+        )
+        .expect("write MariaDB project source");
+        fs::write(
+            state.root.join(".env"),
+            "DATABASE_URL=mysql://studio_user:studio_secret@127.0.0.1:3306/studio_db\n",
+        )
+        .expect("write local connection configuration");
+        let (status, _, body) = database_target_response(&state).expect("inspect target metadata");
+        let value: Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(status, 200);
+        assert_eq!(value["engine"], "mariadb");
+        assert_eq!(value["database"], "studio_db");
+        assert_eq!(value["configured"], true);
+        assert_eq!(value["creationSupported"], true);
+        assert!(!body.contains("studio_secret"));
+        let _ = fs::remove_dir_all(state.root.clone());
+    }
+
+    #[test]
+    fn studio_database_create_requires_confirmation_and_rejects_unavailable_backend() {
+        let state = project();
+        fs::write(
+            state.root.join("main.zyl"),
+            "database main {\n    engine: mariadb\n}\nfn main() {}\n",
+        )
+        .expect("write MariaDB project source");
+        assert_eq!(
+            create_project_database(&state, &json!({})).unwrap_err().0,
+            400
+        );
+        fs::write(
+            state.root.join("main.zyl"),
+            "database main {\n    engine: postgres\n}\nfn main() {}\n",
+        )
+        .expect("write PostgreSQL project source");
+        assert_eq!(
+            create_project_database(&state, &json!({"confirm": true}))
+                .unwrap_err()
+                .0,
+            501
+        );
         let _ = fs::remove_dir_all(state.root.clone());
     }
 

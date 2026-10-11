@@ -179,8 +179,10 @@ For usage details see the [web and database quickstart](getting-started.md),
   per request) and compiler-checked source changes to add or edit simple table
   columns. Key, unique, and defaulted fields cannot be edited visually; every
   change requires a fresh hash and explicit confirmation and does not apply a
-  migration. Backend/connection selection, database creation, and a complete
-  plan/risk editor remain open. See the [Studio guide](studio.en.md).
+  migration. Studio can create a declared MariaDB database after confirmation
+  when a connection is already configured; schema application remains separate.
+  Backend/connection selection, PostgreSQL/MySQL database creation, and a
+  complete plan/risk editor remain open. See the [Studio guide](studio.en.md).
   Version 0.9.2 adds contextual help, an action finder, AST-backed local
   completion, live diagnostics, F12 definitions, lexical Shift+F12 occurrences,
   a deterministic compiler project map, and a bounded explicit Run action.
