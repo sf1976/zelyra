@@ -605,9 +605,11 @@ Zelyra-Quelltext überprüfbar bleiben. Die Roadmap staffelt diese Ziele über
   Spalten, Indizes und deklarierte Beziehungen ansehen, Datensätze standardmäßig
   schreibgeschützt durchsuchen und den zuständigen Quellmodulen zuordnen. Das
   ER-Diagramm wird filterbar und navigierbar; Auswahl eines Feldes oder einer
-  Beziehung zeigt Definition, Quellmodul und verwendende Ressourcen. Änderungen
-  und Schemaerzeugung erfordern einen geprüften Plan und ausdrückliche
-  Bestätigung.
+  Beziehung zeigt Definition, Quellmodul und verwendende Ressourcen.
+  Lesende, typisierte Datenquellen für Kennzahlen werden so vorbereitet, dass
+  sie in 0.9.4 ohne frei formulierte SQL-Ausdrücke gewählt werden können.
+  Änderungen und Schemaerzeugung erfordern einen geprüften Plan und
+  ausdrückliche Bestätigung.
 - Nachweis: Separate MariaDB-, MySQL- und PostgreSQL-Tests entsprechen der
   veröffentlichten Datenbankmatrix. Schreibgeschütztes Browsen wird erzwungen;
   Zugangsdaten erscheinen nie in Editor-Ausgabe, URLs, Diagnosen oder Browser-
@@ -619,17 +621,25 @@ Zelyra-Quelltext überprüfbar bleiben. Die Roadmap staffelt diese Ziele über
   und Beziehungen wählen, Felder und Formulare entwerfen, Routen und Quelltext
   vorschauen, den gesamten Änderungsumfang prüfen, Compilerchecks ausführen und
   Änderungen ausdrücklich übernehmen oder verwerfen. Diagramme werden zu
-  bearbeitbaren Einstiegen in diese Arbeitsabläufe. Zusätzlich wird ein
-  deklaratives Präsentationsmodell für Geschäftsanwendungen geplant: geprüfte
-  Folien mit Text, Tabellen, Diagrammen und explizit typisierten Datenquellen,
-  mit Studio-Vorschau und eigenständigem HTML-/Druckexport. Präsentationen
-  bleiben versionierbarer Zelyra-Quelltext; beliebige Client-Hydration und
-  versteckte Datenbankzugriffe gehören nicht dazu. Das Rechnungstutorial wird
-  zu einem praktischen IDE-Workflow erweitert.
+  bearbeitbaren Einstiegen in diese Arbeitsabläufe. Ein geführter
+  Kennzahlen-/Diagramm-Entwurf lässt Nutzer eine deklarierte Datenquelle,
+  Kennzahl (zum Beispiel Anzahl oder Summe), Gruppierung (etwa Monat), Zeitraum
+  und Darstellungsform auswählen. So entstehen Fälle wie Neukunden pro Monat,
+  monatlicher Rechnungsumsatz oder ein Dashboard-Kennwert, ohne dass Nutzer
+  Diagramm-API-Befehle oder frei formuliertes SQL lernen müssen. Die
+  Generierung verwendet typisierte, lesende Abfragen und bleibt an bestehende
+  Datenbank-Capabilities, Autorisierung und Mandantengrenzen gebunden.
+  Zusätzlich wird ein deklaratives Präsentationsmodell für Geschäftsanwendungen
+  geplant: geprüfte Folien mit Text, Tabellen, Diagrammen und explizit
+  typisierten Datenquellen, mit Studio-Vorschau und eigenständigem HTML-/Druck-
+  export. Präsentationen und Dashboards bleiben versionierbarer Zelyra-Quelltext;
+  beliebige Client-Hydration und versteckte Datenbankzugriffe gehören nicht
+  dazu. Das Rechnungstutorial wird zu einem praktischen IDE-Workflow erweitert.
 - Nachweis: Kunden-, Artikel-, Rechnungs- und Positionsabläufe bestehen
   Mehrdatenbank-Integrationstests und bleiben normaler, änderbarer Zelyra-
-  Quelltext. Diagramme, Präsentationsdatenquellen, Ausgabe-Escaping,
-  barrierearme Darstellung und Export werden mit gültigen und ungültigen
+  Quelltext. Zeitreihen, Gruppierungen, leere Datensätze, Datenbankfehler,
+  Berechtigungen, Mandantentrennung, Ausgabe-Escaping, barrierearme Diagramme,
+  Präsentationsdatenquellen und Export werden in gültigen und ungültigen
   Projekten geprüft. Veraltete oder ungültige Vorschauen lassen sich nicht
   übernehmen.
 

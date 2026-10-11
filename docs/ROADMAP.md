@@ -633,8 +633,9 @@ this work across 0.9.2–0.9.8; these are not capabilities of the released 0.9.0
   columns, indexes, and declared relationships; browse records read-only by
   default; show how source modules own each object. Make the ER diagram
   filterable and navigable so selecting a field or relationship reveals its
-  declaration module and using resources. Mutations and generated schema
-  changes require a reviewed plan and explicit confirmation.
+  declaration module and using resources. Prepare typed, read-only data sources
+  for metrics so 0.9.4 can offer selections without free-form SQL. Mutations and
+  generated schema changes require a reviewed plan and explicit confirmation.
 - Exit evidence: separate MariaDB, MySQL, and PostgreSQL tests match the published
   database matrix. Read-only browsing is enforced, and credentials never enter
   editor output, URLs, diagnostics, or browser storage.
@@ -645,16 +646,23 @@ this work across 0.9.2–0.9.8; these are not capabilities of the released 0.9.0
   and relationships, design fields and forms, preview routes and generated source,
   inspect the full change set, run compiler checks, then explicitly apply or
   discard it. Make diagrams actionable entry points into these workflows. Add a
+  guided metric/chart designer: choose a declared data source, metric (such as
+  count or sum), grouping (such as month), time range, and visual form. This
+  should cover cases such as new customers per month, monthly invoice revenue,
+  and dashboard KPIs without requiring users to learn chart API calls or write
+  free-form SQL. Generated queries must be typed and read-only, and remain
+  subject to database capabilities, authorization, and tenant boundaries. Add a
   declarative presentation model for business applications: compiler-checked
-  slides with text, tables, diagrams, and explicitly typed data sources, shown
-  in Studio and exported as standalone HTML or print-ready output. Keep
-  presentations versionable as Zelyra source; arbitrary client hydration and
-  hidden database access are out of scope. Refine the invoice tutorial into a
-  practical guided IDE workflow.
+  slides with text, tables, charts, diagrams, and explicitly typed data sources,
+  shown in Studio and exported as standalone HTML or print-ready output. Keep
+  dashboards and presentations versionable as Zelyra source; arbitrary client
+  hydration and hidden database access are out of scope. Refine the invoice
+  tutorial into a practical guided IDE workflow.
 - Exit evidence: generated customer, item, invoice, and line-item flows pass
   multi-database integration coverage and remain editable as ordinary Zelyra
-  source. Diagrams, presentation data sources, output escaping, accessible
-  rendering, and export are checked with valid and invalid projects. Applying a
+  source. Time ranges, grouping, empty datasets, database errors, permissions,
+  tenant isolation, output escaping, accessible charts, presentation data
+  sources, and export are checked with valid and invalid projects. Applying a
   stale or invalid preview is rejected.
 
 ## Release 0.9.5 — first-party mail and SMTP
