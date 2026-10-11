@@ -40,6 +40,12 @@ principles; the roadmap below tracks what is actually implemented.
   checksums, SBOMs, attestations, and the bilingual website handbook are
   verified in the [0.9.0 release record](release-readiness/0.9.0-candidate-verification.md).
   Human acceptance stays reserved for 1.0.0.
+- [x] **0.9.1 stable release published:** Studio session, save, Problems panel,
+  and invoice tutorial workflows are extended; language line 0.1 uses `#` and
+  `##` comments. Full CI, Linux/Windows artifacts, checksums, SBOMs,
+  attestations, and website updates are verified in the
+  [0.9.1 release record](release-readiness/0.9.1-candidate-verification.md).
+  Independent human acceptance remains reserved for 1.0.0.
 
 - [~] The 0.4 development branch adds administrative listing/revocation of
   persistent sessions, CSRF/permission checks and an audit request event.
@@ -612,8 +618,9 @@ this work across 0.9.2–0.9.8; these are not capabilities of the released 0.9.0
   from the address bar and kept for that tab session. API and filesystem checks
   cover stale edits, path traversal, secret files, protected files, and explicit
   CRUD apply. Access remains loopback-bound, and the compiler remains
-  authoritative. The versioned candidate is pending exact-head CI and website
-  publication; see the [0.9.1 plan](release-plans/0.9.1.en.md).
+  authoritative. The tagged `v0.9.1` passed the full CI; Linux/Windows artifacts,
+  checksums, SPDX SBOMs, and attestations were published. The bilingual website
+  handbook is live; see the [0.9.1 plan](release-plans/0.9.1.en.md).
 - Exit evidence: Chromium browser coverage, editor API/security checks, and
   MariaDB/PostgreSQL Studio workflows pass locally. CI must repeat them against
   the exact release candidate. The invoice example opens and runs from the
@@ -628,17 +635,24 @@ this work across 0.9.2–0.9.8; these are not capabilities of the released 0.9.0
 
 ## Release 0.9.2 — IDE language services
 
+- [🗺️] Grow Studio into an IDE with a context-sensitive properties sidebar.
+  Selecting a file, route, table, field, or diagram element shows the relevant
+  valid settings in clear language. Common workflows should use selection and
+  properties instead of requiring users to memorize commands or chart APIs.
+  While writing, users can request the description and options for the current
+  command.
 - [🗺️] Add compiler-backed completion, symbol navigation, find/references,
-  formatting, actionable diagnostics, and integrated check/run/test tasks. Show
-  clear task progress and output without exposing secrets or hiding compiler
-  errors. Keep features scoped to documented language 0.1 constructs. Also
-  derive trustworthy architecture diagrams for modules/imports, routes, and
-  resource relationships from the compiler's project model. Nodes and edges
-  link back to source files and diagnostics; unknown or dynamic relationships
-  are marked incomplete.
-- Exit evidence: positive and negative multi-file projects verify completions,
-  source spans, navigation, formatter idempotence, task output, and deterministic
-  diagram data; unsupported syntax is identified instead of guessed.
+  formatting, actionable diagnostics updated while typing, and integrated
+  check/run/test tasks. Show clear task progress and output without exposing
+  secrets or hiding compiler errors. Keep features scoped to documented
+  language 0.1 constructs. Also derive trustworthy architecture diagrams for
+  modules/imports, routes, and resource relationships from the compiler's
+  project model. Nodes and edges link back to source files and diagnostics;
+  unknown or dynamic relationships are marked incomplete.
+- Exit evidence: positive and negative multi-file projects verify contextual
+  properties and help, completions, live diagnostic ranges, navigation,
+  formatter idempotence, task output, and deterministic diagram data;
+  unsupported syntax is identified instead of guessed.
 
 ## Release 0.9.3 — database workbench
 
@@ -646,17 +660,27 @@ this work across 0.9.2–0.9.8; these are not capabilities of the released 0.9.0
   columns, indexes, and declared relationships; browse records read-only by
   default; show how source modules own each object. Make the ER diagram
   filterable and navigable so selecting a field or relationship reveals its
-  declaration module and using resources. Prepare typed, read-only data sources
-  for metrics so 0.9.4 can offer selections without free-form SQL. Mutations and
-  generated schema changes require a reviewed plan and explicit confirmation.
+  declaration module and using resources.
+- [🗺️] Let users add and edit table columns through the properties sidebar.
+  Show the complete schema plan, impact, and risks; run compiler checks and
+  require explicit confirmation before applying changes. Let users choose the
+  database backend and connection, then create the project database from Studio
+  where the backend and granted privileges support it. Clearly explain
+  unsupported combinations and never store or print credentials in the browser.
+- [🗺️] Prepare typed, read-only data sources for metrics so 0.9.4 can offer
+  selections without free-form SQL. Mutations and generated schema changes
+  require a reviewed plan and explicit confirmation.
 - Exit evidence: separate MariaDB, MySQL, and PostgreSQL tests match the published
-  database matrix. Read-only browsing is enforced, and credentials never enter
-  editor output, URLs, diagnostics, or browser storage.
+  database matrix. Unsupported schema actions fail closed, stale plan hashes or
+  database state block apply, read-only browsing is enforced, and credentials
+  never enter editor output, URLs, diagnostics, or browser storage.
 
 ## Release 0.9.4 — visual CRUD design
 
-- [🗺️] Make relational CRUD workflows understandable in Studio: choose tables
-  and relationships, design fields and forms, preview routes and generated source,
+- [🗺️] Make relational CRUD and business-chart workflows understandable in
+  Studio: choose tables and relationships, design fields and forms, and configure
+  metrics through the properties sidebar instead of chart commands. Preview
+  routes and generated source,
   inspect the full change set, run compiler checks, then explicitly apply or
   discard it. Make diagrams actionable entry points into these workflows. Add a
   guided metric/chart designer: choose a declared data source, metric (such as
