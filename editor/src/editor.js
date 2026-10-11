@@ -1646,6 +1646,10 @@ window.addEventListener("beforeunload", (event) => {
   if (dirtyCount()) { event.preventDefault(); event.returnValue = ""; }
 });
 window.addEventListener("keydown", (event) => {
+  if (!event.defaultPrevented && (event.ctrlKey || event.metaKey) && event.code === "Space" && editor) {
+    event.preventDefault();
+    startCompletion(editor);
+  }
   if (event.key === "Escape" && $("task-finder").open) { event.preventDefault(); $("task-finder").close(); }
   if (event.key === "Escape" && $("project-search").open) { event.preventDefault(); $("project-search").close(); }
   if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "p") { event.preventDefault(); openTaskFinder(); }
