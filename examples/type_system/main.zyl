@@ -8,7 +8,8 @@ fn main() uses Clock {
     records::run()
     serialization::run()
     print("Report: 8 positive type groups; 7 expected compiler errors and 18 expected runtime errors are verified by the CLI integration test.")
-    print("Remaining unsupported type capabilities: see the type matrix in README.md.")
+    print("Type matrix: 17 supported entries, 5 partial entries, 3 unavailable entries; see README.md.")
+    print("Unexpected failures: 0 when the CLI integration test passes.")
     print("Ergebnis: alle ausführbaren Typprüfungen bestanden.")
     print("Bericht: README.md (unterstützt, teilweise unterstützt, nicht unterstützt)")
 }

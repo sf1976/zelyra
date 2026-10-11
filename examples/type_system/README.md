@@ -80,6 +80,8 @@ JSON-Zahl, nicht-stringbasierte Map-Serialisierung sowie nicht unterstützte
 `Result`-Decodierung). Ein erwarteter Fehler ist dabei ein
 positives Testergebnis. Bei erfolgreichem Integrationstest sind alle 8
 positiven Testgruppen bestanden und es gibt 0 unerwartete Fehler. Die
+aktuelle Matrix umfasst 17 unterstützte, 5 teilweise unterstützte und 3 noch
+nicht verfügbare Einträge; das Programm gibt diese drei Zahlen aus. Die
 Sprachmatrix weist noch nicht verfügbare Enumerationen, Funktionswerte und
 benutzerdefinierte Generics ausdrücklich aus. Records verwenden bewusst
 Wertsemantik; eigene Klassen-/Referenzidentität ist nicht implementiert.

@@ -74,7 +74,8 @@ invalid index, invalid Date/Time/Bytes/Decimal values, wrong tuple length,
 non-finite JSON number, non-string-keyed Map serialization, and unsupported
 `Result` decoding). An expected error is a passing
 test result. When the integration test passes, all 8 positive groups pass and
-there are 0 unexpected failures. The type matrix explicitly records that
+there are 0 unexpected failures. The current matrix has 17 supported, 5 partial,
+and 3 unavailable entries; the program prints these counts. The type matrix explicitly records that
 user-defined enums, function values, and user-defined generics are not yet
 available. Records intentionally use value semantics; custom class/reference
 identity is not implemented.

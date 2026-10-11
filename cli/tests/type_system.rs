@@ -76,6 +76,8 @@ fn type_coverage_program_passes_supported_tests_and_reports_expected_failures() 
         "PASS Unit type, function return",
         "PASS Option, Result, records",
         "Report: 8 positive type groups; 7 expected compiler errors and 18 expected runtime errors",
+        "Type matrix: 17 supported entries, 5 partial entries, 3 unavailable entries",
+        "Unexpected failures: 0 when the CLI integration test passes",
         "alle ausführbaren Typprüfungen bestanden",
     ] {
         assert!(
