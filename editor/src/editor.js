@@ -736,7 +736,6 @@ function createView(path, state) {
     }))),
     keymap.of([
       { key: "Mod-s", run: () => { saveActive(); return true; } },
-      { key: "Ctrl-Space", run: startCompletion },
       { key: "Mod-Space", run: startCompletion },
       { key: "F12", run: () => { void goToDefinition(); return true; } },
       { key: "Shift-F12", run: () => { void findIdentifierOccurrences(); return true; } },
@@ -761,7 +760,7 @@ function createView(path, state) {
     EditorView.contentAttributes.of({ "aria-label": `${path} im Zelyra-Webeditor` }),
   ];
   return new EditorView({
-    state: state.reconfigure({ extensions }),
+    state: state.reconfigure(extensions),
     parent: editorRoot,
   });
 }
