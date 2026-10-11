@@ -55,7 +55,7 @@ let lastCrudPreviewRequest = null;
 const editorRoot = $("editor-root");
 const messages = {
   de: {
-    symbolProject: "Projektdeklaration", symbolFunction: "Funktion", symbolType: "Typ", symbolTable: "Datenbanktabelle", symbolView: "Ansicht", symbolComponent: "Komponente",
+    symbolProject: "Projektdeklaration", symbolFunction: "Funktion", symbolEntrypoint: "Programmeinstieg", symbolType: "Typ", symbolTable: "Datenbanktabelle", symbolView: "Ansicht", symbolComponent: "Komponente",
     symbolForm: "Formular", symbolCrud: "CRUD-Ressource", symbolPage: "Seite", symbolApi: "API-Endpunkt",
     symbolTableview: "Abfrageansicht",
     taskFinder: "Aktionen", taskFinderTitle: "Was möchtest du tun?", taskFinderPlaceholder: "Aktion oder Befehl suchen",
@@ -127,7 +127,7 @@ const messages = {
     table: "Tabelle", field: "Feld", moduleUnknown: "Quellmodul unbekannt", selectTarget: "Quelldatei auswählen"
   },
   en: {
-    symbolProject: "Project declaration", symbolFunction: "Function", symbolType: "Type", symbolTable: "Database table", symbolView: "View", symbolComponent: "Component",
+    symbolProject: "Project declaration", symbolFunction: "Function", symbolEntrypoint: "Program entry point", symbolType: "Type", symbolTable: "Database table", symbolView: "View", symbolComponent: "Component",
     symbolForm: "Form", symbolCrud: "CRUD resource", symbolPage: "Page", symbolApi: "API endpoint",
     symbolTableview: "Query view",
     taskFinder: "Actions", taskFinderTitle: "What would you like to do?", taskFinderPlaceholder: "Search actions or commands",
@@ -430,16 +430,20 @@ function completionSource(context) {
       detail: `${t(item.detail === "parameter" ? "localParameter" : item.detail === "loop value" ? "loopValue" : item.detail === "match value" ? "matchValue" : "localValue")}${item.valueType ? ` · ${item.valueType}` : ""}`,
     }));
     const localNames = new Set(localOptions.map((item) => item.label));
+    const projectOptions = symbols.filter((symbol) => !localNames.has(symbol.label)).map((symbol) => ({
+      label: symbol.label,
+      type: symbol.kind,
+      detail: symbol.detail ? t(`symbol${symbol.detail[0].toUpperCase()}${symbol.detail.slice(1)}`) : t("symbolProject"),
+    }));
+    if (!localNames.has("main") && !projectOptions.some((item) => item.label === "main")) {
+      projectOptions.push({ label: "main", type: "function", detail: t("symbolEntrypoint") });
+    }
     return {
       from: word ? word.from : context.pos,
       options: [
         ...[...keywords].map((label) => ({ label, type: "keyword" })),
         ...localOptions,
-        ...symbols.filter((symbol) => !localNames.has(symbol.label)).map((symbol) => ({
-          label: symbol.label,
-          type: symbol.kind,
-          detail: symbol.detail ? t(`symbol${symbol.detail[0].toUpperCase()}${symbol.detail.slice(1)}`) : t("symbolProject"),
-        })),
+        ...projectOptions,
       ],
     };
   });
@@ -732,6 +736,7 @@ function createView(path, state) {
       }))),
       keymap.of([
         { key: "Mod-s", run: () => { saveActive(); return true; } },
+        { key: "Ctrl-Space", run: startCompletion },
         { key: "Mod-Space", run: startCompletion },
         { key: "F12", run: () => { void goToDefinition(); return true; } },
         { key: "Shift-F12", run: () => { void findIdentifierOccurrences(); return true; } },
