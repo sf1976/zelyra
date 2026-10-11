@@ -2332,7 +2332,7 @@ geplante oder derzeit nicht verfügbare Sprachmerkmale.
 | Schleifen | `for item in items`, `while`, `loop` | `for item in items`, `while`, `loop` | Zelyra unterstützt keine Rust-Iteratortraits | ✅ |
 | Funktionsaufrufe | `add(1, 2)` | `add(1, 2)` | gleiche Oberfläche, andere Auflösung | ✅ |
 | Ausgabe | `print(value)` | `println!("{}", value);` | Rust verwendet ein Makro mit `!` | ✅ |
-| Kommentare | `// Kommentar` | `// Kommentar`, `/* ... */` | aktueller Zelyra-Lexer hat Zeilenkommentare | ✅ |
+| Kommentare | `# Kommentar`, alleinstehendes `##` als Blockanfang/-ende | `// Kommentar`, `/* ... */` | `//` bleibt aus Kompatibilitätsgründen zulässig; `##` muss allein in der Zeile stehen und Blockkommentare dürfen nicht verschachtelt werden | 🧪 |
 | Zeilenumbrüche | meist Trennzeichen; nach Operatoren fortsetzbar | meist Whitespace | Parserregeln sind eigenständig | ✅ |
 | Semikolons | werden als Statementtrenner akzeptiert, aber nicht benötigt | häufig Statementtrenner | Zelyra ist nicht semikolonpflichtig | ✅ |
 | Blockstruktur | `{ ... }` | `{ ... }` | Klammern bestimmen in beiden die Blöcke | ✅ |
@@ -2745,9 +2745,9 @@ zelyra fmt examples/fibonacci.zyl
 zelyra fmt examples/fibonacci.zyl --check
 ~~~
 
-Der Formatter bewahrt Zeilenkommentare und behandelt SQL- und HTML-Blöcke als
-opaken Quelltext. Er ist idempotent: Ein bereits formatiertes Dokument erzeugt
-byte-identisch dieselbe Ausgabe.
+Der Formatter bewahrt Zeilen- und Blockkommentare und behandelt SQL- und
+HTML-Blöcke als opaken Quelltext. Er ist idempotent: Ein bereits formatiertes
+Dokument erzeugt byte-identisch dieselbe Ausgabe.
 
 #### Typisierte Lücken (Typed Holes)
 

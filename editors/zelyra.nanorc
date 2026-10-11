@@ -3,7 +3,7 @@
 ## Website: https://siedelmann.com
 
 syntax zelyra "\.zyl$"
-comment "//"
+comment "#"
 
 # Keywords & Declarations
 color magenta "\<(fn|page|schema|table|form|let|mut|mutable|const|type|struct|enum|impl|use|mod|html|sql|route|rule)\>"
@@ -26,8 +26,9 @@ color brightyellow ""([^"\\]|\\.)*""
 color brightcyan "\{[a-zA-Z0-9_]+\}"
 
 # Comments
+color brightblack "(^|[[:space:]])#.*$"
 color brightblack "(^|[[:space:]])//.*$"
-color brightblack start="/\*" end="\*/"
+color brightblack start="^[[:space:]]*##[[:space:]]*$" end="^[[:space:]]*##[[:space:]]*$"
 
 # Trailing Whitespace indicator
 color ,red "[[:space:]]+$"

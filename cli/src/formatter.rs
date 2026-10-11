@@ -24,6 +24,7 @@ struct Formatter<'a> {
     generic_depth: usize,
     pending_block_break: bool,
     previous_kind: Option<TokenKind>,
+    in_block_comment: bool,
 }
 
 impl<'a> Formatter<'a> {
@@ -40,6 +41,7 @@ impl<'a> Formatter<'a> {
             generic_depth: 0,
             pending_block_break: false,
             previous_kind: None,
+            in_block_comment: false,
         }
     }
 
@@ -100,17 +102,34 @@ impl<'a> Formatter<'a> {
             return;
         }
         let gap = &self.source[start..end];
-        let Some(comment_start) = gap.find("//") else {
+        if self.in_block_comment {
+            self.output.push_str(gap);
+            if gap.trim() == "##" {
+                self.in_block_comment = false;
+            }
+            return;
+        }
+        let Some((comment_start, _)) = gap
+            .char_indices()
+            .find(|(index, character)| *character == '#' || gap[*index..].starts_with("//"))
+        else {
             return;
         };
         let comment = gap[comment_start..].trim_end_matches(['\r', '\n', ' ', '\t']);
         if comment.is_empty() {
             return;
         }
-        if !self.at_line_start() {
+        let standalone = gap[..comment_start].contains('\n') || comment.trim() == "##";
+        if standalone {
+            self.ensure_pending_block_break();
+            self.ensure_line_start();
+        } else if !self.at_line_start() {
             self.output.push(' ');
         }
         self.push_text(comment);
+        if comment.trim() == "##" {
+            self.in_block_comment = true;
+        }
     }
 
     fn left_brace(&mut self) {

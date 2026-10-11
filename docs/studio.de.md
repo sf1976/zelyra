@@ -14,10 +14,14 @@ müssen vom selben Browser-Origin kommen.
 ## Quellcode bearbeiten
 
 Die Dateiliste zeigt Zelyra-Quelldateien des Projekts. Tabs halten mehrere
-Dateien geöffnet. Suche, Vervollständigung, Formatierung, Compilerdiagnosen
-und das Speichern mit Versionsprüfung unterstützen den normalen Arbeitsablauf.
+Dateien geöffnet. Suche, Vervollständigung, Formatierung, Compilerdiagnosen,
+Rückgängig/Wiederholen und das Speichern mit Versionsprüfung unterstützen den
+Arbeitsablauf. Über **Umbenennen** und **Löschen** kannst du Quelldateien
+bearbeiten. Studio verlangt vorher eine Bestätigung; Importverweise werden beim
+Umbenennen nicht angepasst. `main.zyl` und `zelyra.toml` sind geschützt.
+Projektpfade bleiben begrenzt, und Dateiaktionen prüfen den gespeicherten Hash.
 Änderungen, die eine andere Anwendung seit dem Laden vorgenommen hat, werden
-beim Speichern als Konflikt gemeldet.
+abgelehnt; lade die Datei neu und wiederhole die Aktion.
 
 ## Datenbankschema ansehen
 

@@ -14,9 +14,12 @@ origin.
 ## Edit source code
 
 The file tree lists Zelyra source files in the project. Tabs keep several files
-open. Search, completion, formatting, compiler diagnostics, and version-aware
-saving support the normal edit cycle. If another application changes a file
-after Studio loads it, saving reports a conflict.
+open. Search, completion, formatting, compiler diagnostics, undo/redo, and
+version-aware saving support the edit cycle. **Rename** and **Delete** provide
+explicitly confirmed source-file operations; rename does not update imports.
+`main.zyl` and `zelyra.toml` are protected. Paths stay inside the project, and
+file operations compare the saved content hash. If another application changes
+a file after Studio loads it, the operation is rejected; reload before retrying.
 
 ## Inspect the database schema
 

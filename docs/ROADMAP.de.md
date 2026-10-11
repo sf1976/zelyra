@@ -558,16 +558,44 @@ Die menschliche Abnahme bleibt auf 1.0.0 verschoben.
   [0.9.0-Plan](release-plans/0.9.0.de.md), Release-Notizen und
   [Releaseprüfnachweis](release-readiness/0.9.0-candidate-verification.md).
 
+## Produktlinie: Sprache, Compiler, Datenbank und Studio
+
+Zelyras zentrale Produktidee ist ein zusammenhängender Weg von verständlichem
+Quelltext über Compiler und Datenbank bis zur fertigen Geschäftsanwendung.
+Diagramme sollen aus geprüften Projektinformationen entstehen und direkt zu
+Quelltext, Diagnosen und Arbeitsabläufen führen. Präsentationen sollen dieselben
+typisierten, ausdrücklich freigegebenen Datenquellen nutzen und als lesbarer
+Zelyra-Quelltext überprüfbar bleiben. Die Roadmap staffelt diese Ziele über
+0.9.2–0.9.8; sie sind noch keine Fähigkeiten des veröffentlichten 0.9.0.
+
 ## Release 0.9.1 — IDE-Grundlage
 
-- [🗺️] Studio wird zu einem verlässlichen Mehrdatei-Arbeitsbereich: Projektbaum,
-  Tabs, sichtbarer Speicherstatus, Rückgängig/Wiederholen, sichere Dateioperationen,
-  Projektpfadbegrenzung und Diagnosen an der richtigen Datei und Position. Der
-  lokale Zugriff bleibt auf Loopback begrenzt; der Compiler bleibt maßgeblich.
-- Nachweis: Browser- und Sicherheitstests decken ungespeicherte Änderungen,
-  gleichzeitige Dateiänderungen, Pfadmanipulation, fehlerhaften Quelltext,
-  Neustart und Tastaturbedienung ab. Das Rechnungsbeispiel lässt sich öffnen und
-  ausführen.
+- [🧪] Studio enthält bereits Projektbaum, Tabs, sichtbaren Speicherstatus,
+  Rückgängig/Wiederholen, Projektpfadbegrenzung und datei-/positionsbezogene
+  Diagnosen. Umbenennen und Löschen von Quelldateien benötigen eine sichtbare
+  Bestätigung und einen aktuellen Datei-Hash; vorhandene Ziele werden nie
+  überschrieben, `main.zyl` und `zelyra.toml` sind geschützt. Importverweise
+  werden beim Umbenennen nicht angepasst. Browser-E2E prüft jetzt Sitzungsstart
+  und Neuladen, ungespeicherte Änderungen, Tastaturspeichern, Compilerdiagnosen
+  und Neustart. Das Sitzungstoken wird aus der Adresszeile entfernt und für
+  diese Tab-Sitzung gehalten. API- und Dateisystemprüfungen decken veraltete
+  Änderungen, Pfad-Traversal, Geheimdateien, geschützte Dateien und
+  ausdrückliches Anwenden ab. Zugriff bleibt auf Loopback begrenzt; der
+  Compiler bleibt maßgeblich. Der versionsgebundene Kandidat wartet auf exakte
+  CI-Prüfung und Websiteveröffentlichung; siehe den
+  [0.9.1-Plan](release-plans/0.9.1.de.md).
+- Nachweis: Chromium-Browserabdeckung, Editor-API-/Sicherheitsprüfungen und
+  MariaDB-/PostgreSQL-Studioabläufe bestehen lokal. CI muss diese für den
+  exakten Releasekandidaten wiederholen. Das Rechnungsbeispiel lässt sich öffnen
+  und ausführen.
+- [🧪] Das Rechnungstutorial zeigt eine Netto-/19%-Umsatzsteuer-/Brutto-
+  Rechnung aus den gespeicherten Positionen und eine druckoptimierte Ansicht,
+  die der Browser als PDF speichern kann. Der angenommene Standardsatz gilt
+  nur für das deutsche Lernbeispiel; dies ist keine native PDF-Engine und keine
+  vollständige gesetzeskonforme Rechnungsvorlage.
+- [🧪] Die Sprachzeile 0.1 verwendet `#` für einzeilige Kommentare und
+  alleinstehende `##`-Zeilen als nicht verschachtelte Blockkommentar-Grenzen.
+  `//` bleibt für vorhandene Programme kompatibel.
 
 ## Release 0.9.2 — Sprachdienste der IDE
 
@@ -575,18 +603,27 @@ Die menschliche Abnahme bleibt auf 1.0.0 verschoben.
   Formatierung, handlungsorientierte Diagnosen sowie integrierte Check-, Run-
   und Test-Aufgaben ergänzen. Fortschritt und Ausgabe bleiben sichtbar und
   geheimnisfrei. Die Funktionen decken die dokumentierten Sprach-0.1-Konstrukte
-  ab.
+  ab. Zusätzlich entstehen aus dem Compiler-Projektmodell verlässliche
+  Architekturdiagramme für Module/Importe, Routen und Ressourcenbeziehungen.
+  Knoten und Kanten führen zur passenden Quelldatei und Diagnose zurück;
+  unbekannte oder dynamische Beziehungen werden sichtbar als unvollständig
+  markiert.
 - Nachweis: Positive und negative Mehrdateiprojekte prüfen Vorschläge,
-  Quellpositionen, Navigation, idempotente Formatierung und Aufgabenausgabe;
-  unbekannte Syntax wird kenntlich gemacht statt erraten.
+  Quellpositionen, Navigation, idempotente Formatierung, Aufgabenausgabe und
+  deterministische Diagrammdaten; unbekannte Syntax wird kenntlich gemacht
+  statt erraten.
 
 ## Release 0.9.3 — Datenbankwerkbank
 
 - [🗺️] Die Datenbankansicht der IDE zur sicheren Werkbank ausbauen: Tabellen,
   Spalten, Indizes und deklarierte Beziehungen ansehen, Datensätze standardmäßig
-  schreibgeschützt durchsuchen und den zuständigen Quellmodulen zuordnen.
-  Änderungen und Schemaerzeugung erfordern einen geprüften Plan und ausdrückliche
-  Bestätigung.
+  schreibgeschützt durchsuchen und den zuständigen Quellmodulen zuordnen. Das
+  ER-Diagramm wird filterbar und navigierbar; Auswahl eines Feldes oder einer
+  Beziehung zeigt Definition, Quellmodul und verwendende Ressourcen.
+  Lesende, typisierte Datenquellen für Kennzahlen werden so vorbereitet, dass
+  sie in 0.9.4 ohne frei formulierte SQL-Ausdrücke gewählt werden können.
+  Änderungen und Schemaerzeugung erfordern einen geprüften Plan und
+  ausdrückliche Bestätigung.
 - Nachweis: Separate MariaDB-, MySQL- und PostgreSQL-Tests entsprechen der
   veröffentlichten Datenbankmatrix. Schreibgeschütztes Browsen wird erzwungen;
   Zugangsdaten erscheinen nie in Editor-Ausgabe, URLs, Diagnosen oder Browser-
@@ -597,11 +634,28 @@ Die menschliche Abnahme bleibt auf 1.0.0 verschoben.
 - [🗺️] Verständliche relationale CRUD-Abläufe in Studio ermöglichen: Tabellen
   und Beziehungen wählen, Felder und Formulare entwerfen, Routen und Quelltext
   vorschauen, den gesamten Änderungsumfang prüfen, Compilerchecks ausführen und
-  Änderungen ausdrücklich übernehmen oder verwerfen. Das Rechnungstutorial
-  wird zu einem praktischen IDE-Workflow erweitert.
+  Änderungen ausdrücklich übernehmen oder verwerfen. Diagramme werden zu
+  bearbeitbaren Einstiegen in diese Arbeitsabläufe. Ein geführter
+  Kennzahlen-/Diagramm-Entwurf lässt Nutzer eine deklarierte Datenquelle,
+  Kennzahl (zum Beispiel Anzahl oder Summe), Gruppierung (etwa Monat), Zeitraum
+  und Darstellungsform auswählen. So entstehen Fälle wie Neukunden pro Monat,
+  monatlicher Rechnungsumsatz oder ein Dashboard-Kennwert, ohne dass Nutzer
+  Diagramm-API-Befehle oder frei formuliertes SQL lernen müssen. Die
+  Generierung verwendet typisierte, lesende Abfragen und bleibt an bestehende
+  Datenbank-Capabilities, Autorisierung und Mandantengrenzen gebunden.
+  Zusätzlich wird ein deklaratives Präsentationsmodell für Geschäftsanwendungen
+  geplant: geprüfte Folien mit Text, Tabellen, Diagrammen und explizit
+  typisierten Datenquellen, mit Studio-Vorschau und eigenständigem HTML-/Druck-
+  export. Präsentationen und Dashboards bleiben versionierbarer Zelyra-Quelltext;
+  beliebige Client-Hydration und versteckte Datenbankzugriffe gehören nicht
+  dazu. Das Rechnungstutorial wird zu einem praktischen IDE-Workflow erweitert.
 - Nachweis: Kunden-, Artikel-, Rechnungs- und Positionsabläufe bestehen
   Mehrdatenbank-Integrationstests und bleiben normaler, änderbarer Zelyra-
-  Quelltext. Veraltete oder ungültige Vorschauen lassen sich nicht übernehmen.
+  Quelltext. Zeitreihen, Gruppierungen, leere Datensätze, Datenbankfehler,
+  Berechtigungen, Mandantentrennung, Ausgabe-Escaping, barrierearme Diagramme,
+  Präsentationsdatenquellen und Export werden in gültigen und ungültigen
+  Projekten geprüft. Veraltete oder ungültige Vorschauen lassen sich nicht
+  übernehmen.
 
 ## Release 0.9.5 — Eigene Mail- und SMTP-Unterstützung
 
@@ -647,8 +701,10 @@ Die menschliche Abnahme bleibt auf 1.0.0 verschoben.
   auf unterstützten Betriebssystemen und Datenbanken proben. Betreiber- und
   Nutzerdokumentation, Lizenz-/Abhängigkeitsreview, Ressourcenlimits,
   Geheimnisredaktion, reproduzierbare Artefakte, SBOM/Provenance und Offline-
-  Abläufe abschließen. Start, übliche CRUD-Abläufe und begrenzten Ressourcenbedarf
-  messen und Ergebnisse ohne unbelegte Leistungsversprechen veröffentlichen.
+  Abläufe abschließen. Präsentationen und Diagramme auf sauberen Umgebungen,
+  barrierearme Lesbarkeit, stabile Exporte und Geheimnisfreiheit prüfen. Start,
+  übliche CRUD-Abläufe und begrenzten Ressourcenbedarf messen und Ergebnisse
+  ohne unbelegte Leistungsversprechen veröffentlichen.
 - Abschlusskriterien: Alle Proben bestehen in sauberen Umgebungen,
   Handbuchbeispiele sind geprüft, bekannte Befunde haben Verantwortliche und
   Entscheidungen, und keine 1.0-Anforderung ist unimplementiert. Siehe den

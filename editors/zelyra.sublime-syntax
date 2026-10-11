@@ -7,15 +7,19 @@ scope: source.zyl
 
 contexts:
   main:
-    - match: '//.*$'
-      scope: comment.line.double-slash.zyl
-
-    - match: '/\*'
+    - match: '^\s*##\s*$'
       scope: comment.block.zyl
       push:
-        - match: '\*/'
+        - meta_scope: comment.block.zyl
+        - match: '^\s*##\s*$'
           scope: comment.block.zyl
           pop: true
+
+    - match: '#.*$'
+      scope: comment.line.number-sign.zyl
+
+    - match: '//.*$'
+      scope: comment.line.double-slash.zyl
 
     - match: '"'
       scope: punctuation.definition.string.begin.zyl

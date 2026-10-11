@@ -271,6 +271,8 @@ fn editor_response(
         }
         ("PUT", "file") => write_existing_file(state, parse_json_body(&request.body)?, false),
         ("POST", "file") => write_existing_file(state, parse_json_body(&request.body)?, true),
+        ("POST", "file-rename") => rename_editor_file(state, parse_json_body(&request.body)?),
+        ("DELETE", "file") => delete_editor_file(state, parse_json_body(&request.body)?),
         ("POST", "check") => check_project(state, &parse_json_body(&request.body)?),
         ("POST", "format") => format_editor_file(state, &parse_json_body(&request.body)?),
         ("POST", "crud-preview") => preview_crud_resource(state, &parse_json_body(&request.body)?),
@@ -1055,6 +1057,107 @@ fn write_existing_file(
     ))
 }
 
+fn editor_file_hash(
+    state: &EditorState,
+    relative: &str,
+    field: &str,
+    value: &Value,
+) -> Result<PathBuf, (u16, String)> {
+    let path = safe_editor_path(&state.root, relative, false)?;
+    let expected = value
+        .get(field)
+        .and_then(Value::as_str)
+        .ok_or((400, format!("{field} is required")))?;
+    let current = fs::read(&path).map_err(|_| (404, "file not found".into()))?;
+    if content_hash(&current) != expected {
+        return Err((
+            409,
+            "file changed on disk; reload it before changing its path".into(),
+        ));
+    }
+    Ok(path)
+}
+
+fn protected_editor_file(relative: &str) -> bool {
+    matches!(relative, "main.zyl" | "zelyra.toml")
+}
+
+fn rename_editor_file(
+    state: &EditorState,
+    value: Value,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let relative = value
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or((400, "path is required".into()))?;
+    let new_relative = value
+        .get("newPath")
+        .and_then(Value::as_str)
+        .ok_or((400, "newPath is required".into()))?;
+    if protected_editor_file(relative) || protected_editor_file(new_relative) {
+        return Err((
+            403,
+            "the project entry file and project configuration cannot be renamed".into(),
+        ));
+    }
+    let source = editor_file_hash(state, relative, "baseHash", &value)?;
+    let target = safe_editor_path(&state.root, new_relative, true)?;
+    if source == target {
+        return Err((400, "newPath must differ from path".into()));
+    }
+    // hard_link creates the destination atomically only when it does not exist,
+    // so a concurrent file cannot be silently overwritten by a rename.
+    fs::hard_link(&source, &target).map_err(|error| {
+        if error.kind() == io::ErrorKind::AlreadyExists {
+            (409, "destination file already exists".into())
+        } else {
+            (500, "could not create renamed file; source and destination must be on the same filesystem".into())
+        }
+    })?;
+    let renamed =
+        fs::read(&target).map_err(|_| (500, "renamed file could not be verified".into()))?;
+    if content_hash(&renamed) != value["baseHash"].as_str().unwrap_or_default() {
+        let _ = fs::remove_file(&target);
+        return Err((
+            409,
+            "file changed during rename; reload it before retrying".into(),
+        ));
+    }
+    if fs::remove_file(&source).is_err() {
+        let _ = fs::remove_file(&target);
+        return Err((500, "could not finish file rename".into()));
+    }
+    Ok((
+        200,
+        "application/json; charset=utf-8",
+        json!({"path": relative, "newPath": new_relative, "hash": content_hash(&renamed)})
+            .to_string(),
+    ))
+}
+
+fn delete_editor_file(
+    state: &EditorState,
+    value: Value,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let relative = value
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or((400, "path is required".into()))?;
+    if protected_editor_file(relative) {
+        return Err((
+            403,
+            "the project entry file and project configuration cannot be deleted".into(),
+        ));
+    }
+    let path = editor_file_hash(state, relative, "baseHash", &value)?;
+    fs::remove_file(&path).map_err(|_| (500, "could not delete file".into()))?;
+    Ok((
+        200,
+        "application/json; charset=utf-8",
+        json!({"path": relative, "deleted": true}).to_string(),
+    ))
+}
+
 fn check_project(
     state: &EditorState,
     value: &Value,
@@ -1320,16 +1423,23 @@ mod tests {
     #[test]
     fn editor_mutations_require_same_origin() {
         let state = project();
-        let request = request(
-            "POST",
-            "/__zelyra/editor/api/file",
-            &[
-                ("x-zelyra-editor-token", "local-session-token"),
-                ("origin", "https://attacker.invalid"),
-            ],
-        );
-        let error = editor_response(&request, &state).expect_err("cross-origin mutation must fail");
-        assert_eq!(error.0, 403);
+        for (method, path) in [
+            ("POST", "/__zelyra/editor/api/file"),
+            ("POST", "/__zelyra/editor/api/file-rename"),
+            ("DELETE", "/__zelyra/editor/api/file"),
+        ] {
+            let request = request(
+                method,
+                path,
+                &[
+                    ("x-zelyra-editor-token", "local-session-token"),
+                    ("origin", "https://attacker.invalid"),
+                ],
+            );
+            let error =
+                editor_response(&request, &state).expect_err("cross-origin mutation must fail");
+            assert_eq!(error.0, 403, "{method} {path} must be protected");
+        }
         let _ = fs::remove_dir_all(state.root);
     }
 
@@ -1442,6 +1552,75 @@ mod tests {
                 .0,
             409
         );
+        let _ = fs::remove_dir_all(state.root);
+    }
+
+    #[test]
+    fn editor_rename_is_project_scoped_hash_checked_and_never_overwrites() {
+        let state = project();
+        fs::create_dir(state.root.join("src")).expect("create source directory");
+        fs::write(state.root.join("src/old.zyl"), "module old\n").expect("write source");
+        let source = state.root.join("src/old.zyl");
+        let hash = content_hash(&fs::read(&source).expect("read source"));
+
+        let error = rename_editor_file(
+            &state,
+            json!({"path":"src/old.zyl", "newPath":"../outside.zyl", "baseHash":hash}),
+        )
+        .expect_err("path traversal must fail");
+        assert_eq!(error.0, 400);
+        assert!(source.exists());
+
+        fs::write(state.root.join("src/existing.zyl"), "keep me").expect("write destination");
+        let error = rename_editor_file(
+            &state,
+            json!({"path":"src/old.zyl", "newPath":"src/existing.zyl", "baseHash":hash}),
+        )
+        .expect_err("existing file must not be overwritten");
+        assert_eq!(error.0, 409);
+        assert_eq!(
+            fs::read_to_string(state.root.join("src/existing.zyl")).unwrap(),
+            "keep me"
+        );
+
+        let response = rename_editor_file(
+            &state,
+            json!({"path":"src/old.zyl", "newPath":"src/new.zyl", "baseHash":hash}),
+        )
+        .expect("rename source");
+        assert_eq!(response.0, 200);
+        assert!(!source.exists());
+        assert_eq!(
+            fs::read_to_string(state.root.join("src/new.zyl")).unwrap(),
+            "module old\n"
+        );
+
+        let _ = fs::remove_dir_all(state.root);
+    }
+
+    #[test]
+    fn editor_delete_requires_current_hash_and_protects_project_files() {
+        let state = project();
+        fs::create_dir(state.root.join("src")).expect("create source directory");
+        let file = state.root.join("src/remove.zyl");
+        fs::write(&file, "original").expect("write source");
+        let stale =
+            delete_editor_file(&state, json!({"path":"src/remove.zyl", "baseHash":"stale"}))
+                .expect_err("stale delete must fail");
+        assert_eq!(stale.0, 409);
+        assert!(file.exists());
+        let protected =
+            delete_editor_file(&state, json!({"path":"main.zyl", "baseHash":"anything"}))
+                .expect_err("entry file must be protected");
+        assert_eq!(protected.0, 403);
+        let hash = content_hash(&fs::read(&file).expect("read file"));
+        assert_eq!(
+            delete_editor_file(&state, json!({"path":"src/remove.zyl", "baseHash":hash}))
+                .unwrap()
+                .0,
+            200
+        );
+        assert!(!file.exists());
         let _ = fs::remove_dir_all(state.root);
     }
 

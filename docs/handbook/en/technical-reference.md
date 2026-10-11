@@ -2169,7 +2169,7 @@ and was checked with the installed Rust toolchain or Zelyra CLI. `🧪`, `🗺�
 | Loops | `for item in items`, `while`, `loop` | `for item in items`, `while`, `loop` | no Rust iterator traits in Zelyra | ✅ |
 | Function call | `add(1, 2)` | `add(1, 2)` | same surface, different name resolution | ✅ |
 | Output | `print(value)` | `println!("{}", value);` | Rust uses a macro with `!` | ✅ |
-| Comments | `// comment` | `// comment`, `/* ... */` | current Zelyra lexer has line comments | ✅ |
+| Comments | `# comment`; standalone `##` to open and close a block | `// comment`, `/* ... */` | `//` remains accepted for compatibility; `##` must be alone on its line and block comments do not nest | 🧪 |
 | Newlines | usually separators; continuation after operators | usually whitespace | parser rules are independent | ✅ |
 | Semicolons | accepted as statement separators, not required | often statement separators | Zelyra is not semicolon-dependent | ✅ |
 | Blocks | `{ ... }` | `{ ... }` | braces determine blocks in both | ✅ |
@@ -2558,9 +2558,9 @@ zelyra fmt examples/fibonacci.zyl
 zelyra fmt examples/fibonacci.zyl --check
 ~~~
 
-The formatter preserves line comments and treats SQL and HTML blocks as opaque
-source. It is idempotent: formatting an already formatted document yields
-byte-for-byte identical output.
+The formatter preserves line and block comments and treats SQL and HTML blocks
+as opaque source. It is idempotent: formatting an already formatted document
+yields byte-for-byte identical output.
 
 #### Typed holes
 

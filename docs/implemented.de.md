@@ -138,9 +138,13 @@ der [Setup-Anleitung](setup-web.de.md) und den
   Vorschaupfad ohne unabhängige Produktionsfreigabe.
 - Das Sprachkompatibilitätskorpus 0.1 umfasst in 0.9 zusätzliche typisierte
   API-Fehler sowie Laufzeitfälle der Rechnungsanwendung und von `Result`.
-- ✅ `zelyra --tutorial invoice` führt Schritt für Schritt durch Kunden,
-  Artikel, Dashboard und Rechnungserstellung. Es ist ein Lernpfad, keine
-  Produktions- oder Deploymentfreigabe.
+- 🧪 Die aktuelle Erweiterung von `zelyra --tutorial invoice` führt durch
+  Kunden, Artikel, Dashboard und Rechnungserstellung. Die Rechnungsansicht addiert
+  Positionspreise netto, berechnet im Lernbeispiel 19% Umsatzsteuer und zeigt
+  den Bruttobetrag. Unter `/invoices/RECHNUNGSNUMMER/print` kann der Browser
+  die druckoptimierte Rechnung als PDF speichern. Es ist ein Lernpfad, keine
+  Produktions- oder Deploymentfreigabe; Details und Grenzen stehen im
+  [Rechnungstutorial](tutorials/invoice.de.md).
 - Studio ist noch keine vollständige IDE oder beliebiger Datenbankdesigner.
 
 ## APIs, Authentifizierung, Berechtigungen und Audit

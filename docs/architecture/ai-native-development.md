@@ -166,4 +166,13 @@ fields, repairing SQL, changing validation, adding permissions, updating
 schemas, and fixing null handling. It will measure first-pass compilation,
 correction loops, time to passing tests, tokens, code size, security findings,
 missed dependencies, faulty database changes, and human review effort.
-No superiority claim is made until controlled, reproducible results exist.
+
+Reducing the total effort of AI-assisted business software is an internal
+product goal. A connected language, database model, compiler, runtime, and
+Studio should reduce avoidable glue code, generated files, context size,
+correction rounds, and token use while preserving the same required behavior,
+security properties, and passing checks. Benchmarks must compare equivalent
+tasks, include the full generated and reviewed change, and report the model,
+prompt/context, compiler version, and acceptance criteria. Fewer source lines
+alone do not demonstrate lower cost or better results. No superiority or cost
+savings claim is made until controlled, reproducible results exist.

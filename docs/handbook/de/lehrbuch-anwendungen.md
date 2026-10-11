@@ -2728,6 +2728,11 @@ Sprachlinie eines Projekts nicht automatisch.
 - **0.9.1–0.9.2 (geplant):** Studio mit Mehrdatei-Projektbaum, Tabs,
   sicherem Speichern, Diagnosen, Vervollständigung, Navigation, Formatierung
   und integrierten Compileraufgaben zur IDE ausbauen.
+- **Rechnungstutorial (0.9.1 in Entwicklung):** Die Rechnungsansicht summiert
+  Nettopreise, berechnet im deutschen Lernbeispiel 19% Umsatzsteuer und Brutto.
+  Eine druckoptimierte Seite kann über den Browser-Druckdialog als PDF
+  gespeichert werden. Das ist keine native PDF-Erzeugung; Steuersatzannahmen
+  und Grenzen beschreibt das [Tutorial](../../tutorials/invoice.de.md).
 - **0.9.3–0.9.4 (geplant):** Datenbankwerkbank und relationalen CRUD-Entwurf
   mit nachvollziehbarer Vorschau, Compilerprüfung und ausdrücklicher Übernahme
   ergänzen.

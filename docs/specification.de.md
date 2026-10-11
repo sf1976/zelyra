@@ -49,6 +49,15 @@ umfangreichere Edit-Operationen, feinere Effekte und Benchmarks bleiben geplant.
 String- und Zeichenliterale bewahren gültige Unicode-Zeichen unverändert.
 Source-Spans verwenden weiterhin UTF-8-Byte-Offsets.
 
+## Kommentare in Sprachlinie 0.1
+
+`#` beginnt einen Zeilenkommentar bis zum Zeilenende. Eine alleinstehende
+`##`-Zeile öffnet einen Blockkommentar; die nächste alleinstehende `##`-Zeile
+schließt ihn. Blockkommentare werden nicht verschachtelt. Fehlt das Ende,
+meldet der Lexer einen Fehler am Öffner. Die ältere `//`-Zeilenkommentarsyntax
+bleibt für gültige Bestandsprogramme erhalten; neuer Zelyra-Quelltext verwendet
+`#` und `##`.
+
 ## Interaktive Konsoleneingabe
 
 CLI-Programme lesen eine Zeile mit `read_console(prompt: String) -> String?`.

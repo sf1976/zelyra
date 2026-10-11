@@ -32,11 +32,27 @@ Gleichzeitig ist Zelyra **datenbank- und webzentriert**:
 Schauen wir uns ein erstes winziges Zelyra-Programm an:
 
 ```zelyra
-// Unser erstes Zelyra-Programm: Eine Begrüßung
+# Unser erstes Zelyra-Programm: Eine Begrüßung
 fn main() {
     print("Willkommen bei Zelyra!")
 }
 ```
+
+Einzeilige Kommentare beginnen mit `#`. Ein Blockkommentar beginnt und endet
+mit jeweils einer alleinstehenden `##`-Zeile. Blockkommentare können nicht
+verschachtelt werden; fehlt die schließende Zeile, meldet der Lexer einen
+Fehler:
+
+```zelyra
+##
+Dieser ganze Bereich wird vom Compiler ignoriert.
+Er kann sich über mehrere Zeilen erstrecken.
+##
+```
+
+Die ältere Schreibweise `//` wird aus Kompatibilitätsgründen weiterhin
+verstanden. Für neuen Zelyra-Code sind `#` und `##` der empfohlene Standard.
+Ein vollständiges Beispiel steht in [`examples/comments.zyl`](../../../examples/comments.zyl).
 
 Wenn du diesem Programm mehr Struktur geben möchtest, zerlegst du die Aufgabe in eine Funktion:
 
