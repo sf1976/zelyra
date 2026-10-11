@@ -611,6 +611,14 @@ files, with cross-file navigation and diagnostics from Studio. The roadmap
 stages these goals across 0.9.2–0.9.8; they are not capabilities of the
 released 0.9.0.
 
+The Laravel Migrator is also an implementation driver for Zelyra itself. When
+an accepted Laravel mapping is blocked by a missing Zelyra language, compiler,
+database, runtime, or Studio capability, record that gap against the release
+that needs it and implement it within 0.9.3–0.9.8. Do not label a mapping
+"direct" until its generated project runs through the promised workflow. Keep
+genuinely ambiguous or unsafe business behavior as explicit manual work, with
+its source evidence and reason.
+
 ## Release 0.9.1 — IDE foundation
 
 - [🧪] Studio already provides the project explorer, tabs, visible save state,
@@ -801,6 +809,8 @@ released 0.9.0.
   Refuse overlapping source/report/output paths and unsafe existing targets.
   The report must distinguish generated scaffolding from transferred business
   behavior, and every generated project must pass the matching Zelyra compiler.
+  Treat each blocker in an accepted mapping as a Zelyra implementation item in
+  the same release train, and close it before calling that mapping supported.
 - [🗺️] Add a persistent, tenant-scoped in-app notification center with unread
   counts, read/archive actions, pagination, preferences, and clear retention
   rules. Connect application events to optional email through the 0.9.5 SMTP
@@ -843,9 +853,13 @@ released 0.9.0.
   compatibility matrix. Verify read-only analysis, secret/PII redaction,
   source-location accuracy, route-to-data relationship reports, ambiguity
   handling, path separation, provenance in generated files, and compiler-valid
-  output on representative Laravel fixtures. Document supported Laravel and
-  package patterns plus known limits. No automatic business-logic or security
-  parity claim is made; the tool supplies an auditable migration starting point.
+  output on representative Laravel fixtures. Run generated applications through
+  real CRUD workflows on the supported databases, including the supported
+  relation, tenant, permission, transaction, and money cases. Resolve any
+  Zelyra capability that blocks an accepted mapping before 0.9.8 exits. Document
+  supported Laravel and package patterns plus known limits. No automatic
+  business-logic or security parity claim is made; the tool supplies an
+  auditable migration starting point.
 - [🗺️] Rehearse clean installation, upgrades, rollback, migration, backup and
   restore on supported operating systems and databases. Finish operator and
   user documentation, dependency/license review, resource limits, error

@@ -579,6 +579,15 @@ lesbarer Zelyra-Quelltext überprüfbar; folgenreicher Datenzugriff zeigt Plan,
 Auswirkungen und eine ausdrückliche Bestätigung. Die Roadmap staffelt diese Ziele über
 0.9.2–0.9.8; sie sind noch keine Fähigkeiten des veröffentlichten 0.9.0.
 
+Der Laravel-Migrator ist zugleich ein Umsetzungstreiber für Zelyra selbst.
+Blockiert eine angenommene Laravel-Zuordnung durch eine fehlende Zelyra-
+Sprach-, Compiler-, Datenbank-, Laufzeit- oder Studio-Funktion, wird diese
+Lücke dem dafür nötigen Release zugeordnet und innerhalb von 0.9.3–0.9.8
+geschlossen. Eine Zuordnung gilt erst als „direkt abbildbar“, wenn das erzeugte
+Projekt den zugesagten Ablauf tatsächlich ausführt. Echte Mehrdeutigkeiten und
+unsichere Geschäftslogik bleiben mit Quellbeleg und Begründung ausdrücklich
+manuell umzusetzen.
+
 ## Release 0.9.1 — IDE-Grundlage
 
 - [🧪] Studio enthält bereits Projektbaum, Tabs, sichtbaren Speicherstatus,
@@ -795,6 +804,9 @@ Auswirkungen und eine ausdrückliche Bestätigung. Die Roadmap staffelt diese Zi
   Quell-/Berichts-/Zielpfade und unsichere bestehende Ziele ablehnen. Der Bericht
   muss Gerüst und tatsächlich übertragene Geschäftslogik unterscheiden; jedes
   erzeugte Projekt muss mit dem passenden Zelyra-Compiler geprüft werden.
+  Blockaden angenommener Zuordnungen werden als Zelyra-Umsetzungsaufgabe in
+  derselben Release-Reihe geführt und behoben, bevor die Zuordnung als
+  unterstützt gilt.
 - [🗺️] Ein persistentes, mandantengebundenes In-App-Benachrichtigungszentrum mit
   ungelesener Anzahl, Gelesen-/Archiviert-Aktionen, Seitennavigation,
   Einstellungen und klaren Aufbewahrungsregeln bauen. Anwendungsereignisse
@@ -842,7 +854,11 @@ Auswirkungen und eine ausdrückliche Bestätigung. Die Roadmap staffelt diese Zi
   Geheimnis-/PII-Redaktion, Quellpositionsgenauigkeit, Routen-Daten-Beziehungen,
   Behandlung von Mehrdeutigkeiten, Pfadtrennung, Herkunftsverweise in
   generierten Dateien und compilergeprüfte Ausgabe an repräsentativen Laravel-
-  Fixtures prüfen. Unterstützte Laravel-/Paketmuster und Grenzen dokumentieren.
+  Fixtures prüfen. Erzeugte Anwendungen mit echten CRUD-Abläufen auf den
+  unterstützten Datenbanken ausführen, einschließlich unterstützter Beziehungen,
+  Mandanten, Berechtigungen, Transaktionen und Geldbeträge. Jede Zelyra-Funktion,
+  die eine angenommene Zuordnung blockiert, vor dem Abschluss von 0.9.8
+  implementieren. Unterstützte Laravel-/Paketmuster und Grenzen dokumentieren.
   Keine automatische Geschäftslogik- oder Sicherheitsparität behaupten; das
   Werkzeug liefert einen überprüfbaren Migrationsstartpunkt.
 - [🗺️] Saubere Installation, Upgrade, Rollback, Migration, Backup und Restore
