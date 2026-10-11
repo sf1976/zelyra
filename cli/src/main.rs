@@ -754,7 +754,10 @@ console = false
       retries: 20
 
   web:
-    build: .
+    build:
+      context: .
+      args:
+        ZELYRA_REF: ${ZELYRA_REF:-__ZELYRA_DEFAULT_REF__}
     command: ["zelyra", "serve", "main.zyl", "0.0.0.0:__WEB_PORT__"]
     environment:
       ZELYRA_DATABASE_MAIN_URL: mariadb://__MARIADB_USER__:__MARIADB_PASSWORD__@mariadb:3306/__MARIADB_DATABASE__
@@ -803,7 +806,11 @@ volumes:
                 )
                 .replace("__WEB_PORT__", &web_port_value)
                 .replace("__HOST_PORT__", &host_port_value)
-                .replace("__DATABASE_HOST_PORT__", &database_host_port_value),
+                .replace("__DATABASE_HOST_PORT__", &database_host_port_value)
+                .replace(
+                    "__ZELYRA_DEFAULT_REF__",
+                    &format!("v{}", env!("CARGO_PKG_VERSION")),
+                ),
             ),
             (
                 "Dockerfile",
