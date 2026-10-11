@@ -366,6 +366,7 @@ fn editor_response(
                 values.get("path").map(String::as_str).unwrap_or("main.zyl"),
             )
         }
+        ("POST", "locals") => local_editor_symbols(state, &parse_json_body(&request.body)?),
         ("GET", "file") => {
             let query = request
                 .target
@@ -582,6 +583,140 @@ fn push_editor_symbol(
         "path": path,
         "position": prefix.encode_utf16().count(),
     }));
+}
+
+fn local_editor_symbols(
+    state: &EditorState,
+    value: &Value,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let relative = value
+        .get("path")
+        .and_then(Value::as_str)
+        .filter(|path| path.ends_with(".zyl"))
+        .ok_or((400, "choose a Zelyra source file".into()))?;
+    let _path = safe_editor_path(&state.root, relative, false)?;
+    let source = value
+        .get("source")
+        .and_then(Value::as_str)
+        .ok_or((400, "source is required".into()))?;
+    if source.len() > EDITOR_MAX_FILE_BYTES {
+        return Err((413, "source exceeds the 1 MiB editor limit".into()));
+    }
+    let offset = value
+        .get("offset")
+        .and_then(Value::as_u64)
+        .ok_or((400, "editor offset is required".into()))?;
+    let byte_offset = utf16_to_byte(source, usize::try_from(offset).unwrap_or(usize::MAX));
+    let tokens = lex(source).map_err(|_| (422, "source is not parseable yet".into()))?;
+    let program = parse(&tokens).map_err(|_| (422, "source is not parseable yet".into()))?;
+    let mut locals = Vec::new();
+    if let Some(function) = program.functions.iter().find(|function| {
+        function.body.span.start <= byte_offset && byte_offset <= function.body.span.end
+    }) {
+        for parameter in &function.params {
+            locals.push(json!({
+                "label": parameter.name,
+                "kind": "variable",
+                "detail": "parameter",
+                "valueType": parameter.ty.to_string(),
+            }));
+        }
+        collect_visible_bindings(&function.body, byte_offset, &mut locals);
+    }
+    Ok((
+        200,
+        "application/json; charset=utf-8",
+        json!({"symbols": locals}).to_string(),
+    ))
+}
+
+fn utf16_to_byte(source: &str, requested: usize) -> usize {
+    let mut utf16_offset = 0;
+    for (byte_offset, character) in source.char_indices() {
+        if utf16_offset >= requested {
+            return byte_offset;
+        }
+        utf16_offset += character.len_utf16();
+        if utf16_offset > requested {
+            return byte_offset;
+        }
+    }
+    source.len()
+}
+
+fn collect_visible_bindings(block: &zelyra_ast::Block, offset: usize, output: &mut Vec<Value>) {
+    if offset < block.span.start || offset > block.span.end {
+        return;
+    }
+    for statement in &block.statements {
+        match statement {
+            zelyra_ast::Stmt::Let { name, ty, span, .. } if span.start < offset => {
+                output.push(json!({
+                    "label": name,
+                    "kind": "variable",
+                    "detail": "local value",
+                    "valueType": ty.as_ref().map(ToString::to_string),
+                }))
+            }
+            zelyra_ast::Stmt::If {
+                then_block,
+                else_block,
+                span,
+                ..
+            } if span.start < offset => {
+                collect_visible_bindings(then_block, offset, output);
+                if let Some(block) = else_block {
+                    collect_visible_bindings(block, offset, output);
+                }
+            }
+            zelyra_ast::Stmt::While { body, span, .. }
+            | zelyra_ast::Stmt::Loop { body, span, .. }
+            | zelyra_ast::Stmt::Transaction { body, span }
+            | zelyra_ast::Stmt::Parallel { body, span }
+                if span.start < offset =>
+            {
+                collect_visible_bindings(body, offset, output);
+            }
+            zelyra_ast::Stmt::For {
+                name, body, span, ..
+            } if span.start < offset && body.span.start <= offset && offset <= body.span.end => {
+                output.push(json!({
+                    "label": name,
+                    "kind": "variable",
+                    "detail": "loop value",
+                    "valueType": Value::Null,
+                }));
+                collect_visible_bindings(body, offset, output);
+            }
+            zelyra_ast::Stmt::Match { arms, span, .. } if span.start < offset => {
+                for arm in arms
+                    .iter()
+                    .filter(|arm| arm.span.start <= offset && offset <= arm.span.end)
+                {
+                    collect_pattern_bindings(&arm.pattern, output);
+                    collect_visible_bindings(&arm.body, offset, output);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn collect_pattern_bindings(pattern: &zelyra_ast::Pattern, output: &mut Vec<Value>) {
+    match &pattern.kind {
+        zelyra_ast::PatternKind::Variable(name) => output.push(json!({
+            "label": name,
+            "kind": "variable",
+            "detail": "match value",
+            "valueType": Value::Null,
+        })),
+        zelyra_ast::PatternKind::Constructor {
+            inner: Some(inner), ..
+        } => {
+            collect_pattern_bindings(inner, output);
+        }
+        _ => {}
+    }
 }
 
 fn editor_database_schemas(

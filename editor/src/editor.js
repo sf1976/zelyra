@@ -71,6 +71,7 @@ const messages = {
     definitionNotFound: "Keine passende Definition im Projekt gefunden.", definitionSaveFirst: "Speichere die Datei vor dem Sprung, damit die Quellposition stimmt.", definitionOpened: "Definition geöffnet: {0}",
     projectSearch: "Projekt durchsuchen", projectSearchTitle: "Projekt durchsuchen", projectSearchHelp: "Alle gespeicherten Zelyra-Dateien durchsuchen", projectSearchPlaceholder: "Text in Zelyra-Dateien suchen", projectSearchResults: "Suchergebnisse", projectSearchEmpty: "Keine Treffer gefunden.", projectSearchLoading: "Projekt wird durchsucht …", projectSearchSaveFirst: "Speichere offene Änderungen, bevor du das Projekt durchsuchst.", projectSearchTruncated: "Die Trefferliste ist wegen einer Suchgrenze unvollständig.", projectSearchSubmit: "Suchen",
     referencesTitle: "Bezeichnerverwendungen", referencesPlaceholder: "Zelyra-Bezeichner suchen",
+    localParameter: "Parameter", localValue: "Lokaler Wert", loopValue: "Schleifenwert", matchValue: "Musterwert",
     assistant: "Hilfe und Eigenschaften", helpTab: "Hilfe", propertiesTab: "Eigenschaften", contextHelp: "KONTEXT-HILFE",
     selectLanguageItem: "Wähle einen Zelyra-Begriff", contextHelpHint: "Bewege den Cursor auf einen Begriff. F1 öffnet diese Hilfe.",
     fileProperties: "DATEIEIGENSCHAFTEN", fileType: "Dateityp", filePath: "Projektpfad", fileStatus: "Status",
@@ -138,6 +139,7 @@ const messages = {
     definitionNotFound: "No matching project definition was found.", definitionSaveFirst: "Save this file before jumping so source positions stay accurate.", definitionOpened: "Opened definition: {0}",
     projectSearch: "Search project", projectSearchTitle: "Search project", projectSearchHelp: "Search all saved Zelyra files", projectSearchPlaceholder: "Search text in Zelyra files", projectSearchResults: "Search results", projectSearchEmpty: "No matches found.", projectSearchLoading: "Searching the project …", projectSearchSaveFirst: "Save open changes before searching the project.", projectSearchTruncated: "The result list is incomplete because a search limit was reached.", projectSearchSubmit: "Search",
     referencesTitle: "Identifier occurrences", referencesPlaceholder: "Find a Zelyra identifier",
+    localParameter: "Parameter", localValue: "Local value", loopValue: "Loop value", matchValue: "Match value",
     assistant: "Help and properties", helpTab: "Help", propertiesTab: "Properties", contextHelp: "CONTEXT HELP",
     selectLanguageItem: "Select a Zelyra term", contextHelpHint: "Place the cursor on a term. Press F1 to open this help.",
     fileProperties: "FILE PROPERTIES", fileType: "File type", filePath: "Project path", fileStatus: "Status",
@@ -409,17 +411,37 @@ function renderTabs() {
 function completionSource(context) {
   const word = context.matchBefore(/[\w]+/);
   if (!word && !context.explicit) return null;
-  return loadProjectSymbols(activePath).then((symbols) => ({
-    from: word ? word.from : context.pos,
-    options: [
-      ...[...keywords].map((label) => ({ label, type: "keyword" })),
-      ...symbols.map((symbol) => ({
-        label: symbol.label,
-        type: symbol.kind,
-        detail: symbol.detail ? t(`symbol${symbol.detail[0].toUpperCase()}${symbol.detail.slice(1)}`) : t("symbolProject"),
-      })),
-    ],
-  }));
+  const source = context.state.doc.toString();
+  return Promise.all([
+    loadProjectSymbols(activePath),
+    loadLocalSymbols(activePath, source, context.pos),
+  ]).then(([symbols, locals]) => {
+    const localOptions = [...new Map(locals.map((item) => [item.label, item])).values()].map((item) => ({
+      label: item.label,
+      type: "variable",
+      detail: `${t(item.detail === "parameter" ? "localParameter" : item.detail === "loop value" ? "loopValue" : item.detail === "match value" ? "matchValue" : "localValue")}${item.valueType ? ` · ${item.valueType}` : ""}`,
+    }));
+    const localNames = new Set(localOptions.map((item) => item.label));
+    return {
+      from: word ? word.from : context.pos,
+      options: [
+        ...[...keywords].map((label) => ({ label, type: "keyword" })),
+        ...localOptions,
+        ...symbols.filter((symbol) => !localNames.has(symbol.label)).map((symbol) => ({
+          label: symbol.label,
+          type: symbol.kind,
+          detail: symbol.detail ? t(`symbol${symbol.detail[0].toUpperCase()}${symbol.detail.slice(1)}`) : t("symbolProject"),
+        })),
+      ],
+    };
+  });
+}
+
+function loadLocalSymbols(path, source, offset) {
+  if (!path?.endsWith(".zyl")) return Promise.resolve([]);
+  return api("locals", { method: "POST", body: JSON.stringify({ path, source, offset }) })
+    .then((result) => result.symbols || [])
+    .catch(() => []);
 }
 
 function loadProjectSymbols(path) {

@@ -620,8 +620,11 @@ Auswirkungen und eine ausdrückliche Bestätigung. Die Roadmap staffelt diese Zi
   Projektmodell und F12-Sprünge zu Definitionen aus gespeicherten Projektdateien.
   Zusätzlich verfügbar sind eine Literalsuche und lexikalische Bezeichnerfundstellen
   per Umschalt+F12 in gespeicherten `.zyl`-Dateien. Diese Fundstellen lösen keine
-  Gültigkeitsbereiche auf und sind keine semantischen Referenzen. Lokale/typisierte
-  Vervollständigung und symbolbezogene Eigenschaften bleiben offen.
+  Gültigkeitsbereiche auf und sind keine semantischen Referenzen. Typisierte
+  Vervollständigung und symbolbezogene Eigenschaften bleiben offen. Strg+Leertaste
+  ergänzt zusätzlich Parameter sowie gültige, im aktuellen Block sichtbare
+  `let`-, Schleifen- und Match-Bindungen aus ungespeichertem Quelltext. Typinferenz
+  bleibt offen.
 - [🗺️] Compiler-gestützte Vervollständigung, Symbolnavigation, Suche/Referenzen,
   Formatierung, handlungsorientierte und während der Eingabe aktualisierte
   Diagnosen sowie integrierte Check-, Run- und Test-Aufgaben ergänzen.

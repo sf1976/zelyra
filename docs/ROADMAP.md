@@ -649,8 +649,9 @@ released 0.9.0.
   project model, and F12 navigation to definitions in saved project files. A
   literal project search and Shift+F12 lexical identifier occurrences are also
   available for saved `.zyl` files. Occurrences are not scope-aware semantic
-  references; local/type-aware completion and symbol-level properties remain
-  open.
+  references. Ctrl+Space also completes parameters and in-scope `let`, loop,
+  and match bindings from valid unsaved source. Type inference and
+  symbol-level properties remain open.
 - [🗺️] Add compiler-backed completion, symbol navigation, find/references,
   formatting, actionable diagnostics updated while typing, and integrated
   check/run/test tasks. Show clear task progress and output without exposing
