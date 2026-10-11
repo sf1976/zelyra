@@ -235,13 +235,17 @@ try {
   await page.locator("#assistant-properties-tab").click();
   await page.getByRole("heading", { name: "main.zyl" }).waitFor();
   await page.locator("#assistant-help-tab").click();
+  await page.route("**/__zelyra/editor/api/run", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ success: true, exitCode: 0, timedOut: false, durationMs: 1, stdout: "3\n", stderr: "", truncated: false }),
+  }));
   await page.locator("#run-button").click();
   await page.waitForFunction(() => document.querySelector("#run-output-state")?.dataset.kind === "success");
-  const runState = await page.locator("#run-output-state").textContent();
-  const webUrl = await page.locator("#run-output-web-url").getAttribute("href");
-  assert.match(runState, /Web application is running locally|Webanwendung läuft lokal/);
-  assert.match(webUrl, /^http:\/\/127\.0\.0\.1:\d+$/);
-  await page.locator("#run-output-web-link").waitFor({ state: "visible" });
+  const consoleOutput = await page.locator("#run-output-content").textContent();
+  assert.match(consoleOutput, /3/, "Studio Run must display console output");
+  assert.match(consoleOutput, /interactive input|interaktive Eingabe/i, "Studio must explain that stdin is unavailable");
+  await page.unroute("**/__zelyra/editor/api/run");
   await page.locator("#run-output-close").click();
 
   await editor.focus();
