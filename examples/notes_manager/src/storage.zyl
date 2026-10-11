@@ -1,0 +1,99 @@
+import "src/model.zyl" as model
+pub fn load(name: String) -> Result<model::Note, String>uses FileSystem {
+    if!model::valid_name(name) {
+        return Err("Der Dateiname ist ungültig. Erlaubt ist ein einfacher Name ohne Pfadteile.")
+    }
+    match read_text_result(model::note_path(name)) {
+        Ok(text) => {
+            return json_decode_result<model::Note>(text)
+        }
+        Err(message) => {
+            return Err("Notiz konnte nicht gelesen werden: " + message)
+        }
+    }
+}
+pub fn save_new(name: String, note: model::Note) -> Result<Bool, String>uses FileSystem {
+    if!model::valid_name(name) {
+        return Err("Der Dateiname ist ungültig.")
+    }
+    match write_text_new_result(model::note_path(name), json_encode(note)) {
+        Ok(_) => {
+            return Ok(true)
+        }
+        Err(message) => {
+            return Err(message)
+        }
+    }
+}
+pub fn replace(name: String, note: model::Note) -> Result<Bool, String>uses FileSystem {
+    match atomic_write_text_result(model::note_path(name), json_encode(note)) {
+        Ok(_) => {
+            return Ok(true)
+        }
+        Err(message) => {
+            return Err(message)
+        }
+    }
+}
+pub fn names() -> Result<String[], String>uses FileSystem {
+    return Ok(list_dir("data/notes"))
+}
+pub fn backup(name: String) -> Result<String, String>uses FileSystem, Clock {
+    match read_text_result(model::note_path(name)) {
+        Ok(contents) => {
+            stamp = json_encode(now())
+            mutable sequence = 1
+            mutable saved = ""
+            mutable complete = false
+            backup_names = list_dir("data/notes/backups")
+            while sequence < 100 &&!complete {
+                backup_file = "backup." + stamp + "." + json_encode(sequence) + ".json"
+                candidate = "data/notes/backups/" + backup_file
+                if contains(backup_names, backup_file) {
+                    sequence = sequence + 1
+                }
+                else {
+                    backup_record = model::NoteBackup {
+                        original_name: name, note_text: contents
+                    }
+                    match write_text_new_result(candidate, json_encode(backup_record)) {
+                        Ok(_) => {
+                            saved = candidate
+                            complete = true
+                        }
+                        Err(message) => {
+                            return Err("Sicherungskopie konnte nicht erstellt werden: " + message)
+                        }
+                    }
+                }
+            }
+            if complete {
+                return Ok(saved)
+            }
+            return Err("Es konnte kein freier Sicherungsdateiname gefunden werden.")
+        }
+        Err(message) => {
+            return Err("Vor der Änderung konnte keine Sicherung gelesen werden: " + message)
+        }
+    }
+}
+pub fn update_content(name: String, content: String) -> Result<Bool, String>uses FileSystem, Clock {
+    match load(name) {
+        Ok(old) => {
+            match backup(name) {
+                Ok(_) => {
+                    updated = model::Note {
+                        display_title: old.display_title, content: content, created_at: old.created_at, updated_at: now()
+                    }
+                    return replace(name, updated)
+                }
+                Err(message) => {
+                    return Err(message)
+                }
+            }
+        }
+        Err(message) => {
+            return Err(message)
+        }
+    }
+}

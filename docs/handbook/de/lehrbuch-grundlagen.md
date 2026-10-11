@@ -2895,6 +2895,26 @@ fn main() uses FileSystem {
 Fehlende Projektfreigaben und verweigerte Capabilities bleiben Sicherheitsfehler.
 Die Result-Varianten fangen gewöhnliche Pfad-, Lese-, Schreib- und JSON-Fehler ab.
 
+Für sichere Textdatei-Änderungen gibt es außerdem `write_text_new_result`,
+`atomic_write_text_result`, `append_text_result`, `copy_file_new_result`,
+`rename_file_result` und `delete_file_result`. `write_text_new_result` legt
+Dateien exklusiv an und meldet einen Konflikt, wenn der Zielname bereits
+existiert. `atomic_write_text_result` schreibt zuerst eine temporäre Datei im
+gleichen Verzeichnis und ersetzt das Ziel erst nach erfolgreichem Schreiben.
+`rename_file_result` und `copy_file_new_result` überschreiben ebenfalls keine
+vorhandene Zieldatei. Alle Dateioperationen bleiben auf die in der
+Projektkonfiguration freigegebenen Wurzelverzeichnisse beschränkt.
+
+`text_contains` sucht eine wörtliche Zeichenfolge. `text_replace_result` ersetzt
+alle Vorkommen eines nicht leeren Suchtexts; `text_split_result` teilt an einem
+nicht leeren Trenntext und erhält auch leere Teile am Anfang oder Ende. Diese
+Funktionen arbeiten mit UTF-8-Strings und interpretieren den Suchtext nicht als
+regulären Ausdruck.
+
+Ein vollständiges, mehrteiliges Beispiel mit Notizverwaltung, Backups,
+Protokoll, Restore und Tests liegt unter
+[`examples/notes_manager`](../../../examples/notes_manager/README.md).
+
 ### 5. Typische Fehler und deren Ursachen
 - **Fehler:** Aufruf von `read_text` oder `write_text` ohne Deklaration von `uses FileSystem`.
   *Ursache:* Zelyras Sicherheitssystem (`E-CAP-001`) verhindert jeden unberechtigten Zugriff auf die Festplatte.

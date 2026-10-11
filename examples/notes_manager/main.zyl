@@ -1,0 +1,62 @@
+import "src/notes.zyl" as notes
+import "tests.zyl" as tests
+pub fn main() uses Console, FileSystem, Clock {
+    print("Zelyra Notizverwaltung")
+    print("UTF-8-Notizen als JSON-Textdateien; Änderungen erhalten eine Sicherung.")
+    mutable running = true
+    while running {
+        print("")
+        print("1 Liste  2 Erstellen  3 Lesen  4 Absatz anhängen  5 Text ersetzen")
+        print("6 Absatz entfernen  7 Umbenennen  8 Kopieren  9 Löschen")
+        print("10 Suchen  11 Wiederherstellen  12 Tests  0 Ende")
+        choice = read_console("Auswahl: ")
+        match choice {
+            Some("1") => {
+                notes::list_notes()
+            }
+            Some("2") => {
+                notes::create_note()
+            }
+            Some("3") => {
+                notes::read_note()
+            }
+            Some("4") => {
+                notes::append_paragraph()
+            }
+            Some("5") => {
+                notes::replace_text()
+            }
+            Some("6") => {
+                notes::remove_paragraph()
+            }
+            Some("7") => {
+                notes::rename_note()
+            }
+            Some("8") => {
+                notes::copy_note()
+            }
+            Some("9") => {
+                notes::delete_note()
+            }
+            Some("10") => {
+                notes::search_notes()
+            }
+            Some("11") => {
+                notes::restore_backup()
+            }
+            Some("12") => {
+                tests::run()
+            }
+            Some("0") => {
+                running = false
+            }
+            Some(_) => {
+                print("Bitte eine Zahl aus dem Menü eingeben.")
+            }
+            None => {
+                running = false
+            }
+        }
+    }
+    print("Notizverwaltung beendet.")
+}

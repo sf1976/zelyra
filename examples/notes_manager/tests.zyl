@@ -1,0 +1,253 @@
+import "src/model.zyl" as model
+import "src/storage.zyl" as storage
+import "src/text_tools.zyl" as text_tools
+fn require(condition: Bool, message: String) {
+    if condition {
+        print("PASS " + message)
+    }
+    else {
+        print("FEHLER: " + message)
+    }
+}
+pub fn run() uses Console, FileSystem, Clock {
+    print("Starte Notizverwaltungs-Tests")
+    sample = model::Note {
+        display_title: "Küche & Grüße",
+        content: "Umlaute äöü ÄÖÜ ß; Komma, Semikolon; Anführungszeichen \"ja\".\nZweite Zeile.\n\nZweiter Absatz.",
+        created_at: now(),
+        updated_at: now()
+    }
+    require(model::matches_search("kunde", sample, "kunde"), "Suche nach Dateiname")
+    require(model::matches_search("kunde", sample, "Grüße"), "Suche nach UTF-8-Inhalt")
+    require(!model::matches_search("kunde", sample, "nicht vorhanden"), "Suche ohne Treffer")
+    match text_replace_result("Text", "", "x") {
+        Ok(_) => {
+            print("FEHLER leere Ersetzungssuche wurde akzeptiert")
+        }
+        Err(_) => {
+            print("PASS leere Ersetzungssuche abgelehnt")
+        }
+    }
+    match text_split_result("Text", "") {
+        Ok(_) => {
+            print("FEHLER leerer Trenntext wurde akzeptiert")
+        }
+        Err(_) => {
+            print("PASS leerer Trenntext abgelehnt")
+        }
+    }
+    first_file = model::note_path("__zelyra_test_note")
+    renamed_file = model::note_path("__zelyra_test_renamed")
+    copied_file = model::note_path("__zelyra_test_copy")
+    existing_files = list_dir("data/notes")
+    if contains(existing_files, "__zelyra_test_note.note.json") {
+        delete_file(first_file)
+    }
+    if contains(existing_files, "__zelyra_test_renamed.note.json") {
+        delete_file(renamed_file)
+    }
+    if contains(existing_files, "__zelyra_test_copy.note.json") {
+        delete_file(copied_file)
+    }
+    match storage::load("__zelyra_missing_note") {
+        Ok(_) => {
+            print("FEHLER fehlende Notiz wurde gefunden")
+        }
+        Err(_) => {
+            print("PASS verständlicher Fehler bei fehlender Notiz")
+        }
+    }
+    if contains(existing_files, "__zelyra_test_empty.note.json") {
+        delete_file("data/notes/__zelyra_test_empty.note.json")
+    }
+    empty_note = model::empty_note("Leere Notiz")
+    match storage::save_new("__zelyra_test_empty", empty_note) {
+        Ok(_) => {
+            match storage::load("__zelyra_test_empty") {
+                Ok(note) => {
+                    require(note.content == "", "leere Notiz erstellen und lesen")
+                }
+                Err(message) => {
+                    print("FEHLER leere Notiz lesen: " + message)
+                }
+            }
+            delete_file("data/notes/__zelyra_test_empty.note.json")
+        }
+        Err(message) => {
+            print("FEHLER leere Notiz erstellen: " + message)
+        }
+    }
+    match storage::save_new("__zelyra_test_note", sample) {
+        Ok(_) => {
+            print("PASS Erstellen ohne Überschreiben")
+        }
+        Err(message) => {
+            print("FEHLER Erstellen: " + message)
+        }
+    }
+    match storage::save_new("__zelyra_test_note", sample) {
+        Ok(_) => {
+            print("FEHLER: vorhandene Datei wurde überschrieben")
+        }
+        Err(_) => {
+            print("PASS Überschreiben verhindert")
+        }
+    }
+    match storage::load("__zelyra_test_note") {
+        Ok(note) => {
+            require(note == sample, "Lesen und UTF-8-Roundtrip")
+        }
+        Err(message) => {
+            print("FEHLER Lesen: " + message)
+        }
+    }
+    match storage::update_content("__zelyra_test_note", sample.content + "\n\nAngehängt") {
+        Ok(_) => {
+            print("PASS Anhängen mit Sicherung und atomarem Speichern")
+        }
+        Err(message) => {
+            print("FEHLER Anhängen: " + message)
+        }
+    }
+    match storage::load("__zelyra_test_note") {
+        Ok(note) => {
+            match text_replace_result(note.content, "Angehängt", "Ersetzt") {
+                Ok(updated) => {
+                    require(text_contains(updated, "Ersetzt"), "Text ersetzen")
+                    match text_replace_result(updated, "kommt-nicht-vor", "x") {
+                        Ok(unchanged) => {
+                            require(unchanged == updated, "Suchtext fehlt; Text bleibt unverändert")
+                        }
+                        Err(message) => {
+                            print("FEHLER Ersetzen ohne Treffer: " + message)
+                        }
+                    }
+                    match text_tools::remove_paragraph(updated, 2) {
+                        Ok(without_second) => {
+                            require(!text_contains(without_second, "Zweiter Absatz"), "Absatz entfernen")
+                        }
+                        Err(message) => {
+                            print("FEHLER Absatz entfernen: " + message)
+                        }
+                    }
+                }
+                Err(message) => {
+                    print("FEHLER Ersetzen: " + message)
+                }
+            }
+        }
+        Err(message) => {
+            print("FEHLER erneutes Lesen: " + message)
+        }
+    }
+    match storage::backup("__zelyra_test_note") {
+        Ok(backup_path) => {
+            match read_text_result(backup_path) {
+                Ok(backup_json) => {
+                    match json_decode_result<model::NoteBackup>(backup_json) {
+                        Ok(backup_record) => {
+                            match atomic_write_text_result(first_file, "Geänderte Version") {
+                                Ok(_) => {
+                                    match atomic_write_text_result(first_file, backup_record.note_text) {
+                                        Ok(_) => {
+                                            print("PASS Wiederherstellen einer Sicherung")
+                                            match storage::load("__zelyra_test_note") {
+                                                Ok(restored_note) => {
+                                                    require(restored_note.content == sample.content + "\n\nAngehängt", "wiederhergestellter Dateiinhalt stimmt")
+                                                }
+                                                Err(message) => {
+                                                    print("FEHLER wiederhergestellte Notiz lesen: " + message)
+                                                }
+                                            }
+                                        }
+                                        Err(message) => {
+                                            print("FEHLER Wiederherstellen: " + message)
+                                        }
+                                    }
+                                }
+                                Err(message) => {
+                                    print("FEHLER vorbereitende Änderung: " + message)
+                                }
+                            }
+                        }
+                        Err(message) => {
+                            print("FEHLER Backup-JSON lesen: " + message)
+                        }
+                    }
+                }
+                Err(message) => {
+                    print("FEHLER Backup lesen: " + message)
+                }
+            }
+        }
+        Err(message) => {
+            print("FEHLER Backup anlegen: " + message)
+        }
+    }
+    match rename_file_result(first_file, renamed_file) {
+        Ok(_) => {
+            print("PASS Umbenennen ohne Überschreiben")
+        }
+        Err(message) => {
+            print("FEHLER Umbenennen: " + message)
+        }
+    }
+    match copy_file_new_result(renamed_file, copied_file) {
+        Ok(_) => {
+            print("PASS Kopieren ohne Überschreiben")
+        }
+        Err(message) => {
+            print("FEHLER Kopieren: " + message)
+        }
+    }
+    match delete_file_result(copied_file) {
+        Ok(_) => {
+            print("PASS Löschen")
+        }
+        Err(message) => {
+            print("FEHLER Löschen: " + message)
+        }
+    }
+    mutable large = ""
+    mutable item_number = 0
+    while item_number < 4096 {
+        large = large + "Großer UTF-8-Inhalt; Grüße äöü.\n"
+        item_number = item_number + 1
+    }
+    match atomic_write_text_result(renamed_file, large) {
+        Ok(_) => {
+            match read_text_result(renamed_file) {
+                Ok(roundtrip) => {
+                    require(roundtrip == large, "großer Inhalt bleibt vollständig erhalten")
+                }
+                Err(message) => {
+                    print("FEHLER großen Inhalt lesen: " + message)
+                }
+            }
+        }
+        Err(message) => {
+            print("FEHLER großen Inhalt schreiben: " + message)
+        }
+    }
+    require(!model::valid_name("../outside"), "Pfadzugriff außerhalb des Notizordners")
+    delete_file(renamed_file)
+    all_backups = list_dir("data/notes/backups")
+    for backup_file in all_backups {
+        match read_text_result("data/notes/backups/" + backup_file) {
+            Ok(backup_json) => {
+                match json_decode_result<model::NoteBackup>(backup_json) {
+                    Ok(backup_record) => {
+                        if backup_record.original_name == "__zelyra_test_note" {
+                            delete_file("data/notes/backups/" + backup_file)
+                        }
+                    }
+                    Err(_) => {
+                    }
+                }
+            }
+            Err(_) => {
+            }
+        }
+    }
+    print("Notizverwaltungs-Tests abgeschlossen; Details siehe PASS/FEHLER-Zeilen.")
+}

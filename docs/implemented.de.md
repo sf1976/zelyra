@@ -72,7 +72,12 @@ den Beweis, dass beliebige Anwendungen korrekt sind.
 - ✅ Stringwerte lassen sich lexikografisch vergleichen. `json_decode_result<T>`,
   `read_text_result` und `write_text_result` geben erwartbare Parse- und
   Dateifehler als `Result` zurück. `format_timestamp` zeigt UTC-Zeitstempel als
-  ISO-8601; Capability- und Projektgrenzen bleiben aktiv.
+  ISO-8601; Capability- und Projektgrenzen bleiben aktiv. Exklusive
+  Dateierstellung, temporäres Schreiben mit atomarem Austausch, Anhängen,
+  Kopieren, Umbenennen und Result-basiertes Löschen sind verfügbar. Wörtliche
+  Textsuche, Ersetzen und Teilen unterstützen mehrteilige Textdateiabläufe.
+  `examples/notes_manager` demonstriert UTF-8-Notizen, Sicherungen vor
+  Änderungen, Wiederherstellung, Protokollierung und automatisierte Tests.
 - ✅ `zelyra check`, `build`, `run` und `serve`; menschenlesbare Diagnosen,
   stabile Diagnosecodes in unterstützten Maschinenformaten und Quellpositionen.
 - ✅ Kanonische Formatierung mit `zelyra fmt` und nicht veränderndem

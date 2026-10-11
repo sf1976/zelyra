@@ -648,6 +648,12 @@ its source evidence and reason.
 
 ## Release 0.9.2 — IDE language services
 
+- [✅] Add safe UTF-8 text-file operations for exclusive creation, atomic file
+  replacement, append, copy, rename, and Result-based deletion. Literal text
+  search, replacement, and splitting support the multi-file console notes
+  manager in `examples/notes_manager`, including pre-change backups, restore,
+  filesystem boundaries, action logging, and automated regression tests.
+
 - [🧪] The guided tutorial command starts MariaDB and the web app, then applies
   the schema. The Compose web app gets its database URL from project setup, so
   beginners need not set `DATABASE_URL` or run separate `db setup` and `serve`

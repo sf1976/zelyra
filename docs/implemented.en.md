@@ -70,7 +70,12 @@ proof that arbitrary applications are correct.
 - ✅ Strings support lexicographic comparisons. `json_decode_result<T>`,
   `read_text_result`, and `write_text_result` return expected parse and file
   errors as `Result`. `format_timestamp` renders UTC timestamps as ISO 8601;
-  capability grants and project filesystem boundaries still apply.
+  capability grants and project filesystem boundaries still apply. Exclusive
+  file creation, temporary writes with atomic replacement, append, copy, rename,
+  and Result-based deletion are available. Literal text search, replacement,
+  and splitting support multi-file text workflows. `examples/notes_manager`
+  demonstrates UTF-8 notes, pre-change backups, restore, action logging, and
+  automated tests.
 - ✅ `zelyra check`, `build`, `run`, and `serve`; human-readable diagnostics,
   stable diagnostic codes in supported machine output, and source locations.
 - ✅ Canonical formatting with `zelyra fmt` and non-mutating `--check` mode.

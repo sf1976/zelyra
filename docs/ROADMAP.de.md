@@ -620,6 +620,13 @@ manuell umzusetzen.
 
 ## Release 0.9.2 — Sprachdienste der IDE
 
+- [✅] Sichere UTF-8-Textdateioperationen für exklusive Erstellung, atomaren
+  Dateiaustausch, Anhängen, Kopieren, Umbenennen und Result-basiertes Löschen
+  ergänzen. Wörtliche Textsuche, Ersetzen und Teilen unterstützen die
+  mehrteilige Konsolen-Notizverwaltung unter `examples/notes_manager` mit
+  Sicherungen vor Änderungen, Wiederherstellung, Dateigrenzen, Aktionsprotokoll
+  und automatisierten Regressionstests.
+
 - [🧪] Der geführte Tutorialbefehl startet MariaDB und Webanwendung und wendet
   das Schema an. Die Compose-Webanwendung bezieht die Datenbank-URL aus der
   Projekteinstellung; Einsteiger müssen weder `DATABASE_URL` setzen noch

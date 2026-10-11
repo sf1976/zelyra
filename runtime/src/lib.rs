@@ -9,6 +9,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use zelyra_ast::*;
 
 mod csv;
+mod filesystem;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypeError {
@@ -3231,7 +3232,16 @@ fn check_capability_expr(
                     declared,
                     errors,
                 );
-            } else if name == "write_text" || name == "write_text_result" {
+            } else if matches!(
+                name.as_str(),
+                "write_text"
+                    | "write_text_result"
+                    | "write_text_new_result"
+                    | "atomic_write_text_result"
+                    | "append_text_result"
+                    | "copy_file_new_result"
+                    | "rename_file_result"
+            ) {
                 require_capability(
                     "FileSystem",
                     "file-system write access",
@@ -3240,7 +3250,7 @@ fn check_capability_expr(
                     declared,
                     errors,
                 );
-            } else if name == "delete_file" {
+            } else if name == "delete_file" || name == "delete_file_result" {
                 require_capability(
                     "FileSystem",
                     "file-system delete access",
@@ -4156,6 +4166,42 @@ impl<'a> Checker<'a> {
                             Type::Unknown
                         }
                     }
+                } else if name == "text_contains" {
+                    if args.len() != 2 {
+                        self.error(expr.span, "text_contains expects a text and search text");
+                        return Type::Unknown;
+                    }
+                    let text = self.check_expr(&args[0], scopes);
+                    let search = self.check_expr(&args[1], scopes);
+                    self.expect_type(&Type::String, &text, args[0].span);
+                    self.expect_type(&Type::String, &search, args[1].span);
+                    Type::Bool
+                } else if name == "text_replace_result" {
+                    if args.len() != 3 {
+                        self.error(
+                            expr.span,
+                            "text_replace_result expects text, search, and replacement",
+                        );
+                        return Type::Unknown;
+                    }
+                    for arg in args {
+                        let value = self.check_expr(arg, scopes);
+                        self.expect_type(&Type::String, &value, arg.span);
+                    }
+                    Type::Result(Box::new(Type::String), Box::new(Type::String))
+                } else if name == "text_split_result" {
+                    if args.len() != 2 {
+                        self.error(expr.span, "text_split_result expects text and separator");
+                        return Type::Unknown;
+                    }
+                    for arg in args {
+                        let value = self.check_expr(arg, scopes);
+                        self.expect_type(&Type::String, &value, arg.span);
+                    }
+                    Type::Result(
+                        Box::new(Type::Array(Box::new(Type::String))),
+                        Box::new(Type::String),
+                    )
                 } else if name == "get" {
                     if args.len() != 2 {
                         self.error(expr.span, "`get` expects a Map and one key");
@@ -4552,14 +4598,47 @@ impl<'a> Checker<'a> {
                     self.expect_type(&Type::String, &path, args[0].span);
                     self.expect_type(&Type::String, &content, args[1].span);
                     Type::Result(Box::new(Type::Unit), Box::new(Type::String))
-                } else if name == "delete_file" {
+                } else if matches!(
+                    name.as_str(),
+                    "write_text_new_result" | "atomic_write_text_result" | "append_text_result"
+                ) {
+                    if args.len() != 2 {
+                        self.error(
+                            expr.span,
+                            format!("{name} expects a String path and String content"),
+                        );
+                        return Type::Unknown;
+                    }
+                    let path = self.check_expr(&args[0], scopes);
+                    let content = self.check_expr(&args[1], scopes);
+                    self.expect_type(&Type::String, &path, args[0].span);
+                    self.expect_type(&Type::String, &content, args[1].span);
+                    Type::Result(Box::new(Type::Unit), Box::new(Type::String))
+                } else if matches!(name.as_str(), "copy_file_new_result" | "rename_file_result") {
+                    if args.len() != 2 {
+                        self.error(
+                            expr.span,
+                            format!("{name} expects source and destination String paths"),
+                        );
+                        return Type::Unknown;
+                    }
+                    let source = self.check_expr(&args[0], scopes);
+                    let destination = self.check_expr(&args[1], scopes);
+                    self.expect_type(&Type::String, &source, args[0].span);
+                    self.expect_type(&Type::String, &destination, args[1].span);
+                    Type::Result(Box::new(Type::Unit), Box::new(Type::String))
+                } else if name == "delete_file" || name == "delete_file_result" {
                     if args.len() != 1 {
-                        self.error(expr.span, "delete_file expects one String path");
+                        self.error(expr.span, format!("{name} expects one String path"));
                         return Type::Unknown;
                     }
                     let path = self.check_expr(&args[0], scopes);
                     self.expect_type(&Type::String, &path, args[0].span);
-                    Type::Unit
+                    if name == "delete_file_result" {
+                        Type::Result(Box::new(Type::Unit), Box::new(Type::String))
+                    } else {
+                        Type::Unit
+                    }
                 } else if name == "list_dir" {
                     if args.len() != 1 {
                         self.error(expr.span, "list_dir expects one String path");
@@ -5354,6 +5433,18 @@ impl Interpreter {
             ));
         }
         Ok(())
+    }
+
+    fn filesystem_roots(&self, write: bool) -> Vec<PathBuf> {
+        self.filesystem_policy
+            .as_ref()
+            .map_or_else(Vec::new, |policy| {
+                if write {
+                    policy.write_roots.clone()
+                } else {
+                    policy.read_roots.clone()
+                }
+            })
     }
 
     fn resolve_filesystem_path(
@@ -6578,6 +6669,78 @@ impl Interpreter {
                             format!("`contains` expects an array or Map, found {}", value.ty()),
                         )),
                     }
+                } else if name == "text_contains" {
+                    if args.len() != 2 {
+                        return Err(self.runtime_error(
+                            expr.span,
+                            "text_contains expects a text and search text",
+                        ));
+                    }
+                    let text = self.eval(&args[0], env)?;
+                    let search = self.eval(&args[1], env)?;
+                    match (text, search) {
+                        (Value::String(text), Value::String(search)) => {
+                            Ok(Value::Bool(text.contains(&search)))
+                        }
+                        _ => {
+                            Err(self
+                                .runtime_error(expr.span, "text_contains expects String arguments"))
+                        }
+                    }
+                } else if name == "text_replace_result" {
+                    if args.len() != 3 {
+                        return Err(self.runtime_error(
+                            expr.span,
+                            "text_replace_result expects text, search, and replacement",
+                        ));
+                    }
+                    let text = self.eval(&args[0], env)?;
+                    let search = self.eval(&args[1], env)?;
+                    let replacement = self.eval(&args[2], env)?;
+                    let outcome = match (text, search, replacement) {
+                        (
+                            Value::String(text),
+                            Value::String(search),
+                            Value::String(replacement),
+                        ) if !search.is_empty() => Ok(text.replace(&search, &replacement)),
+                        (Value::String(_), Value::String(_), Value::String(_)) => {
+                            Err("text_replace_result requires a non-empty search text".to_string())
+                        }
+                        _ => Err("text_replace_result expects String arguments".to_string()),
+                    };
+                    Ok(Value::Result(
+                        outcome
+                            .map(|value| Box::new(Value::String(value)))
+                            .map_err(|message| Box::new(Value::String(message))),
+                    ))
+                } else if name == "text_split_result" {
+                    if args.len() != 2 {
+                        return Err(self.runtime_error(
+                            expr.span,
+                            "text_split_result expects text and separator",
+                        ));
+                    }
+                    let text = self.eval(&args[0], env)?;
+                    let separator = self.eval(&args[1], env)?;
+                    let outcome = match (text, separator) {
+                        (Value::String(text), Value::String(separator))
+                            if !separator.is_empty() =>
+                        {
+                            Ok(text
+                                .split(&separator)
+                                .map(|part| Value::String(part.to_string()))
+                                .collect())
+                        }
+                        (Value::String(_), Value::String(_)) => {
+                            Err("text_split_result requires a non-empty separator".to_string())
+                        }
+                        _ => Err("text_split_result expects String arguments".to_string()),
+                    };
+                    Ok(Value::Result(
+                        outcome
+                            .map(|values| Box::new(Value::Array(values)))
+                            .map_err(|message| Box::new(Value::String(message))),
+                    ))
                 } else if name == "get" {
                     if args.len() != 2 {
                         return Err(
@@ -7303,7 +7466,122 @@ impl Interpreter {
                             .map(|_| Box::new(Value::Unit))
                             .map_err(|error| Box::new(Value::String(error))),
                     ))
-                } else if name == "delete_file" {
+                } else if matches!(
+                    name.as_str(),
+                    "write_text_new_result" | "atomic_write_text_result" | "append_text_result"
+                ) {
+                    if args.len() != 2 {
+                        return Err(self.runtime_error(
+                            expr.span,
+                            format!("{name} expects a String path and String content"),
+                        ));
+                    }
+                    self.require_runtime_capability(
+                        "FileSystem",
+                        "file-system write access",
+                        expr.span,
+                    )?;
+                    let path = self.eval(&args[0], env)?;
+                    let content = self.eval(&args[1], env)?;
+                    let outcome = match (path, content) {
+                        (Value::String(path), Value::String(content)) if !path.is_empty() => self
+                            .resolve_filesystem_path(
+                                &path,
+                                &self.filesystem_roots(true),
+                                "write",
+                                expr.span,
+                                true,
+                            )
+                            .map_err(|error| error.message)
+                            .and_then(|target| {
+                                let operation = match name.as_str() {
+                                    "write_text_new_result" => {
+                                        filesystem::write_text_new(&target, &content)
+                                    }
+                                    "atomic_write_text_result" => {
+                                        filesystem::atomic_write_text(&target, &content)
+                                    }
+                                    _ => filesystem::append_text(&target, &content),
+                                };
+                                operation
+                                    .map_err(|error| format!("file-system {name} failed: {error}"))
+                            }),
+                        (Value::String(_), Value::String(_)) => {
+                            Err(format!("{name} expects a non-empty path"))
+                        }
+                        _ => Err(format!("{name} expects String arguments")),
+                    };
+                    Ok(Value::Result(
+                        outcome
+                            .map(|()| Box::new(Value::Unit))
+                            .map_err(|error| Box::new(Value::String(error))),
+                    ))
+                } else if matches!(name.as_str(), "copy_file_new_result" | "rename_file_result") {
+                    if args.len() != 2 {
+                        return Err(self.runtime_error(
+                            expr.span,
+                            format!("{name} expects source and destination String paths"),
+                        ));
+                    }
+                    self.require_runtime_capability(
+                        "FileSystem",
+                        "file-system write access",
+                        expr.span,
+                    )?;
+                    let source = self.eval(&args[0], env)?;
+                    let destination = self.eval(&args[1], env)?;
+                    let outcome = match (source, destination) {
+                        (Value::String(source), Value::String(destination))
+                            if !source.is_empty() && !destination.is_empty() =>
+                        {
+                            let source_roots = if name == "copy_file_new_result" {
+                                self.filesystem_policy
+                                    .as_ref()
+                                    .map_or_else(Vec::new, |policy| policy.read_roots.clone())
+                            } else {
+                                self.filesystem_roots(true)
+                            };
+                            let source_path = self
+                                .resolve_filesystem_path(
+                                    &source,
+                                    &source_roots,
+                                    "read or rename",
+                                    expr.span,
+                                    false,
+                                )
+                                .map_err(|error| error.message);
+                            source_path.and_then(|source_path| {
+                                self.resolve_filesystem_path(
+                                    &destination,
+                                    &self.filesystem_roots(true),
+                                    "copy or rename",
+                                    expr.span,
+                                    true,
+                                )
+                                .map_err(|error| error.message)
+                                .and_then(|destination_path| {
+                                    let operation = if name == "copy_file_new_result" {
+                                        filesystem::copy_file_new(&source_path, &destination_path)
+                                    } else {
+                                        filesystem::rename_file_new(&source_path, &destination_path)
+                                    };
+                                    operation.map_err(|error| {
+                                        format!("file-system {name} failed: {error}")
+                                    })
+                                })
+                            })
+                        }
+                        (Value::String(_), Value::String(_)) => {
+                            Err(format!("{name} expects non-empty paths"))
+                        }
+                        _ => Err(format!("{name} expects String paths")),
+                    };
+                    Ok(Value::Result(
+                        outcome
+                            .map(|()| Box::new(Value::Unit))
+                            .map_err(|error| Box::new(Value::String(error))),
+                    ))
+                } else if name == "delete_file" || name == "delete_file_result" {
                     if args.len() != 1 {
                         return Err(
                             self.runtime_error(expr.span, "delete_file expects one String path")
@@ -7314,26 +7592,37 @@ impl Interpreter {
                         "file-system delete access",
                         expr.span,
                     )?;
-                    let path = self.eval(&args[0], env)?;
-                    let Value::String(path) = path else {
-                        return Err(
-                            self.runtime_error(args[0].span, "delete_file expects a String path")
-                        );
+                    let path_value = self.eval(&args[0], env)?;
+                    let operation = match path_value {
+                        Value::String(path) if !path.is_empty() => {
+                            let roots = self.filesystem_roots(true);
+                            self.resolve_filesystem_path(&path, &roots, "delete", expr.span, false)
+                                .and_then(|path| {
+                                    std::fs::remove_file(path).map_err(|error| {
+                                        self.runtime_error(
+                                            expr.span,
+                                            format!("file-system delete failed: {error}"),
+                                        )
+                                    })
+                                })
+                        }
+                        Value::String(_) => {
+                            Err(self
+                                .runtime_error(expr.span, "delete_file expects a non-empty path"))
+                        }
+                        _ => {
+                            Err(self.runtime_error(expr.span, "delete_file expects a String path"))
+                        }
                     };
-                    if path.is_empty() {
-                        return Err(self
-                            .runtime_error(args[0].span, "delete_file expects a non-empty path"));
+                    if name == "delete_file_result" {
+                        Ok(Value::Result(
+                            operation
+                                .map(|()| Box::new(Value::Unit))
+                                .map_err(|error| Box::new(Value::String(error.message))),
+                        ))
+                    } else {
+                        operation.map(|()| Value::Unit)
                     }
-                    let roots = self
-                        .filesystem_policy
-                        .as_ref()
-                        .map_or_else(Vec::new, |policy| policy.write_roots.clone());
-                    let path =
-                        self.resolve_filesystem_path(&path, &roots, "delete", expr.span, false)?;
-                    std::fs::remove_file(&path).map_err(|error| {
-                        self.runtime_error(expr.span, format!("file-system delete failed: {error}"))
-                    })?;
-                    Ok(Value::Unit)
                 } else if name == "list_dir" {
                     if args.len() != 1 {
                         return Err(

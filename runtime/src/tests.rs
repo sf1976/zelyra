@@ -1259,6 +1259,108 @@ fn writes_lists_and_deletes_with_a_file_system_policy() {
 }
 
 #[test]
+fn safe_text_file_apis_preserve_utf8_and_reject_overwrites_and_path_escape() {
+    let root = std::env::temp_dir().join(format!(
+        "zelyra-safe-text-files-{}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let notes = root.join("notes");
+    std::fs::create_dir_all(&notes).unwrap();
+    let program = parse(
+        &lex(r#"fn main() uses FileSystem {
+                match write_text_new_result("notes/a.note", "Grüße; \"Zitat\"\nzweite Zeile") {
+                    Ok(_) => { print("created") }
+                    Err(message) => { print("create error: " + message) }
+                }
+                match write_text_new_result("notes/a.note", "overwrite") {
+                    Ok(_) => { print("overwrite allowed") }
+                    Err(_) => { print("overwrite refused") }
+                }
+                match atomic_write_text_result("notes/a.note", "neue Version äöü") {
+                    Ok(_) => { print("updated") }
+                    Err(message) => { print("update error: " + message) }
+                }
+                match read_text_result("notes/a.note") {
+                    Ok(text) => { print(text) }
+                    Err(message) => { print("read error: " + message) }
+                }
+                match append_text_result("notes/log.jsonl", "{\"event\":\"edit\"}\n") {
+                    Ok(_) => { print("appended") }
+                    Err(message) => { print("append error: " + message) }
+                }
+                match copy_file_new_result("notes/a.note", "notes/b.note") {
+                    Ok(_) => { print("copied") }
+                    Err(message) => { print("copy error: " + message) }
+                }
+                match rename_file_result("notes/b.note", "notes/c.note") {
+                    Ok(_) => { print("renamed") }
+                    Err(message) => { print("rename error: " + message) }
+                }
+                match delete_file_result("notes/c.note") {
+                    Ok(_) => { print("deleted") }
+                    Err(message) => { print("delete error: " + message) }
+                }
+                match write_text_new_result("../outside.note", "blocked") {
+                    Ok(_) => { print("path escape allowed") }
+                    Err(_) => { print("path escape refused") }
+                }
+            }"#)
+        .unwrap(),
+    )
+    .unwrap();
+    check(&program).unwrap();
+    check_capabilities(&program).unwrap();
+    let policy = FileSystemPolicy {
+        base_dir: root.clone(),
+        read_roots: vec![notes.clone()],
+        write_roots: vec![notes.clone()],
+    };
+    let grants = HashSet::from([String::from("FileSystem")]);
+    let output =
+        execute_with_capabilities_and_filesystem_policy(&program, Some(&grants), Some(&policy))
+            .unwrap();
+    assert_eq!(
+        output,
+        [
+            "created",
+            "overwrite refused",
+            "updated",
+            "neue Version äöü",
+            "appended",
+            "copied",
+            "renamed",
+            "deleted",
+            "path escape refused"
+        ]
+    );
+    assert_eq!(
+        std::fs::read_to_string(notes.join("a.note")).unwrap(),
+        "neue Version äöü"
+    );
+    assert_eq!(
+        std::fs::read_to_string(notes.join("log.jsonl")).unwrap(),
+        "{\"event\":\"edit\"}\n"
+    );
+    assert!(!notes.join("b.note").exists());
+    assert!(!notes.join("c.note").exists());
+    assert!(!root.join("outside.note").exists());
+    std::fs::remove_dir_all(root).unwrap();
+
+    let ungranted = parse(
+        &lex("fn main() { match write_text_new_result(\"data.txt\", \"text\") { Ok(_) => {} Err(_) => {} } }").unwrap(),
+    )
+    .unwrap();
+    check(&ungranted).unwrap();
+    assert!(check_capabilities(&ungranted)
+        .unwrap_err()
+        .iter()
+        .any(|error| error.message.contains("FileSystem")));
+}
+
+#[test]
 fn rejects_file_system_writes_outside_configured_roots() {
     let program =
         parse(&lex("fn main() uses FileSystem { write_text(\"blocked.txt\", \"no\") }").unwrap())

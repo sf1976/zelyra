@@ -2903,6 +2903,25 @@ fn main() uses FileSystem {
 Missing project grants and denied capabilities remain security errors. The
 Result variants catch ordinary path, read, write, and JSON errors.
 
+Safe text-file changes also have `write_text_new_result`,
+`atomic_write_text_result`, `append_text_result`, `copy_file_new_result`,
+`rename_file_result`, and `delete_file_result`. `write_text_new_result` creates
+files exclusively and reports a conflict if the destination already exists.
+`atomic_write_text_result` first writes a temporary file in the same directory
+and replaces the destination only after the write succeeds. Rename and copy
+also refuse to overwrite an existing destination. File operations stay inside
+the root directories allowed by the project configuration.
+
+`text_contains` searches for a literal string. `text_replace_result` replaces
+all occurrences of a non-empty search string; `text_split_result` splits on a
+non-empty separator and preserves empty parts at the start or end. These
+functions operate on UTF-8 strings and do not interpret the search text as a
+regular expression.
+
+A complete multi-file notes manager with backups, an action log, restore, and
+automated tests is in
+[`examples/notes_manager`](../../../examples/notes_manager/README.md).
+
 ### 5. Typical errors and their causes
 - **Error:** Calling `read_text` or `write_text` without declaring `uses FileSystem`.
   *Cause:* Zelyra's capability system (`E-CAP-001`) prevents any unauthorized access to secondary storage.
