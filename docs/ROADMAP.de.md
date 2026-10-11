@@ -43,6 +43,12 @@ den tatsächlich implementierten Stand.
   Prüfsummen, SBOMs, Attestierungen und das zweisprachige Website-Handbuch sind
   im [0.9.0-Releaseprüfnachweis](release-readiness/0.9.0-candidate-verification.md)
   bestätigt. Die menschliche Abnahme bleibt für 1.0.0 reserviert.
+- [x] **Stabiles Release 0.9.1 veröffentlicht:** Studio-Sitzung, Speichern,
+  Problems-Bereich und Rechnerabläufe des Rechnungstutorials sind erweitert;
+  Sprachlinie 0.1 verwendet `#`- und `##`-Kommentare. Vollständige CI,
+  Linux-/Windows-Artefakte, Prüfsummen, SBOMs, Attestierungen und Website-Update
+  sind im [0.9.1-Releaseprüfnachweis](release-readiness/0.9.1-candidate-verification.md)
+  belegt. Die unabhängige menschliche Abnahme bleibt für 1.0.0 reserviert.
 
 - [~] Der 0.4-Entwicklungszweig ergänzt Anzeige und Sperrung dauerhafter
   Sitzungen mit Verwaltungsrecht, CSRF-Prüfung und Audit-Anfrageereignis.
@@ -562,10 +568,12 @@ Die menschliche Abnahme bleibt auf 1.0.0 verschoben.
 
 Zelyras zentrale Produktidee ist ein zusammenhängender Weg von verständlichem
 Quelltext über Compiler und Datenbank bis zur fertigen Geschäftsanwendung.
-Diagramme sollen aus geprüften Projektinformationen entstehen und direkt zu
-Quelltext, Diagnosen und Arbeitsabläufen führen. Präsentationen sollen dieselben
-typisierten, ausdrücklich freigegebenen Datenquellen nutzen und als lesbarer
-Zelyra-Quelltext überprüfbar bleiben. Die Roadmap staffelt diese Ziele über
+Studio soll möglichst alle häufigen, sicher modellierbaren Aufgaben der Sprache
+und des Frameworks übernehmen: Eigenschaften auswählen, Abläufe führen, gültige
+Optionen erklären, Fehler zeigen und geprüften Quelltext erzeugen. Diagramme und
+Präsentationen sind nur Beispiele dafür. Jede generierte Änderung bleibt als
+lesbarer Zelyra-Quelltext überprüfbar; folgenreicher Datenzugriff zeigt Plan,
+Auswirkungen und eine ausdrückliche Bestätigung. Die Roadmap staffelt diese Ziele über
 0.9.2–0.9.8; sie sind noch keine Fähigkeiten des veröffentlichten 0.9.0.
 
 ## Release 0.9.1 — IDE-Grundlage
@@ -581,8 +589,9 @@ Zelyra-Quelltext überprüfbar bleiben. Die Roadmap staffelt diese Ziele über
   diese Tab-Sitzung gehalten. API- und Dateisystemprüfungen decken veraltete
   Änderungen, Pfad-Traversal, Geheimdateien, geschützte Dateien und
   ausdrückliches Anwenden ab. Zugriff bleibt auf Loopback begrenzt; der
-  Compiler bleibt maßgeblich. Der versionsgebundene Kandidat wartet auf exakte
-  CI-Prüfung und Websiteveröffentlichung; siehe den
+  Compiler bleibt maßgeblich. Der getaggte Stand `v0.9.1` bestand die vollständige
+  CI; Linux-/Windows-Artefakte, Prüfsummen, SPDX-SBOMs und Attestierungen wurden
+  veröffentlicht. Das zweisprachige Website-Handbuch ist live; siehe den
   [0.9.1-Plan](release-plans/0.9.1.de.md).
 - Nachweis: Chromium-Browserabdeckung, Editor-API-/Sicherheitsprüfungen und
   MariaDB-/PostgreSQL-Studioabläufe bestehen lokal. CI muss diese für den
@@ -599,19 +608,25 @@ Zelyra-Quelltext überprüfbar bleiben. Die Roadmap staffelt diese Ziele über
 
 ## Release 0.9.2 — Sprachdienste der IDE
 
+- [🗺️] Studio zur IDE mit einer kontextabhängigen Eigenschaftsseitenleiste und
+  Aufgaben-/Befehlsfinder ausbauen. Häufige Abläufe zu Dateien, Symbolen, Routen,
+  Views, Formularen, Ressourcen und Diagrammen lassen sich durch Auswahl und
+  gültige Eigenschaften einstellen. Beim Schreiben können Beschreibung,
+  Optionen und Beispiele zum Befehl am Cursor gezielt aufgerufen werden; Nutzer
+  müssen die API nicht auswendig lernen.
 - [🗺️] Compiler-gestützte Vervollständigung, Symbolnavigation, Suche/Referenzen,
-  Formatierung, handlungsorientierte Diagnosen sowie integrierte Check-, Run-
-  und Test-Aufgaben ergänzen. Fortschritt und Ausgabe bleiben sichtbar und
-  geheimnisfrei. Die Funktionen decken die dokumentierten Sprach-0.1-Konstrukte
-  ab. Zusätzlich entstehen aus dem Compiler-Projektmodell verlässliche
-  Architekturdiagramme für Module/Importe, Routen und Ressourcenbeziehungen.
-  Knoten und Kanten führen zur passenden Quelldatei und Diagnose zurück;
-  unbekannte oder dynamische Beziehungen werden sichtbar als unvollständig
-  markiert.
-- Nachweis: Positive und negative Mehrdateiprojekte prüfen Vorschläge,
-  Quellpositionen, Navigation, idempotente Formatierung, Aufgabenausgabe und
-  deterministische Diagrammdaten; unbekannte Syntax wird kenntlich gemacht
-  statt erraten.
+  Formatierung, handlungsorientierte und während der Eingabe aktualisierte
+  Diagnosen sowie integrierte Check-, Run- und Test-Aufgaben ergänzen.
+  Fortschritt und Ausgabe bleiben sichtbar und geheimnisfrei. Die Funktionen
+  decken dokumentierte Sprach-0.1-Konstrukte ab. Zusätzlich entstehen aus dem
+  Compiler-Projektmodell verlässliche Architekturdiagramme für Module/Importe,
+  Routen und Ressourcenbeziehungen. Knoten und Kanten führen zur passenden
+  Quelldatei und Diagnose zurück; unbekannte oder dynamische Beziehungen werden
+  sichtbar als unvollständig markiert.
+- Nachweis: Positive und negative Mehrdateiprojekte prüfen kontextuelle
+  Eigenschaften, Hilfetexte, Vorschläge, Live-Fehlerpositionen, Navigation,
+  idempotente Formatierung, Aufgabenausgabe und deterministische Diagrammdaten;
+  unbekannte Syntax wird kenntlich gemacht statt erraten.
 
 ## Release 0.9.3 — Datenbankwerkbank
 
@@ -620,14 +635,20 @@ Zelyra-Quelltext überprüfbar bleiben. Die Roadmap staffelt diese Ziele über
   schreibgeschützt durchsuchen und den zuständigen Quellmodulen zuordnen. Das
   ER-Diagramm wird filterbar und navigierbar; Auswahl eines Feldes oder einer
   Beziehung zeigt Definition, Quellmodul und verwendende Ressourcen.
-  Lesende, typisierte Datenquellen für Kennzahlen werden so vorbereitet, dass
-  sie in 0.9.4 ohne frei formulierte SQL-Ausdrücke gewählt werden können.
-  Änderungen und Schemaerzeugung erfordern einen geprüften Plan und
-  ausdrückliche Bestätigung.
+- [🗺️] Tabellenspalten über die Eigenschaftsseitenleiste grafisch ergänzen und
+  bearbeiten. Studio zeigt den vollständigen Schema-Plan mit Auswirkungen und
+  Risiken, lässt den Compiler prüfen und verlangt vor jeder Anwendung eine
+  ausdrückliche Bestätigung. Außerdem kann der Nutzer den gewählten Datenbanktyp
+  und die Verbindung einstellen und — soweit Backend und Rechte es unterstützen
+  — die Projektdatenbank aus Studio anlegen. Nicht unterstützte Kombinationen
+  werden klar benannt; Zugangsdaten werden nie im Browser gespeichert oder
+  ausgegeben.
+- [🗺️] Lesende, typisierte Datenquellen für Kennzahlen vorbereiten, damit sie
+  in 0.9.4 ohne frei formulierte SQL-Ausdrücke gewählt werden können.
 - Nachweis: Separate MariaDB-, MySQL- und PostgreSQL-Tests entsprechen der
-  veröffentlichten Datenbankmatrix. Schreibgeschütztes Browsen wird erzwungen;
-  Zugangsdaten erscheinen nie in Editor-Ausgabe, URLs, Diagnosen oder Browser-
-  Speicherung.
+  veröffentlichten Datenbankmatrix. Nicht verfügbare Schemaoperationen werden
+  abgewiesen; Änderungen sind gegen Vorschau-Hash und aktuellen Datenbankstand
+  geschützt. Schreibgeschütztes Browsen ist der Standard.
 
 ## Release 0.9.4 — Visueller CRUD-Entwurf
 
