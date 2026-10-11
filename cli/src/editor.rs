@@ -258,6 +258,19 @@ fn editor_response(
     match (request.method.as_str(), operation) {
         ("GET", "tree") => tree_response(state),
         ("GET", "database-schema") => database_schema_response(state),
+        ("GET", "symbols") => {
+            let query = request
+                .target
+                .split_once('?')
+                .map(|(_, query)| query)
+                .unwrap_or_default();
+            let values =
+                zelyra_web::parse_urlencoded(query).map_err(|error| (400, error.message))?;
+            editor_symbols(
+                state,
+                values.get("path").map(String::as_str).unwrap_or("main.zyl"),
+            )
+        }
         ("GET", "file") => {
             let query = request
                 .target
@@ -279,6 +292,128 @@ fn editor_response(
         ("POST", "crud-apply") => apply_crud_resource(state, &parse_json_body(&request.body)?),
         _ => Err((404, "not found".into())),
     }
+}
+
+fn editor_symbols(
+    state: &EditorState,
+    _relative_entry: &str,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let entry = safe_editor_path(&state.root, "main.zyl", false)?;
+    let loaded = project::load(&entry.to_string_lossy()).map_err(|_| {
+        (
+            422,
+            "project symbols are unavailable until the imported source parses".into(),
+        )
+    })?;
+    let source = loaded
+        .sources
+        .iter()
+        .find(|source| source.path == "main.zyl")
+        .map(|source| source.text.as_str())
+        .ok_or((422, "project entry source is unavailable".into()))?;
+    let tokens =
+        lex(source).map_err(|_| (422, "project declarations are not parseable yet".into()))?;
+    let local =
+        parse(&tokens).map_err(|_| (422, "project declarations are not parseable yet".into()))?;
+    let linked = loaded.program;
+    let root_module = loaded
+        .modules
+        .iter()
+        .find(|module| module.path == "main.zyl")
+        .ok_or((422, "project entry module is unavailable".into()))?;
+    let imported_paths = root_module
+        .imports
+        .iter()
+        .map(|import| import.path.as_str())
+        .collect::<BTreeSet<_>>();
+    let mut symbols = Vec::new();
+    symbols.extend(
+        local
+            .functions
+            .iter()
+            .map(|item| json!({"label": item.name, "kind": "function", "detail": "function"})),
+    );
+    symbols.extend(
+        local
+            .types
+            .iter()
+            .map(|item| json!({"label": item.name, "kind": "type", "detail": "type"})),
+    );
+    symbols.extend(
+        local
+            .records
+            .iter()
+            .map(|item| json!({"label": item.name, "kind": "type", "detail": "type"})),
+    );
+    symbols.extend(
+        local
+            .views
+            .iter()
+            .map(|item| json!({"label": item.name, "kind": "class", "detail": "view"})),
+    );
+    symbols.extend(
+        local
+            .components
+            .iter()
+            .map(|item| json!({"label": item.name, "kind": "class", "detail": "component"})),
+    );
+    symbols.extend(
+        local
+            .forms
+            .iter()
+            .map(|item| json!({"label": item.name, "kind": "class", "detail": "form"})),
+    );
+    symbols.extend(
+        local
+            .cruds
+            .iter()
+            .map(|item| json!({"label": item.name, "kind": "class", "detail": "crud"})),
+    );
+    symbols.extend(
+        local
+            .pages
+            .iter()
+            .map(|item| json!({"label": item.path, "kind": "class", "detail": "page"})),
+    );
+    symbols.extend(
+        local
+            .apis
+            .iter()
+            .map(|item| json!({"label": item.path, "kind": "class", "detail": "api"})),
+    );
+    symbols.extend(
+        local
+            .tableviews
+            .iter()
+            .map(|item| json!({"label": item.name, "kind": "class", "detail": "tableview"})),
+    );
+    symbols.extend(
+        linked
+            .tables
+            .iter()
+            .map(|item| json!({"label": item.name, "kind": "class", "detail": "table"})),
+    );
+    for module in loaded
+        .modules
+        .iter()
+        .filter(|module| imported_paths.contains(module.path.as_str()))
+    {
+        for export in &module.exports {
+            let (kind, detail) = match export.kind.as_str() {
+                "function" => ("function", "function"),
+                "record" | "type" => ("type", "type"),
+                "view" => ("class", "view"),
+                "component" => ("class", "component"),
+                _ => continue,
+            };
+            symbols.push(json!({"label": export.name, "kind": kind, "detail": detail}));
+        }
+    }
+    Ok((
+        200,
+        "application/json; charset=utf-8",
+        json!({"symbols": symbols}).to_string(),
+    ))
 }
 
 fn editor_database_schemas(
@@ -1728,6 +1863,27 @@ mod tests {
             fs::read_to_string(path).expect("source remains untouched"),
             original
         );
+        let _ = fs::remove_dir_all(state.root);
+    }
+
+    #[test]
+    fn editor_symbols_come_from_linked_project_declarations() {
+        let state = project();
+        fs::write(
+            state.root.join("main.zyl"),
+            "fn main() {}\nfn calculate_total() -> Int { return 1 }\n",
+        )
+        .expect("write project declarations");
+        let response = editor_symbols(&state, "main.zyl").expect("load project symbols");
+        let payload: Value = serde_json::from_str(&response.2).expect("decode symbols");
+        let names = payload["symbols"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|item| item["label"].as_str())
+            .collect::<Vec<_>>();
+        assert!(names.contains(&"main"));
+        assert!(names.contains(&"calculate_total"));
         let _ = fs::remove_dir_all(state.root);
     }
 

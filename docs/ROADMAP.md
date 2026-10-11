@@ -638,8 +638,9 @@ released 0.9.0.
   While writing, users can request the description and options for the current
   command. The current work already adds file properties, F1 help for core
   language terms, a filterable action finder on Ctrl+Shift+P, and
-  compiler-checked diagnostics while typing; full task coverage and symbol-level
-  properties remain open.
+  compiler-checked diagnostics while typing, and suggestions for declarations
+  from the compiler project model; full task coverage, local/type-aware
+  completion, and symbol-level properties remain open.
 - [🗺️] Add compiler-backed completion, symbol navigation, find/references,
   formatting, actionable diagnostics updated while typing, and integrated
   check/run/test tasks. Show clear task progress and output without exposing

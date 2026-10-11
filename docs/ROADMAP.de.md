@@ -609,8 +609,9 @@ Auswirkungen und eine ausdrückliche Bestätigung. Die Roadmap staffelt diese Zi
   müssen die API nicht auswendig lernen. Die aktuelle Arbeitsfassung ergänzt
   bereits Dateieigenschaften, Hilfe zu zentralen Sprachbegriffen per F1, einen
   filterbaren Aktionsfinder per Strg+Umschalt+P und compilergeprüfte Diagnosen
-  während der Eingabe; eine vollständige Aufgabenabdeckung und
-  symbolbezogene Eigenschaften bleiben offen.
+  während der Eingabe sowie Vorschläge für Deklarationen aus dem Compiler-
+  Projektmodell; eine vollständige Aufgabenabdeckung, lokale/typisierte
+  Vervollständigung und symbolbezogene Eigenschaften bleiben offen.
 - [🗺️] Compiler-gestützte Vervollständigung, Symbolnavigation, Suche/Referenzen,
   Formatierung, handlungsorientierte und während der Eingabe aktualisierte
   Diagnosen sowie integrierte Check-, Run- und Test-Aufgaben ergänzen.

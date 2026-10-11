@@ -1,4 +1,4 @@
-import { autocompletion } from "@codemirror/autocomplete";
+import { autocompletion, startCompletion } from "@codemirror/autocomplete";
 import { defaultKeymap, history as undoRedoHistory, historyKeymap } from "@codemirror/commands";
 import {
   bracketMatching,
@@ -41,6 +41,8 @@ let editor = null;
 let diagnostics = [];
 let liveCheckTimer = null;
 let liveCheckSequence = 0;
+const symbolCache = new Map();
+const symbolRequests = new Map();
 let treeFiles = [];
 let activeFilter = "";
 let databaseMap = null;
@@ -52,6 +54,9 @@ let lastCrudPreviewRequest = null;
 const editorRoot = $("editor-root");
 const messages = {
   de: {
+    symbolProject: "Projektdeklaration", symbolFunction: "Funktion", symbolType: "Typ", symbolTable: "Datenbanktabelle", symbolView: "Ansicht", symbolComponent: "Komponente",
+    symbolForm: "Formular", symbolCrud: "CRUD-Ressource", symbolPage: "Seite", symbolApi: "API-Endpunkt",
+    symbolTableview: "Abfrageansicht",
     taskFinder: "Aktionen", taskFinderTitle: "Was möchtest du tun?", taskFinderPlaceholder: "Aktion oder Befehl suchen",
     chooseAction: "Aktion auswählen", noMatchingTasks: "Keine passende Aktion gefunden.", taskOpenFile: "Datei öffnen", taskOpenFileHelp: "Projektdatei nach Namen suchen",
     taskNewFile: "Datei erstellen", taskNewFileHelp: "Neue Datei im Projekt anlegen", taskSave: "Aktive Datei speichern",
@@ -111,6 +116,9 @@ const messages = {
     table: "Tabelle", field: "Feld", moduleUnknown: "Quellmodul unbekannt", selectTarget: "Quelldatei auswählen"
   },
   en: {
+    symbolProject: "Project declaration", symbolFunction: "Function", symbolType: "Type", symbolTable: "Database table", symbolView: "View", symbolComponent: "Component",
+    symbolForm: "Form", symbolCrud: "CRUD resource", symbolPage: "Page", symbolApi: "API endpoint",
+    symbolTableview: "Query view",
     taskFinder: "Actions", taskFinderTitle: "What would you like to do?", taskFinderPlaceholder: "Search actions or commands",
     chooseAction: "Choose action", noMatchingTasks: "No matching action found.", taskOpenFile: "Open file", taskOpenFileHelp: "Find a project file by name",
     taskNewFile: "Create file", taskNewFileHelp: "Add a new file to the project", taskSave: "Save active file",
@@ -386,7 +394,34 @@ function renderTabs() {
 function completionSource(context) {
   const word = context.matchBefore(/[\w]+/);
   if (!word && !context.explicit) return null;
-  return { from: word ? word.from : context.pos, options: [...keywords].map((label) => ({ label, type: "keyword" })) };
+  return loadProjectSymbols(activePath).then((symbols) => ({
+    from: word ? word.from : context.pos,
+    options: [
+      ...[...keywords].map((label) => ({ label, type: "keyword" })),
+      ...symbols.map((symbol) => ({
+        label: symbol.label,
+        type: symbol.kind,
+        detail: symbol.detail ? t(`symbol${symbol.detail[0].toUpperCase()}${symbol.detail.slice(1)}`) : t("symbolProject"),
+      })),
+    ],
+  }));
+}
+
+function loadProjectSymbols(path) {
+  if (!path?.endsWith(".zyl")) return Promise.resolve([]);
+  const cached = symbolCache.get(path);
+  if (cached && cached.expires > Date.now()) return Promise.resolve(cached.symbols);
+  if (symbolRequests.has(path)) return symbolRequests.get(path);
+  const request = api(`symbols?path=${encodeURIComponent(path)}`)
+    .then((result) => result.symbols || [])
+    .catch(() => [])
+    .then((symbols) => {
+      symbolCache.set(path, { symbols, expires: Date.now() + 2_000 });
+      symbolRequests.delete(path);
+      return symbols;
+    });
+  symbolRequests.set(path, request);
+  return request;
 }
 
 function selectedLanguageWord(state) {
@@ -517,6 +552,7 @@ function createView(path, state) {
       }))),
       keymap.of([
         { key: "Mod-s", run: () => { saveActive(); return true; } },
+        { key: "Mod-Space", run: startCompletion },
         { key: "F1", run: () => { toggleAssistant("help"); return true; } },
         ...defaultKeymap, ...historyKeymap, ...searchKeymap, ...foldKeymap,
       ]),

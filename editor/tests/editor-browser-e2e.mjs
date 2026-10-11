@@ -33,6 +33,10 @@ try {
 
   const editor = page.locator(".cm-content[contenteditable=true]");
   await editor.focus();
+  await page.keyboard.press("Control+Space");
+  await page.locator(".cm-tooltip-autocomplete").waitFor();
+  await page.locator(".cm-tooltip-autocomplete .cm-completionLabel", { hasText: /^main$/ }).waitFor();
+  await page.keyboard.press("Escape");
   await page.keyboard.press("F1");
   await page.locator("#studio-assistant:not([hidden])").waitFor();
   await page.locator("#assistant-help-details").getByText(/Optionen|Options/).waitFor();

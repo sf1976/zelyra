@@ -145,6 +145,9 @@ der [Setup-Anleitung](setup-web.de.md) und den
   die druckoptimierte Rechnung als PDF speichern. Es ist ein Lernpfad, keine
   Produktions- oder Deploymentfreigabe; Details und Grenzen stehen im
   [Rechnungstutorial](tutorials/invoice.de.md).
+- 🧪 `zelyra --help` schließt mit einem deutschen und englischen Schnelleinstieg:
+  minimales Projekt oder Rechnungstutorial, gefolgt von Befehlen mit kurzer
+  Erklärung ihres Zwecks.
 - Studio ist noch keine vollständige IDE oder beliebiger Datenbankdesigner.
 
 ## APIs, Authentifizierung, Berechtigungen und Audit

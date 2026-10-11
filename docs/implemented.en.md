@@ -131,6 +131,9 @@ For usage details see the [web and database quickstart](getting-started.md),
   invoice as a PDF. This is a learning path, not production or deployment
   approval; see the [invoice tutorial](tutorials/invoice.en.md) for its scope
   and limits.
+- 🧪 `zelyra --help` ends with German and English getting-started paths for a
+  minimal project or invoice tutorial, followed by short explanations of the
+  purpose of key commands.
 - Studio is not yet a complete IDE or unrestricted database designer.
 
 ## APIs, authentication, permissions, and audit
