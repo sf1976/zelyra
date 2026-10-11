@@ -56,4 +56,14 @@ for route in / /customers /items /invoices /invoice_lines /views/invoicedashboar
     exit 1
   fi
 done
+home="$(curl --silent --show-error --fail "http://${address}/")"
+if [[ "${home}" != *'href="/__zelyra/theme.css"'* ]]; then
+  echo "invoice tutorial did not link its project theme stylesheet" >&2
+  exit 1
+fi
+theme="$(curl --silent --show-error --fail "http://${address}/__zelyra/theme.css")"
+if [[ "${theme}" != *"--tutorial-shadow"* ]]; then
+  echo "invoice tutorial theme stylesheet did not contain its project CSS" >&2
+  exit 1
+fi
 echo "invoice tutorial schema and all customer, item, invoice, and dashboard routes passed"

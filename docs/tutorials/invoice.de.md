@@ -14,7 +14,10 @@ Schema gemeinsam. Bei einem anderen Zielordner verwende den entsprechenden
 Pfad, zum Beispiel `zelyra --tutorial invoice ./meine-rechnungen`.
 Für reine Projektgenerierung ohne Docker-Start kannst du `--no-start`
 anhängen; die Ausgabe nennt dann den kombinierten Startbefehl `zelyra setup
---all`.
+--all` und die vorgesehene Browseradresse. Auch `zelyra new ... --mariadb`
+zeigt schon beim Anlegen die Adresse an, die nach dem Start erreichbar ist.
+Wenn der Schema-Schritt nach dem Start fehlschlägt, bleibt die Adresse in der
+Fehlermeldung sichtbar.
 
 Die fertige Anwendung läuft auf der in der Befehlsausgabe genannten lokalen
 Adresse (standardmäßig `http://127.0.0.1:3000`). Sie enthält fünf verbundene

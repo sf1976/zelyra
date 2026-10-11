@@ -64,10 +64,10 @@ const messages = {
     taskSaveHelp: "Ungespeicherte Änderungen übernehmen", taskSaveAll: "Alle Dateien speichern", taskSaveAllHelp: "Alle geänderten Dateien übernehmen",
     taskFormat: "Datei formatieren", taskFormatHelp: "Zelyra-Quelldatei kanonisch formatieren", taskCheck: "Projekt prüfen",
     taskCheckHelp: "Compilerdiagnosen für das Projekt anzeigen", taskDatabase: "Datenbank öffnen", taskDatabaseHelp: "Tabellen und Beziehungen ansehen",
-    taskRun: "Programm ausführen", taskRunHelp: "main.zyl mit Zelyras Laufzeit starten; konfigurierte Datenbank-, Netzwerk- und Prozesseffekte sind möglich, interaktive Eingabe fehlt",
+    taskRun: "Programm oder Web-App starten", taskRunHelp: "Konsolenprogramme mit Zelyras Laufzeit ausführen oder Webanwendungen lokal starten; konfigurierte Effekte sind möglich, interaktive Eingabe fehlt",
     projectMap: "Projektkarte", projectMapTitle: "Projektbeziehungen", projectMapOpenSource: "Quelltext öffnen", projectMapLoading: "Compiler-Projektmodell wird geladen …", projectMapUnavailable: "Projektkarte konnte nicht erstellt werden.", projectMapIncomplete: "Die Karte ist unvollständig. Nicht auflösbare oder begrenzte Beziehungen werden nicht geraten.", projectMapEmpty: "Noch keine unterstützten Beziehungen im Projekt.", projectMapModules: "Module", projectMapData: "Daten und Ansichten", projectMapWeb: "Routen und APIs", projectMapLogic: "Funktionen",
-    runButton: "Starten", runButtonTitle: "main.zyl ausführen",
-    runOutputTitle: "Programmausgabe", runStarting: "main.zyl wird ausgeführt …", runSuccess: "Programm erfolgreich beendet", runFailure: "Programm mit Fehler beendet", runTimeout: "Ausführung nach 15 Sekunden beendet", runOutputTruncated: "Die Ausgabe ist auf 64 KiB je Stream begrenzt.", runNoOutput: "Keine Ausgabe.", runStdout: "AUSGABE", runStderr: "FEHLER", runInputUnavailable: "Studio stellt dem Programm keine interaktive Eingabe bereit.",
+    runButton: "Starten", runButtonTitle: "main.zyl ausführen oder Webanwendung starten",
+    runOutputTitle: "Programmausgabe", runStarting: "main.zyl wird ausgeführt …", runSuccess: "Programm erfolgreich beendet", runFailure: "Programm mit Fehler beendet", runTimeout: "Ausführung nach 15 Sekunden beendet", runOutputTruncated: "Die Ausgabe ist auf 64 KiB je Stream begrenzt.", runNoOutput: "Keine Ausgabe.", runStdout: "AUSGABE", runStderr: "FEHLER", runInputUnavailable: "Studio stellt dem Programm keine interaktive Eingabe bereit.", runWebReady: "Webanwendung läuft lokal:", runWebOpen: "Anwendung im Browser öffnen", runWebStop: "Vorschau beenden", runWebStopped: "Lokale Vorschau wurde beendet.",
     taskHelp: "Kontexthilfe öffnen", taskHelpHelp: "Hilfe zum Begriff am Cursor anzeigen", taskProperties: "Dateieigenschaften öffnen",
     taskPropertiesHelp: "Informationen und Aktionen zur aktuellen Datei anzeigen", taskSearch: "Text suchen", taskSearchHelp: "Im aktuellen Dokument suchen",
     taskGoToDefinition: "Zur Definition springen", taskGoToDefinitionHelp: "Zur Funktion oder zum Typ am Cursor springen (F12)",
@@ -136,10 +136,10 @@ const messages = {
     taskSaveHelp: "Write the current changes", taskSaveAll: "Save all files", taskSaveAllHelp: "Write all changed files",
     taskFormat: "Format file", taskFormatHelp: "Format a Zelyra source file", taskCheck: "Check project",
     taskCheckHelp: "Show compiler diagnostics for the project", taskDatabase: "Open database", taskDatabaseHelp: "Inspect tables and relationships",
-    taskRun: "Run program", taskRunHelp: "Run main.zyl with Zelyra; configured database, network, and process effects are possible, and interactive input is unavailable",
+    taskRun: "Run program or web app", taskRunHelp: "Run console programs with Zelyra or start web applications locally; configured effects are possible, and interactive input is unavailable",
     projectMap: "Project map", projectMapTitle: "Project relationships", projectMapOpenSource: "Open source location", projectMapLoading: "Loading the compiler project model …", projectMapUnavailable: "Could not create the project map.", projectMapIncomplete: "The map is incomplete. Unresolved or limited relationships are not guessed.", projectMapEmpty: "No supported relationships in this project yet.", projectMapModules: "Modules", projectMapData: "Data and views", projectMapWeb: "Routes and APIs", projectMapLogic: "Functions",
-    runButton: "Run", runButtonTitle: "Run main.zyl",
-    runOutputTitle: "Program output", runStarting: "Running main.zyl …", runSuccess: "Program finished successfully", runFailure: "Program finished with an error", runTimeout: "Execution stopped after 15 seconds", runOutputTruncated: "Output is limited to 64 KiB per stream.", runNoOutput: "No output.", runStdout: "OUTPUT", runStderr: "ERROR", runInputUnavailable: "Studio does not provide interactive input to the program.",
+    runButton: "Run", runButtonTitle: "Run main.zyl or start the web application",
+    runOutputTitle: "Program output", runStarting: "Running main.zyl …", runSuccess: "Program finished successfully", runFailure: "Program finished with an error", runTimeout: "Execution stopped after 15 seconds", runOutputTruncated: "Output is limited to 64 KiB per stream.", runNoOutput: "No output.", runStdout: "OUTPUT", runStderr: "ERROR", runInputUnavailable: "Studio does not provide interactive input to the program.", runWebReady: "Web application is running locally:", runWebOpen: "Open application in browser", runWebStop: "Stop preview", runWebStopped: "Local preview stopped.",
     taskHelp: "Open contextual help", taskHelpHelp: "Show help for the term at the cursor", taskProperties: "Open file properties",
     taskPropertiesHelp: "Show information and actions for the active file", taskSearch: "Find text", taskSearchHelp: "Search in the active document",
     taskGoToDefinition: "Go to definition", taskGoToDefinitionHelp: "Go to the function or type at the cursor (F12)",
@@ -1399,10 +1399,23 @@ async function runProject() {
   state.textContent = t("runStarting");
   state.dataset.kind = "pending";
   output.textContent = "";
+  $("run-output-web-link").hidden = true;
+  $("run-output-web-url").removeAttribute("href");
   if (!dialog.open) dialog.showModal();
   announce(t("runStarting"));
   try {
     const result = await api("run", { method: "POST", body: JSON.stringify({ path: "main.zyl" }) });
+    const webLink = $("run-output-web-link");
+    if (result.webApp && result.webUrl) {
+      state.textContent = t("runWebReady");
+      state.dataset.kind = "success";
+      webLink.hidden = false;
+      $("run-output-web-url").href = result.webUrl;
+      output.textContent = result.webUrl;
+      announce(`${t("runWebReady")} ${result.webUrl}`, "success");
+      return;
+    }
+    webLink.hidden = true;
     const statusText = result.timedOut ? t("runTimeout") : result.success ? t("runSuccess") : t("runFailure");
     state.textContent = `${statusText}${result.exitCode === null ? "" : ` · exit ${result.exitCode}`} · ${result.durationMs} ms`;
     state.dataset.kind = result.success ? "success" : "error";
@@ -1417,6 +1430,21 @@ async function runProject() {
   } catch (error) {
     state.textContent = error.message;
     state.dataset.kind = "error";
+    announce(error.message, "error");
+  }
+}
+
+async function stopWebPreview() {
+  try {
+    await api("stop-web-preview", { method: "POST", body: "{}" });
+    $("run-output-web-link").hidden = true;
+    $("run-output-state").textContent = t("runWebStopped");
+    $("run-output-state").dataset.kind = "success";
+    $("run-output-web-url").removeAttribute("href");
+    announce(t("runWebStopped"), "success");
+  } catch (error) {
+    $("run-output-state").textContent = error.message;
+    $("run-output-state").dataset.kind = "error";
     announce(error.message, "error");
   }
 }
@@ -1583,6 +1611,7 @@ $("delete-file-button").addEventListener("click", deleteActiveFile);
 $("save-all-button").addEventListener("click", saveAll);
 $("check-button").addEventListener("click", checkProject);
 $("run-button").addEventListener("click", runProject);
+$("run-output-web-stop").addEventListener("click", stopWebPreview);
 $("format-button").addEventListener("click", formatActive);
 $("database-button").addEventListener("click", openDatabaseWorkbench);
 $("assistant-toggle").addEventListener("click", () => toggleAssistant());

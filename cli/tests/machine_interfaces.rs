@@ -256,6 +256,15 @@ fn customer_order_acceptance_example_is_valid() {
 }
 
 #[test]
+fn help_lists_the_route_inventory_command_and_syntax() {
+    let output = run(&["--help"]);
+    assert!(output.status.success());
+    let help = String::from_utf8_lossy(&output.stderr);
+    assert!(help.contains("zelyra routes <entry.zyl> [--format human|json]"));
+    assert!(help.contains("lists declared pages, APIs, and generated resource routes"));
+}
+
+#[test]
 fn invoice_tutorial_creates_a_checkable_project_without_overwriting() {
     let directory = temporary_directory("invoice-tutorial");
     let tutorial = run(&[
@@ -284,6 +293,8 @@ fn invoice_tutorial_creates_a_checkable_project_without_overwriting() {
         );
     }
     assert!(String::from_utf8_lossy(&tutorial.stdout).contains("zelyra setup --all"));
+    assert!(String::from_utf8_lossy(&tutorial.stdout).contains("http://127.0.0.1:3000"));
+    assert!(source.contains("<html class=\"zelyra-app\">"));
 
     let overwrite = run(&["--tutorial", "invoice", directory.to_str().unwrap()]);
     assert!(!overwrite.status.success());
@@ -473,6 +484,8 @@ fn new_mariadb_project_propagates_the_selected_web_port() {
     assert!(env_file.contains("ZELYRA_DATABASE_MAIN_URL=mariadb://zelyra:"));
     assert!(env_file.contains("ZELYRA_LANGUAGE=de"));
     assert!(env_file.contains("ZELYRA_LEVEL=learn"));
+    assert!(String::from_utf8_lossy(&output.stdout)
+        .contains(&format!("http://127.0.0.1:{web_host_port}")));
     assert!(env_file.contains("ZELYRA_ALLOWED_HOSTS=localhost,127.0.0.1,[::1]"));
     assert!(env_file.contains("# ZELYRA_WEB_PORT=8080"));
     assert!(env_file.contains(&format!("# ZELYRA_HOST_PORT={web_host_port}")));

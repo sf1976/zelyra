@@ -672,6 +672,15 @@ manuell umzusetzen.
 
 ## Release 0.9.3 — Datenbankwerkbank
 
+- [🧪] Den im 0.9.2-Rechnungstutorial gefundenen Startfehler beheben: Das
+  deklarative Weblayout muss das Projekt-Theme laden; die CLI zeigt die lokale
+  Browseradresse schon beim Anlegen und behält sie auch bei fehlgeschlagenem
+  Schema-Setup bei. Studios **Starten** führt Konsolenprogramme aus und startet
+  bei Webprojekten eine lokale Vorschau mit anklickbarer Adresse. Der Start
+  beendet eine vorherige Vorschau und Studio beendet die aktive Vorschau beim
+  Schließen; **Vorschau beenden** stoppt sie sofort. Datenbanken werden weiterhin
+  ausdrücklich separat gestartet. CI-Nachweis für den neuen Studio-Webablauf
+  steht noch aus.
 - [🗺️] Einen schreibgeschützten Laravel-Projektanalysator in der Zelyra-CLI
   beginnen: `zelyra migrate laravel <projekt> --report <pfad>`. Er erfasst
   Laravel-/Paketversionen, Routen und Middleware, Controller, Models,

@@ -88,6 +88,9 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         if no_start {
             println!("\nAutomatic startup was skipped. To start the database, apply the schema, and launch the app, run:");
             println!("  cd {directory} && zelyra setup --all");
+            if let Ok(url) = project_web_url(std::path::Path::new(&directory)) {
+                println!("  application URL after startup: {url}");
+            }
         } else {
             println!(
                 "\nStarting the local database and preparing the application automatically..."
@@ -127,6 +130,9 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         if no_start {
             println!("\nAutomatischer Start übersprungen. Mit diesem Befehl startest du Datenbank und Anwendung und richtest das Schema ein:");
             println!("  cd {directory} && zelyra setup --all");
+            if let Ok(url) = project_web_url(std::path::Path::new(&directory)) {
+                println!("  Anwendung nach dem Start erreichbar unter: {url}");
+            }
         } else {
             println!("\nLokale Datenbank starten und Anwendung automatisch vorbereiten...");
             match setup_action(&directory, "all", &SetupOptions::default()) {

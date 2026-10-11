@@ -48,6 +48,21 @@ struct EditorState {
     root: PathBuf,
     token: String,
     authority: String,
+    web_process: Arc<std::sync::Mutex<Option<std::process::Child>>>,
+}
+
+impl Drop for EditorState {
+    fn drop(&mut self) {
+        if Arc::strong_count(&self.web_process) != 1 {
+            return;
+        }
+        if let Ok(mut process) = self.web_process.lock() {
+            if let Some(mut child) = process.take() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
+    }
 }
 
 pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
@@ -121,6 +136,7 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         root,
         token: token.clone(),
         authority: authority.clone(),
+        web_process: Arc::new(std::sync::Mutex::new(None)),
     });
     let active = Arc::new(AtomicUsize::new(0));
     println!("Zelyra Studio ist lokal erreichbar: http://{authority}{EDITOR_PATH}/#{token}");
@@ -140,9 +156,7 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
             "Browserstart übersprungen. Öffne die URL oben selbst. Mit Ctrl+C beendest du Studio."
         );
     }
-    println!(
-        "Studio akzeptiert ausschließlich Verbindungen von diesem Rechner. Es startet weder Datenbank noch Webanwendung."
-    );
+    println!("Studio akzeptiert ausschließlich Verbindungen von diesem Rechner.");
     for incoming in listener.incoming() {
         match incoming {
             Ok(stream) => {
@@ -385,6 +399,7 @@ fn editor_response(
         ("DELETE", "file") => delete_editor_file(state, parse_json_body(&request.body)?),
         ("POST", "check") => check_project(state, &parse_json_body(&request.body)?),
         ("POST", "run") => run_editor_program(state, &parse_json_body(&request.body)?),
+        ("POST", "stop-web-preview") => stop_editor_web_app(state),
         ("POST", "format") => format_editor_file(state, &parse_json_body(&request.body)?),
         ("POST", "crud-preview") => preview_crud_resource(state, &parse_json_body(&request.body)?),
         ("POST", "crud-apply") => apply_crud_resource(state, &parse_json_body(&request.body)?),
@@ -2118,6 +2133,21 @@ fn run_editor_program(
     {
         return Err((413, "entry file exceeds the 1 MiB editor limit".into()));
     }
+    if let Ok(project) = project::load(&path.to_string_lossy()) {
+        let program = project.program;
+        let database_name = program
+            .databases
+            .first()
+            .map(|database| database.name.clone());
+        if !program.pages.is_empty()
+            || !program.forms.is_empty()
+            || !program.cruds.is_empty()
+            || !program.tableviews.is_empty()
+            || !program.apis.is_empty()
+        {
+            return start_editor_web_app(state, relative, database_name.as_deref());
+        }
+    }
     let executable =
         env::current_exe().map_err(|_| (500, "could not locate the running Zelyra CLI".into()))?;
     let mut child = Command::new(executable)
@@ -2176,6 +2206,111 @@ fn run_editor_program(
             "truncated": stdout_truncated || stderr_truncated,
         })
         .to_string(),
+    ))
+}
+
+fn start_editor_web_app(
+    state: &EditorState,
+    relative: &str,
+    database_name: Option<&str>,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let executable =
+        env::current_exe().map_err(|_| (500, "could not locate the running Zelyra CLI".into()))?;
+    let listener = std::net::TcpListener::bind("127.0.0.1:0")
+        .map_err(|_| (500, "could not reserve a local preview port".into()))?;
+    let address = listener
+        .local_addr()
+        .map_err(|_| (500, "could not read the local preview port".into()))?;
+    drop(listener);
+
+    let mut current = state
+        .web_process
+        .lock()
+        .map_err(|_| (500, "could not access the local web preview".into()))?;
+    if let Some(mut previous) = current.take() {
+        let _ = previous.kill();
+        let _ = previous.wait();
+    }
+    let mut command = Command::new(executable);
+    command
+        .arg("serve")
+        .arg(relative)
+        .arg(address.to_string())
+        .current_dir(&state.root)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    if database_url_from_environment(database_name).is_none() {
+        if let Ok(database_url) = expanded_database_url(&state.root) {
+            command.env("DATABASE_URL", &database_url);
+            if let Some(database_name) = database_name {
+                command.env(database_url_environment_name(database_name), &database_url);
+            }
+        }
+    }
+    let mut child = command
+        .spawn()
+        .map_err(|_| (500, "could not start the local web application".into()))?;
+
+    let preview_url = format!("http://{address}");
+    let ready_by = std::time::Instant::now() + Duration::from_secs(10);
+    loop {
+        if let Some(status) = child
+            .try_wait()
+            .map_err(|_| (500, "could not read the web application status".into()))?
+        {
+            return Err((
+                422,
+                format!("web application exited with {status}; check the project and database configuration"),
+            ));
+        }
+        if TcpStream::connect_timeout(&address, Duration::from_millis(100)).is_ok() {
+            *current = Some(child);
+            return Ok((
+                200,
+                "application/json; charset=utf-8",
+                json!({
+                    "success": true,
+                    "webApp": true,
+                    "webUrl": preview_url,
+                    "stdout": "",
+                    "stderr": "",
+                    "durationMs": 0,
+                    "truncated": false,
+                })
+                .to_string(),
+            ));
+        }
+        if std::time::Instant::now() >= ready_by {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err((
+                504,
+                "web application did not become ready within 10 seconds".into(),
+            ));
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+}
+
+fn stop_editor_web_app(state: &EditorState) -> Result<(u16, &'static str, String), (u16, String)> {
+    let mut current = state
+        .web_process
+        .lock()
+        .map_err(|_| (500, "could not access the local web preview".into()))?;
+    let stopped = if let Some(mut child) = current.take() {
+        if child.try_wait().ok().flatten().is_none() {
+            let _ = child.kill();
+        }
+        let _ = child.wait();
+        true
+    } else {
+        false
+    };
+    Ok((
+        200,
+        "application/json; charset=utf-8",
+        json!({"success": true, "stopped": stopped}).to_string(),
     ))
 }
 
@@ -2440,6 +2575,7 @@ mod tests {
             root: directory.canonicalize().expect("canonical project root"),
             token: "local-session-token".into(),
             authority: "127.0.0.1:4177".into(),
+            web_process: Arc::new(std::sync::Mutex::new(None)),
         }
     }
 

@@ -686,6 +686,14 @@ its source evidence and reason.
 
 ## Release 0.9.3 — database workbench
 
+- [🧪] Fix the invoice tutorial startup defect found after 0.9.2: declarative
+  web layouts must load the project theme; the CLI prints the local browser
+  address when scaffolding and preserves it when schema setup fails. Studio's
+  **Run** action executes console programs and starts a local preview for web
+  projects with a clickable address. A new preview replaces the prior one and
+  Studio stops the active preview when it closes; **Stop preview** ends it
+  immediately. Databases still start explicitly and separately. CI evidence for
+  the new Studio web workflow is still pending.
 - [🗺️] Start a read-only Laravel project analyzer in the Zelyra CLI:
   `zelyra migrate laravel <project> --report <path>`. It statically inventories
   Laravel/package versions, routes and middleware, controllers, models,

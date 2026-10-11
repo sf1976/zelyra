@@ -88,6 +88,24 @@ try {
   assert.match(runOutput, /3/, "Studio Run must execute main.zyl and display stdout");
   assert.match(runOutput, /interactive input|interaktive Eingabe/i, "Studio must explain that stdin is unavailable");
   await page.locator("#run-output-close").click();
+
+  await editor.focus();
+  await page.keyboard.press("Control+A");
+  await page.keyboard.type('page "/" { html { <h1>Studio web preview ready</h1> } }\n');
+  await page.keyboard.press("Control+S");
+  await page.locator(".tab-state.dirty").waitFor({ state: "detached" });
+  await page.locator("#run-button").click();
+  await page.locator("#run-output-web-link:not([hidden])").waitFor();
+  const previewUrl = await page.locator("#run-output-web-url").getAttribute("href");
+  assert.match(previewUrl, /^http:\/\/127\.0\.0\.1:\d+$/);
+  const previewResponse = await page.request.get(previewUrl);
+  assert.equal(previewResponse.status(), 200);
+  assert.match(await previewResponse.text(), /Studio web preview ready/);
+  await page.locator("#run-output-web-stop").click();
+  await page.locator("#run-output-web-link").waitFor({ state: "hidden" });
+  await assert.rejects(() => page.request.get(previewUrl, { timeout: 1_000 }));
+  await page.locator("#run-output-close").click();
+
   await editor.focus();
   await page.keyboard.press("Control+A");
   await page.keyboard.type('fn main() { print("unsaved browser edit"); }\n');

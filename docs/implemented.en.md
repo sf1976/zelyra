@@ -1,14 +1,39 @@
-# Implemented in Zelyra 0.9.1
+# Implemented in Zelyra 0.9.2
 
-**Snapshot:** stable 0.9.1 · language compatibility line `0.1` · 2026-10-11
+**Snapshot:** stable 0.9.2 · language compatibility line `0.1` · 2026-10-11
 **Maturity:** experimental; not approved for production use
 
-This is an inventory of capabilities implemented in the stable Zelyra 0.9.1
+This is an inventory of capabilities implemented in the stable Zelyra 0.9.2
 release. It does not claim human acceptance; that remains scheduled for 1.0.0. It records delivered scope, not the full language vision
 or future plans. The [roadmap](ROADMAP.md) remains the source for unfinished
 work; the [changelog](../CHANGELOG.md) records what changed in each release.
 Links below lead to detailed instructions and test evidence so this page does
 not duplicate the handbook.
+
+## Changes in 0.9.2
+
+- ✅ Studio provides contextual help and a searchable action finder.
+  Completion includes compiler-known project declarations and local AST
+  bindings; live diagnostics also check unsaved edits without modifying project
+  files.
+- ✅ F12 opens unambiguous definitions in the current or a directly imported
+  module. Shift+F12 finds lexically identical identifiers in saved `.zyl`
+  files; it does not resolve scopes.
+- ✅ The deterministic project map displays compiler-known modules, imports,
+  tables, views, CRUD resources, pages, APIs, and functions with source
+  positions. Ambiguous, dynamic, or limit-truncated relationships are not
+  guessed.
+- ✅ The explicit Studio **Run** action limits programs to 15 seconds and 64
+  KiB per output stream, and redacts recognized secrets from the process
+  environment and `.env`. Studio does not run programs automatically and does
+  not provide interactive stdin.
+- ✅ `zelyra --tutorial invoice` creates the invoice tutorial, starts its local
+  MariaDB/web Compose application, and applies its schema. `--no-start` skips
+  Docker startup. The example calculates net, 19% VAT, and gross and provides a
+  browser-printable invoice view.
+- ✅ Automated browser and keyboard checks cover the new editor language
+  services. Independent screen-reader, contrast, and product acceptance remain
+  scheduled for 1.0.0.
 
 ## Changes in 0.9.1
 
@@ -130,6 +155,11 @@ For usage details see the [web and database quickstart](getting-started.md),
   checks a candidate, Studio shows its diff, and writes only after explicit
   apply with a fresh hash check. MySQL live introspection and schema or record
   changes are out of scope here. See the [Studio guide](studio.en.md).
+  Version 0.9.2 adds contextual help, an action finder, AST-backed local
+  completion, live diagnostics, F12 definitions, lexical Shift+F12 occurrences,
+  a deterministic compiler project map, and a bounded explicit Run action.
+  Type inference, full semantic references, and dynamic project relationships
+  are not included.
 - ✅ `zelyra text edit <plan.zedit>` previews text edits from TOML plans using
   linear regular expressions, expected match counts, a source-bound plan ID,
   and explicit apply. Project boundaries and unchanged inputs are checked
@@ -139,8 +169,10 @@ For usage details see the [web and database quickstart](getting-started.md),
   independent production approval.
 - The 0.1 language compatibility corpus adds typed API errors and runtime
   cases for the invoice application and `Result`.
-- 🧪 The current `zelyra --tutorial invoice` update guides users through
-  customers, items, a dashboard, and invoice creation. The invoice page totals net line prices,
+- 🧪 `zelyra --tutorial invoice` now creates the app and starts its local
+  MariaDB/web Compose stack, including its schema. `--no-start` creates only
+  the scaffold. The tutorial guides users through customers, items, a dashboard,
+  and invoice creation. The invoice page totals net line prices,
   calculates 19% VAT in this learning example, and shows the gross amount.
   At `/invoices/INVOICE-NUMBER/print`, the browser can save the print-ready
   invoice as a PDF. This is a learning path, not production or deployment

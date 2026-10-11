@@ -1,9 +1,9 @@
-# In Zelyra 0.9.1 umgesetzt
+# In Zelyra 0.9.2 umgesetzt
 
-**Stand:** stabiles Release 0.9.1 · Sprachkompatibilitätslinie `0.1` · 2026-10-11
+**Stand:** stabiles Release 0.9.2 · Sprachkompatibilitätslinie `0.1` · 2026-10-11
 **Reifegrad:** experimentell; nicht für den Produktiveinsatz freigegeben
 
-Diese Übersicht führt Funktionen auf, die im stabilen Release Zelyra 0.9.1
+Diese Übersicht führt Funktionen auf, die im stabilen Release Zelyra 0.9.2
 tatsächlich implementiert sind. Eine menschliche Abnahme wird nicht behauptet;
 sie bleibt bis 1.0.0 offen. Sie beschreibt den ausgelieferten Umfang,
 nicht die gesamte Sprachvision oder zukünftige Vorhaben. Die
@@ -11,6 +11,31 @@ nicht die gesamte Sprachvision oder zukünftige Vorhaben. Die
 [Changelog](../CHANGELOG.md) hält die Änderungen der Releases fest. Die Links
 führen zu ausführlichen Anleitungen und Testnachweisen, damit diese Seite das
 Handbuch nicht doppelt wiedergibt.
+
+## Änderungen in 0.9.2
+
+- ✅ Studio zeigt Kontexthilfe und einen durchsuchbaren Aktionsfinder. Die
+  Vervollständigung berücksichtigt deklarierte Projektbegriffe und lokale
+  Bindungen aus dem Compiler-AST; Live-Diagnosen prüfen auch ungespeicherte
+  Änderungen, ohne Projektdateien zu verändern.
+- ✅ F12 öffnet eindeutige Definitionen im aktuellen oder direkt importierten
+  Modul. Umschalt+F12 findet lexikalisch gleiche Bezeichner in gespeicherten
+  `.zyl`-Dateien; die Suche löst keine Gültigkeitsbereiche auf.
+- ✅ Die deterministische Projektkarte zeigt Compiler-erfasste Module,
+  Importe, Tabellen, Views, CRUD-Ressourcen, Seiten, APIs und Funktionen mit
+  Quellpositionen. Mehrdeutige, dynamische oder begrenzungsbedingt fehlende
+  Beziehungen werden nicht geraten.
+- ✅ Die ausdrückliche Studio-Aktion **Starten** begrenzt Programme auf
+  15 Sekunden und 64 KiB je Ausgabekanal und redigiert erkannte Geheimnisse aus
+  Prozessumgebung und `.env`. Studio startet nichts selbstständig; interaktive
+  stdin-Eingabe ist nicht verfügbar.
+- ✅ `zelyra --tutorial invoice` erzeugt das Rechnungstutorial, startet die
+  MariaDB-/Web-Compose-Anwendung und richtet ihr Schema ein. `--no-start`
+  überspringt den Docker-Start. Das Beispiel berechnet Netto, 19% Umsatzsteuer
+  und Brutto und stellt eine druckbare Browseransicht bereit.
+- ✅ Automatisierte Browser- und Tastaturprüfungen ergänzen die Editor-
+  Sprachdienste; unabhängige Screenreader-, Kontrast- und Produktabnahme bleibt
+  für 1.0.0 vorgesehen.
 
 ## Änderungen in 0.9.1
 
@@ -141,6 +166,11 @@ der [Setup-Anleitung](setup-web.de.md) und den
   0.9.0 zeigt dazu betroffene Dateien, Tabellen, deklarierte Beziehungen und
   Routen. Der Kandidat wird mit dem Compiler geprüft, als Diff angezeigt und
   erst nach ausdrücklichem Anwenden mit erneutem Hashvergleich geschrieben.
+  0.9.2 ergänzt Kontexthilfe, Aktionsfinder, AST-basierte lokale
+  Vervollständigung, Live-Diagnosen, F12-Definitionen, lexikalische
+  Umschalt+F12-Fundstellen, eine deterministische Compiler-Projektkarte und
+  einen begrenzten ausdrücklichen Run-Befehl. Typinferenz, vollständige
+  semantische Referenzen und dynamische Projektbeziehungen sind nicht enthalten.
   MySQL-Live-Introspektion und Änderungen an Schema oder Datensätzen sind hier
   nicht enthalten. Einzelheiten: [Studio-Anleitung](studio.de.md).
 - ✅ `zelyra text edit <plan.zedit>` bietet vorschau-basierte Textänderungen aus
@@ -153,8 +183,10 @@ der [Setup-Anleitung](setup-web.de.md) und den
   Vorschaupfad ohne unabhängige Produktionsfreigabe.
 - Das Sprachkompatibilitätskorpus 0.1 umfasst in 0.9 zusätzliche typisierte
   API-Fehler sowie Laufzeitfälle der Rechnungsanwendung und von `Result`.
-- 🧪 Die aktuelle Erweiterung von `zelyra --tutorial invoice` führt durch
-  Kunden, Artikel, Dashboard und Rechnungserstellung. Die Rechnungsansicht addiert
+- 🧪 `zelyra --tutorial invoice` erzeugt jetzt die Anwendung und startet ihre
+  lokale MariaDB-/Web-Compose-Umgebung einschließlich Schema. `--no-start`
+  erstellt nur das Projektgerüst. Das Tutorial führt durch Kunden, Artikel,
+  Dashboard und Rechnungserstellung. Die Rechnungsansicht addiert
   Positionspreise netto, berechnet im Lernbeispiel 19% Umsatzsteuer und zeigt
   den Bruttobetrag. Unter `/invoices/RECHNUNGSNUMMER/print` kann der Browser
   die druckoptimierte Rechnung als PDF speichern. Es ist ein Lernpfad, keine
