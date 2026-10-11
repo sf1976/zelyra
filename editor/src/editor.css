@@ -23,6 +23,7 @@
 html, body { height: 100%; margin: 0; overflow: hidden; background: var(--canvas); color: var(--ink); }
 button, input { color: inherit; font: inherit; }
 button { cursor: pointer; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .studio-shell { display: flex; flex-direction: column; width: 100%; height: 100%; min-width: 360px; }
 .topbar { height: 58px; flex: 0 0 58px; display: flex; align-items: center; gap: 32px; padding: 0 18px; background: var(--surface); border-bottom: 1px solid var(--border); z-index: 2; }
 .brand-lockup { display: flex; align-items: center; gap: 10px; min-width: 214px; }
@@ -86,6 +87,7 @@ button { cursor: pointer; }
 .assistant-tabs { display: flex; height: 38px; border-bottom: 1px solid var(--border); }
 .assistant-tabs button { flex: 1; border: 0; border-bottom: 2px solid transparent; color: var(--muted); background: transparent; font-size: 10px; }
 .assistant-tabs button.selected { border-bottom-color: var(--accent); color: var(--ink); }
+.assistant-tabs button:focus-visible { position: relative; z-index: 1; outline-offset: -3px; }
 .assistant-view { padding: 16px 14px; }
 .assistant-view h2 { margin: 8px 0; color: var(--ink); font-size: 14px; overflow-wrap: anywhere; }
 .assistant-view p { color: var(--muted); font-size: 11px; line-height: 1.55; }
@@ -133,7 +135,7 @@ button { cursor: pointer; }
 .project-map-edge-label { fill: var(--muted); font: 8px ui-sans-serif, system-ui, sans-serif; paint-order: stroke; stroke: var(--editor-bg); stroke-width: 3px; stroke-linejoin: round; }
 .project-map-node { cursor: pointer; outline: none; }
 .project-map-node rect { fill: var(--surface); stroke: var(--border); stroke-width: 1.2; rx: 7px; }
-.project-map-node:hover rect, .project-map-node:focus rect { stroke: var(--accent); stroke-width: 2; }
+.project-map-node:hover rect, .project-map-node:focus-visible rect { stroke: var(--accent); stroke-width: 2; }
 .project-map-node-name { fill: var(--ink); font: 600 10px ui-monospace, monospace; }
 .project-map-node-file { fill: var(--muted); font: 8px ui-monospace, monospace; }
 .project-map-node.kind-api rect, .project-map-node.kind-page rect { stroke: color-mix(in srgb, var(--accent) 60%, var(--border)); }
@@ -210,7 +212,7 @@ kbd { padding: 3px 5px; border: 1px solid var(--border); border-radius: 4px; col
 .database-graph-edge.related + .database-graph-arrow { fill: var(--accent); }
 .database-graph-node { cursor: pointer; outline: none; }
 .database-graph-node rect { fill: var(--surface); stroke: var(--border); stroke-width: 1.2; filter: drop-shadow(0 3px 5px #11182714); transition: stroke .15s, fill .15s; }
-.database-graph-node:hover rect, .database-graph-node:focus rect { stroke: var(--accent); }
+.database-graph-node:hover rect, .database-graph-node:focus-visible rect { stroke: var(--accent); stroke-width: 2; }
 .database-graph-node.selected rect { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; }
 .database-graph-node.drift rect { stroke: var(--warning); stroke-dasharray: 4 3; }
 .database-graph-title { fill: var(--ink); font: 600 11px ui-monospace, monospace; }

@@ -14,7 +14,7 @@
       <div class="brand-lockup"><div class="brand-mark">Z</div><div><strong>Zelyra Studio</strong><small data-i18n="subtitle">Lokale Entwicklungsumgebung</small></div></div>
       <div class="project-switcher"><span class="project-glyph">⌂</span><span id="project-name">Projekt</span><span class="project-branch" data-i18n="local">LOCAL</span></div>
       <div class="top-actions">
-        <button class="icon-button" id="sidebar-toggle" aria-label="Dateiübersicht umschalten" title="Dateiübersicht umschalten" data-i18n-title="toggleExplorer" data-i18n-aria="toggleExplorer">☰</button>
+        <button class="icon-button" id="sidebar-toggle" aria-label="Dateiübersicht umschalten" aria-controls="explorer" aria-expanded="true" title="Dateiübersicht umschalten" data-i18n-title="toggleExplorer" data-i18n-aria="toggleExplorer">☰</button>
         <button class="toolbar-button" id="open-search" title="Suchen (Strg+F)" data-i18n-title="search">⌕ <span data-i18n="search">Suchen</span></button>
         <button class="toolbar-button" id="project-search-button" title="Projekt durchsuchen (Strg+Umschalt+F)" data-i18n-title="projectSearch">⌕ <span data-i18n="projectSearch">Projekt</span></button>
         <button class="toolbar-button" id="project-map-button" title="Projektbeziehungen anzeigen" data-i18n-title="projectMap">◇ <span data-i18n="projectMap">Projektkarte</span></button>
@@ -50,10 +50,13 @@
         <div class="tabbar" id="tabs" role="tablist" aria-label="Geöffnete Dateien"></div>
         <section class="editor-stage">
           <div id="editor-root" class="editor-root"></div>
-          <aside class="studio-assistant" id="studio-assistant" hidden>
-            <div class="assistant-tabs"><button id="assistant-help-tab" class="selected" data-i18n="helpTab">Hilfe</button><button id="assistant-properties-tab" data-i18n="propertiesTab">Eigenschaften</button></div>
-            <section id="assistant-help-view" class="assistant-view"><span class="database-eyebrow" data-i18n="contextHelp">KONTEXT-HILFE</span><h2 id="assistant-help-title" data-i18n="selectLanguageItem">Wähle einen Zelyra-Begriff</h2><p id="assistant-help-description" data-i18n="contextHelpHint">Bewege den Cursor auf einen Begriff. F1 öffnet diese Hilfe.</p><div id="assistant-help-details"></div></section>
-            <section id="assistant-properties-view" class="assistant-view" hidden><span class="database-eyebrow" data-i18n="fileProperties">DATEIEIGENSCHAFTEN</span><h2 id="assistant-file-name">—</h2><dl id="assistant-file-details"></dl><div class="assistant-property-actions"><button class="toolbar-button" id="assistant-format" data-i18n="format">Formatieren</button><button class="toolbar-button" id="assistant-check" data-i18n="check">Projekt prüfen</button></div></section>
+          <aside class="studio-assistant" id="studio-assistant" aria-label="Hilfe und Eigenschaften" data-i18n-aria="assistant" hidden>
+            <div class="assistant-tabs" role="tablist" aria-label="Studio-Seitenleiste" data-i18n-aria="assistantTabs">
+              <button id="assistant-help-tab" class="selected" type="button" role="tab" aria-selected="true" aria-controls="assistant-help-view" tabindex="0" data-i18n="helpTab">Hilfe</button>
+              <button id="assistant-properties-tab" type="button" role="tab" aria-selected="false" aria-controls="assistant-properties-view" tabindex="-1" data-i18n="propertiesTab">Eigenschaften</button>
+            </div>
+            <section id="assistant-help-view" class="assistant-view" role="tabpanel" aria-labelledby="assistant-help-tab"><span class="database-eyebrow" data-i18n="contextHelp">KONTEXT-HILFE</span><h2 id="assistant-help-title" data-i18n="selectLanguageItem">Wähle einen Zelyra-Begriff</h2><p id="assistant-help-description" data-i18n="contextHelpHint">Bewege den Cursor auf einen Begriff. F1 öffnet diese Hilfe.</p><div id="assistant-help-details"></div></section>
+            <section id="assistant-properties-view" class="assistant-view" role="tabpanel" aria-labelledby="assistant-properties-tab" hidden><span class="database-eyebrow" data-i18n="fileProperties">DATEIEIGENSCHAFTEN</span><h2 id="assistant-file-name">—</h2><dl id="assistant-file-details"></dl><div class="assistant-property-actions"><button class="toolbar-button" id="assistant-format" data-i18n="format">Formatieren</button><button class="toolbar-button" id="assistant-check" data-i18n="check">Projekt prüfen</button></div></section>
           </aside>
           <div id="empty-state" class="empty-state">
             <div class="empty-mark">Z</div><h1 data-i18n="welcome">Willkommen in Zelyra Studio</h1>
@@ -75,7 +78,7 @@
             <div class="database-detail" id="database-detail">
               <section class="database-graph-panel" id="database-graph-panel" hidden>
                 <div class="database-section-heading"><div><span class="database-eyebrow" data-i18n="databaseStudio">DATABASE STUDIO</span><h3 data-i18n="relationshipMap">Tabellenbeziehungen</h3><p data-i18n="relationshipMapHint">Wähle eine Tabelle in der Karte, um ihre Felder zu öffnen.</p></div><span id="database-graph-count" class="database-legend"></span></div>
-                <div class="database-graph-scroller"><svg id="database-graph" class="database-graph" role="img" aria-label="Tabellenbeziehungen"></svg></div>
+                <div class="database-graph-scroller"><svg id="database-graph" class="database-graph" role="group" aria-label="Interaktive Tabellenbeziehungen"></svg></div>
                 <div class="database-graph-legend"><span data-state="matched" data-i18n="relationMatched">Durchgezogen · Quelle und Live</span><span data-state="source-only" data-i18n="relationSourceOnly">Gestrichelt · nur Quelle</span><span data-state="database-only" data-i18n="relationDatabaseOnly">Gepunktet · nur Datenbank</span></div>
               </section>
               <div class="database-welcome" id="database-welcome"><div class="empty-mark">▤</div><h2 data-i18n="databaseChooseTable">Wähle links eine Tabelle</h2><p data-i18n="databaseChooseHint">Studio zeigt Spalten, Schlüssel, Beziehungen und Quellcode-Abweichungen.</p><button class="primary-button" id="database-start" data-i18n="loadSchema">Datenbankschema laden</button></div>
@@ -118,8 +121,8 @@
   </div>
   <dialog id="task-finder" class="task-finder" aria-labelledby="task-finder-title">
     <header><h2 id="task-finder-title" data-i18n="taskFinderTitle">Was möchtest du tun?</h2><button id="task-finder-close" aria-label="Schließen" data-i18n-aria="close">×</button></header>
-    <label class="task-finder-search"><span>⌕</span><input id="task-finder-input" type="search" autocomplete="off" placeholder="Aktion oder Befehl suchen" data-i18n-placeholder="taskFinderPlaceholder"></label>
-    <div id="task-finder-results" class="task-finder-results" role="listbox" aria-label="Aktionen"></div>
+    <label class="task-finder-search"><span aria-hidden="true">⌕</span><input id="task-finder-input" type="search" role="combobox" aria-autocomplete="list" aria-controls="task-finder-results" aria-expanded="false" autocomplete="off" placeholder="Aktion oder Befehl suchen" data-i18n-placeholder="taskFinderPlaceholder"></label>
+    <div id="task-finder-results" class="task-finder-results" role="listbox" aria-label="Aktionen" data-i18n-aria="taskFinderResults"></div>
     <p id="task-finder-empty" class="task-finder-empty" hidden data-i18n="noMatchingTasks">Keine passende Aktion gefunden.</p>
     <footer><kbd>↑</kbd><kbd>↓</kbd><kbd>Enter</kbd><span data-i18n="chooseAction">Aktion auswählen</span><kbd>Esc</kbd><span data-i18n="close">Schließen</span></footer>
   </dialog>
@@ -140,7 +143,7 @@
     <header class="project-map-header"><div><span class="database-eyebrow" data-i18n="projectMap">PROJEKTKARTE</span><h2 id="project-map-title" data-i18n="projectMapTitle">Projektbeziehungen</h2></div><button id="project-map-close" aria-label="Schließen" data-i18n-aria="close">×</button></header>
     <p id="project-map-status" class="project-map-status" role="status"></p>
     <div class="project-map-legend"><span data-i18n="projectMapModules">Module</span><span data-i18n="projectMapData">Daten und Ansichten</span><span data-i18n="projectMapWeb">Routen und APIs</span><span data-i18n="projectMapLogic">Funktionen</span></div>
-    <div class="project-map-scroller"><svg id="project-map-graph" class="project-map-graph" role="img" aria-label="Projektbeziehungen"></svg></div>
+    <div class="project-map-scroller"><svg id="project-map-graph" class="project-map-graph" role="group" aria-label="Interaktive Projektbeziehungen" data-i18n-aria="projectMapTitle"></svg></div>
   </dialog>
 </body>
 </html>

@@ -65,7 +65,7 @@ const messages = {
     taskFormat: "Datei formatieren", taskFormatHelp: "Zelyra-Quelldatei kanonisch formatieren", taskCheck: "Projekt prüfen",
     taskCheckHelp: "Compilerdiagnosen für das Projekt anzeigen", taskDatabase: "Datenbank öffnen", taskDatabaseHelp: "Tabellen und Beziehungen ansehen",
     taskRun: "Programm ausführen", taskRunHelp: "main.zyl mit Zelyras Laufzeit starten; konfigurierte Datenbank-, Netzwerk- und Prozesseffekte sind möglich, interaktive Eingabe fehlt",
-    projectMap: "Projektkarte", projectMapTitle: "Projektbeziehungen", projectMapLoading: "Compiler-Projektmodell wird geladen …", projectMapUnavailable: "Projektkarte konnte nicht erstellt werden.", projectMapIncomplete: "Die Karte ist unvollständig. Nicht auflösbare oder begrenzte Beziehungen werden nicht geraten.", projectMapEmpty: "Noch keine unterstützten Beziehungen im Projekt.", projectMapModules: "Module", projectMapData: "Daten und Ansichten", projectMapWeb: "Routen und APIs", projectMapLogic: "Funktionen",
+    projectMap: "Projektkarte", projectMapTitle: "Projektbeziehungen", projectMapOpenSource: "Quelltext öffnen", projectMapLoading: "Compiler-Projektmodell wird geladen …", projectMapUnavailable: "Projektkarte konnte nicht erstellt werden.", projectMapIncomplete: "Die Karte ist unvollständig. Nicht auflösbare oder begrenzte Beziehungen werden nicht geraten.", projectMapEmpty: "Noch keine unterstützten Beziehungen im Projekt.", projectMapModules: "Module", projectMapData: "Daten und Ansichten", projectMapWeb: "Routen und APIs", projectMapLogic: "Funktionen",
     runButton: "Starten", runButtonTitle: "main.zyl ausführen",
     runOutputTitle: "Programmausgabe", runStarting: "main.zyl wird ausgeführt …", runSuccess: "Programm erfolgreich beendet", runFailure: "Programm mit Fehler beendet", runTimeout: "Ausführung nach 15 Sekunden beendet", runOutputTruncated: "Die Ausgabe ist auf 64 KiB je Stream begrenzt.", runNoOutput: "Keine Ausgabe.", runStdout: "AUSGABE", runStderr: "FEHLER", runInputUnavailable: "Studio stellt dem Programm keine interaktive Eingabe bereit.",
     taskHelp: "Kontexthilfe öffnen", taskHelpHelp: "Hilfe zum Begriff am Cursor anzeigen", taskProperties: "Dateieigenschaften öffnen",
@@ -76,7 +76,7 @@ const messages = {
     projectSearch: "Projekt durchsuchen", projectSearchTitle: "Projekt durchsuchen", projectSearchHelp: "Alle gespeicherten Zelyra-Dateien durchsuchen", projectSearchPlaceholder: "Text in Zelyra-Dateien suchen", projectSearchResults: "Suchergebnisse", projectSearchEmpty: "Keine Treffer gefunden.", projectSearchLoading: "Projekt wird durchsucht …", projectSearchSaveFirst: "Speichere offene Änderungen, bevor du das Projekt durchsuchst.", projectSearchTruncated: "Die Trefferliste ist wegen einer Suchgrenze unvollständig.", projectSearchSubmit: "Suchen",
     referencesTitle: "Bezeichnerverwendungen", referencesPlaceholder: "Zelyra-Bezeichner suchen",
     localParameter: "Parameter", localValue: "Lokaler Wert", loopValue: "Schleifenwert", matchValue: "Musterwert",
-    assistant: "Hilfe und Eigenschaften", helpTab: "Hilfe", propertiesTab: "Eigenschaften", contextHelp: "KONTEXT-HILFE",
+    assistant: "Hilfe und Eigenschaften", assistantTabs: "Studio-Seitenleiste", taskFinderResults: "Aktionen", helpTab: "Hilfe", propertiesTab: "Eigenschaften", contextHelp: "KONTEXT-HILFE",
     selectLanguageItem: "Wähle einen Zelyra-Begriff", contextHelpHint: "Bewege den Cursor auf einen Begriff. F1 öffnet diese Hilfe.",
     fileProperties: "DATEIEIGENSCHAFTEN", fileType: "Dateityp", filePath: "Projektpfad", fileStatus: "Status",
     sourceKind: "Zelyra-Quelltext", configFile: "Projektkonfiguration", otherFile: "Projektdatei", savedState: "Gespeichert", unsavedState: "Ungespeichert",
@@ -96,7 +96,7 @@ const messages = {
     problemsFound: "{0} Problem(e) gefunden", formatRunning: "Formatiere …", formatted: "{0} formatiert",
     createPrompt: "Neuer Dateipfad im Projekt (zum Beispiel src/customer.zyl)",
     closeUnsaved: "{0} enthält ungespeicherte Änderungen. Tab trotzdem schließen?",
-    filesCount: "{0} Dateien", chooseFile: "Datei öffnen", database: "Datenbank",
+    filesCount: "{0} Dateien", chooseFile: "Datei öffnen", database: "Datenbank", databaseOpenTable: "Tabelle auswählen",
     databaseStudio: "DATENBANK STUDIO", databaseTitle: "Datenbank verstehen",
     databaseIntro: "Leseübersicht für DATABASE_URL mit compilergeprüfter CRUD-Vorschau.", databaseNotLoaded: "Noch nicht verbunden",
     refreshSchema: "Schema laden", backToCode: "Zurück zum Code", filterTables: "Tabellen filtern",
@@ -137,7 +137,7 @@ const messages = {
     taskFormat: "Format file", taskFormatHelp: "Format a Zelyra source file", taskCheck: "Check project",
     taskCheckHelp: "Show compiler diagnostics for the project", taskDatabase: "Open database", taskDatabaseHelp: "Inspect tables and relationships",
     taskRun: "Run program", taskRunHelp: "Run main.zyl with Zelyra; configured database, network, and process effects are possible, and interactive input is unavailable",
-    projectMap: "Project map", projectMapTitle: "Project relationships", projectMapLoading: "Loading the compiler project model …", projectMapUnavailable: "Could not create the project map.", projectMapIncomplete: "The map is incomplete. Unresolved or limited relationships are not guessed.", projectMapEmpty: "No supported relationships in this project yet.", projectMapModules: "Modules", projectMapData: "Data and views", projectMapWeb: "Routes and APIs", projectMapLogic: "Functions",
+    projectMap: "Project map", projectMapTitle: "Project relationships", projectMapOpenSource: "Open source location", projectMapLoading: "Loading the compiler project model …", projectMapUnavailable: "Could not create the project map.", projectMapIncomplete: "The map is incomplete. Unresolved or limited relationships are not guessed.", projectMapEmpty: "No supported relationships in this project yet.", projectMapModules: "Modules", projectMapData: "Data and views", projectMapWeb: "Routes and APIs", projectMapLogic: "Functions",
     runButton: "Run", runButtonTitle: "Run main.zyl",
     runOutputTitle: "Program output", runStarting: "Running main.zyl …", runSuccess: "Program finished successfully", runFailure: "Program finished with an error", runTimeout: "Execution stopped after 15 seconds", runOutputTruncated: "Output is limited to 64 KiB per stream.", runNoOutput: "No output.", runStdout: "OUTPUT", runStderr: "ERROR", runInputUnavailable: "Studio does not provide interactive input to the program.",
     taskHelp: "Open contextual help", taskHelpHelp: "Show help for the term at the cursor", taskProperties: "Open file properties",
@@ -148,7 +148,7 @@ const messages = {
     projectSearch: "Search project", projectSearchTitle: "Search project", projectSearchHelp: "Search all saved Zelyra files", projectSearchPlaceholder: "Search text in Zelyra files", projectSearchResults: "Search results", projectSearchEmpty: "No matches found.", projectSearchLoading: "Searching the project …", projectSearchSaveFirst: "Save open changes before searching the project.", projectSearchTruncated: "The result list is incomplete because a search limit was reached.", projectSearchSubmit: "Search",
     referencesTitle: "Identifier occurrences", referencesPlaceholder: "Find a Zelyra identifier",
     localParameter: "Parameter", localValue: "Local value", loopValue: "Loop value", matchValue: "Match value",
-    assistant: "Help and properties", helpTab: "Help", propertiesTab: "Properties", contextHelp: "CONTEXT HELP",
+    assistant: "Help and properties", assistantTabs: "Studio sidebar", taskFinderResults: "Actions", helpTab: "Help", propertiesTab: "Properties", contextHelp: "CONTEXT HELP",
     selectLanguageItem: "Select a Zelyra term", contextHelpHint: "Place the cursor on a term. Press F1 to open this help.",
     fileProperties: "FILE PROPERTIES", fileType: "File type", filePath: "Project path", fileStatus: "Status",
     sourceKind: "Zelyra source", configFile: "Project configuration", otherFile: "Project file", savedState: "Saved", unsavedState: "Unsaved",
@@ -168,7 +168,7 @@ const messages = {
     problemsFound: "Found {0} problem(s)", formatRunning: "Formatting …", formatted: "Formatted {0}",
     createPrompt: "New project file path (for example src/customer.zyl)",
     closeUnsaved: "{0} has unsaved changes. Close this tab anyway?",
-    filesCount: "{0} files", chooseFile: "Open file", database: "Database",
+    filesCount: "{0} files", chooseFile: "Open file", database: "Database", databaseOpenTable: "Select table",
     databaseStudio: "DATABASE STUDIO", databaseTitle: "Understand your data",
     databaseIntro: "Read-only DATABASE_URL schema overview with a compiler-checked CRUD preview.", databaseNotLoaded: "Not connected",
     refreshSchema: "Load schema", backToCode: "Back to code", filterTables: "Filter tables",
@@ -515,8 +515,13 @@ function renderFileProperties(path) {
 }
 
 function showAssistantTab(tab) {
-  $("assistant-help-tab").classList.toggle("selected", tab === "help");
-  $("assistant-properties-tab").classList.toggle("selected", tab === "properties");
+  for (const [name, id] of [["help", "assistant-help-tab"], ["properties", "assistant-properties-tab"]]) {
+    const button = $(id);
+    const selected = tab === name;
+    button.classList.toggle("selected", selected);
+    button.setAttribute("aria-selected", String(selected));
+    button.tabIndex = selected ? 0 : -1;
+  }
   $("assistant-help-view").hidden = tab !== "help";
   $("assistant-properties-view").hidden = tab !== "properties";
   if (tab === "properties") renderFileProperties(activePath);
@@ -555,15 +560,22 @@ function renderTaskFinder() {
   const matches = studioTasks.filter(([title, description, terms]) =>
     [t(title), t(description), ...terms].join(" ").toLocaleLowerCase().includes(query));
   $("task-finder-empty").hidden = matches.length > 0;
-  if (!matches.length) { selectedTaskIndex = -1; return; }
+  if (!matches.length) {
+    selectedTaskIndex = -1;
+    $("task-finder-input").removeAttribute("aria-activedescendant");
+    return;
+  }
   selectedTaskIndex = Math.max(0, Math.min(selectedTaskIndex, matches.length - 1));
   matches.forEach(([title, description, , action], index) => {
     const row = document.createElement("button"); row.type = "button"; row.className = "task-finder-item";
+    row.id = `task-finder-option-${index}`;
+    row.tabIndex = -1;
     row.setAttribute("role", "option"); row.setAttribute("aria-selected", String(index === selectedTaskIndex));
     const name = document.createElement("strong"); name.textContent = t(title);
     const hint = document.createElement("span"); hint.textContent = t(description);
     row.append(name, hint); row.addEventListener("click", () => runStudioTask(action)); results.append(row);
   });
+  $("task-finder-input").setAttribute("aria-activedescendant", `task-finder-option-${selectedTaskIndex}`);
 }
 
 function runStudioTask(action) {
@@ -574,6 +586,7 @@ function runStudioTask(action) {
 function openTaskFinder() {
   const dialog = $("task-finder");
   if (!dialog.open) dialog.showModal();
+  $("task-finder-input").setAttribute("aria-expanded", "true");
   $("task-finder-input").value = ""; selectedTaskIndex = 0; renderTaskFinder();
   $("task-finder-input").focus();
 }
@@ -1040,7 +1053,7 @@ function renderDatabaseGraph() {
     group.setAttribute("transform", `translate(${position.x} ${position.y})`);
     group.setAttribute("tabindex", "0");
     group.setAttribute("role", "button");
-    group.setAttribute("aria-label", `${table.name}, ${statusLabel(status)}`);
+    group.setAttribute("aria-label", `${table.name}, ${statusLabel(status)} · ${t("databaseOpenTable")}`);
     const card = document.createElementNS(namespace, "rect");
     card.setAttribute("width", nodeWidth);
     card.setAttribute("height", nodeHeight);
@@ -1482,7 +1495,7 @@ function renderProjectMap(map) {
       group.setAttribute("class", `project-map-node kind-${node.kind}`);
       group.setAttribute("role", "button");
       group.setAttribute("tabindex", "0");
-      group.setAttribute("aria-label", `${node.kind}: ${node.label} · ${node.path}:${node.line || 1}`);
+      group.setAttribute("aria-label", `${node.kind}: ${node.label} · ${node.path}:${node.line || 1} · ${t("projectMapOpenSource")}`);
       const rect = document.createElementNS(ns, "rect");
       rect.setAttribute("x", String(position.x)); rect.setAttribute("y", String(position.y));
       rect.setAttribute("width", String(cardWidth)); rect.setAttribute("height", String(cardHeight));
@@ -1550,10 +1563,25 @@ $("database-button").addEventListener("click", openDatabaseWorkbench);
 $("assistant-toggle").addEventListener("click", () => toggleAssistant());
 $("assistant-help-tab").addEventListener("click", () => showAssistantTab("help"));
 $("assistant-properties-tab").addEventListener("click", () => showAssistantTab("properties"));
+$("assistant-help-tab").addEventListener("keydown", (event) => {
+  if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+    event.preventDefault();
+    showAssistantTab("properties");
+    $("assistant-properties-tab").focus();
+  }
+});
+$("assistant-properties-tab").addEventListener("keydown", (event) => {
+  if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+    event.preventDefault();
+    showAssistantTab("help");
+    $("assistant-help-tab").focus();
+  }
+});
 $("assistant-format").addEventListener("click", formatActive);
 $("assistant-check").addEventListener("click", checkProject);
 $("task-finder-button").addEventListener("click", openTaskFinder);
 $("task-finder-close").addEventListener("click", () => $("task-finder").close());
+$("task-finder").addEventListener("close", () => $("task-finder-input").setAttribute("aria-expanded", "false"));
 $("project-search-button").addEventListener("click", openProjectSearch);
 $("project-search-close").addEventListener("click", () => $("project-search").close());
 $("run-output-close").addEventListener("click", () => $("run-output").close());
@@ -1569,6 +1597,7 @@ $("task-finder-input").addEventListener("keydown", (event) => {
     event.preventDefault();
     selectedTaskIndex = rows.length ? (selectedTaskIndex + (event.key === "ArrowDown" ? 1 : -1) + rows.length) % rows.length : -1;
     rows.forEach((row, index) => row.setAttribute("aria-selected", String(index === selectedTaskIndex)));
+    if (selectedTaskIndex >= 0) $("task-finder-input").setAttribute("aria-activedescendant", rows[selectedTaskIndex].id);
     rows[selectedTaskIndex]?.scrollIntoView({ block: "nearest" });
   } else if (event.key === "Enter" && rows[selectedTaskIndex]) {
     event.preventDefault(); rows[selectedTaskIndex].click();
@@ -1588,7 +1617,10 @@ $("theme-button").addEventListener("click", () => {
   localStorage.setItem("zelyra-editor-theme", root.dataset.theme);
 });
 $("language-button").addEventListener("click", () => setLanguage(language === "de" ? "en" : "de"));
-$("sidebar-toggle").addEventListener("click", () => document.body.classList.toggle("sidebar-hidden"));
+$("sidebar-toggle").addEventListener("click", (event) => {
+  const hidden = document.body.classList.toggle("sidebar-hidden");
+  event.currentTarget.setAttribute("aria-expanded", String(!hidden));
+});
 $("problems-toggle").addEventListener("click", () => { $("problems-panel").hidden = !$("problems-panel").hidden; });
 $("problems-close").addEventListener("click", () => { $("problems-panel").hidden = true; });
 $("open-search").addEventListener("click", findInDocument);
