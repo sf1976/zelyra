@@ -1,6 +1,6 @@
 # In Zelyra 0.9.3 umgesetzt
 
-**Stand:** stabiles Release 0.9.3 · Sprachkompatibilitätslinie `0.1` · 2026-10-11
+**Stand:** stabiles Release 0.9.3 · Sprachkompatibilitätslinie `0.1` · 2026-10-12
 **Reifegrad:** experimentell; nicht für den Produktiveinsatz freigegeben
 
 Diese Übersicht führt Funktionen auf, die im stabilen Release Zelyra 0.9.3

@@ -47,6 +47,15 @@ principles; the roadmap below tracks what is actually implemented.
   [0.9.1 release record](release-readiness/0.9.1-candidate-verification.md).
   Independent human acceptance remains reserved for 1.0.0.
 
+- [x] **0.9.3 stable release published:** Studio read-only database browsing
+  with bounded pages, checked source-column edits, confirmed MariaDB creation,
+  a read-only Laravel inventory, native values, and CSV/labyrinth examples are
+  released. Main CI and release packaging passed on the exact tag commit;
+  artifacts, checksums, SBOMs, and attestations are published. Type coverage
+  remains 17 supported, 5 partial, and 3 unavailable. See the
+  [0.9.3 candidate verification](release-readiness/0.9.3-candidate-verification.md). Human product acceptance
+  remains reserved for 1.0.0.
+
 - [~] The 0.4 development branch adds administrative listing/revocation of
   persistent sessions, CSRF/permission checks and an audit request event.
   `/account/sessions` also lists and revokes the signed-in user's sessions,
@@ -817,6 +826,12 @@ Scope and technical gates are in the [0.9.3 release plan](release-plans/0.9.3.en
   runtime-error, and serialization checks and must report zero unexpected
   failures; any unsupported item needs an explicit product decision, not a
   silent omission.
+- [🗺️] Add a counted range loop in clear Zelyra syntax in 0.9.4, for example
+  `for index in 0..count` with an exclusive upper bound. Define and test empty
+  ranges, bounds and overflow, type checking, and interaction with `break` and
+  `continue`. Collection loops, `while`, and `loop` remain available for their
+  respective jobs; a C-style loop header or another `do while` form is not
+  needed.
 - [🗺️] Expand Laravel analysis into an evidence-linked project graph:
   route → middleware/controller → model/relation → migration/table → view,
   with validation rules, package dependencies, file and line locations, and

@@ -50,6 +50,15 @@ den tatsächlich implementierten Stand.
   sind im [0.9.1-Releaseprüfnachweis](release-readiness/0.9.1-candidate-verification.md)
   belegt. Die unabhängige menschliche Abnahme bleibt für 1.0.0 reserviert.
 
+- [x] **Stabiles Release 0.9.3 veröffentlicht:** Studio-Datenbrowser mit
+  begrenzten schreibgeschützten Seiten, geprüfte Quellspaltenänderungen,
+  bestätigte MariaDB-Anlage, schreibgeschütztes Laravel-Inventar, native
+  Typwerte sowie CSV- und Labyrinth-Beispiele. Main-CI und Releasebuild auf
+  dem exakten Tag-Commit sind erfolgreich; Artefakte, Prüfsummen, SBOMs und
+  Attestierungen sind veröffentlicht. Die Typmatrix bleibt bei 17 unterstützt,
+  5 teilweise und 3 nicht verfügbar. Nachweis: [0.9.3-Kandidatenprüfung](release-readiness/0.9.3-candidate-verification.md). Die menschliche
+  Produktabnahme bleibt für 1.0.0 reserviert.
+
 - [~] Der 0.4-Entwicklungszweig ergänzt Anzeige und Sperrung dauerhafter
   Sitzungen mit Verwaltungsrecht, CSRF-Prüfung und Audit-Anfrageereignis.
   Unter `/account/sessions` können angemeldete Nutzer außerdem eigene
@@ -814,6 +823,12 @@ Arbeitsumfang und technische Gates stehen im [Releaseplan 0.9.3](release-plans/0
   positive Prüfungen, erwartete Compiler-/Runtimefehler und Serialisierung
   erneut aus und muss null unerwartete Fehler melden. Für jeden dann noch
   fehlenden Punkt ist eine ausdrückliche Produktentscheidung nötig.
+- [🗺️] Ergänze in 0.9.4 eine zählende Bereichsschleife in klarer Zelyra-
+  Schreibweise, zum Beispiel `for index in 0..count` mit exklusivem Endwert.
+  Leere Bereiche, Grenzen und Überlauf, Typprüfung sowie `break`/`continue`
+  müssen festgelegt und getestet werden. Sammlungsschleifen, `while` und `loop`
+  bleiben für ihre jeweiligen Abläufe erhalten; eine C-artige Kopfzeile oder
+  ein zusätzliches `do while` ist nicht erforderlich.
 - [🗺️] Die Laravel-Analyse zu einem belegbaren Projektgraphen ausbauen:
   Route → Middleware/Controller → Model/Beziehung → Migration/Tabelle → View,
   einschließlich Validierungsregeln, Paketabhängigkeiten, Datei- und
