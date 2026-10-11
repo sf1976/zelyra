@@ -27,6 +27,9 @@ if [[ -n "${zelyra_ref}" && ( ! "${zelyra_ref}" =~ ^[A-Za-z0-9._/-]+$ || "${zely
     echo "error: ZELYRA_DOCKER_E2E_REF must be a simple Git branch, tag, or commit ref" >&2
     exit 1
 fi
+if [[ -n "${zelyra_ref}" ]]; then
+    export ZELYRA_REF="${zelyra_ref}"
+fi
 
 project_root="$(mktemp -d "${TMPDIR:-/tmp}/zelyra-generated-docker-e2e.XXXXXX")"
 project_dir="${project_root}/app"
