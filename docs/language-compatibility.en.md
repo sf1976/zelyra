@@ -40,7 +40,7 @@ language line and migration notes. It must not be introduced silently under
 ## Evolution through 1.0.0
 
 Language line `0.1` remains the same line throughout compiler releases through
-`0.99.0`. Release numbers such as `0.8.0` and `0.99.0` identify Zelyra
+`0.9.9`. Release numbers such as `0.8.0` and `0.9.9` identify Zelyra
 releases, not new language lines. A compiler upgrade never changes a project's
 language line automatically. Introduce a new line only when a necessary change
 breaks valid programs or changes their established meaning; it requires its
@@ -52,13 +52,15 @@ The work proceeds through verifiable stages:
 | --- | --- |
 | `0.7.0` | Enforce `zelyra = "0.1"`, report `E-LANG-001` for unsupported explicit lines, retain projects that omit the field, and add a first runnable corpus for accepted, rejected, and runtime-checked examples. |
 | `0.8.0` | Systematically expand the corpus for lexing, parsing, type checking, and formatting. Each grammar family gets positive and negative fixtures; formatter output is checked for idempotence. |
-| `0.9.0` | ✅ Expanded: runtime and module fixtures for operator and built-in semantics, error paths, effects, contracts, imports, and SQL typing; database workflows are checked separately for each promised subset. |
-| `0.95.0` | Audit the language reference and corpus against the planned 1.0 scope. Document unresolved semantics, known gaps, and migration cases; do not label unchecked areas stable. |
-| `0.99.0` | Freeze language features. Freeze the grammar, type rules, and semantics of `0.1` as a release candidate; allow only fixes, security corrections, and required compatibility fixes. Document and regression-test every exception. |
+| `0.9.0` | ✅ Expand runtime and module fixtures for operator and built-in semantics, error paths, effects, contracts, imports, and SQL typing; verify database workflows separately for each promised subset. |
+| `0.9.1–0.9.4` | Grow compiler-backed IDE services and multi-file tests together: diagnostics, source spans, completion, navigation, formatting, SQL/schema references, and form generation must use the documented language contract. |
+| `0.9.5–0.9.6` | Specify mail, templates, and notification event effects and capabilities explicitly; add accepted, rejected, and runtime fixtures for secret handling, delivery failures, and retry behavior. |
+| `0.9.7–0.9.8` | Audit the language reference, built-ins, SQL fixtures, and conformance corpus against the planned 1.0 scope. Document unresolved semantics, migration cases, and unsupported behavior; do not label unchecked areas stable. |
+| `0.9.9` | Freeze language features. Freeze the grammar, type rules, and semantics of `0.1` as a release candidate; allow only documented fixes, security corrections, and required compatibility fixes, each with regression coverage. |
 | `1.0.0` | After independent human acceptance, publish the checked contract, corpus, and support matrix together as the first production language release. |
 
 These stages are acceptance criteria, not claims that planned work is already
-implemented. Stages 0.7 through 0.9 are implemented; the corpus remains a
+implemented. Stages through 0.9.0 are implemented; 0.9.1–0.9.8 add the planned product work and evidence, and 0.9.9 freezes the result. The corpus remains a
 growing, bounded collection rather than a complete cross-release conformance
 proof. It does not freeze the language contract for production. The 1.0 release must publish the
 supported grammar, compatibility guarantees, and tested conformance set

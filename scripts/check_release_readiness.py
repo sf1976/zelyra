@@ -176,13 +176,21 @@ RELEASE_PLAN_CHECKLISTS = {
         ("docs/release-plans/0.9.0.en.md", "## Release gates"),
         ("docs/release-plans/0.9.0.de.md", "## Release-Gates"),
     ),
-    "0.95.0": (
-        ("docs/release-plans/0.95.0.en.md", "## Exit criteria"),
-        ("docs/release-plans/0.95.0.de.md", "## Abschlusskriterien"),
+    "0.9.5": (
+        ("docs/release-plans/0.9.5.en.md", "## Exit criteria"),
+        ("docs/release-plans/0.9.5.de.md", "## Abschlusskriterien"),
     ),
-    "0.99.0": (
-        ("docs/release-plans/0.99.0.en.md", "## Exit criteria"),
-        ("docs/release-plans/0.99.0.de.md", "## Abschlusskriterien"),
+    "0.9.8": (
+        ("docs/release-plans/0.9.8.en.md", "## Exit criteria"),
+        ("docs/release-plans/0.9.8.de.md", "## Abschlusskriterien"),
+    ),
+    "0.9.9": (
+        ("docs/release-plans/0.9.5.en.md", "## Exit criteria"),
+        ("docs/release-plans/0.9.5.de.md", "## Abschlusskriterien"),
+        ("docs/release-plans/0.9.8.en.md", "## Exit criteria"),
+        ("docs/release-plans/0.9.8.de.md", "## Abschlusskriterien"),
+        ("docs/release-plans/0.9.9.en.md", "## Exit criteria"),
+        ("docs/release-plans/0.9.9.de.md", "## Abschlusskriterien"),
     ),
 }
 

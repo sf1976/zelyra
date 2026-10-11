@@ -2731,10 +2731,19 @@ change a project's language line.
   uses named TOML plans, preview, match counts, and explicit apply. Local TOTP
   for MariaDB is an optional security preview. MySQL/PostgreSQL workflows stay
   within the published support matrix.
-- **0.95.0 (planned):** Close technical, security, upgrade, rollback,
-  dependency, and documentation gaps.
-- **0.99.0 (planned):** Freeze the language and feature scope and technically
-  verify an immutable release candidate.
+- **0.9.1–0.9.2 (planned):** Grow Studio into an IDE with a multi-file
+  project tree, tabs, safe saving, diagnostics, completion, navigation,
+  formatting, and integrated compiler tasks.
+- **0.9.3–0.9.4 (planned):** Add a database workbench and relational CRUD
+  design with reviewable previews, compiler checks, and explicit apply.
+- **0.9.5–0.9.6 (planned):** Implement complete local mail/SMTP support and a
+  tenant-scoped notification center with optional SMTP delivery.
+- **0.9.7–0.9.8 (planned):** Harden and rehearse MariaDB, MySQL, and PostgreSQL
+  workflows, security, authorization, upgrades/rollback, backup/restore,
+  dependencies, and production operations.
+- **0.9.9 (planned):** Finish implementation, freeze the feature scope, and
+  verify the immutable technical candidate. Human acceptance for 1.0.0 should
+  be the only remaining gate.
 - **1.0.0:** The first productive release follows technical gates and
   independent human acceptance of the exact candidate. That acceptance has
   not been replaced by CI or internal tests.
@@ -2765,7 +2774,7 @@ are not part of the 1.0.0 commitment.
 
 ### 7. Exercises (Level 1 Easy, Level 2 Medium, Level 3 Challenging)
 - **Level 1 (Easy):** Read the official `CHANGELOG.md` in the Zelyra GitHub repository.
-- **Level 2 (Medium):** Compare the 0.9.0 and 0.95.0 goals in `docs/ROADMAP.md`.
+- **Level 2 (Medium):** Compare the 0.9.1 IDE goals and 0.9.5 mail/SMTP goals in `docs/ROADMAP.md`.
 - **Level 3 (Challenging):** Select a table in Studio, inspect a schema difference, and review how the CRUD preview treats changes before explicit apply.
 
 ### 8. Practical task: Check the Zelyra version and environment

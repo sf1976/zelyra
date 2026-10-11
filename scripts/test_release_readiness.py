@@ -42,7 +42,7 @@ class ReleaseReadinessTests(unittest.TestCase):
     def test_later_milestone_gate_checklists_require_both_languages_and_all_items(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            version = "0.95.0"
+            version = "0.9.5"
             for relative_path, heading in RELEASE_PLAN_CHECKLISTS[version]:
                 path = root / relative_path
                 path.parent.mkdir(parents=True, exist_ok=True)

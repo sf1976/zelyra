@@ -33,13 +33,13 @@ principles; the roadmap below tracks what is actually implemented.
   outbox, compatibility fixtures for language line 0.1, and published
   Linux/Windows artifacts with SBOMs. Exact evidence is in the
   [0.8.0 candidate verification](release-readiness/0.8.0-candidate-verification.md).
-- [x] **0.9.0 feature implementation merged:** Guided Studio business workflows,
+- [x] **0.9.0 stable release published:** Guided Studio business workflows,
   invoice tutorial improvements, preview-bound `zelyra text edit`, and the
-  expanded language corpus are merged. Optional local TOTP is limited to
-  MariaDB with persistent sessions and audit. Exact versioned release CI,
-  artifact publication, website handbook synchronization, and clean branch
-  closure remain release-verification work. Human acceptance stays reserved
-  for 1.0.0.
+  expanded language corpus are released. Optional local TOTP is limited to
+  MariaDB with persistent sessions and audit. Exact CI, Linux/Windows artifacts,
+  checksums, SBOMs, attestations, and the bilingual website handbook are
+  verified in the [0.9.0 release record](release-readiness/0.9.0-candidate-verification.md).
+  Human acceptance stays reserved for 1.0.0.
 
 - [~] The 0.4 development branch adds administrative listing/revocation of
   persistent sessions, CSRF/permission checks and an audit request event.
@@ -266,11 +266,13 @@ architecture requirement for every phase, not a provider-specific feature.
 
 - [🧪] **Language compatibility:** the initial enforcement in 0.7 accepts
   `zelyra = "0.1"`, rejects unsupported explicit lines with `E-LANG-001`, and
-  preserves older projects without the field. The language line remains `0.1` through 0.99.0; compiler
-  release numbers do not change it automatically. 0.7 now includes the first
+  preserves older projects without the field. The language line remains `0.1`
+  through 0.9.9; compiler release numbers do not change it automatically. 0.7
+  now includes the first
   runnable accepted/rejected/runtime corpus. Version 0.8 expands grammar,
   typing, and formatter coverage; 0.9 adds runtime, module, effect, contract,
-  and SQL fixtures; 0.95 audits reference and corpus gaps. Version 0.99 freezes
+  and SQL fixtures; 0.9.7–0.9.8 audit reference and corpus gaps. Version 0.9.9
+  freezes
   grammar and semantics as a release candidate and allows only documented
   corrections. Only 1.0.0, after its independent human acceptance gate, makes
   the contract production-ready.
@@ -567,7 +569,7 @@ Independent human acceptance remains deferred to 1.0.0.
   for one declared table. The maintainer security review and mutation rollback
   E2E are recorded in the 0.7 plan. No tenant migration or backfill is added.
   Independent security review and human acceptance remain pre-production gates
-  for 0.99.0/1.0.0. See the [0.7.0 plan](release-plans/0.7.0.en.md).
+  for 0.9.9/1.0.0. See the [0.7.0 plan](release-plans/0.7.0.en.md).
 
 ## Release 0.8.0
 
@@ -581,26 +583,114 @@ Independent human acceptance remains deferred to 1.0.0.
 
 ## Release 0.9.0
 
-- [x] **Feature scope merged, stable publication being verified:** guided
+- [x] **Stable release published:** guided
   Studio business workflows, the invoice path, preview-first readable regex
   text editing, and expanded language fixtures are implemented. Database
   claims are limited to the exact server matrix and workflow evidence. Optional
   MariaDB TOTP remains a preview pending independent production security
-  review. See the [0.9.0 plan](release-plans/0.9.0.en.md) and release notes.
+  review. See the [0.9.0 plan](release-plans/0.9.0.en.md), release notes, and
+  [release verification record](release-readiness/0.9.0-candidate-verification.md).
 
-## Release 0.95.0
+## Release 0.9.1 — IDE foundation
 
-- [🗺️] Stabilize the planned production scope: close technical, security,
-  upgrade, rollback, dependency, release-artifact, and documentation gaps. Audit
-  the language reference and corpus without adding a large subsystem. See the
-  [0.95.0 plan](release-plans/0.95.0.en.md).
+- [🗺️] Make Studio a dependable multi-file workspace: project explorer, tabs,
+  explicit save state, undo/redo, safe file operations, project-root containment,
+  and diagnostics attached to the right file and span. Keep the local-only,
+  loopback-bound access model and compiler as the source of truth.
+- Exit evidence: browser and security tests cover unsaved edits, concurrent file
+  changes, path traversal, malformed source, clean restart, and keyboard use.
+  The invoice example opens and runs from the workspace.
 
-## Release 0.99.0
+## Release 0.9.2 — IDE language services
 
-- [🗺️] Freeze product and language features, verify all technical gates on an
-  immutable candidate, and prepare the exact 1.0.0 human-study materials. Only
-  independent human acceptance remains before the first productive release.
-  See the [0.99.0 plan](release-plans/0.99.0.en.md).
+- [🗺️] Add compiler-backed completion, symbol navigation, find/references,
+  formatting, actionable diagnostics, and integrated check/run/test tasks. Show
+  clear task progress and output without exposing secrets or hiding compiler
+  errors. Keep features scoped to documented language 0.1 constructs.
+- Exit evidence: positive and negative multi-file projects verify completions,
+  source spans, navigation, formatter idempotence, and task output; unsupported
+  syntax is identified instead of guessed.
+
+## Release 0.9.3 — database workbench
+
+- [🗺️] Grow the IDE database view into a safe workbench: inspect tables,
+  columns, indexes, and declared relationships; browse records read-only by
+  default; show how source modules own each object. Mutations and generated
+  schema changes require a reviewed plan and explicit confirmation.
+- Exit evidence: separate MariaDB, MySQL, and PostgreSQL tests match the published
+  database matrix. Read-only browsing is enforced, and credentials never enter
+  editor output, URLs, diagnostics, or browser storage.
+
+## Release 0.9.4 — visual CRUD design
+
+- [🗺️] Make relational CRUD workflows understandable in Studio: choose tables
+  and relationships, design fields and forms, preview routes and generated source,
+  inspect the full change set, run compiler checks, then explicitly apply or
+  discard it. Refine the invoice tutorial into a practical guided IDE workflow.
+- Exit evidence: generated customer, item, invoice, and line-item flows pass
+  multi-database integration coverage and remain editable as ordinary Zelyra
+  source. Applying a stale or invalid preview is rejected.
+
+## Release 0.9.5 — first-party mail and SMTP
+
+- [🗺️] Complete explicit application mail support without a mandatory provider:
+  MIME text/HTML messages, encoded headers, SMTP authentication, implicit TLS,
+  STARTTLS, timeouts, bounded retries, and integration with the existing
+  transactional outbox. Provide local project configuration and a clear SMTP
+  test sink workflow. Never silently downgrade TLS.
+- Exit criteria: local SMTP sink tests cover success, auth/TLS failure, timeout,
+  restart, retry, duplicate window, template escaping, and secret redaction.
+  Mail capabilities and delivery semantics are documented in both languages.
+  See the [0.9.5 plan](release-plans/0.9.5.en.md).
+
+## Release 0.9.6 — notification center
+
+- [🗺️] Add a persistent, tenant-scoped in-app notification center with unread
+  counts, read/archive actions, pagination, preferences, and clear retention
+  rules. Connect application events to optional email through the 0.9.5 SMTP
+  path; keep in-app notifications useful with mail disabled. Use the outbox for
+  retryable delivery and make duplicate handling explicit.
+- Exit evidence: authorization tests prove users cannot list, change, or count
+  another tenant's notifications; retries, idempotency, retention, accessibility,
+  and failure states have integration coverage. No external push service is
+  required.
+
+## Release 0.9.7 — database and security hardening
+
+- [🗺️] Close the promised MariaDB, MySQL, and PostgreSQL workflow matrix for
+  1.0, including schema inspection, migrations, CRUD, transactions, TLS, backup,
+  and restore where each backend claims support. Complete independent review
+  of authentication, MFA, tenant isolation, authorization, CSRF, SMTP secrets,
+  and Studio mutation boundaries. Resolve every release-blocking finding.
+- Exit evidence: exact server versions and limitations are published; each
+  supported workflow has CI evidence, negative authorization tests, and a
+  maintainer-reviewed disposition for every security finding. Do not claim
+  universal SQL parity.
+
+## Release 0.9.8 — production-readiness rehearsal
+
+- [🗺️] Rehearse clean installation, upgrades, rollback, migration, backup and
+  restore on supported operating systems and databases. Finish operator and
+  user documentation, dependency/license review, resource limits, error
+  redaction, reproducible artifacts, SBOM/provenance, and offline workflows.
+  Measure startup, common CRUD paths, and bounded resource use; publish results
+  without unsupported performance promises.
+- Exit criteria: all rehearsal scripts pass from clean environments, handbook
+  examples validate, known findings have owners and dispositions, and no
+  unimplemented 1.0 requirement remains. See the
+  [0.9.8 plan](release-plans/0.9.8.en.md).
+
+## Release 0.9.9 — feature freeze and final technical candidate
+
+- [🗺️] Freeze language, CLI, runtime, databases, IDE, mail, notification, and
+  tutorial scope. Complete every accepted 0.9.1–0.9.8 requirement and run the
+  complete technical gates on an immutable candidate. Prepare exact 1.0.0
+  human-study materials. At this point independent human acceptance should be
+  the only remaining gate; do not claim production approval or run acceptance
+  against 0.9.9.
+- Exit criteria: no open implementation, security, database, migration,
+  packaging, or documentation blocker remains. If one remains, 0.9.9 is not
+  complete. See the [0.9.9 plan](release-plans/0.9.9.en.md).
 
 A general queue platform remains beyond 1.0.0. The 0.8 outbox is a bounded,
 local MariaDB feature and does not imply a scheduler, distributed workers, or
