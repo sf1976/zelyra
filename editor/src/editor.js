@@ -1553,8 +1553,6 @@ async function createFile() {
 $("save-button").addEventListener("click", saveActive);
 $("rename-file-button").addEventListener("click", renameActiveFile);
 $("delete-file-button").addEventListener("click", deleteActiveFile);
-$("rename-file-button").addEventListener("click", renameActiveFile);
-$("delete-file-button").addEventListener("click", deleteActiveFile);
 $("save-all-button").addEventListener("click", saveAll);
 $("check-button").addEventListener("click", checkProject);
 $("run-button").addEventListener("click", runProject);
