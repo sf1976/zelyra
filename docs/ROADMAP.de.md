@@ -539,7 +539,10 @@ Die menschliche Abnahme bleibt auf 1.0.0 verschoben.
   MySQL-8.4.11-SQL, Rechnungstutorial, erstes Sprachkorpus für 0.1 und ein
   MariaDB-Mandanten-CRUD-Pfad für eine deklarierte Tabelle. Maintainer-
   Sicherheitsprüfung und Mutation-Rollback-E2E sind im 0.7-Plan dokumentiert.
-  Es gibt keine Mandantenmigration oder Backfill. Unabhängiges Sicherheitsreview
+  Dieser Pfad ist auf MariaDB, eine mandanteneigene Tabelle und CRUD ohne
+  Beziehungen begrenzt; er ist noch nicht die für 1.0.0 zugesagte vollständige
+  mandantenfähige CRUD-Unterstützung für alle Datenbanken. Es gibt keine
+  Mandantenmigration oder Backfill. Unabhängiges Sicherheitsreview
   und menschliche Abnahme bleiben Gates vor Produktiveinsatz in 0.9.9/1.0.0.
   Details im [0.7.0-Plan](release-plans/0.7.0.de.md).
 
@@ -676,6 +679,18 @@ Auswirkungen und eine ausdrückliche Bestätigung. Die Roadmap staffelt diese Zi
   eingeschränkt. Kaskaden oder `SET NULL` müssen ausdrücklich deklariert,
   typgeprüft und je Backend integriert getestet werden, bevor sie als
   unterstützt gelten.
+- [🗺️] Das mandanten-gefilterte generierte CRUD über den experimentellen
+  MariaDB-Pfad hinaus erweitern: Die Mandantenauswahl an die aktive Mitgliedschaft
+  des angemeldeten Benutzers binden, die Ressourcenberechtigung verlangen und
+  Mandantenfilter in Listen, Detailansichten, Erstellen, Bearbeiten, Aktualisieren,
+  Löschen und Wiederherstellen serverseitig erzwingen. Mandantenschlüssel werden
+  serverseitig gebunden und sind keine normalen CRUD-Felder oder Filter. Mit
+  Fremdschlüsseln müssen Auswahl und Speicherung verknüpfter Datensätze außerdem
+  nachweisen, dass diese zum aktiven Mandanten gehören. Eigene SQL-Aktionen auf
+  Mandantendaten müssen den Mandanten sicher berücksichtigen oder vom Compiler
+  abgelehnt werden. Der Nachweis umfasst positive und negative Integrationstests
+  für zwei Mandanten, alle Lese- und Änderungswege, entzogene Mitgliedschaften
+  sowie manipulierte oder widersprüchliche Mandantenauswahl.
 - [🗺️] Tabellenspalten über die Eigenschaftsseitenleiste grafisch ergänzen und
   bearbeiten. Studio zeigt den vollständigen Schema-Plan mit Auswirkungen und
   Risiken, lässt den Compiler prüfen und verlangt vor jeder Anwendung eine
@@ -767,6 +782,13 @@ Auswirkungen und eine ausdrückliche Bestätigung. Die Roadmap staffelt diese Zi
   von Authentifizierung, MFA, Mandantentrennung, Autorisierung, CSRF,
   SMTP-Geheimnissen und Studio-Änderungsgrenzen abschließen und alle
   releaseblockierenden Befunde beheben.
+- [🗺️] Die vollständige Autorisierungsmatrix für mandanten-gefiltertes CRUD
+  mit den festgelegten MariaDB-, MySQL- und PostgreSQL-Versionen durchlaufen.
+  Mandantenauswahl, Mitgliedschaft und Berechtigung, generierte Listen und
+  Detailansichten, Erstellen/Aktualisieren/Löschen/Wiederherstellen,
+  Mandantenzugehörigkeit von Beziehungen und fail-closed-Verhalten bei fehlendem
+  oder entzogenem Kontext abdecken. Mandantenmodell und Migrationserwartungen
+  dokumentieren; keine automatische Migration bestehender Daten versprechen.
 - Nachweis: Exakte Serverversionen und Grenzen sind veröffentlicht; jeder
   unterstützte Ablauf hat CI-Nachweise, negative Autorisierungstests und eine
   maintainergeprüfte Entscheidung zu Sicherheitsbefunden. Keine universelle

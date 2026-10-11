@@ -573,7 +573,9 @@ Independent human acceptance remains deferred to 1.0.0.
 - [🧪] **Experimental release:** local Studio, bounded typed MySQL 8.4.11 SQL,
   invoice tutorial, initial language-0.1 corpus, and a MariaDB tenant CRUD path
   for one declared table. The maintainer security review and mutation rollback
-  E2E are recorded in the 0.7 plan. No tenant migration or backfill is added.
+  E2E are recorded in the 0.7 plan. This is limited to MariaDB, one tenant-
+  owned table, and CRUD without relations; it is not the complete multi-
+  database tenant CRUD required for 1.0.0. No tenant migration or backfill is added.
   Independent security review and human acceptance remain pre-production gates
   for 0.9.9/1.0.0. See the [0.7.0 plan](release-plans/0.7.0.en.md).
 
@@ -691,6 +693,17 @@ released 0.9.0.
   default delete behavior is restrictive. Any explicit cascade or set-null
   behavior must be declared, type-checked, and covered by each backend's
   integration matrix before it is advertised.
+- [🗺️] Extend tenant-filtered generated CRUD beyond the experimental MariaDB
+  path: bind tenant selection to the authenticated user's active membership,
+  require the resource permission, and enforce the tenant predicate in list,
+  detail, create, edit, update, delete, and restore operations. Tenant keys are
+  server-bound and cannot be selected through submitted fields or exposed as
+  ordinary CRUD filters. Once foreign keys land, related-record choices and
+  writes must also prove that referenced rows belong to the active tenant.
+  Custom SQL actions on tenant-owned data must be tenant-aware or be rejected
+  at compile time. Exit evidence includes two-tenant positive and negative
+  integration cases for every mutation and read path, including membership
+  revocation and forged/conflicting selectors.
 - [🗺️] Let users add and edit table columns through the properties sidebar.
   Show the complete schema plan, impact, and risks; run compiler checks and
   require explicit confirmation before applying changes. Let users choose the
@@ -775,6 +788,13 @@ released 0.9.0.
   and restore where each backend claims support. Complete independent review
   of authentication, MFA, tenant isolation, authorization, CSRF, SMTP secrets,
   and Studio mutation boundaries. Resolve every release-blocking finding.
+- [🗺️] Run the complete tenant-filtered CRUD authorization matrix against the
+  exact supported MariaDB, MySQL, and PostgreSQL versions. Cover tenant
+  selection, membership and permission checks, generated list/detail and
+  create/update/delete/restore paths, relation ownership, and fail-closed
+  behavior when context or membership is missing or revoked. Document the
+  supported tenant model and migration expectations; do not imply that
+  existing installations are automatically backfilled.
 - Exit evidence: exact server versions and limitations are published; each
   supported workflow has CI evidence, negative authorization tests, and a
   maintainer-reviewed disposition for every security finding. Do not claim
