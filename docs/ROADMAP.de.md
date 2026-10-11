@@ -665,6 +665,17 @@ Auswirkungen und eine ausdrückliche Bestätigung. Die Roadmap staffelt diese Zi
   schreibgeschützt durchsuchen und den zuständigen Quellmodulen zuordnen. Das
   ER-Diagramm wird filterbar und navigierbar; Auswahl eines Feldes oder einer
   Beziehung zeigt Definition, Quellmodul und verwendende Ressourcen.
+- [🗺️] Fremdschlüssel bis 1.0.0 als durchgängige Datenbankfunktion liefern:
+  Referenzen in Zelyra-Tabellenfeldern deklarieren, Zieltabellen und Feldtypen
+  im Compiler prüfen, echte Constraints anlegen und auslesen sowie Beziehungen
+  in der Studio-Karte anzeigen. Die unterstützten Abläufe werden getrennt für
+  MariaDB, MySQL und PostgreSQL nachgewiesen. Vor dem Hinzufügen zu bestehenden
+  Daten prüft der Schema-Plan auf verwaiste Zeilen; bei Fehlern bleiben Daten
+  erhalten, riskante Änderungen brauchen eine Prüfung und nicht unterstützte
+  Aktionen werden fail-closed abgelehnt. Löschungen sind standardmäßig
+  eingeschränkt. Kaskaden oder `SET NULL` müssen ausdrücklich deklariert,
+  typgeprüft und je Backend integriert getestet werden, bevor sie als
+  unterstützt gelten.
 - [🗺️] Tabellenspalten über die Eigenschaftsseitenleiste grafisch ergänzen und
   bearbeiten. Studio zeigt den vollständigen Schema-Plan mit Auswirkungen und
   Risiken, lässt den Compiler prüfen und verlangt vor jeder Anwendung eine
@@ -703,6 +714,12 @@ Auswirkungen und eine ausdrückliche Bestätigung. Die Roadmap staffelt diese Zi
   Diagramm-API-Befehle oder frei formuliertes SQL lernen müssen. Die
   Generierung verwendet typisierte, lesende Abfragen und bleibt an bestehende
   Datenbank-Capabilities, Autorisierung und Mandantengrenzen gebunden.
+  Erzeugte relationale CRUD-Abläufe können referenzierte Datensätze auswählen,
+  verknüpfte Datensätze anzeigen und gültige Fremdschlüsselwerte speichern,
+  ohne handgeschriebenes Join-SQL vorauszusetzen. Einfügen, Ändern, Löschen und
+  eingeschränktes Löschen werden für MariaDB, MySQL und PostgreSQL geprüft;
+  nicht unterstützte Beziehungsoperationen stehen ausdrücklich in der
+  Supportmatrix.
   Zusätzlich wird ein deklaratives Präsentationsmodell für Geschäftsanwendungen
   geplant: geprüfte Folien mit Text, Tabellen, Diagrammen und explizit
   typisierten Datenquellen, mit Studio-Vorschau und eigenständigem HTML-/Druck-

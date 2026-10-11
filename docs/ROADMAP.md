@@ -681,6 +681,16 @@ released 0.9.0.
   default; show how source modules own each object. Make the ER diagram
   filterable and navigable so selecting a field or relationship reveals its
   declaration module and using resources.
+- [🗺️] Deliver foreign-key relationships as an end-to-end database feature by
+  1.0.0: declare references in Zelyra table fields, validate target table and
+  column types in the compiler, create and inspect real constraints, and show
+  relationship metadata in the Studio map. Ship the supported create/change
+  workflows separately for MariaDB, MySQL, and PostgreSQL. Schema plans must
+  detect orphan rows before adding a constraint, preserve data on failure, and
+  require review for risky changes; unsupported actions fail closed. The
+  default delete behavior is restrictive. Any explicit cascade or set-null
+  behavior must be declared, type-checked, and covered by each backend's
+  integration matrix before it is advertised.
 - [🗺️] Let users add and edit table columns through the properties sidebar.
   Show the complete schema plan, impact, and risks; run compiler checks and
   require explicit confirmation before applying changes. Let users choose the
@@ -716,7 +726,12 @@ released 0.9.0.
   and dashboard KPIs without requiring users to learn chart API calls or write
   free-form SQL. Generated queries must be typed and read-only, and remain
   subject to database capabilities, authorization, and tenant boundaries. Add a
-  declarative presentation model for business applications: compiler-checked
+  generated relational CRUD flow that can select referenced records, display
+  linked records, and save valid foreign-key values without requiring handwritten
+  join SQL. Verify insert, update, delete, and restrictive-delete behavior for
+  MariaDB, MySQL, and PostgreSQL; keep unsupported relationship operations
+  explicit in the support matrix. Add a declarative presentation model for
+  business applications: compiler-checked
   slides with text, tables, charts, diagrams, and explicitly typed data sources,
   shown in Studio and exported as standalone HTML or print-ready output. Keep
   dashboards and presentations versionable as Zelyra source; arbitrary client
