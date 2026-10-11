@@ -60,7 +60,15 @@ database_created=1
 
 project="$work_root/project"
 mkdir -p "$project"
+mkdir -p "$project/src"
+cat >"$project/src/math.zyl" <<'ZELYRA'
+pub fn sum(left: Int, right: Int) -> Int {
+    return left + right
+}
+ZELYRA
 cat >"$project/main.zyl" <<ZELYRA
+import "src/math.zyl" as math
+
 database main {
     engine: $engine
 }
@@ -75,6 +83,10 @@ table customers {
     department: Department required
     name: String(120) required
     description: String?
+}
+
+fn main() {
+    let total = math::sum(1, 2)
 }
 ZELYRA
 

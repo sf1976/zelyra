@@ -32,11 +32,44 @@ try {
   await page.locator("#task-finder").waitFor({ state: "hidden" });
 
   const editor = page.locator(".cm-content[contenteditable=true]");
+  const initialEditorWidth = await editor.evaluate((element) => element.getBoundingClientRect().width);
+  const sidebarToggle = page.locator("#sidebar-toggle");
+  await sidebarToggle.click();
+  assert.equal(await sidebarToggle.getAttribute("aria-expanded"), "false");
+  await page.waitForFunction((width) =>
+    document.querySelector(".cm-content")?.getBoundingClientRect().width > width,
+  initialEditorWidth);
+  await page.setViewportSize({ width: 800, height: 600 });
+  await page.waitForFunction(() => document.querySelector(".cm-content")?.getBoundingClientRect().width > 0);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await sidebarToggle.click();
+  assert.equal(await sidebarToggle.getAttribute("aria-expanded"), "true");
+
   await editor.focus();
   await page.locator("#complete-button").click();
   await page.locator(".cm-tooltip-autocomplete").waitFor();
   await page.locator(".cm-tooltip-autocomplete .cm-completionLabel", { hasText: /^main$/ }).waitFor();
   await page.keyboard.press("Escape");
+
+  const callSite = page.locator(".cm-line", { hasText: "math::sum" });
+  await callSite.click();
+  const callSiteOffset = (await callSite.textContent()).indexOf("sum");
+  await page.keyboard.press("Home");
+  for (let index = 0; index < callSiteOffset; index += 1) await page.keyboard.press("ArrowRight");
+  for (let index = 0; index < 3; index += 1) await page.keyboard.press("Shift+ArrowRight");
+  await page.keyboard.press("F12");
+  await page.waitForFunction(() => document.querySelector("#active-file")?.textContent === "src/math.zyl");
+  await page.keyboard.press("Shift+F12");
+  await page.locator("#project-search").waitFor({ state: "visible" });
+  const references = page.locator("#project-search-results .task-finder-item");
+  await page.waitForFunction(() => document.querySelectorAll("#project-search-results .task-finder-item").length >= 2);
+  const referenceRows = await references.allTextContents();
+  assert.ok(referenceRows.some((row) => row.includes("src/math.zyl")), "references must include the declaration file");
+  assert.ok(referenceRows.some((row) => row.includes("main.zyl")), "references must include the imported call site");
+  await page.locator("#project-search-close").click();
+  await page.locator('.tree-item.file[title="main.zyl"]').click();
+  await page.waitForFunction(() => document.querySelector("#active-file")?.textContent === "main.zyl");
+
   await page.keyboard.press("F1");
   await page.locator("#studio-assistant:not([hidden])").waitFor();
   await page.locator("#assistant-help-details").getByText(/Optionen|Options/).waitFor();
