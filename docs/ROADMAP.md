@@ -723,8 +723,9 @@ its source evidence and reason.
   Studio stops the active preview when it closes; **Stop preview** ends it
   immediately. Databases still start explicitly and separately. The tutorial
   is generated as a real imported multi-file project with separate database,
-  customer, item, invoice, layout, and dashboard modules. CI evidence for the
-  new Studio web workflow is still pending.
+  customer, item, invoice, layout, and dashboard modules. CLI and Studio
+  browser E2E evidence covers the web workflow; human acceptance remains for
+  1.0.0.
 - [🧪] Expand CLI help: `zelyra <command> --help` and nested calls such as
   `zelyra db plan --help` explain purpose, options, examples, and prerequisites
   in German or English without running the command.
@@ -737,11 +738,14 @@ its source evidence and reason.
   partially mappable, manual, and unresolved items and identify a safe next
   step. Start with a documented supported-pattern subset; ambiguous matches
   remain unresolved rather than guessed.
-- [🗺️] Grow the IDE database view into a safe workbench: inspect tables,
+- [🧪] Grow the IDE database view into a safe workbench: inspect tables,
   columns, indexes, and declared relationships; browse records read-only by
   default; show how source modules own each object. Make the ER diagram
   filterable and navigable so selecting a field or relationship reveals its
-  declaration module and using resources.
+  declaration module and using resources. Studio now offers a session-protected
+  read-only data browser capped at 25 rows per request and a compiler-checked
+  helper to add/edit simple source columns. Backend setup, database creation,
+  and the complete reviewed plan/risk view remain open.
 - [🗺️] Deliver foreign-key relationships as an end-to-end database feature by
   1.0.0: declare references in Zelyra table fields, validate target table and
   column types in the compiler, create and inspect real constraints, and show
@@ -763,12 +767,15 @@ its source evidence and reason.
   at compile time. Exit evidence includes two-tenant positive and negative
   integration cases for every mutation and read path, including membership
   revocation and forged/conflicting selectors.
-- [🗺️] Let users add and edit table columns through the properties sidebar.
+- [🧪] Let users add and edit table columns through the properties sidebar.
   Show the complete schema plan, impact, and risks; run compiler checks and
   require explicit confirmation before applying changes. Let users choose the
   database backend and connection, then create the project database from Studio
   where the backend and granted privileges support it. Clearly explain
   unsupported combinations and never store or print credentials in the browser.
+  Add/Edit for simple source columns is compiler-checked, hash-bound, and
+  explicitly confirmed. Key, unique, and defaulted columns cannot be edited
+  visually. Backend and connection setup plus database creation remain open.
 - [🗺️] Prepare typed, read-only data sources for metrics so 0.9.4 can offer
   selections without free-form SQL. Mutations and generated schema changes
   require a reviewed plan and explicit confirmation.

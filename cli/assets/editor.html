@@ -49,7 +49,7 @@
           </div>
         </div>
         <div class="tabbar" id="tabs" role="tablist" aria-label="Geöffnete Dateien"></div>
-        <section class="editor-stage">
+        <section class="editor-stage" id="editor-stage">
           <div id="editor-root" class="editor-root"></div>
           <aside class="studio-assistant" id="studio-assistant" aria-label="Hilfe und Eigenschaften" data-i18n-aria="assistant" hidden>
             <div class="assistant-tabs" role="tablist" aria-label="Studio-Seitenleiste" data-i18n-aria="assistantTabs">
@@ -87,6 +87,25 @@
                 <header class="database-table-heading"><div><span class="database-eyebrow" id="database-module"></span><h2 id="database-table-name"></h2><p id="database-table-status"></p></div><span class="schema-badge" id="database-status-badge"></span></header>
                 <div class="database-section-heading"><div><h3 data-i18n="columnsAndRelations">Spalten und Beziehungen</h3><p data-i18n="schemaCompareHint">Deklarierte und live vorhandene Merkmale im Vergleich.</p></div><span class="database-legend" data-i18n="schemaLegend">Quelle · Datenbank</span></div>
                 <div id="database-columns" class="database-columns"></div>
+                <section class="schema-column-editor" id="schema-column-editor" aria-labelledby="schema-column-title">
+                  <div class="database-section-heading"><div><span class="database-eyebrow" data-i18n="guidedBuilder">GEFÜHRTER ASSISTENT</span><h3 id="schema-column-title" data-i18n="schemaColumnTitle">Tabellenspalte hinzufügen</h3><p data-i18n="schemaColumnHint">Erzeugt und prüft eine Änderung im Zelyra-Quelltext. Die Datenbank wird dabei nicht geändert.</p></div></div>
+                  <div class="schema-column-controls">
+                    <label><span data-i18n="schemaColumnOperation">Aktion</span><select id="schema-column-operation"><option value="add" data-i18n="schemaColumnAdd">Hinzufügen</option><option value="edit" data-i18n="schemaColumnEdit">Bearbeiten</option></select></label>
+                    <label id="schema-column-existing-wrap" hidden><span data-i18n="schemaColumnExisting">Vorhandenes Feld</span><select id="schema-column-existing"></select></label>
+                    <label><span data-i18n="schemaColumnName">Feldname</span><input id="schema-column-name" maxlength="64" autocomplete="off"></label>
+                    <label><span data-i18n="schemaColumnType">Datentyp</span><select id="schema-column-type"><option value="String(120)">String(120)</option><option value="Int">Int</option><option value="UInt">UInt</option><option value="Decimal">Decimal</option><option value="Bool">Bool</option><option value="Date">Date</option><option value="Time">Time</option><option value="Timestamp">Timestamp</option><option value="Duration">Duration</option><option value="Bytes">Bytes</option><option value="Float">Float</option><option value="Char">Char</option><option value="String">String</option></select></label>
+                    <label class="schema-column-required"><input id="schema-column-required" type="checkbox"><span data-i18n="schemaColumnRequired">Pflichtfeld</span></label>
+                  </div>
+                  <div class="schema-column-actions"><button class="primary-button" id="schema-column-preview" type="button" data-i18n="schemaColumnPreview">Änderung prüfen</button><button class="toolbar-button" id="schema-column-apply" type="button" disabled data-i18n="schemaColumnApply">Quelltext übernehmen</button><span class="schema-column-state" id="schema-column-state" role="status" aria-live="polite"></span></div>
+                  <div class="schema-column-preview-grid" id="schema-column-preview-grid" hidden><section><div class="crud-preview-heading" data-i18n="sourceDiff">QUELLTEXTÄNDERUNG</div><pre id="schema-column-diff"></pre></section><section><div class="crud-preview-heading" data-i18n="changeImpact">AUSWIRKUNGEN</div><pre id="schema-column-impact"></pre></section></div>
+                  <div class="crud-diagnostics" id="schema-column-diagnostics" hidden></div>
+                </section>
+                <section class="database-record-browser" id="database-record-browser" aria-labelledby="database-record-title">
+                  <div class="database-section-heading"><div><span class="database-eyebrow" data-i18n="recordPreviewEyebrow">DATEN VORSCHAU</span><h3 id="database-record-title" data-i18n="recordPreviewTitle">Datensätze ansehen</h3><p data-i18n="recordPreviewHint">Nur-Leseansicht · bis zu 25 Zeilen pro Seite · Laden erst nach deiner Auswahl.</p></div><button class="toolbar-button" id="database-record-load" type="button" data-i18n="recordPreviewLoad">Datensätze laden</button></div>
+                  <p class="database-record-status" id="database-record-status" role="status" aria-live="polite"></p>
+                  <div class="database-record-table-wrap" id="database-record-table-wrap" hidden></div>
+                  <div class="database-record-pagination"><button class="toolbar-button" id="database-record-previous" type="button" disabled data-i18n="recordPreviewPrevious">Zurück</button><span id="database-record-page"></span><button class="toolbar-button" id="database-record-next" type="button" disabled data-i18n="recordPreviewNext">Weiter</button></div>
+                </section>
                 <section class="crud-builder" id="crud-builder" hidden>
                   <div class="database-section-heading"><div><span class="database-eyebrow" data-i18n="guidedBuilder">GEFÜHRTER ASSISTENT</span><h3 data-i18n="crudBuilderTitle">CRUD für diese Tabelle erstellen</h3><p data-i18n="crudBuilderHint">Felder auswählen, Zelyra-Code prüfen und erst danach ausdrücklich übernehmen.</p></div></div>
                   <div class="crud-builder-controls">

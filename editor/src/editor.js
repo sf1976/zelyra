@@ -50,6 +50,11 @@ let databaseMap = null;
 let databaseTables = [];
 let selectedDatabaseTable = null;
 let databaseFilter = "";
+let databaseRecordOffset = 0;
+let databaseRecordOffsets = [0];
+let databaseRecordRequest = 0;
+let databaseRecordBusy = false;
+let schemaColumnPreview = null;
 let crudPreviewValid = false;
 let lastCrudPreviewRequest = null;
 const editorRoot = $("editor-root");
@@ -119,11 +124,25 @@ const messages = {
     required: "Pflichtfeld", autoIncrement: "Automatische ID", unique: "Eindeutig",
     relation: "Beziehung", relationTo: "Verweist auf", declaredOnly: "Nur in Quelle",
     liveOnly: "Nur in Datenbank", typeMismatch: "Abweichender Typ", noRelationships: "Keine Beziehungen deklariert",
+    recordPreviewEyebrow: "DATEN VORSCHAU", recordPreviewTitle: "Datensätze ansehen",
+    recordPreviewHint: "Nur-Leseansicht · bis zu 25 Zeilen pro Seite · Laden erst nach deiner Auswahl.",
+    recordPreviewLoad: "Datensätze laden", recordPreviewPrevious: "Zurück", recordPreviewNext: "Weiter",
+    recordPreviewIdle: "Wähle eine Tabelle und lade die Vorschau bewusst.", recordPreviewLoading: "Lese Datensätze …",
+    recordPreviewPage: "Zeilen {0}–{1}", recordPreviewEmpty: "Keine Datensätze auf dieser Seite.",
+    recordPreviewIncomplete: "Die Vorschau ist begrenzt. Lange Werte oder zusätzliche Spalten wurden gekürzt.",
+    recordPreviewFailed: "Datensätze konnten nicht geladen werden.",
     tableNotDeclared: "Diese Live-Tabelle ist noch nicht in Zelyra deklariert. Lege zuerst eine geprüfte Tabellendeklaration an.",
     existingCrud: "Für diese Tabelle existiert bereits eine CRUD-Ressource.",
     previewRunning: "Prüfe erzeugten Code …", previewPassed: "Compilerprüfung bestanden · Änderung noch nicht übernommen",
     previewFailed: "Compilerprüfung fehlgeschlagen", previewRequired: "Erstelle zuerst eine gültige Vorschau.",
     applySuccess: "CRUD-Änderung übernommen", selectOneField: "Wähle mindestens ein Feld.",
+    schemaColumnTitle: "Tabellenspalten bearbeiten", schemaColumnHint: "Erzeugt und prüft eine Änderung im Zelyra-Quelltext. Die Datenbank wird dabei nicht geändert.",
+    schemaColumnOperation: "Aktion", schemaColumnAdd: "Hinzufügen", schemaColumnEdit: "Bearbeiten", schemaColumnExisting: "Vorhandenes Feld",
+    schemaColumnName: "Feldname", schemaColumnType: "Datentyp", schemaColumnRequired: "Pflichtfeld",
+    schemaColumnPreview: "Änderung prüfen", schemaColumnApply: "Quelltext übernehmen",
+    schemaColumnRunning: "Prüfe Tabellendeklaration …", schemaColumnPassed: "Compilerprüfung bestanden · Datenbank unverändert",
+    schemaColumnFailed: "Compilerprüfung fehlgeschlagen", schemaColumnConfirm: "Feld {0} im Projektquelltext ändern? Die Datenbank bleibt unverändert. Prüfe danach den Schema-Plan.",
+    schemaColumnApplied: "Quelltext geändert. Prüfe `zelyra db plan main.zyl`, bevor du eine Datenbankänderung anwendest.",
     table: "Tabelle", field: "Feld", moduleUnknown: "Quellmodul unbekannt", selectTarget: "Quelldatei auswählen"
   },
   en: {
@@ -191,11 +210,25 @@ const messages = {
     required: "Required", autoIncrement: "Auto increment", unique: "Unique",
     relation: "Relation", relationTo: "References", declaredOnly: "Source only",
     liveOnly: "Database only", typeMismatch: "Type differs", noRelationships: "No declared relations",
+    recordPreviewEyebrow: "DATA PREVIEW", recordPreviewTitle: "Browse records",
+    recordPreviewHint: "Read only · up to 25 rows per page · loaded only when you choose.",
+    recordPreviewLoad: "Load records", recordPreviewPrevious: "Previous", recordPreviewNext: "Next",
+    recordPreviewIdle: "Choose a table, then explicitly load its preview.", recordPreviewLoading: "Reading records …",
+    recordPreviewPage: "Rows {0}–{1}", recordPreviewEmpty: "No records on this page.",
+    recordPreviewIncomplete: "The preview is bounded. Long values or additional columns were shortened.",
+    recordPreviewFailed: "Could not load records.",
     tableNotDeclared: "This live table is not declared in Zelyra yet. Add a reviewed table declaration first.",
     existingCrud: "A CRUD resource already exists for this table.",
     previewRunning: "Checking generated source …", previewPassed: "Compiler check passed · change not yet applied",
     previewFailed: "Compiler check failed", previewRequired: "Create a valid preview first.",
     applySuccess: "CRUD change applied", selectOneField: "Choose at least one field.",
+    schemaColumnTitle: "Edit table columns", schemaColumnHint: "Creates and checks a Zelyra source change. It does not change the database.",
+    schemaColumnOperation: "Action", schemaColumnAdd: "Add", schemaColumnEdit: "Edit", schemaColumnExisting: "Existing field",
+    schemaColumnName: "Field name", schemaColumnType: "Data type", schemaColumnRequired: "Required",
+    schemaColumnPreview: "Check change", schemaColumnApply: "Apply source change",
+    schemaColumnRunning: "Checking table declaration …", schemaColumnPassed: "Compiler check passed · database unchanged",
+    schemaColumnFailed: "Compiler check failed", schemaColumnConfirm: "Change field {0} in project source? The database stays unchanged. Review the schema plan afterwards.",
+    schemaColumnApplied: "Source updated. Review `zelyra db plan main.zyl` before applying a database change.",
     table: "Table", field: "Field", moduleUnknown: "Source module unknown", selectTarget: "Choose source file"
   }
 };
@@ -1110,6 +1143,7 @@ function showDatabaseWelcome(message = t("databaseChooseHint")) {
 
 function selectDatabaseTable(name) {
   selectedDatabaseTable = databaseTables.find((table) => table.name === name) || null;
+  resetDatabaseRecordPreview();
   if (!selectedDatabaseTable) return showDatabaseWelcome();
   $("database-welcome").hidden = true;
   $("database-table-view").hidden = false;
@@ -1120,9 +1154,227 @@ function selectDatabaseTable(name) {
   badge.textContent = statusLabel(tableStatus(selectedDatabaseTable));
   badge.dataset.state = tableStatus(selectedDatabaseTable);
   renderDatabaseColumns(selectedDatabaseTable);
+  renderSchemaColumnEditor(selectedDatabaseTable);
   renderCrudBuilder(selectedDatabaseTable);
   renderDatabaseTables();
   renderDatabaseGraph();
+}
+
+function resetSchemaColumnPreview() {
+  schemaColumnPreview = null;
+  $("schema-column-preview-grid").hidden = true;
+  $("schema-column-diagnostics").replaceChildren();
+  $("schema-column-diagnostics").hidden = true;
+  $("schema-column-apply").disabled = true;
+  $("schema-column-state").textContent = "";
+  $("schema-column-state").dataset.kind = "";
+}
+
+function renderSchemaColumnEditor(table) {
+  resetSchemaColumnPreview();
+  const owner = table.module;
+  const controls = $("schema-column-editor");
+  controls.hidden = !owner || table.status === "live_unmapped";
+  $("schema-column-name").value = "";
+  const existing = $("schema-column-existing");
+  existing.replaceChildren();
+  for (const column of table.declared_columns || []) {
+    if (column.primary_key || column.auto_increment || column.unique) continue;
+    const option = document.createElement("option"); option.value = column.name; option.textContent = column.name; existing.append(option);
+  }
+  $("schema-column-operation").value = "add";
+  $("schema-column-existing-wrap").hidden = true;
+  $("schema-column-name").readOnly = false;
+  $("schema-column-type").value = "String(120)";
+  $("schema-column-required").checked = false;
+}
+
+function updateSchemaColumnOperation() {
+  const editing = $("schema-column-operation").value === "edit";
+  $("schema-column-existing-wrap").hidden = !editing;
+  $("schema-column-name").readOnly = editing;
+  if (editing) updateSchemaColumnField();
+  resetSchemaColumnPreview();
+}
+
+function updateSchemaColumnField() {
+  const field = $("schema-column-existing").value;
+  const column = (selectedDatabaseTable?.declared_columns || []).find((item) => item.name === field);
+  if (!column) return;
+  $("schema-column-name").value = column.name;
+  $("schema-column-required").checked = column.zelyra_required === true;
+  const type = column.zelyra_type;
+  if (type) {
+    const select = $("schema-column-type");
+    let option = [...select.options].find((item) => item.value === type);
+    if (!option) { option = document.createElement("option"); option.value = type; option.textContent = type; select.append(option); }
+    select.value = type;
+  }
+}
+
+function schemaColumnRequest() {
+  if (!selectedDatabaseTable?.module) throw new Error(t("schemaColumnFailed"));
+  const column = $("schema-column-name").value.trim();
+  if (!column) throw new Error(`${t("schemaColumnName")} is required`);
+  return {
+    path: selectedDatabaseTable.module,
+    table: selectedDatabaseTable.name,
+    column,
+    operation: $("schema-column-operation").value,
+    type: $("schema-column-type").value,
+    required: $("schema-column-required").checked,
+  };
+}
+
+async function previewSchemaColumn() {
+  resetSchemaColumnPreview();
+  $("schema-column-state").textContent = t("schemaColumnRunning");
+  $("schema-column-state").dataset.kind = "pending";
+  try {
+    const request = schemaColumnRequest();
+    const file = await api(`file?path=${encodeURIComponent(request.path)}`);
+    request.baseHash = file.hash;
+    const result = await api("schema-column-preview", { method: "POST", body: JSON.stringify(request) });
+    $("schema-column-diff").textContent = result.diff || "";
+    $("schema-column-impact").textContent = JSON.stringify(result.impact || {}, null, 2);
+    $("schema-column-preview-grid").hidden = false;
+    const diagnostics = $("schema-column-diagnostics");
+    diagnostics.replaceChildren();
+    for (const item of result.diagnostics || []) {
+      const row = document.createElement("div"); row.className = "crud-diagnostic";
+      const code = document.createElement("strong"); code.textContent = item.code || "Compiler";
+      const message = document.createElement("span"); message.textContent = item.message || "";
+      row.append(code, message); diagnostics.append(row);
+    }
+    diagnostics.hidden = !diagnostics.childElementCount;
+    if (result.success) {
+      schemaColumnPreview = { ...request, candidateHash: result.candidateHash };
+      $("schema-column-apply").disabled = false;
+      $("schema-column-state").textContent = t("schemaColumnPassed");
+      $("schema-column-state").dataset.kind = "success";
+    } else {
+      $("schema-column-state").textContent = t("schemaColumnFailed");
+      $("schema-column-state").dataset.kind = "error";
+    }
+  } catch (error) {
+    $("schema-column-state").textContent = error.message;
+    $("schema-column-state").dataset.kind = "error";
+  }
+}
+
+async function applySchemaColumn() {
+  if (!schemaColumnPreview) return;
+  const message = t("schemaColumnConfirm", schemaColumnPreview.column);
+  if (!window.confirm(message)) return;
+  try {
+    const result = await api("schema-column-apply", {
+      method: "POST",
+      body: JSON.stringify({ ...schemaColumnPreview, confirm: true }),
+    });
+    const tab = tabs.get(result.path);
+    if (tab) {
+      tab.saved = result.content;
+      tab.hash = result.hash;
+      tab.state = EditorState.create({ doc: result.content });
+      if (activePath === result.path && editor) { editor.setState(tab.state); tab.state = editor.state; }
+      renderTabs();
+    } else await openFile(result.path);
+    resetSchemaColumnPreview();
+    await refreshTree();
+    await loadDatabaseSchema();
+    announce(t("schemaColumnApplied"), "success");
+  } catch (error) {
+    $("schema-column-state").textContent = error.message;
+    $("schema-column-state").dataset.kind = "error";
+    announce(error.message, "error");
+  }
+}
+
+function resetDatabaseRecordPreview() {
+  databaseRecordRequest += 1;
+  databaseRecordBusy = false;
+  databaseRecordOffset = 0;
+  databaseRecordOffsets = [0];
+  const wrap = $("database-record-table-wrap");
+  wrap.replaceChildren();
+  wrap.hidden = true;
+  $("database-record-page").textContent = "";
+  $("database-record-status").textContent = t("recordPreviewIdle");
+  $("database-record-status").dataset.kind = "";
+  $("database-record-previous").disabled = true;
+  $("database-record-next").disabled = true;
+}
+
+function renderDatabaseRecords(result) {
+  const wrap = $("database-record-table-wrap");
+  const columns = Array.isArray(result.columns) ? result.columns : [];
+  const rows = Array.isArray(result.rows) ? result.rows : [];
+  if (result.readOnly !== true) throw new Error("Studio received an unexpected writable data response");
+  wrap.replaceChildren();
+  if (!rows.length || !columns.length) {
+    wrap.hidden = true;
+    $("database-record-status").textContent = t("recordPreviewEmpty");
+  } else {
+    const table = document.createElement("table");
+    table.className = "database-record-table";
+    const heading = table.createTHead().insertRow();
+    for (const name of columns) {
+      const cell = document.createElement("th");
+      cell.scope = "col";
+      cell.textContent = String(name);
+      heading.append(cell);
+    }
+    const body = table.createTBody();
+    for (const values of rows) {
+      const row = body.insertRow();
+      for (let index = 0; index < columns.length; index += 1) {
+        const cell = row.insertCell();
+        cell.textContent = String(values[index] ?? "");
+        cell.title = cell.textContent;
+      }
+    }
+    wrap.append(table);
+    wrap.hidden = false;
+    $("database-record-status").textContent = result.truncated ? t("recordPreviewIncomplete") : "";
+    $("database-record-status").dataset.kind = result.truncated ? "warning" : "";
+  }
+  $("database-record-page").textContent = rows.length
+    ? t("recordPreviewPage", `${databaseRecordOffset + 1}–${databaseRecordOffset + rows.length}`)
+    : "";
+  $("database-record-previous").disabled = databaseRecordOffsets.length <= 1;
+  $("database-record-next").disabled = !Number.isInteger(result.nextOffset);
+}
+
+async function loadDatabaseRecords(offset = 0) {
+  if (!selectedDatabaseTable || databaseRecordBusy) return;
+  const table = selectedDatabaseTable.name;
+  const requestId = ++databaseRecordRequest;
+  databaseRecordOffset = offset;
+  databaseRecordBusy = true;
+  $("database-record-load").disabled = true;
+  $("database-record-previous").disabled = true;
+  $("database-record-next").disabled = true;
+  $("database-record-status").textContent = t("recordPreviewLoading");
+  $("database-record-status").dataset.kind = "pending";
+  try {
+    const result = await api(`database-rows?table=${encodeURIComponent(table)}&limit=25&offset=${offset}`);
+    if (requestId !== databaseRecordRequest || selectedDatabaseTable?.name !== table) return;
+    renderDatabaseRecords(result);
+    if (offset === 0) databaseRecordOffsets = [0];
+    else if (databaseRecordOffsets.at(-1) !== offset) databaseRecordOffsets.push(offset);
+  } catch (error) {
+    if (requestId !== databaseRecordRequest) return;
+    $("database-record-table-wrap").replaceChildren();
+    $("database-record-table-wrap").hidden = true;
+    $("database-record-status").textContent = `${t("recordPreviewFailed")} ${error.message}`;
+    $("database-record-status").dataset.kind = "error";
+  } finally {
+    if (requestId === databaseRecordRequest) {
+      databaseRecordBusy = false;
+      $("database-record-load").disabled = false;
+      $("database-record-previous").disabled = databaseRecordOffsets.length <= 1;
+    }
+  }
 }
 
 function columnSignature(column) {
@@ -1661,6 +1913,24 @@ $("code-button").addEventListener("click", openCodeWorkbench);
 $("database-refresh").addEventListener("click", loadDatabaseSchema);
 $("database-start").addEventListener("click", loadDatabaseSchema);
 $("database-filter").addEventListener("input", (event) => { databaseFilter = event.target.value; renderDatabaseTables(); });
+$("database-record-load").addEventListener("click", () => { void loadDatabaseRecords(0); });
+$("database-record-previous").addEventListener("click", () => {
+  if (databaseRecordOffsets.length <= 1 || databaseRecordBusy) return;
+  databaseRecordOffsets.pop();
+  void loadDatabaseRecords(databaseRecordOffsets.at(-1));
+});
+$("database-record-next").addEventListener("click", () => {
+  if (databaseRecordBusy || $("database-record-next").disabled) return;
+  void loadDatabaseRecords(databaseRecordOffset + 25);
+});
+$("schema-column-preview").addEventListener("click", previewSchemaColumn);
+$("schema-column-apply").addEventListener("click", applySchemaColumn);
+$("schema-column-operation").addEventListener("change", updateSchemaColumnOperation);
+$("schema-column-existing").addEventListener("change", () => { updateSchemaColumnField(); resetSchemaColumnPreview(); });
+for (const id of ["schema-column-name", "schema-column-type", "schema-column-required"]) {
+  $(id).addEventListener("input", resetSchemaColumnPreview);
+  $(id).addEventListener("change", resetSchemaColumnPreview);
+}
 $("crud-preview-button").addEventListener("click", previewCrud);
 $("crud-apply-button").addEventListener("click", applyCrud);
 $("new-file-button").addEventListener("click", createFile);

@@ -68,6 +68,21 @@ automatische IDs, Eindeutigkeit und Fremdschlüssel mit der Live-Datenbank. Fehl
 der Datenbank vorhandene Tabellen und Spalten werden markiert. Die Zuordnung
 zum Quellmodul ist eine Orientierung und setzt keine Zugriffsrechte durch.
 
+Der **Datenbrowser** zeigt Datensätze nur auf ausdrücklichen Klick und in
+Seiten mit höchstens 25 Zeilen. Er ist schreibgeschützt; Tabellen- und
+Spaltennamen stammen aus der geladenen Schemaansicht, die SQL-Bezeichner werden
+backendgerecht maskiert, und Werte werden als Text dargestellt. Studio lädt
+keine Datensätze automatisch beim Öffnen der Werkbank.
+
+Im geführten **Spaltenassistenten** lassen sich neue Tabellenfelder ergänzen
+und einfache bestehende Felder ändern. Schlüssel-, eindeutige und Felder mit
+Defaultwert sind von der visuellen Bearbeitung ausgeschlossen. Vor der
+Übernahme prüft Zelyra den Quelltext mit dem Projektcompiler und zeigt Diff,
+Diagnosen und den Hinweis auf den erforderlichen Schema-Plan. Die Übernahme
+ändert ausschließlich die Zelyra-Datei. Vor einer Datenbankmigration muss der
+Nutzer `zelyra db plan main.zyl` prüfen und die Datenbankaktion separat
+ausführen.
+
 In dieser Version unterstützt die visuelle Live-Introspektion MariaDB und
 PostgreSQL entsprechend der geprüften `db map`-Unterstützung. Für MySQL zeigt
 Studio ausdrücklich an, dass die Schema-Introspektion noch nicht unterstützt

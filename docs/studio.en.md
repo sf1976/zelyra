@@ -61,6 +61,18 @@ foreign keys with the live database. Missing tables and columns, as well as
 live-only tables and columns, are marked. Source-module mapping is guidance;
 it does not enforce access rights.
 
+The **record browser** loads rows only after an explicit click and pages at no
+more than 25 rows. It is read-only; table and column names come from the loaded
+schema, SQL identifiers are quoted for the selected backend, and values are
+rendered as text. Opening the workbench does not fetch records automatically.
+
+The guided **column editor** can add table fields and edit simple existing
+fields. Key, unique, and defaulted columns are excluded from visual editing.
+Before applying a source change, Zelyra checks it with the project compiler
+and shows a diff, diagnostics, and a reminder to review the schema plan. The
+operation changes only the Zelyra source file. Review `zelyra db plan main.zyl`
+and apply any database migration separately.
+
 In this release, visual live introspection supports MariaDB and PostgreSQL as
 covered by the tested `db map` support. Studio clearly reports that MySQL
 schema introspection is not yet supported. This is separate from the MySQL

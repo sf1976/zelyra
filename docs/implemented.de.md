@@ -194,8 +194,14 @@ der [Setup-Anleitung](setup-web.de.md) und den
   Umschalt+F12-Fundstellen, eine deterministische Compiler-Projektkarte und
   einen begrenzten ausdrücklichen Run-Befehl. Typinferenz, vollständige
   semantische Referenzen und dynamische Projektbeziehungen sind nicht enthalten.
-  MySQL-Live-Introspektion und Änderungen an Schema oder Datensätzen sind hier
-  nicht enthalten. Einzelheiten: [Studio-Anleitung](studio.de.md).
+  MySQL-Live-Introspektion ist hier nicht enthalten. 0.9.3 ergänzt den
+  expliziten schreibgeschützten Datenbrowser (höchstens 25 Datensätze pro
+  Anfrage) sowie compilergeprüftes Ergänzen und Bearbeiten einfacher
+  Tabellenspalten im Quelltext. Schlüssel-, eindeutige und Default-Felder sind
+  vom visuellen Edit ausgeschlossen; jede Änderung verlangt Hashprüfung und
+  Bestätigung und wendet keine Migration an. Backend-/Verbindungswahl,
+  Datenbankanlage und ein vollständiger Plan-/Risikoeditor fehlen noch.
+  Einzelheiten: [Studio-Anleitung](studio.de.md).
 - ✅ `zelyra text edit <plan.zedit>` bietet vorschau-basierte Textänderungen aus
   TOML-Plänen mit linearen regulären Ausdrücken, erwarteter Trefferzahl,
   quellgebundener Plan-ID und ausdrücklichem Anwenden. Projektgrenzen und

@@ -713,8 +713,8 @@ manuell umzusetzen.
   Schließen; **Vorschau beenden** stoppt sie sofort. Datenbanken werden weiterhin
   ausdrücklich separat gestartet. Das Tutorial wird als echtes importiertes
   Mehrdateienprojekt mit eigenem Datenbank-, Kunden-, Artikel-, Rechnungs-,
-  Layout- und Dashboard-Modul erzeugt. CI-Nachweis für den neuen Studio-
-  Webablauf steht noch aus.
+  Layout- und Dashboard-Modul erzeugt. Der CLI- und Browser-E2E-Nachweis für
+  den Studio-Webablauf ist ergänzt; menschliche Abnahme bleibt für 1.0.0.
 - [🧪] Die CLI-Hilfe ausbauen: `zelyra <befehl> --help` und verschachtelte
   Aufrufe wie `zelyra db plan --help` erklären Zweck, Optionen, Beispiele und
   Voraussetzungen in Deutsch oder Englisch, ohne den Befehl auszuführen.
@@ -728,11 +728,15 @@ manuell umzusetzen.
   abbildbare, manuell umzusetzen und nicht sicher zuordenbare Elemente und
   nennen den nächsten sicheren Schritt. Der unterstützte Musterumfang wird
   dokumentiert; mehrdeutige Funde bleiben offen statt erraten zu werden.
-- [🗺️] Die Datenbankansicht der IDE zur sicheren Werkbank ausbauen: Tabellen,
+- [🧪] Die Datenbankansicht der IDE zur sicheren Werkbank ausbauen: Tabellen,
   Spalten, Indizes und deklarierte Beziehungen ansehen, Datensätze standardmäßig
   schreibgeschützt durchsuchen und den zuständigen Quellmodulen zuordnen. Das
   ER-Diagramm wird filterbar und navigierbar; Auswahl eines Feldes oder einer
-  Beziehung zeigt Definition, Quellmodul und verwendende Ressourcen.
+  Beziehung zeigt Definition, Quellmodul und verwendende Ressourcen. Studio
+  bietet nun einen sitzungsgeschützten, schreibgeschützten Datenbrowser mit
+  höchstens 25 Zeilen je Abruf sowie einen compilergeprüften Assistenten zum
+  Ergänzen und Bearbeiten einfacher Quellspalten. Datenbankeinstellungen,
+  Datenbankanlage und die vollständige Plan-/Risikoansicht bleiben offen.
 - [🗺️] Fremdschlüssel bis 1.0.0 als durchgängige Datenbankfunktion liefern:
   Referenzen in Zelyra-Tabellenfeldern deklarieren, Zieltabellen und Feldtypen
   im Compiler prüfen, echte Constraints anlegen und auslesen sowie Beziehungen
@@ -756,14 +760,17 @@ manuell umzusetzen.
   abgelehnt werden. Der Nachweis umfasst positive und negative Integrationstests
   für zwei Mandanten, alle Lese- und Änderungswege, entzogene Mitgliedschaften
   sowie manipulierte oder widersprüchliche Mandantenauswahl.
-- [🗺️] Tabellenspalten über die Eigenschaftsseitenleiste grafisch ergänzen und
+- [🧪] Tabellenspalten über die Eigenschaftsseitenleiste grafisch ergänzen und
   bearbeiten. Studio zeigt den vollständigen Schema-Plan mit Auswirkungen und
   Risiken, lässt den Compiler prüfen und verlangt vor jeder Anwendung eine
   ausdrückliche Bestätigung. Außerdem kann der Nutzer den gewählten Datenbanktyp
   und die Verbindung einstellen und — soweit Backend und Rechte es unterstützen
   — die Projektdatenbank aus Studio anlegen. Nicht unterstützte Kombinationen
   werden klar benannt; Zugangsdaten werden nie im Browser gespeichert oder
-  ausgegeben.
+  ausgegeben. Add/Edit für einfache Quellspalten ist compilergeprüft,
+  hashgebunden und ausdrücklich bestätigt. Schlüssel-, eindeutige und
+  Default-Felder sind vom visuellen Edit ausgeschlossen. Datenbanktyp,
+  Verbindungsdialog und Datenbankanlage sind noch nicht umgesetzt.
 - [🗺️] Lesende, typisierte Datenquellen für Kennzahlen vorbereiten, damit sie
   in 0.9.4 ohne frei formulierte SQL-Ausdrücke gewählt werden können.
 - [🗺️] Wiederverwendbare JavaScript-ES-Module als Projektdateien planen:

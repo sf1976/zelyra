@@ -174,8 +174,13 @@ For usage details see the [web and database quickstart](getting-started.md),
   schemas and a guided CRUD source builder. Version 0.9.0 adds an impact view
   for affected files, tables, declared relationships, and routes. The compiler
   checks a candidate, Studio shows its diff, and writes only after explicit
-  apply with a fresh hash check. MySQL live introspection and schema or record
-  changes are out of scope here. See the [Studio guide](studio.en.md).
+  apply with a fresh hash check. MySQL live introspection is not included.
+  Version 0.9.3 adds an explicit read-only record browser (at most 25 records
+  per request) and compiler-checked source changes to add or edit simple table
+  columns. Key, unique, and defaulted fields cannot be edited visually; every
+  change requires a fresh hash and explicit confirmation and does not apply a
+  migration. Backend/connection selection, database creation, and a complete
+  plan/risk editor remain open. See the [Studio guide](studio.en.md).
   Version 0.9.2 adds contextual help, an action finder, AST-backed local
   completion, live diagnostics, F12 definitions, lexical Shift+F12 occurrences,
   a deterministic compiler project map, and a bounded explicit Run action.
