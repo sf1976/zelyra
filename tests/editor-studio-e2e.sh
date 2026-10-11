@@ -4,6 +4,7 @@ set -euo pipefail
 zelyra_bin="${ZELYRA_BIN:-target/debug/zelyra}"
 database_url="${ZELYRA_STUDIO_E2E_DATABASE_URL:-}"
 backend="${ZELYRA_STUDIO_E2E_BACKEND:-mariadb}"
+database_port="${ZELYRA_STUDIO_E2E_DATABASE_PORT:-$([[ "$backend" == "mariadb" ]] && echo 3306 || echo 5432)}"
 if [[ "$backend" != "mariadb" && "$backend" != "postgres" ]]; then
   echo "ZELYRA_STUDIO_E2E_BACKEND must be mariadb or postgres" >&2
   exit 2
@@ -31,10 +32,10 @@ cleanup() {
   fi
   if [[ "$database_created" -eq 1 ]]; then
     if [[ "$backend" == "mariadb" ]]; then
-      mariadb --protocol=tcp --host=127.0.0.1 --port=3306 --user=root \
+      mariadb --protocol=tcp --host=127.0.0.1 --port="$database_port" --user=root \
         --batch --skip-column-names -e "DROP DATABASE IF EXISTS \`$database_name\`" >/dev/null
     else
-      psql --host=127.0.0.1 --port=5432 --username=zelyra_ci --dbname=zelyra_ci \
+      psql --host=127.0.0.1 --port="$database_port" --username=zelyra_ci --dbname=zelyra_ci \
         --command="DROP DATABASE IF EXISTS \"$database_name\"" >/dev/null
     fi
   fi
@@ -44,14 +45,14 @@ trap cleanup EXIT
 
 database_url="${database_url%/*}/$database_name"
 if [[ "$backend" == "mariadb" ]]; then
-  mariadb --protocol=tcp --host=127.0.0.1 --port=3306 --user=root \
+  mariadb --protocol=tcp --host=127.0.0.1 --port="$database_port" --user=root \
     --batch --skip-column-names \
     -e "CREATE DATABASE \`$database_name\`; CREATE TABLE \`$database_name\`.departments (id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, name VARCHAR(80) NOT NULL) ENGINE=InnoDB; CREATE TABLE \`$database_name\`.customers (id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, department_id BIGINT NOT NULL, name VARCHAR(120) NOT NULL, legacy_code VARCHAR(20) NULL, CONSTRAINT fk_studio_customer_department FOREIGN KEY (department_id) REFERENCES \`$database_name\`.departments(id)) ENGINE=InnoDB"
   engine="mariadb"
 else
-  psql --host=127.0.0.1 --port=5432 --username=zelyra_ci --dbname=zelyra_ci \
+  psql --host=127.0.0.1 --port="$database_port" --username=zelyra_ci --dbname=zelyra_ci \
     --command="CREATE DATABASE \"$database_name\"" >/dev/null
-  psql --host=127.0.0.1 --port=5432 --username=zelyra_ci --dbname="$database_name" \
+  psql --host=127.0.0.1 --port="$database_port" --username=zelyra_ci --dbname="$database_name" \
     --command='CREATE TABLE departments (id BIGSERIAL PRIMARY KEY, name VARCHAR(80) NOT NULL); CREATE TABLE customers (id BIGSERIAL PRIMARY KEY, department_id BIGINT NOT NULL REFERENCES departments(id), name VARCHAR(120) NOT NULL, legacy_code VARCHAR(20))' >/dev/null
   engine="postgres"
 fi
@@ -155,6 +156,11 @@ payload = {"path": "main.zyl", "baseHash": original["hash"], "table": "customers
 preview = request("crud-preview", "POST", payload)
 assert preview["success"] is True, preview["diagnostics"]
 assert "crud Customer -> customers" in preview["snippet"]
+impact = preview["impact"]
+assert impact["files"] == ["main.zyl"]
+assert impact["tables"] == ["customers"]
+assert any(route["path"] == "/customers/{id}/edit" for route in impact["routes"])
+assert any(relation["toTable"] == "departments" for relation in impact["relationships"])
 assert open(os.path.join(project, "main.zyl"), encoding="utf-8").read() == original["content"]
 
 with open(os.path.join(project, "main.zyl"), "a", encoding="utf-8") as source:
@@ -175,13 +181,13 @@ with open(os.path.join(project, "main.zyl"), encoding="utf-8") as source:
 PY
 
 if [[ "$backend" == "mariadb" ]]; then
-  table_count="$(mariadb --protocol=tcp --host=127.0.0.1 --port=3306 --user=root \
+  table_count="$(mariadb --protocol=tcp --host=127.0.0.1 --port="$database_port" --user=root \
     --batch --skip-column-names "$database_name" -e 'SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()')"
-  row_count="$(mariadb --protocol=tcp --host=127.0.0.1 --port=3306 --user=root \
+  row_count="$(mariadb --protocol=tcp --host=127.0.0.1 --port="$database_port" --user=root \
     --batch --skip-column-names "$database_name" -e 'SELECT COUNT(*) FROM customers')"
 else
-  table_count="$(psql --host=127.0.0.1 --port=5432 --username=zelyra_ci --dbname="$database_name" --tuples-only --no-align --command="SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'")"
-  row_count="$(psql --host=127.0.0.1 --port=5432 --username=zelyra_ci --dbname="$database_name" --tuples-only --no-align --command='SELECT COUNT(*) FROM customers')"
+  table_count="$(psql --host=127.0.0.1 --port="$database_port" --username=zelyra_ci --dbname="$database_name" --tuples-only --no-align --command="SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'")"
+  row_count="$(psql --host=127.0.0.1 --port="$database_port" --username=zelyra_ci --dbname="$database_name" --tuples-only --no-align --command='SELECT COUNT(*) FROM customers')"
   table_count="$(xargs <<<"$table_count")"
   row_count="$(xargs <<<"$row_count")"
 fi

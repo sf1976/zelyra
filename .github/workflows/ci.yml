@@ -342,6 +342,12 @@ jobs:
           ZELYRA_BIN: target/debug/zelyra
           ZELYRA_AUTH_E2E_ADDRESS: 127.0.0.1:38505
         run: ./tests/mariadb-auth-e2e.sh
+      - name: Run MariaDB local MFA integration test
+        env:
+          DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+          ZELYRA_MFA_E2E_DB_PASSWORD: root
+          ZELYRA_BIN: target/debug/zelyra
+        run: bash ./tests/mariadb-mfa-e2e.sh
       - name: Run protected CRUD and API integration test
         env:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
@@ -413,6 +419,12 @@ jobs:
           ZELYRA_STUDIO_E2E_ROOT_PASSWORD: root
           ZELYRA_BIN: target/debug/zelyra
         run: bash ./tests/editor-studio-e2e.sh
+      - name: Exercise local MFA against this MariaDB version
+        env:
+          DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+          ZELYRA_MFA_E2E_DB_PASSWORD: root
+          ZELYRA_BIN: target/debug/zelyra
+        run: bash ./tests/mariadb-mfa-e2e.sh
       - name: Verify MariaDB database tests, pool limits, and statement timeouts
         env:
           ZELYRA_DB_TIMEOUT_TEST_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci

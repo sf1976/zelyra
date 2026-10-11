@@ -27,6 +27,18 @@ principles; the roadmap below tracks what is actually implemented.
 
 ## Current milestones
 
+- [x] **0.8.0 stably released:** Zelyra Studio includes a local read-only
+  database map for MariaDB and PostgreSQL plus guided CRUD source preview,
+  compiler checking, and explicit apply. It also includes a bounded MariaDB
+  outbox, compatibility fixtures for language line 0.1, and published
+  Linux/Windows artifacts with SBOMs. Exact evidence is in the
+  [0.8.0 candidate verification](release-readiness/0.8.0-candidate-verification.md).
+- [~] **0.9.0 in development:** Guided Studio business workflows and preview-
+  bound `zelyra text edit` are implemented. Optional local TOTP is limited to
+  MariaDB with persistent sessions and audit. Independent MFA/authorization
+  review, end-to-end evidence, database matrix, handbook upgrade path, and exact
+  release verification remain open. Human acceptance stays deferred to 1.0.0.
+
 - [~] The 0.4 development branch adds administrative listing/revocation of
   persistent sessions, CSRF/permission checks and an audit request event.
   `/account/sessions` also lists and revokes the signed-in user's sessions,

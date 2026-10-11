@@ -406,6 +406,9 @@ pub(super) fn run() -> ExitCode {
     if command == "edit" {
         return edit_command(args);
     }
+    if command == "text" {
+        return text_edit::command(args);
+    }
     if command == "context" {
         return context_command(args);
     }

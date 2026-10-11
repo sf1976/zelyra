@@ -29,6 +29,20 @@ den tatsächlich implementierten Stand.
 
 ## Aktuelle Meilensteine
 
+- [x] **0.8.0 stabil veröffentlicht:** Zelyra Studio enthält eine lokale,
+  schreibgeschützte Datenbankkarte für MariaDB und PostgreSQL sowie eine
+  geführte CRUD-Quelltextvorschau mit Compilerprüfung und ausdrücklicher
+  Übernahme. Dazu kommen eine begrenzte MariaDB-Outbox, Kompatibilitäts-Fixtures
+  für Sprachlinie 0.1 und veröffentlichte Linux-/Windows-Artefakte samt SBOM.
+  Der genaue Nachweis steht in
+  [0.8.0-Kandidatenprüfung](release-readiness/0.8.0-candidate-verification.md).
+- [~] **0.9.0 in Entwicklung:** Geführte Studio-Geschäftsabläufe und eine
+  Vorschau-gebundene `zelyra text edit`-CLI sind umgesetzt. Optionales lokales
+  TOTP ist auf MariaDB mit persistenten Sessions und Audit begrenzt. Noch offen
+  sind unabhängiges MFA-/Autorisierungsreview, Ende-zu-Ende-Nachweise,
+  Datenbankmatrix, Handbuch-Upgradepfad und exakte Releaseprüfung. Die
+  menschliche Abnahme bleibt bis 1.0.0 aufgeschoben.
+
 - [~] Der 0.4-Entwicklungszweig ergänzt Anzeige und Sperrung dauerhafter
   Sitzungen mit Verwaltungsrecht, CSRF-Prüfung und Audit-Anfrageereignis.
   Unter `/account/sessions` können angemeldete Nutzer außerdem eigene

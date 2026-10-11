@@ -1,0 +1,27 @@
+type CustomerId = Id
+
+struct CustomerNotFound {
+    id: CustomerId
+    reason: String
+}
+
+fn find_customer(id: CustomerId) -> Result<String, CustomerNotFound> {
+    return Err(CustomerNotFound {
+        id: id
+        reason: "customer does not exist"
+    })
+}
+
+api GET "/customers/{id}" {
+    handler find_customer
+    input {
+        id: CustomerId
+    }
+    output Result<String, CustomerNotFound>
+    errors {
+        404 NotFound: CustomerNotFound
+    }
+}
+
+fn main() {
+}

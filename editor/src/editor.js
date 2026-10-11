@@ -72,7 +72,7 @@ const messages = {
     sourceFile: "Quelldatei", resourceName: "Ressourcenname", displayTitle: "Anzeigetitel", sourceColumn: "QUELLE", databaseColumn: "DATENBANK", saveBeforePreview: "Speichere die Quelldatei vor der Vorschau.", noTargetFiles: "Keine importierte Zelyra-Quelldatei gefunden",
     visibleFields: "Sichtbare Felder", chooseFieldsHint: "Mindestens ein Feld auswählen",
     previewCrud: "Code prüfen und Vorschau zeigen", applyCrud: "Änderung übernehmen",
-    generatedSource: "ERZEUGTER ZELYRA-CODE", sourceDiff: "QUELLTEXTÄNDERUNG",
+    generatedSource: "ERZEUGTER ZELYRA-CODE", sourceDiff: "QUELLTEXTÄNDERUNG", changeImpact: "AUSWIRKUNGEN",
     schemaLoading: "Lade Datenbankschema …", schemaLoaded: "Schema geladen · nur lesend",
     schemaLoadFailed: "Datenbankschema konnte nicht geladen werden", tablesCount: "{0} Tabellen",
     matched: "Live-Tabelle vorhanden", schemaDrift: "Schemaabweichung", declaredMissingLive: "In Datenbank nicht gefunden", liveUnmapped: "Nur live vorhanden",
@@ -116,7 +116,7 @@ const messages = {
     sourceFile: "Source file", resourceName: "Resource name", displayTitle: "Display title", sourceColumn: "SOURCE", databaseColumn: "DATABASE", saveBeforePreview: "Save the source file before previewing.", noTargetFiles: "No imported Zelyra source file found",
     visibleFields: "Visible fields", chooseFieldsHint: "Choose at least one field",
     previewCrud: "Check code and preview", applyCrud: "Apply change",
-    generatedSource: "GENERATED ZELYRA SOURCE", sourceDiff: "SOURCE CHANGE",
+    generatedSource: "GENERATED ZELYRA SOURCE", sourceDiff: "SOURCE CHANGE", changeImpact: "CHANGE IMPACT",
     schemaLoading: "Loading database schema …", schemaLoaded: "Schema loaded · read only",
     schemaLoadFailed: "Could not load database schema", tablesCount: "{0} tables",
     matched: "Table exists", schemaDrift: "Schema drift", declaredMissingLive: "Missing from database", liveUnmapped: "Live only",
@@ -741,6 +741,7 @@ async function previewCrud() {
     const result = await api("crud-preview", { method: "POST", body: JSON.stringify(request) });
     $("crud-source-preview").textContent = result.snippet || "";
     $("crud-diff-preview").textContent = result.diff || "";
+    $("crud-impact-preview").textContent = JSON.stringify(result.impact || {}, null, 2);
     $("crud-preview-grid").hidden = false;
     showCrudDiagnostics(result.diagnostics || []);
     crudPreviewValid = Boolean(result.success);

@@ -9,6 +9,10 @@ license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
 serde_json = "1.0"
+regex = "1.13"
+toml = "0.8"
+glob = "0.3"
+similar = "2.7"
 rand_core = { version = "0.6", features = ["getrandom"] }
 semver = "1.0"
 sha2 = "0.10"
@@ -23,6 +27,7 @@ rustls-pemfile = "2.2.0"
 ureq = { version = "3.4.2", default-features = true }
 lettre = { version = "0.11.23", default-features = false, features = ["builder", "smtp-transport", "rustls", "ring", "webpki-roots"] }
 ring = "0.17.14"
+subtle = "2.6.1"
 zeroize = "1.9.0"
 url = "2.5.8"
 zelyra-ast = { path = "ast", version = "0.8" }

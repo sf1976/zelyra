@@ -1,0 +1,17 @@
+fn safe_divide(left: Int, right: Int) -> Result<Int, String> {
+    if right == 0 {
+        return Err("division by zero")
+    }
+    return Ok(left / right)
+}
+
+fn main() {
+    match safe_divide(8, 2) {
+        Ok(value) => {
+            print(value)
+        }
+        Err(message) => {
+            print(message)
+        }
+    }
+}

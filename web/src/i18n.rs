@@ -237,6 +237,41 @@ pub(crate) fn framework_text_key(value: &str) -> Option<&'static str> {
         "DATABASE_URL is required for CRUD details." => "error.database_url_crud_details",
         "DATABASE_URL is required for CRUD actions." => "error.database_url_crud_actions",
         "The action could not be completed." => "error.action_failed",
+        "Account security" => "mfa.account_security",
+        "Multi-factor authentication is enabled." => "mfa.enabled_status",
+        "MFA setup is pending. Start again to replace the pending secret." => {
+            "mfa.pending_status"
+        }
+        "Multi-factor authentication is not enabled." => "mfa.disabled_status",
+        "Replace recovery codes" => "mfa.replace_recovery",
+        "Turn off MFA" => "mfa.turn_off",
+        "Confirm password" => "mfa.confirm_password",
+        "Current authenticator code" => "mfa.current_code",
+        "Set up authenticator" => "mfa.setup_authenticator",
+        "Additional verification" => "mfa.additional_verification",
+        "Enter an authenticator code or an unused recovery code." => "mfa.enter_code",
+        "Authenticator or recovery code" => "mfa.authenticator_or_recovery",
+        "Verify" => "mfa.verify",
+        "Enter this key in your authenticator app. It is shown only during setup." => {
+            "mfa.enter_setup_key"
+        }
+        "Confirm password again" => "mfa.confirm_password_again",
+        "Six-digit authenticator code" => "mfa.six_digit_code",
+        "Enable MFA" => "mfa.enable",
+        "MFA enabled" => "mfa.enabled_title",
+        "Save these recovery codes now. They will not be shown again." => "mfa.save_codes",
+        "Continue" => "mfa.continue",
+        "Recovery codes replaced" => "mfa.codes_replaced",
+        "Save these codes now. Earlier recovery codes no longer work. They will not be shown again." => {
+            "mfa.save_replaced_codes"
+        }
+        "Password confirmation failed." => "mfa.password_failed",
+        "Invalid verification code." => "mfa.invalid_code",
+        "Invalid authenticator code." => "mfa.invalid_authenticator",
+        "Try again later." => "mfa.try_later",
+        "Start MFA setup again." => "mfa.setup_again",
+        "MFA is already enabled." => "mfa.already_enabled",
+        "MFA is not enabled." => "mfa.not_enabled",
         _ => return None,
     })
 }
@@ -316,6 +351,31 @@ mod tests {
         assert_eq!(english_keys, german_keys);
         assert!(english.values().all(|value| !value.trim().is_empty()));
         assert!(german.values().all(|value| !value.trim().is_empty()));
+    }
+
+    #[test]
+    fn local_mfa_page_copy_is_available_in_german() {
+        for (source, key) in [
+            ("Account security", "mfa.account_security"),
+            ("Additional verification", "mfa.additional_verification"),
+            (
+                "Authenticator or recovery code",
+                "mfa.authenticator_or_recovery",
+            ),
+            (
+                "Save these recovery codes now. They will not be shown again.",
+                "mfa.save_codes",
+            ),
+        ] {
+            assert_eq!(
+                framework_text(UiLanguage::German, source).as_deref(),
+                Some(text(UiLanguage::German, key))
+            );
+            assert_ne!(
+                text(UiLanguage::German, key),
+                text(UiLanguage::English, key)
+            );
+        }
     }
 
     #[test]

@@ -1,6 +1,7 @@
 # Zelyra Studio: local web editor
 
-**Target version:** Zelyra 0.7.0 · **Status:** experimental development
+**Target version:** Zelyra 0.8.0 · **Status:** local Studio, database map, and
+guided CRUD preview released as stable; continued development is planned to 1.0
 
 Zelyra Studio is the integrated browser interface for editing a Zelyra
 project. It runs as part of the CLI and bundles its editor assets locally. It
@@ -59,10 +60,11 @@ before release.
 
 ## Planned path to the visual database builder
 
-The 0.7 editor is the coding and checking foundation. The planned 0.8 step adds
-a read-only database browser and relationship map, then a guided CRUD builder:
-select a table, choose visible fields and views, inspect the generated Zelyra
-source diff, run the compiler, and apply the change explicitly. Schema writes
-continue through a reviewed migration plan. Version 0.9 is planned to guide
-users through invoice and other small business workflows and help them add
-business rules. See the [invoice tutorial](tutorials/invoice.en.md).
+Since 0.8, Studio provides a read-only database map for MariaDB and PostgreSQL,
+identifies relationships, and can produce a CRUD draft with compiler checking,
+source preview, and explicit apply. It does not silently create tables. Schema
+changes continue through a reviewed migration plan. The 0.9 preview also lists
+the affected source file, table, declared relationships, and generated routes
+before CRUD source is applied. `zelyra text edit` provides preview-bound plans
+for repeatable regex changes; neither workflow writes until explicitly applied.
+See the [invoice tutorial](tutorials/invoice.en.md).

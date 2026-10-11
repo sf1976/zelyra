@@ -250,3 +250,5 @@ kbd { padding: 3px 5px; border: 1px solid var(--border); border-radius: 4px; col
   .crud-preview-grid { grid-template-columns: minmax(0, 1fr); }
   .database-builder-hint { padding: 9px; }
 }
+
+.crud-preview-grid .crud-impact{grid-column:1/-1}@media(max-width:760px){.crud-preview-grid .crud-impact{grid-column:auto}}
