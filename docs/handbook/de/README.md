@@ -148,10 +148,10 @@ oder Cargo installiert werden. Das gewählte Archiv wird über HTTPS geladen und
 per SHA-256 geprüft:
 
 ~~~bash
-./install.sh --release v0.8.0
+./install.sh --release v0.9.0
 ~~~
 
-Unter Windows in PowerShell `-Release v0.8.0` mit `install.ps1` verwenden.
+Unter Windows in PowerShell `-Release v0.9.0` mit `install.ps1` verwenden.
 macOS nutzt derzeit weiterhin den Quellcode-Installer.
 
 Wenn die Shell `zelyra` nicht findet:
