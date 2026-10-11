@@ -560,10 +560,14 @@ Die menschliche Abnahme bleibt auf 1.0.0 verschoben.
 
 ## Release 0.9.1 — IDE-Grundlage
 
-- [🗺️] Studio wird zu einem verlässlichen Mehrdatei-Arbeitsbereich: Projektbaum,
-  Tabs, sichtbarer Speicherstatus, Rückgängig/Wiederholen, sichere Dateioperationen,
-  Projektpfadbegrenzung und Diagnosen an der richtigen Datei und Position. Der
-  lokale Zugriff bleibt auf Loopback begrenzt; der Compiler bleibt maßgeblich.
+- [🧪] Studio enthält bereits Projektbaum, Tabs, sichtbaren Speicherstatus,
+  Rückgängig/Wiederholen, Projektpfadbegrenzung und datei-/positionsbezogene
+  Diagnosen. Umbenennen und Löschen von Quelldateien benötigen eine sichtbare
+  Bestätigung und einen aktuellen Datei-Hash; vorhandene Ziele werden nie
+  überschrieben, `main.zyl` und `zelyra.toml` sind geschützt. Importverweise
+  werden beim Umbenennen nicht angepasst. Die Browser-/End-to-End-Prüfung und
+  restliche IDE-Abnahme für 0.9.1 stehen noch aus. Zugriff bleibt auf Loopback
+  begrenzt; der Compiler bleibt maßgeblich.
 - Nachweis: Browser- und Sicherheitstests decken ungespeicherte Änderungen,
   gleichzeitige Dateiänderungen, Pfadmanipulation, fehlerhaften Quelltext,
   Neustart und Tastaturbedienung ab. Das Rechnungsbeispiel lässt sich öffnen und

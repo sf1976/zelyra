@@ -593,10 +593,13 @@ Independent human acceptance remains deferred to 1.0.0.
 
 ## Release 0.9.1 — IDE foundation
 
-- [🗺️] Make Studio a dependable multi-file workspace: project explorer, tabs,
-  explicit save state, undo/redo, safe file operations, project-root containment,
-  and diagnostics attached to the right file and span. Keep the local-only,
-  loopback-bound access model and compiler as the source of truth.
+- [🧪] Studio already provides the project explorer, tabs, visible save state,
+  undo/redo, project-root containment, and file/span diagnostics. Source-file
+  rename and delete require visible confirmation and a current content hash;
+  existing destinations are never overwritten, and `main.zyl` and
+  `zelyra.toml` are protected. Rename does not update import references. Browser
+  end-to-end verification and the remaining 0.9.1 IDE acceptance work are still
+  open. Access remains loopback-bound, and the compiler remains authoritative.
 - Exit evidence: browser and security tests cover unsaved edits, concurrent file
   changes, path traversal, malformed source, clean restart, and keyboard use.
   The invoice example opens and runs from the workspace.

@@ -47,6 +47,9 @@ const messages = {
   de: {
     subtitle: "Lokale Entwicklungsumgebung", local: "LOKAL", files: "DATEIEN", newFile: "Neue Datei",
     refresh: "Aktualisieren", filterFiles: "Dateien filtern", saveAll: "Alle speichern", save: "Speichern",
+    renameFile: "Umbenennen", deleteFile: "Löschen", renamePrompt: "Neuer Projektpfad (zum Beispiel src/customer-new.zyl)",
+    renameConfirm: "Datei {0} umbenennen? Importverweise werden nicht angepasst.", deleteConfirm: "Datei {0} endgültig löschen?",
+    fileRenamed: "Datei umbenannt: {0}", fileDeleted: "Datei gelöscht: {0}",
     switchLanguage: "Sprache wechseln",
     format: "Formatieren", check: "Projekt prüfen", welcome: "Willkommen in Zelyra Studio",
     welcomeHint: "Öffne links eine Datei und entwickle direkt in deinem Projekt.", problems: "Probleme",
@@ -91,6 +94,9 @@ const messages = {
   en: {
     subtitle: "Local development environment", local: "LOCAL", files: "FILES", newFile: "New file",
     refresh: "Refresh", filterFiles: "Filter files", saveAll: "Save all", save: "Save",
+    renameFile: "Rename", deleteFile: "Delete", renamePrompt: "New project path (for example src/customer-new.zyl)",
+    renameConfirm: "Rename {0}? Import references will not be updated.", deleteConfirm: "Permanently delete {0}?",
+    fileRenamed: "File renamed: {0}", fileDeleted: "File deleted: {0}",
     switchLanguage: "Switch language",
     format: "Format", check: "Check project", welcome: "Welcome to Zelyra Studio",
     welcomeHint: "Open a file on the left and work directly in your project.", problems: "Problems",
@@ -252,6 +258,9 @@ function renderTabs() {
   }
   $("save-button").disabled = !activePath || !isDirty(tabs.get(activePath));
   $("save-all-button").disabled = dirtyCount() === 0;
+  const protectedFile = activePath === "main.zyl" || activePath === "zelyra.toml";
+  $("rename-file-button").disabled = !activePath || protectedFile;
+  $("delete-file-button").disabled = !activePath || protectedFile;
 }
 
 function completionSource(context) {
@@ -347,6 +356,41 @@ function saveActive() { if (activePath) void savePath(activePath); }
 async function saveAll() {
   for (const path of tabs.keys()) if (!(await savePath(path))) return false;
   return true;
+}
+
+async function renameActiveFile() {
+  const path = activePath;
+  if (!path || path === "main.zyl" || path === "zelyra.toml") return;
+  const newPath = prompt(t("renamePrompt"), path);
+  if (!newPath || newPath === path) return;
+  if (!confirm(t("renameConfirm", path))) return;
+  if (!(await savePath(path))) return;
+  try {
+    const tab = tabs.get(path);
+    const result = await api("file-rename", { method: "POST", body: JSON.stringify({ path, newPath, baseHash: tab.hash }) });
+    if (editor) { tab.state = editor.state; editor.destroy(); editor = null; }
+    tabs.delete(path);
+    tab.hash = result.hash;
+    tabs.set(result.newPath, tab);
+    activePath = result.newPath;
+    await refreshTree();
+    activate(result.newPath);
+    announce(t("fileRenamed", result.newPath), "success");
+  } catch (error) { announce(error.message, "error"); }
+}
+
+async function deleteActiveFile() {
+  const path = activePath;
+  if (!path || path === "main.zyl" || path === "zelyra.toml") return;
+  if (!confirm(t("deleteConfirm", path))) return;
+  if (!(await savePath(path))) return;
+  try {
+    const tab = tabs.get(path);
+    await api("file", { method: "DELETE", body: JSON.stringify({ path, baseHash: tab.hash }) });
+    closeTab(path);
+    await refreshTree();
+    announce(t("fileDeleted", path), "success");
+  } catch (error) { announce(error.message, "error"); }
 }
 
 function makeTree(files) {
@@ -859,6 +903,10 @@ async function createFile() {
 }
 
 $("save-button").addEventListener("click", saveActive);
+$("rename-file-button").addEventListener("click", renameActiveFile);
+$("delete-file-button").addEventListener("click", deleteActiveFile);
+$("rename-file-button").addEventListener("click", renameActiveFile);
+$("delete-file-button").addEventListener("click", deleteActiveFile);
 $("save-all-button").addEventListener("click", saveAll);
 $("check-button").addEventListener("click", checkProject);
 $("format-button").addEventListener("click", formatActive);
