@@ -6,7 +6,7 @@
 
 Willkommen beim vollständigen Zelyra-Handbuch. Es umfasst sowohl das didaktische Lehrbuch **»Zelyra lernen – Verständlich programmieren von den Grundlagen bis zur eigenen Anwendung«** (Teil I bis X, Kapitel 1 bis 42) als auch das **technische Referenzhandbuch** (Kapitel 1 bis 23) sowie ausführliche **Anhänge** (A bis J).
 
-> **Projektstatus:** Compiler 0.8.0 ist experimentell und noch nicht für den Produktiveinsatz freigegeben. Die unabhängige menschliche Abnahme ist für 1.0.0 vorgesehen.
+> **Projektstatus:** Compiler 0.9.0 ist experimentell und noch nicht für den Produktiveinsatz freigegeben. Die unabhängige menschliche Abnahme ist für 1.0.0 vorgesehen.
 
 ## Statuszeichen
 
@@ -69,7 +69,7 @@ Willkommen beim vollständigen Zelyra-Handbuch. Es umfasst sowohl das didaktisch
   - [Kapitel 39: Bereitstellung und Betrieb](lehrbuch-anwendungen.md#kapitel-39-bereitstellung-und-betrieb)
 - **[TEIL X – ABSCHLUSSPROJEKT UND WEITERFÜHRUNG](lehrbuch-anwendungen.md#teil-x-abschlussprojekt-und-weiterfuhrung)**
   - [Kapitel 40: Das große Abschlussprojekt: Vollständige Aufgabenverwaltung](lehrbuch-anwendungen.md#kapitel-40-das-grosse-abschlussprojekt-vollstandige-aufgabenverwaltung)
-  - [Kapitel 41: Die Zelyra-Roadmap (Von 0.8.0 bis 1.0)](lehrbuch-anwendungen.md#kapitel-41-die-zelyra-roadmap-von-080-bis-10)
+  - [Kapitel 41: Die Zelyra-Roadmap (Von 0.9.0 bis 1.0)](lehrbuch-anwendungen.md#kapitel-41-die-zelyra-roadmap-von-090-bis-10)
   - [Kapitel 42: Dein Weg als Zelyra-Entwickler](lehrbuch-anwendungen.md#kapitel-42-dein-weg-als-zelyra-entwickler)
 
 ### Technisches Referenzhandbuch

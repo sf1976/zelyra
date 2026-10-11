@@ -6,6 +6,8 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+## 0.9.0 — 2026-10-11
+
 - Add preview-bound `zelyra text edit` TOML plans with linear regexes, expected
   match counts, a SHA-256 plan ID, project-root boundaries, and explicit apply.
   / Vorschaugebundene `zelyra text edit`-TOML-Pläne mit linearer Regex-Engine,
@@ -16,7 +18,8 @@ releases follow Semantic Versioning independently of the language line.
   in Studio anzeigen: Quelldatei, Tabelle, deklarierte Beziehungen und erzeugte
   Routen.
 - Add opt-in MariaDB local TOTP MFA with encrypted factors, recovery codes,
-  replay protection, and persistent audit; review gates remain open. / Optionale
+  replay protection, and persistent audit; independent security review remains
+  a 1.0.0 production gate. / Optionale
   lokale MariaDB-TOTP-MFA mit verschlüsselten Faktoren, Recovery-Codes,
   Replay-Schutz und persistentem Audit ergänzen; Prüf-Gates bleiben offen.
 - Extend the 0.1 compatibility corpus with typed API errors, the invoice
@@ -24,7 +27,7 @@ releases follow Semantic Versioning independently of the language line.
   typisierte API-Fehler, die Rechnungsanwendung und Result-Laufzeitverhalten
   erweitern.
 
-## 0.8.0 — 2026-10-11
+## 0.8.0 — 2026-10-10
 
 - Expand local Zelyra Studio with a clickable, read-only MariaDB/PostgreSQL
   relationship map and source/live schema comparison. / Lokales Zelyra Studio

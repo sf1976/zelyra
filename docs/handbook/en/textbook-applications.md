@@ -2702,12 +2702,12 @@ Navigate to `http://localhost:8080` in your browser—your own live Zelyra appli
 
 ---
 
-<a id="chapter-41-the-zelyra-roadmap-from-080-to-10"></a>
+<a id="chapter-41-the-zelyra-roadmap-from-090-to-10"></a>
 
-## Chapter 41: The Zelyra Roadmap (From 0.8.0 to 1.0)
+## Chapter 41: The Zelyra Roadmap (From 0.9.0 to 1.0)
 
 ### 1. What will I learn in this chapter?
-- The experimental scope of Zelyra 0.8.0 and the next development milestones.
+- The experimental scope of Zelyra 0.9.0 and the next development milestones.
 - How language compatibility line 0.1 remains separate from compiler releases.
 - Which technical evidence and human acceptance are still required for 1.0.0.
 
@@ -2725,8 +2725,12 @@ change a project's language line.
   and requires explicit apply. MySQL live introspection and visual database
   changes are not included. The bounded local MariaDB outbox is not a general
   queue platform.
-- **0.9.0 (planned):** Guided business workflows, verified MariaDB/MySQL/
-  PostgreSQL paths, and a preview-first command for readable regex text edits.
+- **0.9.0 (experimental, published):** Guided CRUD preview shows affected
+  files, tables, relationships, and routes. The invoice tutorial covers
+  customers, items, the dashboard, and linked invoice lines. `zelyra text edit`
+  uses named TOML plans, preview, match counts, and explicit apply. Local TOTP
+  for MariaDB is an optional security preview. MySQL/PostgreSQL workflows stay
+  within the published support matrix.
 - **0.95.0 (planned):** Close technical, security, upgrade, rollback,
   dependency, and documentation gaps.
 - **0.99.0 (planned):** Freeze the language and feature scope and technically
@@ -2749,12 +2753,12 @@ are not part of the 1.0.0 commitment.
 - **Misconception:** "Studio can edit any database schema."
   *Correction:* The map reads schema metadata. The CRUD builder generates
   compiler-checked source and does not change the schema or records.
-- **Misconception:** "0.8.0 is production-ready because CI is green."
-  *Correction:* 0.8.0 remains experimental. CI proves automated checks, but
+- **Misconception:** "0.9.0 is production-ready because CI is green."
+  *Correction:* 0.9.0 remains experimental. CI proves automated checks, but
   does not replace the planned human acceptance for 1.0.0.
 
 ### 6. Key takeaways
-1. 0.8.0 is an experimental compiler release; the language line remains 0.1.
+1. 0.9.0 is an experimental compiler release; the language line remains 0.1.
 2. Studio reads schema metadata and validates generated CRUD source before
    explicitly applying a change.
 3. 1.0.0 will be published only after technical evidence and human acceptance.
@@ -2776,7 +2780,7 @@ zelyra doctor
 - Roadmap items are goals, not claims that a feature is already available.
 
 ### 10. Self-check review questions
-1. Which Studio features are included in 0.8.0, and which database changes does its visual view avoid?
+1. Which impacts does the CRUD preview show in 0.9.0, and which changes does Studio avoid?
 2. What is the difference between compiler version and language compatibility line?
 3. What acceptance remains before the productive 1.0.0 release?
 

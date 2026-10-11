@@ -1,9 +1,9 @@
-# In Zelyra 0.7.0 umgesetzt
+# In Zelyra 0.9.0 umgesetzt
 
-**Stand:** stabiles Release 0.7.0 · Sprachkompatibilitätslinie `0.1` · 2026-10-10
+**Stand:** stabiles Release 0.9.0 · Sprachkompatibilitätslinie `0.1` · 2026-10-11
 **Reifegrad:** experimentell; nicht für den Produktiveinsatz freigegeben
 
-Diese Übersicht führt Funktionen auf, die im stabilen Release Zelyra 0.7.0
+Diese Übersicht führt Funktionen auf, die im stabilen Release Zelyra 0.9.0
 tatsächlich implementiert sind. Eine menschliche Abnahme wird nicht behauptet;
 sie bleibt bis 1.0.0 offen. Sie beschreibt den ausgelieferten Umfang,
 nicht die gesamte Sprachvision oder zukünftige Vorhaben. Die
@@ -123,10 +123,21 @@ der [Setup-Anleitung](setup-web.de.md) und den
   und denselben Browser-Origin; Shell und externe Dienste werden nicht genutzt.
   0.8.0 ergänzt eine lesende, anklickbare Beziehungskarte für unterstützte
   MariaDB-/PostgreSQL-Schemata sowie einen geführten CRUD-Quelltextassistenten.
-  Er prüft den Kandidaten mit dem Compiler,
-  zeigt den Diff und schreibt erst nach ausdrücklichem Anwenden mit erneutem
-  Hashvergleich. MySQL-Live-Introspektion und Änderungen an Schema oder
-  Datensätzen sind hier nicht enthalten. Einzelheiten: [Studio-Anleitung](studio.de.md).
+  0.9.0 zeigt dazu betroffene Dateien, Tabellen, deklarierte Beziehungen und
+  Routen. Der Kandidat wird mit dem Compiler geprüft, als Diff angezeigt und
+  erst nach ausdrücklichem Anwenden mit erneutem Hashvergleich geschrieben.
+  MySQL-Live-Introspektion und Änderungen an Schema oder Datensätzen sind hier
+  nicht enthalten. Einzelheiten: [Studio-Anleitung](studio.de.md).
+- ✅ `zelyra text edit <plan.zedit>` bietet vorschau-basierte Textänderungen aus
+  TOML-Plänen mit linearen regulären Ausdrücken, erwarteter Trefferzahl,
+  quellgebundener Plan-ID und ausdrücklichem Anwenden. Projektgrenzen und
+  unveränderte Eingaben werden vor der Änderung geprüft; Details und Grenzen
+  stehen in [Text edit](text-edit.de.md).
+- 🧪 Optionales lokales TOTP für MariaDB unterstützt verschlüsselte Faktoren,
+  Recovery-Codes, Replay-Schutz, Sperren und Audit. Es ist ein experimenteller
+  Vorschaupfad ohne unabhängige Produktionsfreigabe.
+- Das Sprachkompatibilitätskorpus 0.1 umfasst in 0.9 zusätzliche typisierte
+  API-Fehler sowie Laufzeitfälle der Rechnungsanwendung und von `Result`.
 - ✅ `zelyra --tutorial invoice` führt Schritt für Schritt durch Kunden,
   Artikel, Dashboard und Rechnungserstellung. Es ist ein Lernpfad, keine
   Produktions- oder Deploymentfreigabe.
@@ -191,7 +202,7 @@ vergleichenden Benchmark-Ergebnisse behauptet.
 
 ## Test- und Release-Nachweise
 
-Der Funktionsstand wurde auf PR-Head `a35a5ee` durch CI-Lauf
+Der historische Funktionsstand wurde auf PR-Head `a35a5ee` durch CI-Lauf
 [#38057534730](https://github.com/sf1976/zelyra/actions/runs/38057534730)
 geprüft: Workspace-Tests, vier MariaDB-Kompatibilitätsjobs, PostgreSQL-16-
 Runtime-Integration, Fuzzing, Dependency-Audit sowie Linux-/Windows-CI
@@ -206,7 +217,7 @@ mit 228 Paketen und veröffentlichte GitHub-Attestierungen.
 Heruntergeladene Release-Artefakte bestanden Prüfsummen- und SBOM-Prüfung; das
 Linux-Binary meldet `zelyra 0.6.0`. Siehe den
 [Release-Prüfnachweis](release-readiness/0.6.0-candidate-verification.md).
-Die unabhängige menschliche Abnahme ist für 1.0.0 vorgesehen.
+Der 0.9-Funktionsumfang wurde in Merge-Commit `407c81f8e75fa568797fc163d3416748214a6f19` integriert; PR-CI prüfte Linux/Windows sowie die MariaDB-, MySQL-, PostgreSQL-, Studio-, MFA-, Editor-, Tutorial-, Fuzzing- und Abhängigkeitsläufe. Die exakte versionsangehobene Kandidaten- und Artefaktprüfung steht im [0.9.0-Releaseprüfnachweis](release-readiness/0.9.0-candidate-verification.md), sobald Tag und GitHub-Artefakte verifiziert sind. Die unabhängige menschliche Abnahme bleibt für 1.0.0 reserviert.
 
 Diese Übersicht wird angepasst, wenn sich ausgelieferte Funktionen oder ihre
 Nachweise ändern. Ein Spezifikations- oder Roadmap-Eintrag allein wird hier

@@ -2695,12 +2695,12 @@ zelyra serve src/main.zyl 0.0.0.0:8080
 
 ---
 
-<a id="kapitel-41-die-zelyra-roadmap-von-080-bis-10"></a>
+<a id="kapitel-41-die-zelyra-roadmap-von-090-bis-10"></a>
 
-## Kapitel 41: Die Zelyra-Roadmap (Von 0.8.0 bis 1.0)
+## Kapitel 41: Die Zelyra-Roadmap (Von 0.9.0 bis 1.0)
 
 ### 1. Was lerne ich in diesem Kapitel?
-- Den experimentellen Stand von Zelyra 0.8.0 und die nächsten Entwicklungsschritte.
+- Den experimentellen Stand von Zelyra 0.9.0 und die nächsten Entwicklungsschritte.
 - Wie die Sprachkompatibilitätslinie 0.1 von den Compiler-Releases getrennt bleibt.
 - Welche technischen Nachweise und menschliche Abnahme für 1.0.0 noch erforderlich sind.
 
@@ -2718,9 +2718,13 @@ Sprachlinie eines Projekts nicht automatisch.
   Compiler und verlangt das ausdrückliche Anwenden. MySQL-Live-Introspektion
   und visuelle Datenbankänderungen sind nicht enthalten. Die begrenzte lokale
   MariaDB-Outbox bietet keine allgemeine Queue.
-- **0.9.0 (geplant):** Geführte Geschäftsabläufe, geprüfte MariaDB-/MySQL-/
-  PostgreSQL-Abläufe und ein Vorschau-zuerst-Befehl für lesbare Regex-
-  Textänderungen.
+- **0.9.0 (experimentell, veröffentlicht):** Die geführte CRUD-Vorschau zeigt
+  betroffene Dateien, Tabellen, Beziehungen und Routen. Das Rechnungstutorial
+  deckt Kunden, Artikel, Dashboard und verknüpfte Rechnungspositionen ab.
+  `zelyra text edit` nutzt benannte TOML-Pläne, Vorschau, Trefferzahlen und
+  ausdrückliches Anwenden. Lokales TOTP für MariaDB ist eine optionale
+  Sicherheitsvorschau. MySQL-/PostgreSQL-Pfade bleiben auf die veröffentlichte
+  Supportmatrix beschränkt.
 - **0.95.0 (geplant):** Technische Stabilisierung, Sicherheits-, Upgrade-,
   Rollback-, Abhängigkeits- und Dokumentationslücken schließen.
 - **0.99.0 (geplant):** Sprach- und Funktionsumfang einfrieren und einen
@@ -2743,12 +2747,12 @@ sind nicht für 1.0.0 versprochen.
 - **Missverständnis:** „Das Studio kann jedes Datenbankschema bearbeiten.“
   *Richtigstellung:* Die Karte liest Schema-Metadaten. Der CRUD-Assistent
   erzeugt compilergeprüften Quelltext und ändert weder Schema noch Datensätze.
-- **Missverständnis:** „0.8.0 ist produktionsreif, weil CI grün ist.“
-  *Richtigstellung:* 0.8.0 bleibt experimentell. CI belegt automatisierte
+- **Missverständnis:** „0.9.0 ist produktionsreif, weil CI grün ist.“
+  *Richtigstellung:* 0.9.0 bleibt experimentell. CI belegt automatisierte
   Prüfungen, ersetzt aber nicht die geplante menschliche Abnahme für 1.0.0.
 
 ### 6. Merksätze
-1. 0.8.0 ist ein experimentelles Compiler-Release; die Sprachlinie bleibt 0.1.
+1. 0.9.0 ist ein experimentelles Compiler-Release; die Sprachlinie bleibt 0.1.
 2. Das Studio liest Schema-Metadaten und prüft erzeugten CRUD-Quelltext, bevor
    es eine Änderung ausdrücklich übernimmt.
 3. 1.0.0 wird erst nach technischen Nachweisen und menschlicher Abnahme
@@ -2771,7 +2775,7 @@ zelyra doctor
 - Roadmap-Einträge sind Ziele und keine Garantie, dass ein Feature bereits verfügbar ist.
 
 ### 10. Kontrollfragen zur Selbstprüfung
-1. Welche Studio-Funktionen sind in 0.8.0 enthalten und welche Datenbankänderungen führt die visuelle Ansicht ausdrücklich nicht aus?
+1. Welche Auswirkungen zeigt die CRUD-Vorschau in 0.9.0, und welche Änderungen führt Studio ausdrücklich nicht aus?
 2. Was unterscheidet Compiler-Version und Sprachkompatibilitätslinie?
 3. Welche Abnahme ist vor der produktiven Veröffentlichung 1.0.0 noch offen?
 

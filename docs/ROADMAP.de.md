@@ -36,12 +36,12 @@ den tatsächlich implementierten Stand.
   für Sprachlinie 0.1 und veröffentlichte Linux-/Windows-Artefakte samt SBOM.
   Der genaue Nachweis steht in
   [0.8.0-Kandidatenprüfung](release-readiness/0.8.0-candidate-verification.md).
-- [~] **0.9.0 in Entwicklung:** Geführte Studio-Geschäftsabläufe und eine
-  Vorschau-gebundene `zelyra text edit`-CLI sind umgesetzt. Optionales lokales
-  TOTP ist auf MariaDB mit persistenten Sessions und Audit begrenzt. Noch offen
-  sind unabhängiges MFA-/Autorisierungsreview, Ende-zu-Ende-Nachweise,
-  Datenbankmatrix, Handbuch-Upgradepfad und exakte Releaseprüfung. Die
-  menschliche Abnahme bleibt bis 1.0.0 aufgeschoben.
+- [x] **0.9.0-Funktionsumfang integriert:** Geführte Studio-Geschäftsabläufe,
+  Rechnungstutorial, vorschau-gebundene `zelyra text edit`-CLI und erweitertes
+  Sprachkorpus sind integriert. Optionales lokales TOTP bleibt auf MariaDB mit
+  persistenten Sessions und Audit begrenzt. Exakte versionsbezogene Release-CI,
+  Artefaktveröffentlichung, Website-Handbuchabgleich und Branch-Abschluss laufen
+  noch. Die menschliche Abnahme bleibt für 1.0.0 reserviert.
 
 - [~] Der 0.4-Entwicklungszweig ergänzt Anzeige und Sperrung dauerhafter
   Sitzungen mit Verwaltungsrecht, CSRF-Prüfung und Audit-Anfrageereignis.
@@ -548,11 +548,13 @@ Die menschliche Abnahme bleibt auf 1.0.0 verschoben.
 
 ## Release 0.9.0
 
-- [🗺️] Geführte Geschäftsabläufe und Hilfe zum Erweitern erzeugter Anwendungen
-  ergänzen. Die zugesagten MariaDB-, MySQL- und PostgreSQL-Abläufe auf echten
-  Servern prüfen, Vorschau-basierte lesbare Regex-Textbearbeitung aus einem
-  benannten Plan ergänzen sowie Laufzeit-, Modul-, Effekt-, Vertrags- und
-  SQL-Fixtures ausbauen. Siehe [0.9.0-Plan](release-plans/0.9.0.de.md).
+- [x] **Funktionsumfang integriert, stabile Veröffentlichung in Prüfung:**
+  geführte Studio-Geschäftsabläufe, Rechnungspfad, vorschau-basierte lesbare
+  Regex-Textbearbeitung und erweitertes Sprachkorpus sind implementiert. Die
+  Datenbankaussagen bleiben auf die genaue Servermatrix und belegten Abläufe
+  beschränkt. Lokales MariaDB-TOTP bleibt Vorschau bis zum unabhängigen
+  Sicherheitsreview vor Produktionsfreigabe. Siehe
+  [0.9.0-Plan](release-plans/0.9.0.de.md) und Release-Notizen.
 
 ## Release 0.95.0
 
