@@ -167,6 +167,12 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
                     return ExitCode::FAILURE;
                 }
             }
+            if let Ok(url) = project_web_url(std::path::Path::new(&directory)) {
+                let graphical = editor::has_graphical_session();
+                let opened = open_tutorial_browser(&url, graphical, editor::open_system_browser);
+                println!("{}", browser_launch_guidance(opened, graphical, true));
+                println!("Application URL: {url}");
+            }
         }
         println!("Open Studio with `zelyra editor {directory}` to inspect the source.");
         println!("The invoice page calculates net, 19% VAT, and gross totals from its lines. Open /invoices/INVOICE-NUMBER/print and use the browser print dialog to save a PDF.");
@@ -209,10 +215,77 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
                     return ExitCode::FAILURE;
                 }
             }
+            if let Ok(url) = project_web_url(std::path::Path::new(&directory)) {
+                let graphical = editor::has_graphical_session();
+                let opened = open_tutorial_browser(&url, graphical, editor::open_system_browser);
+                println!("{}", browser_launch_guidance(opened, graphical, false));
+                println!("Anwendung erreichbar unter: {url}");
+            }
         }
         println!("Mit `zelyra editor {directory}` kannst du den Quelltext ansehen.");
         println!("Die Rechnungsseite berechnet Netto, 19% Umsatzsteuer und Brutto aus den Positionen. Öffne /invoices/RECHNUNGSNUMMER/print und speichere über den Druckdialog des Browsers als PDF.");
         println!("Das Beispiel nimmt den allgemeinen deutschen Steuersatz an und ist kein vollständiges gesetzeskonformes Rechnungs- oder Buchhaltungssystem.");
     }
     ExitCode::SUCCESS
+}
+
+fn open_tutorial_browser(url: &str, graphical: bool, opener: impl FnOnce(&str) -> bool) -> bool {
+    graphical && opener(url)
+}
+
+fn browser_launch_guidance(opened: bool, graphical: bool, english: bool) -> &'static str {
+    match (english, graphical, opened) {
+        (true, _, true) => "Opening the default browser.",
+        (true, true, false) => "Could not open a browser automatically; open the application URL manually.",
+        (true, false, _) => "No graphical browser session detected; open the application URL manually.",
+        (false, _, true) => "Der Standardbrowser wird geöffnet.",
+        (false, true, false) => "Der Browser konnte nicht automatisch geöffnet werden. Öffne die Anwendungsadresse manuell.",
+        (false, false, _) => "Keine grafische Browsersitzung erkannt. Öffne die Anwendungsadresse manuell.",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{browser_launch_guidance, open_tutorial_browser};
+
+    #[test]
+    fn tutorial_opens_the_application_url_only_with_a_graphical_session() {
+        let mut opened_url = None;
+        assert!(open_tutorial_browser(
+            "http://127.0.0.1:3000",
+            true,
+            |url| {
+                opened_url = Some(url.to_owned());
+                true
+            }
+        ));
+        assert_eq!(opened_url.as_deref(), Some("http://127.0.0.1:3000"));
+
+        let mut called = false;
+        assert!(!open_tutorial_browser(
+            "http://127.0.0.1:3000",
+            false,
+            |_| {
+                called = true;
+                true
+            }
+        ));
+        assert!(!called);
+    }
+
+    #[test]
+    fn tutorial_browser_guidance_covers_open_and_fallback_cases() {
+        assert_eq!(
+            browser_launch_guidance(true, true, false),
+            "Der Standardbrowser wird geöffnet."
+        );
+        assert!(browser_launch_guidance(false, true, false).contains("manuell"));
+        assert!(browser_launch_guidance(false, false, false).contains("Keine grafische"));
+        assert_eq!(
+            browser_launch_guidance(true, true, true),
+            "Opening the default browser."
+        );
+        assert!(browser_launch_guidance(false, true, true).contains("manually"));
+        assert!(browser_launch_guidance(false, false, true).contains("No graphical"));
+    }
 }

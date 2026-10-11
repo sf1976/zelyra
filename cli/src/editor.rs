@@ -189,7 +189,7 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-fn has_graphical_session() -> bool {
+pub(super) fn has_graphical_session() -> bool {
     if env::var_os("CI").is_some() {
         return false;
     }
@@ -207,7 +207,7 @@ fn has_graphical_session() -> bool {
     }
 }
 
-fn open_system_browser(url: &str) -> bool {
+pub(super) fn open_system_browser(url: &str) -> bool {
     #[cfg(target_os = "windows")]
     let mut command = {
         let mut command = Command::new("cmd.exe");
