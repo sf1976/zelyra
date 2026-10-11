@@ -888,11 +888,15 @@ function renderTree() {
       const icon = document.createElement("span"); icon.className = "tree-icon"; icon.setAttribute("aria-hidden", "true"); icon.textContent = item.file ? fileIcon(name) : "▸";
       const label = document.createElement("span"); label.className = "tree-label"; label.textContent = name;
       row.append(icon, label);
+      let children = null;
       if (item.file) {
         if (item.path === activePath) row.setAttribute("aria-current", "page");
         row.addEventListener("click", () => openFile(item.path));
       } else {
         const childrenId = `tree-folder-${encodeURIComponent(item.path)}`;
+        children = document.createElement("div");
+        children.className = "tree-children";
+        children.id = childrenId;
         row.setAttribute("aria-expanded", "true");
         row.setAttribute("aria-controls", childrenId);
         row.addEventListener("click", () => {
@@ -903,8 +907,7 @@ function renderTree() {
         });
       }
       target.append(row);
-      if (!item.file) {
-        const children = document.createElement("div"); children.className = "tree-children"; children.id = `tree-folder-${encodeURIComponent(item.path)}`;
+      if (children) {
         row.after(children); draw(item, children, depth + 1);
       }
     });
