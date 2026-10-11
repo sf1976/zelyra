@@ -36,12 +36,13 @@ den tatsächlich implementierten Stand.
   für Sprachlinie 0.1 und veröffentlichte Linux-/Windows-Artefakte samt SBOM.
   Der genaue Nachweis steht in
   [0.8.0-Kandidatenprüfung](release-readiness/0.8.0-candidate-verification.md).
-- [x] **0.9.0-Funktionsumfang integriert:** Geführte Studio-Geschäftsabläufe,
+- [x] **Stabiles Release 0.9.0 veröffentlicht:** Geführte Studio-Geschäftsabläufe,
   Rechnungstutorial, vorschau-gebundene `zelyra text edit`-CLI und erweitertes
   Sprachkorpus sind integriert. Optionales lokales TOTP bleibt auf MariaDB mit
-  persistenten Sessions und Audit begrenzt. Exakte versionsbezogene Release-CI,
-  Artefaktveröffentlichung, Website-Handbuchabgleich und Branch-Abschluss laufen
-  noch. Die menschliche Abnahme bleibt für 1.0.0 reserviert.
+  persistenten Sessions und Audit begrenzt. Exakte CI, Linux-/Windows-Artefakte,
+  Prüfsummen, SBOMs, Attestierungen und das zweisprachige Website-Handbuch sind
+  im [0.9.0-Releaseprüfnachweis](release-readiness/0.9.0-candidate-verification.md)
+  bestätigt. Die menschliche Abnahme bleibt für 1.0.0 reserviert.
 
 - [~] Der 0.4-Entwicklungszweig ergänzt Anzeige und Sperrung dauerhafter
   Sitzungen mit Verwaltungsrecht, CSRF-Prüfung und Audit-Anfrageereignis.
@@ -533,7 +534,7 @@ Die menschliche Abnahme bleibt auf 1.0.0 verschoben.
   MariaDB-Mandanten-CRUD-Pfad für eine deklarierte Tabelle. Maintainer-
   Sicherheitsprüfung und Mutation-Rollback-E2E sind im 0.7-Plan dokumentiert.
   Es gibt keine Mandantenmigration oder Backfill. Unabhängiges Sicherheitsreview
-  und menschliche Abnahme bleiben Gates vor Produktiveinsatz in 0.99.0/1.0.0.
+  und menschliche Abnahme bleiben Gates vor Produktiveinsatz in 0.9.9/1.0.0.
   Details im [0.7.0-Plan](release-plans/0.7.0.de.md).
 
 ## Release 0.8.0
@@ -548,28 +549,122 @@ Die menschliche Abnahme bleibt auf 1.0.0 verschoben.
 
 ## Release 0.9.0
 
-- [x] **Funktionsumfang integriert, stabile Veröffentlichung in Prüfung:**
+- [x] **Stabiles Release veröffentlicht:**
   geführte Studio-Geschäftsabläufe, Rechnungspfad, vorschau-basierte lesbare
   Regex-Textbearbeitung und erweitertes Sprachkorpus sind implementiert. Die
   Datenbankaussagen bleiben auf die genaue Servermatrix und belegten Abläufe
   beschränkt. Lokales MariaDB-TOTP bleibt Vorschau bis zum unabhängigen
   Sicherheitsreview vor Produktionsfreigabe. Siehe
-  [0.9.0-Plan](release-plans/0.9.0.de.md) und Release-Notizen.
+  [0.9.0-Plan](release-plans/0.9.0.de.md), Release-Notizen und
+  [Releaseprüfnachweis](release-readiness/0.9.0-candidate-verification.md).
 
-## Release 0.95.0
+## Release 0.9.1 — IDE-Grundlage
 
-- [🗺️] Den geplanten Produktumfang stabilisieren: technische, Sicherheits-,
-  Upgrade-, Rollback-, Abhängigkeits-, Artefakt- und Dokumentationslücken
-  schließen. Sprachreferenz und Korpus prüfen, ohne ein großes Teilsystem
-  hinzuzufügen. Siehe [0.95.0-Plan](release-plans/0.95.0.de.md).
+- [🗺️] Studio wird zu einem verlässlichen Mehrdatei-Arbeitsbereich: Projektbaum,
+  Tabs, sichtbarer Speicherstatus, Rückgängig/Wiederholen, sichere Dateioperationen,
+  Projektpfadbegrenzung und Diagnosen an der richtigen Datei und Position. Der
+  lokale Zugriff bleibt auf Loopback begrenzt; der Compiler bleibt maßgeblich.
+- Nachweis: Browser- und Sicherheitstests decken ungespeicherte Änderungen,
+  gleichzeitige Dateiänderungen, Pfadmanipulation, fehlerhaften Quelltext,
+  Neustart und Tastaturbedienung ab. Das Rechnungsbeispiel lässt sich öffnen und
+  ausführen.
 
-## Release 0.99.0
+## Release 0.9.2 — Sprachdienste der IDE
 
-- [🗺️] Produkt- und Sprachfunktionen einfrieren, alle technischen Gates am
-  unveränderlichen Kandidaten prüfen und Materialien für die menschliche
-  Abnahme an genau diesem Stand vorbereiten. Vor dem ersten Produktivrelease
-  bleibt nur die unabhängige menschliche Abnahme offen. Siehe
-  [0.99.0-Plan](release-plans/0.99.0.de.md).
+- [🗺️] Compiler-gestützte Vervollständigung, Symbolnavigation, Suche/Referenzen,
+  Formatierung, handlungsorientierte Diagnosen sowie integrierte Check-, Run-
+  und Test-Aufgaben ergänzen. Fortschritt und Ausgabe bleiben sichtbar und
+  geheimnisfrei. Die Funktionen decken die dokumentierten Sprach-0.1-Konstrukte
+  ab.
+- Nachweis: Positive und negative Mehrdateiprojekte prüfen Vorschläge,
+  Quellpositionen, Navigation, idempotente Formatierung und Aufgabenausgabe;
+  unbekannte Syntax wird kenntlich gemacht statt erraten.
+
+## Release 0.9.3 — Datenbankwerkbank
+
+- [🗺️] Die Datenbankansicht der IDE zur sicheren Werkbank ausbauen: Tabellen,
+  Spalten, Indizes und deklarierte Beziehungen ansehen, Datensätze standardmäßig
+  schreibgeschützt durchsuchen und den zuständigen Quellmodulen zuordnen.
+  Änderungen und Schemaerzeugung erfordern einen geprüften Plan und ausdrückliche
+  Bestätigung.
+- Nachweis: Separate MariaDB-, MySQL- und PostgreSQL-Tests entsprechen der
+  veröffentlichten Datenbankmatrix. Schreibgeschütztes Browsen wird erzwungen;
+  Zugangsdaten erscheinen nie in Editor-Ausgabe, URLs, Diagnosen oder Browser-
+  Speicherung.
+
+## Release 0.9.4 — Visueller CRUD-Entwurf
+
+- [🗺️] Verständliche relationale CRUD-Abläufe in Studio ermöglichen: Tabellen
+  und Beziehungen wählen, Felder und Formulare entwerfen, Routen und Quelltext
+  vorschauen, den gesamten Änderungsumfang prüfen, Compilerchecks ausführen und
+  Änderungen ausdrücklich übernehmen oder verwerfen. Das Rechnungstutorial
+  wird zu einem praktischen IDE-Workflow erweitert.
+- Nachweis: Kunden-, Artikel-, Rechnungs- und Positionsabläufe bestehen
+  Mehrdatenbank-Integrationstests und bleiben normaler, änderbarer Zelyra-
+  Quelltext. Veraltete oder ungültige Vorschauen lassen sich nicht übernehmen.
+
+## Release 0.9.5 — Eigene Mail- und SMTP-Unterstützung
+
+- [🗺️] Explizite Mailunterstützung ohne verpflichtenden Anbieter vervollständigen:
+  MIME-Text/HTML, kodierte Header, SMTP-Authentifizierung, implizites TLS,
+  STARTTLS, Timeouts, begrenzte Wiederholungen und Anbindung an die vorhandene
+  transaktionale Outbox. Lokale Projektkonfiguration und ein verständlicher
+  SMTP-Testsenken-Workflow gehören dazu. TLS wird nie stillschweigend abgestuft.
+- Abschlusskriterien: lokale SMTP-Senkentests decken Erfolg, Auth-/TLS-Fehler,
+  Timeout, Neustart, Wiederholung, Duplikatfenster, Template-Escaping und
+  Geheimnisredaktion ab. Mail-Capabilities und Zustellsemantik sind zweisprachig
+  dokumentiert. Siehe den [0.9.5-Plan](release-plans/0.9.5.de.md).
+
+## Release 0.9.6 — Benachrichtigungszentrum
+
+- [🗺️] Ein persistentes, mandantengebundenes In-App-Benachrichtigungszentrum mit
+  ungelesener Anzahl, Gelesen-/Archiviert-Aktionen, Seitennavigation,
+  Einstellungen und klaren Aufbewahrungsregeln bauen. Anwendungsereignisse
+  optional über den SMTP-Pfad aus 0.9.5 versenden; In-App-Nachrichten müssen auch
+  ohne Mail funktionieren. Die Outbox übernimmt wiederholbare Zustellung,
+  Duplikatverhalten wird ausdrücklich geregelt.
+- Nachweis: Autorisierungstests verhindern Auflistung, Änderung oder Zählung der
+  Nachrichten anderer Mandanten. Wiederholungen, Idempotenz, Aufbewahrung,
+  Barrierefreiheit und Fehlerzustände sind integriert geprüft. Ein externer
+  Pushdienst ist nicht erforderlich.
+
+## Release 0.9.7 — Datenbank- und Sicherheitshärtung
+
+- [🗺️] Die für 1.0 zugesagte MariaDB-, MySQL- und PostgreSQL-Ablaufmatrix
+  schließen: Schemaansicht, Migrationen, CRUD, Transaktionen, TLS, Backup und
+  Restore, soweit ein Backend diese Funktion beansprucht. Unabhängige Reviews
+  von Authentifizierung, MFA, Mandantentrennung, Autorisierung, CSRF,
+  SMTP-Geheimnissen und Studio-Änderungsgrenzen abschließen und alle
+  releaseblockierenden Befunde beheben.
+- Nachweis: Exakte Serverversionen und Grenzen sind veröffentlicht; jeder
+  unterstützte Ablauf hat CI-Nachweise, negative Autorisierungstests und eine
+  maintainergeprüfte Entscheidung zu Sicherheitsbefunden. Keine universelle
+  SQL-Parität behaupten.
+
+## Release 0.9.8 — Probe der Produktionsreife
+
+- [🗺️] Saubere Installation, Upgrade, Rollback, Migration, Backup und Restore
+  auf unterstützten Betriebssystemen und Datenbanken proben. Betreiber- und
+  Nutzerdokumentation, Lizenz-/Abhängigkeitsreview, Ressourcenlimits,
+  Geheimnisredaktion, reproduzierbare Artefakte, SBOM/Provenance und Offline-
+  Abläufe abschließen. Start, übliche CRUD-Abläufe und begrenzten Ressourcenbedarf
+  messen und Ergebnisse ohne unbelegte Leistungsversprechen veröffentlichen.
+- Abschlusskriterien: Alle Proben bestehen in sauberen Umgebungen,
+  Handbuchbeispiele sind geprüft, bekannte Befunde haben Verantwortliche und
+  Entscheidungen, und keine 1.0-Anforderung ist unimplementiert. Siehe den
+  [0.9.8-Plan](release-plans/0.9.8.de.md).
+
+## Release 0.9.9 — Feature-Freeze und letzter technischer Kandidat
+
+- [🗺️] Sprach-, CLI-, Runtime-, Datenbank-, IDE-, Mail-, Benachrichtigungs- und
+  Tutorialumfang einfrieren. Alle angenommenen Anforderungen aus 0.9.1–0.9.8
+  umsetzen und die vollständigen technischen Gates an einem unveränderlichen
+  Kandidaten ausführen. Materialien für die exakte 1.0.0-Menschenstudie
+  vorbereiten. Danach sollte nur noch die unabhängige menschliche Abnahme offen
+  sein; für 0.9.9 keine Abnahme und keine Produktivfreigabe behaupten.
+- Abschlusskriterien: Keine offenen Implementierungs-, Sicherheits-, Datenbank-,
+  Migrations-, Paketierungs- oder Dokumentationsblocker. Bleibt einer offen, ist
+  0.9.9 nicht fertig. Siehe den [0.9.9-Plan](release-plans/0.9.9.de.md).
 
 Eine allgemeine Queue-Plattform bleibt hinter 1.0.0. Die Outbox in 0.8 ist
 lokal und auf MariaDB begrenzt; sie bietet weder Scheduler noch verteilte
@@ -579,8 +674,9 @@ Cloud-/KI-Dienste, Telemetrie und unbelegte Leistungsversprechen bleiben
 ausgeschlossen.
 
 Die detaillierten Abnahmekriterien stehen in den Plänen für [0.8.0](release-plans/0.8.0.de.md),
-[0.9.0](release-plans/0.9.0.de.md), [0.95.0 Stabilisierung](release-plans/0.95.0.de.md),
-[0.99.0 Freeze](release-plans/0.99.0.de.md) und [1.0.0](release-plans/1.0.0.de.md).
+[0.9.0](release-plans/0.9.0.de.md), [0.9.5 Mail](release-plans/0.9.5.de.md),
+[0.9.8 Stabilisierung](release-plans/0.9.8.de.md),
+[0.9.9 Freeze](release-plans/0.9.9.de.md) und [1.0.0](release-plans/1.0.0.de.md).
 ## Erste produktive Veröffentlichung 1.0.0
 
 `v1.0.0` ist die erste produktive Veröffentlichung und das verpflichtende Ziel für

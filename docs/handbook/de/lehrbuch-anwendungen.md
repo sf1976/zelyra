@@ -2725,10 +2725,21 @@ Sprachlinie eines Projekts nicht automatisch.
   ausdrückliches Anwenden. Lokales TOTP für MariaDB ist eine optionale
   Sicherheitsvorschau. MySQL-/PostgreSQL-Pfade bleiben auf die veröffentlichte
   Supportmatrix beschränkt.
-- **0.95.0 (geplant):** Technische Stabilisierung, Sicherheits-, Upgrade-,
-  Rollback-, Abhängigkeits- und Dokumentationslücken schließen.
-- **0.99.0 (geplant):** Sprach- und Funktionsumfang einfrieren und einen
-  unveränderlichen Release Candidate technisch prüfen.
+- **0.9.1–0.9.2 (geplant):** Studio mit Mehrdatei-Projektbaum, Tabs,
+  sicherem Speichern, Diagnosen, Vervollständigung, Navigation, Formatierung
+  und integrierten Compileraufgaben zur IDE ausbauen.
+- **0.9.3–0.9.4 (geplant):** Datenbankwerkbank und relationalen CRUD-Entwurf
+  mit nachvollziehbarer Vorschau, Compilerprüfung und ausdrücklicher Übernahme
+  ergänzen.
+- **0.9.5–0.9.6 (geplant):** Vollständige lokale Mail-/SMTP-Unterstützung und
+  mandantengebundenes Benachrichtigungszentrum mit optionalem SMTP-Versand
+  implementieren.
+- **0.9.7–0.9.8 (geplant):** MariaDB-, MySQL- und PostgreSQL-Abläufe,
+  Sicherheit, Autorisierung, Upgrade/Rollback, Backup/Restore, Abhängigkeiten
+  und Produktionsbetrieb technisch härten und proben.
+- **0.9.9 (geplant):** Alle Umsetzungsarbeiten abschließen, Funktionsumfang
+  einfrieren und den unveränderlichen technischen Kandidaten prüfen. Danach
+  sollte nur die menschliche Abnahme für 1.0.0 fehlen.
 - **1.0.0:** Die erste produktive Version erscheint erst nach bestandenen
   technischen Gates und unabhängiger menschlicher Abnahme des exakten
   Kandidaten. Diese Abnahme wurde nicht durch CI oder interne Tests ersetzt.
@@ -2760,7 +2771,7 @@ sind nicht für 1.0.0 versprochen.
 
 ### 7. Übungsaufgaben
 - **Stufe 1 (Leicht):** Lies das offizielle `CHANGELOG.md` im Zelyra-Repository.
-- **Stufe 2 (Mittel):** Vergleiche die in `docs/ROADMAP.de.md` dokumentierten Ziele für 0.9.0 und 0.95.0.
+- **Stufe 2 (Mittel):** Vergleiche die in `docs/ROADMAP.de.md` dokumentierten IDE-Ziele für 0.9.1 und die Mail-/SMTP-Ziele für 0.9.5.
 - **Stufe 3 (Anspruchsvoll):** Wähle eine Tabelle in Studio, untersuche eine Schemaabweichung und prüfe, wie die CRUD-Vorschau Änderungen bis zum ausdrücklichen Anwenden behandelt.
 
 ### 8. Praxisaufgabe: Zelyra-Version und Umgebung prüfen

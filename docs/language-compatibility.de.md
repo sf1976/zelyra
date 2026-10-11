@@ -41,7 +41,7 @@ Sie darf nicht stillschweigend unter `0.1` erscheinen.
 ## Ausbau bis 1.0.0
 
 Die Sprachlinie `0.1` bleibt während aller Compiler-Releases bis einschließlich
-`0.99.0` dieselbe Linie. Versionsnummern wie `0.8.0` und `0.99.0` bezeichnen
+`0.9.9` dieselbe Linie. Versionsnummern wie `0.8.0` und `0.9.9` bezeichnen
 Zelyra-Releases, keine neuen Sprachlinien. Ein Projekt wechselt seine
 Sprachlinie niemals automatisch beim Compiler-Upgrade. Eine neue Linie wird
 erst eingeführt, wenn eine notwendige Änderung gültige Programme oder deren
@@ -52,12 +52,14 @@ Der Ausbau erfolgt in prüfbaren Stufen:
 
 | Release | Sprachvertrag und Nachweis |
 | --- | --- |
-| `0.7.0` | Deklaration `zelyra = "0.1"` durchsetzen, `E-LANG-001` für nicht unterstützte explizite Linien ausgeben, ältere Projekte ohne Feld erhalten und ein erstes ausführbares Korpus für gültige, ungültige und laufzeitgeprüfte Beispiele anlegen. |
-| `0.8.0` | Korpus für Lexer, Parser, Typprüfung und Formatter systematisch ausbauen. Jede Grammatikfamilie erhält positive und negative Fixtures; Formatter-Ausgaben werden auf Idempotenz geprüft. |
-| `0.9.0` | ✅ Erweitert: Laufzeit- und Modul-Fixtures für Operator- und Built-in-Semantik, Fehlerpfade, Effekte, Verträge, Imports und SQL-Typprüfung; Datenbankabläufe werden je zugesagter Teilmenge getrennt geprüft. |
-| `0.95.0` | Sprachreferenz und Korpus vollständig gegen den geplanten 1.0-Umfang abgleichen. Offene Semantik, bekannte Abweichungen und Migrationsfälle dokumentieren; keine ungeprüften Sprachbereiche als stabil bezeichnen. |
-| `0.99.0` | Sprach-Feature-Freeze. Grammatik, Typregeln und Semantik von `0.1` als Release-Kandidat einfrieren; nur Korrekturen, Sicherheitskorrekturen und notwendige Kompatibilitätsfehlerbehebungen zulassen. Jede Ausnahme braucht Begründung und Regressionstest. |
-| `1.0.0` | Nach unabhängiger menschlicher Abnahme den geprüften Vertrag, das Korpus und die Supportmatrix gemeinsam als erste produktive Sprachveröffentlichung markieren. |
+| `0.7.0` | `zelyra = "0.1"` erzwingen, nicht unterstützte explizite Linien mit `E-LANG-001` melden, Projekte ohne Feld beibehalten und ein erstes ausführbares Korpus für akzeptierte, abgelehnte und zur Laufzeit geprüfte Beispiele ergänzen. |
+| `0.8.0` | Korpus für Lexing, Parsing, Typprüfung und Formatierung systematisch ausbauen. Jede Grammatikfamilie erhält positive und negative Fixtures; Formatter-Ausgabe wird auf Idempotenz geprüft. |
+| `0.9.0` | ✅ Laufzeit- und Modul-Fixtures zu Operatoren, eingebauten Funktionen, Fehlerpfaden, Effekten, Contracts, Imports und SQL-Typisierung erweitern; zugesagte Datenbankabläufe separat prüfen. |
+| `0.9.1–0.9.4` | Compiler-gestützte IDE-Dienste und Mehrdateitests gemeinsam ausbauen: Diagnosen, Quellpositionen, Vervollständigung, Navigation, Formatierung, SQL-/Schemasymbole und Formulargenerierung müssen den dokumentierten Sprachvertrag verwenden. |
+| `0.9.5–0.9.6` | Effekte und Capabilities für Mail, Templates und Benachrichtigungsereignisse ausdrücklich festlegen; akzeptierte, abgelehnte und Laufzeit-Fixtures für Geheimnisse, Zustellfehler und Wiederholungen ergänzen. |
+| `0.9.7–0.9.8` | Sprachreferenz, eingebaute Funktionen, SQL-Fixtures und Konformitätskorpus mit dem geplanten 1.0-Umfang abgleichen. Offene Semantik, Migrationen und nicht unterstütztes Verhalten dokumentieren; ungeprüfte Bereiche nicht als stabil bezeichnen. |
+| `0.9.9` | Sprachfunktionen einfrieren. Grammatik, Typregeln und Semantik von `0.1` als Release Candidate einfrieren; nur dokumentierte Fehler-, Sicherheits- und notwendige Kompatibilitätskorrekturen mit Regressionstests zulassen. |
+| `1.0.0` | Nach unabhängiger menschlicher Abnahme den geprüften Vertrag, das Korpus und die Supportmatrix gemeinsam als erste produktive Sprachversion veröffentlichen. |
 
 Diese Stufen sind Abnahmekriterien und keine Behauptung, dass geplante Arbeit
 bereits implementiert ist. Die Stufen 0.7 bis 0.9 sind umgesetzt; der Korpus
