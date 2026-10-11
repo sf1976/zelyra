@@ -17,6 +17,31 @@ Der Editor ist nur unter `127.0.0.1` erreichbar. Die Startadresse enthält ein
 zufälliges Sitzungstoken. Schreibende Anfragen benötigen dieses Token und
 müssen vom selben Browser-Origin kommen.
 
+## IDE-Werkzeuge verwenden
+
+Mit **F1** oder über die Hilfeaktion öffnest du Beschreibung, Optionen und ein
+Beispiel zum unterstützten Sprachbegriff am Cursor. **Strg+Umschalt+P** öffnet
+den durchsuchbaren Aktionsfinder. **Strg+Leertaste** fordert
+Vervollständigungsvorschläge an, darunter Projekterklärungen sowie unterstützte
+lokale Parameter und Bindungen. F12 öffnet die gespeicherte Funktions- oder
+Typdefinition in derselben oder einer direkt importierten Datei. Umschalt+F12
+findet exakt gleiche lexikalische Bezeichner in gespeicherten `.zyl`-Dateien.
+Diese Treffer sind keine scopebewussten semantischen Referenzen. Speichere
+geänderte Dateien vor der Navigation, damit die Fundstellen stimmen.
+
+Compilerdiagnosen werden während der Bearbeitung gespeicherter Zelyra-
+Projektdateien aktualisiert. Die Prüfung arbeitet auf einer privaten
+temporären Projektkopie und schreibt nicht in den ungespeicherten Editorpuffer.
+**Starten** führt `main.zyl` ausdrücklich aus, höchstens 15 Sekunden und mit
+64 KiB je Ausgabekanal. Erkannte geheime Umgebungs- und lokale `.env`-Werte
+werden redigiert. Studio startet Anwendung und Datenbank nicht automatisch und
+bietet dem Programm keine interaktive Eingabe.
+
+Die **Projektkarte** zeigt nur eindeutige Beziehungen aus dem Compiler-
+Projektmodell und verknüpft Knoten mit gespeicherten Quellpositionen. Dynamische
+und nicht aufgelöste Beziehungen bleiben sichtbar unvollständig, statt
+hergeleitet zu werden.
+
 ## Quellcode bearbeiten
 
 Die Dateiliste zeigt Zelyra-Quelldateien des Projekts. Tabs halten mehrere
@@ -70,7 +95,7 @@ Datenbank und verändert keine Datensätze.
 
 ## Umfang
 
-Studio ist ein lokales Entwicklungswerkzeug und noch keine vollständige IDE.
+Studio ist eine lokale IDE-Grundlage und noch keine vollständige IDE.
 Die Datenbankansicht ist ein lesender Schemaüberblick, kein beliebiger
 Datenbankdesigner. Die CRUD-Erzeugung arbeitet mit bereits deklarierten
 Tabellen und prüft den erzeugten Code vor dem Schreiben.
