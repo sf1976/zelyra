@@ -180,6 +180,11 @@ with open(os.path.join(project, "main.zyl"), encoding="utf-8") as source:
     assert "crud Customer -> customers" in source.read()
 PY
 
+if [[ "${ZELYRA_STUDIO_BROWSER_E2E:-0}" == "1" ]]; then
+  ZELYRA_STUDIO_E2E_PORT="$port" ZELYRA_STUDIO_E2E_TOKEN="$token" \
+    node editor/tests/editor-browser-e2e.mjs
+fi
+
 if [[ "$backend" == "mariadb" ]]; then
   table_count="$(mariadb --protocol=tcp --host=127.0.0.1 --port="$database_port" --user=root \
     --batch --skip-column-names "$database_name" -e 'SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()')"

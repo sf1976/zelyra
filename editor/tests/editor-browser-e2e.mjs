@@ -1,0 +1,69 @@
+import assert from "node:assert/strict";
+import { chromium } from "playwright";
+
+const port = process.env.ZELYRA_STUDIO_E2E_PORT;
+const token = process.env.ZELYRA_STUDIO_E2E_TOKEN;
+assert.ok(port && token, "Studio browser E2E requires its local session URL");
+
+const browser = await chromium.launch({ headless: true });
+try {
+  const page = await browser.newPage();
+  page.setDefaultTimeout(5_000);
+  const browserErrors = [];
+  const base = `http://127.0.0.1:${port}/__zelyra/editor`;
+  const url = `${base}/#${token}`;
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  await page.goto(url);
+  assert.equal(new URL(page.url()).hash, "", "the session token must be removed from the address bar");
+  await page.locator(".cm-content[contenteditable=true]").waitFor({ timeout: 10_000 });
+  await page.locator('.tree-item.file[title="main.zyl"]').waitFor();
+
+  const editor = page.locator(".cm-content[contenteditable=true]");
+  await editor.focus();
+  await page.keyboard.press("Control+A");
+  await page.keyboard.type('fn main() { print("unsaved browser edit"); }\n');
+  await page.locator(".tab-state.dirty").waitFor();
+
+  let unloadPromptSeen = false;
+  page.once("dialog", async (dialog) => {
+    unloadPromptSeen = dialog.type() === "beforeunload";
+    await dialog.accept();
+  });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  assert.equal(unloadPromptSeen, true, "reload must warn before discarding unsaved edits");
+  await page.locator(".cm-content[contenteditable=true]").waitFor();
+
+  const current = page.locator(".cm-content[contenteditable=true]");
+  await current.focus();
+  await page.keyboard.press("Control+A");
+  await page.keyboard.type("fn main( {\n");
+  await current.press("Control+S");
+  await page.locator(".tab-state.dirty").waitFor({ state: "detached" });
+  await page.getByRole("button", { name: /Projekt prüfen|Check project/ }).click();
+  await page.waitForFunction(() => !document.querySelector("#status-message").textContent.includes("wird geprüft") && !document.querySelector("#status-message").textContent.includes("Checking project"));
+  console.log("Studio check status:", await page.locator("#status-message").textContent());
+  await page.locator("#problems-panel:not([hidden])").waitFor();
+  await page.locator("#problems-count").waitFor();
+  const problemCount = Number(await page.locator("#problems-count").textContent());
+  assert.ok(problemCount > 0, "malformed source must produce visible compiler diagnostics");
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.locator(".cm-content[contenteditable=true]").waitFor();
+  assert.equal(
+    await page.locator(".cm-content[contenteditable=true]").textContent(),
+    "fn main( {",
+    "saved content must be restored after a clean Studio restart",
+  );
+
+  const response = await page.evaluate(async ({ base, token }) => {
+    const result = await fetch(`${base}/api/file?path=main.zyl`, {
+      headers: { "X-Zelyra-Editor-Token": token },
+    });
+    return result.json();
+  }, { base, token });
+  assert.equal(response.content, "fn main( {\n", "the browser keyboard save must reach the project file");
+  assert.deepEqual(browserErrors, [], "Studio must not raise browser runtime errors");
+  console.log("Studio browser editing, unsaved-change warning, keyboard save, diagnostics, and restart passed");
+} finally {
+  await browser.close();
+}

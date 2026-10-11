@@ -117,6 +117,16 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+      - name: Install Node.js for browser verification
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.2
+          cache: npm
+          cache-dependency-path: editor/package-lock.json
+      - name: Install locked browser verification dependencies
+        run: npm ci --prefix editor
+      - name: Install headless Chromium
+        run: npx --prefix editor playwright install --with-deps chromium
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -173,6 +183,7 @@ jobs:
           ZELYRA_STUDIO_E2E_BACKEND: mariadb
           ZELYRA_STUDIO_E2E_DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
           ZELYRA_STUDIO_E2E_ROOT_PASSWORD: root
+          ZELYRA_STUDIO_BROWSER_E2E: '1'
           ZELYRA_BIN: target/debug/zelyra
         run: bash ./tests/editor-studio-e2e.sh
       - name: Exercise Zelyra Studio against PostgreSQL
@@ -180,6 +191,7 @@ jobs:
           ZELYRA_STUDIO_E2E_BACKEND: postgres
           ZELYRA_STUDIO_E2E_DATABASE_URL: postgres://zelyra_ci:zelyra_ci@127.0.0.1:5432/zelyra_ci
           ZELYRA_STUDIO_E2E_POSTGRES_PASSWORD: zelyra_ci
+          ZELYRA_STUDIO_BROWSER_E2E: '1'
           ZELYRA_BIN: target/debug/zelyra
         run: bash ./tests/editor-studio-e2e.sh
       - name: Test imported tableviews through composed project schema

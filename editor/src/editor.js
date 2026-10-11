@@ -1,5 +1,5 @@
 import { autocompletion } from "@codemirror/autocomplete";
-import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
+import { defaultKeymap, history as undoRedoHistory, historyKeymap } from "@codemirror/commands";
 import {
   bracketMatching,
   defaultHighlightStyle,
@@ -26,7 +26,12 @@ import {
 } from "@codemirror/view";
 
 const root = document.documentElement;
-const token = location.hash.slice(1);
+const editorSessionStorageKey = "zelyra-editor-session-token";
+const fragmentToken = location.hash.slice(1);
+const token = /^[0-9a-f]{64}$/.test(fragmentToken)
+  ? fragmentToken
+  : sessionStorage.getItem(editorSessionStorageKey) || "";
+if (token) sessionStorage.setItem(editorSessionStorageKey, token);
 history.replaceState(null, "", location.pathname);
 const $ = (id) => document.getElementById(id);
 const status = $("status-message");
@@ -233,8 +238,9 @@ function announce(message, kind = "") {
   status.dataset.kind = kind;
 }
 
-function isDirty(tab) { return tab && tab.state.doc.toString() !== tab.saved; }
-function dirtyCount() { return [...tabs.values()].filter(isDirty).length; }
+function tabState(path, tab) { return path === activePath && editor ? editor.state : tab?.state; }
+function isDirty(tab, path) { return tab && tabState(path, tab).doc.toString() !== tab.saved; }
+function dirtyCount() { return [...tabs].filter(([path, tab]) => isDirty(tab, path)).length; }
 
 function renderTabs() {
   const bar = $("tabs");
@@ -244,7 +250,7 @@ function renderTabs() {
     button.className = `tab${path === activePath ? " active" : ""}`;
     button.title = path;
     const dot = document.createElement("span");
-    dot.className = `tab-state${isDirty(tab) ? " dirty" : ""}`;
+    dot.className = `tab-state${isDirty(tab, path) ? " dirty" : ""}`;
     const label = document.createElement("span");
     label.textContent = path.split("/").pop();
     button.append(dot, label);
@@ -257,7 +263,7 @@ function renderTabs() {
     button.append(close);
     bar.append(button);
   }
-  $("save-button").disabled = !activePath || !isDirty(tabs.get(activePath));
+  $("save-button").disabled = !activePath || !isDirty(tabs.get(activePath), activePath);
   $("save-all-button").disabled = dirtyCount() === 0;
   const protectedFile = activePath === "main.zyl" || activePath === "zelyra.toml";
   $("rename-file-button").disabled = !activePath || protectedFile;
@@ -275,7 +281,7 @@ function createView(path, state) {
     state,
     parent: editorRoot,
     extensions: [
-      lineNumbers(), highlightActiveLineGutter(), foldGutter(), history(), drawSelection(),
+      lineNumbers(), highlightActiveLineGutter(), foldGutter(), undoRedoHistory(), drawSelection(),
       rectangularSelection(), crosshairCursor(), highlightActiveLine(), bracketMatching(),
       indentOnInput(), highlightSelectionMatches(), zelyraLanguage,
       syntaxHighlighting(defaultHighlightStyle, { fallback: true }), zelyraHighlight,
@@ -294,7 +300,13 @@ function createView(path, state) {
         const tab = tabs.get(path);
         if (!tab) return;
         tab.state = update.state;
-        if (update.docChanged) { setDiagnostics(update.view, []); renderTabs(); announce(t("unsaved"), "warning"); }
+        if (update.docChanged) {
+          renderTabs();
+          announce(t("unsaved"), "warning");
+          queueMicrotask(() => {
+            if (editor === update.view) editor.dispatch(setDiagnostics(editor.state, []));
+          });
+        }
       }),
       EditorView.lineWrapping,
       zelyraTheme,
@@ -302,6 +314,15 @@ function createView(path, state) {
     ],
   });
 }
+
+editorRoot.addEventListener("input", () => {
+  if (!activePath || !editor) return;
+  const tab = tabs.get(activePath);
+  if (!tab) return;
+  tab.state = editor.state;
+  renderTabs();
+  announce(t("unsaved"), "warning");
+});
 
 async function openFile(path) {
   if (tabs.has(path)) return activate(path);
@@ -329,7 +350,7 @@ function activate(path) {
 
 function closeTab(path) {
   const tab = tabs.get(path);
-  if (isDirty(tab) && !confirm(t("closeUnsaved", path))) return;
+  if (isDirty(tab, path) && !confirm(t("closeUnsaved", path))) return;
   if (activePath === path && editor) { editor.destroy(); editor = null; }
   tabs.delete(path);
   if (activePath === path) {
@@ -343,7 +364,8 @@ function closeTab(path) {
 
 async function savePath(path) {
   const tab = tabs.get(path);
-  if (!tab || !isDirty(tab)) return true;
+  if (!tab || !isDirty(tab, path)) return true;
+  tab.state = tabState(path, tab);
   try {
     const result = await api("file", { method: "PUT", body: JSON.stringify({ path, content: tab.state.doc.toString(), baseHash: tab.hash }) });
     tab.saved = result.content;
@@ -756,7 +778,7 @@ async function currentCrudRequest() {
   if (!path) throw new Error(t("selectTarget"));
   if (!selectedCrudFields().length) throw new Error(t("selectOneField"));
   const tab = tabs.get(path);
-  if (tab && isDirty(tab)) throw new Error(t("saveBeforePreview"));
+  if (tab && isDirty(tab, path)) throw new Error(t("saveBeforePreview"));
   const file = await api(`file?path=${encodeURIComponent(path)}`);
   return {
     path,
@@ -843,10 +865,10 @@ function renderDiagnostics(items, success) {
     const start = item.span?.start || {};
     return { ...item, from: item.editorSpan?.start ?? start.offset ?? 0, to: item.editorSpan?.end ?? item.editorSpan?.start ?? start.offset ?? 0 };
   });
-  if (editor) setDiagnostics(editor, diagnostics.filter((item) => !item.file || item.file.endsWith(activePath)).map((item) => ({
+  if (editor) editor.dispatch(setDiagnostics(editor.state, diagnostics.filter((item) => !item.file || item.file.endsWith(activePath)).map((item) => ({
     from: item.from, to: Math.max(item.from + 1, item.to), severity: item.severity || "error",
     message: `${item.code || ""} ${item.message || ""}`.trim(),
-  })));
+  }))));
   const panel = $("problems-list"); panel.replaceChildren();
   for (const item of items) {
     const row = document.createElement("button"); row.className = `problem ${item.severity || "error"}`;
