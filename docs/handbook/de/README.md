@@ -545,6 +545,16 @@ match email {
 Pattern Matching muss vollständig sein. Sonst erinnert dich der Compiler an
 den Fall, den der Freitagabend-Deploy vermutlich gefunden hätte.
 
+`match` kann auch direkt einen Wert liefern. Jeder Zweig muss dabei denselben
+Typ ergeben:
+
+~~~zelyra
+status = match load_order(order_id) {
+    Ok(order) => "Bestellung " + json_encode(order.id)
+    Err(_) => "Bestellung nicht gefunden"
+}
+~~~
+
 Fehler werden als Teil der Funktionssignatur sichtbar:
 
 ~~~zelyra

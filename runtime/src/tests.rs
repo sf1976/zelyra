@@ -31,6 +31,28 @@ fn assert_is_type_checked_and_fails_execution_with_message() {
 }
 
 #[test]
+fn match_expressions_bind_patterns_and_return_typed_values() {
+    let output = run(
+        "fn unwrap(value: Result<Int, String>) -> Int { return match value { Ok(number) => number Err(_) => 0 } } fn main() { answer = match true { true => unwrap(Ok(42)) false => 0 } print(answer) }",
+    );
+    assert_eq!(output, ["42"]);
+
+    let program =
+        parse(&lex("fn main() { answer = match true { true => 1 false => \"wrong\" } }").unwrap())
+            .unwrap();
+    assert!(check(&program)
+        .unwrap_err()
+        .iter()
+        .any(|error| error.message.contains("expected `Int`, found `String`")));
+
+    let program = parse(&lex("fn main() { answer = match true { true => 1 } }").unwrap()).unwrap();
+    assert!(check(&program)
+        .unwrap_err()
+        .iter()
+        .any(|error| error.message.contains("non-exhaustive match")));
+}
+
+#[test]
 fn text_trim_removes_unicode_whitespace_without_changing_interior_text() {
     let output = run("fn main() { print(text_trim(\"  Grüße\u{00a0}\")) }");
     assert_eq!(output, ["Grüße"]);

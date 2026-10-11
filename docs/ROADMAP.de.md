@@ -112,7 +112,8 @@ den tatsächlich implementierten Stand.
 
 - [x] Sprachkern mit Lexer, Parser, AST, Funktionen, Ausdrücken, Kontrollfluss,
   unveränderlichen Bindings als Standard, Arrays, deterministischen typisierten
-  Maps, Records, Option, Result und Pattern Matching.
+  Maps, Records, Option, Result und exhaustivem Pattern Matching als Anweisung
+  und Ausdruck.
 - [x] Statische Prüfung, nominale Fachdaten-Typen, Capabilities, Contracts,
   Runtime-Prüfungen und ein erster Verifier.
 - [x] MariaDB als primäres Schema-Backend, Inspektion, DDL-Planung,

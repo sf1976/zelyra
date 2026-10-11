@@ -1246,6 +1246,26 @@ fn add_expression_type_references(
             expression.span,
             sources,
         ),
+        ExprKind::Match { value, arms } => {
+            add_expression_type_references(
+                references,
+                owner,
+                value,
+                type_names,
+                record_names,
+                sources,
+            );
+            for arm in arms {
+                add_expression_type_references(
+                    references,
+                    owner,
+                    &arm.value,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+            }
+        }
         ExprKind::Int(_)
         | ExprKind::UInt(_)
         | ExprKind::Float(_)
@@ -1467,6 +1487,12 @@ fn collect_expression_calls(
         ExprKind::Binary { left, right, .. } => {
             collect_expression_calls(left, function_names, calls);
             collect_expression_calls(right, function_names, calls);
+        }
+        ExprKind::Match { value, arms } => {
+            collect_expression_calls(value, function_names, calls);
+            for arm in arms {
+                collect_expression_calls(&arm.value, function_names, calls);
+            }
         }
         ExprKind::Int(_)
         | ExprKind::UInt(_)
@@ -1785,6 +1811,12 @@ fn collect_expr_sql(
         ExprKind::Binary { left, right, .. } => {
             collect_expr_sql(left, owner, kind, table_names, sources, entries);
             collect_expr_sql(right, owner, kind, table_names, sources, entries);
+        }
+        ExprKind::Match { value, arms } => {
+            collect_expr_sql(value, owner, kind, table_names, sources, entries);
+            for arm in arms {
+                collect_expr_sql(&arm.value, owner, kind, table_names, sources, entries);
+            }
         }
         ExprKind::Int(_)
         | ExprKind::UInt(_)

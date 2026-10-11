@@ -93,7 +93,7 @@ principles; the roadmap below tracks what is actually implemented.
 
 - [x] Language core: lexer, parser, AST, functions, expressions, control flow,
   immutable-by-default bindings, arrays, deterministic typed maps, records,
-  Option, Result, and pattern matching.
+  Option, Result, and exhaustive pattern matching as statements and expressions.
 - [x] Static checking, nominal domain types, capabilities, contracts, runtime
   checks, and an initial verifier.
 - [x] MariaDB-first schema definitions, inspection, DDL planning, schema

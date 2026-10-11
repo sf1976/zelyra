@@ -68,7 +68,8 @@ den Beweis, dass beliebige Anwendungen korrekt sind.
   Veränderlichkeit muss ausdrücklich markiert werden.
 - ✅ Nominale Fachdaten-Typen, Records mit geprüftem Feldzugriff, Arrays mit
   gebräuchlichen Operationen, deterministische typisierte Maps, `Option`,
-  `Result` und Pattern Matching im implementierten Sprachumfang.
+  `Result` und exhaustives Pattern Matching als Anweisung oder Ausdruck; ein
+  `match`-Ausdruck liefert einen einheitlich typgeprüften Wert.
 - ✅ Stringwerte lassen sich lexikografisch vergleichen. `json_decode_result<T>`,
   `read_text_result` und `write_text_result` geben erwartbare Parse- und
   Dateifehler als `Result` zurück. `format_timestamp` zeigt UTC-Zeitstempel als

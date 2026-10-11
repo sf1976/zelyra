@@ -201,6 +201,17 @@ pub enum HirExprKind {
         query: String,
     },
     Await(Box<HirExpr>),
+    Match {
+        value: Box<HirExpr>,
+        arms: Vec<HirMatchExprArm>,
+    },
+}
+
+#[derive(Clone, Debug)]
+pub struct HirMatchExprArm {
+    pub pattern: HirPattern,
+    pub value: HirExpr,
+    pub span: Span,
 }
 
 pub fn lower(program: &Program) -> Result<HirProgram, Vec<ResolveError>> {
@@ -641,6 +652,23 @@ impl<'a> Resolver<'a> {
                 query: query.clone(),
             },
             ExprKind::Await(inner) => HirExprKind::Await(Box::new(self.expr(inner))),
+            ExprKind::Match { value, arms } => HirExprKind::Match {
+                value: Box::new(self.expr(value)),
+                arms: arms
+                    .iter()
+                    .map(|arm| {
+                        self.scopes.push(HashMap::new());
+                        let pattern = self.pattern(&arm.pattern);
+                        let value = self.expr(&arm.value);
+                        self.scopes.pop();
+                        HirMatchExprArm {
+                            pattern,
+                            value,
+                            span: arm.span,
+                        }
+                    })
+                    .collect(),
+            },
         };
         HirExpr {
             kind,

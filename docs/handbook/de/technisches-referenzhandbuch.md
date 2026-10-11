@@ -360,6 +360,16 @@ match email {
 Pattern Matching muss vollständig sein. Sonst erinnert dich der Compiler an
 den Fall, den der Freitagabend-Deploy vermutlich gefunden hätte.
 
+`match` ist auch ein Ausdruck. Alle Zweige müssen einen kompatiblen Werttyp
+liefern; Pattern-Bindings gelten nur innerhalb ihres Zweigs:
+
+~~~zelyra
+status = match load_order(order_id) {
+    Ok(order) => "Bestellung " + json_encode(order.id)
+    Err(_) => "Bestellung nicht gefunden"
+}
+~~~
+
 Fehler werden als Teil der Funktionssignatur sichtbar. Der aktuelle Sprachkern
 verwendet dafür `Result<T, E>` mit `Ok` oder `Err`:
 

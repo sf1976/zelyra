@@ -1573,6 +1573,12 @@ fn expression_contains_variable(expression: &Expr, name: &str) -> bool {
         }
         ExprKind::Field { target, .. } => expression_contains_variable(target, name),
         ExprKind::Await(inner) => expression_contains_variable(inner, name),
+        ExprKind::Match { value, arms } => {
+            expression_contains_variable(value, name)
+                || arms
+                    .iter()
+                    .any(|arm| expression_contains_variable(&arm.value, name))
+        }
         ExprKind::Int(..)
         | ExprKind::UInt(..)
         | ExprKind::Float(..)
@@ -2944,7 +2950,8 @@ fn constant_value(expression: &Expr) -> Option<ConstantValue> {
         | ExprKind::Variable(_)
         | ExprKind::Call { .. }
         | ExprKind::Sql { .. }
-        | ExprKind::Await(_) => None,
+        | ExprKind::Await(_)
+        | ExprKind::Match { .. } => None,
     }
 }
 
@@ -3320,6 +3327,12 @@ fn check_capability_expr(
         }
         ExprKind::Await(inner) => {
             check_capability_expr(inner, function, functions, declared, errors);
+        }
+        ExprKind::Match { value, arms } => {
+            check_capability_expr(value, function, functions, declared, errors);
+            for arm in arms {
+                check_capability_expr(&arm.value, function, functions, declared, errors);
+            }
         }
         ExprKind::Int(..)
         | ExprKind::UInt(..)
@@ -4805,6 +4818,31 @@ impl<'a> Checker<'a> {
                     self.error(expr.span, "`await` is only valid inside a `parallel` block");
                 }
                 self.check_expr(inner, scopes)
+            }
+            ExprKind::Match { value, arms } => {
+                let value_type = self.check_expr(value, scopes);
+                let mut covered = std::collections::HashSet::new();
+                let mut result_type = Type::Unknown;
+                for arm in arms {
+                    let mut pattern_scope = HashMap::new();
+                    self.check_pattern(
+                        &arm.pattern,
+                        &value_type,
+                        &mut pattern_scope,
+                        &mut covered,
+                        true,
+                    );
+                    let mut arm_scopes = scopes.to_vec();
+                    arm_scopes.push(pattern_scope);
+                    let arm_type = self.check_expr(&arm.value, &arm_scopes);
+                    if result_type == Type::Unknown {
+                        result_type = arm_type;
+                    } else {
+                        self.expect_type(&result_type, &arm_type, arm.value.span);
+                    }
+                }
+                self.check_exhaustiveness(&value_type, &covered, expr.span);
+                result_type
             }
         }
     }
@@ -7859,6 +7897,21 @@ impl Interpreter {
                 })
             }
             ExprKind::Await(inner) => self.eval(inner, env),
+            ExprKind::Match { value, arms } => {
+                let scrutinee = self.eval(value, env)?;
+                for arm in arms {
+                    if let Some(bindings) = match_pattern(&scrutinee, &arm.pattern) {
+                        env.push();
+                        for (name, value) in bindings {
+                            env.declare(name, value, false);
+                        }
+                        let result = self.eval(&arm.value, env);
+                        env.pop();
+                        return result;
+                    }
+                }
+                Err(self.runtime_error(expr.span, "non-exhaustive match at runtime"))
+            }
         }
     }
     fn binary(

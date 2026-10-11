@@ -85,7 +85,8 @@ types are language values but are rejected by JSON conversion.
 ## Pattern matching
 
 Match arms bind inner values and must be exhaustive for `Option`, `Result`, and
-`Bool`:
+`Bool`. `match` works as both a statement and an expression; expression arms
+must return values with a consistent checked type:
 
 ```zelyra
 match find_number(true) {
@@ -95,6 +96,13 @@ match find_number(true) {
     None => {
         print(0)
     }
+}
+```
+
+```zelyra
+label = match lookup_number(true) {
+    Ok(number) => "Number " + json_encode(number)
+    Err(_) => "Not found"
 }
 ```
 

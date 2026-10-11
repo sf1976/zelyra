@@ -1350,6 +1350,12 @@ impl TypeLinker<'_> {
             ExprKind::Sql { result_type, .. } => {
                 self.rewrite_type(result_type, expression.span)?;
             }
+            ExprKind::Match { value, arms } => {
+                self.rewrite_expression_types(value)?;
+                for arm in arms {
+                    self.rewrite_expression_types(&mut arm.value)?;
+                }
+            }
             ExprKind::Int(_)
             | ExprKind::UInt(_)
             | ExprKind::Float(_)
@@ -1876,6 +1882,34 @@ fn rewrite_expr(
             for argument in args {
                 rewrite_expr(
                     argument,
+                    module_path,
+                    module_name,
+                    imports,
+                    local_functions,
+                    function_sets,
+                    module_names,
+                    root_functions,
+                    display_path,
+                    is_root,
+                )?;
+            }
+        }
+        ExprKind::Match { value, arms } => {
+            rewrite_expr(
+                value,
+                module_path,
+                module_name,
+                imports,
+                local_functions,
+                function_sets,
+                module_names,
+                root_functions,
+                display_path,
+                is_root,
+            )?;
+            for arm in arms {
+                rewrite_expr(
+                    &mut arm.value,
                     module_path,
                     module_name,
                     imports,

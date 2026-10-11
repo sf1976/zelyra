@@ -14,43 +14,27 @@ pub struct SolveResult {
     examined: Int
 }
 pub fn load(path: String) -> Result<Maze, String>uses FileSystem {
-    match read_text_result(path) {
-        Ok(contents) => {
-            return parse(contents)
-        }
-        Err(message) => {
-            return Err("Labyrinthdatei konnte nicht gelesen werden: " + message)
-        }
+    return match read_text_result(path) {
+        Ok(contents) => parse(contents)
+        Err(message) => Err("Labyrinthdatei konnte nicht gelesen werden: " + message)
     }
 }
 pub fn save(path: String, maze: Maze) -> Result<Bool, String>uses FileSystem {
-    match atomic_write_text_result(path, encode(maze)) {
-        Ok(_) => {
-            return Ok(true)
-        }
-        Err(message) => {
-            return Err(message)
-        }
+    return match atomic_write_text_result(path, encode(maze)) {
+        Ok(_) => Ok(true)
+        Err(message) => Err(message)
     }
 }
 pub fn parse(contents: String) -> Result<Maze, String> {
-    match text_replace_result(contents, "\r\n", "\n") {
-        Ok(normalized) => {
-            return parse_normalized(normalized)
-        }
-        Err(message) => {
-            return Err("Zeilenenden konnten nicht normalisiert werden: " + message)
-        }
+    return match text_replace_result(contents, "\r\n", "\n") {
+        Ok(normalized) => parse_normalized(normalized)
+        Err(message) => Err("Zeilenenden konnten nicht normalisiert werden: " + message)
     }
 }
 fn parse_normalized(contents: String) -> Result<Maze, String> {
-    match text_split_result(contents, "\n") {
-        Ok(raw_rows) => {
-            return parse_rows(raw_rows)
-        }
-        Err(message) => {
-            return Err("Labyrinth konnte nicht getrennt werden: " + message)
-        }
+    return match text_split_result(contents, "\n") {
+        Ok(raw_rows) => parse_rows(raw_rows)
+        Err(message) => Err("Labyrinth konnte nicht getrennt werden: " + message)
     }
 }
 fn parse_rows(raw_rows: String[]) -> Result<Maze, String> {

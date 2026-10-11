@@ -7034,6 +7034,12 @@ fn visit_expression_sql<'a>(
             visit_expression_sql(right, visitor);
         }
         ExprKind::Sql { query, .. } => visitor(query, expression.span),
+        ExprKind::Match { value, arms } => {
+            visit_expression_sql(value, visitor);
+            for arm in arms {
+                visit_expression_sql(&arm.value, visitor);
+            }
+        }
         ExprKind::Int(_)
         | ExprKind::UInt(_)
         | ExprKind::Float(_)

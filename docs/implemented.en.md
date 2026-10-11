@@ -66,7 +66,8 @@ proof that arbitrary applications are correct.
   explicit.
 - ✅ Nominal domain types, records and checked field access, arrays and common
   array operations, deterministic typed maps, `Option`, `Result`, and pattern
-  matching in the implemented language subset.
+  matching as either a statement or expression; a `match` expression returns
+  a value whose type is checked consistently across all arms.
 - ✅ Strings support lexicographic comparisons. `json_decode_result<T>`,
   `read_text_result`, and `write_text_result` return expected parse and file
   errors as `Result`. `format_timestamp` renders UTC timestamps as ISO 8601;

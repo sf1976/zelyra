@@ -318,6 +318,16 @@ match email {
 Pattern matching must be exhaustive, preventing the forgotten case that would
 otherwise introduce itself during a Friday deployment.
 
+`match` is also an expression. Every arm must return a compatible value type;
+pattern bindings exist only inside their arm:
+
+~~~zelyra
+status = match load_order(order_id) {
+    Ok(order) => "Order " + json_encode(order.id)
+    Err(_) => "Order not found"
+}
+~~~
+
 Functions expose failures through their return type. The current language core
 uses `Result<T, E>` with `Ok` or `Err`:
 

@@ -2474,6 +2474,38 @@ impl<'a> Parser<'a> {
                 kind: ExprKind::Bool(false),
                 span: token.span,
             }),
+            TokenKind::Match => {
+                let value = self.expression()?;
+                self.expect(TokenKind::LBrace, "`{` after match value")?;
+                let mut arms = Vec::new();
+                self.skip_newlines();
+                while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                    let pattern = self.pattern()?;
+                    self.expect(TokenKind::FatArrow, "`=>` after match pattern")?;
+                    let arm_value = self.expression()?;
+                    let span = pattern.span.join(arm_value.span);
+                    arms.push(MatchExprArm {
+                        pattern,
+                        value: arm_value,
+                        span,
+                    });
+                    if self.at(&TokenKind::Comma) {
+                        self.advance();
+                    }
+                    self.skip_newlines();
+                }
+                if arms.is_empty() {
+                    return self.error("match expression must contain at least one arm");
+                }
+                let end = self.expect(TokenKind::RBrace, "`}` after match arms")?;
+                Ok(Expr {
+                    kind: ExprKind::Match {
+                        value: Box::new(value),
+                        arms,
+                    },
+                    span: token.span.join(end),
+                })
+            }
             TokenKind::LBracket => {
                 let mut values = Vec::new();
                 self.skip_newlines();

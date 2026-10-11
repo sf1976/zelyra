@@ -610,6 +610,13 @@ pub struct MatchArm {
 }
 
 #[derive(Clone, Debug)]
+pub struct MatchExprArm {
+    pub pattern: Pattern,
+    pub value: Expr,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
 pub struct Pattern {
     pub kind: PatternKind,
     pub span: Span,
@@ -677,6 +684,10 @@ pub enum ExprKind {
         query: String,
     },
     Await(Box<Expr>),
+    Match {
+        value: Box<Expr>,
+        arms: Vec<MatchExprArm>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
