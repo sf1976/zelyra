@@ -21,8 +21,11 @@ Or choose a project path and port:
 zelyra editor ./invoices --port 4177
 ```
 
-The CLI prints a local URL containing a random session token. Open it in a
-browser and stop the editor process with `Ctrl+C` when finished.
+The CLI opens the default browser automatically. If that is unavailable, it
+prints the local URL containing the session token for manual use. Pass
+`--no-open` to skip browser launch, for example over SSH or without a graphical
+desktop. Studio needs neither a database nor a running web application; start
+those only when you want to use them separately. Stop Studio with `Ctrl+C`.
 
 ## Workspace
 

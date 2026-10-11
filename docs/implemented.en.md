@@ -119,10 +119,11 @@ For usage details see the [web and database quickstart](getting-started.md),
 
 ## Zelyra Studio and invoice tutorial
 
-- 🧪 `zelyra editor [directory] [--port <port>]` starts local Studio on
+- 🧪 `zelyra editor [directory] [--port <port>] [--no-open]` starts local Studio on
   `127.0.0.1` with a project tree, tabs, search/replace, completion, compiler
-  diagnostics, and formatting. Writes require a session token and same browser
-  origin; it uses no shell or external services. Version 0.8.0 adds a
+  diagnostics, and formatting. The CLI opens the system browser by default;
+  `--no-open` skips it. Writes require a session token and same browser origin;
+  the database and web application are not started automatically. Version 0.8.0 adds a
   read-only clickable relationship map for supported MariaDB/PostgreSQL
   schemas and a guided CRUD source builder. Version 0.9.0 adds an impact view
   for affected files, tables, declared relationships, and routes. The compiler

@@ -7,6 +7,12 @@ Projektverzeichnis mit:
 zelyra editor
 ```
 
+Die CLI startet den lokalen Editor und öffnet den Standardbrowser automatisch.
+Falls keine grafische Browsersitzung verfügbar ist, zeigt sie die URL zum
+manuellen Öffnen an. Auf SSH- oder headless-Systemen lässt sich der Browserstart
+mit `zelyra editor --no-open` überspringen. Studio braucht zum Bearbeiten weder
+eine laufende Datenbank noch die gestartete Webanwendung.
+
 Der Editor ist nur unter `127.0.0.1` erreichbar. Die Startadresse enthält ein
 zufälliges Sitzungstoken. Schreibende Anfragen benötigen dieses Token und
 müssen vom selben Browser-Origin kommen.

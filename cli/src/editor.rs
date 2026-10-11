@@ -2,6 +2,7 @@ use super::*;
 use std::io::{self, Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::path::{Component, Path, PathBuf};
+use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use std::time::Duration;
@@ -53,6 +54,7 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     let mut directory = PathBuf::from(".");
     let mut directory_given = false;
     let mut port = 4177_u16;
+    let mut open_browser = true;
     while let Some(argument) = arguments.next() {
         if argument == "--port" {
             let Some(value) = arguments.next() else {
@@ -66,11 +68,15 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
                     return ExitCode::from(2);
                 }
             };
+        } else if argument == "--no-open" {
+            open_browser = false;
         } else if !argument.starts_with('-') && !directory_given {
             directory = PathBuf::from(argument);
             directory_given = true;
         } else {
-            eprintln!("error[E-EDITOR-001]: usage: zelyra editor [directory] [--port <port>]");
+            eprintln!(
+                "error[E-EDITOR-001]: usage: zelyra editor [directory] [--port <port>] [--no-open]"
+            );
             return ExitCode::from(2);
         }
     }
@@ -119,8 +125,23 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     let active = Arc::new(AtomicUsize::new(0));
     println!("Zelyra Studio ist lokal erreichbar: http://{authority}{EDITOR_PATH}/#{token}");
     println!("Projekt: {}", state.root.display());
+    if open_browser && has_graphical_session() {
+        if open_system_browser(&format!("http://{authority}{EDITOR_PATH}/#{token}")) {
+            println!("Der Standardbrowser wird geöffnet. Mit Ctrl+C beendest du Studio.");
+        } else {
+            println!(
+                "Kein Browser konnte automatisch geöffnet werden. Rufe die URL oben manuell auf."
+            );
+        }
+    } else if open_browser {
+        println!("Keine grafische Browsersitzung erkannt. Rufe die URL oben manuell auf. Mit Ctrl+C beendest du Studio.");
+    } else {
+        println!(
+            "Browserstart übersprungen. Öffne die URL oben selbst. Mit Ctrl+C beendest du Studio."
+        );
+    }
     println!(
-        "Der Editor akzeptiert ausschließlich Verbindungen von diesem Rechner. Beenden mit Ctrl+C."
+        "Studio akzeptiert ausschließlich Verbindungen von diesem Rechner. Es startet weder Datenbank noch Webanwendung."
     );
     for incoming in listener.incoming() {
         match incoming {
@@ -151,6 +172,57 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         }
     }
     ExitCode::SUCCESS
+}
+
+fn has_graphical_session() -> bool {
+    if env::var_os("CI").is_some() {
+        return false;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        env::var_os("DISPLAY").is_some() || env::var_os("WAYLAND_DISPLAY").is_some()
+    }
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    {
+        true
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
+    {
+        false
+    }
+}
+
+fn open_system_browser(url: &str) -> bool {
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        let mut command = Command::new("cmd.exe");
+        command.args(["/C", "start", "", url]);
+        command
+    };
+    #[cfg(target_os = "macos")]
+    let mut command = {
+        let mut command = Command::new("open");
+        command.arg(url);
+        command
+    };
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut command = {
+        let mut command = Command::new("xdg-open");
+        command.arg(url);
+        command
+    };
+    #[cfg(not(any(unix, target_os = "windows")))]
+    let mut command = {
+        let _ = url;
+        return false;
+    };
+
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .is_ok()
 }
 
 fn handle_editor_connection(

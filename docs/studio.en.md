@@ -7,6 +7,11 @@ project directory:
 zelyra editor
 ```
 
+The CLI starts local Studio and opens the default browser. If no graphical
+browser session is available, it prints the URL for manual use. On SSH or
+headless systems, skip browser launch with `zelyra editor --no-open`. Editing
+does not require a running database or the web application.
+
 The editor listens only on `127.0.0.1`. Its startup address contains a random
 session token. Mutating requests require that token and the same browser
 origin.
