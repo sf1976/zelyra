@@ -86,7 +86,7 @@ table customers {
 }
 
 fn main() {
-    let total = math::sum(1, 2)
+    print(math::sum(1, 2))
 }
 ZELYRA
 
