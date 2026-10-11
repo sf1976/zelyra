@@ -21,11 +21,11 @@ class ReleaseReadinessTests(unittest.TestCase):
     def test_non_030_version_has_no_final_gate(self) -> None:
         self.assertEqual(unfinished_gates(Path("."), "0.2.0"), [])
 
-    def test_later_milestones_cannot_bypass_open_bilingual_release_gates(self) -> None:
+    def test_completed_release_gates_pass_and_future_milestones_stay_blocked(self) -> None:
         root = Path(__file__).resolve().parents[1]
         for version, plans in RELEASE_PLAN_CHECKLISTS.items():
             failures = unfinished_gates(root, version)
-            if version in {"0.7.0", "0.8.0"}:
+            if version in {"0.7.0", "0.8.0", "0.9.0"}:
                 self.assertEqual(
                     failures,
                     [],
