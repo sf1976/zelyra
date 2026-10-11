@@ -12,7 +12,7 @@ import {
 } from "@codemirror/language";
 import { linter, setDiagnostics } from "@codemirror/lint";
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
-import { EditorState } from "@codemirror/state";
+import { EditorState, StateEffect } from "@codemirror/state";
 import { tags } from "@lezer/highlight";
 import {
   crosshairCursor,
@@ -760,7 +760,7 @@ function createView(path, state) {
     EditorView.contentAttributes.of({ "aria-label": `${path} im Zelyra-Webeditor` }),
   ];
   return new EditorView({
-    state: state.reconfigure(extensions),
+    state: state.update({ effects: StateEffect.reconfigure.of(extensions) }).state,
     parent: editorRoot,
   });
 }
