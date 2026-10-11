@@ -628,6 +628,16 @@ Auswirkungen und eine ausdrückliche Bestätigung. Die Roadmap staffelt diese Zi
   mit 15-Sekunden-Limit, begrenzter Ausgabe und Ersetzung erkannter Geheimnisse
   aus Prozessumgebung und `.env`. Die Ausführung bleibt ein experimenteller
   lokaler IDE-Ablauf.
+- [🧪] Die Projektkarte zeigt Compilerbeziehungen für Modulimporte,
+  Deklarationen, CRUD/Tabellen, Seiten/Views und eindeutig aufgelöste
+  API-Handler. Quellnavigation ist enthalten. Dynamische und
+  Datenbankabfrage-Beziehungen bleiben ausgelassen; mehrdeutige oder begrenzte
+  Karten sind als unvollständig markiert.
+- [🗺️] IDE-Sprachdienste vervollständigen: scopebewusste semantische Referenzen,
+  typisierte Vorschläge, Symbol-/Routen-Eigenschaften und integrierte Verify-
+  und Test-Aufgaben ergänzen. Projekt-, Modul-, Routen- und Ressourcendiagramme
+  deterministisch vervollständigen. Unbekannte Beziehungen bleiben sichtbar
+  unvollständig, statt erraten zu werden.
 - [🗺️] Compiler-gestützte Vervollständigung, Symbolnavigation, Suche/Referenzen,
   Formatierung, handlungsorientierte und während der Eingabe aktualisierte
   Diagnosen sowie integrierte Check-, Run- und Test-Aufgaben ergänzen.

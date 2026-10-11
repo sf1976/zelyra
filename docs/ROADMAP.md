@@ -653,15 +653,16 @@ released 0.9.0.
   and match bindings from valid unsaved source. Type inference and
   symbol-level properties remain open. Studio can explicitly run `main.zyl`
   with a 15-second timeout, bounded output, and redaction of recognized
-  environment and `.env` secrets. This remains an experimental local task.
-- [🗺️] Add compiler-backed completion, symbol navigation, find/references,
-  formatting, actionable diagnostics updated while typing, and integrated
-  check/run/test tasks. Show clear task progress and output without exposing
-  secrets or hiding compiler errors. Keep features scoped to documented
-  language 0.1 constructs. Also derive trustworthy architecture diagrams for
-  modules/imports, routes, and resource relationships from the compiler's
-  project model. Nodes and edges link back to source files and diagnostics;
-  unknown or dynamic relationships are marked incomplete.
+  environment and `.env` secrets. This remains an experimental local task. A
+  compiler-backed project map now displays module imports, declaration
+  ownership, CRUD/table links, page/view links, and uniquely resolved API
+  handlers, with source navigation and explicit incomplete status. It omits
+  dynamic and database-query relationships.
+- [🧪] Continue the IDE language services: add scope-aware semantic references,
+  type-aware completion, symbol/route properties, integrated verify/test tasks,
+  and diagnostics that link across the project. Complete deterministic project,
+  module, route, and resource diagrams. Keep claims scoped to language 0.1 and
+  mark unsupported relationships incomplete instead of guessing.
 - Exit evidence: positive and negative multi-file projects verify contextual
   properties and help, completions, live diagnostic ranges, navigation,
   formatter idempotence, task output, and deterministic diagram data;

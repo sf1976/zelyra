@@ -352,6 +352,7 @@ fn editor_response(
                 values.get("name").map(String::as_str).unwrap_or(""),
             )
         }
+        ("GET", "project-map") => editor_project_map(state),
         ("GET", "database-schema") => database_schema_response(state),
         ("GET", "symbols") => {
             let query = request
@@ -556,6 +557,252 @@ fn editor_symbols(
         "application/json; charset=utf-8",
         json!({"symbols": symbols}).to_string(),
     ))
+}
+
+fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String), (u16, String)> {
+    let mut project_files = Vec::new();
+    collect_editor_files(&state.root, &state.root, 0, &mut project_files)?;
+    if project_files.len() >= EDITOR_MAX_FILES {
+        return Err((413, "project map is limited to 2,000 project files".into()));
+    }
+    let mut total_source_bytes = 0_u64;
+    for relative in project_files.iter().filter(|path| path.ends_with(".zyl")) {
+        let path = safe_editor_path(&state.root, relative, false)?;
+        let size = fs::metadata(path)
+            .map_err(|_| (500, "could not inspect project source".into()))?
+            .len();
+        total_source_bytes = total_source_bytes.saturating_add(size);
+        if size > EDITOR_MAX_FILE_BYTES as u64 || total_source_bytes > 32 * 1024 * 1024 {
+            return Err((
+                413,
+                "project map source is limited to 1 MiB per file and 32 MiB total".into(),
+            ));
+        }
+    }
+    let entry = safe_editor_path(&state.root, "main.zyl", false)?;
+    let loaded = project::load(&entry.to_string_lossy()).map_err(|_| {
+        (
+            422,
+            "project map is unavailable until imported source files parse".into(),
+        )
+    })?;
+    let mut nodes = BTreeMap::<String, Value>::new();
+    let mut edges = BTreeSet::<(String, String, String)>::new();
+    let mut incomplete = false;
+    let node_limit = 500;
+    for module in &loaded.modules {
+        let id = format!("module:{}", module.path);
+        if nodes.len() >= node_limit {
+            incomplete = true;
+            break;
+        }
+        nodes.insert(
+            id.clone(),
+            json!({"id": id, "kind": "module", "label": module.path, "path": module.path}),
+        );
+        for import in &module.imports {
+            let target = format!("module:{}", import.path);
+            if loaded
+                .modules
+                .iter()
+                .any(|candidate| candidate.path == import.path)
+            {
+                edges.insert((id.clone(), target, "imports".into()));
+            } else {
+                incomplete = true;
+            }
+        }
+    }
+
+    let mut tables_by_name = BTreeMap::<String, Vec<String>>::new();
+    let mut cruds = Vec::<(String, String)>::new();
+    let mut api_handlers = Vec::<(String, String)>::new();
+    let mut functions_by_name = BTreeMap::<String, Vec<String>>::new();
+    let mut views_by_path_and_name = BTreeMap::<(String, String), String>::new();
+    for source in &loaded.sources {
+        let tokens =
+            lex(&source.text).map_err(|_| (422, "project source is not parseable".into()))?;
+        let program =
+            parse(&tokens).map_err(|_| (422, "project source is not parseable".into()))?;
+        let module_id = format!("module:{}", source.path);
+
+        for table in &program.tables {
+            let id = format!("table:{}:{}", source.path, table.name);
+            insert_project_map_node(
+                &mut nodes,
+                &mut incomplete,
+                node_limit,
+                &id,
+                "table",
+                &table.name,
+                &source.path,
+                &source.text,
+                table.span,
+            );
+            tables_by_name
+                .entry(table.name.clone())
+                .or_default()
+                .push(id.clone());
+            edges.insert((module_id.clone(), id, "declares".into()));
+        }
+        for view in &program.views {
+            let id = format!("view:{}:{}", source.path, view.name);
+            insert_project_map_node(
+                &mut nodes,
+                &mut incomplete,
+                node_limit,
+                &id,
+                "view",
+                &view.name,
+                &source.path,
+                &source.text,
+                view.span,
+            );
+            views_by_path_and_name.insert((source.path.clone(), view.name.clone()), id.clone());
+            edges.insert((module_id.clone(), id, "declares".into()));
+        }
+        for crud in &program.cruds {
+            let id = format!("crud:{}:{}", source.path, crud.name);
+            insert_project_map_node(
+                &mut nodes,
+                &mut incomplete,
+                node_limit,
+                &id,
+                "crud",
+                &crud.name,
+                &source.path,
+                &source.text,
+                crud.span,
+            );
+            edges.insert((module_id.clone(), id.clone(), "declares".into()));
+            cruds.push((id, crud.table.clone()));
+        }
+        for page in &program.pages {
+            let id = format!("page:{}:{}", source.path, page.path);
+            insert_project_map_node(
+                &mut nodes,
+                &mut incomplete,
+                node_limit,
+                &id,
+                "page",
+                &page.path,
+                &source.path,
+                &source.text,
+                page.span,
+            );
+            edges.insert((module_id.clone(), id.clone(), "declares".into()));
+            if let Some(view) = &page.view {
+                if let Some(target) =
+                    views_by_path_and_name.get(&(source.path.clone(), view.clone()))
+                {
+                    edges.insert((id, target.clone(), "uses view".into()));
+                } else {
+                    incomplete = true;
+                }
+            }
+        }
+        for api in &program.apis {
+            let id = format!("api:{}:{}:{}", source.path, api.method, api.path);
+            insert_project_map_node(
+                &mut nodes,
+                &mut incomplete,
+                node_limit,
+                &id,
+                "api",
+                &format!("{} {}", api.method, api.path),
+                &source.path,
+                &source.text,
+                api.span,
+            );
+            edges.insert((module_id.clone(), id.clone(), "declares".into()));
+            if let Some(handler) = &api.handler {
+                api_handlers.push((id, handler.clone()));
+            }
+        }
+        for function in &program.functions {
+            let id = format!("function:{}:{}", source.path, function.name);
+            insert_project_map_node(
+                &mut nodes,
+                &mut incomplete,
+                node_limit,
+                &id,
+                "function",
+                &function.name,
+                &source.path,
+                &source.text,
+                function.span,
+            );
+            edges.insert((module_id.clone(), id.clone(), "declares".into()));
+            functions_by_name
+                .entry(function.name.clone())
+                .or_default()
+                .push(id);
+        }
+    }
+
+    for (crud, table) in cruds {
+        match tables_by_name.get(&table) {
+            Some(targets) if targets.len() == 1 => {
+                edges.insert((crud, targets[0].clone(), "uses table".into()));
+            }
+            _ => incomplete = true,
+        }
+    }
+    for (route, handler) in api_handlers {
+        match functions_by_name.get(&handler) {
+            Some(targets) if targets.len() == 1 => {
+                edges.insert((route, targets[0].clone(), "handled by".into()));
+            }
+            _ => incomplete = true,
+        }
+    }
+    edges.retain(|(from, to, _)| {
+        let keep = nodes.contains_key(from) && nodes.contains_key(to);
+        incomplete |= !keep;
+        keep
+    });
+    if edges.len() > 1_000 {
+        incomplete = true;
+        edges = edges.into_iter().take(1_000).collect();
+    }
+    Ok((
+        200,
+        "application/json; charset=utf-8",
+        json!({
+            "nodes": nodes.into_values().collect::<Vec<_>>(),
+            "edges": edges.into_iter().map(|(from, to, label)| json!({"from": from, "to": to, "label": label})).collect::<Vec<_>>(),
+            "incomplete": incomplete,
+        })
+        .to_string(),
+    ))
+}
+
+fn insert_project_map_node(
+    nodes: &mut BTreeMap<String, Value>,
+    incomplete: &mut bool,
+    limit: usize,
+    id: &str,
+    kind: &str,
+    label: &str,
+    path: &str,
+    source: &str,
+    span: zelyra_ast::Span,
+) {
+    if nodes.len() >= limit {
+        *incomplete = true;
+        return;
+    }
+    nodes.insert(
+        id.into(),
+        json!({
+            "id": id,
+            "kind": kind,
+            "label": label,
+            "path": path,
+            "line": span.line,
+            "position": byte_to_utf16(source, span.start),
+        }),
+    );
 }
 
 fn push_editor_symbol(

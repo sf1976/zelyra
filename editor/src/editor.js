@@ -65,6 +65,7 @@ const messages = {
     taskFormat: "Datei formatieren", taskFormatHelp: "Zelyra-Quelldatei kanonisch formatieren", taskCheck: "Projekt prüfen",
     taskCheckHelp: "Compilerdiagnosen für das Projekt anzeigen", taskDatabase: "Datenbank öffnen", taskDatabaseHelp: "Tabellen und Beziehungen ansehen",
     taskRun: "Programm ausführen", taskRunHelp: "main.zyl mit Zelyras Laufzeit starten; konfigurierte Datenbank-, Netzwerk- und Prozesseffekte sind möglich, interaktive Eingabe fehlt",
+    projectMap: "Projektkarte", projectMapTitle: "Projektbeziehungen", projectMapLoading: "Compiler-Projektmodell wird geladen …", projectMapUnavailable: "Projektkarte konnte nicht erstellt werden.", projectMapIncomplete: "Die Karte ist unvollständig. Nicht auflösbare oder begrenzte Beziehungen werden nicht geraten.", projectMapEmpty: "Noch keine unterstützten Beziehungen im Projekt.", projectMapModules: "Module", projectMapData: "Daten und Ansichten", projectMapWeb: "Routen und APIs", projectMapLogic: "Funktionen",
     runButton: "Starten", runButtonTitle: "main.zyl ausführen",
     runOutputTitle: "Programmausgabe", runStarting: "main.zyl wird ausgeführt …", runSuccess: "Programm erfolgreich beendet", runFailure: "Programm mit Fehler beendet", runTimeout: "Ausführung nach 15 Sekunden beendet", runOutputTruncated: "Die Ausgabe ist auf 64 KiB je Stream begrenzt.", runNoOutput: "Keine Ausgabe.", runStdout: "AUSGABE", runStderr: "FEHLER", runInputUnavailable: "Studio stellt dem Programm keine interaktive Eingabe bereit.",
     taskHelp: "Kontexthilfe öffnen", taskHelpHelp: "Hilfe zum Begriff am Cursor anzeigen", taskProperties: "Dateieigenschaften öffnen",
@@ -136,6 +137,7 @@ const messages = {
     taskFormat: "Format file", taskFormatHelp: "Format a Zelyra source file", taskCheck: "Check project",
     taskCheckHelp: "Show compiler diagnostics for the project", taskDatabase: "Open database", taskDatabaseHelp: "Inspect tables and relationships",
     taskRun: "Run program", taskRunHelp: "Run main.zyl with Zelyra; configured database, network, and process effects are possible, and interactive input is unavailable",
+    projectMap: "Project map", projectMapTitle: "Project relationships", projectMapLoading: "Loading the compiler project model …", projectMapUnavailable: "Could not create the project map.", projectMapIncomplete: "The map is incomplete. Unresolved or limited relationships are not guessed.", projectMapEmpty: "No supported relationships in this project yet.", projectMapModules: "Modules", projectMapData: "Data and views", projectMapWeb: "Routes and APIs", projectMapLogic: "Functions",
     runButton: "Run", runButtonTitle: "Run main.zyl",
     runOutputTitle: "Program output", runStarting: "Running main.zyl …", runSuccess: "Program finished successfully", runFailure: "Program finished with an error", runTimeout: "Execution stopped after 15 seconds", runOutputTruncated: "Output is limited to 64 KiB per stream.", runNoOutput: "No output.", runStdout: "OUTPUT", runStderr: "ERROR", runInputUnavailable: "Studio does not provide interactive input to the program.",
     taskHelp: "Open contextual help", taskHelpHelp: "Show help for the term at the cursor", taskProperties: "Open file properties",
@@ -536,6 +538,7 @@ const studioTasks = [
   ["taskFormat", "taskFormatHelp", ["format", "formatter"], () => void formatActive()],
   ["taskCheck", "taskCheckHelp", ["check", "compiler", "error", "diagnostic"], () => void checkProject()],
   ["taskRun", "taskRunHelp", ["run", "execute", "start program"], () => void runProject()],
+  ["projectMap", "projectMapTitle", ["map", "diagram", "module", "route", "relationship"], () => void openProjectMap()],
   ["taskDatabase", "taskDatabaseHelp", ["database", "table", "relation", "schema"], () => openDatabaseWorkbench()],
   ["taskHelp", "taskHelpHelp", ["help", "documentation", "f1"], () => toggleAssistant("help")],
   ["taskProperties", "taskPropertiesHelp", ["properties", "file", "settings"], () => toggleAssistant("properties")],
@@ -1379,6 +1382,137 @@ async function runProject() {
   }
 }
 
+async function openProjectMap() {
+  const dialog = $("project-map-dialog");
+  const status = $("project-map-status");
+  const graph = $("project-map-graph");
+  if (!dialog.open) dialog.showModal();
+  status.textContent = t("projectMapLoading");
+  graph.replaceChildren();
+  try {
+    const map = await api("project-map");
+    renderProjectMap(map);
+    status.textContent = map.incomplete ? t("projectMapIncomplete") : "";
+    if (!map.nodes?.length) status.textContent = t("projectMapEmpty");
+  } catch (error) {
+    status.textContent = error.message || t("projectMapUnavailable");
+  }
+}
+
+function renderProjectMap(map) {
+  const svg = $("project-map-graph");
+  const ns = "http://www.w3.org/2000/svg";
+  const columns = ["module", "data", "web", "logic"];
+  const columnKinds = {
+    module: new Set(["module"]),
+    data: new Set(["table", "crud", "view"]),
+    web: new Set(["api", "page"]),
+    logic: new Set(["function"]),
+  };
+  const labels = { module: t("projectMapModules"), data: t("projectMapData"), web: t("projectMapWeb"), logic: t("projectMapLogic") };
+  const grouped = Object.fromEntries(columns.map((column) => [column, []]));
+  for (const node of map.nodes || []) {
+    const column = columns.find((key) => columnKinds[key].has(node.kind));
+    if (column) grouped[column].push(node);
+  }
+  for (const column of columns) grouped[column].sort((left, right) => left.label.localeCompare(right.label) || left.path.localeCompare(right.path));
+  const width = 1080;
+  const cardWidth = 224;
+  const cardHeight = 50;
+  const rowGap = 68;
+  const xPositions = [16, 286, 556, 826];
+  const height = Math.max(320, Math.max(...columns.map((column) => grouped[column].length), 1) * rowGap + 70);
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("width", String(width));
+  svg.setAttribute("height", String(height));
+  svg.replaceChildren();
+  const defs = document.createElementNS(ns, "defs");
+  const marker = document.createElementNS(ns, "marker");
+  marker.setAttribute("id", "project-map-arrow");
+  marker.setAttribute("viewBox", "0 0 8 8");
+  marker.setAttribute("refX", "7"); marker.setAttribute("refY", "4");
+  marker.setAttribute("markerWidth", "6"); marker.setAttribute("markerHeight", "6");
+  marker.setAttribute("orient", "auto-start-reverse");
+  const arrow = document.createElementNS(ns, "path");
+  arrow.setAttribute("d", "M 0 0 L 8 4 L 0 8 z"); arrow.setAttribute("class", "project-map-arrow");
+  marker.append(arrow); defs.append(marker); svg.append(defs);
+  const positions = new Map();
+  for (let columnIndex = 0; columnIndex < columns.length; columnIndex += 1) {
+    const column = columns[columnIndex];
+    const heading = document.createElementNS(ns, "text");
+    heading.setAttribute("x", String(xPositions[columnIndex]));
+    heading.setAttribute("y", "20");
+    heading.setAttribute("class", "project-map-column-title");
+    heading.textContent = labels[column];
+    svg.append(heading);
+    grouped[column].forEach((node, index) => {
+      positions.set(node.id, { x: xPositions[columnIndex], y: 38 + index * rowGap });
+    });
+  }
+  for (const edge of map.edges || []) {
+    const from = positions.get(edge.from);
+    const to = positions.get(edge.to);
+    if (!from || !to) continue;
+    const line = document.createElementNS(ns, "path");
+    const startX = from.x + (from.x <= to.x ? cardWidth : 0);
+    const endX = to.x + (from.x <= to.x ? 0 : cardWidth);
+    const startY = from.y + cardHeight / 2;
+    const endY = to.y + cardHeight / 2;
+    const curve = Math.max(30, Math.abs(endX - startX) / 2);
+    line.setAttribute("d", `M ${startX} ${startY} C ${startX + (from.x <= to.x ? curve : -curve)} ${startY}, ${endX - (from.x <= to.x ? curve : -curve)} ${endY}, ${endX} ${endY}`);
+    line.setAttribute("class", `project-map-edge${edge.label === "imports" ? " import" : ""}`);
+    line.setAttribute("marker-end", "url(#project-map-arrow)");
+    const title = document.createElementNS(ns, "title");
+    title.textContent = edge.label;
+    line.append(title);
+    svg.append(line);
+    if (edge.label !== "declares") {
+      const caption = document.createElementNS(ns, "text");
+      caption.setAttribute("x", String((startX + endX) / 2));
+      caption.setAttribute("y", String((startY + endY) / 2 - 4));
+      caption.setAttribute("class", "project-map-edge-label");
+      caption.textContent = edge.label;
+      svg.append(caption);
+    }
+  }
+  for (const column of columns) {
+    for (const node of grouped[column]) {
+      const position = positions.get(node.id);
+      const group = document.createElementNS(ns, "g");
+      group.setAttribute("class", `project-map-node kind-${node.kind}`);
+      group.setAttribute("role", "button");
+      group.setAttribute("tabindex", "0");
+      group.setAttribute("aria-label", `${node.kind}: ${node.label} · ${node.path}:${node.line || 1}`);
+      const rect = document.createElementNS(ns, "rect");
+      rect.setAttribute("x", String(position.x)); rect.setAttribute("y", String(position.y));
+      rect.setAttribute("width", String(cardWidth)); rect.setAttribute("height", String(cardHeight));
+      const name = document.createElementNS(ns, "text");
+      name.setAttribute("x", String(position.x + 10)); name.setAttribute("y", String(position.y + 20)); name.setAttribute("class", "project-map-node-name");
+      name.textContent = `${node.kind} · ${node.label}`.slice(0, 32);
+      const file = document.createElementNS(ns, "text");
+      file.setAttribute("x", String(position.x + 10)); file.setAttribute("y", String(position.y + 38)); file.setAttribute("class", "project-map-node-file");
+      file.textContent = `${node.path}:${node.line || 1}`.slice(0, 34);
+      const title = document.createElementNS(ns, "title");
+      title.textContent = `${node.kind}: ${node.label} · ${node.path}:${node.line || 1}`;
+      group.append(rect, name, file, title);
+      const openNode = () => {
+        void openFile(node.path).then(() => {
+          if (activePath !== node.path || !editor) return;
+          const position = Math.max(0, Math.min(node.position || 0, editor.state.doc.length));
+          editor.dispatch({ selection: { anchor: position }, scrollIntoView: true });
+          editor.focus();
+          $("project-map-dialog").close();
+        });
+      };
+      group.addEventListener("click", openNode);
+      group.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openNode(); }
+      });
+      svg.append(group);
+    }
+  }
+}
+
 async function formatActive() {
   if (!activePath) return;
   if (!(await savePath(activePath))) return;
@@ -1423,6 +1557,8 @@ $("task-finder-close").addEventListener("click", () => $("task-finder").close())
 $("project-search-button").addEventListener("click", openProjectSearch);
 $("project-search-close").addEventListener("click", () => $("project-search").close());
 $("run-output-close").addEventListener("click", () => $("run-output").close());
+$("project-map-button").addEventListener("click", openProjectMap);
+$("project-map-close").addEventListener("click", () => $("project-map-dialog").close());
 $("project-search-input").addEventListener("keydown", (event) => {
   if (event.key === "Enter") { event.preventDefault(); void performProjectSearch(); }
 });

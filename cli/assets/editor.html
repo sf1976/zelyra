@@ -17,6 +17,7 @@
         <button class="icon-button" id="sidebar-toggle" aria-label="Dateiübersicht umschalten" title="Dateiübersicht umschalten" data-i18n-title="toggleExplorer" data-i18n-aria="toggleExplorer">☰</button>
         <button class="toolbar-button" id="open-search" title="Suchen (Strg+F)" data-i18n-title="search">⌕ <span data-i18n="search">Suchen</span></button>
         <button class="toolbar-button" id="project-search-button" title="Projekt durchsuchen (Strg+Umschalt+F)" data-i18n-title="projectSearch">⌕ <span data-i18n="projectSearch">Projekt</span></button>
+        <button class="toolbar-button" id="project-map-button" title="Projektbeziehungen anzeigen" data-i18n-title="projectMap">◇ <span data-i18n="projectMap">Projektkarte</span></button>
         <button class="toolbar-button" id="task-finder-button" title="Aktion suchen (Strg+Umschalt+P)" data-i18n-title="taskFinder">⌘ <span data-i18n="taskFinder">Aktionen</span></button>
         <button class="toolbar-button" id="database-button" title="Datenbankübersicht öffnen" data-i18n-title="database">▤ <span data-i18n="database">Datenbank</span></button>
         <button class="toolbar-button" id="assistant-toggle" title="Hilfe und Eigenschaften" data-i18n-title="assistant">ⓘ <span data-i18n="assistant">Hilfe</span></button>
@@ -134,6 +135,12 @@
     <p id="run-output-state" class="run-output-state" role="status"></p>
     <pre id="run-output-content" class="run-output-content"></pre>
     <footer><span>main.zyl</span><kbd>Esc</kbd><span data-i18n="close">Schließen</span></footer>
+  </dialog>
+  <dialog id="project-map-dialog" class="project-map-dialog" aria-labelledby="project-map-title">
+    <header class="project-map-header"><div><span class="database-eyebrow" data-i18n="projectMap">PROJEKTKARTE</span><h2 id="project-map-title" data-i18n="projectMapTitle">Projektbeziehungen</h2></div><button id="project-map-close" aria-label="Schließen" data-i18n-aria="close">×</button></header>
+    <p id="project-map-status" class="project-map-status" role="status"></p>
+    <div class="project-map-legend"><span data-i18n="projectMapModules">Module</span><span data-i18n="projectMapData">Daten und Ansichten</span><span data-i18n="projectMapWeb">Routen und APIs</span><span data-i18n="projectMapLogic">Funktionen</span></div>
+    <div class="project-map-scroller"><svg id="project-map-graph" class="project-map-graph" role="img" aria-label="Projektbeziehungen"></svg></div>
   </dialog>
 </body>
 </html>
