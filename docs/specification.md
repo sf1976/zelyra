@@ -47,6 +47,14 @@ benchmarks remain roadmap work.
 String and character literals preserve valid Unicode characters as written.
 Source spans continue to use UTF-8 byte offsets.
 
+## Comments in language line 0.1
+
+`#` starts a line comment through the end of the line. A standalone `##` line
+opens a block comment; the next standalone `##` line closes it. Block comments
+do not nest. If a closing delimiter is missing, the lexer reports an error at
+the opening delimiter. The older `//` line-comment syntax remains available
+for valid existing programs; new Zelyra source uses `#` and `##`.
+
 ## Interactive console input
 
 CLI programs read one line with `read_console(prompt: String) -> String?`.

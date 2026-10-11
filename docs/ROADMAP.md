@@ -612,6 +612,13 @@ this work across 0.9.2–0.9.8; these are not capabilities of the released 0.9.0
 - Exit evidence: browser and security tests cover unsaved edits, concurrent file
   changes, path traversal, malformed source, clean restart, and keyboard use.
   The invoice example opens and runs from the workspace.
+- [🧪] The invoice tutorial shows net, 19% VAT, and gross amounts from stored
+  lines and provides a print-ready view the browser can save as PDF. The German
+  standard rate is only an assumption for this learning example; this is not a
+  native PDF engine or a complete legally compliant invoice template.
+- [🧪] Language line 0.1 uses `#` for line comments and standalone `##` lines
+  as non-nesting block-comment delimiters. Existing `//` comments remain
+  compatible.
 
 ## Release 0.9.2 — IDE language services
 

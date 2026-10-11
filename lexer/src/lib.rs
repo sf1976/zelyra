@@ -190,6 +190,84 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
             }
             continue;
         }
+        if c == '#' {
+            let line_end = bytes[i..]
+                .iter()
+                .position(|byte| *byte == b'\n')
+                .map_or(bytes.len(), |offset| i + offset);
+            let is_block_delimiter = bytes.get(i + 1) == Some(&b'#')
+                && source[bytes[..i]
+                    .iter()
+                    .rposition(|byte| *byte == b'\n')
+                    .map_or(0, |offset| offset + 1)..line_end]
+                    .trim()
+                    == "##";
+
+            if is_block_delimiter {
+                let opening = Span::new(i, line_end, line, column);
+                i = line_end;
+                column += line_end - start;
+                if i < bytes.len() {
+                    tokens.push(Token {
+                        kind: TokenKind::Newline,
+                        span: Span::new(i, i + 1, line, column),
+                    });
+                    i += 1;
+                    line += 1;
+                    column = 1;
+                }
+
+                let mut closed = false;
+                while i < bytes.len() {
+                    let content_start = i;
+                    let content_end = bytes[i..]
+                        .iter()
+                        .position(|byte| *byte == b'\n')
+                        .map_or(bytes.len(), |offset| i + offset);
+                    if source[content_start..content_end].trim() == "##" {
+                        i = content_end;
+                        column += content_end - content_start;
+                        if i < bytes.len() {
+                            tokens.push(Token {
+                                kind: TokenKind::Newline,
+                                span: Span::new(i, i + 1, line, column),
+                            });
+                            i += 1;
+                            line += 1;
+                            column = 1;
+                        }
+                        closed = true;
+                        break;
+                    }
+
+                    i = content_end;
+                    column += content_end - content_start;
+                    if i < bytes.len() {
+                        tokens.push(Token {
+                            kind: TokenKind::Newline,
+                            span: Span::new(i, i + 1, line, column),
+                        });
+                        i += 1;
+                        line += 1;
+                        column = 1;
+                    }
+                }
+
+                if !closed {
+                    return Err(LexError {
+                        message: "unterminated block comment; expected a standalone `##` line"
+                            .into(),
+                        span: opening,
+                    });
+                }
+            } else {
+                while i < bytes.len() && bytes[i] != b'\n' {
+                    i += 1;
+                    column += 1;
+                }
+            }
+            continue;
+        }
         let span = |end: usize| Span::new(start, end, token_line, token_column);
         if c.is_ascii_alphabetic() || c == '_' {
             i += 1;

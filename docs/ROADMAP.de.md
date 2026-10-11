@@ -582,6 +582,14 @@ Zelyra-Quelltext überprüfbar bleiben. Die Roadmap staffelt diese Ziele über
   gleichzeitige Dateiänderungen, Pfadmanipulation, fehlerhaften Quelltext,
   Neustart und Tastaturbedienung ab. Das Rechnungsbeispiel lässt sich öffnen und
   ausführen.
+- [🧪] Das Rechnungstutorial zeigt eine Netto-/19%-Umsatzsteuer-/Brutto-
+  Rechnung aus den gespeicherten Positionen und eine druckoptimierte Ansicht,
+  die der Browser als PDF speichern kann. Der angenommene Standardsatz gilt
+  nur für das deutsche Lernbeispiel; dies ist keine native PDF-Engine und keine
+  vollständige gesetzeskonforme Rechnungsvorlage.
+- [🧪] Die Sprachzeile 0.1 verwendet `#` für einzeilige Kommentare und
+  alleinstehende `##`-Zeilen als nicht verschachtelte Blockkommentar-Grenzen.
+  `//` bleibt für vorhandene Programme kompatibel.
 
 ## Release 0.9.2 — Sprachdienste der IDE
 

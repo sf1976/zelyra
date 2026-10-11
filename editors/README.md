@@ -8,7 +8,8 @@ Official Visual Studio Code extension for the **Zelyra** programming language (`
 - **Language Configuration**:
   - Automatic bracket pairing: `{}`, `()`, `[]`
   - Auto-closing pairs and surround support
-  - Line (`//`) and block (`/* ... */`) comments with indentation rules
+  - Standard line (`#`) and standalone-delimiter block (`##`) comments; legacy
+    `//` comments remain accepted by the compiler
   - Symbol folding and outline support
 
 ## Quick Installation

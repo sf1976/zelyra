@@ -32,11 +32,26 @@ At the same time, Zelyra is **database- and web-centric**:
 Let us examine a first minimal Zelyra program:
 
 ```zelyra
-// Our first Zelyra program: A greeting
+# Our first Zelyra program: A greeting
 fn main() {
     print("Welcome to Zelyra!")
 }
 ```
+
+Single-line comments start with `#`. A block comment starts and ends with a
+line containing only `##`. Block comments cannot nest; if the closing line is
+missing, the lexer reports an error:
+
+```zelyra
+##
+The compiler ignores this whole region.
+It can span multiple lines.
+##
+```
+
+The older `//` spelling remains accepted for compatibility. New Zelyra code
+should use `#` and `##`. See [`examples/comments.zyl`](../../../examples/comments.zyl)
+for a complete example.
 
 To give this program more modular structure, we can break the task down into a reusable function:
 

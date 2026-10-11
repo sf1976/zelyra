@@ -1,0 +1,9 @@
+# This is the standard one-line comment syntax.
+##
+This is a block comment.
+It continues until another standalone ## line.
+##
+fn main() {
+    print("Comments are ignored by the compiler") # Inline line comment
+}
+// Existing projects may continue to use this spelling.

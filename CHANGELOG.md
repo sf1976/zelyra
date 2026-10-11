@@ -6,6 +6,14 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+- Calculate invoice net, 19% VAT, and gross totals from linked lines and provide
+  a browser print-to-PDF invoice view. / Netto, 19% Umsatzsteuer und
+  Bruttobeträge aus verknüpften Rechnungspositionen berechnen und eine
+  druckoptimierte Rechnungsansicht mit PDF-Ausgabe des Browsers ergänzen.
+- Standardize `#` line comments and standalone `##` block delimiters while
+  retaining `//` compatibility. / `#`-Zeilenkommentare und alleinstehende
+  `##`-Blockkommentargrenzen als Standard festlegen und `//` kompatibel halten.
+
 ## 0.9.0 — 2026-10-11
 
 - Add preview-bound `zelyra text edit` TOML plans with linear regexes, expected

@@ -19,8 +19,9 @@ syn match zylFunction "\v<fn>\s+\zs<[a-zA-Z_][a-zA-Z0-9_]*>"
 syn match zylOperator "->\|=>\|==\|!=\|<=\|>=\|&&\|||\|=\|+\|-\|\*\|\/\|%"
 syn match zylNumber "\v<\d+(\.\d+)?>"
 
+syn match zylComment "#.*$"
 syn match zylComment "//.*$"
-syn region zylComment start="/\*" end="\*/"
+syn region zylComment start="^\s*##\s*$" end="^\s*##\s*$"
 
 syn region zylString start='"' skip='\\"' end='"' contains=zylInterpolation
 syn region zylInterpolation contained start="{" end="}" contains=ALLBUT,zylComment

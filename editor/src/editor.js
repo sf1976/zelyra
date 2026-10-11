@@ -165,19 +165,20 @@ const keywords = new Set((
 ).split(/\s+/));
 const zelyraLanguage = StreamLanguage.define({
   startState: () => ({ inBlockComment: false }),
+  languageData: { commentTokens: { line: "#", block: { open: "##", close: "##" } } },
   token(stream, state) {
+    if (stream.string.trim() === "##") {
+      stream.skipToEnd();
+      state.inBlockComment = !state.inBlockComment;
+      return "comment";
+    }
     if (state.inBlockComment) {
-      if (stream.match("*/")) state.inBlockComment = false;
-      else stream.next();
+      stream.skipToEnd();
       return "comment";
     }
     if (stream.eatSpace()) return null;
+    if (stream.match("#")) { stream.skipToEnd(); return "comment"; }
     if (stream.match("//")) { stream.skipToEnd(); return "comment"; }
-    if (stream.match("/*")) {
-      state.inBlockComment = true;
-      if (stream.skipTo("*/")) { stream.match("*/"); state.inBlockComment = false; }
-      return "comment";
-    }
     if (stream.match(/(?:\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*')/)) return "string";
     if (stream.match(/\b\d+(?:\.\d+)?\b/)) return "number";
     if (stream.match(/[A-Za-z_][\w]*/)) {
