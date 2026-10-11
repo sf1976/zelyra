@@ -1,14 +1,37 @@
-# Implemented in Zelyra 0.9.2
+# Implemented in Zelyra 0.9.3
 
-**Snapshot:** stable 0.9.2 · language compatibility line `0.1` · 2026-10-11
+**Snapshot:** stable 0.9.3 · language compatibility line `0.1` · 2026-10-11
 **Maturity:** experimental; not approved for production use
 
-This is an inventory of capabilities implemented in the stable Zelyra 0.9.2
+This is an inventory of capabilities implemented in the stable Zelyra 0.9.3
 release. It does not claim human acceptance; that remains scheduled for 1.0.0. It records delivered scope, not the full language vision
 or future plans. The [roadmap](ROADMAP.md) remains the source for unfinished
 work; the [changelog](../CHANGELOG.md) records what changed in each release.
 Links below lead to detailed instructions and test evidence so this page does
 not duplicate the handbook.
+
+## Changes in 0.9.3
+
+- ✅ The modular `examples/type_system` now also checks native fixed-point,
+  calendar, time, duration, byte, tuple, and set values. Its report separates
+  supported, partial, and unavailable concepts. Enum types, function values,
+  and user-defined generics remain unavailable; records have value semantics
+  without observable class identity. See the [type inventory](../examples/type_system/README.md).
+- ✅ `examples/csv_catalog` handles UTF-8 CSV with semicolons, quotes, and
+  newlines, validates records, exports errors and valid items, and calculates
+  decimal prices without Float.
+- ✅ `examples/labyrinth_solver` validates and loads grid files, uses
+  breadth-first search for a shortest path, and reports the path, steps, and
+  search counters.
+- ✅ Studio adds a session-protected read-only data browser, compiler-checked
+  and confirmed source-column edits, and confirmed MariaDB database creation
+  when a connection is already configured. It does not apply table migrations.
+- 🧪 `zelyra migrate laravel <project> --report <path>` creates a read-only
+  Markdown/JSON inventory with source locations and unresolved findings. The
+  pattern-based scanner is not yet a PHP parser or automatic migrator.
+- ✅ Tutorial and Studio startup flows and nested CLI command help are improved.
+  Independent human product and accessibility acceptance remains scheduled
+  for 1.0.0.
 
 ## Changes in 0.9.2
 

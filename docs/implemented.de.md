@@ -1,9 +1,9 @@
-# In Zelyra 0.9.2 umgesetzt
+# In Zelyra 0.9.3 umgesetzt
 
-**Stand:** stabiles Release 0.9.2 · Sprachkompatibilitätslinie `0.1` · 2026-10-11
+**Stand:** stabiles Release 0.9.3 · Sprachkompatibilitätslinie `0.1` · 2026-10-11
 **Reifegrad:** experimentell; nicht für den Produktiveinsatz freigegeben
 
-Diese Übersicht führt Funktionen auf, die im stabilen Release Zelyra 0.9.2
+Diese Übersicht führt Funktionen auf, die im stabilen Release Zelyra 0.9.3
 tatsächlich implementiert sind. Eine menschliche Abnahme wird nicht behauptet;
 sie bleibt bis 1.0.0 offen. Sie beschreibt den ausgelieferten Umfang,
 nicht die gesamte Sprachvision oder zukünftige Vorhaben. Die
@@ -11,6 +11,31 @@ nicht die gesamte Sprachvision oder zukünftige Vorhaben. Die
 [Changelog](../CHANGELOG.md) hält die Änderungen der Releases fest. Die Links
 führen zu ausführlichen Anleitungen und Testnachweisen, damit diese Seite das
 Handbuch nicht doppelt wiedergibt.
+
+## Änderungen in 0.9.3
+
+- ✅ Das mehrteilige `examples/type_system` prüft jetzt auch native
+  Festkomma-, Kalender-, Zeit-, Dauer-, Byte-, Tupel- und Mengenwerte. Der
+  Bericht trennt unterstützte, teilweise und nicht verfügbare Konzepte.
+  Enumtypen, Funktionswerte und benutzerdefinierte Generics fehlen weiterhin;
+  Records folgen Wertsemantik ohne beobachtbare Klassenidentität. Siehe das
+  [Typinventar](../examples/type_system/README.md).
+- ✅ `examples/csv_catalog` verarbeitet UTF-8-CSV mit Semikolon, Quotes und
+  Zeilenumbrüchen, prüft Datensätze, exportiert Fehler und gültige Artikel und
+  berechnet Dezimalpreise ohne Float.
+- ✅ `examples/labyrinth_solver` prüft und lädt Rasterdateien, sucht mit
+  Breitensuche einen kürzesten Weg und gibt Weg, Schritte und Suchzähler aus.
+- ✅ Das Studio erhält einen sitzungsgeschützten schreibgeschützten
+  Datenbrowser, compilergeprüfte und bestätigte Quellspaltenänderungen sowie
+  die bestätigte Anlage einer MariaDB-Datenbank bei vorhandener Verbindung.
+  Es wendet dabei keine Tabellenmigration an.
+- 🧪 `zelyra migrate laravel <projekt> --report <pfad>` erstellt ein
+  schreibgeschütztes Markdown-/JSON-Inventar mit Quellpositionen und offenen
+  Befunden. Der musterbasierte Scanner ist noch kein PHP-Parser oder
+  automatischer Migrator.
+- ✅ Tutorial- und Studio-Startabläufe sowie die gestaffelte CLI-Detailhilfe
+  sind ergänzt. Unabhängige menschliche Produkt- und Barrierefreiheitsabnahme
+  bleibt für 1.0.0 vorgesehen.
 
 ## Änderungen in 0.9.2
 
