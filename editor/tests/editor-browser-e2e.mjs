@@ -82,6 +82,12 @@ try {
   await page.locator("#assistant-properties-tab").click();
   await page.getByRole("heading", { name: "main.zyl" }).waitFor();
   await page.locator("#assistant-help-tab").click();
+  await page.locator("#run-button").click();
+  await page.waitForFunction(() => document.querySelector("#run-output-state")?.dataset.kind === "success");
+  const runOutput = await page.locator("#run-output-content").textContent();
+  assert.match(runOutput, /3/, "Studio Run must execute main.zyl and display stdout");
+  assert.match(runOutput, /interactive input|interaktive Eingabe/i, "Studio must explain that stdin is unavailable");
+  await page.locator("#run-output-close").click();
   await editor.focus();
   await page.keyboard.press("Control+A");
   await page.keyboard.type('fn main() { print("unsaved browser edit"); }\n');
