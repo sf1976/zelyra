@@ -162,6 +162,21 @@ assert "legacy_code" in live and "legacy_code" not in declared
 assert any(key["references_table"] == "departments" for key in customers["foreign_keys"])
 assert any(key["references_table"] == "departments" for key in customers["live_foreign_keys"])
 
+project_map = request("project-map")
+assert project_map == request("project-map"), "project map output must be deterministic"
+math_function = next(
+    node for node in project_map["nodes"]
+    if node["kind"] == "function" and node["label"] == "sum"
+)
+assert math_function["path"] == "src/math.zyl" and math_function["line"] == 1
+assert isinstance(math_function["position"], int)
+assert any(
+    edge["from"] == "module:main.zyl"
+    and edge["to"] == "module:src/math.zyl"
+    and edge["label"] == "imports"
+    for edge in project_map["edges"]
+), "project map must include the imported module edge"
+
 path = "file?path=" + urllib.parse.quote("main.zyl")
 original = request(path)
 payload = {"path": "main.zyl", "baseHash": original["hash"], "table": "customers", "fields": ["name"], "resourceName": "Customer", "title": "Customer"}
