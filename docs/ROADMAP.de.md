@@ -690,6 +690,8 @@ manuell umzusetzen.
 
 ## Release 0.9.3 — Datenbankwerkbank
 
+Arbeitsumfang und technische Gates stehen im [Releaseplan 0.9.3](release-plans/0.9.3.de.md).
+
 - [✅] CSV-Grundlagen für Import und Export ergänzen: `String[][]` als
   verschachtelten Typ parsen, zitierte Trennzeichen/Quotes/Zeilenumbrüche
   korrekt decodieren und encodieren sowie Dezimaltexte ohne Float exakt in

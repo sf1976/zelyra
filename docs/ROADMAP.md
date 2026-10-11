@@ -702,6 +702,8 @@ its source evidence and reason.
 
 ## Release 0.9.3 — database workbench
 
+Scope and technical gates are in the [0.9.3 release plan](release-plans/0.9.3.en.md).
+
 - [✅] Add CSV foundations for import and export: parse `String[][]` as a
   nested type, correctly decode and encode quoted delimiters/quotes/newlines,
   and convert decimal text to scaled integers without Float. The
