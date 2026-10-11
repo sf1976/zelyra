@@ -2061,6 +2061,31 @@ impl<'a> Parser<'a> {
                 self.expect(TokenKind::Greater, "`>` after Map value type")?;
                 Type::Map(Box::new(key), Box::new(value))
             }
+            "List" => {
+                self.expect(TokenKind::Less, "`<` after `List`")?;
+                let inner = self.type_name()?;
+                self.expect(TokenKind::Greater, "`>` after List element type")?;
+                Type::Array(Box::new(inner))
+            }
+            "Set" => {
+                self.expect(TokenKind::Less, "`<` after `Set`")?;
+                let inner = self.type_name()?;
+                self.expect(TokenKind::Greater, "`>` after Set element type")?;
+                Type::Set(Box::new(inner))
+            }
+            "Tuple" => {
+                self.expect(TokenKind::Less, "`<` after `Tuple`")?;
+                let mut items = vec![self.type_name()?];
+                while self.at(&TokenKind::Comma) {
+                    self.advance();
+                    items.push(self.type_name()?);
+                }
+                self.expect(TokenKind::Greater, "`>` after Tuple item types")?;
+                if items.len() < 2 {
+                    return self.error("Tuple requires at least two item types");
+                }
+                Type::Tuple(items)
+            }
             "HttpResult" => {
                 self.expect(TokenKind::Less, "`<` after `HttpResult`")?;
                 let response = self.type_name()?;

@@ -75,8 +75,10 @@ proof that arbitrary applications are correct.
   point with nine fractional digits and exact base-10 arithmetic; it serializes
   as a decimal string for lossless JSON round trips. `Date`, `Time`, `Duration`,
   and `Bytes` now have runtime values, validating constructors, and JSON round
-  trips. Enums, tuples, sets, class identity, and user-defined generics remain
-  open.
+  trips. `List<T>` aliases `T[]`; heterogeneous `Tuple<A, B, ...>` and
+  deterministic `Set<T>` values can be created, checked, iterated, and passed
+  through JSON. User-defined enums/generics and observable class identity
+  remain open.
 - ✅ Strings support lexicographic comparisons. `json_decode_result<T>`,
   `read_text_result`, and `write_text_result` return expected parse and file
   errors as `Result`. `format_timestamp` renders UTC timestamps as ISO 8601;

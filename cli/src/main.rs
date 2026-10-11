@@ -8467,6 +8467,9 @@ fn api_json_value_node(value: &RuntimeValue) -> serde_json::Value {
         RuntimeValue::Array(values) => {
             serde_json::Value::Array(values.iter().map(api_json_value_node).collect())
         }
+        RuntimeValue::Tuple(values) | RuntimeValue::Set(values) => {
+            serde_json::Value::Array(values.iter().map(api_json_value_node).collect())
+        }
         RuntimeValue::Map(entries) => {
             let object = entries
                 .iter()

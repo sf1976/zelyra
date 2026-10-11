@@ -1,2 +1,4 @@
-fn accept_list(value: List) {}
-fn main() {}
+fn main() {
+    value: List<Int> = ["not an integer"]
+    print(value)
+}

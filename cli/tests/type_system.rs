@@ -71,10 +71,11 @@ fn type_coverage_program_passes_supported_tests_and_reports_expected_failures() 
         "PASS Decimal exact base-10 arithmetic and Float binary precision",
         "PASS Bool, Char, String, Unicode, Timestamp, Date, Time, Duration and Bytes",
         "PASS Arrays, nested collections",
+        "PASS List, Tuple and Set construction, typing, operations and JSON",
         "PASS records, nested fields",
         "PASS Unit type, function return",
         "PASS Option, Result, records",
-        "Report: 7 expected compiler errors and 17 expected runtime errors",
+        "Report: 7 expected compiler errors and 18 expected runtime errors",
         "alle ausführbaren Typprüfungen bestanden",
     ] {
         assert!(
@@ -88,9 +89,15 @@ fn type_coverage_program_passes_supported_tests_and_reports_expected_failures() 
         ("mixed_array.zyl", "type mismatch"),
         ("non_exhaustive_match.zyl", "non-exhaustive match"),
         ("invalid_operation.zyl", "numeric operands"),
-        ("unsupported_type.zyl", "unknown type `Tuple`"),
-        ("unsupported_list.zyl", "unknown type `List`"),
-        ("unsupported_set.zyl", "unknown type `Set`"),
+        (
+            "unsupported_type.zyl",
+            "Tuple requires at least two item types",
+        ),
+        ("unsupported_list.zyl", "type mismatch"),
+        (
+            "unsupported_set.zyl",
+            "Set elements must be scalar comparable types",
+        ),
     ] {
         let path = format!("expected/compiler/{fixture}");
         let result = cli(&project, &["check", &path]);
@@ -124,6 +131,7 @@ fn type_coverage_program_passes_supported_tests_and_reports_expected_failures() 
             "base-10 value with at most 9 fractional digits",
         ),
         ("decimal_json_number.zyl", "expected Decimal string"),
+        ("invalid_tuple_json.zyl", "expected 2 tuple values, found 1"),
         (
             "non_string_map_json.zyl",
             "supports only Map<String, Value>",

@@ -5,6 +5,22 @@ pub fn identity_labels(value: Map<String, Int>) -> Map<String, Int> {
     return value
 }
 pub fn run() {
+    pair: Tuple<String, Int> = tuple("Rechnung", 7)
+    assert(pair[0] == "Rechnung" && pair[1] == 7, "Tuple keeps heterogeneous item types and supports constant index access")
+    restored_pair = json_decode<Tuple<String, Int>>(json_encode(pair))
+    assert(restored_pair == pair, "Tuple JSON round trip preserves item types and order")
+    values: List<Int> = [1, 2, 3]
+    assert(values[1] == 2 && len(values) == 3, "List is the named spelling of Zelyra's ordered array type")
+    tags: Set<Int> = set([3, 1, 3, 2])
+    assert(len(tags) == 3 && contains(tags, 1), "Set removes duplicate elements and supports membership")
+    changed_tags = set_remove(set_add(tags, 4), 2)
+    assert(changed_tags == set([1, 3, 4]), "Set add and remove return deterministic values")
+    restored_tags = json_decode<Set<Int>>(json_encode(tags))
+    assert(restored_tags == tags, "Set JSON round trip preserves unique membership")
+    mutable total = 0
+    for tag in tags { total = total + tag }
+    assert(total == 6, "Set iteration visits each member once")
+    print("PASS List, Tuple and Set construction, typing, operations and JSON")
     empty: Int[] = []
     assert(len(empty) == 0, "typed empty arrays")
     mutable numbers = identity_numbers(append(empty, 4))

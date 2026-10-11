@@ -36,9 +36,9 @@ Programmlauf.
 | `String` | ✅ unterstützt | UTF-8, Unicode, Escape-Sequenzen, Gleichheit, lexikografische Vergleiche und Verkettung. `text_chars` zählt Unicode-Skalarwerte; eine Byte-Längenfunktion gibt es nicht. |
 | Null und optionale Werte | ✅ unterstützt | Kein eigenständiger Nulltyp. `Option<T>`, `Some` und `None` unterscheiden fehlende Werte von `0`, `false` und `""`. JSON bildet `None` auf `null` ab. |
 | Arrays | ✅ unterstützt | Typisierte, verschachtelte und leere Arrays; `append`/Verkettung liefern Werte zurück. Doppelte Elemente sind erlaubt. Falsche Typen werden beim Kompilieren, ungültige Indizes zur Laufzeit erkannt. |
-| Listen | — nicht vorhanden | Arrays sind die vorhandene Sammlung; ein eigener `List<T>`-Typ existiert nicht. |
-| Tupel | — nicht vorhanden | Kein Tupeltyp; die erwartete Typdatei wird als Compilerfehler geprüft. |
-| Mengen | — nicht vorhanden | Kein Set-Typ. |
+| Listen | ✅ Alias | `List<T>` ist ein Typsynonym für `T[]`; Literale bleiben `[a, b]`, und Arrayoperationen gelten unverändert. Es gibt bewusst nur eine geordnete Sequenzsemantik. |
+| Tupel | ✅ unterstützt | `Tuple<A, B, ...>` und `tuple(a, b, ...)` bilden geordnete heterogene Werte. Konstante Indizes werden statisch typgeprüft; dynamische Tuple-Indizes sind nicht erlaubt. JSON verwendet ein positionsgetreues Array mit geprüfter Länge. |
+| Mengen | ✅ unterstützt | `Set<T>`, `set([a, b])`, `contains`, `set_add` und `set_remove`. Werte sind deterministisch sortiert, Duplikate werden entfernt. Unterstützt werden die skalar vergleichbaren Schlüsseltypen; JSON ist ein sortiertes Array. |
 | `Map<K,V>` | ✅ unterstützt | Typisierte Maps; erlaubte Schlüsseltypen sind `Int`, `UInt`, `String`, `Bool`, `Char` und `Timestamp`. Doppelte Literalschlüssel behalten einen Eintrag und der letzte Wert gewinnt. Ein fehlender `get`-Schlüssel ergibt `None`. JSON unterstützt nur String-Schlüssel. |
 | Records (`struct`) | ✅ unterstützt | Eigene, verschachtelte Records, Felder, Wertgleichheit und JSON-Roundtrip. Bindings sind standardmäßig unveränderlich; ein `mutable` Binding kann durch einen neuen Recordwert ersetzt werden. |
 | Enums | — nicht vorhanden | Kein benutzerdefinierter Enumtyp. `Option` und `Result` sind eingebaute Varianten-Typen. |
@@ -70,12 +70,14 @@ Recordfelds oder eines Arrayelements über einen Index.
 ## Automatisierte Abnahme
 
 Der erfolgreiche Programmlauf prüft Zahlenbereiche, Rechenoperationen,
-Rundungsverhalten, Unicode, optionale Werte, Sammlungen, Records und JSON.
+Rundungsverhalten, Unicode, optionale Werte, Arrays, Listen-Aliase, Tupel,
+Mengen, Records und JSON.
 Der CLI-Integrationstest erwartet zusätzlich **7 Compilerfehler** und
-**17 Runtimefehler** (Typfehler, gemischte Arrays, unvollständiges Matching,
-Überlauf/Unterlauf, Division durch null, ungültiger Index, nicht-endliche
+**18 Runtimefehler** (Typfehler, gemischte Arrays, unvollständiges Matching,
+Überlauf/Unterlauf, Division durch null, ungültiger Index, ungültige
+Date-/Time-/Bytes-/Decimal-Werte, falsche Tuple-Länge, nicht-endliche
 JSON-Zahl, nicht-stringbasierte Map-Serialisierung sowie nicht unterstützte
-`Date`-/`Bytes`-/`Result`-Decodierung). Ein erwarteter Fehler ist dabei ein
+`Result`-Decodierung). Ein erwarteter Fehler ist dabei ein
 positives Testergebnis. Bei erfolgreichem Integrationstest sind alle 7
 positiven Testgruppen bestanden und es gibt 0 unerwartete Fehler.
 

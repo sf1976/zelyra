@@ -266,9 +266,10 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
 fn api_type_known(ty: &Type, known_types: &HashSet<String>) -> bool {
     match ty {
         Type::Named(name) => known_types.contains(name),
-        Type::Option(inner) | Type::Array(inner) | Type::HttpResult(inner) => {
+        Type::Option(inner) | Type::Array(inner) | Type::Set(inner) | Type::HttpResult(inner) => {
             api_type_known(inner, known_types)
         }
+        Type::Tuple(items) => items.iter().all(|item| api_type_known(item, known_types)),
         Type::Map(key, value) => {
             api_type_known(key, known_types) && api_type_known(value, known_types)
         }
@@ -290,9 +291,12 @@ fn api_json_type_error(
     visiting: &mut HashSet<String>,
 ) -> Option<String> {
     match ty {
-        Type::Option(inner) | Type::Array(inner) | Type::HttpResult(inner) => {
+        Type::Option(inner) | Type::Array(inner) | Type::Set(inner) | Type::HttpResult(inner) => {
             api_json_type_error(inner, program, visiting)
         }
+        Type::Tuple(items) => items
+            .iter()
+            .find_map(|item| api_json_type_error(item, program, visiting)),
         Type::Map(key, value) => {
             if **key != Type::String {
                 return Some(format!(
@@ -3722,11 +3726,12 @@ impl<'a> Checker<'a> {
                 let iterable_type = self.check_expr(iterable, scopes);
                 let element_type = match iterable_type {
                     Type::Array(inner) => *inner,
+                    Type::Set(inner) => *inner,
                     Type::Unknown => Type::Unknown,
                     other => {
                         self.error(
                             iterable.span,
-                            format!("`for ... in` expects an array, found `{other}`"),
+                            format!("`for ... in` expects an array or Set, found `{other}`"),
                         );
                         Type::Unknown
                     }
@@ -3839,6 +3844,20 @@ impl<'a> Checker<'a> {
                 self.check_type(error, span);
             }
             Type::Array(inner) => self.check_type(inner, span),
+            Type::Set(inner) => {
+                self.check_type(inner, span);
+                if !matches!(inner.as_ref(), Type::Unknown) && !is_map_key_type(inner) {
+                    self.error(
+                        span,
+                        format!("Set elements must be scalar comparable types; found `{inner}`"),
+                    );
+                }
+            }
+            Type::Tuple(items) => {
+                for item in items {
+                    self.check_type(item, span);
+                }
+            }
             Type::Map(key, value) => {
                 self.check_type(key, span);
                 self.check_type(value, span);
@@ -4142,10 +4161,12 @@ impl<'a> Checker<'a> {
                         return Type::Unknown;
                     }
                     let argument = self.check_expr(&args[0], scopes);
-                    if !matches!(argument, Type::Array(_) | Type::Map(_, _))
-                        && argument != Type::Unknown
+                    if !matches!(
+                        argument,
+                        Type::Array(_) | Type::Tuple(_) | Type::Set(_) | Type::Map(_, _)
+                    ) && argument != Type::Unknown
                     {
-                        self.error(args[0].span, "`len` expects an array or Map");
+                        self.error(args[0].span, "`len` expects an array, Tuple, Set or Map");
                     }
                     Type::Int
                 } else if name == "append" {
@@ -4173,7 +4194,7 @@ impl<'a> Checker<'a> {
                     if args.len() != 2 {
                         self.error(
                             expr.span,
-                            "`contains` expects an array or Map and one value",
+                            "`contains` expects an array, Set or Map and one value",
                         );
                         return Type::Unknown;
                     }
@@ -4188,11 +4209,70 @@ impl<'a> Checker<'a> {
                             self.expect_type(&key, &value_type, args[1].span);
                             Type::Bool
                         }
+                        Type::Set(inner) => {
+                            self.expect_type(&inner, &value_type, args[1].span);
+                            Type::Bool
+                        }
                         Type::Unknown => Type::Bool,
                         other => {
                             self.error(
                                 args[0].span,
-                                format!("`contains` expects an array or Map, found `{other}`"),
+                                format!(
+                                    "`contains` expects an array, Set, or Map, found `{other}`"
+                                ),
+                            );
+                            Type::Unknown
+                        }
+                    }
+                } else if name == "tuple" {
+                    if args.len() < 2 {
+                        self.error(expr.span, "tuple expects at least two values");
+                        return Type::Unknown;
+                    }
+                    Type::Tuple(
+                        args.iter()
+                            .map(|arg| self.check_expr(arg, scopes))
+                            .collect(),
+                    )
+                } else if name == "set" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "set expects one array");
+                        return Type::Unknown;
+                    }
+                    match self.check_expr(&args[0], scopes) {
+                        Type::Array(inner) => {
+                            if !matches!(inner.as_ref(), Type::Unknown) && !is_map_key_type(&inner)
+                            {
+                                self.error(args[0].span, format!("Set elements must be scalar comparable types; found `{inner}`"));
+                            }
+                            Type::Set(inner)
+                        }
+                        Type::Unknown => Type::Set(Box::new(Type::Unknown)),
+                        other => {
+                            self.error(
+                                args[0].span,
+                                format!("set expects an array, found `{other}`"),
+                            );
+                            Type::Unknown
+                        }
+                    }
+                } else if name == "set_add" || name == "set_remove" {
+                    if args.len() != 2 {
+                        self.error(expr.span, format!("{name} expects a Set and one element"));
+                        return Type::Unknown;
+                    }
+                    let collection = self.check_expr(&args[0], scopes);
+                    let element = self.check_expr(&args[1], scopes);
+                    match collection {
+                        Type::Set(inner) => {
+                            self.expect_type(&inner, &element, args[1].span);
+                            Type::Set(inner)
+                        }
+                        Type::Unknown => Type::Unknown,
+                        other => {
+                            self.error(
+                                args[0].span,
+                                format!("{name} expects a Set, found `{other}`"),
                             );
                             Type::Unknown
                         }
@@ -4786,11 +4866,38 @@ impl<'a> Checker<'a> {
                 }
                 match target_type {
                     Type::Array(inner) => *inner,
+                    Type::Tuple(items) => match index.kind {
+                        ExprKind::Int(value) if value >= 0 => {
+                            items.get(value as usize).cloned().unwrap_or_else(|| {
+                                self.error(
+                                    index.span,
+                                    format!("tuple index {value} is out of bounds"),
+                                );
+                                Type::Unknown
+                            })
+                        }
+                        ExprKind::UInt(value) => {
+                            items.get(value as usize).cloned().unwrap_or_else(|| {
+                                self.error(
+                                    index.span,
+                                    format!("tuple index {value} is out of bounds"),
+                                );
+                                Type::Unknown
+                            })
+                        }
+                        _ => {
+                            self.error(
+                                index.span,
+                                "tuple index must be a non-negative integer literal",
+                            );
+                            Type::Unknown
+                        }
+                    },
                     Type::Unknown => Type::Unknown,
                     other => {
                         self.error(
                             target.span,
-                            format!("array indexing requires an array, found `{other}`"),
+                            format!("indexing requires an array or Tuple, found `{other}`"),
                         );
                         Type::Unknown
                     }
@@ -5025,7 +5132,12 @@ fn validate_type(
             validate_type(ok, known_types, errors, span);
             validate_type(error, known_types, errors, span);
         }
-        Type::Array(inner) => validate_type(inner, known_types, errors, span),
+        Type::Array(inner) | Type::Set(inner) => validate_type(inner, known_types, errors, span),
+        Type::Tuple(items) => {
+            for item in items {
+                validate_type(item, known_types, errors, span);
+            }
+        }
         Type::Map(key, value) => {
             validate_type(key, known_types, errors, span);
             validate_type(value, known_types, errors, span);
@@ -5071,6 +5183,8 @@ pub enum Value {
     Duration(i64),
     Bytes(Vec<u8>),
     Array(Vec<Value>),
+    Tuple(Vec<Value>),
+    Set(Vec<Value>),
     Map(Vec<(Value, Value)>),
     Object {
         type_name: String,
@@ -5101,6 +5215,10 @@ impl Value {
             Value::Duration(_) => Type::Duration,
             Value::Bytes(_) => Type::Bytes,
             Value::Array(values) => Type::Array(Box::new(
+                values.first().map(Value::ty).unwrap_or(Type::Unknown),
+            )),
+            Value::Tuple(values) => Type::Tuple(values.iter().map(Value::ty).collect()),
+            Value::Set(values) => Type::Set(Box::new(
                 values.first().map(Value::ty).unwrap_or(Type::Unknown),
             )),
             Value::Map(entries) => Type::Map(
@@ -5150,6 +5268,22 @@ impl Value {
             ),
             Value::Array(values) => format!(
                 "[{}]",
+                values
+                    .iter()
+                    .map(Value::output)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            Value::Tuple(values) => format!(
+                "({})",
+                values
+                    .iter()
+                    .map(Value::output)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            Value::Set(values) => format!(
+                "Set{{{}}}",
                 values
                     .iter()
                     .map(Value::output)
@@ -5550,6 +5684,69 @@ fn read_console_line(prompt: &str) -> io::Result<Option<String>> {
         }
     }
     Ok(Some(input))
+}
+
+fn is_runtime_builtin(name: &str) -> bool {
+    matches!(
+        name,
+        "print"
+            | "assert"
+            | "len"
+            | "append"
+            | "tuple"
+            | "set"
+            | "set_add"
+            | "set_remove"
+            | "contains"
+            | "get"
+            | "put"
+            | "keys"
+            | "values"
+            | "first"
+            | "last"
+            | "Some"
+            | "Ok"
+            | "Err"
+            | "now"
+            | "date"
+            | "decimal"
+            | "time"
+            | "duration_ms"
+            | "bytes"
+            | "format_timestamp"
+            | "env"
+            | "random_int"
+            | "read_console"
+            | "http_get"
+            | "http_request"
+            | "json_encode"
+            | "json_decode"
+            | "json_decode_result"
+            | "csv_decode_result"
+            | "csv_encode"
+            | "text_contains"
+            | "text_trim"
+            | "text_chars"
+            | "text_replace_result"
+            | "text_split_result"
+            | "decimal_scaled_result"
+            | "format_scaled_result"
+            | "http_json"
+            | "http_result"
+            | "run_process"
+            | "read_text"
+            | "read_text_result"
+            | "write_text"
+            | "write_text_result"
+            | "write_text_new_result"
+            | "atomic_write_text_result"
+            | "append_text_result"
+            | "copy_file_new_result"
+            | "rename_file_result"
+            | "delete_file_result"
+            | "delete_file"
+            | "list_dir"
+    )
 }
 
 impl Interpreter {
@@ -5967,6 +6164,11 @@ impl Interpreter {
                 .map(|value| self.json_value(value, span))
                 .collect::<Result<Vec<_>, _>>()
                 .map(serde_json::Value::Array),
+            Value::Tuple(values) | Value::Set(values) => values
+                .iter()
+                .map(|value| self.json_value(value, span))
+                .collect::<Result<Vec<_>, _>>()
+                .map(serde_json::Value::Array),
             Value::Map(entries) => {
                 let mut object = serde_json::Map::new();
                 for (key, value) in entries {
@@ -6146,6 +6348,37 @@ impl Interpreter {
                     .map(|value| self.json_decode_value(value, inner, span))
                     .collect::<Result<Vec<_>, _>>()
                     .map(Value::Array)
+            }
+            Type::Tuple(types) => {
+                let Some(values) = value.as_array() else {
+                    return Err(self.json_type_error("array", value, span));
+                };
+                if values.len() != types.len() {
+                    return Err(self.runtime_error(
+                        span,
+                        format!(
+                            "json_decode expected {} tuple values, found {}",
+                            types.len(),
+                            values.len()
+                        ),
+                    ));
+                }
+                values
+                    .iter()
+                    .zip(types)
+                    .map(|(value, ty)| self.json_decode_value(value, ty, span))
+                    .collect::<Result<Vec<_>, _>>()
+                    .map(Value::Tuple)
+            }
+            Type::Set(inner) => {
+                let Some(values) = value.as_array() else {
+                    return Err(self.json_type_error("array", value, span));
+                };
+                let values = values
+                    .iter()
+                    .map(|value| self.json_decode_value(value, inner, span))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(Value::Set(canonical_set(values)))
             }
             Type::Map(key, value_type) => {
                 if key.as_ref() != &Type::String {
@@ -6583,6 +6816,7 @@ impl Interpreter {
                 let iterable = self.eval(iterable, env)?;
                 let values = match iterable {
                     Value::Array(values) => values,
+                    Value::Set(values) => values,
                     value => {
                         return Err(self.runtime_error(
                             *span,
@@ -6819,6 +7053,1108 @@ impl Interpreter {
             _ => Err(self.runtime_error(span, format!("unknown scalar constructor `{name}`"))),
         }
     }
+    fn eval_language_value_builtin(
+        &mut self,
+        name: &str,
+        args: &[Expr],
+        env: &mut Environment,
+        span: Span,
+    ) -> Result<Value, RuntimeError> {
+        match name {
+            "decimal" | "date" | "time" | "duration_ms" | "bytes" => {
+                self.eval_scalar_constructor(name, args, env, span)
+            }
+            _ => self.eval_collection_builtin(name, args, env, span),
+        }
+    }
+    fn eval_collection_builtin(
+        &mut self,
+        name: &str,
+        args: &[Expr],
+        env: &mut Environment,
+        span: Span,
+    ) -> Result<Value, RuntimeError> {
+        match name {
+            "tuple" => {
+                if args.len() < 2 {
+                    return Err(self.runtime_error(span, "tuple expects at least two values"));
+                }
+                args.iter()
+                    .map(|arg| self.eval(arg, env))
+                    .collect::<Result<Vec<_>, _>>()
+                    .map(Value::Tuple)
+            }
+            "set" => {
+                if args.len() != 1 {
+                    return Err(
+                        self.runtime_error(span, format!("{name} expects exactly one array"))
+                    );
+                }
+                match self.eval(&args[0], env)? {
+                    Value::Array(values) => Ok(Value::Set(canonical_set(values))),
+                    value => Err(self.runtime_error(
+                        args[0].span,
+                        format!("{name} expects an array, found {}", value.ty()),
+                    )),
+                }
+            }
+            "set_add" | "set_remove" => {
+                if args.len() != 2 {
+                    return Err(
+                        self.runtime_error(span, format!("{name} expects a Set and one element"))
+                    );
+                }
+                let collection = self.eval(&args[0], env)?;
+                let element = self.eval(&args[1], env)?;
+                let Value::Set(mut values) = collection else {
+                    return Err(self.runtime_error(
+                        args[0].span,
+                        format!("{name} expects a Set, found {}", collection.ty()),
+                    ));
+                };
+                if name == "set_add" {
+                    if !values.contains(&element) {
+                        values.push(element);
+                    }
+                } else {
+                    values.retain(|value| value != &element);
+                }
+                Ok(Value::Set(canonical_set(values)))
+            }
+            _ => Err(self.runtime_error(span, format!("unknown collection builtin `{name}`"))),
+        }
+    }
+    fn eval_call_expr(
+        &mut self,
+        name: &str,
+        type_args: &[Type],
+        args: &[Expr],
+        env: &mut Environment,
+        span: Span,
+    ) -> Result<Value, RuntimeError> {
+        if !is_runtime_builtin(name) && self.functions.contains_key(name) {
+            let values = args
+                .iter()
+                .map(|arg| self.eval(arg, env))
+                .collect::<Result<Vec<_>, _>>()?;
+            return self.call(name, values, span);
+        }
+        self.eval_builtin_call(name, type_args, args, env, span)
+    }
+
+    fn eval_builtin_call(
+        &mut self,
+        name: &str,
+        type_args: &[Type],
+        args: &[Expr],
+        env: &mut Environment,
+        span: Span,
+    ) -> Result<Value, RuntimeError> {
+        if matches!(
+            name,
+            "tuple"
+                | "set"
+                | "set_add"
+                | "set_remove"
+                | "decimal"
+                | "date"
+                | "time"
+                | "duration_ms"
+                | "bytes"
+        ) {
+            return self.eval_language_value_builtin(name, args, env, span);
+        }
+        if name == "read_console" {
+            if args.len() != 1 {
+                return Err(
+                    self.runtime_error(span, "read_console expects exactly one String prompt")
+                );
+            }
+            self.require_runtime_capability("Console", "console input", span)?;
+            let prompt = self.eval(&args[0], env)?;
+            let Value::String(prompt) = prompt else {
+                return Err(
+                    self.runtime_error(args[0].span, "read_console expects a String prompt")
+                );
+            };
+            read_console_line(&prompt)
+                .map(|value| Value::Option(value.map(|value| Box::new(Value::String(value)))))
+                .map_err(|error| self.runtime_error(span, format!("console input failed: {error}")))
+        } else if name == "print" {
+            let value = self.eval(
+                args.first()
+                    .ok_or_else(|| self.runtime_error(span, "`print` expects one argument"))?,
+                env,
+            )?;
+            self.output.push(value.output());
+            Ok(Value::Unit)
+        } else if name == "assert" {
+            if !(1..=2).contains(&args.len()) {
+                return Err(self.runtime_error(
+                    span,
+                    "`assert` expects a Bool condition and an optional String message",
+                ));
+            }
+            let condition = self.eval(&args[0], env)?;
+            let Value::Bool(condition) = condition else {
+                return Err(self.runtime_error(args[0].span, "`assert` expects a Bool condition"));
+            };
+            let message = if let Some(message_expr) = args.get(1) {
+                let value = self.eval(message_expr, env)?;
+                let Value::String(message) = value else {
+                    return Err(
+                        self.runtime_error(message_expr.span, "`assert` message must be a String")
+                    );
+                };
+                Some(message)
+            } else {
+                None
+            };
+            if condition {
+                Ok(Value::Unit)
+            } else {
+                Err(self.runtime_error(span, message.unwrap_or_else(|| "assertion failed".into())))
+            }
+        } else if name == "len" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "`len` expects exactly one argument"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::Array(values) | Value::Tuple(values) | Value::Set(values) => {
+                    Ok(Value::Int(values.len() as i64))
+                }
+                Value::Map(entries) => Ok(Value::Int(entries.len() as i64)),
+                value => Err(self.runtime_error(
+                    span,
+                    format!(
+                        "`len` expects an array, Tuple, Set or Map, found {}",
+                        value.ty()
+                    ),
+                )),
+            }
+        } else if name == "append" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(span, "`append` expects an array and one value"));
+            }
+            let array = self.eval(&args[0], env)?;
+            let value = self.eval(&args[1], env)?;
+            match array {
+                Value::Array(mut values) => {
+                    values.push(value);
+                    Ok(Value::Array(values))
+                }
+                value => Err(self.runtime_error(
+                    span,
+                    format!("`append` expects an array, found {}", value.ty()),
+                )),
+            }
+        } else if name == "contains" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(
+                    span,
+                    "`contains` expects an array, Set or Map and one value",
+                ));
+            }
+            let collection = self.eval(&args[0], env)?;
+            let value = self.eval(&args[1], env)?;
+            match collection {
+                Value::Array(values) => Ok(Value::Bool(values.iter().any(|item| item == &value))),
+                Value::Set(values) => Ok(Value::Bool(values.contains(&value))),
+                Value::Map(entries) => {
+                    Ok(Value::Bool(entries.iter().any(|(key, _)| key == &value)))
+                }
+                value => Err(self.runtime_error(
+                    span,
+                    format!(
+                        "`contains` expects an array, Set or Map, found {}",
+                        value.ty()
+                    ),
+                )),
+            }
+        } else if name == "text_contains" {
+            if args.len() != 2 {
+                return Err(
+                    self.runtime_error(span, "text_contains expects a text and search text")
+                );
+            }
+            let text = self.eval(&args[0], env)?;
+            let search = self.eval(&args[1], env)?;
+            match (text, search) {
+                (Value::String(text), Value::String(search)) => {
+                    Ok(Value::Bool(text.contains(&search)))
+                }
+                _ => Err(self.runtime_error(span, "text_contains expects String arguments")),
+            }
+        } else if name == "text_trim" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "text_trim expects exactly one String"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::String(text) => Ok(Value::String(text.trim().to_owned())),
+                _ => Err(self.runtime_error(args[0].span, "text_trim expects a String")),
+            }
+        } else if name == "text_chars" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "text_chars expects exactly one String"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::String(text) => Ok(Value::Array(
+                    text.chars()
+                        .map(|character| Value::String(character.to_string()))
+                        .collect(),
+                )),
+                _ => Err(self.runtime_error(args[0].span, "text_chars expects a String")),
+            }
+        } else if name == "text_replace_result" {
+            if args.len() != 3 {
+                return Err(self.runtime_error(
+                    span,
+                    "text_replace_result expects text, search, and replacement",
+                ));
+            }
+            let text = self.eval(&args[0], env)?;
+            let search = self.eval(&args[1], env)?;
+            let replacement = self.eval(&args[2], env)?;
+            let outcome = match (text, search, replacement) {
+                (Value::String(text), Value::String(search), Value::String(replacement))
+                    if !search.is_empty() =>
+                {
+                    Ok(text.replace(&search, &replacement))
+                }
+                (Value::String(_), Value::String(_), Value::String(_)) => {
+                    Err("text_replace_result requires a non-empty search text".to_string())
+                }
+                _ => Err("text_replace_result expects String arguments".to_string()),
+            };
+            Ok(Value::Result(
+                outcome
+                    .map(|value| Box::new(Value::String(value)))
+                    .map_err(|message| Box::new(Value::String(message))),
+            ))
+        } else if name == "text_split_result" {
+            if args.len() != 2 {
+                return Err(
+                    self.runtime_error(span, "text_split_result expects text and separator")
+                );
+            }
+            let text = self.eval(&args[0], env)?;
+            let separator = self.eval(&args[1], env)?;
+            let outcome = match (text, separator) {
+                (Value::String(text), Value::String(separator)) if !separator.is_empty() => {
+                    Ok(text
+                        .split(&separator)
+                        .map(|part| Value::String(part.to_string()))
+                        .collect())
+                }
+                (Value::String(_), Value::String(_)) => {
+                    Err("text_split_result requires a non-empty separator".to_string())
+                }
+                _ => Err("text_split_result expects String arguments".to_string()),
+            };
+            Ok(Value::Result(
+                outcome
+                    .map(|values| Box::new(Value::Array(values)))
+                    .map_err(|message| Box::new(Value::String(message))),
+            ))
+        } else if name == "get" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(span, "`get` expects a Map and one key"));
+            }
+            let map = self.eval(&args[0], env)?;
+            let key = self.eval(&args[1], env)?;
+            match map {
+                Value::Map(entries) => Ok(Value::Option(
+                    entries
+                        .iter()
+                        .find(|(existing, _)| existing == &key)
+                        .map(|(_, value)| Box::new(value.clone())),
+                )),
+                value => {
+                    Err(self
+                        .runtime_error(span, format!("`get` expects a Map, found {}", value.ty())))
+                }
+            }
+        } else if name == "put" {
+            if args.len() != 3 {
+                return Err(self.runtime_error(span, "`put` expects a Map, a key, and a value"));
+            }
+            let map = self.eval(&args[0], env)?;
+            let key = self.eval(&args[1], env)?;
+            let value = self.eval(&args[2], env)?;
+            match map {
+                Value::Map(mut entries) => {
+                    if let Some((_, existing_value)) =
+                        entries.iter_mut().find(|(existing, _)| existing == &key)
+                    {
+                        *existing_value = value;
+                    } else {
+                        entries.push((key, value));
+                    }
+                    Ok(Value::Map(entries))
+                }
+                value => {
+                    Err(self
+                        .runtime_error(span, format!("`put` expects a Map, found {}", value.ty())))
+                }
+            }
+        } else if name == "keys" || name == "values" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, format!("`{name}` expects exactly one Map")));
+            }
+            match self.eval(&args[0], env)? {
+                Value::Map(entries) if name == "keys" => Ok(Value::Array(
+                    entries.into_iter().map(|(key, _)| key).collect(),
+                )),
+                Value::Map(entries) => Ok(Value::Array(
+                    entries.into_iter().map(|(_, value)| value).collect(),
+                )),
+                value => Err(self.runtime_error(
+                    span,
+                    format!("`{name}` expects a Map, found {}", value.ty()),
+                )),
+            }
+        } else if name == "first" || name == "last" {
+            if args.len() != 1 {
+                return Err(
+                    self.runtime_error(span, format!("`{name}` expects exactly one argument"))
+                );
+            }
+            match self.eval(&args[0], env)? {
+                Value::Array(values) => {
+                    let value = if name == "first" {
+                        values.first()
+                    } else {
+                        values.last()
+                    };
+                    Ok(Value::Option(value.cloned().map(Box::new)))
+                }
+                value => Err(self.runtime_error(
+                    span,
+                    format!("`{name}` expects an array, found {}", value.ty()),
+                )),
+            }
+        } else if name == "Some" || name == "Ok" || name == "Err" {
+            let argument = args.first().ok_or_else(|| {
+                self.runtime_error(span, format!("`{name}` expects one argument"))
+            })?;
+            if args.len() != 1 {
+                return Err(
+                    self.runtime_error(span, format!("`{name}` expects exactly one argument"))
+                );
+            }
+            let value = Box::new(self.eval(argument, env)?);
+            match name {
+                "Some" => Ok(Value::Option(Some(value))),
+                "Ok" => Ok(Value::Result(Ok(value))),
+                _ => Ok(Value::Result(Err(value))),
+            }
+        } else if matches!(name, "decimal" | "date" | "time" | "duration_ms" | "bytes") {
+            self.eval_language_value_builtin(name, args, env, span)
+        } else if name == "now" {
+            if !args.is_empty() {
+                return Err(self.runtime_error(span, "now expects no arguments"));
+            }
+            self.require_runtime_capability("Clock", "clock access", span)?;
+            let timestamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_err(|error| {
+                    self.runtime_error(
+                        span,
+                        format!("clock access failed: system time is before Unix epoch: {error}"),
+                    )
+                })?
+                .as_millis();
+            let timestamp = i64::try_from(timestamp)
+                .map_err(|_| self.runtime_error(span, "clock access failed: timestamp overflow"))?;
+            Ok(Value::Timestamp(timestamp))
+        } else if name == "format_timestamp" {
+            if args.len() != 1 {
+                return Err(
+                    self.runtime_error(span, "format_timestamp expects exactly one Timestamp")
+                );
+            }
+            match self.eval(&args[0], env)? {
+                Value::Timestamp(timestamp) => Ok(Value::String(format_timestamp_utc(timestamp))),
+                value => Err(self.runtime_error(
+                    args[0].span,
+                    format!("format_timestamp expects a Timestamp, found {}", value.ty()),
+                )),
+            }
+        } else if name == "env" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "env expects exactly one argument"));
+            }
+            self.require_runtime_capability("Environment", "environment access", span)?;
+            let key = self.eval(&args[0], env)?;
+            let Value::String(key) = key else {
+                return Err(self.runtime_error(args[0].span, "env expects a String variable name"));
+            };
+            if key.is_empty() {
+                return Err(
+                    self.runtime_error(args[0].span, "env expects a non-empty variable name")
+                );
+            }
+            let value = std::env::var_os(&key)
+                .map(|value| {
+                    value.into_string().map_err(|_| {
+                        self.runtime_error(
+                            args[0].span,
+                            format!("environment variable {key} is not valid UTF-8"),
+                        )
+                    })
+                })
+                .transpose()?;
+            Ok(Value::Option(
+                value.map(|value| Box::new(Value::String(value))),
+            ))
+        } else if name == "random_int" {
+            if args.len() != 2 {
+                return Err(self
+                    .runtime_error(span, "random_int expects minimum and maximum Int arguments"));
+            }
+            self.require_runtime_capability("Random", "random access", span)?;
+            let minimum = self.eval(&args[0], env)?;
+            let maximum = self.eval(&args[1], env)?;
+            let (Value::Int(minimum), Value::Int(maximum)) = (minimum, maximum) else {
+                return Err(self.runtime_error(span, "random_int expects Int arguments"));
+            };
+            if minimum > maximum {
+                return Err(self.runtime_error(span, "random_int requires minimum <= maximum"));
+            }
+            let range = (i128::from(maximum) - i128::from(minimum) + 1) as u128;
+            let limit = u128::from(u64::MAX) + 1;
+            let cutoff = limit - (limit % range);
+            let mut random = OsRng;
+            loop {
+                let mut bytes = [0_u8; 8];
+                random.try_fill_bytes(&mut bytes).map_err(|error| {
+                    self.runtime_error(span, format!("random access failed: {error}"))
+                })?;
+                let candidate = u128::from(u64::from_ne_bytes(bytes));
+                if candidate < cutoff {
+                    let value = i128::from(minimum) + (candidate % range) as i128;
+                    return Ok(Value::Int(value as i64));
+                }
+            }
+        } else if name == "http_get" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "http_get expects exactly one String URL"));
+            }
+            self.require_runtime_capability("Network", "network access", span)?;
+            let url = self.eval(&args[0], env)?;
+            let Value::String(url) = url else {
+                return Err(self.runtime_error(args[0].span, "http_get expects a String URL"));
+            };
+            self.http_get(&url, span).map(Value::String)
+        } else if name == "json_encode" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "json_encode expects exactly one value"));
+            }
+            let value = self.eval(&args[0], env)?;
+            self.json_encode(&value, span).map(Value::String)
+        } else if name == "json_decode" {
+            if type_args.len() != 1 || args.len() != 1 {
+                return Err(self.runtime_error(
+                    span,
+                    "json_decode expects one type argument and one String value",
+                ));
+            }
+            let value = self.eval(&args[0], env)?;
+            let Value::String(source) = value else {
+                return Err(self.runtime_error(args[0].span, "json_decode expects a String value"));
+            };
+            self.json_decode(&source, &type_args[0], span)
+        } else if name == "json_decode_result" {
+            if type_args.len() != 1 || args.len() != 1 {
+                return Err(self.runtime_error(
+                    span,
+                    "json_decode_result expects one type argument and one String value",
+                ));
+            }
+            let value = self.eval(&args[0], env)?;
+            let Value::String(source) = value else {
+                return Err(
+                    self.runtime_error(args[0].span, "json_decode_result expects a String value")
+                );
+            };
+            Ok(Value::Result(
+                match self.json_decode(&source, &type_args[0], span) {
+                    Ok(value) => Ok(Box::new(value)),
+                    Err(error) => Err(Box::new(Value::String(error.message))),
+                },
+            ))
+        } else if name == "csv_decode_result" {
+            if !type_args.is_empty() || args.len() != 2 {
+                return Err(self.runtime_error(span, "csv_decode_result expects a String and Char"));
+            }
+            let source = self.eval(&args[0], env)?;
+            let delimiter = self.eval(&args[1], env)?;
+            let (Value::String(source), Value::Char(delimiter)) = (source, delimiter) else {
+                return Err(self.runtime_error(span, "csv_decode_result expects a String and Char"));
+            };
+            let decoded = csv::decode(&source, delimiter).map(|rows| {
+                Value::Array(
+                    rows.into_iter()
+                        .map(|row| {
+                            Value::Array(row.into_iter().map(Value::String).collect::<Vec<_>>())
+                        })
+                        .collect::<Vec<_>>(),
+                )
+            });
+            Ok(Value::Result(
+                decoded
+                    .map(Box::new)
+                    .map_err(|message| Box::new(Value::String(message))),
+            ))
+        } else if name == "csv_encode" {
+            if !type_args.is_empty() || args.len() != 2 {
+                return Err(
+                    self.runtime_error(span, "csv_encode expects String[][] rows and a Char")
+                );
+            }
+            let rows = self.eval(&args[0], env)?;
+            let delimiter = self.eval(&args[1], env)?;
+            let (Value::Array(rows), Value::Char(delimiter)) = (rows, delimiter) else {
+                return Err(
+                    self.runtime_error(span, "csv_encode expects String[][] rows and a Char")
+                );
+            };
+            let rows = rows
+                .into_iter()
+                .map(|row| match row {
+                    Value::Array(fields) => fields
+                        .into_iter()
+                        .map(|field| match field {
+                            Value::String(value) => Ok(value),
+                            _ => Err("csv_encode expects String[][] rows".to_string()),
+                        })
+                        .collect::<Result<Vec<_>, _>>(),
+                    _ => Err("csv_encode expects String[][] rows".to_string()),
+                })
+                .collect::<Result<Vec<_>, _>>();
+            let encoded = rows
+                .and_then(|rows| csv::encode(&rows, delimiter))
+                .map(Value::String);
+            Ok(Value::Result(
+                encoded
+                    .map(Box::new)
+                    .map_err(|message| Box::new(Value::String(message))),
+            ))
+        } else if name == "decimal_scaled_result" {
+            if !type_args.is_empty() || args.len() != 2 {
+                return Err(self
+                    .runtime_error(span, "decimal_scaled_result expects a String and scale Int"));
+            }
+            let source = self.eval(&args[0], env)?;
+            let scale = self.eval(&args[1], env)?;
+            let (Value::String(source), Value::Int(scale)) = (source, scale) else {
+                return Err(self
+                    .runtime_error(span, "decimal_scaled_result expects a String and scale Int"));
+            };
+            Ok(Value::Result(
+                csv::decimal_to_scaled(&source, scale)
+                    .map(|value| Box::new(Value::Int(value)))
+                    .map_err(|message| Box::new(Value::String(message))),
+            ))
+        } else if name == "format_scaled_result" {
+            if !type_args.is_empty() || args.len() != 2 {
+                return Err(
+                    self.runtime_error(span, "format_scaled_result expects an Int and scale Int")
+                );
+            }
+            let value = self.eval(&args[0], env)?;
+            let scale = self.eval(&args[1], env)?;
+            let (Value::Int(value), Value::Int(scale)) = (value, scale) else {
+                return Err(self.runtime_error(span, "format_scaled_result expects Int arguments"));
+            };
+            Ok(Value::Result(
+                csv::format_scaled(value, scale)
+                    .map(|value| Box::new(Value::String(value)))
+                    .map_err(|message| Box::new(Value::String(message))),
+            ))
+        } else if name == "http_json" {
+            if type_args.len() != 2 || args.len() != 4 {
+                return Err(self.runtime_error(
+                    span,
+                    "http_json expects request and response type arguments plus four values",
+                ));
+            }
+            self.require_runtime_capability("Network", "network access", span)?;
+            let method = self.eval(&args[0], env)?;
+            let url = self.eval(&args[1], env)?;
+            let headers = self.eval(&args[2], env)?;
+            let body = self.eval(&args[3], env)?;
+            let Value::String(method) = method else {
+                return Err(self.runtime_error(args[0].span, "http_json expects a String method"));
+            };
+            let Value::String(url) = url else {
+                return Err(self.runtime_error(args[1].span, "http_json expects a String URL"));
+            };
+            let Value::Array(headers) = headers else {
+                return Err(self.runtime_error(args[2].span, "http_json expects String[] headers"));
+            };
+            let mut header_strings = Vec::with_capacity(headers.len() + 1);
+            let mut has_content_type = false;
+            for header in headers {
+                let Value::String(header) = header else {
+                    return Err(
+                        self.runtime_error(args[2].span, "http_json expects String[] headers")
+                    );
+                };
+                if header
+                    .split_once(':')
+                    .is_some_and(|(name, _)| name.trim().eq_ignore_ascii_case("content-type"))
+                {
+                    has_content_type = true;
+                }
+                header_strings.push(header);
+            }
+            if !has_content_type {
+                header_strings.push("Content-Type: application/json".into());
+            }
+            let body = match body {
+                Value::Option(Some(body)) => Some(body),
+                Value::Option(None) => None,
+                _ => {
+                    return Err(
+                        self.runtime_error(args[3].span, "http_json expects a Request? body")
+                    );
+                }
+            };
+            self.http_json(
+                &method,
+                &url,
+                &header_strings,
+                body.as_deref(),
+                &type_args[1],
+                span,
+            )
+        } else if name == "http_result" {
+            if type_args.len() != 2 || args.len() != 4 {
+                return Err(self.runtime_error(
+                    span,
+                    "http_result expects request and response type arguments plus four values",
+                ));
+            }
+            self.require_runtime_capability("Network", "network access", span)?;
+            let method = self.eval(&args[0], env)?;
+            let url = self.eval(&args[1], env)?;
+            let headers = self.eval(&args[2], env)?;
+            let body = self.eval(&args[3], env)?;
+            let Value::String(method) = method else {
+                return Err(self.runtime_error(args[0].span, "http_result expects a String method"));
+            };
+            let Value::String(url) = url else {
+                return Err(self.runtime_error(args[1].span, "http_result expects a String URL"));
+            };
+            let Value::Array(headers) = headers else {
+                return Err(
+                    self.runtime_error(args[2].span, "http_result expects String[] headers")
+                );
+            };
+            let mut header_strings = Vec::with_capacity(headers.len() + 1);
+            let mut has_content_type = false;
+            for header in headers {
+                let Value::String(header) = header else {
+                    return Err(
+                        self.runtime_error(args[2].span, "http_result expects String[] headers")
+                    );
+                };
+                if header
+                    .split_once(':')
+                    .is_some_and(|(name, _)| name.trim().eq_ignore_ascii_case("content-type"))
+                {
+                    has_content_type = true;
+                }
+                header_strings.push(header);
+            }
+            if !has_content_type {
+                header_strings.push("Content-Type: application/json".into());
+            }
+            let body = match body {
+                Value::Option(Some(body)) => Some(body),
+                Value::Option(None) => None,
+                _ => {
+                    return Err(
+                        self.runtime_error(args[3].span, "http_result expects a Request? body")
+                    );
+                }
+            };
+            self.http_result(
+                &method,
+                &url,
+                &header_strings,
+                body.as_deref(),
+                &type_args[1],
+                span,
+            )
+        } else if name == "http_request" {
+            if args.len() != 4 {
+                return Err(self.runtime_error(
+                            span,
+                            "http_request expects String method, String URL, String[] headers, and String? body",
+                        ));
+            }
+            self.require_runtime_capability("Network", "network access", span)?;
+            let method = self.eval(&args[0], env)?;
+            let url = self.eval(&args[1], env)?;
+            let headers = self.eval(&args[2], env)?;
+            let body = self.eval(&args[3], env)?;
+            let Value::String(method) = method else {
+                return Err(
+                    self.runtime_error(args[0].span, "http_request expects a String method")
+                );
+            };
+            let Value::String(url) = url else {
+                return Err(self.runtime_error(args[1].span, "http_request expects a String URL"));
+            };
+            let Value::Array(headers) = headers else {
+                return Err(
+                    self.runtime_error(args[2].span, "http_request expects String[] headers")
+                );
+            };
+            let mut header_strings = Vec::with_capacity(headers.len());
+            for header in headers {
+                let Value::String(header) = header else {
+                    return Err(
+                        self.runtime_error(args[2].span, "http_request expects String[] headers")
+                    );
+                };
+                header_strings.push(header);
+            }
+            let body = match body {
+                Value::Option(Some(body)) => match *body {
+                    Value::String(body) => Some(body),
+                    _ => {
+                        return Err(
+                            self.runtime_error(args[3].span, "http_request expects a String? body")
+                        );
+                    }
+                },
+                Value::Option(None) => None,
+                _ => {
+                    return Err(
+                        self.runtime_error(args[3].span, "http_request expects a String? body")
+                    );
+                }
+            };
+            self.http_request(&method, &url, &header_strings, body.as_deref(), span)
+        } else if name == "run_process" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(
+                    span,
+                    "run_process expects a String command and String[] arguments",
+                ));
+            }
+            self.require_runtime_capability("Process", "process execution", span)?;
+            let command = self.eval(&args[0], env)?;
+            let arguments = self.eval(&args[1], env)?;
+            let Value::String(command) = command else {
+                return Err(
+                    self.runtime_error(args[0].span, "run_process expects a String command")
+                );
+            };
+            let Value::Array(arguments) = arguments else {
+                return Err(
+                    self.runtime_error(args[1].span, "run_process expects String[] arguments")
+                );
+            };
+            let mut argument_strings = Vec::with_capacity(arguments.len());
+            for argument in arguments {
+                let Value::String(argument) = argument else {
+                    return Err(
+                        self.runtime_error(args[1].span, "run_process expects String[] arguments")
+                    );
+                };
+                argument_strings.push(argument);
+            }
+            self.run_process(&command, &argument_strings, span)
+                .map(Value::String)
+        } else if name == "read_text" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "read_text expects exactly one String path"));
+            }
+            self.require_runtime_capability("FileSystem", "file-system read access", span)?;
+            let path = self.eval(&args[0], env)?;
+            let Value::String(path) = path else {
+                return Err(self.runtime_error(args[0].span, "read_text expects a String path"));
+            };
+            if path.is_empty() {
+                return Err(self.runtime_error(args[0].span, "read_text expects a non-empty path"));
+            }
+            let path = self.resolve_filesystem_path(
+                &path,
+                &self
+                    .filesystem_policy
+                    .as_ref()
+                    .map_or_else(Vec::new, |policy| policy.read_roots.clone()),
+                "read",
+                span,
+                false,
+            )?;
+            std::fs::read_to_string(&path)
+                .map_err(|error| {
+                    self.runtime_error(span, format!("file-system read failed: {error}"))
+                })
+                .map(Value::String)
+        } else if name == "read_text_result" {
+            if args.len() != 1 {
+                return Err(
+                    self.runtime_error(span, "read_text_result expects exactly one String path")
+                );
+            }
+            self.require_runtime_capability("FileSystem", "file-system read access", span)?;
+            let path_value = self.eval(&args[0], env)?;
+            let outcome = match path_value {
+                Value::String(path) if !path.is_empty() => {
+                    let roots = self
+                        .filesystem_policy
+                        .as_ref()
+                        .map_or_else(Vec::new, |policy| policy.read_roots.clone());
+                    match self.resolve_filesystem_path(&path, &roots, "read", span, false) {
+                        Ok(path) => std::fs::read_to_string(path)
+                            .map_err(|error| format!("file-system read failed: {error}")),
+                        Err(error) => Err(error.message),
+                    }
+                }
+                Value::String(_) => Err("read_text_result expects a non-empty path".into()),
+                _ => Err("read_text_result expects a String path".into()),
+            };
+            Ok(Value::Result(
+                outcome
+                    .map(|value| Box::new(Value::String(value)))
+                    .map_err(|error| Box::new(Value::String(error))),
+            ))
+        } else if name == "write_text" {
+            if args.len() != 2 {
+                return Err(
+                    self.runtime_error(span, "write_text expects a String path and String content")
+                );
+            }
+            self.require_runtime_capability("FileSystem", "file-system write access", span)?;
+            let path = self.eval(&args[0], env)?;
+            let content = self.eval(&args[1], env)?;
+            let (Value::String(path), Value::String(content)) = (path, content) else {
+                return Err(self.runtime_error(span, "write_text expects String arguments"));
+            };
+            if path.is_empty() {
+                return Err(self.runtime_error(args[0].span, "write_text expects a non-empty path"));
+            }
+            let roots = self
+                .filesystem_policy
+                .as_ref()
+                .map_or_else(Vec::new, |policy| policy.write_roots.clone());
+            let path = self.resolve_filesystem_path(&path, &roots, "write", span, true)?;
+            std::fs::write(&path, content).map_err(|error| {
+                self.runtime_error(span, format!("file-system write failed: {error}"))
+            })?;
+            Ok(Value::Unit)
+        } else if name == "write_text_result" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(
+                    span,
+                    "write_text_result expects a String path and String content",
+                ));
+            }
+            self.require_runtime_capability("FileSystem", "file-system write access", span)?;
+            let path_value = self.eval(&args[0], env)?;
+            let content_value = self.eval(&args[1], env)?;
+            let outcome = match (path_value, content_value) {
+                (Value::String(path), Value::String(content)) if !path.is_empty() => {
+                    let roots = self
+                        .filesystem_policy
+                        .as_ref()
+                        .map_or_else(Vec::new, |policy| policy.write_roots.clone());
+                    match self.resolve_filesystem_path(&path, &roots, "write", span, true) {
+                        Ok(path) => std::fs::write(path, content)
+                            .map_err(|error| format!("file-system write failed: {error}")),
+                        Err(error) => Err(error.message),
+                    }
+                }
+                (Value::String(_), Value::String(_)) => {
+                    Err("write_text_result expects a non-empty path".into())
+                }
+                _ => Err("write_text_result expects String arguments".into()),
+            };
+            Ok(Value::Result(
+                outcome
+                    .map(|_| Box::new(Value::Unit))
+                    .map_err(|error| Box::new(Value::String(error))),
+            ))
+        } else if matches!(
+            name,
+            "write_text_new_result" | "atomic_write_text_result" | "append_text_result"
+        ) {
+            if args.len() != 2 {
+                return Err(self.runtime_error(
+                    span,
+                    format!("{name} expects a String path and String content"),
+                ));
+            }
+            self.require_runtime_capability("FileSystem", "file-system write access", span)?;
+            let path = self.eval(&args[0], env)?;
+            let content = self.eval(&args[1], env)?;
+            let outcome = match (path, content) {
+                (Value::String(path), Value::String(content)) if !path.is_empty() => self
+                    .resolve_filesystem_path(
+                        &path,
+                        &self.filesystem_roots(true),
+                        "write",
+                        span,
+                        true,
+                    )
+                    .map_err(|error| error.message)
+                    .and_then(|target| {
+                        let operation = match name {
+                            "write_text_new_result" => {
+                                filesystem::write_text_new(&target, &content)
+                            }
+                            "atomic_write_text_result" => {
+                                filesystem::atomic_write_text(&target, &content)
+                            }
+                            _ => filesystem::append_text(&target, &content),
+                        };
+                        operation.map_err(|error| format!("file-system {name} failed: {error}"))
+                    }),
+                (Value::String(_), Value::String(_)) => {
+                    Err(format!("{name} expects a non-empty path"))
+                }
+                _ => Err(format!("{name} expects String arguments")),
+            };
+            Ok(Value::Result(
+                outcome
+                    .map(|()| Box::new(Value::Unit))
+                    .map_err(|error| Box::new(Value::String(error))),
+            ))
+        } else if matches!(name, "copy_file_new_result" | "rename_file_result") {
+            if args.len() != 2 {
+                return Err(self.runtime_error(
+                    span,
+                    format!("{name} expects source and destination String paths"),
+                ));
+            }
+            self.require_runtime_capability("FileSystem", "file-system write access", span)?;
+            let source = self.eval(&args[0], env)?;
+            let destination = self.eval(&args[1], env)?;
+            let outcome = match (source, destination) {
+                (Value::String(source), Value::String(destination))
+                    if !source.is_empty() && !destination.is_empty() =>
+                {
+                    let source_roots = if name == "copy_file_new_result" {
+                        self.filesystem_policy
+                            .as_ref()
+                            .map_or_else(Vec::new, |policy| policy.read_roots.clone())
+                    } else {
+                        self.filesystem_roots(true)
+                    };
+                    let source_path = self
+                        .resolve_filesystem_path(
+                            &source,
+                            &source_roots,
+                            "read or rename",
+                            span,
+                            false,
+                        )
+                        .map_err(|error| error.message);
+                    source_path.and_then(|source_path| {
+                        self.resolve_filesystem_path(
+                            &destination,
+                            &self.filesystem_roots(true),
+                            "copy or rename",
+                            span,
+                            true,
+                        )
+                        .map_err(|error| error.message)
+                        .and_then(|destination_path| {
+                            let operation = if name == "copy_file_new_result" {
+                                filesystem::copy_file_new(&source_path, &destination_path)
+                            } else {
+                                filesystem::rename_file_new(&source_path, &destination_path)
+                            };
+                            operation.map_err(|error| format!("file-system {name} failed: {error}"))
+                        })
+                    })
+                }
+                (Value::String(_), Value::String(_)) => {
+                    Err(format!("{name} expects non-empty paths"))
+                }
+                _ => Err(format!("{name} expects String paths")),
+            };
+            Ok(Value::Result(
+                outcome
+                    .map(|()| Box::new(Value::Unit))
+                    .map_err(|error| Box::new(Value::String(error))),
+            ))
+        } else if name == "delete_file" || name == "delete_file_result" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "delete_file expects one String path"));
+            }
+            self.require_runtime_capability("FileSystem", "file-system delete access", span)?;
+            let path_value = self.eval(&args[0], env)?;
+            let operation = match path_value {
+                Value::String(path) if !path.is_empty() => {
+                    let roots = self.filesystem_roots(true);
+                    self.resolve_filesystem_path(&path, &roots, "delete", span, false)
+                        .and_then(|path| {
+                            std::fs::remove_file(path).map_err(|error| {
+                                self.runtime_error(
+                                    span,
+                                    format!("file-system delete failed: {error}"),
+                                )
+                            })
+                        })
+                }
+                Value::String(_) => {
+                    Err(self.runtime_error(span, "delete_file expects a non-empty path"))
+                }
+                _ => Err(self.runtime_error(span, "delete_file expects a String path")),
+            };
+            if name == "delete_file_result" {
+                Ok(Value::Result(
+                    operation
+                        .map(|()| Box::new(Value::Unit))
+                        .map_err(|error| Box::new(Value::String(error.message))),
+                ))
+            } else {
+                operation.map(|()| Value::Unit)
+            }
+        } else if name == "list_dir" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "list_dir expects one String path"));
+            }
+            self.require_runtime_capability("FileSystem", "file-system read access", span)?;
+            let path = self.eval(&args[0], env)?;
+            let Value::String(path) = path else {
+                return Err(self.runtime_error(args[0].span, "list_dir expects a String path"));
+            };
+            if path.is_empty() {
+                return Err(self.runtime_error(args[0].span, "list_dir expects a non-empty path"));
+            }
+            let roots = self
+                .filesystem_policy
+                .as_ref()
+                .map_or_else(Vec::new, |policy| policy.read_roots.clone());
+            let path = self.resolve_filesystem_path(&path, &roots, "list", span, false)?;
+            let mut entries = std::fs::read_dir(&path)
+                .map_err(|error| {
+                    self.runtime_error(span, format!("file-system list failed: {error}"))
+                })?
+                .map(|entry| {
+                    entry
+                        .map(|entry| {
+                            Value::String(entry.file_name().to_string_lossy().into_owned())
+                        })
+                        .map_err(|error| {
+                            self.runtime_error(span, format!("file-system list failed: {error}"))
+                        })
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            entries.sort_by_key(Value::output);
+            Ok(Value::Array(entries))
+        } else {
+            Err(self.runtime_error(span, format!("unknown function `{name}`")))
+        }
+    }
     fn eval(&mut self, expr: &Expr, env: &mut Environment) -> Result<Value, RuntimeError> {
         match &expr.kind {
             ExprKind::Int(v) => Ok(Value::Int(*v)),
@@ -6871,1162 +8207,7 @@ impl Interpreter {
                 name,
                 type_args,
                 args,
-            } => {
-                if name == "read_console" {
-                    if args.len() != 1 {
-                        return Err(self.runtime_error(
-                            expr.span,
-                            "read_console expects exactly one String prompt",
-                        ));
-                    }
-                    self.require_runtime_capability("Console", "console input", expr.span)?;
-                    let prompt = self.eval(&args[0], env)?;
-                    let Value::String(prompt) = prompt else {
-                        return Err(self
-                            .runtime_error(args[0].span, "read_console expects a String prompt"));
-                    };
-                    read_console_line(&prompt)
-                        .map(|value| {
-                            Value::Option(value.map(|value| Box::new(Value::String(value))))
-                        })
-                        .map_err(|error| {
-                            self.runtime_error(expr.span, format!("console input failed: {error}"))
-                        })
-                } else if name == "print" {
-                    let value = self.eval(
-                        args.first().ok_or_else(|| {
-                            self.runtime_error(expr.span, "`print` expects one argument")
-                        })?,
-                        env,
-                    )?;
-                    self.output.push(value.output());
-                    Ok(Value::Unit)
-                } else if name == "assert" {
-                    if !(1..=2).contains(&args.len()) {
-                        return Err(self.runtime_error(
-                            expr.span,
-                            "`assert` expects a Bool condition and an optional String message",
-                        ));
-                    }
-                    let condition = self.eval(&args[0], env)?;
-                    let Value::Bool(condition) = condition else {
-                        return Err(
-                            self.runtime_error(args[0].span, "`assert` expects a Bool condition")
-                        );
-                    };
-                    let message = if let Some(message_expr) = args.get(1) {
-                        let value = self.eval(message_expr, env)?;
-                        let Value::String(message) = value else {
-                            return Err(self.runtime_error(
-                                message_expr.span,
-                                "`assert` message must be a String",
-                            ));
-                        };
-                        Some(message)
-                    } else {
-                        None
-                    };
-                    if condition {
-                        Ok(Value::Unit)
-                    } else {
-                        Err(self.runtime_error(
-                            expr.span,
-                            message.unwrap_or_else(|| "assertion failed".into()),
-                        ))
-                    }
-                } else if name == "len" {
-                    if args.len() != 1 {
-                        return Err(
-                            self.runtime_error(expr.span, "`len` expects exactly one argument")
-                        );
-                    }
-                    match self.eval(&args[0], env)? {
-                        Value::Array(values) => Ok(Value::Int(values.len() as i64)),
-                        Value::Map(entries) => Ok(Value::Int(entries.len() as i64)),
-                        value => Err(self.runtime_error(
-                            expr.span,
-                            format!("`len` expects an array or Map, found {}", value.ty()),
-                        )),
-                    }
-                } else if name == "append" {
-                    if args.len() != 2 {
-                        return Err(self
-                            .runtime_error(expr.span, "`append` expects an array and one value"));
-                    }
-                    let array = self.eval(&args[0], env)?;
-                    let value = self.eval(&args[1], env)?;
-                    match array {
-                        Value::Array(mut values) => {
-                            values.push(value);
-                            Ok(Value::Array(values))
-                        }
-                        value => Err(self.runtime_error(
-                            expr.span,
-                            format!("`append` expects an array, found {}", value.ty()),
-                        )),
-                    }
-                } else if name == "contains" {
-                    if args.len() != 2 {
-                        return Err(self.runtime_error(
-                            expr.span,
-                            "`contains` expects an array or Map and one value",
-                        ));
-                    }
-                    let collection = self.eval(&args[0], env)?;
-                    let value = self.eval(&args[1], env)?;
-                    match collection {
-                        Value::Array(values) => {
-                            Ok(Value::Bool(values.iter().any(|item| item == &value)))
-                        }
-                        Value::Map(entries) => {
-                            Ok(Value::Bool(entries.iter().any(|(key, _)| key == &value)))
-                        }
-                        value => Err(self.runtime_error(
-                            expr.span,
-                            format!("`contains` expects an array or Map, found {}", value.ty()),
-                        )),
-                    }
-                } else if name == "text_contains" {
-                    if args.len() != 2 {
-                        return Err(self.runtime_error(
-                            expr.span,
-                            "text_contains expects a text and search text",
-                        ));
-                    }
-                    let text = self.eval(&args[0], env)?;
-                    let search = self.eval(&args[1], env)?;
-                    match (text, search) {
-                        (Value::String(text), Value::String(search)) => {
-                            Ok(Value::Bool(text.contains(&search)))
-                        }
-                        _ => {
-                            Err(self
-                                .runtime_error(expr.span, "text_contains expects String arguments"))
-                        }
-                    }
-                } else if name == "text_trim" {
-                    if args.len() != 1 {
-                        return Err(
-                            self.runtime_error(expr.span, "text_trim expects exactly one String")
-                        );
-                    }
-                    match self.eval(&args[0], env)? {
-                        Value::String(text) => Ok(Value::String(text.trim().to_owned())),
-                        _ => Err(self.runtime_error(args[0].span, "text_trim expects a String")),
-                    }
-                } else if name == "text_chars" {
-                    if args.len() != 1 {
-                        return Err(
-                            self.runtime_error(expr.span, "text_chars expects exactly one String")
-                        );
-                    }
-                    match self.eval(&args[0], env)? {
-                        Value::String(text) => Ok(Value::Array(
-                            text.chars()
-                                .map(|character| Value::String(character.to_string()))
-                                .collect(),
-                        )),
-                        _ => Err(self.runtime_error(args[0].span, "text_chars expects a String")),
-                    }
-                } else if name == "text_replace_result" {
-                    if args.len() != 3 {
-                        return Err(self.runtime_error(
-                            expr.span,
-                            "text_replace_result expects text, search, and replacement",
-                        ));
-                    }
-                    let text = self.eval(&args[0], env)?;
-                    let search = self.eval(&args[1], env)?;
-                    let replacement = self.eval(&args[2], env)?;
-                    let outcome = match (text, search, replacement) {
-                        (
-                            Value::String(text),
-                            Value::String(search),
-                            Value::String(replacement),
-                        ) if !search.is_empty() => Ok(text.replace(&search, &replacement)),
-                        (Value::String(_), Value::String(_), Value::String(_)) => {
-                            Err("text_replace_result requires a non-empty search text".to_string())
-                        }
-                        _ => Err("text_replace_result expects String arguments".to_string()),
-                    };
-                    Ok(Value::Result(
-                        outcome
-                            .map(|value| Box::new(Value::String(value)))
-                            .map_err(|message| Box::new(Value::String(message))),
-                    ))
-                } else if name == "text_split_result" {
-                    if args.len() != 2 {
-                        return Err(self.runtime_error(
-                            expr.span,
-                            "text_split_result expects text and separator",
-                        ));
-                    }
-                    let text = self.eval(&args[0], env)?;
-                    let separator = self.eval(&args[1], env)?;
-                    let outcome = match (text, separator) {
-                        (Value::String(text), Value::String(separator))
-                            if !separator.is_empty() =>
-                        {
-                            Ok(text
-                                .split(&separator)
-                                .map(|part| Value::String(part.to_string()))
-                                .collect())
-                        }
-                        (Value::String(_), Value::String(_)) => {
-                            Err("text_split_result requires a non-empty separator".to_string())
-                        }
-                        _ => Err("text_split_result expects String arguments".to_string()),
-                    };
-                    Ok(Value::Result(
-                        outcome
-                            .map(|values| Box::new(Value::Array(values)))
-                            .map_err(|message| Box::new(Value::String(message))),
-                    ))
-                } else if name == "get" {
-                    if args.len() != 2 {
-                        return Err(
-                            self.runtime_error(expr.span, "`get` expects a Map and one key")
-                        );
-                    }
-                    let map = self.eval(&args[0], env)?;
-                    let key = self.eval(&args[1], env)?;
-                    match map {
-                        Value::Map(entries) => Ok(Value::Option(
-                            entries
-                                .iter()
-                                .find(|(existing, _)| existing == &key)
-                                .map(|(_, value)| Box::new(value.clone())),
-                        )),
-                        value => Err(self.runtime_error(
-                            expr.span,
-                            format!("`get` expects a Map, found {}", value.ty()),
-                        )),
-                    }
-                } else if name == "put" {
-                    if args.len() != 3 {
-                        return Err(self
-                            .runtime_error(expr.span, "`put` expects a Map, a key, and a value"));
-                    }
-                    let map = self.eval(&args[0], env)?;
-                    let key = self.eval(&args[1], env)?;
-                    let value = self.eval(&args[2], env)?;
-                    match map {
-                        Value::Map(mut entries) => {
-                            if let Some((_, existing_value)) =
-                                entries.iter_mut().find(|(existing, _)| existing == &key)
-                            {
-                                *existing_value = value;
-                            } else {
-                                entries.push((key, value));
-                            }
-                            Ok(Value::Map(entries))
-                        }
-                        value => Err(self.runtime_error(
-                            expr.span,
-                            format!("`put` expects a Map, found {}", value.ty()),
-                        )),
-                    }
-                } else if name == "keys" || name == "values" {
-                    if args.len() != 1 {
-                        return Err(self.runtime_error(
-                            expr.span,
-                            format!("`{name}` expects exactly one Map"),
-                        ));
-                    }
-                    match self.eval(&args[0], env)? {
-                        Value::Map(entries) if name == "keys" => Ok(Value::Array(
-                            entries.into_iter().map(|(key, _)| key).collect(),
-                        )),
-                        Value::Map(entries) => Ok(Value::Array(
-                            entries.into_iter().map(|(_, value)| value).collect(),
-                        )),
-                        value => Err(self.runtime_error(
-                            expr.span,
-                            format!("`{name}` expects a Map, found {}", value.ty()),
-                        )),
-                    }
-                } else if name == "first" || name == "last" {
-                    if args.len() != 1 {
-                        return Err(self.runtime_error(
-                            expr.span,
-                            format!("`{name}` expects exactly one argument"),
-                        ));
-                    }
-                    match self.eval(&args[0], env)? {
-                        Value::Array(values) => {
-                            let value = if name == "first" {
-                                values.first()
-                            } else {
-                                values.last()
-                            };
-                            Ok(Value::Option(value.cloned().map(Box::new)))
-                        }
-                        value => Err(self.runtime_error(
-                            expr.span,
-                            format!("`{name}` expects an array, found {}", value.ty()),
-                        )),
-                    }
-                } else if name == "Some" || name == "Ok" || name == "Err" {
-                    let argument = args.first().ok_or_else(|| {
-                        self.runtime_error(expr.span, format!("`{name}` expects one argument"))
-                    })?;
-                    if args.len() != 1 {
-                        return Err(self.runtime_error(
-                            expr.span,
-                            format!("`{name}` expects exactly one argument"),
-                        ));
-                    }
-                    let value = Box::new(self.eval(argument, env)?);
-                    match name.as_str() {
-                        "Some" => Ok(Value::Option(Some(value))),
-                        "Ok" => Ok(Value::Result(Ok(value))),
-                        _ => Ok(Value::Result(Err(value))),
-                    }
-                } else if matches!(
-                    name.as_str(),
-                    "decimal" | "date" | "time" | "duration_ms" | "bytes"
-                ) {
-                    self.eval_scalar_constructor(name, args, env, expr.span)
-                } else if name == "now" {
-                    if !args.is_empty() {
-                        return Err(self.runtime_error(expr.span, "now expects no arguments"));
-                    }
-                    self.require_runtime_capability("Clock", "clock access", expr.span)?;
-                    let timestamp = SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .map_err(|error| {
-                            self.runtime_error(
-                                expr.span,
-                                format!("clock access failed: system time is before Unix epoch: {error}"),
-                            )
-                        })?
-                        .as_millis();
-                    let timestamp = i64::try_from(timestamp).map_err(|_| {
-                        self.runtime_error(expr.span, "clock access failed: timestamp overflow")
-                    })?;
-                    Ok(Value::Timestamp(timestamp))
-                } else if name == "format_timestamp" {
-                    if args.len() != 1 {
-                        return Err(self.runtime_error(
-                            expr.span,
-                            "format_timestamp expects exactly one Timestamp",
-                        ));
-                    }
-                    match self.eval(&args[0], env)? {
-                        Value::Timestamp(timestamp) => {
-                            Ok(Value::String(format_timestamp_utc(timestamp)))
-                        }
-                        value => Err(self.runtime_error(
-                            args[0].span,
-                            format!("format_timestamp expects a Timestamp, found {}", value.ty()),
-                        )),
-                    }
-                } else if name == "env" {
-                    if args.len() != 1 {
-                        return Err(
-                            self.runtime_error(expr.span, "env expects exactly one argument")
-                        );
-                    }
-                    self.require_runtime_capability(
-                        "Environment",
-                        "environment access",
-                        expr.span,
-                    )?;
-                    let key = self.eval(&args[0], env)?;
-                    let Value::String(key) = key else {
-                        return Err(
-                            self.runtime_error(args[0].span, "env expects a String variable name")
-                        );
-                    };
-                    if key.is_empty() {
-                        return Err(self
-                            .runtime_error(args[0].span, "env expects a non-empty variable name"));
-                    }
-                    let value = std::env::var_os(&key)
-                        .map(|value| {
-                            value.into_string().map_err(|_| {
-                                self.runtime_error(
-                                    args[0].span,
-                                    format!("environment variable {key} is not valid UTF-8"),
-                                )
-                            })
-                        })
-                        .transpose()?;
-                    Ok(Value::Option(
-                        value.map(|value| Box::new(Value::String(value))),
-                    ))
-                } else if name == "random_int" {
-                    if args.len() != 2 {
-                        return Err(self.runtime_error(
-                            expr.span,
-                            "random_int expects minimum and maximum Int arguments",
-                        ));
-                    }
-                    self.require_runtime_capability("Random", "random access", expr.span)?;
-                    let minimum = self.eval(&args[0], env)?;
-                    let maximum = self.eval(&args[1], env)?;
-                    let (Value::Int(minimum), Value::Int(maximum)) = (minimum, maximum) else {
-                        return Err(
-                            self.runtime_error(expr.span, "random_int expects Int arguments")
-                        );
-                    };
-                    if minimum > maximum {
-                        return Err(
-                            self.runtime_error(expr.span, "random_int requires minimum <= maximum")
-                        );
-                    }
-                    let range = (i128::from(maximum) - i128::from(minimum) + 1) as u128;
-                    let limit = u128::from(u64::MAX) + 1;
-                    let cutoff = limit - (limit % range);
-                    let mut random = OsRng;
-                    loop {
-                        let mut bytes = [0_u8; 8];
-                        random.try_fill_bytes(&mut bytes).map_err(|error| {
-                            self.runtime_error(expr.span, format!("random access failed: {error}"))
-                        })?;
-                        let candidate = u128::from(u64::from_ne_bytes(bytes));
-                        if candidate < cutoff {
-                            let value = i128::from(minimum) + (candidate % range) as i128;
-                            return Ok(Value::Int(value as i64));
-                        }
-                    }
-                } else if name == "http_get" {
-                    if args.len() != 1 {
-                        return Err(self
-                            .runtime_error(expr.span, "http_get expects exactly one String URL"));
-                    }
-                    self.require_runtime_capability("Network", "network access", expr.span)?;
-                    let url = self.eval(&args[0], env)?;
-                    let Value::String(url) = url else {
-                        return Err(
-                            self.runtime_error(args[0].span, "http_get expects a String URL")
-                        );
-                    };
-                    self.http_get(&url, expr.span).map(Value::String)
-                } else if name == "json_encode" {
-                    if args.len() != 1 {
-                        return Err(
-                            self.runtime_error(expr.span, "json_encode expects exactly one value")
-                        );
-                    }
-                    let value = self.eval(&args[0], env)?;
-                    self.json_encode(&value, expr.span).map(Value::String)
-                } else if name == "json_decode" {
-                    if type_args.len() != 1 || args.len() != 1 {
-                        return Err(self.runtime_error(
-                            expr.span,
-                            "json_decode expects one type argument and one String value",
-                        ));
-                    }
-                    let value = self.eval(&args[0], env)?;
-                    let Value::String(source) = value else {
-                        return Err(
-                            self.runtime_error(args[0].span, "json_decode expects a String value")
-                        );
-                    };
-                    self.json_decode(&source, &type_args[0], expr.span)
-                } else if name == "json_decode_result" {
-                    if type_args.len() != 1 || args.len() != 1 {
-                        return Err(self.runtime_error(
-                            expr.span,
-                            "json_decode_result expects one type argument and one String value",
-                        ));
-                    }
-                    let value = self.eval(&args[0], env)?;
-                    let Value::String(source) = value else {
-                        return Err(self.runtime_error(
-                            args[0].span,
-                            "json_decode_result expects a String value",
-                        ));
-                    };
-                    Ok(Value::Result(
-                        match self.json_decode(&source, &type_args[0], expr.span) {
-                            Ok(value) => Ok(Box::new(value)),
-                            Err(error) => Err(Box::new(Value::String(error.message))),
-                        },
-                    ))
-                } else if name == "csv_decode_result" {
-                    if !type_args.is_empty() || args.len() != 2 {
-                        return Err(self.runtime_error(
-                            expr.span,
-                            "csv_decode_result expects a String and Char",
-                        ));
-                    }
-                    let source = self.eval(&args[0], env)?;
-                    let delimiter = self.eval(&args[1], env)?;
-                    let (Value::String(source), Value::Char(delimiter)) = (source, delimiter)
-                    else {
-                        return Err(self.runtime_error(
-                            expr.span,
-                            "csv_decode_result expects a String and Char",
-                        ));
-                    };
-                    let decoded = csv::decode(&source, delimiter).map(|rows| {
-                        Value::Array(
-                            rows.into_iter()
-                                .map(|row| {
-                                    Value::Array(
-                                        row.into_iter().map(Value::String).collect::<Vec<_>>(),
-                                    )
-                                })
-                                .collect::<Vec<_>>(),
-                        )
-                    });
-                    Ok(Value::Result(
-                        decoded
-                            .map(Box::new)
-                            .map_err(|message| Box::new(Value::String(message))),
-                    ))
-                } else if name == "csv_encode" {
-                    if !type_args.is_empty() || args.len() != 2 {
-                        return Err(self.runtime_error(
-                            expr.span,
-                            "csv_encode expects String[][] rows and a Char",
-                        ));
-                    }
-                    let rows = self.eval(&args[0], env)?;
-                    let delimiter = self.eval(&args[1], env)?;
-                    let (Value::Array(rows), Value::Char(delimiter)) = (rows, delimiter) else {
-                        return Err(self.runtime_error(
-                            expr.span,
-                            "csv_encode expects String[][] rows and a Char",
-                        ));
-                    };
-                    let rows = rows
-                        .into_iter()
-                        .map(|row| match row {
-                            Value::Array(fields) => fields
-                                .into_iter()
-                                .map(|field| match field {
-                                    Value::String(value) => Ok(value),
-                                    _ => Err("csv_encode expects String[][] rows".to_string()),
-                                })
-                                .collect::<Result<Vec<_>, _>>(),
-                            _ => Err("csv_encode expects String[][] rows".to_string()),
-                        })
-                        .collect::<Result<Vec<_>, _>>();
-                    let encoded = rows
-                        .and_then(|rows| csv::encode(&rows, delimiter))
-                        .map(Value::String);
-                    Ok(Value::Result(
-                        encoded
-                            .map(Box::new)
-                            .map_err(|message| Box::new(Value::String(message))),
-                    ))
-                } else if name == "decimal_scaled_result" {
-                    if !type_args.is_empty() || args.len() != 2 {
-                        return Err(self.runtime_error(
-                            expr.span,
-                            "decimal_scaled_result expects a String and scale Int",
-                        ));
-                    }
-                    let source = self.eval(&args[0], env)?;
-                    let scale = self.eval(&args[1], env)?;
-                    let (Value::String(source), Value::Int(scale)) = (source, scale) else {
-                        return Err(self.runtime_error(
-                            expr.span,
-                            "decimal_scaled_result expects a String and scale Int",
-                        ));
-                    };
-                    Ok(Value::Result(
-                        csv::decimal_to_scaled(&source, scale)
-                            .map(|value| Box::new(Value::Int(value)))
-                            .map_err(|message| Box::new(Value::String(message))),
-                    ))
-                } else if name == "format_scaled_result" {
-                    if !type_args.is_empty() || args.len() != 2 {
-                        return Err(self.runtime_error(
-                            expr.span,
-                            "format_scaled_result expects an Int and scale Int",
-                        ));
-                    }
-                    let value = self.eval(&args[0], env)?;
-                    let scale = self.eval(&args[1], env)?;
-                    let (Value::Int(value), Value::Int(scale)) = (value, scale) else {
-                        return Err(self.runtime_error(
-                            expr.span,
-                            "format_scaled_result expects Int arguments",
-                        ));
-                    };
-                    Ok(Value::Result(
-                        csv::format_scaled(value, scale)
-                            .map(|value| Box::new(Value::String(value)))
-                            .map_err(|message| Box::new(Value::String(message))),
-                    ))
-                } else if name == "http_json" {
-                    if type_args.len() != 2 || args.len() != 4 {
-                        return Err(self.runtime_error(
-                            expr.span,
-                            "http_json expects request and response type arguments plus four values",
-                        ));
-                    }
-                    self.require_runtime_capability("Network", "network access", expr.span)?;
-                    let method = self.eval(&args[0], env)?;
-                    let url = self.eval(&args[1], env)?;
-                    let headers = self.eval(&args[2], env)?;
-                    let body = self.eval(&args[3], env)?;
-                    let Value::String(method) = method else {
-                        return Err(
-                            self.runtime_error(args[0].span, "http_json expects a String method")
-                        );
-                    };
-                    let Value::String(url) = url else {
-                        return Err(
-                            self.runtime_error(args[1].span, "http_json expects a String URL")
-                        );
-                    };
-                    let Value::Array(headers) = headers else {
-                        return Err(
-                            self.runtime_error(args[2].span, "http_json expects String[] headers")
-                        );
-                    };
-                    let mut header_strings = Vec::with_capacity(headers.len() + 1);
-                    let mut has_content_type = false;
-                    for header in headers {
-                        let Value::String(header) = header else {
-                            return Err(self.runtime_error(
-                                args[2].span,
-                                "http_json expects String[] headers",
-                            ));
-                        };
-                        if header.split_once(':').is_some_and(|(name, _)| {
-                            name.trim().eq_ignore_ascii_case("content-type")
-                        }) {
-                            has_content_type = true;
-                        }
-                        header_strings.push(header);
-                    }
-                    if !has_content_type {
-                        header_strings.push("Content-Type: application/json".into());
-                    }
-                    let body = match body {
-                        Value::Option(Some(body)) => Some(body),
-                        Value::Option(None) => None,
-                        _ => {
-                            return Err(self
-                                .runtime_error(args[3].span, "http_json expects a Request? body"));
-                        }
-                    };
-                    self.http_json(
-                        &method,
-                        &url,
-                        &header_strings,
-                        body.as_deref(),
-                        &type_args[1],
-                        expr.span,
-                    )
-                } else if name == "http_result" {
-                    if type_args.len() != 2 || args.len() != 4 {
-                        return Err(self.runtime_error(
-                            expr.span,
-                            "http_result expects request and response type arguments plus four values",
-                        ));
-                    }
-                    self.require_runtime_capability("Network", "network access", expr.span)?;
-                    let method = self.eval(&args[0], env)?;
-                    let url = self.eval(&args[1], env)?;
-                    let headers = self.eval(&args[2], env)?;
-                    let body = self.eval(&args[3], env)?;
-                    let Value::String(method) = method else {
-                        return Err(
-                            self.runtime_error(args[0].span, "http_result expects a String method")
-                        );
-                    };
-                    let Value::String(url) = url else {
-                        return Err(
-                            self.runtime_error(args[1].span, "http_result expects a String URL")
-                        );
-                    };
-                    let Value::Array(headers) = headers else {
-                        return Err(self
-                            .runtime_error(args[2].span, "http_result expects String[] headers"));
-                    };
-                    let mut header_strings = Vec::with_capacity(headers.len() + 1);
-                    let mut has_content_type = false;
-                    for header in headers {
-                        let Value::String(header) = header else {
-                            return Err(self.runtime_error(
-                                args[2].span,
-                                "http_result expects String[] headers",
-                            ));
-                        };
-                        if header.split_once(':').is_some_and(|(name, _)| {
-                            name.trim().eq_ignore_ascii_case("content-type")
-                        }) {
-                            has_content_type = true;
-                        }
-                        header_strings.push(header);
-                    }
-                    if !has_content_type {
-                        header_strings.push("Content-Type: application/json".into());
-                    }
-                    let body = match body {
-                        Value::Option(Some(body)) => Some(body),
-                        Value::Option(None) => None,
-                        _ => {
-                            return Err(self.runtime_error(
-                                args[3].span,
-                                "http_result expects a Request? body",
-                            ));
-                        }
-                    };
-                    self.http_result(
-                        &method,
-                        &url,
-                        &header_strings,
-                        body.as_deref(),
-                        &type_args[1],
-                        expr.span,
-                    )
-                } else if name == "http_request" {
-                    if args.len() != 4 {
-                        return Err(self.runtime_error(
-                            expr.span,
-                            "http_request expects String method, String URL, String[] headers, and String? body",
-                        ));
-                    }
-                    self.require_runtime_capability("Network", "network access", expr.span)?;
-                    let method = self.eval(&args[0], env)?;
-                    let url = self.eval(&args[1], env)?;
-                    let headers = self.eval(&args[2], env)?;
-                    let body = self.eval(&args[3], env)?;
-                    let Value::String(method) = method else {
-                        return Err(self
-                            .runtime_error(args[0].span, "http_request expects a String method"));
-                    };
-                    let Value::String(url) = url else {
-                        return Err(
-                            self.runtime_error(args[1].span, "http_request expects a String URL")
-                        );
-                    };
-                    let Value::Array(headers) = headers else {
-                        return Err(self
-                            .runtime_error(args[2].span, "http_request expects String[] headers"));
-                    };
-                    let mut header_strings = Vec::with_capacity(headers.len());
-                    for header in headers {
-                        let Value::String(header) = header else {
-                            return Err(self.runtime_error(
-                                args[2].span,
-                                "http_request expects String[] headers",
-                            ));
-                        };
-                        header_strings.push(header);
-                    }
-                    let body = match body {
-                        Value::Option(Some(body)) => match *body {
-                            Value::String(body) => Some(body),
-                            _ => {
-                                return Err(self.runtime_error(
-                                    args[3].span,
-                                    "http_request expects a String? body",
-                                ));
-                            }
-                        },
-                        Value::Option(None) => None,
-                        _ => {
-                            return Err(self.runtime_error(
-                                args[3].span,
-                                "http_request expects a String? body",
-                            ));
-                        }
-                    };
-                    self.http_request(&method, &url, &header_strings, body.as_deref(), expr.span)
-                } else if name == "run_process" {
-                    if args.len() != 2 {
-                        return Err(self.runtime_error(
-                            expr.span,
-                            "run_process expects a String command and String[] arguments",
-                        ));
-                    }
-                    self.require_runtime_capability("Process", "process execution", expr.span)?;
-                    let command = self.eval(&args[0], env)?;
-                    let arguments = self.eval(&args[1], env)?;
-                    let Value::String(command) = command else {
-                        return Err(self
-                            .runtime_error(args[0].span, "run_process expects a String command"));
-                    };
-                    let Value::Array(arguments) = arguments else {
-                        return Err(self.runtime_error(
-                            args[1].span,
-                            "run_process expects String[] arguments",
-                        ));
-                    };
-                    let mut argument_strings = Vec::with_capacity(arguments.len());
-                    for argument in arguments {
-                        let Value::String(argument) = argument else {
-                            return Err(self.runtime_error(
-                                args[1].span,
-                                "run_process expects String[] arguments",
-                            ));
-                        };
-                        argument_strings.push(argument);
-                    }
-                    self.run_process(&command, &argument_strings, expr.span)
-                        .map(Value::String)
-                } else if name == "read_text" {
-                    if args.len() != 1 {
-                        return Err(self.runtime_error(
-                            expr.span,
-                            "read_text expects exactly one String path",
-                        ));
-                    }
-                    self.require_runtime_capability(
-                        "FileSystem",
-                        "file-system read access",
-                        expr.span,
-                    )?;
-                    let path = self.eval(&args[0], env)?;
-                    let Value::String(path) = path else {
-                        return Err(
-                            self.runtime_error(args[0].span, "read_text expects a String path")
-                        );
-                    };
-                    if path.is_empty() {
-                        return Err(
-                            self.runtime_error(args[0].span, "read_text expects a non-empty path")
-                        );
-                    }
-                    let path = self.resolve_filesystem_path(
-                        &path,
-                        &self
-                            .filesystem_policy
-                            .as_ref()
-                            .map_or_else(Vec::new, |policy| policy.read_roots.clone()),
-                        "read",
-                        expr.span,
-                        false,
-                    )?;
-                    std::fs::read_to_string(&path)
-                        .map_err(|error| {
-                            self.runtime_error(
-                                expr.span,
-                                format!("file-system read failed: {error}"),
-                            )
-                        })
-                        .map(Value::String)
-                } else if name == "read_text_result" {
-                    if args.len() != 1 {
-                        return Err(self.runtime_error(
-                            expr.span,
-                            "read_text_result expects exactly one String path",
-                        ));
-                    }
-                    self.require_runtime_capability(
-                        "FileSystem",
-                        "file-system read access",
-                        expr.span,
-                    )?;
-                    let path_value = self.eval(&args[0], env)?;
-                    let outcome = match path_value {
-                        Value::String(path) if !path.is_empty() => {
-                            let roots = self
-                                .filesystem_policy
-                                .as_ref()
-                                .map_or_else(Vec::new, |policy| policy.read_roots.clone());
-                            match self
-                                .resolve_filesystem_path(&path, &roots, "read", expr.span, false)
-                            {
-                                Ok(path) => std::fs::read_to_string(path)
-                                    .map_err(|error| format!("file-system read failed: {error}")),
-                                Err(error) => Err(error.message),
-                            }
-                        }
-                        Value::String(_) => Err("read_text_result expects a non-empty path".into()),
-                        _ => Err("read_text_result expects a String path".into()),
-                    };
-                    Ok(Value::Result(
-                        outcome
-                            .map(|value| Box::new(Value::String(value)))
-                            .map_err(|error| Box::new(Value::String(error))),
-                    ))
-                } else if name == "write_text" {
-                    if args.len() != 2 {
-                        return Err(self.runtime_error(
-                            expr.span,
-                            "write_text expects a String path and String content",
-                        ));
-                    }
-                    self.require_runtime_capability(
-                        "FileSystem",
-                        "file-system write access",
-                        expr.span,
-                    )?;
-                    let path = self.eval(&args[0], env)?;
-                    let content = self.eval(&args[1], env)?;
-                    let (Value::String(path), Value::String(content)) = (path, content) else {
-                        return Err(
-                            self.runtime_error(expr.span, "write_text expects String arguments")
-                        );
-                    };
-                    if path.is_empty() {
-                        return Err(
-                            self.runtime_error(args[0].span, "write_text expects a non-empty path")
-                        );
-                    }
-                    let roots = self
-                        .filesystem_policy
-                        .as_ref()
-                        .map_or_else(Vec::new, |policy| policy.write_roots.clone());
-                    let path =
-                        self.resolve_filesystem_path(&path, &roots, "write", expr.span, true)?;
-                    std::fs::write(&path, content).map_err(|error| {
-                        self.runtime_error(expr.span, format!("file-system write failed: {error}"))
-                    })?;
-                    Ok(Value::Unit)
-                } else if name == "write_text_result" {
-                    if args.len() != 2 {
-                        return Err(self.runtime_error(
-                            expr.span,
-                            "write_text_result expects a String path and String content",
-                        ));
-                    }
-                    self.require_runtime_capability(
-                        "FileSystem",
-                        "file-system write access",
-                        expr.span,
-                    )?;
-                    let path_value = self.eval(&args[0], env)?;
-                    let content_value = self.eval(&args[1], env)?;
-                    let outcome = match (path_value, content_value) {
-                        (Value::String(path), Value::String(content)) if !path.is_empty() => {
-                            let roots = self
-                                .filesystem_policy
-                                .as_ref()
-                                .map_or_else(Vec::new, |policy| policy.write_roots.clone());
-                            match self
-                                .resolve_filesystem_path(&path, &roots, "write", expr.span, true)
-                            {
-                                Ok(path) => std::fs::write(path, content)
-                                    .map_err(|error| format!("file-system write failed: {error}")),
-                                Err(error) => Err(error.message),
-                            }
-                        }
-                        (Value::String(_), Value::String(_)) => {
-                            Err("write_text_result expects a non-empty path".into())
-                        }
-                        _ => Err("write_text_result expects String arguments".into()),
-                    };
-                    Ok(Value::Result(
-                        outcome
-                            .map(|_| Box::new(Value::Unit))
-                            .map_err(|error| Box::new(Value::String(error))),
-                    ))
-                } else if matches!(
-                    name.as_str(),
-                    "write_text_new_result" | "atomic_write_text_result" | "append_text_result"
-                ) {
-                    if args.len() != 2 {
-                        return Err(self.runtime_error(
-                            expr.span,
-                            format!("{name} expects a String path and String content"),
-                        ));
-                    }
-                    self.require_runtime_capability(
-                        "FileSystem",
-                        "file-system write access",
-                        expr.span,
-                    )?;
-                    let path = self.eval(&args[0], env)?;
-                    let content = self.eval(&args[1], env)?;
-                    let outcome = match (path, content) {
-                        (Value::String(path), Value::String(content)) if !path.is_empty() => self
-                            .resolve_filesystem_path(
-                                &path,
-                                &self.filesystem_roots(true),
-                                "write",
-                                expr.span,
-                                true,
-                            )
-                            .map_err(|error| error.message)
-                            .and_then(|target| {
-                                let operation = match name.as_str() {
-                                    "write_text_new_result" => {
-                                        filesystem::write_text_new(&target, &content)
-                                    }
-                                    "atomic_write_text_result" => {
-                                        filesystem::atomic_write_text(&target, &content)
-                                    }
-                                    _ => filesystem::append_text(&target, &content),
-                                };
-                                operation
-                                    .map_err(|error| format!("file-system {name} failed: {error}"))
-                            }),
-                        (Value::String(_), Value::String(_)) => {
-                            Err(format!("{name} expects a non-empty path"))
-                        }
-                        _ => Err(format!("{name} expects String arguments")),
-                    };
-                    Ok(Value::Result(
-                        outcome
-                            .map(|()| Box::new(Value::Unit))
-                            .map_err(|error| Box::new(Value::String(error))),
-                    ))
-                } else if matches!(name.as_str(), "copy_file_new_result" | "rename_file_result") {
-                    if args.len() != 2 {
-                        return Err(self.runtime_error(
-                            expr.span,
-                            format!("{name} expects source and destination String paths"),
-                        ));
-                    }
-                    self.require_runtime_capability(
-                        "FileSystem",
-                        "file-system write access",
-                        expr.span,
-                    )?;
-                    let source = self.eval(&args[0], env)?;
-                    let destination = self.eval(&args[1], env)?;
-                    let outcome = match (source, destination) {
-                        (Value::String(source), Value::String(destination))
-                            if !source.is_empty() && !destination.is_empty() =>
-                        {
-                            let source_roots = if name == "copy_file_new_result" {
-                                self.filesystem_policy
-                                    .as_ref()
-                                    .map_or_else(Vec::new, |policy| policy.read_roots.clone())
-                            } else {
-                                self.filesystem_roots(true)
-                            };
-                            let source_path = self
-                                .resolve_filesystem_path(
-                                    &source,
-                                    &source_roots,
-                                    "read or rename",
-                                    expr.span,
-                                    false,
-                                )
-                                .map_err(|error| error.message);
-                            source_path.and_then(|source_path| {
-                                self.resolve_filesystem_path(
-                                    &destination,
-                                    &self.filesystem_roots(true),
-                                    "copy or rename",
-                                    expr.span,
-                                    true,
-                                )
-                                .map_err(|error| error.message)
-                                .and_then(|destination_path| {
-                                    let operation = if name == "copy_file_new_result" {
-                                        filesystem::copy_file_new(&source_path, &destination_path)
-                                    } else {
-                                        filesystem::rename_file_new(&source_path, &destination_path)
-                                    };
-                                    operation.map_err(|error| {
-                                        format!("file-system {name} failed: {error}")
-                                    })
-                                })
-                            })
-                        }
-                        (Value::String(_), Value::String(_)) => {
-                            Err(format!("{name} expects non-empty paths"))
-                        }
-                        _ => Err(format!("{name} expects String paths")),
-                    };
-                    Ok(Value::Result(
-                        outcome
-                            .map(|()| Box::new(Value::Unit))
-                            .map_err(|error| Box::new(Value::String(error))),
-                    ))
-                } else if name == "delete_file" || name == "delete_file_result" {
-                    if args.len() != 1 {
-                        return Err(
-                            self.runtime_error(expr.span, "delete_file expects one String path")
-                        );
-                    }
-                    self.require_runtime_capability(
-                        "FileSystem",
-                        "file-system delete access",
-                        expr.span,
-                    )?;
-                    let path_value = self.eval(&args[0], env)?;
-                    let operation = match path_value {
-                        Value::String(path) if !path.is_empty() => {
-                            let roots = self.filesystem_roots(true);
-                            self.resolve_filesystem_path(&path, &roots, "delete", expr.span, false)
-                                .and_then(|path| {
-                                    std::fs::remove_file(path).map_err(|error| {
-                                        self.runtime_error(
-                                            expr.span,
-                                            format!("file-system delete failed: {error}"),
-                                        )
-                                    })
-                                })
-                        }
-                        Value::String(_) => {
-                            Err(self
-                                .runtime_error(expr.span, "delete_file expects a non-empty path"))
-                        }
-                        _ => {
-                            Err(self.runtime_error(expr.span, "delete_file expects a String path"))
-                        }
-                    };
-                    if name == "delete_file_result" {
-                        Ok(Value::Result(
-                            operation
-                                .map(|()| Box::new(Value::Unit))
-                                .map_err(|error| Box::new(Value::String(error.message))),
-                        ))
-                    } else {
-                        operation.map(|()| Value::Unit)
-                    }
-                } else if name == "list_dir" {
-                    if args.len() != 1 {
-                        return Err(
-                            self.runtime_error(expr.span, "list_dir expects one String path")
-                        );
-                    }
-                    self.require_runtime_capability(
-                        "FileSystem",
-                        "file-system read access",
-                        expr.span,
-                    )?;
-                    let path = self.eval(&args[0], env)?;
-                    let Value::String(path) = path else {
-                        return Err(
-                            self.runtime_error(args[0].span, "list_dir expects a String path")
-                        );
-                    };
-                    if path.is_empty() {
-                        return Err(
-                            self.runtime_error(args[0].span, "list_dir expects a non-empty path")
-                        );
-                    }
-                    let roots = self
-                        .filesystem_policy
-                        .as_ref()
-                        .map_or_else(Vec::new, |policy| policy.read_roots.clone());
-                    let path =
-                        self.resolve_filesystem_path(&path, &roots, "list", expr.span, false)?;
-                    let mut entries = std::fs::read_dir(&path)
-                        .map_err(|error| {
-                            self.runtime_error(
-                                expr.span,
-                                format!("file-system list failed: {error}"),
-                            )
-                        })?
-                        .map(|entry| {
-                            entry
-                                .map(|entry| {
-                                    Value::String(entry.file_name().to_string_lossy().into_owned())
-                                })
-                                .map_err(|error| {
-                                    self.runtime_error(
-                                        expr.span,
-                                        format!("file-system list failed: {error}"),
-                                    )
-                                })
-                        })
-                        .collect::<Result<Vec<_>, _>>()?;
-                    entries.sort_by_key(Value::output);
-                    Ok(Value::Array(entries))
-                } else {
-                    let values = args
-                        .iter()
-                        .map(|arg| self.eval(arg, env))
-                        .collect::<Result<Vec<_>, _>>()?;
-                    self.call(name, values, expr.span)
-                }
-            }
+            } => self.eval_call_expr(name, type_args, args, env, expr.span),
             ExprKind::Unary { op, expr: inner } => {
                 let value = self.eval(inner, env)?;
                 match (op, value) {
@@ -8069,9 +8250,15 @@ impl Interpreter {
                             format!("array index {index} is out of bounds"),
                         )
                     }),
+                    Value::Tuple(values) => values.get(index).cloned().ok_or_else(|| {
+                        self.runtime_error(
+                            expr.span,
+                            format!("tuple index {index} is out of bounds"),
+                        )
+                    }),
                     value => Err(self.runtime_error(
                         expr.span,
-                        format!("array indexing requires an array, found {}", value.ty()),
+                        format!("indexing requires an array or Tuple, found {}", value.ty()),
                     )),
                 }
             }
@@ -8288,6 +8475,12 @@ impl Interpreter {
 
 const DECIMAL_SCALE: i128 = 1_000_000_000;
 
+fn canonical_set(mut values: Vec<Value>) -> Vec<Value> {
+    values.sort_by_key(Value::output);
+    values.dedup();
+    values
+}
+
 fn parse_decimal(value: &str) -> Option<i128> {
     let (negative, unsigned) = value
         .strip_prefix('-')
@@ -8448,6 +8641,8 @@ fn value_to_query_value(
         Value::Option(None) | Value::Unit => Ok(QueryValue::Null),
         Value::Option(Some(value)) => value_to_query_value(value, span),
         Value::Array(_)
+        | Value::Tuple(_)
+        | Value::Set(_)
         | Value::Map(_)
         | Value::Object { .. }
         | Value::Rows { .. }

@@ -1179,8 +1179,16 @@ impl TypeLinker<'_> {
                     ));
                 }
             }
-            Type::Option(inner) | Type::Array(inner) | Type::HttpResult(inner) => {
+            Type::Option(inner)
+            | Type::Array(inner)
+            | Type::Set(inner)
+            | Type::HttpResult(inner) => {
                 self.ensure_exported_type_is_public(inner, span)?;
+            }
+            Type::Tuple(items) => {
+                for item in items {
+                    self.ensure_exported_type_is_public(item, span)?;
+                }
             }
             Type::Result(ok, error) | Type::Map(ok, error) => {
                 self.ensure_exported_type_is_public(ok, span)?;
@@ -1249,8 +1257,16 @@ impl TypeLinker<'_> {
                     *name = internal_type_name(self.current_name, name);
                 }
             }
-            Type::Option(inner) | Type::Array(inner) | Type::HttpResult(inner) => {
+            Type::Option(inner)
+            | Type::Array(inner)
+            | Type::Set(inner)
+            | Type::HttpResult(inner) => {
                 self.rewrite_type(inner, span)?;
+            }
+            Type::Tuple(items) => {
+                for item in items {
+                    self.rewrite_type(item, span)?;
+                }
             }
             Type::Result(ok, error) | Type::Map(ok, error) => {
                 self.rewrite_type(ok, span)?;

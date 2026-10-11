@@ -78,8 +78,11 @@ den Beweis, dass beliebige Anwendungen korrekt sind.
   verwendet nun Festkomma mit neun Nachkommastellen und exakter Basis-10-
   Arithmetik; für verlustfreie JSON-Roundtrips wird es als Dezimalstring
   serialisiert. `Date`, `Time`, `Duration` und `Bytes` haben jetzt echte
-  Runtimewerte, geprüfte Konstruktoren und JSON-Roundtrips. Enums, Tupel,
-  Sets, Klassenidentität und benutzerdefinierte Generics bleiben offen.
+  Runtimewerte, geprüfte Konstruktoren und JSON-Roundtrips. `List<T>` ist ein
+  Alias für `T[]`; heterogene `Tuple<A, B, ...>`-Werte und deterministische
+  `Set<T>`-Werte lassen sich erstellen, prüfen, iterieren und als JSON
+  austauschen. Benutzerdefinierte Enums/Generics und beobachtbare
+  Klassenidentität bleiben offen.
 - ✅ Stringwerte lassen sich lexikografisch vergleichen. `json_decode_result<T>`,
   `read_text_result` und `write_text_result` geben erwartbare Parse- und
   Dateifehler als `Result` zurück. `format_timestamp` zeigt UTC-Zeitstempel als

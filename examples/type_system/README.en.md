@@ -35,9 +35,9 @@ diagnostic. These cases do not belong in the successful program run.
 | `String` | ✅ supported | UTF-8, Unicode, escapes, equality, lexicographic comparisons, and concatenation. `text_chars` counts Unicode scalar values; no byte-length function is available. |
 | Null and optional values | ✅ supported | No standalone null type. `Option<T>`, `Some`, and `None` distinguish absence from `0`, `false`, and `""`. JSON maps `None` to `null`. |
 | Arrays | ✅ supported | Typed, nested, and empty arrays; `append`/concatenation return values. Duplicates are allowed. Invalid element types fail at compile time and invalid indices at runtime. |
-| Lists | — unavailable | Arrays are the existing collection; there is no separate `List<T>` type. |
-| Tuples | — unavailable | No tuple type; an expected-type fixture checks the compiler error. |
-| Sets | — unavailable | No set type. |
+| Lists | ✅ alias | `List<T>` is a type synonym for `T[]`; literals remain `[a, b]`, and array operations apply unchanged. Zelyra intentionally has one ordered sequence model. |
+| Tuples | ✅ supported | `Tuple<A, B, ...>` and `tuple(a, b, ...)` create ordered heterogeneous values. Constant indices are checked statically; dynamic tuple indices are rejected. JSON uses a positional array with an exact length check. |
+| Sets | ✅ supported | `Set<T>`, `set([a, b])`, `contains`, `set_add`, and `set_remove`. Values have deterministic ordering and duplicates are removed. Supported elements are scalar comparable key types; JSON uses a sorted array. |
 | `Map<K,V>` | ✅ supported | Typed maps; supported key types are `Int`, `UInt`, `String`, `Bool`, `Char`, and `Timestamp`. Duplicate literal keys keep one entry and the last value wins. A missing `get` key returns `None`. JSON supports only string keys. |
 | Records (`struct`) | ✅ supported | User-defined nested records, fields, value equality, and JSON round trips. Bindings are immutable by default; a `mutable` binding can be replaced with a new record value. |
 | Enums | — unavailable | No user-defined enum type. `Option` and `Result` are built-in variant types. |
@@ -67,11 +67,12 @@ separate shallow/deep copy operations. The tested mutation path reassigns a
 ## Automated acceptance
 
 The successful run checks numeric ranges, arithmetic, rounding behavior,
-Unicode, optional values, collections, records, and JSON. The CLI integration
-test also expects **7 compiler errors** and **17 runtime errors** (type mismatch,
+Unicode, optional values, arrays, List aliases, tuples, sets, records, and JSON. The CLI integration
+test also expects **7 compiler errors** and **18 runtime errors** (type mismatch,
 mixed arrays, non-exhaustive matching, overflow/underflow, division by zero,
-invalid index, non-finite JSON number, non-string-keyed Map serialization, and
-unsupported `Date`/`Bytes`/`Result` decoding). An expected error is a passing
+invalid index, invalid Date/Time/Bytes/Decimal values, wrong tuple length,
+non-finite JSON number, non-string-keyed Map serialization, and unsupported
+`Result` decoding). An expected error is a passing
 test result. When the integration test passes, all 7 positive groups pass and
 there are 0 unexpected failures.
 

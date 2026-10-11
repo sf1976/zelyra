@@ -1,2 +1,4 @@
-fn accept_set(value: Set) {}
-fn main() {}
+fn main() {
+    value: Set<Float> = set([1.5, 2.5])
+    print(value)
+}
