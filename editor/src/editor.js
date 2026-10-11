@@ -45,6 +45,7 @@ const symbolCache = new Map();
 const symbolRequests = new Map();
 let treeFiles = [];
 let activeFilter = "";
+let projectSearchMode = "text";
 let databaseMap = null;
 let databaseTables = [];
 let selectedDatabaseTable = null;
@@ -66,8 +67,10 @@ const messages = {
     taskHelp: "Kontexthilfe öffnen", taskHelpHelp: "Hilfe zum Begriff am Cursor anzeigen", taskProperties: "Dateieigenschaften öffnen",
     taskPropertiesHelp: "Informationen und Aktionen zur aktuellen Datei anzeigen", taskSearch: "Text suchen", taskSearchHelp: "Im aktuellen Dokument suchen",
     taskGoToDefinition: "Zur Definition springen", taskGoToDefinitionHelp: "Zur Funktion oder zum Typ am Cursor springen (F12)",
+    taskFindReferences: "Bezeichnerverwendungen finden", taskFindReferencesHelp: "Exakte Zelyra-Bezeichner im Projekt finden (Umschalt+F12)",
     definitionNotFound: "Keine passende Definition im Projekt gefunden.", definitionSaveFirst: "Speichere die Datei vor dem Sprung, damit die Quellposition stimmt.", definitionOpened: "Definition geöffnet: {0}",
-    projectSearch: "Projekt durchsuchen", projectSearchTitle: "Projekt durchsuchen", projectSearchHelp: "Alle gespeicherten Zelyra-Dateien durchsuchen", projectSearchPlaceholder: "Text in Zelyra-Dateien suchen", projectSearchResults: "Suchergebnisse", projectSearchEmpty: "Keine Treffer gefunden.", projectSearchLoading: "Projekt wird durchsucht …", projectSearchSaveFirst: "Speichere offene Änderungen, bevor du das Projekt durchsuchst.", projectSearchTruncated: "Die Anzeige ist auf die ersten 500 Treffer begrenzt.", projectSearchSubmit: "Suchen",
+    projectSearch: "Projekt durchsuchen", projectSearchTitle: "Projekt durchsuchen", projectSearchHelp: "Alle gespeicherten Zelyra-Dateien durchsuchen", projectSearchPlaceholder: "Text in Zelyra-Dateien suchen", projectSearchResults: "Suchergebnisse", projectSearchEmpty: "Keine Treffer gefunden.", projectSearchLoading: "Projekt wird durchsucht …", projectSearchSaveFirst: "Speichere offene Änderungen, bevor du das Projekt durchsuchst.", projectSearchTruncated: "Die Trefferliste ist wegen einer Suchgrenze unvollständig.", projectSearchSubmit: "Suchen",
+    referencesTitle: "Bezeichnerverwendungen", referencesPlaceholder: "Zelyra-Bezeichner suchen",
     assistant: "Hilfe und Eigenschaften", helpTab: "Hilfe", propertiesTab: "Eigenschaften", contextHelp: "KONTEXT-HILFE",
     selectLanguageItem: "Wähle einen Zelyra-Begriff", contextHelpHint: "Bewege den Cursor auf einen Begriff. F1 öffnet diese Hilfe.",
     fileProperties: "DATEIEIGENSCHAFTEN", fileType: "Dateityp", filePath: "Projektpfad", fileStatus: "Status",
@@ -131,8 +134,10 @@ const messages = {
     taskHelp: "Open contextual help", taskHelpHelp: "Show help for the term at the cursor", taskProperties: "Open file properties",
     taskPropertiesHelp: "Show information and actions for the active file", taskSearch: "Find text", taskSearchHelp: "Search in the active document",
     taskGoToDefinition: "Go to definition", taskGoToDefinitionHelp: "Go to the function or type at the cursor (F12)",
+    taskFindReferences: "Find identifier occurrences", taskFindReferencesHelp: "Find exact Zelyra identifiers across the project (Shift+F12)",
     definitionNotFound: "No matching project definition was found.", definitionSaveFirst: "Save this file before jumping so source positions stay accurate.", definitionOpened: "Opened definition: {0}",
-    projectSearch: "Search project", projectSearchTitle: "Search project", projectSearchHelp: "Search all saved Zelyra files", projectSearchPlaceholder: "Search text in Zelyra files", projectSearchResults: "Search results", projectSearchEmpty: "No matches found.", projectSearchLoading: "Searching the project …", projectSearchSaveFirst: "Save open changes before searching the project.", projectSearchTruncated: "Showing the first 500 matches only.", projectSearchSubmit: "Search",
+    projectSearch: "Search project", projectSearchTitle: "Search project", projectSearchHelp: "Search all saved Zelyra files", projectSearchPlaceholder: "Search text in Zelyra files", projectSearchResults: "Search results", projectSearchEmpty: "No matches found.", projectSearchLoading: "Searching the project …", projectSearchSaveFirst: "Save open changes before searching the project.", projectSearchTruncated: "The result list is incomplete because a search limit was reached.", projectSearchSubmit: "Search",
+    referencesTitle: "Identifier occurrences", referencesPlaceholder: "Find a Zelyra identifier",
     assistant: "Help and properties", helpTab: "Help", propertiesTab: "Properties", contextHelp: "CONTEXT HELP",
     selectLanguageItem: "Select a Zelyra term", contextHelpHint: "Place the cursor on a term. Press F1 to open this help.",
     fileProperties: "FILE PROPERTIES", fileType: "File type", filePath: "Project path", fileStatus: "Status",
@@ -194,6 +199,10 @@ function setLanguage(next) {
   for (const element of document.querySelectorAll("[data-i18n-title]")) element.title = messages[language][element.dataset.i18nTitle] || element.title;
   for (const element of document.querySelectorAll("[data-i18n-placeholder]")) element.placeholder = messages[language][element.dataset.i18nPlaceholder] || element.placeholder;
   for (const element of document.querySelectorAll("[data-i18n-aria]")) element.setAttribute("aria-label", messages[language][element.dataset.i18nAria] || element.getAttribute("aria-label"));
+  if (projectSearchMode === "references") {
+    $("project-search-title").textContent = t("referencesTitle");
+    $("project-search-input").placeholder = t("referencesPlaceholder");
+  }
   localStorage.setItem("zelyra-editor-language", language);
   renderTree();
   if (databaseMap) {
@@ -503,6 +512,7 @@ const studioTasks = [
   ["taskProperties", "taskPropertiesHelp", ["properties", "file", "settings"], () => toggleAssistant("properties")],
   ["taskSearch", "taskSearchHelp", ["find", "search", "text"], () => findInDocument()],
   ["taskGoToDefinition", "taskGoToDefinitionHelp", ["definition", "symbol", "function", "type", "f12"], () => void goToDefinition()],
+  ["taskFindReferences", "taskFindReferencesHelp", ["references", "usages", "occurrences", "symbol", "shift f12"], () => void findIdentifierOccurrences()],
   ["projectSearch", "projectSearchHelp", ["project", "search", "find", "all files"], () => openProjectSearch()],
 ];
 let selectedTaskIndex = 0;
@@ -543,13 +553,43 @@ function findInDocument() {
 }
 
 function openProjectSearch() {
+  projectSearchMode = "text";
   if (dirtyCount()) { announce(t("projectSearchSaveFirst"), "warning"); return; }
   const dialog = $("project-search");
   if (!dialog.open) dialog.showModal();
+  $("project-search-title").textContent = t("projectSearchTitle");
+  $("project-search-input").placeholder = t("projectSearchPlaceholder");
   $("project-search-input").value = "";
   $("project-search-results").replaceChildren();
   $("project-search-empty").hidden = true;
   $("project-search-input").focus();
+}
+
+function findIdentifierOccurrences() {
+  if (!editor || !activePath?.endsWith(".zyl")) {
+    announce(t("definitionNotFound"), "warning");
+    return;
+  }
+  if (dirtyCount()) {
+    announce(t("projectSearchSaveFirst"), "warning");
+    return;
+  }
+  const selection = editor.state.selection.main;
+  const wordRange = selection.empty ? editor.state.wordAt(selection.head) : selection;
+  const name = wordRange ? editor.state.sliceDoc(wordRange.from, wordRange.to).trim() : "";
+  if (!name) {
+    announce(t("definitionNotFound"), "warning");
+    return;
+  }
+  projectSearchMode = "references";
+  const dialog = $("project-search");
+  if (!dialog.open) dialog.showModal();
+  $("project-search-title").textContent = t("referencesTitle");
+  $("project-search-input").placeholder = t("referencesPlaceholder");
+  $("project-search-input").value = name;
+  $("project-search-results").replaceChildren();
+  $("project-search-empty").hidden = true;
+  void performProjectSearch();
 }
 
 async function performProjectSearch() {
@@ -562,7 +602,9 @@ async function performProjectSearch() {
   empty.textContent = t("projectSearchLoading");
   empty.hidden = false;
   try {
-    const response = await api(`search?q=${encodeURIComponent(query)}`);
+    const response = projectSearchMode === "references"
+      ? await api(`references?name=${encodeURIComponent(query)}`)
+      : await api(`search?q=${encodeURIComponent(query)}`);
     const matches = response.matches || [];
     empty.textContent = t("projectSearchEmpty");
     empty.hidden = matches.length > 0;
@@ -648,6 +690,7 @@ function createView(path, state) {
         { key: "Mod-s", run: () => { saveActive(); return true; } },
         { key: "Mod-Space", run: startCompletion },
         { key: "F12", run: () => { void goToDefinition(); return true; } },
+        { key: "Shift-F12", run: () => { void findIdentifierOccurrences(); return true; } },
         { key: "F1", run: () => { toggleAssistant("help"); return true; } },
         ...defaultKeymap, ...historyKeymap, ...searchKeymap, ...foldKeymap,
       ]),

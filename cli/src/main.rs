@@ -25,7 +25,7 @@ use zelyra_database::{
 };
 use zelyra_forms::{check_program as check_form_program, validate as validate_form};
 use zelyra_hir::lower;
-use zelyra_lexer::lex;
+use zelyra_lexer::{lex, TokenKind};
 use zelyra_parser::parse;
 use zelyra_runtime::{
     check, check_apis, check_capabilities_with_grants,

@@ -339,6 +339,19 @@ fn editor_response(
                 zelyra_web::parse_urlencoded(query).map_err(|error| (400, error.message))?;
             search_editor_project(state, values.get("q").map(String::as_str).unwrap_or(""))
         }
+        ("GET", "references") => {
+            let query = request
+                .target
+                .split_once('?')
+                .map(|(_, query)| query)
+                .unwrap_or_default();
+            let values =
+                zelyra_web::parse_urlencoded(query).map_err(|error| (400, error.message))?;
+            find_editor_identifier_occurrences(
+                state,
+                values.get("name").map(String::as_str).unwrap_or(""),
+            )
+        }
         ("GET", "database-schema") => database_schema_response(state),
         ("GET", "symbols") => {
             let query = request
@@ -1150,7 +1163,7 @@ fn search_editor_project(
     collect_editor_files(&state.root, &state.root, 0, &mut files)?;
     files.sort();
     let mut matches = Vec::new();
-    let mut truncated = false;
+    let mut truncated = files.len() >= EDITOR_MAX_FILES;
     'files: for relative in files.iter().filter(|path| path.ends_with(".zyl")) {
         let path = safe_editor_path(&state.root, relative, false)?;
         let source = match fs::read_to_string(path) {
@@ -1194,6 +1207,122 @@ fn search_editor_project(
         200,
         "application/json; charset=utf-8",
         json!({"matches": matches, "truncated": truncated}).to_string(),
+    ))
+}
+
+fn find_editor_identifier_occurrences(
+    state: &EditorState,
+    name: &str,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let mut chars = name.chars();
+    let valid_start = chars
+        .next()
+        .is_some_and(|ch| ch == '_' || ch.is_alphabetic());
+    if !valid_start
+        || chars.clone().any(|ch| ch != '_' && !ch.is_alphanumeric())
+        || name.len() > 120
+    {
+        return Err((400, "choose a valid Zelyra identifier to find".into()));
+    }
+
+    let mut files = Vec::new();
+    collect_editor_files(&state.root, &state.root, 0, &mut files)?;
+    files.sort();
+    let mut matches = Vec::new();
+    let mut truncated = files.len() >= EDITOR_MAX_FILES;
+    let mut scanned_bytes = 0_usize;
+    const MAX_REFERENCE_SCAN_BYTES: usize = 32 * 1024 * 1024;
+
+    'files: for relative in files.iter().filter(|path| path.ends_with(".zyl")) {
+        let path = safe_editor_path(&state.root, relative, false)?;
+        let metadata = match fs::metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(_) => {
+                truncated = true;
+                continue;
+            }
+        };
+        let Ok(file_bytes) = usize::try_from(metadata.len()) else {
+            truncated = true;
+            break;
+        };
+        if file_bytes > EDITOR_MAX_FILE_BYTES
+            || scanned_bytes.saturating_add(file_bytes) > MAX_REFERENCE_SCAN_BYTES
+        {
+            truncated = true;
+            break;
+        }
+        let source = match fs::read_to_string(&path) {
+            Ok(source) => source,
+            Err(_) => {
+                truncated = true;
+                continue;
+            }
+        };
+        scanned_bytes = scanned_bytes.saturating_add(source.len());
+        let tokens = match lex(&source) {
+            Ok(tokens) => tokens,
+            Err(_) => {
+                truncated = true;
+                continue;
+            }
+        };
+        for token in tokens {
+            if !matches!(&token.kind, TokenKind::Ident(identifier) if identifier == name) {
+                continue;
+            }
+            if matches.len() == 500 {
+                truncated = true;
+                break 'files;
+            }
+            let line_number = token.span.line.max(1);
+            let Some(line) = source.lines().nth(line_number - 1) else {
+                continue;
+            };
+            let column = source
+                .get(..token.span.start.min(source.len()))
+                .and_then(|prefix| {
+                    prefix
+                        .rsplit_once('\n')
+                        .map(|(_, tail)| tail)
+                        .or(Some(prefix))
+                })
+                .map(|prefix| prefix.encode_utf16().count() + 1)
+                .unwrap_or(1);
+            let snippet = if line.encode_utf16().count() <= 240 {
+                line.to_owned()
+            } else {
+                let start = token.span.start.min(source.len());
+                let line_start = source[..start].rfind('\n').map_or(0, |index| index + 1);
+                let local_start = start.saturating_sub(line_start);
+                let mut from = local_start.saturating_sub(100);
+                while !line.is_char_boundary(from) {
+                    from = from.saturating_sub(1);
+                }
+                let mut to = local_start.saturating_add(140).min(line.len());
+                while !line.is_char_boundary(to) {
+                    to -= 1;
+                }
+                format!(
+                    "{}{}{}",
+                    if from > 0 { "…" } else { "" },
+                    &line[from..to],
+                    if to < line.len() { "…" } else { "" }
+                )
+            };
+            matches.push(json!({
+                "path": relative,
+                "line": line_number,
+                "column": column,
+                "snippet": snippet,
+            }));
+        }
+    }
+    Ok((
+        200,
+        "application/json; charset=utf-8",
+        json!({"matches": matches, "truncated": truncated, "mode": "lexical-identifiers"})
+            .to_string(),
     ))
 }
 

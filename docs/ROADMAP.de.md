@@ -617,10 +617,11 @@ Auswirkungen und eine ausdrückliche Bestätigung. Die Roadmap staffelt diese Zi
   bereits Dateieigenschaften, Hilfe zu zentralen Sprachbegriffen per F1, einen
   filterbaren Aktionsfinder per Strg+Umschalt+P und compilergeprüfte Diagnosen
   während der Eingabe sowie Vorschläge für Deklarationen aus dem Compiler-
-  Projektmodell und F12-Sprünge zu Definitionen aus gespeicherten Projektdateien;
-  eine einfache literale Suche über gespeicherte `.zyl`-Dateien kommt hinzu.
-  Symbolsuche/Referenzen, lokale/typisierte Vervollständigung und
-  symbolbezogene Eigenschaften bleiben offen.
+  Projektmodell und F12-Sprünge zu Definitionen aus gespeicherten Projektdateien.
+  Zusätzlich verfügbar sind eine Literalsuche und lexikalische Bezeichnerfundstellen
+  per Umschalt+F12 in gespeicherten `.zyl`-Dateien. Diese Fundstellen lösen keine
+  Gültigkeitsbereiche auf und sind keine semantischen Referenzen. Lokale/typisierte
+  Vervollständigung und symbolbezogene Eigenschaften bleiben offen.
 - [🗺️] Compiler-gestützte Vervollständigung, Symbolnavigation, Suche/Referenzen,
   Formatierung, handlungsorientierte und während der Eingabe aktualisierte
   Diagnosen sowie integrierte Check-, Run- und Test-Aufgaben ergänzen.

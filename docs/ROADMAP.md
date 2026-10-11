@@ -647,8 +647,9 @@ released 0.9.0.
   language terms, a filterable action finder on Ctrl+Shift+P, and
   compiler-checked diagnostics while typing, suggestions from the compiler
   project model, and F12 navigation to definitions in saved project files. A
-  basic literal search across saved `.zyl` files is also being added. Symbol
-  references, local/type-aware completion, and symbol-level properties remain
+  literal project search and Shift+F12 lexical identifier occurrences are also
+  available for saved `.zyl` files. Occurrences are not scope-aware semantic
+  references; local/type-aware completion and symbol-level properties remain
   open.
 - [🗺️] Add compiler-backed completion, symbol navigation, find/references,
   formatting, actionable diagnostics updated while typing, and integrated
