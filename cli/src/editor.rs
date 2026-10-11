@@ -619,124 +619,113 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
     let mut api_handlers = Vec::<(String, String)>::new();
     let mut functions_by_name = BTreeMap::<String, Vec<String>>::new();
     let mut views_by_path_and_name = BTreeMap::<(String, String), String>::new();
-    for source in &loaded.sources {
-        let tokens =
-            lex(&source.text).map_err(|_| (422, "project source is not parseable".into()))?;
-        let program =
-            parse(&tokens).map_err(|_| (422, "project source is not parseable".into()))?;
-        let module_id = format!("module:{}", source.path);
+    {
+        let mut node_sink = ProjectMapNodeSink {
+            nodes: &mut nodes,
+            incomplete: &mut incomplete,
+            limit: node_limit,
+        };
+        for source in &loaded.sources {
+            let tokens =
+                lex(&source.text).map_err(|_| (422, "project source is not parseable".into()))?;
+            let program =
+                parse(&tokens).map_err(|_| (422, "project source is not parseable".into()))?;
+            let module_id = format!("module:{}", source.path);
 
-        for table in &program.tables {
-            let id = format!("table:{}:{}", source.path, table.name);
-            insert_project_map_node(
-                &mut nodes,
-                &mut incomplete,
-                node_limit,
-                &id,
-                "table",
-                &table.name,
-                &source.path,
-                &source.text,
-                table.span,
-            );
-            tables_by_name
-                .entry(table.name.clone())
-                .or_default()
-                .push(id.clone());
-            edges.insert((module_id.clone(), id, "declares".into()));
-        }
-        for view in &program.views {
-            let id = format!("view:{}:{}", source.path, view.name);
-            insert_project_map_node(
-                &mut nodes,
-                &mut incomplete,
-                node_limit,
-                &id,
-                "view",
-                &view.name,
-                &source.path,
-                &source.text,
-                view.span,
-            );
-            views_by_path_and_name.insert((source.path.clone(), view.name.clone()), id.clone());
-            edges.insert((module_id.clone(), id, "declares".into()));
-        }
-        for crud in &program.cruds {
-            let id = format!("crud:{}:{}", source.path, crud.name);
-            insert_project_map_node(
-                &mut nodes,
-                &mut incomplete,
-                node_limit,
-                &id,
-                "crud",
-                &crud.name,
-                &source.path,
-                &source.text,
-                crud.span,
-            );
-            edges.insert((module_id.clone(), id.clone(), "declares".into()));
-            cruds.push((id, crud.table.clone()));
-        }
-        for page in &program.pages {
-            let id = format!("page:{}:{}", source.path, page.path);
-            insert_project_map_node(
-                &mut nodes,
-                &mut incomplete,
-                node_limit,
-                &id,
-                "page",
-                &page.path,
-                &source.path,
-                &source.text,
-                page.span,
-            );
-            edges.insert((module_id.clone(), id.clone(), "declares".into()));
-            if let Some(view) = &page.view {
-                if let Some(target) =
-                    views_by_path_and_name.get(&(source.path.clone(), view.clone()))
-                {
-                    edges.insert((id, target.clone(), "uses view".into()));
-                } else {
-                    incomplete = true;
+            for table in &program.tables {
+                let id = format!("table:{}:{}", source.path, table.name);
+                node_sink.insert(
+                    &id,
+                    "table",
+                    &table.name,
+                    &source.path,
+                    &source.text,
+                    table.span,
+                );
+                tables_by_name
+                    .entry(table.name.clone())
+                    .or_default()
+                    .push(id.clone());
+                edges.insert((module_id.clone(), id, "declares".into()));
+            }
+            for view in &program.views {
+                let id = format!("view:{}:{}", source.path, view.name);
+                node_sink.insert(
+                    &id,
+                    "view",
+                    &view.name,
+                    &source.path,
+                    &source.text,
+                    view.span,
+                );
+                views_by_path_and_name.insert((source.path.clone(), view.name.clone()), id.clone());
+                edges.insert((module_id.clone(), id, "declares".into()));
+            }
+            for crud in &program.cruds {
+                let id = format!("crud:{}:{}", source.path, crud.name);
+                node_sink.insert(
+                    &id,
+                    "crud",
+                    &crud.name,
+                    &source.path,
+                    &source.text,
+                    crud.span,
+                );
+                edges.insert((module_id.clone(), id.clone(), "declares".into()));
+                cruds.push((id, crud.table.clone()));
+            }
+            for page in &program.pages {
+                let id = format!("page:{}:{}", source.path, page.path);
+                node_sink.insert(
+                    &id,
+                    "page",
+                    &page.path,
+                    &source.path,
+                    &source.text,
+                    page.span,
+                );
+                edges.insert((module_id.clone(), id.clone(), "declares".into()));
+                if let Some(view) = &page.view {
+                    if let Some(target) =
+                        views_by_path_and_name.get(&(source.path.clone(), view.clone()))
+                    {
+                        edges.insert((id, target.clone(), "uses view".into()));
+                    } else {
+                        *node_sink.incomplete = true;
+                    }
                 }
             }
-        }
-        for api in &program.apis {
-            let id = format!("api:{}:{}:{}", source.path, api.method, api.path);
-            insert_project_map_node(
-                &mut nodes,
-                &mut incomplete,
-                node_limit,
-                &id,
-                "api",
-                &format!("{} {}", api.method, api.path),
-                &source.path,
-                &source.text,
-                api.span,
-            );
-            edges.insert((module_id.clone(), id.clone(), "declares".into()));
-            if let Some(handler) = &api.handler {
-                api_handlers.push((id, handler.clone()));
+            for api in &program.apis {
+                let id = format!("api:{}:{}:{}", source.path, api.method, api.path);
+                node_sink.insert(
+                    &id,
+                    "api",
+                    &format!("{} {}", api.method, api.path),
+                    &source.path,
+                    &source.text,
+                    api.span,
+                );
+                edges.insert((module_id.clone(), id.clone(), "declares".into()));
+                if let Some(handler) = &api.handler {
+                    api_handlers.push((id, handler.clone()));
+                }
             }
-        }
-        for function in &program.functions {
-            let id = format!("function:{}:{}", source.path, function.name);
-            insert_project_map_node(
-                &mut nodes,
-                &mut incomplete,
-                node_limit,
-                &id,
-                "function",
-                &function.name,
-                &source.path,
-                &source.text,
-                function.span,
-            );
-            edges.insert((module_id.clone(), id.clone(), "declares".into()));
-            functions_by_name
-                .entry(function.name.clone())
-                .or_default()
-                .push(id);
+            for function in &program.functions {
+                let id = format!("function:{}:{}", source.path, function.name);
+                node_sink.insert(
+                    &id,
+                    "function",
+                    &function.name,
+                    &source.path,
+                    &source.text,
+                    function.span,
+                );
+                edges.insert((module_id.clone(), id.clone(), "declares".into()));
+                functions_by_name
+                    .entry(function.name.clone())
+                    .or_default()
+                    .push(id);
+            }
         }
     }
 
@@ -777,32 +766,38 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
     ))
 }
 
-fn insert_project_map_node(
-    nodes: &mut BTreeMap<String, Value>,
-    incomplete: &mut bool,
+struct ProjectMapNodeSink<'a> {
+    nodes: &'a mut BTreeMap<String, Value>,
+    incomplete: &'a mut bool,
     limit: usize,
-    id: &str,
-    kind: &str,
-    label: &str,
-    path: &str,
-    source: &str,
-    span: zelyra_ast::Span,
-) {
-    if nodes.len() >= limit {
-        *incomplete = true;
-        return;
+}
+
+impl ProjectMapNodeSink<'_> {
+    fn insert(
+        &mut self,
+        id: &str,
+        kind: &str,
+        label: &str,
+        path: &str,
+        source: &str,
+        span: zelyra_ast::Span,
+    ) {
+        if self.nodes.len() >= self.limit {
+            *self.incomplete = true;
+            return;
+        }
+        self.nodes.insert(
+            id.into(),
+            json!({
+                "id": id,
+                "kind": kind,
+                "label": label,
+                "path": path,
+                "line": span.line,
+                "position": byte_to_utf16(source, span.start),
+            }),
+        );
     }
-    nodes.insert(
-        id.into(),
-        json!({
-            "id": id,
-            "kind": kind,
-            "label": label,
-            "path": path,
-            "line": span.line,
-            "position": byte_to_utf16(source, span.start),
-        }),
-    );
 }
 
 fn push_editor_symbol(
