@@ -72,6 +72,10 @@ try {
   await page.locator('.tree-item.file[title="main.zyl"]').click();
   await page.waitForFunction(() => document.querySelector("#active-file")?.textContent === "main.zyl");
 
+  const functionDeclaration = page.locator(".cm-line", { hasText: "fn main" });
+  await functionDeclaration.click();
+  await page.keyboard.press("Home");
+  await page.keyboard.press("ArrowRight");
   await page.keyboard.press("F1");
   await page.locator("#studio-assistant:not([hidden])").waitFor();
   await page.locator("#assistant-help-details").getByText(/Optionen|Options/).waitFor();
