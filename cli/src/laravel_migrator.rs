@@ -126,7 +126,19 @@ fn analyze(
     for (path, relative) in &files {
         let source = fs::read_to_string(path)
             .map_err(|_| format!("{} is not valid UTF-8 source", relative))?;
+        let finding_count = findings.len();
         scan_source(relative, &source, &mut findings);
+        if findings.len() == finding_count {
+            findings.push(Finding {
+                kind: "source_file",
+                status: "unresolved",
+                file: relative.clone(),
+                line: 1,
+                name: "no supported pattern recognized".into(),
+                summary: "This PHP file contains syntax outside the analyzer's recognized pattern set; its behavior is not described by this report.".into(),
+                next_step: "Review this source file for routes, business rules, authorization, or side effects that need manual mapping.",
+            });
+        }
     }
     if findings.is_empty() {
         findings.push(Finding {
