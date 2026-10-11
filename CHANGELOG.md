@@ -8,6 +8,30 @@ releases follow Semantic Versioning independently of the language line.
 
 _Changes for the next release go here._
 
+## 0.9.2 — 2026-10-11
+
+- Extend local Studio into an IDE with contextual command help, task discovery,
+  compiler-backed completion, cross-file definition navigation, lexical
+  identifier occurrences, live diagnostics, and a compiler project map. Add an
+  explicit bounded run action for `main.zyl` with secret redaction.
+  / Studio um Befehlshilfe, Aktionssuche, compilergestützte Vervollständigung,
+  dateiübergreifende Definitionssprünge, lexikalische Bezeichnerfundstellen,
+  Live-Diagnosen und Compiler-Projektkarte erweitern. Eine begrenzte, explizite
+  Ausführung von `main.zyl` mit Geheimnisredaktion ergänzen.
+- Install CodeMirror extensions into the active editor state so completion,
+  help, navigation, and keyboard commands are available in the browser.
+  / CodeMirror-Erweiterungen im aktiven Editorzustand installieren, damit
+  Vervollständigung, Hilfe, Navigation und Tastaturbefehle im Browser verfügbar
+  sind.
+- Start the invoice tutorial's local MariaDB/web stack and schema setup from the
+  guided CLI entry point; retain a no-start scaffold option.
+  / Lokalen MariaDB-/Web-Stack und Schemaeinrichtung des Rechnungstutorials über
+  den geführten CLI-Einstieg starten; eine Option ohne Start beibehalten.
+- Cover cross-file IDE navigation, occurrence search, sidebar resizing, and
+  narrow viewport behavior in the Studio browser workflow.
+  / Dateiübergreifende IDE-Navigation, Fundstellensuche, Größenänderung der
+  Dateiseitenleiste und schmales Browserfenster im Studio-Ablauf prüfen.
+
 ## 0.9.1 — 2026-10-11
 
 - Fix the Studio session flow so reloads retain the local token in

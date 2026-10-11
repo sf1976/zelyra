@@ -573,7 +573,9 @@ Independent human acceptance remains deferred to 1.0.0.
 - [🧪] **Experimental release:** local Studio, bounded typed MySQL 8.4.11 SQL,
   invoice tutorial, initial language-0.1 corpus, and a MariaDB tenant CRUD path
   for one declared table. The maintainer security review and mutation rollback
-  E2E are recorded in the 0.7 plan. No tenant migration or backfill is added.
+  E2E are recorded in the 0.7 plan. This is limited to MariaDB, one tenant-
+  owned table, and CRUD without relations; it is not the complete multi-
+  database tenant CRUD required for 1.0.0. No tenant migration or backfill is added.
   Independent security review and human acceptance remain pre-production gates
   for 0.9.9/1.0.0. See the [0.7.0 plan](release-plans/0.7.0.en.md).
 
@@ -600,11 +602,22 @@ Independent human acceptance remains deferred to 1.0.0.
 ## Product direction: language, compiler, database, and Studio
 
 Zelyra's core product idea is one connected path from readable source through
-the compiler and database to a finished business application. Diagrams should
-come from checked project information and link directly to source, diagnostics,
-and workflows. Presentations should use the same typed, explicitly approved
-data sources and remain reviewable as readable Zelyra source. The roadmap stages
-this work across 0.9.2–0.9.8; these are not capabilities of the released 0.9.0.
+the compiler and database to a finished business application. Studio should
+take on as many common, safely modelled language and framework tasks as possible:
+explain valid choices, guide workflows, show errors, and generate checked,
+readable Zelyra source. Diagrams and presentations are examples of that broader
+direction. Shared JavaScript modules should remain ordinary reusable project
+files, with cross-file navigation and diagnostics from Studio. The roadmap
+stages these goals across 0.9.2–0.9.8; they are not capabilities of the
+released 0.9.0.
+
+The Laravel Migrator is also an implementation driver for Zelyra itself. When
+an accepted Laravel mapping is blocked by a missing Zelyra language, compiler,
+database, runtime, or Studio capability, record that gap against the release
+that needs it and implement it within 0.9.3–0.9.8. Do not label a mapping
+"direct" until its generated project runs through the promised workflow. Keep
+genuinely ambiguous or unsafe business behavior as explicit manual work, with
+its source evidence and reason.
 
 ## Release 0.9.1 — IDE foundation
 
@@ -635,20 +648,37 @@ this work across 0.9.2–0.9.8; these are not capabilities of the released 0.9.0
 
 ## Release 0.9.2 — IDE language services
 
-- [🗺️] Grow Studio into an IDE with a context-sensitive properties sidebar.
+- [🧪] The guided tutorial command starts MariaDB and the web app, then applies
+  the schema. The Compose web app gets its database URL from project setup, so
+  beginners need not set `DATABASE_URL` or run separate `db setup` and `serve`
+  commands. Its responsive theme styles the dashboard, CRUD forms, lists, and
+  print view.
+
+- [🧪] Grow Studio into an IDE with a context-sensitive properties sidebar.
   Selecting a file, route, table, field, or diagram element shows the relevant
   valid settings in clear language. Common workflows should use selection and
   properties instead of requiring users to memorize commands or chart APIs.
   While writing, users can request the description and options for the current
-  command.
-- [🗺️] Add compiler-backed completion, symbol navigation, find/references,
-  formatting, actionable diagnostics updated while typing, and integrated
-  check/run/test tasks. Show clear task progress and output without exposing
-  secrets or hiding compiler errors. Keep features scoped to documented
-  language 0.1 constructs. Also derive trustworthy architecture diagrams for
-  modules/imports, routes, and resource relationships from the compiler's
-  project model. Nodes and edges link back to source files and diagnostics;
-  unknown or dynamic relationships are marked incomplete.
+  command. The current work already adds file properties, F1 help for core
+  language terms, a filterable action finder on Ctrl+Shift+P, and
+  compiler-checked diagnostics while typing, suggestions from the compiler
+  project model, and F12 navigation to definitions in saved project files. A
+  literal project search and Shift+F12 lexical identifier occurrences are also
+  available for saved `.zyl` files. Occurrences are not scope-aware semantic
+  references. Ctrl+Space also completes parameters and in-scope `let`, loop,
+  and match bindings from valid unsaved source. Type inference and
+  symbol-level properties remain open. Studio can explicitly run `main.zyl`
+  with a 15-second timeout, bounded output, and redaction of recognized
+  environment and `.env` secrets. This remains an experimental local task. A
+  compiler-backed project map now displays module imports, declaration
+  ownership, CRUD/table links, page/view links, and uniquely resolved API
+  handlers, with source navigation and explicit incomplete status. It omits
+  dynamic and database-query relationships.
+- [🧪] Continue the IDE language services: add scope-aware semantic references,
+  type-aware completion, symbol/route properties, integrated verify/test tasks,
+  and diagnostics that link across the project. Complete deterministic project,
+  module, route, and resource diagrams. Keep claims scoped to language 0.1 and
+  mark unsupported relationships incomplete instead of guessing.
 - Exit evidence: positive and negative multi-file projects verify contextual
   properties and help, completions, live diagnostic ranges, navigation,
   formatter idempotence, task output, and deterministic diagram data;
@@ -656,11 +686,41 @@ this work across 0.9.2–0.9.8; these are not capabilities of the released 0.9.0
 
 ## Release 0.9.3 — database workbench
 
+- [🗺️] Start a read-only Laravel project analyzer in the Zelyra CLI:
+  `zelyra migrate laravel <project> --report <path>`. It statically inventories
+  Laravel/package versions, routes and middleware, controllers, models,
+  migrations, validation, views, jobs, and integrations, and links findings to
+  source locations. It must not boot the application, invoke Artisan, connect to
+  a database, or read `.env` files. Reports distinguish directly mappable,
+  partially mappable, manual, and unresolved items and identify a safe next
+  step. Start with a documented supported-pattern subset; ambiguous matches
+  remain unresolved rather than guessed.
 - [🗺️] Grow the IDE database view into a safe workbench: inspect tables,
   columns, indexes, and declared relationships; browse records read-only by
   default; show how source modules own each object. Make the ER diagram
   filterable and navigable so selecting a field or relationship reveals its
   declaration module and using resources.
+- [🗺️] Deliver foreign-key relationships as an end-to-end database feature by
+  1.0.0: declare references in Zelyra table fields, validate target table and
+  column types in the compiler, create and inspect real constraints, and show
+  relationship metadata in the Studio map. Ship the supported create/change
+  workflows separately for MariaDB, MySQL, and PostgreSQL. Schema plans must
+  detect orphan rows before adding a constraint, preserve data on failure, and
+  require review for risky changes; unsupported actions fail closed. The
+  default delete behavior is restrictive. Any explicit cascade or set-null
+  behavior must be declared, type-checked, and covered by each backend's
+  integration matrix before it is advertised.
+- [🗺️] Extend tenant-filtered generated CRUD beyond the experimental MariaDB
+  path: bind tenant selection to the authenticated user's active membership,
+  require the resource permission, and enforce the tenant predicate in list,
+  detail, create, edit, update, delete, and restore operations. Tenant keys are
+  server-bound and cannot be selected through submitted fields or exposed as
+  ordinary CRUD filters. Once foreign keys land, related-record choices and
+  writes must also prove that referenced rows belong to the active tenant.
+  Custom SQL actions on tenant-owned data must be tenant-aware or be rejected
+  at compile time. Exit evidence includes two-tenant positive and negative
+  integration cases for every mutation and read path, including membership
+  revocation and forged/conflicting selectors.
 - [🗺️] Let users add and edit table columns through the properties sidebar.
   Show the complete schema plan, impact, and risks; run compiler checks and
   require explicit confirmation before applying changes. Let users choose the
@@ -670,6 +730,13 @@ this work across 0.9.2–0.9.8; these are not capabilities of the released 0.9.0
 - [🗺️] Prepare typed, read-only data sources for metrics so 0.9.4 can offer
   selections without free-form SQL. Mutations and generated schema changes
   require a reviewed plan and explicit confirmation.
+- [🗺️] Plan reusable JavaScript ES modules as project files: keep shared
+  functions once in a clear asset/client area and import them from multiple
+  pages. Studio should find imports and exports, show cross-file references,
+  and provide relevant help and error locations. Common browser tasks can also
+  have simple Zelyra building blocks; those must not replace normal JavaScript
+  or existing JS libraries. Specify module wiring, asset output, security
+  boundaries, and interoperability before implementation.
 - Exit evidence: separate MariaDB, MySQL, and PostgreSQL tests match the published
   database matrix. Unsupported schema actions fail closed, stale plan hashes or
   database state block apply, read-only browsing is enforced, and credentials
@@ -677,6 +744,13 @@ this work across 0.9.2–0.9.8; these are not capabilities of the released 0.9.0
 
 ## Release 0.9.4 — visual CRUD design
 
+- [🗺️] Expand Laravel analysis into an evidence-linked project graph:
+  route → middleware/controller → model/relation → migration/table → view,
+  with validation rules, package dependencies, file and line locations, and
+  explicit unresolved edges. Produce readable Markdown and machine-readable
+  JSON reports. Version compatibility mappings and describe the behavioral
+  impact and required manual work; matching syntax is not proof of equivalent
+  behavior.
 - [🗺️] Make relational CRUD and business-chart workflows understandable in
   Studio: choose tables and relationships, design fields and forms, and configure
   metrics through the properties sidebar instead of chart commands. Preview
@@ -689,7 +763,12 @@ this work across 0.9.2–0.9.8; these are not capabilities of the released 0.9.0
   and dashboard KPIs without requiring users to learn chart API calls or write
   free-form SQL. Generated queries must be typed and read-only, and remain
   subject to database capabilities, authorization, and tenant boundaries. Add a
-  declarative presentation model for business applications: compiler-checked
+  generated relational CRUD flow that can select referenced records, display
+  linked records, and save valid foreign-key values without requiring handwritten
+  join SQL. Verify insert, update, delete, and restrictive-delete behavior for
+  MariaDB, MySQL, and PostgreSQL; keep unsupported relationship operations
+  explicit in the support matrix. Add a declarative presentation model for
+  business applications: compiler-checked
   slides with text, tables, charts, diagrams, and explicitly typed data sources,
   shown in Studio and exported as standalone HTML or print-ready output. Keep
   dashboards and presentations versionable as Zelyra source; arbitrary client
@@ -704,6 +783,12 @@ this work across 0.9.2–0.9.8; these are not capabilities of the released 0.9.0
 
 ## Release 0.9.5 — first-party mail and SMTP
 
+- [🗺️] Add versioned compatibility analysis for Laravel authentication,
+  policies/permissions, business logic, transactions, money fields, jobs,
+  integrations, file handling, and views. Mark security-sensitive or
+  behavior-dependent findings for human review, including status changes,
+  totals, side effects, and failure handling. Keep this analyzer useful without
+  PHP packages or a running Laravel environment.
 - [🗺️] Complete explicit application mail support without a mandatory provider:
   MIME text/HTML messages, encoded headers, SMTP authentication, implicit TLS,
   STARTTLS, timeouts, bounded retries, and integration with the existing
@@ -716,6 +801,16 @@ this work across 0.9.2–0.9.8; these are not capabilities of the released 0.9.0
 
 ## Release 0.9.6 — notification center
 
+- [🗺️] Add opt-in scaffold generation with
+  `zelyra migrate laravel <project> --output <target>`; allow `--report` and
+  `--output` together. Generate a separate Zelyra project only when requested,
+  preserve source attribution and mapping-rule identifiers in generated files,
+  and never copy secrets, `.env` values, personal records, or production data.
+  Refuse overlapping source/report/output paths and unsafe existing targets.
+  The report must distinguish generated scaffolding from transferred business
+  behavior, and every generated project must pass the matching Zelyra compiler.
+  Treat each blocker in an accepted mapping as a Zelyra implementation item in
+  the same release train, and close it before calling that mapping supported.
 - [🗺️] Add a persistent, tenant-scoped in-app notification center with unread
   counts, read/archive actions, pagination, preferences, and clear retention
   rules. Connect application events to optional email through the 0.9.5 SMTP
@@ -728,11 +823,25 @@ this work across 0.9.2–0.9.8; these are not capabilities of the released 0.9.0
 
 ## Release 0.9.7 — database and security hardening
 
+- [🗺️] Harden Laravel migration analysis for tenant boundaries, authorization,
+  downloads/uploads, payments/accounting, and public endpoints. Trace evidence
+  through routes, middleware, controllers, models, and relations where the
+  supported syntax permits; flag manipulated-ID and cross-tenant risks. When
+  static evidence is missing or ambiguous, require manual review and never
+  silently omit the behavior. Add fixtures for tenant isolation, foreign keys,
+  transactions, decimal money, permissions, and file storage.
 - [🗺️] Close the promised MariaDB, MySQL, and PostgreSQL workflow matrix for
   1.0, including schema inspection, migrations, CRUD, transactions, TLS, backup,
   and restore where each backend claims support. Complete independent review
   of authentication, MFA, tenant isolation, authorization, CSRF, SMTP secrets,
   and Studio mutation boundaries. Resolve every release-blocking finding.
+- [🗺️] Run the complete tenant-filtered CRUD authorization matrix against the
+  exact supported MariaDB, MySQL, and PostgreSQL versions. Cover tenant
+  selection, membership and permission checks, generated list/detail and
+  create/update/delete/restore paths, relation ownership, and fail-closed
+  behavior when context or membership is missing or revoked. Document the
+  supported tenant model and migration expectations; do not imply that
+  existing installations are automatically backfilled.
 - Exit evidence: exact server versions and limitations are published; each
   supported workflow has CI evidence, negative authorization tests, and a
   maintainer-reviewed disposition for every security finding. Do not claim
@@ -740,6 +849,17 @@ this work across 0.9.2–0.9.8; these are not capabilities of the released 0.9.0
 
 ## Release 0.9.8 — production-readiness rehearsal
 
+- [🗺️] Complete the supported Laravel Migrator scope and its versioned
+  compatibility matrix. Verify read-only analysis, secret/PII redaction,
+  source-location accuracy, route-to-data relationship reports, ambiguity
+  handling, path separation, provenance in generated files, and compiler-valid
+  output on representative Laravel fixtures. Run generated applications through
+  real CRUD workflows on the supported databases, including the supported
+  relation, tenant, permission, transaction, and money cases. Resolve any
+  Zelyra capability that blocks an accepted mapping before 0.9.8 exits. Document
+  supported Laravel and package patterns plus known limits. No automatic
+  business-logic or security parity claim is made; the tool supplies an
+  auditable migration starting point.
 - [🗺️] Rehearse clean installation, upgrades, rollback, migration, backup and
   restore on supported operating systems and databases. Finish operator and
   user documentation, dependency/license review, resource limits, error

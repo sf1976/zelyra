@@ -22,8 +22,12 @@ Oder mit einem Projektpfad und einem abweichenden Port:
 zelyra editor ./rechnung --port 4177
 ```
 
-Die CLI zeigt eine lokale URL mit einem zufälligen Sitzungstoken an. Öffne sie
-im Browser und beende den Editorprozess mit `Ctrl+C`, wenn du fertig bist.
+Die CLI öffnet automatisch den Standardbrowser. Falls das auf dem System nicht
+möglich ist, zeigt sie die lokale URL mit dem Sitzungstoken zum manuellen Öffnen
+an. Mit `--no-open` überspringst du den Browserstart, etwa per SSH oder ohne
+grafische Oberfläche. Studio braucht weder Datenbank noch laufende Webanwendung;
+diese startest du nur, wenn du sie separat verwenden möchtest. Beende Studio mit
+`Ctrl+C`.
 
 ## Arbeitsoberfläche
 

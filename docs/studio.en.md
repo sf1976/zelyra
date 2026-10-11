@@ -7,9 +7,36 @@ project directory:
 zelyra editor
 ```
 
+The CLI starts local Studio and opens the default browser. If no graphical
+browser session is available, it prints the URL for manual use. On SSH or
+headless systems, skip browser launch with `zelyra editor --no-open`. Editing
+does not require a running database or the web application.
+
 The editor listens only on `127.0.0.1`. Its startup address contains a random
 session token. Mutating requests require that token and the same browser
 origin.
+
+## Use the IDE tools
+
+Press **F1** or choose the help action to see a description, options, and an
+example for a supported language term. **Ctrl+Shift+P** opens the searchable
+action finder. **Ctrl+Space** requests completion; available suggestions include
+project declarations and supported local parameters and bindings. F12 opens a
+saved function or type definition in the current or a directly imported file.
+Shift+F12 finds exact lexical identifier occurrences in saved `.zyl` files.
+These occurrence results are not scope-aware semantic references. Save changed
+files before navigating so source locations stay accurate.
+
+Compiler diagnostics update while editing saved Zelyra project files; they are
+checked against a private temporary project copy and do not write the unsaved
+buffer. **Run** is an explicit action for `main.zyl`, bounded to 15 seconds and
+64 KiB per output stream. Recognized environment and local `.env` values are
+redacted. Studio does not start the app or database automatically and does not
+provide interactive program input.
+
+The **Project map** shows only unambiguous relationships from the compiler
+project model and links nodes to saved source locations. Dynamic and
+unresolved relationships remain marked incomplete instead of being inferred.
 
 ## Edit source code
 
@@ -58,7 +85,7 @@ does not migrate the database or change records.
 
 ## Scope
 
-Studio is a local development tool, not yet a complete IDE. Its database view
+Studio is a local IDE foundation, not yet a complete IDE. Its database view
 is a read-only schema overview, not an unrestricted database designer. CRUD
 generation works from existing declared tables and validates generated code
 before writing it.

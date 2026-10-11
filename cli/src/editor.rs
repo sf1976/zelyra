@@ -2,6 +2,7 @@ use super::*;
 use std::io::{self, Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::path::{Component, Path, PathBuf};
+use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use std::time::Duration;
@@ -53,6 +54,7 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     let mut directory = PathBuf::from(".");
     let mut directory_given = false;
     let mut port = 4177_u16;
+    let mut open_browser = true;
     while let Some(argument) = arguments.next() {
         if argument == "--port" {
             let Some(value) = arguments.next() else {
@@ -66,11 +68,15 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
                     return ExitCode::from(2);
                 }
             };
+        } else if argument == "--no-open" {
+            open_browser = false;
         } else if !argument.starts_with('-') && !directory_given {
             directory = PathBuf::from(argument);
             directory_given = true;
         } else {
-            eprintln!("error[E-EDITOR-001]: usage: zelyra editor [directory] [--port <port>]");
+            eprintln!(
+                "error[E-EDITOR-001]: usage: zelyra editor [directory] [--port <port>] [--no-open]"
+            );
             return ExitCode::from(2);
         }
     }
@@ -119,8 +125,23 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     let active = Arc::new(AtomicUsize::new(0));
     println!("Zelyra Studio ist lokal erreichbar: http://{authority}{EDITOR_PATH}/#{token}");
     println!("Projekt: {}", state.root.display());
+    if open_browser && has_graphical_session() {
+        if open_system_browser(&format!("http://{authority}{EDITOR_PATH}/#{token}")) {
+            println!("Der Standardbrowser wird geöffnet. Mit Ctrl+C beendest du Studio.");
+        } else {
+            println!(
+                "Kein Browser konnte automatisch geöffnet werden. Rufe die URL oben manuell auf."
+            );
+        }
+    } else if open_browser {
+        println!("Keine grafische Browsersitzung erkannt. Rufe die URL oben manuell auf. Mit Ctrl+C beendest du Studio.");
+    } else {
+        println!(
+            "Browserstart übersprungen. Öffne die URL oben selbst. Mit Ctrl+C beendest du Studio."
+        );
+    }
     println!(
-        "Der Editor akzeptiert ausschließlich Verbindungen von diesem Rechner. Beenden mit Ctrl+C."
+        "Studio akzeptiert ausschließlich Verbindungen von diesem Rechner. Es startet weder Datenbank noch Webanwendung."
     );
     for incoming in listener.incoming() {
         match incoming {
@@ -151,6 +172,57 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         }
     }
     ExitCode::SUCCESS
+}
+
+fn has_graphical_session() -> bool {
+    if env::var_os("CI").is_some() {
+        return false;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        env::var_os("DISPLAY").is_some() || env::var_os("WAYLAND_DISPLAY").is_some()
+    }
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    {
+        true
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
+    {
+        false
+    }
+}
+
+fn open_system_browser(url: &str) -> bool {
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        let mut command = Command::new("cmd.exe");
+        command.args(["/C", "start", "", url]);
+        command
+    };
+    #[cfg(target_os = "macos")]
+    let mut command = {
+        let mut command = Command::new("open");
+        command.arg(url);
+        command
+    };
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut command = {
+        let mut command = Command::new("xdg-open");
+        command.arg(url);
+        command
+    };
+    #[cfg(not(any(unix, target_os = "windows")))]
+    let mut command = {
+        let _ = url;
+        return false;
+    };
+
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .is_ok()
 }
 
 fn handle_editor_connection(
@@ -257,7 +329,45 @@ fn editor_response(
     }
     match (request.method.as_str(), operation) {
         ("GET", "tree") => tree_response(state),
+        ("GET", "search") => {
+            let query = request
+                .target
+                .split_once('?')
+                .map(|(_, query)| query)
+                .unwrap_or_default();
+            let values =
+                zelyra_web::parse_urlencoded(query).map_err(|error| (400, error.message))?;
+            search_editor_project(state, values.get("q").map(String::as_str).unwrap_or(""))
+        }
+        ("GET", "references") => {
+            let query = request
+                .target
+                .split_once('?')
+                .map(|(_, query)| query)
+                .unwrap_or_default();
+            let values =
+                zelyra_web::parse_urlencoded(query).map_err(|error| (400, error.message))?;
+            find_editor_identifier_occurrences(
+                state,
+                values.get("name").map(String::as_str).unwrap_or(""),
+            )
+        }
+        ("GET", "project-map") => editor_project_map(state),
         ("GET", "database-schema") => database_schema_response(state),
+        ("GET", "symbols") => {
+            let query = request
+                .target
+                .split_once('?')
+                .map(|(_, query)| query)
+                .unwrap_or_default();
+            let values =
+                zelyra_web::parse_urlencoded(query).map_err(|error| (400, error.message))?;
+            editor_symbols(
+                state,
+                values.get("path").map(String::as_str).unwrap_or("main.zyl"),
+            )
+        }
+        ("POST", "locals") => local_editor_symbols(state, &parse_json_body(&request.body)?),
         ("GET", "file") => {
             let query = request
                 .target
@@ -274,10 +384,581 @@ fn editor_response(
         ("POST", "file-rename") => rename_editor_file(state, parse_json_body(&request.body)?),
         ("DELETE", "file") => delete_editor_file(state, parse_json_body(&request.body)?),
         ("POST", "check") => check_project(state, &parse_json_body(&request.body)?),
+        ("POST", "run") => run_editor_program(state, &parse_json_body(&request.body)?),
         ("POST", "format") => format_editor_file(state, &parse_json_body(&request.body)?),
         ("POST", "crud-preview") => preview_crud_resource(state, &parse_json_body(&request.body)?),
         ("POST", "crud-apply") => apply_crud_resource(state, &parse_json_body(&request.body)?),
         _ => Err((404, "not found".into())),
+    }
+}
+
+fn editor_symbols(
+    state: &EditorState,
+    relative_entry: &str,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let entry = safe_editor_path(&state.root, "main.zyl", false)?;
+    let requested = safe_editor_path(&state.root, relative_entry, false)?;
+    let relative_path = requested
+        .strip_prefix(&state.root)
+        .map_err(|_| (400, "symbol path must stay inside the project".into()))?
+        .to_string_lossy()
+        .replace('\\', "/");
+    let loaded = project::load(&entry.to_string_lossy()).map_err(|_| {
+        (
+            422,
+            "project symbols are unavailable until the imported source parses".into(),
+        )
+    })?;
+    let active_source = fs::read_to_string(&requested)
+        .map_err(|_| (415, "active Zelyra source is not UTF-8 text".into()))?;
+    let active_tokens = lex(&active_source).map_err(|_| {
+        (
+            422,
+            "active source declarations are not parseable yet".into(),
+        )
+    })?;
+    let active_program = parse(&active_tokens).map_err(|_| {
+        (
+            422,
+            "active source declarations are not parseable yet".into(),
+        )
+    })?;
+    let imported_paths = active_program
+        .imports
+        .iter()
+        .map(|import| import.path.as_str())
+        .collect::<BTreeSet<_>>();
+    let mut project_sources = loaded.sources.clone();
+    if !project_sources
+        .iter()
+        .any(|source| source.path == relative_path)
+    {
+        project_sources.push(project::ProjectSource {
+            path: relative_path.clone(),
+            text: active_source,
+        });
+    }
+    let mut symbols = Vec::new();
+
+    for source in project_sources.iter().filter(|source| {
+        source.path == relative_path || imported_paths.contains(source.path.as_str())
+    }) {
+        let is_local = source.path == relative_path;
+        let tokens = lex(&source.text)
+            .map_err(|_| (422, "project declarations are not parseable yet".into()))?;
+        let parsed = parse(&tokens)
+            .map_err(|_| (422, "project declarations are not parseable yet".into()))?;
+        for item in &parsed.functions {
+            if is_local || item.is_public {
+                push_editor_symbol(
+                    &mut symbols,
+                    &source.path,
+                    &source.text,
+                    &item.name,
+                    "function",
+                    "function",
+                    item.span,
+                );
+            }
+        }
+        for item in &parsed.types {
+            if is_local || item.is_public {
+                push_editor_symbol(
+                    &mut symbols,
+                    &source.path,
+                    &source.text,
+                    &item.name,
+                    "type",
+                    "type",
+                    item.span,
+                );
+            }
+        }
+        for item in &parsed.records {
+            if is_local || item.is_public {
+                push_editor_symbol(
+                    &mut symbols,
+                    &source.path,
+                    &source.text,
+                    &item.name,
+                    "type",
+                    "type",
+                    item.span,
+                );
+            }
+        }
+        for item in &parsed.views {
+            if is_local || item.is_public {
+                push_editor_symbol(
+                    &mut symbols,
+                    &source.path,
+                    &source.text,
+                    &item.name,
+                    "class",
+                    "view",
+                    item.span,
+                );
+            }
+        }
+        for item in &parsed.components {
+            if is_local || item.is_public {
+                push_editor_symbol(
+                    &mut symbols,
+                    &source.path,
+                    &source.text,
+                    &item.name,
+                    "class",
+                    "component",
+                    item.span,
+                );
+            }
+        }
+        if is_local {
+            symbols.extend(
+                parsed
+                    .forms
+                    .iter()
+                    .map(|item| json!({"label": item.name, "kind": "class", "detail": "form"})),
+            );
+            symbols.extend(
+                parsed
+                    .cruds
+                    .iter()
+                    .map(|item| json!({"label": item.name, "kind": "class", "detail": "crud"})),
+            );
+            symbols.extend(
+                parsed
+                    .pages
+                    .iter()
+                    .map(|item| json!({"label": item.path, "kind": "class", "detail": "page"})),
+            );
+            symbols.extend(
+                parsed
+                    .apis
+                    .iter()
+                    .map(|item| json!({"label": item.path, "kind": "class", "detail": "api"})),
+            );
+            symbols.extend(
+                parsed.tableviews.iter().map(
+                    |item| json!({"label": item.name, "kind": "class", "detail": "tableview"}),
+                ),
+            );
+        }
+    }
+    symbols.extend(
+        loaded
+            .program
+            .tables
+            .iter()
+            .map(|item| json!({"label": item.name, "kind": "class", "detail": "table"})),
+    );
+    Ok((
+        200,
+        "application/json; charset=utf-8",
+        json!({"symbols": symbols}).to_string(),
+    ))
+}
+
+fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String), (u16, String)> {
+    let mut project_files = Vec::new();
+    collect_editor_files(&state.root, &state.root, 0, &mut project_files)?;
+    if project_files.len() >= EDITOR_MAX_FILES {
+        return Err((413, "project map is limited to 2,000 project files".into()));
+    }
+    let mut total_source_bytes = 0_u64;
+    for relative in project_files.iter().filter(|path| path.ends_with(".zyl")) {
+        let path = safe_editor_path(&state.root, relative, false)?;
+        let size = fs::metadata(path)
+            .map_err(|_| (500, "could not inspect project source".into()))?
+            .len();
+        total_source_bytes = total_source_bytes.saturating_add(size);
+        if size > EDITOR_MAX_FILE_BYTES as u64 || total_source_bytes > 32 * 1024 * 1024 {
+            return Err((
+                413,
+                "project map source is limited to 1 MiB per file and 32 MiB total".into(),
+            ));
+        }
+    }
+    let entry = safe_editor_path(&state.root, "main.zyl", false)?;
+    let loaded = project::load(&entry.to_string_lossy()).map_err(|_| {
+        (
+            422,
+            "project map is unavailable until imported source files parse".into(),
+        )
+    })?;
+    let mut nodes = BTreeMap::<String, Value>::new();
+    let mut edges = BTreeSet::<(String, String, String)>::new();
+    let mut incomplete = false;
+    let node_limit = 500;
+    for module in &loaded.modules {
+        let id = format!("module:{}", module.path);
+        if nodes.len() >= node_limit {
+            incomplete = true;
+            break;
+        }
+        nodes.insert(
+            id.clone(),
+            json!({"id": id, "kind": "module", "label": module.path, "path": module.path}),
+        );
+        for import in &module.imports {
+            let target = format!("module:{}", import.path);
+            if loaded
+                .modules
+                .iter()
+                .any(|candidate| candidate.path == import.path)
+            {
+                edges.insert((id.clone(), target, "imports".into()));
+            } else {
+                incomplete = true;
+            }
+        }
+    }
+
+    let mut tables_by_name = BTreeMap::<String, Vec<String>>::new();
+    let mut cruds = Vec::<(String, String)>::new();
+    let mut api_handlers = Vec::<(String, String)>::new();
+    let mut functions_by_name = BTreeMap::<String, Vec<String>>::new();
+    let mut views_by_path_and_name = BTreeMap::<(String, String), String>::new();
+    {
+        let mut node_sink = ProjectMapNodeSink {
+            nodes: &mut nodes,
+            incomplete: &mut incomplete,
+            limit: node_limit,
+        };
+        for source in &loaded.sources {
+            let tokens =
+                lex(&source.text).map_err(|_| (422, "project source is not parseable".into()))?;
+            let program =
+                parse(&tokens).map_err(|_| (422, "project source is not parseable".into()))?;
+            let module_id = format!("module:{}", source.path);
+
+            for table in &program.tables {
+                let id = format!("table:{}:{}", source.path, table.name);
+                node_sink.insert(
+                    &id,
+                    "table",
+                    &table.name,
+                    &source.path,
+                    &source.text,
+                    table.span,
+                );
+                tables_by_name
+                    .entry(table.name.clone())
+                    .or_default()
+                    .push(id.clone());
+                edges.insert((module_id.clone(), id, "declares".into()));
+            }
+            for view in &program.views {
+                let id = format!("view:{}:{}", source.path, view.name);
+                node_sink.insert(
+                    &id,
+                    "view",
+                    &view.name,
+                    &source.path,
+                    &source.text,
+                    view.span,
+                );
+                views_by_path_and_name.insert((source.path.clone(), view.name.clone()), id.clone());
+                edges.insert((module_id.clone(), id, "declares".into()));
+            }
+            for crud in &program.cruds {
+                let id = format!("crud:{}:{}", source.path, crud.name);
+                node_sink.insert(
+                    &id,
+                    "crud",
+                    &crud.name,
+                    &source.path,
+                    &source.text,
+                    crud.span,
+                );
+                edges.insert((module_id.clone(), id.clone(), "declares".into()));
+                cruds.push((id, crud.table.clone()));
+            }
+            for page in &program.pages {
+                let id = format!("page:{}:{}", source.path, page.path);
+                node_sink.insert(
+                    &id,
+                    "page",
+                    &page.path,
+                    &source.path,
+                    &source.text,
+                    page.span,
+                );
+                edges.insert((module_id.clone(), id.clone(), "declares".into()));
+                if let Some(view) = &page.view {
+                    if let Some(target) =
+                        views_by_path_and_name.get(&(source.path.clone(), view.clone()))
+                    {
+                        edges.insert((id, target.clone(), "uses view".into()));
+                    } else {
+                        *node_sink.incomplete = true;
+                    }
+                }
+            }
+            for api in &program.apis {
+                let id = format!("api:{}:{}:{}", source.path, api.method, api.path);
+                node_sink.insert(
+                    &id,
+                    "api",
+                    &format!("{} {}", api.method, api.path),
+                    &source.path,
+                    &source.text,
+                    api.span,
+                );
+                edges.insert((module_id.clone(), id.clone(), "declares".into()));
+                if let Some(handler) = &api.handler {
+                    api_handlers.push((id, handler.clone()));
+                }
+            }
+            for function in &program.functions {
+                let id = format!("function:{}:{}", source.path, function.name);
+                node_sink.insert(
+                    &id,
+                    "function",
+                    &function.name,
+                    &source.path,
+                    &source.text,
+                    function.span,
+                );
+                edges.insert((module_id.clone(), id.clone(), "declares".into()));
+                functions_by_name
+                    .entry(function.name.clone())
+                    .or_default()
+                    .push(id);
+            }
+        }
+    }
+
+    for (crud, table) in cruds {
+        match tables_by_name.get(&table) {
+            Some(targets) if targets.len() == 1 => {
+                edges.insert((crud, targets[0].clone(), "uses table".into()));
+            }
+            _ => incomplete = true,
+        }
+    }
+    for (route, handler) in api_handlers {
+        match functions_by_name.get(&handler) {
+            Some(targets) if targets.len() == 1 => {
+                edges.insert((route, targets[0].clone(), "handled by".into()));
+            }
+            _ => incomplete = true,
+        }
+    }
+    edges.retain(|(from, to, _)| {
+        let keep = nodes.contains_key(from) && nodes.contains_key(to);
+        incomplete |= !keep;
+        keep
+    });
+    if edges.len() > 1_000 {
+        incomplete = true;
+        edges = edges.into_iter().take(1_000).collect();
+    }
+    Ok((
+        200,
+        "application/json; charset=utf-8",
+        json!({
+            "nodes": nodes.into_values().collect::<Vec<_>>(),
+            "edges": edges.into_iter().map(|(from, to, label)| json!({"from": from, "to": to, "label": label})).collect::<Vec<_>>(),
+            "incomplete": incomplete,
+        })
+        .to_string(),
+    ))
+}
+
+struct ProjectMapNodeSink<'a> {
+    nodes: &'a mut BTreeMap<String, Value>,
+    incomplete: &'a mut bool,
+    limit: usize,
+}
+
+impl ProjectMapNodeSink<'_> {
+    fn insert(
+        &mut self,
+        id: &str,
+        kind: &str,
+        label: &str,
+        path: &str,
+        source: &str,
+        span: zelyra_ast::Span,
+    ) {
+        if self.nodes.len() >= self.limit {
+            *self.incomplete = true;
+            return;
+        }
+        self.nodes.insert(
+            id.into(),
+            json!({
+                "id": id,
+                "kind": kind,
+                "label": label,
+                "path": path,
+                "line": span.line,
+                "position": byte_to_utf16(source, span.start),
+            }),
+        );
+    }
+}
+
+fn push_editor_symbol(
+    symbols: &mut Vec<Value>,
+    path: &str,
+    source: &str,
+    name: &str,
+    kind: &str,
+    detail: &str,
+    span: zelyra_ast::Span,
+) {
+    let Some(declaration) = source.get(span.start..span.end.min(source.len())) else {
+        return;
+    };
+    let Some(offset) = declaration.find(name) else {
+        return;
+    };
+    let byte_position = span.start + offset;
+    let Some(prefix) = source.get(..byte_position) else {
+        return;
+    };
+    symbols.push(json!({
+        "label": name,
+        "kind": kind,
+        "detail": detail,
+        "path": path,
+        "position": prefix.encode_utf16().count(),
+    }));
+}
+
+fn local_editor_symbols(
+    state: &EditorState,
+    value: &Value,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let relative = value
+        .get("path")
+        .and_then(Value::as_str)
+        .filter(|path| path.ends_with(".zyl"))
+        .ok_or((400, "choose a Zelyra source file".into()))?;
+    let _path = safe_editor_path(&state.root, relative, false)?;
+    let source = value
+        .get("source")
+        .and_then(Value::as_str)
+        .ok_or((400, "source is required".into()))?;
+    if source.len() > EDITOR_MAX_FILE_BYTES {
+        return Err((413, "source exceeds the 1 MiB editor limit".into()));
+    }
+    let offset = value
+        .get("offset")
+        .and_then(Value::as_u64)
+        .ok_or((400, "editor offset is required".into()))?;
+    let byte_offset = utf16_to_byte(source, usize::try_from(offset).unwrap_or(usize::MAX));
+    let tokens = lex(source).map_err(|_| (422, "source is not parseable yet".into()))?;
+    let program = parse(&tokens).map_err(|_| (422, "source is not parseable yet".into()))?;
+    let mut locals = Vec::new();
+    if let Some(function) = program.functions.iter().find(|function| {
+        function.body.span.start <= byte_offset && byte_offset <= function.body.span.end
+    }) {
+        for parameter in &function.params {
+            locals.push(json!({
+                "label": parameter.name,
+                "kind": "variable",
+                "detail": "parameter",
+                "valueType": parameter.ty.to_string(),
+            }));
+        }
+        collect_visible_bindings(&function.body, byte_offset, &mut locals);
+    }
+    Ok((
+        200,
+        "application/json; charset=utf-8",
+        json!({"symbols": locals}).to_string(),
+    ))
+}
+
+fn utf16_to_byte(source: &str, requested: usize) -> usize {
+    let mut utf16_offset = 0;
+    for (byte_offset, character) in source.char_indices() {
+        if utf16_offset >= requested {
+            return byte_offset;
+        }
+        utf16_offset += character.len_utf16();
+        if utf16_offset > requested {
+            return byte_offset;
+        }
+    }
+    source.len()
+}
+
+fn collect_visible_bindings(block: &zelyra_ast::Block, offset: usize, output: &mut Vec<Value>) {
+    if offset < block.span.start || offset > block.span.end {
+        return;
+    }
+    for statement in &block.statements {
+        match statement {
+            zelyra_ast::Stmt::Let { name, ty, span, .. } if span.start < offset => {
+                output.push(json!({
+                    "label": name,
+                    "kind": "variable",
+                    "detail": "local value",
+                    "valueType": ty.as_ref().map(ToString::to_string),
+                }))
+            }
+            zelyra_ast::Stmt::If {
+                then_block,
+                else_block,
+                span,
+                ..
+            } if span.start < offset => {
+                collect_visible_bindings(then_block, offset, output);
+                if let Some(block) = else_block {
+                    collect_visible_bindings(block, offset, output);
+                }
+            }
+            zelyra_ast::Stmt::While { body, span, .. }
+            | zelyra_ast::Stmt::Loop { body, span, .. }
+            | zelyra_ast::Stmt::Transaction { body, span }
+            | zelyra_ast::Stmt::Parallel { body, span }
+                if span.start < offset =>
+            {
+                collect_visible_bindings(body, offset, output);
+            }
+            zelyra_ast::Stmt::For {
+                name, body, span, ..
+            } if span.start < offset && body.span.start <= offset && offset <= body.span.end => {
+                output.push(json!({
+                    "label": name,
+                    "kind": "variable",
+                    "detail": "loop value",
+                    "valueType": Value::Null,
+                }));
+                collect_visible_bindings(body, offset, output);
+            }
+            zelyra_ast::Stmt::Match { arms, span, .. } if span.start < offset => {
+                for arm in arms
+                    .iter()
+                    .filter(|arm| arm.span.start <= offset && offset <= arm.span.end)
+                {
+                    collect_pattern_bindings(&arm.pattern, output);
+                    collect_visible_bindings(&arm.body, offset, output);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn collect_pattern_bindings(pattern: &zelyra_ast::Pattern, output: &mut Vec<Value>) {
+    match &pattern.kind {
+        zelyra_ast::PatternKind::Variable(name) => output.push(json!({
+            "label": name,
+            "kind": "variable",
+            "detail": "match value",
+            "valueType": Value::Null,
+        })),
+        zelyra_ast::PatternKind::Constructor {
+            inner: Some(inner), ..
+        } => {
+            collect_pattern_bindings(inner, output);
+        }
+        _ => {}
     }
 }
 
@@ -654,7 +1335,28 @@ fn validate_editor_candidate(
                     .strip_prefix(&temporary_root)
                     .map(|path| path.to_string_lossy().replace('\\', "/"))
                     .unwrap_or_else(|_| "main.zyl".into());
-                item["file"] = Value::String(relative);
+                item["file"] = Value::String(relative.clone());
+                let diagnostic_source = if relative == target {
+                    Some(candidate.to_owned())
+                } else {
+                    safe_editor_path(&state.root, &relative, false)
+                        .ok()
+                        .and_then(|path| fs::read_to_string(path).ok())
+                };
+                if let Some(diagnostic_source) = diagnostic_source {
+                    let start = item
+                        .pointer("/span/start/offset")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0) as usize;
+                    let end = item
+                        .pointer("/span/end/offset")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(start as u64) as usize;
+                    item["editorSpan"] = json!({
+                        "start": byte_to_utf16(&diagnostic_source, start),
+                        "end": byte_to_utf16(&diagnostic_source, end),
+                    });
+                }
             }
             item
         })
@@ -824,6 +1526,181 @@ fn tree_response(state: &EditorState) -> Result<(u16, &'static str, String), (u1
         200,
         "application/json; charset=utf-8",
         json!({"files": files}).to_string(),
+    ))
+}
+
+fn search_editor_project(
+    state: &EditorState,
+    query: &str,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let query = query.trim();
+    if query.is_empty() || query.chars().count() > 120 {
+        return Err((400, "search text must contain 1 to 120 characters".into()));
+    }
+    let mut files = Vec::new();
+    collect_editor_files(&state.root, &state.root, 0, &mut files)?;
+    files.sort();
+    let mut matches = Vec::new();
+    let mut truncated = files.len() >= EDITOR_MAX_FILES;
+    'files: for relative in files.iter().filter(|path| path.ends_with(".zyl")) {
+        let path = safe_editor_path(&state.root, relative, false)?;
+        let source = match fs::read_to_string(path) {
+            Ok(source) => source,
+            Err(_) => continue,
+        };
+        for (line_index, line) in source.lines().enumerate() {
+            for (byte_column, _) in line.match_indices(query) {
+                if matches.len() == 500 {
+                    truncated = true;
+                    break 'files;
+                }
+                let prefix = &line[..byte_column];
+                let mut snippet_start = byte_column.saturating_sub(100);
+                while !line.is_char_boundary(snippet_start) {
+                    snippet_start += 1;
+                }
+                let mut snippet_end = byte_column
+                    .saturating_add(query.len())
+                    .saturating_add(140)
+                    .min(line.len());
+                while !line.is_char_boundary(snippet_end) {
+                    snippet_end -= 1;
+                }
+                let snippet = format!(
+                    "{}{}{}",
+                    if snippet_start > 0 { "…" } else { "" },
+                    &line[snippet_start..snippet_end],
+                    if snippet_end < line.len() { "…" } else { "" }
+                );
+                matches.push(json!({
+                    "path": relative,
+                    "line": line_index + 1,
+                    "column": prefix.encode_utf16().count() + 1,
+                    "snippet": snippet,
+                }));
+            }
+        }
+    }
+    Ok((
+        200,
+        "application/json; charset=utf-8",
+        json!({"matches": matches, "truncated": truncated}).to_string(),
+    ))
+}
+
+fn find_editor_identifier_occurrences(
+    state: &EditorState,
+    name: &str,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let mut chars = name.chars();
+    let valid_start = chars
+        .next()
+        .is_some_and(|ch| ch == '_' || ch.is_alphabetic());
+    if !valid_start
+        || chars.clone().any(|ch| ch != '_' && !ch.is_alphanumeric())
+        || name.len() > 120
+    {
+        return Err((400, "choose a valid Zelyra identifier to find".into()));
+    }
+
+    let mut files = Vec::new();
+    collect_editor_files(&state.root, &state.root, 0, &mut files)?;
+    files.sort();
+    let mut matches = Vec::new();
+    let mut truncated = files.len() >= EDITOR_MAX_FILES;
+    let mut scanned_bytes = 0_usize;
+    const MAX_REFERENCE_SCAN_BYTES: usize = 32 * 1024 * 1024;
+
+    'files: for relative in files.iter().filter(|path| path.ends_with(".zyl")) {
+        let path = safe_editor_path(&state.root, relative, false)?;
+        let metadata = match fs::metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(_) => {
+                truncated = true;
+                continue;
+            }
+        };
+        let Ok(file_bytes) = usize::try_from(metadata.len()) else {
+            truncated = true;
+            break;
+        };
+        if file_bytes > EDITOR_MAX_FILE_BYTES
+            || scanned_bytes.saturating_add(file_bytes) > MAX_REFERENCE_SCAN_BYTES
+        {
+            truncated = true;
+            break;
+        }
+        let source = match fs::read_to_string(&path) {
+            Ok(source) => source,
+            Err(_) => {
+                truncated = true;
+                continue;
+            }
+        };
+        scanned_bytes = scanned_bytes.saturating_add(source.len());
+        let tokens = match lex(&source) {
+            Ok(tokens) => tokens,
+            Err(_) => {
+                truncated = true;
+                continue;
+            }
+        };
+        for token in tokens {
+            if !matches!(&token.kind, TokenKind::Ident(identifier) if identifier == name) {
+                continue;
+            }
+            if matches.len() == 500 {
+                truncated = true;
+                break 'files;
+            }
+            let line_number = token.span.line.max(1);
+            let Some(line) = source.lines().nth(line_number - 1) else {
+                continue;
+            };
+            let column = source
+                .get(..token.span.start.min(source.len()))
+                .and_then(|prefix| {
+                    prefix
+                        .rsplit_once('\n')
+                        .map(|(_, tail)| tail)
+                        .or(Some(prefix))
+                })
+                .map(|prefix| prefix.encode_utf16().count() + 1)
+                .unwrap_or(1);
+            let snippet = if line.encode_utf16().count() <= 240 {
+                line.to_owned()
+            } else {
+                let start = token.span.start.min(source.len());
+                let line_start = source[..start].rfind('\n').map_or(0, |index| index + 1);
+                let local_start = start.saturating_sub(line_start);
+                let mut from = local_start.saturating_sub(100);
+                while !line.is_char_boundary(from) {
+                    from = from.saturating_sub(1);
+                }
+                let mut to = local_start.saturating_add(140).min(line.len());
+                while !line.is_char_boundary(to) {
+                    to -= 1;
+                }
+                format!(
+                    "{}{}{}",
+                    if from > 0 { "…" } else { "" },
+                    &line[from..to],
+                    if to < line.len() { "…" } else { "" }
+                )
+            };
+            matches.push(json!({
+                "path": relative,
+                "line": line_number,
+                "column": column,
+                "snippet": snippet,
+            }));
+        }
+    }
+    Ok((
+        200,
+        "application/json; charset=utf-8",
+        json!({"matches": matches, "truncated": truncated, "mode": "lexical-identifiers"})
+            .to_string(),
     ))
 }
 
@@ -1169,8 +2046,22 @@ fn check_project(
         .or_else(|| state.root.join("main.zyl").is_file().then_some("main.zyl"))
         .ok_or((400, "choose a Zelyra entry file to check".into()))?;
     let path = safe_editor_path(&state.root, entry, false)?;
-    let source =
-        fs::read_to_string(&path).map_err(|_| (415, "entry file is not UTF-8 text".into()))?;
+    let source = value
+        .get("source")
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+        .map(Ok)
+        .unwrap_or_else(|| {
+            fs::read_to_string(&path).map_err(|_| (415, "entry file is not UTF-8 text".into()))
+        })?;
+    if value.get("source").and_then(Value::as_str).is_some() {
+        let (success, diagnostics) = validate_editor_candidate(state, entry, &source)?;
+        return Ok((
+            200,
+            "application/json; charset=utf-8",
+            json!({"success": success, "diagnostics": diagnostics}).to_string(),
+        ));
+    }
     begin_json_diagnostics(&path.to_string_lossy(), &source);
     let success = validate(&path.to_string_lossy()).is_ok();
     let diagnostics = finish_json_diagnostics()
@@ -1208,6 +2099,161 @@ fn check_project(
         "application/json; charset=utf-8",
         json!({"success": success, "diagnostics": diagnostics}).to_string(),
     ))
+}
+
+fn run_editor_program(
+    state: &EditorState,
+    value: &Value,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let relative = value
+        .get("path")
+        .and_then(Value::as_str)
+        .filter(|path| path.ends_with(".zyl"))
+        .ok_or((400, "choose a Zelyra entry file to run".into()))?;
+    let path = safe_editor_path(&state.root, relative, false)?;
+    if fs::metadata(&path)
+        .map_err(|_| (404, "entry file could not be read".into()))?
+        .len()
+        > EDITOR_MAX_FILE_BYTES as u64
+    {
+        return Err((413, "entry file exceeds the 1 MiB editor limit".into()));
+    }
+    let executable =
+        env::current_exe().map_err(|_| (500, "could not locate the running Zelyra CLI".into()))?;
+    let mut child = Command::new(executable)
+        .arg("run")
+        .arg(relative)
+        .current_dir(&state.root)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|_| (500, "could not start the Zelyra program".into()))?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or((500, "could not capture program output".into()))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or((500, "could not capture program errors".into()))?;
+    let stdout_reader = read_editor_output(stdout);
+    let stderr_reader = read_editor_output(stderr);
+    let started = std::time::Instant::now();
+    let timeout = Duration::from_secs(15);
+    let mut timed_out = false;
+    let status = loop {
+        if let Some(status) = child
+            .try_wait()
+            .map_err(|_| (500, "could not read program status".into()))?
+        {
+            break status;
+        }
+        if started.elapsed() >= timeout {
+            timed_out = true;
+            let _ = child.kill();
+            break child
+                .wait()
+                .map_err(|_| (500, "could not stop the timed-out program".into()))?;
+        }
+        thread::sleep(Duration::from_millis(25));
+    };
+    let (stdout, stdout_truncated) = collect_editor_output(stdout_reader);
+    let (stderr, stderr_truncated) = collect_editor_output(stderr_reader);
+    let secrets = editor_secret_values(state);
+    let stdout = redact_editor_secrets(String::from_utf8_lossy(&stdout).into_owned(), &secrets);
+    let stderr = redact_editor_secrets(String::from_utf8_lossy(&stderr).into_owned(), &secrets);
+    Ok((
+        200,
+        "application/json; charset=utf-8",
+        json!({
+            "success": status.success() && !timed_out,
+            "exitCode": status.code(),
+            "timedOut": timed_out,
+            "durationMs": started.elapsed().as_millis(),
+            "stdout": stdout,
+            "stderr": stderr,
+            "truncated": stdout_truncated || stderr_truncated,
+        })
+        .to_string(),
+    ))
+}
+
+fn read_editor_output<R: Read + Send + 'static>(
+    mut reader: R,
+) -> std::sync::mpsc::Receiver<(Vec<u8>, bool)> {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    thread::spawn(move || {
+        const OUTPUT_LIMIT: usize = 65_536;
+        let mut captured = Vec::new();
+        let mut buffer = [0_u8; 8192];
+        let mut truncated = false;
+        loop {
+            match reader.read(&mut buffer) {
+                Ok(0) | Err(_) => break,
+                Ok(count) => {
+                    let remaining = OUTPUT_LIMIT.saturating_sub(captured.len());
+                    let retained = count.min(remaining);
+                    captured.extend_from_slice(&buffer[..retained]);
+                    truncated |= retained < count;
+                }
+            }
+        }
+        let _ = sender.send((captured, truncated));
+    });
+    receiver
+}
+
+fn collect_editor_output(receiver: std::sync::mpsc::Receiver<(Vec<u8>, bool)>) -> (Vec<u8>, bool) {
+    receiver
+        .recv_timeout(Duration::from_secs(2))
+        .unwrap_or_else(|_| (Vec::new(), true))
+}
+
+fn editor_secret_values(state: &EditorState) -> Vec<String> {
+    let is_secret_key = |key: &str| {
+        let key = key.to_ascii_uppercase();
+        [
+            "PASSWORD",
+            "SECRET",
+            "TOKEN",
+            "API_KEY",
+            "DATABASE_URL",
+            "PRIVATE_KEY",
+            "CREDENTIAL",
+        ]
+        .iter()
+        .any(|marker| key.contains(marker))
+    };
+    let mut secrets = env::vars_os()
+        .filter_map(|(key, value)| {
+            let key = key.to_string_lossy();
+            is_secret_key(&key).then(|| value.to_string_lossy().into_owned())
+        })
+        .filter(|value| value.len() >= 4)
+        .collect::<Vec<_>>();
+    if let Ok(contents) = fs::read_to_string(state.root.join(".env")) {
+        if contents.len() <= 256 * 1024 {
+            secrets.extend(contents.lines().filter_map(|line| {
+                let (key, value) = line.split_once('=')?;
+                if !is_secret_key(key.trim()) {
+                    return None;
+                }
+                let value = value.trim().trim_matches(['"', '\'']).to_owned();
+                (value.len() >= 4).then_some(value)
+            }));
+        }
+    }
+    secrets.sort_by_key(|value| std::cmp::Reverse(value.len()));
+    secrets.dedup();
+    secrets
+}
+
+fn redact_editor_secrets(mut output: String, secrets: &[String]) -> String {
+    for secret in secrets {
+        output = output.replace(secret, "[redacted]");
+    }
+    output
 }
 
 fn byte_to_utf16(source: &str, byte_offset: usize) -> usize {
@@ -1670,6 +2716,50 @@ mod tests {
             base,
             "preview must not modify the project source"
         );
+        let _ = fs::remove_dir_all(state.root);
+    }
+
+    #[test]
+    fn editor_live_check_validates_unsaved_source_without_writing_it() {
+        let state = project();
+        let path = state.root.join("main.zyl");
+        let original = fs::read_to_string(&path).expect("read original source");
+        let response = check_project(
+            &state,
+            &json!({
+                "path": "main.zyl",
+                "source": "fn main( {\n"
+            }),
+        )
+        .expect("unsaved source can be checked");
+        let payload: Value = serde_json::from_str(&response.2).expect("decode check result");
+        assert_eq!(payload["success"], false);
+        assert!(!payload["diagnostics"].as_array().unwrap().is_empty());
+        assert_eq!(
+            fs::read_to_string(path).expect("source remains untouched"),
+            original
+        );
+        let _ = fs::remove_dir_all(state.root);
+    }
+
+    #[test]
+    fn editor_symbols_come_from_linked_project_declarations() {
+        let state = project();
+        fs::write(
+            state.root.join("main.zyl"),
+            "fn main() {}\nfn calculate_total() -> Int { return 1 }\n",
+        )
+        .expect("write project declarations");
+        let response = editor_symbols(&state, "main.zyl").expect("load project symbols");
+        let payload: Value = serde_json::from_str(&response.2).expect("decode symbols");
+        let names = payload["symbols"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|item| item["label"].as_str())
+            .collect::<Vec<_>>();
+        assert!(names.contains(&"main"));
+        assert!(names.contains(&"calculate_total"));
         let _ = fs::remove_dir_all(state.root);
     }
 

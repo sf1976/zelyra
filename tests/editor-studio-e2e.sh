@@ -60,7 +60,15 @@ database_created=1
 
 project="$work_root/project"
 mkdir -p "$project"
+mkdir -p "$project/src"
+cat >"$project/src/math.zyl" <<'ZELYRA'
+pub fn sum(left: Int, right: Int) -> Int {
+    return left + right
+}
+ZELYRA
 cat >"$project/main.zyl" <<ZELYRA
+import "src/math.zyl" as math
+
 database main {
     engine: $engine
 }
@@ -75,6 +83,10 @@ table customers {
     department: Department required
     name: String(120) required
     description: String?
+}
+
+fn main() {
+    print(math::sum(1, 2))
 }
 ZELYRA
 
@@ -149,6 +161,21 @@ assert "description" in declared and "description" not in live
 assert "legacy_code" in live and "legacy_code" not in declared
 assert any(key["references_table"] == "departments" for key in customers["foreign_keys"])
 assert any(key["references_table"] == "departments" for key in customers["live_foreign_keys"])
+
+project_map = request("project-map")
+assert project_map == request("project-map"), "project map output must be deterministic"
+math_function = next(
+    node for node in project_map["nodes"]
+    if node["kind"] == "function" and node["label"] == "sum"
+)
+assert math_function["path"] == "src/math.zyl" and math_function["line"] == 1
+assert isinstance(math_function["position"], int)
+assert any(
+    edge["from"] == "module:main.zyl"
+    and edge["to"] == "module:src/math.zyl"
+    and edge["label"] == "imports"
+    for edge in project_map["edges"]
+), "project map must include the imported module edge"
 
 path = "file?path=" + urllib.parse.quote("main.zyl")
 original = request(path)

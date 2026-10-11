@@ -131,10 +131,11 @@ der [Setup-Anleitung](setup-web.de.md) und den
 
 ## Zelyra Studio und Rechnungstutorial
 
-- 🧪 `zelyra editor [directory] [--port <port>]` startet ein lokales Studio
+- 🧪 `zelyra editor [directory] [--port <port>] [--no-open]` startet ein lokales Studio
   auf `127.0.0.1` mit Dateibaum, Tabs, Suche/Ersetzen, Vervollständigung,
-  Compilerdiagnosen und Formatierung. Schreibzugriffe benötigen Sitzungstoken
-  und denselben Browser-Origin; Shell und externe Dienste werden nicht genutzt.
+  Compilerdiagnosen und Formatierung. Standardmäßig öffnet die CLI den
+  Systembrowser; `--no-open` überspringt dies. Schreibzugriffe benötigen
+  Sitzungstoken und denselben Browser-Origin; Datenbank/Webanwendung starten nicht mit.
   0.8.0 ergänzt eine lesende, anklickbare Beziehungskarte für unterstützte
   MariaDB-/PostgreSQL-Schemata sowie einen geführten CRUD-Quelltextassistenten.
   0.9.0 zeigt dazu betroffene Dateien, Tabellen, deklarierte Beziehungen und
@@ -159,6 +160,10 @@ der [Setup-Anleitung](setup-web.de.md) und den
   die druckoptimierte Rechnung als PDF speichern. Es ist ein Lernpfad, keine
   Produktions- oder Deploymentfreigabe; Details und Grenzen stehen im
   [Rechnungstutorial](tutorials/invoice.de.md).
+- 🧪 `zelyra --help` schließt mit einem deutschen und englischen Schnelleinstieg:
+  minimales Projekt oder Rechnungstutorial, gefolgt von Befehlen mit kurzer
+  Erklärung ihres Zwecks. `zelyra editor` ist als direkter Start im aktuellen
+  Projektordner ausgewiesen.
 - Studio ist noch keine vollständige IDE oder beliebiger Datenbankdesigner.
 
 ## APIs, Authentifizierung, Berechtigungen und Audit

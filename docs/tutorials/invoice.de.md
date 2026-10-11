@@ -1,12 +1,24 @@
 # Rechnungstutorial
 
-`zelyra --tutorial invoice` erstellt das Projekt `invoice-tutorial`. Alternativ
-kannst du ein anderes, noch nicht vorhandenes Verzeichnis angeben:
-`zelyra --tutorial invoice ./meine-rechnungen`. Der Befehl schreibt nicht in
-bereits vorhandene Verzeichnisse und prüft die erzeugte Anwendung mit dem
-Compiler.
+`zelyra --tutorial invoice` erstellt ein neues Projekt und richtet es sofort
+ein: Zelyra schreibt die Anwendung, das lokale `.env`, Docker-Compose-Dateien
+und das professionelle Theme, startet MariaDB und die Webanwendung und spielt
+das Datenbankschema ein. Es ist weder ein manuelles Setzen von
+`DATABASE_URL` noch ein separates `db setup` oder `serve` erforderlich.
 
-Das Tutorial erstellt ein lokales MariaDB-Projekt mit fünf verbundenen Teilen:
+Voraussetzung ist eine laufende Docker-Installation mit Docker Compose. Zelyra
+installiert Docker nicht selbst. Fehlt Compose oder kann der Container nicht
+starten, bleiben die Projektdateien erhalten; nach Behebung des Docker-Problems
+startet `cd invoice-tutorial && zelyra setup --all` Datenbank, Anwendung und
+Schema gemeinsam. Bei einem anderen Zielordner verwende den entsprechenden
+Pfad, zum Beispiel `zelyra --tutorial invoice ./meine-rechnungen`.
+Für reine Projektgenerierung ohne Docker-Start kannst du `--no-start`
+anhängen; die Ausgabe nennt dann den kombinierten Startbefehl `zelyra setup
+--all`.
+
+Die fertige Anwendung läuft auf der in der Befehlsausgabe genannten lokalen
+Adresse (standardmäßig `http://127.0.0.1:3000`). Sie enthält fünf verbundene
+Bereiche:
 
 1. **Kunden** — Kundendatensätze unter `/customers` anlegen und suchen.
 2. **Artikel** — wiederverwendbare Produkte, Preise und Aktivstatus unter
@@ -17,21 +29,12 @@ Das Tutorial erstellt ein lokales MariaDB-Projekt mit fünf verbundenen Teilen:
    Status unter `/invoices` verwalten.
 5. **Rechnungspositionen** — unter `/invoice_lines` Rechnung und Artikel
    auswählen und Menge sowie Netto-Stückpreis eintragen. Aus den Positionen
-   berechnet die Rechnungsansicht den Nettobetrag, 19% Umsatzsteuer und den
-   Bruttobetrag.
+   berechnet die Rechnungsansicht Nettobetrag, 19% Umsatzsteuer und Brutto.
 
-Der Befehl gibt dieselben Anweisungen zum lokalen MariaDB-Start und Setup wie
-`zelyra new --template mariadb-crud` aus. Wenn die Datenbank läuft und
-`zelyra db setup main.zyl` erfolgreich war, starte die Anwendung:
-
-```sh
-zelyra serve main.zyl
-```
-
-Öffne `http://127.0.0.1:3000`, arbeite die fünf Schritte der Reihe nach durch
-und verwende `zelyra editor .`, um dabei den Quelltext anzusehen. Das erzeugte
-Programm liegt in `main.zyl`; Datenbankdeklaration und Verbindungseinstellungen
-liegen wie üblich in den Projektdateien.
+Das responsiv gestaltete Theme umfasst Navigation, Formulare, Schaltflächen,
+Tabellen und eine eigene Druckansicht. Mit `zelyra editor invoice-tutorial`
+öffnest du Studio, um das Programm und seine Datenbankdeklarationen anzusehen
+und zu bearbeiten.
 
 ## Rechnung ansehen und als PDF speichern
 

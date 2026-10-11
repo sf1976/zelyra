@@ -539,7 +539,10 @@ Die menschliche Abnahme bleibt auf 1.0.0 verschoben.
   MySQL-8.4.11-SQL, Rechnungstutorial, erstes Sprachkorpus für 0.1 und ein
   MariaDB-Mandanten-CRUD-Pfad für eine deklarierte Tabelle. Maintainer-
   Sicherheitsprüfung und Mutation-Rollback-E2E sind im 0.7-Plan dokumentiert.
-  Es gibt keine Mandantenmigration oder Backfill. Unabhängiges Sicherheitsreview
+  Dieser Pfad ist auf MariaDB, eine mandanteneigene Tabelle und CRUD ohne
+  Beziehungen begrenzt; er ist noch nicht die für 1.0.0 zugesagte vollständige
+  mandantenfähige CRUD-Unterstützung für alle Datenbanken. Es gibt keine
+  Mandantenmigration oder Backfill. Unabhängiges Sicherheitsreview
   und menschliche Abnahme bleiben Gates vor Produktiveinsatz in 0.9.9/1.0.0.
   Details im [0.7.0-Plan](release-plans/0.7.0.de.md).
 
@@ -576,6 +579,15 @@ lesbarer Zelyra-Quelltext überprüfbar; folgenreicher Datenzugriff zeigt Plan,
 Auswirkungen und eine ausdrückliche Bestätigung. Die Roadmap staffelt diese Ziele über
 0.9.2–0.9.8; sie sind noch keine Fähigkeiten des veröffentlichten 0.9.0.
 
+Der Laravel-Migrator ist zugleich ein Umsetzungstreiber für Zelyra selbst.
+Blockiert eine angenommene Laravel-Zuordnung durch eine fehlende Zelyra-
+Sprach-, Compiler-, Datenbank-, Laufzeit- oder Studio-Funktion, wird diese
+Lücke dem dafür nötigen Release zugeordnet und innerhalb von 0.9.3–0.9.8
+geschlossen. Eine Zuordnung gilt erst als „direkt abbildbar“, wenn das erzeugte
+Projekt den zugesagten Ablauf tatsächlich ausführt. Echte Mehrdeutigkeiten und
+unsichere Geschäftslogik bleiben mit Quellbeleg und Begründung ausdrücklich
+manuell umzusetzen.
+
 ## Release 0.9.1 — IDE-Grundlage
 
 - [🧪] Studio enthält bereits Projektbaum, Tabs, sichtbaren Speicherstatus,
@@ -608,12 +620,42 @@ Auswirkungen und eine ausdrückliche Bestätigung. Die Roadmap staffelt diese Zi
 
 ## Release 0.9.2 — Sprachdienste der IDE
 
-- [🗺️] Studio zur IDE mit einer kontextabhängigen Eigenschaftsseitenleiste und
+- [🧪] Der geführte Tutorialbefehl startet MariaDB und Webanwendung und wendet
+  das Schema an. Die Compose-Webanwendung bezieht die Datenbank-URL aus der
+  Projekteinstellung; Einsteiger müssen weder `DATABASE_URL` setzen noch
+  separat `db setup` und `serve` ausführen. Ein responsives Theme gestaltet
+  Dashboard, CRUD-Formulare, Listen und Druckansicht.
+
+- [🧪] Studio zur IDE mit einer kontextabhängigen Eigenschaftsseitenleiste und
   Aufgaben-/Befehlsfinder ausbauen. Häufige Abläufe zu Dateien, Symbolen, Routen,
   Views, Formularen, Ressourcen und Diagrammen lassen sich durch Auswahl und
   gültige Eigenschaften einstellen. Beim Schreiben können Beschreibung,
   Optionen und Beispiele zum Befehl am Cursor gezielt aufgerufen werden; Nutzer
-  müssen die API nicht auswendig lernen.
+  müssen die API nicht auswendig lernen. Die aktuelle Arbeitsfassung ergänzt
+  bereits Dateieigenschaften, Hilfe zu zentralen Sprachbegriffen per F1, einen
+  filterbaren Aktionsfinder per Strg+Umschalt+P und compilergeprüfte Diagnosen
+  während der Eingabe sowie Vorschläge für Deklarationen aus dem Compiler-
+  Projektmodell und F12-Sprünge zu Definitionen aus gespeicherten Projektdateien.
+  Zusätzlich verfügbar sind eine Literalsuche und lexikalische Bezeichnerfundstellen
+  per Umschalt+F12 in gespeicherten `.zyl`-Dateien. Diese Fundstellen lösen keine
+  Gültigkeitsbereiche auf und sind keine semantischen Referenzen. Typisierte
+  Vervollständigung und symbolbezogene Eigenschaften bleiben offen. Strg+Leertaste
+  ergänzt zusätzlich Parameter sowie gültige, im aktuellen Block sichtbare
+  `let`-, Schleifen- und Match-Bindungen aus ungespeichertem Quelltext. Typinferenz
+  bleibt offen. Der Aktionsfinder startet `main.zyl` nach ausdrücklicher Auswahl
+  mit 15-Sekunden-Limit, begrenzter Ausgabe und Ersetzung erkannter Geheimnisse
+  aus Prozessumgebung und `.env`. Die Ausführung bleibt ein experimenteller
+  lokaler IDE-Ablauf.
+- [🧪] Die Projektkarte zeigt Compilerbeziehungen für Modulimporte,
+  Deklarationen, CRUD/Tabellen, Seiten/Views und eindeutig aufgelöste
+  API-Handler. Quellnavigation ist enthalten. Dynamische und
+  Datenbankabfrage-Beziehungen bleiben ausgelassen; mehrdeutige oder begrenzte
+  Karten sind als unvollständig markiert.
+- [🗺️] IDE-Sprachdienste vervollständigen: scopebewusste semantische Referenzen,
+  typisierte Vorschläge, Symbol-/Routen-Eigenschaften und integrierte Verify-
+  und Test-Aufgaben ergänzen. Projekt-, Modul-, Routen- und Ressourcendiagramme
+  deterministisch vervollständigen. Unbekannte Beziehungen bleiben sichtbar
+  unvollständig, statt erraten zu werden.
 - [🗺️] Compiler-gestützte Vervollständigung, Symbolnavigation, Suche/Referenzen,
   Formatierung, handlungsorientierte und während der Eingabe aktualisierte
   Diagnosen sowie integrierte Check-, Run- und Test-Aufgaben ergänzen.
@@ -630,11 +672,44 @@ Auswirkungen und eine ausdrückliche Bestätigung. Die Roadmap staffelt diese Zi
 
 ## Release 0.9.3 — Datenbankwerkbank
 
+- [🗺️] Einen schreibgeschützten Laravel-Projektanalysator in der Zelyra-CLI
+  beginnen: `zelyra migrate laravel <projekt> --report <pfad>`. Er erfasst
+  Laravel-/Paketversionen, Routen und Middleware, Controller, Models,
+  Migrationen, Validierungen, Views, Jobs und Integrationen statisch und
+  verknüpft die Funde mit Quellpositionen. Er darf die Anwendung nicht starten,
+  Artisan nicht aufrufen, keine Datenbankverbindung öffnen und keine `.env`-
+  Dateien lesen. Berichte unterscheiden direkt abbildbare, teilweise
+  abbildbare, manuell umzusetzen und nicht sicher zuordenbare Elemente und
+  nennen den nächsten sicheren Schritt. Der unterstützte Musterumfang wird
+  dokumentiert; mehrdeutige Funde bleiben offen statt erraten zu werden.
 - [🗺️] Die Datenbankansicht der IDE zur sicheren Werkbank ausbauen: Tabellen,
   Spalten, Indizes und deklarierte Beziehungen ansehen, Datensätze standardmäßig
   schreibgeschützt durchsuchen und den zuständigen Quellmodulen zuordnen. Das
   ER-Diagramm wird filterbar und navigierbar; Auswahl eines Feldes oder einer
   Beziehung zeigt Definition, Quellmodul und verwendende Ressourcen.
+- [🗺️] Fremdschlüssel bis 1.0.0 als durchgängige Datenbankfunktion liefern:
+  Referenzen in Zelyra-Tabellenfeldern deklarieren, Zieltabellen und Feldtypen
+  im Compiler prüfen, echte Constraints anlegen und auslesen sowie Beziehungen
+  in der Studio-Karte anzeigen. Die unterstützten Abläufe werden getrennt für
+  MariaDB, MySQL und PostgreSQL nachgewiesen. Vor dem Hinzufügen zu bestehenden
+  Daten prüft der Schema-Plan auf verwaiste Zeilen; bei Fehlern bleiben Daten
+  erhalten, riskante Änderungen brauchen eine Prüfung und nicht unterstützte
+  Aktionen werden fail-closed abgelehnt. Löschungen sind standardmäßig
+  eingeschränkt. Kaskaden oder `SET NULL` müssen ausdrücklich deklariert,
+  typgeprüft und je Backend integriert getestet werden, bevor sie als
+  unterstützt gelten.
+- [🗺️] Das mandanten-gefilterte generierte CRUD über den experimentellen
+  MariaDB-Pfad hinaus erweitern: Die Mandantenauswahl an die aktive Mitgliedschaft
+  des angemeldeten Benutzers binden, die Ressourcenberechtigung verlangen und
+  Mandantenfilter in Listen, Detailansichten, Erstellen, Bearbeiten, Aktualisieren,
+  Löschen und Wiederherstellen serverseitig erzwingen. Mandantenschlüssel werden
+  serverseitig gebunden und sind keine normalen CRUD-Felder oder Filter. Mit
+  Fremdschlüsseln müssen Auswahl und Speicherung verknüpfter Datensätze außerdem
+  nachweisen, dass diese zum aktiven Mandanten gehören. Eigene SQL-Aktionen auf
+  Mandantendaten müssen den Mandanten sicher berücksichtigen oder vom Compiler
+  abgelehnt werden. Der Nachweis umfasst positive und negative Integrationstests
+  für zwei Mandanten, alle Lese- und Änderungswege, entzogene Mitgliedschaften
+  sowie manipulierte oder widersprüchliche Mandantenauswahl.
 - [🗺️] Tabellenspalten über die Eigenschaftsseitenleiste grafisch ergänzen und
   bearbeiten. Studio zeigt den vollständigen Schema-Plan mit Auswirkungen und
   Risiken, lässt den Compiler prüfen und verlangt vor jeder Anwendung eine
@@ -645,6 +720,15 @@ Auswirkungen und eine ausdrückliche Bestätigung. Die Roadmap staffelt diese Zi
   ausgegeben.
 - [🗺️] Lesende, typisierte Datenquellen für Kennzahlen vorbereiten, damit sie
   in 0.9.4 ohne frei formulierte SQL-Ausdrücke gewählt werden können.
+- [🗺️] Wiederverwendbare JavaScript-ES-Module als Projektdateien planen:
+  gemeinsame Funktionen liegen einmalig in einem klaren Asset-/Client-Bereich
+  und können von mehreren Seiten importiert werden. Studio soll Import-/Export-
+  Verwendungen auffindbar machen, Referenzen über Dateien hinweg zeigen und
+  passende Hilfe und Fehlerstellen anbieten. Häufige Browseraufgaben können
+  zusätzlich als einfache Zelyra-Bausteine bereitstehen; sie ersetzen weder
+  normales JavaScript noch bestehende JS-Bibliotheken. Die genaue Einbindung,
+  Asset-Ausgabe, Sicherheitsgrenzen und Interoperabilität werden vor der
+  Implementierung spezifiziert.
 - Nachweis: Separate MariaDB-, MySQL- und PostgreSQL-Tests entsprechen der
   veröffentlichten Datenbankmatrix. Nicht verfügbare Schemaoperationen werden
   abgewiesen; Änderungen sind gegen Vorschau-Hash und aktuellen Datenbankstand
@@ -652,6 +736,13 @@ Auswirkungen und eine ausdrückliche Bestätigung. Die Roadmap staffelt diese Zi
 
 ## Release 0.9.4 — Visueller CRUD-Entwurf
 
+- [🗺️] Die Laravel-Analyse zu einem belegbaren Projektgraphen ausbauen:
+  Route → Middleware/Controller → Model/Beziehung → Migration/Tabelle → View,
+  einschließlich Validierungsregeln, Paketabhängigkeiten, Datei- und
+  Zeilenpositionen sowie ausdrücklich unaufgelöster Verbindungen. Lesbare
+  Markdown- und maschinenlesbare JSON-Berichte ausgeben. Versionierte
+  Kompatibilitätsregeln beschreiben Auswirkungen und nötige manuelle Arbeit;
+  ähnliche Syntax belegt kein gleiches Verhalten.
 - [🗺️] Verständliche relationale CRUD-Abläufe in Studio ermöglichen: Tabellen
   und Beziehungen wählen, Felder und Formulare entwerfen, Routen und Quelltext
   vorschauen, den gesamten Änderungsumfang prüfen, Compilerchecks ausführen und
@@ -664,6 +755,12 @@ Auswirkungen und eine ausdrückliche Bestätigung. Die Roadmap staffelt diese Zi
   Diagramm-API-Befehle oder frei formuliertes SQL lernen müssen. Die
   Generierung verwendet typisierte, lesende Abfragen und bleibt an bestehende
   Datenbank-Capabilities, Autorisierung und Mandantengrenzen gebunden.
+  Erzeugte relationale CRUD-Abläufe können referenzierte Datensätze auswählen,
+  verknüpfte Datensätze anzeigen und gültige Fremdschlüsselwerte speichern,
+  ohne handgeschriebenes Join-SQL vorauszusetzen. Einfügen, Ändern, Löschen und
+  eingeschränktes Löschen werden für MariaDB, MySQL und PostgreSQL geprüft;
+  nicht unterstützte Beziehungsoperationen stehen ausdrücklich in der
+  Supportmatrix.
   Zusätzlich wird ein deklaratives Präsentationsmodell für Geschäftsanwendungen
   geplant: geprüfte Folien mit Text, Tabellen, Diagrammen und explizit
   typisierten Datenquellen, mit Studio-Vorschau und eigenständigem HTML-/Druck-
@@ -680,6 +777,12 @@ Auswirkungen und eine ausdrückliche Bestätigung. Die Roadmap staffelt diese Zi
 
 ## Release 0.9.5 — Eigene Mail- und SMTP-Unterstützung
 
+- [🗺️] Eine versionierte Kompatibilitätsanalyse für Laravel-Authentifizierung,
+  Policies/Berechtigungen, Geschäftslogik, Transaktionen, Geldfelder, Jobs,
+  Integrationen, Dateiablage und Views ergänzen. Sicherheitskritische oder
+  verhaltensabhängige Funde müssen zur menschlichen Prüfung markiert werden,
+  darunter Statuswechsel, Summen, Nebenwirkungen und Fehlerbehandlung. Die
+  Analyse muss ohne PHP-Pakete und laufende Laravel-Umgebung funktionieren.
 - [🗺️] Explizite Mailunterstützung ohne verpflichtenden Anbieter vervollständigen:
   MIME-Text/HTML, kodierte Header, SMTP-Authentifizierung, implizites TLS,
   STARTTLS, Timeouts, begrenzte Wiederholungen und Anbindung an die vorhandene
@@ -692,6 +795,18 @@ Auswirkungen und eine ausdrückliche Bestätigung. Die Roadmap staffelt diese Zi
 
 ## Release 0.9.6 — Benachrichtigungszentrum
 
+- [🗺️] Eine ausdrücklich angeforderte Gerüsterzeugung mit
+  `zelyra migrate laravel <projekt> --output <ziel>` ergänzen; `--report` und
+  `--output` dürfen gemeinsam verwendet werden. Nur auf Wunsch ein separates
+  Zelyra-Projekt erzeugen, Quellfundstellen und IDs der Zuordnungsregeln in
+  generierten Dateien erhalten und niemals Geheimnisse, `.env`-Werte,
+  personenbezogene Einträge oder Produktionsdaten kopieren. Überlappende
+  Quell-/Berichts-/Zielpfade und unsichere bestehende Ziele ablehnen. Der Bericht
+  muss Gerüst und tatsächlich übertragene Geschäftslogik unterscheiden; jedes
+  erzeugte Projekt muss mit dem passenden Zelyra-Compiler geprüft werden.
+  Blockaden angenommener Zuordnungen werden als Zelyra-Umsetzungsaufgabe in
+  derselben Release-Reihe geführt und behoben, bevor die Zuordnung als
+  unterstützt gilt.
 - [🗺️] Ein persistentes, mandantengebundenes In-App-Benachrichtigungszentrum mit
   ungelesener Anzahl, Gelesen-/Archiviert-Aktionen, Seitennavigation,
   Einstellungen und klaren Aufbewahrungsregeln bauen. Anwendungsereignisse
@@ -705,12 +820,28 @@ Auswirkungen und eine ausdrückliche Bestätigung. Die Roadmap staffelt diese Zi
 
 ## Release 0.9.7 — Datenbank- und Sicherheitshärtung
 
+- [🗺️] Die Laravel-Analyse für Mandantengrenzen, Autorisierung,
+  Datei-Downloads/-Uploads, Zahlungs-/Buchhaltungsabläufe und öffentliche
+  Endpunkte härten. Soweit die unterstützte Syntax reicht, Belege über Routen,
+  Middleware, Controller, Models und Beziehungen verfolgen und manipulierte
+  IDs sowie Mandantenüberschreitungen markieren. Bei fehlenden oder mehrdeutigen
+  statischen Belegen ist eine manuelle Prüfung erforderlich; Verhalten darf
+  nicht stillschweigend ausgelassen werden. Test-Fixtures für Mandantentrennung,
+  Fremdschlüssel, Transaktionen, Dezimal-Geldbeträge, Berechtigungen und
+  Dateiablage ergänzen.
 - [🗺️] Die für 1.0 zugesagte MariaDB-, MySQL- und PostgreSQL-Ablaufmatrix
   schließen: Schemaansicht, Migrationen, CRUD, Transaktionen, TLS, Backup und
   Restore, soweit ein Backend diese Funktion beansprucht. Unabhängige Reviews
   von Authentifizierung, MFA, Mandantentrennung, Autorisierung, CSRF,
   SMTP-Geheimnissen und Studio-Änderungsgrenzen abschließen und alle
   releaseblockierenden Befunde beheben.
+- [🗺️] Die vollständige Autorisierungsmatrix für mandanten-gefiltertes CRUD
+  mit den festgelegten MariaDB-, MySQL- und PostgreSQL-Versionen durchlaufen.
+  Mandantenauswahl, Mitgliedschaft und Berechtigung, generierte Listen und
+  Detailansichten, Erstellen/Aktualisieren/Löschen/Wiederherstellen,
+  Mandantenzugehörigkeit von Beziehungen und fail-closed-Verhalten bei fehlendem
+  oder entzogenem Kontext abdecken. Mandantenmodell und Migrationserwartungen
+  dokumentieren; keine automatische Migration bestehender Daten versprechen.
 - Nachweis: Exakte Serverversionen und Grenzen sind veröffentlicht; jeder
   unterstützte Ablauf hat CI-Nachweise, negative Autorisierungstests und eine
   maintainergeprüfte Entscheidung zu Sicherheitsbefunden. Keine universelle
@@ -718,6 +849,18 @@ Auswirkungen und eine ausdrückliche Bestätigung. Die Roadmap staffelt diese Zi
 
 ## Release 0.9.8 — Probe der Produktionsreife
 
+- [🗺️] Den unterstützten Umfang des Laravel-Migrators und seine versionierte
+  Kompatibilitätsmatrix abschließen. Schreibgeschützte Analyse,
+  Geheimnis-/PII-Redaktion, Quellpositionsgenauigkeit, Routen-Daten-Beziehungen,
+  Behandlung von Mehrdeutigkeiten, Pfadtrennung, Herkunftsverweise in
+  generierten Dateien und compilergeprüfte Ausgabe an repräsentativen Laravel-
+  Fixtures prüfen. Erzeugte Anwendungen mit echten CRUD-Abläufen auf den
+  unterstützten Datenbanken ausführen, einschließlich unterstützter Beziehungen,
+  Mandanten, Berechtigungen, Transaktionen und Geldbeträge. Jede Zelyra-Funktion,
+  die eine angenommene Zuordnung blockiert, vor dem Abschluss von 0.9.8
+  implementieren. Unterstützte Laravel-/Paketmuster und Grenzen dokumentieren.
+  Keine automatische Geschäftslogik- oder Sicherheitsparität behaupten; das
+  Werkzeug liefert einen überprüfbaren Migrationsstartpunkt.
 - [🗺️] Saubere Installation, Upgrade, Rollback, Migration, Backup und Restore
   auf unterstützten Betriebssystemen und Datenbanken proben. Betreiber- und
   Nutzerdokumentation, Lizenz-/Abhängigkeitsreview, Ressourcenlimits,
