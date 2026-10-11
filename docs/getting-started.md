@@ -821,6 +821,20 @@ MariaDB tableview integration path can run the same application by setting
 
 ## 11. Useful commands
 
+Use `zelyra --help` for the full command overview. To see options, examples,
+and prerequisites for one command, request help directly from it:
+
+~~~bash
+zelyra fmt --help
+zelyra init --help
+zelyra setup --help
+zelyra routes --help
+zelyra db plan --help
+~~~
+
+`--help` also works on subcommands and does not run the requested action.
+Detailed help defaults to German; set `ZELYRA_LANGUAGE=en` for English.
+
 ~~~text
 zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
                                          create a project and choose its ports

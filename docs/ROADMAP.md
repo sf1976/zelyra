@@ -694,6 +694,9 @@ its source evidence and reason.
   Studio stops the active preview when it closes; **Stop preview** ends it
   immediately. Databases still start explicitly and separately. CI evidence for
   the new Studio web workflow is still pending.
+- [🧪] Expand CLI help: `zelyra <command> --help` and nested calls such as
+  `zelyra db plan --help` explain purpose, options, examples, and prerequisites
+  in German or English without running the command.
 - [🗺️] Start a read-only Laravel project analyzer in the Zelyra CLI:
   `zelyra migrate laravel <project> --report <path>`. It statically inventories
   Laravel/package versions, routes and middleware, controllers, models,

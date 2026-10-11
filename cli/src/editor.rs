@@ -2599,7 +2599,7 @@ mod tests {
         let request = request("GET", "/__zelyra/editor/api/tree", &[]);
         let error = editor_response(&request, &state).expect_err("missing token must fail");
         assert_eq!(error.0, 403);
-        let _ = fs::remove_dir_all(state.root);
+        let _ = fs::remove_dir_all(state.root.clone());
     }
 
     #[test]
@@ -2622,7 +2622,7 @@ mod tests {
                 editor_response(&request, &state).expect_err("cross-origin mutation must fail");
             assert_eq!(error.0, 403, "{method} {path} must be protected");
         }
-        let _ = fs::remove_dir_all(state.root);
+        let _ = fs::remove_dir_all(state.root.clone());
     }
 
     #[test]
@@ -2637,7 +2637,7 @@ mod tests {
             let error = editor_response(&request, &state).expect_err("API token is required");
             assert_eq!(error.0, 403, "endpoint {path} must be protected");
         }
-        let _ = fs::remove_dir_all(state.root);
+        let _ = fs::remove_dir_all(state.root.clone());
     }
 
     #[test]
@@ -2659,7 +2659,7 @@ mod tests {
             .1
             .contains("MySQL schema introspection is not supported"));
         assert!(!error.1.contains("password") && !error.1.contains("DATABASE_URL"));
-        let _ = fs::remove_dir_all(state.root);
+        let _ = fs::remove_dir_all(state.root.clone());
     }
 
     #[test]
@@ -2668,7 +2668,7 @@ mod tests {
         let error = build_crud_preview(&state, &json!({"path":"main.zyl", "baseHash":"stale"}))
             .expect_err("stale source must block preview");
         assert_eq!(error.0, 409);
-        let _ = fs::remove_dir_all(state.root);
+        let _ = fs::remove_dir_all(state.root.clone());
     }
 
     #[test]
@@ -2688,7 +2688,7 @@ mod tests {
         }
         assert!(editor_file_allowed(Path::new("src/invoice.zyl")));
         assert!(!editor_file_allowed(Path::new(".env")));
-        let _ = fs::remove_dir_all(state.root);
+        let _ = fs::remove_dir_all(state.root.clone());
     }
 
     #[test]
@@ -2713,7 +2713,7 @@ mod tests {
             fs::read_to_string(&path).expect("read saved source"),
             updated
         );
-        let _ = fs::remove_dir_all(state.root);
+        let _ = fs::remove_dir_all(state.root.clone());
     }
 
     #[test]
@@ -2734,7 +2734,7 @@ mod tests {
                 .0,
             409
         );
-        let _ = fs::remove_dir_all(state.root);
+        let _ = fs::remove_dir_all(state.root.clone());
     }
 
     #[test]
@@ -2777,7 +2777,7 @@ mod tests {
             "module old\n"
         );
 
-        let _ = fs::remove_dir_all(state.root);
+        let _ = fs::remove_dir_all(state.root.clone());
     }
 
     #[test]
@@ -2803,7 +2803,7 @@ mod tests {
             200
         );
         assert!(!file.exists());
-        let _ = fs::remove_dir_all(state.root);
+        let _ = fs::remove_dir_all(state.root.clone());
     }
 
     #[test]
@@ -2852,7 +2852,7 @@ mod tests {
             base,
             "preview must not modify the project source"
         );
-        let _ = fs::remove_dir_all(state.root);
+        let _ = fs::remove_dir_all(state.root.clone());
     }
 
     #[test]
@@ -2875,7 +2875,7 @@ mod tests {
             fs::read_to_string(path).expect("source remains untouched"),
             original
         );
-        let _ = fs::remove_dir_all(state.root);
+        let _ = fs::remove_dir_all(state.root.clone());
     }
 
     #[test]
@@ -2896,7 +2896,7 @@ mod tests {
             .collect::<Vec<_>>();
         assert!(names.contains(&"main"));
         assert!(names.contains(&"calculate_total"));
-        let _ = fs::remove_dir_all(state.root);
+        let _ = fs::remove_dir_all(state.root.clone());
     }
 
     #[cfg(unix)]

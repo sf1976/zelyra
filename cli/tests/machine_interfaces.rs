@@ -265,6 +265,38 @@ fn help_lists_the_route_inventory_command_and_syntax() {
 }
 
 #[test]
+fn command_help_explains_options_without_running_the_command() {
+    let fmt = run(&["fmt", "--help"]);
+    assert!(fmt.status.success());
+    let fmt_help = String::from_utf8_lossy(&fmt.stdout);
+    assert!(fmt_help.contains("zelyra fmt <datei.zyl> [--check]"));
+    assert!(fmt_help.contains("schreibt nichts"));
+
+    let init = run(&["init", "--help"]);
+    assert!(init.status.success());
+    let init_help = String::from_utf8_lossy(&init.stdout);
+    assert!(init_help.contains("zelyra init [ordner] [Optionen]"));
+    assert!(init_help.contains("--template minimal|mariadb-crud|mariadb-auth|mariadb-business"));
+
+    let database = run(&["db", "plan", "--help"]);
+    assert!(database.status.success());
+    assert!(String::from_utf8_lossy(&database.stdout).contains("zelyra db plan <datei.zyl>"));
+}
+
+#[test]
+fn command_help_is_available_in_english() {
+    let output = Command::new(binary())
+        .args(["fmt", "--help"])
+        .env("ZELYRA_LANGUAGE", "en")
+        .output()
+        .expect("zelyra binary should run");
+    assert!(output.status.success());
+    let help = String::from_utf8_lossy(&output.stdout);
+    assert!(help.contains("Command: zelyra fmt <file.zyl> [--check]"));
+    assert!(help.contains("do not write changes"));
+}
+
+#[test]
 fn invoice_tutorial_creates_a_checkable_project_without_overwriting() {
     let directory = temporary_directory("invoice-tutorial");
     let tutorial = run(&[

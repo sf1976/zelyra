@@ -681,6 +681,9 @@ manuell umzusetzen.
   Schließen; **Vorschau beenden** stoppt sie sofort. Datenbanken werden weiterhin
   ausdrücklich separat gestartet. CI-Nachweis für den neuen Studio-Webablauf
   steht noch aus.
+- [🧪] Die CLI-Hilfe ausbauen: `zelyra <befehl> --help` und verschachtelte
+  Aufrufe wie `zelyra db plan --help` erklären Zweck, Optionen, Beispiele und
+  Voraussetzungen in Deutsch oder Englisch, ohne den Befehl auszuführen.
 - [🗺️] Einen schreibgeschützten Laravel-Projektanalysator in der Zelyra-CLI
   beginnen: `zelyra migrate laravel <projekt> --report <pfad>`. Er erfasst
   Laravel-/Paketversionen, Routen und Middleware, Controller, Models,

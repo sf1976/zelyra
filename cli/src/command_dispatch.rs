@@ -17,6 +17,11 @@ pub(super) fn run() -> ExitCode {
         }
         return version_command();
     }
+    let arguments = args.collect::<Vec<_>>();
+    if help::print_if_requested(&command, &arguments) {
+        return ExitCode::SUCCESS;
+    }
+    let mut args = arguments.into_iter();
     if command == "update" {
         let check_only = match (args.next(), args.next()) {
             (None, None) => false,
