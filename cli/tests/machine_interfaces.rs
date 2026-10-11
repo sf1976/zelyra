@@ -18,6 +18,144 @@ fn run(arguments: &[&str]) -> Output {
         .expect("zelyra binary should run")
 }
 
+#[test]
+fn nested_cli_help_describes_database_creation_and_setup_accurately() {
+    let run_german_help = |arguments: &[&str]| {
+        Command::new(binary())
+            .args(arguments)
+            .env("ZELYRA_LANGUAGE", "de")
+            .output()
+            .expect("zelyra help should run")
+    };
+    let create = run_german_help(&["db", "create", "--help"]);
+    assert!(create.status.success());
+    let create_help = String::from_utf8_lossy(&create.stdout);
+    assert!(create_help.contains("Gibt das geprüfte CREATE-SQL"));
+    assert!(create_help.contains("verbindet sich nicht mit einer Datenbank"));
+    assert!(create_help.contains("zelyra db setup main.zyl"));
+
+    let setup = run_german_help(&["setup", "--help"]);
+    assert!(setup.status.success());
+    let setup_help = String::from_utf8_lossy(&setup.stdout);
+    assert!(setup_help.contains("--all"));
+    assert!(setup_help.contains("Webadresse"));
+}
+
+#[test]
+fn form_validate_covers_valid_and_invalid_inputs_without_database_access() {
+    let source = example("customer_form.zyl");
+    let valid = run(&[
+        "form",
+        "validate",
+        source.to_str().unwrap(),
+        "CustomerCreate",
+        "name=Anna",
+        "email=anna@example.org",
+    ]);
+    assert!(valid.status.success());
+    assert!(String::from_utf8_lossy(&valid.stdout).contains("valid: CustomerCreate"));
+
+    let invalid = run(&[
+        "form",
+        "validate",
+        source.to_str().unwrap(),
+        "CustomerCreate",
+        "name=Anna",
+        "email=not-an-email",
+    ]);
+    assert!(!invalid.status.success());
+    assert!(String::from_utf8_lossy(&invalid.stderr).contains("E-FORM-004"));
+}
+
+#[test]
+fn every_documented_cli_command_has_specific_nested_help() {
+    let overview = run(&["--help"]);
+    assert!(overview.status.success());
+    let overview = String::from_utf8_lossy(&overview.stderr);
+    for command in [
+        "zelyra routes",
+        "zelyra editor",
+        "zelyra text edit",
+        "zelyra outbox",
+        "zelyra db <create|setup|bootstrap|inspect|map|plan|apply|history>",
+    ] {
+        assert!(
+            overview.contains(command),
+            "top-level help omitted {command}"
+        );
+    }
+    let command_help = [
+        &["--tutorial", "invoice", "--help"][..],
+        &["update", "--help"],
+        &["new", "--help"],
+        &["init", "--help"],
+        &["setup", "--help"],
+        &["setup", "--web", "--help"],
+        &["check", "--help"],
+        &["fmt", "--help"],
+        &["impact", "--help"],
+        &["edit", "--help"],
+        &["text", "--help"],
+        &["text", "edit", "--help"],
+        &["context", "--help"],
+        &["config", "--help"],
+        &["build", "--help"],
+        &["run", "--help"],
+        &["serve", "--help"],
+        &["routes", "--help"],
+        &["editor", "--help"],
+        &["migrate", "laravel", "--help"],
+        &["module", "plan", "--help"],
+        &["module", "bundle", "--help"],
+        &["doctor", "--help"],
+        &["verify", "--help"],
+        &["doc", "--help"],
+        &["auth", "hash-password", "--help"],
+        &["auth", "role", "--help"],
+        &["auth", "role-permission", "--help"],
+        &["audit", "inspect", "--help"],
+        &["audit", "export", "--help"],
+        &["audit", "verify", "--help"],
+        &["audit", "prune", "--help"],
+        &["form", "validate", "--help"],
+        &["db", "create", "--help"],
+        &["db", "setup", "--help"],
+        &["db", "bootstrap", "--help"],
+        &["db", "inspect", "--help"],
+        &["db", "map", "--help"],
+        &["db", "plan", "--help"],
+        &["db", "apply", "--help"],
+        &["db", "history", "--help"],
+        &["outbox", "setup", "--help"],
+        &["outbox", "list", "--help"],
+        &["outbox", "requeue", "--help"],
+        &["outbox", "run", "--help"],
+    ];
+    for language in ["de", "en"] {
+        for arguments in command_help {
+            let output = Command::new(binary())
+                .args(arguments)
+                .env("ZELYRA_LANGUAGE", language)
+                .output()
+                .expect("zelyra help should run");
+            assert!(
+                output.status.success(),
+                "{language} help failed for {arguments:?}: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let help = String::from_utf8_lossy(&output.stdout);
+            assert!(
+                !help.contains("Detailed help is not available"),
+                "missing specific English help for {arguments:?}"
+            );
+            assert!(
+                !help.contains("Detaillierte Hilfe ist für diesen Befehl noch nicht verfügbar"),
+                "missing specific German help for {arguments:?}"
+            );
+        }
+    }
+}
+
 fn example(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("..")
@@ -420,7 +558,12 @@ fn invoice_tutorial_creates_a_checkable_project_without_overwriting() {
     }
     assert!(feature_sources.contains("customers::Customer"));
     assert!(String::from_utf8_lossy(&tutorial.stdout).contains("zelyra setup --all"));
-    assert!(String::from_utf8_lossy(&tutorial.stdout).contains("http://127.0.0.1:3000"));
+    assert!(
+        String::from_utf8_lossy(&tutorial.stdout)
+            .contains("application URL after startup: http://127.0.0.1:"),
+        "tutorial output omitted the URL: {}",
+        String::from_utf8_lossy(&tutorial.stdout)
+    );
     let shell = fs::read_to_string(directory.join("src/shell.zyl")).unwrap();
     assert!(shell.contains("<html class=\"zelyra-app\">"));
 

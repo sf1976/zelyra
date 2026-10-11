@@ -1,14 +1,23 @@
-# Implemented in Zelyra 0.9.3
+# Implemented in Zelyra 0.9.4
 
-**Snapshot:** stable 0.9.3 · language compatibility line `0.1` · 2026-10-12
+**Snapshot:** stable 0.9.4 · language compatibility line `0.1` · 2026-10-12
 **Maturity:** experimental; not approved for production use
 
-This is an inventory of capabilities implemented in the stable Zelyra 0.9.3
+This is an inventory of capabilities implemented in the stable Zelyra 0.9.4
 release. It does not claim human acceptance; that remains scheduled for 1.0.0. It records delivered scope, not the full language vision
 or future plans. The [roadmap](ROADMAP.md) remains the source for unfinished
 work; the [changelog](../CHANGELOG.md) records what changed in each release.
 Links below lead to detailed instructions and test evidence so this page does
 not duplicate the handbook.
+
+## Changes in 0.9.4
+
+- ✅ Setup streams Compose progress and prints the application URL; non-transient schema errors return immediately with safe guidance.
+- ✅ Database help explains that `db create` emits SQL, while `db setup` and `setup <directory> --all` perform setup actions.
+- ✅ The invoice tutorial creates its protected `.env` even with `--no-start`; its MariaDB-backed Studio customer create/list flow and repeated schema application are covered.
+- ✅ Studio CRUD query failures now say to check database availability and applied project schema without exposing driver details.
+- ✅ MariaDB unqualified `DECIMAL` equivalence prevents false destructive schema drift on repeat setup.
+- ✅ The CLI help matrix, command examples, setup behavior, and update API rate-limit guidance have regression coverage. See the [0.9.4 CLI audit](release-readiness/0.9.4-cli-audit.md).
 
 ## Changes in 0.9.3
 

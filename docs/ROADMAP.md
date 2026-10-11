@@ -811,68 +811,53 @@ Scope and technical gates are in the [0.9.3 release plan](release-plans/0.9.3.en
   database state block apply, read-only browsing is enforced, and credentials
   never enter editor output, URLs, diagnostics, or browser storage.
 
-## Release 0.9.4 — visual CRUD design
+## Release 0.9.4 — CLI, setup, and tutorial reliability (complete)
 
-- [🧪] Make the guided invoice tutorial generate its protected local `.env`
-  whenever it creates the project, including with `--no-start`. Include both
-  the declared `ZELYRA_DATABASE_MAIN_URL` and the `DATABASE_URL` fallback used
-  by CRUD routes and tools. Never print credentials; `--no-start` still skips
-  starting Docker. Verify the generated configuration and Studio preview path.
-- [🗺️] Close the type-system gaps tracked by `examples/type_system` before
-  0.9.9: add nominal enum variants with exhaustive matching and typed JSON
-  round trips; add safe, statically typed function values and user-defined
-  generic functions/records in bounded, documented forms; and define a
-  Zelyra-native identity-bearing business entity if real object identity is
-  needed alongside value-based records. Preserve Zelyra's explicit `Int`/
-  `UInt` and `Float`/`Decimal` model rather than adding width variants without
-  demonstrated business need. Each feature must update compiler/runtime,
-  diagnostics, compatibility fixtures, Studio help, and the type coverage
-  matrix. The 0.9.9 gate reruns positive, expected-compiler-error, expected-
-  runtime-error, and serialization checks and must report zero unexpected
-  failures; any unsupported item needs an explicit product decision, not a
-  silent omission.
-- [🗺️] Add a counted range loop in clear Zelyra syntax in 0.9.4, for example
-  `for index in 0..count` with an exclusive upper bound. Define and test empty
-  ranges, bounds and overflow, type checking, and interaction with `break` and
-  `continue`. Collection loops, `while`, and `loop` remain available for their
-  respective jobs; a C-style loop header or another `do while` form is not
-  needed.
-- [🗺️] Expand Laravel analysis into an evidence-linked project graph:
-  route → middleware/controller → model/relation → migration/table → view,
-  with validation rules, package dependencies, file and line locations, and
-  explicit unresolved edges. Produce readable Markdown and machine-readable
-  JSON reports. Version compatibility mappings and describe the behavioral
-  impact and required manual work; matching syntax is not proof of equivalent
-  behavior.
-- [🗺️] Make relational CRUD and business-chart workflows understandable in
-  Studio: choose tables and relationships, design fields and forms, and configure
-  metrics through the properties sidebar instead of chart commands. Preview
-  routes and generated source,
-  inspect the full change set, run compiler checks, then explicitly apply or
-  discard it. Make diagrams actionable entry points into these workflows. Add a
-  guided metric/chart designer: choose a declared data source, metric (such as
-  count or sum), grouping (such as month), time range, and visual form. This
-  should cover cases such as new customers per month, monthly invoice revenue,
-  and dashboard KPIs without requiring users to learn chart API calls or write
-  free-form SQL. Generated queries must be typed and read-only, and remain
-  subject to database capabilities, authorization, and tenant boundaries. Add a
-  generated relational CRUD flow that can select referenced records, display
-  linked records, and save valid foreign-key values without requiring handwritten
-  join SQL. Verify insert, update, delete, and restrictive-delete behavior for
-  MariaDB, MySQL, and PostgreSQL; keep unsupported relationship operations
-  explicit in the support matrix. Add a declarative presentation model for
-  business applications: compiler-checked
-  slides with text, tables, charts, diagrams, and explicitly typed data sources,
-  shown in Studio and exported as standalone HTML or print-ready output. Keep
-  dashboards and presentations versionable as Zelyra source; arbitrary client
-  hydration and hidden database access are out of scope. Refine the invoice
-  tutorial into a practical guided IDE workflow.
-- Exit evidence: generated customer, item, invoice, and line-item flows pass
-  multi-database integration coverage and remain editable as ordinary Zelyra
-  source. Time ranges, grouping, empty datasets, database errors, permissions,
-  tenant isolation, output escaping, accessible charts, presentation data
-  sources, and export are checked with valid and invalid projects. Applying a
-  stale or invalid preview is rejected.
+- [✅] Audited every documented top-level and nested CLI command, its options,
+  help output, successful path, and expected error path. Reproduce the reported
+  setup and database problems, correct the behavior and explanations, and keep
+  an English/German command matrix with regression coverage. `db create` must
+  clearly emit SQL only; `db setup` and `setup <directory> --all` must identify
+  their actual database and schema effects.
+- [✅] Made setup progress visible while Docker Compose builds and starts the
+  application. Surface the final schema-setup failure details without exposing
+  credentials, and print the actual application URL after startup.
+- [✅] Kept the invoice tutorial's protected `.env` available with and without
+  `--no-start`. Verify from Studio that the preview uses the project database,
+  then exercise customer form load, create, redirect, and list. When a query
+  fails, show a safe next step to check the database and applied schema.
+- Exit evidence: bilingual command/help coverage has no missing documented
+  command; `setup --all` is exercised against an isolated MariaDB Compose
+  project; the Studio-compatible customer flow passes against MariaDB; and the
+  complete workspace test suite and release metadata checks pass.
+
+## Work staged for 0.9.5–0.9.8
+
+The product work below remains part of the 1.0.0 plan, but is staged so each
+release has testable acceptance criteria instead of treating the full IDE and
+language backlog as one 0.9.4 change.
+
+- [🗺️] Grow the language type coverage in bounded steps: counted range loops and
+  statically typed function values, followed by nominal enums, bounded generic
+  functions/records, and a Zelyra-native identity-bearing business entity when
+  a concrete use case requires it. Keep records value-based and preserve the
+  explicit `Int`/`UInt` and `Float`/`Decimal` model. Update the compiler,
+  runtime, diagnostics, compatibility fixtures, Studio help, and
+  `examples/type_system`; 0.9.9 must rerun positive, expected-compiler-error,
+  expected-runtime-error, and serialization checks with no unexpected failures.
+- [🗺️] Extend the Laravel analyzer from inventories to evidence-linked route,
+  middleware, controller, model/relation, migration/table, and view graphs.
+  Emit Markdown and JSON with source locations, package and validation findings,
+  unresolved edges, versioned mappings, and explicit manual-work and security
+  findings. Later add opt-in, separate-project scaffolding with provenance;
+  never copy secrets or production data or claim automatic business parity.
+- [🗺️] Grow Studio from its existing safe CRUD/schema tools into reviewed
+  relational CRUD design, foreign-key selection, and typed chart configuration
+  through the properties sidebar. Then add compiler-checked diagrams and
+  presentation exports. Keep generated queries typed and read-only, enforce
+  permissions and tenant boundaries, inspect the complete diff, and require
+  explicit apply. Verify each database backend only for the operations it
+  supports; arbitrary client hydration remains out of scope.
 
 ## Release 0.9.5 — first-party mail and SMTP
 

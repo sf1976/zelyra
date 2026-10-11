@@ -1,9 +1,9 @@
-# In Zelyra 0.9.3 umgesetzt
+# In Zelyra 0.9.4 umgesetzt
 
-**Stand:** stabiles Release 0.9.3 · Sprachkompatibilitätslinie `0.1` · 2026-10-12
+**Stand:** stabiles Release 0.9.4 · Sprachkompatibilitätslinie `0.1` · 2026-10-12
 **Reifegrad:** experimentell; nicht für den Produktiveinsatz freigegeben
 
-Diese Übersicht führt Funktionen auf, die im stabilen Release Zelyra 0.9.3
+Diese Übersicht führt Funktionen auf, die im stabilen Release Zelyra 0.9.4
 tatsächlich implementiert sind. Eine menschliche Abnahme wird nicht behauptet;
 sie bleibt bis 1.0.0 offen. Sie beschreibt den ausgelieferten Umfang,
 nicht die gesamte Sprachvision oder zukünftige Vorhaben. Die
@@ -11,6 +11,15 @@ nicht die gesamte Sprachvision oder zukünftige Vorhaben. Die
 [Changelog](../CHANGELOG.md) hält die Änderungen der Releases fest. Die Links
 führen zu ausführlichen Anleitungen und Testnachweisen, damit diese Seite das
 Handbuch nicht doppelt wiedergibt.
+
+## Änderungen in 0.9.4
+
+- ✅ Setup leitet Compose-Fortschritt weiter, gibt die Anwendungsadresse aus und bricht bei nicht vorübergehenden Schemafehlern mit sicheren Hinweisen sofort ab.
+- ✅ Die Datenbankhilfe erklärt: `db create` gibt SQL aus; `db setup` und `setup <verzeichnis> --all` führen Einrichtungsschritte aus.
+- ✅ Das Rechnungstutorial legt seine geschützte `.env` auch mit `--no-start` an. Kundenanlage und -liste im MariaDB-gestützten Studio-Ablauf sowie wiederholtes Schema-Setup sind abgedeckt.
+- ✅ CRUD-Abfragefehler im Studio empfehlen, Datenbank und angewendetes Projektschema zu prüfen, ohne Treiberdetails offenzulegen.
+- ✅ Die Gleichbehandlung von unqualifiziertem MariaDB-`DECIMAL` verhindert falsche destruktive Schemaabweichungen beim erneuten Setup.
+- ✅ CLI-Hilfematrix, Beispiele, Setup und Hinweise bei API-Ratenbegrenzung haben Regressionstests. Siehe [CLI-Prüfbericht](release-readiness/0.9.4-cli-audit.md).
 
 ## Änderungen in 0.9.3
 

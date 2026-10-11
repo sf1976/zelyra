@@ -220,6 +220,7 @@ pub(crate) fn framework_text_key(value: &str) -> Option<&'static str> {
         "User activation requires an active column." => "error.active_column_required",
         "The Database capability is not granted." => "error.database_capability_denied",
         "Database is unavailable." => "error.database_unavailable",
+        "The requested data could not be loaded. Check that the database is running and the project schema has been applied." => "error.crud_data_unavailable",
         "Page data could not be loaded." => "error.page_data_unavailable",
         "Unknown sort column." => "error.unknown_sort_column",
         "This table view is not sortable." => "error.view_not_sortable",

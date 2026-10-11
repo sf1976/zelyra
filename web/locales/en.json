@@ -93,6 +93,7 @@
   "error.active_column_required": "User activation requires an active column.",
   "error.database_capability_denied": "The Database capability is not granted.",
   "error.database_unavailable": "Database is unavailable.",
+  "error.crud_data_unavailable": "The requested data could not be loaded. Check that the database is running and the project schema has been applied.",
   "error.page_data_unavailable": "Page data could not be loaded.",
   "error.unknown_sort_column": "Unknown sort column.",
   "error.view_not_sortable": "This table view is not sortable.",

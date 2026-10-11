@@ -2033,11 +2033,11 @@ dependencies = [
 
 [[package]]
 name = "zelyra-ast"
-version = "0.9.3"
+version = "0.9.4"
 
 [[package]]
 name = "zelyra-cli"
-version = "0.9.3"
+version = "0.9.4"
 dependencies = [
  "glob",
  "libc",
@@ -2063,7 +2063,7 @@ dependencies = [
 
 [[package]]
 name = "zelyra-database"
-version = "0.9.3"
+version = "0.9.4"
 dependencies = [
  "mysql",
  "postgres",
@@ -2082,7 +2082,7 @@ dependencies = [
 
 [[package]]
 name = "zelyra-forms"
-version = "0.9.3"
+version = "0.9.4"
 dependencies = [
  "zelyra-ast",
  "zelyra-database",
@@ -2090,7 +2090,7 @@ dependencies = [
 
 [[package]]
 name = "zelyra-hir"
-version = "0.9.3"
+version = "0.9.4"
 dependencies = [
  "zelyra-ast",
  "zelyra-lexer",
@@ -2099,14 +2099,14 @@ dependencies = [
 
 [[package]]
 name = "zelyra-lexer"
-version = "0.9.3"
+version = "0.9.4"
 dependencies = [
  "zelyra-ast",
 ]
 
 [[package]]
 name = "zelyra-parser"
-version = "0.9.3"
+version = "0.9.4"
 dependencies = [
  "zelyra-ast",
  "zelyra-lexer",
@@ -2114,7 +2114,7 @@ dependencies = [
 
 [[package]]
 name = "zelyra-runtime"
-version = "0.9.3"
+version = "0.9.4"
 dependencies = [
  "rand_core 0.6.4",
  "serde_json",
@@ -2127,7 +2127,7 @@ dependencies = [
 
 [[package]]
 name = "zelyra-web"
-version = "0.9.3"
+version = "0.9.4"
 dependencies = [
  "argon2",
  "blake2",

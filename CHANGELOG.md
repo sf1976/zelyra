@@ -34,6 +34,32 @@ releases follow Semantic Versioning independently of the language line.
   CLI-Detailhilfe sowie lokale Datenbank- und Schemaabläufe ergänzen. Die
   menschliche Abnahme bleibt 1.0.0 vorbehalten.
 
+## 0.9.4 — 2026-10-12
+
+- Show live Docker Compose build and startup output in `setup`; report schema
+  setup progress, final errors, and the application URL. / Docker-Compose-Build-
+  und Startausgabe bei `setup` sichtbar machen; Schemafortschritt, letzte
+  Fehler und Anwendungsadresse ausgeben.
+- Correct CLI help for `db create`, add missing `outbox` and database history
+  entries to the command overview, and provide detailed help for text edits and
+  backend limits. / CLI-Hilfe für `db create` korrigieren, fehlende
+  `outbox`- und Datenbankhistorien-Einträge ergänzen und Detailhilfe für
+  Textänderungen und Backend-Grenzen bereitstellen.
+- Test the tutorial's private `.env` and Studio-compatible customer
+  create/list flow against MariaDB; show a safe database/schema hint for CRUD
+  query failures. / Geschützte Tutorial-`.env` sowie Kundenanlage und -liste
+  im Studio-kompatiblen MariaDB-Ablauf prüfen; einen sicheren Hinweis auf
+  Datenbank und Schema bei CRUD-Abfragefehlern anzeigen.
+- Treat MariaDB's default storage for unqualified `DECIMAL` as `DECIMAL(10,0)`
+  so repeated schema setup is idempotent. Stop retries on non-transient or
+  approval-required schema errors and explain the review path. / Den
+  MariaDB-Standard für unqualifiziertes `DECIMAL` als `DECIMAL(10,0)` erkennen,
+  damit wiederholtes Schema-Setup idempotent bleibt. Bei nicht vorübergehenden
+  oder freigabepflichtigen Fehlern sofort abbrechen und den Prüfweg nennen.
+- Explain GitHub HTTP 403/429 responses from `update --check` with a recovery
+  hint. / GitHub-HTTP-403/429-Antworten von `update --check` mit einem
+  verständlichen nächsten Schritt erklären.
+
 ## Unreleased
 
 _Changes for the next release go here._

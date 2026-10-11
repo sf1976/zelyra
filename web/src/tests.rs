@@ -2658,6 +2658,25 @@ fn renders_crud_list_with_escaped_rows_and_pagination() {
     assert!(error_response
         .body
         .contains("data-loading-message=\"Loading customers\""));
+
+    let database_error = crud_error_response(
+        &route,
+        500,
+        "Internal Server Error",
+        "The requested data could not be loaded. Check that the database is running and the project schema has been applied.",
+    );
+    assert!(database_error.body.contains("database is running"));
+    assert!(database_error
+        .body
+        .contains("project schema has been applied"));
+    assert_eq!(
+        framework_text(
+            UiLanguage::German,
+            "The requested data could not be loaded. Check that the database is running and the project schema has been applied.",
+        )
+        .as_deref(),
+        Some("Die angeforderten Daten konnten nicht geladen werden. Prüfe, ob die Datenbank läuft und das Projektschema eingerichtet wurde.")
+    );
 }
 
 #[test]

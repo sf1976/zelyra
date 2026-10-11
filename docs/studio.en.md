@@ -30,13 +30,31 @@ files before navigating so source locations stay accurate.
 Compiler diagnostics update while editing saved Zelyra project files; they are
 checked against a private temporary project copy and do not write the unsaved
 buffer. **Run** is an explicit action for `main.zyl`, bounded to 15 seconds and
-64 KiB per output stream. Recognized environment and local `.env` values are
-redacted. Studio does not start the app or database automatically and does not
-provide interactive program input.
+64 KiB per output stream. For web projects it starts a local web preview; Studio
+does not start the database automatically. Recognized environment and local
+`.env` values are redacted. The program does not receive interactive input.
 
 The **Project map** shows only unambiguous relationships from the compiler
 project model and links nodes to saved source locations. Dynamic and
 unresolved relationships remain marked incomplete instead of being inferred.
+
+## Start the invoice tutorial in Studio
+
+The tutorial needs a running MariaDB and an applied schema before customer and
+item lists can load data. After creating it with `--no-start`, run this from the
+project directory:
+
+```sh
+zelyra setup --all
+zelyra editor .
+```
+
+`setup --all` starts MariaDB and the web application, applies the schema, and
+shows startup progress and the application address. In Studio, run `main.zyl`
+and open `/customers`. The local preview reads the project connection from its
+protected `.env` file. If a CRUD page cannot load data, check that MariaDB is
+running and the project schema has been applied; the page does not reveal
+connection errors or credentials.
 
 ## Edit source code
 

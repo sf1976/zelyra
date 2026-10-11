@@ -136,6 +136,21 @@ pub(super) fn run() -> ExitCode {
         if action == "prepare" {
             return setup_project(&path, &setup_options);
         }
+        let english = std::env::var("ZELYRA_LANGUAGE")
+            .is_ok_and(|language| language.eq_ignore_ascii_case("en"));
+        println!(
+            "{}",
+            match (english, action) {
+                (true, "database") => "Starting the local MariaDB and web application...",
+                (true, "schema") => "Starting the local stack and applying the project schema...",
+                (true, _) => "Starting the local stack and applying the project schema...",
+                (false, "database") => "Lokale MariaDB und Webanwendung werden gestartet...",
+                (false, "schema") =>
+                    "Lokaler Stack wird gestartet und das Projektschema wird eingerichtet...",
+                (false, _) =>
+                    "Lokaler Stack wird gestartet und das Projektschema wird eingerichtet...",
+            }
+        );
         return match setup_action(&path, action, &setup_options) {
             Ok(message) => {
                 println!("{message}");

@@ -122,13 +122,28 @@ fn fetch_latest_release() -> Result<LatestRelease, String> {
     parse_latest_release(&body)
 }
 
+fn release_metadata_request_error(error: ureq::Error) -> String {
+    match error {
+        ureq::Error::StatusCode(status @ (403 | 429)) => format!(
+            "GitHub refused the release metadata request (HTTP {status}); retry later or check https://github.com/sf1976/zelyra/releases"
+        ),
+        error => format!("could not download the official update data: {error}"),
+    }
+}
+
 fn fetch_bytes(agent: &ureq::Agent, url: &str, maximum: u64) -> Result<Vec<u8>, String> {
     let mut response = agent
         .get(url)
         .header("User-Agent", concat!("zelyra/", env!("CARGO_PKG_VERSION")))
         .header("Accept", "application/vnd.github+json")
         .call()
-        .map_err(|error| format!("could not download the official update data: {error}"))?;
+        .map_err(|error| {
+            if url == LATEST_RELEASE_URL {
+                release_metadata_request_error(error)
+            } else {
+                format!("could not download the official update asset: {error}")
+            }
+        })?;
     let bytes = response
         .body_mut()
         .with_config()
@@ -416,6 +431,16 @@ mod tests {
     use super::*;
     #[cfg(unix)]
     use std::path::PathBuf;
+
+    #[test]
+    fn rate_limited_update_metadata_has_a_clear_recovery_hint() {
+        for status in [403, 429] {
+            let message = release_metadata_request_error(ureq::Error::StatusCode(status));
+            assert!(message.contains(&format!("HTTP {status}")));
+            assert!(message.contains("retry later"));
+            assert!(message.contains("github.com/sf1976/zelyra/releases"));
+        }
+    }
 
     #[test]
     fn compares_release_versions_using_semver_precedence() {

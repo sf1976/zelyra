@@ -33,14 +33,34 @@ Compilerdiagnosen werden während der Bearbeitung gespeicherter Zelyra-
 Projektdateien aktualisiert. Die Prüfung arbeitet auf einer privaten
 temporären Projektkopie und schreibt nicht in den ungespeicherten Editorpuffer.
 **Starten** führt `main.zyl` ausdrücklich aus, höchstens 15 Sekunden und mit
-64 KiB je Ausgabekanal. Erkannte geheime Umgebungs- und lokale `.env`-Werte
-werden redigiert. Studio startet Anwendung und Datenbank nicht automatisch und
-bietet dem Programm keine interaktive Eingabe.
+64 KiB je Ausgabekanal. Bei Webprojekten startet die Aktion eine lokale
+Webvorschau; die Datenbank startet Studio nicht automatisch. Erkannte geheime
+Umgebungs- und lokale `.env`-Werte werden redigiert. Das Programm erhält keine
+interaktive Eingabe.
 
 Die **Projektkarte** zeigt nur eindeutige Beziehungen aus dem Compiler-
 Projektmodell und verknüpft Knoten mit gespeicherten Quellpositionen. Dynamische
 und nicht aufgelöste Beziehungen bleiben sichtbar unvollständig, statt
 hergeleitet zu werden.
+
+## Rechnungstutorial in Studio starten
+
+Das Tutorial benötigt eine laufende MariaDB und ein eingerichtetes Schema,
+bevor die Kunden- und Artikellisten Daten laden können. Nach einem Tutorialstart
+mit `--no-start` im Projektordner ausführen:
+
+```sh
+zelyra setup --all
+zelyra editor .
+```
+
+`setup --all` startet MariaDB und die Webanwendung, wendet das Schema an und
+zeigt während des Starts den Fortschritt sowie die Anwendungsadresse. In Studio
+`main.zyl` starten und die Kundenliste unter `/customers` öffnen. Die lokale
+Vorschau liest die Projektverbindung aus der geschützten `.env`. Meldet eine
+CRUD-Seite, dass Daten nicht geladen werden können, prüfen, ob MariaDB läuft
+und das Projektschema angewendet wurde; Verbindungsfehler und Zugangsdaten
+werden nicht in der Seite ausgegeben.
 
 ## Quellcode bearbeiten
 

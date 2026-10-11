@@ -30,8 +30,8 @@ pub use http::{parse_request, HttpError, MAX_REQUEST_BODY_BYTES};
 #[cfg(test)]
 use i18n::framework_text;
 use i18n::{
-    field_text, framework_text_with_catalog, identifier as locale_identifier, LOCALE_REFERENCE_END,
-    LOCALE_REFERENCE_PARAMETER, LOCALE_REFERENCE_START,
+    field_text, framework_text_with_catalog, identifier as locale_identifier, text as locale_text,
+    LOCALE_REFERENCE_END, LOCALE_REFERENCE_PARAMETER, LOCALE_REFERENCE_START,
 };
 pub use password_reset::{PasswordResetMailer, PasswordResetSmtpConfig};
 pub use server::serve_app;
@@ -6326,12 +6326,8 @@ fn dispatch_crud(
         Ok(result) => result,
         Err(error) => {
             eprintln!("zelyra web: CRUD query failed: {error}");
-            return crud_error_response(
-                crud,
-                500,
-                "Internal Server Error",
-                "The requested data could not be loaded.",
-            );
+            let message = locale_text(language, "error.crud_data_unavailable");
+            return crud_error_response(crud, 500, "Internal Server Error", message);
         }
     };
     Response::html(

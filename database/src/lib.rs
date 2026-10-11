@@ -1086,10 +1086,36 @@ fn type_change_risk(current: &str, desired: &str, backend: Backend) -> Risk {
 }
 
 fn sql_types_equivalent(current: &str, desired: &str, backend: Backend) -> bool {
+    if backend == Backend::MariaDb {
+        return mariadb_storage_type(current) == mariadb_storage_type(desired);
+    }
     if backend != Backend::Postgres {
         return current == desired;
     }
     postgres_storage_type(current) == postgres_storage_type(desired)
+}
+
+fn mariadb_storage_type(sql_type: &str) -> String {
+    let normalized = sql_type
+        .chars()
+        .filter(|character| !character.is_ascii_whitespace())
+        .flat_map(char::to_uppercase)
+        .collect::<String>();
+    let Some((name, arguments)) = normalized.split_once('(') else {
+        return match normalized.as_str() {
+            "DECIMAL" | "NUMERIC" => "DECIMAL(10,0)".into(),
+            _ => normalized,
+        };
+    };
+    let arguments = arguments.trim_end_matches(')');
+    if name != "DECIMAL" && name != "NUMERIC" {
+        return normalized;
+    }
+    match arguments.split_once(',') {
+        Some((precision, scale)) => format!("DECIMAL({precision},{scale})"),
+        None if !arguments.is_empty() => format!("DECIMAL({arguments},0)"),
+        _ => "DECIMAL(10,0)".into(),
+    }
 }
 
 fn postgres_storage_type(sql_type: &str) -> &str {
@@ -4983,6 +5009,35 @@ mod tests {
         assert!(!sql_types_equivalent(
             "BIGINT",
             "BIGSERIAL",
+            Backend::MariaDb
+        ));
+    }
+
+    #[test]
+    fn compares_unqualified_mariadb_decimal_to_its_server_default_storage_type() {
+        assert!(sql_types_equivalent(
+            "DECIMAL(10,0)",
+            "DECIMAL",
+            Backend::MariaDb
+        ));
+        assert!(sql_types_equivalent(
+            "NUMERIC(10)",
+            "DECIMAL",
+            Backend::MariaDb
+        ));
+        assert!(sql_types_equivalent(
+            "DECIMAL(12,0)",
+            "NUMERIC(12)",
+            Backend::MariaDb
+        ));
+        assert!(!sql_types_equivalent(
+            "DECIMAL(10,2)",
+            "DECIMAL",
+            Backend::MariaDb
+        ));
+        assert!(!sql_types_equivalent(
+            "DECIMAL(12,0)",
+            "DECIMAL(10,0)",
             Backend::MariaDb
         ));
     }

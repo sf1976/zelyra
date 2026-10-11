@@ -7,12 +7,12 @@ use std::{
     env,
     fmt::Write as _,
     fs,
-    io::Read,
+    io::{Read, Write as _},
     net::TcpListener,
     path::PathBuf,
-    process::Command,
     process::ExitCode,
     process::Stdio,
+    process::{Child, Command, Output},
     sync::{Arc, Mutex},
 };
 use zelyra_ast::Type;
@@ -138,7 +138,7 @@ fn usage() {
     eprintln!("  setup supports `--database`, `--schema`, `--all`, `--host-port`, `--db-host-port`, and `--web [--port <port>]`");
     eprintln!("  outbox: `setup [file.zyl]`, `list [file.zyl] [--limit <1..200>] [--format text|json]`, `requeue <event-id> [file.zyl]`, or `run [file.zyl] --handler <event.type=function_name> [--once] [--lease-seconds <5..3600>]");
     eprintln!("  Detailhilfe / detailed help: `zelyra fmt --help`, `zelyra init --help`, or `zelyra db plan --help` shows options and examples");
-    eprintln!("Zelyra {}\n\nUsage:\n  zelyra --help\n  zelyra --version\n  zelyra version\n  zelyra update [--check]\n  zelyra --tutorial invoice [directory] [--no-start]\n  zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] [--database|--schema|--all] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] --web [--port <port>]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra config <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra routes <entry.zyl> [--format human|json]\n  zelyra editor [directory] [--port <port>] [--no-open]\n  zelyra migrate laravel <project> --report <path> [--format markdown|json]\n  zelyra module plan <entry.zyl> <module.zyl|resource-id>\n  zelyra module bundle <entry.zyl> <module.zyl|resource-id> --output <dir> [--docker --compiler-ref <40-character-commit>]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|map|plan|apply> <file.zyl>\n\nSchnelleinstieg\n  Geführtes Rechnungstutorial:\n    zelyra --tutorial invoice                 Erstellt Projekt, Datenbank und Schema und startet die Anwendung.\n    Browseradresse aus der Ausgabe öffnen     Die fertige Anwendung ist sofort verwendbar.\n    zelyra editor invoice-tutorial            Öffnet Studio für das Tutorialprojekt.\n  Kleines eigenes Projekt:\n    zelyra init ./mein-projekt                Erstellt ein minimales Projekt ohne Datenbank.\n    cd mein-projekt && zelyra run main.zyl    Startet das Programm direkt.\n    zelyra editor                              Startet Studio im aktuellen Ordner und öffnet den Standardbrowser.\n\nWichtige Befehle\n  init/new  Projektgerüst erstellen; init ist der kurze Einstieg, new bietet Vorlagen und Optionen.\n  check     Datei oder Projekt auf Syntax- und Compilerfehler prüfen.\n  run       Ein Zelyra-Programm direkt ausführen.\n  serve     Eine Webanwendung lokal starten.\n  setup     MariaDB-Projekt vorbereiten; Datenbankkonfiguration muss vorhanden sein. `.` bedeutet aktuelles Verzeichnis, `./test_a` einen Unterordner.\n  db plan   Schemaänderungen zuerst nur anzeigen; db apply setzt einen geprüften Plan um.\n  routes    `zelyra routes main.zyl` listet deklarierte Seiten, APIs und erzeugte Ressourcenrouten; `--format json` liefert maschinenlesbare Ausgabe.\n  editor    Startet den lokalen Studio-Server und öffnet den Standardbrowser; ohne Argument gilt der aktuelle Ordner. `--no-open` überspringt den Browserstart.\n\nGetting started\n  Guided invoice tutorial:\n    zelyra --tutorial invoice                 Creates the project, database, and schema, then starts the app.\n    Open the browser address printed above    The application is ready to use.\n    zelyra editor invoice-tutorial            Opens Studio for the tutorial project.\n  Small project of your own:\n    zelyra init ./my-project                  Creates a minimal project without a database.\n    cd my-project && zelyra run main.zyl      Runs the program directly.\n    zelyra editor                              Starts Studio in the current folder and opens the default browser.\n\nKey commands\n  init/new  Create a project; init is the short path, new offers templates and options.\n  check     Check a file or project for syntax and compiler errors.\n  run       Execute a Zelyra program directly.\n  serve     Start a web application locally.\n  setup     Prepare a MariaDB project; its database configuration must exist. `.` is the current folder, `./test_a` a subfolder.\n  db plan   Preview schema changes; db apply applies a reviewed plan.\n  routes    `zelyra routes main.zyl` lists declared pages, APIs, and generated resource routes; use `--format json` for machine-readable output.\n  editor    Start the local Studio server and open the default browser; defaults to the current folder. Use `--no-open` to skip browser launch.", env!("CARGO_PKG_VERSION"));
+    eprintln!("Zelyra {}\n\nUsage:\n  zelyra --help\n  zelyra --version\n  zelyra version\n  zelyra update [--check]\n  zelyra --tutorial invoice [directory] [--no-start]\n  zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] [--database|--schema|--all] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] --web [--port <port>]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra config <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra routes <entry.zyl> [--format human|json]\n  zelyra editor [directory] [--port <port>] [--no-open]\n  zelyra migrate laravel <project> --report <path> [--format markdown|json]\n  zelyra module plan <entry.zyl> <module.zyl|resource-id>\n  zelyra module bundle <entry.zyl> <module.zyl|resource-id> --output <dir> [--docker --compiler-ref <40-character-commit>]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra outbox <setup|list|requeue|run> [file.zyl] [options]\n  zelyra db <create|setup|bootstrap|inspect|map|plan|apply|history> <file.zyl>\n\nSchnelleinstieg\n  Geführtes Rechnungstutorial:\n    zelyra --tutorial invoice                 Erstellt Projekt, Datenbank und Schema und startet die Anwendung.\n    Browseradresse aus der Ausgabe öffnen     Die fertige Anwendung ist sofort verwendbar.\n    zelyra editor invoice-tutorial            Öffnet Studio für das Tutorialprojekt.\n  Kleines eigenes Projekt:\n    zelyra init ./mein-projekt                Erstellt ein minimales Projekt ohne Datenbank.\n    cd mein-projekt && zelyra run main.zyl    Startet das Programm direkt.\n    zelyra editor                              Startet Studio im aktuellen Ordner und öffnet den Standardbrowser.\n\nWichtige Befehle\n  init/new  Projektgerüst erstellen; init ist der kurze Einstieg, new bietet Vorlagen und Optionen.\n  check     Datei oder Projekt auf Syntax- und Compilerfehler prüfen.\n  run       Ein Zelyra-Programm direkt ausführen.\n  serve     Eine Webanwendung lokal starten.\n  setup     MariaDB-Projekt vorbereiten; `--all` startet Stack und Schema sichtbar. `.` bedeutet aktuelles Verzeichnis, `./test_a` einen Unterordner.\n  db plan   Schemaänderungen zuerst nur anzeigen; db apply setzt einen geprüften Plan um.\n  db create Gibt CREATE-SQL aus; `db setup` richtet das MariaDB-Schema ein.\n  outbox    Transaktionale Ereignisse einrichten, prüfen und mit Handlern verarbeiten.\n  routes    `zelyra routes main.zyl` listet deklarierte Seiten, APIs und erzeugte Ressourcenrouten; `--format json` liefert maschinenlesbare Ausgabe.\n  editor    Startet den lokalen Studio-Server und öffnet den Standardbrowser; ohne Argument gilt der aktuelle Ordner. `--no-open` überspringt den Browserstart.\n\nGetting started\n  Guided invoice tutorial:\n    zelyra --tutorial invoice                 Creates the project, database, and schema, then starts the app.\n    Open the browser address printed above    The application is ready to use.\n    zelyra editor invoice-tutorial            Opens Studio for the tutorial project.\n  Small project of your own:\n    zelyra init ./my-project                  Creates a minimal project without a database.\n    cd my-project && zelyra run main.zyl      Runs the program directly.\n    zelyra editor                              Starts Studio in the current folder and opens the default browser.\n\nKey commands\n  init/new  Create a project; init is the short path, new offers templates and options.\n  check     Check a file or project for syntax and compiler errors.\n  run       Execute a Zelyra program directly.\n  serve     Start a web application locally.\n  setup     Prepare a MariaDB project; `--all` visibly starts the stack and applies the schema. `.` is the current folder, `./test_a` a subfolder.\n  db plan   Preview schema changes; db apply applies a reviewed plan.\n  db create Emit CREATE SQL; `db setup` initializes the MariaDB database and schema.\n  outbox    Set up, inspect, and process transactional events with explicit handlers.\n  routes    `zelyra routes main.zyl` lists declared pages, APIs, and generated resource routes; use `--format json` for machine-readable output.\n  editor    Start the local Studio server and open the default browser; defaults to the current folder. Use `--no-open` to skip browser launch.", env!("CARGO_PKG_VERSION"));
 }
 
 fn version_command() -> ExitCode {
@@ -162,7 +162,7 @@ thread_local! {
 
 fn database_usage() {
     eprintln!(
-        "Usage:\n  zelyra db create <file.zyl>\n  zelyra db setup <file.zyl>\n  zelyra db bootstrap <file.zyl>\n  zelyra db inspect <file.zyl>\n  zelyra db map <file.zyl> [--format=text|json]\n  zelyra db plan <file.zyl> [--format=text|json]\n  zelyra db apply <file.zyl> [--plan-id <sha256:...>] [--allow-risky]\n  zelyra db history <file.zyl> [--format=text|json]\n\nUse a plan id from `db plan --format=json` to refuse applying a plan if the database schema changed after review.\nThe read-only database map groups declared tables by source module and reports live tables without a declaration; module ownership is advisory.\nMariaDB migrations are journaled; use `db history` to inspect progress and interrupted runs.\n--allow-destructive remains available for DESTRUCTIVE plans only.\nA project database uses ZELYRA_DATABASE_<NAME>_URL (for example ZELYRA_DATABASE_MAIN_URL); DATABASE_URL remains a compatibility fallback."
+        "Usage:\n  zelyra db create <file.zyl>\n  zelyra db setup <file.zyl>\n  zelyra db bootstrap <file.zyl>\n  zelyra db inspect <file.zyl>\n  zelyra db map <file.zyl> [--format=text|json]\n  zelyra db plan <file.zyl> [--format=text|json]\n  zelyra db apply <file.zyl> [--plan-id <sha256:...>] [--allow-risky]\n  zelyra db history <file.zyl> [--format=text|json]\n\n`db create` prints checked CREATE SQL and does not connect to or create a database. `db setup` initializes the MariaDB database and schema; for PostgreSQL use `db apply`.\nFor a generated local MariaDB project, `zelyra setup <directory> --all` starts its Docker stack and applies the schema.\nUse a plan id from `db plan --format=json` to refuse applying a plan if the database schema changed after review.\nThe read-only database map groups declared tables by source module and reports live tables without a declaration; module ownership is advisory.\nMariaDB migrations are journaled; use `db history` to inspect progress and interrupted runs.\n--allow-destructive remains available for DESTRUCTIVE plans only.\nA project database uses ZELYRA_DATABASE_<NAME>_URL (for example ZELYRA_DATABASE_MAIN_URL); DATABASE_URL remains a compatibility fallback."
     );
 }
 
@@ -4159,10 +4159,57 @@ fn compose_command(directory: &std::path::Path, command: DockerComposeCommand) -
     };
     process
         .current_dir(directory)
-        .args(["--env-file", ".env", "-f", "docker-compose.mariadb.yml"])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
+        .args(["--env-file", ".env", "-f", "docker-compose.mariadb.yml"]);
     process
+}
+
+fn forward_child_output(mut reader: impl Read, to_stderr: bool) -> Vec<u8> {
+    let mut captured = Vec::new();
+    let mut buffer = [0_u8; 8192];
+    loop {
+        let count = match reader.read(&mut buffer) {
+            Ok(0) | Err(_) => break,
+            Ok(count) => count,
+        };
+        captured.extend_from_slice(&buffer[..count]);
+        if to_stderr {
+            let mut output = std::io::stderr().lock();
+            let _ = output.write_all(&buffer[..count]);
+            let _ = output.flush();
+        } else {
+            let mut output = std::io::stdout().lock();
+            let _ = output.write_all(&buffer[..count]);
+            let _ = output.flush();
+        }
+    }
+    captured
+}
+
+fn wait_with_live_output(mut child: Child) -> Result<Output, String> {
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "could not read Docker Compose output".to_owned())?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| "could not read Docker Compose errors".to_owned())?;
+    let stdout_thread = std::thread::spawn(move || forward_child_output(stdout, false));
+    let stderr_thread = std::thread::spawn(move || forward_child_output(stderr, true));
+    let status = child
+        .wait()
+        .map_err(|error| format!("could not wait for Docker Compose: {error}"))?;
+    let stdout = stdout_thread
+        .join()
+        .map_err(|_| "could not collect Docker Compose output".to_owned())?;
+    let stderr = stderr_thread
+        .join()
+        .map_err(|_| "could not collect Docker Compose errors".to_owned())?;
+    Ok(Output {
+        status,
+        stdout,
+        stderr,
+    })
 }
 
 fn compose_start_failure_message(command: DockerComposeCommand, details: &str) -> String {
@@ -4194,12 +4241,13 @@ fn start_mariadb_compose(directory: &std::path::Path) -> Result<String, String> 
     let Some(command) = detect_docker_compose() else {
         return Err(docker_compose_install_hint());
     };
-    let output = compose_command(directory, command)
+    let child = compose_command(directory, command)
         .args(["up", "-d", "--build"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .output()
+        .spawn()
         .map_err(|error| format!("could not start {}: {error}", command.label()))?;
+    let output = wait_with_live_output(child)?;
     if output.status.success() {
         Ok(format!(
             "MariaDB and the application were started with {}",
@@ -4237,6 +4285,27 @@ fn expanded_database_url(directory: &std::path::Path) -> Result<String, String> 
     let port = read_env_value(env_path.to_str().unwrap_or(".env"), "ZELYRA_DB_HOST_PORT")?
         .unwrap_or_else(|| DEFAULT_DATABASE_HOST_PORT.to_string());
     Ok(url.replace("${ZELYRA_DB_HOST_PORT:-3306}", &port))
+}
+
+fn schema_setup_error_is_transient(details: &str) -> bool {
+    let details = details.to_ascii_lowercase();
+    [
+        "connection refused",
+        "connectionrefused",
+        "connection reset",
+        "connectionreset",
+        "error connecting to server",
+        "can't connect to server",
+        "could not connect to server",
+        "network is unreachable",
+        "name or service not known",
+        "temporary failure in name resolution",
+        "timed out",
+        "timeout while connecting",
+        "server has gone away",
+    ]
+    .iter()
+    .any(|marker| details.contains(marker))
 }
 
 fn project_web_url(directory: &std::path::Path) -> Result<String, String> {
@@ -4291,19 +4360,49 @@ fn run_container_schema_setup(directory: &std::path::Path) -> Result<(), String>
     let Some(command) = detect_docker_compose() else {
         return Err(docker_compose_install_hint());
     };
-    for _attempt in 0..20 {
-        let status = compose_command(directory, command)
+    eprint!("Waiting for MariaDB and applying the project schema");
+    let _ = std::io::stderr().flush();
+    for attempt in 0..20 {
+        let output = compose_command(directory, command)
             .args(["exec", "-T", "web", "zelyra", "db", "apply", "main.zyl"])
-            .status()
+            .output()
             .map_err(|error| {
                 format!("could not run schema setup in the application container: {error}")
             })?;
-        if status.success() {
+        if output.status.success() {
+            eprintln!(" done");
             return Ok(());
         }
+        let details = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        if !schema_setup_error_is_transient(&details) {
+            eprintln!();
+            if details.contains("error[E-DB-004]") {
+                return Err(format!(
+                    "schema setup stopped because a change requires explicit review; inspect `zelyra db plan main.zyl` and apply approved changes with `zelyra db apply main.zyl --allow-risky`. No change was applied automatically.\n{}",
+                    details.trim()
+                ));
+            }
+            return Err(format!(
+                "schema setup stopped on a non-retryable error; no change was applied automatically:\n{}",
+                details.trim()
+            ));
+        }
+        if attempt == 19 {
+            eprintln!();
+            return Err(format!(
+                "schema setup did not succeed after waiting for MariaDB; last attempt: {}",
+                details.trim()
+            ));
+        }
+        eprint!(".");
+        let _ = std::io::stderr().flush();
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
-    Err("schema setup did not succeed after waiting for MariaDB; inspect the Compose logs and retry".into())
+    unreachable!("the schema setup retry loop returns on its final attempt")
 }
 
 fn setup_action(path: &str, action: &str, options: &SetupOptions) -> Result<String, String> {
