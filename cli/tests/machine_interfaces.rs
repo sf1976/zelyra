@@ -258,7 +258,12 @@ fn customer_order_acceptance_example_is_valid() {
 #[test]
 fn invoice_tutorial_creates_a_checkable_project_without_overwriting() {
     let directory = temporary_directory("invoice-tutorial");
-    let tutorial = run(&["--tutorial", "invoice", directory.to_str().unwrap()]);
+    let tutorial = run(&[
+        "--tutorial",
+        "invoice",
+        directory.to_str().unwrap(),
+        "--no-start",
+    ]);
     assert!(
         tutorial.status.success(),
         "stdout: {}\nstderr: {}",
@@ -278,7 +283,7 @@ fn invoice_tutorial_creates_a_checkable_project_without_overwriting() {
             "tutorial source omitted {section}"
         );
     }
-    assert!(String::from_utf8_lossy(&tutorial.stdout).contains("zelyra serve main.zyl"));
+    assert!(String::from_utf8_lossy(&tutorial.stdout).contains("zelyra setup --all"));
 
     let overwrite = run(&["--tutorial", "invoice", directory.to_str().unwrap()]);
     assert!(!overwrite.status.success());

@@ -12,6 +12,9 @@ starten, bleiben die Projektdateien erhalten; nach Behebung des Docker-Problems
 startet `cd invoice-tutorial && zelyra setup --all` Datenbank, Anwendung und
 Schema gemeinsam. Bei einem anderen Zielordner verwende den entsprechenden
 Pfad, zum Beispiel `zelyra --tutorial invoice ./meine-rechnungen`.
+Für reine Projektgenerierung ohne Docker-Start kannst du `--no-start`
+anhängen; die Ausgabe nennt dann den kombinierten Startbefehl `zelyra setup
+--all`.
 
 Die fertige Anwendung läuft auf der in der Befehlsausgabe genannten lokalen
 Adresse (standardmäßig `http://127.0.0.1:3000`). Sie enthält fünf verbundene
