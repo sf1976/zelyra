@@ -33,7 +33,7 @@ try {
 
   const editor = page.locator(".cm-content[contenteditable=true]");
   await editor.focus();
-  await page.keyboard.press("Control+Space");
+  await page.locator("#complete-button").click();
   await page.locator(".cm-tooltip-autocomplete").waitFor();
   await page.locator(".cm-tooltip-autocomplete .cm-completionLabel", { hasText: /^main$/ }).waitFor();
   await page.keyboard.press("Escape");

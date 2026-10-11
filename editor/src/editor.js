@@ -90,7 +90,7 @@ const messages = {
     welcomeHint: "Öffne links eine Datei und entwickle direkt in deinem Projekt.", problems: "Probleme",
     noProblems: "Keine Probleme gefunden. Dein Projekt ist bereit.", close: "Panel schließen", loadingFiles: "Dateien werden geladen",
     toggleExplorer: "Dateiübersicht umschalten", search: "Suchen", handbook: "Handbuch", projectFiles: "Projektdateien",
-    openFile: "Datei öffnen", complete: "Vervollständigen", ready: "Bereit", localMode: "Lokaler Modus",
+    openFile: "Datei öffnen", complete: "Vervollständigen", completeHelp: "Codevorschläge anzeigen (Strg+Leertaste)", ready: "Bereit", localMode: "Lokaler Modus",
     noDocument: "Kein Dokument geöffnet", opened: "{0} geöffnet", unsaved: "Ungespeicherte Änderungen",
     saved: "{0} gespeichert", checkRunning: "Projekt wird geprüft …", checkPassed: "Projektprüfung erfolgreich",
     problemsFound: "{0} Problem(e) gefunden", formatRunning: "Formatiere …", formatted: "{0} formatiert",
@@ -162,7 +162,7 @@ const messages = {
     welcomeHint: "Open a file on the left and work directly in your project.", problems: "Problems",
     noProblems: "No problems found. Your project is ready.", close: "Close panel", loadingFiles: "Loading files",
     toggleExplorer: "Toggle file explorer", search: "Search", handbook: "Handbook", projectFiles: "Project files",
-    openFile: "Open file", complete: "Complete", ready: "Ready", localMode: "Local mode",
+    openFile: "Open file", complete: "Complete", completeHelp: "Show code suggestions (Ctrl+Space)", ready: "Ready", localMode: "Local mode",
     noDocument: "No document open", opened: "Opened {0}", unsaved: "Unsaved changes",
     saved: "Saved {0}", checkRunning: "Checking project …", checkPassed: "Project check passed",
     problemsFound: "Found {0} problem(s)", formatRunning: "Formatting …", formatted: "Formatted {0}",
@@ -409,6 +409,7 @@ function renderTabs() {
     bar.append(button);
   }
   $("save-button").disabled = !activePath || !isDirty(tabs.get(activePath), activePath);
+  $("complete-button").disabled = !activePath;
   $("save-all-button").disabled = dirtyCount() === 0;
   const protectedFile = activePath === "main.zyl" || activePath === "zelyra.toml";
   $("rename-file-button").disabled = !activePath || protectedFile;
@@ -1571,6 +1572,7 @@ async function createFile() {
 }
 
 $("save-button").addEventListener("click", saveActive);
+$("complete-button").addEventListener("click", () => { if (editor) { editor.focus(); startCompletion(editor); } });
 $("rename-file-button").addEventListener("click", renameActiveFile);
 $("delete-file-button").addEventListener("click", deleteActiveFile);
 $("save-all-button").addEventListener("click", saveAll);
