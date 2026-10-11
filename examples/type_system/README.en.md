@@ -29,7 +29,7 @@ diagnostic. These cases do not belong in the successful program run.
 | `Int` | ✅ supported | Signed 64-bit range; addition, subtraction, multiplication, division, remainder, and comparisons; overflow and division by zero return runtime errors. |
 | `UInt` | ✅ supported | Unsigned 64-bit range; arithmetic and comparisons; overflow, underflow, and division by zero return runtime errors. |
 | `Float` | ✅ supported | IEEE-754 binary64; rounding differences, infinity, and NaN are possible. JSON rejects non-finite values. |
-| `Decimal` | 🧪 partial | The type name is accepted, but the runtime stores and computes it as `Float`. There is no exact base-10 arithmetic. Do not use it for monetary values. |
+| `Decimal` | ✅ supported | `decimal("0.10")` creates a fixed-point value with nine fractional digits and exact base-10 arithmetic. Addition, subtraction, multiplication, division, remainder, and comparisons are implemented; overflow and division by zero return runtime errors. More than nine fractional digits are rejected. JSON stores Decimal as an exact decimal string. |
 | `Bool` | ✅ supported | `true`/`false`, logical operations, and equality. |
 | `Char` | ✅ supported | One Unicode scalar value; JSON uses a one-scalar JSON string. Multi-codepoint grapheme clusters are not one `Char`. |
 | `String` | ✅ supported | UTF-8, Unicode, escapes, equality, lexicographic comparisons, and concatenation. `text_chars` counts Unicode scalar values; no byte-length function is available. |
@@ -43,7 +43,7 @@ diagnostic. These cases do not belong in the successful program run.
 | Enums | — unavailable | No user-defined enum type. `Option` and `Result` are built-in variant types. |
 | Classes/object identity/references | — unavailable | Records behave as values. There is no observable object identity or reference semantics, and individual record fields cannot be mutated. |
 | `Timestamp` | ✅ limited | `now()`, equality, UTC formatting, and JSON as Unix milliseconds. No general date/time arithmetic or ordered comparisons in the language core. |
-| `Date`, `Time`, `Duration`, `Bytes` | 🧪 type names only | The parser/type model recognizes the names, but runtime values and JSON round trips are missing. Fixtures check rejected `Date` and `Bytes` decoding. |
+| `Date`, `Time`, `Duration`, `Bytes` | ✅ supported | `date("YYYY-MM-DD")` validates Gregorian dates; `time("HH:MM:SS")` validates clock values; both order chronologically and serialize as ISO text. `duration_ms(Int)` creates a millisecond duration with checked addition/subtraction and integer JSON. `bytes([Int, ...])` accepts only values from 0 to 255 and serializes as an integer array. |
 | `Unit` | ✅ supported | Empty return value, explicit function type, and JSON round trip with `null`. |
 | `Result<T,E>` | ✅ supported | `Ok`/`Err`, pattern matching, and function returns. JSON encodes `Ok` as its contained value and `Err` as an object with `error`; a generic `Result` decoder is missing. |
 | `HttpResult<T>`, `HttpResponse`, `HttpError` | 🧪 specialized | HTTP subsystem types for network responses and errors; no general literals or constructors. |
@@ -68,7 +68,7 @@ separate shallow/deep copy operations. The tested mutation path reassigns a
 
 The successful run checks numeric ranges, arithmetic, rounding behavior,
 Unicode, optional values, collections, records, and JSON. The CLI integration
-test also expects **7 compiler errors** and **12 runtime errors** (type mismatch,
+test also expects **7 compiler errors** and **17 runtime errors** (type mismatch,
 mixed arrays, non-exhaustive matching, overflow/underflow, division by zero,
 invalid index, non-finite JSON number, non-string-keyed Map serialization, and
 unsupported `Date`/`Bytes`/`Result` decoding). An expected error is a passing

@@ -68,13 +68,13 @@ fn type_coverage_program_passes_supported_tests_and_reports_expected_failures() 
     let output = String::from_utf8_lossy(&run.stdout);
     for expected in [
         "PASS Int/UInt ranges",
-        "PASS Float binary precision",
-        "PASS Bool, Char, String, Unicode and Timestamp",
+        "PASS Decimal exact base-10 arithmetic and Float binary precision",
+        "PASS Bool, Char, String, Unicode, Timestamp, Date, Time, Duration and Bytes",
         "PASS Arrays, nested collections",
         "PASS records, nested fields",
         "PASS Unit type, function return",
         "PASS Option, Result, records",
-        "Report: 7 expected compiler errors and 12 expected runtime errors",
+        "Report: 7 expected compiler errors and 17 expected runtime errors",
         "alle ausführbaren Typprüfungen bestanden",
     ] {
         assert!(
@@ -109,13 +109,21 @@ fn type_coverage_program_passes_supported_tests_and_reports_expected_failures() 
         ("array_index.zyl", "out of bounds"),
         ("non_finite_json.zyl", "cannot serialize non-finite Float"),
         (
-            "unsupported_date_json.zyl",
-            "does not support target type `Date`",
+            "invalid_date_json.zyl",
+            "expected Date in YYYY-MM-DD format",
         ),
         (
-            "unsupported_bytes_json.zyl",
-            "does not support target type `Bytes`",
+            "invalid_bytes_json.zyl",
+            "each byte to be an integer from 0 to 255",
         ),
+        ("invalid_time.zyl", "expected HH:MM:SS"),
+        ("invalid_bytes.zyl", "values must be between 0 and 255"),
+        ("decimal_precision.zyl", "at most 9 fractional digits"),
+        (
+            "decimal_exponent.zyl",
+            "base-10 value with at most 9 fractional digits",
+        ),
+        ("decimal_json_number.zyl", "expected Decimal string"),
         (
             "non_string_map_json.zyl",
             "supports only Map<String, Value>",

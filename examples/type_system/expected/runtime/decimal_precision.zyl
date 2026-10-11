@@ -1,0 +1,3 @@
+fn main() {
+    print(decimal("0.1234567891"))
+}

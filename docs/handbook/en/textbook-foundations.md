@@ -489,11 +489,12 @@ The core data types in Zelyra:
 - **`Int`**: 64-bit signed integers, e.g., `-5`, `0`, `42`.
 - **`UInt`**: Unsigned integers (`>= 0`), ideal for record IDs and positive counters.
 - **`Float`**: Floating-point numbers for scientific calculations, e.g., `3.1415`.
-- **`Decimal`**: Fixed-point numbers with guaranteed precision—indispensable for financial amounts to eliminate floating-point rounding artifacts!
+- **`Decimal`**: Fixed-point values with nine fractional digits and exact base-10 arithmetic. Write values as `decimal("19.99")`; values with more than nine fractional digits are rejected. Division truncates toward zero when it produces more than nine fractional digits. JSON stores Decimal as a string to preserve precision.
 - **`Bool`**: Boolean values representing truth. Exactly two states exist: `true` or `false`.
 - **`String`**: UTF-8 character text enclosed in double quotation marks: `"Hello World"`.
 - **`Char`**: Individual characters enclosed in single quotation marks: `'A'`, `'z'`.
 - **`Unit`**: Represents "no meaningful value", analogous to `void` in other languages. When a function only performs side effects and returns nothing, its type is `Unit`.
+- **`Date`, `Time`, `Duration`, `Bytes`**: Create dates and times with `date("2026-10-11")` and `time("09:30:00")`, durations with `duration_ms(1500)`, and bytes with `bytes([65, 66])`. Runtime constructors validate these values, and JSON round trips preserve them.
 
 ### 4. Small, progressive examples
 

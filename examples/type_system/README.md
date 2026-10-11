@@ -30,7 +30,7 @@ Programmlauf.
 | `Int` | ✅ unterstützt | Vorzeichenbehaftetes 64-Bit-Intervall; Addition, Subtraktion, Multiplikation, Division, Rest und Vergleiche; Überlauf und Division durch null ergeben Runtimefehler. |
 | `UInt` | ✅ unterstützt | Vorzeichenloses 64-Bit-Intervall; Rechenoperationen und Vergleiche; Überlauf, Unterlauf und Division durch null ergeben Runtimefehler. |
 | `Float` | ✅ unterstützt | IEEE-754 binary64; Rundungsabweichungen, Unendlich und NaN sind möglich. JSON lehnt nicht-endliche Werte ab. |
-| `Decimal` | 🧪 teilweise | Der Typname wird akzeptiert, die Runtime speichert und rechnet ihn aber als `Float`. Es gibt keine Dezimalarithmetik mit exakter Basis 10. Nicht für Geldbeträge verwenden. |
+| `Decimal` | ✅ unterstützt | `decimal("0.10")` erstellt einen Festkommawert mit neun Nachkommastellen und exakter Basis-10-Arithmetik. Addition, Subtraktion, Multiplikation, Division, Rest und Vergleiche sind implementiert; Überlauf und Division durch null ergeben Runtimefehler. Mehr als neun Nachkommastellen werden abgewiesen. JSON speichert Decimal als exakten Dezimalstring. |
 | `Bool` | ✅ unterstützt | `true`/`false`, logische Operationen und Gleichheit. |
 | `Char` | ✅ unterstützt | Ein Unicode-Skalarwert; JSON verwendet eine einstellige JSON-Zeichenkette. Graphemcluster mit mehreren Codepoints sind kein einzelnes `Char`. |
 | `String` | ✅ unterstützt | UTF-8, Unicode, Escape-Sequenzen, Gleichheit, lexikografische Vergleiche und Verkettung. `text_chars` zählt Unicode-Skalarwerte; eine Byte-Längenfunktion gibt es nicht. |
@@ -44,7 +44,7 @@ Programmlauf.
 | Enums | — nicht vorhanden | Kein benutzerdefinierter Enumtyp. `Option` und `Result` sind eingebaute Varianten-Typen. |
 | Klassen/Objektidentität/Referenzen | — nicht vorhanden | Records werden als Werte behandelt. Es gibt keine beobachtbare Objektidentität oder Referenzsemantik und keine Mutation einzelner Recordfelder. |
 | `Timestamp` | ✅ teilweise nutzbar | `now()`, Gleichheit, UTC-Formatierung und JSON als Unix-Millisekunden. Keine allgemeine Datum-/Zeitrechnung oder geordnete Vergleiche im Sprachkern. |
-| `Date`, `Time`, `Duration`, `Bytes` | 🧪 Typnamen vorhanden | Parser/Typmodell kennen die Namen, aber Runtimewerte und JSON-Roundtrips fehlen. Die Beispiel-Fixtures prüfen die abgewiesene Deserialisierung von `Date` und `Bytes`. |
+| `Date`, `Time`, `Duration`, `Bytes` | ✅ unterstützt | `date("YYYY-MM-DD")` validiert gregorianische Daten; `time("HH:MM:SS")` validiert Uhrzeiten; beide vergleichen chronologisch und werden als ISO-Text serialisiert. `duration_ms(Int)` liefert Millisekunden mit geprüfter Addition/Subtraktion und JSON als Integer. `bytes([Int, ...])` akzeptiert nur Werte von 0 bis 255 und wird als Integer-Array serialisiert. |
 | `Unit` | ✅ unterstützt | Leerer Rückgabewert, explizite Funktionstypen und JSON-Roundtrip mit `null`. |
 | `Result<T,E>` | ✅ unterstützt | `Ok`/`Err`, Pattern Matching und Rückgabe aus Funktionen. JSON kodiert `Ok` als enthaltenen Wert und `Err` als Objekt mit `error`; ein generischer `Result`-Decoder fehlt. |
 | `HttpResult<T>`, `HttpResponse`, `HttpError` | 🧪 spezialisiert | HTTP-Subsystem-Typen für Netzwerkantworten und Fehler; keine allgemeinen Literal- oder Konstruktoren. |
@@ -72,7 +72,7 @@ Recordfelds oder eines Arrayelements über einen Index.
 Der erfolgreiche Programmlauf prüft Zahlenbereiche, Rechenoperationen,
 Rundungsverhalten, Unicode, optionale Werte, Sammlungen, Records und JSON.
 Der CLI-Integrationstest erwartet zusätzlich **7 Compilerfehler** und
-**12 Runtimefehler** (Typfehler, gemischte Arrays, unvollständiges Matching,
+**17 Runtimefehler** (Typfehler, gemischte Arrays, unvollständiges Matching,
 Überlauf/Unterlauf, Division durch null, ungültiger Index, nicht-endliche
 JSON-Zahl, nicht-stringbasierte Map-Serialisierung sowie nicht unterstützte
 `Date`-/`Bytes`-/`Result`-Decodierung). Ein erwarteter Fehler ist dabei ein

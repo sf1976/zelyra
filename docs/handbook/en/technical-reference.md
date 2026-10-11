@@ -2223,7 +2223,7 @@ and was checked with the installed Rust toolchain or Zelyra CLI. `🧪`, `🗺�
 | Immutable variable | `value = 1` | `let value = 1;` | Zelyra is immutable without `mutable` | ✅ |
 | Mutable variable | `mutable value = 1` | `let mut value = 1;` | different marker for mutation | ✅ |
 | Integer | `Int` or `UInt` | `i32`, `i64`, `u32`, `u64` | Rust requires a concrete width; Zelyra abstracts it today | ✅ |
-| Decimal | `Float` or `Decimal` | `f64` or `f32` | Zelyra width and exact overflow rules are not fully specified | 🧪 |
+| Decimal | `Float` or `Decimal` | `f64` or fixed point | `Decimal` has nine fractional digits; division truncates toward zero; overflow returns a runtime error | ✅ |
 | Boolean | `true`, `false`, `Bool` | `true`, `false`, `bool` | own base-type model | ✅ |
 | String | `String` and character literals | `String`, `&str`, character literals | Rust distinguishes ownership and borrowing | ✅ |
 | Optional value | `Email?` or `Option<String>` | `Option<String>` | `?` is Zelyra's Option shorthand | ✅ |

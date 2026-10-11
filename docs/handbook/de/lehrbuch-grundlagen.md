@@ -483,11 +483,12 @@ Die wichtigsten Datentypen in Zelyra:
 - **`Int`**: Ganze Zahlen mit Vorzeichen (64-Bit), z. B. `-5`, `0`, `42`.
 - **`UInt`**: Ganze Zahlen ohne Vorzeichen (nur `>= 0`), z. B. IDs oder Zähler.
 - **`Float`**: Fließkommazahlen für wissenschaftliche Berechnungen, z. B. `3.1415`.
-- **`Decimal`**: Festkommazahlen mit garantierter Exaktheit – unverzichtbar für Geldbeträge, um Rundungsfehler von Fließkommazahlen zu vermeiden!
+- **`Decimal`**: Festkommazahl mit neun Nachkommastellen und exakter Basis-10-Arithmetik. Schreibe Werte als `decimal("19.99")`; mehr als neun Nachkommastellen werden abgewiesen. Eine Division, die mehr Stellen erzeugt, kürzt Richtung null auf neun Stellen. JSON speichert Decimal als Zeichenkette, damit keine Präzision verloren geht.
 - **`Bool`**: Wahrheitswerte. Es gibt exakt zwei Zustände: `true` (wahr) oder `false` (falsch).
 - **`String`**: Zeichenketten (Text) in doppelten Anführungszeichen: `"Hallo Welt"`.
 - **`Char`**: Einzelne Zeichen in einfachen Anführungszeichen: `'A'`, `'z'`, `'✓'`.
 - **`Unit`**: Steht für „kein Wert“, ähnlich wie `void` in anderen Sprachen. Wenn eine Funktion nur etwas ausgibt und nichts zurückliefert, ist ihr Typ `Unit`.
+- **`Date`, `Time`, `Duration`, `Bytes`**: Erzeuge Datum und Uhrzeit mit `date("2026-10-11")` und `time("09:30:00")`, Dauern mit `duration_ms(1500)` und Bytes mit `bytes([65, 66])`. Die Laufzeit prüft die Werte und erhält sie beim JSON-Roundtrip.
 
 ### 4. Kleine, aufeinander aufbauende Beispiele
 

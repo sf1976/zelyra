@@ -8446,10 +8446,24 @@ fn api_json_value_node(value: &RuntimeValue) -> serde_json::Value {
         RuntimeValue::Float(value) => serde_json::Number::from_f64(*value)
             .map(serde_json::Value::Number)
             .unwrap_or(serde_json::Value::Null),
+        RuntimeValue::Decimal(value) => {
+            serde_json::Value::String(RuntimeValue::Decimal(*value).output())
+        }
         RuntimeValue::Bool(value) => serde_json::Value::from(*value),
         RuntimeValue::String(value) => serde_json::Value::String(value.clone()),
         RuntimeValue::Char(value) => serde_json::Value::String(value.to_string()),
         RuntimeValue::Timestamp(value) => serde_json::Value::from(*value),
+        RuntimeValue::Date(value) | RuntimeValue::Time(value) => {
+            serde_json::Value::String(value.clone())
+        }
+        RuntimeValue::Duration(value) => serde_json::Value::from(*value),
+        RuntimeValue::Bytes(values) => serde_json::Value::Array(
+            values
+                .iter()
+                .copied()
+                .map(serde_json::Value::from)
+                .collect(),
+        ),
         RuntimeValue::Array(values) => {
             serde_json::Value::Array(values.iter().map(api_json_value_node).collect())
         }

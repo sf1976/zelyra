@@ -4346,6 +4346,49 @@ impl<'a> Checker<'a> {
                         self.error(expr.span, "now expects no arguments");
                     }
                     Type::Timestamp
+                } else if name == "date" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "date expects one ISO date string (YYYY-MM-DD)");
+                        return Type::Unknown;
+                    }
+                    let value = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::String, &value, args[0].span);
+                    Type::Date
+                } else if name == "decimal" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "decimal expects one decimal string");
+                        return Type::Unknown;
+                    }
+                    let value = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::String, &value, args[0].span);
+                    Type::Decimal
+                } else if name == "time" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "time expects one ISO time string (HH:MM:SS)");
+                        return Type::Unknown;
+                    }
+                    let value = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::String, &value, args[0].span);
+                    Type::Time
+                } else if name == "duration_ms" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "duration_ms expects one Int");
+                        return Type::Unknown;
+                    }
+                    let value = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::Int, &value, args[0].span);
+                    Type::Duration
+                } else if name == "bytes" {
+                    if args.len() != 1 {
+                        self.error(
+                            expr.span,
+                            "bytes expects one Int array with values from 0 to 255",
+                        );
+                        return Type::Unknown;
+                    }
+                    let value = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::Array(Box::new(Type::Int)), &value, args[0].span);
+                    Type::Bytes
                 } else if name == "format_timestamp" {
                     if args.len() != 1 {
                         self.error(expr.span, "format_timestamp expects exactly one Timestamp");
@@ -4774,6 +4817,8 @@ impl<'a> Checker<'a> {
                     BinaryOp::Add => {
                         if left_ty == Type::String && right_ty == Type::String {
                             Type::String
+                        } else if left_ty == Type::Duration && right_ty == Type::Duration {
+                            Type::Duration
                         } else if let (Type::Array(left), Type::Array(right)) =
                             (&left_ty, &right_ty)
                         {
@@ -4786,7 +4831,16 @@ impl<'a> Checker<'a> {
                     BinaryOp::Subtract
                     | BinaryOp::Multiply
                     | BinaryOp::Divide
-                    | BinaryOp::Remainder => self.numeric_result(&left_ty, &right_ty, expr.span),
+                    | BinaryOp::Remainder => {
+                        if *op == BinaryOp::Subtract
+                            && left_ty == Type::Duration
+                            && right_ty == Type::Duration
+                        {
+                            Type::Duration
+                        } else {
+                            self.numeric_result(&left_ty, &right_ty, expr.span)
+                        }
+                    }
                     BinaryOp::Equal | BinaryOp::NotEqual => {
                         self.expect_type(&left_ty, &right_ty, right.span);
                         Type::Bool
@@ -4795,7 +4849,12 @@ impl<'a> Checker<'a> {
                     | BinaryOp::LessEqual
                     | BinaryOp::Greater
                     | BinaryOp::GreaterEqual => {
-                        if left_ty == Type::String && right_ty == Type::String {
+                        if left_ty == right_ty
+                            && matches!(
+                                left_ty,
+                                Type::String | Type::Date | Type::Time | Type::Duration
+                            )
+                        {
                             Type::Bool
                         } else {
                             self.numeric_result(&left_ty, &right_ty, expr.span);
@@ -5002,10 +5061,15 @@ pub enum Value {
     Int(i64),
     UInt(u64),
     Float(f64),
+    Decimal(i128),
     Bool(bool),
     String(String),
     Char(char),
     Timestamp(i64),
+    Date(String),
+    Time(String),
+    Duration(i64),
+    Bytes(Vec<u8>),
     Array(Vec<Value>),
     Map(Vec<(Value, Value)>),
     Object {
@@ -5027,10 +5091,15 @@ impl Value {
             Value::Int(_) => Type::Int,
             Value::UInt(_) => Type::UInt,
             Value::Float(_) => Type::Float,
+            Value::Decimal(_) => Type::Decimal,
             Value::Bool(_) => Type::Bool,
             Value::String(_) => Type::String,
             Value::Char(_) => Type::Char,
             Value::Timestamp(_) => Type::Timestamp,
+            Value::Date(_) => Type::Date,
+            Value::Time(_) => Type::Time,
+            Value::Duration(_) => Type::Duration,
+            Value::Bytes(_) => Type::Bytes,
             Value::Array(values) => Type::Array(Box::new(
                 values.first().map(Value::ty).unwrap_or(Type::Unknown),
             )),
@@ -5064,10 +5133,21 @@ impl Value {
             Value::Int(v) => v.to_string(),
             Value::UInt(v) => v.to_string(),
             Value::Float(v) => v.to_string(),
+            Value::Decimal(v) => format_decimal(*v),
             Value::Bool(v) => v.to_string(),
             Value::String(v) => v.clone(),
             Value::Char(v) => v.to_string(),
             Value::Timestamp(v) => v.to_string(),
+            Value::Date(v) | Value::Time(v) => v.clone(),
+            Value::Duration(v) => format!("{v}ms"),
+            Value::Bytes(values) => format!(
+                "Bytes[{}]",
+                values
+                    .iter()
+                    .map(u8::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
             Value::Array(values) => format!(
                 "[{}]",
                 values
@@ -5868,10 +5948,20 @@ impl Interpreter {
                 .ok_or_else(|| {
                     self.runtime_error(span, "json_encode cannot serialize non-finite Float")
                 }),
+            Value::Decimal(value) => Ok(serde_json::Value::String(format_decimal(*value))),
             Value::Bool(value) => Ok(serde_json::Value::from(*value)),
             Value::String(value) => Ok(serde_json::Value::String(value.clone())),
             Value::Char(value) => Ok(serde_json::Value::String(value.to_string())),
             Value::Timestamp(value) => Ok(serde_json::Value::from(*value)),
+            Value::Date(value) | Value::Time(value) => Ok(serde_json::Value::String(value.clone())),
+            Value::Duration(value) => Ok(serde_json::Value::from(*value)),
+            Value::Bytes(values) => Ok(serde_json::Value::Array(
+                values
+                    .iter()
+                    .copied()
+                    .map(serde_json::Value::from)
+                    .collect(),
+            )),
             Value::Array(values) => values
                 .iter()
                 .map(|value| self.json_value(value, span))
@@ -5964,10 +6054,21 @@ impl Interpreter {
                 .as_u64()
                 .map(Value::UInt)
                 .ok_or_else(|| self.json_type_error("UInt", value, span)),
-            Type::Float | Type::Decimal => value
+            Type::Float => value
                 .as_f64()
                 .map(Value::Float)
                 .ok_or_else(|| self.json_type_error("number", value, span)),
+            Type::Decimal => {
+                let Some(source) = value.as_str() else {
+                    return Err(self.json_type_error("Decimal string", value, span));
+                };
+                parse_decimal(source).map(Value::Decimal).ok_or_else(|| {
+                    self.runtime_error(
+                        span,
+                        "json_decode expected a Decimal with at most 9 fractional digits",
+                    )
+                })
+            }
             Type::Bool => value
                 .as_bool()
                 .map(Value::Bool)
@@ -5990,6 +6091,52 @@ impl Interpreter {
                 .as_i64()
                 .map(Value::Timestamp)
                 .ok_or_else(|| self.json_type_error("Timestamp", value, span)),
+            Type::Date => {
+                let Some(text) = value.as_str() else {
+                    return Err(self.json_type_error("Date string", value, span));
+                };
+                if !valid_date(text) {
+                    return Err(
+                        self.runtime_error(span, "json_decode expected Date in YYYY-MM-DD format")
+                    );
+                }
+                Ok(Value::Date(text.to_owned()))
+            }
+            Type::Time => {
+                let Some(text) = value.as_str() else {
+                    return Err(self.json_type_error("Time string", value, span));
+                };
+                if !valid_time(text) {
+                    return Err(
+                        self.runtime_error(span, "json_decode expected Time in HH:MM:SS format")
+                    );
+                }
+                Ok(Value::Time(text.to_owned()))
+            }
+            Type::Duration => value
+                .as_i64()
+                .map(Value::Duration)
+                .ok_or_else(|| self.json_type_error("Duration milliseconds", value, span)),
+            Type::Bytes => {
+                let Some(values) = value.as_array() else {
+                    return Err(self.json_type_error("byte array", value, span));
+                };
+                values
+                    .iter()
+                    .map(|value| {
+                        value
+                            .as_u64()
+                            .and_then(|value| u8::try_from(value).ok())
+                            .ok_or_else(|| {
+                                self.runtime_error(
+                                    span,
+                                    "json_decode expected each byte to be an integer from 0 to 255",
+                                )
+                            })
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+                    .map(Value::Bytes)
+            }
             Type::Array(inner) => {
                 let Some(values) = value.as_array() else {
                     return Err(self.json_type_error("array", value, span));
@@ -6030,10 +6177,6 @@ impl Interpreter {
                     span,
                     format!("json_decode does not support target type `{target}`"),
                 )),
-            Type::Bytes | Type::Date | Type::Time | Type::Duration => Err(self.runtime_error(
-                span,
-                format!("json_decode does not support target type `{target}`"),
-            )),
         }
     }
 
@@ -6610,6 +6753,72 @@ impl Interpreter {
             other => Err(self.runtime_error(span, format!("expected Bool, found {}", other.ty()))),
         }
     }
+    fn eval_scalar_constructor(
+        &mut self,
+        name: &str,
+        args: &[Expr],
+        env: &mut Environment,
+        span: Span,
+    ) -> Result<Value, RuntimeError> {
+        if args.len() != 1 {
+            return Err(self.runtime_error(span, format!("{name} expects exactly one argument")));
+        }
+        let argument = self.eval(&args[0], env)?;
+        match (name, argument) {
+            ("decimal", Value::String(source)) => {
+                parse_decimal(&source).map(Value::Decimal).ok_or_else(|| {
+                    self.runtime_error(
+                        args[0].span,
+                        "decimal expects a base-10 value with at most 9 fractional digits",
+                    )
+                })
+            }
+            ("decimal", value) => Err(self.runtime_error(
+                args[0].span,
+                format!("decimal expects String, found {}", value.ty()),
+            )),
+            ("date", Value::String(value)) if valid_date(&value) => Ok(Value::Date(value)),
+            ("time", Value::String(value)) if valid_time(&value) => Ok(Value::Time(value)),
+            ("date" | "time", Value::String(value)) => Err(self.runtime_error(
+                args[0].span,
+                format!(
+                    "{name} received invalid value `{value}`; expected {}",
+                    if name == "date" {
+                        "YYYY-MM-DD"
+                    } else {
+                        "HH:MM:SS"
+                    }
+                ),
+            )),
+            ("date" | "time", value) => Err(self.runtime_error(
+                args[0].span,
+                format!("{name} expects String, found {}", value.ty()),
+            )),
+            ("duration_ms", Value::Int(value)) => Ok(Value::Duration(value)),
+            ("duration_ms", value) => Err(self.runtime_error(
+                args[0].span,
+                format!("duration_ms expects Int, found {}", value.ty()),
+            )),
+            ("bytes", Value::Array(values)) => values
+                .into_iter()
+                .map(|value| match value {
+                    Value::Int(value) => u8::try_from(value).map_err(|_| {
+                        self.runtime_error(args[0].span, "bytes values must be between 0 and 255")
+                    }),
+                    other => Err(self.runtime_error(
+                        args[0].span,
+                        format!("bytes expects Int values, found {}", other.ty()),
+                    )),
+                })
+                .collect::<Result<Vec<_>, _>>()
+                .map(Value::Bytes),
+            ("bytes", value) => Err(self.runtime_error(
+                args[0].span,
+                format!("bytes expects an Int array, found {}", value.ty()),
+            )),
+            _ => Err(self.runtime_error(span, format!("unknown scalar constructor `{name}`"))),
+        }
+    }
     fn eval(&mut self, expr: &Expr, env: &mut Environment) -> Result<Value, RuntimeError> {
         match &expr.kind {
             ExprKind::Int(v) => Ok(Value::Int(*v)),
@@ -6973,6 +7182,11 @@ impl Interpreter {
                         "Ok" => Ok(Value::Result(Ok(value))),
                         _ => Ok(Value::Result(Err(value))),
                     }
+                } else if matches!(
+                    name.as_str(),
+                    "decimal" | "date" | "time" | "duration_ms" | "bytes"
+                ) {
+                    self.eval_scalar_constructor(name, args, env, expr.span)
                 } else if name == "now" {
                     if !args.is_empty() {
                         return Err(self.runtime_error(expr.span, "now expects no arguments"));
@@ -7824,6 +8038,10 @@ impl Interpreter {
                         Err(self.runtime_error(expr.span, "cannot negate UInt"))
                     }
                     (UnaryOp::Negate, Value::Float(v)) => Ok(Value::Float(-v)),
+                    (UnaryOp::Negate, Value::Decimal(v)) => v
+                        .checked_neg()
+                        .map(Value::Decimal)
+                        .ok_or_else(|| self.runtime_error(expr.span, "Decimal overflow")),
                     (UnaryOp::Not, Value::Bool(v)) => Ok(Value::Bool(!v)),
                     (_, value) => Err(self.runtime_error(
                         expr.span,
@@ -7981,7 +8199,40 @@ impl Interpreter {
             (Value::Float(a), Multiply, Value::Float(b)) => Ok(Value::Float(a * b)),
             (Value::Float(a), Divide, Value::Float(b)) => Ok(Value::Float(a / b)),
             (Value::Float(a), Remainder, Value::Float(b)) => Ok(Value::Float(a % b)),
+            (Value::Decimal(a), Add, Value::Decimal(b)) => a
+                .checked_add(b)
+                .map(Value::Decimal)
+                .ok_or_else(|| self.runtime_error(span, "Decimal overflow")),
+            (Value::Decimal(a), Subtract, Value::Decimal(b)) => a
+                .checked_sub(b)
+                .map(Value::Decimal)
+                .ok_or_else(|| self.runtime_error(span, "Decimal overflow")),
+            (Value::Decimal(a), Multiply, Value::Decimal(b)) => a
+                .checked_mul(b)
+                .and_then(|value| value.checked_div(DECIMAL_SCALE))
+                .map(Value::Decimal)
+                .ok_or_else(|| self.runtime_error(span, "Decimal overflow")),
+            (Value::Decimal(_), Divide, Value::Decimal(0)) => {
+                Err(self.runtime_error(span, "division by zero"))
+            }
+            (Value::Decimal(a), Divide, Value::Decimal(b)) => a
+                .checked_mul(DECIMAL_SCALE)
+                .and_then(|value| value.checked_div(b))
+                .map(Value::Decimal)
+                .ok_or_else(|| self.runtime_error(span, "Decimal overflow")),
+            (Value::Decimal(_), Remainder, Value::Decimal(0)) => {
+                Err(self.runtime_error(span, "division by zero"))
+            }
+            (Value::Decimal(a), Remainder, Value::Decimal(b)) => Ok(Value::Decimal(a % b)),
             (Value::String(a), Add, Value::String(b)) => Ok(Value::String(a + &b)),
+            (Value::Duration(a), Add, Value::Duration(b)) => a
+                .checked_add(b)
+                .map(Value::Duration)
+                .ok_or_else(|| self.runtime_error(span, "Duration overflow")),
+            (Value::Duration(a), Subtract, Value::Duration(b)) => a
+                .checked_sub(b)
+                .map(Value::Duration)
+                .ok_or_else(|| self.runtime_error(span, "Duration overflow")),
             (Value::Array(mut a), Add, Value::Array(b)) => {
                 a.extend(b);
                 Ok(Value::Array(a))
@@ -8000,10 +8251,27 @@ impl Interpreter {
             (Value::Float(a), LessEqual, Value::Float(b)) => Ok(Value::Bool(a <= b)),
             (Value::Float(a), Greater, Value::Float(b)) => Ok(Value::Bool(a > b)),
             (Value::Float(a), GreaterEqual, Value::Float(b)) => Ok(Value::Bool(a >= b)),
+            (Value::Decimal(a), Less, Value::Decimal(b)) => Ok(Value::Bool(a < b)),
+            (Value::Decimal(a), LessEqual, Value::Decimal(b)) => Ok(Value::Bool(a <= b)),
+            (Value::Decimal(a), Greater, Value::Decimal(b)) => Ok(Value::Bool(a > b)),
+            (Value::Decimal(a), GreaterEqual, Value::Decimal(b)) => Ok(Value::Bool(a >= b)),
             (Value::String(a), Less, Value::String(b)) => Ok(Value::Bool(a < b)),
             (Value::String(a), LessEqual, Value::String(b)) => Ok(Value::Bool(a <= b)),
             (Value::String(a), Greater, Value::String(b)) => Ok(Value::Bool(a > b)),
             (Value::String(a), GreaterEqual, Value::String(b)) => Ok(Value::Bool(a >= b)),
+            (Value::Date(a), Less, Value::Date(b)) | (Value::Time(a), Less, Value::Time(b)) => {
+                Ok(Value::Bool(a < b))
+            }
+            (Value::Date(a), LessEqual, Value::Date(b))
+            | (Value::Time(a), LessEqual, Value::Time(b)) => Ok(Value::Bool(a <= b)),
+            (Value::Date(a), Greater, Value::Date(b))
+            | (Value::Time(a), Greater, Value::Time(b)) => Ok(Value::Bool(a > b)),
+            (Value::Date(a), GreaterEqual, Value::Date(b))
+            | (Value::Time(a), GreaterEqual, Value::Time(b)) => Ok(Value::Bool(a >= b)),
+            (Value::Duration(a), Less, Value::Duration(b)) => Ok(Value::Bool(a < b)),
+            (Value::Duration(a), LessEqual, Value::Duration(b)) => Ok(Value::Bool(a <= b)),
+            (Value::Duration(a), Greater, Value::Duration(b)) => Ok(Value::Bool(a > b)),
+            (Value::Duration(a), GreaterEqual, Value::Duration(b)) => Ok(Value::Bool(a >= b)),
             (Value::Bool(a), And, Value::Bool(b)) => Ok(Value::Bool(a && b)),
             (Value::Bool(a), Or, Value::Bool(b)) => Ok(Value::Bool(a || b)),
             (left, op, right) => Err(self.runtime_error(
@@ -8016,6 +8284,97 @@ impl Interpreter {
             )),
         }
     }
+}
+
+const DECIMAL_SCALE: i128 = 1_000_000_000;
+
+fn parse_decimal(value: &str) -> Option<i128> {
+    let (negative, unsigned) = value
+        .strip_prefix('-')
+        .map_or((false, value), |value| (true, value));
+    let (whole, fraction) = unsigned.split_once('.').unwrap_or((unsigned, ""));
+    if whole.is_empty()
+        || !whole.bytes().all(|byte| byte.is_ascii_digit())
+        || fraction.len() > 9
+        || !fraction.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        return None;
+    }
+    let whole = whole.parse::<i128>().ok()?.checked_mul(DECIMAL_SCALE)?;
+    let fraction_value = if fraction.is_empty() {
+        0
+    } else {
+        fraction
+            .parse::<i128>()
+            .ok()?
+            .checked_mul(10_i128.checked_pow((9 - fraction.len()) as u32)?)?
+    };
+    let value = whole.checked_add(fraction_value)?;
+    if negative {
+        value.checked_neg()
+    } else {
+        Some(value)
+    }
+}
+
+fn format_decimal(value: i128) -> String {
+    let magnitude = value.unsigned_abs();
+    let whole = magnitude / DECIMAL_SCALE as u128;
+    let fraction = magnitude % DECIMAL_SCALE as u128;
+    if fraction == 0 {
+        return format!("{}{whole}", if value < 0 { "-" } else { "" });
+    }
+    let fraction = format!("{fraction:09}").trim_end_matches('0').to_owned();
+    format!("{}{whole}.{fraction}", if value < 0 { "-" } else { "" })
+}
+
+fn valid_date(value: &str) -> bool {
+    let Some((year, month_day)) = value.split_once('-') else {
+        return false;
+    };
+    let Some((month, day)) = month_day.split_once('-') else {
+        return false;
+    };
+    if year.len() != 4
+        || month.len() != 2
+        || day.len() != 2
+        || !year.bytes().all(|byte| byte.is_ascii_digit())
+        || !month.bytes().all(|byte| byte.is_ascii_digit())
+        || !day.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        return false;
+    }
+    let (Ok(year), Ok(month), Ok(day)) = (
+        year.parse::<u32>(),
+        month.parse::<u32>(),
+        day.parse::<u32>(),
+    ) else {
+        return false;
+    };
+    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let days = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if leap => 29,
+        2 => 28,
+        _ => return false,
+    };
+    year > 0 && (1..=days).contains(&day)
+}
+
+fn valid_time(value: &str) -> bool {
+    let mut parts = value.split(':');
+    let (Some(hour), Some(minute), Some(second), None) =
+        (parts.next(), parts.next(), parts.next(), parts.next())
+    else {
+        return false;
+    };
+    [hour, minute, second]
+        .iter()
+        .all(|part| part.len() == 2 && part.bytes().all(|byte| byte.is_ascii_digit()))
+        && hour.parse::<u32>().is_ok_and(|value| value <= 23)
+        && minute.parse::<u32>().is_ok_and(|value| value <= 59)
+        && second.parse::<u32>().is_ok_and(|value| value <= 59)
 }
 
 fn format_timestamp_utc(timestamp_millis: i64) -> String {
@@ -8079,16 +8438,20 @@ fn value_to_query_value(
         Value::Int(value) => Ok(QueryValue::Int(*value)),
         Value::UInt(value) => Ok(QueryValue::UInt(*value)),
         Value::Float(value) => Ok(QueryValue::Float(*value)),
+        Value::Decimal(value) => Ok(QueryValue::String(format_decimal(*value))),
         Value::Bool(value) => Ok(QueryValue::Bool(*value)),
         Value::String(value) => Ok(QueryValue::String(value.clone())),
         Value::Char(value) => Ok(QueryValue::String(value.to_string())),
         Value::Timestamp(value) => Ok(QueryValue::Int(*value)),
+        Value::Date(value) | Value::Time(value) => Ok(QueryValue::String(value.clone())),
+        Value::Duration(value) => Ok(QueryValue::Int(*value)),
         Value::Option(None) | Value::Unit => Ok(QueryValue::Null),
         Value::Option(Some(value)) => value_to_query_value(value, span),
         Value::Array(_)
         | Value::Map(_)
         | Value::Object { .. }
         | Value::Rows { .. }
+        | Value::Bytes(_)
         | Value::Result(_) => Err(RuntimeError {
             message: "SQL parameters must be scalar values".into(),
             span,

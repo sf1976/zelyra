@@ -75,9 +75,11 @@ den Beweis, dass beliebige Anwendungen korrekt sind.
   mehrteilige `examples/type_system` prüft unterstützte Typen, erwartete
   Compiler-/Runtimefehler und dokumentiert partielle sowie fehlende Typen.
   `Unit` ist in Typsignaturen und JSON-`null`-Roundtrips nutzbar. `Decimal`
-  verwendet weiterhin binäre `Float`-Runtimewerte; Datum/Uhrzeit, Binärdaten,
-  Enums, Tupel, Sets und benutzerdefinierte Generics sind nicht vollständig
-  unterstützt.
+  verwendet nun Festkomma mit neun Nachkommastellen und exakter Basis-10-
+  Arithmetik; für verlustfreie JSON-Roundtrips wird es als Dezimalstring
+  serialisiert. `Date`, `Time`, `Duration` und `Bytes` haben jetzt echte
+  Runtimewerte, geprüfte Konstruktoren und JSON-Roundtrips. Enums, Tupel,
+  Sets, Klassenidentität und benutzerdefinierte Generics bleiben offen.
 - ✅ Stringwerte lassen sich lexikografisch vergleichen. `json_decode_result<T>`,
   `read_text_result` und `write_text_result` geben erwartbare Parse- und
   Dateifehler als `Result` zurück. `format_timestamp` zeigt UTC-Zeitstempel als

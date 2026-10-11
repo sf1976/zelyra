@@ -19,6 +19,18 @@ pub fn identity_string(value: String) -> String {
 pub fn identity_timestamp(value: Timestamp) -> Timestamp {
     return value
 }
+pub fn identity_date(value: Date) -> Date {
+    return value
+}
+pub fn identity_time(value: Time) -> Time {
+    return value
+}
+pub fn identity_duration(value: Duration) -> Duration {
+    return value
+}
+pub fn identity_bytes(value: Bytes) -> Bytes {
+    return value
+}
 pub fn run() uses Clock {
     int_max = json_decode<Int>("9223372036854775807")
     int_min = json_decode<Int>("-9223372036854775808")
@@ -36,14 +48,16 @@ pub fn run() uses Clock {
     mutable changed_uint = identity_uint(uint_one)
     changed_uint = uint_two
     assert(changed_uint == uint_two, "UInt mutable binding can be reassigned")
-    decimal_typed = json_decode<Decimal>("0.1") + json_decode<Decimal>("0.2")
+    decimal_typed = decimal("0.1") + decimal("0.2")
     float_sum = identity_float(0.1 + 0.2)
     assert(float_sum != 0.3, "Float uses binary floating point")
     mutable changed_float = identity_float(1.5)
     changed_float = 2.5
     assert(changed_float == 2.5, "Float mutable binding can be reassigned")
-    assert(decimal_typed != json_decode<Decimal>("0.3"), "Decimal currently uses binary floating point")
-    assert(json_encode(decimal_typed) == json_encode(float_sum), "Decimal currently has no separate exact runtime representation")
+    assert(decimal_typed == decimal("0.3"), "Decimal arithmetic is exact in base 10")
+    assert(decimal("1.25") * decimal("2") == decimal("2.5"), "Decimal multiplication retains exact scale")
+    assert(decimal("1") / decimal("4") == decimal("0.25"), "Decimal division uses fixed base-10 scale")
+    assert(json_decode<Decimal>(json_encode(decimal_typed)) == decimal_typed, "Decimal JSON round trip uses an exact decimal string")
     infinity = 1.0 / 0.0
     not_a_number = 0.0 / 0.0
     assert(infinity > 1.0, "Float division follows IEEE infinity behavior")
@@ -71,7 +85,20 @@ pub fn run() uses Clock {
     assert(text_contains(format_timestamp(timestamp), "T"), "Timestamp formats as UTC ISO-8601")
     timestamp_copy = json_decode<Timestamp>(json_encode(timestamp))
     assert(timestamp_copy == timestamp, "Timestamp JSON round trip uses integer milliseconds")
+    day = identity_date(date("2026-10-11"))
+    later_day = date("2026-10-12")
+    assert(day < later_day, "Date validates ISO calendar values and orders chronologically")
+    assert(json_decode<Date>(json_encode(day)) == day, "Date JSON round trip uses ISO text")
+    morning = identity_time(time("09:30:00"))
+    assert(morning < time("10:00:00"), "Time validates and orders ISO clock values")
+    assert(json_decode<Time>(json_encode(morning)) == morning, "Time JSON round trip uses ISO text")
+    short = identity_duration(duration_ms(1500))
+    assert(short + duration_ms(500) == duration_ms(2000), "Duration uses checked millisecond arithmetic")
+    assert(json_decode<Duration>(json_encode(short)) == short, "Duration JSON round trip uses milliseconds")
+    payload = identity_bytes(bytes([0, 65, 255]))
+    assert(payload == bytes([0, 65, 255]), "Bytes preserve all byte values")
+    assert(json_decode<Bytes>(json_encode(payload)) == payload, "Bytes JSON round trip uses integer arrays")
     print("PASS Int/UInt ranges, arithmetic, comparisons, parameters and returns")
-    print("PASS Float binary precision, infinity and NaN")
-    print("PASS Bool, Char, String, Unicode and Timestamp")
+    print("PASS Decimal exact base-10 arithmetic and Float binary precision, infinity and NaN")
+    print("PASS Bool, Char, String, Unicode, Timestamp, Date, Time, Duration and Bytes")
 }

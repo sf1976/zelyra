@@ -71,10 +71,12 @@ proof that arbitrary applications are correct.
 - ✅ `Int` and `UInt` arithmetic is bounded to their 64-bit ranges; overflow,
   underflow, and division by zero return runtime errors. The modular
   `examples/type_system` checks supported types and expected compiler/runtime
-  errors, and documents partial or missing types. `Decimal` still uses binary
-  `Float` runtime values. `Unit` works in type signatures and JSON `null` round
-  trips; date/time, binary data, enums, tuples, sets, and user-defined generics
-  are not fully supported.
+  errors, and documents partial or missing types. `Decimal` now uses fixed
+  point with nine fractional digits and exact base-10 arithmetic; it serializes
+  as a decimal string for lossless JSON round trips. `Date`, `Time`, `Duration`,
+  and `Bytes` now have runtime values, validating constructors, and JSON round
+  trips. Enums, tuples, sets, class identity, and user-defined generics remain
+  open.
 - ✅ Strings support lexicographic comparisons. `json_decode_result<T>`,
   `read_text_result`, and `write_text_result` return expected parse and file
   errors as `Result`. `format_timestamp` renders UTC timestamps as ISO 8601;
