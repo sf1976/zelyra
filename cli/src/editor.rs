@@ -383,6 +383,7 @@ fn editor_response(
         ("POST", "file-rename") => rename_editor_file(state, parse_json_body(&request.body)?),
         ("DELETE", "file") => delete_editor_file(state, parse_json_body(&request.body)?),
         ("POST", "check") => check_project(state, &parse_json_body(&request.body)?),
+        ("POST", "run") => run_editor_program(state, &parse_json_body(&request.body)?),
         ("POST", "format") => format_editor_file(state, &parse_json_body(&request.body)?),
         ("POST", "crud-preview") => preview_crud_resource(state, &parse_json_body(&request.body)?),
         ("POST", "crud-apply") => apply_crud_resource(state, &parse_json_body(&request.body)?),
@@ -1856,6 +1857,161 @@ fn check_project(
         "application/json; charset=utf-8",
         json!({"success": success, "diagnostics": diagnostics}).to_string(),
     ))
+}
+
+fn run_editor_program(
+    state: &EditorState,
+    value: &Value,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let relative = value
+        .get("path")
+        .and_then(Value::as_str)
+        .filter(|path| path.ends_with(".zyl"))
+        .ok_or((400, "choose a Zelyra entry file to run".into()))?;
+    let path = safe_editor_path(&state.root, relative, false)?;
+    if fs::metadata(&path)
+        .map_err(|_| (404, "entry file could not be read".into()))?
+        .len()
+        > EDITOR_MAX_FILE_BYTES as u64
+    {
+        return Err((413, "entry file exceeds the 1 MiB editor limit".into()));
+    }
+    let executable =
+        env::current_exe().map_err(|_| (500, "could not locate the running Zelyra CLI".into()))?;
+    let mut child = Command::new(executable)
+        .arg("run")
+        .arg(relative)
+        .current_dir(&state.root)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|_| (500, "could not start the Zelyra program".into()))?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or((500, "could not capture program output".into()))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or((500, "could not capture program errors".into()))?;
+    let stdout_reader = read_editor_output(stdout);
+    let stderr_reader = read_editor_output(stderr);
+    let started = std::time::Instant::now();
+    let timeout = Duration::from_secs(15);
+    let mut timed_out = false;
+    let status = loop {
+        if let Some(status) = child
+            .try_wait()
+            .map_err(|_| (500, "could not read program status".into()))?
+        {
+            break status;
+        }
+        if started.elapsed() >= timeout {
+            timed_out = true;
+            let _ = child.kill();
+            break child
+                .wait()
+                .map_err(|_| (500, "could not stop the timed-out program".into()))?;
+        }
+        thread::sleep(Duration::from_millis(25));
+    };
+    let (stdout, stdout_truncated) = collect_editor_output(stdout_reader);
+    let (stderr, stderr_truncated) = collect_editor_output(stderr_reader);
+    let secrets = editor_secret_values(state);
+    let stdout = redact_editor_secrets(String::from_utf8_lossy(&stdout).into_owned(), &secrets);
+    let stderr = redact_editor_secrets(String::from_utf8_lossy(&stderr).into_owned(), &secrets);
+    Ok((
+        200,
+        "application/json; charset=utf-8",
+        json!({
+            "success": status.success() && !timed_out,
+            "exitCode": status.code(),
+            "timedOut": timed_out,
+            "durationMs": started.elapsed().as_millis(),
+            "stdout": stdout,
+            "stderr": stderr,
+            "truncated": stdout_truncated || stderr_truncated,
+        })
+        .to_string(),
+    ))
+}
+
+fn read_editor_output<R: Read + Send + 'static>(
+    mut reader: R,
+) -> std::sync::mpsc::Receiver<(Vec<u8>, bool)> {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    thread::spawn(move || {
+        const OUTPUT_LIMIT: usize = 65_536;
+        let mut captured = Vec::new();
+        let mut buffer = [0_u8; 8192];
+        let mut truncated = false;
+        loop {
+            match reader.read(&mut buffer) {
+                Ok(0) | Err(_) => break,
+                Ok(count) => {
+                    let remaining = OUTPUT_LIMIT.saturating_sub(captured.len());
+                    let retained = count.min(remaining);
+                    captured.extend_from_slice(&buffer[..retained]);
+                    truncated |= retained < count;
+                }
+            }
+        }
+        let _ = sender.send((captured, truncated));
+    });
+    receiver
+}
+
+fn collect_editor_output(receiver: std::sync::mpsc::Receiver<(Vec<u8>, bool)>) -> (Vec<u8>, bool) {
+    receiver
+        .recv_timeout(Duration::from_secs(2))
+        .unwrap_or_else(|_| (Vec::new(), true))
+}
+
+fn editor_secret_values(state: &EditorState) -> Vec<String> {
+    let is_secret_key = |key: &str| {
+        let key = key.to_ascii_uppercase();
+        [
+            "PASSWORD",
+            "SECRET",
+            "TOKEN",
+            "API_KEY",
+            "DATABASE_URL",
+            "PRIVATE_KEY",
+            "CREDENTIAL",
+        ]
+        .iter()
+        .any(|marker| key.contains(marker))
+    };
+    let mut secrets = env::vars_os()
+        .filter_map(|(key, value)| {
+            let key = key.to_string_lossy();
+            is_secret_key(&key).then(|| value.to_string_lossy().into_owned())
+        })
+        .filter(|value| value.len() >= 4)
+        .collect::<Vec<_>>();
+    if let Ok(contents) = fs::read_to_string(state.root.join(".env")) {
+        if contents.len() <= 256 * 1024 {
+            secrets.extend(contents.lines().filter_map(|line| {
+                let (key, value) = line.split_once('=')?;
+                if !is_secret_key(key.trim()) {
+                    return None;
+                }
+                let value = value.trim().trim_matches(['"', '\'']).to_owned();
+                (value.len() >= 4).then_some(value)
+            }));
+        }
+    }
+    secrets.sort_by_key(|value| std::cmp::Reverse(value.len()));
+    secrets.dedup();
+    secrets
+}
+
+fn redact_editor_secrets(mut output: String, secrets: &[String]) -> String {
+    for secret in secrets {
+        output = output.replace(secret, "[redacted]");
+    }
+    output
 }
 
 fn byte_to_utf16(source: &str, byte_offset: usize) -> usize {

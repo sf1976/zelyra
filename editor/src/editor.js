@@ -64,6 +64,8 @@ const messages = {
     taskSaveHelp: "Ungespeicherte Änderungen übernehmen", taskSaveAll: "Alle Dateien speichern", taskSaveAllHelp: "Alle geänderten Dateien übernehmen",
     taskFormat: "Datei formatieren", taskFormatHelp: "Zelyra-Quelldatei kanonisch formatieren", taskCheck: "Projekt prüfen",
     taskCheckHelp: "Compilerdiagnosen für das Projekt anzeigen", taskDatabase: "Datenbank öffnen", taskDatabaseHelp: "Tabellen und Beziehungen ansehen",
+    taskRun: "Programm ausführen", taskRunHelp: "main.zyl mit Zelyras Laufzeit starten; konfigurierte Datenbank-, Netzwerk- und Prozesseffekte sind möglich, interaktive Eingabe fehlt",
+    runOutputTitle: "Programmausgabe", runStarting: "main.zyl wird ausgeführt …", runSuccess: "Programm erfolgreich beendet", runFailure: "Programm mit Fehler beendet", runTimeout: "Ausführung nach 15 Sekunden beendet", runOutputTruncated: "Die Ausgabe ist auf 64 KiB je Stream begrenzt.", runNoOutput: "Keine Ausgabe.", runStdout: "AUSGABE", runStderr: "FEHLER", runInputUnavailable: "Studio stellt dem Programm keine interaktive Eingabe bereit.",
     taskHelp: "Kontexthilfe öffnen", taskHelpHelp: "Hilfe zum Begriff am Cursor anzeigen", taskProperties: "Dateieigenschaften öffnen",
     taskPropertiesHelp: "Informationen und Aktionen zur aktuellen Datei anzeigen", taskSearch: "Text suchen", taskSearchHelp: "Im aktuellen Dokument suchen",
     taskGoToDefinition: "Zur Definition springen", taskGoToDefinitionHelp: "Zur Funktion oder zum Typ am Cursor springen (F12)",
@@ -132,6 +134,8 @@ const messages = {
     taskSaveHelp: "Write the current changes", taskSaveAll: "Save all files", taskSaveAllHelp: "Write all changed files",
     taskFormat: "Format file", taskFormatHelp: "Format a Zelyra source file", taskCheck: "Check project",
     taskCheckHelp: "Show compiler diagnostics for the project", taskDatabase: "Open database", taskDatabaseHelp: "Inspect tables and relationships",
+    taskRun: "Run program", taskRunHelp: "Run main.zyl with Zelyra; configured database, network, and process effects are possible, and interactive input is unavailable",
+    runOutputTitle: "Program output", runStarting: "Running main.zyl …", runSuccess: "Program finished successfully", runFailure: "Program finished with an error", runTimeout: "Execution stopped after 15 seconds", runOutputTruncated: "Output is limited to 64 KiB per stream.", runNoOutput: "No output.", runStdout: "OUTPUT", runStderr: "ERROR", runInputUnavailable: "Studio does not provide interactive input to the program.",
     taskHelp: "Open contextual help", taskHelpHelp: "Show help for the term at the cursor", taskProperties: "Open file properties",
     taskPropertiesHelp: "Show information and actions for the active file", taskSearch: "Find text", taskSearchHelp: "Search in the active document",
     taskGoToDefinition: "Go to definition", taskGoToDefinitionHelp: "Go to the function or type at the cursor (F12)",
@@ -529,6 +533,7 @@ const studioTasks = [
   ["taskSaveAll", "taskSaveAllHelp", ["save", "all"], () => void saveAll()],
   ["taskFormat", "taskFormatHelp", ["format", "formatter"], () => void formatActive()],
   ["taskCheck", "taskCheckHelp", ["check", "compiler", "error", "diagnostic"], () => void checkProject()],
+  ["taskRun", "taskRunHelp", ["run", "execute", "start program"], () => void runProject()],
   ["taskDatabase", "taskDatabaseHelp", ["database", "table", "relation", "schema"], () => openDatabaseWorkbench()],
   ["taskHelp", "taskHelpHelp", ["help", "documentation", "f1"], () => toggleAssistant("help")],
   ["taskProperties", "taskPropertiesHelp", ["properties", "file", "settings"], () => toggleAssistant("properties")],
@@ -1342,6 +1347,36 @@ async function checkProject() {
   } catch (error) { announce(error.message, "error"); }
 }
 
+async function runProject() {
+  if (!(await saveAll())) return;
+  const dialog = $("run-output");
+  const state = $("run-output-state");
+  const output = $("run-output-content");
+  state.textContent = t("runStarting");
+  state.dataset.kind = "pending";
+  output.textContent = "";
+  if (!dialog.open) dialog.showModal();
+  announce(t("runStarting"));
+  try {
+    const result = await api("run", { method: "POST", body: JSON.stringify({ path: "main.zyl" }) });
+    const statusText = result.timedOut ? t("runTimeout") : result.success ? t("runSuccess") : t("runFailure");
+    state.textContent = `${statusText}${result.exitCode === null ? "" : ` · exit ${result.exitCode}`} · ${result.durationMs} ms`;
+    state.dataset.kind = result.success ? "success" : "error";
+    const streams = [
+      result.stdout && `${t("runStdout")}\n${result.stdout}`,
+      result.stderr && `${t("runStderr")}\n${result.stderr}`,
+    ].filter(Boolean).join("\n\n");
+    output.textContent = streams || t("runNoOutput");
+    output.textContent = `${output.textContent || t("runNoOutput")}\n\n${t("runInputUnavailable")}`;
+    if (result.truncated) output.textContent += `\n${t("runOutputTruncated")}`;
+    announce(statusText, result.success ? "success" : "error");
+  } catch (error) {
+    state.textContent = error.message;
+    state.dataset.kind = "error";
+    announce(error.message, "error");
+  }
+}
+
 async function formatActive() {
   if (!activePath) return;
   if (!(await savePath(activePath))) return;
@@ -1384,6 +1419,7 @@ $("task-finder-button").addEventListener("click", openTaskFinder);
 $("task-finder-close").addEventListener("click", () => $("task-finder").close());
 $("project-search-button").addEventListener("click", openProjectSearch);
 $("project-search-close").addEventListener("click", () => $("project-search").close());
+$("run-output-close").addEventListener("click", () => $("run-output").close());
 $("project-search-input").addEventListener("keydown", (event) => {
   if (event.key === "Enter") { event.preventDefault(); void performProjectSearch(); }
 });

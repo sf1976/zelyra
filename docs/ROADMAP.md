@@ -651,7 +651,9 @@ released 0.9.0.
   available for saved `.zyl` files. Occurrences are not scope-aware semantic
   references. Ctrl+Space also completes parameters and in-scope `let`, loop,
   and match bindings from valid unsaved source. Type inference and
-  symbol-level properties remain open.
+  symbol-level properties remain open. Studio can explicitly run `main.zyl`
+  with a 15-second timeout, bounded output, and redaction of recognized
+  environment and `.env` secrets. This remains an experimental local task.
 - [🗺️] Add compiler-backed completion, symbol navigation, find/references,
   formatting, actionable diagnostics updated while typing, and integrated
   check/run/test tasks. Show clear task progress and output without exposing

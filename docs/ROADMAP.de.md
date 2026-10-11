@@ -624,7 +624,10 @@ Auswirkungen und eine ausdrückliche Bestätigung. Die Roadmap staffelt diese Zi
   Vervollständigung und symbolbezogene Eigenschaften bleiben offen. Strg+Leertaste
   ergänzt zusätzlich Parameter sowie gültige, im aktuellen Block sichtbare
   `let`-, Schleifen- und Match-Bindungen aus ungespeichertem Quelltext. Typinferenz
-  bleibt offen.
+  bleibt offen. Der Aktionsfinder startet `main.zyl` nach ausdrücklicher Auswahl
+  mit 15-Sekunden-Limit, begrenzter Ausgabe und Ersetzung erkannter Geheimnisse
+  aus Prozessumgebung und `.env`. Die Ausführung bleibt ein experimenteller
+  lokaler IDE-Ablauf.
 - [🗺️] Compiler-gestützte Vervollständigung, Symbolnavigation, Suche/Referenzen,
   Formatierung, handlungsorientierte und während der Eingabe aktualisierte
   Diagnosen sowie integrierte Check-, Run- und Test-Aufgaben ergänzen.
