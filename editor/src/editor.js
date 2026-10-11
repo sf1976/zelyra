@@ -65,6 +65,7 @@ const messages = {
     taskFormat: "Datei formatieren", taskFormatHelp: "Zelyra-Quelldatei kanonisch formatieren", taskCheck: "Projekt prüfen",
     taskCheckHelp: "Compilerdiagnosen für das Projekt anzeigen", taskDatabase: "Datenbank öffnen", taskDatabaseHelp: "Tabellen und Beziehungen ansehen",
     taskRun: "Programm ausführen", taskRunHelp: "main.zyl mit Zelyras Laufzeit starten; konfigurierte Datenbank-, Netzwerk- und Prozesseffekte sind möglich, interaktive Eingabe fehlt",
+    runButton: "Starten", runButtonTitle: "main.zyl ausführen",
     runOutputTitle: "Programmausgabe", runStarting: "main.zyl wird ausgeführt …", runSuccess: "Programm erfolgreich beendet", runFailure: "Programm mit Fehler beendet", runTimeout: "Ausführung nach 15 Sekunden beendet", runOutputTruncated: "Die Ausgabe ist auf 64 KiB je Stream begrenzt.", runNoOutput: "Keine Ausgabe.", runStdout: "AUSGABE", runStderr: "FEHLER", runInputUnavailable: "Studio stellt dem Programm keine interaktive Eingabe bereit.",
     taskHelp: "Kontexthilfe öffnen", taskHelpHelp: "Hilfe zum Begriff am Cursor anzeigen", taskProperties: "Dateieigenschaften öffnen",
     taskPropertiesHelp: "Informationen und Aktionen zur aktuellen Datei anzeigen", taskSearch: "Text suchen", taskSearchHelp: "Im aktuellen Dokument suchen",
@@ -135,6 +136,7 @@ const messages = {
     taskFormat: "Format file", taskFormatHelp: "Format a Zelyra source file", taskCheck: "Check project",
     taskCheckHelp: "Show compiler diagnostics for the project", taskDatabase: "Open database", taskDatabaseHelp: "Inspect tables and relationships",
     taskRun: "Run program", taskRunHelp: "Run main.zyl with Zelyra; configured database, network, and process effects are possible, and interactive input is unavailable",
+    runButton: "Run", runButtonTitle: "Run main.zyl",
     runOutputTitle: "Program output", runStarting: "Running main.zyl …", runSuccess: "Program finished successfully", runFailure: "Program finished with an error", runTimeout: "Execution stopped after 15 seconds", runOutputTruncated: "Output is limited to 64 KiB per stream.", runNoOutput: "No output.", runStdout: "OUTPUT", runStderr: "ERROR", runInputUnavailable: "Studio does not provide interactive input to the program.",
     taskHelp: "Open contextual help", taskHelpHelp: "Show help for the term at the cursor", taskProperties: "Open file properties",
     taskPropertiesHelp: "Show information and actions for the active file", taskSearch: "Find text", taskSearchHelp: "Search in the active document",
@@ -1408,6 +1410,7 @@ $("rename-file-button").addEventListener("click", renameActiveFile);
 $("delete-file-button").addEventListener("click", deleteActiveFile);
 $("save-all-button").addEventListener("click", saveAll);
 $("check-button").addEventListener("click", checkProject);
+$("run-button").addEventListener("click", runProject);
 $("format-button").addEventListener("click", formatActive);
 $("database-button").addEventListener("click", openDatabaseWorkbench);
 $("assistant-toggle").addEventListener("click", () => toggleAssistant());
