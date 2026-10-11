@@ -16,13 +16,15 @@ pub fn load_state() -> Result<model::State, String>uses FileSystem {
         }
     }
 }
-pub fn save_state(state: model::State) uses FileSystem {
+pub fn save_state(state: model::State) -> Bool uses FileSystem {
     encoded = json_encode(state)
     match write_text_result("data/state.json", encoded) {
         Ok(_) => {
+            return true
         }
         Err(message) => {
             print("Speichern fehlgeschlagen: " + message)
+            return false
         }
     }
 }

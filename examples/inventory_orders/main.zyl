@@ -56,8 +56,13 @@ pub fn main() uses Console, FileSystem, Clock {
             }
         }
         if persistence_enabled {
-            storage::save_state(state)
+            persistence_enabled = storage::save_state(state)
         }
     }
-    print("Daten gespeichert. Auf Wiedersehen.")
+    if persistence_enabled {
+        print("Daten gespeichert. Auf Wiedersehen.")
+    }
+    else {
+        print("Sitzung beendet. Aenderungen konnten nicht gespeichert werden.")
+    }
 }
