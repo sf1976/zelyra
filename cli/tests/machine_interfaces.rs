@@ -282,6 +282,12 @@ fn command_help_explains_options_without_running_the_command() {
     assert!(database.status.success());
     assert!(String::from_utf8_lossy(&database.stdout).contains("zelyra db plan <datei.zyl>"));
 
+    let database_group = run(&["db", "--help"]);
+    assert!(database_group.status.success());
+    let database_help = String::from_utf8_lossy(&database_group.stdout);
+    assert!(database_help.contains("ZELYRA_DATABASE_<NAME>_URL"));
+    assert!(database_help.contains("DATABASE_URL"));
+
     let migrator = run(&["migrate", "laravel", "--help"]);
     assert!(migrator.status.success());
     let migrator_help = String::from_utf8_lossy(&migrator.stdout);
@@ -306,6 +312,16 @@ fn command_help_is_available_in_english() {
     let help = String::from_utf8_lossy(&output.stdout);
     assert!(help.contains("Command: zelyra fmt <file.zyl> [--check]"));
     assert!(help.contains("do not write changes"));
+
+    let database = Command::new(binary())
+        .args(["db", "--help"])
+        .env("ZELYRA_LANGUAGE", "en")
+        .output()
+        .expect("database help command should run");
+    assert!(database.status.success());
+    let database_help = String::from_utf8_lossy(&database.stdout);
+    assert!(database_help.contains("ZELYRA_DATABASE_<NAME>_URL"));
+    assert!(database_help.contains("DATABASE_URL"));
 }
 
 #[test]

@@ -84,6 +84,30 @@ fn help_text(command: &str, arguments: &[String], german: bool) -> Option<&'stat
 
 fn german_help(key: &str) -> &'static str {
     match key {
+        "db" => "Befehle: zelyra db <create|setup|bootstrap|inspect|map|plan|apply|history> <datei.zyl>
+
+Verwaltet das in Zelyra deklarierte Datenbankschema. `plan` zeigt Änderungen zuerst nur an; `apply` wendet einen geprüften Plan an.
+
+Datenbankverbindung:
+  ZELYRA_DATABASE_<NAME>_URL  Verbindung einer benannten Projektdatenbank, zum Beispiel ZELYRA_DATABASE_MAIN_URL
+  DATABASE_URL               Rückfallwert für Projekte mit nur einer Datenbank
+
+Beispiele:
+  zelyra db plan main.zyl
+  zelyra db plan main.zyl --format json
+  zelyra db apply main.zyl
+
+Die verfügbaren Operationen und ihre Grenzen:
+  create     Deklarierte Datenbank anlegen, sofern das Backend unterstützt wird
+  setup      Deklariertes Schema einrichten; vorher `plan` prüfen
+  bootstrap  Alias für `setup`
+  inspect    Vorhandene Datenbankstruktur lesen
+  map        Deklarierte und vorhandene Tabellen vergleichen
+  plan       Schemaänderungen vorschauen, ohne die Datenbank zu ändern
+  apply      Geprüften Schemaänderungsplan anwenden
+  history    Journalisierte MariaDB-Migrationen anzeigen
+
+Eine benannte Verbindung hat Vorrang vor `DATABASE_URL`. Zugangsdaten werden nicht in der Hilfe ausgegeben.",
         "fmt" => "Befehl: zelyra fmt <datei.zyl> [--check]\n\nFormatiert eine Zelyra-Datei kanonisch.\n  --check  Prüft, ob die Datei bereits formatiert ist; schreibt nichts.\n\nBeispiele:\n  zelyra fmt main.zyl\n  zelyra fmt src/rechnungen.zyl --check\n\nDatenbank: nicht erforderlich.",
         "init" => "Befehl: zelyra init [ordner] [Optionen]\n\nInitialisiert ein Zelyra-Projekt im angegebenen Ordner; ohne Ordner wird das aktuelle Verzeichnis verwendet.\n\nOptionen:\n  --mariadb                         MariaDB-Projekt mit lokalem Docker-Setup erstellen\n  --template minimal|mariadb-crud|mariadb-auth|mariadb-business\n                                    Projektvorlage auswählen\n  --web-port <port>                 Port im Webcontainer (Standard: 3000)\n  --host-port <port>                Lokaler Port der Webanwendung\n  --db-host-port <port>             Lokaler MariaDB-Port\n\nBeispiele:\n  zelyra init\n  zelyra init ./mein-projekt\n  zelyra init ./rechnung --mariadb --host-port 8080\n\nOhne `--mariadb` wird keine Datenbank eingerichtet.",
         "new" => "Befehl: zelyra new <ordner> [Optionen]\n\nErstellt ein neues Zelyra-Projekt aus einer Vorlage.\n\nOptionen:\n  --mariadb                         MariaDB-Projekt mit lokalem Docker-Setup erstellen\n  --template minimal|mariadb-crud|mariadb-auth|mariadb-business\n                                    Projektvorlage auswählen\n  --web-port <port>                 Port im Webcontainer (Standard: 3000)\n  --host-port <port>                Lokaler Port der Webanwendung\n  --db-host-port <port>             Lokaler MariaDB-Port\n\nBeispiele:\n  zelyra new ./kunden --template mariadb-crud\n  zelyra new ./rechnung --mariadb --host-port 8080\n\nOhne `--mariadb` wird keine Datenbank eingerichtet.",
@@ -145,6 +169,30 @@ fn common_german_help(key: &str) -> &'static str {
 
 fn english_help(key: &str) -> &'static str {
     match key {
+        "db" => "Commands: zelyra db <create|setup|bootstrap|inspect|map|plan|apply|history> <file.zyl>
+
+Manage the database schema declared by a Zelyra project. `plan` previews changes; `apply` applies a reviewed plan.
+
+Database connection:
+  ZELYRA_DATABASE_<NAME>_URL  Named project database connection, for example ZELYRA_DATABASE_MAIN_URL
+  DATABASE_URL               Fallback for projects with one database
+
+Examples:
+  zelyra db plan main.zyl
+  zelyra db plan main.zyl --format json
+  zelyra db apply main.zyl
+
+Available operations and their limits:
+  create     Create the declared database where the backend supports it
+  setup      Set up the declared schema; review `plan` first
+  bootstrap  Alias for `setup`
+  inspect    Read the existing database structure
+  map        Compare declared and live tables
+  plan       Preview schema changes without modifying the database
+  apply      Apply a reviewed schema change plan
+  history    Inspect journaled MariaDB migrations
+
+A named connection takes precedence over `DATABASE_URL`. Help never prints credentials.",
         "fmt" => "Command: zelyra fmt <file.zyl> [--check]\n\nFormat a Zelyra source file canonically.\n  --check  Check whether the file is formatted; do not write changes.\n\nExamples:\n  zelyra fmt main.zyl\n  zelyra fmt src/invoices.zyl --check\n\nNo database access required.",
         "init" => "Command: zelyra init [directory] [options]\n\nInitialize a Zelyra project in the given directory; defaults to the current directory.\n\nOptions:\n  --mariadb                         Create a MariaDB project with local Docker setup\n  --template minimal|mariadb-crud|mariadb-auth|mariadb-business\n                                    Select a project template\n  --web-port <port>                 Port inside the web container (default: 3000)\n  --host-port <port>                Local web application port\n  --db-host-port <port>             Local MariaDB port\n\nExamples:\n  zelyra init\n  zelyra init ./my-project\n  zelyra init ./invoice --mariadb --host-port 8080\n\nWithout `--mariadb`, no database is configured.",
         "new" => "Command: zelyra new <directory> [options]\n\nCreate a Zelyra project from a selected template.\n\nOptions:\n  --mariadb                         Create a MariaDB project with local Docker setup\n  --template minimal|mariadb-crud|mariadb-auth|mariadb-business\n                                    Select a project template\n  --web-port <port>                 Port inside the web container (default: 3000)\n  --host-port <port>                Local web application port\n  --db-host-port <port>             Local MariaDB port\n\nExamples:\n  zelyra new ./customers --template mariadb-crud\n  zelyra new ./invoice --mariadb --host-port 8080\n\nWithout `--mariadb`, no database is configured.",
