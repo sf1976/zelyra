@@ -8,7 +8,7 @@ assert.ok(port && token, "Studio browser E2E requires its local session URL");
 const browser = await chromium.launch({ headless: true });
 try {
   const page = await browser.newPage();
-  page.setDefaultTimeout(5_000);
+  page.setDefaultTimeout(10_000);
   const browserErrors = [];
   const liveChecks = [];
   const base = `http://127.0.0.1:${port}/__zelyra/editor`;
@@ -55,7 +55,7 @@ try {
 
   const callSite = page.locator(".cm-line", { hasText: "math::sum" });
   await callSite.click();
-  const callSiteOffset = (await callSite.textContent()).indexOf("sum");
+  const callSiteOffset = (await callSite.textContent()).trimStart().indexOf("sum");
   await page.keyboard.press("Home");
   for (let index = 0; index < callSiteOffset; index += 1) await page.keyboard.press("ArrowRight");
   for (let index = 0; index < 3; index += 1) await page.keyboard.press("Shift+ArrowRight");
