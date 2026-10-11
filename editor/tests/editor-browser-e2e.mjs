@@ -218,7 +218,9 @@ try {
   assert.equal(schemaApplyRequest.candidateHash, "reviewed-schema-preview");
   await page.locator("#language-button").click();
   await page.getByRole("heading", { name: "Browse records" }).waitFor();
+  await page.locator("#editor-stage").waitFor({ state: "hidden" });
   await page.locator("#code-button").click();
+  await page.locator("#editor-stage").waitFor({ state: "visible" });
 
   await page.locator('.tree-item.file[title="main.zyl"]').click();
   await page.waitForFunction(() => document.querySelector("#active-file")?.textContent === "main.zyl");
@@ -235,9 +237,11 @@ try {
   await page.locator("#assistant-help-tab").click();
   await page.locator("#run-button").click();
   await page.waitForFunction(() => document.querySelector("#run-output-state")?.dataset.kind === "success");
-  const runOutput = await page.locator("#run-output-content").textContent();
-  assert.match(runOutput, /3/, "Studio Run must execute main.zyl and display stdout");
-  assert.match(runOutput, /interactive input|interaktive Eingabe/i, "Studio must explain that stdin is unavailable");
+  const runState = await page.locator("#run-output-state").textContent();
+  const webUrl = await page.locator("#run-output-web-url").getAttribute("href");
+  assert.match(runState, /Web application is running locally|Webanwendung läuft lokal/);
+  assert.match(webUrl, /^http:\/\/127\.0\.0\.1:\d+$/);
+  await page.locator("#run-output-web-link").waitFor({ state: "visible" });
   await page.locator("#run-output-close").click();
 
   await editor.focus();
