@@ -312,6 +312,11 @@ fn invoice_tutorial_creates_a_checkable_project_without_overwriting() {
         String::from_utf8_lossy(&tutorial.stderr)
     );
     let source = fs::read_to_string(directory.join("main.zyl")).unwrap();
+    assert!(source.contains("import \"src/customers.zyl\" as customers"));
+    assert!(source.contains("import \"src/invoices.zyl\" as invoices"));
+    let feature_sources = ["customers", "items", "invoices", "dashboard"]
+        .map(|name| fs::read_to_string(directory.join(format!("src/{name}.zyl"))).unwrap())
+        .join("\n");
     for section in [
         "table customers",
         "table items",
@@ -320,13 +325,17 @@ fn invoice_tutorial_creates_a_checkable_project_without_overwriting() {
         "tableview InvoiceDashboard",
     ] {
         assert!(
-            source.contains(section),
+            feature_sources.contains(section),
             "tutorial source omitted {section}"
         );
     }
+    assert!(directory.join("src/database.zyl").is_file());
+    assert!(directory.join("src/shell.zyl").is_file());
+    assert!(feature_sources.contains("customers::Customer"));
     assert!(String::from_utf8_lossy(&tutorial.stdout).contains("zelyra setup --all"));
     assert!(String::from_utf8_lossy(&tutorial.stdout).contains("http://127.0.0.1:3000"));
-    assert!(source.contains("<html class=\"zelyra-app\">"));
+    let shell = fs::read_to_string(directory.join("src/shell.zyl")).unwrap();
+    assert!(shell.contains("<html class=\"zelyra-app\">"));
 
     let overwrite = run(&["--tutorial", "invoice", directory.to_str().unwrap()]);
     assert!(!overwrite.status.success());

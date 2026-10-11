@@ -1,0 +1,26 @@
+# Shared page layout. Each feature can use the same navigation and theme.
+pub view InvoiceTutorialShell {
+    html {
+        <!doctype html>
+        <html class="zelyra-app">
+            <head>
+                <meta charset="utf-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <title>Rechnungstutorial mit Zelyra</title>
+            </head>
+            <body>
+                <header>
+                    <h1>Rechnungsbüro</h1>
+                    <nav>
+                        <a href="/">Übersicht</a>
+                        <a href="/customers">Kunden</a>
+                        <a href="/items">Artikel</a>
+                        <a href="/invoices">Rechnungen</a>
+                        <a href="/invoice_lines">Positionen</a>
+                    </nav>
+                </header>
+                <main><slot /></main>
+            </body>
+        </html>
+    }
+}

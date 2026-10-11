@@ -34,6 +34,30 @@ Bereiche:
    auswählen und Menge sowie Netto-Stückpreis eintragen. Aus den Positionen
    berechnet die Rechnungsansicht Nettobetrag, 19% Umsatzsteuer und Brutto.
 
+## Projektaufbau: eine Aufgabe pro Datei
+
+Das Tutorial ist ein echtes Mehrdateienprojekt. `main.zyl` ist der Einstieg und
+bindet die Module mit `import` ein. Die fachlichen Bereiche liegen getrennt:
+
+~~~text
+invoice-tutorial/
+├── main.zyl                 Einstieg und Startseite
+├── zelyra.toml              Projekt- und Laufzeitkonfiguration
+├── zelyra.theme.css         Design-Anpassungen
+└── src/
+    ├── database.zyl         gemeinsame MariaDB-Deklaration
+    ├── shell.zyl            wiederverwendbares Seitenlayout
+    ├── customers.zyl        Kundenmodell, Tabelle und CRUD-Seiten
+    ├── items.zyl            Artikelmodell, Tabelle und CRUD-Seiten
+    ├── invoices.zyl         Rechnungen, Positionen und Druckansicht
+    └── dashboard.zyl        Summenabfrage und Rechnungsübersicht
+~~~
+
+So kann ein Einsteiger einzelne Teile lesen oder ändern, während Compiler und
+Runtime das gesamte importierte Projekt gemeinsam prüfen. `zelyra check
+main.zyl` und `zelyra routes main.zyl` starten im Projektordner am Einstieg;
+Studio zeigt dieselben Quelldateien im Projektbaum.
+
 Das responsiv gestaltete Theme umfasst Navigation, Formulare, Schaltflächen,
 Tabellen und eine eigene Druckansicht. Mit `zelyra editor invoice-tutorial`
 öffnest du Studio, um das Programm und seine Datenbankdeklarationen anzusehen

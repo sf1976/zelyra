@@ -1,7 +1,33 @@
 use super::*;
 
-const INVOICE_SOURCE: &str = include_str!("../../examples/invoice_tutorial.zyl");
+const INVOICE_SOURCE: &str = include_str!("../../examples/invoice_tutorial/main.zyl");
 const INVOICE_THEME: &str = include_str!("../../examples/invoice_tutorial.theme.css");
+const INVOICE_MODULES: &[(&str, &str)] = &[
+    (
+        "src/database.zyl",
+        include_str!("../../examples/invoice_tutorial/src/database.zyl"),
+    ),
+    (
+        "src/shell.zyl",
+        include_str!("../../examples/invoice_tutorial/src/shell.zyl"),
+    ),
+    (
+        "src/customers.zyl",
+        include_str!("../../examples/invoice_tutorial/src/customers.zyl"),
+    ),
+    (
+        "src/items.zyl",
+        include_str!("../../examples/invoice_tutorial/src/items.zyl"),
+    ),
+    (
+        "src/invoices.zyl",
+        include_str!("../../examples/invoice_tutorial/src/invoices.zyl"),
+    ),
+    (
+        "src/dashboard.zyl",
+        include_str!("../../examples/invoice_tutorial/src/dashboard.zyl"),
+    ),
+];
 
 pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     let Some(name) = arguments.next() else {
@@ -51,6 +77,25 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         );
         return ExitCode::FAILURE;
     }
+    for (relative_path, source) in INVOICE_MODULES {
+        let module_path = PathBuf::from(&directory).join(relative_path);
+        if let Some(parent) = module_path.parent() {
+            if let Err(error) = fs::create_dir_all(parent) {
+                eprintln!(
+                    "error[E-TUTORIAL-002]: could not create tutorial module directory `{}`: {error}",
+                    parent.display()
+                );
+                return ExitCode::FAILURE;
+            }
+        }
+        if let Err(error) = fs::write(&module_path, source) {
+            eprintln!(
+                "error[E-TUTORIAL-002]: could not write tutorial module `{}`: {error}",
+                module_path.display()
+            );
+            return ExitCode::FAILURE;
+        }
+    }
     let theme_path = PathBuf::from(&directory).join("zelyra.theme.css");
     if let Err(error) = fs::write(&theme_path, INVOICE_THEME) {
         eprintln!(
@@ -79,12 +124,19 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
                 "Invoice tutorial — setting up your local application now."
             }
         );
-        println!("\nFollow these five steps in `{}`:", main_path.display());
-        println!("  1. Customers: create and find customers at /customers.");
-        println!("  2. Items: maintain reusable products and prices at /items.");
-        println!("  3. Dashboard: review invoices at / and /views/invoicedashboard.");
-        println!("  4. Invoice: create a draft at /invoices and select its customer.");
-        println!("  5. Lines: add invoice items at /invoice_lines.");
+        println!("\nThis is a multi-file project. `main.zyl` connects the following parts:");
+        println!("  src/database.zyl   shared MariaDB connection");
+        println!("  src/shell.zyl      shared page layout and navigation");
+        println!("  src/customers.zyl  customer table, form, and list");
+        println!("  src/items.zyl      item table, form, and list");
+        println!("  src/invoices.zyl   invoices, line items, relations, and printable invoice");
+        println!("  src/dashboard.zyl  invoice totals and dashboard");
+        println!("\nFollow the workflow in the running app:");
+        println!("  1. Customers: create and find customers at /customers (`src/customers.zyl`).");
+        println!("  2. Items: maintain reusable products and prices at /items (`src/items.zyl`).");
+        println!("  3. Dashboard: review invoices at / and /views/invoicedashboard (`src/dashboard.zyl`).");
+        println!("  4. Invoice: create a draft at /invoices and select its customer (`src/invoices.zyl`).");
+        println!("  5. Lines: add invoice items at /invoice_lines (`src/invoices.zyl`).");
         if no_start {
             println!("\nAutomatic startup was skipped. To start the database, apply the schema, and launch the app, run:");
             println!("  cd {directory} && zelyra setup --all");
@@ -118,15 +170,19 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
                 "Rechnungstutorial — deine lokale Anwendung wird jetzt eingerichtet."
             }
         );
-        println!(
-            "\nArbeite diese fünf Schritte in `{}` durch:",
-            main_path.display()
-        );
-        println!("  1. Kunden: unter /customers erfassen und suchen.");
-        println!("  2. Artikel: Produkte und Preise unter /items pflegen.");
-        println!("  3. Dashboard: Rechnungen unter / und /views/invoicedashboard ansehen.");
-        println!("  4. Rechnung: unter /invoices einen Entwurf anlegen und Kunden auswählen.");
-        println!("  5. Positionen: unter /invoice_lines Artikel zur Rechnung hinzufügen.");
+        println!("\nDas Projekt besteht aus mehreren Dateien. `main.zyl` verbindet diese Teile:");
+        println!("  src/database.zyl   gemeinsame MariaDB-Datenbank");
+        println!("  src/shell.zyl      gemeinsames Seitenlayout und Navigation");
+        println!("  src/customers.zyl  Kundentabelle, Formular und Liste");
+        println!("  src/items.zyl      Artikeltabelle, Formular und Liste");
+        println!("  src/invoices.zyl   Rechnungen, Positionen, Beziehungen und Druckansicht");
+        println!("  src/dashboard.zyl  Rechnungssummen und Dashboard");
+        println!("\nGehe den Ablauf in der Anwendung durch:");
+        println!("  1. Kunden: unter /customers erfassen und suchen (`src/customers.zyl`).");
+        println!("  2. Artikel: Produkte und Preise unter /items pflegen (`src/items.zyl`).");
+        println!("  3. Dashboard: Rechnungen unter / und /views/invoicedashboard ansehen (`src/dashboard.zyl`).");
+        println!("  4. Rechnung: unter /invoices einen Entwurf anlegen und Kunden auswählen (`src/invoices.zyl`).");
+        println!("  5. Positionen: unter /invoice_lines Artikel zur Rechnung hinzufügen (`src/invoices.zyl`).");
         if no_start {
             println!("\nAutomatischer Start übersprungen. Mit diesem Befehl startest du Datenbank und Anwendung und richtest das Schema ein:");
             println!("  cd {directory} && zelyra setup --all");

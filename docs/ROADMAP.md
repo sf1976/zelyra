@@ -692,8 +692,10 @@ its source evidence and reason.
   **Run** action executes console programs and starts a local preview for web
   projects with a clickable address. A new preview replaces the prior one and
   Studio stops the active preview when it closes; **Stop preview** ends it
-  immediately. Databases still start explicitly and separately. CI evidence for
-  the new Studio web workflow is still pending.
+  immediately. Databases still start explicitly and separately. The tutorial
+  is generated as a real imported multi-file project with separate database,
+  customer, item, invoice, layout, and dashboard modules. CI evidence for the
+  new Studio web workflow is still pending.
 - [🧪] Expand CLI help: `zelyra <command> --help` and nested calls such as
   `zelyra db plan --help` explain purpose, options, examples, and prerequisites
   in German or English without running the command.

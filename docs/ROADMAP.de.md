@@ -679,8 +679,10 @@ manuell umzusetzen.
   bei Webprojekten eine lokale Vorschau mit anklickbarer Adresse. Der Start
   beendet eine vorherige Vorschau und Studio beendet die aktive Vorschau beim
   Schließen; **Vorschau beenden** stoppt sie sofort. Datenbanken werden weiterhin
-  ausdrücklich separat gestartet. CI-Nachweis für den neuen Studio-Webablauf
-  steht noch aus.
+  ausdrücklich separat gestartet. Das Tutorial wird als echtes importiertes
+  Mehrdateienprojekt mit eigenem Datenbank-, Kunden-, Artikel-, Rechnungs-,
+  Layout- und Dashboard-Modul erzeugt. CI-Nachweis für den neuen Studio-
+  Webablauf steht noch aus.
 - [🧪] Die CLI-Hilfe ausbauen: `zelyra <befehl> --help` und verschachtelte
   Aufrufe wie `zelyra db plan --help` erklären Zweck, Optionen, Beispiele und
   Voraussetzungen in Deutsch oder Englisch, ohne den Befehl auszuführen.

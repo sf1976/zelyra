@@ -1,0 +1,39 @@
+import "src/database.zyl" as storage
+import "src/customers.zyl" as customers
+import "src/items.zyl" as items
+import "src/invoices.zyl" as invoices
+import "src/shell.zyl" as shell
+
+struct InvoiceDashboardRow {
+    id: Id
+    invoice_number: String
+    customer_name: String
+    status: String?
+    net_total: Decimal
+    tax_amount: Decimal
+    gross_total: Decimal
+}
+
+tableview InvoiceDashboard {
+    source sql<InvoiceDashboardRow[]> {
+        SELECT
+            invoices.id,
+            invoices.invoice_number,
+            customers.name AS customer_name,
+            invoices.status,
+            ROUND(COALESCE(SUM(invoice_lines.quantity * invoice_lines.unit_price), 0), 2) AS net_total,
+            ROUND(COALESCE(SUM(invoice_lines.quantity * invoice_lines.unit_price), 0) * 0.19, 2) AS tax_amount,
+            ROUND(COALESCE(SUM(invoice_lines.quantity * invoice_lines.unit_price), 0) + COALESCE(SUM(invoice_lines.quantity * invoice_lines.unit_price), 0) * 0.19, 2) AS gross_total
+        FROM invoices
+        JOIN customers ON customers.id = invoices.customer_id
+        LEFT JOIN invoice_lines ON invoice_lines.invoice_id = invoices.id
+        GROUP BY invoices.id, invoices.invoice_number, customers.name, invoices.status
+    }
+    columns {
+        id invoice_number customer_name status net_total tax_amount gross_total
+    }
+    filter { status }
+    searchable
+    sortable
+    paginated 20
+}
