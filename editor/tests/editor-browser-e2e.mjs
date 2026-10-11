@@ -35,6 +35,7 @@ try {
   await editor.focus();
   await page.keyboard.press("F1");
   await page.locator("#studio-assistant:not([hidden])").waitFor();
+  await page.locator("#assistant-help-details").getByText(/Optionen|Options/).waitFor();
   await page.locator("#assistant-properties-tab").click();
   await page.getByRole("heading", { name: "main.zyl" }).waitFor();
   await page.locator("#assistant-help-tab").click();

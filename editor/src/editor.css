@@ -91,6 +91,7 @@ button { cursor: pointer; }
 .assistant-view p { color: var(--muted); font-size: 11px; line-height: 1.55; }
 .assistant-view pre { overflow: auto; padding: 9px; border: 1px solid var(--border); border-radius: 6px; color: var(--token-type); background: var(--editor-bg); font: 10px/1.6 ui-monospace, monospace; white-space: pre-wrap; }
 .assistant-view #assistant-help-details > strong { display: block; margin-top: 15px; color: var(--faint); font: 700 9px ui-monospace, monospace; text-transform: uppercase; }
+.assistant-view #assistant-help-details ul { display: grid; gap: 5px; margin: 7px 0 0; padding-left: 17px; color: var(--muted); font-size: 10px; line-height: 1.45; }
 .assistant-view #assistant-help-details p { margin-bottom: 0; }
 .assistant-view dl { margin: 18px 0 0; }
 .assistant-view dt { margin-top: 12px; color: var(--faint); font-size: 9px; text-transform: uppercase; }

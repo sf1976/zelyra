@@ -215,6 +215,13 @@ const languageHelp = {
   requires: ["Vorbedingung", "Beschreibt, was vor einem Funktionsaufruf gelten muss.", "requires betrag >= 0", "Vorbedingungen werden bei der Projektprüfung berücksichtigt."],
   ensures: ["Nachbedingung", "Beschreibt eine Garantie nach erfolgreicher Ausführung.", "ensures result >= 0", "Hilft, Absichten für Menschen und Werkzeuge sichtbar zu machen."],
   invariant: ["Invariante", "Formuliert eine Bedingung, die dauerhaft gelten soll.", "invariant saldo >= 0", "Geeignet für wichtige Regeln eines Datenmodells."],
+  api: ["API-Endpunkt", "Deklariert einen typisierten HTTP-Endpunkt mit Anfrage und Antwort.", "api GET \"/customers/{id}\" { handler get_customer }", "Der Compiler prüft Eingaben, Ausgaben und Handler."],
+  page: ["Webseite", "Verknüpft einen URL-Pfad mit einer HTML-Ansicht.", "page \"/hello/{name}\" { html { … } }", "Routenparameter werden im Seiteninhalt verfügbar."],
+  database: ["Datenbankverbindung", "Deklariert das Datenbank-Backend und den logischen Verbindungsnamen.", "database main { engine: mariadb }", "Die Zugangsdaten kommen aus der Prozessumgebung, nicht aus dem Quelltext."],
+  tableview: ["Abfrageansicht", "Stellt ausgewählte Abfrageergebnisse als typisierte Ansicht bereit.", "tableview Customers { source sql<Customer[]> { … } }", "Die Datenabfrage und ihr Ergebnistyp werden geprüft."],
+  auth: ["Authentifizierung", "Legt die Tabellen und Routen der Anmeldung und Berechtigungsverwaltung fest.", "auth users { table: users sessions: auth_sessions }", "Authentifizierungszugriff und Tabellen müssen zusammenpassen."],
+  uses: ["Capability-Anforderung", "Deklariert, welche Laufzeitfähigkeit eine Funktion verwenden darf.", "fn main() uses Console { … }", "Auch eine Projektfreigabe kann erforderlich sein."],
+  capability: ["Explizite Laufzeitfähigkeit", "Begrenzt, welche externen Aktionen ein Projekt ausführen darf.", "[capabilities]\nconsole = true", "Eine Freigabe im Projekt hebt keine Aufrufregeln des Compilers auf."],
 };
 const languageHelpEn = {
   fn: ["function", "Defines a named, reusable operation.", "fn greet(name: Text) -> Text", "return \"Hello \" + name"],
@@ -235,6 +242,43 @@ const languageHelpEn = {
   requires: ["precondition", "States what must be true before a function call.", "requires amount >= 0", "Preconditions are included in project checks."],
   ensures: ["postcondition", "States a guarantee after successful execution.", "ensures result >= 0", "Makes intended outcomes clear to people and tools."],
   invariant: ["invariant", "States a condition that should remain true.", "invariant balance >= 0", "Useful for important rules in a data model."],
+  api: ["API endpoint", "Declares a typed HTTP endpoint with a request and response.", "api GET \"/customers/{id}\" { handler get_customer }", "The compiler checks inputs, outputs, and the handler."],
+  page: ["web page", "Connects a URL path to an HTML view.", "page \"/hello/{name}\" { html { … } }", "Route parameters are available inside the page content."],
+  database: ["database connection", "Declares the backend and logical connection name.", "database main { engine: mariadb }", "Credentials come from the process environment, not source code."],
+  tableview: ["query view", "Presents selected query results as a typed view.", "tableview Customers { source sql<Customer[]> { … } }", "The query and its result type are checked."],
+  auth: ["authentication", "Declares the tables and routes for sign-in and permission management.", "auth users { table: users sessions: auth_sessions }", "Authentication access and tables must agree."],
+  uses: ["capability requirement", "Declares which runtime capability a function may use.", "fn main() uses Console { … }", "The project may also need to grant that capability."],
+  capability: ["explicit runtime capability", "Limits which external actions a project can perform.", "[capabilities]\nconsole = true", "A project grant does not remove compiler call rules."],
+};
+const languageOptions = {
+  de: {
+    fn: ["Parameter mit Typ", "Rückgabetyp", "uses Capability", "requires Vorbedingung", "ensures Nachbedingung"],
+    table: ["typisierte Felder", "required", "unique", "primary auto", "default Wert", "index { Feld }"],
+    form: ["fields { Feldnamen }", "field Name: Typ", "label", "required", "max", "widget"],
+    crud: ["title", "view { fields { … } }", "list", "detail", "create_form", "edit_form"],
+    route: ["HTTP-Methode und Pfad", "handler Funktionsname", "input", "output", "errors"],
+    api: ["HTTP-Methode und Pfad", "handler", "input", "output", "errors", "version", "rate_limit"],
+    database: ["engine: mariadb | mysql | postgres | sqlite", "database: Name"],
+    page: ["HTML-Inhalt in html { … }", "Routenparameter im Seiteninhalt"],
+    tableview: ["source sql<Typ> { … }", "strukturierte Feldauswahl"],
+    auth: ["table", "sessions", "permissions", "roles", "admin_path"],
+    uses: ["explizite Capabilitys, z. B. Database oder Console"],
+    capability: ["Projektfreigabe in [capabilities] der zelyra.toml"],
+  },
+  en: {
+    fn: ["typed parameters", "return type", "uses capability", "requires precondition", "ensures postcondition"],
+    table: ["typed fields", "required", "unique", "primary auto", "default value", "index { field }"],
+    form: ["fields { field names }", "field Name: Type", "label", "required", "max", "widget"],
+    crud: ["title", "view { fields { … } }", "list", "detail", "create_form", "edit_form"],
+    route: ["HTTP method and path", "handler function name", "input", "output", "errors"],
+    api: ["HTTP method and path", "handler", "input", "output", "errors", "version", "rate_limit"],
+    database: ["engine: mariadb | mysql | postgres | sqlite", "database: name"],
+    page: ["HTML content inside html { … }", "route parameters in page content"],
+    tableview: ["source sql<Type> { … }", "structured field selection"],
+    auth: ["table", "sessions", "permissions", "roles", "admin_path"],
+    uses: ["explicit capabilities, for example Database or Console"],
+    capability: ["project grant in [capabilities] in zelyra.toml"],
+  },
 };
 const zelyraLanguage = StreamLanguage.define({
   startState: () => ({ inBlockComment: false }),
@@ -365,7 +409,15 @@ function renderContextHelp(state, path) {
   const syntax = document.createElement("pre"); syntax.textContent = help[2];
   const exampleTitle = document.createElement("strong"); exampleTitle.textContent = language === "de" ? "Hinweis" : "Tip";
   const example = document.createElement("p"); example.textContent = help[3];
-  details.append(syntaxTitle, syntax, exampleTitle, example);
+  details.append(syntaxTitle, syntax);
+  const options = languageOptions[language][word];
+  if (options?.length) {
+    const optionsTitle = document.createElement("strong"); optionsTitle.textContent = language === "de" ? "Optionen" : "Options";
+    const list = document.createElement("ul");
+    for (const option of options) { const item = document.createElement("li"); item.textContent = option; list.append(item); }
+    details.append(optionsTitle, list);
+  }
+  details.append(exampleTitle, example);
 }
 
 function renderFileProperties(path) {
