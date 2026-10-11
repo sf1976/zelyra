@@ -1650,7 +1650,8 @@ window.addEventListener("beforeunload", (event) => {
   if (dirtyCount()) { event.preventDefault(); event.returnValue = ""; }
 });
 window.addEventListener("keydown", (event) => {
-  if (!event.defaultPrevented && (event.ctrlKey || event.metaKey) && event.code === "Space" && editor) {
+  if (event.defaultPrevented) return;
+  if ((event.ctrlKey || event.metaKey) && event.code === "Space" && editor) {
     event.preventDefault();
     startCompletion(editor);
   }
