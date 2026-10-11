@@ -69,6 +69,18 @@ pub fn calculate_order(subtotal_cents: Int, discount_percent: Int) -> Int[] {
     tax_cents = (taxable_cents * 19 + 50) / 100
     return[subtotal_cents, discount_cents, tax_cents, taxable_cents + tax_cents]
 }
+pub fn max_article_price_cents() -> Int {
+    return 100000000
+}
+pub fn max_stock() -> Int {
+    return 1000000
+}
+pub fn max_order_lines() -> Int {
+    return 50
+}
+pub fn valid_article_values(price_cents: Int, stock: Int) -> Bool {
+    return price_cents >= 0 && price_cents <= max_article_price_cents() && stock >= 0 && stock <= max_stock()
+}
 pub fn enough_stock(available: Int, requested: Int) -> Bool {
-    return requested > 0 && available >= requested
+    return available >= 0 && available <= max_stock() && requested > 0 && requested <= max_stock() && available >= requested
 }

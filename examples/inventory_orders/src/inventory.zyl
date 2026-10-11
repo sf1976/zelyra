@@ -88,8 +88,8 @@ pub fn edit_values(state: model::State, number: Int, article_name: String, price
         Some(price) => {
             match model::parse_int(stock_raw) {
                 Some(stock) => {
-                    if price < 0 || stock < 0 || article_name == "" || article_category == "" {
-                        print("Preis und Bestand muessen >= 0 sein; Textfelder duerfen nicht leer sein.") return state
+                    if!model::valid_article_values(price, stock) || article_name == "" || article_category == "" {
+                        print("Preis muss 0 bis 100000000 Cent und Bestand 0 bis 1000000 betragen; Textfelder duerfen nicht leer sein.") return state
                     }
                     mutable articles: model::Article[] = []
                     for article in state.articles {
@@ -222,8 +222,8 @@ pub fn add_values(state: model::State, number_raw: String, article_name: String,
                 Some(price) => {
                     match model::parse_int(stock_raw) {
                         Some(stock) => {
-                            if number <= 0 || price < 0 || stock < 0 || article_name == "" || article_category == "" {
-                                print("Eingaben ungueltig: Nummer > 0, Preis und Bestand >= 0, Textfelder nicht leer.") return state
+                            if number <= 0 ||!model::valid_article_values(price, stock) || article_name == "" || article_category == "" {
+                                print("Eingaben ungueltig: Nummer > 0, Preis 0 bis 100000000 Cent, Bestand 0 bis 1000000, Textfelder nicht leer.") return state
                             }
                             if find(state.articles, number) {
                                 print("Diese Artikelnummer ist bereits vergeben.") return state

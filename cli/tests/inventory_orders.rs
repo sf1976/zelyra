@@ -70,7 +70,7 @@ fn inventory_orders_example_checks_tests_and_persists_cancelled_orders() {
     assert!(test_output.contains("PASS Preisberechnung"));
     assert!(test_output.contains("PASS Bestandspruefung"));
     assert!(test_output.contains("PASS Stornierung"));
-    assert!(test_output.contains("\n3\n0\n"));
+    assert!(test_output.contains("\n4\n0\n"));
 
     let mut application = Command::new(binary())
         .args(["run", "main.zyl"])
@@ -96,7 +96,9 @@ fn inventory_orders_example_checks_tests_and_persists_cancelled_orders() {
     );
     let output_text = String::from_utf8_lossy(&output.stdout);
     assert!(output_text.contains("Bestellung storniert; Waren wurden wieder eingelagert."));
-    assert!(output_text.contains("Artikel ist in einer Bestellung referenziert und bleibt erhalten."));
+    assert!(
+        output_text.contains("Artikel ist in einer Bestellung referenziert und bleibt erhalten.")
+    );
     assert!(output_text.contains('T') && output_text.contains('Z'));
     assert!(output_text.contains("Umsatz in Cent:\n0"));
 

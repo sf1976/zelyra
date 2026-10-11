@@ -46,20 +46,30 @@ pub fn create(state: model::State) -> model::State uses Console, Clock {
                                                         }
                                                         match found {
                                                             Some(article) => {
-                                                                if!model::enough_stock(article.stock, quantity) {
-                                                                    print("Nicht genug Lagerbestand oder Menge ungueltig.")
+                                                                if!model::valid_article_values(article.price_cents, article.stock) {
+                                                                    print("Artikelpreis oder Bestand liegt ausserhalb des erlaubten Bereichs.")
                                                                 }
                                                                 else {
-                                                                    if has_line(lines, number) {
-                                                                        print("Artikelnummer bereits in der Bestellung; Menge bitte in einer Position zusammenfassen.")
+                                                                    if!model::enough_stock(article.stock, quantity) {
+                                                                        print("Nicht genug Lagerbestand oder Menge ungueltig.")
                                                                     }
                                                                     else {
-                                                                        lines = append(lines, model::OrderLine {
-                                                                            article_number: number, article_name: article.name, quantity: quantity, unit_price_cents: article.price_cents
+                                                                        if has_line(lines, number) {
+                                                                            print("Artikelnummer bereits in der Bestellung; Menge bitte in einer Position zusammenfassen.")
                                                                         }
-                                                                        )
-                                                                        subtotal = subtotal + article.price_cents * quantity
-                                                                        print("Position aufgenommen. Zwischensumme Cent:") print(subtotal)
+                                                                        else {
+                                                                            if len(lines) >= model::max_order_lines() {
+                                                                                print("Eine Bestellung darf hoechstens 50 verschiedene Artikel enthalten.")
+                                                                            }
+                                                                            else {
+                                                                                lines = append(lines, model::OrderLine {
+                                                                                    article_number: number, article_name: article.name, quantity: quantity, unit_price_cents: article.price_cents
+                                                                                }
+                                                                                )
+                                                                                subtotal = subtotal + article.price_cents * quantity
+                                                                                print("Position aufgenommen. Zwischensumme Cent:") print(subtotal)
+                                                                            }
+                                                                        }
                                                                     }
                                                                 }
                                                             }

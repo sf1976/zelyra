@@ -16,6 +16,12 @@ pub fn run() uses Clock {
     else {
         print("FAIL Bestandspruefung") failed = failed + 1
     }
+    if model::valid_article_values(0, 0) && model::valid_article_values(100000000, 1000000) &&!model::valid_article_values(100000001, 0) &&!model::valid_article_values(0, 1000001) && model::max_order_lines() == 50 {
+        print("PASS Eingabegrenzen: Preis, Bestand und Bestellpositionen") passed = passed + 1
+    }
+    else {
+        print("FAIL Eingabegrenzen") failed = failed + 1
+    }
     article = model::Article {
         number: 7, name: "Testartikel", price_cents: 250, stock: 2, category: "Test"
     }

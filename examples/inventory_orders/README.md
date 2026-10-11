@@ -21,6 +21,8 @@ Die Daten stehen in `data/state.json`. Die Projektkonfiguration erlaubt Lesezugr
 
 Geldbetraege werden als ganzzahlige Cent eingegeben und gespeichert. So vermeidet das Beispiel Rundungsfehler durch binaere Gleitkommazahlen. Die Steuer betraegt 19%; der Rabatt wird vor der Steuer abgezogen. Im Bericht zaehlen nur offene Bestellungen als Umsatz.
 
+Zum Schutz der Ganzzahlberechnung sind Artikelpreise auf 1.000.000,00 EUR, Lagerbestaende auf 1.000.000 Stueck und Bestellungen auf 50 verschiedene Positionen begrenzt. Mengen koennen den verfuegbaren Bestand nicht ueberschreiten.
+
 Die Konsolenmenues bieten Artikelerfassung/Bearbeitung/Suche/Loeschung, Sortierung nach Name/Preis/Bestand und Filter, Kundenanlage/Bearbeitung/Suche/Loeschung, mehrteilige Bestellungen und Stornierung. Bestellpositionen speichern den damaligen Artikelpreis. Eine Stornierung lagert Positionen genau einmal wieder ein. Artikel mit Bestellreferenz sowie Kunden mit Bestellungen lassen sich nicht loeschen.
 
 ## Tests
