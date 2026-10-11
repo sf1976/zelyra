@@ -1646,6 +1646,45 @@ records, nested records, arrays, options, and scalar values. `json_encode`
 serializes the same value families. Malformed JSON, type mismatches, unknown
 record fields, and missing required fields are explicit runtime errors.
 
+The 0.9.3 development branch adds nested array types such as `String[][]` and
+typed CSV and fixed-point APIs for delimited text files:
+
+~~~zelyra
+fn parse_catalog(text: String) -> Result<String[][], String> {
+    return csv_decode_result(text, ';')
+}
+
+fn read_price(text: String) -> Result<Int, String> {
+    return decimal_scaled_result(text, 2)
+}
+~~~
+
+`csv_decode_result(text, delimiter)` returns each CSV row as `String[]` and
+preserves distinct columns, doubled quotes, UTF-8, LF/CRLF, and newlines inside
+quoted fields. A UTF-8 BOM at the start of a file is accepted. Unclosed quotes,
+quotes in unquoted fields, characters after a closing quote, and lone CR
+characters outside a quoted field return `Err(String)`. An empty file returns
+an empty row list; the application is responsible for checking headers and
+field counts.
+
+`csv_encode(rows, delimiter)` quotes delimiters, quotes, and line breaks, and
+doubles quotes inside quoted fields. Both CSV functions return `Result` so an
+invalid delimiter is reported as data rather than hidden. They process the
+whole text in memory and are not streaming APIs.
+
+For exact money calculations, keep amounts as integer units such as cents.
+`decimal_scaled_result(text, scale)` converts decimal text to a scaled `Int`
+without binary floating point. It accepts either a period or comma as the one
+decimal separator and at most `scale` fractional digits.
+`format_scaled_result(value, scale)` returns a fixed decimal representation for
+export. Both functions accept scales from 0 through 9 and return `Err(String)`
+for invalid text, excess precision, or overflow. The application checks domain
+rules such as nonnegative prices after conversion.
+
+The complete `examples/csv_catalog` project creates a UTF-8 file, imports and
+validates articles, exports valid rows and errors separately, and tests the
+export/import round trip.
+
 For a complete typed JSON request/response flow, use `http_json` with separate
 request and response type arguments:
 

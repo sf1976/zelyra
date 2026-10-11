@@ -1,0 +1,120 @@
+import "src/model.zyl" as model
+import "src/validation.zyl" as validation
+pub fn expected_header() -> String[] {
+    return["Artikelnummer", "Name", "Kategorie", "Preis", "Lagerbestand", "Aktiv"]
+}
+pub fn import_file(path: String) -> Result<model::ImportSummary, String>uses FileSystem {
+    match read_text_result(path) {
+        Ok(contents) => {
+            return import_text(contents)
+        }
+        Err(message) => {
+            return Err("Datei konnte nicht gelesen werden: " + message)
+        }
+    }
+}
+pub fn import_text(contents: String) -> Result<model::ImportSummary, String> {
+    if contents == "" {
+        return Err("CSV-Datei ist leer.")
+    }
+    match csv_decode_result(contents, ';') {
+        Ok(rows) => {
+            if len(rows) == 0 {
+                return Err("CSV-Datei ist leer.")
+            }
+            if rows[0] != expected_header() {
+                return Err("CSV-Kopfzeile stimmt nicht. Erwartet werden Artikelnummer;Name;Kategorie;Preis;Lagerbestand;Aktiv.")
+            }
+            if len(rows) > 10001 {
+                return Err("CSV-Datei ueberschreitet das Limit von 10000 Datensaetzen.")
+            }
+            mutable articles: model::Article[] = []
+            mutable issues: model::ImportIssue[] = []
+            mutable records_read = 0
+            mutable valid_count = 0
+            mutable invalid_count = 0
+            mutable total_stock = 0
+            mutable total_value_cents = 0
+            mutable header = true
+            mutable record_number = 0
+            for row in rows {
+                if header {
+                    header = false
+                }
+                else {
+                    record_number = record_number + 1
+                    records_read = records_read + 1
+                    checked = validation::check_row(row, record_number, articles)
+                    if checked.valid {
+                        mutable overflow_issues: model::ImportIssue[] = []
+                        mutable article_value = 0
+                        if checked.article.stock > 0 {
+                            if checked.article.price_cents > 9000000000000000000 / checked.article.stock {
+                                overflow_issues = model::add_issue(overflow_issues, record_number, "Lagerwert", "Preis mal Bestand ueberschreitet den sicher auswertbaren Ganzzahlbereich")
+                            }
+                            else {
+                                article_value = checked.article.price_cents * checked.article.stock
+                            }
+                        }
+                        if total_stock > 9000000000000000000 - checked.article.stock {
+                            overflow_issues = model::add_issue(overflow_issues, record_number, "Lagerbestand", "Gesamtbestand ueberschreitet den sicher auswertbaren Ganzzahlbereich")
+                        }
+                        if len(overflow_issues) == 0 && total_value_cents > 9000000000000000000 - article_value {
+                            overflow_issues = model::add_issue(overflow_issues, record_number, "Lagerwert", "Gesamter Lagerwert ueberschreitet den sicher auswertbaren Ganzzahlbereich")
+                        }
+                        if len(overflow_issues) == 0 {
+                            articles = append(articles, checked.article)
+                            valid_count = valid_count + 1
+                            total_stock = total_stock + checked.article.stock
+                            total_value_cents = total_value_cents + article_value
+                        }
+                        else {
+                            invalid_count = invalid_count + 1
+                            for issue in overflow_issues {
+                                issues = append(issues, issue)
+                            }
+                        }
+                    }
+                    else {
+                        invalid_count = invalid_count + 1
+                        for issue in checked.issues {
+                            issues = append(issues, issue)
+                        }
+                    }
+                }
+            }
+            summary = model::ImportSummary {
+                articles: sort_articles(articles),
+                issues: issues,
+                records_read: records_read,
+                valid_count: valid_count,
+                invalid_count: invalid_count,
+                total_stock: total_stock,
+                total_value_cents: total_value_cents,
+            }
+            return Ok(summary)
+        }
+        Err(message) => {
+            return Err("CSV-Struktur ist beschaedigt: " + message)
+        }
+    }
+}
+pub fn sort_articles(articles: model::Article[]) -> model::Article[] {
+    mutable sorted: model::Article[] = []
+    for article in articles {
+        mutable inserted = false
+        mutable next: model::Article[] = []
+        for current in sorted {
+            if!inserted && article.number < current.number {
+                next = append(next, article)
+                inserted = true
+            }
+            next = append(next, current)
+        }
+        if!inserted {
+            next = append(next, article)
+        }
+        sorted = next
+    }
+    return sorted
+}

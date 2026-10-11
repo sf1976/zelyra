@@ -672,6 +672,14 @@ manuell umzusetzen.
 
 ## Release 0.9.3 — Datenbankwerkbank
 
+- [✅] CSV-Grundlagen für Import und Export ergänzen: `String[][]` als
+  verschachtelten Typ parsen, zitierte Trennzeichen/Quotes/Zeilenumbrüche
+  korrekt decodieren und encodieren sowie Dezimaltexte ohne Float exakt in
+  skalierte Integer umwandeln. Das Beispiel `examples/csv_catalog` erstellt
+  Quelldaten, validiert Felder, protokolliert Fehler, sortiert/exportiert
+  gültige Datensätze und prüft den Roundtrip automatisiert. CSV wird als
+  vollständiger UTF-8-Text im Speicher verarbeitet, nicht gestreamt.
+
 - [🧪] Den im 0.9.2-Rechnungstutorial gefundenen Startfehler beheben: Das
   deklarative Weblayout muss das Projekt-Theme laden; die CLI zeigt die lokale
   Browseradresse schon beim Anlegen und behält sie auch bei fehlgeschlagenem

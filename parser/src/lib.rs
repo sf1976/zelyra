@@ -2072,7 +2072,7 @@ impl<'a> Parser<'a> {
             self.advance();
             ty = Type::Option(Box::new(ty));
         }
-        if self.at(&TokenKind::LBracket) {
+        while self.at(&TokenKind::LBracket) {
             self.advance();
             self.expect(TokenKind::RBracket, "`]` after array type")?;
             ty = Type::Array(Box::new(ty));
@@ -2666,6 +2666,18 @@ mod tests {
         let program = parse(&lex("fn main() { print(1 + 2 * 3) }").unwrap()).unwrap();
         assert_eq!(program.functions.len(), 1);
         assert_eq!(program.functions[0].name, "main");
+    }
+    #[test]
+    fn parses_nested_array_types_for_tabular_text_data() {
+        let program = parse(
+            &lex("fn rows() -> String[][] { return [[\"one\", \"two\"], [\"three\", \"four\"]] }")
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            program.functions[0].return_type,
+            Some(Type::Array(Box::new(Type::Array(Box::new(Type::String)))))
+        );
     }
     #[test]
     fn incomplete_expression_at_end_of_input_returns_a_parse_error() {

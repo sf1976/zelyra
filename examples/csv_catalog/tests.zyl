@@ -1,0 +1,163 @@
+import "src/app.zyl" as app
+import "src/model.zyl" as model
+import "src/importer.zyl" as importer
+pub fn main() uses FileSystem {
+    print("Automatisierte CSV-Anwendungstests")
+    mutable passed = 0
+    mutable failed = 0
+    if app::run() {
+        print("PASS Beispieldatei erstellt, importiert und exportiert")
+        passed = passed + 1
+    }
+    else {
+        print("FAIL Beispieldatei und Verarbeitung")
+        failed = failed + 1
+    }
+    match importer::import_file("data/articles.csv") {
+        Ok(original) => {
+            if original.records_read == 12 && original.valid_count == 3 && original.invalid_count == 9 {
+                print("PASS Datensatzzaehler: gelesen 12, gueltig 3, ungueltig 9")
+                passed = passed + 1
+            }
+            else {
+                print("FAIL Datensatzzaehler")
+                failed = failed + 1
+            }
+            if original.total_stock == 14 && original.total_value_cents == 25668 {
+                print("PASS Gesamtbestand 14 und exakter Lagerwert 256.68 EUR")
+                passed = passed + 1
+            }
+            else {
+                print("FAIL Bestands- oder Wertsumme")
+                failed = failed + 1
+            }
+            if original.articles[0].number == 101 && original.articles[0].name == "Äpfel; \"Bio\"\nErnte" && original.articles[0].category == "Frisch; regional" {
+                print("PASS UTF-8, Semikolon, Anfuehrungszeichen und Zeilenumbruch")
+                passed = passed + 1
+            }
+            else {
+                print("FAIL Sonderzeichen oder CSV-Quoting")
+                failed = failed + 1
+            }
+            if original.articles[1].category == "Allgemein" &&!original.articles[1].active {
+                print("PASS Standardkategorie und boolescher false-Wert")
+                passed = passed + 1
+            }
+            else {
+                print("FAIL Standardwert oder Wahrheitswert")
+                failed = failed + 1
+            }
+            match importer::import_file("data/articles_valid.csv") {
+                Ok(reloaded) => {
+                    if same_articles(original.articles, reloaded.articles) && reloaded.invalid_count == 0 {
+                        print("PASS Export und erneuter Import erhalten alle Artikel")
+                        passed = passed + 1
+                    }
+                    else {
+                        print("FAIL Roundtrip der gueltigen Artikel")
+                        failed = failed + 1
+                    }
+                }
+                Err(message) => {
+                    print("FAIL Rueckimport: " + message)
+                    failed = failed + 1
+                }
+            }
+            if has_issue(original.issues, 4, "Artikelnummer") && has_issue(original.issues, 5, "Preis") && has_issue(original.issues, 6, "Preis") && has_issue(original.issues, 7, "Lagerbestand") && has_issue(original.issues, 8, "Lagerbestand") && has_issue(original.issues, 9, "Aktiv") && has_issue(original.issues, 10, "Datensatz") && has_issue(original.issues, 12, "Name") && has_issue(original.issues, 12, "Preis") && has_issue(original.issues, 12, "Lagerbestand") && has_issue(original.issues, 12, "Aktiv") {
+                print("PASS Fehlerfelder fuer Duplikat, Preise, Bestand, Aktivwert und Feldanzahl")
+                passed = passed + 1
+            }
+            else {
+                print("FAIL Feldbezogene Fehlererkennung")
+                failed = failed + 1
+            }
+            match read_text_result("data/import_errors.csv") {
+                Ok(error_csv) => {
+                    match csv_decode_result(error_csv, ';') {
+                        Ok(error_rows) => {
+                            if len(error_rows) > 1 && error_rows[0] == ["Datensatznummer", "Feld", "Fehlergrund"] {
+                                print("PASS Fehlerprotokoll als CSV exportiert")
+                                passed = passed + 1
+                            }
+                            else {
+                                print("FAIL Fehlerprotokoll-Inhalt")
+                                failed = failed + 1
+                            }
+                        }
+                        Err(message) => {
+                            print("FAIL Fehlerprotokoll-CSV: " + message)
+                            failed = failed + 1
+                        }
+                    }
+                }
+                Err(message) => {
+                    print("FAIL Fehlerprotokoll fehlt: " + message)
+                    failed = failed + 1
+                }
+            }
+        }
+        Err(message) => {
+            print("FAIL Ausgangsimport: " + message)
+            failed = failed + 1
+        }
+    }
+    if expect_import_error("", "CSV-Datei ist leer.") && expect_import_error("Wrong;Header\n1;Test", "CSV-Kopfzeile stimmt nicht. Erwartet werden Artikelnummer;Name;Kategorie;Preis;Lagerbestand;Aktiv.") && expect_import_error("Artikelnummer;Name;Kategorie;Preis;Lagerbestand;Aktiv\n\"offen", "CSV-Struktur ist beschaedigt: unterminated quoted field at end of input near line 2") {
+        print("PASS Leere, falsche Kopfzeile und beschaedigte CSV")
+        passed = passed + 1
+    }
+    else {
+        print("FAIL Dateiinhalt-Pruefungen")
+        failed = failed + 1
+    }
+    match importer::import_file("data/datei-fehlt.csv") {
+        Ok(_) => {
+            print("FAIL fehlende Datei wurde akzeptiert")
+            failed = failed + 1
+        }
+        Err(message) => {
+            if message != "" {
+                print("PASS Verstaendlicher Fehler fuer fehlende Datei")
+                passed = passed + 1
+            }
+            else {
+                print("FAIL Fehlermeldung fuer fehlende Datei")
+                failed = failed + 1
+            }
+        }
+    }
+    print("Testergebnis bestanden / fehlgeschlagen:")
+    print(passed)
+    print(failed)
+}
+pub fn same_articles(left: model::Article[], right: model::Article[]) -> Bool {
+    if len(left) != len(right) {
+        return false
+    }
+    mutable cursor = 0
+    mutable same = true
+    while cursor < len(left) {
+        if left[cursor].number != right[cursor].number || left[cursor].name != right[cursor].name || left[cursor].category != right[cursor].category || left[cursor].price_cents != right[cursor].price_cents || left[cursor].stock != right[cursor].stock || left[cursor].active != right[cursor].active {
+            same = false
+        }
+        cursor = cursor + 1
+    }
+    return same
+}
+pub fn has_issue(issues: model::ImportIssue[], record_number: Int, field_name: String) -> Bool {
+    for issue in issues {
+        if issue.record_number == record_number && issue.field_name == field_name {
+            return true
+        }
+    }
+    return false
+}
+pub fn expect_import_error(contents: String, expected: String) -> Bool {
+    match importer::import_text(contents) {
+        Ok(_) => {
+            return false
+        }
+        Err(message) => {
+            return message == expected
+        }
+    }
+}

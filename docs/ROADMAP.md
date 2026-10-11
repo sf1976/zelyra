@@ -686,6 +686,14 @@ its source evidence and reason.
 
 ## Release 0.9.3 — database workbench
 
+- [✅] Add CSV foundations for import and export: parse `String[][]` as a
+  nested type, correctly decode and encode quoted delimiters/quotes/newlines,
+  and convert decimal text to scaled integers without Float. The
+  `examples/csv_catalog` project creates source data, validates fields, logs
+  errors, sorts/exports valid records, and automatically checks the round trip.
+  CSV is processed as a complete UTF-8 string in memory; streaming is not
+  included.
+
 - [🧪] Fix the invoice tutorial startup defect found after 0.9.2: declarative
   web layouts must load the project theme; the CLI prints the local browser
   address when scaffolding and preserves it when schema setup fails. Studio's

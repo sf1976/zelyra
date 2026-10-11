@@ -8,6 +8,8 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use zelyra_ast::*;
 
+mod csv;
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypeError {
     pub message: String,
@@ -4333,6 +4335,80 @@ impl<'a> Checker<'a> {
                         Box::new(type_args.first().cloned().unwrap_or(Type::Unknown)),
                         Box::new(Type::String),
                     )
+                } else if name == "csv_decode_result" {
+                    if !type_args.is_empty() {
+                        self.error(
+                            expr.span,
+                            "csv_decode_result does not accept type arguments",
+                        );
+                    }
+                    if args.len() != 2 {
+                        self.error(expr.span, "csv_decode_result expects a String and Char");
+                        return Type::Unknown;
+                    }
+                    let source = self.check_expr(&args[0], scopes);
+                    let delimiter = self.check_expr(&args[1], scopes);
+                    self.expect_type(&Type::String, &source, args[0].span);
+                    self.expect_type(&Type::Char, &delimiter, args[1].span);
+                    Type::Result(
+                        Box::new(Type::Array(Box::new(Type::Array(Box::new(Type::String))))),
+                        Box::new(Type::String),
+                    )
+                } else if name == "csv_encode" {
+                    if !type_args.is_empty() {
+                        self.error(expr.span, "csv_encode does not accept type arguments");
+                    }
+                    if args.len() != 2 {
+                        self.error(expr.span, "csv_encode expects String[][] rows and a Char");
+                        return Type::Unknown;
+                    }
+                    let rows = self.check_expr(&args[0], scopes);
+                    let delimiter = self.check_expr(&args[1], scopes);
+                    self.expect_type(
+                        &Type::Array(Box::new(Type::Array(Box::new(Type::String)))),
+                        &rows,
+                        args[0].span,
+                    );
+                    self.expect_type(&Type::Char, &delimiter, args[1].span);
+                    Type::Result(Box::new(Type::String), Box::new(Type::String))
+                } else if name == "decimal_scaled_result" {
+                    if !type_args.is_empty() {
+                        self.error(
+                            expr.span,
+                            "decimal_scaled_result does not accept type arguments",
+                        );
+                    }
+                    if args.len() != 2 {
+                        self.error(
+                            expr.span,
+                            "decimal_scaled_result expects a String and scale Int",
+                        );
+                        return Type::Unknown;
+                    }
+                    let source = self.check_expr(&args[0], scopes);
+                    let scale = self.check_expr(&args[1], scopes);
+                    self.expect_type(&Type::String, &source, args[0].span);
+                    self.expect_type(&Type::Int, &scale, args[1].span);
+                    Type::Result(Box::new(Type::Int), Box::new(Type::String))
+                } else if name == "format_scaled_result" {
+                    if !type_args.is_empty() {
+                        self.error(
+                            expr.span,
+                            "format_scaled_result does not accept type arguments",
+                        );
+                    }
+                    if args.len() != 2 {
+                        self.error(
+                            expr.span,
+                            "format_scaled_result expects an Int and scale Int",
+                        );
+                        return Type::Unknown;
+                    }
+                    let value = self.check_expr(&args[0], scopes);
+                    let scale = self.check_expr(&args[1], scopes);
+                    self.expect_type(&Type::Int, &value, args[0].span);
+                    self.expect_type(&Type::Int, &scale, args[1].span);
+                    Type::Result(Box::new(Type::String), Box::new(Type::String))
                 } else if name == "http_json" {
                     if type_args.len() != 2 {
                         self.error(
@@ -6759,6 +6835,114 @@ impl Interpreter {
                             Ok(value) => Ok(Box::new(value)),
                             Err(error) => Err(Box::new(Value::String(error.message))),
                         },
+                    ))
+                } else if name == "csv_decode_result" {
+                    if !type_args.is_empty() || args.len() != 2 {
+                        return Err(self.runtime_error(
+                            expr.span,
+                            "csv_decode_result expects a String and Char",
+                        ));
+                    }
+                    let source = self.eval(&args[0], env)?;
+                    let delimiter = self.eval(&args[1], env)?;
+                    let (Value::String(source), Value::Char(delimiter)) = (source, delimiter)
+                    else {
+                        return Err(self.runtime_error(
+                            expr.span,
+                            "csv_decode_result expects a String and Char",
+                        ));
+                    };
+                    let decoded = csv::decode(&source, delimiter).map(|rows| {
+                        Value::Array(
+                            rows.into_iter()
+                                .map(|row| {
+                                    Value::Array(
+                                        row.into_iter().map(Value::String).collect::<Vec<_>>(),
+                                    )
+                                })
+                                .collect::<Vec<_>>(),
+                        )
+                    });
+                    Ok(Value::Result(
+                        decoded
+                            .map(Box::new)
+                            .map_err(|message| Box::new(Value::String(message))),
+                    ))
+                } else if name == "csv_encode" {
+                    if !type_args.is_empty() || args.len() != 2 {
+                        return Err(self.runtime_error(
+                            expr.span,
+                            "csv_encode expects String[][] rows and a Char",
+                        ));
+                    }
+                    let rows = self.eval(&args[0], env)?;
+                    let delimiter = self.eval(&args[1], env)?;
+                    let (Value::Array(rows), Value::Char(delimiter)) = (rows, delimiter) else {
+                        return Err(self.runtime_error(
+                            expr.span,
+                            "csv_encode expects String[][] rows and a Char",
+                        ));
+                    };
+                    let rows = rows
+                        .into_iter()
+                        .map(|row| match row {
+                            Value::Array(fields) => fields
+                                .into_iter()
+                                .map(|field| match field {
+                                    Value::String(value) => Ok(value),
+                                    _ => Err("csv_encode expects String[][] rows".to_string()),
+                                })
+                                .collect::<Result<Vec<_>, _>>(),
+                            _ => Err("csv_encode expects String[][] rows".to_string()),
+                        })
+                        .collect::<Result<Vec<_>, _>>();
+                    let encoded = rows
+                        .and_then(|rows| csv::encode(&rows, delimiter))
+                        .map(Value::String);
+                    Ok(Value::Result(
+                        encoded
+                            .map(Box::new)
+                            .map_err(|message| Box::new(Value::String(message))),
+                    ))
+                } else if name == "decimal_scaled_result" {
+                    if !type_args.is_empty() || args.len() != 2 {
+                        return Err(self.runtime_error(
+                            expr.span,
+                            "decimal_scaled_result expects a String and scale Int",
+                        ));
+                    }
+                    let source = self.eval(&args[0], env)?;
+                    let scale = self.eval(&args[1], env)?;
+                    let (Value::String(source), Value::Int(scale)) = (source, scale) else {
+                        return Err(self.runtime_error(
+                            expr.span,
+                            "decimal_scaled_result expects a String and scale Int",
+                        ));
+                    };
+                    Ok(Value::Result(
+                        csv::decimal_to_scaled(&source, scale)
+                            .map(|value| Box::new(Value::Int(value)))
+                            .map_err(|message| Box::new(Value::String(message))),
+                    ))
+                } else if name == "format_scaled_result" {
+                    if !type_args.is_empty() || args.len() != 2 {
+                        return Err(self.runtime_error(
+                            expr.span,
+                            "format_scaled_result expects an Int and scale Int",
+                        ));
+                    }
+                    let value = self.eval(&args[0], env)?;
+                    let scale = self.eval(&args[1], env)?;
+                    let (Value::Int(value), Value::Int(scale)) = (value, scale) else {
+                        return Err(self.runtime_error(
+                            expr.span,
+                            "format_scaled_result expects Int arguments",
+                        ));
+                    };
+                    Ok(Value::Result(
+                        csv::format_scaled(value, scale)
+                            .map(|value| Box::new(Value::String(value)))
+                            .map_err(|message| Box::new(Value::String(message))),
                     ))
                 } else if name == "http_json" {
                     if type_args.len() != 2 || args.len() != 4 {

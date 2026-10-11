@@ -1,0 +1,56 @@
+pub struct Article {
+    number: Int
+    name: String
+    category: String
+    price_cents: Int
+    stock: Int
+    active: Bool
+}
+pub struct ImportIssue {
+    record_number: Int
+    field_name: String
+    reason: String
+}
+pub struct RowCheck {
+    valid: Bool
+    article: Article
+    issues: ImportIssue[]
+}
+pub struct ImportSummary {
+    articles: Article[]
+    issues: ImportIssue[]
+    records_read: Int
+    valid_count: Int
+    invalid_count: Int
+    total_stock: Int
+    total_value_cents: Int
+}
+pub fn blank_article() -> Article {
+    return Article {
+        number: 0,
+        name: "",
+        category: "",
+        price_cents: 0,
+        stock: 0,
+        active: false,
+    }
+}
+pub fn empty_summary() -> ImportSummary {
+    return ImportSummary {
+        articles: [],
+        issues: [],
+        records_read: 0,
+        valid_count: 0,
+        invalid_count: 0,
+        total_stock: 0,
+        total_value_cents: 0,
+    }
+}
+pub fn add_issue(issues: ImportIssue[], record_number: Int, field_name: String, reason: String) -> ImportIssue[] {
+    return append(issues, ImportIssue {
+        record_number: record_number,
+        field_name: field_name,
+        reason: reason,
+    }
+    )
+}

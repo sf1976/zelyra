@@ -1,0 +1,86 @@
+import "src/model.zyl" as model
+import "src/importer.zyl" as importer
+import "src/exporter.zyl" as exporter
+import "src/sample_data.zyl" as sample_data
+pub fn run() -> Bool uses FileSystem {
+    match csv_encode(sample_data::source_rows(), ';') {
+        Ok(source_csv) => {
+            match write_text_result("data/articles.csv", source_csv) {
+                Ok(_) => {
+                    print("UTF-8-Quelldatei erstellt: data/articles.csv")
+                }
+                Err(message) => {
+                    print("Quelldatei konnte nicht erstellt werden: " + message)
+                    return false
+                }
+            }
+        }
+        Err(message) => {
+            print("Quelldatei konnte nicht codiert werden: " + message)
+            return false
+        }
+    }
+    match importer::import_file("data/articles.csv") {
+        Ok(summary) => {
+            match exporter::articles_csv(summary.articles) {
+                Ok(valid_csv) => {
+                    match write_text_result("data/articles_valid.csv", valid_csv) {
+                        Ok(_) => {
+                            print("Gueltige, nach Artikelnummer sortierte Datensaetze: data/articles_valid.csv")
+                        }
+                        Err(message) => {
+                            print("Export der gueltigen Artikel fehlgeschlagen: " + message)
+                            return false
+                        }
+                    }
+                }
+                Err(message) => {
+                    print("Gueltige Artikel konnten nicht exportiert werden: " + message)
+                    return false
+                }
+            }
+            match exporter::issues_csv(summary.issues) {
+                Ok(errors_csv) => {
+                    match write_text_result("data/import_errors.csv", errors_csv) {
+                        Ok(_) => {
+                            print("Importfehler exportiert: data/import_errors.csv")
+                        }
+                        Err(message) => {
+                            print("Fehlerprotokoll konnte nicht gespeichert werden: " + message)
+                            return false
+                        }
+                    }
+                }
+                Err(message) => {
+                    print("Fehlerprotokoll konnte nicht codiert werden: " + message)
+                    return false
+                }
+            }
+            print_summary(summary)
+            return true
+        }
+        Err(message) => {
+            print("Import abgebrochen: " + message)
+            return false
+        }
+    }
+}
+pub fn print_summary(summary: model::ImportSummary) {
+    print("Datensaetze gelesen:")
+    print(summary.records_read)
+    print("Gueltige Datensaetze:")
+    print(summary.valid_count)
+    print("Ungueltige Datensaetze:")
+    print(summary.invalid_count)
+    print("Gesamter Lagerbestand:")
+    print(summary.total_stock)
+    match format_scaled_result(summary.total_value_cents, 2) {
+        Ok(value) => {
+            print("Gesamter Lagerwert (EUR):")
+            print(value)
+        }
+        Err(message) => {
+            print("Lagerwert konnte nicht formatiert werden: " + message)
+        }
+    }
+}

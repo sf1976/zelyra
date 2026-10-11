@@ -1,0 +1,118 @@
+import "src/model.zyl" as model
+pub fn check_row(row: String[], record_number: Int, existing: model::Article[]) -> model::RowCheck {
+    mutable issues: model::ImportIssue[] = []
+    if len(row) != 6 {
+        issues = model::add_issue(issues, record_number, "Datensatz", "erwartet 6 Felder, erhalten " + json_encode(len(row)))
+        return model::RowCheck {
+            valid: false,
+            article: model::blank_article(),
+            issues: issues,
+        }
+    }
+    number_text = row[0]
+    name = row[1]
+    category_text = row[2]
+    price_text = row[3]
+    stock_text = row[4]
+    active_text = row[5]
+    mutable number = 0
+    mutable price_cents = 0
+    mutable stock = 0
+    mutable active = false
+    if number_text == "" {
+        issues = model::add_issue(issues, record_number, "Artikelnummer", "Pflichtfeld fehlt")
+    }
+    else {
+        match json_decode_result<Int>(number_text) {
+            Ok(value) => {
+                if value <= 0 {
+                    issues = model::add_issue(issues, record_number, "Artikelnummer", "muss groesser als null sein")
+                }
+                else {
+                    number = value
+                }
+            }
+            Err(_) => {
+                issues = model::add_issue(issues, record_number, "Artikelnummer", "muss eine Ganzzahl sein")
+            }
+        }
+    }
+    if name == "" {
+        issues = model::add_issue(issues, record_number, "Name", "Pflichtfeld fehlt")
+    }
+    mutable category = category_text
+    if category == "" {
+        category = "Allgemein"
+    }
+    if price_text == "" {
+        issues = model::add_issue(issues, record_number, "Preis", "Pflichtfeld fehlt")
+    }
+    else {
+        match decimal_scaled_result(price_text, 2) {
+            Ok(value) => {
+                if value < 0 {
+                    issues = model::add_issue(issues, record_number, "Preis", "darf nicht negativ sein")
+                }
+                else {
+                    price_cents = value
+                }
+            }
+            Err(_) => {
+                issues = model::add_issue(issues, record_number, "Preis", "muss eine Zahl mit hoechstens zwei Nachkommastellen sein")
+            }
+        }
+    }
+    if stock_text == "" {
+        issues = model::add_issue(issues, record_number, "Lagerbestand", "Pflichtfeld fehlt")
+    }
+    else {
+        match json_decode_result<Int>(stock_text) {
+            Ok(value) => {
+                if value < 0 {
+                    issues = model::add_issue(issues, record_number, "Lagerbestand", "darf nicht negativ sein")
+                }
+                else {
+                    stock = value
+                }
+            }
+            Err(_) => {
+                issues = model::add_issue(issues, record_number, "Lagerbestand", "muss eine nicht negative Ganzzahl sein")
+            }
+        }
+    }
+    if active_text == "true" {
+        active = true
+    }
+    else {
+        if active_text == "false" {
+            active = false
+        }
+        else {
+            issues = model::add_issue(issues, record_number, "Aktiv", "erlaubt sind nur true oder false")
+        }
+    }
+    if number > 0 && has_number(existing, number) {
+        issues = model::add_issue(issues, record_number, "Artikelnummer", "ist bereits durch einen frueher erfolgreich importierten Datensatz belegt")
+    }
+    return model::RowCheck {
+        valid: len(issues) == 0,
+        article: model::Article {
+            number: number,
+            name: name,
+            category: category,
+            price_cents: price_cents,
+            stock: stock,
+            active: active,
+        }
+        ,
+        issues: issues,
+    }
+}
+pub fn has_number(articles: model::Article[], number: Int) -> Bool {
+    for article in articles {
+        if article.number == number {
+            return true
+        }
+    }
+    return false
+}

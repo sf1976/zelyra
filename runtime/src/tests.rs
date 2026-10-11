@@ -75,6 +75,56 @@ fn result_apis_report_json_and_file_errors_without_aborting() {
 }
 
 #[test]
+fn csv_and_fixed_point_builtins_preserve_data_and_report_errors() {
+    let output = run(r#"fn main() {
+            source_text = "number;name;note\n42;\"Äpfel; \"\"Bio\"\"\";\"erste Zeile\nzweite Zeile\""
+            match csv_decode_result(source_text, ';') {
+                Ok(rows) => {
+                    print(len(rows))
+                    print(rows[1][1])
+                    print(rows[1][2])
+                    match csv_encode(rows, ';') {
+                        Ok(encoded) => { print(encoded == source_text) }
+                        Err(message) => { print(message) }
+                    }
+                }
+                Err(message) => { print(message) }
+            }
+            match decimal_scaled_result("12,34", 2) {
+                Ok(cents) => {
+                    print(cents)
+                    match format_scaled_result(cents, 2) {
+                        Ok(text) => { print(text) }
+                        Err(message) => { print(message) }
+                    }
+                }
+                Err(message) => { print(message) }
+            }
+            match decimal_scaled_result("1.234", 2) {
+                Ok(_) => { print("unexpected precision success") }
+                Err(message) => { print(message) }
+            }
+            match csv_decode_result("a;b\n\"unfinished", ';') {
+                Ok(_) => { print("unexpected CSV success") }
+                Err(message) => { print(message) }
+            }
+        }"#);
+    assert_eq!(
+        output,
+        [
+            "2",
+            "Äpfel; \"Bio\"",
+            "erste Zeile\nzweite Zeile",
+            "true",
+            "1234",
+            "12.34",
+            "at most 2 fractional digits are allowed",
+            "unterminated quoted field at end of input near line 2",
+        ]
+    );
+}
+
+#[test]
 fn executes_parallel_await_bindings_and_merges_results() {
     let output = run(
             "fn load_customer() -> String { return \"customer\" } fn load_orders() -> Int { return 3 } fn main() { parallel { customer = await load_customer() orders = await load_orders() } print(customer) print(orders) }",

@@ -1779,6 +1779,46 @@ Records, verschachtelte Records, Arrays, Optionen und Skalarwerte.
 unbekannte Record-Felder und fehlende Pflichtfelder werden als ausdrückliche
 Laufzeitfehler gemeldet.
 
+Der Entwicklungszweig 0.9.3 ergänzt für tabellarische Textdateien
+verschachtelte Arraytypen wie `String[][]` sowie typisierte CSV- und
+Festkomma-APIs:
+
+~~~zelyra
+fn parse_catalog(text: String) -> Result<String[][], String> {
+    return csv_decode_result(text, ';')
+}
+
+fn read_price(text: String) -> Result<Int, String> {
+    return decimal_scaled_result(text, 2)
+}
+~~~
+
+`csv_decode_result(text, delimiter)` liefert jede CSV-Zeile als `String[]` und
+erhält getrennte Spalten, doppelte Anführungszeichen, UTF-8, LF/CRLF und
+Zeilenumbrüche innerhalb zitierter Felder. Ein UTF-8-BOM am Dateianfang wird
+akzeptiert. Nicht geschlossene Quotes, Quotes in unzitierten Feldern, Zeichen
+nach einem schließenden Quote und einzelne CR-Zeichen außerhalb eines zitierten
+Felds ergeben `Err(String)`. Eine leere Datei ergibt eine leere Zeilenliste;
+die Anwendung prüft Kopfzeilen und Feldanzahl selbst.
+
+`csv_encode(rows, delimiter)` maskiert Trennzeichen, Quotes und Zeilenumbrüche
+und verdoppelt Quotes innerhalb zitierter Felder. Beide CSV-Funktionen liefern
+`Result`, damit ungültige Trennzeichen als Datenfehler behandelt werden können.
+Sie verarbeiten den gesamten Text im Speicher und sind keine Streaming-API.
+
+Geldwerte bleiben für exakte Berechnungen ganzzahlige Einheiten, zum Beispiel
+Cent. `decimal_scaled_result(text, scale)` konvertiert eine Dezimalzahl ohne
+binäre Gleitkommazahl in eine skalierte `Int`; Punkt oder Komma sind als
+einzelnes Dezimaltrennzeichen zulässig, höchstens `scale` Nachkommastellen.
+`format_scaled_result(value, scale)` erzeugt die feste Dezimalschreibweise für
+den Export. Beide Funktionen erlauben Skalen von 0 bis 9 und melden ungültige
+Texte, zu viele Stellen oder Überläufe als `Err(String)`. Fachliche Regeln wie
+„Preis darf nicht negativ sein“ prüft die Anwendung nach der Konvertierung.
+
+Das vollständige Beispiel `examples/csv_catalog` erzeugt eine UTF-8-Datei,
+importiert und validiert Artikel, schreibt gültige und fehlerhafte Datensätze
+getrennt zurück und testet den Export-/Import-Roundtrip.
+
 Für einen vollständigen typisierten JSON-Request-/Response-Ablauf gibt es
 `http_json` mit getrennten Request- und Response-Typargumenten:
 
