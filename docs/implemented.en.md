@@ -1,14 +1,28 @@
-# Implemented in Zelyra 0.7.0
+# Implemented in Zelyra 0.9.1
 
-**Snapshot:** stable 0.9.0 · language compatibility line `0.1` · 2026-10-11
+**Snapshot:** stable 0.9.1 · language compatibility line `0.1` · 2026-10-11
 **Maturity:** experimental; not approved for production use
 
-This is an inventory of capabilities implemented in the stable Zelyra 0.7.0
+This is an inventory of capabilities implemented in the stable Zelyra 0.9.1
 release. It does not claim human acceptance; that remains scheduled for 1.0.0. It records delivered scope, not the full language vision
 or future plans. The [roadmap](ROADMAP.md) remains the source for unfinished
 work; the [changelog](../CHANGELOG.md) records what changed in each release.
 Links below lead to detailed instructions and test evidence so this page does
 not duplicate the handbook.
+
+## Changes in 0.9.1
+
+- ✅ Studio restores its local session after a tab reload. It removes the
+  session token from the address bar and keeps it for the current tab.
+- ✅ Unsaved edits are visible; `Ctrl+S` saves the current editor content.
+  Compiler diagnostics appear in the Problems panel.
+- ✅ Chromium E2E covers saving, reload, diagnostics, and restart with MariaDB
+  and PostgreSQL Studio workflows.
+- ✅ The invoice tutorial calculates net, 19% VAT, and gross from linked lines.
+  Its print view uses browser PDF export; there is no native PDF engine or legal
+  compliance claim.
+- ✅ `#` line comments and standalone `##` block delimiters are part of language
+  line 0.1. Existing `//` comments remain compatible.
 
 ## How to read this inventory
 
@@ -203,7 +217,7 @@ workflow #38060275164 built Linux and Windows packages, verified checksums and
 228-package SPDX SBOMs, and published GitHub attestations. Downloaded release assets passed checksum and
 SBOM verification; the Linux binary reports `zelyra 0.6.0`. See the
 [release verification record](release-readiness/0.6.0-candidate-verification.md).
-The 0.9 feature scope was merged in commit `407c81f8e75fa568797fc163d3416748214a6f19`; PR CI covered Linux/Windows, MariaDB, MySQL, PostgreSQL, Studio, MFA, editor, tutorial, fuzzing, and dependency checks. Exact version-bumped candidate and release artifact verification is documented in the [0.9.0 release verification record](release-readiness/0.9.0-candidate-verification.md). Independent human acceptance remains reserved for 1.0.0.
+Zelyra 0.9.1 was published from merge commit `aeba34eb73d327cf9d2b65bfaa0e2ce477802af6`. Exact CI, artifact, checksum, SBOM, attestation, and website evidence is in the [0.9.1 release verification record](release-readiness/0.9.1-candidate-verification.md). Independent human acceptance remains reserved for 1.0.0.
 
 This page is updated when a delivered capability or its evidence changes. It
 does not turn a specification or roadmap entry into an implementation claim.

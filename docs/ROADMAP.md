@@ -40,6 +40,12 @@ principles; the roadmap below tracks what is actually implemented.
   checksums, SBOMs, attestations, and the bilingual website handbook are
   verified in the [0.9.0 release record](release-readiness/0.9.0-candidate-verification.md).
   Human acceptance stays reserved for 1.0.0.
+- [x] **0.9.1 stable release published:** Studio session, save, Problems panel,
+  and invoice tutorial workflows are extended; language line 0.1 uses `#` and
+  `##` comments. Full CI, Linux/Windows artifacts, checksums, SBOMs,
+  attestations, and website updates are verified in the
+  [0.9.1 release record](release-readiness/0.9.1-candidate-verification.md).
+  Independent human acceptance remains reserved for 1.0.0.
 
 - [~] The 0.4 development branch adds administrative listing/revocation of
   persistent sessions, CSRF/permission checks and an audit request event.
@@ -615,8 +621,9 @@ released 0.9.0.
   from the address bar and kept for that tab session. API and filesystem checks
   cover stale edits, path traversal, secret files, protected files, and explicit
   CRUD apply. Access remains loopback-bound, and the compiler remains
-  authoritative. The versioned candidate is pending exact-head CI and website
-  publication; see the [0.9.1 plan](release-plans/0.9.1.en.md).
+  authoritative. The tagged `v0.9.1` passed the full CI; Linux/Windows artifacts,
+  checksums, SPDX SBOMs, and attestations were published. The bilingual website
+  handbook is live; see the [0.9.1 plan](release-plans/0.9.1.en.md).
 - Exit evidence: Chromium browser coverage, editor API/security checks, and
   MariaDB/PostgreSQL Studio workflows pass locally. CI must repeat them against
   the exact release candidate. The invoice example opens and runs from the

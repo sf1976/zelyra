@@ -43,6 +43,12 @@ den tatsächlich implementierten Stand.
   Prüfsummen, SBOMs, Attestierungen und das zweisprachige Website-Handbuch sind
   im [0.9.0-Releaseprüfnachweis](release-readiness/0.9.0-candidate-verification.md)
   bestätigt. Die menschliche Abnahme bleibt für 1.0.0 reserviert.
+- [x] **Stabiles Release 0.9.1 veröffentlicht:** Studio-Sitzung, Speichern,
+  Problems-Bereich und Rechnerabläufe des Rechnungstutorials sind erweitert;
+  Sprachlinie 0.1 verwendet `#`- und `##`-Kommentare. Vollständige CI,
+  Linux-/Windows-Artefakte, Prüfsummen, SBOMs, Attestierungen und Website-Update
+  sind im [0.9.1-Releaseprüfnachweis](release-readiness/0.9.1-candidate-verification.md)
+  belegt. Die unabhängige menschliche Abnahme bleibt für 1.0.0 reserviert.
 
 - [~] Der 0.4-Entwicklungszweig ergänzt Anzeige und Sperrung dauerhafter
   Sitzungen mit Verwaltungsrecht, CSRF-Prüfung und Audit-Anfrageereignis.
@@ -583,8 +589,9 @@ Auswirkungen und eine ausdrückliche Bestätigung. Die Roadmap staffelt diese Zi
   diese Tab-Sitzung gehalten. API- und Dateisystemprüfungen decken veraltete
   Änderungen, Pfad-Traversal, Geheimdateien, geschützte Dateien und
   ausdrückliches Anwenden ab. Zugriff bleibt auf Loopback begrenzt; der
-  Compiler bleibt maßgeblich. Der versionsgebundene Kandidat wartet auf exakte
-  CI-Prüfung und Websiteveröffentlichung; siehe den
+  Compiler bleibt maßgeblich. Der getaggte Stand `v0.9.1` bestand die vollständige
+  CI; Linux-/Windows-Artefakte, Prüfsummen, SPDX-SBOMs und Attestierungen wurden
+  veröffentlicht. Das zweisprachige Website-Handbuch ist live; siehe den
   [0.9.1-Plan](release-plans/0.9.1.de.md).
 - Nachweis: Chromium-Browserabdeckung, Editor-API-/Sicherheitsprüfungen und
   MariaDB-/PostgreSQL-Studioabläufe bestehen lokal. CI muss diese für den

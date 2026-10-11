@@ -11,13 +11,17 @@ Business-, Datenbank- und Webanwendungen. Schemaabhängiges SQL, Formulare,
 CRUD, Views und Geschäftslogik greifen ineinander; gewöhnlicher Programmcode
 und natives SQL bleiben jederzeit möglich.
 
-> **Aktueller stabiler Compilerstand: 0.9.0 · Sprachkompatibilitätslinie: 0.1 · experimentell**
+> **Aktueller stabiler Compilerstand: 0.9.1 · Sprachkompatibilitätslinie: 0.1 · experimentell**
 >
-> Zelyra 0.9.0 ist nicht für den Produktiveinsatz freigegeben. „Korrektheit
+> Zelyra 0.9.1 bleibt experimentell und ist nicht für den Produktiveinsatz freigegeben. „Korrektheit
 > beweisen“ ist ein Entwicklungsziel: Der aktuelle Verifier deckt nur einen
 > begrenzten Teil ab und beweist nicht die Korrektheit beliebiger Anwendungen.
 
-Das stabile [`v0.9.0`-Release](https://github.com/sf1976/zelyra/releases/tag/v0.9.0) ist experimentell und nicht für den Produktiveinsatz freigegeben. Die unabhängige menschliche Abnahme bleibt für 1.0.0 reserviert; dieses README ist kein Abnahmenachweis. Siehe die [Release-Notizen 0.9.0](docs/release-notes/0.9.0.de.md), die [Datenbank-Supportmatrix](docs/database-support.de.md) und den [1.0.0-Releaseplan](docs/release-plans/1.0.0.de.md).
+Das stabile [`v0.9.1`-Release](https://github.com/sf1976/zelyra/releases/tag/v0.9.1) bleibt experimentell und ist nicht für den Produktiveinsatz freigegeben. Die unabhängige menschliche Abnahme bleibt für 1.0.0 reserviert; dieses README ist kein Abnahmenachweis. Siehe die [Release-Notizen 0.9.1](docs/release-notes/0.9.1.de.md), die [Datenbank-Supportmatrix](docs/database-support.de.md) und den [1.0.0-Releaseplan](docs/release-plans/1.0.0.de.md).
+
+## Was ist neu in 0.9.1?
+
+Studio behält seine lokale Sitzung beim Neuladen des Tabs, entfernt das Sitzungstoken aus der Adresszeile, zeigt ungespeicherte Änderungen und speichert mit `Strg+S`. Compilerdiagnosen erscheinen im Problems-Bereich. Chromium-Browserprüfungen decken diese Abläufe mit MariaDB und PostgreSQL ab. Das Rechnungstutorial berechnet Netto, 19% Umsatzsteuer und Brutto; die Druckansicht kann der Browser als PDF speichern. `#`-Zeilenkommentare und alleinstehende `##`-Blockgrenzen sind Standard; vorhandene `//`-Kommentare bleiben kompatibel. Das Release bleibt experimentell; eine unabhängige menschliche Abnahme fand nicht statt. Siehe [Release-Notizen](docs/release-notes/0.9.1.de.md) und [Studio-Anleitung](docs/studio.de.md).
 
 ## Was ist neu in 0.9.0?
 
@@ -70,7 +74,7 @@ unter Unix nur Besitzerrechte (`0600`). Unter Windows gelten die ACLs des
 Verzeichnisses; vorhandene `.env`-Dateien werden nicht nachträglich mit neuen
 Rechten versehen. Die Datei darf nicht committet oder geteilt werden. Für den
 Produktiveinsatz geeignete Secret-Verwaltung und eigene Zugangsdaten nutzen;
-0.9.0 ist nicht für den Produktiveinsatz freigegeben.
+0.9.1 ist nicht für den Produktiveinsatz freigegeben.
 
 Ein neu erzeugtes MariaDB-Projekt verwendet standardmäßig Deutsch und den
 Lernmodus. Mit `ZELYRA_LANGUAGE=de|en` und `ZELYRA_LEVEL=learn|work` in der
@@ -82,12 +86,12 @@ weitere Einstellungen stehen in der Umgebungsreferenz.
 | Wenn du … | lies … |
 | --- | --- |
 | Zelyra Schritt für Schritt lernen möchtest | [Getting Started](docs/getting-started.de.md) · [Deutsches Handbuch](docs/handbook/de/handbuch.md) · [English handbook](docs/handbook/en/handbook.md) |
-| sehen möchtest, was Compiler 0.9.0 tatsächlich kann | [Umgesetzte Funktionen](docs/implemented.de.md) · [English](docs/implemented.en.md) |
+| sehen möchtest, was Compiler 0.9.1 tatsächlich kann | [Umgesetzte Funktionen](docs/implemented.de.md) · [English](docs/implemented.en.md) |
 | wissen möchtest, was die Sprache spezifiziert | [Sprachspezifikation](docs/specification.de.md) · [Quellenlandkarte und Prüfanleitung](docs/source-authority.de.md) |
 | Projekt oder Umgebung konfigurieren möchtest | [Umgebung und Konfiguration](docs/env.md) · [English reference](docs/env.en.md) |
 | Datenbankunterstützung prüfen möchtest | [Datenbank-Supportmatrix](docs/database-support.de.md) · [English](docs/database-support.en.md) |
 | den lokalen Editor oder sichere Regex-Änderungen nutzen möchtest | [Zelyra Studio](docs/web-editor.de.md) · [Textänderungsbefehl](docs/text-edit.de.md) |
-| aktuelle und geplante Arbeiten prüfen möchtest | [Roadmap](docs/ROADMAP.de.md) · [Releaseplan 0.9.0](docs/release-plans/0.9.0.de.md) · [Releaseplan 1.0.0](docs/release-plans/1.0.0.de.md) |
+| aktuelle und geplante Arbeiten prüfen möchtest | [Roadmap](docs/ROADMAP.de.md) · [Releaseplan 0.9.1](docs/release-plans/0.9.1.de.md) · [IDE-Plan 0.9.2](docs/release-plans/0.9.2.de.md) · [Releaseplan 1.0.0](docs/release-plans/1.0.0.de.md) |
 | die Entwicklungsrichtung verstehen möchtest | [Manifest](docs/MANIFESTO.de.md) · [KI-native Architektur](docs/architecture/ai-native-development.de.md) · [Entwurf lesbarer Regex-Textbearbeitung](docs/design/readable-regex-text-editing.de.md) |
 | konkrete Release-Änderungen suchst | [Changelog](CHANGELOG.md) · [GitHub-Releases](https://github.com/sf1976/zelyra/releases) |
 

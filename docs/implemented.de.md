@@ -1,9 +1,9 @@
-# In Zelyra 0.9.0 umgesetzt
+# In Zelyra 0.9.1 umgesetzt
 
-**Stand:** stabiles Release 0.9.0 · Sprachkompatibilitätslinie `0.1` · 2026-10-11
+**Stand:** stabiles Release 0.9.1 · Sprachkompatibilitätslinie `0.1` · 2026-10-11
 **Reifegrad:** experimentell; nicht für den Produktiveinsatz freigegeben
 
-Diese Übersicht führt Funktionen auf, die im stabilen Release Zelyra 0.9.0
+Diese Übersicht führt Funktionen auf, die im stabilen Release Zelyra 0.9.1
 tatsächlich implementiert sind. Eine menschliche Abnahme wird nicht behauptet;
 sie bleibt bis 1.0.0 offen. Sie beschreibt den ausgelieferten Umfang,
 nicht die gesamte Sprachvision oder zukünftige Vorhaben. Die
@@ -11,6 +11,20 @@ nicht die gesamte Sprachvision oder zukünftige Vorhaben. Die
 [Changelog](../CHANGELOG.md) hält die Änderungen der Releases fest. Die Links
 führen zu ausführlichen Anleitungen und Testnachweisen, damit diese Seite das
 Handbuch nicht doppelt wiedergibt.
+
+## Änderungen in 0.9.1
+
+- ✅ Studio setzt seine lokale Sitzung nach dem Neuladen eines Tabs fort. Das
+  Sitzungstoken wird aus der Adresszeile entfernt und tab-lokal gehalten.
+- ✅ Ungespeicherte Änderungen werden angezeigt; `Strg+S` speichert den aktuellen
+  Editorinhalt. Compilerdiagnosen erscheinen im Problems-Bereich.
+- ✅ Chromium-E2E deckt Speichern, Neuladen, Fehlerdiagnosen und Neustart mit
+  MariaDB- und PostgreSQL-Studioabläufen ab.
+- ✅ Das Rechnungstutorial berechnet Netto, 19% Umsatzsteuer und Brutto aus
+  verknüpften Positionen. Die druckoptimierte Ansicht nutzt den Browser-PDF-
+  Export; es gibt keine native PDF-Engine oder Rechtskonformitätszusage.
+- ✅ `#`-Zeilenkommentare und alleinstehende `##`-Blockgrenzen gehören zur
+  Sprachlinie 0.1. `//` bleibt für vorhandene Programme kompatibel.
 
 ## Statuszeichen
 
@@ -224,7 +238,7 @@ mit 228 Paketen und veröffentlichte GitHub-Attestierungen.
 Heruntergeladene Release-Artefakte bestanden Prüfsummen- und SBOM-Prüfung; das
 Linux-Binary meldet `zelyra 0.6.0`. Siehe den
 [Release-Prüfnachweis](release-readiness/0.6.0-candidate-verification.md).
-Der 0.9-Funktionsumfang wurde in Merge-Commit `407c81f8e75fa568797fc163d3416748214a6f19` integriert; PR-CI prüfte Linux/Windows sowie die MariaDB-, MySQL-, PostgreSQL-, Studio-, MFA-, Editor-, Tutorial-, Fuzzing- und Abhängigkeitsläufe. Die exakte versionsangehobene Kandidaten- und Artefaktprüfung ist im [0.9.0-Releaseprüfnachweis](release-readiness/0.9.0-candidate-verification.md) dokumentiert. Die unabhängige menschliche Abnahme bleibt für 1.0.0 reserviert.
+Zelyra 0.9.1 wurde in Merge-Commit `aeba34eb73d327cf9d2b65bfaa0e2ce477802af6` veröffentlicht. Exakte CI-, Artefakt-, Prüfsummen-, SBOM-, Attestierungs- und Website-Nachweise stehen im [0.9.1-Releaseprüfnachweis](release-readiness/0.9.1-candidate-verification.md). Die unabhängige menschliche Abnahme bleibt für 1.0.0 reserviert.
 
 Diese Übersicht wird angepasst, wenn sich ausgelieferte Funktionen oder ihre
 Nachweise ändern. Ein Spezifikations- oder Roadmap-Eintrag allein wird hier
