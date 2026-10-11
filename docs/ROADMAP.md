@@ -793,6 +793,19 @@ its source evidence and reason.
 
 ## Release 0.9.4 — visual CRUD design
 
+- [🗺️] Close the type-system gaps tracked by `examples/type_system` before
+  0.9.9: add nominal enum variants with exhaustive matching and typed JSON
+  round trips; add safe, statically typed function values and user-defined
+  generic functions/records in bounded, documented forms; and define a
+  Zelyra-native identity-bearing business entity if real object identity is
+  needed alongside value-based records. Preserve Zelyra's explicit `Int`/
+  `UInt` and `Float`/`Decimal` model rather than adding width variants without
+  demonstrated business need. Each feature must update compiler/runtime,
+  diagnostics, compatibility fixtures, Studio help, and the type coverage
+  matrix. The 0.9.9 gate reruns positive, expected-compiler-error, expected-
+  runtime-error, and serialization checks and must report zero unexpected
+  failures; any unsupported item needs an explicit product decision, not a
+  silent omission.
 - [🗺️] Expand Laravel analysis into an evidence-linked project graph:
   route → middleware/controller → model/relation → migration/table → view,
   with validation rules, package dependencies, file and line locations, and

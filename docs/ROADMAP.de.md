@@ -789,6 +789,19 @@ manuell umzusetzen.
 
 ## Release 0.9.4 — Visueller CRUD-Entwurf
 
+- [🗺️] Die in `examples/type_system` erfassten Lücken vor 0.9.9 schließen:
+  nominale Enum-Varianten mit exhaustivem Matching und typisierten JSON-
+  Roundtrips einführen; sicher typisierte Funktionswerte und benutzerdefinierte
+  generische Funktionen/Records in klar begrenzter, dokumentierter Form
+  ergänzen; und einen Zelyra-eigenen identitätsbehafteten Geschäftsentitätstyp
+  definieren, falls neben wertbasierten Records echte Objektidentität gebraucht
+  wird. Zelyras ausdrückliches `Int`/`UInt`- und `Float`/`Decimal`-Modell bleibt
+  bestehen; Breitenvarianten werden nur bei belegtem Geschäftsnutzen ergänzt.
+  Jede Erweiterung aktualisiert Compiler/Runtime, Diagnosen,
+  Kompatibilitätsfixtures, Studio-Hilfe und Typmatrix. Das 0.9.9-Gate führt
+  positive Prüfungen, erwartete Compiler-/Runtimefehler und Serialisierung
+  erneut aus und muss null unerwartete Fehler melden. Für jeden dann noch
+  fehlenden Punkt ist eine ausdrückliche Produktentscheidung nötig.
 - [🗺️] Die Laravel-Analyse zu einem belegbaren Projektgraphen ausbauen:
   Route → Middleware/Controller → Model/Beziehung → Migration/Tabelle → View,
   einschließlich Validierungsregeln, Paketabhängigkeiten, Datei- und
