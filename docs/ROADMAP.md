@@ -33,11 +33,13 @@ principles; the roadmap below tracks what is actually implemented.
   outbox, compatibility fixtures for language line 0.1, and published
   Linux/Windows artifacts with SBOMs. Exact evidence is in the
   [0.8.0 candidate verification](release-readiness/0.8.0-candidate-verification.md).
-- [~] **0.9.0 in development:** Guided Studio business workflows and preview-
-  bound `zelyra text edit` are implemented. Optional local TOTP is limited to
-  MariaDB with persistent sessions and audit. Independent MFA/authorization
-  review, end-to-end evidence, database matrix, handbook upgrade path, and exact
-  release verification remain open. Human acceptance stays deferred to 1.0.0.
+- [x] **0.9.0 feature implementation merged:** Guided Studio business workflows,
+  invoice tutorial improvements, preview-bound `zelyra text edit`, and the
+  expanded language corpus are merged. Optional local TOTP is limited to
+  MariaDB with persistent sessions and audit. Exact versioned release CI,
+  artifact publication, website handbook synchronization, and clean branch
+  closure remain release-verification work. Human acceptance stays reserved
+  for 1.0.0.
 
 - [~] The 0.4 development branch adds administrative listing/revocation of
   persistent sessions, CSRF/permission checks and an audit request event.
@@ -579,11 +581,12 @@ Independent human acceptance remains deferred to 1.0.0.
 
 ## Release 0.9.0
 
-- [🗺️] Add guided business workflows and help for extending generated apps.
-  Verify the promised MariaDB, MySQL, and PostgreSQL workflows on real servers;
-  add preview-first readable regex text editing from a named plan; expand
-  runtime, module, effect, contract, and SQL language fixtures. See the
-  [0.9.0 plan](release-plans/0.9.0.en.md).
+- [x] **Feature scope merged, stable publication being verified:** guided
+  Studio business workflows, the invoice path, preview-first readable regex
+  text editing, and expanded language fixtures are implemented. Database
+  claims are limited to the exact server matrix and workflow evidence. Optional
+  MariaDB TOTP remains a preview pending independent production security
+  review. See the [0.9.0 plan](release-plans/0.9.0.en.md) and release notes.
 
 ## Release 0.95.0
 

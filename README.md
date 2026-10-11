@@ -11,23 +11,17 @@ for database-backed business and web applications. It brings schema-aware SQL,
 forms, CRUD, views, and application logic together while keeping ordinary code
 and native SQL available.
 
-> **Current stable compiler release: 0.8.0 · language compatibility line: 0.1 · experimental**
+> **Current stable compiler release: 0.9.0 · language compatibility line: 0.1 · experimental**
 >
-> Zelyra 0.8.0 is not approved for production use. “Prove correctness” is a
+> Zelyra 0.9.0 is not approved for production use. “Prove correctness” is a
 > design goal: the current verifier covers a bounded subset and does not prove
 > arbitrary applications correct.
 
-The stable [`v0.8.0` release](https://github.com/sf1976/zelyra/releases/tag/v0.8.0) is experimental and not production-approved. Independent human acceptance for earlier releases is deferred to the first productive release, 1.0.0; this README is not acceptance evidence. See the [0.8.0 release notes](docs/release-notes/0.8.0.en.md) and [1.0.0 release plan](docs/release-plans/1.0.0.en.md).
+The stable [`v0.9.0` release](https://github.com/sf1976/zelyra/releases/tag/v0.9.0) is experimental and not production-approved. Independent human acceptance remains reserved for 1.0.0; this README is not acceptance evidence. See the [0.9.0 release notes](docs/release-notes/0.9.0.en.md), [database support matrix](docs/database-support.en.md), and [1.0.0 release plan](docs/release-plans/1.0.0.en.md).
 
-## What changed in 0.8.0
+## What changed in 0.9.0
 
-Zelyra 0.8.0 expands the local Studio with a clickable MariaDB/PostgreSQL schema
-map and a guided CRUD source builder. Generated code is compiler-checked, shown
-as a diff, and written only after explicit apply; schema and records stay
-read-only. The release also adds a bounded MariaDB transactional outbox with an
-explicit CLI worker and expands the language compatibility corpus. MySQL live
-schema introspection and a general queue are not included. See the
-[release notes](docs/release-notes/0.8.0.en.md) and [Studio guide](docs/studio.en.md).
+Zelyra 0.9.0 expands Studio's guided CRUD preview with affected files, tables, relationships, and routes; extends the invoice tutorial; and adds preview-first `zelyra text edit` plans for bounded regular-expression changes. It also expands the language compatibility corpus and includes an optional, local MariaDB TOTP MFA preview. MFA is not independently security-approved. MySQL and PostgreSQL support remains limited to the workflows in the published matrix; this release does not claim full SQL parity or production readiness. See the [release notes](docs/release-notes/0.9.0.en.md) and [Studio guide](docs/studio.en.md).
 
 The [roadmap](docs/ROADMAP.md) tracks implementation status and limitations.
 This README is a project overview, not a second handbook or changelog.
@@ -73,7 +67,7 @@ excluded from Git and Docker build contexts; Zelyra sets newly created files to
 owner-only permissions (`0600`) on Unix. On Windows, the file inherits the
 directory's ACL, and existing `.env` files are not re-permissioned. Do not
 commit or share the file. For production, use an appropriate secrets manager
-and deployment-specific credentials; 0.8.0 is not production-approved.
+and deployment-specific credentials; 0.9.0 is not production-approved.
 
 The generated MariaDB project defaults to German and learn mode. Set
 `ZELYRA_LANGUAGE=de|en` and `ZELYRA_LEVEL=learn|work` in its `.env` to change
@@ -85,12 +79,12 @@ other settings.
 | If you want to… | Read |
 | --- | --- |
 | Learn Zelyra step by step | [Getting started](docs/getting-started.md) · [English handbook](docs/handbook/en/handbook.md) · [Deutsches Handbuch](docs/handbook/de/handbuch.md) |
-| See what works in compiler 0.8.0 | [Implemented capabilities](docs/implemented.en.md) · [Deutsch](docs/implemented.de.md) |
+| See what works in compiler 0.9.0 | [Implemented capabilities](docs/implemented.en.md) · [Deutsch](docs/implemented.de.md) |
 | Check what the language specifies | [Language specification](docs/specification.md) · [Source authority and validation guide](docs/source-authority.md) |
 | Configure a project or its environment | [Environment and configuration reference](docs/env.en.md) · [Deutsche Referenz](docs/env.md) |
-| Understand database support | [Database compatibility matrix](docs/database-compatibility.en.md) · [German](docs/database-compatibility.de.md) |
+| Understand database support | [Database support matrix](docs/database-support.en.md) · [German](docs/database-support.de.md) |
 | Use the local editor or preview a safe regex edit | [Zelyra Studio](docs/web-editor.en.md) · [Text edit command](docs/text-edit.en.md) |
-| Review current and planned work | [Roadmap](docs/ROADMAP.md) · [0.8.0 release plan](docs/release-plans/0.8.0.en.md) · [1.0.0 release plan](docs/release-plans/1.0.0.en.md) |
+| Review current and planned work | [Roadmap](docs/ROADMAP.md) · [0.9.0 release plan](docs/release-plans/0.9.0.en.md) · [1.0.0 release plan](docs/release-plans/1.0.0.en.md) |
 | Read the design direction | [Manifesto](docs/MANIFESTO.md) · [AI-native architecture](docs/architecture/ai-native-development.md) · [Readable regex text-edit design](docs/design/readable-regex-text-editing.en.md) |
 | See exact release changes | [Changelog](CHANGELOG.md) · [GitHub releases](https://github.com/sf1976/zelyra/releases) |
 

@@ -6,7 +6,7 @@ English · [Deutsche Ausgabe](/handbuch)
 
 Welcome to the complete Zelyra Handbook. It includes both the introductory textbook **"Learning Zelyra – Understandable Programming from the Foundations to Your Own Application"** (Parts I to X, Chapters 1 to 42), the **Technical Reference Manual** (Chapters 1 to 23), and comprehensive **Appendices** (A to J).
 
-> **Project status:** Compiler 0.8.0 is experimental and not approved for production use. Independent human acceptance is planned for 1.0.0.
+> **Project status:** Compiler 0.9.0 is experimental and not approved for production use. Independent human acceptance is planned for 1.0.0.
 
 ## Status marks
 
@@ -69,7 +69,7 @@ Welcome to the complete Zelyra Handbook. It includes both the introductory textb
   - [Chapter 39: Deployment and Operations](textbook-applications.md#chapter-39-deployment-and-operations)
 - **[PART X – CAPSTONE PROJECT AND LOOKING AHEAD](textbook-applications.md#part-x-capstone-project-and-looking-ahead)**
   - [Chapter 40: The Grand Capstone Project: Complete Task Management](textbook-applications.md#chapter-40-the-grand-capstone-project-complete-task-management)
-  - [Chapter 41: The Zelyra Roadmap (From 0.8.0 to 1.0)](textbook-applications.md#chapter-41-the-zelyra-roadmap-from-080-to-10)
+  - [Chapter 41: The Zelyra Roadmap (From 0.9.0 to 1.0)](textbook-applications.md#chapter-41-the-zelyra-roadmap-from-090-to-10)
   - [Chapter 42: Your Journey as a Zelyra Developer](textbook-applications.md#chapter-42-your-journey-as-a-zelyra-developer)
 
 ### Technical Reference Manual

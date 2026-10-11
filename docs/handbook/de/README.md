@@ -19,7 +19,7 @@ ersten Programm bis zur datenbankgestützten Webanwendung.
 Ein neues lokales Lernprojekt für Kunden, Artikel und Rechnungen erzeugst du
 mit [`zelyra --tutorial invoice`](../../tutorials/invoice.de.md).
 
-> **Projektstatus:** Zelyra 0.8.0 ist stabil veröffentlicht, bleibt aber
+> **Projektstatus:** Zelyra 0.9.0 ist stabil veröffentlicht, bleibt aber
 > experimentell und ist nicht für den Produktiveinsatz freigegeben. Die
 > unabhängige menschliche Abnahme früherer Releases ist auf 1.0.0 verschoben.
 > Siehe [Roadmap](../../ROADMAP.de.md) und

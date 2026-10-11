@@ -1,6 +1,6 @@
 # Implemented in Zelyra 0.7.0
 
-**Snapshot:** stable 0.7.0 · language compatibility line `0.1` · 2026-10-10
+**Snapshot:** stable 0.9.0 · language compatibility line `0.1` · 2026-10-11
 **Maturity:** experimental; not approved for production use
 
 This is an inventory of capabilities implemented in the stable Zelyra 0.7.0
@@ -110,10 +110,20 @@ For usage details see the [web and database quickstart](getting-started.md),
   diagnostics, and formatting. Writes require a session token and same browser
   origin; it uses no shell or external services. Version 0.8.0 adds a
   read-only clickable relationship map for supported MariaDB/PostgreSQL
-  schemas and a guided CRUD source builder. It compiler-checks a candidate,
-  shows the diff, and writes only after explicit apply with a fresh hash check.
-  MySQL live introspection and schema or record changes are out of scope here.
-  See the [Studio guide](studio.en.md).
+  schemas and a guided CRUD source builder. Version 0.9.0 adds an impact view
+  for affected files, tables, declared relationships, and routes. The compiler
+  checks a candidate, Studio shows its diff, and writes only after explicit
+  apply with a fresh hash check. MySQL live introspection and schema or record
+  changes are out of scope here. See the [Studio guide](studio.en.md).
+- ✅ `zelyra text edit <plan.zedit>` previews text edits from TOML plans using
+  linear regular expressions, expected match counts, a source-bound plan ID,
+  and explicit apply. Project boundaries and unchanged inputs are checked
+  before mutation; see [Text edit](text-edit.en.md) for syntax and limits.
+- 🧪 Optional local MariaDB TOTP supports encrypted factors, recovery codes,
+  replay protection, lockout, and audit. It is an experimental preview without
+  independent production approval.
+- The 0.1 language compatibility corpus adds typed API errors and runtime
+  cases for the invoice application and `Result`.
 - ✅ `zelyra --tutorial invoice` guides users through customers, items, a
   dashboard, and invoice creation. It is a learning path, not production or
   deployment approval.
@@ -173,7 +183,7 @@ benchmark result is claimed here.
 
 ## Test and release evidence
 
-The feature implementation passed CI on PR head `a35a5ee` in run
+The earlier feature implementation passed CI on PR head `a35a5ee` in run
 [#38057534730](https://github.com/sf1976/zelyra/actions/runs/38057534730):
 workspace tests, four MariaDB compatibility jobs, PostgreSQL 16 runtime
 integration, fuzzing, dependency audit, and Linux/Windows CI. Package validation
@@ -186,7 +196,7 @@ workflow #38060275164 built Linux and Windows packages, verified checksums and
 228-package SPDX SBOMs, and published GitHub attestations. Downloaded release assets passed checksum and
 SBOM verification; the Linux binary reports `zelyra 0.6.0`. See the
 [release verification record](release-readiness/0.6.0-candidate-verification.md).
-Independent human acceptance remains scheduled for 1.0.0.
+The 0.9 feature scope was merged in commit `407c81f8e75fa568797fc163d3416748214a6f19`; PR CI covered Linux/Windows, MariaDB, MySQL, PostgreSQL, Studio, MFA, editor, tutorial, fuzzing, and dependency checks. Exact version-bumped candidate and release asset verification will be recorded in the [0.9.0 release verification record](release-readiness/0.9.0-candidate-verification.md) after the tag and GitHub artifacts are verified. Independent human acceptance remains reserved for 1.0.0.
 
 This page is updated when a delivered capability or its evidence changes. It
 does not turn a specification or roadmap entry into an implementation claim.
