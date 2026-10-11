@@ -591,6 +591,15 @@ Independent human acceptance remains deferred to 1.0.0.
   review. See the [0.9.0 plan](release-plans/0.9.0.en.md), release notes, and
   [release verification record](release-readiness/0.9.0-candidate-verification.md).
 
+## Product direction: language, compiler, database, and Studio
+
+Zelyra's core product idea is one connected path from readable source through
+the compiler and database to a finished business application. Diagrams should
+come from checked project information and link directly to source, diagnostics,
+and workflows. Presentations should use the same typed, explicitly approved
+data sources and remain reviewable as readable Zelyra source. The roadmap stages
+this work across 0.9.2–0.9.8; these are not capabilities of the released 0.9.0.
+
 ## Release 0.9.1 — IDE foundation
 
 - [🧪] Studio already provides the project explorer, tabs, visible save state,
@@ -609,17 +618,23 @@ Independent human acceptance remains deferred to 1.0.0.
 - [🗺️] Add compiler-backed completion, symbol navigation, find/references,
   formatting, actionable diagnostics, and integrated check/run/test tasks. Show
   clear task progress and output without exposing secrets or hiding compiler
-  errors. Keep features scoped to documented language 0.1 constructs.
+  errors. Keep features scoped to documented language 0.1 constructs. Also
+  derive trustworthy architecture diagrams for modules/imports, routes, and
+  resource relationships from the compiler's project model. Nodes and edges
+  link back to source files and diagnostics; unknown or dynamic relationships
+  are marked incomplete.
 - Exit evidence: positive and negative multi-file projects verify completions,
-  source spans, navigation, formatter idempotence, and task output; unsupported
-  syntax is identified instead of guessed.
+  source spans, navigation, formatter idempotence, task output, and deterministic
+  diagram data; unsupported syntax is identified instead of guessed.
 
 ## Release 0.9.3 — database workbench
 
 - [🗺️] Grow the IDE database view into a safe workbench: inspect tables,
   columns, indexes, and declared relationships; browse records read-only by
-  default; show how source modules own each object. Mutations and generated
-  schema changes require a reviewed plan and explicit confirmation.
+  default; show how source modules own each object. Make the ER diagram
+  filterable and navigable so selecting a field or relationship reveals its
+  declaration module and using resources. Mutations and generated schema
+  changes require a reviewed plan and explicit confirmation.
 - Exit evidence: separate MariaDB, MySQL, and PostgreSQL tests match the published
   database matrix. Read-only browsing is enforced, and credentials never enter
   editor output, URLs, diagnostics, or browser storage.
@@ -629,10 +644,18 @@ Independent human acceptance remains deferred to 1.0.0.
 - [🗺️] Make relational CRUD workflows understandable in Studio: choose tables
   and relationships, design fields and forms, preview routes and generated source,
   inspect the full change set, run compiler checks, then explicitly apply or
-  discard it. Refine the invoice tutorial into a practical guided IDE workflow.
+  discard it. Make diagrams actionable entry points into these workflows. Add a
+  declarative presentation model for business applications: compiler-checked
+  slides with text, tables, diagrams, and explicitly typed data sources, shown
+  in Studio and exported as standalone HTML or print-ready output. Keep
+  presentations versionable as Zelyra source; arbitrary client hydration and
+  hidden database access are out of scope. Refine the invoice tutorial into a
+  practical guided IDE workflow.
 - Exit evidence: generated customer, item, invoice, and line-item flows pass
   multi-database integration coverage and remain editable as ordinary Zelyra
-  source. Applying a stale or invalid preview is rejected.
+  source. Diagrams, presentation data sources, output escaping, accessible
+  rendering, and export are checked with valid and invalid projects. Applying a
+  stale or invalid preview is rejected.
 
 ## Release 0.9.5 — first-party mail and SMTP
 
@@ -676,8 +699,10 @@ Independent human acceptance remains deferred to 1.0.0.
   restore on supported operating systems and databases. Finish operator and
   user documentation, dependency/license review, resource limits, error
   redaction, reproducible artifacts, SBOM/provenance, and offline workflows.
-  Measure startup, common CRUD paths, and bounded resource use; publish results
-  without unsupported performance promises.
+  Verify diagrams and presentations in clean environments, including accessible
+  reading, stable exports, and secret redaction. Measure startup, common CRUD
+  paths, and bounded resource use; publish results without unsupported
+  performance promises.
 - Exit criteria: all rehearsal scripts pass from clean environments, handbook
   examples validate, known findings have owners and dispositions, and no
   unimplemented 1.0 requirement remains. See the

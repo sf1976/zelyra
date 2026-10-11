@@ -558,6 +558,16 @@ Die menschliche Abnahme bleibt auf 1.0.0 verschoben.
   [0.9.0-Plan](release-plans/0.9.0.de.md), Release-Notizen und
   [Releaseprüfnachweis](release-readiness/0.9.0-candidate-verification.md).
 
+## Produktlinie: Sprache, Compiler, Datenbank und Studio
+
+Zelyras zentrale Produktidee ist ein zusammenhängender Weg von verständlichem
+Quelltext über Compiler und Datenbank bis zur fertigen Geschäftsanwendung.
+Diagramme sollen aus geprüften Projektinformationen entstehen und direkt zu
+Quelltext, Diagnosen und Arbeitsabläufen führen. Präsentationen sollen dieselben
+typisierten, ausdrücklich freigegebenen Datenquellen nutzen und als lesbarer
+Zelyra-Quelltext überprüfbar bleiben. Die Roadmap staffelt diese Ziele über
+0.9.2–0.9.8; sie sind noch keine Fähigkeiten des veröffentlichten 0.9.0.
+
 ## Release 0.9.1 — IDE-Grundlage
 
 - [🧪] Studio enthält bereits Projektbaum, Tabs, sichtbaren Speicherstatus,
@@ -579,17 +589,24 @@ Die menschliche Abnahme bleibt auf 1.0.0 verschoben.
   Formatierung, handlungsorientierte Diagnosen sowie integrierte Check-, Run-
   und Test-Aufgaben ergänzen. Fortschritt und Ausgabe bleiben sichtbar und
   geheimnisfrei. Die Funktionen decken die dokumentierten Sprach-0.1-Konstrukte
-  ab.
+  ab. Zusätzlich entstehen aus dem Compiler-Projektmodell verlässliche
+  Architekturdiagramme für Module/Importe, Routen und Ressourcenbeziehungen.
+  Knoten und Kanten führen zur passenden Quelldatei und Diagnose zurück;
+  unbekannte oder dynamische Beziehungen werden sichtbar als unvollständig
+  markiert.
 - Nachweis: Positive und negative Mehrdateiprojekte prüfen Vorschläge,
-  Quellpositionen, Navigation, idempotente Formatierung und Aufgabenausgabe;
-  unbekannte Syntax wird kenntlich gemacht statt erraten.
+  Quellpositionen, Navigation, idempotente Formatierung, Aufgabenausgabe und
+  deterministische Diagrammdaten; unbekannte Syntax wird kenntlich gemacht
+  statt erraten.
 
 ## Release 0.9.3 — Datenbankwerkbank
 
 - [🗺️] Die Datenbankansicht der IDE zur sicheren Werkbank ausbauen: Tabellen,
   Spalten, Indizes und deklarierte Beziehungen ansehen, Datensätze standardmäßig
-  schreibgeschützt durchsuchen und den zuständigen Quellmodulen zuordnen.
-  Änderungen und Schemaerzeugung erfordern einen geprüften Plan und ausdrückliche
+  schreibgeschützt durchsuchen und den zuständigen Quellmodulen zuordnen. Das
+  ER-Diagramm wird filterbar und navigierbar; Auswahl eines Feldes oder einer
+  Beziehung zeigt Definition, Quellmodul und verwendende Ressourcen. Änderungen
+  und Schemaerzeugung erfordern einen geprüften Plan und ausdrückliche
   Bestätigung.
 - Nachweis: Separate MariaDB-, MySQL- und PostgreSQL-Tests entsprechen der
   veröffentlichten Datenbankmatrix. Schreibgeschütztes Browsen wird erzwungen;
@@ -601,11 +618,20 @@ Die menschliche Abnahme bleibt auf 1.0.0 verschoben.
 - [🗺️] Verständliche relationale CRUD-Abläufe in Studio ermöglichen: Tabellen
   und Beziehungen wählen, Felder und Formulare entwerfen, Routen und Quelltext
   vorschauen, den gesamten Änderungsumfang prüfen, Compilerchecks ausführen und
-  Änderungen ausdrücklich übernehmen oder verwerfen. Das Rechnungstutorial
-  wird zu einem praktischen IDE-Workflow erweitert.
+  Änderungen ausdrücklich übernehmen oder verwerfen. Diagramme werden zu
+  bearbeitbaren Einstiegen in diese Arbeitsabläufe. Zusätzlich wird ein
+  deklaratives Präsentationsmodell für Geschäftsanwendungen geplant: geprüfte
+  Folien mit Text, Tabellen, Diagrammen und explizit typisierten Datenquellen,
+  mit Studio-Vorschau und eigenständigem HTML-/Druckexport. Präsentationen
+  bleiben versionierbarer Zelyra-Quelltext; beliebige Client-Hydration und
+  versteckte Datenbankzugriffe gehören nicht dazu. Das Rechnungstutorial wird
+  zu einem praktischen IDE-Workflow erweitert.
 - Nachweis: Kunden-, Artikel-, Rechnungs- und Positionsabläufe bestehen
   Mehrdatenbank-Integrationstests und bleiben normaler, änderbarer Zelyra-
-  Quelltext. Veraltete oder ungültige Vorschauen lassen sich nicht übernehmen.
+  Quelltext. Diagramme, Präsentationsdatenquellen, Ausgabe-Escaping,
+  barrierearme Darstellung und Export werden mit gültigen und ungültigen
+  Projekten geprüft. Veraltete oder ungültige Vorschauen lassen sich nicht
+  übernehmen.
 
 ## Release 0.9.5 — Eigene Mail- und SMTP-Unterstützung
 
@@ -651,8 +677,10 @@ Die menschliche Abnahme bleibt auf 1.0.0 verschoben.
   auf unterstützten Betriebssystemen und Datenbanken proben. Betreiber- und
   Nutzerdokumentation, Lizenz-/Abhängigkeitsreview, Ressourcenlimits,
   Geheimnisredaktion, reproduzierbare Artefakte, SBOM/Provenance und Offline-
-  Abläufe abschließen. Start, übliche CRUD-Abläufe und begrenzten Ressourcenbedarf
-  messen und Ergebnisse ohne unbelegte Leistungsversprechen veröffentlichen.
+  Abläufe abschließen. Präsentationen und Diagramme auf sauberen Umgebungen,
+  barrierearme Lesbarkeit, stabile Exporte und Geheimnisfreiheit prüfen. Start,
+  übliche CRUD-Abläufe und begrenzten Ressourcenbedarf messen und Ergebnisse
+  ohne unbelegte Leistungsversprechen veröffentlichen.
 - Abschlusskriterien: Alle Proben bestehen in sauberen Umgebungen,
   Handbuchbeispiele sind geprüft, bekannte Befunde haben Verantwortliche und
   Entscheidungen, und keine 1.0-Anforderung ist unimplementiert. Siehe den
