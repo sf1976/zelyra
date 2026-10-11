@@ -32,7 +32,7 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         host_port_given: false,
         database_host_port_given: false,
     };
-    let result = create_project(&directory, options);
+    let result = create_project_with_setup_hint(&directory, options, false);
     if result != ExitCode::SUCCESS {
         return result;
     }
@@ -65,23 +65,27 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         env::var("ZELYRA_LANGUAGE").is_ok_and(|language| language.eq_ignore_ascii_case("en"));
     println!();
     if english {
-        println!("Invoice tutorial — your application is ready to explore.");
+        println!("Invoice tutorial — setting up your local application now.");
         println!("\nFollow these five steps in `{}`:", main_path.display());
         println!("  1. Customers: create and find customers at /customers.");
         println!("  2. Items: maintain reusable products and prices at /items.");
         println!("  3. Dashboard: review invoices at / and /views/invoicedashboard.");
         println!("  4. Invoice: create a draft at /invoices and select its customer.");
         println!("  5. Lines: add invoice items at /invoice_lines.");
-        println!("\nStart the local database and application:");
-        println!("  cd {}", directory);
-        println!("  follow the MariaDB start and environment commands printed above");
-        println!("  zelyra db setup main.zyl");
-        println!("  zelyra serve main.zyl");
-        println!("\nOpen http://127.0.0.1:3000. Use `zelyra editor .` to inspect the source.");
+        println!("\nStarting the local database and preparing the application automatically...");
+        match setup_action(&directory, "all", &SetupOptions::default()) {
+            Ok(details) => println!("{details}"),
+            Err(error) => {
+                eprintln!("error[E-TUTORIAL-005]: could not prepare the invoice tutorial: {error}");
+                eprintln!("The project files are ready. After Docker Compose is available, run `cd {directory} && zelyra setup --all`.");
+                return ExitCode::FAILURE;
+            }
+        }
+        println!("Open Studio with `zelyra editor {directory}` to inspect the source.");
         println!("The invoice page calculates net, 19% VAT, and gross totals from its lines. Open /invoices/INVOICE-NUMBER/print and use the browser print dialog to save a PDF.");
         println!("The example assumes the German standard rate; it is not a complete legally compliant invoicing or accounting system.");
     } else {
-        println!("Rechnungstutorial — deine Anwendung kann erkundet werden.");
+        println!("Rechnungstutorial — deine lokale Anwendung wird jetzt eingerichtet.");
         println!(
             "\nArbeite diese fünf Schritte in `{}` durch:",
             main_path.display()
@@ -91,14 +95,16 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         println!("  3. Dashboard: Rechnungen unter / und /views/invoicedashboard ansehen.");
         println!("  4. Rechnung: unter /invoices einen Entwurf anlegen und Kunden auswählen.");
         println!("  5. Positionen: unter /invoice_lines Artikel zur Rechnung hinzufügen.");
-        println!("\nLokale Datenbank und Anwendung starten:");
-        println!("  cd {}", directory);
-        println!("  die MariaDB-Start- und Umgebungsbefehle von oben ausführen");
-        println!("  zelyra db setup main.zyl");
-        println!("  zelyra serve main.zyl");
-        println!(
-            "\nÖffne http://127.0.0.1:3000. Mit `zelyra editor .` kannst du den Quelltext ansehen."
-        );
+        println!("\nLokale Datenbank starten und Anwendung automatisch vorbereiten...");
+        match setup_action(&directory, "all", &SetupOptions::default()) {
+            Ok(details) => println!("{details}"),
+            Err(error) => {
+                eprintln!("error[E-TUTORIAL-005]: das Rechnungstutorial konnte nicht gestartet werden: {error}");
+                eprintln!("Die Projektdateien sind bereit. Sobald Docker Compose verfügbar ist: `cd {directory} && zelyra setup --all`.");
+                return ExitCode::FAILURE;
+            }
+        }
+        println!("Mit `zelyra editor {directory}` kannst du den Quelltext ansehen.");
         println!("Die Rechnungsseite berechnet Netto, 19% Umsatzsteuer und Brutto aus den Positionen. Öffne /invoices/RECHNUNGSNUMMER/print und speichere über den Druckdialog des Browsers als PDF.");
         println!("Das Beispiel nimmt den allgemeinen deutschen Steuersatz an und ist kein vollständiges gesetzeskonformes Rechnungs- oder Buchhaltungssystem.");
     }

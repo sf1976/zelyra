@@ -608,6 +608,12 @@ Auswirkungen und eine ausdrückliche Bestätigung. Die Roadmap staffelt diese Zi
 
 ## Release 0.9.2 — Sprachdienste der IDE
 
+- [🧪] Der geführte Tutorialbefehl startet MariaDB und Webanwendung und wendet
+  das Schema an. Die Compose-Webanwendung bezieht die Datenbank-URL aus der
+  Projekteinstellung; Einsteiger müssen weder `DATABASE_URL` setzen noch
+  separat `db setup` und `serve` ausführen. Ein responsives Theme gestaltet
+  Dashboard, CRUD-Formulare, Listen und Druckansicht.
+
 - [🧪] Studio zur IDE mit einer kontextabhängigen Eigenschaftsseitenleiste und
   Aufgaben-/Befehlsfinder ausbauen. Häufige Abläufe zu Dateien, Symbolen, Routen,
   Views, Formularen, Ressourcen und Diagrammen lassen sich durch Auswahl und

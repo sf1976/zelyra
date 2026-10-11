@@ -1,47 +1,294 @@
+:root {
+    color-scheme: light;
+    --zelyra-color-accent: #235c4b;
+    --zelyra-color-accent-strong: #174437;
+    --zelyra-color-accent-text: #174437;
+    --zelyra-color-accent-soft: #e7f2ed;
+    --zelyra-color-ink: #192a25;
+    --zelyra-color-muted: #6b7b74;
+    --zelyra-color-border: #dce6e0;
+    --zelyra-color-canvas: #f2f6f3;
+    --zelyra-color-surface: #ffffff;
+    --zelyra-color-surface-subtle: #f7faf8;
+    --zelyra-color-sidebar-start: #142a24;
+    --zelyra-color-sidebar-middle: #1d3c32;
+    --zelyra-color-sidebar-end: #285342;
+    --zelyra-color-sidebar-foreground: #f4faf6;
+    --zelyra-color-sidebar-muted: #bfd2c7;
+    --zelyra-color-hero-start: #173d32;
+    --zelyra-color-hero-middle: #245947;
+    --zelyra-color-hero-end: #3e7359;
+    --zelyra-radius-card: 18px;
+    --zelyra-radius-control: 10px;
+    --zelyra-content-max-width: 1280px;
+    --tutorial-shadow: 0 16px 40px rgb(25 54 42 / 8%);
+}
+
+* {
+    box-sizing: border-box;
+}
+
 body {
-    max-width: 960px;
+    min-height: 100vh;
+    max-width: 1280px;
     margin: 0 auto;
-    padding: 1rem;
-    color: #172033;
-    font-family: sans-serif;
+    padding: clamp(1rem, 3vw, 2.5rem);
+    color: var(--zelyra-color-ink);
+    background:
+        radial-gradient(ellipse at 12% 0%, rgb(195 222 205 / 48%), transparent 36rem),
+        var(--zelyra-color-canvas);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
 }
 
-header,
-nav,
-main {
-    margin-bottom: 1.5rem;
+header {
+    position: relative;
+    overflow: hidden;
+    margin: 0 0 1.5rem;
+    padding: clamp(1.5rem, 4vw, 3rem);
+    color: #f6fbf7;
+    background: linear-gradient(122deg, var(--zelyra-color-hero-start), var(--zelyra-color-hero-middle) 58%, var(--zelyra-color-hero-end));
+    border: 1px solid rgb(255 255 255 / 14%);
+    border-radius: 24px;
+    box-shadow: var(--tutorial-shadow);
 }
 
-nav {
+header::after {
+    position: absolute;
+    top: -5rem;
+    right: -2rem;
+    width: 19rem;
+    height: 19rem;
+    content: "";
+    border: 1px solid rgb(255 255 255 / 15%);
+    border-radius: 50%;
+    box-shadow: 0 0 0 2.5rem rgb(255 255 255 / 4%), 0 0 0 5rem rgb(255 255 255 / 3%);
+    pointer-events: none;
+}
+
+header h1 {
+    position: relative;
+    z-index: 1;
+    margin: 0 0 1.25rem;
+    font-size: clamp(1.8rem, 4vw, 2.7rem);
+    font-weight: 720;
+    letter-spacing: -0.04em;
+}
+
+header nav {
+    position: relative;
+    z-index: 1;
     display: flex;
     flex-wrap: wrap;
-    gap: 1rem;
+    gap: 0.55rem;
 }
 
-table {
+header nav a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.65rem;
+    padding: 0.55rem 0.9rem;
+    color: #f6fbf7;
+    background: rgb(255 255 255 / 9%);
+    border: 1px solid rgb(255 255 255 / 20%);
+    border-radius: 999px;
+    font-size: 0.92rem;
+    font-weight: 620;
+    text-decoration: none;
+    transition: background 140ms ease, transform 140ms ease;
+}
+
+header nav a:hover,
+header nav a:focus-visible {
+    color: #fff;
+    background: rgb(255 255 255 / 18%);
+    transform: translateY(-1px);
+}
+
+main {
+    min-height: 22rem;
+    padding: clamp(1.2rem, 3vw, 2rem);
+    background: var(--zelyra-color-surface);
+    border: 1px solid var(--zelyra-color-border);
+    border-radius: var(--zelyra-radius-card);
+    box-shadow: var(--tutorial-shadow);
+}
+
+main h2,
+main h3 {
+    color: #203c31;
+    letter-spacing: -0.025em;
+}
+
+main a {
+    color: var(--zelyra-color-accent-text);
+    font-weight: 620;
+    text-underline-offset: 0.2em;
+}
+
+main a:hover {
+    color: var(--zelyra-color-accent-strong);
+}
+
+main section,
+main article,
+main form,
+main table,
+main ul {
+    margin-block: 1rem;
+}
+
+main section,
+main article {
+    padding: 1rem;
+    background: var(--zelyra-color-surface-subtle);
+    border: 1px solid var(--zelyra-color-border);
+    border-radius: 14px;
+}
+
+main form {
+    display: grid;
+    gap: 0.85rem;
+}
+
+main label {
+    color: #344a40;
+    font-size: 0.92rem;
+    font-weight: 650;
+}
+
+main input,
+main select,
+main textarea {
     width: 100%;
-    border-collapse: collapse;
+    min-height: 2.8rem;
+    padding: 0.7rem 0.85rem;
+    color: var(--zelyra-color-ink);
+    background: #fff;
+    border: 1px solid #cbd9d0;
+    border-radius: var(--zelyra-radius-control);
+    font: inherit;
 }
 
-th,
-td {
-    padding: 0.6rem;
-    border-bottom: 1px solid #ccd2dc;
+main input:focus,
+main select:focus,
+main textarea:focus {
+    border-color: #438469;
+    outline: 3px solid rgb(67 132 105 / 18%);
+}
+
+main button,
+main input[type="submit"],
+main [type="button"] {
+    width: fit-content;
+    min-height: 2.8rem;
+    padding: 0.65rem 1.05rem;
+    color: #fff;
+    background: var(--zelyra-color-accent);
+    border: 1px solid var(--zelyra-color-accent);
+    border-radius: var(--zelyra-radius-control);
+    font: inherit;
+    font-weight: 680;
+    cursor: pointer;
+    transition: background 140ms ease, transform 140ms ease, box-shadow 140ms ease;
+}
+
+main button:hover,
+main input[type="submit"]:hover,
+main [type="button"]:hover {
+    background: var(--zelyra-color-accent-strong);
+    box-shadow: 0 5px 14px rgb(23 68 55 / 18%);
+    transform: translateY(-1px);
+}
+
+main table {
+    width: 100%;
+    overflow: hidden;
+    border-collapse: separate;
+    border-spacing: 0;
+    border: 1px solid var(--zelyra-color-border);
+    border-radius: 12px;
+}
+
+main th,
+main td {
+    padding: 0.8rem 0.9rem;
+    border-bottom: 1px solid var(--zelyra-color-border);
     text-align: left;
+}
+
+main th {
+    color: #355346;
+    background: #edf4ef;
+    font-size: 0.84rem;
+    font-weight: 720;
+}
+
+main tr:last-child td {
+    border-bottom: 0;
+}
+
+main tbody tr:hover {
+    background: #f7faf8;
 }
 
 .amount {
     text-align: right;
+    font-variant-numeric: tabular-nums;
 }
 
 .invoice-totals {
-    max-width: 24rem;
-    margin: 1rem 0 1rem auto;
+    max-width: 26rem;
+    margin: 1.5rem 0 1.5rem auto;
+    padding: 1rem 1.2rem;
+    background: #f2f7f3;
+    border: 1px solid var(--zelyra-color-border);
+    border-radius: 14px;
 }
 
 .invoice-totals p {
     display: flex;
     justify-content: space-between;
+    gap: 1rem;
+    margin: 0;
+    padding: 0.55rem 0;
+    border-bottom: 1px solid #dce6e0;
+}
+
+.invoice-totals p:last-child {
+    padding-top: 0.85rem;
+    border-bottom: 0;
+    color: #174437;
+    font-size: 1.15rem;
+    font-weight: 750;
+}
+
+@media (max-width: 640px) {
+    body {
+        padding: 0.75rem;
+    }
+
+    header,
+    main {
+        border-radius: 16px;
+    }
+
+    header nav a {
+        min-height: 2.45rem;
+        padding-inline: 0.75rem;
+        font-size: 0.85rem;
+    }
+
+    main {
+        padding: 1rem;
+        overflow-x: auto;
+    }
+
+    main th,
+    main td {
+        padding: 0.65rem;
+    }
 }
 
 @media print {
@@ -49,6 +296,7 @@ td {
         max-width: none;
         padding: 0;
         color: #000;
+        background: #fff;
     }
 
     header,
@@ -57,7 +305,16 @@ td {
         display: none !important;
     }
 
-    .invoice {
+    main {
+        padding: 0;
         border: 0;
+        border-radius: 0;
+        box-shadow: none;
+    }
+
+    .invoice-totals {
+        color: #000;
+        background: #fff;
+        border-color: #aaa;
     }
 }

@@ -638,6 +638,12 @@ released 0.9.0.
 
 ## Release 0.9.2 — IDE language services
 
+- [🧪] The guided tutorial command starts MariaDB and the web app, then applies
+  the schema. The Compose web app gets its database URL from project setup, so
+  beginners need not set `DATABASE_URL` or run separate `db setup` and `serve`
+  commands. Its responsive theme styles the dashboard, CRUD forms, lists, and
+  print view.
+
 - [🧪] Grow Studio into an IDE with a context-sensitive properties sidebar.
   Selecting a file, route, table, field, or diagram element shows the relevant
   valid settings in clear language. Common workflows should use selection and
