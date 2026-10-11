@@ -607,11 +607,17 @@ this work across 0.9.2–0.9.8; these are not capabilities of the released 0.9.0
   rename and delete require visible confirmation and a current content hash;
   existing destinations are never overwritten, and `main.zyl` and
   `zelyra.toml` are protected. Rename does not update import references. Browser
-  end-to-end verification and the remaining 0.9.1 IDE acceptance work are still
-  open. Access remains loopback-bound, and the compiler remains authoritative.
-- Exit evidence: browser and security tests cover unsaved edits, concurrent file
-  changes, path traversal, malformed source, clean restart, and keyboard use.
-  The invoice example opens and runs from the workspace.
+  end-to-end verification now covers session start and reload, unsaved changes,
+  keyboard save, compiler diagnostics, and restart. The session token is removed
+  from the address bar and kept for that tab session. API and filesystem checks
+  cover stale edits, path traversal, secret files, protected files, and explicit
+  CRUD apply. Access remains loopback-bound, and the compiler remains
+  authoritative. The versioned candidate is pending exact-head CI and website
+  publication; see the [0.9.1 plan](release-plans/0.9.1.en.md).
+- Exit evidence: Chromium browser coverage, editor API/security checks, and
+  MariaDB/PostgreSQL Studio workflows pass locally. CI must repeat them against
+  the exact release candidate. The invoice example opens and runs from the
+  workspace.
 - [🧪] The invoice tutorial shows net, 19% VAT, and gross amounts from stored
   lines and provides a print-ready view the browser can save as PDF. The German
   standard rate is only an assumption for this learning example; this is not a

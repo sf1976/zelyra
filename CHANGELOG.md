@@ -6,6 +6,20 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+_Changes for the next release go here._
+
+## 0.9.1 — 2026-10-11
+
+- Fix the Studio session flow so reloads retain the local token in
+  `sessionStorage`, edits update the dirty state, and compiler diagnostics are
+  dispatched through the supported CodeMirror state API. / Studio-Sitzungen
+  überstehen Neuladen nun mit einem Token im `sessionStorage`; Änderungen
+  aktualisieren den Status und Compilerdiagnosen nutzen die CodeMirror-State-API.
+- Exercise real Chromium editing, unsaved-change prompts, keyboard save,
+  malformed-source diagnostics, and clean restart in the MariaDB and PostgreSQL
+  Studio workflows. / Reale Chromium-Browserabläufe für ungespeicherte
+  Änderungen, Tastaturspeichern, fehlerhaften Quelltext und Neustart in den
+  MariaDB- und PostgreSQL-Studioläufen prüfen.
 - Calculate invoice net, 19% VAT, and gross totals from linked lines and provide
   a browser print-to-PDF invoice view. / Netto, 19% Umsatzsteuer und
   Bruttobeträge aus verknüpften Rechnungspositionen berechnen und eine

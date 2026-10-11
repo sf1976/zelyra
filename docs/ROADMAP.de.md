@@ -575,13 +575,19 @@ Zelyra-Quelltext überprüfbar bleiben. Die Roadmap staffelt diese Ziele über
   Diagnosen. Umbenennen und Löschen von Quelldateien benötigen eine sichtbare
   Bestätigung und einen aktuellen Datei-Hash; vorhandene Ziele werden nie
   überschrieben, `main.zyl` und `zelyra.toml` sind geschützt. Importverweise
-  werden beim Umbenennen nicht angepasst. Die Browser-/End-to-End-Prüfung und
-  restliche IDE-Abnahme für 0.9.1 stehen noch aus. Zugriff bleibt auf Loopback
-  begrenzt; der Compiler bleibt maßgeblich.
-- Nachweis: Browser- und Sicherheitstests decken ungespeicherte Änderungen,
-  gleichzeitige Dateiänderungen, Pfadmanipulation, fehlerhaften Quelltext,
-  Neustart und Tastaturbedienung ab. Das Rechnungsbeispiel lässt sich öffnen und
-  ausführen.
+  werden beim Umbenennen nicht angepasst. Browser-E2E prüft jetzt Sitzungsstart
+  und Neuladen, ungespeicherte Änderungen, Tastaturspeichern, Compilerdiagnosen
+  und Neustart. Das Sitzungstoken wird aus der Adresszeile entfernt und für
+  diese Tab-Sitzung gehalten. API- und Dateisystemprüfungen decken veraltete
+  Änderungen, Pfad-Traversal, Geheimdateien, geschützte Dateien und
+  ausdrückliches Anwenden ab. Zugriff bleibt auf Loopback begrenzt; der
+  Compiler bleibt maßgeblich. Der versionsgebundene Kandidat wartet auf exakte
+  CI-Prüfung und Websiteveröffentlichung; siehe den
+  [0.9.1-Plan](release-plans/0.9.1.de.md).
+- Nachweis: Chromium-Browserabdeckung, Editor-API-/Sicherheitsprüfungen und
+  MariaDB-/PostgreSQL-Studioabläufe bestehen lokal. CI muss diese für den
+  exakten Releasekandidaten wiederholen. Das Rechnungsbeispiel lässt sich öffnen
+  und ausführen.
 - [🧪] Das Rechnungstutorial zeigt eine Netto-/19%-Umsatzsteuer-/Brutto-
   Rechnung aus den gespeicherten Positionen und eine druckoptimierte Ansicht,
   die der Browser als PDF speichern kann. Der angenommene Standardsatz gilt
