@@ -281,6 +281,18 @@ fn command_help_explains_options_without_running_the_command() {
     let database = run(&["db", "plan", "--help"]);
     assert!(database.status.success());
     assert!(String::from_utf8_lossy(&database.stdout).contains("zelyra db plan <datei.zyl>"));
+
+    let migrator = run(&["migrate", "laravel", "--help"]);
+    assert!(migrator.status.success());
+    let migrator_help = String::from_utf8_lossy(&migrator.stdout);
+    assert!(migrator_help.contains("zelyra migrate laravel <projekt> --report <pfad>"));
+    assert!(migrator_help.contains("`.env`-Dateien werden nicht"));
+
+    let migration_group = run(&["migrate", "--help"]);
+    assert!(migration_group.status.success());
+    assert!(
+        String::from_utf8_lossy(&migration_group.stdout).contains("zelyra migrate laravel --help")
+    );
 }
 
 #[test]
@@ -294,6 +306,55 @@ fn command_help_is_available_in_english() {
     let help = String::from_utf8_lossy(&output.stdout);
     assert!(help.contains("Command: zelyra fmt <file.zyl> [--check]"));
     assert!(help.contains("do not write changes"));
+}
+
+#[test]
+fn laravel_migrator_cli_writes_machine_report_outside_read_only_source() {
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock is available")
+        .as_nanos();
+    let project = std::env::temp_dir().join(format!("zelyra-laravel-cli-{unique}"));
+    let reports = std::env::temp_dir().join(format!("zelyra-laravel-output-{unique}"));
+    fs::create_dir_all(project.join("routes")).expect("project fixture is created");
+    fs::create_dir_all(&reports).expect("report directory is created");
+    fs::write(project.join(".env"), "APP_KEY=private-test-value").expect("env fixture is written");
+    fs::write(
+        project.join("routes/web.php"),
+        "<?php\nRoute::post('/orders', [OrderController::class, 'store']);\n",
+    )
+    .expect("Laravel route fixture is written");
+    let report = reports.join("migration.json");
+    let output = Command::new(binary())
+        .args([
+            "migrate",
+            "laravel",
+            project.to_str().unwrap(),
+            "--report",
+            report.to_str().unwrap(),
+            "--format",
+            "json",
+        ])
+        .output()
+        .expect("migrator command should run");
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let result: serde_json::Value = serde_json::from_slice(&fs::read(&report).unwrap()).unwrap();
+    assert_eq!(result["env_files_read"], false);
+    assert_eq!(result["findings"][0]["file"], "routes/web.php");
+    let contents = fs::read_to_string(&report).unwrap();
+    assert!(!contents.contains("private-test-value"));
+    assert_eq!(
+        fs::read_to_string(project.join(".env")).unwrap(),
+        "APP_KEY=private-test-value"
+    );
+    assert!(!project.join("report.json").exists());
+    let _ = fs::remove_dir_all(project);
+    let _ = fs::remove_dir_all(reports);
 }
 
 #[test]

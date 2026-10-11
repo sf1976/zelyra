@@ -729,15 +729,21 @@ its source evidence and reason.
 - [🧪] Expand CLI help: `zelyra <command> --help` and nested calls such as
   `zelyra db plan --help` explain purpose, options, examples, and prerequisites
   in German or English without running the command.
-- [🗺️] Start a read-only Laravel project analyzer in the Zelyra CLI:
-  `zelyra migrate laravel <project> --report <path>`. It statically inventories
+- [🧪] Start a read-only Laravel project analyzer in the Zelyra CLI:
+  `zelyra migrate laravel <project> --report <path>`. The first static inventory
+  already detects
   Laravel/package versions, routes and middleware, controllers, models,
   migrations, validation, views, jobs, and integrations, and links findings to
   source locations. It must not boot the application, invoke Artisan, connect to
   a database, or read `.env` files. Reports distinguish directly mappable,
   partially mappable, manual, and unresolved items and identify a safe next
   step. Start with a documented supported-pattern subset; ambiguous matches
-  remain unresolved rather than guessed.
+  remain unresolved rather than guessed. The first release scans Composer
+  constraints, routes, models, controllers, schema creation, relationships,
+  validation entry points, queued jobs, Blade views, and selected integrations
+  with source locations in Markdown or JSON. It creates only a new report
+  outside the source project. Versioned compatibility mapping, linked project
+  graph, package/rule analysis, and scaffold generation continue in 0.9.4–0.9.8.
 - [🧪] Grow the IDE database view into a safe workbench: inspect tables,
   columns, indexes, and declared relationships; browse records read-only by
   default; show how source modules own each object. Make the ER diagram

@@ -718,8 +718,9 @@ manuell umzusetzen.
 - [🧪] Die CLI-Hilfe ausbauen: `zelyra <befehl> --help` und verschachtelte
   Aufrufe wie `zelyra db plan --help` erklären Zweck, Optionen, Beispiele und
   Voraussetzungen in Deutsch oder Englisch, ohne den Befehl auszuführen.
-- [🗺️] Einen schreibgeschützten Laravel-Projektanalysator in der Zelyra-CLI
-  beginnen: `zelyra migrate laravel <projekt> --report <pfad>`. Er erfasst
+- [🧪] Einen schreibgeschützten Laravel-Projektanalysator in der Zelyra-CLI
+  beginnen: `zelyra migrate laravel <projekt> --report <pfad>`. Der erste
+  statische Inventarlauf erfasst
   Laravel-/Paketversionen, Routen und Middleware, Controller, Models,
   Migrationen, Validierungen, Views, Jobs und Integrationen statisch und
   verknüpft die Funde mit Quellpositionen. Er darf die Anwendung nicht starten,
@@ -727,7 +728,13 @@ manuell umzusetzen.
   Dateien lesen. Berichte unterscheiden direkt abbildbare, teilweise
   abbildbare, manuell umzusetzen und nicht sicher zuordenbare Elemente und
   nennen den nächsten sicheren Schritt. Der unterstützte Musterumfang wird
-  dokumentiert; mehrdeutige Funde bleiben offen statt erraten zu werden.
+  dokumentiert; mehrdeutige Funde bleiben offen statt erraten zu werden. Die
+  erste Fassung erfasst bereits Composer-Versionen, Routen, Models,
+  Controller, Schema-Erstellungen, Beziehungen, Validierungsaufrufe, Queued
+  Jobs, Views und ausgewählte Integrationen mit Fundstellen in Markdown oder
+  JSON. Sie bearbeitet ausschließlich einen neuen Bericht außerhalb des
+  Quellprojekts. Versionsmatrix, verknüpfter Projektgraph, Paket-/Regelabgleich
+  und Gerüstgenerierung folgen in 0.9.4–0.9.8.
 - [🧪] Die Datenbankansicht der IDE zur sicheren Werkbank ausbauen: Tabellen,
   Spalten, Indizes und deklarierte Beziehungen ansehen, Datensätze standardmäßig
   schreibgeschützt durchsuchen und den zuständigen Quellmodulen zuordnen. Das
