@@ -421,7 +421,12 @@ function completionSource(context) {
   const word = context.matchBefore(/[\w]+/);
   if (!word && !context.explicit) return null;
   const source = context.state.doc.toString();
-  return Promise.all([
+  const from = word ? word.from : context.pos;
+  const basicOptions = [
+    ...[...keywords].map((label) => ({ label, type: "keyword" })),
+    { label: "main", type: "function", detail: t("symbolEntrypoint") },
+  ];
+  const projectOptions = Promise.all([
     loadProjectSymbols(activePath),
     loadLocalSymbols(activePath, source, context.pos),
   ]).then(([symbols, locals]) => {
@@ -439,15 +444,12 @@ function completionSource(context) {
     if (!localNames.has("main") && !projectOptions.some((item) => item.label === "main")) {
       projectOptions.push({ label: "main", type: "function", detail: t("symbolEntrypoint") });
     }
-    return {
-      from: word ? word.from : context.pos,
-      options: [
-        ...[...keywords].map((label) => ({ label, type: "keyword" })),
-        ...localOptions,
-        ...projectOptions,
-      ],
-    };
+    return [...localOptions, ...projectOptions];
   });
+  const fast = { from, options: basicOptions };
+  const complete = projectOptions.then((options) => ({ from, options: [...basicOptions, ...options] }));
+  const fallback = new Promise((resolve) => setTimeout(() => resolve(fast), 300));
+  return Promise.race([complete, fallback]);
 }
 
 function loadLocalSymbols(path, source, offset) {
