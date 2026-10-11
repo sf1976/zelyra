@@ -1,0 +1,5 @@
+fn main() {
+    maximum = json_decode<Int>("9223372036854775807")
+    value = maximum + 1
+    print(value)
+}

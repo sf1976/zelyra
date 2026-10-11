@@ -70,6 +70,14 @@ den Beweis, dass beliebige Anwendungen korrekt sind.
   gebräuchlichen Operationen, deterministische typisierte Maps, `Option`,
   `Result` und exhaustives Pattern Matching als Anweisung oder Ausdruck; ein
   `match`-Ausdruck liefert einen einheitlich typgeprüften Wert.
+- ✅ `Int` und `UInt` rechnen innerhalb ihrer 64-Bit-Bereiche; Überlauf,
+  Unterlauf und Division durch null werden als Runtimefehler gemeldet. Das
+  mehrteilige `examples/type_system` prüft unterstützte Typen, erwartete
+  Compiler-/Runtimefehler und dokumentiert partielle sowie fehlende Typen.
+  `Unit` ist in Typsignaturen und JSON-`null`-Roundtrips nutzbar. `Decimal`
+  verwendet weiterhin binäre `Float`-Runtimewerte; Datum/Uhrzeit, Binärdaten,
+  Enums, Tupel, Sets und benutzerdefinierte Generics sind nicht vollständig
+  unterstützt.
 - ✅ Stringwerte lassen sich lexikografisch vergleichen. `json_decode_result<T>`,
   `read_text_result` und `write_text_result` geben erwartbare Parse- und
   Dateifehler als `Result` zurück. `format_timestamp` zeigt UTC-Zeitstempel als

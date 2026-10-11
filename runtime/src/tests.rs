@@ -53,6 +53,42 @@ fn match_expressions_bind_patterns_and_return_typed_values() {
 }
 
 #[test]
+fn unsigned_integer_arithmetic_comparisons_and_overflow_are_consistent() {
+    let output = run(
+        "fn increment(value: UInt) -> UInt { return value + json_decode<UInt>(\"1\") } fn main() { one = json_decode<UInt>(\"1\") two = increment(one) maximum = json_decode<UInt>(\"18446744073709551615\") assert(two > one) assert(maximum > two) print(json_encode(two)) print(json_encode(maximum)) }",
+    );
+    assert_eq!(output, ["2", "18446744073709551615"]);
+
+    for (source, expected) in [
+        (
+            "fn main() { value = json_decode<Int>(\"9223372036854775807\") + 1 }",
+            "Int overflow",
+        ),
+        (
+            "fn main() { value = json_decode<UInt>(\"18446744073709551615\") + json_decode<UInt>(\"1\") }",
+            "UInt overflow",
+        ),
+        (
+            "fn main() { value = json_decode<UInt>(\"0\") - json_decode<UInt>(\"1\") }",
+            "UInt underflow",
+        ),
+        (
+            "fn main() { value = json_decode<Int>(\"-9223372036854775808\") / -1 }",
+            "Int overflow",
+        ),
+        (
+            "fn main() { value = -json_decode<Int>(\"-9223372036854775808\") }",
+            "Int overflow",
+        ),
+    ] {
+        let program = parse(&lex(source).unwrap()).unwrap();
+        check(&program).unwrap();
+        let error = execute(&program).expect_err("overflow must return a runtime error");
+        assert!(error.message.contains(expected), "{}", error.message);
+    }
+}
+
+#[test]
 fn text_trim_removes_unicode_whitespace_without_changing_interior_text() {
     let output = run("fn main() { print(text_trim(\"  Grüße\u{00a0}\")) }");
     assert_eq!(output, ["Grüße"]);

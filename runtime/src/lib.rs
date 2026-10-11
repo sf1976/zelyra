@@ -4932,6 +4932,9 @@ fn compatible(expected: &Type, actual: &Type) -> bool {
             compatible(expected_ok, actual_ok) && compatible(expected_error, actual_error)
         }
         (Type::Array(expected), Type::Array(actual)) => compatible(expected, actual),
+        (Type::Map(expected_key, expected_value), Type::Map(actual_key, actual_value)) => {
+            compatible(expected_key, actual_key) && compatible(expected_value, actual_value)
+        }
         (Type::HttpResult(expected), Type::HttpResult(actual)) => compatible(expected, actual),
         _ => expected == actual,
     }
@@ -7813,7 +7816,10 @@ impl Interpreter {
             ExprKind::Unary { op, expr: inner } => {
                 let value = self.eval(inner, env)?;
                 match (op, value) {
-                    (UnaryOp::Negate, Value::Int(v)) => Ok(Value::Int(-v)),
+                    (UnaryOp::Negate, Value::Int(v)) => v
+                        .checked_neg()
+                        .map(Value::Int)
+                        .ok_or_else(|| self.runtime_error(expr.span, "Int overflow")),
                     (UnaryOp::Negate, Value::UInt(_)) => {
                         Err(self.runtime_error(expr.span, "cannot negate UInt"))
                     }
@@ -7923,14 +7929,53 @@ impl Interpreter {
     ) -> Result<Value, RuntimeError> {
         use BinaryOp::*;
         match (left, op, right) {
-            (Value::Int(a), Add, Value::Int(b)) => Ok(Value::Int(a + b)),
-            (Value::Int(a), Subtract, Value::Int(b)) => Ok(Value::Int(a - b)),
-            (Value::Int(a), Multiply, Value::Int(b)) => Ok(Value::Int(a * b)),
+            (Value::Int(a), Add, Value::Int(b)) => a
+                .checked_add(b)
+                .map(Value::Int)
+                .ok_or_else(|| self.runtime_error(span, "Int overflow")),
+            (Value::Int(a), Subtract, Value::Int(b)) => a
+                .checked_sub(b)
+                .map(Value::Int)
+                .ok_or_else(|| self.runtime_error(span, "Int overflow")),
+            (Value::Int(a), Multiply, Value::Int(b)) => a
+                .checked_mul(b)
+                .map(Value::Int)
+                .ok_or_else(|| self.runtime_error(span, "Int overflow")),
             (Value::Int(_), Divide, Value::Int(0)) | (Value::Int(_), Remainder, Value::Int(0)) => {
                 Err(self.runtime_error(span, "division by zero"))
             }
-            (Value::Int(a), Divide, Value::Int(b)) => Ok(Value::Int(a / b)),
-            (Value::Int(a), Remainder, Value::Int(b)) => Ok(Value::Int(a % b)),
+            (Value::Int(i64::MIN), Divide, Value::Int(-1)) => {
+                Err(self.runtime_error(span, "Int overflow"))
+            }
+            (Value::Int(i64::MIN), Remainder, Value::Int(-1)) => {
+                Err(self.runtime_error(span, "Int overflow"))
+            }
+            (Value::Int(a), Divide, Value::Int(b)) => a
+                .checked_div(b)
+                .map(Value::Int)
+                .ok_or_else(|| self.runtime_error(span, "Int overflow")),
+            (Value::Int(a), Remainder, Value::Int(b)) => a
+                .checked_rem(b)
+                .map(Value::Int)
+                .ok_or_else(|| self.runtime_error(span, "Int overflow")),
+            (Value::UInt(a), Add, Value::UInt(b)) => a
+                .checked_add(b)
+                .map(Value::UInt)
+                .ok_or_else(|| self.runtime_error(span, "UInt overflow")),
+            (Value::UInt(a), Subtract, Value::UInt(b)) => a
+                .checked_sub(b)
+                .map(Value::UInt)
+                .ok_or_else(|| self.runtime_error(span, "UInt underflow")),
+            (Value::UInt(a), Multiply, Value::UInt(b)) => a
+                .checked_mul(b)
+                .map(Value::UInt)
+                .ok_or_else(|| self.runtime_error(span, "UInt overflow")),
+            (Value::UInt(_), Divide, Value::UInt(0))
+            | (Value::UInt(_), Remainder, Value::UInt(0)) => {
+                Err(self.runtime_error(span, "division by zero"))
+            }
+            (Value::UInt(a), Divide, Value::UInt(b)) => Ok(Value::UInt(a / b)),
+            (Value::UInt(a), Remainder, Value::UInt(b)) => Ok(Value::UInt(a % b)),
             (Value::Float(a), Add, Value::Float(b)) => Ok(Value::Float(a + b)),
             (Value::Float(a), Subtract, Value::Float(b)) => Ok(Value::Float(a - b)),
             (Value::Float(a), Multiply, Value::Float(b)) => Ok(Value::Float(a * b)),
@@ -7947,6 +7992,10 @@ impl Interpreter {
             (Value::Int(a), LessEqual, Value::Int(b)) => Ok(Value::Bool(a <= b)),
             (Value::Int(a), Greater, Value::Int(b)) => Ok(Value::Bool(a > b)),
             (Value::Int(a), GreaterEqual, Value::Int(b)) => Ok(Value::Bool(a >= b)),
+            (Value::UInt(a), Less, Value::UInt(b)) => Ok(Value::Bool(a < b)),
+            (Value::UInt(a), LessEqual, Value::UInt(b)) => Ok(Value::Bool(a <= b)),
+            (Value::UInt(a), Greater, Value::UInt(b)) => Ok(Value::Bool(a > b)),
+            (Value::UInt(a), GreaterEqual, Value::UInt(b)) => Ok(Value::Bool(a >= b)),
             (Value::Float(a), Less, Value::Float(b)) => Ok(Value::Bool(a < b)),
             (Value::Float(a), LessEqual, Value::Float(b)) => Ok(Value::Bool(a <= b)),
             (Value::Float(a), Greater, Value::Float(b)) => Ok(Value::Bool(a > b)),

@@ -1,0 +1,44 @@
+pub fn identity_numbers(value: Int[]) -> Int[] {
+    return value
+}
+pub fn identity_labels(value: Map<String, Int>) -> Map<String, Int> {
+    return value
+}
+pub fn run() {
+    empty: Int[] = []
+    assert(len(empty) == 0, "typed empty arrays")
+    mutable numbers = identity_numbers(append(empty, 4))
+    numbers = append(numbers, 4)
+    numbers = append(numbers, 9)
+    assert(len(numbers) == 3, "arrays allow duplicate elements")
+    assert(numbers[0] == 4 && numbers[2] == 9, "array indexing")
+    nested: Int[][] = [[1, 2], [], [3]]
+    assert(nested[0][1] == 2 && len(nested[1]) == 0, "nested and empty arrays")
+    combined = numbers + [12]
+    assert(len(combined) == 4 && len(numbers) == 3, "array concatenation returns a new value")
+    empty_map: Map<String, Int> = Map {
+    }
+    assert(len(empty_map) == 0, "typed empty Map")
+    pairs: Map<String, Int> = identity_labels(Map {
+        "eins": 1
+        "zwei": 2
+        "eins": 3
+    }
+    )
+    assert(len(pairs) == 2, "duplicate Map keys keep one entry")
+    first_duplicate = match get(pairs, "eins") {
+        Some(value) => value == 3
+        None => false
+    }
+    assert(first_duplicate, "last duplicate Map value wins")
+    missing_key = match get(pairs, "fehlt") {
+        Some(_) => false
+        None => true
+    }
+    assert(missing_key, "missing Map key is represented by None")
+    mutable changed = put(pairs, "zwei", 20)
+    changed = put(changed, "drei", 3)
+    assert(len(changed) == 3, "put updates or adds one Map key")
+    assert(contains(changed, "drei"), "Map key lookup")
+    print("PASS Arrays, nested collections, duplicates, indexing and Map lookup")
+}

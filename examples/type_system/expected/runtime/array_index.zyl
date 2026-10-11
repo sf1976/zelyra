@@ -1,0 +1,4 @@
+fn main() {
+    values = [1]
+    print(values[1])
+}

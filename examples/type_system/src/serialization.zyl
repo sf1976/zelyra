@@ -1,0 +1,68 @@
+struct Snapshot {
+    number: Int
+    title: String
+    active: Bool
+    marker: Char
+    labels: String[]
+    note: String?
+}
+fn optional_identity(value: String?) -> String? {
+    return value
+}
+fn result_identity(value: Result<Int, String>) -> Result<Int, String> {
+    return value
+}
+fn unit_value() -> Unit {
+    return json_decode<Unit>("null")
+}
+pub fn run() {
+    missing: String? = optional_identity(None)
+    present: String? = optional_identity(Some("Grüße"))
+    assert(missing == None && present == Some("Grüße"), "Option distinguishes absent and present values")
+    assert(0 != 1 && false != true && "" != "x", "zero, false, and empty String are distinct values")
+    original = Snapshot {
+        number: 7
+        title: "Angebot; \"Änderung\"\n🧭"
+        active: true
+        marker: 'ä'
+        labels: ["eins", "zwei"]
+        note: None
+    }
+    json = json_encode(original)
+    restored = json_decode<Snapshot>(json)
+    assert(restored.number == original.number, "record numeric field survives JSON")
+    assert(restored.title == original.title, "record Unicode and newlines survive JSON")
+    assert(restored.marker == original.marker, "Char restores from one-scalar JSON String")
+    assert(restored.labels == original.labels && restored.note == None, "array and Option fields survive JSON")
+    present_copy = json_decode<String?>(json_encode(Some("Emoji 🧭")))
+    assert(present_copy == Some("Emoji 🧭"), "Some value survives JSON")
+    labels: Map<String, Int> = Map {
+        "first": 1
+        "second": 2
+    }
+    restored_labels = json_decode<Map<String, Int>>(json_encode(labels))
+    assert(len(restored_labels) == 2, "String-keyed Map survives JSON")
+    restored_first = match get(restored_labels, "first") {
+        Some(value) => value
+        None => 0
+    }
+    assert(restored_first == 1, "String-keyed Map values survive JSON")
+    assert(json_encode(None) == "null", "None serializes as JSON null")
+    assert(json_decode<Int>(json_encode(42)) == 42, "Int JSON round trip")
+    assert(json_decode<UInt>(json_encode(json_decode<UInt>("42"))) == json_decode<UInt>("42"), "UInt JSON round trip")
+    assert(json_decode<Bool>(json_encode(false)) == false, "Bool JSON round trip")
+    assert(json_decode<Char>(json_encode('🧭')) == '🧭', "Char JSON round trip")
+    unit_json = json_encode(unit_value())
+    assert(unit_json == "null", "Unit serializes as JSON null")
+    print("PASS Unit type, function return and JSON null")
+    successful: Result<Int, String> = result_identity(Ok(9))
+    result_json = match successful {
+        Ok(value) => json_encode(value)
+        Err(_) => "unexpected error"
+    }
+    assert(result_json == "9", "Ok values serialize as the contained JSON value")
+    failed: Result<Int, String> = Err("unavailable")
+    assert(json_encode(failed) == "{\"error\":\"unavailable\"}", "Err serializes using an error object")
+    assert(json_decode<Float>(json_encode(0.1)) == 0.1, "finite Float JSON round trip")
+    print("PASS Option, Result, records and supported JSON round trips")
+}

@@ -1,0 +1,4 @@
+fn main() {
+    minimum = json_decode<Int>("-9223372036854775808")
+    print(-minimum)
+}

@@ -68,6 +68,13 @@ proof that arbitrary applications are correct.
   array operations, deterministic typed maps, `Option`, `Result`, and pattern
   matching as either a statement or expression; a `match` expression returns
   a value whose type is checked consistently across all arms.
+- ✅ `Int` and `UInt` arithmetic is bounded to their 64-bit ranges; overflow,
+  underflow, and division by zero return runtime errors. The modular
+  `examples/type_system` checks supported types and expected compiler/runtime
+  errors, and documents partial or missing types. `Decimal` still uses binary
+  `Float` runtime values. `Unit` works in type signatures and JSON `null` round
+  trips; date/time, binary data, enums, tuples, sets, and user-defined generics
+  are not fully supported.
 - ✅ Strings support lexicographic comparisons. `json_decode_result<T>`,
   `read_text_result`, and `write_text_result` return expected parse and file
   errors as `Result`. `format_timestamp` renders UTC timestamps as ISO 8601;

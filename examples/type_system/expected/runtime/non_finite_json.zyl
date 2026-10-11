@@ -1,0 +1,4 @@
+fn main() {
+    value = 1.0 / 0.0
+    print(json_encode(value))
+}

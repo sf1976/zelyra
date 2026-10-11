@@ -1,0 +1,37 @@
+pub struct Address {
+    city: String
+}
+pub struct Person {
+    name: String
+    age: Int
+    address: Address
+    nickname: String?
+}
+pub fn identity_person(value: Person) -> Person {
+    return value
+}
+pub fn run() {
+    original = Person {
+        name: "Ada"
+        age: 36
+        address: Address {
+            city: "München"
+        }
+        nickname: None
+    }
+    copy = identity_person(original)
+    assert(copy.name == "Ada" && copy.address.city == "München", "record fields and nested records")
+    assert(copy == original, "records compare by value")
+    mutable current = original
+    current = Person {
+        name: "Grace"
+        age: 37
+        address: Address {
+            city: "Berlin"
+        }
+        nickname: Some("Amazing")
+    }
+    assert(current.name == "Grace" && current.nickname == Some("Amazing"), "records can be replaced through mutable bindings")
+    assert(original.name == "Ada", "replacing a record binding leaves the earlier value unchanged")
+    print("PASS records, nested fields, Option fields, value equality and replacement")
+}

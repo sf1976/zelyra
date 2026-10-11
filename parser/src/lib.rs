@@ -2038,6 +2038,7 @@ impl<'a> Parser<'a> {
             "Date" => Type::Date,
             "Time" => Type::Time,
             "Duration" => Type::Duration,
+            "Unit" => Type::Unit,
             "Option" => {
                 self.expect(TokenKind::Less, "`<` after `Option`")?;
                 let inner = self.type_name()?;

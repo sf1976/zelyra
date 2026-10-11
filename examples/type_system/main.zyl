@@ -1,0 +1,14 @@
+import "src/scalars.zyl" as scalars
+import "src/collections.zyl" as collections
+import "src/records.zyl" as records
+import "src/serialization.zyl" as serialization
+fn main() uses Clock {
+    scalars::run()
+    collections::run()
+    records::run()
+    serialization::run()
+    print("Report: 7 expected compiler errors and 12 expected runtime errors are verified by the CLI integration test.")
+    print("Not supported: see the type matrix in README.md.")
+    print("Ergebnis: alle ausführbaren Typprüfungen bestanden.")
+    print("Bericht: README.md (unterstützt, teilweise unterstützt, nicht unterstützt)")
+}

@@ -1,0 +1,7 @@
+[project]
+name = "type-system-coverage"
+version = "0.1.0"
+zelyra = "0.1"
+
+[capabilities]
+clock = true

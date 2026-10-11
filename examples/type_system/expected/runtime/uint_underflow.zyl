@@ -1,0 +1,5 @@
+fn main() {
+    zero = json_decode<UInt>("0")
+    one = json_decode<UInt>("1")
+    print(zero - one)
+}
