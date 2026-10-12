@@ -231,6 +231,10 @@ pub(super) fn localized_validation_message(language: UiLanguage, message: &str) 
             "validation.money"
         }
         "must be true or false" => "validation.boolean",
+        "must be a valid Date in YYYY-MM-DD format" => "validation.date",
+        "must be a valid Time in HH:MM:SS format" => "validation.time",
+        "must be a Timestamp in UTC ISO format or Unix milliseconds within years 0001 through 9999" => "validation.timestamp",
+        "must be an integer duration in milliseconds" => "validation.duration",
         "must be a valid email address" => "validation.email",
         "must be a valid HTTP URL" => "validation.url",
         "must be an integer identifier" => "validation.id",

@@ -1,0 +1,29 @@
+# Zahlungsfrist in Kalendertagen; UTC-Zeitstempel rechnen in Millisekunden.
+fn main() {
+    issued: Date = date("2026-10-12")
+    match date_add_days_result(issued, 14) {
+        Ok(due) => {
+            print(due)
+        }
+        Err(reason) => {
+            print(reason)
+        }
+    }
+    match date_days_between_result(date("2024-02-28"), date("2024-03-01")) {
+        Ok(days) => {
+            print(days)
+        }
+        Err(reason) => {
+            print(reason)
+        }
+    }
+    stamp: Timestamp = json_decode<Timestamp>("1704067200000")
+    match timestamp_add_result(stamp, duration_ms(1)) {
+        Ok(later) => {
+            print(format_timestamp(later))
+        }
+        Err(reason) => {
+            print(reason)
+        }
+    }
+}

@@ -768,3 +768,12 @@ Zwischenwert; Restbildung am negativen Minimum verursacht keinen Panic.
 JSON-Ausgaben bleiben Dezimalstrings. Siehe [vollständige Regeln](decimals.de.md)
 und [Beispiel](../examples/decimal_money.zyl). Das belegt keine volle
 PostgreSQL-CRUD-/Auth-Parität oder Produktivfreigabe.
+
+## Datums-/Zeitgrenzen im Entwicklungszweig
+
+Kalender-Tagesrechnung und UTC-Millisekunden sind mit unabhängigen Python-
+Referenzen geprüft. Formulare und APIs weisen ungültige Kalender-/Uhrzeitwerte
+ab; Timestamp ist auf ISO-Jahre 0001–9999 begrenzt. API-Handler erhalten echte
+Date-/Time-/Timestamp-/Duration-Werte. JSON-Ausgaben bleiben unverändert;
+generierte Clients werden daran angepasst. Weitere SQL-Speicher-/Ergebnispfade
+bleiben Gates. Siehe [Regeln](dates.de.md) und [Nachweise](release-readiness/0.9.9-calendar-http.de.md).

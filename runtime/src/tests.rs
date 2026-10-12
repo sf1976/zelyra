@@ -2997,3 +2997,37 @@ fn decimal_extreme_remainder_and_invalid_operations_do_not_panic() {
         assert!(error.message.contains("overflow") || error.message.contains("zero"));
     }
 }
+
+#[test]
+fn timestamp_decoding_rejects_values_outside_the_documented_calendar_range() {
+    for value in [
+        "-62135596800001",
+        "253402300800000",
+        "9223372036854775807",
+        "-9223372036854775808",
+    ] {
+        let program = parse(
+            &lex(&format!(
+                "fn main() {{ value = json_decode<Timestamp>(\"{value}\") }}"
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        check(&program).unwrap();
+        let error = execute(&program).unwrap_err();
+        assert!(error.span.start > 0);
+        assert!(error.message.contains("Timestamp"));
+    }
+    assert_eq!(
+        run(r#"fn main() {
+        print(format_timestamp(json_decode<Timestamp>("-62135596800000")))
+        print(format_timestamp(json_decode<Timestamp>("253402300799999")))
+        print(format_timestamp(json_decode<Timestamp>("-1")))
+    }"#),
+        [
+            "0001-01-01T00:00:00.000Z",
+            "9999-12-31T23:59:59.999Z",
+            "1969-12-31T23:59:59.999Z"
+        ]
+    );
+}

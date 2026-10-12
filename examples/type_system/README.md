@@ -105,3 +105,7 @@ Weitere exakte Decimal-/Money-Grenzen, SQL-Skalen und Alias-Regeln:
 [Decimal und Geldbeträge](../../docs/decimals.de.md). Die Grenzwertregressionen
 prüfen das skalierte Minimum/Maximum, gültige breite Zwischenwerte und
 kontrollierte Fehler.
+
+Aktuelle Date-/Time-/Timestamp-/Duration-Regeln und unabhängige Nachweise:
+[Datum und UTC-Dauern](../../docs/dates.de.md). Timestamp-Eingaben außerhalb
+der ISO-Jahre 0001–9999 werden kontrolliert abgewiesen.

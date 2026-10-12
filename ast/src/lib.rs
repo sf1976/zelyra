@@ -2,6 +2,7 @@ use std::fmt;
 
 pub mod decimal;
 pub mod json;
+pub mod temporal;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Span {

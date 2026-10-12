@@ -3088,3 +3088,34 @@ fn schema_setup_runs_independently_of_web_server_readiness() {
         ["zelyra", "db", "apply", "main.zyl"]
     );
 }
+
+#[test]
+fn temporal_api_inputs_produce_validated_runtime_types() {
+    let program = parse(&lex("fn main() {}").unwrap()).unwrap();
+    let date = api_value_json(&serde_json::json!("2000-02-29"), &Type::Date, &program).unwrap();
+    assert!(matches!(date, RuntimeValue::Date(value) if value == "2000-02-29"));
+    let time = api_value_json(&serde_json::json!("23:59:59"), &Type::Time, &program).unwrap();
+    assert!(matches!(time, RuntimeValue::Time(value) if value == "23:59:59"));
+    let timestamp = api_value_json(&serde_json::json!(-1), &Type::Timestamp, &program).unwrap();
+    assert!(matches!(timestamp, RuntimeValue::Timestamp(-1)));
+    for (ty, value) in [
+        (Type::Date, serde_json::json!("1900-02-29")),
+        (Type::Time, serde_json::json!("24:00:00")),
+        (Type::Timestamp, serde_json::json!(253402300800000_i64)),
+        (Type::Duration, serde_json::json!(true)),
+    ] {
+        assert!(api_value_json(&value, &ty, &program).is_err());
+    }
+}
+
+#[test]
+fn temporal_client_schemas_match_existing_wire_formats() {
+    assert_eq!(docs::typescript_type(&Type::Timestamp), "number");
+    assert_eq!(docs::typescript_type(&Type::Duration), "number");
+    assert_eq!(docs::typescript_type(&Type::Date), "string");
+    let date_schema = zelyra_ast::json::parse(&docs::openapi_schema(&Type::Date)).unwrap();
+    assert_eq!(date_schema["format"], "date");
+    let timestamp_schema =
+        zelyra_ast::json::parse(&docs::openapi_schema(&Type::Timestamp)).unwrap();
+    assert_eq!(timestamp_schema["type"], "integer");
+}

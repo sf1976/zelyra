@@ -250,6 +250,12 @@ jobs:
             target/debug/zelyra fmt "$formatted_file" --check
             rm "$formatted_file"
           done
+      - name: Verify Gregorian calendar and UTC reference values
+        run: python3 ./scripts/check_calendar_references.py --compiler target/debug/zelyra
+      - name: Verify typed temporal HTTP round trips
+        env:
+          ZELYRA_BIN: target/debug/zelyra
+        run: python3 ./tests/temporal-api-e2e.py
       - name: Run generated-project MariaDB end-to-end test
         env:
           ZELYRA_GENERATED_E2E_ROOT_PASSWORD: root
