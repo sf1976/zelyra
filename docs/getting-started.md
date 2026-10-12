@@ -90,6 +90,9 @@ The current repository contains:
 - run_process(command, args) through Process without a shell, using an exact
   command allowlist and bounded execution;
 - runtime-checked function contracts using `requires` and `ensures`.
+- transactional application mail with `mail_queue` and an explicit
+  MariaDB outbox worker; SMTP uses authenticated STARTTLS/implicit TLS or a
+  loopback-only plaintext sink and checks both email and host capabilities;
 - an initial structured-concurrency slice using `parallel` and `await`; each
   branch uses an immutable environment snapshot and all branches are joined
   before execution continues.

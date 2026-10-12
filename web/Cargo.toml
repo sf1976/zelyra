@@ -8,6 +8,7 @@ license.workspace = true
 zelyra-ast.workspace = true
 zelyra-database.workspace = true
 zelyra-forms.workspace = true
+zelyra-mail.workspace = true
 argon2 = "0.5"
 blake2 = "0.10"
 rand_core.workspace = true

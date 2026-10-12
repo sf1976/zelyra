@@ -1,14 +1,10 @@
 use super::*;
-use lettre::{
-    message::{header::ContentType, Mailbox},
-    transport::smtp::authentication::Credentials,
-    Message, SmtpTransport, Transport,
-};
 use rand_core::{OsRng, RngCore};
 use ring::aead::{Aad, LessSafeKey, Nonce, UnboundKey, AES_256_GCM};
 use std::sync::mpsc::{SyncSender, TrySendError};
 #[cfg(not(test))]
 use std::{sync::mpsc::sync_channel, thread, time::Duration};
+use zelyra_mail::{MailMessage, SmtpClient, SmtpConfig, SmtpSecurity};
 use zeroize::Zeroize;
 
 const RESET_TOKEN_TTL_MINUTES: u32 = 15;
@@ -35,6 +31,7 @@ pub struct PasswordResetSmtpConfig<'a> {
     pub security: &'a str,
     pub username: Option<&'a str>,
     pub password: Option<&'a str>,
+    pub ca_certificate_pem: Option<&'a [u8]>,
     pub from: &'a str,
     pub base_url: &'a str,
     pub database_url: &'a str,
@@ -85,6 +82,7 @@ impl PasswordResetMailer {
             security,
             username,
             password,
+            ca_certificate_pem,
             from,
             base_url,
             database_url,
@@ -106,55 +104,35 @@ impl PasswordResetMailer {
                 "ZELYRA_SMTP_USERNAME and ZELYRA_SMTP_PASSWORD must be set together".into(),
             );
         }
-        let local_plaintext = security == "local_plaintext";
-        if local_plaintext
-            && (!matches!(host, "localhost" | "127.0.0.1" | "::1") || username.is_some())
-        {
-            return Err(
-                "local_plaintext SMTP is restricted to loopback without authentication".into(),
-            );
-        }
-        let mut builder = match security {
-            "implicit_tls" => SmtpTransport::relay(host),
-            "starttls" => SmtpTransport::starttls_relay(host),
-            "local_plaintext" => Ok(SmtpTransport::builder_dangerous(host)),
-            _ => {
-                return Err(
-                    "ZELYRA_SMTP_SECURITY must be implicit_tls, starttls, or local_plaintext"
-                        .into(),
-                )
-            }
-        }
-        .map_err(|_| "SMTP relay configuration is invalid".to_owned())?
-        .port(port)
-        .timeout(Some(Duration::from_secs(5)));
-        if let (Some(username), Some(password)) = (username, password) {
-            builder = builder.credentials(Credentials::new(username.into(), password.into()));
-        }
-        let transport = Arc::new(builder.build());
-        let from = from
-            .parse::<Mailbox>()
-            .map_err(|_| "ZELYRA_SMTP_FROM must be a valid email address".to_owned())?;
+        let security = SmtpSecurity::parse(security).map_err(|_| {
+            "ZELYRA_SMTP_SECURITY must be implicit_tls, starttls, or local_plaintext".to_owned()
+        })?;
+        let smtp = Arc::new(
+            SmtpClient::new(SmtpConfig {
+                host,
+                port,
+                security,
+                username,
+                password,
+                ca_certificate_pem,
+                from,
+            })
+            .map_err(|error| error.to_string())?,
+        );
         let base_url = base_url.trim_end_matches('/').to_owned();
         let sender: Arc<ResetMailSender> = Arc::new(move |recipient, link, language| {
-            let to = recipient
-                .parse::<Mailbox>()
-                .map_err(|_| "password reset recipient is invalid".to_owned())?;
             let subject = i18n::text(language, "auth.reset_email_subject").to_owned();
             let body = i18n::text(language, "auth.reset_email_body")
                 .replace("{minutes}", &RESET_TOKEN_TTL_MINUTES.to_string())
                 .replace("{link}", link);
-            let message = Message::builder()
-                .from(from.clone())
-                .to(to)
-                .subject(subject)
-                .header(ContentType::TEXT_PLAIN)
-                .body(body)
-                .map_err(|_| "password reset message could not be built".to_owned())?;
-            transport
-                .send(&message)
-                .map(|_| ())
-                .map_err(|_| "SMTP transport could not deliver the message".to_owned())
+            smtp.send(MailMessage {
+                to: recipient,
+                subject: &subject,
+                text_body: &body,
+                html_body: None,
+                message_id: None,
+            })
+            .map_err(|error| error.to_string())
         });
         #[cfg(not(test))]
         let queue = {
@@ -206,6 +184,7 @@ impl PasswordResetMailer {
             security,
             username,
             password,
+            ca_certificate_pem: None,
             from,
             base_url,
             database_url: "mariadb://test:test@127.0.0.1/test",

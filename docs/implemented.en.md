@@ -145,6 +145,12 @@ See the [formal specification](specification.md),
 - ✅ Native SQL is checked against known schemas for tables, columns,
   parameters, nullability, and result mapping. Parameters are bound safely;
   transactions are available.
+- 🧪 The 0.9.5 branch adds `mail_queue` and `mail_deliver` for typed text/HTML
+  messages through the MariaDB transactional outbox. SMTP authentication,
+  STARTTLS, implicit TLS, explicit private CA roots, a five-second transport
+  timeout, message bounds, and a loopback test sink are covered. Delivery is
+  at least once; PostgreSQL outbox support, templates, and attachments are not
+  included in this milestone.
 - ✅ SQLite has tested schema and local database workflows. PostgreSQL schema
   inspection/planning and selected safety checks are tested. 0.6.0 adds an
   experimental native PostgreSQL 16 runtime slice for direct parameterized SQL

@@ -154,6 +154,12 @@ Siehe die [formale Sprachspezifikation](specification.de.md), die
 - ✅ Natives SQL wird anhand bekannter Schemata auf Tabellen, Spalten,
   Parameter, Nullability und Ergebnis-Mapping geprüft. Parameter werden sicher
   gebunden; Transaktionen stehen zur Verfügung.
+- 🧪 Der 0.9.5-Branch ergänzt `mail_queue` und `mail_deliver` für typisierte
+  Text-/HTML-Nachrichten über die transaktionale MariaDB-Outbox. SMTP-
+  Authentifizierung, STARTTLS, implizites TLS, ausdrückliche private CA-Wurzeln,
+  ein fünfsekündiges Transport-Timeout, Nachrichtengrenzen und eine Loopback-
+  Testsenke werden geprüft. Die Zustellung erfolgt mindestens einmal;
+  PostgreSQL-Outbox, Templates und Anhänge sind nicht Teil dieses Meilensteins.
 - ✅ SQLite besitzt getestete Schema- und lokale Datenbankabläufe. PostgreSQL-
   Schema-Inspektion/-Planung und ausgewählte Sicherheitsprüfungen sind
   getestet. 0.6.0 ergänzt eine experimentelle native PostgreSQL-16-Runtime-

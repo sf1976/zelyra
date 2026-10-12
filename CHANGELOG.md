@@ -4,6 +4,31 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language compatibility line remains `0.1`. Compiler and repository
 releases follow Semantic Versioning independently of the language line.
 
+## 0.9.5 — in development
+
+- Add first-party typed text/HTML email with SMTP authentication, implicit TLS,
+  STARTTLS, private CA roots, message bounds, explicit host allowlisting, and
+  transactional MariaDB outbox delivery. Delivery remains at least once; the
+  mail feature does not yet include templates, attachments, or PostgreSQL
+  outbox support. / Typisierte Text-/HTML-Mail mit SMTP-Authentifizierung,
+  implizitem TLS, STARTTLS, privaten CA-Wurzeln, Nachrichtengrenzen,
+  ausdrücklicher Hostfreigabe und transaktionaler MariaDB-Outbox ergänzen. Die
+  Zustellung erfolgt mindestens einmal; Templates, Anhänge und PostgreSQL-
+  Outbox sind noch nicht enthalten.
+- Extend the Laravel analyzer with versioned findings for authorization clues,
+  tenant-like fields, financial calculations, and file operations. Reports
+  remain static, read-only inventories and never claim behavior or security
+  parity. / Laravel-Analyzer mit versionierten Hinweisen zu Autorisierung,
+  mandantenähnlichen Feldern, Geldberechnungen und Dateioperationen erweitern.
+  Berichte bleiben statische, schreibgeschützte Inventare und behaupten keine
+  Funktions- oder Sicherheitsparität.
+- Add a local MariaDB/SMTP end-to-end test for transaction enqueue, STARTTLS,
+  SMTP authentication, trusted and rejected CA roots, retries, MIME content,
+  and the transport greeting timeout. / Lokalen MariaDB-/SMTP-End-to-End-Test
+  für transaktionales Einreihen, STARTTLS, SMTP-Authentifizierung, vertrauens-
+  würdige und abgewiesene CA-Wurzeln, Wiederholung, MIME-Inhalt und
+  Transport-Timeout ergänzen.
+
 ## 0.9.3 — 2026-10-11
 
 - Add a compiler-checked Studio database workbench with a session-protected,

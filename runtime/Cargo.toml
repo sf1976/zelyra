@@ -10,6 +10,8 @@ serde_json.workspace = true
 ureq.workspace = true
 zelyra-ast.workspace = true
 zelyra-database.workspace = true
+zelyra-mail.workspace = true
+zeroize.workspace = true
 
 [dev-dependencies]
 zelyra-lexer.workspace = true

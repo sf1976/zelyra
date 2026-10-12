@@ -24,12 +24,18 @@ transaction APIs. Each finding includes its file, line, status, description,
 and next review step. JSON is intended for tools; Markdown is directly
 readable.
 
+The 0.9.5 mapping ruleset adds explicit review findings for common authorization
+calls and policy classes, tenant-like identifiers, money and aggregate
+calculations, and file upload/download operations. JSON reports identify both
+the analyzer and mapping ruleset version. These findings describe evidence for
+review; they do not determine whether a control is complete or correct.
+
 ## Limits
 
 The scanner is pattern- and line-based, not a PHP parser. It does not yet link a
 complete graph of route, middleware, controller, model, migration, and view.
-Dynamic routes, conditional validation, policies, nested business logic, and
-implicit package behavior can be missed. Recognized syntax does not prove
+Dynamic routes, conditional validation, policy semantics, nested business logic,
+and implicit package behavior can be missed. Recognized syntax does not prove
 functional or security parity. A pattern that was not recognized does not mean
 the feature is absent. Manually review tenant boundaries, permissions,
 transactions, money, file storage, and external side effects.

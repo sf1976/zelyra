@@ -97,6 +97,10 @@ Das aktuelle Repository enthält:
 - run_process(command, args) über Process ohne Shell, mit exakter
   Befehls-Allowlist und begrenzter Ausführung;
 - zur Laufzeit geprüfte Funktions-Contracts mit `requires` und `ensures`.
+- transaktionale Anwendungs-E-Mail mit `mail_queue` und einem ausdrücklich
+  gestarteten MariaDB-Outbox-Worker; SMTP unterstützt authentifiziertes
+  STARTTLS/implizites TLS oder eine Klartext-Senke nur auf Loopback und prüft
+  E-Mail- sowie Host-Capabilities;
 - einen ersten Baustein für strukturierte Nebenläufigkeit mit `parallel` und
   `await`; jeder Branch verwendet einen unveränderlichen Umgebungs-Snapshot,
   bevor alle Branches vor der Fortsetzung zusammengeführt werden.

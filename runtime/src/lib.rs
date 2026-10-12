@@ -10,6 +10,7 @@ use zelyra_ast::*;
 
 mod csv;
 mod filesystem;
+mod mail;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypeError {
@@ -51,6 +52,7 @@ pub const KNOWN_CAPABILITIES: &[&str] = &[
     "Database",
     "Database(read)",
     "Database(write)",
+    "Email",
     "Network",
     "FileSystem",
     "Environment",
@@ -3225,6 +3227,32 @@ fn check_capability_expr(
                     declared,
                     errors,
                 );
+            } else if name == "mail_queue" {
+                require_capability(
+                    "Email",
+                    "email delivery",
+                    expression.span,
+                    function,
+                    declared,
+                    errors,
+                );
+                require_capability(
+                    "Database(write)",
+                    "transactional mail queue write",
+                    expression.span,
+                    function,
+                    declared,
+                    errors,
+                );
+            } else if name == "mail_deliver" {
+                require_capability(
+                    "Email",
+                    "email delivery",
+                    expression.span,
+                    function,
+                    declared,
+                    errors,
+                );
             } else if name == "run_process" {
                 require_capability(
                     "Process",
@@ -3428,6 +3456,7 @@ struct Checker<'a> {
     errors: Vec<TypeError>,
     loop_depth: usize,
     parallel_depth: usize,
+    transaction_depth: usize,
     _program: &'a Program,
 }
 
@@ -3533,6 +3562,7 @@ pub fn check(program: &Program) -> Result<(), Vec<TypeError>> {
         errors,
         loop_depth: 0,
         parallel_depth: 0,
+        transaction_depth: 0,
         _program: program,
     };
     for function in &program.functions {
@@ -3788,7 +3818,11 @@ impl<'a> Checker<'a> {
                 }
                 self.check_exhaustiveness(&value_type, &covered, *span);
             }
-            Stmt::Transaction { body, .. } => self.check_block(body, scopes, expected),
+            Stmt::Transaction { body, .. } => {
+                self.transaction_depth += 1;
+                self.check_block(body, scopes, expected);
+                self.transaction_depth -= 1;
+            }
             Stmt::Parallel { body, span } => {
                 let mut names = HashSet::new();
                 let mut new_bindings = Vec::new();
@@ -4706,6 +4740,41 @@ impl<'a> Checker<'a> {
                     self.expect_type(&Type::Array(Box::new(Type::String)), &headers, args[2].span);
                     self.expect_type(&Type::Option(Box::new(Type::String)), &body, args[3].span);
                     Type::Named("HttpResponse".into())
+                } else if name == "mail_queue" {
+                    if self.transaction_depth == 0 {
+                        self.error(expr.span, "mail_queue is only allowed inside a transaction");
+                    }
+                    if !(3..=4).contains(&args.len()) {
+                        self.error(
+                            expr.span,
+                            "mail_queue expects recipient, subject, text body, and an optional HTML body",
+                        );
+                        return Type::Unknown;
+                    }
+                    for argument in args {
+                        if !is_pure_mail_expression(argument) {
+                            self.error(
+                                argument.span,
+                                "mail_queue arguments must be literals, values, fields, or pure string concatenations",
+                            );
+                        }
+                        let actual = self.check_expr(argument, scopes);
+                        self.expect_type(&Type::String, &actual, argument.span);
+                    }
+                    Type::Unit
+                } else if name == "mail_deliver" {
+                    if args.len() != 2 {
+                        self.error(
+                            expr.span,
+                            "mail_deliver expects an outbox event ID and payload JSON",
+                        );
+                        return Type::Unknown;
+                    }
+                    for argument in args {
+                        let actual = self.check_expr(argument, scopes);
+                        self.expect_type(&Type::String, &actual, argument.span);
+                    }
+                    Type::Result(Box::new(Type::Unit), Box::new(Type::String))
                 } else if name == "run_process" {
                     if args.len() != 2 {
                         self.error(
@@ -5360,11 +5429,49 @@ pub struct ProcessPolicy {
     pub max_output_bytes: usize,
 }
 
+#[derive(Clone, Default, PartialEq, Eq)]
+pub struct MailPolicy {
+    pub host: Option<String>,
+    pub port: Option<u16>,
+    pub security: Option<String>,
+    pub username: Option<String>,
+    pub password: Option<String>,
+    pub ca_certificate_pem: Option<Vec<u8>>,
+    pub from: Option<String>,
+}
+
+impl fmt::Debug for MailPolicy {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("MailPolicy")
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("security", &self.security)
+            .field("username", &self.username.as_ref().map(|_| "<redacted>"))
+            .field("password", &self.password.as_ref().map(|_| "<redacted>"))
+            .field(
+                "ca_certificate_pem",
+                &self.ca_certificate_pem.as_ref().map(|_| "<configured>"),
+            )
+            .field("from", &self.from)
+            .finish()
+    }
+}
+
+impl Drop for MailPolicy {
+    fn drop(&mut self) {
+        if let Some(password) = &mut self.password {
+            zeroize::Zeroize::zeroize(password);
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct RuntimePolicy {
     pub filesystem: Option<FileSystemPolicy>,
     pub network: Option<NetworkPolicy>,
     pub process: Option<ProcessPolicy>,
+    pub mail: Option<MailPolicy>,
 }
 
 impl fmt::Display for RuntimeError {
@@ -5479,6 +5586,7 @@ pub fn execute_with_capabilities_and_filesystem_policy(
             filesystem: filesystem_policy.cloned(),
             network: None,
             process: None,
+            mail: None,
         }),
     )
 }
@@ -5505,6 +5613,7 @@ pub fn execute_with_database_and_capabilities_and_filesystem_policy(
             filesystem: filesystem_policy.cloned(),
             network: None,
             process: None,
+            mail: None,
         }),
     )
 }
@@ -5560,6 +5669,7 @@ pub fn execute_function_with_capabilities_and_policies(
         filesystem_policy: policy.and_then(|policy| policy.filesystem.clone()),
         network_policy: policy.and_then(|policy| policy.network.clone()),
         process_policy: policy.and_then(|policy| policy.process.clone()),
+        mail_policy: policy.and_then(|policy| policy.mail.clone()),
         record_definitions: program
             .records
             .iter()
@@ -5610,6 +5720,7 @@ pub fn execute_function_with_capabilities_and_filesystem_policy(
             filesystem: filesystem_policy.cloned(),
             network: None,
             process: None,
+            mail: None,
         }),
     )
 }
@@ -5632,7 +5743,8 @@ fn execute_internal(
         granted_capabilities,
         filesystem_policy: policy.as_ref().and_then(|policy| policy.filesystem.clone()),
         network_policy: policy.as_ref().and_then(|policy| policy.network.clone()),
-        process_policy: policy.and_then(|policy| policy.process),
+        process_policy: policy.as_ref().and_then(|policy| policy.process.clone()),
+        mail_policy: policy.as_ref().and_then(|policy| policy.mail.clone()),
         record_definitions: program
             .records
             .iter()
@@ -5658,6 +5770,7 @@ struct Interpreter {
     filesystem_policy: Option<FileSystemPolicy>,
     network_policy: Option<NetworkPolicy>,
     process_policy: Option<ProcessPolicy>,
+    mail_policy: Option<MailPolicy>,
     record_definitions: HashMap<String, RecordDef>,
     type_aliases: HashMap<String, Type>,
     active_capabilities: Vec<HashSet<String>>,
@@ -5719,6 +5832,8 @@ fn is_runtime_builtin(name: &str) -> bool {
             | "read_console"
             | "http_get"
             | "http_request"
+            | "mail_queue"
+            | "mail_deliver"
             | "json_encode"
             | "json_decode"
             | "json_decode_result"
@@ -6882,7 +6997,7 @@ impl Interpreter {
                 let Stmt::Transaction { body, .. } = statement else {
                     unreachable!();
                 };
-                let queries = transaction_queries(body, env, *span)?;
+                let queries = transaction_queries(self, body, env, *span)?;
                 zelyra_database::execute_queries(&database_url, &queries, true).map_err(
                     |error| {
                         self.runtime_error(*span, format!("database transaction failed: {error}"))
@@ -6926,6 +7041,7 @@ impl Interpreter {
                             filesystem_policy: self.filesystem_policy.clone(),
                             network_policy: self.network_policy.clone(),
                             process_policy: self.process_policy.clone(),
+                            mail_policy: self.mail_policy.clone(),
                             record_definitions: self.record_definitions.clone(),
                             type_aliases: self.type_aliases.clone(),
                             active_capabilities: self.active_capabilities.clone(),
@@ -7839,6 +7955,31 @@ impl Interpreter {
                 }
             };
             self.http_request(&method, &url, &header_strings, body.as_deref(), span)
+        } else if name == "mail_queue" {
+            Err(self.runtime_error(span, "mail_queue is only allowed inside a transaction"))
+        } else if name == "mail_deliver" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(
+                    span,
+                    "mail_deliver expects an outbox event ID and payload JSON",
+                ));
+            }
+            self.require_runtime_capability("Email", "email delivery", span)?;
+            let event_id = self.eval(&args[0], env)?;
+            let payload_json = self.eval(&args[1], env)?;
+            let (Value::String(event_id), Value::String(payload_json)) = (event_id, payload_json)
+            else {
+                return Err(self.runtime_error(span, "mail_deliver expects String arguments"));
+            };
+            let result = mail::deliver_outbox_message(
+                &event_id,
+                &payload_json,
+                self.mail_policy.as_ref(),
+                self.network_policy.as_ref(),
+            )
+            .map(|()| Box::new(Value::Unit))
+            .map_err(|error| Box::new(Value::String(error.to_owned())));
+            Ok(Value::Result(result))
         } else if name == "run_process" {
             if args.len() != 2 {
                 return Err(self.runtime_error(
@@ -8622,6 +8763,19 @@ fn query_parameters(
     Ok(parameters)
 }
 
+fn is_pure_mail_expression(expression: &Expr) -> bool {
+    match &expression.kind {
+        ExprKind::String(_) | ExprKind::Variable(_) => true,
+        ExprKind::Field { target, .. } => is_pure_mail_expression(target),
+        ExprKind::Binary {
+            left,
+            op: BinaryOp::Add,
+            right,
+        } => is_pure_mail_expression(left) && is_pure_mail_expression(right),
+        _ => false,
+    }
+}
+
 fn value_to_query_value(
     value: &Value,
     span: Span,
@@ -8655,15 +8809,16 @@ fn value_to_query_value(
 }
 
 fn transaction_queries(
+    interpreter: &mut Interpreter,
     block: &Block,
-    env: &Environment,
+    env: &mut Environment,
     span: Span,
 ) -> Result<Vec<zelyra_database::Query>, RuntimeError> {
     let mut queries = Vec::new();
     for statement in &block.statements {
-        let expression = match statement {
-            Stmt::Expr(expression) => expression,
-            Stmt::Let { value, .. } => value,
+        let (expression, allow_mail_queue) = match statement {
+            Stmt::Expr(expression) => (expression, true),
+            Stmt::Let { value, .. } => (value, false),
             _ => {
                 return Err(RuntimeError {
                     message: "transactions may contain only SQL statements".into(),
@@ -8671,16 +8826,122 @@ fn transaction_queries(
                 })
             }
         };
-        let ExprKind::Sql { query, .. } = &expression.kind else {
-            return Err(RuntimeError {
-                message: "transactions may contain only SQL statements".into(),
+        match &expression.kind {
+            ExprKind::Sql { query, .. } => queries.push(zelyra_database::Query {
+                sql: query.clone(),
+                params: query_parameters(query, env, expression.span)?,
+            }),
+            ExprKind::Call { name, args, .. } if name == "mail_queue" => {
+                if !allow_mail_queue {
+                    return Err(interpreter.runtime_error(
+                        expression.span,
+                        "mail_queue must be a standalone statement inside a transaction",
+                    ));
+                }
+                if !(3..=4).contains(&args.len()) {
+                    return Err(interpreter.runtime_error(
+                        expression.span,
+                        "mail_queue expects recipient, subject, text body, and an optional HTML body",
+                    ));
+                }
+                if args
+                    .iter()
+                    .any(|argument| !is_pure_mail_expression(argument))
+                {
+                    return Err(interpreter.runtime_error(
+                        expression.span,
+                        "mail_queue arguments must be literals, values, fields, or pure string concatenations",
+                    ));
+                }
+                interpreter.require_runtime_capability(
+                    "Email",
+                    "email delivery",
+                    expression.span,
+                )?;
+                interpreter.require_runtime_capability(
+                    "Database(write)",
+                    "transactional mail queue write",
+                    expression.span,
+                )?;
+                let database_url = interpreter.database_url.as_deref().ok_or_else(|| {
+                    interpreter.runtime_error(
+                        expression.span,
+                        "mail_queue requires a MariaDB or MySQL database runtime",
+                    )
+                })?;
+                if !supports_mariadb_outbox(database_url) {
+                    return Err(interpreter.runtime_error(
+                        expression.span,
+                        "mail_queue currently requires MariaDB or MySQL; PostgreSQL outbox support is not available",
+                    ));
+                }
+                let mut values = Vec::with_capacity(args.len());
+                for argument in args {
+                    match interpreter.eval(argument, env)? {
+                        Value::String(value) => values.push(value),
+                        value => {
+                            return Err(interpreter.runtime_error(
+                                argument.span,
+                                format!(
+                                    "mail_queue expects String arguments, found {}",
+                                    value.ty()
+                                ),
+                            ));
+                        }
+                    }
+                }
+                let html = values.get(3).map(String::as_str);
+                let mail_message = zelyra_mail::MailMessage {
+                    to: &values[0],
+                    subject: &values[1],
+                    text_body: &values[2],
+                    html_body: html,
+                    message_id: None,
+                };
+                zelyra_mail::validate_message(&mail_message).map_err(|_| {
+                    interpreter
+                        .runtime_error(expression.span, "mail_queue received an invalid message")
+                })?;
+                let payload = serde_json::json!({
+                    "to": &values[0],
+                    "subject": &values[1],
+                    "text": &values[2],
+                    "html": html,
+                })
+                .to_string();
+                if payload.len() > zelyra_database::outbox::MAX_EVENT_PAYLOAD_BYTES {
+                    return Err(interpreter.runtime_error(
+                        expression.span,
+                        "mail_queue payload exceeds the outbox size limit",
+                    ));
+                }
+                let mut random = [0_u8; 16];
+                OsRng.try_fill_bytes(&mut random).map_err(|_| {
+                    interpreter.runtime_error(
+                        expression.span,
+                        "mail_queue could not create a unique event ID",
+                    )
+                })?;
+                let event_id = random
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>();
+                queries.push(zelyra_database::Query {
+                    sql: "INSERT INTO `_zelyra_outbox` (`event_id`, `event_type`, `payload`) VALUES (:event_id, :event_type, :payload)".into(),
+                    params: vec![
+                        ("event_id".into(), zelyra_database::QueryValue::String(event_id)),
+                        ("event_type".into(), zelyra_database::QueryValue::String("zelyra.mail.send".into())),
+                        ("payload".into(), zelyra_database::QueryValue::String(payload)),
+                    ],
+                });
+            }
+            _ => return Err(RuntimeError {
+                message:
+                    "transactions may contain only SQL statements and standalone mail_queue calls"
+                        .into(),
                 span: expression.span,
-            });
-        };
-        queries.push(zelyra_database::Query {
-            sql: query.clone(),
-            params: query_parameters(query, env, expression.span)?,
-        });
+            }),
+        }
     }
     if queries.is_empty() {
         return Err(RuntimeError {
@@ -8689,6 +8950,10 @@ fn transaction_queries(
         });
     }
     Ok(queries)
+}
+
+fn supports_mariadb_outbox(database_url: &str) -> bool {
+    database_url.starts_with("mariadb://") || database_url.starts_with("mysql://")
 }
 
 fn match_pattern(value: &Value, pattern: &Pattern) -> Option<Vec<(String, Value)>> {

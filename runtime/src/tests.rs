@@ -662,6 +662,7 @@ fn performs_http_get_with_network_policy() {
             max_response_bytes: 100,
         }),
         process: None,
+        mail: None,
     };
     let body = execute_function_with_capabilities_and_policies(
         &program,
@@ -691,6 +692,7 @@ fn rejects_http_get_outside_network_allowlist() {
             max_response_bytes: 100,
         }),
         process: None,
+        mail: None,
     };
     let error = execute_function_with_capabilities_and_policies(
         &program,
@@ -747,6 +749,7 @@ fn sends_typed_http_request_and_returns_structured_response() {
             max_response_bytes: 100,
         }),
         process: None,
+        mail: None,
     };
     let response = execute_function_with_capabilities_and_policies(
         &program,
@@ -819,6 +822,7 @@ fn sends_and_decodes_typed_json_http_request() {
             max_response_bytes: 100,
         }),
         process: None,
+        mail: None,
     };
     let customer = execute_function_with_capabilities_and_policies(
         &program,
@@ -876,6 +880,7 @@ fn returns_structured_http_result_for_http_errors() {
             max_response_bytes: 100,
         }),
         process: None,
+        mail: None,
     };
     let result = execute_function_with_capabilities_and_policies(
         &program,
@@ -920,6 +925,7 @@ fn rejects_http_request_body_for_get() {
             max_response_bytes: 100,
         }),
         process: None,
+        mail: None,
     };
     let error = execute_function_with_capabilities_and_policies(
         &program,
@@ -1038,6 +1044,7 @@ fn runs_allowlisted_process_without_a_shell() {
             timeout_ms: 1_000,
             max_output_bytes: 100,
         }),
+        mail: None,
     };
     let output = execute_function_with_capabilities_and_policies(
         &program,
@@ -1077,6 +1084,7 @@ fn rejects_processes_outside_allowlist_and_output_limit() {
             timeout_ms: 1_000,
             max_output_bytes: 3,
         }),
+        mail: None,
     };
     let error = execute_function_with_capabilities_and_policies(
         &program,
@@ -1214,6 +1222,101 @@ fn accepts_secure_random_int_with_random_capability() {
         execute_function_with_capabilities(&program, "roll", Vec::new(), None, Some(&grants))
             .unwrap();
     assert!(matches!(value, Value::Int(value) if (1..=6).contains(&value)));
+}
+
+#[test]
+fn mail_api_is_typed_transactional_and_capability_checked() {
+    let source = r#"
+fn enqueue_mail(to: String, subject: String, text: String) uses Email, Database(write) {
+    transaction {
+        mail_queue(to, subject, text)
+    }
+}
+fn deliver_mail(event_id: String, payload: String) -> Result<Unit, String> uses Email {
+    return mail_deliver(event_id, payload)
+}
+fn main() { }
+"#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap();
+    check_capabilities(&program).unwrap();
+
+    let missing_email = parse(
+        &lex("fn main() { transaction { mail_queue(\"a@example.test\", \"Hi\", \"Body\") } }")
+            .unwrap(),
+    )
+    .unwrap();
+    check(&missing_email).unwrap();
+    let diagnostics = check_capabilities(&missing_email).unwrap_err();
+    assert!(diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.message.contains("Email")));
+    assert!(diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.message.contains("Database(write)")));
+
+    let outside_transaction = parse(
+        &lex("fn main() uses Email, Database(write) { mail_queue(\"a@example.test\", \"Hi\", \"Body\") }")
+            .unwrap(),
+    )
+    .unwrap();
+    let type_errors = check(&outside_transaction).unwrap_err();
+    assert!(type_errors.iter().any(|diagnostic| diagnostic
+        .message
+        .contains("only allowed inside a transaction")));
+
+    let side_effecting_argument = parse(
+        &lex(
+            "fn recipient() -> String { return \"a@example.test\" } fn main() uses Email, Database(write) { transaction { mail_queue(recipient(), \"Hi\", \"Body\") } }",
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let type_errors = check(&side_effecting_argument).unwrap_err();
+    assert!(type_errors.iter().any(|diagnostic| diagnostic
+        .message
+        .contains("arguments must be literals, values, fields, or pure string concatenations")));
+}
+
+#[test]
+fn mail_delivery_failure_returns_redacted_result() {
+    let program = parse(
+        &lex("fn deliver(id: String, payload: String) -> Result<Unit, String> uses Email { return mail_deliver(id, payload) } fn main() { }")
+            .unwrap(),
+    )
+    .unwrap();
+    check(&program).unwrap();
+    check_capabilities(&program).unwrap();
+    let grants = HashSet::from([String::from("Email")]);
+    let result = execute_function_with_capabilities_and_policies(
+        &program,
+        "deliver",
+        vec![
+            Value::String("event-01".into()),
+            Value::String(r#"{"to":"a@example.test","subject":"Hi","text":"Body"}"#.into()),
+        ],
+        None,
+        Some(&grants),
+        None,
+    )
+    .unwrap();
+    assert!(
+        matches!(result, Value::Result(Err(message)) if matches!(*message, Value::String(ref message) if message.contains("SMTP") && !message.contains("secret")))
+    );
+}
+
+#[test]
+fn mail_outbox_database_support_is_explicit() {
+    assert!(supports_mariadb_outbox(
+        "mariadb://user:secret@127.0.0.1:3306/app"
+    ));
+    assert!(supports_mariadb_outbox(
+        "mysql://user:secret@127.0.0.1:3306/app"
+    ));
+    assert!(!supports_mariadb_outbox(
+        "postgres://user:secret@127.0.0.1:5432/app"
+    ));
+    assert!(!supports_mariadb_outbox("sqlite:///tmp/app.db"));
 }
 
 #[test]

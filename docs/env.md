@@ -152,6 +152,36 @@ aus einem Projekt. Maschinelle API-/JSON-Verträge und Compilerdiagnosen bleiben
 sprachneutral beziehungsweise in ihrer festgelegten technischen Sprache und
 werden nicht anhand der UI-Einstellung verändert.
 
+## Anwendungs-E-Mail ab 0.9.5
+
+Die Zelyra-Mail-API verwendet dieselben SMTP-Variablen wie die
+Passwortwiederherstellung. Zusätzlich muss `[capabilities].email = true`
+gesetzt sein. Der SMTP-Host muss exakt in `[network].allowed_hosts` stehen.
+Die Mail-Outbox unterstützt in 0.9.5 MariaDB und wird separat mit
+`zelyra outbox setup main.zyl` eingerichtet.
+
+| Variable | Standard | Verwendung und Sicherheit |
+|---|---:|---|
+| `ZELYRA_SMTP_HOST` | keiner | Erforderlicher SMTP-Host für die Zustellung. |
+| `ZELYRA_SMTP_PORT` | `465` / `587` / `25` | Port für `implicit_tls` / `starttls` / `local_plaintext`; Klartext ist nur am Loopback ohne Authentifizierung erlaubt. |
+| `ZELYRA_SMTP_SECURITY` | `implicit_tls` | `implicit_tls`, `starttls` oder `local_plaintext`; TLS-Fehler führen nie zu Klartext. |
+| `ZELYRA_SMTP_FROM` | keiner | Erforderliche Absenderadresse. |
+| `ZELYRA_SMTP_USERNAME` | keiner | Optionaler SMTP-Benutzer; muss mit dem Passwort zusammen gesetzt werden. Secret. |
+| `ZELYRA_SMTP_PASSWORD` | keiner | SMTP-Passwort. Secret; niemals ausgeben oder einchecken. |
+| `ZELYRA_SMTP_CA_CERT` | keiner | Optionales PEM-Wurzelzertifikat, relativ zum Projekt oder absolut; reguläre Datei ohne Symlink bis 128 KiB. Kein Secret; Hostnamen werden weiter geprüft. |
+
+Einrichten und ausdrückliches Zustellen:
+
+```sh
+zelyra outbox setup main.zyl
+zelyra outbox run main.zyl --handler zelyra.mail.send=deliver_mail --once
+```
+
+`mail_queue` schreibt die Nachricht innerhalb einer Datenbanktransaktion in
+die Outbox. Der Worker stellt sie später über SMTP zu. Die Zustellung erfolgt
+mindestens einmal und kann Duplikate erzeugen. Konfiguration und vollständiges
+Beispiel stehen in [`mail.de.md`](mail.de.md).
+
 ## Passwortwiederherstellung im 0.4-Entwicklungszweig
 
 Eine Auth-Deklaration kann `reset_tokens: password_resets` konfigurieren.
