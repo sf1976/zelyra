@@ -458,7 +458,7 @@ for _ in $(seq 1 60); do
     if grep -Fq 'password reset message delivery failed' "${temp_dir}/server-c.log"; then break; fi
     sleep 0.1
 done
-grep -Fq 'password reset message delivery failed: SMTP transport could not deliver the message' \
+grep -Fq 'password reset message delivery failed: SMTP delivery failed' \
     "${temp_dir}/server-c.log"
 ! grep -Fq "${email}" "${temp_dir}/server-c.log"
 ! grep -Fq "${unknown_email}" "${temp_dir}/server-c.log"
