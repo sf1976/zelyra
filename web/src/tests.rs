@@ -3768,3 +3768,19 @@ fn decimal_fields_use_text_input_and_optional_blanks_bind_sql_null() {
         assert!(matches!(params[0].1, QueryValue::Null));
     }
 }
+
+#[test]
+fn decimal_presentation_retains_digits_without_padding_or_float_conversion() {
+    assert_eq!(display_exact_decimal_value("150.000000000"), "150");
+    assert_eq!(
+        display_exact_decimal_value("9007199254740993.123456789"),
+        "9007199254740993.123456789"
+    );
+    assert_eq!(display_exact_decimal_value("-12.340000000"), "-12.34");
+    assert_eq!(display_exact_decimal_value("0.000000001"), "0.000000001");
+    assert_eq!(
+        display_database_value("150.000000000"),
+        "150.000000000",
+        "ordinary text stays unchanged"
+    );
+}

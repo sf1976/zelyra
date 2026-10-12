@@ -1031,6 +1031,9 @@ language backlog as one 0.9.4 change.
 
 ## Release 0.9.9 — feature freeze and final technical candidate
 
+- [✅] Typed Decimal tableview presentation retains exact digits without added
+  fractional padding; ordinary text and raw data keep their representation.
+
 - [✅] Correct setup dependency after precision hardening: MariaDB first,
   schema in a separate container run, web service only after success;
   migration approvals remain enforced.

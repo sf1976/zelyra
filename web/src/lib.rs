@@ -6973,9 +6973,17 @@ fn render_tableview(
             html.push_str("<tr>");
             for index in 0..tableview.columns.len() {
                 html.push_str("<td>");
-                html.push_str(&html_escape(display_database_value(
-                    row.get(index).map(String::as_str).unwrap_or(""),
-                )));
+                let value =
+                    display_database_value(row.get(index).map(String::as_str).unwrap_or(""));
+                let value = if tableview.filters.iter().any(|filter| {
+                    filter.name == tableview.columns[index]
+                        && filter.kind == TableViewFilterKind::Decimal
+                }) {
+                    display_exact_decimal_value(value)
+                } else {
+                    value
+                };
+                html.push_str(&html_escape(value));
                 html.push_str("</td>");
             }
             html.push_str("</tr>");
@@ -9730,6 +9738,21 @@ fn route_data_row(
             (field.clone(), value)
         })
         .collect()
+}
+
+fn display_exact_decimal_value(value: &str) -> &str {
+    let unsigned = value.strip_prefix('-').unwrap_or(value);
+    let Some((whole, fraction)) = unsigned.split_once('.') else {
+        return value;
+    };
+    if whole.is_empty()
+        || fraction.is_empty()
+        || !whole.bytes().all(|byte| byte.is_ascii_digit())
+        || !fraction.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        return value;
+    }
+    value.trim_end_matches('0').trim_end_matches('.')
 }
 
 fn display_database_value(value: &str) -> &str {
