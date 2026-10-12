@@ -14,7 +14,7 @@ password="ZelyraNotification-${suffix}-Password"
 other_email="zelyra-notifications-other-${suffix}@example.test"
 other_password="ZelyraOtherNotification-${suffix}-Password"
 tenant_a_title="Tenant A notice ${suffix}"
-tenant_a_other_title="Other user's tenant A notice ${suffix}"
+tenant_a_other_title="Second recipient tenant A notice ${suffix}"
 tenant_a_expired="Expired notice ${suffix}"
 tenant_a_read="Read notice ${suffix}"
 tenant_a_archived="Archived notice ${suffix}"
@@ -92,8 +92,10 @@ VALUES (101, @user_id, '${tenant_a_title}', 'Visible only to its recipient in te
 SQL
 notification_a_id="$(client --batch --skip-column-names -e "SELECT id FROM notifications WHERE title = '${tenant_a_title}'")"
 notification_other_id="$(client --batch --skip-column-names -e "SELECT id FROM notifications WHERE title = '${tenant_a_other_title}'")"
+notification_expired_id="$(client --batch --skip-column-names -e "SELECT id FROM notifications WHERE title = '${tenant_a_expired}'")"
+notification_archived_id="$(client --batch --skip-column-names -e "SELECT id FROM notifications WHERE title = '${tenant_a_archived}'")"
 notification_b_id="$(client --batch --skip-column-names -e "SELECT id FROM notifications WHERE title = '${tenant_b_title}'")"
-[[ -n "${notification_a_id}" && -n "${notification_other_id}" && -n "${notification_b_id}" ]]
+[[ -n "${notification_a_id}" && -n "${notification_other_id}" && -n "${notification_expired_id}" && -n "${notification_archived_id}" && -n "${notification_b_id}" ]]
 
 echo "[2/7] starting the app and authenticating"
 "${zelyra_bin}" serve "${project_file}" "${address}" >"${temp_dir}/server.log" 2>&1 &
@@ -141,7 +143,7 @@ cross_recipient="$(curl --silent --show-error --output /dev/null --write-out '%{
     --cookie "${cookie}" "${base_url}/notifications/${notification_other_id}?tenant_id=101")"
 [[ "${cross_recipient}" == "404" ]]
 
-echo "[6/6] authenticating as a second user in the same tenant"
+echo "[6/7] authenticating as a second user in the same tenant"
 other_login_html="${temp_dir}/other-login.html"
 other_cookie="${temp_dir}/other-session.cookies"
 curl --silent --show-error --fail --cookie-jar "${other_cookie}" "${base_url}/login" -o "${other_login_html}"
@@ -164,19 +166,30 @@ detail_status="$(curl --silent --show-error --output "${temp_dir}/notification-d
 [[ "${detail_status}" == "200" ]]
 grep -Eq 'Mark as read|Als gelesen markieren' "${temp_dir}/notification-detail.html"
 read_csrf="$(sed -n 's/.*name="_zelyra_csrf" value="\([^"]*\)".*/\1/p' "${temp_dir}/notification-detail.html")"
-read_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+read_status="$(curl --silent --show-error --location --output "${temp_dir}/post-read.html" --write-out '%{http_code}' \
     --header "Origin: ${base_url}" --cookie "${cookie}" \
     --data-urlencode "_zelyra_csrf=${read_csrf}" \
     "${base_url}/notifications/${notification_a_id}/read?tenant_id=101")"
-[[ "${read_status}" == "303" ]]
+echo "owned mark-read redirect status: ${read_status}"
+[[ "${read_status}" == "200" ]]
 foreign_read_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
     --header "Origin: ${base_url}" --cookie "${cookie}" \
     --data-urlencode "_zelyra_csrf=${read_csrf}" \
     "${base_url}/notifications/${notification_other_id}/read?tenant_id=101")"
+echo "foreign mark-read status: ${foreign_read_status}"
 [[ "${foreign_read_status}" == "404" ]]
-post_read_status="$(curl --silent --show-error --output "${temp_dir}/post-read.html" --write-out '%{http_code}' \
-    --cookie "${cookie}" "${base_url}/notifications?tenant_id=101")"
-[[ "${post_read_status}" == "200" ]]
+invalid_csrf_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+    --header "Origin: ${base_url}" --cookie "${cookie}" \
+    --data-urlencode '_zelyra_csrf=invalid' \
+    "${base_url}/notifications/${notification_a_id}/read?tenant_id=101")"
+[[ "${invalid_csrf_status}" == "403" ]]
+for unavailable_id in "${notification_expired_id}" "${notification_archived_id}"; do
+    unavailable_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+        --header "Origin: ${base_url}" --cookie "${cookie}" \
+        --data-urlencode "_zelyra_csrf=${read_csrf}" \
+        "${base_url}/notifications/${unavailable_id}/read?tenant_id=101")"
+    [[ "${unavailable_status}" == "404" ]]
+done
 grep -Eq 'Unread notifications: 0|Ungelesene Benachrichtigungen: 0' "${temp_dir}/post-read.html"
 grep -Eq 'Notification marked as read\.|Benachrichtigung als gelesen markiert\.' "${temp_dir}/post-read.html"
 read_detail_status="$(curl --silent --show-error --output "${temp_dir}/read-detail.html" --write-out '%{http_code}' \
