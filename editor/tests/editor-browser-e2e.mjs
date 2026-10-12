@@ -119,14 +119,21 @@ try {
   assert.equal(await page.locator("html").getAttribute("data-theme"), "light");
   assert.equal(await themeButton.getAttribute("aria-label"), "Dunkles Farbschema aktivieren");
   assert.equal(await page.locator(".cm-editor").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)");
+  assert.equal(await page.locator(".topbar").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)");
+  assert.equal(await page.locator(".explorer").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(248, 249, 252)");
+  assert.equal(await page.locator("#project-map-dialog").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)");
   await page.reload();
   await page.locator(".cm-content[contenteditable=true]").waitFor({ timeout: 10_000 });
   assert.equal(await page.locator("html").getAttribute("data-theme"), "light", "the selected appearance must survive reload");
   assert.equal(await page.locator(".cm-editor").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)", "CodeMirror must use the selected light appearance");
-  await themeButton.click();
+  await themeButton.focus();
+  await page.keyboard.press("Space");
   assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");
   assert.equal(await themeButton.getAttribute("aria-label"), "Helles Farbschema aktivieren");
+  await page.keyboard.press("Space");
+  assert.equal(await page.locator("html").getAttribute("data-theme"), "light", "keyboard users must be able to switch the Studio appearance");
   await page.locator("#task-finder-button").click();
+  assert.equal(await page.locator("#task-finder").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)");
   await page.locator("#task-finder-input").fill("no such studio action");
   await page.locator("#task-finder-empty").waitFor();
   await page.locator("#task-finder-input").clear();
@@ -186,6 +193,7 @@ try {
 
   await page.locator("#database-button").click();
   await page.locator("#database-create").waitFor({ state: "visible" });
+  assert.equal(await page.locator(".database-header").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)");
   page.once("dialog", async (dialog) => {
     assert.match(dialog.message(), /studio_db/);
     await dialog.accept();
