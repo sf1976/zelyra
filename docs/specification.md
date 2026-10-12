@@ -648,3 +648,13 @@ and patterns can cross explicit module imports. Payload variants use an
 explicit JSON object such as `{"$enum":"OrderEvent","payload":[7],"variant":"Created"}`;
 decoding validates each payload against the enum definition. The existing JSON
 shape for unit variants is unchanged.
+
+### Explicit scalar text formatting in 0.9.9
+
+`format_text(value)` explicitly converts one scalar value to display text. It
+accepts `Int`, `UInt`, `Float`, `Decimal`, `Bool`, `Char`, `String`, `Date`,
+`Time`, `Timestamp`, and `Duration`; it does not add JSON quotes and does not
+enable implicit conversions in assignments or string concatenation. Arrays,
+records, enums, option/result values, unit, and function values have no implicit
+display contract and are rejected. Decimal display omits insignificant trailing
+zeroes, so fixed-scale monetary output must use `format_scaled_result`.

@@ -474,6 +474,9 @@ gehören nicht in Zelyra-Quellcode, JSON-Diagnosen, Kontextausgaben oder Logs.
 | Variable | Status | Verwendung |
 |---|---|---|
 | `ZELYRA_INSTALL_ROOT` | implementiert | benutzerbezogenes Ziel der Installationsskripte |
+| `ZELYRA_COLOR` | implementiert | `auto` (Standard), `always` oder `never`; steuert ANSI-Farben in CLI-Hilfe und Erfolgsmeldungen |
+| `NO_COLOR` | implementiert | Wenn gesetzt, schaltet es automatische Farben aus; `ZELYRA_COLOR=always` hat Vorrang |
+| `CLICOLOR_FORCE` | implementiert | Ein nicht leerer Wert außer `0` erzwingt Farben, sofern `ZELYRA_COLOR` nicht gesetzt ist und `NO_COLOR` fehlt |
 | `ZELYRA_DB_TIMEOUT_TEST_URL` | CI-/Testvariable | MariaDB-URL für Timeout- und Pool-Integrationstests; ausschließlich lokale/isolierte Testdatenbank |
 | `ZELYRA_MARIADB_ROOT_PASSWORD` | Test-/Entwicklungswerkzeug | Passwort für lokale MariaDB-Testläufe |
 | `ZELYRA_MARIADB_PASSWORD` | Test-/Entwicklungswerkzeug | Benutzerpasswort für lokale MariaDB-Testläufe |

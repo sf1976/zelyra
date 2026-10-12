@@ -4,6 +4,27 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language compatibility line remains `0.1`. Compiler and repository
 releases follow Semantic Versioning independently of the language line.
 
+## 0.9.9 — in development
+
+- Add generic user-defined records and enums, typed references to named
+  functions, and explicit scalar display formatting with `format_text`.
+  / Generische nutzerdefinierte Records und Enums, typisierte Referenzen auf
+  benannte Funktionen und explizite skalare Textformatierung mit
+  `format_text` ergänzen.
+- Add opt-in terminal color controls and a short, reduced-motion-aware Studio
+  startup splash while preserving the persisted light/dark theme.
+  / Optionale Terminalfarben und einen kurzen, bei reduzierter Bewegung
+  deaktivierten Studio-Startbildschirm ergänzen; die gespeicherte helle oder
+  dunkle Darstellung bleibt erhalten.
+- Continue the 0.9.7 language review against the 0.9.9 source build: all 20
+  tasks, 35 controlled negative cases, 400 numeric reference comparisons, and
+  100 repeated task runs pass. Four observations remain explicitly bounded;
+  database and production readiness are not inferred from this corpus.
+  / Die Sprachprüfung von 0.9.7 gegen den 0.9.9-Quellbuild wiederholen:
+  20 Aufgaben, 35 kontrollierte Negativfälle, 400 Zahlenvergleiche und 100
+  Aufgaben-Wiederholungen bestehen. Vier Beobachtungen bleiben ausdrücklich
+  eingegrenzt; daraus folgt keine Datenbank- oder Produktionsfreigabe.
+
 ## 0.9.8 — 2026-10-12
 
 - Bound function-call recursion and opt-in statement/loop execution budgets;

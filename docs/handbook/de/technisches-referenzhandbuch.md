@@ -1845,6 +1845,15 @@ So lassen sich Raster und andere zeichenweise Textformate mit normalen,
 typisierten Zelyra-Arrays verarbeiten. Die Aufteilung erfolgt nach Unicode-
 Codepoints, nicht nach zusammengesetzten Graphem-Clustern.
 
+`format_text(wert)` wandelt skalare Zahlen, Wahrheitswerte, Zeichen, Datums-,
+Zeit- und Dauerwerte ausdrücklich in Anzeigetext um. Beispiel:
+`label = "Kunde " + format_text(customer.id)`. Das ist keine implizite
+Typumwandlung und keine JSON-Serialisierung. Für Geldbeträge mit fester Skala
+verwendet die Anwendung `format_scaled_result`; `format_text` lässt bei
+`Decimal` bedeutungslose Nullen am Ende weg. Records, Sammlungen und Varianten
+werden abgewiesen, damit ihre Darstellung kein unbeabsichtigtes Austauschformat
+wird.
+
 Das mehrteilige Labyrinthbeispiel
 [`examples/labyrinth_solver`](../../../examples/labyrinth_solver/README.md)
 zeigt die Rasterverarbeitung zusammen mit Datei-APIs, Maps, Arrays und einer

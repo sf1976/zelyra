@@ -110,10 +110,14 @@ try {
       }),
     });
   });
-  await page.goto(url);
+  await page.goto(url, { waitUntil: "domcontentloaded" });
   assert.equal(new URL(page.url()).hash, "", "the session token must be removed from the address bar");
+  const startupSplash = page.locator("#studio-splash");
+  await startupSplash.waitFor({ state: "visible" });
+  assert.equal(await startupSplash.getAttribute("aria-label"), "Zelyra Studio wird gestartet");
   await page.locator(".cm-content[contenteditable=true]").waitFor({ timeout: 10_000 });
   await page.locator('.tree-item.file[title="main.zyl"]').waitFor();
+  await startupSplash.waitFor({ state: "detached", timeout: 5_000 });
   const themeButton = page.locator("#theme-button");
   await themeButton.click();
   assert.equal(await page.locator("html").getAttribute("data-theme"), "light");

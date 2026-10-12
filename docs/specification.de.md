@@ -638,3 +638,14 @@ JSON-, Form- oder Payloadfehler, der innere Wert ist die dekodierte fachliche
 Felder und ungültige Payloads liefern einen äußeren `Err`. Das bestehende
 `json_encode`-Format wird nicht verändert; HTTP- und API-Wireformate bleiben
 damit kompatibel.
+
+### Explizite skalare Textformatierung in 0.9.9
+
+`format_text(wert)` wandelt ausdrücklich einen einzelnen skalaren Wert in
+Anzeigetext um. Zulässig sind `Int`, `UInt`, `Float`, `Decimal`, `Bool`, `Char`,
+`String`, `Date`, `Time`, `Timestamp` und `Duration`. Die Funktion fügt keine
+JSON-Anführungszeichen hinzu und erlaubt keine implizite Konvertierung in
+Zuweisungen oder Textverkettungen. Arrays, Records, Enums, Option-/Result-Werte,
+Unit und Funktionswerte besitzen keinen impliziten Anzeigestandard und werden
+abgewiesen. Bei Decimal werden bedeutungslose Nullen am Ende weggelassen; für
+Geldbeträge mit fester Nachkommastellenzahl ist `format_scaled_result` gedacht.

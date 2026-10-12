@@ -3407,6 +3407,7 @@ fn main() {}
             .find("/__zelyra/editor/assets/editor.css")
             .expect("editor stylesheet should load");
         assert!(theme_script_position < stylesheet_position);
+        assert!(page.2.contains("id=\"studio-splash\""));
         assert!(
             !page.2.contains("<script>"),
             "the CSP blocks inline scripts"
@@ -3417,6 +3418,13 @@ fn main() {}
         )
         .expect("local theme initializer should load");
         assert!(theme_script.2.contains("zelyra-editor-theme"));
+        assert!(theme_script.2.contains("studio-splash"));
+        let stylesheet = editor_response(
+            &request("GET", "/__zelyra/editor/assets/editor.css", &[]),
+            &state,
+        )
+        .expect("local Studio stylesheet should load");
+        assert!(stylesheet.2.contains("prefers-reduced-motion:reduce"));
         let _ = fs::remove_dir_all(state.root.clone());
     }
 

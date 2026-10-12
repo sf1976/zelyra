@@ -33,6 +33,7 @@ diagnostic. These cases do not belong in the successful program run.
 | `Bool` | ✅ supported | `true`/`false`, logical operations, and equality. |
 | `Char` | ✅ supported | One Unicode scalar value; JSON uses a one-scalar JSON string. Multi-codepoint grapheme clusters are not one `Char`. |
 | `String` | ✅ supported | UTF-8, Unicode, escapes, equality, lexicographic comparisons, and concatenation. `text_chars` counts Unicode scalar values; no byte-length function is available. |
+| `format_text` | ✅ supported | Explicit display formatting for scalar values (`Int`, `UInt`, `Float`, `Decimal`, `Bool`, `Char`, `String`, `Date`, `Time`, `Timestamp`, `Duration`). It adds no JSON quotes. Collections, records, enums, `Result`, and function values are rejected; use `format_scaled_result` for fixed-scale money. |
 | Null and optional values | ✅ supported | No standalone null type. `Option<T>`, `Some`, and `None` distinguish absence from `0`, `false`, and `""`. JSON maps `None` to `null`. |
 | Arrays | ✅ supported | Typed, nested, and empty arrays; `append`/concatenation and `array_replace_result` return values. Duplicates are allowed. Invalid element types fail at compile time; invalid replacement indices return `Err`. |
 | Lists | ✅ alias | `List<T>` is a type synonym for `T[]`; literals remain `[a, b]`, and array operations apply unchanged. Zelyra intentionally has one ordered sequence model. |
@@ -67,8 +68,9 @@ separate shallow/deep copy operations. The value-update helpers return a new rec
 
 The successful run checks numeric ranges, arithmetic, rounding behavior,
 Unicode, optional values, arrays, List aliases, tuples, sets, records, unit and
-payload enums, named function values and indirect calls, calendar and timestamp operations, Decimal quantization, ranges,
-JSON, and user-defined generic functions, records, and enums. The CLI integration test also expects **19 compiler errors** and **19 runtime errors** (type mismatch,
+payload enums, named function values and indirect calls, calendar and timestamp
+operations, Decimal quantization, explicit scalar text formatting, ranges,
+JSON, and user-defined generic functions, records, and enums. The CLI integration test also expects **20 compiler errors** and **19 runtime errors** (type mismatch,
 mixed arrays, non-exhaustive matching, overflow/underflow, division by zero,
 invalid index, invalid Date/Time/Bytes/Decimal values, wrong tuple length,
 non-finite JSON number, non-string-keyed Map serialization, and unsupported general

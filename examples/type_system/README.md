@@ -34,6 +34,7 @@ Programmlauf.
 | `Bool` | ✅ unterstützt | `true`/`false`, logische Operationen und Gleichheit. |
 | `Char` | ✅ unterstützt | Ein Unicode-Skalarwert; JSON verwendet eine einstellige JSON-Zeichenkette. Graphemcluster mit mehreren Codepoints sind kein einzelnes `Char`. |
 | `String` | ✅ unterstützt | UTF-8, Unicode, Escape-Sequenzen, Gleichheit, lexikografische Vergleiche und Verkettung. `text_chars` zählt Unicode-Skalarwerte; eine Byte-Längenfunktion gibt es nicht. |
+| `format_text` | ✅ unterstützt | Explizite Anzeigeformatierung für einzelne skalare Werte (`Int`, `UInt`, `Float`, `Decimal`, `Bool`, `Char`, `String`, `Date`, `Time`, `Timestamp`, `Duration`). Fügt keine JSON-Anführungszeichen hinzu. Sammlungen, Records, Enums, `Result` und Funktionswerte werden abgewiesen; Geld mit fester Skala weiter über `format_scaled_result` formatieren. |
 | Null und optionale Werte | ✅ unterstützt | Kein eigenständiger Nulltyp. `Option<T>`, `Some` und `None` unterscheiden fehlende Werte von `0`, `false` und `""`. JSON bildet `None` auf `null` ab. |
 | Arrays | ✅ unterstützt | Typisierte, verschachtelte und leere Arrays; `append`, Verkettung und `array_replace_result` liefern neue Werte. Doppelte Elemente sind erlaubt. Falsche Typen werden beim Kompilieren, ungültige Indizes als `Err` erkannt. |
 | Listen | ✅ Alias | `List<T>` ist ein Typsynonym für `T[]`; Literale bleiben `[a, b]`, und Arrayoperationen gelten unverändert. Es gibt bewusst nur eine geordnete Sequenzsemantik. |
@@ -72,9 +73,10 @@ keine flachen oder tiefen Kopien als getrennte Operationen. `record_with` und
 Der erfolgreiche Programmlauf prüft Zahlenbereiche, Rechenoperationen,
 Rundungsverhalten, Unicode, optionale Werte, Arrays, Listen-Aliase, Tupel,
 Mengen, Records, payloadfreie und payloadtragende Enums,
-Kalender-/Zeitstempeloperationen, Decimal-Quantisierung, Bereiche, JSON sowie
+Kalender-/Zeitstempeloperationen, Decimal-Quantisierung, explizite skalare
+Textformatierung, Bereiche, JSON sowie
 benutzerdefinierte generische Funktionen, Records und Enums.
-Der CLI-Integrationstest erwartet zusätzlich **19 Compilerfehler** und
+Der CLI-Integrationstest erwartet zusätzlich **20 Compilerfehler** und
 **19 Runtimefehler** (Typfehler, gemischte Arrays, unvollständiges Matching,
 Überlauf/Unterlauf, Division durch null, ungültiger Index, ungültige
 Date-/Time-/Bytes-/Decimal-Werte, falsche Tuple-Länge, nicht-endliche

@@ -23,6 +23,7 @@ pub fn run() {
         Err(reason) => decimal("0")
     }
     assert(rounded == decimal("-1.25"), "Decimal half-up rounds negative ties away from zero")
+    assert(format_text(42) == "42" && format_text(true) == "true", "format_text explicitly formats scalar values")
     mutable sum = 0
     for value in -2..3 {
         if value == 0 { continue }
@@ -35,5 +36,5 @@ pub fn run() {
         Err(reason) => []
     }
     assert(replaced == [3, 9, 5] && values == [3, 4, 5], "array_replace_result preserves the original array")
-    print("PASS calendar arithmetic, Timestamp ordering, Decimal quantization, exclusive ranges")
+    print("PASS calendar arithmetic, Timestamp ordering, Decimal quantization, scalar text formatting, exclusive ranges")
 }

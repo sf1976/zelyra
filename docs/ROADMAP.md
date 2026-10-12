@@ -988,9 +988,9 @@ language backlog as one 0.9.4 change.
   value-semantic record/array updates, a tagged Result JSON codec, and
   iterative handling of long expressions. Workspace tests, Clippy, formatting,
   324 handbook examples, all 80 corpus cases, 100 repeat runs, and 300 integer
-  division/remainder plus 100 Decimal reference checks passed. Fourteen known
-  observation/gap cases are documented in the specification and type matrix
-  and are mandatory 0.9.9 carry-over.
+  division/remainder plus 100 Decimal reference checks passed. The 0.9.9
+  rerun closes the ten earlier language-gap probes; four bounded observations
+  are documented in the specification and type matrix.
 - [✅] Studio's light appearance now covers the editor, project navigation,
   properties, help, database workbench, task finder, and dialogs. Browser E2E
   verifies persistence, keyboard access, consistent surfaces, and at least
@@ -1036,11 +1036,18 @@ language backlog as one 0.9.4 change.
   human-study materials. At this point independent human acceptance should be
   the only remaining gate; do not claim production approval or run acceptance
   against 0.9.9.
-- [🗺️] Close remaining language and release gates: the full language corpus,
-  CLI, setup, database, migrator, security, documentation, and packaging
-  findings. General constraints/traits, closures, and generic function
-  references remain documented language boundaries. The [0.9.9
-  plan](release-plans/0.9.9.en.md) lists testable criteria.
+- [✅] Language review against the 0.9.9 source build: 80 cases with no
+  unexpected outcomes, 20 tasks, 35 controlled negative cases, 100 repeats,
+  and 400 independent numeric comparisons passed. The four observations and
+  Linux-only scope are recorded in the
+  [review report](release-readiness/0.9.9-language-review.en.md).
+- [🗺️] Close the remaining CLI, setup, database, migrator, security,
+  documentation, and packaging gates. General constraints/traits, closures,
+  and generic function references remain explicit language boundaries. The
+  [0.9.9 plan](release-plans/0.9.9.en.md) lists the testable criteria.
+- [✅] Add and verify an optional colored CLI help mode with `ZELYRA_COLOR`,
+  `NO_COLOR`, and `CLICOLOR_FORCE`, plus a brief Studio startup splash that
+  respects the persisted appearance and reduced-motion preference.
 - [✅] Generic functions, records, and enums are implemented on the 0.9.9
   branch. Type arguments are inferred or explicit, including through nested
   records, arrays, `Option`, and `Result`. Conflicting, missing, and wrong-arity

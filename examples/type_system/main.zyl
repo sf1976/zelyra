@@ -60,7 +60,7 @@ fn main() uses Clock {
     assert(restored_event == event, "payload enum JSON round trip")
     print("PASS unit and payload enums, equality, exhaustive match and JSON round trip")
     print("PASS named typed function values, argument checking and indirect calls")
-    print("Report: 12 positive type groups; 19 expected compiler errors and 19 expected runtime errors are verified by the CLI integration test.")
+    print("Report: 12 positive type groups; 20 expected compiler errors and 19 expected runtime errors are verified by the CLI integration test.")
     print("Type matrix: 18 supported entries, 6 partial entries, 1 unavailable entry; see README.md.")
     print("Unexpected failures: 0 when the CLI integration test passes.")
     print("Ergebnis: alle ausführbaren Typprüfungen bestanden.")

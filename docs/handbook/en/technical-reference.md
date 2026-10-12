@@ -1709,6 +1709,14 @@ programs process grids and other character-oriented text formats with ordinary
 typed Zelyra arrays. Splitting uses Unicode code points, not composed grapheme
 clusters.
 
+`format_text(value)` explicitly converts scalar numbers, booleans, characters,
+dates, times, timestamps, and durations to display text. For example,
+`label = "Customer " + format_text(customer.id)`. This is neither an implicit
+conversion nor JSON serialization. Use `format_scaled_result` for fixed-scale
+money; `format_text` removes insignificant trailing zeroes from `Decimal`.
+Records, collections, and variants are rejected so their display form does not
+accidentally become a data-exchange format.
+
 The multi-file labyrinth example at
 [`examples/labyrinth_solver`](../../../examples/labyrinth_solver/README.md)
 shows grid handling with file APIs, maps, arrays, and breadth-first search.

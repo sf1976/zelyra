@@ -440,6 +440,9 @@ diagnostics, context output, or logs.
 | Variable | Status | Use |
 |---|---|---|
 | `ZELYRA_INSTALL_ROOT` | implemented | user-local destination for install scripts |
+| `ZELYRA_COLOR` | implemented | `auto` (default), `always`, or `never`; controls ANSI color in CLI help and success messages |
+| `NO_COLOR` | implemented | When present, disables automatic color; `ZELYRA_COLOR=always` takes precedence |
+| `CLICOLOR_FORCE` | implemented | Any nonempty value other than `0` forces color when `ZELYRA_COLOR` is unset and `NO_COLOR` is absent |
 | `ZELYRA_DB_TIMEOUT_TEST_URL` | CI/test variable | MariaDB URL for timeout and pool integration tests; local/isolated test database only |
 | `ZELYRA_MARIADB_ROOT_PASSWORD` | test/development tool | password for local MariaDB test runs |
 | `ZELYRA_MARIADB_PASSWORD` | test/development tool | user password for local MariaDB test runs |

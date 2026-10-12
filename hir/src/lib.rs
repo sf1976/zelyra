@@ -677,6 +677,7 @@ impl<'a> Resolver<'a> {
                             | "duration_ms"
                             | "bytes"
                             | "format_timestamp"
+                            | "format_text"
                             | "env"
                             | "random_int"
                             | "read_console"
@@ -911,6 +912,14 @@ mod tests {
             hir.functions[0].body.statements[6],
             HirStmt::For { ref name, .. } if name == "item"
         ));
+    }
+
+    #[test]
+    fn lowers_explicit_scalar_text_formatting_builtin() {
+        let program =
+            parse(&lex("fn main() { formatted = format_text(7) print(formatted) }").unwrap())
+                .unwrap();
+        lower(&program).expect("format_text is a known language builtin");
     }
 
     #[test]

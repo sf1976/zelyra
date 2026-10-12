@@ -1,18 +1,25 @@
-# Implemented in Zelyra 0.9.8
+# Implemented in Zelyra 0.9.9
 
-**Snapshot:** 0.9.8 release candidate · language compatibility line `0.1` · 2026-10-12
-**Maturity:** experimental; not approved for production use
+**Snapshot:** 0.9.9 development branch · language compatibility line `0.1` · 2026-10-12
+**Maturity:** pre-release engineering work; not approved for production use
+
+This is a development snapshot, not a published 0.9.9 release. Its remaining
+technical release gates are listed in the [0.9.9 plan](release-plans/0.9.9.en.md).
+Human acceptance remains reserved for the exact 1.0.0 candidate.
 
 This inventory describes what the current Zelyra release can do. Capabilities
 are grouped by use, not by historical release number. Older and newer releases
 are listed in the [changelog](../CHANGELOG.md); unfinished work is tracked in
 the [roadmap](ROADMAP.md). Independent human acceptance is reserved for 1.0.0.
 
-## What Zelyra 0.9.8 provides
+## What the 0.9.9 development branch provides
 
 - **Language and compiler:** a statically checked language with functions,
-  records, typed collections, `Option` and `Result`, pattern matching, modules,
-  contracts, effects, and compiler-checked SQL/web declarations. See
+  generic records and enums, named function values, typed collections,
+  `Option` and `Result`, pattern matching, modules, contracts, effects, and
+  compiler-checked SQL/web declarations. Explicit scalar text formatting,
+  calendar-day operations, Decimal rounding, and controlled recursion limits
+  are included. See
   [Language and compiler](#language-and-compiler) for the supported subset and
   its limits.
 - **Databases:** schema-aware queries, relational foreign keys, database
@@ -24,7 +31,8 @@ the [roadmap](ROADMAP.md). Independent human acceptance is reserved for 1.0.0.
   filtering, sorting, pagination, CRUD, and typed APIs with OpenAPI output.
 - **Zelyra Studio:** a local web editor with a persisted light/dark appearance,
   compiler diagnostics, formatting, navigation, completion, task help, a
-  database workbench, and a project map.
+  database workbench, and a project map. Startup includes a short branded
+  splash; the CLI uses a terminal palette when enabled by its output mode.
   The map shows known relationships and explains unresolved or bounded links
   rather than guessing.
 - **Invoice tutorial:** a multi-file customer, item, and invoice application
@@ -90,7 +98,10 @@ proof that arbitrary applications are correct.
   `E-TYPE-MATCH-001`. Nested calls have a controlled runtime depth limit;
   `zelyra run --max-steps <n>` opts into a statement/loop step budget, which is
   unlimited by default.
-- ✅ Strings support lexicographic comparisons. `json_decode_result<T>`,
+- ✅ Strings support lexicographic comparisons. `format_text(value)` explicitly
+  formats scalar values without implicit coercion; fixed-scale monetary text
+  uses `format_scaled_result`. Collections, records, enums, `Result`, and
+  functions have no display conversion. `json_decode_result<T>`,
   `read_text_result`, and `write_text_result` return expected parse and file
   errors as `Result`. The explicit tagged Result codec,
   `json_encode_tagged_result` / `json_decode_tagged_result<T,E>`, preserves the
@@ -132,7 +143,7 @@ See the [formal specification](specification.md),
   implicit TLS, or explicitly configured private CA roots. A five-second
   transport timeout, message bounds, and a loopback test sink are covered.
   Delivery is at least once; exactly-once delivery, PostgreSQL outbox, named
-  templates, and file attachments are not promised in 0.9.8.
+  templates, and file attachments are not promised in 0.9.9.
 - ✅ SQLite provides tested local schema workflows. PostgreSQL supports
   selected runtime, schema, and safety checks. MySQL Server 8.4.11 supports
   typed parameterized queries and an isolated schema workflow covering setup,

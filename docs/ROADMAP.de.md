@@ -1003,8 +1003,9 @@ IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
   getaggter Result-JSON-Codec und iterative Verarbeitung langer Ausdrücke.
   Workspace, Clippy, Formatierung, 324 Handbuchbeispiele, alle 80 Korpusfälle,
   100 Wiederholungsläufe sowie 300 Integer-Division/Rest- und 100 Decimal-
-  Referenztests bestanden. 14 bekannte Beobachtungs-/Lückenfälle sind in
-  Spezifikation und Typmatrix ausgewiesen und verbindlich nach 0.9.9 übertragen.
+  Referenztests bestanden. Die 0.9.9-Wiederholung schließt die zehn früheren
+  Sprachlückenproben; vier begrenzte Beobachtungen sind in Spezifikation und
+  Typmatrix ausgewiesen.
 - [✅] Die helle Studio-Darstellung deckt Editor, Projektnavigation,
   Eigenschaften, Hilfe, Datenbankwerkbank, Aktionssuche und Dialoge ab.
   Browser-E2E prüft Speicherung, Tastaturbedienung, einheitliche Flächen und
@@ -1051,12 +1052,19 @@ IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
   Kandidaten ausführen. Materialien für die exakte 1.0.0-Menschenstudie
   vorbereiten. Danach sollte nur noch die unabhängige menschliche Abnahme offen
   sein; für 0.9.9 keine Abnahme und keine Produktivfreigabe behaupten.
-- [🗺️] Verbleibende Sprach- und Release-Gates schließen: vollständigen Sprachkorpus,
-  CLI-, Setup-, Datenbank-, Migrator- und Sicherheitsbefunde sowie
-  Dokumentations- und Paketierungsprüfungen. Allgemeine Constraints/Traits,
-  Closures und generische Funktionsreferenzen bleiben ausdrücklich dokumentierte
-  Grenzen der Sprachlinie. Der
+- [✅] Sprachprüfung gegen den 0.9.9-Quellbuild: 80 Fälle ohne unerwartete
+  Ergebnisse, 20 Aufgaben, 35 kontrollierte Negativfälle, 100 Wiederholungen
+  und 400 unabhängige Zahlenvergleiche bestanden. Die vier Beobachtungen und
+  der Linux-only-Umfang sind im [Prüfbericht](release-readiness/0.9.9-language-review.de.md)
+  festgehalten.
+- [🗺️] Verbleibende CLI-, Setup-, Datenbank-, Migrator-, Sicherheits-,
+  Dokumentations- und Paketierungsgates schließen. Allgemeine Constraints/
+  Traits, Closures und generische Funktionsreferenzen bleiben ausdrücklich
+  dokumentierte Grenzen der Sprachlinie. Der
   [0.9.9-Plan](release-plans/0.9.9.de.md) enthält die prüfbaren Kriterien.
+- [✅] Eine optionale farbige CLI-Hilfe mit `ZELYRA_COLOR`, `NO_COLOR` und
+  `CLICOLOR_FORCE` sowie einen kurzen Studio-Startbildschirm mit gespeicherter
+  Darstellung und Reduced-Motion-Beachtung ergänzen und prüfen.
 - [✅] Generische Funktionen, Records und Enums sind im 0.9.9-Branch umgesetzt:
   Typargumente werden abgeleitet oder ausdrücklich angegeben, auch in
   verschachtelten Records, Arrays, `Option` und `Result`. Konfliktierende,

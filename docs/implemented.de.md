@@ -1,7 +1,11 @@
-# In Zelyra 0.9.8 umgesetzt
+# In Zelyra 0.9.9 umgesetzt
 
-**Stand:** Release-Kandidat 0.9.8 · Sprachkompatibilitätslinie `0.1` · 2026-10-12
-**Reifegrad:** experimentell; nicht für den Produktiveinsatz freigegeben
+**Stand:** Entwicklungszweig 0.9.9 · Sprachkompatibilitätslinie `0.1` · 2026-10-12
+**Reifegrad:** Vorabentwicklung; nicht für den Produktiveinsatz freigegeben
+
+Dies ist eine Entwicklungsübersicht, kein veröffentlichtes 0.9.9-Release. Die
+offenen technischen Gates stehen im [Releaseplan 0.9.9](release-plans/0.9.9.de.md).
+Die menschliche Abnahme bleibt dem konkreten 1.0.0-Kandidaten vorbehalten.
 
 Diese Übersicht beschreibt, was die aktuelle Zelyra-Version kann. Sie führt die
 Funktionen nach Anwendungsbereichen statt nach einzelnen Versionsnummern auf.
@@ -9,11 +13,14 @@ Funktionen nach Anwendungsbereichen statt nach einzelnen Versionsnummern auf.
 steht in der [Roadmap](ROADMAP.de.md). Eine unabhängige menschliche Abnahme ist
 für 1.0.0 vorgesehen.
 
-## Was Zelyra 0.9.8 bietet
+## Was der Entwicklungszweig 0.9.9 bietet
 
 - **Sprache und Compiler:** eine statisch geprüfte Sprache mit Funktionen,
-  Records, typisierten Sammlungen, `Option` und `Result`, Pattern Matching,
-  Modulen, Contracts, Effekten und compilergeprüften SQL-/Webdeklarationen.
+  generischen Records und Enums, benannten Funktionswerten, typisierten
+  Sammlungen, `Option` und `Result`, Pattern Matching, Modulen, Contracts,
+  Effekten und compilergeprüften SQL-/Webdeklarationen. Explizite skalare
+  Textformatierung, Kalender-Tagesrechnung, Decimal-Rundung und kontrollierte
+  Rekursion sind enthalten.
   Die genaue Typabdeckung und ihre Grenzen stehen im Abschnitt
   [Sprache und Compiler](#sprache-und-compiler).
 - **Datenbanken:** schemaabhängige Abfragen, relationale Fremdschlüssel,
@@ -26,7 +33,9 @@ für 1.0.0 vorgesehen.
   APIs mit OpenAPI-Ausgabe.
 - **Zelyra Studio:** lokaler Webeditor mit gespeicherter heller und dunkler
   Darstellung, Compilerdiagnosen, Formatierung, Navigation, Vervollständigung,
-  Aufgabenhilfe, Datenbankwerkbank und Projektkarte. Die Karte zeigt bekannte Beziehungen und begründet offene oder
+  Aufgabenhilfe, Datenbankwerkbank und Projektkarte. Ein kurzer Markenstart
+  überbrückt das Laden; die CLI verwendet auf Wunsch Terminalfarben. Die Karte
+  zeigt bekannte Beziehungen und begründet offene oder
   begrenzte Zuordnungen, statt sie zu erraten.
 - **Rechnungstutorial:** eine mehrteilige Anwendung für Kunden, Artikel und
   Rechnungen mit Kennzahlen aus gespeicherten Daten. Tabler Core 1.6.1 wird
@@ -95,7 +104,11 @@ den Beweis, dass beliebige Anwendungen korrekt sind.
   `E-TYPE-MATCH-001`. Die Laufzeit begrenzt verschachtelte
   Funktionsaufrufe kontrolliert; `zelyra run --max-steps <n>` aktiviert ein
   optionales Schrittbudget, standardmäßig bleibt es unbegrenzt.
-- ✅ Stringwerte lassen sich lexikografisch vergleichen. `json_decode_result<T>`,
+- ✅ Stringwerte lassen sich lexikografisch vergleichen. `format_text(wert)`
+  formatiert skalare Werte ausdrücklich und ohne implizite Konvertierung;
+  Geldbeträge mit fester Skala verwenden `format_scaled_result`. Sammlungen,
+  Records, Enums, `Result` und Funktionen besitzen keine Anzeigekonvertierung.
+  `json_decode_result<T>`,
   `read_text_result` und `write_text_result` geben erwartbare Parse- und
   Dateifehler als `Result` zurück. Der explizite getaggte Result-Codec
   `json_encode_tagged_result`/`json_decode_tagged_result<T,E>` erhält Ok- und
@@ -141,7 +154,7 @@ Siehe die [formale Sprachspezifikation](specification.de.md), die
   werden. Ein fünfsekündiges Transport-Timeout, Nachrichtengrenzen und eine
   Loopback-Testsenke sind geprüft. Die Zustellung erfolgt mindestens einmal;
   genau-einmalige Zustellung, PostgreSQL-Outbox, benannte Vorlagen und
-  Dateianhänge sind in 0.9.8 nicht zugesagt.
+  Dateianhänge sind in 0.9.9 nicht zugesagt.
 - ✅ SQLite bietet geprüfte lokale Schemaabläufe. PostgreSQL unterstützt
   ausgewählte Laufzeit-, Schema- und Sicherheitsprüfungen. MySQL Server 8.4.11
   unterstützt typisierte parametrisierte Abfragen sowie einen isolierten

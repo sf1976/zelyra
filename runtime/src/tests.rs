@@ -382,6 +382,26 @@ fn main() {
 }
 
 #[test]
+fn format_text_is_an_explicit_scalar_conversion_without_json_quotes() {
+    let source = r#"
+fn main() {
+    print(format_text(42))
+    print(format_text(decimal("12.34")))
+    print(format_text(true))
+    print(format_text("Zelyra"))
+}
+"#;
+    assert_eq!(run(source), ["42", "12.34", "true", "Zelyra"]);
+
+    let non_scalar = parse(&lex("fn main() { print(format_text([1, 2])) }").unwrap()).unwrap();
+    let errors =
+        check(&non_scalar).expect_err("collections do not have an implicit display format");
+    assert!(errors.iter().any(|error| {
+        error.code == "E-TYPE-FORMAT-001" && error.message.contains("does not support `Int[]`")
+    }));
+}
+
+#[test]
 fn long_left_associative_expressions_are_checked_and_evaluated_without_stack_overflow() {
     let expression = std::iter::repeat_n("1", 5_000)
         .collect::<Vec<_>>()

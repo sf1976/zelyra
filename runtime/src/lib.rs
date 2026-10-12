@@ -5746,6 +5746,37 @@ impl<'a> Checker<'a> {
                     let timestamp = self.check_expr(&args[0], scopes);
                     self.expect_type(&Type::Timestamp, &timestamp, args[0].span);
                     Type::String
+                } else if name == "format_text" {
+                    if !type_args.is_empty() || args.len() != 1 {
+                        self.error_with_code(
+                            "E-TYPE-FORMAT-001",
+                            expr.span,
+                            "format_text expects one scalar value and no type arguments",
+                        );
+                        return Type::Unknown;
+                    }
+                    let value = self.check_expr(&args[0], scopes);
+                    if !matches!(
+                        value,
+                        Type::Int
+                            | Type::UInt
+                            | Type::Float
+                            | Type::Decimal
+                            | Type::Bool
+                            | Type::Char
+                            | Type::String
+                            | Type::Timestamp
+                            | Type::Date
+                            | Type::Time
+                            | Type::Duration
+                    ) {
+                        self.error_with_code(
+                            "E-TYPE-FORMAT-001",
+                            args[0].span,
+                            format!("format_text does not support `{value}`"),
+                        );
+                    }
+                    Type::String
                 } else if name == "env" {
                     if args.len() != 1 {
                         self.error(expr.span, "env expects exactly one argument");
@@ -7699,6 +7730,7 @@ fn is_runtime_builtin(name: &str) -> bool {
             | "duration_ms"
             | "bytes"
             | "format_timestamp"
+            | "format_text"
             | "env"
             | "random_int"
             | "read_console"
@@ -10106,6 +10138,35 @@ impl<'program> Interpreter<'program> {
                     args[0].span,
                     format!("format_timestamp expects a Timestamp, found {}", value.ty()),
                 )),
+            }
+        } else if name == "format_text" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(
+                    span,
+                    "format_text expects one scalar value and no type arguments",
+                ));
+            }
+            let value = self.eval(&args[0], env)?;
+            if matches!(
+                value,
+                Value::Int(_)
+                    | Value::UInt(_)
+                    | Value::Float(_)
+                    | Value::Decimal(_)
+                    | Value::Bool(_)
+                    | Value::Char(_)
+                    | Value::String(_)
+                    | Value::Timestamp(_)
+                    | Value::Date(_)
+                    | Value::Time(_)
+                    | Value::Duration(_)
+            ) {
+                Ok(Value::String(value.output()))
+            } else {
+                Err(self.runtime_error(
+                    args[0].span,
+                    format!("format_text does not support `{}`", value.ty()),
+                ))
             }
         } else if name == "env" {
             if args.len() != 1 {
