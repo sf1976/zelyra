@@ -9,7 +9,7 @@ const MAX_SOURCE_FILES: usize = 10_000;
 const MAX_SOURCE_FILE_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_TOTAL_SOURCE_BYTES: u64 = 256 * 1024 * 1024;
 const MAX_DIRECTORY_DEPTH: usize = 64;
-const ANALYZER_VERSION: &str = "0.9.5";
+const ANALYZER_VERSION: &str = "0.9.6";
 
 #[derive(Clone)]
 struct Finding {
@@ -24,9 +24,7 @@ struct Finding {
 
 pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     if arguments.next().as_deref() != Some("laravel") {
-        eprintln!(
-            "Usage: zelyra migrate laravel <project> --report <path> [--format markdown|json]"
-        );
+        eprintln!("Usage: zelyra migrate laravel <project> [--report <path>] [--output <target>] [--format markdown|json]");
         return ExitCode::from(2);
     }
     let Some(project) = arguments.next() else {
@@ -34,10 +32,12 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         return ExitCode::from(2);
     };
     let mut report = None;
+    let mut output = None;
     let mut format = None;
     while let Some(argument) = arguments.next() {
         match argument.as_str() {
             "--report" => report = arguments.next(),
+            "--output" => output = arguments.next(),
             "--format" => format = arguments.next(),
             _ => {
                 eprintln!("error[E-MIGRATE-001]: unknown migrate option `{argument}`");
@@ -45,14 +45,19 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
             }
         }
     }
-    let Some(report) = report else {
-        eprintln!("error[E-MIGRATE-001]: `--report <path>` is required; source analysis never writes into the Laravel project");
+    if report.is_none() && output.is_none() {
+        eprintln!("error[E-MIGRATE-001]: provide `--report <path>`, `--output <target>`, or both");
         return ExitCode::from(2);
-    };
+    }
     let project = PathBuf::from(project);
-    let report = PathBuf::from(report);
+    let report = report.map(PathBuf::from);
+    let output = output.map(PathBuf::from);
     let format = match format.as_deref() {
-        None => match report.extension().and_then(|extension| extension.to_str()) {
+        None => match report
+            .as_ref()
+            .and_then(|path| path.extension())
+            .and_then(|extension| extension.to_str())
+        {
             Some("json") => "json",
             _ => "markdown",
         },
@@ -63,10 +68,26 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    match analyze(&project, &report, format) {
-        Ok((path, counts)) => {
+    let result = if let Some(output) = output {
+        generate_scaffold(&project, report.as_deref(), &output, format)
+    } else {
+        analyze(
+            &project,
+            report.as_deref().expect("report required without output"),
+            format,
+        )
+        .map(|(path, counts)| (Some(path), None, counts))
+    };
+    match result {
+        Ok((report_path, output_path, counts)) => {
             println!("Laravel source analyzed without executing PHP or reading environment files.");
-            println!("Report: {}", path.display());
+            if let Some(path) = report_path {
+                println!("Report: {}", path.display());
+            }
+            if let Some(path) = output_path {
+                println!("Separate Zelyra scaffold: {}", path.display());
+                println!("Transferred business logic: none; review MIGRATION_TODO.md and MIGRATION_REPORT.md.");
+            }
             println!(
                 "Findings: {} · unresolved/manual: {} · partial: {}",
                 counts.0, counts.1, counts.2
@@ -78,6 +99,189 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
             ExitCode::from(1)
         }
     }
+}
+
+fn generate_scaffold(
+    project: &Path,
+    external_report: Option<&Path>,
+    output: &Path,
+    format: &str,
+) -> Result<(Option<PathBuf>, Option<PathBuf>, (usize, usize, usize)), String> {
+    let root = fs::canonicalize(project)
+        .map_err(|_| "Laravel project directory does not exist or is not readable".to_owned())?;
+    if !root.is_dir() {
+        return Err("Laravel project path must be a directory".into());
+    }
+    let output = resolve_new_report_path(output)?;
+    let output_parent = output.parent().ok_or("target needs a parent directory")?;
+    let canonical_parent = fs::canonicalize(output_parent)
+        .map_err(|_| "target parent directory does not exist".to_owned())?;
+    let output_name = output
+        .file_name()
+        .ok_or("target directory name is required")?;
+    let target = canonical_parent.join(output_name);
+    if target.starts_with(&root) || root.starts_with(&target) {
+        return Err("scaffold target must be separate from the Laravel source project".into());
+    }
+    if fs::symlink_metadata(&target).is_ok() {
+        return Err(
+            "scaffold target already exists; choose a new directory so files are never overwritten"
+                .into(),
+        );
+    }
+    let report_target = if let Some(report) = external_report {
+        let report = resolve_new_report_path(report)?;
+        let parent = report.parent().ok_or("report needs a parent directory")?;
+        let parent = fs::canonicalize(parent)
+            .map_err(|_| "report parent directory does not exist".to_owned())?;
+        let name = report.file_name().ok_or("report filename is required")?;
+        let report_target = parent.join(name);
+        if report_target.starts_with(&root) || root.starts_with(&report_target) {
+            return Err("report path must be outside the Laravel source project".into());
+        }
+        if report_target.starts_with(&target) || target.starts_with(&report_target) {
+            return Err("report path and scaffold target must be separate".into());
+        }
+        if fs::symlink_metadata(&report_target).is_ok() {
+            return Err(
+                "report already exists; choose a new path so reports are never overwritten".into(),
+            );
+        }
+        Some((report_target, report))
+    } else {
+        None
+    };
+
+    let mut staging = None;
+    for attempt in 0..16_u32 {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| "system clock is before the Unix epoch".to_owned())?
+            .as_nanos();
+        let path = canonical_parent.join(format!(
+            ".zelyra-laravel-{}-{nonce}-{attempt}",
+            std::process::id()
+        ));
+        match fs::create_dir(&path) {
+            Ok(()) => {
+                staging = Some(path);
+                break;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                return Err(format!(
+                    "could not create private staging directory: {error}"
+                ))
+            }
+        }
+    }
+    let staging = staging.ok_or("could not allocate a unique staging directory")?;
+    let result = (|| {
+        let staged_report = staging.join("MIGRATION_REPORT.json");
+        let (_, counts) = analyze(&root, &staged_report, "json")?;
+        let report_json: Value = serde_json::from_slice(
+            &fs::read(&staged_report)
+                .map_err(|error| format!("could not read staged report: {error}"))?,
+        )
+        .map_err(|_| "generated migration report is invalid JSON".to_owned())?;
+        let project_name = root
+            .file_name()
+            .and_then(|name| name.to_str())
+            .filter(|name| {
+                name.chars()
+                    .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
+            })
+            .unwrap_or("laravel-migration");
+        write_new_file(
+            &staging.join("zelyra.toml"),
+            &format!(
+                "[project]\nname = \"{}\"\nlanguage = \"0.1\"\n",
+                project_name
+            ),
+        )?;
+        write_new_file(
+            &staging.join("main.zyl"),
+            "# Generated scaffold: no Laravel business behavior was transferred.\nfn main() {\n    print(\"Review MIGRATION_TODO.md before implementing this application.\")\n}\n",
+        )?;
+        write_new_file(
+            &staging.join("README.md"),
+            "# Zelyra migration scaffold\n\nThis is a separate, compiler-checkable starting point. It contains no copied Laravel code, configuration, secrets, personal records, or production data. The analysis report is an inventory, not a claim of functional or security parity.\n\nStart with `zelyra check main.zyl`, then review `MIGRATION_TODO.md` and implement each behavior explicitly.\n",
+        )?;
+        let findings = report_json["findings"]
+            .as_array()
+            .ok_or("generated migration report has no findings list")?;
+        let ruleset = report_json["mapping_ruleset"].as_str().unwrap_or("unknown");
+        let mut report_markdown = format!(
+            "# Laravel migration inventory\n\n- Mapping ruleset: `{ruleset}`\n- Source: `{}`\n- Analysis: static and read-only; PHP/Artisan and `.env` were not read.\n- Transferred business behavior: none.\n\n",
+            report_json["source_project"].as_str().unwrap_or("Laravel project")
+        );
+        let mut todo = String::from(
+            "# Migration work still required\n\nNo Laravel business logic has been transferred. Each mapping ID below identifies an analyzer finding, not a claim that the behavior is supported. Review the original source and reimplement and test authorization, tenant boundaries, validation, transactions, money calculations, file handling, jobs, integrations, and error paths before enabling any workflow.\n\n",
+        );
+        report_markdown.push_str("| Status | Mapping ID | Source location | Finding | Next step |\n|---|---|---|---|---|\n");
+        for finding in findings {
+            let kind = finding["kind"].as_str().unwrap_or("unknown");
+            let id = format!("{ruleset}/{kind}");
+            let file = finding["file"].as_str().unwrap_or("unknown");
+            let line = finding["line"].as_u64().unwrap_or(0);
+            let name = finding["name"].as_str().unwrap_or("unclassified finding");
+            let summary = finding["summary"].as_str().unwrap_or("");
+            let next_step = finding["next_step"].as_str().unwrap_or("Review manually.");
+            let status = finding["status"].as_str().unwrap_or("unresolved");
+            let safe_cell = |value: &str| value.replace('|', "\\|").replace(['\n', '\r'], " ");
+            use std::fmt::Write as _;
+            let _ = writeln!(
+                report_markdown,
+                "| {} | `{}` | `{}:{}` | {}: {} | {} |",
+                safe_cell(status),
+                id,
+                safe_cell(file),
+                line,
+                safe_cell(name),
+                safe_cell(summary),
+                safe_cell(next_step)
+            );
+            let _ = writeln!(todo, "- **`{id}`** · `{file}:{line}` · {status}: {name}\n  - {summary}\n  - Next: {next_step}");
+        }
+        write_new_file(&staging.join("MIGRATION_REPORT.md"), &report_markdown)?;
+        write_new_file(&staging.join("MIGRATION_TODO.md"), &todo)?;
+        let main = staging.join("main.zyl");
+        super::validate(
+            main.to_str()
+                .ok_or("staged source path is not valid UTF-8")?,
+        )
+        .map_err(|_| "generated scaffold failed the Zelyra compiler check".to_owned())?;
+
+        let external_report_path =
+            if let Some((destination, requested_path)) = report_target.as_ref() {
+                let (_, _) = analyze(&root, requested_path, format)?;
+                Some(destination.clone())
+            } else {
+                None
+            };
+        super::module_cli::publish_directory_no_replace(&staging, &target).map_err(|error| {
+            format!("could not publish scaffold without replacing an existing target: {error}")
+        })?;
+        Ok((external_report_path, Some(target.clone()), counts))
+    })();
+    if staging.exists() {
+        let _ = fs::remove_dir_all(&staging);
+    }
+    result
+}
+
+fn write_new_file(path: &Path, contents: &str) -> Result<(), String> {
+    use std::io::Write;
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(|error| format!("could not create scaffold file: {error}"))?;
+    if let Err(error) = file.write_all(contents.as_bytes()) {
+        let _ = fs::remove_file(path);
+        return Err(format!("could not write scaffold file: {error}"));
+    }
+    Ok(())
 }
 
 fn analyze(

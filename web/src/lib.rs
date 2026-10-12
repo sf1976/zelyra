@@ -376,6 +376,8 @@ pub struct CrudRoute {
     pub title: String,
     pub table: String,
     pub tenant_column: Option<String>,
+    pub unread_column: Option<String>,
+    pub expires_column: Option<String>,
     pub list_columns: Vec<String>,
     pub search_columns: Vec<String>,
     pub filter_columns: Vec<String>,
@@ -6262,6 +6264,13 @@ fn dispatch_crud(
             if archived { "NOT NULL" } else { "NULL" }
         ));
     }
+    if let Some(expires_column) = &crud.expires_column {
+        conditions.push(format!(
+            "({} IS NULL OR {} > CURRENT_TIMESTAMP)",
+            quote_identifier(expires_column),
+            quote_identifier(expires_column)
+        ));
+    }
     if let (Some(tenant_column), Some(tenant_context)) =
         (crud.tenant_column.as_deref(), tenant_context)
     {
@@ -6330,6 +6339,51 @@ fn dispatch_crud(
             return crud_error_response(crud, 500, "Internal Server Error", message);
         }
     };
+    let unread_count = if let Some(unread_column) = crud.unread_column.as_deref() {
+        let mut count_conditions = vec![format!("{} IS NULL", quote_identifier(unread_column))];
+        if let Some(soft_delete) = &crud.soft_delete {
+            count_conditions.push(format!("{} IS NULL", quote_identifier(&soft_delete.column)));
+        }
+        if let Some(expires_column) = &crud.expires_column {
+            count_conditions.push(format!(
+                "({} IS NULL OR {} > CURRENT_TIMESTAMP)",
+                quote_identifier(expires_column),
+                quote_identifier(expires_column)
+            ));
+        }
+        if let (Some(tenant_column), Some(tenant_context)) =
+            (crud.tenant_column.as_deref(), tenant_context)
+        {
+            count_conditions.push(format!(
+                "{} = :zelyra_tenant_id AND {}",
+                quote_identifier(tenant_column),
+                tenant_membership_predicate(tenant_context)
+            ));
+        } else if crud.tenant_column.is_some() {
+            return Response::html(403, "<h1>403 Forbidden</h1>");
+        }
+        let count_sql = format!(
+            "SELECT COUNT(*) FROM {} WHERE {}",
+            quote_identifier(&crud.table),
+            count_conditions.join(" AND ")
+        );
+        let count_params = tenant_context.map(tenant_query_params).unwrap_or_default();
+        match zelyra_database::execute_mariadb_query(database_url, &count_sql, count_params) {
+            Ok(result) => result
+                .rows
+                .first()
+                .and_then(|row| row.first())
+                .and_then(|count| count.parse::<u64>().ok())
+                .unwrap_or(0),
+            Err(error) => {
+                eprintln!("zelyra web: notification unread count failed: {error}");
+                let message = locale_text(language, "error.crud_data_unavailable");
+                return crud_error_response(crud, 500, "Internal Server Error", message);
+            }
+        }
+    } else {
+        0
+    };
     Response::html(
         200,
         render_crud_list_with_actions(
@@ -6347,6 +6401,7 @@ fn dispatch_crud(
                 page,
                 per_page,
                 archived,
+                unread_count: crud.unread_column.as_ref().map(|_| unread_count),
                 success: query_values.get("zelyra_success").map(String::as_str),
                 success_title: query_values.get("zelyra_success_title").map(String::as_str),
             },
@@ -6753,9 +6808,9 @@ fn render_tableview(
             html.push_str("<tr>");
             for index in 0..tableview.columns.len() {
                 html.push_str("<td>");
-                html.push_str(&html_escape(
+                html.push_str(&html_escape(display_database_value(
                     row.get(index).map(String::as_str).unwrap_or(""),
-                ));
+                )));
                 html.push_str("</td>");
             }
             html.push_str("</tr>");
@@ -7582,6 +7637,7 @@ struct CrudListView<'a> {
     page: u64,
     per_page: u64,
     archived: bool,
+    unread_count: Option<u64>,
     success: Option<&'a str>,
     success_title: Option<&'a str>,
 }
@@ -7621,6 +7677,7 @@ fn render_crud_list_with_actions(
         page,
         per_page,
         archived,
+        unread_count,
         success,
         success_title,
     } = view;
@@ -7631,6 +7688,16 @@ fn render_crud_list_with_actions(
         &localize_user_text(language, &crud.title),
     ));
     html.push_str("</h1>");
+    if let Some(count) = unread_count {
+        html.push_str("<p class=\"zelyra-unread-count\" role=\"status\"><strong>");
+        html.push_str(&html_escape_preserving_locale_references(&tr(
+            language,
+            "crud.unread_count",
+        )));
+        html.push_str(": ");
+        html.push_str(&count.to_string());
+        html.push_str("</strong></p>");
+    }
     if crud.soft_delete.is_some() {
         html.push_str("<p class=\"zelyra-archive-toggle\"><a href=\"");
         if archived {
@@ -7800,6 +7867,7 @@ fn render_crud_list_with_actions(
                     .and_then(|index| row.get(index))
                     .map(String::as_str)
                     .unwrap_or("");
+                let value = display_database_value(value);
                 html.push_str("<dl><dt>");
                 html.push_str(&html_escape_preserving_locale_references(
                     &crud_column_label(language, &crud.schema, &crud.table, column),
@@ -7841,6 +7909,7 @@ fn render_crud_list_with_actions(
                     .and_then(|index| row.get(index))
                     .map(String::as_str)
                     .unwrap_or("");
+                let value = display_database_value(value);
                 if let Some(href) =
                     crud_list_detail_href(crud, query_columns, display_columns, row, column, value)
                 {
@@ -7967,7 +8036,7 @@ fn render_crud_detail_with_actions(
             &crud_column_label(language, &crud.schema, &crud.table, column),
         ));
         html.push_str("</dt><dd>");
-        html.push_str(&html_escape(value));
+        html.push_str(&html_escape(display_database_value(value)));
         html.push_str("</dd>");
     }
     if ui_actions.edit || ui_actions.create {
@@ -9100,11 +9169,19 @@ fn route_data_row(
                 .iter()
                 .position(|column| column.eq_ignore_ascii_case(field))
                 .and_then(|index| row.get(index))
-                .cloned()
+                .map(|value| display_database_value(value).to_owned())
                 .unwrap_or_default();
             (field.clone(), value)
         })
         .collect()
+}
+
+fn display_database_value(value: &str) -> &str {
+    if value == "\\N" {
+        ""
+    } else {
+        value
+    }
 }
 
 struct TemplateForBlock {

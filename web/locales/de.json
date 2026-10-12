@@ -199,6 +199,7 @@
   "shell.environment_label": "ZELYRA-ANWENDUNG",
   "shell.overview": "Übersicht",
   "crud.archive.active": "Aktive Datensätze anzeigen",
+  "crud.unread_count": "Ungelesene Benachrichtigungen",
   "crud.archive.archived": "Archivierte Datensätze anzeigen",
   "crud.create": "Neu anlegen",
   "query.legend": "Suche und Filter",
