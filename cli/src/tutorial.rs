@@ -144,7 +144,7 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         println!("\nFollow the workflow in the running app:");
         println!("  1. Customers: create and find customers at /customers (`src/customers.zyl`).");
         println!("  2. Items: maintain reusable products and prices at /items (`src/items.zyl`).");
-        println!("  3. Dashboard: review invoices at / and /views/invoicedashboard (`src/dashboard.zyl`).");
+        println!("  3. Dashboard: view live customer, invoice, net, and gross totals at /; search invoices at /views/invoicedashboard.");
         println!("  4. Invoice: create a draft at /invoices and select its customer (`src/invoices.zyl`).");
         println!("  5. Lines: add invoice items at /invoice_lines (`src/invoices.zyl`).");
         if no_start {
@@ -175,6 +175,7 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
             }
         }
         println!("Open Studio with `zelyra editor {directory}` to inspect the source.");
+        println!("The dashboard shows live totals and guides you through the connected customer → item → invoice workflow. The desktop layout adapts to smaller screens; its Tabler styling is bundled locally, with no CDN request.");
         println!("The invoice page calculates net, 19% VAT, and gross totals from its lines. Open /invoices/INVOICE-NUMBER/print and use the browser print dialog to save a PDF.");
         println!("The example assumes the German standard rate; it is not a complete legally compliant invoicing or accounting system.");
     } else {
@@ -196,7 +197,7 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         println!("\nGehe den Ablauf in der Anwendung durch:");
         println!("  1. Kunden: unter /customers erfassen und suchen (`src/customers.zyl`).");
         println!("  2. Artikel: Produkte und Preise unter /items pflegen (`src/items.zyl`).");
-        println!("  3. Dashboard: Rechnungen unter / und /views/invoicedashboard ansehen (`src/dashboard.zyl`).");
+        println!("  3. Dashboard: echte Kunden-, Rechnungs-, Netto- und Bruttowerte unter / ansehen; Rechnungen unter /views/invoicedashboard suchen.");
         println!("  4. Rechnung: unter /invoices einen Entwurf anlegen und Kunden auswählen (`src/invoices.zyl`).");
         println!("  5. Positionen: unter /invoice_lines Artikel zur Rechnung hinzufügen (`src/invoices.zyl`).");
         if no_start {
@@ -223,6 +224,7 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
             }
         }
         println!("Mit `zelyra editor {directory}` kannst du den Quelltext ansehen.");
+        println!("Das Dashboard zeigt echte Summen und führt dich durch Kunden → Artikel → Rechnung. Das Desktop-Layout passt sich schmalen Displays an; Tabler-CSS wird lokal ausgeliefert, ohne CDN-Aufruf.");
         println!("Die Rechnungsseite berechnet Netto, 19% Umsatzsteuer und Brutto aus den Positionen. Öffne /invoices/RECHNUNGSNUMMER/print und speichere über den Druckdialog des Browsers als PDF.");
         println!("Das Beispiel nimmt den allgemeinen deutschen Steuersatz an und ist kein vollständiges gesetzeskonformes Rechnungs- oder Buchhaltungssystem.");
     }

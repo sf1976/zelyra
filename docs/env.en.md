@@ -264,6 +264,18 @@ proxies should also set their own deadlines and connection limits.
 the default design is unchanged. There is no theme-selection variable or
 additional configuration precedence.
 
+A project can opt into the bundled Tabler Core 1.6.1 stylesheet by putting
+this marker on its own line in `zelyra.theme.css`:
+
+```css
+/* zelyra:tabler */
+```
+
+Zelyra serves that MIT-licensed stylesheet locally before project CSS; it does
+not use a CDN or load Tabler JavaScript. The 128 KiB limit applies to the
+authored project file, while the built-in stylesheet remains part of the Zelyra
+CLI distribution. This marker changes presentation only.
+
 The file can override these public CSS properties:
 
 ```css

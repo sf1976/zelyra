@@ -542,6 +542,15 @@ fn project_theme_css_is_optional_utf8_and_size_limited() {
         Some(theme.into())
     );
 
+    let tabler_theme = "/* zelyra:tabler */\nbody { color: #223; }";
+    fs::write(&theme_path, tabler_theme).unwrap();
+    let resolved_theme = project_theme_css(source_path.to_str().unwrap())
+        .unwrap()
+        .expect("Tabler theme should be enabled");
+    assert!(resolved_theme.contains("Tabler v1.6.1"));
+    assert!(resolved_theme.contains("body { color: #223; }"));
+    assert!(resolved_theme.len() > PROJECT_THEME_CSS_MAX_BYTES as usize);
+
     fs::write(
         &theme_path,
         vec![b'x'; PROJECT_THEME_CSS_MAX_BYTES as usize + 1],

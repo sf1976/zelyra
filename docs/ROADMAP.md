@@ -919,7 +919,33 @@ language backlog as one 0.9.4 change.
   configured, and guessed cross-tenant IDs stay hidden. Localization, generated
   forms, and failure states have coverage. No external push service is required.
 
-## Release 0.9.7 — database and security hardening
+## Release 0.9.7 — Studio, invoice tutorial, and hardening
+
+- [🧪] Split the invoice tutorial between `main.zyl` and feature modules, with
+  a desktop dashboard backed by real metrics and a guided customer/item/invoice
+  flow. The Tabler CSS component is optional, local, and MIT-licensed; no CDN
+  dependency. Keep the learning path's net, 19% VAT, and gross print output.
+- [🧪] Fix project-map gaps: resolve views across modules only within the local
+  module or through imported public views, include CRUD layouts, and show table
+  views. Explain limits and unresolved relationships with localized stable
+  reasons; do not guess SQL relationships.
+- [🗺️] Add responsive browser E2E for desktop and narrow viewports, real
+  metrics, generated CRUD forms, offline local Tabler delivery, and printable
+  invoices.
+- [🗺️] Deliver personal read receipts and recipient authorization, bounded
+  retention, safe templates/attachments, and optional SMTP. Verify atomic
+  enqueueing, idempotent retries, cross-tenant/recipient IDs, and duplicate
+  delivery behavior.
+- [🗺️] Harden Laravel analysis for tenant boundaries, authorization,
+  downloads/uploads, payments/accounting, and public endpoints. Missing or
+  ambiguous evidence requires manual review.
+- [🗺️] Close the promised MariaDB, MySQL, and PostgreSQL workflow matrix for
+  1.0; document exact server versions, supported workflows, and limitations.
+  Verify relations, TLS, backup/restore, and tenant-filtered CRUD with negative
+  authorization tests.
+- Exit criteria: the project-map regression resolves the imported tutorial
+  layout, browser checks show real metrics, and all findings/backend limits are
+  documented. Full scope: [0.9.7 plan](release-plans/0.9.7.en.md).
 
 - [🗺️] Extend the notification center with per-user read receipts, recipient
   authorization, bounded retention, safe named templates, and optional SMTP

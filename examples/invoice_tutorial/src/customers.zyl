@@ -12,7 +12,7 @@ table customers {
     name: String(120) required
     email: Email?
     access {
-        read: ["src/invoices.zyl", "src/dashboard.zyl"]
+        read: ["src/invoices.zyl", "src/dashboard.zyl", "main.zyl"]
     }
 }
 

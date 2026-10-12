@@ -29,8 +29,11 @@ Bereiche:
 1. **Kunden** — Kundendatensätze unter `/customers` anlegen und suchen.
 2. **Artikel** — wiederverwendbare Produkte, Preise und Aktivstatus unter
    `/items` pflegen.
-3. **Dashboard** — unter `/` starten und die durchsuchbare Rechnungsübersicht
-   unter `/views/invoicedashboard` öffnen.
+3. **Dashboard** — unter `/` starten. Dort zeigen echte Daten Kundenanzahl,
+   Rechnungsanzahl sowie gespeicherte Netto- und Bruttowerte inklusive Steuer.
+   Die Werte enthalten auch Entwürfe und sind daher keine gebuchte Umsatzstatistik.
+   Der geführte
+   Vier-Schritte-Ablauf verlinkt Formulare und Rechnungsübersicht direkt.
 4. **Rechnungen** — Entwurf erstellen, Kunden auswählen, Rechnungsnummer und
    Status unter `/invoices` verwalten.
 5. **Rechnungspositionen** — unter `/invoice_lines` Rechnung und Artikel
@@ -61,10 +64,14 @@ Runtime das gesamte importierte Projekt gemeinsam prüfen. `zelyra check
 main.zyl` und `zelyra routes main.zyl` starten im Projektordner am Einstieg;
 Studio zeigt dieselben Quelldateien im Projektbaum.
 
-Das responsiv gestaltete Theme umfasst Navigation, Formulare, Schaltflächen,
-Tabellen und eine eigene Druckansicht. Mit `zelyra editor invoice-tutorial`
-öffnest du Studio, um das Programm und seine Datenbankdeklarationen anzusehen
-und zu bearbeiten.
+Das Desktop-Dashboard nutzt vier Kennzahlenkarten, einen geführten Ablauf und
+eine Übersicht der Beziehungen zwischen Kunden, Rechnungen und Positionen.
+Navigation und CRUD-Ansichten passen sich Tablet und schmalen Displays an;
+Tabellen bleiben dort horizontal bedienbar. Tabler Core 1.6.1 wird zusammen mit
+Zelyra ausgeliefert und lokal eingebunden. Die Anwendung lädt weder ein CDN noch
+Tabler-JavaScript nach. Die Druckansicht blendet Navigation und Bedienelemente
+aus. Mit `zelyra editor invoice-tutorial` öffnest du Studio, um Quelltext und
+Datenbankdeklarationen anzusehen und zu bearbeiten.
 
 ## Rechnung ansehen und als PDF speichern
 
