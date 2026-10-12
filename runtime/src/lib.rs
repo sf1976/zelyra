@@ -11568,14 +11568,24 @@ impl<'program> Interpreter<'program> {
                         })?
                 };
                 if definition.is_class {
-                    let object_id = self
-                        .next_class_object_id
-                        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |next| {
-                            next.checked_add(1)
-                        })
-                        .map_err(|_| {
+                    let object_id = loop {
+                        let current = self.next_class_object_id.load(Ordering::Relaxed);
+                        let next = current.checked_add(1).ok_or_else(|| {
                             self.runtime_error(expr.span, "class object identity space exhausted")
                         })?;
+                        if self
+                            .next_class_object_id
+                            .compare_exchange_weak(
+                                current,
+                                next,
+                                Ordering::Relaxed,
+                                Ordering::Relaxed,
+                            )
+                            .is_ok()
+                        {
+                            break current;
+                        }
+                    };
                     let reference = ClassObjectRef {
                         object_id,
                         object: Arc::new(Mutex::new(RuntimeClassObject { fields: values })),
