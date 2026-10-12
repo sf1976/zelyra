@@ -210,7 +210,12 @@ pub fn validate_message(message: &MailMessage<'_>) -> Result<(), MailError> {
 }
 
 pub fn validate_ca_certificate(pem: &[u8]) -> Result<(), MailError> {
-    parse_ca_certificate(pem).map(|_| ())
+    let certificate = parse_ca_certificate(pem)?;
+    TlsParameters::builder("smtp-ca-validation.invalid".to_owned())
+        .add_root_certificate(certificate)
+        .build()
+        .map(|_| ())
+        .map_err(|_| MailError::Configuration)
 }
 
 fn parse_ca_certificate(pem: &[u8]) -> Result<Certificate, MailError> {
@@ -293,6 +298,12 @@ mod tests {
     #[test]
     fn rejects_invalid_custom_ca_and_plaintext_ca_configuration() {
         let invalid_pem = b"-----BEGIN CERTIFICATE-----\nnot-base64\n-----END CERTIFICATE-----";
+        let invalid_der =
+            b"-----BEGIN CERTIFICATE-----\nbm90LWEtY2VydA==\n-----END CERTIFICATE-----";
+        assert_eq!(
+            validate_ca_certificate(invalid_der),
+            Err(MailError::Configuration)
+        );
         assert!(SmtpClient::new(SmtpConfig {
             host: "smtp.example.test",
             port: 587,
