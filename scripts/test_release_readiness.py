@@ -41,7 +41,7 @@ class ReleaseReadinessTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         for version, plans in RELEASE_PLAN_CHECKLISTS.items():
             failures = unfinished_gates(root, version)
-            if version in {"0.7.0", "0.8.0", "0.9.0", "0.9.3", "0.9.5", "0.9.6"}:
+            if version in {"0.7.0", "0.8.0", "0.9.0", "0.9.3", "0.9.5", "0.9.6", "0.9.8"}:
                 self.assertEqual(
                     failures,
                     [],
@@ -60,6 +60,31 @@ class ReleaseReadinessTests(unittest.TestCase):
                     any(relative_path in failure for failure in failures),
                     f"{version} must report incomplete gates from {relative_path}",
                 )
+
+    def test_098_release_scope_passes_while_099_rechecks_open_carry_over(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        self.assertEqual(unfinished_gates(root, "0.9.8"), [])
+
+        english_carry_over = (
+            root / "docs/release-plans/0.9.8.en.md"
+        ).read_text(encoding="utf-8")
+        german_carry_over = (
+            root / "docs/release-plans/0.9.8.de.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("## Mandatory 0.9.9 carry-over gates", english_carry_over)
+        self.assertIn("## Verbindliche 0.9.9-Übernahmen", german_carry_over)
+        self.assertIn("- [ ]", english_carry_over.split("## Mandatory 0.9.9 carry-over gates", 1)[1])
+        self.assertIn("- [ ]", german_carry_over.split("## Verbindliche 0.9.9-Übernahmen", 1)[1])
+
+        failures = unfinished_gates(root, "0.9.9")
+        self.assertTrue(
+            any("docs/release-plans/0.9.8.en.md" in failure for failure in failures),
+            "unfinished 0.9.8 carry-over items must still block 0.9.9",
+        )
+        self.assertTrue(
+            any("docs/release-plans/0.9.8.de.md" in failure for failure in failures),
+            "the German 0.9.8 carry-over must also block 0.9.9",
+        )
 
     def test_later_milestone_gate_checklists_require_both_languages_and_all_items(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
