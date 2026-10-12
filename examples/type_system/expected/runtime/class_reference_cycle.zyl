@@ -1,0 +1,10 @@
+class Node {
+    next: Node?
+}
+
+fn main() {
+    first = Node { next: None }
+    second = Node { next: None }
+    first.next = Some(second)
+    second.next = Some(first)
+}

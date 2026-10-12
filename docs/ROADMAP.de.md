@@ -1082,11 +1082,13 @@ IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
   Gespeicherte SQL-Ansichten, Einbindung in Anwendungsseiten, Compilerprüfung
   der Berichtsdateien sowie vollständige Barrierefreiheits- und Exportnachweise
   bleiben Releasekriterien.
-- [🧪] Das Records-Wertmodell bietet keine Klassen, Methoden,
-  Referenzmutation oder beobachtbare Objektidentität. Diese Punkte waren zuvor
-  als bewusster Ausschluss dokumentiert; der aktuelle 0.9.9-Umfang verlangt vor
-  dem Freeze ein begrenztes, Zelyra-gerechtes Klassenmodell. Vererbung bleibt
-  eine getrennte, nicht zugesagte Entscheidung.
+- [✅] Ein begrenztes, Zelyra-gerechtes Klassenmodell bietet nun typisierte
+  Konstruktoren, geteilte Referenzidentität, Identitätsgleichheit, Feldzugriffe
+  und -updates, generische Klassen sowie optionale Felder. Runtimeprüfungen
+  verhindern Referenzzyklen und parallele Mutation; JSON-/API-/SQL-Grenzen
+  lehnen Klassenreferenzen ab. Verhalten wird mit gewöhnlichen Funktionen und
+  ausdrücklich übergebenem Empfänger geschrieben. Methoden-, Closure- und
+  Vererbungssyntax bleiben außerhalb des 0.9.9-Umfangs.
 - Abschlusskriterien: Keine offenen Implementierungs-, Sicherheits-, Datenbank-,
   Migrations-, Paketierungs- oder Dokumentationsblocker. Bleibt einer offen, ist
   0.9.9 nicht fertig. Siehe den [0.9.9-Plan](release-plans/0.9.9.de.md).

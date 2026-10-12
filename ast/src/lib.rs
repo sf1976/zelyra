@@ -571,6 +571,7 @@ pub struct TypeDef {
 pub struct RecordDef {
     pub name: String,
     pub is_public: bool,
+    pub is_class: bool,
     pub type_params: Vec<String>,
     pub fields: Vec<RecordField>,
     pub span: Span,

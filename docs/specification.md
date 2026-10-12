@@ -580,17 +580,54 @@ function references are not supported. A generic parameter may use only
 operations whose types are known for the concrete value. Missing or conflicting
 inference produces `E-TYPE-GENERIC-001` or a type mismatch diagnostic.
 
-### Values, records, and classes
+### Records and classes
 
-Zelyra's core model uses value-semantic records. Domain identity lives in
-explicit ID fields; `record_with` creates a new record for an update. The
-language currently defines no `class` construct, mutable shared object
-references, object-identity comparisons, or inheritance. This boundary avoids
-hidden alias mutations and keeps database and JSON values inspectable. This
-describes the implemented scope of the reviewed source build. A bounded class
-model with defined reference identity and field mutation remains open for the
-0.9.9 freeze; see the [0.9.9 release plan](release-plans/0.9.9.en.md). Do not
-read this pending feature as already supported.
+`struct` records are values: assignment and parameter passing copy the record
+value, equality compares its fields, and `record_with` returns a changed copy.
+`class` instances instead have reference identity. `class` is contextual only
+before a class declaration; elsewhere it remains an ordinary identifier so
+valid language line `0.1` source can keep using `class` as a variable or
+function name. Constructors use the same readable field syntax:
+
+~~~zelyra
+class Counter {
+    value: Int
+}
+
+fn increment(counter: Counter) {
+    counter.value = counter.value + 1
+}
+
+fn main() {
+    first = Counter { value: 0 }
+    alias = first
+    increment(first)
+    print(alias.value) # 1
+    print(first == alias) # true
+}
+~~~
+
+Every non-optional field must be initialized. Field assignment is statically
+checked for its receiver, field name, and value type and updates the same
+instance; binding copies, function returns, and parameter passing preserve its
+identity. `==` and `!=` compare class instance identity, even when two
+instances have equal field values. Generic classes are supported when their
+type arguments can be inferred from the constructor or are explicit.
+
+Classes do not have method or inheritance syntax. Behavior is expressed as an
+ordinary function with an explicitly typed receiver parameter, keeping data
+flow visible and avoiding implicit `this`. `record_with` cannot update a
+class. A field update that would create a reference cycle is rejected with a
+controlled runtime diagnostic; field mutation inside a `parallel` block is
+also rejected at runtime. This prevents unbounded reference cycles and
+nondeterministic concurrent mutation.
+
+Class references cannot be serialized directly through JSON, HTTP APIs, or
+SQL because those formats do not preserve runtime object identity. Explicitly
+convert the fields needed for exchange into a `struct` DTO. Records and enum
+variants containing class references are also rejected at JSON boundaries.
+These rules describe the 0.9.9 development branch; inheritance, methods,
+closures, and a general object/ORM mapper remain outside this scope.
 
 ### Named function values in 0.9.9
 

@@ -1,0 +1,14 @@
+class Customer {
+    name: String
+}
+
+struct CustomerEnvelope {
+    customer: Customer
+}
+
+fn main() {
+    envelope = CustomerEnvelope {
+        customer: Customer { name: "Ada" }
+    }
+    json_encode(envelope)
+}

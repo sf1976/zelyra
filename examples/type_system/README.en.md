@@ -33,7 +33,7 @@ diagnostic. These cases do not belong in the successful program run.
 | `Bool` | ✅ supported | `true`/`false`, logical operations, and equality. |
 | `Char` | ✅ supported | One Unicode scalar value; JSON uses a one-scalar JSON string. Multi-codepoint grapheme clusters are not one `Char`. |
 | `String` | ✅ supported | UTF-8, Unicode, escapes, equality, lexicographic comparisons, and concatenation. `text_chars` counts Unicode scalar values; no byte-length function is available. |
-| `format_text` | ✅ supported | Explicit display formatting for scalar values (`Int`, `UInt`, `Float`, `Decimal`, `Bool`, `Char`, `String`, `Date`, `Time`, `Timestamp`, `Duration`). It adds no JSON quotes. Collections, records, enums, `Result`, and function values are rejected; use `format_scaled_result` for fixed-scale money. |
+| `format_text` | ✅ supported | Explicit display formatting for scalar values (`Int`, `UInt`, `Float`, `Decimal`, `Bool`, `Char`, `String`, `Date`, `Time`, `Timestamp`, `Duration`). It adds no JSON quotes. Collections, records, classes, enums, `Result`, and function values are rejected; use `format_scaled_result` for fixed-scale money. |
 | Null and optional values | ✅ supported | No standalone null type. `Option<T>`, `Some`, and `None` distinguish absence from `0`, `false`, and `""`. JSON maps `None` to `null`. |
 | Arrays | ✅ supported | Typed, nested, and empty arrays; `append`/concatenation and `array_replace_result` return values. Duplicates are allowed. Invalid element types fail at compile time; invalid replacement indices return `Err`. |
 | Lists | ✅ alias | `List<T>` is a type synonym for `T[]`; literals remain `[a, b]`, and array operations apply unchanged. Zelyra intentionally has one ordered sequence model. |
@@ -42,7 +42,7 @@ diagnostic. These cases do not belong in the successful program run.
 | `Map<K,V>` | ✅ supported | Typed maps; supported key types are `Int`, `UInt`, `String`, `Bool`, `Char`, and `Timestamp`. Duplicate literal keys keep one entry and the last value wins. A missing `get` key returns `None`. JSON supports only string keys. |
 | Records (`struct`) | ✅ supported | User-defined nested and generic records, fields, value equality, and typed JSON round trips. `record_with(record, "field", value)` returns a statically checked copy with one field changed; the source record is preserved. Generic records are not SQL column types. |
 | Enums | ✅ supported | User-defined unit, payload, and generic variants with checked constructors, pattern bindings, exhaustive matching, value equality, and JSON round trips. Type arguments are inferred or explicit. Public enums also work across module imports. |
-| Classes/object identity/references | — unavailable | Zelyra uses value-semantics records and immutable function flows. Classes, observable object identity, and mutable references are not currently part of the language line. |
+| Classes/object identity/references | ✅ supported | `class` creates instances with shared reference identity. Copies, arguments, returns, and collections preserve the instance; `==`/`!=` compare identity. `object.field = value` is type-checked. Generic classes and optional fields are available. There is no method or inheritance syntax; functions receive their object explicitly as a parameter. Direct JSON/HTTP/SQL serialization is rejected; use record DTOs. Reference cycles and mutation inside `parallel` are controlled and rejected. |
 | `Timestamp` | ✅ limited | `now()`, equality/order comparisons, UTC formatting, JSON as Unix milliseconds, and checked UTC-duration helpers `timestamp_add_result` / `timestamp_difference_result`. Years are bounded to 0001–9999; zones and local DST are out of scope. |
 | `Date`, `Time`, `Duration`, `Bytes` | ✅ supported | Validated ISO dates/times, checked duration operations, and bytes 0–255. `date_add_days_result` and `date_days_between_result` implement calendar-day math, including leap years and year boundaries. |
 | `Unit` | ✅ supported | Empty return value, explicit function type, and JSON round trip with `null`. |
@@ -60,9 +60,13 @@ Implicit numeric conversions such as `Int` to `Float` are not allowed.
 bindings need an initial value; `Option` is the available way to express
 absence. Missing optional record fields become `None` during JSON decoding.
 
-Assignments and parameter passing use value behavior. Arrays and records are
-cloned internally; the language exposes neither reference identity nor
-separate shallow/deep copy operations. The value-update helpers return a new record or array; they do not mutate the input value or introduce reference identity.
+Scalars, arrays, and records use value behavior for assignment and parameter
+passing; arrays and records are cloned internally. Classes are the explicit
+exception: copied bindings and passed parameters share instance identity and
+observe field updates through every reference. `record_with` and
+`array_replace_result` return changed values and preserve the input. Classes
+have no method or inheritance syntax and cannot be serialized directly;
+reference cycles and parallel class-field mutation are rejected.
 
 ## Automated acceptance
 
@@ -70,20 +74,20 @@ The successful run checks numeric ranges, arithmetic, rounding behavior,
 Unicode, optional values, arrays, List aliases, tuples, sets, records, unit and
 payload enums, named function values and indirect calls, calendar and timestamp
 operations, Decimal quantization, explicit scalar text formatting, ranges,
-JSON, and user-defined generic functions, records, and enums. The CLI integration test also expects **20 compiler errors** and **19 runtime errors** (type mismatch,
+JSON, and user-defined generic functions, records, enums, and classes. The CLI integration test also expects **27 compiler errors** and **21 runtime errors** (type mismatch,
 mixed arrays, non-exhaustive matching, overflow/underflow, division by zero,
 invalid index, invalid Date/Time/Bytes/Decimal values, wrong tuple length,
 non-finite JSON number, non-string-keyed Map serialization, and unsupported general
 `json_decode<Result<...>>` decoding; the separate tagged codec is available). An expected error is a passing
-test result. When the integration test passes, all 12 positive groups pass and
-there are 0 unexpected failures. The current matrix has 18 supported, 6 partial,
-and 1 unavailable entry; the program prints these counts. User-defined
-generic functions and data types, payload enums, and named function values are
-covered by the positive type-system example and explicit compiler-negative
-cases. General constraints, generic aliases, closures, and generic function
-values remain unavailable. Classes and reference identity are a deliberate
-departure from the value-oriented record model; entities express identity with
-ordinary domain ID fields.
+test result. When the integration test passes, all 13 positive groups pass and
+there are 0 unexpected failures. The current matrix has 19 supported, 6 partial,
+and no unavailable entries; the program prints these counts. User-defined
+generic functions and data types, payload enums, named function values, and
+class references are covered by the positive type-system example and explicit
+compiler/runtime negative cases. General constraints, generic aliases,
+closures, generic function values, method syntax, and inheritance remain
+unavailable. Class reference identity is distinct from business/database IDs;
+use explicit records with domain IDs for APIs and persistence.
 
 This is coverage of the existing language surface, not a claim that every type
 or conversion is implemented.

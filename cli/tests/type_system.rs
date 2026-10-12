@@ -99,8 +99,9 @@ fn type_coverage_program_passes_supported_tests_and_reports_expected_failures() 
         "PASS calendar arithmetic, Timestamp ordering, Decimal quantization, scalar text formatting, exclusive ranges",
         "PASS unit and payload enums, equality, exhaustive match and JSON round trip",
         "PASS named typed function values, argument checking and indirect calls",
-        "Report: 12 positive type groups; 20 expected compiler errors and 19 expected runtime errors",
-        "Type matrix: 18 supported entries, 6 partial entries, 1 unavailable entry",
+        "PASS classes, shared references, identity equality and checked field updates",
+        "Report: 13 positive type groups; 27 expected compiler errors and 21 expected runtime errors",
+        "Type matrix: 19 supported entries, 6 partial entries, 0 unavailable entries",
         "Unexpected failures: 0 when the CLI integration test passes",
         "alle ausführbaren Typprüfungen bestanden",
     ] {
@@ -155,12 +156,52 @@ fn type_coverage_program_passes_supported_tests_and_reports_expected_failures() 
             "function_value_equality.zyl",
             "function values cannot be compared",
         ),
+        (
+            "class_field_type.zyl",
+            "type mismatch: expected `Int`, found `String`",
+        ),
+        (
+            "record_field_mutation.zyl",
+            "field assignment requires a class instance",
+        ),
+        (
+            "class_json_encode.zyl",
+            "class references cannot be serialized directly",
+        ),
+        (
+            "class_json_decode.zyl",
+            "json_decode does not support class types",
+        ),
+        (
+            "class_nested_json_encode.zyl",
+            "class references cannot be serialized directly",
+        ),
+        (
+            "class_unknown_field.zyl",
+            "unknown field `missing` in class `Counter`",
+        ),
+        (
+            "class_record_with.zyl",
+            "record_with cannot copy or update a class reference",
+        ),
     ] {
         let path = format!("expected/compiler/{fixture}");
         let result = cli(&project, &["check", &path]);
         let stderr = String::from_utf8_lossy(&result.stderr);
         assert!(!result.status.success(), "{fixture} unexpectedly compiled");
         assert!(stderr.contains(expected), "{fixture}: {stderr}");
+        if matches!(
+            fixture,
+            "class_field_type.zyl"
+                | "class_unknown_field.zyl"
+                | "record_field_mutation.zyl"
+                | "class_record_with.zyl"
+        ) {
+            assert!(
+                stderr.contains("E-TYPE-CLASS-001"),
+                "{fixture} should use the stable class diagnostic: {stderr}"
+            );
+        }
     }
 
     for (fixture, expected) in [
@@ -200,6 +241,14 @@ fn type_coverage_program_passes_supported_tests_and_reports_expected_failures() 
         (
             "function_value_json.zyl",
             "cannot serialize a function value",
+        ),
+        (
+            "class_mutation_in_parallel.zyl",
+            "class field mutation is not allowed inside a `parallel` block",
+        ),
+        (
+            "class_reference_cycle.zyl",
+            "class field update would create a reference cycle",
         ),
     ] {
         let path = format!("expected/runtime/{fixture}");

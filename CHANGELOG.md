@@ -11,6 +11,16 @@ releases follow Semantic Versioning independently of the language line.
   / Generische nutzerdefinierte Records und Enums, typisierte Referenzen auf
   benannte Funktionen und explizite skalare Textformatierung mit
   `format_text` ergänzen.
+- Add a bounded `class` reference model with shared identity, checked field
+  updates, generic classes, and optional fields. Keep `class` contextual so
+  existing identifiers remain valid. Reject class references at
+  JSON/API/SQL boundaries, cyclic reference graphs, and parallel mutation;
+  functions use explicit receiver parameters, without method or inheritance
+  syntax. / Ein begrenztes `class`-Referenzmodell mit geteilter Identität,
+  geprüften Feldupdates, generischen Klassen und optionalen Feldern ergänzen.
+  Klassenreferenzen an JSON-/API-/SQL-Grenzen, zyklische Referenzgraphen und
+  parallele Mutation abweisen; Funktionen verwenden sichtbare Empfänger,
+  ohne Methoden- oder Vererbungssyntax.
 - Add opt-in terminal color controls and a short, reduced-motion-aware Studio
   startup splash while preserving the persisted light/dark theme.
   / Optionale Terminalfarben und einen kurzen, bei reduzierter Bewegung

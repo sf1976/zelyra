@@ -34,7 +34,7 @@ Programmlauf.
 | `Bool` | ✅ unterstützt | `true`/`false`, logische Operationen und Gleichheit. |
 | `Char` | ✅ unterstützt | Ein Unicode-Skalarwert; JSON verwendet eine einstellige JSON-Zeichenkette. Graphemcluster mit mehreren Codepoints sind kein einzelnes `Char`. |
 | `String` | ✅ unterstützt | UTF-8, Unicode, Escape-Sequenzen, Gleichheit, lexikografische Vergleiche und Verkettung. `text_chars` zählt Unicode-Skalarwerte; eine Byte-Längenfunktion gibt es nicht. |
-| `format_text` | ✅ unterstützt | Explizite Anzeigeformatierung für einzelne skalare Werte (`Int`, `UInt`, `Float`, `Decimal`, `Bool`, `Char`, `String`, `Date`, `Time`, `Timestamp`, `Duration`). Fügt keine JSON-Anführungszeichen hinzu. Sammlungen, Records, Enums, `Result` und Funktionswerte werden abgewiesen; Geld mit fester Skala weiter über `format_scaled_result` formatieren. |
+| `format_text` | ✅ unterstützt | Explizite Anzeigeformatierung für einzelne skalare Werte (`Int`, `UInt`, `Float`, `Decimal`, `Bool`, `Char`, `String`, `Date`, `Time`, `Timestamp`, `Duration`). Fügt keine JSON-Anführungszeichen hinzu. Sammlungen, Records, Klassen, Enums, `Result` und Funktionswerte werden abgewiesen; Geld mit fester Skala weiter über `format_scaled_result` formatieren. |
 | Null und optionale Werte | ✅ unterstützt | Kein eigenständiger Nulltyp. `Option<T>`, `Some` und `None` unterscheiden fehlende Werte von `0`, `false` und `""`. JSON bildet `None` auf `null` ab. |
 | Arrays | ✅ unterstützt | Typisierte, verschachtelte und leere Arrays; `append`, Verkettung und `array_replace_result` liefern neue Werte. Doppelte Elemente sind erlaubt. Falsche Typen werden beim Kompilieren, ungültige Indizes als `Err` erkannt. |
 | Listen | ✅ Alias | `List<T>` ist ein Typsynonym für `T[]`; Literale bleiben `[a, b]`, und Arrayoperationen gelten unverändert. Es gibt bewusst nur eine geordnete Sequenzsemantik. |
@@ -43,7 +43,7 @@ Programmlauf.
 | `Map<K,V>` | ✅ unterstützt | Typisierte Maps; erlaubte Schlüsseltypen sind `Int`, `UInt`, `String`, `Bool`, `Char` und `Timestamp`. Doppelte Literalschlüssel behalten einen Eintrag und der letzte Wert gewinnt. Ein fehlender `get`-Schlüssel ergibt `None`. JSON unterstützt nur String-Schlüssel. |
 | Records (`struct`) | ✅ unterstützt | Eigene, verschachtelte und generische Records, Felder, Wertgleichheit und typisierte JSON-Roundtrips. `record_with(record, "feld", wert)` liefert einen typgeprüften neuen Record; der ursprüngliche Wert bleibt bestehen. Generische Records sind keine SQL-Spaltentypen. |
 | Enums | ✅ unterstützt | Eigene payloadfreie, payloadtragende und generische Varianten mit typgeprüften Konstruktoren, Bindings in `match`, Exhaustivität, Wertgleichheit und JSON-Roundtrip. Typargumente werden abgeleitet oder ausdrücklich angegeben. Öffentliche Enums funktionieren auch über Modulimporte. |
-| Klassen/Objektidentität/Referenzen | — nicht vorhanden | Zelyra verwendet Records mit Wertsemantik und unveränderliche Funktionsabläufe. Klassen, beobachtbare Objektidentität und veränderliche Referenzen gehören derzeit nicht zur Sprachlinie. |
+| Klassen/Objektidentität/Referenzen | ✅ unterstützt | `class` erstellt Instanzen mit geteilter Referenzidentität. Kopieren, Übergaben, Rückgaben und Sammlungen bewahren die Instanz; `==`/`!=` vergleichen Identität. `objekt.feld = wert` ist typgeprüft. Generische Klassen und optionale Felder sind möglich. Keine Methoden- oder Vererbungssyntax; Funktionen erhalten den Empfänger ausdrücklich als Parameter. Direkte JSON-/HTTP-/SQL-Serialisierung wird abgewiesen; DTO-Records verwenden. Referenzzyklen und Änderungen innerhalb von `parallel` werden kontrolliert verhindert. |
 | `Timestamp` | ✅ teilweise nutzbar | `now()`, Gleichheit, chronologische Vergleiche, UTC-Formatierung, JSON als Unix-Millisekunden sowie `timestamp_add_result` und `timestamp_difference_result` für UTC-Dauern. Operationen sind auf ISO-Jahre 0001–9999 begrenzt. Zeitzonen und lokale Sommerzeit sind nicht enthalten. |
 | `Date`, `Time`, `Duration`, `Bytes` | ✅ unterstützt | Validierte ISO-Daten und Uhrzeiten, chronologische Vergleiche, JSON-Roundtrips und geprüfte Daueraddition/-subtraktion. `date_add_days_result` und `date_days_between_result` rechnen Kalender-Tage inklusive Schaltjahren und Jahreswechseln. `Bytes` akzeptiert Werte 0–255. |
 | Bereichsschleife | ✅ unterstützt | `for i in start..end` verwendet Int-Grenzen mit exklusivem Ende. Negative Grenzen, leere Bereiche, `break` und `continue` funktionieren. Der Bereich wird in einer Schleife nicht als Array materialisiert. |
@@ -63,10 +63,14 @@ Normale Bindings brauchen einen initialen Wert; `Option` ist die vorhandene
 Möglichkeit, das Fehlen eines Werts ausdrücklich darzustellen. Fehlende
 optionale Recordfelder erhalten beim JSON-Decodieren `None`.
 
-Zuweisungen und Parameterübergaben verhalten sich wertbasiert. Arrays und
-Records werden intern geklont; die Sprache bietet keine Referenzidentität und
-keine flachen oder tiefen Kopien als getrennte Operationen. `record_with` und
-`array_replace_result` liefern geänderte Werte zurück und erhalten das Original.
+Zuweisungen und Parameterübergaben verhalten sich bei Skalaren, Arrays und
+Records wertbasiert; Records und Arrays werden intern geklont. Klassen sind die
+ausdrückliche Ausnahme: eine Bindungskopie oder Parameterübergabe teilt die
+Instanzidentität und sieht Feldänderungen über alle Referenzen. `record_with`
+und `array_replace_result` liefern geänderte Werte zurück und erhalten das
+Original. Klassen haben keine Methoden- oder Vererbungssyntax und lassen sich
+nicht direkt serialisieren; Objektzyklen und parallele Klassenfeldänderungen
+werden abgewiesen.
 
 ## Automatisierte Abnahme
 
@@ -75,23 +79,24 @@ Rundungsverhalten, Unicode, optionale Werte, Arrays, Listen-Aliase, Tupel,
 Mengen, Records, payloadfreie und payloadtragende Enums,
 Kalender-/Zeitstempeloperationen, Decimal-Quantisierung, explizite skalare
 Textformatierung, Bereiche, JSON sowie
-benutzerdefinierte generische Funktionen, Records und Enums.
-Der CLI-Integrationstest erwartet zusätzlich **20 Compilerfehler** und
-**19 Runtimefehler** (Typfehler, gemischte Arrays, unvollständiges Matching,
+benutzerdefinierte generische Funktionen, Records, Enums und Klassen.
+Der CLI-Integrationstest erwartet zusätzlich **27 Compilerfehler** und
+**21 Runtimefehler** (Typfehler, gemischte Arrays, unvollständiges Matching,
 Überlauf/Unterlauf, Division durch null, ungültiger Index, ungültige
 Date-/Time-/Bytes-/Decimal-Werte, falsche Tuple-Länge, nicht-endliche
 JSON-Zahl, nicht-stringbasierte Map-Serialisierung sowie nicht unterstützte allgemeine
 `json_decode<Result<...>>`-Decodierung; der separate getaggte Codec ist verfügbar). Ein erwarteter Fehler ist dabei ein
-positives Testergebnis. Bei erfolgreichem Integrationstest sind alle 12
+positives Testergebnis. Bei erfolgreichem Integrationstest sind alle 13
 positiven Testgruppen bestanden und es gibt 0 unerwartete Fehler. Die
-aktuelle Matrix umfasst 18 unterstützte, 6 teilweise unterstützte und 1 noch
+aktuelle Matrix umfasst 19 unterstützte, 6 teilweise unterstützte und keinen
 nicht verfügbaren Eintrag; das Programm gibt diese drei Zahlen aus. Eigene
 generische Funktionen und Datentypen, payloadtragende Enums und benannte
-Funktionswerte werden im positiven Type-System-Beispiel sowie mit expliziten
-Compiler-Negativfällen geprüft. Allgemeine Constraints, generische Typ-Aliase,
-Closures und generische Funktionswerte fehlen noch. Klassen und
-Referenzidentität sind eine bewusste Abweichung vom wertorientierten Recordmodell;
-Entitäten bilden ihre Identität über normale fachliche ID-Felder ab.
+Funktionswerte sowie Klassenreferenzen werden im positiven Type-System-Beispiel
+sowie mit expliziten Compiler- und Runtime-Negativfällen geprüft. Allgemeine
+Constraints, generische Typ-Aliase, Closures, generische Funktionswerte,
+Methoden- und Vererbungssyntax fehlen. Klassenreferenzen sind nicht dasselbe
+wie fachliche Datenbank-IDs; für APIs und persistente Daten werden explizite
+Records mit fachlichen IDs verwendet.
 
 Das ist eine Abdeckung der vorhandenen Sprachoberfläche, keine Behauptung, dass
 alle Typen oder Konvertierungen bereits implementiert sind.

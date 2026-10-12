@@ -9156,6 +9156,10 @@ fn api_json_value_node(value: &RuntimeValue) -> serde_json::Value {
             serde_json::Value::Object(object)
         }
         RuntimeValue::Function { .. } => serde_json::Value::Null,
+        // API schema validation rejects class references before execution.
+        // Keep this fallback non-panicking for internally invalid responses;
+        // the declared API boundary remains fail-closed.
+        RuntimeValue::ClassRef { .. } => serde_json::Value::Null,
         RuntimeValue::Object { fields, .. } => {
             let object = fields
                 .iter()

@@ -2440,16 +2440,16 @@ mod tests {
         let directory = project(&[
             (
                 "main.zyl",
-                "import \"src/models.zyl\" as models\nfn main() { value = models::Box<Int> { value: 17 } print(models::identity(value).value) event = models::Maybe::Some(23) print(models::unwrap(event)) }\n",
+                "import \"src/models.zyl\" as models\nfn main() { value = models::Box<Int> { value: 17 } print(models::identity(value).value) event = models::Maybe::Some(23) print(models::unwrap(event)) counter = models::Counter { value: 0 } alias = counter models::advance(counter) assert(alias.value == 1, \"imported class references share identity\") print(alias.value) }\n",
             ),
             (
                 "src/models.zyl",
-                "pub struct Box<T> { value: T }\npub enum Maybe<T> { Some(T) None }\npub fn identity<T>(value: T) -> T { return value }\npub fn unwrap(value: Maybe<Int>) -> Int { match value { Maybe::Some(number) => { return number } Maybe::None => { return 0 } } }\n",
+                "pub struct Box<T> { value: T }\npub enum Maybe<T> { Some(T) None }\npub class Counter { value: Int }\npub fn identity<T>(value: T) -> T { return value }\npub fn unwrap(value: Maybe<Int>) -> Int { match value { Maybe::Some(number) => { return number } Maybe::None => { return 0 } } }\npub fn advance(counter: Counter) { counter.value = counter.value + 1 }\n",
             ),
         ]);
         let loaded = load(directory.join("main.zyl").to_str().unwrap()).unwrap();
         check(&loaded.program).unwrap_or_else(|errors| panic!("{errors:?}"));
-        assert_eq!(execute(&loaded.program).unwrap(), ["17", "23"]);
+        assert_eq!(execute(&loaded.program).unwrap(), ["17", "23", "1"]);
         cleanup(&directory);
     }
 

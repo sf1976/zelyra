@@ -654,6 +654,7 @@ impl<'a> Resolver<'a> {
                             | "len"
                             | "range"
                             | "array_replace_result"
+                            | "object_set_field"
                             | "record_with"
                             | "append"
                             | "tuple"

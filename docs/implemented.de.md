@@ -16,7 +16,7 @@ für 1.0.0 vorgesehen.
 ## Was der Entwicklungszweig 0.9.9 bietet
 
 - **Sprache und Compiler:** eine statisch geprüfte Sprache mit Funktionen,
-  generischen Records und Enums, benannten Funktionswerten, typisierten
+  generischen Records, Enums und Klassen, benannten Funktionswerten, typisierten
   Sammlungen, `Option` und `Result`, Pattern Matching, Modulen, Contracts,
   Effekten und compilergeprüften SQL-/Webdeklarationen. Explizite skalare
   Textformatierung, Kalender-Tagesrechnung, Decimal-Rundung und kontrollierte
@@ -74,7 +74,12 @@ den Beweis, dass beliebige Anwendungen korrekt sind.
 - ✅ Nominale Fachdaten-Typen, Records mit geprüftem Feldzugriff, Arrays mit
   gebräuchlichen Operationen, deterministische typisierte Maps, `Option`,
   `Result` und exhaustives Pattern Matching als Anweisung oder Ausdruck; ein
-  `match`-Ausdruck liefert einen einheitlich typgeprüften Wert.
+  `match`-Ausdruck liefert einen einheitlich typgeprüften Wert. `class`-Instanzen
+  teilen überprüfte Referenzidentität bei Zuweisung, Parameterübergabe, Rückgabe
+  und in Sammlungen; typisierte Feldupdates ändern die geteilte Instanz. Records
+  bleiben wertbasiert. Klassen haben ausdrücklich keine Methoden- oder
+  Vererbungssyntax, keine zyklischen Referenzgraphen und keine direkte JSON-,
+  HTTP- oder SQL-Serialisierung; API-Daten werden in Records übertragen.
 - ✅ `Int` und `UInt` rechnen innerhalb ihrer 64-Bit-Bereiche; das direkt
   geschriebene `-9223372036854775808` wird unterstützt. Überlauf,
   Unterlauf und Division durch null werden als Runtimefehler gemeldet. Das
@@ -107,7 +112,8 @@ den Beweis, dass beliebige Anwendungen korrekt sind.
 - ✅ Stringwerte lassen sich lexikografisch vergleichen. `format_text(wert)`
   formatiert skalare Werte ausdrücklich und ohne implizite Konvertierung;
   Geldbeträge mit fester Skala verwenden `format_scaled_result`. Sammlungen,
-  Records, Enums, `Result` und Funktionen besitzen keine Anzeigekonvertierung.
+  Records, Klassen, Enums, `Result` und Funktionen besitzen keine
+  Anzeigekonvertierung.
   `json_decode_result<T>`,
   `read_text_result` und `write_text_result` geben erwartbare Parse- und
   Dateifehler als `Result` zurück. Der explizite getaggte Result-Codec

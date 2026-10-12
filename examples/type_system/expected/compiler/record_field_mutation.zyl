@@ -1,0 +1,8 @@
+struct Counter {
+    value: Int
+}
+
+fn main() {
+    counter = Counter { value: 1 }
+    counter.value = 2
+}

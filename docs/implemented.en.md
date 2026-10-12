@@ -15,7 +15,7 @@ the [roadmap](ROADMAP.md). Independent human acceptance is reserved for 1.0.0.
 ## What the 0.9.9 development branch provides
 
 - **Language and compiler:** a statically checked language with functions,
-  generic records and enums, named function values, typed collections,
+  generic records, enums, and classes, named function values, typed collections,
   `Option` and `Result`, pattern matching, modules, contracts, effects, and
   compiler-checked SQL/web declarations. Explicit scalar text formatting,
   calendar-day operations, Decimal rounding, and controlled recursion limits
@@ -71,7 +71,12 @@ proof that arbitrary applications are correct.
 - ✅ Nominal domain types, records and checked field access, arrays and common
   array operations, deterministic typed maps, `Option`, `Result`, and pattern
   matching as either a statement or expression; a `match` expression returns
-  a value whose type is checked consistently across all arms.
+  a value whose type is checked consistently across all arms. `class` instances
+  preserve checked reference identity across assignments, parameters, returns,
+  and collections; typed field updates mutate the shared instance. Records
+  remain value-based. Classes explicitly have no method or inheritance syntax,
+  cyclic reference graphs, or direct JSON, HTTP, or SQL serialization; API data
+  is exchanged through records.
 - ✅ `Int` and `UInt` arithmetic is bounded to their 64-bit ranges; the direct
   literal `-9223372036854775808` is supported. Overflow,
   underflow, and division by zero return runtime errors. The modular
@@ -100,8 +105,8 @@ proof that arbitrary applications are correct.
   unlimited by default.
 - ✅ Strings support lexicographic comparisons. `format_text(value)` explicitly
   formats scalar values without implicit coercion; fixed-scale monetary text
-  uses `format_scaled_result`. Collections, records, enums, `Result`, and
-  functions have no display conversion. `json_decode_result<T>`,
+  uses `format_scaled_result`. Collections, records, classes, enums, `Result`,
+  and functions have no display conversion. `json_decode_result<T>`,
   `read_text_result`, and `write_text_result` return expected parse and file
   errors as `Result`. The explicit tagged Result codec,
   `json_encode_tagged_result` / `json_decode_tagged_result<T,E>`, preserves the

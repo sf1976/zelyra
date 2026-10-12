@@ -4,6 +4,7 @@ import "src/records.zyl" as records
 import "src/serialization.zyl" as serialization
 import "src/advanced.zyl" as advanced
 import "src/generics.zyl" as generics
+import "src/classes.zyl" as classes
 enum OrderStatus {
     Draft Pending Paid
 }
@@ -26,6 +27,7 @@ fn main() uses Clock {
     serialization::run()
     advanced::run()
     generics::run()
+    classes::run()
     transform: Function<(Int) -> Int> = provide_increment()
     assert(transform(4) == 5, "named function values call with their declared type")
     assert(apply(transform, 8) == 9, "typed indirect function calls preserve results")
@@ -60,8 +62,8 @@ fn main() uses Clock {
     assert(restored_event == event, "payload enum JSON round trip")
     print("PASS unit and payload enums, equality, exhaustive match and JSON round trip")
     print("PASS named typed function values, argument checking and indirect calls")
-    print("Report: 12 positive type groups; 20 expected compiler errors and 19 expected runtime errors are verified by the CLI integration test.")
-    print("Type matrix: 18 supported entries, 6 partial entries, 1 unavailable entry; see README.md.")
+    print("Report: 13 positive type groups; 27 expected compiler errors and 21 expected runtime errors are verified by the CLI integration test.")
+    print("Type matrix: 19 supported entries, 6 partial entries, 0 unavailable entries; see README.md.")
     print("Unexpected failures: 0 when the CLI integration test passes.")
     print("Ergebnis: alle ausführbaren Typprüfungen bestanden.")
     print("Bericht: README.md (unterstützt, teilweise unterstützt, nicht unterstützt)")

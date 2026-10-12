@@ -45,6 +45,67 @@ fn recursion_is_bounded_and_reports_the_call_site_without_crashing() {
 }
 
 #[test]
+fn classes_share_identity_and_mutate_checked_fields() {
+    let source = r#"
+class Counter { value: Int }
+
+fn increment(counter: Counter) {
+    counter.value = counter.value + 1
+}
+
+fn identity(counter: Counter) -> Counter {
+    return counter
+}
+
+fn main() {
+    original = Counter { value: 0 }
+    alias = original
+    increment(original)
+    returned = identity(alias)
+    assert(original == alias, "binding copies preserve object identity")
+    assert(returned == original, "function returns preserve object identity")
+    assert(alias.value == 1, "field mutation is shared through aliases")
+    fresh = Counter { value: 1 }
+    assert(fresh != original, "distinct objects with equal fields have distinct identity")
+    print("class references passed")
+}
+"#;
+    assert_eq!(run(source), ["class references passed"]);
+}
+
+#[test]
+fn class_references_are_rejected_at_json_api_boundaries() {
+    let program = parse(
+        &lex(
+            "class Customer { name: String } struct CustomerEnvelope { customer: Customer } api GET \"/customers\" { output CustomerEnvelope } fn main() { }",
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let errors = check_apis(&program)
+        .expect_err("class identity must not be silently flattened into API JSON");
+    assert!(errors.iter().any(|error| {
+        error
+            .message
+            .contains("class references of type `Customer` cannot cross an API JSON boundary")
+    }));
+
+    let alias = parse(
+        &lex(
+            "class Customer { name: String } type CustomerRef = Customer api GET \"/customers\" { output CustomerRef } fn main() { }",
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let errors = check_apis(&alias).expect_err("class aliases must retain the JSON boundary rule");
+    assert!(errors.iter().any(|error| {
+        error
+            .message
+            .contains("class references of type `Customer` cannot cross an API JSON boundary")
+    }));
+}
+
+#[test]
 fn sql_rows_keep_the_declared_result_type_for_runtime_return_checks() {
     let rows = Value::Rows {
         columns: vec!["id".into(), "name".into()],

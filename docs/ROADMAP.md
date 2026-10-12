@@ -1063,10 +1063,12 @@ language backlog as one 0.9.4 change.
   browser/database E2E checks pass. Saved SQL views, application-page embedding,
   compiler validation of report files, and full accessibility/export evidence
   remain open release criteria.
-- [🧪] The Records value model does not provide classes, methods, reference
-  mutation, or observable object identity. These were previously listed as a
-  deliberate exclusion; the current 0.9.9 scope requires a bounded Zelyra-style
-  class model before freeze. Inheritance remains a separate, unpromised choice.
+- [✅] A bounded Zelyra-style class model now provides typed constructors,
+  shared reference identity, identity equality, field reads/updates, generic
+  classes, and optional fields. Runtime checks reject reference cycles and
+  parallel mutation; JSON/API/SQL boundaries reject class references. Behavior
+  uses ordinary functions with explicit receiver parameters. Methods, closures,
+  and inheritance syntax remain outside the 0.9.9 scope.
 - Exit criteria: no open implementation, security, database, migration,
   packaging, or documentation blocker remains. If one remains, 0.9.9 is not
   complete. See the [0.9.9 plan](release-plans/0.9.9.en.md).

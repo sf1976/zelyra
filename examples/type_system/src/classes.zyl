@@ -1,0 +1,51 @@
+pub class Customer {
+    name: String
+    visits: Int
+}
+
+pub class Slot<T> {
+    value: T
+}
+
+pub class Profile {
+    id: Int
+    nickname: String?
+}
+
+pub fn record_visit(customer: Customer) {
+    customer.visits = customer.visits + 1
+}
+
+pub fn identity(customer: Customer) -> Customer {
+    return customer
+}
+
+pub fn run() {
+    customer = Customer {
+        name: "Ada"
+        visits: 0
+    }
+    alias = customer
+    record_visit(customer)
+    assert(customer == alias, "copied class bindings retain object identity")
+    assert(alias.visits == 1, "field mutation is visible through another reference")
+    returned = identity(customer)
+    assert(returned == customer, "class identity is retained across function returns")
+    references = [customer, alias, returned]
+    assert(references[0] == references[2], "arrays preserve class references")
+
+    other = Customer {
+        name: "Ada"
+        visits: 1
+    }
+    assert(customer != other, "class equality compares object identity")
+
+    slot = Slot { value: 1 }
+    slot.value = 2
+    assert(slot.value == 2, "generic class fields retain their concrete type")
+    explicit_slot = Slot<Int> { value: 3 }
+    assert(explicit_slot.value == 3, "generic class type arguments may be explicit")
+    profile = Profile { id: 1 }
+    assert(profile.nickname == None, "omitted optional class fields default to None")
+    print("PASS classes, shared references, identity equality and checked field updates")
+}

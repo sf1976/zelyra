@@ -514,13 +514,18 @@ fn editor_symbols(
         }
         for item in &parsed.records {
             if is_local || item.is_public {
+                let (kind, detail) = if item.is_class {
+                    ("class", "class")
+                } else {
+                    ("type", "record")
+                };
                 push_editor_symbol(
                     &mut symbols,
                     &source.path,
                     &source.text,
                     &item.name,
-                    "type",
-                    "type",
+                    kind,
+                    detail,
                     item.span,
                 );
             }
@@ -4524,7 +4529,7 @@ fn main() {}
         let state = project();
         fs::write(
             state.root.join("main.zyl"),
-            "fn main() {}\nfn calculate_total() -> Int { return 1 }\n",
+            "pub class Customer { id: Int }\nstruct Invoice { id: Int }\nfn main() {}\nfn calculate_total() -> Int { return 1 }\n",
         )
         .expect("write project declarations");
         let response = editor_symbols(&state, "main.zyl").expect("load project symbols");
@@ -4537,6 +4542,14 @@ fn main() {}
             .collect::<Vec<_>>();
         assert!(names.contains(&"main"));
         assert!(names.contains(&"calculate_total"));
+        let customer = payload["symbols"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["label"] == "Customer")
+            .expect("public class should be available to Studio navigation");
+        assert_eq!(customer["kind"], "class");
+        assert_eq!(customer["detail"], "class");
         let _ = fs::remove_dir_all(state.root.clone());
     }
 

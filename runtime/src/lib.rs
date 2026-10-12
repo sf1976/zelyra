@@ -4,7 +4,8 @@ use std::fmt;
 use std::io::{self, BufRead, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use zelyra_ast::*;
 
@@ -355,6 +356,15 @@ fn api_json_type_error(
             .or_else(|| api_json_type_error(error, program, visiting)),
         Type::Function { .. } => Some("function values cannot cross an API JSON boundary".into()),
         Type::Applied { name, args } => {
+            if program
+                .records
+                .iter()
+                .any(|record| record.name == *name && record.is_class)
+            {
+                return Some(format!(
+                    "class references of type `{ty}` cannot cross an API JSON boundary"
+                ));
+            }
             if let Some(error) = args
                 .iter()
                 .find_map(|argument| api_json_type_error(argument, program, visiting))
@@ -420,6 +430,15 @@ fn api_json_type_error(
             result
         }
         Type::Named(name) => {
+            if program
+                .records
+                .iter()
+                .any(|record| record.name == *name && record.is_class)
+            {
+                return Some(format!(
+                    "class references of type `{name}` cannot cross an API JSON boundary"
+                ));
+            }
             if !visiting.insert(name.clone()) {
                 return None;
             }
@@ -459,6 +478,139 @@ fn api_json_type_error(
         }
         _ => None,
     }
+}
+
+fn contains_class_reference_type(ty: &Type, program: &Program) -> bool {
+    fn contains(ty: &Type, program: &Program, visiting: &mut HashSet<String>) -> bool {
+        let record = |name: &str| program.records.iter().find(|item| item.name == name);
+        match ty {
+            Type::Named(name) => {
+                if record(name).is_some_and(|definition| definition.is_class) {
+                    return true;
+                }
+                if !visiting.insert(ty.to_string()) {
+                    return false;
+                }
+                let found = program
+                    .types
+                    .iter()
+                    .find(|alias| alias.name == *name)
+                    .is_some_and(|alias| contains(&alias.target, program, visiting))
+                    || record(name).is_some_and(|definition| {
+                        definition
+                            .fields
+                            .iter()
+                            .any(|field| contains(&field.ty, program, visiting))
+                    })
+                    || program
+                        .enums
+                        .iter()
+                        .find(|definition| definition.name == *name)
+                        .is_some_and(|definition| {
+                            definition
+                                .variant_payloads
+                                .iter()
+                                .flat_map(|(_, payloads)| payloads)
+                                .any(|payload| contains(payload, program, visiting))
+                        });
+                visiting.remove(&ty.to_string());
+                found
+            }
+            Type::Applied { name, args } => {
+                if record(name).is_some_and(|definition| definition.is_class)
+                    || args
+                        .iter()
+                        .any(|argument| contains(argument, program, visiting))
+                {
+                    return true;
+                }
+                let key = ty.to_string();
+                if !visiting.insert(key.clone()) {
+                    return false;
+                }
+                let substitutions = record(name)
+                    .map(|definition| {
+                        definition
+                            .type_params
+                            .iter()
+                            .zip(args)
+                            .map(|(parameter, argument)| (parameter.clone(), argument.clone()))
+                            .collect::<HashMap<_, _>>()
+                    })
+                    .or_else(|| {
+                        program
+                            .enums
+                            .iter()
+                            .find(|definition| definition.name == *name)
+                            .map(|definition| {
+                                definition
+                                    .type_params
+                                    .iter()
+                                    .zip(args)
+                                    .map(|(parameter, argument)| {
+                                        (parameter.clone(), argument.clone())
+                                    })
+                                    .collect::<HashMap<_, _>>()
+                            })
+                    });
+                let found = if let Some(substitutions) = substitutions {
+                    record(name)
+                        .map(|definition| {
+                            definition.fields.iter().any(|field| {
+                                let field_type = substitute_generic_type(&field.ty, &substitutions);
+                                contains(&field_type, program, visiting)
+                            })
+                        })
+                        .or_else(|| {
+                            program
+                                .enums
+                                .iter()
+                                .find(|definition| definition.name == *name)
+                                .map(|definition| {
+                                    definition
+                                        .variant_payloads
+                                        .iter()
+                                        .flat_map(|(_, payloads)| payloads)
+                                        .any(|payload| {
+                                            let payload_type =
+                                                substitute_generic_type(payload, &substitutions);
+                                            contains(&payload_type, program, visiting)
+                                        })
+                                })
+                        })
+                        .unwrap_or(false)
+                } else {
+                    false
+                };
+                visiting.remove(&key);
+                found
+            }
+            Type::Option(inner)
+            | Type::Array(inner)
+            | Type::Set(inner)
+            | Type::HttpResult(inner) => contains(inner, program, visiting),
+            Type::Result(ok, error) => {
+                contains(ok, program, visiting) || contains(error, program, visiting)
+            }
+            Type::Tuple(items) => items.iter().any(|item| contains(item, program, visiting)),
+            Type::Map(key, value) => {
+                contains(key, program, visiting) || contains(value, program, visiting)
+            }
+            Type::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                params
+                    .iter()
+                    .any(|parameter| contains(parameter, program, visiting))
+                    || contains(return_type, program, visiting)
+            }
+            _ => false,
+        }
+    }
+
+    contains(ty, program, &mut HashSet::new())
 }
 
 fn api_path_parameters(path: &str) -> Result<Vec<String>, String> {
@@ -5365,6 +5517,81 @@ impl<'a> Checker<'a> {
                             Type::Unknown
                         }
                     }
+                } else if name == "object_set_field" {
+                    if !type_args.is_empty() || args.len() != 3 {
+                        self.error_with_code(
+                            "E-TYPE-CLASS-001",
+                            expr.span,
+                            "class field update expects an object, literal field name, and value",
+                        );
+                        return Type::Unknown;
+                    }
+                    let object_type = self.check_expr(&args[0], scopes);
+                    let field_name = match &args[1].kind {
+                        ExprKind::String(name) => Some(name.as_str()),
+                        _ => {
+                            self.error_with_code(
+                                "E-TYPE-CLASS-001",
+                                args[1].span,
+                                "class field name must be a String literal",
+                            );
+                            None
+                        }
+                    };
+                    let value_type = self.check_expr(&args[2], scopes);
+                    let (type_name, type_arguments) = match &object_type {
+                        Type::Named(type_name) => (Some(type_name.as_str()), &[][..]),
+                        Type::Applied { name, args } => (Some(name.as_str()), args.as_slice()),
+                        _ => (None, &[][..]),
+                    };
+                    if let (Some(type_name), Some(field_name)) = (type_name, field_name) {
+                        match self
+                            ._program
+                            .records
+                            .iter()
+                            .find(|record| record.name == type_name)
+                        {
+                            Some(class) if class.is_class => {
+                                if let Some(field) =
+                                    class.fields.iter().find(|field| field.name == field_name)
+                                {
+                                    let substitutions = class
+                                        .type_params
+                                        .iter()
+                                        .zip(type_arguments)
+                                        .map(|(parameter, argument)| {
+                                            (parameter.clone(), argument.clone())
+                                        })
+                                        .collect::<HashMap<_, _>>();
+                                    let field_type =
+                                        substitute_generic_type(&field.ty, &substitutions);
+                                    if !compatible(&field_type, &value_type) {
+                                        self.error_with_code(
+                                            "E-TYPE-CLASS-001",
+                                            args[2].span,
+                                            format!(
+                                                "type mismatch: expected `{field_type}`, found `{value_type}`"
+                                            ),
+                                        );
+                                    }
+                                } else {
+                                    self.error_with_code(
+                                        "E-TYPE-CLASS-001",
+                                        args[1].span,
+                                        format!(
+                                            "unknown field `{field_name}` in class `{type_name}`"
+                                        ),
+                                    );
+                                }
+                            }
+                            _ => self.error_with_code(
+                                "E-TYPE-CLASS-001",
+                                args[0].span,
+                                "field assignment requires a class instance",
+                            ),
+                        }
+                    }
+                    Type::Unit
                 } else if name == "record_with" {
                     if !type_args.is_empty() || args.len() != 3 {
                         self.error(
@@ -5397,6 +5624,14 @@ impl<'a> Checker<'a> {
                             .iter()
                             .find(|record| record.name == type_name)
                         {
+                            if record.is_class {
+                                self.error_with_code(
+                                    "E-TYPE-CLASS-001",
+                                    args[0].span,
+                                    "record_with cannot copy or update a class reference",
+                                );
+                                return Type::Unknown;
+                            }
                             if let Some(field) =
                                 record.fields.iter().find(|field| field.name == field_name)
                             {
@@ -5814,7 +6049,14 @@ impl<'a> Checker<'a> {
                         self.error(expr.span, "json_encode expects exactly one value");
                         return Type::Unknown;
                     }
-                    self.check_expr(&args[0], scopes);
+                    let value_type = self.check_expr(&args[0], scopes);
+                    if contains_class_reference_type(&value_type, self._program) {
+                        self.error_with_code(
+                            "E-TYPE-CLASS-001",
+                            args[0].span,
+                            "class references cannot be serialized directly; convert them to a record",
+                        );
+                    }
                     Type::String
                 } else if name == "json_encode_tagged_result" {
                     if !type_args.is_empty() || args.len() != 1 {
@@ -5829,6 +6071,13 @@ impl<'a> Checker<'a> {
                         self.error(
                             args[0].span,
                             "json_encode_tagged_result expects a Result value",
+                        );
+                    }
+                    if contains_class_reference_type(&value, self._program) {
+                        self.error_with_code(
+                            "E-TYPE-CLASS-001",
+                            args[0].span,
+                            "class references cannot be serialized directly; convert them to a record",
                         );
                     }
                     Type::String
@@ -5870,7 +6119,15 @@ impl<'a> Checker<'a> {
                     }
                     let source = self.check_expr(&args[0], scopes);
                     self.expect_type(&Type::String, &source, args[0].span);
-                    type_args.first().cloned().unwrap_or(Type::Unknown)
+                    let target = type_args.first().cloned().unwrap_or(Type::Unknown);
+                    if contains_class_reference_type(&target, self._program) {
+                        self.error_with_code(
+                            "E-TYPE-CLASS-001",
+                            expr.span,
+                            "json_decode does not support class types because it cannot restore object identity",
+                        );
+                    }
+                    target
                 } else if name == "json_decode_result" {
                     if type_args.len() != 1 {
                         self.error(
@@ -7025,6 +7282,11 @@ pub enum Value {
         type_args: Vec<Type>,
         fields: HashMap<String, Value>,
     },
+    ClassRef {
+        reference: ClassObjectRef,
+        type_name: String,
+        type_args: Vec<Type>,
+    },
     Option(Option<Box<Value>>),
     Result(Result<Box<Value>, Box<Value>>),
     Rows {
@@ -7112,6 +7374,20 @@ impl Value {
                     }
                 }
             }
+            Value::ClassRef {
+                type_name,
+                type_args,
+                ..
+            } => {
+                if type_args.is_empty() {
+                    Type::Named(type_name.clone())
+                } else {
+                    Type::Applied {
+                        name: type_name.clone(),
+                        args: type_args.clone(),
+                    }
+                }
+            }
             Value::Option(Some(value)) => Type::Option(Box::new(value.ty())),
             Value::Option(None) => Type::Option(Box::new(Type::Unknown)),
             Value::Result(Ok(value)) => Type::Result(Box::new(value.ty()), Box::new(Type::Unknown)),
@@ -7172,6 +7448,26 @@ impl Value {
                     .map(u8::to_string)
                     .collect::<Vec<_>>()
                     .join(", ")
+            ),
+            Value::ClassRef {
+                reference,
+                type_name,
+                type_args,
+            } => format!(
+                "<{}#{}>",
+                if type_args.is_empty() {
+                    type_name.clone()
+                } else {
+                    format!(
+                        "{type_name}<{}>",
+                        type_args
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                },
+                reference.object_id
             ),
             Value::Array(values) => format!(
                 "[{}]",
@@ -7522,6 +7818,8 @@ pub fn execute_function_with_capabilities_and_policies(
             .map(|function| (function.name.clone(), function))
             .collect(),
         output: Vec::new(),
+        next_class_object_id: Arc::new(AtomicU64::new(1)),
+        parallel_worker: false,
         steps: 0,
         step_budget: policy.as_ref().and_then(|policy| policy.step_budget),
         call_depth: 0,
@@ -7606,6 +7904,8 @@ fn execute_internal(
             .map(|f| (f.name.clone(), f))
             .collect(),
         output: Vec::new(),
+        next_class_object_id: Arc::new(AtomicU64::new(1)),
+        parallel_worker: false,
         steps: 0,
         step_budget: policy.as_ref().and_then(|policy| policy.step_budget),
         call_depth: 0,
@@ -7642,6 +7942,8 @@ const MAX_FUNCTION_CALL_DEPTH: usize = 24;
 struct Interpreter<'program> {
     functions: HashMap<String, &'program Function>,
     output: Vec<String>,
+    next_class_object_id: Arc<AtomicU64>,
+    parallel_worker: bool,
     steps: usize,
     step_budget: Option<usize>,
     call_depth: usize,
@@ -7656,6 +7958,77 @@ struct Interpreter<'program> {
     enum_definitions: HashMap<String, zelyra_ast::EnumDef>,
     active_capabilities: Vec<HashSet<String>>,
     active_type_substitutions: Vec<HashMap<String, Type>>,
+}
+
+struct RuntimeClassObject {
+    fields: HashMap<String, Value>,
+}
+
+#[derive(Clone)]
+pub struct ClassObjectRef {
+    object_id: u64,
+    object: Arc<Mutex<RuntimeClassObject>>,
+}
+
+impl fmt::Debug for ClassObjectRef {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "ClassObjectRef({})", self.object_id)
+    }
+}
+
+impl PartialEq for ClassObjectRef {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.object, &other.object)
+    }
+}
+
+fn class_reference_would_cycle(value: &Value, target: &ClassObjectRef) -> Result<bool, String> {
+    let mut pending = vec![value.clone()];
+    let mut visited = HashSet::new();
+    while let Some(value) = pending.pop() {
+        match value {
+            Value::ClassRef { reference, .. } => {
+                if Arc::ptr_eq(&reference.object, &target.object) {
+                    return Ok(true);
+                }
+                let address = Arc::as_ptr(&reference.object) as usize;
+                if visited.insert(address) {
+                    let object = reference
+                        .object
+                        .lock()
+                        .map_err(|_| "class object is unavailable".to_owned())?;
+                    pending.extend(object.fields.values().cloned());
+                }
+            }
+            Value::Array(values) | Value::Tuple(values) | Value::Set(values) => {
+                pending.extend(values);
+            }
+            Value::Map(entries) => {
+                pending.extend(entries.into_iter().flat_map(|(key, value)| [key, value]));
+            }
+            Value::Object { fields, .. } => pending.extend(fields.into_values()),
+            Value::Enum { payloads, .. } => pending.extend(payloads),
+            Value::Option(Some(value)) => pending.push(*value),
+            Value::Result(Ok(value)) | Value::Result(Err(value)) => pending.push(*value),
+            Value::Int(_)
+            | Value::UInt(_)
+            | Value::Float(_)
+            | Value::Decimal(_)
+            | Value::Bool(_)
+            | Value::String(_)
+            | Value::Char(_)
+            | Value::Timestamp(_)
+            | Value::Date(_)
+            | Value::Time(_)
+            | Value::Duration(_)
+            | Value::Bytes(_)
+            | Value::Function(_)
+            | Value::Option(None)
+            | Value::Rows { .. }
+            | Value::Unit => {}
+        }
+    }
+    Ok(false)
 }
 
 fn statement_span(statement: &Stmt) -> Span {
@@ -7707,6 +8080,7 @@ fn is_runtime_builtin(name: &str) -> bool {
             | "len"
             | "range"
             | "array_replace_result"
+            | "object_set_field"
             | "record_with"
             | "append"
             | "tuple"
@@ -8316,6 +8690,10 @@ impl<'program> Interpreter<'program> {
                 })
                 .collect::<Result<serde_json::Map<_, _>, _>>()
                 .map(serde_json::Value::Object),
+            Value::ClassRef { .. } => Err(self.runtime_error(
+                span,
+                "class references cannot be serialized directly; convert them to a record",
+            )),
             Value::Function(_) => {
                 Err(self.runtime_error(span, "json_encode cannot serialize a function value"))
             }
@@ -8373,6 +8751,12 @@ impl<'program> Interpreter<'program> {
                 return self.json_decode_enum(value, definition, &[], span);
             }
             if let Some(record) = self.record_definitions.get(name) {
+                if record.is_class {
+                    return Err(self.runtime_error(
+                        span,
+                        "json_decode does not support class types because it cannot restore object identity",
+                    ));
+                }
                 return self.json_decode_record(value, record, &[], span);
             }
             if matches!(name.as_str(), "Id" | "Email" | "Url" | "Uuid" | "Money") {
@@ -8384,6 +8768,12 @@ impl<'program> Interpreter<'program> {
                 return self.json_decode_enum(value, definition, args, span);
             }
             if let Some(record) = self.record_definitions.get(name) {
+                if record.is_class {
+                    return Err(self.runtime_error(
+                        span,
+                        "json_decode does not support class types because it cannot restore object identity",
+                    ));
+                }
                 return self.json_decode_record(value, record, args, span);
             }
         }
@@ -9328,6 +9718,8 @@ impl<'program> Interpreter<'program> {
                             let mut child = Interpreter {
                                 functions: self.functions.clone(),
                                 output: Vec::new(),
+                                next_class_object_id: Arc::clone(&self.next_class_object_id),
+                                parallel_worker: true,
                                 steps: 0,
                                 step_budget: self.step_budget,
                                 call_depth: 0,
@@ -9796,6 +10188,84 @@ impl<'program> Interpreter<'program> {
                     .map(Box::new)
                     .map_err(|message| Box::new(Value::String(message))),
             ))
+        } else if name == "object_set_field" {
+            if self.parallel_worker {
+                return Err(self.runtime_error(
+                    span,
+                    "class field mutation is not allowed inside a `parallel` block",
+                ));
+            }
+            if !type_args.is_empty() || args.len() != 3 {
+                return Err(self.runtime_error(
+                    span,
+                    "class field update expects an object, literal field name, and value",
+                ));
+            }
+            let object_value = self.eval(&args[0], env)?;
+            let field_name = self.eval(&args[1], env)?;
+            let value = self.eval(&args[2], env)?;
+            let (reference, type_name, type_args, field_name) = match (object_value, field_name) {
+                (
+                    Value::ClassRef {
+                        reference,
+                        type_name,
+                        type_args,
+                    },
+                    Value::String(field_name),
+                ) => (reference, type_name, type_args, field_name),
+                _ => {
+                    return Err(self.runtime_error(
+                        span,
+                        "field assignment requires a class instance and literal field name",
+                    ))
+                }
+            };
+            let definition = self.record_definitions.get(&type_name).ok_or_else(|| {
+                self.runtime_error(span, format!("unknown class type `{type_name}`"))
+            })?;
+            if !definition.is_class {
+                return Err(self.runtime_error(span, "field assignment requires a class instance"));
+            }
+            let field = definition
+                .fields
+                .iter()
+                .find(|field| field.name == field_name)
+                .ok_or_else(|| {
+                    self.runtime_error(
+                        args[1].span,
+                        format!("unknown field `{field_name}` in class `{type_name}`"),
+                    )
+                })?;
+            let substitutions = definition
+                .type_params
+                .iter()
+                .zip(&type_args)
+                .map(|(parameter, argument)| (parameter.clone(), argument.clone()))
+                .collect::<HashMap<_, _>>();
+            let expected = substitute_generic_type(&field.ty, &substitutions);
+            if !compatible(&expected, &value.ty()) {
+                return Err(self.runtime_error(
+                    args[2].span,
+                    format!(
+                        "class field `{field_name}` expects `{expected}`, found `{}`",
+                        value.ty()
+                    ),
+                ));
+            }
+            if class_reference_would_cycle(&value, &reference)
+                .map_err(|message| self.runtime_error(span, message))?
+            {
+                return Err(self.runtime_error(
+                    args[2].span,
+                    "class field update would create a reference cycle",
+                ));
+            }
+            let mut object = reference
+                .object
+                .lock()
+                .map_err(|_| self.runtime_error(span, "class object is unavailable"))?;
+            object.fields.insert(field_name, value);
+            Ok(Value::Unit)
         } else if name == "record_with" {
             if !type_args.is_empty() || args.len() != 3 {
                 return Err(self.runtime_error(
@@ -11059,6 +11529,11 @@ impl<'program> Interpreter<'program> {
                 let definition = self.record_definitions.get(type_name).ok_or_else(|| {
                     self.runtime_error(expr.span, format!("unknown record type `{type_name}`"))
                 })?;
+                for field in &definition.fields {
+                    if !values.contains_key(&field.name) && matches!(&field.ty, Type::Option(_)) {
+                        values.insert(field.name.clone(), Value::Option(None));
+                    }
+                }
                 let concrete_args = if !type_args.is_empty() {
                     type_args.clone()
                 } else if definition.type_params.is_empty() {
@@ -11092,6 +11567,25 @@ impl<'program> Interpreter<'program> {
                             )
                         })?
                 };
+                if definition.is_class {
+                    let object_id = self
+                        .next_class_object_id
+                        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |next| {
+                            next.checked_add(1)
+                        })
+                        .map_err(|_| {
+                            self.runtime_error(expr.span, "class object identity space exhausted")
+                        })?;
+                    let reference = ClassObjectRef {
+                        object_id,
+                        object: Arc::new(Mutex::new(RuntimeClassObject { fields: values })),
+                    };
+                    return Ok(Value::ClassRef {
+                        reference,
+                        type_name: type_name.clone(),
+                        type_args: concrete_args,
+                    });
+                }
                 Ok(Value::Object {
                     type_name: type_name.clone(),
                     type_args: concrete_args,
@@ -11201,9 +11695,23 @@ impl<'program> Interpreter<'program> {
                     Value::Object { fields, .. } => fields.get(field).cloned().ok_or_else(|| {
                         self.runtime_error(expr.span, format!("record field `{field}` is missing"))
                     }),
+                    Value::ClassRef { reference, .. } => {
+                        let object = reference.object.lock().map_err(|_| {
+                            self.runtime_error(expr.span, "class object is unavailable")
+                        })?;
+                        object.fields.get(field).cloned().ok_or_else(|| {
+                            self.runtime_error(
+                                expr.span,
+                                format!("class field `{field}` is missing"),
+                            )
+                        })
+                    }
                     value => Err(self.runtime_error(
                         expr.span,
-                        format!("field access requires a record, found {}", value.ty()),
+                        format!(
+                            "field access requires a record or class, found {}",
+                            value.ty()
+                        ),
                     )),
                 }
             }
@@ -11695,6 +12203,7 @@ fn value_to_query_value(
         | Value::Set(_)
         | Value::Map(_)
         | Value::Object { .. }
+        | Value::ClassRef { .. }
         | Value::Enum { .. }
         | Value::Function(_)
         | Value::Rows { .. }

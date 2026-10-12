@@ -1,0 +1,8 @@
+class Counter {
+    value: Int
+}
+
+fn main() {
+    counter = Counter { value: 1 }
+    counter.value = "one"
+}

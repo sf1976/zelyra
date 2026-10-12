@@ -66,6 +66,9 @@ impl<'a> Parser<'a> {
     fn at(&self, kind: &TokenKind) -> bool {
         &self.current().kind == kind
     }
+    fn at_word(&self, word: &str) -> bool {
+        matches!(&self.current().kind, TokenKind::Ident(name) if name == word)
+    }
     fn advance(&mut self) -> &'a Token {
         let token = self.current();
         if !matches!(&token.kind, TokenKind::Eof) {
@@ -155,7 +158,7 @@ impl<'a> Parser<'a> {
                     functions.push(self.function(true)?);
                 } else if self.at(&TokenKind::Type) {
                     types.push(self.type_definition(true)?);
-                } else if self.at(&TokenKind::Struct) {
+                } else if self.at(&TokenKind::Struct) || self.at_word("class") {
                     records.push(self.record_definition(true)?);
                 } else if self.at(&TokenKind::Enum) {
                     enums.push(self.enum_definition(true)?);
@@ -165,7 +168,7 @@ impl<'a> Parser<'a> {
                     components.push(self.component_definition(true)?);
                 } else {
                     return self
-                        .error("`pub` currently applies only to functions, types, enums, records, views, and components");
+                        .error("`pub` currently applies only to functions, types, enums, records, classes, views, and components");
                 }
             } else if self.at(&TokenKind::Database) {
                 declarations_started = true;
@@ -176,7 +179,7 @@ impl<'a> Parser<'a> {
             } else if self.at(&TokenKind::Type) {
                 declarations_started = true;
                 types.push(self.type_definition(false)?);
-            } else if self.at(&TokenKind::Struct) {
+            } else if self.at(&TokenKind::Struct) || self.at_word("class") {
                 declarations_started = true;
                 records.push(self.record_definition(false)?);
             } else if self.at(&TokenKind::Enum) {
@@ -1919,7 +1922,11 @@ impl<'a> Parser<'a> {
     }
 
     fn record_definition(&mut self, is_public: bool) -> Result<RecordDef, ParseError> {
-        let start = self.expect(TokenKind::Struct, "`struct`")?;
+        let (start, is_class) = if self.at_word("class") {
+            (self.advance().span, true)
+        } else {
+            (self.expect(TokenKind::Struct, "`struct`")?, false)
+        };
         let (name, _) = self.ident("record name")?;
         let type_params = self.type_parameter_names()?;
         self.expect(TokenKind::LBrace, "`{` after record name")?;
@@ -1947,6 +1954,7 @@ impl<'a> Parser<'a> {
         Ok(RecordDef {
             name,
             is_public,
+            is_class,
             type_params,
             fields,
             span: start.join(end),
@@ -2551,7 +2559,33 @@ impl<'a> Parser<'a> {
                 });
             }
         }
-        Ok(Stmt::Expr(self.expression()?))
+        let expression = self.expression()?;
+        if self.at(&TokenKind::Equal) {
+            self.advance();
+            let value = self.expression()?;
+            let span = expression.span.join(value.span);
+            let ExprKind::Field { target, field } = expression.kind else {
+                return self
+                    .error("assignment target must be a class field such as `customer.name`");
+            };
+            let field_span = target.span.join(expression.span);
+            return Ok(Stmt::Expr(Expr {
+                kind: ExprKind::Call {
+                    name: "object_set_field".into(),
+                    type_args: Vec::new(),
+                    args: vec![
+                        *target,
+                        Expr {
+                            kind: ExprKind::String(field),
+                            span: field_span,
+                        },
+                        value,
+                    ],
+                },
+                span,
+            }));
+        }
+        Ok(Stmt::Expr(expression))
     }
     fn pattern(&mut self) -> Result<Pattern, ParseError> {
         self.with_nesting(Self::pattern_inner)
@@ -4448,7 +4482,7 @@ mod tests {
             parse(&lex("pub table customers { id: Id primary auto }").unwrap()).unwrap_err();
         assert!(invalid_visibility
             .message
-            .contains("functions, types, enums, records, views, and components"));
+            .contains("functions, types, enums, records, classes, views, and components"));
     }
 
     #[test]

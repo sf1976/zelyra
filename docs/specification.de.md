@@ -556,18 +556,59 @@ Operationen verwenden, deren Typ für den konkreten Wert feststeht. Der
 Compiler meldet fehlende oder widersprüchliche Ableitungen mit
 `E-TYPE-GENERIC-001` beziehungsweise einem Typfehler.
 
-### Werte, Records und Klassen
+### Records und Klassen
 
-Zelyras Kernmodell verwendet Records mit Wertsemantik. Fachliche Identität
-steht in expliziten ID-Feldern; Änderungen erzeugen mit `record_with` einen
-neuen Record. Die Sprache definiert derzeit weder ein `class`-Konstrukt noch
-veränderliche gemeinsam referenzierte Objekte, Objektidentitätsvergleiche oder
-Vererbung. Diese Grenze verhindert versteckte Aliasänderungen und hält
-Datenbank- und JSON-Werte nachvollziehbar. Diese Beschreibung gilt für den
-implementierten Sprachumfang des geprüften Quellbuilds. Für den 0.9.9-Freeze ist
-ein begrenztes Klassenmodell mit definierter Referenzidentität und Feldmutation
-zusätzlich offen; siehe den [0.9.9-Releaseplan](release-plans/0.9.9.de.md).
-Es darf nicht als bereits unterstützt verstanden werden.
+`struct`-Records sind Werte: Zuweisung und Parameterübergabe kopieren den
+Recordwert, Gleichheit vergleicht seine Felder, und `record_with` erzeugt einen
+geänderten neuen Wert. `class`-Instanzen besitzen dagegen Referenzidentität.
+`class` ist nur vor einer Klassendeklaration ein Kontextwort. An allen anderen
+Stellen bleibt es ein normaler Bezeichner, damit gültiger Quelltext der
+Sprachlinie `0.1` mit einer Variable oder Funktion namens `class` gültig bleibt.
+Konstruktoren verwenden dieselbe lesbare Feldschreibweise:
+
+~~~zelyra
+class Counter {
+    value: Int
+}
+
+fn increment(counter: Counter) {
+    counter.value = counter.value + 1
+}
+
+fn main() {
+    first = Counter { value: 0 }
+    alias = first
+    increment(first)
+    print(alias.value) # 1
+    print(first == alias) # true
+}
+~~~
+
+Alle nicht-optionalen Felder müssen beim Erstellen angegeben werden. Eine
+Zuweisung an ein Feld wird statisch auf Empfänger, Feldname und Werttyp geprüft
+und aktualisiert dieselbe Instanz; Kopieren einer Bindung, Rückgabe aus einer
+Funktion und Übergabe als Parameter erhalten dieselbe Identität. `==` und `!=`
+vergleichen Klassenreferenzen anhand der Instanzidentität, auch wenn zwei
+Instanzen gleiche Feldwerte haben. Generische Klassen sind möglich, sofern ihre
+Typargumente aus dem Konstruktor ableitbar sind oder ausdrücklich angegeben
+werden.
+
+Klassen besitzen keine Methoden- oder Vererbungssyntax. Verhalten wird als
+gewöhnliche Funktion mit einem ausdrücklich typisierten Empfängerparameter
+geschrieben; dadurch bleibt der Datenfluss sichtbar und es gibt kein implizites
+`this`. `record_with` ist für Klassen unzulässig. Ein Feldupdate, das einen
+Referenzzyklus erzeugen würde, wird mit `E-RUNTIME-001` abgewiesen;
+Feldänderungen innerhalb eines `parallel`-Blocks liefern ebenfalls eine
+kontrollierte Runtime-Diagnose. Damit verhindert die Runtime unbeschränkte
+Referenzzyklen und nichtdeterministische gleichzeitige Mutationen.
+
+Klassenreferenzen lassen sich nicht direkt mit JSON, HTTP-APIs oder SQL
+serialisieren, weil diese Formate keine Runtime-Objektidentität bewahren.
+Konvertiere die für einen Austausch benötigten Felder ausdrücklich in einen
+`struct`-DTO. Auch Records und Varianten, die Klassenreferenzen enthalten,
+werden an JSON-Grenzen abgewiesen. Diese Klassenregeln gelten für den
+0.9.9-Entwicklungszweig; Vererbung, Methoden, Closures und ein allgemeiner
+Objekt-/ORM-Mapper bleiben außerhalb dieses Umfangs.
 
 ### Benannte Funktionswerte in 0.9.9
 
