@@ -114,6 +114,18 @@ try {
   assert.equal(new URL(page.url()).hash, "", "the session token must be removed from the address bar");
   await page.locator(".cm-content[contenteditable=true]").waitFor({ timeout: 10_000 });
   await page.locator('.tree-item.file[title="main.zyl"]').waitFor();
+  const themeButton = page.locator("#theme-button");
+  await themeButton.click();
+  assert.equal(await page.locator("html").getAttribute("data-theme"), "light");
+  assert.equal(await themeButton.getAttribute("aria-label"), "Dunkles Farbschema aktivieren");
+  assert.equal(await page.locator(".cm-editor").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)");
+  await page.reload();
+  await page.locator(".cm-content[contenteditable=true]").waitFor({ timeout: 10_000 });
+  assert.equal(await page.locator("html").getAttribute("data-theme"), "light", "the selected appearance must survive reload");
+  assert.equal(await page.locator(".cm-editor").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)", "CodeMirror must use the selected light appearance");
+  await themeButton.click();
+  assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");
+  assert.equal(await themeButton.getAttribute("aria-label"), "Helles Farbschema aktivieren");
   await page.locator("#task-finder-button").click();
   await page.locator("#task-finder-input").fill("no such studio action");
   await page.locator("#task-finder-empty").waitFor();
