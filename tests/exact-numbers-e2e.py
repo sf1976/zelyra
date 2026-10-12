@@ -40,7 +40,7 @@ def sql(statement):
                    "-U", user, "-d", database, "-c", statement]
     else:
         env["MYSQL_PWD"] = password
-        command = ["mariadb", "--protocol=tcp", "--batch", "--skip-column-names",
+        command = ["mysql" if ENGINE == "mysql" else "mariadb", "--protocol=tcp", "--batch", "--skip-column-names",
                    "--host=" + host, "--port=" + str(PARTS.port or 3306),
                    "--user=" + user, database, "-e", statement]
     result = subprocess.run(command, env=env, text=True, capture_output=True, timeout=30)
