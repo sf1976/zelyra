@@ -186,6 +186,10 @@ try {
   initialEditorWidth);
   await page.setViewportSize({ width: 800, height: 600 });
   await page.waitForFunction(() => document.querySelector(".cm-content")?.getBoundingClientRect().width > 0);
+  await page.setViewportSize({ width: 360, height: 740 });
+  await page.waitForFunction(() => window.innerWidth === 360);
+  assert.ok(await page.locator("#theme-button").isVisible(), "theme control must remain reachable on a narrow screen");
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), "Studio must not clip horizontally at its supported 360px minimum width");
   await page.setViewportSize({ width: 1280, height: 900 });
   await sidebarToggle.click();
   assert.equal(await sidebarToggle.getAttribute("aria-expanded"), "true");

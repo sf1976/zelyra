@@ -996,8 +996,10 @@ IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
 - [✅] Die helle Studio-Darstellung deckt Editor, Projektnavigation,
   Eigenschaften, Hilfe, Datenbankwerkbank, Aktionssuche und Dialoge ab.
   Browser-E2E prüft Speicherung, Tastaturbedienung, einheitliche Flächen und
-  mindestens 4,5:1 Kontrast für Text und Syntaxfarben. Die IDE-Arbeit geht mit
-  den grafischen relationalen und Diagrammabläufen für 0.9.9 weiter.
+  mindestens 4,5:1 Kontrast für Text und Syntaxfarben. Bei 360 CSS-Pixeln
+  bleiben die Arbeitsfläche und der Theme-Schalter ohne horizontalen Überlauf
+  nutzbar. Die IDE-Arbeit geht mit den grafischen relationalen und
+  Diagrammabläufen für 0.9.9 weiter.
 - [🗺️] Den unterstützten Umfang des Laravel-Migrators und seine versionierte
   Kompatibilitätsmatrix abschließen. Schreibgeschützte Analyse,
   Geheimnis-/PII-Redaktion, Quellpositionsgenauigkeit, Routen-Daten-Beziehungen,
