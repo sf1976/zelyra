@@ -406,7 +406,8 @@ fn read_mariadb_migration_history(database_url: &str) -> Result<Value, DatabaseE
         "1" => {}
         _ => {
             return Err(DatabaseError {
-                message: "MariaDB returned an invalid migration history table status".into(),
+                message: "database server returned an invalid migration history table status"
+                    .into(),
             });
         }
     }
@@ -538,7 +539,7 @@ fn print_mariadb_migration_history(
         );
     } else if let Some(entries) = history.as_array() {
         if entries.is_empty() {
-            println!("No MariaDB schema migrations recorded.");
+            println!("No schema migrations recorded for this database.");
         }
         for entry in entries {
             println!(
@@ -982,11 +983,16 @@ pub(super) fn database_command(mut args: impl Iterator<Item = String>) -> ExitCo
                     subcommand
                 );
                 if subcommand == "setup" {
-                    eprintln!("hint: set a MariaDB URL without committing it to source control");
+                    let scheme = if schema_backend_name(&schema) == "mysql" {
+                        "mysql"
+                    } else {
+                        "mariadb"
+                    };
+                    eprintln!("hint: set a {scheme} URL without committing it to source control");
                     eprintln!(
-                        "  export DATABASE_URL='mariadb://user:<password>@127.0.0.1:3306/my_app'"
+                        "  export DATABASE_URL='{scheme}://user:<password>@127.0.0.1:3306/my_app'"
                     );
-                    eprintln!("  # PowerShell: $env:DATABASE_URL = 'mariadb://user:<password>@127.0.0.1:3306/my_app'");
+                    eprintln!("  # PowerShell: $env:DATABASE_URL = '{scheme}://user:<password>@127.0.0.1:3306/my_app'");
                 }
                 return ExitCode::from(1);
             };
@@ -999,7 +1005,7 @@ pub(super) fn database_command(mut args: impl Iterator<Item = String>) -> ExitCo
                 Backend::Sqlite => apply_sqlite(&url, &schema.create_sql()),
                 Backend::Postgres => Err(zelyra_database::DatabaseError {
                     message: format!(
-                        "db {} currently supports mariadb and sqlite; use db apply for postgres",
+                        "db {} currently supports MariaDB/MySQL and SQLite; use db apply for PostgreSQL",
                         subcommand
                     ),
                 }),

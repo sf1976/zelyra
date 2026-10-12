@@ -34,11 +34,42 @@ fn nested_cli_help_describes_database_creation_and_setup_accurately() {
     assert!(create_help.contains("verbindet sich nicht mit einer Datenbank"));
     assert!(create_help.contains("zelyra db setup main.zyl"));
 
+    let db_setup = run_german_help(&["db", "setup", "--help"]);
+    assert!(db_setup.status.success());
+    assert!(String::from_utf8_lossy(&db_setup.stdout).contains("MariaDB und MySQL"));
+    let db_history = run_german_help(&["db", "history", "--help"]);
+    assert!(db_history.status.success());
+    assert!(String::from_utf8_lossy(&db_history.stdout).contains("MySQL-Schemamigrationen"));
+
     let setup = run_german_help(&["setup", "--help"]);
     assert!(setup.status.success());
     let setup_help = String::from_utf8_lossy(&setup.stdout);
     assert!(setup_help.contains("--all"));
     assert!(setup_help.contains("Webadresse"));
+}
+
+#[test]
+fn mysql_db_setup_hint_uses_the_declared_connection_scheme() {
+    let source = r#"
+database main {
+    engine: mysql
+    database: "zelyra_ci"
+}
+fn main() {}
+"#;
+    let (directory, path) = temporary_project_source("mysql-setup-hint", source);
+    let output = Command::new(binary())
+        .args(["db", "setup", path.to_str().unwrap()])
+        .env_remove("DATABASE_URL")
+        .env_remove("ZELYRA_DATABASE_MAIN_URL")
+        .output()
+        .expect("zelyra should report a missing MySQL connection");
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("DATABASE_URL is required"));
+    assert!(stderr.contains("mysql://user:<password>"));
+    assert!(!stderr.contains("mariadb://"));
+    fs::remove_dir_all(directory).unwrap();
 }
 
 #[test]

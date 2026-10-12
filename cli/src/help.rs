@@ -101,13 +101,13 @@ Beispiele:
 
 Die verfügbaren Operationen und ihre Grenzen:
   create     Geprüftes CREATE-SQL ausgeben; verbindet sich nicht mit der Datenbank
-  setup      Datenbank bei MariaDB anlegen und deklariertes Schema einrichten
+  setup      Datenbank bei MariaDB/MySQL anlegen und deklariertes Schema einrichten; SQLite initialisieren
   bootstrap  Alias für `setup`
   inspect    Vorhandene Datenbankstruktur lesen
   map        Deklarierte und vorhandene Tabellen vergleichen
   plan       Schemaänderungen vorschauen, ohne die Datenbank zu ändern
   apply      Geprüften Schemaänderungsplan anwenden
-  history    Journalisierte MariaDB-Migrationen anzeigen
+  history    Journalisierte MariaDB-/MySQL-Migrationen anzeigen
 
 Eine benannte Verbindung hat Vorrang vor `DATABASE_URL`. Zugangsdaten werden nicht in der Hilfe ausgegeben.",
         "fmt" => "Befehl: zelyra fmt <datei.zyl> [--check]\n\nFormatiert eine Zelyra-Datei kanonisch.\n  --check  Prüft, ob die Datei bereits formatiert ist; schreibt nichts.\n\nBeispiele:\n  zelyra fmt main.zyl\n  zelyra fmt src/rechnungen.zyl --check\n\nDatenbank: nicht erforderlich.",
@@ -127,9 +127,9 @@ Eine benannte Verbindung hat Vorrang vor `DATABASE_URL`. Zugangsdaten werden nic
         "db-apply" => "Befehl: zelyra db apply <datei.zyl> [--plan-id <sha256:…>] [--allow-risky]\n\nWendet einen Schemaänderungsplan an. Mit `--plan-id` muss der aktuelle Plan exakt der zuvor geprüften Kennung entsprechen.\n\nBeispiele:\n  zelyra db plan main.zyl --format json\n  zelyra db apply main.zyl --plan-id sha256:<kennung>\n\nRiskante Änderungen benötigen die ausdrückliche Option `--allow-risky`; destructive Änderungen behalten eine eigene Bestätigung. Benötigt die konfigurierte Projektdatenbank.",
         "db-map" => "Befehl: zelyra db map <datei.zyl> [--format text|json]\n\nZeigt Tabellen gruppiert nach Quellmodul, deklarierte Beziehungen und nicht zugeordnete Live-Tabellen. Die Zuordnung zu Modulen ist informativ.\n\nBeispiel:\n  zelyra db map main.zyl --format json\n\nBenötigt die konfigurierte Projektdatenbank.",
         "db-inspect" => "Befehl: zelyra db inspect <datei.zyl>\n\nLiest den aktuellen Zustand der konfigurierten Projektdatenbank aus.\n\nBeispiel:\n  zelyra db inspect main.zyl\n\nÄndert keine Datenbankobjekte.",
-        "db-create" => "Befehl: zelyra db create <datei.zyl>\n\nGibt das geprüfte CREATE-SQL für die deklarierten Tabellen aus. Der Befehl verbindet sich nicht mit einer Datenbank und legt weder die Datenbank noch Tabellen an.\n\nBeispiel:\n  zelyra db create main.zyl\n  zelyra db create main.zyl > schema.sql\n\nZum Anlegen der MariaDB-Datenbank und Einrichten des Schemas: `zelyra db setup main.zyl`. Für ein lokales Docker-Projekt: `zelyra setup . --all`.",
-        "db-setup" | "db-bootstrap" => "Befehl: zelyra db setup|bootstrap <datei.zyl>\n\nMariaDB: legt die deklarierte Datenbank bei Bedarf an und richtet das Schema ein. SQLite: initialisiert die konfigurierte Datei und Tabellen. PostgreSQL: `setup` wird nicht unterstützt; verwende `zelyra db apply`. Prüfe vorher mit `zelyra db plan`, welche Änderungen anstehen.\n\nBeispiele:\n  zelyra db plan main.zyl\n  zelyra db setup main.zyl\n\nBenötigt die konfigurierte Projektdatenbank.",
-        "db-history" => "Befehl: zelyra db history <datei.zyl> [--format text|json]\n\nZeigt den Fortschritt journalisierter MariaDB-Schemamigrationen.\n\nBeispiel:\n  zelyra db history main.zyl\n\nBenötigt die konfigurierte MariaDB-Projektdatenbank.",
+        "db-create" => "Befehl: zelyra db create <datei.zyl>\n\nGibt das geprüfte CREATE-SQL für die deklarierten Tabellen aus. Der Befehl verbindet sich nicht mit einer Datenbank und legt weder die Datenbank noch Tabellen an.\n\nBeispiel:\n  zelyra db create main.zyl\n  zelyra db create main.zyl > schema.sql\n\nZum Anlegen der MariaDB- oder MySQL-Datenbank und Einrichten des Schemas: `zelyra db setup main.zyl`. Für ein lokales MariaDB-Docker-Projekt: `zelyra setup . --all`.",
+        "db-setup" | "db-bootstrap" => "Befehl: zelyra db setup|bootstrap <datei.zyl>\n\nMariaDB und MySQL: legt die deklarierte Datenbank bei Bedarf an und richtet das Schema ein. SQLite: initialisiert die konfigurierte Datei und Tabellen. PostgreSQL: `setup` wird nicht unterstützt; verwende `zelyra db apply`. Prüfe vorher mit `zelyra db plan`, welche Änderungen anstehen.\n\nBeispiele:\n  zelyra db plan main.zyl\n  zelyra db setup main.zyl\n\nBenötigt die konfigurierte Projektdatenbank.",
+        "db-history" => "Befehl: zelyra db history <datei.zyl> [--format text|json]\n\nZeigt den Fortschritt journalisierter MariaDB- und MySQL-Schemamigrationen.\n\nBeispiel:\n  zelyra db history main.zyl\n\nBenötigt die konfigurierte MariaDB- oder MySQL-Projektdatenbank.",
         _ => common_german_help(key),
     }
 }
@@ -188,13 +188,13 @@ Examples:
 
 Available operations and their limits:
   create     Emit checked CREATE SQL; does not connect to a database
-  setup      Create the MariaDB database if needed and set up the declared schema
+  setup      Create a MariaDB/MySQL database and set up its schema; initialize SQLite
   bootstrap  Alias for `setup`
   inspect    Read the existing database structure
   map        Compare declared and live tables
   plan       Preview schema changes without modifying the database
   apply      Apply a reviewed schema change plan
-  history    Inspect journaled MariaDB migrations
+  history    Inspect journaled MariaDB/MySQL migrations
 
 A named connection takes precedence over `DATABASE_URL`. Help never prints credentials.",
         "fmt" => "Command: zelyra fmt <file.zyl> [--check]\n\nFormat a Zelyra source file canonically.\n  --check  Check whether the file is formatted; do not write changes.\n\nExamples:\n  zelyra fmt main.zyl\n  zelyra fmt src/invoices.zyl --check\n\nNo database access required.",
@@ -214,9 +214,9 @@ A named connection takes precedence over `DATABASE_URL`. Help never prints crede
         "db-apply" => "Command: zelyra db apply <file.zyl> [--plan-id <sha256:…>] [--allow-risky]\n\nApply a schema change plan. With `--plan-id`, the current plan must match the reviewed identifier exactly.\n\nExamples:\n  zelyra db plan main.zyl --format json\n  zelyra db apply main.zyl --plan-id sha256:<id>\n\nRisky changes require `--allow-risky`; destructive changes retain a separate confirmation. Requires the configured project database.",
         "db-map" => "Command: zelyra db map <file.zyl> [--format text|json]\n\nShow tables grouped by source module, declared relationships, and undeclared live tables. Module ownership is informational.\n\nExample: zelyra db map main.zyl --format json\n\nRequires the configured project database.",
         "db-inspect" => "Command: zelyra db inspect <file.zyl>\n\nRead the current state of the configured project database.\n\nExample: zelyra db inspect main.zyl\n\nDoes not modify database objects.",
-        "db-create" => "Command: zelyra db create <file.zyl>\n\nEmit checked CREATE SQL for the declared tables. This command does not connect to a database and does not create the database or tables.\n\nExample:\n  zelyra db create main.zyl\n  zelyra db create main.zyl > schema.sql\n\nTo create the MariaDB database and apply its schema, run `zelyra db setup main.zyl`. For a local Docker project, run `zelyra setup . --all`.",
-        "db-setup" | "db-bootstrap" => "Command: zelyra db setup|bootstrap <file.zyl>\n\nMariaDB: create the declared database if needed and apply its schema. SQLite: initialize the configured file and tables. PostgreSQL: `setup` is unsupported; use `zelyra db apply`. Review pending changes first with `zelyra db plan`.\n\nExamples:\n  zelyra db plan main.zyl\n  zelyra db setup main.zyl\n\nRequires the configured project database.",
-        "db-history" => "Command: zelyra db history <file.zyl> [--format text|json]\n\nShow the progress of journaled MariaDB schema migrations.\n\nExample: zelyra db history main.zyl\n\nRequires the configured MariaDB project database.",
+        "db-create" => "Command: zelyra db create <file.zyl>\n\nEmit checked CREATE SQL for the declared tables. This command does not connect to a database and does not create the database or tables.\n\nExample:\n  zelyra db create main.zyl\n  zelyra db create main.zyl > schema.sql\n\nTo create the MariaDB or MySQL database and apply its schema, run `zelyra db setup main.zyl`. For a local MariaDB Docker project, run `zelyra setup . --all`.",
+        "db-setup" | "db-bootstrap" => "Command: zelyra db setup|bootstrap <file.zyl>\n\nMariaDB and MySQL: create the declared database if needed and apply its schema. SQLite: initialize the configured file and tables. PostgreSQL: `setup` is unsupported; use `zelyra db apply`. Review pending changes first with `zelyra db plan`.\n\nExamples:\n  zelyra db plan main.zyl\n  zelyra db setup main.zyl\n\nRequires the configured project database.",
+        "db-history" => "Command: zelyra db history <file.zyl> [--format text|json]\n\nShow the progress of journaled MariaDB and MySQL schema migrations.\n\nExample: zelyra db history main.zyl\n\nRequires the configured MariaDB or MySQL project database.",
         _ => english_common_help(key),
     }
 }
