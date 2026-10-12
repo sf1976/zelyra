@@ -1,14 +1,32 @@
-# Implemented in Zelyra 0.9.5
+# Implemented in Zelyra 0.9.6
 
-**Snapshot:** stable 0.9.5 · language compatibility line `0.1` · 2026-10-12
+**Snapshot:** stable 0.9.6 · language compatibility line `0.1` · 2026-10-12
 **Maturity:** experimental; not approved for production use
 
-This is an inventory of capabilities implemented in the stable Zelyra 0.9.5
+This is an inventory of capabilities implemented in the stable Zelyra 0.9.6
 release. It does not claim human acceptance; that remains scheduled for 1.0.0. It records delivered scope, not the full language vision
 or future plans. The [roadmap](ROADMAP.md) remains the source for unfinished
 work; the [changelog](../CHANGELOG.md) records what changed in each release.
 Links below lead to detailed instructions and test evidence so this page does
 not duplicate the handbook.
+
+## Changes in 0.9.6
+
+- ✅ On explicit request, `zelyra migrate laravel <source> --output <target>`
+  creates a separate Zelyra scaffold; `--report` may be supplied alongside it
+  or by itself. Provenance, ruleset version, mapping IDs, and unresolved tasks
+  are explicit. Business logic, credentials, `.env`, and production data are
+  not transferred. The candidate rejects overlapping paths, traversal,
+  symlinks, and existing targets, then validates generated files with the
+  compiler. See the [Migrator guide](laravel-migrator.en.md).
+- ✅ The shared notification feed scopes queries to active tenant membership,
+  counts unread entries, and hides expired and archived entries. Preference
+  records are editable. Integration tests cover two tenants and guessed foreign
+  IDs. This slice is tested against MariaDB; personal read receipts, scheduled
+  retention, and event-triggered mail are not included.
+- ✅ CI and the 0.9.6 database/platform checks are recorded in the
+  [candidate verification record](release-readiness/0.9.6-candidate-verification.md).
+  The release remains experimental; human acceptance is reserved for 1.0.0.
 
 ## Changes in 0.9.5
 

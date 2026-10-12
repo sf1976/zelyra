@@ -41,7 +41,7 @@ class ReleaseReadinessTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         for version, plans in RELEASE_PLAN_CHECKLISTS.items():
             failures = unfinished_gates(root, version)
-            if version in {"0.7.0", "0.8.0", "0.9.0", "0.9.3", "0.9.5"}:
+            if version in {"0.7.0", "0.8.0", "0.9.0", "0.9.3", "0.9.5", "0.9.6"}:
                 self.assertEqual(
                     failures,
                     [],

@@ -11,13 +11,21 @@ for database-backed business and web applications. It brings schema-aware SQL,
 forms, CRUD, views, and application logic together while keeping ordinary code
 and native SQL available.
 
-> **Current stable compiler release: 0.9.5 · language compatibility line: 0.1 · experimental**
+> **Current stable compiler release: 0.9.6 · language compatibility line: 0.1 · experimental**
 >
-> Zelyra 0.9.5 remains experimental and is not approved for production use. “Prove correctness” is a
+> Zelyra 0.9.6 remains experimental and is not approved for production use. “Prove correctness” is a
 > design goal: the current verifier covers a bounded subset and does not prove
 > arbitrary applications correct.
 
-The stable [`v0.9.5` release](https://github.com/sf1976/zelyra/releases/tag/v0.9.5) remains experimental and is not production-approved. It adds explicit SMTP mail delivery through the transactional MariaDB outbox. Independent human acceptance remains reserved for 1.0.0; this README is not acceptance evidence. See the [0.9.5 release notes](docs/release-notes/0.9.5.en.md), [database support matrix](docs/database-support.en.md), and [1.0.0 release plan](docs/release-plans/1.0.0.en.md).
+The stable [`v0.9.6` release](https://github.com/sf1976/zelyra/releases/tag/v0.9.6) remains experimental and is not production-approved. It adds a compiler-checked Laravel scaffold preview and a shared tenant-scoped notification feed. Personal read receipts and event-triggered mail belong to the next development step. Independent human acceptance remains reserved for 1.0.0; this README is not acceptance evidence. See the [0.9.6 release notes](docs/release-notes/0.9.6.en.md), [database support matrix](docs/database-support.en.md), and [1.0.0 release plan](docs/release-plans/1.0.0.en.md).
+
+## What changed in 0.9.6
+
+- On explicit request, the Laravel Migrator can create a separate compiler-checked Zelyra starter scaffold with source locations, mapping IDs, and open TODOs. It does not transfer Laravel business logic.
+- The shared in-app notification feed scopes by tenant and expiry, reports an unread count, and archives entries with soft deletion.
+- This notification slice is tested against MariaDB. Personal read receipts, scheduled retention, and SMTP event delivery belong to the next step.
+
+See the [0.9.6 release notes](docs/release-notes/0.9.6.en.md) and [0.9.6 release plan](docs/release-plans/0.9.6.en.md).
 
 ## What changed in 0.9.5
 

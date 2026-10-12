@@ -1,9 +1,9 @@
-# In Zelyra 0.9.5 umgesetzt
+# In Zelyra 0.9.6 umgesetzt
 
-**Stand:** stabiles Release 0.9.5 · Sprachkompatibilitätslinie `0.1` · 2026-10-12
+**Stand:** stabiles Release 0.9.6 · Sprachkompatibilitätslinie `0.1` · 2026-10-12
 **Reifegrad:** experimentell; nicht für den Produktiveinsatz freigegeben
 
-Diese Übersicht führt Funktionen auf, die im stabilen Release Zelyra 0.9.5
+Diese Übersicht führt Funktionen auf, die im stabilen Release Zelyra 0.9.6
 tatsächlich implementiert sind. Eine menschliche Abnahme wird nicht behauptet;
 sie bleibt bis 1.0.0 offen. Sie beschreibt den ausgelieferten Umfang,
 nicht die gesamte Sprachvision oder zukünftige Vorhaben. Die
@@ -11,6 +11,26 @@ nicht die gesamte Sprachvision oder zukünftige Vorhaben. Die
 [Changelog](../CHANGELOG.md) hält die Änderungen der Releases fest. Die Links
 führen zu ausführlichen Anleitungen und Testnachweisen, damit diese Seite das
 Handbuch nicht doppelt wiedergibt.
+
+## Änderungen in 0.9.6
+
+- ✅ `zelyra migrate laravel <quelle> --output <ziel>` erzeugt auf ausdrückliche
+  Anfrage ein separates Zelyra-Grundgerüst; `--report` kann parallel oder
+  allein angegeben werden. Herkunft, Regelsatzversion, Zuordnungs-IDs und
+  ungelöste Aufgaben werden kenntlich gemacht. Geschäftslogik, Zugangsdaten,
+  `.env` und Produktionsdaten werden nicht übertragen. Der Kandidat prüft
+  Pfadüberschneidungen, Traversal, Symlinks und vorhandene Ausgabeziele und
+  validiert erzeugte Dateien mit dem Compiler. Siehe [Migrator](laravel-migrator.de.md).
+- ✅ Der gemeinsame Benachrichtigungsfeed begrenzt Abfragen auf die aktive
+  Mandantenmitgliedschaft, zählt ungelesene Einträge und blendet abgelaufene
+  sowie archivierte Einträge aus. Einstellungsdatensätze sind bearbeitbar.
+  Integrationstests decken zwei Mandanten und erratene fremde IDs ab. Dieser
+  Funktionsschritt ist gegen MariaDB geprüft; persönliche Lesebestätigungen,
+  geplante Aufbewahrung und ereignisgesteuerte Mail sind nicht enthalten.
+- ✅ CI und die für 0.9.6 vorgesehenen Datenbank-/Plattformprüfungen werden im
+  [Kandidaten-Prüfnachweis](release-readiness/0.9.6-candidate-verification.md)
+  festgehalten. Das Release bleibt experimentell; menschliche Abnahme ist für
+  1.0.0 reserviert.
 
 ## Änderungen in 0.9.5
 

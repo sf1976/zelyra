@@ -4,6 +4,29 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language compatibility line remains `0.1`. Compiler and repository
 releases follow Semantic Versioning independently of the language line.
 
+## 0.9.6 — 2026-10-12
+
+- Add an opt-in Laravel scaffold preview alongside static analysis. It writes a
+  separate compiler-checked Zelyra starter project with versioned mapping IDs,
+  source provenance, and explicit TODOs; it does not execute Laravel or copy
+  business logic, secrets, or application data. / Eine optionale
+  Laravel-Gerüstvorschau neben der statischen Analyse ergänzen. Sie schreibt
+  ein separates, compilergeprüftes Zelyra-Startprojekt mit versionierten
+  Zuordnungs-IDs, Quellherkunft und ausdrücklichen TODOs; Laravel wird nicht
+  ausgeführt und Geschäftslogik, Geheimnisse oder Anwendungsdaten werden nicht
+  kopiert.
+- Add a tenant-scoped shared notification feed with unread counts, expiry
+  filtering, soft-delete archive, and editable preference records. Personal
+  read receipts, scheduled retention, and event-triggered mail remain planned
+  for 0.9.7. / Mandantengebundenen gemeinsamen Benachrichtigungsfeed mit
+  ungelesener Anzahl, Ablauf-Filter, Soft-Delete-Archiv und bearbeitbaren
+  Einstellungsdatensätzen ergänzen. Persönliche Lesebestätigungen, geplante
+  Aufbewahrung und ereignisgesteuerte Mail bleiben für 0.9.7 vorgesehen.
+- Harden generated paths and report handling against overlap, traversal,
+  symlink escape, pre-existing targets, and partial output. / Generierte Pfade
+  und Berichte gegen Überschneidung, Traversal, Symlink-Ausbruch, vorhandene
+  Ziele und Teilausgaben absichern.
+
 ## 0.9.5 — 2026-10-12
 
 - Add first-party typed text/HTML email with SMTP authentication, implicit TLS,
