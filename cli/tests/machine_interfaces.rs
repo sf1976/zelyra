@@ -571,6 +571,23 @@ fn laravel_migrator_creates_a_separate_compiler_checked_scaffold() {
         String::from_utf8_lossy(&check.stderr)
     );
 
+    let output_only_target = parent.join("output-only-scaffold");
+    let output_only = run(&[
+        "migrate",
+        "laravel",
+        project.to_str().unwrap(),
+        "--output",
+        output_only_target.to_str().unwrap(),
+    ]);
+    assert!(
+        output_only.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output_only.stdout),
+        String::from_utf8_lossy(&output_only.stderr)
+    );
+    assert!(output_only_target.join("main.zyl").is_file());
+    assert!(!String::from_utf8_lossy(&output_only.stdout).contains("Report:"));
+
     let blocked_target = parent.join("existing");
     fs::create_dir(&blocked_target).unwrap();
     fs::write(blocked_target.join("keep.txt"), "unchanged").unwrap();

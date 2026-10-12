@@ -199,6 +199,7 @@ fn generate_scaffold(
         }
     }
     let staging = staging.ok_or("could not allocate a unique staging directory")?;
+    let mut external_report_temporary = None;
     let result = (|| {
         let staged_report = staging.join("MIGRATION_REPORT.json");
         let analysis = analyze(&root, &staged_report, "json")?;
@@ -276,16 +277,76 @@ fn generate_scaffold(
         )
         .map_err(|_| "generated scaffold failed the Zelyra compiler check".to_owned())?;
 
-        let external_report_path =
-            if let Some((destination, requested_path)) = report_target.as_ref() {
-                let _ = analyze(&root, requested_path, format)?;
-                Some(destination.clone())
-            } else {
-                None
-            };
+        let staged_external_report = if let Some((destination, requested_path)) =
+            report_target.as_ref()
+        {
+            let extension = if format == "json" { "json" } else { "md" };
+            let report_parent = requested_path
+                .parent()
+                .ok_or("report needs a parent directory")?;
+            let report_parent = fs::canonicalize(report_parent)
+                .map_err(|_| "report parent directory does not exist".to_owned())?;
+            let mut temporary_report_directory = None;
+            for _ in 0..16 {
+                let candidate = report_parent.join(format!(
+                    ".zelyra-laravel-report-{}-{}",
+                    std::process::id(),
+                    OsRng.next_u64()
+                ));
+                match fs::create_dir(&candidate) {
+                    Ok(()) => {
+                        temporary_report_directory = Some(candidate);
+                        break;
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                    Err(error) => {
+                        return Err(format!(
+                            "could not create a private report staging directory: {error}"
+                        ));
+                    }
+                }
+            }
+            let temporary_report_directory = temporary_report_directory
+                .ok_or("could not allocate a temporary external report directory")?;
+            external_report_temporary = Some(temporary_report_directory.clone());
+            let temporary_report = temporary_report_directory.join(format!("report.{extension}"));
+            let analysis = analyze(&root, &temporary_report, format)?;
+            Some((destination.clone(), analysis.report_path))
+        } else {
+            None
+        };
         super::module_cli::publish_directory_no_replace(&staging, &target).map_err(|error| {
             format!("could not publish scaffold without replacing an existing target: {error}")
         })?;
+        let external_report_path = if let Some((destination, staged_report)) =
+            staged_external_report
+        {
+            if let Err(error) = fs::hard_link(&staged_report, &destination) {
+                let _ = fs::remove_dir_all(&target);
+                return Err(format!(
+                    "could not publish the external report without replacing an existing file: {error}"
+                ));
+            }
+            if let Err(error) = fs::remove_file(&staged_report) {
+                let _ = fs::remove_file(&destination);
+                let _ = fs::remove_dir_all(&target);
+                return Err(format!(
+                    "could not finalize the scaffold report files: {error}"
+                ));
+            }
+            if let Some(temporary_report_directory) = external_report_temporary.take() {
+                if let Err(error) = fs::remove_dir_all(&temporary_report_directory) {
+                    let _ = fs::remove_file(&destination);
+                    let _ = fs::remove_dir_all(&target);
+                    return Err(format!(
+                        "could not remove the private report staging directory: {error}"
+                    ));
+                }
+            }
+            Some(destination)
+        } else {
+            None
+        };
         Ok(CommandOutput {
             report_path: external_report_path,
             scaffold_path: Some(target.clone()),
@@ -294,6 +355,9 @@ fn generate_scaffold(
     })();
     if staging.exists() {
         let _ = fs::remove_dir_all(&staging);
+    }
+    if let Some(temporary_report) = external_report_temporary {
+        let _ = fs::remove_dir_all(temporary_report);
     }
     result
 }
