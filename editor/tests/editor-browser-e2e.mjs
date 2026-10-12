@@ -146,7 +146,14 @@ try {
   assert.equal(await mainCompletions.count(), 1, "completion must deduplicate the project entry point");
   await page.keyboard.press("Escape");
 
+  await page.locator('.tree-item.file[title="main.zyl"]').click();
+  await page.waitForFunction(() =>
+    document.querySelector("#active-file")?.textContent === "main.zyl" &&
+    document.querySelector(".cm-content")?.textContent.includes("import"),
+  );
+  await page.locator(".cm-scroller").evaluate((element) => { element.scrollTop = element.scrollHeight; });
   const callSite = page.locator(".cm-line", { hasText: "math::sum" });
+  await callSite.waitFor();
   await callSite.click();
   const callSiteOffset = (await callSite.textContent()).trimStart().indexOf("sum");
   await page.keyboard.press("Home");
@@ -225,7 +232,9 @@ try {
   await page.locator('.tree-item.file[title="main.zyl"]').click();
   await page.waitForFunction(() => document.querySelector("#active-file")?.textContent === "main.zyl");
 
+  await page.locator(".cm-scroller").evaluate((element) => { element.scrollTop = element.scrollHeight; });
   const functionDeclaration = page.locator(".cm-line", { hasText: "fn main" });
+  await functionDeclaration.waitFor();
   await functionDeclaration.click();
   await page.keyboard.press("Home");
   await page.keyboard.press("ArrowRight");
