@@ -653,7 +653,11 @@ fn preserve_tenant_selector_in_html(html: &str, tenant_id: i64) -> String {
     output
 }
 
-fn tenant_cache_policy(mut response: Response, tenant_context: Option<&TenantContext>) -> Response {
+fn tenant_cache_policy(
+    mut response: Response,
+    tenant_context: Option<&TenantContext>,
+    recipient_scoped: bool,
+) -> Response {
     if let Some(tenant_context) = tenant_context {
         response.body = preserve_tenant_selector_in_html(&response.body, tenant_context.tenant_id);
         if let Some(location) = response.location.as_mut() {
@@ -661,7 +665,11 @@ fn tenant_cache_policy(mut response: Response, tenant_context: Option<&TenantCon
         }
         response.with_header("Cache-Control", "private, no-store")
     } else {
-        response
+        if recipient_scoped {
+            response.with_header("Cache-Control", "private, no-store")
+        } else {
+            response
+        }
     }
 }
 
@@ -1303,6 +1311,7 @@ impl WebApp {
                         form.layout_html.as_deref(),
                     ),
                     tenant_context.as_ref(),
+                    form.recipient_column.is_some(),
                 );
             }
         }
@@ -1350,6 +1359,7 @@ impl WebApp {
                         crud.layout_html.as_deref(),
                     ),
                     tenant_context.as_ref(),
+                    crud.recipient_column.is_some(),
                 );
             }
             for action in &crud.actions {
@@ -1400,6 +1410,7 @@ impl WebApp {
                             action.form.layout_html.as_deref(),
                         ),
                         tenant_context.as_ref(),
+                        action.form.recipient_column.is_some(),
                     );
                 }
             }
@@ -1454,6 +1465,7 @@ impl WebApp {
                         crud.layout_html.as_deref(),
                     ),
                     tenant_context.as_ref(),
+                    crud.recipient_column.is_some(),
                 );
             }
             let delete_path = format!("{}/{{id}}/delete", crud.path.trim_end_matches('/'));
@@ -1507,6 +1519,7 @@ impl WebApp {
                         crud.layout_html.as_deref(),
                     ),
                     tenant_context.as_ref(),
+                    crud.recipient_column.is_some(),
                 );
             }
             let detail_path = format!("{}/{{id}}", crud.path.trim_end_matches('/'));
@@ -1554,6 +1567,7 @@ impl WebApp {
                         crud.layout_html.as_deref(),
                     ),
                     tenant_context.as_ref(),
+                    crud.recipient_column.is_some(),
                 );
             }
         }
