@@ -200,6 +200,8 @@
   "shell.overview": "Übersicht",
   "crud.archive.active": "Aktive Datensätze anzeigen",
   "crud.unread_count": "Ungelesene Benachrichtigungen",
+  "crud.mark_read": "Als gelesen markieren",
+  "crud.marked_read": "Benachrichtigung als gelesen markiert.",
   "crud.archive.archived": "Archivierte Datensätze anzeigen",
   "crud.create": "Neu anlegen",
   "query.legend": "Suche und Filter",

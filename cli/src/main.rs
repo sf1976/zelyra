@@ -6971,6 +6971,18 @@ fn validate_cruds(path: &str, program: &zelyra_ast::Program, schema: &Schema) ->
                 valid = false;
             }
         }
+        if crud.unread_column.is_some()
+            && (!crud.requires_auth
+                || !program.auth.iter().any(|auth| auth.session_table.is_some()))
+        {
+            diagnostic_with_span(
+                path,
+                "E-CRUD-007",
+                "CRUD unread markers require `requires auth` and database-backed auth sessions",
+                crud.span,
+            );
+            valid = false;
+        }
         if let Some(tenant_column) = crud.tenant_column.as_deref() {
             let fail_tenant = |message: &str| {
                 diagnostic_with_span(path, "E-TENANT-002", message, crud.span);

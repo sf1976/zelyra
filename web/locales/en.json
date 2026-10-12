@@ -200,6 +200,8 @@
   "shell.overview": "Overview",
   "crud.archive.active": "Show active records",
   "crud.unread_count": "Unread notifications",
+  "crud.mark_read": "Mark as read",
+  "crud.marked_read": "Notification marked as read.",
   "crud.archive.archived": "Show archived records",
   "crud.create": "Create new",
   "query.legend": "Search and filters",

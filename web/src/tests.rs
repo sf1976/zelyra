@@ -3279,7 +3279,7 @@ fn crud_delete_requires_csrf() {
 
 #[test]
 fn renders_crud_delete_confirmation_form() {
-    let route = CrudRoute {
+    let mut route = CrudRoute {
         path: "/machines".into(),
         title: "Machines".into(),
         table: "machines".into(),
@@ -3316,6 +3316,43 @@ fn renders_crud_delete_confirmation_form() {
     assert!(html.contains("method=\"post\" action=\"/machines/1/delete\""));
     assert!(html.contains("name=\"_zelyra_csrf\" value=\"crud-csrf\""));
     assert!(html.contains(">Delete</button>"));
+
+    route.unread_column = Some("read_at".into());
+    let unread_html = localize_html(
+        &render_crud_detail_with_actions(
+            &route,
+            &["id", "read_at"],
+            &["1".into(), "\\N".into()],
+            "1",
+            CrudUiActions {
+                create: false,
+                edit: false,
+                delete: false,
+                restore: false,
+                custom: Vec::new(),
+            },
+            UiLanguage::English,
+        ),
+        UiLanguage::English,
+    );
+    assert!(unread_html.contains("method=\"post\" action=\"/machines/1/read\""));
+    assert!(unread_html.contains(">Mark as read</button>"));
+    assert!(unread_html.contains("name=\"_zelyra_csrf\" value=\"crud-csrf\""));
+    let read_html = render_crud_detail_with_actions(
+        &route,
+        &["id", "read_at"],
+        &["1".into(), "2026-10-12 09:00:00".into()],
+        "1",
+        CrudUiActions {
+            create: false,
+            edit: false,
+            delete: false,
+            restore: false,
+            custom: Vec::new(),
+        },
+        UiLanguage::English,
+    );
+    assert!(!read_html.contains("/machines/1/read"));
 
     let restricted_html = render_crud_detail_with_actions(
         &route,

@@ -70,7 +70,7 @@ for command in mariadb curl; do
 done
 [[ -x "${zelyra_bin}" ]] || { echo "error: Zelyra binary not found at ${zelyra_bin}" >&2; exit 1; }
 
-echo "[1/5] applying tenant notification schema"
+echo "[1/7] applying tenant and recipient notification schema"
 DATABASE_URL="${database_url}" "${zelyra_bin}" db setup "${project_file}"
 password_hash="$(printf '%s\n' "${password}" | "${zelyra_bin}" auth hash-password --stdin)"
 other_password_hash="$(printf '%s\n' "${other_password}" | "${zelyra_bin}" auth hash-password --stdin)"
@@ -95,7 +95,7 @@ notification_other_id="$(client --batch --skip-column-names -e "SELECT id FROM n
 notification_b_id="$(client --batch --skip-column-names -e "SELECT id FROM notifications WHERE title = '${tenant_b_title}'")"
 [[ -n "${notification_a_id}" && -n "${notification_other_id}" && -n "${notification_b_id}" ]]
 
-echo "[2/5] starting the app and authenticating"
+echo "[2/7] starting the app and authenticating"
 "${zelyra_bin}" serve "${project_file}" "${address}" >"${temp_dir}/server.log" 2>&1 &
 server_pid=$!
 for _ in $(seq 1 30); do
@@ -110,11 +110,11 @@ login_status="$(curl --silent --show-error --output /dev/null --write-out '%{htt
     --data-urlencode "password=${password}" "${base_url}/login")"
 [[ "${login_status}" == "303" ]]
 
-echo "[3/5] requiring an explicit tenant selection"
+echo "[3/7] requiring an explicit tenant selection"
 ambiguous="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --cookie "${cookie}" "${base_url}/notifications")"
 [[ "${ambiguous}" == "403" ]]
 
-echo "[4/5] showing read history while counting only current unread notifications in tenant A"
+echo "[4/7] showing read history while counting only current unread notifications in tenant A"
 status_a="$(curl --silent --show-error --output "${temp_dir}/tenant-a.html" --write-out '%{http_code}' \
     --cookie "${cookie}" "${base_url}/notifications?tenant_id=101")"
 [[ "${status_a}" == "200" ]]
@@ -127,7 +127,7 @@ grep -Fq "${tenant_a_read}" "${temp_dir}/tenant-a.html"
 ! grep -Fq '\\N' "${temp_dir}/tenant-a.html"
 grep -Eq 'Unread notifications: 1|Ungelesene Benachrichtigungen: 1' "${temp_dir}/tenant-a.html"
 
-echo "[5/5] separating tenants and hiding guessed cross-tenant IDs"
+echo "[5/7] separating tenants and hiding guessed cross-tenant IDs"
 status_b="$(curl --silent --show-error --output "${temp_dir}/tenant-b.html" --write-out '%{http_code}' \
     --cookie "${cookie}" --header 'X-Zelyra-Tenant: 202' "${base_url}/notifications")"
 [[ "${status_b}" == "200" ]]
@@ -158,4 +158,30 @@ grep -Fq "${tenant_a_other_title}" "${temp_dir}/other-user.html"
 ! grep -Fq "${tenant_a_title}" "${temp_dir}/other-user.html"
 grep -Eq 'Unread notifications: 1|Ungelesene Benachrichtigungen: 1' "${temp_dir}/other-user.html"
 
-echo "MariaDB notification-center recipient and tenant isolation, unread count, expiry, and direct-ID checks passed."
+echo "[7/7] marking an owned notification as read with CSRF protection"
+detail_status="$(curl --silent --show-error --output "${temp_dir}/notification-detail.html" --write-out '%{http_code}' \
+    --cookie "${cookie}" "${base_url}/notifications/${notification_a_id}?tenant_id=101")"
+[[ "${detail_status}" == "200" ]]
+grep -Eq 'Mark as read|Als gelesen markieren' "${temp_dir}/notification-detail.html"
+read_csrf="$(sed -n 's/.*name="_zelyra_csrf" value="\([^"]*\)".*/\1/p' "${temp_dir}/notification-detail.html")"
+read_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+    --header "Origin: ${base_url}" --cookie "${cookie}" \
+    --data-urlencode "_zelyra_csrf=${read_csrf}" \
+    "${base_url}/notifications/${notification_a_id}/read?tenant_id=101")"
+[[ "${read_status}" == "303" ]]
+foreign_read_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+    --header "Origin: ${base_url}" --cookie "${cookie}" \
+    --data-urlencode "_zelyra_csrf=${read_csrf}" \
+    "${base_url}/notifications/${notification_other_id}/read?tenant_id=101")"
+[[ "${foreign_read_status}" == "404" ]]
+post_read_status="$(curl --silent --show-error --output "${temp_dir}/post-read.html" --write-out '%{http_code}' \
+    --cookie "${cookie}" "${base_url}/notifications?tenant_id=101")"
+[[ "${post_read_status}" == "200" ]]
+grep -Eq 'Unread notifications: 0|Ungelesene Benachrichtigungen: 0' "${temp_dir}/post-read.html"
+grep -Eq 'Notification marked as read\.|Benachrichtigung als gelesen markiert\.' "${temp_dir}/post-read.html"
+read_detail_status="$(curl --silent --show-error --output "${temp_dir}/read-detail.html" --write-out '%{http_code}' \
+    --cookie "${cookie}" "${base_url}/notifications/${notification_a_id}?tenant_id=101")"
+[[ "${read_detail_status}" == "200" ]]
+! grep -Eq 'Mark as read|Als gelesen markieren' "${temp_dir}/read-detail.html"
+
+echo "MariaDB notification-center recipient isolation, CSRF-protected read receipt, unread count, expiry, and tenant-boundary checks passed."
