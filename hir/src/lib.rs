@@ -188,6 +188,10 @@ pub enum HirExprKind {
         enum_name: String,
         variant: String,
     },
+    FunctionValue {
+        name: String,
+        function: Option<FunctionId>,
+    },
     Index {
         target: Box<HirExpr>,
         index: Box<HirExpr>,
@@ -596,6 +600,16 @@ impl<'a> Resolver<'a> {
                     .map(|(name, value)| (name.clone(), self.expr(value)))
                     .collect(),
             },
+            ExprKind::FunctionValue(name) => {
+                let function = self.functions.get(name).copied();
+                if function.is_none() {
+                    self.error(expr.span, format!("unknown function `{name}`"));
+                }
+                HirExprKind::FunctionValue {
+                    name: name.clone(),
+                    function,
+                }
+            }
             ExprKind::Variable(name) => match self.lookup(name) {
                 Some(local) => HirExprKind::Local(local),
                 None if name.split_once("::").is_some() => {
@@ -623,6 +637,7 @@ impl<'a> Resolver<'a> {
             } => {
                 let function = self.functions.get(name).copied();
                 if function.is_none()
+                    && self.lookup(name).is_none()
                     && !name
                         .rsplit_once("::")
                         .is_some_and(|(enum_name, _)| self.enum_names.contains(enum_name))
@@ -1047,6 +1062,39 @@ mod tests {
                 },
                 ..
             } if name == "read_console"
+        ));
+    }
+
+    #[test]
+    fn lowers_function_values_and_resolves_indirect_calls() {
+        let program = parse(
+            &lex("fn increment(value: Int) -> Int { return value + 1 } fn apply(callback: Function<(Int) -> Int>, value: Int) -> Int { return callback(value) } fn main() { saved = &increment print(apply(saved, 4)) }")
+                .unwrap(),
+        )
+        .unwrap();
+        let hir = lower(&program).unwrap();
+        assert!(matches!(
+            hir.functions[2].body.statements[0],
+            HirStmt::Let {
+                value: HirExpr {
+                    kind: HirExprKind::FunctionValue {
+                        ref name,
+                        function: Some(FunctionId(0)),
+                    },
+                    ..
+                },
+                ..
+            } if name == "increment"
+        ));
+        assert!(matches!(
+            hir.functions[1].body.statements[0],
+            HirStmt::Return {
+                value: Some(HirExpr {
+                    kind: HirExprKind::Call { ref name, function: None, .. },
+                    ..
+                }),
+                ..
+            } if name == "callback"
         ));
     }
 }

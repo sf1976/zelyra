@@ -444,9 +444,12 @@ Konstrukte absichtlich.
   Code `E-TYPE-MATCH-001`. Die Analyse behandelt Sequenzen, Bedingungen, `match`,
   Schleifen und Kontrollflussabbrüche konservativ; eine möglicherweise
   terminierende Schleife gilt nicht als garantierte Rückgabe.
-- Verschachtelte Funktionsaufrufe sind auf 32 Ebenen begrenzt und werden bei
+- Verschachtelte Funktionsaufrufe werden zur Laufzeit begrenzt und bei
   Überschreitung mit einer quellgebundenen Runtime-Diagnose abgebrochen. Das
   schützt vor Stackabstürzen, ist aber kein konfigurierbares Rekursionslimit.
+  Zusätzliche Tests in 0.9.9 zeigten, dass die zuvor gewählte Grenze auf
+  kleinen Runtime-Stacks noch abstürzen konnte; sie ist deshalb auf 24 aktive
+  Aufruf-Frames abgesenkt.
 - Eigene Enums unterstützen payloadfreie und payloadtragende Varianten.
   `enum Status { Draft Paid }` sowie `enum Event { Created(Int) Paid(Date) }`
   erzeugen typsichere Werte. Muster binden Nutzdaten, und `match` muss jede
@@ -508,8 +511,44 @@ eine falsche Anzahl expliziter Typargumente und Typparameter, die deklarierte
 Typen verdecken, verwenden `E-TYPE-GENERIC-001`. Generische Funktionen dürfen
 andere generische Funktionen aufrufen. Der Type-System-Beispiellauf deckt
 Inference, explizite Typen, Arrays, `Option`, Modulimporte und erwartete
-Compilerfehler ab. Eigene generische Records und Enums, allgemeine Constraints
-und Funktionswerte bleiben weitere 0.9.9-Arbeit.
+Compilerfehler ab. Eigene generische Records und Enums sowie allgemeine
+Constraints bleiben weitere 0.9.9-Arbeit.
+
+### Benannte Funktionswerte in 0.9.9
+
+Der 0.9.9-Entwicklungszweig kann Referenzen auf benannte, nicht generische
+Funktionen speichern, übergeben und indirekt aufrufen. Ein vorangestelltes `&`
+kennzeichnet die Referenz; es ruft die Funktion nicht auf:
+
+~~~zelyra
+fn increment(value: Int) -> Int { return value + 1 }
+
+fn apply(callback: Function<(Int) -> Int>, value: Int) -> Int {
+    return callback(value)
+}
+
+fn main() {
+    transform = &increment
+    print(apply(transform, 8))
+}
+~~~
+
+Funktionswerte besitzen ausdrückliche Parameter- und Rückgabetypen. Ein
+effektbehafteter Funktionstyp nennt seine benötigten Capabilities mit
+`uses {Capability}`. Die Anforderungen der referenzierten Funktion müssen in
+den deklarierten Funktionstyp passen; auch die aufrufende Funktion eines
+indirekten Aufrufs muss diese Anforderungen deklarieren. Die Typprüfung folgt
+Funktionswerten durch lokale Bindungen und Zuweisungen; die Laufzeit prüft die
+Capability zusätzlich vor dem Aufruf. Öffentliche Funktionen dürfen über
+explizite Modulaliase referenziert werden, etwa `&math::increment`; private
+Funktionen sind nicht modulübergreifend verfügbar. `function` bleibt ein
+gewöhnlicher Bezeichner.
+
+Closures, eingefangene lokale Funktionen und Referenzen auf generische
+Funktionen sind in diesem begrenzten Schritt nicht enthalten. Funktionswerte
+haben keine Gleichheits- oder Identitätssemantik; sie sind keine JSON- oder
+SQL-Daten und werden an diesen Grenzen abgewiesen. Ihre Signaturen stehen
+Compilerwerkzeugen zur Verfügung, aber nicht als HTTP-Schemadaten.
 
 ### Enum-Varianten mit Nutzdaten in 0.9.9
 

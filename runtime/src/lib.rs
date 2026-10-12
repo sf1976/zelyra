@@ -320,6 +320,7 @@ fn api_json_type_error(
         }
         Type::Result(ok, error) => api_json_type_error(ok, program, visiting)
             .or_else(|| api_json_type_error(error, program, visiting)),
+        Type::Function { .. } => Some("function values cannot cross an API JSON boundary".into()),
         Type::Named(name) => {
             if !visiting.insert(name.clone()) {
                 return None;
@@ -1603,6 +1604,7 @@ fn expression_contains_variable(expression: &Expr, name: &str) -> bool {
         | ExprKind::Bool(..)
         | ExprKind::String(..)
         | ExprKind::Char(..)
+        | ExprKind::FunctionValue(..)
         | ExprKind::Sql { .. } => false,
     }
 }
@@ -2969,6 +2971,7 @@ fn constant_value(expression: &Expr) -> Option<ConstantValue> {
         | ExprKind::Index { .. }
         | ExprKind::Field { .. }
         | ExprKind::Variable(_)
+        | ExprKind::FunctionValue(_)
         | ExprKind::Call { .. }
         | ExprKind::Sql { .. }
         | ExprKind::Await(_)
@@ -3092,6 +3095,23 @@ pub fn check_capabilities_with_grants(
             }
         }
         check_capability_block(&function.body, function, &functions, &declared, &mut errors);
+        let mut function_values = HashMap::new();
+        for parameter in &function.params {
+            if let Type::Function { capabilities, .. } = &parameter.ty {
+                function_values.insert(
+                    parameter.name.clone(),
+                    capabilities.iter().cloned().collect::<HashSet<_>>(),
+                );
+            }
+        }
+        check_indirect_capability_block(
+            &function.body,
+            function,
+            &functions,
+            &declared,
+            &mut function_values,
+            &mut errors,
+        );
         for contract in function.requires.iter().chain(&function.ensures) {
             check_capability_expr(contract, function, &functions, &declared, &mut errors);
         }
@@ -3101,6 +3121,281 @@ pub fn check_capabilities_with_grants(
         Ok(())
     } else {
         Err(errors)
+    }
+}
+
+fn function_value_capabilities(
+    expression: &Expr,
+    values: &HashMap<String, HashSet<String>>,
+    functions: &HashMap<&str, &Function>,
+) -> Option<HashSet<String>> {
+    match &expression.kind {
+        ExprKind::FunctionValue(name) => functions
+            .get(name.as_str())
+            .map(|function| function.capabilities.iter().cloned().collect()),
+        ExprKind::Variable(name) => values.get(name).cloned(),
+        ExprKind::Call { name, .. } => functions
+            .get(name.as_str())
+            .and_then(|function| function.return_type.as_ref())
+            .and_then(|ty| match ty {
+                Type::Function { capabilities, .. } => Some(capabilities.iter().cloned().collect()),
+                _ => None,
+            }),
+        ExprKind::Match { arms, .. } => {
+            let mut found = false;
+            let mut capabilities = HashSet::new();
+            for arm in arms {
+                if let Some(arm_capabilities) =
+                    function_value_capabilities(&arm.value, values, functions)
+                {
+                    found = true;
+                    capabilities.extend(arm_capabilities);
+                }
+            }
+            found.then_some(capabilities)
+        }
+        _ => None,
+    }
+}
+
+fn check_indirect_capability_block(
+    block: &Block,
+    function: &Function,
+    functions: &HashMap<&str, &Function>,
+    declared: &HashSet<&str>,
+    values: &mut HashMap<String, HashSet<String>>,
+    errors: &mut Vec<CapabilityError>,
+) {
+    for statement in &block.statements {
+        match statement {
+            Stmt::Let {
+                name, ty, value, ..
+            } => {
+                check_indirect_capability_expr(value, function, declared, values, errors);
+                let declared_effects = ty.as_ref().and_then(|ty| match ty {
+                    Type::Function { capabilities, .. } => {
+                        Some(capabilities.iter().cloned().collect())
+                    }
+                    _ => None,
+                });
+                if let Some(capabilities) = declared_effects
+                    .or_else(|| function_value_capabilities(value, values, functions))
+                {
+                    values.insert(name.clone(), capabilities);
+                }
+            }
+            Stmt::BindOrAssign { name, value, .. } => {
+                check_indirect_capability_expr(value, function, declared, values, errors);
+                if let Some(capabilities) = function_value_capabilities(value, values, functions) {
+                    values.entry(name.clone()).or_default().extend(capabilities);
+                } else {
+                    values.remove(name);
+                }
+            }
+            Stmt::Expr(expression)
+            | Stmt::Return {
+                value: Some(expression),
+                ..
+            } => {
+                check_indirect_capability_expr(expression, function, declared, values, errors);
+            }
+            Stmt::If {
+                condition,
+                then_block,
+                else_block,
+                ..
+            } => {
+                check_indirect_capability_expr(condition, function, declared, values, errors);
+                let before = values.clone();
+                let mut then_values = before.clone();
+                check_indirect_capability_block(
+                    then_block,
+                    function,
+                    functions,
+                    declared,
+                    &mut then_values,
+                    errors,
+                );
+                let mut else_values = before.clone();
+                if let Some(else_block) = else_block {
+                    check_indirect_capability_block(
+                        else_block,
+                        function,
+                        functions,
+                        declared,
+                        &mut else_values,
+                        errors,
+                    );
+                }
+                *values = merge_function_value_capabilities(&before, &[then_values, else_values]);
+            }
+            Stmt::While {
+                condition,
+                invariants,
+                body,
+                ..
+            } => {
+                check_indirect_capability_expr(condition, function, declared, values, errors);
+                for invariant in invariants {
+                    check_indirect_capability_expr(invariant, function, declared, values, errors);
+                }
+                let before = values.clone();
+                let mut body_values = before.clone();
+                check_indirect_capability_block(
+                    body,
+                    function,
+                    functions,
+                    declared,
+                    &mut body_values,
+                    errors,
+                );
+                *values = merge_function_value_capabilities(&before, &[body_values]);
+            }
+            Stmt::For { iterable, body, .. } => {
+                check_indirect_capability_expr(iterable, function, declared, values, errors);
+                let before = values.clone();
+                let mut body_values = before.clone();
+                check_indirect_capability_block(
+                    body,
+                    function,
+                    functions,
+                    declared,
+                    &mut body_values,
+                    errors,
+                );
+                *values = merge_function_value_capabilities(&before, &[body_values]);
+            }
+            Stmt::Loop {
+                invariants, body, ..
+            } => {
+                for invariant in invariants {
+                    check_indirect_capability_expr(invariant, function, declared, values, errors);
+                }
+                let before = values.clone();
+                let mut body_values = before.clone();
+                check_indirect_capability_block(
+                    body,
+                    function,
+                    functions,
+                    declared,
+                    &mut body_values,
+                    errors,
+                );
+                *values = merge_function_value_capabilities(&before, &[body_values]);
+            }
+            Stmt::Match { value, arms, .. } => {
+                check_indirect_capability_expr(value, function, declared, values, errors);
+                let before = values.clone();
+                let mut branches = Vec::new();
+                for arm in arms {
+                    let mut branch = before.clone();
+                    check_indirect_capability_block(
+                        &arm.body,
+                        function,
+                        functions,
+                        declared,
+                        &mut branch,
+                        errors,
+                    );
+                    branches.push(branch);
+                }
+                *values = merge_function_value_capabilities(&before, &branches);
+            }
+            Stmt::Transaction { body, .. } | Stmt::Parallel { body, .. } => {
+                let before = values.clone();
+                let mut nested = before.clone();
+                check_indirect_capability_block(
+                    body,
+                    function,
+                    functions,
+                    declared,
+                    &mut nested,
+                    errors,
+                );
+                *values = merge_function_value_capabilities(&before, &[nested]);
+            }
+            Stmt::Return { value: None, .. } | Stmt::Break { .. } | Stmt::Continue { .. } => {}
+        }
+    }
+}
+
+fn merge_function_value_capabilities(
+    before: &HashMap<String, HashSet<String>>,
+    branches: &[HashMap<String, HashSet<String>>],
+) -> HashMap<String, HashSet<String>> {
+    let mut merged = before.clone();
+    for name in before.keys() {
+        for branch in branches {
+            if let Some(capabilities) = branch.get(name) {
+                merged
+                    .entry(name.clone())
+                    .or_default()
+                    .extend(capabilities.iter().cloned());
+            }
+        }
+    }
+    merged
+}
+
+fn check_indirect_capability_expr(
+    expression: &Expr,
+    function: &Function,
+    declared: &HashSet<&str>,
+    values: &HashMap<String, HashSet<String>>,
+    errors: &mut Vec<CapabilityError>,
+) {
+    let mut pending = vec![expression];
+    while let Some(expression) = pending.pop() {
+        match &expression.kind {
+            ExprKind::Call { name, args, .. } => {
+                if let Some(capabilities) = values.get(name) {
+                    for capability in capabilities {
+                        require_capability(
+                            capability,
+                            &format!("indirect call through `{name}`"),
+                            expression.span,
+                            function,
+                            declared,
+                            errors,
+                        );
+                    }
+                }
+                pending.extend(args);
+            }
+            ExprKind::Unary { expr, .. } | ExprKind::Await(expr) => pending.push(expr),
+            ExprKind::Binary { left, right, .. } => {
+                pending.push(left);
+                pending.push(right);
+            }
+            ExprKind::Array(values) => pending.extend(values),
+            ExprKind::Map(entries) => {
+                for (key, value) in entries {
+                    pending.push(key);
+                    pending.push(value);
+                }
+            }
+            ExprKind::Record { fields, .. } => {
+                pending.extend(fields.iter().map(|(_, value)| value));
+            }
+            ExprKind::Index { target, index } => {
+                pending.push(target);
+                pending.push(index);
+            }
+            ExprKind::Field { target, .. } => pending.push(target),
+            ExprKind::Match { value, arms } => {
+                pending.push(value);
+                pending.extend(arms.iter().map(|arm| &arm.value));
+            }
+            ExprKind::Sql { .. }
+            | ExprKind::Int(_)
+            | ExprKind::UInt(_)
+            | ExprKind::Float(_)
+            | ExprKind::Bool(_)
+            | ExprKind::String(_)
+            | ExprKind::Char(_)
+            | ExprKind::FunctionValue(_)
+            | ExprKind::Variable(_) => {}
+        }
     }
 }
 
@@ -3389,7 +3684,8 @@ fn check_capability_expr(
             | ExprKind::Bool(..)
             | ExprKind::String(..)
             | ExprKind::Char(..)
-            | ExprKind::Variable(..) => {}
+            | ExprKind::Variable(..)
+            | ExprKind::FunctionValue(..) => {}
         }
     }
 }
@@ -3467,6 +3763,7 @@ struct FunctionSignature {
     type_params: Vec<String>,
     params: Vec<Type>,
     return_type: Type,
+    capabilities: Vec<String>,
 }
 
 struct Checker<'a> {
@@ -3587,6 +3884,7 @@ pub fn check(program: &Program) -> Result<(), Vec<TypeError>> {
                         .map(|param| param.ty.clone())
                         .collect(),
                     return_type: function.return_type.clone().unwrap_or(Type::Unknown),
+                    capabilities: function.capabilities.clone(),
                 },
             );
         }
@@ -4162,6 +4460,25 @@ impl<'a> Checker<'a> {
                 }
             }
             Type::HttpResult(inner) => self.check_type(inner, span),
+            Type::Function {
+                params,
+                return_type,
+                capabilities,
+            } => {
+                for parameter in params {
+                    self.check_type(parameter, span);
+                }
+                self.check_type(return_type, span);
+                for capability in capabilities {
+                    if !KNOWN_CAPABILITIES.contains(&capability.as_str()) {
+                        self.error_with_code(
+                            "E-TYPE-FUNCTION-001",
+                            span,
+                            format!("unknown capability `{capability}` in function type"),
+                        );
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -4437,6 +4754,31 @@ impl<'a> Checker<'a> {
             ExprKind::Bool(_) => Type::Bool,
             ExprKind::String(_) => Type::String,
             ExprKind::Char(_) => Type::Char,
+            ExprKind::FunctionValue(name) => {
+                let Some(signature) = self.functions.get(name).cloned() else {
+                    self.error_with_code(
+                        "E-TYPE-FUNCTION-001",
+                        expr.span,
+                        format!("unknown function value `{name}`"),
+                    );
+                    return Type::Unknown;
+                };
+                if !signature.type_params.is_empty() {
+                    self.error_with_code(
+                        "E-TYPE-FUNCTION-001",
+                        expr.span,
+                        format!(
+                            "generic function `{name}` cannot be stored as a function value yet"
+                        ),
+                    );
+                    return Type::Unknown;
+                }
+                Type::Function {
+                    params: signature.params,
+                    return_type: Box::new(signature.return_type),
+                    capabilities: signature.capabilities,
+                }
+            }
             ExprKind::Array(values) => {
                 let mut element = Type::Unknown;
                 for value in values {
@@ -5494,6 +5836,40 @@ impl<'a> Checker<'a> {
                     let path = self.check_expr(&args[0], scopes);
                     self.expect_type(&Type::String, &path, args[0].span);
                     Type::Array(Box::new(Type::String))
+                } else if let Some(variable) = self.lookup(scopes, name).cloned() {
+                    let Type::Function {
+                        params,
+                        return_type,
+                        ..
+                    } = variable.ty
+                    else {
+                        self.error(expr.span, format!("value `{name}` is not callable"));
+                        return Type::Unknown;
+                    };
+                    if !type_args.is_empty() {
+                        self.error_with_code(
+                            "E-TYPE-FUNCTION-001",
+                            expr.span,
+                            "indirect function calls do not accept explicit type arguments",
+                        );
+                    }
+                    if args.len() != params.len() {
+                        self.error(
+                            expr.span,
+                            format!(
+                                "function value `{name}` expects {} argument(s), found {}",
+                                params.len(),
+                                args.len()
+                            ),
+                        );
+                    }
+                    for (index, argument) in args.iter().enumerate() {
+                        let actual = self.check_expr(argument, scopes);
+                        if let Some(expected) = params.get(index) {
+                            self.expect_type(expected, &actual, argument.span);
+                        }
+                    }
+                    *return_type
                 } else if let Some(signature) = self.functions.get(name).cloned() {
                     if args.len() != signature.params.len() {
                         self.error(
@@ -5743,6 +6119,15 @@ impl<'a> Checker<'a> {
                     }
                 }
                 BinaryOp::Equal | BinaryOp::NotEqual => {
+                    if matches!(&left_type, Type::Function { .. })
+                        || matches!(&right_type, Type::Function { .. })
+                    {
+                        self.error_with_code(
+                            "E-TYPE-FUNCTION-001",
+                            span,
+                            "function values cannot be compared",
+                        );
+                    }
                     self.expect_type(&left_type, &right_type, right.span);
                     Type::Bool
                 }
@@ -5865,6 +6250,24 @@ fn compatible(expected: &Type, actual: &Type) -> bool {
             compatible(expected_key, actual_key) && compatible(expected_value, actual_value)
         }
         (Type::HttpResult(expected), Type::HttpResult(actual)) => compatible(expected, actual),
+        (
+            Type::Function {
+                params: expected_params,
+                return_type: expected_return,
+                capabilities: expected_capabilities,
+            },
+            Type::Function {
+                params: actual_params,
+                return_type: actual_return,
+                capabilities: actual_capabilities,
+            },
+        ) => {
+            expected_params == actual_params
+                && expected_return == actual_return
+                && actual_capabilities
+                    .iter()
+                    .all(|capability| expected_capabilities.contains(capability))
+        }
         (Type::HttpResult(_), Type::Named(actual)) if actual == "HttpResult" => true,
         _ => expected == actual,
     }
@@ -5922,6 +6325,25 @@ fn infer_generic_types(
                 infer_generic_types(expected, actual, parameters, substitutions);
             }
         }
+        Type::Function {
+            params: expected_params,
+            return_type: expected_return,
+            ..
+        } => {
+            if let Type::Function {
+                params: actual_params,
+                return_type: actual_return,
+                ..
+            } = actual
+            {
+                if expected_params.len() == actual_params.len() {
+                    for (expected, actual) in expected_params.iter().zip(actual_params) {
+                        infer_generic_types(expected, actual, parameters, substitutions);
+                    }
+                    infer_generic_types(expected_return, actual_return, parameters, substitutions);
+                }
+            }
+        }
         _ => {}
     }
 }
@@ -5954,6 +6376,18 @@ fn substitute_generic_type(ty: &Type, substitutions: &HashMap<String, Type>) -> 
         Type::HttpResult(inner) => {
             Type::HttpResult(Box::new(substitute_generic_type(inner, substitutions)))
         }
+        Type::Function {
+            params,
+            return_type,
+            capabilities,
+        } => Type::Function {
+            params: params
+                .iter()
+                .map(|parameter| substitute_generic_type(parameter, substitutions))
+                .collect(),
+            return_type: Box::new(substitute_generic_type(return_type, substitutions)),
+            capabilities: capabilities.clone(),
+        },
         _ => ty.clone(),
     }
 }
@@ -6006,6 +6440,25 @@ fn validate_type(
             }
         }
         Type::HttpResult(inner) => validate_type(inner, known_types, errors, span),
+        Type::Function {
+            params,
+            return_type,
+            capabilities,
+        } => {
+            for parameter in params {
+                validate_type(parameter, known_types, errors, span);
+            }
+            validate_type(return_type, known_types, errors, span);
+            for capability in capabilities {
+                if !KNOWN_CAPABILITIES.contains(&capability.as_str()) {
+                    errors.push(TypeError {
+                        code: "E-TYPE-FUNCTION-001",
+                        message: format!("unknown capability `{capability}` in function type"),
+                        span,
+                    });
+                }
+            }
+        }
         _ => {}
     }
 }
@@ -6046,6 +6499,7 @@ pub enum Value {
     Tuple(Vec<Value>),
     Set(Vec<Value>),
     Map(Vec<(Value, Value)>),
+    Function(Box<FunctionValue>),
     Object {
         type_name: String,
         fields: HashMap<String, Value>,
@@ -6060,6 +6514,14 @@ pub enum Value {
     Unit,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct FunctionValue {
+    pub name: String,
+    pub params: Vec<Type>,
+    pub return_type: Type,
+    pub capabilities: Vec<String>,
+}
+
 impl Value {
     pub fn ty(&self) -> Type {
         match self {
@@ -6071,6 +6533,11 @@ impl Value {
             Value::String(_) => Type::String,
             Value::Char(_) => Type::Char,
             Value::Enum { type_name, .. } => Type::Named(type_name.clone()),
+            Value::Function(function) => Type::Function {
+                params: function.params.clone(),
+                return_type: Box::new(function.return_type.clone()),
+                capabilities: function.capabilities.clone(),
+            },
             Value::Timestamp(_) => Type::Timestamp,
             Value::Date(_) => Type::Date,
             Value::Time(_) => Type::Time,
@@ -6178,6 +6645,7 @@ impl Value {
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
+            Value::Function(function) => format!("<function {}>", function.name),
             Value::Object { type_name, fields } => format!(
                 "{}{{{}}}",
                 type_name,
@@ -6594,7 +7062,7 @@ fn execute_internal(
     Ok(interpreter.output)
 }
 
-const MAX_FUNCTION_CALL_DEPTH: usize = 32;
+const MAX_FUNCTION_CALL_DEPTH: usize = 24;
 
 struct Interpreter<'program> {
     functions: HashMap<String, &'program Function>,
@@ -7268,6 +7736,9 @@ impl<'program> Interpreter<'program> {
                 })
                 .collect::<Result<serde_json::Map<_, _>, _>>()
                 .map(serde_json::Value::Object),
+            Value::Function(_) => {
+                Err(self.runtime_error(span, "json_encode cannot serialize a function value"))
+            }
             Value::Option(Some(value)) => self.json_value(value, span),
             Value::Option(None) | Value::Unit => Ok(serde_json::Value::Null),
             Value::Result(Ok(value)) => self.json_value(value, span),
@@ -7555,11 +8026,14 @@ impl<'program> Interpreter<'program> {
                 span,
                 format!("json_decode does not support target type `{name}`"),
             )),
-            Type::Result(_, _) | Type::Unknown | Type::Option(_) | Type::HttpResult(_) => Err(self
-                .runtime_error(
-                    span,
-                    format!("json_decode does not support target type `{target}`"),
-                )),
+            Type::Result(_, _)
+            | Type::Unknown
+            | Type::Option(_)
+            | Type::HttpResult(_)
+            | Type::Function { .. } => Err(self.runtime_error(
+                span,
+                format!("json_decode does not support target type `{target}`"),
+            )),
         }
     }
 
@@ -8420,6 +8894,37 @@ impl<'program> Interpreter<'program> {
         env: &mut Environment,
         span: Span,
     ) -> Result<Value, RuntimeError> {
+        if let Some(Value::Function(function)) = env.get(name) {
+            if !type_args.is_empty() {
+                return Err(self.runtime_error(
+                    span,
+                    "indirect function calls do not accept explicit type arguments",
+                ));
+            }
+            if let Some(caller_capabilities) = self.active_capabilities.last() {
+                let declared = caller_capabilities
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<HashSet<_>>();
+                if let Some(capability) = function
+                    .capabilities
+                    .iter()
+                    .find(|capability| !function_declares_capability(&declared, capability))
+                {
+                    return Err(self.runtime_error(
+                        span,
+                        format!(
+                            "runtime capability denied: current function does not declare `{capability}` required by indirect call through `{name}`"
+                        ),
+                    ));
+                }
+            }
+            let values = args
+                .iter()
+                .map(|argument| self.eval(argument, env))
+                .collect::<Result<Vec<_>, _>>()?;
+            return self.call_with_type_args(&function.name, &[], values, span);
+        }
         if let Some((enum_name, variant)) = name.rsplit_once("::") {
             if let Some(definition) = self.enum_definitions.get(enum_name) {
                 let payload_types = definition
@@ -9761,6 +10266,29 @@ impl<'program> Interpreter<'program> {
             ExprKind::Bool(v) => Ok(Value::Bool(*v)),
             ExprKind::String(v) => Ok(Value::String(v.clone())),
             ExprKind::Char(v) => Ok(Value::Char(*v)),
+            ExprKind::FunctionValue(name) => {
+                let function = self.functions.get(name).copied().ok_or_else(|| {
+                    self.runtime_error(expr.span, format!("unknown function value `{name}`"))
+                })?;
+                if !function.type_params.is_empty() {
+                    return Err(self.runtime_error(
+                        expr.span,
+                        format!(
+                            "generic function `{name}` cannot be stored as a function value yet"
+                        ),
+                    ));
+                }
+                Ok(Value::Function(Box::new(FunctionValue {
+                    name: name.clone(),
+                    params: function
+                        .params
+                        .iter()
+                        .map(|param| param.ty.clone())
+                        .collect(),
+                    return_type: function.return_type.clone().unwrap_or(Type::Unit),
+                    capabilities: function.capabilities.clone(),
+                })))
+            }
             ExprKind::Array(values) => values
                 .iter()
                 .map(|value| self.eval(value, env))
@@ -10057,6 +10585,10 @@ impl<'program> Interpreter<'program> {
             (Value::Array(mut a), Add, Value::Array(b)) => {
                 a.extend(b);
                 Ok(Value::Array(a))
+            }
+            (Value::Function(_), Equal | NotEqual, _)
+            | (_, Equal | NotEqual, Value::Function(_)) => {
+                Err(self.runtime_error(span, "function values cannot be compared"))
             }
             (a, Equal, b) => Ok(Value::Bool(a == b)),
             (a, NotEqual, b) => Ok(Value::Bool(a != b)),
@@ -10384,6 +10916,7 @@ fn value_to_query_value(
         | Value::Map(_)
         | Value::Object { .. }
         | Value::Enum { .. }
+        | Value::Function(_)
         | Value::Rows { .. }
         | Value::Bytes(_)
         | Value::Result(_) => Err(RuntimeError {

@@ -58,6 +58,11 @@ pub enum Type {
     Set(Box<Type>),
     Map(Box<Type>, Box<Type>),
     HttpResult(Box<Type>),
+    Function {
+        params: Vec<Type>,
+        return_type: Box<Type>,
+        capabilities: Vec<String>,
+    },
     Named(String),
     Unknown,
 }
@@ -95,6 +100,22 @@ impl fmt::Display for Type {
             Type::Set(inner) => return write!(f, "Set<{inner}>"),
             Type::Map(key, value) => return write!(f, "Map<{key}, {value}>"),
             Type::HttpResult(inner) => return write!(f, "HttpResult<{inner}>"),
+            Type::Function {
+                params,
+                return_type,
+                capabilities,
+            } => {
+                let params = params
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                write!(f, "Function<({params}) -> {return_type}>")?;
+                if !capabilities.is_empty() {
+                    write!(f, " uses {{{}}}", capabilities.join(", "))?;
+                }
+                return Ok(());
+            }
             Type::Named(name) => name,
             Type::Unknown => "unknown",
         };
@@ -699,6 +720,7 @@ pub enum ExprKind {
         type_name: String,
         fields: Vec<(String, Expr)>,
     },
+    FunctionValue(String),
     Variable(String),
     Index {
         target: Box<Expr>,

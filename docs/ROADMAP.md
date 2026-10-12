@@ -363,7 +363,7 @@ architecture requirement for every phase, not a provider-specific feature.
 - [~] Deterministic bounded mutation regressions exercise the lexer/parser, SQL
   binder, template renderer, and HTTP parser in normal CI (2,048 inputs per
   path). Coverage-guided runs found a parser stack overflow; recursive syntax
-  now has a 32-frame recursion limit, focused regressions, and a retained crash
+  now has a 24-frame recursion limit, focused regressions, and a retained crash
   seed. Four post-fix 60-second local runs passed; the 15-second CI rerun for
   the fixed revision remains open.
 - [~] Security regression coverage and dependency/license scanning run in CI.
@@ -855,10 +855,11 @@ language backlog as one 0.9.4 change.
 
 - [🧪] Language type coverage: exclusive range loops, payload-free nominal
   enums, calendar/UTC timestamp operations, Decimal quantization, and safe
-  value-semantic record/array updates are added in 0.9.8. Still required for
-  0.9.9 are statically typed function values, bounded generic functions/records,
-  and possibly a Zelyra-native identity-bearing business entity if a concrete
-  use case requires it. Keep records value-based and preserve the explicit
+  value-semantic record/array updates are added in 0.9.8. The 0.9.9 branch adds
+  named typed function values, bounded generic functions, and payload enums.
+  Generic user-defined records/enums remain open; a Zelyra-native
+  identity-bearing business entity is not required unless a concrete use case
+  demonstrates a need. Keep records value-based and preserve the explicit
   `Int`/`UInt` and `Float`/`Decimal` model. Update compiler, runtime,
   diagnostics, compatibility fixtures, Studio help, and `examples/type_system`.
   Before the 0.9.9 freeze, positive, expected-compiler-error,
@@ -1035,18 +1036,19 @@ language backlog as one 0.9.4 change.
   human-study materials. At this point independent human acceptance should be
   the only remaining gate; do not claim production approval or run acceptance
   against 0.9.9.
-- [🗺️] Close the language gaps carried over from 0.9.8: user-defined generics,
-  payload-carrying enums, safe function values/indirect calls, a distinguishable
-  generic Result JSON codec, and every remaining corpus, CLI, setup, database,
-  migrator, and security finding. The [0.9.9 plan](release-plans/0.9.9.en.md)
-  lists testable criteria.
-- [🧪] Verified implementation slice on the 0.9.9 branch: generic functions
+- [🗺️] Close remaining language gaps carried over from 0.9.8: generic
+  user-defined records/enums and general constraints, plus every remaining
+  corpus, CLI, setup, database, migrator, and security finding. The [0.9.9
+  plan](release-plans/0.9.9.en.md) lists testable criteria.
+- [🧪] Verified implementation slices on the 0.9.9 branch: generic functions
   accept inferred or explicit type arguments, including type parameters nested
   in arrays, `Option`, and `Result`. Conflicting and uninferable types have
   regression coverage. The type-system example checks imported generic
   functions, empty collections with explicit types, and compiler-negative
-  cases. Generic records/aliases, bounds, payload enums, and function values
-  remain open; this slice does not close the language gate.
+  cases. Payload-carrying enums and typed named function values/indirect calls
+  also pass focused positive and negative tests, including capability
+  propagation. Generic records/aliases and general constraints remain open;
+  these slices do not close the language gate.
 - Exit criteria: no open implementation, security, database, migration,
   packaging, or documentation blocker remains. If one remains, 0.9.9 is not
   complete. See the [0.9.9 plan](release-plans/0.9.9.en.md).

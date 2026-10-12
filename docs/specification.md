@@ -487,6 +487,27 @@ content and preserves the current URL state. Pagination also performs a safe
 count query and exposes `total` and `pages` as `UInt` page bindings. Pages that
 use only explicit `input` declarations remain manual by design.
 
+## Language and runtime additions in 0.9.8
+
+The 0.9.8 development line adds tested language behavior without changing
+existing syntax: a directly written `-9223372036854775808` is `Int::MIN`;
+non-`Unit` functions must return a value on every reachable path; and
+non-exhaustive enum matches are rejected. The interpreter bounds nested function
+calls and reports the attempted call site before exceeding that limit. Extra
+0.9.9 tests found that the original bound could still overflow smaller runtime
+stacks, so the maximum is now 24 active frames. This conservative bound protects
+Rust-backed execution stacks but does not remove recursion depth limits.
+
+The line also adds unit enums, exclusive integer range loops, value-returning
+`record_with` and `array_replace_result` updates, Gregorian calendar-day
+helpers, UTC timestamp ordering and duration arithmetic, explicit fixed-point
+Decimal quantization, and an optional `zelyra run --max-steps N` execution
+budget. Date arithmetic is distinct from elapsed UTC durations; local time
+zones and daylight-saving rules are not included. Decimal multiplication and
+division still have nine fractional digits and may truncate beyond that
+precision. The step budget is not process isolation and is unlimited unless
+enabled. Payload-carrying enums are specified separately below.
+
 ## Generic functions in 0.9.9
 
 The 0.9.9 development branch supports user-defined generic functions. Type
@@ -516,9 +537,43 @@ compiler reports `E-TYPE-001`. Uninferable types, an incorrect number of
 explicit type arguments, and type parameters that shadow declared types use
 `E-TYPE-GENERIC-001`. Generic functions may call other generic functions. The
 type-system example covers inference, explicit types, arrays, `Option`, module
-imports, and expected compiler errors. General constraints, generic records and
-generic records and enums, general constraints, and function values remain
-0.9.9 work.
+imports, and expected compiler errors. Generic records and enums and general
+constraints remain 0.9.9 work.
+
+### Named function values in 0.9.9
+
+The 0.9.9 development branch supports storing, passing, and indirectly calling
+references to named, non-generic functions. Prefix `&` marks a reference; it
+does not execute the function:
+
+~~~zelyra
+fn increment(value: Int) -> Int { return value + 1 }
+
+fn apply(callback: Function<(Int) -> Int>, value: Int) -> Int {
+    return callback(value)
+}
+
+fn main() {
+    transform = &increment
+    print(apply(transform, 8))
+}
+~~~
+
+Function values have explicit parameter and return types. An effectful function
+type also names its required capabilities with `uses {Capability}`. The
+referenced function's requirements must fit within the declared function type,
+and the caller of an indirect call must declare those requirements too. The
+checker follows function values through local bindings and assignments; the
+runtime repeats the capability check before dispatch. Public functions can be
+referenced through an explicit module alias, as in `&math::increment`; private
+functions cannot cross module boundaries. The bare identifier `function` is
+not a reserved word.
+
+This bounded step does not include closures, capturing local functions, or
+generic function references. Function values do not have equality or identity
+semantics; they are not JSON or SQL data and are rejected at those boundaries.
+Their signatures are available to compiler tools, but not exposed as HTTP
+schema values.
 
 ## Payload-carrying enums in 0.9.9
 

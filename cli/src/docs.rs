@@ -486,6 +486,19 @@ fn typescript_type(ty: &Type) -> String {
         ),
         Type::Map(_, value) => format!("Record<string, {}>", typescript_type(value)),
         Type::HttpResult(inner) => format!("HttpResult<{}>", typescript_type(inner)),
+        Type::Function {
+            params,
+            return_type,
+            ..
+        } => {
+            let params = params
+                .iter()
+                .enumerate()
+                .map(|(index, parameter)| format!("_arg{index}: {}", typescript_type(parameter)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("({params}) => {}", typescript_type(return_type))
+        }
         Type::Named(name) => match name.as_str() {
             "Id" => "number".into(),
             "Email" | "Url" | "Uuid" | "Money" => "string".into(),

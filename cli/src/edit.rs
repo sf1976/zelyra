@@ -968,6 +968,7 @@ fn collect_function_expression(
         | zelyra_ast::ExprKind::String(_)
         | zelyra_ast::ExprKind::Char(_)
         | zelyra_ast::ExprKind::Variable(_)
+        | zelyra_ast::ExprKind::FunctionValue(_)
         | zelyra_ast::ExprKind::Sql { .. } => {}
     }
 }

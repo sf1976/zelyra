@@ -7483,7 +7483,8 @@ fn visit_expression_sql<'a>(
         | ExprKind::Bool(_)
         | ExprKind::String(_)
         | ExprKind::Char(_)
-        | ExprKind::Variable(_) => {}
+        | ExprKind::Variable(_)
+        | ExprKind::FunctionValue(_) => {}
     }
 }
 
@@ -8973,6 +8974,7 @@ fn api_json_value_node(value: &RuntimeValue) -> serde_json::Value {
                 .collect();
             serde_json::Value::Object(object)
         }
+        RuntimeValue::Function { .. } => serde_json::Value::Null,
         RuntimeValue::Object { fields, .. } => {
             let object = fields
                 .iter()

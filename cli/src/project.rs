@@ -1238,6 +1238,16 @@ impl TypeLinker<'_> {
                 self.ensure_exported_type_is_public(ok, span)?;
                 self.ensure_exported_type_is_public(error, span)?;
             }
+            Type::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                for parameter in params {
+                    self.ensure_exported_type_is_public(parameter, span)?;
+                }
+                self.ensure_exported_type_is_public(return_type, span)?;
+            }
             _ => {}
         }
         Ok(())
@@ -1315,6 +1325,16 @@ impl TypeLinker<'_> {
             Type::Result(ok, error) | Type::Map(ok, error) => {
                 self.rewrite_type(ok, span)?;
                 self.rewrite_type(error, span)?;
+            }
+            Type::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                for parameter in params {
+                    self.rewrite_type(parameter, span)?;
+                }
+                self.rewrite_type(return_type, span)?;
             }
             Type::Int
             | Type::UInt
@@ -1422,7 +1442,8 @@ impl TypeLinker<'_> {
             | ExprKind::Bool(_)
             | ExprKind::String(_)
             | ExprKind::Char(_)
-            | ExprKind::Variable(_) => {}
+            | ExprKind::Variable(_)
+            | ExprKind::FunctionValue(_) => {}
         }
         Ok(())
     }
@@ -1992,6 +2013,51 @@ fn rewrite_expr(
                 )?;
             }
         }
+        ExprKind::FunctionValue(name) => {
+            if name.contains("::") && local_functions.contains_key(name) {
+                return Err(project_error(
+                    "E-MOD-006",
+                    "enum variants cannot be stored as function values",
+                    display_path,
+                    expression.span,
+                ));
+            }
+            if local_functions.contains_key(name) {
+                if !is_root {
+                    *name = internal_name(module_name, name);
+                }
+            } else if let Some((alias, function_name)) = name.split_once("::") {
+                if function_name.contains("::") {
+                    return Err(project_error(
+                        "E-MOD-006",
+                        "enum variants are values, not function references",
+                        display_path,
+                        expression.span,
+                    ));
+                }
+                let target = imports.get(alias).ok_or_else(|| {
+                    project_error(
+                        "E-MOD-006",
+                        format!("unknown imported module alias `{alias}`"),
+                        display_path,
+                        expression.span,
+                    )
+                })?;
+                match function_sets
+                    .get(target)
+                    .and_then(|functions| functions.get(function_name))
+                    .copied()
+                {
+                    None => return Err(project_error("E-MOD-006", format!("module `{alias}` has no function `{function_name}`"), display_path, expression.span)),
+                    Some(false) => return Err(project_error("E-MOD-007", format!("function `{function_name}` in module `{alias}` is private; declare it with `pub fn` to store it from another module"), display_path, expression.span)),
+                    Some(true) => {}
+                }
+                let target_module_name = module_names.get(target).expect("resolved module name");
+                *name = internal_name(target_module_name, function_name);
+            } else if !is_root && root_functions.contains_key(name) {
+                return Err(project_error("E-MOD-007", format!("function `{name}` belongs to the entry module; import it through an explicit module namespace"), display_path, expression.span));
+            }
+        }
         ExprKind::Variable(name) => {
             if local_functions.contains_key(name) {
                 if !is_root {
@@ -2243,6 +2309,39 @@ mod tests {
         ]);
         let error = load(private.join("main.zyl").to_str().unwrap())
             .expect_err("private enum variants must not cross a module boundary");
+        assert_eq!(error.code, "E-MOD-007");
+        cleanup(&private);
+    }
+
+    #[test]
+    fn imports_public_functions_as_values_without_erasing_the_signature() {
+        let directory = project(&[
+            (
+                "main.zyl",
+                "import \"src/math.zyl\" as math\nfn apply(callback: Function<(Int) -> Int>, value: Int) -> Int { return callback(value) } fn main() { transform = &math::increment print(apply(transform, 8)) }\n",
+            ),
+            (
+                "src/math.zyl",
+                "pub fn increment(value: Int) -> Int { return value + 1 }\n",
+            ),
+        ]);
+        let loaded = load(directory.join("main.zyl").to_str().unwrap()).unwrap();
+        assert_eq!(execute(&loaded.program).unwrap(), ["9"]);
+        assert!(check(&loaded.program).is_ok());
+        cleanup(&directory);
+
+        let private = project(&[
+            (
+                "main.zyl",
+                "import \"src/math.zyl\" as math\nfn main() { transform = &math::increment }\n",
+            ),
+            (
+                "src/math.zyl",
+                "fn increment(value: Int) -> Int { return value + 1 }\n",
+            ),
+        ]);
+        let error = load(private.join("main.zyl").to_str().unwrap())
+            .expect_err("private functions must not be captured through function values");
         assert_eq!(error.code, "E-MOD-007");
         cleanup(&private);
     }

@@ -129,6 +129,16 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
                 });
                 continue;
             }
+            if contains_function_type(&definition.ty, &program.types, &mut HashSet::new()) {
+                errors.push(SchemaError {
+                    message: format!(
+                        "function values cannot be stored in database column {}.{}",
+                        table.name, definition.name
+                    ),
+                    span: definition.span,
+                });
+                continue;
+            }
             if let Type::Named(name) = &definition.ty {
                 let known_named_type = ["Id", "Email", "Url", "Uuid", "Money"]
                     .contains(&name.as_str())
@@ -367,6 +377,7 @@ fn column_mapping(
         | Type::Set(_)
         | Type::Map(_, _)
         | Type::HttpResult(_)
+        | Type::Function { .. }
         | Type::Unit
         | Type::Unknown => "TEXT",
     };
@@ -383,6 +394,40 @@ fn resolve_type(ty: &Type, definitions: &[TypeDef]) -> Type {
         }
     }
     ty.clone()
+}
+
+fn contains_function_type(
+    ty: &Type,
+    definitions: &[TypeDef],
+    visiting: &mut HashSet<String>,
+) -> bool {
+    match ty {
+        Type::Function { .. } => true,
+        Type::Option(inner) | Type::Array(inner) | Type::Set(inner) | Type::HttpResult(inner) => {
+            contains_function_type(inner, definitions, visiting)
+        }
+        Type::Result(ok, error) | Type::Map(ok, error) => {
+            contains_function_type(ok, definitions, visiting)
+                || contains_function_type(error, definitions, visiting)
+        }
+        Type::Tuple(items) => items
+            .iter()
+            .any(|item| contains_function_type(item, definitions, visiting)),
+        Type::Named(name) => {
+            if !visiting.insert(name.clone()) {
+                return false;
+            }
+            let found = definitions
+                .iter()
+                .find(|definition| definition.name == *name)
+                .is_some_and(|definition| {
+                    contains_function_type(&definition.target, definitions, visiting)
+                });
+            visiting.remove(name);
+            found
+        }
+        _ => false,
+    }
 }
 
 fn table_for_type(name: &str, table_names: &HashSet<String>) -> Option<String> {
@@ -5548,6 +5593,22 @@ mod tests {
         assert!(errors
             .iter()
             .any(|error| error.message.contains("MissingDepartment")));
+    }
+
+    #[test]
+    fn rejects_function_values_from_database_columns_and_aliases() {
+        for source in [
+            "table callbacks { id: Id primary auto callback: Function<() -> Int> required }",
+            "type Callback = Function<() -> Int> table callbacks { id: Id primary auto callback: Callback required }",
+        ] {
+            let program = parse(&lex(source).unwrap()).unwrap();
+            let errors = build_schema(&program).expect_err("function values are not persistent data");
+            assert!(errors.iter().any(|error| {
+                error
+                    .message
+                    .contains("function values cannot be stored in database column callbacks.callback")
+            }));
+        }
     }
 
     #[test]

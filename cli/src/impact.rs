@@ -1284,7 +1284,8 @@ fn add_expression_type_references(
         | ExprKind::Bool(_)
         | ExprKind::String(_)
         | ExprKind::Char(_)
-        | ExprKind::Variable(_) => {}
+        | ExprKind::Variable(_)
+        | ExprKind::FunctionValue(_) => {}
     }
 }
 
@@ -1518,6 +1519,7 @@ fn collect_expression_calls(
         | ExprKind::String(_)
         | ExprKind::Char(_)
         | ExprKind::Variable(_)
+        | ExprKind::FunctionValue(_)
         | ExprKind::Sql { .. } => {}
     }
 }
@@ -1846,7 +1848,8 @@ fn collect_expr_sql(
         | ExprKind::Bool(_)
         | ExprKind::String(_)
         | ExprKind::Char(_)
-        | ExprKind::Variable(_) => {}
+        | ExprKind::Variable(_)
+        | ExprKind::FunctionValue(_) => {}
     }
 }
 

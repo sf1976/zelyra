@@ -855,10 +855,11 @@ IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
 
 - [🧪] Typabdeckung: exklusive Bereichsschleifen, payloadfreie nominale Enums,
   Kalender-/UTC-Zeitstempeloperationen, Decimal-Quantisierung und sichere
-  wertsemantische Record-/Arrayänderungen sind in 0.9.8 ergänzt. Noch offen für
-  0.9.9 sind statisch typisierte Funktionswerte, begrenzte generische
-  Funktionen/Records und gegebenenfalls eine Zelyra-eigene Geschäftsentität mit
-  Identität. Records bleiben Werttypen; `Int`/`UInt` und `Float`/`Decimal`
+  wertsemantische Record-/Arrayänderungen sind in 0.9.8 ergänzt. Der 0.9.9-
+  Branch ergänzt benannte typisierte Funktionswerte, begrenzte generische
+  Funktionen und Payload-Enums. Generische nutzerdefinierte Records/Enums
+  bleiben offen; eine Geschäftsentität mit eigener Identität wird nur bei einem
+  belegten Anwendungsfall benötigt. Records bleiben Werttypen; `Int`/`UInt` und `Float`/`Decimal`
   bleiben ausdrücklich getrennt. Compiler, Runtime, Diagnosen,
   Kompatibilitäts-Fixtures, Studio-Hilfe und `examples/type_system` gemeinsam
   aktualisieren. Vor dem 0.9.9-Freeze müssen positive, erwartete
@@ -1050,18 +1051,19 @@ IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
   Kandidaten ausführen. Materialien für die exakte 1.0.0-Menschenstudie
   vorbereiten. Danach sollte nur noch die unabhängige menschliche Abnahme offen
   sein; für 0.9.9 keine Abnahme und keine Produktivfreigabe behaupten.
-- [🗺️] Die aus 0.9.8 übernommenen Sprachlücken schließen: eigene Generics,
-  payloadtragende Enums, sichere Funktionswerte/indirekte Aufrufe,
-  unterscheidbarer generischer Result-JSON-Codec sowie sämtliche noch offenen
-  Korpus-, CLI-, Setup-, Datenbank-, Migrator- und Sicherheitsbefunde. Der
+- [🗺️] Verbleibende Sprachlücken schließen: generische nutzerdefinierte
+  Records/Enums und allgemeine Constraints sowie sämtliche noch offenen Korpus-,
+  CLI-, Setup-, Datenbank-, Migrator- und Sicherheitsbefunde. Der
   [0.9.9-Plan](release-plans/0.9.9.de.md) enthält die prüfbaren Kriterien.
-- [🧪] Geprüfter Umsetzungsschritt im 0.9.9-Branch: Generische Funktionen
+- [🧪] Geprüfte Umsetzungsschritte im 0.9.9-Branch: Generische Funktionen
   leiten Typargumente ab oder akzeptieren sie ausdrücklich, auch innerhalb
   von Arrays, `Option` und `Result`. Konfliktierende und nicht ableitbare Typen
   besitzen Regressionstests. Das Type-System-Beispiel prüft generische
   Modulimporte, leere Sammlungen mit expliziten Typen und Compiler-Negativfälle.
-  Generische Records/Aliase, Grenzen, Payload-Enums und Funktionswerte bleiben
-  offen; dieser Schritt schließt das Sprach-Gate nicht.
+  Payload-Enums, benannte typisierte Funktionswerte und indirekte Aufrufe bestehen
+  ebenfalls gezielte positive/negative Tests einschließlich Capability-
+  Weitergabe. Generische Records/Aliase und allgemeine Constraints bleiben
+  offen; diese Schritte schließen die Sprach-Gates nicht.
 - Abschlusskriterien: Keine offenen Implementierungs-, Sicherheits-, Datenbank-,
   Migrations-, Paketierungs- oder Dokumentationsblocker. Bleibt einer offen, ist
   0.9.9 nicht fertig. Siehe den [0.9.9-Plan](release-plans/0.9.9.de.md).

@@ -158,6 +158,80 @@ fn generic_functions_reject_conflicting_and_invalid_type_arguments() {
 }
 
 #[test]
+fn named_function_values_are_typed_passed_called_and_keep_capability_requirements() {
+    let source = r#"
+fn increment(value: Int) -> Int { return value + 1 }
+fn provide_increment() -> Function<(Int) -> Int> { return &increment }
+fn apply(callback: Function<(Int) -> Int>, value: Int) -> Int {
+    return callback(value)
+}
+fn main() {
+    saved = provide_increment()
+    print(saved(4))
+    print(apply(saved, 7))
+    print(saved)
+}
+"#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap();
+    check_capabilities(&program).unwrap();
+    assert_eq!(
+        execute(&program).unwrap(),
+        ["5", "8", "<function increment>"]
+    );
+
+    let mismatch = parse(
+        &lex("fn increment(value: Int) -> Int { return value + 1 } fn main() { saved = &increment print(saved(\"wrong\")) }")
+            .unwrap(),
+    )
+    .unwrap();
+    let errors = check(&mismatch).expect_err("indirect function arguments remain statically typed");
+    assert!(errors.iter().any(|error| {
+        error
+            .message
+            .contains("type mismatch: expected `Int`, found `String`")
+    }));
+
+    let hidden_effect = parse(
+        &lex("fn read_clock() -> Timestamp uses Clock { return now() } fn apply(callback: Function<() -> Timestamp>) -> Timestamp { return callback() } fn main() { reader = &read_clock print(apply(reader)) }")
+            .unwrap(),
+    )
+    .unwrap();
+    let errors = check(&hidden_effect).expect_err("a function type may not hide a Clock effect");
+    assert!(errors.iter().any(|error| {
+        error.message.contains("type mismatch") && error.message.contains("Clock")
+    }));
+
+    let propagated_effect = parse(
+        &lex("fn read_clock() -> Timestamp uses Clock { return now() } fn apply(callback: Function<() -> Timestamp> uses {Clock}) -> Timestamp { return callback() } fn main() uses Clock { reader = &read_clock print(apply(reader)) }")
+            .unwrap(),
+    )
+    .unwrap();
+    check(&propagated_effect).unwrap();
+    let errors = check_capabilities(&propagated_effect)
+        .expect_err("an indirect Clock call requires the containing function to declare it");
+    assert!(errors.iter().any(|error| error.message.contains("Clock")));
+
+    let authorized_effect = parse(
+        &lex("fn read_clock() -> Timestamp uses Clock { return now() } fn apply(callback: Function<() -> Timestamp> uses {Clock}) -> Timestamp uses Clock { return callback() } fn main() uses Clock { reader = &read_clock print(apply(reader)) }")
+            .unwrap(),
+    )
+    .unwrap();
+    check(&authorized_effect).unwrap();
+    check_capabilities(&authorized_effect).unwrap();
+    assert_eq!(execute(&authorized_effect).unwrap().len(), 1);
+
+    let encode = parse(
+        &lex("fn increment(value: Int) -> Int { return value + 1 } fn provide() -> Function<(Int) -> Int> { return &increment } fn main() { saved = provide() print(json_encode(saved)) }")
+            .unwrap(),
+    )
+    .unwrap();
+    check(&encode).unwrap();
+    let error = execute(&encode).expect_err("function values are not JSON data");
+    assert!(error.message.contains("cannot serialize a function value"));
+}
+
+#[test]
 fn long_left_associative_expressions_are_checked_and_evaluated_without_stack_overflow() {
     let expression = std::iter::repeat_n("1", 5_000)
         .collect::<Vec<_>>()

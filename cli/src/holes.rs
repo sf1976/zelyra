@@ -397,6 +397,7 @@ impl Collector {
             | ExprKind::String(_)
             | ExprKind::Char(_)
             | ExprKind::Variable(_)
+            | ExprKind::FunctionValue(_)
             | ExprKind::Sql { .. } => {}
         }
     }

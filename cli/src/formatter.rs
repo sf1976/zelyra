@@ -81,6 +81,7 @@ impl<'a> Formatter<'a> {
                 | TokenKind::AndAnd
                 | TokenKind::OrOr => self.operator(token),
                 TokenKind::Bang => self.prefix_operator("!"),
+                TokenKind::Ampersand => self.prefix_reference(),
                 _ => self.word_or_body(token),
             }
 
@@ -219,6 +220,13 @@ impl<'a> Formatter<'a> {
     fn prefix_operator(&mut self, text: &str) {
         self.trim_spaces();
         self.push_text(text);
+    }
+
+    fn prefix_reference(&mut self) {
+        if self.needs_word_space() {
+            self.space_before();
+        }
+        self.push_text("&");
     }
 
     fn word_or_body(&mut self, token: &Token) {
@@ -373,6 +381,7 @@ fn is_compact_token(kind: &TokenKind) -> bool {
             | TokenKind::Slash
             | TokenKind::Percent
             | TokenKind::Bang
+            | TokenKind::Ampersand
             | TokenKind::Equal
             | TokenKind::EqualEqual
             | TokenKind::NotEqual
@@ -509,6 +518,7 @@ fn token_text<'a>(token: &'a Token, source: &'a str) -> &'a str {
         TokenKind::Greater => ">",
         TokenKind::GreaterEqual => ">=",
         TokenKind::AndAnd => "&&",
+        TokenKind::Ampersand => "&",
         TokenKind::OrOr => "||",
         TokenKind::Dot => ".",
         TokenKind::DotDot => "..",
@@ -557,6 +567,15 @@ mod tests {
         );
         assert!(formatted.contains("import \"src/math.zyl\" as math"));
         assert!(formatted.contains("math::add("));
+        assert_eq!(format(&formatted), formatted);
+    }
+
+    #[test]
+    fn formats_named_function_values_as_prefix_references() {
+        let formatted = format(
+            "fn increment(value: Int) -> Int { return value+1 } fn main() { saved=&increment print(saved(2)) }",
+        );
+        assert!(formatted.contains("saved = &increment"), "{formatted:?}");
         assert_eq!(format(&formatted), formatted);
     }
 

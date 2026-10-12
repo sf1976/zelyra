@@ -2236,6 +2236,60 @@ impl<'a> Parser<'a> {
                 self.expect(TokenKind::Greater, "`>` after HttpResult type")?;
                 Type::HttpResult(Box::new(response))
             }
+            "Function" => {
+                self.expect(TokenKind::Less, "`<` after `Function`")?;
+                self.expect(TokenKind::LParen, "`(` before function parameter types")?;
+                let mut params = Vec::new();
+                if !self.at(&TokenKind::RParen) {
+                    loop {
+                        params.push(self.type_name()?);
+                        if !self.at(&TokenKind::Comma) {
+                            break;
+                        }
+                        self.advance();
+                    }
+                }
+                self.expect(TokenKind::RParen, "`)` after function parameter types")?;
+                self.expect(TokenKind::Arrow, "`->` before function return type")?;
+                let return_type = self.type_name()?;
+                self.expect(TokenKind::Greater, "`>` after function type")?;
+                let mut capabilities = Vec::new();
+                if self.at(&TokenKind::Uses) {
+                    self.advance();
+                    self.expect(TokenKind::LBrace, "`{` after function-type `uses`")?;
+                    self.skip_newlines();
+                    while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                        let capability = match &self.current().kind {
+                            TokenKind::Ident(name) => name.clone(),
+                            TokenKind::Database => "Database".into(),
+                            _ => return self.error("expected a capability name in function type"),
+                        };
+                        let span = self.advance().span;
+                        if capabilities.contains(&capability) {
+                            return Err(ParseError {
+                                message: format!(
+                                    "capability `{capability}` is declared more than once"
+                                ),
+                                span,
+                            });
+                        }
+                        capabilities.push(capability);
+                        self.skip_newlines();
+                        if self.at(&TokenKind::Comma) {
+                            self.advance();
+                            self.skip_newlines();
+                        } else if !self.at(&TokenKind::RBrace) {
+                            return self.error("expected `,` or `}` in function-type capabilities");
+                        }
+                    }
+                    self.expect(TokenKind::RBrace, "`}` after function-type capabilities")?;
+                }
+                Type::Function {
+                    params,
+                    return_type: Box::new(return_type),
+                    capabilities,
+                }
+            }
             _ => Type::Named(name),
         };
         if self.at(&TokenKind::Question) {
@@ -2773,6 +2827,20 @@ impl<'a> Parser<'a> {
                 })
             }
             TokenKind::Sql => self.sql_expression(token.span),
+            TokenKind::Ampersand => {
+                let (mut name, mut end) = self.ident("function name after `&`")?;
+                while self.at(&TokenKind::DoubleColon) {
+                    self.advance();
+                    let (segment, segment_span) = self.ident("function name after `::`")?;
+                    name.push_str("::");
+                    name.push_str(&segment);
+                    end = segment_span;
+                }
+                Ok(Expr {
+                    kind: ExprKind::FunctionValue(name),
+                    span: token.span.join(end),
+                })
+            }
             TokenKind::Ident(name) => {
                 let mut name = name;
                 while self.at(&TokenKind::DoubleColon) {
@@ -2971,6 +3039,45 @@ mod tests {
         };
         assert_eq!(name, "identity");
         assert_eq!(type_args, &[Type::Int]);
+    }
+
+    #[test]
+    fn parses_named_function_values_and_typed_function_parameters() {
+        let program = parse(
+            &lex("fn increment(value: Int) -> Int { return value + 1 } fn apply(callback: Function<(Int) -> Int>, value: Int) -> Int { return callback(value) } fn main() { saved = &increment print(apply(saved, 4)) }")
+                .unwrap(),
+        )
+        .unwrap();
+        let Stmt::BindOrAssign { value, .. } = &program.functions[2].body.statements[0] else {
+            panic!("expected local function value");
+        };
+        assert!(matches!(value.kind, ExprKind::FunctionValue(ref name) if name == "increment"));
+        assert!(matches!(
+            program.functions[1].params[0].ty,
+            Type::Function { ref params, ref return_type, ref capabilities }
+                if params == &[Type::Int] && **return_type == Type::Int && capabilities.is_empty()
+        ));
+
+        let effectful = parse(
+            &lex("fn run_file(path: String) -> String uses FileSystem { return path } fn use_file(callback: Function<(String) -> String> uses {FileSystem}) { print(callback(\"x\")) } fn main() { }")
+                .unwrap(),
+        )
+        .unwrap();
+        assert!(matches!(
+            effectful.functions[1].params[0].ty,
+            Type::Function { ref capabilities, .. } if capabilities == &["FileSystem"]
+        ));
+
+        let compatibility = parse(
+            &lex("fn increment(value: Int) -> Int { return value + 1 } fn function() -> Int { return 9 } fn main() { function = &increment print(function(2)) }")
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(compatibility.functions[1].name, "function");
+        assert!(matches!(
+            compatibility.functions[2].body.statements[0],
+            Stmt::BindOrAssign { ref name, .. } if name == "function"
+        ));
     }
 
     #[test]

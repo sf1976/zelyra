@@ -492,7 +492,8 @@ fn check_expr(
         | ExprKind::Bool(_)
         | ExprKind::String(_)
         | ExprKind::Char(_)
-        | ExprKind::Variable(_) => {}
+        | ExprKind::Variable(_)
+        | ExprKind::FunctionValue(_) => {}
     }
 }
 
@@ -526,6 +527,7 @@ fn expr_type(expression: &Expr) -> Type {
         ExprKind::Field { .. } => Type::Unknown,
         ExprKind::Sql { result_type, .. } => result_type.clone(),
         ExprKind::Variable(_)
+        | ExprKind::FunctionValue(_)
         | ExprKind::Call { .. }
         | ExprKind::Unary { .. }
         | ExprKind::Binary { .. } => Type::Unknown,

@@ -1,0 +1,8 @@
+fn read_clock() -> Timestamp uses Clock { return now() }
+fn apply(callback: Function<() -> Timestamp> uses {Clock}) -> Timestamp {
+    return callback()
+}
+fn main() {
+    reader = &read_clock
+    print(apply(reader))
+}

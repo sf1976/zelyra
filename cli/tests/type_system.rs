@@ -98,9 +98,9 @@ fn type_coverage_program_passes_supported_tests_and_reports_expected_failures() 
         "PASS Option, Result, records",
         "PASS calendar arithmetic, Timestamp ordering, Decimal quantization, exclusive ranges",
         "PASS unit and payload enums, equality, exhaustive match and JSON round trip",
-        "PASS user-defined generic functions, inference and explicit types",
-        "Report: 11 positive type groups; 15 expected compiler errors and 18 expected runtime errors",
-        "Type matrix: 18 supported entries, 5 partial entries, 2 unavailable entries",
+        "PASS named typed function values, argument checking and indirect calls",
+        "Report: 12 positive type groups; 19 expected compiler errors and 19 expected runtime errors",
+        "Type matrix: 18 supported entries, 6 partial entries, 1 unavailable entry",
         "Unexpected failures: 0 when the CLI integration test passes",
         "alle ausführbaren Typprüfungen bestanden",
     ] {
@@ -141,6 +141,19 @@ fn type_coverage_program_passes_supported_tests_and_reports_expected_failures() 
         ),
         ("enum_non_exhaustive_payload.zyl", "non-exhaustive match"),
         ("enum_unknown_payload_type.zyl", "unknown type `Missing`"),
+        (
+            "function_value_argument_type.zyl",
+            "type mismatch: expected `Int`, found `String`",
+        ),
+        (
+            "function_value_generic_reference.zyl",
+            "cannot be stored as a function value yet",
+        ),
+        ("function_value_missing_capability.zyl", "Clock"),
+        (
+            "function_value_equality.zyl",
+            "function values cannot be compared",
+        ),
     ] {
         let path = format!("expected/compiler/{fixture}");
         let result = cli(&project, &["check", &path]);
@@ -182,6 +195,10 @@ fn type_coverage_program_passes_supported_tests_and_reports_expected_failures() 
         (
             "unsupported_result_json.zyl",
             "does not support target type `Result<Int, String>`",
+        ),
+        (
+            "function_value_json.zyl",
+            "cannot serialize a function value",
         ),
     ] {
         let path = format!("expected/runtime/{fixture}");

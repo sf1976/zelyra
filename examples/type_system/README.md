@@ -52,7 +52,7 @@ Programmlauf.
 | Generics | 🧪 teilweise | Generische Standardtypen sowie eigene generische Funktionen (`fn identity<T>`) mit Typinferenz oder expliziten Typargumenten sind verfügbar. Eigene generische Records/Enums und allgemeine Constraints sind noch nicht verfügbar. |
 | Typ-Aliase und eigene Typen | 🧪 teilweise | `type Name = ...` sowie Records sind vorhanden. Records werden ausgeführt und serialisiert; Aliase haben keine eigene Runtimeidentität. |
 | `Id`, `Email`, `Url`, `Uuid`, `Money` | 🧪 spezialisiert | Benannte String-Domainwerte für API-/Datenschema-Nutzung; keine eigenen numerischen oder Identitätsregeln in der Runtime. |
-| Funktionen als Werte | — nicht vorhanden | Benannte Funktionen können aufgerufen, aber noch nicht als Werte gespeichert oder übergeben werden. Das bleibt eine offene Sprachlücke in 0.9.9. |
+| Funktionen als Werte | 🧪 teilweise | Benannte, nicht generische Funktionen können mit `&name` gespeichert, übergeben und über einen typisierten `Function<(...) -> ...>`-Wert indirekt aufgerufen werden. Capabilities bleiben statisch und zur Laufzeit erhalten. Closures, erfasste lokale und generische Funktionswerte fehlen. |
 
 ## Konvertierungen, Standardwerte und Kopien
 
@@ -74,19 +74,19 @@ Rundungsverhalten, Unicode, optionale Werte, Arrays, Listen-Aliase, Tupel,
 Mengen, Records, payloadfreie und payloadtragende Enums,
 Kalender-/Zeitstempeloperationen, Decimal-Quantisierung, Bereiche, JSON und
 benutzerdefinierte generische Funktionen.
-Der CLI-Integrationstest erwartet zusätzlich **15 Compilerfehler** und
-**18 Runtimefehler** (Typfehler, gemischte Arrays, unvollständiges Matching,
+Der CLI-Integrationstest erwartet zusätzlich **19 Compilerfehler** und
+**19 Runtimefehler** (Typfehler, gemischte Arrays, unvollständiges Matching,
 Überlauf/Unterlauf, Division durch null, ungültiger Index, ungültige
 Date-/Time-/Bytes-/Decimal-Werte, falsche Tuple-Länge, nicht-endliche
 JSON-Zahl, nicht-stringbasierte Map-Serialisierung sowie nicht unterstützte allgemeine
 `json_decode<Result<...>>`-Decodierung; der separate getaggte Codec ist verfügbar). Ein erwarteter Fehler ist dabei ein
-positives Testergebnis. Bei erfolgreichem Integrationstest sind alle 11
+positives Testergebnis. Bei erfolgreichem Integrationstest sind alle 12
 positiven Testgruppen bestanden und es gibt 0 unerwartete Fehler. Die
-aktuelle Matrix umfasst 18 unterstützte, 5 teilweise unterstützte und 2 noch
-nicht verfügbare Einträge; das Programm gibt diese drei Zahlen aus. Eigene
-generische Funktionen und payloadtragende Enums werden im positiven
+aktuelle Matrix umfasst 18 unterstützte, 6 teilweise unterstützte und 1 noch
+nicht verfügbaren Eintrag; das Programm gibt diese drei Zahlen aus. Eigene
+generische Funktionen, payloadtragende Enums und benannte Funktionswerte werden im positiven
 Type-System-Beispiel sowie mit expliziten Compiler-Negativfällen geprüft.
-Generische Datentypen und Funktionswerte fehlen noch. Klassen und
+Generische Datentypen, Closures und generische Funktionswerte fehlen noch. Klassen und
 Referenzidentität sind eine bewusste Abweichung vom wertorientierten Recordmodell;
 sie sind keine Voraussetzung für Records, CRUD oder Datenbankbeziehungen.
 

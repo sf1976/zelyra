@@ -10,6 +10,15 @@ enum OrderStatus {
 enum OrderEvent {
     Created(Int) Paid(Date, Decimal) Rejected(String)
 }
+fn increment(value: Int) -> Int {
+    return value + 1
+}
+fn provide_increment() -> Function<(Int) -> Int> {
+    return &increment
+}
+fn apply(callback: Function<(Int) -> Int>, value: Int) -> Int {
+    return callback(value)
+}
 fn main() uses Clock {
     scalars::run()
     collections::run()
@@ -17,6 +26,9 @@ fn main() uses Clock {
     serialization::run()
     advanced::run()
     generics::run()
+    transform: Function<(Int) -> Int> = provide_increment()
+    assert(transform(4) == 5, "named function values call with their declared type")
+    assert(apply(transform, 8) == 9, "typed indirect function calls preserve results")
     status: OrderStatus = OrderStatus::Paid
     restored_status: OrderStatus = json_decode<OrderStatus>(json_encode(status))
     assert(restored_status == status, "unit enum JSON round trip")
@@ -47,8 +59,9 @@ fn main() uses Clock {
     restored_event: OrderEvent = json_decode<OrderEvent>(json_encode(event))
     assert(restored_event == event, "payload enum JSON round trip")
     print("PASS unit and payload enums, equality, exhaustive match and JSON round trip")
-    print("Report: 11 positive type groups; 15 expected compiler errors and 18 expected runtime errors are verified by the CLI integration test.")
-    print("Type matrix: 18 supported entries, 5 partial entries, 2 unavailable entries; see README.md.")
+    print("PASS named typed function values, argument checking and indirect calls")
+    print("Report: 12 positive type groups; 19 expected compiler errors and 19 expected runtime errors are verified by the CLI integration test.")
+    print("Type matrix: 18 supported entries, 6 partial entries, 1 unavailable entry; see README.md.")
     print("Unexpected failures: 0 when the CLI integration test passes.")
     print("Ergebnis: alle ausführbaren Typprüfungen bestanden.")
     print("Bericht: README.md (unterstützt, teilweise unterstützt, nicht unterstützt)")

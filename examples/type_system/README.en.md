@@ -50,7 +50,7 @@ diagnostic. These cases do not belong in the successful program run.
 | Generics | 🧪 partial | Generic standard types and user-defined generic functions (`fn identity<T>`) with inference or explicit type arguments are available. User-defined generic records/enums and general constraints are not available yet. |
 | Type aliases and custom types | 🧪 partial | `type Name = ...` and records exist. Records execute and serialize; aliases have no separate runtime identity. |
 | `Id`, `Email`, `Url`, `Uuid`, `Money` | 🧪 specialized | Named string domain values for API/schema use; no separate numeric or identity rules in the runtime. |
-| Functions as values | — unavailable | Named functions can be called but cannot yet be stored or passed as values. This remains an open language gap for 0.9.9. |
+| Functions as values | 🧪 partial | Named, non-generic functions can be stored with `&name`, passed, and called indirectly through a typed `Function<(...) -> ...>` value. Capabilities remain checked statically and at runtime. Closures, captured local functions, and generic function values are not supported. |
 
 ## Conversions, defaults, and copies
 
@@ -67,18 +67,17 @@ separate shallow/deep copy operations. The value-update helpers return a new rec
 
 The successful run checks numeric ranges, arithmetic, rounding behavior,
 Unicode, optional values, arrays, List aliases, tuples, sets, records, unit and
-payload enums, calendar and timestamp operations, Decimal quantization, ranges,
-JSON, and user-defined generic functions. The CLI integration test also expects **15 compiler errors** and **18 runtime errors** (type mismatch,
+payload enums, named function values and indirect calls, calendar and timestamp operations, Decimal quantization, ranges,
+JSON, and user-defined generic functions. The CLI integration test also expects **19 compiler errors** and **19 runtime errors** (type mismatch,
 mixed arrays, non-exhaustive matching, overflow/underflow, division by zero,
 invalid index, invalid Date/Time/Bytes/Decimal values, wrong tuple length,
 non-finite JSON number, non-string-keyed Map serialization, and unsupported general
 `json_decode<Result<...>>` decoding; the separate tagged codec is available). An expected error is a passing
-test result. When the integration test passes, all 11 positive groups pass and
-there are 0 unexpected failures. The current matrix has 18 supported, 5 partial,
-and 2 unavailable entries; the program prints these counts. User-defined
-generic functions and payload enums are covered by the positive type-system
-example and explicit compiler-negative cases. Generic data types and function
-values remain unavailable. Classes and reference identity are a deliberate departure
+test result. When the integration test passes, all 12 positive groups pass and
+there are 0 unexpected failures. The current matrix has 18 supported, 6 partial,
+and 1 unavailable entry; the program prints these counts. User-defined
+generic functions, payload enums, and named function values are covered by the positive type-system
+example and explicit compiler-negative cases. Generic data types, closures, and generic function values remain unavailable. Classes and reference identity are a deliberate departure
 from the value-oriented record model; they are not required for records, CRUD,
 or database relationships.
 
