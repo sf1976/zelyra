@@ -13,10 +13,11 @@ A concise, step-by-step introduction building a machine-management application:
 - [Deutsch (Einstieg)](de/README.md)
 - [English (Intro)](en/README.md)
 
-Both editions document the experimental Zelyra 0.3.0 implementation as it
-exists today and clearly label roadmap features. The next proposed milestone
-is tracked separately in the [English release plan](../release-plans/0.4.0.en.md)
-and [German release plan](../release-plans/0.4.0.de.md).
+Both editions are maintained as practical guides to the current Zelyra
+implementation. The [implemented capabilities](../implemented.en.md) summarize
+what is available, including its limits; the [roadmap](../ROADMAP.md) tracks
+unfinished work. Release plans describe work in progress and are not evidence
+that a planned feature is already available.
 
 The [digital sovereignty manifesto](../MANIFESTO.md) is the binding product
 compass; read it alongside the implementation status rather than as a claim of
@@ -26,5 +27,6 @@ For the binding order of language sources and the required validation workflow,
 see the [source authority guide](../source-authority.md) and the
 [deutsche Quellenlandkarte](../source-authority.de.md).
 
-> Zelyra is experimental. Keep backups, inspect generated SQL, and never test a
-> destructive schema plan on the database that pays your salary.
+> Zelyra is experimental and has not been approved for production use. Keep
+> backups, inspect generated SQL, and never test a destructive schema plan on
+> a database containing data you cannot afford to lose.

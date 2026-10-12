@@ -19,15 +19,22 @@ program and ending with a database-backed web application.
 Create a new local learning project for customers, items, and invoices with
 [`zelyra --tutorial invoice`](../../tutorials/invoice.en.md).
 
-> **Project status:** Zelyra 0.9.5 is stably published, remains experimental,
+> **Project status:** Zelyra 0.9.7 is stably published, remains experimental,
 > and is not approved for production use. Independent human acceptance for
 > earlier releases is deferred to 1.0.0. See the
 > [roadmap](../../ROADMAP.md) and
 > [acceptance decision](../../release-readiness/1.0.0-human-acceptance.en.md).
 
-Version 0.9.5 adds transactional application mail through an explicit SMTP
-outbox worker. See [Application email](../mail.en.md) and
-[the 0.9.5 release notes](../../release-notes/0.9.5.en.md).
+Zelyra combines static type checking and clear diagnostics with
+compiler-checked database and web declarations. The platform includes
+relational foreign keys, CRUD, authentication, audit, optional local MFA, SMTP
+mail through a transactional outbox, and a local Studio with a database
+workbench. The invoice tutorial guides you through customers, items, a
+dashboard, and printable invoices with 19% tax. The
+[implemented capabilities](../../implemented.en.md) describe the limits of
+individual features, databases, and operational workflows. Details for
+[application mail](../mail.en.md) and the
+[invoice tutorial](../../tutorials/invoice.en.md) are documented separately.
 
 The binding product goals for digital sovereignty and evidence-based
 correctness claims are described in the [Zelyra manifesto](../../MANIFESTO.md).
