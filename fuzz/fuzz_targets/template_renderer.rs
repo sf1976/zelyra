@@ -39,6 +39,7 @@ fuzz_target!(|input: &[u8]| {
         csrf: CsrfProtection::new(text.clone()),
         form_view: CrudFormViewDef::default(),
         post_only: true,
+        recipient_column: None,
         audit_table: None,
         audit_event: None,
         audit_chain: false,
