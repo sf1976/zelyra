@@ -104,13 +104,13 @@ echo "[3/5] requiring an explicit tenant selection"
 ambiguous="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --cookie "${cookie}" "${base_url}/notifications")"
 [[ "${ambiguous}" == "403" ]]
 
-echo "[4/5] counting only current unread notifications in tenant A"
+echo "[4/5] showing read history while counting only current unread notifications in tenant A"
 status_a="$(curl --silent --show-error --output "${temp_dir}/tenant-a.html" --write-out '%{http_code}' \
     --cookie "${cookie}" "${base_url}/notifications?tenant_id=101")"
 [[ "${status_a}" == "200" ]]
 grep -Fq "${tenant_a_title}" "${temp_dir}/tenant-a.html"
 ! grep -Fq "${tenant_a_expired}" "${temp_dir}/tenant-a.html"
-! grep -Fq "${tenant_a_read}" "${temp_dir}/tenant-a.html"
+grep -Fq "${tenant_a_read}" "${temp_dir}/tenant-a.html"
 ! grep -Fq "${tenant_b_title}" "${temp_dir}/tenant-a.html"
 ! grep -Fq '\\N' "${temp_dir}/tenant-a.html"
 grep -Eq 'Unread notifications: 1|Ungelesene Benachrichtigungen: 1' "${temp_dir}/tenant-a.html"
