@@ -546,6 +546,8 @@ pub struct RecordField {
 pub struct Function {
     pub name: String,
     pub is_public: bool,
+    /// Type parameters declared after the function name, for example `fn first<T>`.
+    pub type_params: Vec<String>,
     pub params: Vec<Param>,
     pub return_type: Option<Type>,
     pub capabilities: Vec<String>,

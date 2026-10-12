@@ -3,6 +3,7 @@ import "src/collections.zyl" as collections
 import "src/records.zyl" as records
 import "src/serialization.zyl" as serialization
 import "src/advanced.zyl" as advanced
+import "src/generics.zyl" as generics
 
 enum OrderStatus { Draft Pending Paid }
 
@@ -12,6 +13,7 @@ fn main() uses Clock {
     records::run()
     serialization::run()
     advanced::run()
+    generics::run()
     status: OrderStatus = OrderStatus::Paid
     restored_status: OrderStatus = json_decode<OrderStatus>(json_encode(status))
     assert(restored_status == status, "unit enum JSON round trip")
@@ -21,7 +23,7 @@ fn main() uses Clock {
         OrderStatus::Paid => { assert(true, "exhaustive unit enum match") }
     }
     print("PASS unit enums, equality, exhaustive match and JSON round trip")
-    print("Report: 10 positive type groups; 8 expected compiler errors and 18 expected runtime errors are verified by the CLI integration test.")
+    print("Report: 11 positive type groups; 11 expected compiler errors and 18 expected runtime errors are verified by the CLI integration test.")
     print("Type matrix: 18 supported entries, 5 partial entries, 2 unavailable entries; see README.md.")
     print("Unexpected failures: 0 when the CLI integration test passes.")
     print("Ergebnis: alle ausführbaren Typprüfungen bestanden.")

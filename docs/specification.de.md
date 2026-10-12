@@ -470,9 +470,42 @@ Konstrukte absichtlich.
   Festkommadivision kann weiterhin jenseits der neunten Stelle abschneiden.
 - `zelyra run file.zyl --max-steps N` aktiviert eine optionale Obergrenze für
   ausgeführte Anweisungen und Schleifeniterationen. Ohne Option bleibt das
-  Budget unbegrenzt. Das Budget ist keine Prozessisolation. Funktionswerte,
-  benutzerdefinierte Generics und Enum-Payloads sind noch nicht Teil der
-  Sprachlinie.
+  Budget unbegrenzt. Das Budget ist keine Prozessisolation. Benannte
+  Funktionswerte, benutzerdefinierte generische Datentypen und Enum-Payloads
+  sind noch nicht Teil der Sprachlinie.
+
+### Generische Funktionen in 0.9.9
+
+Der 0.9.9-Entwicklungszweig unterstützt benutzerdefinierte generische
+Funktionen. Typparameter stehen direkt nach dem Funktionsnamen; Typen können
+beim Aufruf aus Argumenten abgeleitet oder ausdrücklich angegeben werden:
+
+~~~zelyra
+fn identity<T>(value: T) -> T {
+    return value
+}
+
+fn first_or<T>(values: T[], fallback: T) -> T {
+    if len(values) > 0 { return values[0] }
+    return fallback
+}
+
+fn main() {
+    print(identity(42))
+    print(identity<String>("Zelyra"))
+    print(first_or(["Kunde", "Artikel"], "unbekannt"))
+}
+~~~
+
+Ein Typparameter muss aus Argumenten ableitbar sein oder explizit angegeben
+werden. Wiederholte Verwendungen desselben Parameters müssen denselben Typ
+haben; andernfalls meldet der Compiler `E-TYPE-001`. Nicht ableitbare Typen,
+eine falsche Anzahl expliziter Typargumente und Typparameter, die deklarierte
+Typen verdecken, verwenden `E-TYPE-GENERIC-001`. Generische Funktionen dürfen
+andere generische Funktionen aufrufen. Der Type-System-Beispiellauf deckt
+Inference, explizite Typen, Arrays, `Option`, Modulimporte und erwartete
+Compilerfehler ab. Allgemeine Constraints, eigene generische Records und Enums,
+Enum-Payloads sowie Funktionswerte bleiben weitere 0.9.9-Arbeit.
 
 ### Getaggter JSON-Codec für `Result`
 

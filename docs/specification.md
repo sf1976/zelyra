@@ -486,3 +486,35 @@ Zelyra automatically renders a semantic query-control form before the page
 content and preserves the current URL state. Pagination also performs a safe
 count query and exposes `total` and `pages` as `UInt` page bindings. Pages that
 use only explicit `input` declarations remain manual by design.
+
+## Generic functions in 0.9.9
+
+The 0.9.9 development branch supports user-defined generic functions. Type
+parameters follow the function name. Calls may infer them from arguments or
+provide them explicitly:
+
+~~~zelyra
+fn identity<T>(value: T) -> T {
+    return value
+}
+
+fn first_or<T>(values: T[], fallback: T) -> T {
+    if len(values) > 0 { return values[0] }
+    return fallback
+}
+
+fn main() {
+    print(identity(42))
+    print(identity<String>("Zelyra"))
+    print(first_or(["Customer", "Item"], "unknown"))
+}
+~~~
+
+A type parameter must be inferable from the arguments or supplied explicitly.
+Repeated uses of one parameter must resolve to the same type; otherwise the
+compiler reports `E-TYPE-001`. Uninferable types, an incorrect number of
+explicit type arguments, and type parameters that shadow declared types use
+`E-TYPE-GENERIC-001`. Generic functions may call other generic functions. The
+type-system example covers inference, explicit types, arrays, `Option`, module
+imports, and expected compiler errors. General constraints, generic records and
+enums, enum payloads, and function values remain 0.9.9 work.

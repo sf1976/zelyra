@@ -61,6 +61,103 @@ fn sql_rows_keep_the_declared_result_type_for_runtime_return_checks() {
 }
 
 #[test]
+fn generic_functions_infer_and_accept_explicit_type_arguments() {
+    let source = r#"
+fn identity<T>(value: T) -> T {
+    return value
+}
+
+fn head_value<T>(values: T[]) -> T {
+    return values[0]
+}
+
+fn wrap<T>(value: T) -> Option<T> {
+    return Some(value)
+}
+
+fn result_or<T, E>(value: Result<T, E>, fallback: T) -> T {
+    match value {
+        Ok(found) => { return found }
+        Err(_) => { return fallback }
+    }
+}
+
+fn main() {
+    print(identity(42))
+    print(identity<String>("Grüße"))
+    print(head_value([7, 8]))
+    match wrap(true) {
+        Some(value) => { print(value) }
+        None => { print(false) }
+    }
+    print(result_or<Int, String>(Ok(7), 0))
+}
+"#;
+    assert_eq!(run(source), ["42", "Grüße", "7", "true", "7"]);
+}
+
+#[test]
+fn generic_functions_reject_conflicting_and_invalid_type_arguments() {
+    let conflicting = parse(
+        &lex("fn same<T>(left: T, right: T) -> T { return left } fn main() { print(same(1, \"one\")) }")
+            .unwrap(),
+    )
+    .unwrap();
+    let errors = check(&conflicting).expect_err("different types must not unify as one T");
+    assert!(errors.iter().any(|error| {
+        error
+            .message
+            .contains("type mismatch: expected `Int`, found `String`")
+    }));
+
+    let explicit = parse(
+        &lex("fn identity<T>(value: T) -> T { return value } fn main() { print(identity<Int>(\"one\")) }")
+            .unwrap(),
+    )
+    .unwrap();
+    let errors = check(&explicit).expect_err("an explicit type argument must be enforced");
+    assert!(errors.iter().any(|error| {
+        error
+            .message
+            .contains("type mismatch: expected `Int`, found `String`")
+    }));
+
+    let uninferred = parse(
+        &lex("fn ignored<T>(value: Int) -> Int { return value } fn main() { print(ignored(1)) }")
+            .unwrap(),
+    )
+    .unwrap();
+    let errors = check(&uninferred).expect_err("unconstrained type parameters need explicit types");
+    assert!(errors.iter().any(|error| {
+        error.code == "E-TYPE-GENERIC-001"
+            && error.message.contains("cannot infer type parameter `T`")
+    }));
+
+    let wrong_arity = parse(
+        &lex("fn identity<T>(value: T) -> T { return value } fn main() { print(identity<Int, String>(1)) }")
+            .unwrap(),
+    )
+    .unwrap();
+    let errors = check(&wrong_arity).expect_err("generic type argument count must be checked");
+    assert!(errors.iter().any(|error| {
+        error.code == "E-TYPE-GENERIC-001"
+            && error
+                .message
+                .contains("expects 1 type argument(s), found 2")
+    }));
+
+    let shadows_type = parse(
+        &lex("struct Customer { id: Int } fn identity<Customer>(value: Customer) -> Customer { return value } fn main() { }")
+            .unwrap(),
+    )
+    .unwrap();
+    let errors = check(&shadows_type).expect_err("generic parameters may not shadow domain types");
+    assert!(errors.iter().any(|error| {
+        error.code == "E-TYPE-GENERIC-001" && error.message.contains("shadows a declared type")
+    }));
+}
+
+#[test]
 fn long_left_associative_expressions_are_checked_and_evaluated_without_stack_overflow() {
     let expression = std::iter::repeat_n("1", 5_000)
         .collect::<Vec<_>>()
@@ -2340,6 +2437,20 @@ fn validates_api_handler_signature() {
         )
         .unwrap();
     assert!(check_apis(&program).is_ok());
+}
+
+#[test]
+fn rejects_generic_functions_as_api_handlers() {
+    let program = parse(
+        &lex("fn get_customer<T>(id: Id) -> Customer { } api GET \"/customers/{id}\" { handler get_customer input { id: Id } output Customer } fn main() { }")
+            .unwrap(),
+    )
+    .unwrap();
+    let errors = check_apis(&program).expect_err("API routes have no generic type argument syntax");
+    assert!(errors.iter().any(|error| {
+        error.message.contains("must be non-generic")
+            && error.message.contains("cannot supply type arguments")
+    }));
 }
 
 #[test]

@@ -42,17 +42,17 @@ Programmlauf.
 | `Map<K,V>` | ✅ unterstützt | Typisierte Maps; erlaubte Schlüsseltypen sind `Int`, `UInt`, `String`, `Bool`, `Char` und `Timestamp`. Doppelte Literalschlüssel behalten einen Eintrag und der letzte Wert gewinnt. Ein fehlender `get`-Schlüssel ergibt `None`. JSON unterstützt nur String-Schlüssel. |
 | Records (`struct`) | ✅ unterstützt | Eigene, verschachtelte Records, Felder, Wertgleichheit und JSON-Roundtrip. `record_with(record, "feld", wert)` liefert einen typgeprüften neuen Record; der ursprüngliche Wert bleibt bestehen. |
 | Enums | ✅ unterstützt | Eigene payloadfreie Varianten mit `enum Status { Draft Paid }`, `Status::Draft`, Gleichheit, JSON-Roundtrip und exhaustivem `match`. Varianten mit Nutzdaten sind noch nicht verfügbar. |
-| Klassen/Objektidentität/Referenzen | — nicht vorhanden | Records werden als Werte behandelt. Es gibt keine beobachtbare Objektidentität oder Referenzsemantik und keine Mutation einzelner Recordfelder. |
+| Klassen/Objektidentität/Referenzen | — nicht vorhanden | Zelyra verwendet Records mit Wertsemantik und unveränderliche Funktionsabläufe. Klassen, beobachtbare Objektidentität und veränderliche Referenzen gehören derzeit nicht zur Sprachlinie. |
 | `Timestamp` | ✅ teilweise nutzbar | `now()`, Gleichheit, chronologische Vergleiche, UTC-Formatierung, JSON als Unix-Millisekunden sowie `timestamp_add_result` und `timestamp_difference_result` für UTC-Dauern. Operationen sind auf ISO-Jahre 0001–9999 begrenzt. Zeitzonen und lokale Sommerzeit sind nicht enthalten. |
 | `Date`, `Time`, `Duration`, `Bytes` | ✅ unterstützt | Validierte ISO-Daten und Uhrzeiten, chronologische Vergleiche, JSON-Roundtrips und geprüfte Daueraddition/-subtraktion. `date_add_days_result` und `date_days_between_result` rechnen Kalender-Tage inklusive Schaltjahren und Jahreswechseln. `Bytes` akzeptiert Werte 0–255. |
 | Bereichsschleife | ✅ unterstützt | `for i in start..end` verwendet Int-Grenzen mit exklusivem Ende. Negative Grenzen, leere Bereiche, `break` und `continue` funktionieren. Der Bereich wird in einer Schleife nicht als Array materialisiert. |
 | `Unit` | ✅ unterstützt | Leerer Rückgabewert, explizite Funktionstypen und JSON-Roundtrip mit `null`. |
 | `Result<T,E>` | ✅ unterstützt | `Ok`/`Err`, Pattern Matching und Rückgabe aus Funktionen. Das bisherige `json_encode`-Format bleibt unverändert; `json_encode_tagged_result` und `json_decode_tagged_result<T,E>` tauschen Results verlustfrei als `{"$result":"ok","value":...}` oder `{"$result":"err","error":...}` aus. `json_decode_result<T>` bleibt der Result-basierte Decoder für gewöhnliche JSON-Ziele. |
 | `HttpResult<T>`, `HttpResponse`, `HttpError` | 🧪 spezialisiert | HTTP-Subsystem-Typen für Netzwerkantworten und Fehler; keine allgemeinen Literal- oder Konstruktoren. |
-| Generics | 🧪 eingebaut | Generische Standardtypen wie `Option`, `Result`, `Map`, Arrays und `json_decode<T>` sind vorhanden. Eigene generische Funktionen und Datentypen sind nicht verfügbar. |
+| Generics | 🧪 teilweise | Generische Standardtypen sowie eigene generische Funktionen (`fn identity<T>`) mit Typinferenz oder expliziten Typargumenten sind verfügbar. Eigene generische Records/Enums und allgemeine Constraints sind noch nicht verfügbar. |
 | Typ-Aliase und eigene Typen | 🧪 teilweise | `type Name = ...` sowie Records sind vorhanden. Records werden ausgeführt und serialisiert; Aliase haben keine eigene Runtimeidentität. |
 | `Id`, `Email`, `Url`, `Uuid`, `Money` | 🧪 spezialisiert | Benannte String-Domainwerte für API-/Datenschema-Nutzung; keine eigenen numerischen oder Identitätsregeln in der Runtime. |
-| Funktionen als Werte | — nicht vorhanden | Funktionen können aufgerufen, aber nicht als Werte gespeichert oder übergeben werden. |
+| Funktionen als Werte | — nicht vorhanden | Benannte Funktionen können aufgerufen, aber noch nicht als Werte gespeichert oder übergeben werden. |
 
 ## Konvertierungen, Standardwerte und Kopien
 
@@ -72,21 +72,22 @@ keine flachen oder tiefen Kopien als getrennte Operationen. `record_with` und
 Der erfolgreiche Programmlauf prüft Zahlenbereiche, Rechenoperationen,
 Rundungsverhalten, Unicode, optionale Werte, Arrays, Listen-Aliase, Tupel,
 Mengen, Records, Enums, Kalender-/Zeitstempeloperationen, Decimal-Quantisierung,
-Bereiche und JSON.
-Der CLI-Integrationstest erwartet zusätzlich **8 Compilerfehler** und
+Bereiche, JSON und benutzerdefinierte generische Funktionen.
+Der CLI-Integrationstest erwartet zusätzlich **11 Compilerfehler** und
 **18 Runtimefehler** (Typfehler, gemischte Arrays, unvollständiges Matching,
 Überlauf/Unterlauf, Division durch null, ungültiger Index, ungültige
 Date-/Time-/Bytes-/Decimal-Werte, falsche Tuple-Länge, nicht-endliche
 JSON-Zahl, nicht-stringbasierte Map-Serialisierung sowie nicht unterstützte allgemeine
 `json_decode<Result<...>>`-Decodierung; der separate getaggte Codec ist verfügbar). Ein erwarteter Fehler ist dabei ein
-positives Testergebnis. Bei erfolgreichem Integrationstest sind alle 10
+positives Testergebnis. Bei erfolgreichem Integrationstest sind alle 11
 positiven Testgruppen bestanden und es gibt 0 unerwartete Fehler. Die
 aktuelle Matrix umfasst 18 unterstützte, 5 teilweise unterstützte und 2 noch
-nicht verfügbare Einträge; das Programm gibt diese drei Zahlen aus. Die
-Sprachmatrix weist Funktionswerte und beobachtbare Klassen-/Referenzidentität
-ausdrücklich als nicht verfügbar aus. Eigene Generics und Enum-Varianten mit
-Nutzdaten fehlen ebenfalls; payloadfreie Enums sind enthalten. Records verwenden
-bewusst Wertsemantik.
+nicht verfügbare Einträge; das Programm gibt diese drei Zahlen aus. Eigene
+generische Funktionen werden im positiven Type-System-Beispiel sowie mit
+expliziten Compiler-Negativfällen geprüft. Generische Datentypen,
+Enum-Varianten mit Nutzdaten und Funktionswerte fehlen noch. Klassen und
+Referenzidentität sind eine bewusste Abweichung vom wertorientierten Recordmodell;
+sie sind keine Voraussetzung für Records, CRUD oder Datenbankbeziehungen.
 
 Das ist eine Abdeckung der vorhandenen Sprachoberfläche, keine Behauptung, dass
 alle Typen oder Konvertierungen bereits implementiert sind.

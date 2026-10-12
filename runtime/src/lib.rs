@@ -179,6 +179,15 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
                 });
                 continue;
             };
+            if !function.type_params.is_empty() {
+                errors.push(ApiDiagnostic {
+                    message: format!(
+                        "API handler `{handler}` must be non-generic because API routes cannot supply type arguments"
+                    ),
+                    span: function.span,
+                });
+                continue;
+            }
             if function.params.len() != api.input.len() {
                 errors.push(ApiDiagnostic {
                     message: format!(
@@ -3451,6 +3460,7 @@ struct Variable {
 
 #[derive(Clone)]
 struct FunctionSignature {
+    type_params: Vec<String>,
     params: Vec<Type>,
     return_type: Type,
 }
@@ -3458,6 +3468,7 @@ struct FunctionSignature {
 struct Checker<'a> {
     functions: HashMap<String, FunctionSignature>,
     known_types: std::collections::HashSet<String>,
+    active_type_parameters: HashSet<String>,
     errors: Vec<TypeError>,
     loop_depth: usize,
     parallel_depth: usize,
@@ -3558,6 +3569,7 @@ pub fn check(program: &Program) -> Result<(), Vec<TypeError>> {
             functions.insert(
                 function.name.clone(),
                 FunctionSignature {
+                    type_params: function.type_params.clone(),
                     params: function
                         .params
                         .iter()
@@ -3578,20 +3590,13 @@ pub fn check(program: &Program) -> Result<(), Vec<TypeError>> {
     let mut checker = Checker {
         functions,
         known_types,
+        active_type_parameters: HashSet::new(),
         errors,
         loop_depth: 0,
         parallel_depth: 0,
         transaction_depth: 0,
         _program: program,
     };
-    for function in &program.functions {
-        for parameter in &function.params {
-            checker.check_type(&parameter.ty, parameter.span);
-        }
-        if let Some(return_type) = &function.return_type {
-            checker.check_type(return_type, function.span);
-        }
-    }
     for function in &program.functions {
         checker.check_function(function);
     }
@@ -3716,6 +3721,25 @@ impl<'a> Checker<'a> {
         scopes.iter().rev().find_map(|scope| scope.get(name))
     }
     fn check_function(&mut self, function: &Function) {
+        let previous_type_parameters = std::mem::replace(
+            &mut self.active_type_parameters,
+            function.type_params.iter().cloned().collect(),
+        );
+        for parameter in &function.type_params {
+            if self.known_types.contains(parameter) {
+                self.error_with_code(
+                    "E-TYPE-GENERIC-001",
+                    function.span,
+                    format!("generic type parameter `{parameter}` shadows a declared type"),
+                );
+            }
+        }
+        for parameter in &function.params {
+            self.check_type(&parameter.ty, parameter.span);
+        }
+        if let Some(return_type) = &function.return_type {
+            self.check_type(return_type, function.span);
+        }
         let mut scopes = vec![HashMap::new()];
         for parameter in &function.params {
             if scopes[0]
@@ -3769,6 +3793,7 @@ impl<'a> Checker<'a> {
                 ),
             );
         }
+        self.active_type_parameters = previous_type_parameters;
     }
     fn check_block(
         &mut self,
@@ -4003,7 +4028,10 @@ impl<'a> Checker<'a> {
     }
     fn check_type(&mut self, ty: &Type, span: Span) {
         match ty {
-            Type::Named(name) if !self.known_types.contains(name) => {
+            Type::Named(name)
+                if !self.known_types.contains(name)
+                    && !self.active_type_parameters.contains(name) =>
+            {
                 self.error(span, format!("unknown type `{name}`"));
             }
             Type::Option(inner) => self.check_type(inner, span),
@@ -5275,13 +5303,82 @@ impl<'a> Checker<'a> {
                             ),
                         );
                     }
-                    for (index, arg) in args.iter().enumerate() {
-                        let actual = self.check_expr(arg, scopes);
-                        if let Some(expected) = signature.params.get(index) {
-                            self.expect_type(expected, &actual, arg.span);
+                    let actual_types = args
+                        .iter()
+                        .map(|argument| self.check_expr(argument, scopes))
+                        .collect::<Vec<_>>();
+                    if signature.type_params.is_empty() {
+                        if !type_args.is_empty() {
+                            self.error(
+                                expr.span,
+                                format!("function `{name}` does not accept type arguments"),
+                            );
                         }
+                        for (index, actual) in actual_types.iter().enumerate() {
+                            if let Some(expected) = signature.params.get(index) {
+                                self.expect_type(expected, actual, args[index].span);
+                            }
+                        }
+                        signature.return_type
+                    } else {
+                        let parameters = signature
+                            .type_params
+                            .iter()
+                            .cloned()
+                            .collect::<HashSet<_>>();
+                        let mut substitutions = HashMap::new();
+                        if !type_args.is_empty() {
+                            if type_args.len() != signature.type_params.len() {
+                                self.error_with_code(
+                                    "E-TYPE-GENERIC-001",
+                                    expr.span,
+                                    format!(
+                                        "generic function `{name}` expects {} type argument(s), found {}",
+                                        signature.type_params.len(),
+                                        type_args.len()
+                                    ),
+                                );
+                            }
+                            for argument in type_args {
+                                self.check_type(argument, expr.span);
+                            }
+                            for (parameter, argument) in signature.type_params.iter().zip(type_args)
+                            {
+                                substitutions.insert(parameter.clone(), argument.clone());
+                            }
+                        }
+                        for (index, actual) in actual_types.iter().enumerate() {
+                            if let Some(expected) = signature.params.get(index) {
+                                if type_args.is_empty() {
+                                    infer_generic_types(
+                                        expected,
+                                        actual,
+                                        &parameters,
+                                        &mut substitutions,
+                                    );
+                                }
+                            }
+                        }
+                        for parameter in &signature.type_params {
+                            if !substitutions.contains_key(parameter) {
+                                self.error_with_code(
+                                    "E-TYPE-GENERIC-001",
+                                    expr.span,
+                                    format!(
+                                        "cannot infer type parameter `{parameter}` for `{name}`; provide explicit type arguments"
+                                    ),
+                                );
+                                substitutions.insert(parameter.clone(), Type::Unknown);
+                            }
+                        }
+                        for (index, actual) in actual_types.iter().enumerate() {
+                            if let Some(expected) = signature.params.get(index) {
+                                let expected = substitute_generic_type(expected, &substitutions);
+                                self.expect_type(&expected, actual, args[index].span);
+                            }
+                        }
+                        substitute_generic_type(&signature.return_type, &substitutions)
                     }
-                    signature.return_type
                 } else {
                     self.error(expr.span, format!("unknown function `{name}`"));
                     Type::Unknown
@@ -5570,6 +5667,95 @@ fn compatible(expected: &Type, actual: &Type) -> bool {
         _ => expected == actual,
     }
 }
+
+fn infer_generic_types(
+    expected: &Type,
+    actual: &Type,
+    parameters: &HashSet<String>,
+    substitutions: &mut HashMap<String, Type>,
+) {
+    if *actual == Type::Unknown {
+        return;
+    }
+    match expected {
+        Type::Named(name) if parameters.contains(name) => {
+            substitutions
+                .entry(name.clone())
+                .or_insert_with(|| actual.clone());
+        }
+        Type::Option(expected) => {
+            if let Type::Option(actual) = actual {
+                infer_generic_types(expected, actual, parameters, substitutions);
+            }
+        }
+        Type::Result(expected_ok, expected_error) => {
+            if let Type::Result(actual_ok, actual_error) = actual {
+                infer_generic_types(expected_ok, actual_ok, parameters, substitutions);
+                infer_generic_types(expected_error, actual_error, parameters, substitutions);
+            }
+        }
+        Type::Array(expected) | Type::Set(expected) => match actual {
+            Type::Array(actual) | Type::Set(actual) => {
+                infer_generic_types(expected, actual, parameters, substitutions);
+            }
+            _ => {}
+        },
+        Type::Tuple(expected) => {
+            if let Type::Tuple(actual) = actual {
+                if expected.len() == actual.len() {
+                    for (expected, actual) in expected.iter().zip(actual) {
+                        infer_generic_types(expected, actual, parameters, substitutions);
+                    }
+                }
+            }
+        }
+        Type::Map(expected_key, expected_value) => {
+            if let Type::Map(actual_key, actual_value) = actual {
+                infer_generic_types(expected_key, actual_key, parameters, substitutions);
+                infer_generic_types(expected_value, actual_value, parameters, substitutions);
+            }
+        }
+        Type::HttpResult(expected) => {
+            if let Type::HttpResult(actual) = actual {
+                infer_generic_types(expected, actual, parameters, substitutions);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn substitute_generic_type(ty: &Type, substitutions: &HashMap<String, Type>) -> Type {
+    match ty {
+        Type::Named(name) => substitutions
+            .get(name)
+            .cloned()
+            .unwrap_or_else(|| ty.clone()),
+        Type::Option(inner) => {
+            Type::Option(Box::new(substitute_generic_type(inner, substitutions)))
+        }
+        Type::Result(ok, error) => Type::Result(
+            Box::new(substitute_generic_type(ok, substitutions)),
+            Box::new(substitute_generic_type(error, substitutions)),
+        ),
+        Type::Array(inner) => Type::Array(Box::new(substitute_generic_type(inner, substitutions))),
+        Type::Tuple(items) => Type::Tuple(
+            items
+                .iter()
+                .map(|item| substitute_generic_type(item, substitutions))
+                .collect(),
+        ),
+        Type::Set(inner) => Type::Set(Box::new(substitute_generic_type(inner, substitutions))),
+        Type::Map(key, value) => Type::Map(
+            Box::new(substitute_generic_type(key, substitutions)),
+            Box::new(substitute_generic_type(value, substitutions)),
+        ),
+        Type::HttpResult(inner) => {
+            Type::HttpResult(Box::new(substitute_generic_type(inner, substitutions)))
+        }
+        _ => ty.clone(),
+    }
+}
+
 fn is_numeric(ty: &Type) -> bool {
     matches!(ty, Type::Int | Type::UInt | Type::Float | Type::Decimal)
 }
@@ -6098,6 +6284,7 @@ pub fn execute_function_with_capabilities_and_policies(
             .map(|definition| (definition.name.clone(), definition.clone()))
             .collect(),
         active_capabilities: Vec::new(),
+        active_type_substitutions: Vec::new(),
     };
     interpreter.call(name, args, Span::default())
 }
@@ -6181,6 +6368,7 @@ fn execute_internal(
             .map(|definition| (definition.name.clone(), definition.clone()))
             .collect(),
         active_capabilities: Vec::new(),
+        active_type_substitutions: Vec::new(),
     };
     interpreter.call("main", Vec::new(), Span::default())?;
     Ok(interpreter.output)
@@ -6204,6 +6392,7 @@ struct Interpreter<'program> {
     type_aliases: HashMap<String, Type>,
     enum_definitions: HashMap<String, zelyra_ast::EnumDef>,
     active_capabilities: Vec<HashSet<String>>,
+    active_type_substitutions: Vec<HashMap<String, Type>>,
 }
 
 fn statement_span(statement: &Stmt) -> Span {
@@ -7306,6 +7495,16 @@ impl<'program> Interpreter<'program> {
     }
 
     fn call(&mut self, name: &str, args: Vec<Value>, span: Span) -> Result<Value, RuntimeError> {
+        self.call_with_type_args(name, &[], args, span)
+    }
+
+    fn call_with_type_args(
+        &mut self,
+        name: &str,
+        type_args: &[Type],
+        args: Vec<Value>,
+        span: Span,
+    ) -> Result<Value, RuntimeError> {
         let function = self
             .functions
             .get(name)
@@ -7320,6 +7519,69 @@ impl<'program> Interpreter<'program> {
                 ),
             ));
         }
+        let resolved_type_args = type_args
+            .iter()
+            .map(|ty| {
+                self.active_type_substitutions
+                    .last()
+                    .map_or_else(|| ty.clone(), |active| substitute_generic_type(ty, active))
+            })
+            .collect::<Vec<_>>();
+        let type_args = resolved_type_args.as_slice();
+        let substitutions = if function.type_params.is_empty() {
+            if !type_args.is_empty() {
+                return Err(self.runtime_error(
+                    span,
+                    format!("function `{name}` does not accept type arguments"),
+                ));
+            }
+            HashMap::new()
+        } else {
+            if !type_args.is_empty() && type_args.len() != function.type_params.len() {
+                return Err(self.runtime_error(
+                    span,
+                    format!(
+                        "generic function `{name}` expects {} type argument(s), found {}",
+                        function.type_params.len(),
+                        type_args.len()
+                    ),
+                ));
+            }
+            let parameters = function.type_params.iter().cloned().collect::<HashSet<_>>();
+            let mut substitutions = function
+                .type_params
+                .iter()
+                .zip(type_args)
+                .map(|(parameter, ty)| (parameter.clone(), ty.clone()))
+                .collect::<HashMap<_, _>>();
+            if type_args.is_empty() {
+                for (parameter, value) in function.params.iter().zip(&args) {
+                    infer_generic_types(
+                        &parameter.ty,
+                        &value.ty(),
+                        &parameters,
+                        &mut substitutions,
+                    );
+                }
+            }
+            if let Some(missing) = function
+                .type_params
+                .iter()
+                .find(|parameter| !substitutions.contains_key(*parameter))
+            {
+                return Err(self.runtime_error(
+                    span,
+                    format!(
+                        "cannot infer type parameter `{missing}` for `{name}`; provide explicit type arguments"
+                    ),
+                ));
+            }
+            substitutions
+        };
+        let expected_return = function
+            .return_type
+            .as_ref()
+            .map(|ty| substitute_generic_type(ty, &substitutions));
         if let Some(grants) = &self.granted_capabilities {
             if let Some(capability) = function
                 .capabilities
@@ -7341,6 +7603,7 @@ impl<'program> Interpreter<'program> {
         self.call_depth += 1;
         self.active_capabilities
             .push(function.capabilities.iter().cloned().collect());
+        self.active_type_substitutions.push(substitutions.clone());
         let result = (|| {
             let mut env = Environment::new();
             for (param, value) in function.params.iter().zip(args) {
@@ -7362,7 +7625,7 @@ impl<'program> Interpreter<'program> {
                 Flow::Return(value) => value,
                 Flow::Continue | Flow::LoopContinue | Flow::Break => Value::Unit,
             };
-            if let Some(expected) = function.return_type.as_ref() {
+            if let Some(expected) = expected_return.as_ref() {
                 if *expected != Type::Unit && !returned {
                     return Err(self.runtime_error(
                         function.body.span,
@@ -7394,6 +7657,7 @@ impl<'program> Interpreter<'program> {
             }
             Ok(result)
         })();
+        self.active_type_substitutions.pop();
         self.active_capabilities.pop();
         self.call_depth -= 1;
         result
@@ -7669,6 +7933,7 @@ impl<'program> Interpreter<'program> {
                                 type_aliases: self.type_aliases.clone(),
                                 enum_definitions: self.enum_definitions.clone(),
                                 active_capabilities: self.active_capabilities.clone(),
+                                active_type_substitutions: self.active_type_substitutions.clone(),
                             };
                             let mut child_env = env.clone();
                             scope.spawn(move || {
@@ -7876,7 +8141,7 @@ impl<'program> Interpreter<'program> {
                 .iter()
                 .map(|arg| self.eval(arg, env))
                 .collect::<Result<Vec<_>, _>>()?;
-            return self.call(name, values, span);
+            return self.call_with_type_args(name, type_args, values, span);
         }
         self.eval_builtin_call(name, type_args, args, env, span)
     }

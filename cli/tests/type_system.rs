@@ -66,6 +66,23 @@ fn type_coverage_program_passes_supported_tests_and_reports_expected_failures() 
         String::from_utf8_lossy(&run.stderr)
     );
     let output = String::from_utf8_lossy(&run.stdout);
+    let generic_example = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("examples/generic_functions.zyl");
+    for source in [project.join("src/generics.zyl"), generic_example] {
+        let result = Command::new(binary())
+            .args(["fmt", "--check"])
+            .arg(&source)
+            .current_dir(&project)
+            .output()
+            .expect("Zelyra formatter should run");
+        assert!(
+            result.status.success(),
+            "formatter rejected {}: {}",
+            source.display(),
+            String::from_utf8_lossy(&result.stderr)
+        );
+    }
     for expected in [
         "PASS Int/UInt ranges",
         "PASS Decimal exact base-10 arithmetic and Float binary precision",
@@ -77,7 +94,8 @@ fn type_coverage_program_passes_supported_tests_and_reports_expected_failures() 
         "PASS Option, Result, records",
         "PASS calendar arithmetic, Timestamp ordering, Decimal quantization, exclusive ranges",
         "PASS unit enums, equality, exhaustive match and JSON round trip",
-        "Report: 10 positive type groups; 8 expected compiler errors and 18 expected runtime errors",
+        "PASS user-defined generic functions, inference and explicit types",
+        "Report: 11 positive type groups; 11 expected compiler errors and 18 expected runtime errors",
         "Type matrix: 18 supported entries, 5 partial entries, 2 unavailable entries",
         "Unexpected failures: 0 when the CLI integration test passes",
         "alle ausführbaren Typprüfungen bestanden",
@@ -103,6 +121,12 @@ fn type_coverage_program_passes_supported_tests_and_reports_expected_failures() 
             "unsupported_set.zyl",
             "Set elements must be scalar comparable types",
         ),
+        (
+            "generic_explicit_mismatch.zyl",
+            "type mismatch: expected `Int`, found `String`",
+        ),
+        ("generic_uninferred.zyl", "E-TYPE-GENERIC-001"),
+        ("generic_wrong_arity.zyl", "E-TYPE-GENERIC-001"),
     ] {
         let path = format!("expected/compiler/{fixture}");
         let result = cli(&project, &["check", &path]);

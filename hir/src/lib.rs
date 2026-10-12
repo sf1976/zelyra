@@ -33,6 +33,7 @@ pub struct HirProgram {
 pub struct HirFunction {
     pub id: FunctionId,
     pub name: String,
+    pub type_params: Vec<String>,
     pub params: Vec<HirParam>,
     pub return_type: Option<Type>,
     pub capabilities: Vec<String>,
@@ -275,6 +276,7 @@ pub fn lower(program: &Program) -> Result<HirProgram, Vec<ResolveError>> {
         functions.push(HirFunction {
             id: FunctionId(index),
             name: function.name.clone(),
+            type_params: function.type_params.clone(),
             params,
             return_type: function.return_type.clone(),
             capabilities: function.capabilities.clone(),
@@ -762,6 +764,24 @@ mod tests {
             hir.functions[1].body.statements[0],
             HirStmt::Let { .. }
         ));
+    }
+
+    #[test]
+    fn preserves_generic_function_parameters_in_hir() {
+        let program = parse(
+            &lex("pub fn identity<T, E>(value: Result<T, E>) -> Result<T, E> { return value } fn main() { }")
+                .unwrap(),
+        )
+        .unwrap();
+        let hir = lower(&program).unwrap();
+        assert_eq!(hir.functions[0].type_params, ["T", "E"]);
+        assert_eq!(
+            hir.functions[0].params[0].ty,
+            Type::Result(
+                Box::new(Type::Named("T".into())),
+                Box::new(Type::Named("E".into()))
+            )
+        );
     }
 
     #[test]

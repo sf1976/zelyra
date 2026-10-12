@@ -1990,6 +1990,28 @@ impl<'a> Parser<'a> {
     fn function(&mut self, is_public: bool) -> Result<Function, ParseError> {
         let start = self.expect(TokenKind::Fn, "`fn`")?;
         let (name, _) = self.ident("function name")?;
+        let mut type_params = Vec::new();
+        if self.at(&TokenKind::Less) {
+            self.advance();
+            let mut seen = std::collections::HashSet::new();
+            loop {
+                let (parameter, span) = self.ident("generic type parameter")?;
+                if !seen.insert(parameter.clone()) {
+                    return Err(ParseError {
+                        message: format!(
+                            "generic type parameter `{parameter}` is declared more than once"
+                        ),
+                        span,
+                    });
+                }
+                type_params.push(parameter);
+                if !self.at(&TokenKind::Comma) {
+                    break;
+                }
+                self.advance();
+            }
+            self.expect(TokenKind::Greater, "`>` after generic type parameters")?;
+        }
         self.expect(TokenKind::LParen, "`(`")?;
         let mut params = Vec::new();
         self.skip_newlines();
@@ -2058,6 +2080,7 @@ impl<'a> Parser<'a> {
         Ok(Function {
             name,
             is_public,
+            type_params,
             params,
             return_type,
             capabilities,
@@ -2083,6 +2106,30 @@ impl<'a> Parser<'a> {
     }
     fn type_name(&mut self) -> Result<Type, ParseError> {
         self.with_nesting(Self::type_name_inner)
+    }
+
+    fn looks_like_generic_call(&self) -> bool {
+        if !self.at(&TokenKind::Less) {
+            return false;
+        }
+        let mut depth = 0_usize;
+        for (offset, token) in self.tokens[self.pos..].iter().enumerate() {
+            match &token.kind {
+                TokenKind::Less => depth += 1,
+                TokenKind::Greater => {
+                    depth = depth.saturating_sub(1);
+                    if depth == 0 {
+                        return self
+                            .tokens
+                            .get(self.pos + offset + 1)
+                            .is_some_and(|next| next.kind == TokenKind::LParen);
+                    }
+                }
+                TokenKind::Eof | TokenKind::Newline => return false,
+                _ => {}
+            }
+        }
+        false
     }
 
     fn type_name_inner(&mut self) -> Result<Type, ParseError> {
@@ -2668,14 +2715,15 @@ impl<'a> Parser<'a> {
                     name.push_str("::");
                     name.push_str(&segment);
                 }
-                let type_args = if matches!(
-                    name.as_str(),
-                    "json_decode"
-                        | "json_decode_result"
-                        | "json_decode_tagged_result"
-                        | "http_json"
-                        | "http_result"
-                ) && self.at(&TokenKind::Less)
+                let type_args = if self.at(&TokenKind::Less)
+                    && (matches!(
+                        name.as_str(),
+                        "json_decode"
+                            | "json_decode_result"
+                            | "json_decode_tagged_result"
+                            | "http_json"
+                            | "http_result"
+                    ) || self.looks_like_generic_call())
                 {
                     self.advance();
                     let mut type_args = Vec::new();
@@ -2832,6 +2880,41 @@ mod tests {
         let program = parse(&lex("fn main() { print(1 + 2 * 3) }").unwrap()).unwrap();
         assert_eq!(program.functions.len(), 1);
         assert_eq!(program.functions[0].name, "main");
+    }
+
+    #[test]
+    fn parses_generic_function_declarations_and_calls() {
+        let program = parse(
+            &lex("fn identity<T>(value: T) -> T { return value } fn main() { print(identity<Int>(7)) }")
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(program.functions[0].type_params, ["T"]);
+        let Stmt::Expr(outer) = &program.functions[1].body.statements[0] else {
+            panic!("expected call expression");
+        };
+        let ExprKind::Call { name, args, .. } = &outer.kind else {
+            panic!("expected outer print call");
+        };
+        assert_eq!(name, "print");
+        let ExprKind::Call {
+            name, type_args, ..
+        } = &args[0].kind
+        else {
+            panic!("expected inner generic call");
+        };
+        assert_eq!(name, "identity");
+        assert_eq!(type_args, &[Type::Int]);
+    }
+
+    #[test]
+    fn rejects_duplicate_generic_function_parameters() {
+        let error = parse(
+            &lex("fn pair<T, T>(left: T, right: T) -> T { return left } fn main() { }").unwrap(),
+        )
+        .expect_err("generic parameter names must be unique");
+        assert!(error.message.contains("declared more than once"));
+        assert!(error.span.start > 0);
     }
 
     #[test]

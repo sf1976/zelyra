@@ -1040,6 +1040,13 @@ language backlog as one 0.9.4 change.
   generic Result JSON codec, and every remaining corpus, CLI, setup, database,
   migrator, and security finding. The [0.9.9 plan](release-plans/0.9.9.en.md)
   lists testable criteria.
+- [🧪] Verified implementation slice on the 0.9.9 branch: generic functions
+  accept inferred or explicit type arguments, including type parameters nested
+  in arrays, `Option`, and `Result`. Conflicting and uninferable types have
+  regression coverage. The type-system example checks imported generic
+  functions, empty collections with explicit types, and compiler-negative
+  cases. Generic records/aliases, bounds, payload enums, and function values
+  remain open; this slice does not close the language gate.
 - Exit criteria: no open implementation, security, database, migration,
   packaging, or documentation blocker remains. If one remains, 0.9.9 is not
   complete. See the [0.9.9 plan](release-plans/0.9.9.en.md).

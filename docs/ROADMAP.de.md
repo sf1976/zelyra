@@ -1055,6 +1055,13 @@ IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
   unterscheidbarer generischer Result-JSON-Codec sowie sämtliche noch offenen
   Korpus-, CLI-, Setup-, Datenbank-, Migrator- und Sicherheitsbefunde. Der
   [0.9.9-Plan](release-plans/0.9.9.de.md) enthält die prüfbaren Kriterien.
+- [🧪] Geprüfter Umsetzungsschritt im 0.9.9-Branch: Generische Funktionen
+  leiten Typargumente ab oder akzeptieren sie ausdrücklich, auch innerhalb
+  von Arrays, `Option` und `Result`. Konfliktierende und nicht ableitbare Typen
+  besitzen Regressionstests. Das Type-System-Beispiel prüft generische
+  Modulimporte, leere Sammlungen mit expliziten Typen und Compiler-Negativfälle.
+  Generische Records/Aliase, Grenzen, Payload-Enums und Funktionswerte bleiben
+  offen; dieser Schritt schließt das Sprach-Gate nicht.
 - Abschlusskriterien: Keine offenen Implementierungs-, Sicherheits-, Datenbank-,
   Migrations-, Paketierungs- oder Dokumentationsblocker. Bleibt einer offen, ist
   0.9.9 nicht fertig. Siehe den [0.9.9-Plan](release-plans/0.9.9.de.md).

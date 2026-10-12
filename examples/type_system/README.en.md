@@ -41,16 +41,16 @@ diagnostic. These cases do not belong in the successful program run.
 | `Map<K,V>` | ✅ supported | Typed maps; supported key types are `Int`, `UInt`, `String`, `Bool`, `Char`, and `Timestamp`. Duplicate literal keys keep one entry and the last value wins. A missing `get` key returns `None`. JSON supports only string keys. |
 | Records (`struct`) | ✅ supported | User-defined nested records, fields, value equality, and JSON round trips. `record_with(record, "field", value)` returns a statically checked copy with one field changed; the source record is preserved. |
 | Enums | ✅ limited | User-defined unit variants (`enum Status { Draft Paid }`), qualified values, equality, JSON round trips, and exhaustive matching. Payload variants and imported enum namespaces are not supported yet. |
-| Classes/object identity/references | — unavailable | Records behave as values. There is no observable object identity or reference semantics, and individual record fields cannot be mutated. |
+| Classes/object identity/references | — unavailable | Zelyra uses value-semantics records and immutable function flows. Classes, observable object identity, and mutable references are not currently part of the language line. |
 | `Timestamp` | ✅ limited | `now()`, equality/order comparisons, UTC formatting, JSON as Unix milliseconds, and checked UTC-duration helpers `timestamp_add_result` / `timestamp_difference_result`. Years are bounded to 0001–9999; zones and local DST are out of scope. |
 | `Date`, `Time`, `Duration`, `Bytes` | ✅ supported | Validated ISO dates/times, checked duration operations, and bytes 0–255. `date_add_days_result` and `date_days_between_result` implement calendar-day math, including leap years and year boundaries. |
 | `Unit` | ✅ supported | Empty return value, explicit function type, and JSON round trip with `null`. |
 | `Result<T,E>` | ✅ supported | `Ok`/`Err`, matching, and function returns. Existing `json_encode` output is unchanged; `json_encode_tagged_result` and `json_decode_tagged_result<T,E>` exchange Results losslessly as `{"$result":"ok","value":...}` or `{"$result":"err","error":...}`. `json_decode_result<T>` remains the Result-based decoder for ordinary JSON targets. |
 | `HttpResult<T>`, `HttpResponse`, `HttpError` | 🧪 specialized | HTTP subsystem types for network responses and errors; no general literals or constructors. |
-| Generics | 🧪 built-ins | Generic standard types such as `Option`, `Result`, `Map`, arrays, and `json_decode<T>` exist. User-defined generic functions and data types are unavailable. |
+| Generics | 🧪 partial | Generic standard types and user-defined generic functions (`fn identity<T>`) with inference or explicit type arguments are available. User-defined generic records/enums and general constraints are not available yet. |
 | Type aliases and custom types | 🧪 partial | `type Name = ...` and records exist. Records execute and serialize; aliases have no separate runtime identity. |
 | `Id`, `Email`, `Url`, `Uuid`, `Money` | 🧪 specialized | Named string domain values for API/schema use; no separate numeric or identity rules in the runtime. |
-| Functions as values | — unavailable | Functions can be called but cannot be stored or passed as values. |
+| Functions as values | — unavailable | Named functions can be called but cannot yet be stored or passed as values. |
 
 ## Conversions, defaults, and copies
 
@@ -66,16 +66,21 @@ separate shallow/deep copy operations. The value-update helpers return a new rec
 ## Automated acceptance
 
 The successful run checks numeric ranges, arithmetic, rounding behavior,
-Unicode, optional values, arrays, List aliases, tuples, sets, records, enums, calendar and timestamp operations, Decimal quantization, ranges, and JSON. The CLI integration test also expects **8 compiler errors** and **18 runtime errors** (type mismatch,
+Unicode, optional values, arrays, List aliases, tuples, sets, records, enums,
+calendar and timestamp operations, Decimal quantization, ranges, JSON, and
+user-defined generic functions. The CLI integration test also expects **11 compiler errors** and **18 runtime errors** (type mismatch,
 mixed arrays, non-exhaustive matching, overflow/underflow, division by zero,
 invalid index, invalid Date/Time/Bytes/Decimal values, wrong tuple length,
 non-finite JSON number, non-string-keyed Map serialization, and unsupported general
 `json_decode<Result<...>>` decoding; the separate tagged codec is available). An expected error is a passing
-test result. When the integration test passes, all 10 positive groups pass and
+test result. When the integration test passes, all 11 positive groups pass and
 there are 0 unexpected failures. The current matrix has 18 supported, 5 partial,
-and 2 unavailable entries; the program prints these counts. The unavailable concepts are function values and observable class/reference
-identity. User-defined generics and payload enums are also not implemented;
-records intentionally use value semantics.
+and 2 unavailable entries; the program prints these counts. User-defined
+generic functions are covered by the positive type-system example and explicit
+compiler-negative cases. Generic data types, payload enums, and function values
+remain unavailable. Classes and reference identity are a deliberate departure
+from the value-oriented record model; they are not required for records, CRUD,
+or database relationships.
 
 This is coverage of the existing language surface, not a claim that every type
 or conversion is implemented.
