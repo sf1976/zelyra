@@ -680,6 +680,20 @@ fn execute_crud_mutation(
     scoped_record_check: Option<&zelyra_database::Query>,
 ) -> Result<(), zelyra_database::DatabaseError> {
     let Some(tenant_context) = tenant_context else {
+        if let Some(scoped_record_check) = scoped_record_check {
+            return zelyra_database::with_mariadb_transaction(database_url, |transaction| {
+                if transaction.execute(scoped_record_check)?.rows.is_empty() {
+                    return Err(zelyra_database::DatabaseError {
+                        message: "ZELYRA_TENANT_DENIED: record is not available to this user"
+                            .into(),
+                    });
+                }
+                for query in queries {
+                    transaction.execute(query)?;
+                }
+                Ok(())
+            });
+        }
         zelyra_database::execute_mariadb_queries(database_url, queries, true)?;
         return Ok(());
     };
@@ -7302,11 +7316,7 @@ fn dispatch_crud_mark_read(
             &details,
         ));
     }
-    let result = if tenant_context.is_some() {
-        execute_crud_mutation(database_url, &queries, tenant_context, Some(&record_check))
-    } else {
-        zelyra_database::execute_mariadb_queries(database_url, &queries, true).map(|_| ())
-    };
+    let result = execute_crud_mutation(database_url, &queries, tenant_context, Some(&record_check));
     if let Err(error) = result {
         eprintln!("zelyra web: CRUD mark-read failed: {error}");
         if error.message.starts_with("ZELYRA_TENANT_DENIED:") {
