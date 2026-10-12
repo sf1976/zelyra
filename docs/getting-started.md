@@ -346,6 +346,12 @@ protects it on Unix systems. `zelyra setup` remains an idempotent recovery
 command. It never overwrites an existing `.env` and never prints credentials.
 Do not use generated local-development credentials as production secrets.
 
+Project paths are resolved from the current directory. For a `test_a` folder
+inside it, use `./test_a`; `/test_a` means a directory directly under the
+filesystem root. If that absolute path is missing but a same-named child
+directory exists in the current folder, `zelyra setup` suggests the matching
+relative command.
+
 When setup creates a missing `.env`, it selects free published web and MariaDB
 ports if the template defaults are occupied. Use `zelyra setup . --host-port
 18080 --db-host-port 3308` for exact ports; explicit port choices are rejected
