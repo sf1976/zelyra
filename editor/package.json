@@ -5,7 +5,7 @@
   "description": "Self-hosted browser editor assets for the Zelyra CLI",
   "license": "MIT OR Apache-2.0",
   "scripts": {
-    "build": "esbuild src/editor.js --bundle --minify --outfile=../cli/assets/editor.js && esbuild src/editor.css --bundle --minify --outfile=../cli/assets/editor.css"
+    "build": "esbuild src/theme.js --bundle --minify --outfile=../cli/assets/theme.js && esbuild src/editor.js --bundle --minify --outfile=../cli/assets/editor.js && esbuild src/editor.css --bundle --minify --outfile=../cli/assets/editor.css"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.18.6",

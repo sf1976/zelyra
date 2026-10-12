@@ -11,6 +11,7 @@ use zelyra_web::{parse_request, Request};
 const EDITOR_HTML: &str = include_str!("../assets/editor.html");
 const EDITOR_JS: &str = include_str!("../assets/editor.js");
 const EDITOR_CSS: &str = include_str!("../assets/editor.css");
+const EDITOR_THEME_JS: &str = include_str!("../assets/theme.js");
 const EDITOR_PATH: &str = "/__zelyra/editor";
 const EDITOR_MAX_CONNECTIONS: usize = 16;
 const EDITOR_MAX_FILE_BYTES: usize = 1_048_576;
@@ -315,6 +316,13 @@ fn editor_response(
     }
     if request.path == format!("{EDITOR_PATH}/assets/editor.css") && request.method == "GET" {
         return Ok((200, "text/css; charset=utf-8", EDITOR_CSS.into()));
+    }
+    if request.path == format!("{EDITOR_PATH}/assets/theme.js") && request.method == "GET" {
+        return Ok((
+            200,
+            "text/javascript; charset=utf-8",
+            EDITOR_THEME_JS.into(),
+        ));
     }
     let api_prefix = format!("{EDITOR_PATH}/api/");
     let Some(operation) = request.path.strip_prefix(&api_prefix) else {
@@ -3387,6 +3395,33 @@ fn main() {}
         let request = request("GET", "/__zelyra/editor/api/tree", &[]);
         let error = editor_response(&request, &state).expect_err("missing token must fail");
         assert_eq!(error.0, 403);
+        let _ = fs::remove_dir_all(state.root.clone());
+    }
+
+    #[test]
+    fn saved_light_theme_loads_from_a_local_script_before_the_stylesheet() {
+        let state = project();
+        let page = editor_response(&request("GET", EDITOR_PATH, &[]), &state)
+            .expect("Studio page should load");
+        let theme_script_position = page
+            .2
+            .find("/__zelyra/editor/assets/theme.js")
+            .expect("theme initializer should be external and local");
+        let stylesheet_position = page
+            .2
+            .find("/__zelyra/editor/assets/editor.css")
+            .expect("editor stylesheet should load");
+        assert!(theme_script_position < stylesheet_position);
+        assert!(
+            !page.2.contains("<script>"),
+            "the CSP blocks inline scripts"
+        );
+        let theme_script = editor_response(
+            &request("GET", "/__zelyra/editor/assets/theme.js", &[]),
+            &state,
+        )
+        .expect("local theme initializer should load");
+        assert!(theme_script.2.contains("zelyra-editor-theme"));
         let _ = fs::remove_dir_all(state.root.clone());
     }
 
