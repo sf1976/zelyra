@@ -1,0 +1,7 @@
+enum Event { Created(Int) Idle }
+fn main() {
+    event: Event = Event::Idle
+    match event {
+        Event::Created(id) => { print(id) }
+    }
+}

@@ -126,6 +126,9 @@ pub struct EnumDef {
     pub name: String,
     pub is_public: bool,
     pub variants: Vec<String>,
+    /// Payload field types keyed by variant name; variants absent from this
+    /// list are unit variants.
+    pub variant_payloads: Vec<(String, Vec<Type>)>,
     pub span: Span,
 }
 
@@ -664,6 +667,11 @@ pub enum PatternKind {
     EnumVariant {
         enum_name: String,
         variant: String,
+    },
+    EnumVariantPayload {
+        enum_name: String,
+        variant: String,
+        payloads: Vec<Pattern>,
     },
     Int(i64),
     Bool(bool),

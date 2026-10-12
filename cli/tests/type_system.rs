@@ -69,7 +69,11 @@ fn type_coverage_program_passes_supported_tests_and_reports_expected_failures() 
     let generic_example = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("..")
         .join("examples/generic_functions.zyl");
-    for source in [project.join("src/generics.zyl"), generic_example] {
+    for source in [
+        project.join("main.zyl"),
+        project.join("src/generics.zyl"),
+        generic_example,
+    ] {
         let result = Command::new(binary())
             .args(["fmt", "--check"])
             .arg(&source)
@@ -93,9 +97,9 @@ fn type_coverage_program_passes_supported_tests_and_reports_expected_failures() 
         "PASS Unit type, function return",
         "PASS Option, Result, records",
         "PASS calendar arithmetic, Timestamp ordering, Decimal quantization, exclusive ranges",
-        "PASS unit enums, equality, exhaustive match and JSON round trip",
+        "PASS unit and payload enums, equality, exhaustive match and JSON round trip",
         "PASS user-defined generic functions, inference and explicit types",
-        "Report: 11 positive type groups; 11 expected compiler errors and 18 expected runtime errors",
+        "Report: 11 positive type groups; 15 expected compiler errors and 18 expected runtime errors",
         "Type matrix: 18 supported entries, 5 partial entries, 2 unavailable entries",
         "Unexpected failures: 0 when the CLI integration test passes",
         "alle ausführbaren Typprüfungen bestanden",
@@ -127,6 +131,16 @@ fn type_coverage_program_passes_supported_tests_and_reports_expected_failures() 
         ),
         ("generic_uninferred.zyl", "E-TYPE-GENERIC-001"),
         ("generic_wrong_arity.zyl", "E-TYPE-GENERIC-001"),
+        (
+            "enum_payload_type.zyl",
+            "type mismatch: expected `Int`, found `String`",
+        ),
+        (
+            "enum_payload_arity.zyl",
+            "expects 2 payload value(s), found 1",
+        ),
+        ("enum_non_exhaustive_payload.zyl", "non-exhaustive match"),
+        ("enum_unknown_payload_type.zyl", "unknown type `Missing`"),
     ] {
         let path = format!("expected/compiler/{fixture}");
         let result = cli(&project, &["check", &path]);

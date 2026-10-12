@@ -447,10 +447,14 @@ Konstrukte absichtlich.
 - Verschachtelte Funktionsaufrufe sind auf 32 Ebenen begrenzt und werden bei
   Überschreitung mit einer quellgebundenen Runtime-Diagnose abgebrochen. Das
   schützt vor Stackabstürzen, ist aber kein konfigurierbares Rekursionslimit.
-- Eigene Enums besitzen aktuell payloadfreie Varianten: `enum Status { Draft
-  Paid }`, Werte wie `Status::Draft` und exhaustive `match`-Arme. JSON verwendet
-  für diese Typen `{"$enum":"Status","variant":"Draft"}`. Varianten mit
-  Nutzdaten und Enum-Imports über Modulgrenzen sind noch nicht verfügbar.
+- Eigene Enums unterstützen payloadfreie und payloadtragende Varianten.
+  `enum Status { Draft Paid }` sowie `enum Event { Created(Int) Paid(Date) }`
+  erzeugen typsichere Werte. Muster binden Nutzdaten, und `match` muss jede
+  Variante abdecken. Öffentliche Enums samt Konstruktoren und Mustern dürfen
+  über explizite Modulimporte verwendet werden. Unit-Varianten behalten ihr
+  bisheriges JSON-Format `{"$enum":"Status","variant":"Draft"}`;
+  Varianten mit Nutzdaten verwenden zusätzlich ein `payload`-Array, zum
+  Beispiel `{"$enum":"Event","payload":[7],"variant":"Created"}`.
 - `for item in start..end` durchläuft Integerwerte mit exklusivem Ende. Leere
   Bereiche sind erlaubt; negative Werte, `break` und `continue` funktionieren.
   Ein direkt verwendeter `range(start, end)`-Arraywert ist auf eine Million
@@ -471,8 +475,8 @@ Konstrukte absichtlich.
 - `zelyra run file.zyl --max-steps N` aktiviert eine optionale Obergrenze für
   ausgeführte Anweisungen und Schleifeniterationen. Ohne Option bleibt das
   Budget unbegrenzt. Das Budget ist keine Prozessisolation. Benannte
-  Funktionswerte, benutzerdefinierte generische Datentypen und Enum-Payloads
-  sind noch nicht Teil der Sprachlinie.
+  Funktionswerte, benutzerdefinierte generische Datentypen und allgemeine
+  generische Constraints sind noch offen.
 
 ### Generische Funktionen in 0.9.9
 
@@ -504,8 +508,32 @@ eine falsche Anzahl expliziter Typargumente und Typparameter, die deklarierte
 Typen verdecken, verwenden `E-TYPE-GENERIC-001`. Generische Funktionen dürfen
 andere generische Funktionen aufrufen. Der Type-System-Beispiellauf deckt
 Inference, explizite Typen, Arrays, `Option`, Modulimporte und erwartete
-Compilerfehler ab. Allgemeine Constraints, eigene generische Records und Enums,
-Enum-Payloads sowie Funktionswerte bleiben weitere 0.9.9-Arbeit.
+Compilerfehler ab. Eigene generische Records und Enums, allgemeine Constraints
+und Funktionswerte bleiben weitere 0.9.9-Arbeit.
+
+### Enum-Varianten mit Nutzdaten in 0.9.9
+
+Ein Enum kann bei jeder Variante die Typen ihrer gespeicherten Werte angeben:
+
+~~~zelyra
+enum OrderEvent { Created(Int) Paid(Date, Decimal) Rejected(String) }
+
+fn describe(event: OrderEvent) -> String {
+    match event {
+        OrderEvent::Created(id) => { return "created" }
+        OrderEvent::Paid(day, total) => { return "paid" }
+        OrderEvent::Rejected(reason) => { return "rejected" }
+    }
+}
+~~~
+
+Konstruktorargumente und Muster werden gegen die deklarierte Anzahl und die
+jeweiligen Typen geprüft. Ein unvollständiger Match liefert
+`E-TYPE-MATCH-001`; ein falscher Variant- oder Payload-Gebrauch liefert
+`E-TYPE-ENUM-001`. JSON für Payload-Varianten hat ein explizites
+`{"$enum": ..., "variant": ..., "payload": [...]}`-Format und wird beim
+Decodieren anhand der Enumdeklaration validiert. Das Format der bisherigen
+Payload-freien Varianten bleibt gleich.
 
 ### Getaggter JSON-Codec für `Result`
 

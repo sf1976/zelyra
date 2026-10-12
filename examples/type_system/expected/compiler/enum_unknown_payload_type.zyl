@@ -1,0 +1,4 @@
+enum Event { Created(Missing) }
+fn main() {
+    event = Event::Created(1)
+}

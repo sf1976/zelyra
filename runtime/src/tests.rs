@@ -329,7 +329,6 @@ fn main() {
     restored: OrderStatus = json_decode<OrderStatus>(encoded)
     print(restored == status)
 }
-
 "#;
     assert_eq!(
         run(source),
@@ -358,6 +357,87 @@ fn main() {
         check(&unknown).is_err(),
         "unknown enum variants must be rejected"
     );
+}
+
+#[test]
+fn payload_enums_typecheck_match_serialize_and_round_trip() {
+    let source = r#"
+enum Event { Created(Int) Renamed(String, Date) Idle }
+
+fn describe(event: Event) -> String {
+    match event {
+        Event::Created(id) => { return "created" }
+        Event::Renamed(name, date) => { return "renamed" }
+        Event::Idle => { return "idle" }
+    }
+}
+
+fn main() {
+    created = Event::Created(41)
+    renamed = Event::Renamed("Lager", date("2026-10-12"))
+    idle = Event::Idle
+    assert(created != idle, "payload variants remain distinct")
+    assert(describe(created) == "created", "payload is bound by pattern")
+    assert(describe(renamed) == "renamed", "multiple payloads are bound")
+    assert(describe(idle) == "idle", "unit variants remain compatible")
+    encoded = json_encode(renamed)
+    print(encoded)
+    restored: Event = json_decode<Event>(encoded)
+    assert(restored == renamed, "payload enum JSON round trip")
+    print(restored)
+}
+"#;
+    assert_eq!(
+        run(source),
+        [
+            r#"{"$enum":"Event","payload":["Lager","2026-10-12"],"variant":"Renamed"}"#,
+            "Event::Renamed(Lager, 2026-10-12)",
+        ]
+    );
+
+    for (source, code) in [
+        (
+            "enum Event { Created(Int) Idle } fn main() { event = Event::Created(\"wrong\") }",
+            "E-TYPE-001",
+        ),
+        (
+            "enum Event { Created(Int) Idle } fn main() { event = Event::Created() }",
+            "E-TYPE-ENUM-001",
+        ),
+        (
+            "enum Event { Created(Int) Idle } fn main() { event = Event::Idle() }",
+            "E-TYPE-ENUM-001",
+        ),
+        (
+            "enum Event { Created(Int) Idle } fn main() { event = Event::Created(1) match event { Event::Created(value) => { print(value) } } }",
+            "E-TYPE-MATCH-001",
+        ),
+        (
+            "enum Event { Created(Int) Idle } fn main() { event: Event = Event::Created(1) match event { Event::Created => { print(1) } Event::Idle => { print(0) } } }",
+            "E-TYPE-ENUM-001",
+        ),
+    ] {
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let errors = check(&program).expect_err("invalid payload enum use must be rejected");
+        assert!(errors.iter().any(|error| error.code == code), "{errors:?}");
+    }
+
+    let decode = parse(
+        &lex("enum Event { Created(Int) } fn decode(text: String) -> Event { return json_decode<Event>(text) } fn main() { }")
+            .unwrap(),
+    )
+    .unwrap();
+    check(&decode).unwrap();
+    let error = execute_function(
+        &decode,
+        "decode",
+        vec![Value::String(
+            r#"{"$enum":"Event","variant":"Created","payload":["wrong"]}"#.into(),
+        )],
+        None,
+    )
+    .expect_err("payload JSON must be decoded against the variant field type");
+    assert!(error.message.contains("expected Int"), "{}", error.message);
 }
 
 #[test]

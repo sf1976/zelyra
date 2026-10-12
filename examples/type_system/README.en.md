@@ -40,7 +40,7 @@ diagnostic. These cases do not belong in the successful program run.
 | Sets | ✅ supported | `Set<T>`, `set([a, b])`, `contains`, `set_add`, and `set_remove`. Values have deterministic ordering and duplicates are removed. Supported elements are scalar comparable key types; JSON uses a sorted array. |
 | `Map<K,V>` | ✅ supported | Typed maps; supported key types are `Int`, `UInt`, `String`, `Bool`, `Char`, and `Timestamp`. Duplicate literal keys keep one entry and the last value wins. A missing `get` key returns `None`. JSON supports only string keys. |
 | Records (`struct`) | ✅ supported | User-defined nested records, fields, value equality, and JSON round trips. `record_with(record, "field", value)` returns a statically checked copy with one field changed; the source record is preserved. |
-| Enums | ✅ limited | User-defined unit variants (`enum Status { Draft Paid }`), qualified values, equality, JSON round trips, and exhaustive matching. Payload variants and imported enum namespaces are not supported yet. |
+| Enums | ✅ supported | User-defined unit and payload variants (`enum Event { Created(Int) Idle }`), checked constructors, pattern bindings, exhaustive matching, value equality, and JSON round trips. Public enums also work across module imports. |
 | Classes/object identity/references | — unavailable | Zelyra uses value-semantics records and immutable function flows. Classes, observable object identity, and mutable references are not currently part of the language line. |
 | `Timestamp` | ✅ limited | `now()`, equality/order comparisons, UTC formatting, JSON as Unix milliseconds, and checked UTC-duration helpers `timestamp_add_result` / `timestamp_difference_result`. Years are bounded to 0001–9999; zones and local DST are out of scope. |
 | `Date`, `Time`, `Duration`, `Bytes` | ✅ supported | Validated ISO dates/times, checked duration operations, and bytes 0–255. `date_add_days_result` and `date_days_between_result` implement calendar-day math, including leap years and year boundaries. |
@@ -50,7 +50,7 @@ diagnostic. These cases do not belong in the successful program run.
 | Generics | 🧪 partial | Generic standard types and user-defined generic functions (`fn identity<T>`) with inference or explicit type arguments are available. User-defined generic records/enums and general constraints are not available yet. |
 | Type aliases and custom types | 🧪 partial | `type Name = ...` and records exist. Records execute and serialize; aliases have no separate runtime identity. |
 | `Id`, `Email`, `Url`, `Uuid`, `Money` | 🧪 specialized | Named string domain values for API/schema use; no separate numeric or identity rules in the runtime. |
-| Functions as values | — unavailable | Named functions can be called but cannot yet be stored or passed as values. |
+| Functions as values | — unavailable | Named functions can be called but cannot yet be stored or passed as values. This remains an open language gap for 0.9.9. |
 
 ## Conversions, defaults, and copies
 
@@ -66,9 +66,9 @@ separate shallow/deep copy operations. The value-update helpers return a new rec
 ## Automated acceptance
 
 The successful run checks numeric ranges, arithmetic, rounding behavior,
-Unicode, optional values, arrays, List aliases, tuples, sets, records, enums,
-calendar and timestamp operations, Decimal quantization, ranges, JSON, and
-user-defined generic functions. The CLI integration test also expects **11 compiler errors** and **18 runtime errors** (type mismatch,
+Unicode, optional values, arrays, List aliases, tuples, sets, records, unit and
+payload enums, calendar and timestamp operations, Decimal quantization, ranges,
+JSON, and user-defined generic functions. The CLI integration test also expects **15 compiler errors** and **18 runtime errors** (type mismatch,
 mixed arrays, non-exhaustive matching, overflow/underflow, division by zero,
 invalid index, invalid Date/Time/Bytes/Decimal values, wrong tuple length,
 non-finite JSON number, non-string-keyed Map serialization, and unsupported general
@@ -76,9 +76,9 @@ non-finite JSON number, non-string-keyed Map serialization, and unsupported gene
 test result. When the integration test passes, all 11 positive groups pass and
 there are 0 unexpected failures. The current matrix has 18 supported, 5 partial,
 and 2 unavailable entries; the program prints these counts. User-defined
-generic functions are covered by the positive type-system example and explicit
-compiler-negative cases. Generic data types, payload enums, and function values
-remain unavailable. Classes and reference identity are a deliberate departure
+generic functions and payload enums are covered by the positive type-system
+example and explicit compiler-negative cases. Generic data types and function
+values remain unavailable. Classes and reference identity are a deliberate departure
 from the value-oriented record model; they are not required for records, CRUD,
 or database relationships.
 

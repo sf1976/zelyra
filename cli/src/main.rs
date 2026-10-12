@@ -8926,10 +8926,28 @@ fn api_json_value_node(value: &RuntimeValue) -> serde_json::Value {
         RuntimeValue::Bool(value) => serde_json::Value::from(*value),
         RuntimeValue::String(value) => serde_json::Value::String(value.clone()),
         RuntimeValue::Char(value) => serde_json::Value::String(value.to_string()),
-        RuntimeValue::Enum { type_name, variant } => serde_json::json!({
-            "$enum": type_name,
-            "variant": variant,
-        }),
+        RuntimeValue::Enum {
+            type_name,
+            variant,
+            payloads,
+        } => {
+            let mut encoded = serde_json::json!({
+                "$enum": type_name,
+                "variant": variant,
+            });
+            if !payloads.is_empty() {
+                encoded
+                    .as_object_mut()
+                    .expect("enum JSON is an object")
+                    .insert(
+                        "payload".into(),
+                        serde_json::Value::Array(
+                            payloads.iter().map(api_json_value_node).collect(),
+                        ),
+                    );
+            }
+            encoded
+        }
         RuntimeValue::Timestamp(value) => serde_json::Value::from(*value),
         RuntimeValue::Date(value) | RuntimeValue::Time(value) => {
             serde_json::Value::String(value.clone())

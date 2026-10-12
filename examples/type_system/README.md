@@ -41,7 +41,7 @@ Programmlauf.
 | Mengen | ✅ unterstützt | `Set<T>`, `set([a, b])`, `contains`, `set_add` und `set_remove`. Werte sind deterministisch sortiert, Duplikate werden entfernt. Unterstützt werden die skalar vergleichbaren Schlüsseltypen; JSON ist ein sortiertes Array. |
 | `Map<K,V>` | ✅ unterstützt | Typisierte Maps; erlaubte Schlüsseltypen sind `Int`, `UInt`, `String`, `Bool`, `Char` und `Timestamp`. Doppelte Literalschlüssel behalten einen Eintrag und der letzte Wert gewinnt. Ein fehlender `get`-Schlüssel ergibt `None`. JSON unterstützt nur String-Schlüssel. |
 | Records (`struct`) | ✅ unterstützt | Eigene, verschachtelte Records, Felder, Wertgleichheit und JSON-Roundtrip. `record_with(record, "feld", wert)` liefert einen typgeprüften neuen Record; der ursprüngliche Wert bleibt bestehen. |
-| Enums | ✅ unterstützt | Eigene payloadfreie Varianten mit `enum Status { Draft Paid }`, `Status::Draft`, Gleichheit, JSON-Roundtrip und exhaustivem `match`. Varianten mit Nutzdaten sind noch nicht verfügbar. |
+| Enums | ✅ unterstützt | Eigene payloadfreie und payloadtragende Varianten mit `enum Event { Created(Int) Idle }`, typgeprüften Konstruktoren, Bindings in `match`, Exhaustivität, Wertgleichheit und JSON-Roundtrip. Öffentliche Enums funktionieren auch über Modulimporte. |
 | Klassen/Objektidentität/Referenzen | — nicht vorhanden | Zelyra verwendet Records mit Wertsemantik und unveränderliche Funktionsabläufe. Klassen, beobachtbare Objektidentität und veränderliche Referenzen gehören derzeit nicht zur Sprachlinie. |
 | `Timestamp` | ✅ teilweise nutzbar | `now()`, Gleichheit, chronologische Vergleiche, UTC-Formatierung, JSON als Unix-Millisekunden sowie `timestamp_add_result` und `timestamp_difference_result` für UTC-Dauern. Operationen sind auf ISO-Jahre 0001–9999 begrenzt. Zeitzonen und lokale Sommerzeit sind nicht enthalten. |
 | `Date`, `Time`, `Duration`, `Bytes` | ✅ unterstützt | Validierte ISO-Daten und Uhrzeiten, chronologische Vergleiche, JSON-Roundtrips und geprüfte Daueraddition/-subtraktion. `date_add_days_result` und `date_days_between_result` rechnen Kalender-Tage inklusive Schaltjahren und Jahreswechseln. `Bytes` akzeptiert Werte 0–255. |
@@ -52,7 +52,7 @@ Programmlauf.
 | Generics | 🧪 teilweise | Generische Standardtypen sowie eigene generische Funktionen (`fn identity<T>`) mit Typinferenz oder expliziten Typargumenten sind verfügbar. Eigene generische Records/Enums und allgemeine Constraints sind noch nicht verfügbar. |
 | Typ-Aliase und eigene Typen | 🧪 teilweise | `type Name = ...` sowie Records sind vorhanden. Records werden ausgeführt und serialisiert; Aliase haben keine eigene Runtimeidentität. |
 | `Id`, `Email`, `Url`, `Uuid`, `Money` | 🧪 spezialisiert | Benannte String-Domainwerte für API-/Datenschema-Nutzung; keine eigenen numerischen oder Identitätsregeln in der Runtime. |
-| Funktionen als Werte | — nicht vorhanden | Benannte Funktionen können aufgerufen, aber noch nicht als Werte gespeichert oder übergeben werden. |
+| Funktionen als Werte | — nicht vorhanden | Benannte Funktionen können aufgerufen, aber noch nicht als Werte gespeichert oder übergeben werden. Das bleibt eine offene Sprachlücke in 0.9.9. |
 
 ## Konvertierungen, Standardwerte und Kopien
 
@@ -71,9 +71,10 @@ keine flachen oder tiefen Kopien als getrennte Operationen. `record_with` und
 
 Der erfolgreiche Programmlauf prüft Zahlenbereiche, Rechenoperationen,
 Rundungsverhalten, Unicode, optionale Werte, Arrays, Listen-Aliase, Tupel,
-Mengen, Records, Enums, Kalender-/Zeitstempeloperationen, Decimal-Quantisierung,
-Bereiche, JSON und benutzerdefinierte generische Funktionen.
-Der CLI-Integrationstest erwartet zusätzlich **11 Compilerfehler** und
+Mengen, Records, payloadfreie und payloadtragende Enums,
+Kalender-/Zeitstempeloperationen, Decimal-Quantisierung, Bereiche, JSON und
+benutzerdefinierte generische Funktionen.
+Der CLI-Integrationstest erwartet zusätzlich **15 Compilerfehler** und
 **18 Runtimefehler** (Typfehler, gemischte Arrays, unvollständiges Matching,
 Überlauf/Unterlauf, Division durch null, ungültiger Index, ungültige
 Date-/Time-/Bytes-/Decimal-Werte, falsche Tuple-Länge, nicht-endliche
@@ -83,9 +84,9 @@ positives Testergebnis. Bei erfolgreichem Integrationstest sind alle 11
 positiven Testgruppen bestanden und es gibt 0 unerwartete Fehler. Die
 aktuelle Matrix umfasst 18 unterstützte, 5 teilweise unterstützte und 2 noch
 nicht verfügbare Einträge; das Programm gibt diese drei Zahlen aus. Eigene
-generische Funktionen werden im positiven Type-System-Beispiel sowie mit
-expliziten Compiler-Negativfällen geprüft. Generische Datentypen,
-Enum-Varianten mit Nutzdaten und Funktionswerte fehlen noch. Klassen und
+generische Funktionen und payloadtragende Enums werden im positiven
+Type-System-Beispiel sowie mit expliziten Compiler-Negativfällen geprüft.
+Generische Datentypen und Funktionswerte fehlen noch. Klassen und
 Referenzidentität sind eine bewusste Abweichung vom wertorientierten Recordmodell;
 sie sind keine Voraussetzung für Records, CRUD oder Datenbankbeziehungen.
 

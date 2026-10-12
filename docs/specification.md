@@ -517,4 +517,29 @@ explicit type arguments, and type parameters that shadow declared types use
 `E-TYPE-GENERIC-001`. Generic functions may call other generic functions. The
 type-system example covers inference, explicit types, arrays, `Option`, module
 imports, and expected compiler errors. General constraints, generic records and
-enums, enum payloads, and function values remain 0.9.9 work.
+generic records and enums, general constraints, and function values remain
+0.9.9 work.
+
+## Payload-carrying enums in 0.9.9
+
+An enum variant may declare the types of the values it stores:
+
+~~~zelyra
+enum OrderEvent { Created(Int) Paid(Date, Decimal) Rejected(String) }
+
+fn describe(event: OrderEvent) -> String {
+    match event {
+        OrderEvent::Created(id) => { return "created" }
+        OrderEvent::Paid(day, total) => { return "paid" }
+        OrderEvent::Rejected(reason) => { return "rejected" }
+    }
+}
+~~~
+
+Constructors and patterns are checked against each variant's declared arity
+and payload types. Non-exhaustive matches report `E-TYPE-MATCH-001`; invalid
+variant or payload use reports `E-TYPE-ENUM-001`. Public enums, constructors,
+and patterns can cross explicit module imports. Payload variants use an
+explicit JSON object such as `{"$enum":"OrderEvent","payload":[7],"variant":"Created"}`;
+decoding validates each payload against the enum definition. The existing JSON
+shape for unit variants is unchanged.

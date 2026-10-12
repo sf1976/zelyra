@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use zelyra_ast::*;
 
@@ -24,6 +24,7 @@ impl fmt::Display for ResolveError {
 pub struct HirProgram {
     pub types: Vec<TypeDef>,
     pub records: Vec<RecordDef>,
+    pub enums: Vec<EnumDef>,
     pub apis: Vec<ApiDef>,
     pub functions: Vec<HirFunction>,
     pub functions_by_name: HashMap<String, FunctionId>,
@@ -151,6 +152,11 @@ pub enum HirPatternKind {
         enum_name: String,
         variant: String,
     },
+    EnumVariantPayload {
+        enum_name: String,
+        variant: String,
+        payloads: Vec<HirPattern>,
+    },
     Int(i64),
     Bool(bool),
     String(String),
@@ -243,9 +249,15 @@ pub fn lower(program: &Program) -> Result<HirProgram, Vec<ResolveError>> {
     }
 
     let mut functions = Vec::new();
+    let enum_names = program
+        .enums
+        .iter()
+        .map(|definition| definition.name.clone())
+        .collect::<HashSet<_>>();
     for (index, function) in program.functions.iter().enumerate() {
         let mut resolver = Resolver {
             functions: &functions_by_name,
+            enum_names: &enum_names,
             errors: Vec::new(),
             scopes: vec![HashMap::new()],
             next_local: 0,
@@ -291,6 +303,7 @@ pub fn lower(program: &Program) -> Result<HirProgram, Vec<ResolveError>> {
         Ok(HirProgram {
             types: program.types.clone(),
             records: program.records.clone(),
+            enums: program.enums.clone(),
             apis: program.apis.clone(),
             functions,
             functions_by_name,
@@ -302,6 +315,7 @@ pub fn lower(program: &Program) -> Result<HirProgram, Vec<ResolveError>> {
 
 struct Resolver<'a> {
     functions: &'a HashMap<String, FunctionId>,
+    enum_names: &'a HashSet<String>,
     errors: Vec<ResolveError>,
     scopes: Vec<HashMap<String, LocalId>>,
     next_local: usize,
@@ -533,6 +547,18 @@ impl<'a> Resolver<'a> {
                 enum_name: enum_name.clone(),
                 variant: variant.clone(),
             },
+            PatternKind::EnumVariantPayload {
+                enum_name,
+                variant,
+                payloads,
+            } => HirPatternKind::EnumVariantPayload {
+                enum_name: enum_name.clone(),
+                variant: variant.clone(),
+                payloads: payloads
+                    .iter()
+                    .map(|payload| self.pattern(payload))
+                    .collect(),
+            },
             PatternKind::Int(value) => HirPatternKind::Int(*value),
             PatternKind::Bool(value) => HirPatternKind::Bool(*value),
             PatternKind::String(value) => HirPatternKind::String(value.clone()),
@@ -597,6 +623,9 @@ impl<'a> Resolver<'a> {
             } => {
                 let function = self.functions.get(name).copied();
                 if function.is_none()
+                    && !name
+                        .rsplit_once("::")
+                        .is_some_and(|(enum_name, _)| self.enum_names.contains(enum_name))
                     && !matches!(
                         name.as_str(),
                         "print"
@@ -782,6 +811,35 @@ mod tests {
                 Box::new(Type::Named("E".into()))
             )
         );
+    }
+
+    #[test]
+    fn lowers_payload_enum_constructors_and_pattern_bindings() {
+        let program = parse(
+            &lex("enum ResultState { Failed(String) Ready } fn main() { state = ResultState::Failed(\"no\") match state { ResultState::Failed(message) => { print(message) } ResultState::Ready => { print(\"ready\") } } }")
+                .unwrap(),
+        )
+        .unwrap();
+        let hir = lower(&program).unwrap();
+        assert_eq!(hir.enums[0].variants, ["Failed", "Ready"]);
+        assert!(matches!(
+            &hir.functions[0].body.statements[0],
+            HirStmt::Let {
+                value: HirExpr {
+                    kind: HirExprKind::Call { name, .. },
+                    ..
+                },
+                ..
+            } if name == "ResultState::Failed"
+        ));
+        let HirStmt::Match { arms, .. } = &hir.functions[0].body.statements[1] else {
+            panic!("expected lowered payload enum match");
+        };
+        assert!(matches!(
+            &arms[0].pattern.kind,
+            HirPatternKind::EnumVariantPayload { payloads, .. }
+                if matches!(payloads[0].kind, HirPatternKind::Binding { ref name, .. } if name == "message")
+        ));
     }
 
     #[test]

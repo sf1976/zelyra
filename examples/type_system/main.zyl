@@ -4,9 +4,12 @@ import "src/records.zyl" as records
 import "src/serialization.zyl" as serialization
 import "src/advanced.zyl" as advanced
 import "src/generics.zyl" as generics
-
-enum OrderStatus { Draft Pending Paid }
-
+enum OrderStatus {
+    Draft Pending Paid
+}
+enum OrderEvent {
+    Created(Int) Paid(Date, Decimal) Rejected(String)
+}
 fn main() uses Clock {
     scalars::run()
     collections::run()
@@ -18,12 +21,33 @@ fn main() uses Clock {
     restored_status: OrderStatus = json_decode<OrderStatus>(json_encode(status))
     assert(restored_status == status, "unit enum JSON round trip")
     match status {
-        OrderStatus::Draft => { assert(false, "wrong enum arm") }
-        OrderStatus::Pending => { assert(false, "wrong enum arm") }
-        OrderStatus::Paid => { assert(true, "exhaustive unit enum match") }
+        OrderStatus::Draft => {
+            assert(false, "wrong enum arm")
+        }
+        OrderStatus::Pending => {
+            assert(false, "wrong enum arm")
+        }
+        OrderStatus::Paid => {
+            assert(true, "exhaustive unit enum match")
+        }
     }
-    print("PASS unit enums, equality, exhaustive match and JSON round trip")
-    print("Report: 11 positive type groups; 11 expected compiler errors and 18 expected runtime errors are verified by the CLI integration test.")
+    event = OrderEvent::Paid(date("2026-10-12"), decimal("119.00"))
+    match event {
+        OrderEvent::Created(id) => {
+            assert(false, "wrong payload enum arm")
+        }
+        OrderEvent::Paid(day, total) => {
+            assert(day == date("2026-10-12"), "first payload type is checked")
+            assert(total == decimal("119.00"), "second payload type is checked")
+        }
+        OrderEvent::Rejected(reason) => {
+            assert(false, "wrong payload enum arm")
+        }
+    }
+    restored_event: OrderEvent = json_decode<OrderEvent>(json_encode(event))
+    assert(restored_event == event, "payload enum JSON round trip")
+    print("PASS unit and payload enums, equality, exhaustive match and JSON round trip")
+    print("Report: 11 positive type groups; 15 expected compiler errors and 18 expected runtime errors are verified by the CLI integration test.")
     print("Type matrix: 18 supported entries, 5 partial entries, 2 unavailable entries; see README.md.")
     print("Unexpected failures: 0 when the CLI integration test passes.")
     print("Ergebnis: alle ausführbaren Typprüfungen bestanden.")

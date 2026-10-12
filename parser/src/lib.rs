@@ -1956,17 +1956,45 @@ impl<'a> Parser<'a> {
         let (name, _) = self.ident("enum name")?;
         self.expect(TokenKind::LBrace, "`{` after enum name")?;
         let mut variants = Vec::new();
+        let mut variant_payloads = Vec::new();
         let mut seen = std::collections::HashSet::new();
         self.skip_newlines();
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
-            let (variant, span) = self.ident("unit enum variant")?;
+            let (variant, span) = self.ident("enum variant")?;
             if !seen.insert(variant.clone()) {
                 return Err(ParseError {
                     message: format!("enum variant `{variant}` is declared more than once"),
                     span,
                 });
             }
+            let mut payload_types = Vec::new();
+            if self.at(&TokenKind::LParen) {
+                self.advance();
+                self.skip_newlines();
+                if !self.at(&TokenKind::RParen) {
+                    loop {
+                        payload_types.push(self.type_name()?);
+                        self.skip_newlines();
+                        if !self.at(&TokenKind::Comma) {
+                            break;
+                        }
+                        self.advance();
+                        self.skip_newlines();
+                    }
+                }
+                let end = self.expect(TokenKind::RParen, "`)` after enum payload types")?;
+                if payload_types.is_empty() {
+                    return Err(ParseError {
+                        message: "unit enum variants must not use empty parentheses; write the variant name without `()`".into(),
+                        span: span.join(end),
+                    });
+                }
+            }
             variants.push(variant);
+            variant_payloads.push((
+                variants.last().expect("variant was just pushed").clone(),
+                payload_types,
+            ));
             self.skip_newlines();
             if self.at(&TokenKind::Comma) {
                 self.advance();
@@ -1984,6 +2012,7 @@ impl<'a> Parser<'a> {
             name,
             is_public,
             variants,
+            variant_payloads,
             span: start.join(end),
         })
     }
@@ -2439,12 +2468,49 @@ impl<'a> Parser<'a> {
             }),
             TokenKind::Ident(name) => {
                 if self.at(&TokenKind::DoubleColon) {
-                    self.advance();
-                    let (variant, end) = self.ident("enum variant after `::`")?;
+                    let mut path = name;
+                    let mut end = token.span;
+                    while self.at(&TokenKind::DoubleColon) {
+                        self.advance();
+                        let (segment, segment_span) = self.ident("enum path segment after `::`")?;
+                        path.push_str("::");
+                        path.push_str(&segment);
+                        end = segment_span;
+                    }
+                    let Some((enum_name, variant)) = path.rsplit_once("::") else {
+                        unreachable!("the path has at least two segments")
+                    };
+                    let enum_name = enum_name.to_owned();
+                    if self.at(&TokenKind::LParen) {
+                        self.advance();
+                        let mut payloads = Vec::new();
+                        self.skip_newlines();
+                        if !self.at(&TokenKind::RParen) {
+                            loop {
+                                payloads.push(self.pattern()?);
+                                self.skip_newlines();
+                                if !self.at(&TokenKind::Comma) {
+                                    break;
+                                }
+                                self.advance();
+                                self.skip_newlines();
+                            }
+                        }
+                        let close =
+                            self.expect(TokenKind::RParen, "`)` after enum payload pattern")?;
+                        return Ok(Pattern {
+                            kind: PatternKind::EnumVariantPayload {
+                                enum_name,
+                                variant: variant.to_owned(),
+                                payloads,
+                            },
+                            span: token.span.join(close),
+                        });
+                    }
                     return Ok(Pattern {
                         kind: PatternKind::EnumVariant {
-                            enum_name: name,
-                            variant,
+                            enum_name,
+                            variant: variant.to_owned(),
                         },
                         span: token.span.join(end),
                     });
@@ -2905,6 +2971,58 @@ mod tests {
         };
         assert_eq!(name, "identity");
         assert_eq!(type_args, &[Type::Int]);
+    }
+
+    #[test]
+    fn parses_payload_enum_definitions_constructors_and_patterns() {
+        let program = parse(
+            &lex("enum OrderStatus { Draft PaidAt(Date) Failed(String, Int) } fn main() { status = OrderStatus::PaidAt(date(\"2026-10-12\")) match status { OrderStatus::PaidAt(when) => { print(when) } OrderStatus::Failed(reason, code) => { print(reason) } OrderStatus::Draft => { print(\"draft\") } } }")
+                .unwrap(),
+        )
+        .unwrap();
+        let definition = &program.enums[0];
+        assert_eq!(definition.variants, ["Draft", "PaidAt", "Failed"]);
+        assert_eq!(
+            definition.variant_payloads,
+            [
+                ("Draft".into(), vec![]),
+                ("PaidAt".into(), vec![Type::Date]),
+                ("Failed".into(), vec![Type::String, Type::Int]),
+            ]
+        );
+        let Stmt::BindOrAssign { value, .. } = &program.functions[0].body.statements[0] else {
+            panic!("expected enum construction assignment");
+        };
+        assert!(
+            matches!(value.kind, ExprKind::Call { ref name, .. } if name == "OrderStatus::PaidAt")
+        );
+        let Stmt::Match { arms, .. } = &program.functions[0].body.statements[1] else {
+            panic!("expected enum match");
+        };
+        assert!(matches!(
+            arms[0].pattern.kind,
+            PatternKind::EnumVariantPayload { ref enum_name, ref variant, ref payloads }
+                if enum_name == "OrderStatus" && variant == "PaidAt" && payloads.len() == 1
+        ));
+
+        let imported = parse(
+            &lex("fn main() { match event { events::OrderStatus::PaidAt(when) => { print(when) } } }")
+                .unwrap(),
+        )
+        .unwrap();
+        let Stmt::Match { arms, .. } = &imported.functions[0].body.statements[0] else {
+            panic!("expected match statement");
+        };
+        assert!(matches!(
+            arms[0].pattern.kind,
+            PatternKind::EnumVariantPayload { ref enum_name, ref variant, .. }
+                if enum_name == "events::OrderStatus" && variant == "PaidAt"
+        ));
+
+        let empty = parse(&lex("enum Status { Draft() } fn main() { }").unwrap())
+            .expect_err("unit enum variants use the bare variant name");
+        assert!(empty.message.contains("empty parentheses"));
+        assert!(empty.span.start > 0);
     }
 
     #[test]

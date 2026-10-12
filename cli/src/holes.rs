@@ -473,6 +473,11 @@ fn add_pattern_values(scope: &mut Scope, pattern: &Pattern) {
         | PatternKind::String(_)
         | PatternKind::Char(_)
         | PatternKind::EnumVariant { .. } => {}
+        PatternKind::EnumVariantPayload { payloads, .. } => {
+            for payload in payloads {
+                add_pattern_values(scope, payload);
+            }
+        }
     }
 }
 

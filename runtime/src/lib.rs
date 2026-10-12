@@ -924,6 +924,7 @@ fn add_pattern_bindings<'a>(
             }
         }
         PatternKind::EnumVariant { .. } => {}
+        PatternKind::EnumVariantPayload { .. } => {}
         PatternKind::Wildcard
         | PatternKind::Int(_)
         | PatternKind::Bool(_)
@@ -1839,7 +1840,10 @@ fn constraints_for_pattern(
             }
             Some(alternatives)
         }
-        PatternKind::String(_) | PatternKind::Char(_) | PatternKind::EnumVariant { .. } => None,
+        PatternKind::String(_)
+        | PatternKind::Char(_)
+        | PatternKind::EnumVariant { .. }
+        | PatternKind::EnumVariantPayload { .. } => None,
         PatternKind::Constructor { name, .. } => {
             let expression = value as *const Expr as usize;
             let mut constraints = vec![PathConstraint::Constructor {
@@ -3557,6 +3561,13 @@ pub fn check(program: &Program) -> Result<(), Vec<TypeError>> {
             validate_type(&field.ty, &known_types, &mut errors, field.span);
         }
     }
+    for definition in &program.enums {
+        for (_, payload_types) in &definition.variant_payloads {
+            for ty in payload_types {
+                validate_type(ty, &known_types, &mut errors, definition.span);
+            }
+        }
+    }
     let mut functions = HashMap::new();
     for function in &program.functions {
         if functions.contains_key(&function.name) {
@@ -3612,18 +3623,18 @@ const FLOW_RETURN: u8 = 2;
 const FLOW_BREAK: u8 = 4;
 const FLOW_CONTINUE: u8 = 8;
 
-fn flow_outcomes(block: &Block) -> u8 {
+fn flow_outcomes(block: &Block, program: &Program) -> u8 {
     let mut outcomes = FLOW_FALLTHROUGH;
     for statement in &block.statements {
         if outcomes & FLOW_FALLTHROUGH == 0 {
             break;
         }
-        outcomes = (outcomes & !FLOW_FALLTHROUGH) | statement_flow(statement);
+        outcomes = (outcomes & !FLOW_FALLTHROUGH) | statement_flow(statement, program);
     }
     outcomes
 }
 
-fn statement_flow(statement: &Stmt) -> u8 {
+fn statement_flow(statement: &Stmt, program: &Program) -> u8 {
     match statement {
         Stmt::Return { .. } => FLOW_RETURN,
         Stmt::Break { .. } => FLOW_BREAK,
@@ -3633,24 +3644,24 @@ fn statement_flow(statement: &Stmt) -> u8 {
             else_block,
             ..
         } => {
-            flow_outcomes(then_block)
+            flow_outcomes(then_block, program)
                 | else_block
                     .as_ref()
-                    .map(flow_outcomes)
+                    .map(|block| flow_outcomes(block, program))
                     .unwrap_or(FLOW_FALLTHROUGH)
         }
         Stmt::Match { arms, .. } => {
             let mut outcomes = arms
                 .iter()
-                .map(|arm| flow_outcomes(&arm.body))
+                .map(|arm| flow_outcomes(&arm.body, program))
                 .fold(0, |all, arm| all | arm);
-            if !match_arms_are_exhaustive(arms) {
+            if !match_arms_are_exhaustive(arms, program) {
                 outcomes |= FLOW_FALLTHROUGH;
             }
             outcomes
         }
         Stmt::Loop { body, .. } => {
-            let body_outcomes = flow_outcomes(body);
+            let body_outcomes = flow_outcomes(body, program);
             let mut outcomes = body_outcomes & FLOW_RETURN;
             if body_outcomes & FLOW_BREAK != 0 {
                 outcomes |= FLOW_FALLTHROUGH;
@@ -3660,23 +3671,24 @@ fn statement_flow(statement: &Stmt) -> u8 {
         Stmt::While {
             condition, body, ..
         } => {
-            let body_outcomes = flow_outcomes(body);
+            let body_outcomes = flow_outcomes(body, program);
             let mut outcomes = body_outcomes & FLOW_RETURN;
             if !matches!(condition.kind, ExprKind::Bool(true)) || body_outcomes & FLOW_BREAK != 0 {
                 outcomes |= FLOW_FALLTHROUGH;
             }
             outcomes
         }
-        Stmt::For { body, .. } => FLOW_FALLTHROUGH | (flow_outcomes(body) & FLOW_RETURN),
-        Stmt::Transaction { body, .. } => flow_outcomes(body),
+        Stmt::For { body, .. } => FLOW_FALLTHROUGH | (flow_outcomes(body, program) & FLOW_RETURN),
+        Stmt::Transaction { body, .. } => flow_outcomes(body, program),
         Stmt::Let { .. } | Stmt::BindOrAssign { .. } | Stmt::Expr(_) | Stmt::Parallel { .. } => {
             FLOW_FALLTHROUGH
         }
     }
 }
 
-fn match_arms_are_exhaustive(arms: &[MatchArm]) -> bool {
+fn match_arms_are_exhaustive(arms: &[MatchArm], program: &Program) -> bool {
     let mut covered = HashSet::new();
+    let mut enum_covered = HashSet::new();
     for arm in arms {
         match &arm.pattern.kind {
             PatternKind::Wildcard | PatternKind::Variable(_) => return true,
@@ -3691,15 +3703,35 @@ fn match_arms_are_exhaustive(arms: &[MatchArm]) -> bool {
                     covered.insert(name.as_str());
                 }
             }
-            PatternKind::Int(_)
-            | PatternKind::String(_)
-            | PatternKind::Char(_)
-            | PatternKind::EnumVariant { .. } => {}
+            PatternKind::EnumVariant { enum_name, variant } => {
+                enum_covered.insert(format!("{enum_name}::{variant}"));
+            }
+            PatternKind::EnumVariantPayload {
+                enum_name,
+                variant,
+                payloads,
+            } => {
+                if payloads.iter().all(|payload| {
+                    matches!(
+                        payload.kind,
+                        PatternKind::Wildcard | PatternKind::Variable(_)
+                    )
+                }) {
+                    enum_covered.insert(format!("{enum_name}::{variant}"));
+                }
+            }
+            PatternKind::Int(_) | PatternKind::String(_) | PatternKind::Char(_) => {}
         }
     }
     (covered.contains("true") && covered.contains("false"))
         || (covered.contains("Some") && covered.contains("None"))
         || (covered.contains("Ok") && covered.contains("Err"))
+        || program.enums.iter().any(|definition| {
+            definition
+                .variants
+                .iter()
+                .all(|variant| enum_covered.contains(&format!("{}::{variant}", definition.name)))
+        })
 }
 
 impl<'a> Checker<'a> {
@@ -3712,6 +3744,69 @@ impl<'a> Checker<'a> {
             message: message.into(),
             span,
         });
+    }
+
+    fn check_enum_constructor(
+        &mut self,
+        name: &str,
+        type_args: &[Type],
+        args: &[Expr],
+        span: Span,
+        scopes: &[HashMap<String, Variable>],
+    ) -> Option<Type> {
+        let (enum_name, variant) = name.rsplit_once("::")?;
+        let definition = self
+            ._program
+            .enums
+            .iter()
+            .find(|definition| definition.name == enum_name)?;
+        let payload_types = definition
+            .variant_payloads
+            .iter()
+            .find(|(name, _)| name == variant)
+            .map(|(_, types)| types.clone());
+        let Some(payload_types) = payload_types else {
+            for argument in args {
+                self.check_expr(argument, scopes);
+            }
+            self.error_with_code(
+                "E-TYPE-ENUM-001",
+                span,
+                format!("unknown enum variant `{enum_name}::{variant}`"),
+            );
+            return Some(Type::Unknown);
+        };
+        if !type_args.is_empty() {
+            self.error_with_code(
+                "E-TYPE-ENUM-001",
+                span,
+                "enum variant constructors do not accept type arguments",
+            );
+        }
+        if payload_types.is_empty() {
+            self.error_with_code(
+                "E-TYPE-ENUM-001",
+                span,
+                format!(
+                    "unit enum variant `{enum_name}::{variant}` is written without parentheses"
+                ),
+            );
+        } else if args.len() != payload_types.len() {
+            self.error_with_code(
+                "E-TYPE-ENUM-001",
+                span,
+                format!(
+                    "enum variant `{enum_name}::{variant}` expects {} payload value(s), found {}",
+                    payload_types.len(),
+                    args.len()
+                ),
+            );
+        }
+        for (argument, expected) in args.iter().zip(&payload_types) {
+            let actual = self.check_expr(argument, scopes);
+            self.expect_type(expected, &actual, argument.span);
+        }
+        Some(Type::Named(enum_name.to_owned()))
     }
     fn lookup<'b>(
         &self,
@@ -3781,7 +3876,7 @@ impl<'a> Checker<'a> {
             .return_type
             .as_ref()
             .is_some_and(|return_type| *return_type != Type::Unit)
-            && flow_outcomes(&function.body) & FLOW_FALLTHROUGH != 0
+            && flow_outcomes(&function.body, self._program) & FLOW_FALLTHROUGH != 0
         {
             let return_type = function.return_type.as_ref().expect("checked above");
             self.error_with_code(
@@ -4144,19 +4239,104 @@ impl<'a> Checker<'a> {
             }
             PatternKind::EnumVariant { enum_name, variant } => match expected {
                 Type::Named(expected_name) if expected_name == enum_name => {
-                    let valid = self._program.enums.iter().any(|definition| {
-                        definition.name == *enum_name
-                            && definition.variants.iter().any(|item| item == variant)
-                    });
-                    if valid {
+                    let payload_types = self
+                        ._program
+                        .enums
+                        .iter()
+                        .find(|definition| definition.name == *enum_name)
+                        .and_then(|definition| {
+                            definition
+                                .variant_payloads
+                                .iter()
+                                .find(|(name, _)| name == variant)
+                                .map(|(_, types)| types.clone())
+                        });
+                    if let Some(payload_types) = payload_types {
+                        if !payload_types.is_empty() {
+                            self.error_with_code(
+                                "E-TYPE-ENUM-001",
+                                pattern.span,
+                                format!(
+                                    "enum variant `{enum_name}::{variant}` requires {} payload pattern(s)",
+                                    payload_types.len()
+                                ),
+                            );
+                        }
                         if top_level {
                             covered.insert(format!("{enum_name}::{variant}"));
                         }
                     } else {
-                        self.error(
+                        self.error_with_code(
+                            "E-TYPE-ENUM-001",
                             pattern.span,
                             format!("unknown enum variant `{enum_name}::{variant}`"),
                         );
+                    }
+                }
+                Type::Unknown => {}
+                other => self.error(
+                    pattern.span,
+                    format!("enum variant `{enum_name}::{variant}` does not match `{other}`"),
+                ),
+            },
+            PatternKind::EnumVariantPayload {
+                enum_name,
+                variant,
+                payloads,
+            } => match expected {
+                Type::Named(expected_name) if expected_name == enum_name => {
+                    let payload_types = self
+                        ._program
+                        .enums
+                        .iter()
+                        .find(|definition| definition.name == *enum_name)
+                        .and_then(|definition| {
+                            definition
+                                .variant_payloads
+                                .iter()
+                                .find(|(name, _)| name == variant)
+                                .map(|(_, types)| types.clone())
+                        });
+                    let Some(payload_types) = payload_types else {
+                        self.error_with_code(
+                            "E-TYPE-ENUM-001",
+                            pattern.span,
+                            format!("unknown enum variant `{enum_name}::{variant}`"),
+                        );
+                        return;
+                    };
+                    if payload_types.is_empty() {
+                        self.error_with_code(
+                            "E-TYPE-ENUM-001",
+                            pattern.span,
+                            format!(
+                                "unit enum variant `{enum_name}::{variant}` is written without parentheses"
+                            ),
+                        );
+                    }
+                    if payloads.len() != payload_types.len() {
+                        self.error_with_code(
+                            "E-TYPE-ENUM-001",
+                            pattern.span,
+                            format!(
+                                "enum variant pattern `{enum_name}::{variant}` expects {} payload pattern(s), found {}",
+                                payload_types.len(),
+                                payloads.len()
+                            ),
+                        );
+                    }
+                    for (payload, payload_type) in payloads.iter().zip(&payload_types) {
+                        self.check_pattern(payload, payload_type, scope, covered, false);
+                    }
+                    if top_level
+                        && payloads.iter().all(|payload| {
+                            matches!(
+                                payload.kind,
+                                PatternKind::Wildcard | PatternKind::Variable(_)
+                            )
+                        })
+                    {
+                        covered.insert(format!("{enum_name}::{variant}"));
                     }
                 }
                 Type::Unknown => {}
@@ -4341,19 +4521,36 @@ impl<'a> Checker<'a> {
                 Type::Named(type_name.clone())
             }
             ExprKind::Variable(name) => {
-                if let Some((enum_name, variant)) = name.split_once("::") {
-                    if self
+                if let Some((enum_name, variant)) = name.rsplit_once("::") {
+                    if let Some(definition) = self
                         ._program
                         .enums
                         .iter()
                         .find(|definition| definition.name == enum_name)
-                        .is_some_and(|definition| {
-                            definition.variants.iter().any(|item| item == variant)
-                        })
+                        .filter(|definition| definition.variants.iter().any(|item| item == variant))
                     {
+                        if definition
+                            .variant_payloads
+                            .iter()
+                            .find(|(name, _)| name == variant)
+                            .is_some_and(|(_, payloads)| !payloads.is_empty())
+                        {
+                            self.error_with_code(
+                                "E-TYPE-ENUM-001",
+                                expr.span,
+                                format!(
+                                    "enum variant `{enum_name}::{variant}` requires payload values"
+                                ),
+                            );
+                            return Type::Unknown;
+                        }
                         Type::Named(enum_name.to_owned())
                     } else {
-                        self.error(expr.span, format!("unknown enum variant `{name}`"));
+                        self.error_with_code(
+                            "E-TYPE-ENUM-001",
+                            expr.span,
+                            format!("unknown enum variant `{name}`"),
+                        );
                         Type::Unknown
                     }
                 } else {
@@ -4377,6 +4574,11 @@ impl<'a> Checker<'a> {
                 type_args,
                 args,
             } => {
+                if let Some(ty) =
+                    self.check_enum_constructor(name, type_args, args, expr.span, scopes)
+                {
+                    return ty;
+                }
                 if name == "read_console" {
                     if args.len() != 1 {
                         self.error(expr.span, "read_console expects exactly one String prompt");
@@ -5833,6 +6035,7 @@ pub enum Value {
     Enum {
         type_name: String,
         variant: String,
+        payloads: Vec<Value>,
     },
     Timestamp(i64),
     Date(String),
@@ -5914,7 +6117,24 @@ impl Value {
             Value::Bool(v) => v.to_string(),
             Value::String(v) => v.clone(),
             Value::Char(v) => v.to_string(),
-            Value::Enum { type_name, variant } => format!("{type_name}::{variant}"),
+            Value::Enum {
+                type_name,
+                variant,
+                payloads,
+            } => {
+                if payloads.is_empty() {
+                    format!("{type_name}::{variant}")
+                } else {
+                    format!(
+                        "{type_name}::{variant}({})",
+                        payloads
+                            .iter()
+                            .map(Value::output)
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                }
+            }
             Value::Timestamp(v) => v.to_string(),
             Value::Date(v) | Value::Time(v) => v.clone(),
             Value::Duration(v) => format!("{v}ms"),
@@ -6986,10 +7206,27 @@ impl<'program> Interpreter<'program> {
             Value::Bool(value) => Ok(serde_json::Value::from(*value)),
             Value::String(value) => Ok(serde_json::Value::String(value.clone())),
             Value::Char(value) => Ok(serde_json::Value::String(value.to_string())),
-            Value::Enum { type_name, variant } => Ok(serde_json::json!({
-                "$enum": type_name,
-                "variant": variant,
-            })),
+            Value::Enum {
+                type_name,
+                variant,
+                payloads,
+            } => {
+                let mut encoded = serde_json::json!({
+                    "$enum": type_name,
+                    "variant": variant,
+                });
+                if !payloads.is_empty() {
+                    let encoded_payloads = payloads
+                        .iter()
+                        .map(|payload| self.json_value(payload, span))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    encoded
+                        .as_object_mut()
+                        .expect("enum JSON is an object")
+                        .insert("payload".into(), serde_json::Value::Array(encoded_payloads));
+                }
+                Ok(encoded)
+            }
             Value::Timestamp(value) => Ok(serde_json::Value::from(*value)),
             Value::Date(value) | Value::Time(value) => Ok(serde_json::Value::String(value.clone())),
             Value::Duration(value) => Ok(serde_json::Value::from(*value)),
@@ -7101,9 +7338,56 @@ impl<'program> Interpreter<'program> {
                         self.runtime_error(span, format!("unknown `{name}` variant `{variant}`"))
                     );
                 }
+                let payload_types = definition
+                    .variant_payloads
+                    .iter()
+                    .find(|(candidate, _)| candidate == variant)
+                    .map(|(_, types)| types.as_slice())
+                    .unwrap_or_default();
+                let payloads = if payload_types.is_empty() {
+                    if object.len() != 2 || object.contains_key("payload") {
+                        return Err(self.runtime_error(
+                            span,
+                            format!(
+                                "unit enum `{name}` variant `{variant}` must not have a payload"
+                            ),
+                        ));
+                    }
+                    Vec::new()
+                } else {
+                    if object.len() != 3 {
+                        return Err(self.runtime_error(
+                            span,
+                            format!("enum `{name}` variant `{variant}` requires a payload array"),
+                        ));
+                    }
+                    let Some(values) = object.get("payload").and_then(serde_json::Value::as_array)
+                    else {
+                        return Err(self.runtime_error(
+                            span,
+                            format!("enum `{name}` variant `{variant}` requires a payload array"),
+                        ));
+                    };
+                    if values.len() != payload_types.len() {
+                        return Err(self.runtime_error(
+                            span,
+                            format!(
+                                "enum `{name}` variant `{variant}` expects {} payload value(s), found {}",
+                                payload_types.len(),
+                                values.len()
+                            ),
+                        ));
+                    }
+                    values
+                        .iter()
+                        .zip(payload_types)
+                        .map(|(value, ty)| self.json_decode_value(value, ty, span))
+                        .collect::<Result<Vec<_>, _>>()?
+                };
                 return Ok(Value::Enum {
                     type_name: name.clone(),
                     variant: variant.to_owned(),
+                    payloads,
                 });
             }
             if let Some(record) = self.record_definitions.get(name) {
@@ -8136,6 +8420,67 @@ impl<'program> Interpreter<'program> {
         env: &mut Environment,
         span: Span,
     ) -> Result<Value, RuntimeError> {
+        if let Some((enum_name, variant)) = name.rsplit_once("::") {
+            if let Some(definition) = self.enum_definitions.get(enum_name) {
+                let payload_types = definition
+                    .variant_payloads
+                    .iter()
+                    .find(|(name, _)| name == variant)
+                    .map(|(_, types)| types.clone())
+                    .ok_or_else(|| {
+                        self.runtime_error(
+                            span,
+                            format!("unknown enum variant `{enum_name}::{variant}`"),
+                        )
+                    })?;
+                if !type_args.is_empty() {
+                    return Err(self.runtime_error(
+                        span,
+                        "enum variant constructors do not accept type arguments",
+                    ));
+                }
+                if payload_types.is_empty() {
+                    return Err(self.runtime_error(
+                        span,
+                        format!(
+                            "unit enum variant `{enum_name}::{variant}` is written without parentheses"
+                        ),
+                    ));
+                }
+                if args.len() != payload_types.len() {
+                    return Err(self.runtime_error(
+                        span,
+                        format!(
+                            "enum variant `{enum_name}::{variant}` expects {} payload value(s), found {}",
+                            payload_types.len(),
+                            args.len()
+                        ),
+                    ));
+                }
+                let payloads = args
+                    .iter()
+                    .map(|argument| self.eval(argument, env))
+                    .collect::<Result<Vec<_>, _>>()?;
+                for ((argument, payload), expected) in
+                    args.iter().zip(&payloads).zip(&payload_types)
+                {
+                    if !compatible(expected, &payload.ty()) {
+                        return Err(self.runtime_error(
+                            argument.span,
+                            format!(
+                                "enum variant `{enum_name}::{variant}` payload expects `{expected}`, found `{}`",
+                                payload.ty()
+                            ),
+                        ));
+                    }
+                }
+                return Ok(Value::Enum {
+                    type_name: enum_name.to_owned(),
+                    variant: variant.to_owned(),
+                    payloads,
+                });
+            }
+        }
         if !is_runtime_builtin(name) && self.functions.contains_key(name) {
             let values = args
                 .iter()
@@ -9446,21 +9791,43 @@ impl<'program> Interpreter<'program> {
                     fields: values,
                 })
             }
-            ExprKind::Variable(name) => env
-                .get(name)
-                .or_else(|| {
-                    if name == "None" {
-                        Some(Value::Option(None))
-                    } else if let Some((type_name, variant)) = name.split_once("::") {
-                        Some(Value::Enum {
+            ExprKind::Variable(name) => {
+                if let Some(value) = env.get(name) {
+                    return Ok(value);
+                }
+                if name == "None" {
+                    return Ok(Value::Option(None));
+                }
+                if let Some((type_name, variant)) = name.rsplit_once("::") {
+                    if let Some(definition) = self.enum_definitions.get(type_name) {
+                        let payload_types = definition
+                            .variant_payloads
+                            .iter()
+                            .find(|(candidate, _)| candidate == variant)
+                            .map(|(_, types)| types.as_slice())
+                            .ok_or_else(|| {
+                                self.runtime_error(
+                                    expr.span,
+                                    format!("unknown enum variant `{type_name}::{variant}`"),
+                                )
+                            })?;
+                        if !payload_types.is_empty() {
+                            return Err(self.runtime_error(
+                                expr.span,
+                                format!(
+                                    "enum variant `{type_name}::{variant}` requires payload values"
+                                ),
+                            ));
+                        }
+                        return Ok(Value::Enum {
                             type_name: type_name.to_owned(),
                             variant: variant.to_owned(),
-                        })
-                    } else {
-                        None
+                            payloads: Vec::new(),
+                        });
                     }
-                })
-                .ok_or_else(|| self.runtime_error(expr.span, format!("unknown variable `{name}`"))),
+                }
+                Err(self.runtime_error(expr.span, format!("unknown variable `{name}`")))
+            }
             ExprKind::Call {
                 name,
                 type_args,
@@ -10198,7 +10565,31 @@ fn match_pattern(value: &Value, pattern: &Pattern) -> Option<Vec<(String, Value)
             Value::Enum {
                 type_name,
                 variant: actual,
-            } if type_name == enum_name && actual == variant => Some(Vec::new()),
+                payloads,
+            } if type_name == enum_name && actual == variant && payloads.is_empty() => {
+                Some(Vec::new())
+            }
+            _ => None,
+        },
+        PatternKind::EnumVariantPayload {
+            enum_name,
+            variant,
+            payloads: patterns,
+        } => match value {
+            Value::Enum {
+                type_name,
+                variant: actual,
+                payloads,
+            } if type_name == enum_name
+                && actual == variant
+                && payloads.len() == patterns.len() =>
+            {
+                let mut bindings = Vec::new();
+                for (value, pattern) in payloads.iter().zip(patterns) {
+                    bindings.extend(match_pattern(value, pattern)?);
+                }
+                Some(bindings)
+            }
             _ => None,
         },
         PatternKind::Constructor { name, inner } => match (name.as_str(), value) {
