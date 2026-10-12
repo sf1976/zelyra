@@ -38,7 +38,13 @@ try {
   assert.equal(desktop.stepsColumns.split(" ").length, 2, "desktop workflow should use two columns");
   assert.ok(desktop.headerTitleLeft < desktop.headerActionsLeft, "desktop page title should align before the actions");
   assert.ok(desktop.customerCount >= 1, "dashboard should display persisted customer records");
+  for (const route of ["/customers", "/customers/new", "/items", "/items/new", "/invoices", "/invoices/new", "/invoice_lines"]) {
+    await page.goto(`${baseUrl}${route}`, { waitUntil: "networkidle" });
+    const width = await page.evaluate(() => ({ viewport: innerWidth, document: document.documentElement.scrollWidth }));
+    assert.ok(width.document <= width.viewport, `desktop CRUD route ${route} overflows: ${JSON.stringify(width)}`);
+  }
 
+  await page.goto(baseUrl, { waitUntil: "networkidle" });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(100);
   const mobile = await page.evaluate(() => ({
@@ -50,7 +56,13 @@ try {
   assert.ok(mobile.document <= mobile.viewport, `mobile page overflows: ${JSON.stringify(mobile)}`);
   assert.equal(mobile.stepsColumns.split(" ").length, 1, "mobile workflow should use one column");
   assert.ok(mobile.navCanScroll, "mobile navigation must remain reachable");
+  for (const route of ["/customers", "/customers/new", "/items", "/items/new", "/invoices", "/invoices/new", "/invoice_lines"]) {
+    await page.goto(`${baseUrl}${route}`, { waitUntil: "networkidle" });
+    const width = await page.evaluate(() => ({ viewport: innerWidth, document: document.documentElement.scrollWidth }));
+    assert.ok(width.document <= width.viewport, `mobile CRUD route ${route} overflows: ${JSON.stringify(width)}`);
+  }
 
+  await page.goto(baseUrl, { waitUntil: "networkidle" });
   await page.emulateMedia({ media: "print" });
   assert.equal(await page.locator(".tutorial-navbar").evaluate((node) => getComputedStyle(node).display), "none");
   assert.deepEqual(externalRequests, [], "tutorial must not request remote assets");
