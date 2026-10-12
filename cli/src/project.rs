@@ -103,11 +103,6 @@ pub fn load(entry: &str) -> Result<LoadedProject, ProjectError> {
         visiting: Vec::new(),
     };
     loader.visit(canonical_entry.clone(), None)?;
-    let program =
-        link_modules(&canonical_entry, &loader.modules, &loader.order).map_err(|mut error| {
-            error.sources = loader.sources.clone().into_boxed_slice();
-            error
-        })?;
     let module_paths = loader
         .modules
         .iter()
@@ -200,6 +195,19 @@ pub fn load(entry: &str) -> Result<LoadedProject, ProjectError> {
         })
         .collect::<Vec<_>>();
     modules.sort_by(|left, right| left.path.cmp(&right.path));
+    let program = if loader.modules.len() == 1 {
+        loader
+            .modules
+            .into_values()
+            .next()
+            .expect("single loaded module")
+            .program
+    } else {
+        link_modules(&canonical_entry, &loader.modules, &loader.order).map_err(|mut error| {
+            error.sources = loader.sources.clone().into_boxed_slice();
+            error
+        })?
+    };
     Ok(LoadedProject {
         program,
         sources: loader.sources,

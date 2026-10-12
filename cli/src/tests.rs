@@ -2167,6 +2167,22 @@ fn notification_crud_requires_nullable_timestamp_for_unread_marker() {
 }
 
 #[test]
+fn notification_read_receipts_require_database_authentication() {
+    let source = r#"
+        table notifications {
+            id: Id primary auto
+            read_at: Timestamp?
+        }
+        crud Notification -> notifications {
+            unread: read_at
+        }
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    let schema = build_schema(&program).unwrap();
+    assert!(!validate_cruds("notifications.zyl", &program, &schema));
+}
+
+#[test]
 fn rejects_invalid_soft_delete_columns() {
     let missing_source = r#"
         table machines {

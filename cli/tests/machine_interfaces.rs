@@ -34,11 +34,77 @@ fn nested_cli_help_describes_database_creation_and_setup_accurately() {
     assert!(create_help.contains("verbindet sich nicht mit einer Datenbank"));
     assert!(create_help.contains("zelyra db setup main.zyl"));
 
+    let db_setup = run_german_help(&["db", "setup", "--help"]);
+    assert!(db_setup.status.success());
+    assert!(String::from_utf8_lossy(&db_setup.stdout).contains("MariaDB und MySQL"));
+    let db_history = run_german_help(&["db", "history", "--help"]);
+    assert!(db_history.status.success());
+    assert!(String::from_utf8_lossy(&db_history.stdout).contains("MySQL-Schemamigrationen"));
+
     let setup = run_german_help(&["setup", "--help"]);
     assert!(setup.status.success());
     let setup_help = String::from_utf8_lossy(&setup.stdout);
     assert!(setup_help.contains("--all"));
     assert!(setup_help.contains("Webadresse"));
+}
+
+#[test]
+fn mysql_db_setup_hint_uses_the_declared_connection_scheme() {
+    let source = r#"
+database main {
+    engine: mysql
+    database: "zelyra_ci"
+}
+fn main() {}
+"#;
+    let (directory, path) = temporary_project_source("mysql-setup-hint", source);
+    let output = Command::new(binary())
+        .args(["db", "setup", path.to_str().unwrap()])
+        .env_remove("DATABASE_URL")
+        .env_remove("ZELYRA_DATABASE_MAIN_URL")
+        .output()
+        .expect("zelyra should report a missing MySQL connection");
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("DATABASE_URL is required"));
+    assert!(stderr.contains("mysql://user:<password>"));
+    assert!(!stderr.contains("mariadb://"));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn long_binary_chain_survives_cli_project_validation_and_execution() {
+    let expression = std::iter::repeat_n("1", 5_000)
+        .collect::<Vec<_>>()
+        .join(" + ");
+    let source = format!("fn main() {{ print({expression}) }}");
+    let (directory, path) = temporary_project_source("long-binary-chain", &source);
+    let check = run(&["check", path.to_str().unwrap()]);
+    assert!(
+        check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&check.stderr)
+    );
+    let execution = run(&["run", path.to_str().unwrap()]);
+    assert!(
+        execution.status.success(),
+        "{}",
+        String::from_utf8_lossy(&execution.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&execution.stdout).trim(), "5000");
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn run_step_budget_is_opt_in_and_reports_a_controlled_runtime_error() {
+    let (directory, path) = temporary_project_source("step-budget", "fn main() { loop { } }");
+    let output = run(&["run", path.to_str().unwrap(), "--max-steps", "30"]);
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("E-RUNTIME-001"));
+    assert!(stderr.contains("step budget exceeded"));
+    assert!(stderr.contains("main.zyl:"));
+    fs::remove_dir_all(directory).unwrap();
 }
 
 #[test]
@@ -513,6 +579,119 @@ fn laravel_migrator_cli_writes_machine_report_outside_read_only_source() {
 }
 
 #[test]
+fn laravel_migrator_0_9_8_fixture_covers_business_security_and_integration_clues() {
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock is available")
+        .as_nanos();
+    let parent = std::env::temp_dir().join(format!("zelyra-laravel-review-{unique}"));
+    let project = parent.join("legacy-app");
+    fs::create_dir_all(project.join("routes")).unwrap();
+    fs::create_dir_all(project.join("app/Models")).unwrap();
+    fs::create_dir_all(project.join("app/Http/Controllers")).unwrap();
+    fs::create_dir_all(project.join("app/Jobs")).unwrap();
+    fs::create_dir_all(project.join("database/migrations")).unwrap();
+    fs::create_dir_all(project.join("resources/views")).unwrap();
+    fs::create_dir_all(parent.join("reports")).unwrap();
+    fs::write(
+        project.join("composer.json"),
+        r#"{"require":{"laravel/framework":"^11.0","laravel/sanctum":"^4.0"}}"#,
+    )
+    .unwrap();
+    fs::write(
+        project.join("routes/web.php"),
+        "<?php\nRoute::post('/orders', [OrderController::class, 'store'])->middleware('auth');\n",
+    )
+    .unwrap();
+    fs::write(
+        project.join("app/Models/Order.php"),
+        "<?php\nclass Order extends Model { public function customer() { return $this->belongsTo(Customer::class); } }\n",
+    )
+    .unwrap();
+    fs::write(
+        project.join("app/Http/Controllers/OrderController.php"),
+        "<?php\nclass OrderController { function store($request) { $this->authorize('create', Order::class); $request->validate([]); $order->tenant_id = $tenantId; $order->total = $items->sum('price'); Storage::put('orders', $request->file('attachment')); DB::transaction(fn () => $order->save()); Mail::send('order'); } }\n",
+    )
+    .unwrap();
+    fs::write(
+        project.join("app/Jobs/SendOrder.php"),
+        "<?php\nclass SendOrder implements ShouldQueue { public function handle() {} }\n",
+    )
+    .unwrap();
+    fs::write(
+        project.join("database/migrations/2026_01_01_create_orders.php"),
+        "<?php\nSchema::create('orders', function ($table) { $table->decimal('total', 12, 2); });\n",
+    )
+    .unwrap();
+    fs::write(
+        project.join("resources/views/orders.blade.php"),
+        "<h1>{{ $order->total }}</h1>\n",
+    )
+    .unwrap();
+    fs::write(
+        project.join(".env"),
+        "APP_KEY=fixture-secret-must-not-appear\n",
+    )
+    .unwrap();
+
+    let report = parent.join("reports/migration.json");
+    let result = Command::new(binary())
+        .args([
+            "migrate",
+            "laravel",
+            project.to_str().unwrap(),
+            "--report",
+            report.to_str().unwrap(),
+            "--format",
+            "json",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&result.stdout),
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let report_bytes = fs::read(&report).unwrap();
+    let parsed: serde_json::Value = serde_json::from_slice(&report_bytes).unwrap();
+    assert_eq!(parsed["analyzer"], "Zelyra Laravel Migrator 0.9.8");
+    assert_eq!(parsed["mapping_ruleset"], "0.9.6");
+    assert_eq!(parsed["laravel_constraint"], "^11.0");
+    let findings = parsed["findings"].as_array().unwrap();
+    for kind in [
+        "route",
+        "model",
+        "controller",
+        "migration",
+        "relationship",
+        "validation",
+        "job",
+        "authorization",
+        "tenant_boundary",
+        "financial_rule",
+        "file_access",
+        "integration",
+        "transaction",
+        "view",
+    ] {
+        assert!(
+            findings.iter().any(|finding| finding["kind"] == kind),
+            "missing {kind} fixture finding: {findings:#?}"
+        );
+    }
+    assert!(findings
+        .iter()
+        .all(|finding| finding["status"] != "supported"));
+    assert!(!String::from_utf8_lossy(&report_bytes).contains("fixture-secret-must-not-appear"));
+    assert_eq!(
+        fs::read_to_string(project.join("app/Http/Controllers/OrderController.php")).unwrap(),
+        "<?php\nclass OrderController { function store($request) { $this->authorize('create', Order::class); $request->validate([]); $order->tenant_id = $tenantId; $order->total = $items->sum('price'); Storage::put('orders', $request->file('attachment')); DB::transaction(fn () => $order->save()); Mail::send('order'); } }\n"
+    );
+    fs::remove_dir_all(parent).unwrap();
+}
+
+#[test]
 fn laravel_migrator_creates_a_separate_compiler_checked_scaffold() {
     let unique = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -752,15 +931,39 @@ fn invoice_tutorial_creates_a_checkable_project_without_overwriting() {
 }
 
 #[test]
-fn mysql_schema_commands_fail_closed_while_typed_sql_is_the_only_supported_path() {
-    let path = example("mysql_runtime.zyl");
+fn mysql_schema_create_emits_checked_ddl_without_connecting_to_a_database() {
+    let source = r#"
+database main {
+    engine: mysql
+    database: "zelyra_ci"
+}
+
+table customers {
+    id: Id primary auto
+    email: String(100) required unique
+}
+
+fn main() {}
+"#;
+    let (directory, path) = temporary_project_source("mysql-schema-create", source);
     let check = run(&["check", path.to_str().unwrap()]);
-    assert!(check.status.success());
+    assert!(
+        check.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&check.stdout),
+        String::from_utf8_lossy(&check.stderr)
+    );
 
     let schema = run(&["db", "create", path.to_str().unwrap()]);
-    assert!(!schema.status.success());
-    assert!(String::from_utf8_lossy(&schema.stderr).contains("E-DB-019"));
-    assert!(String::from_utf8_lossy(&schema.stderr).contains("typed, parameterized SQL"));
+    assert!(
+        schema.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&schema.stdout),
+        String::from_utf8_lossy(&schema.stderr)
+    );
+    assert!(String::from_utf8_lossy(&schema.stdout).contains("CREATE TABLE"));
+    assert!(schema.stderr.is_empty());
+    fs::remove_dir_all(directory).unwrap();
 }
 
 #[test]
@@ -1303,7 +1506,7 @@ fn generated_api_metadata_and_rate_limit_reach_http_clients() {
                 output String
             }
 
-            fn health() -> String { "ok" }
+            fn health() -> String { return "ok" }
             fn main() { }
         "#,
     )

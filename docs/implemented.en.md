@@ -1,6 +1,6 @@
-# Implemented in Zelyra 0.9.7
+# Implemented in Zelyra 0.9.8
 
-**Snapshot:** stable 0.9.7 · language compatibility line `0.1` · 2026-10-12
+**Snapshot:** 0.9.8 release candidate · language compatibility line `0.1` · 2026-10-12
 **Maturity:** experimental; not approved for production use
 
 This inventory describes what the current Zelyra release can do. Capabilities
@@ -8,7 +8,7 @@ are grouped by use, not by historical release number. Older and newer releases
 are listed in the [changelog](../CHANGELOG.md); unfinished work is tracked in
 the [roadmap](ROADMAP.md). Independent human acceptance is reserved for 1.0.0.
 
-## What Zelyra 0.9.7 provides
+## What Zelyra 0.9.8 provides
 
 - **Language and compiler:** a statically checked language with functions,
   records, typed collections, `Option` and `Result`, pattern matching, modules,
@@ -17,12 +17,14 @@ the [roadmap](ROADMAP.md). Independent human acceptance is reserved for 1.0.0.
   its limits.
 - **Databases:** schema-aware queries, relational foreign keys, database
   inspection, and checked setup/migration plans. MariaDB is the primary runtime
-  reference; MySQL and PostgreSQL are verified for the workflows listed in the
-  [support matrix](database-support.en.md).
+  reference. MySQL 8.4.11 has an isolated schema workflow as well as
+  parameterized queries; PostgreSQL is verified for the workflows listed in
+  the [support matrix](database-support.en.md).
 - **Business applications:** pages, reusable views, forms, table views, search,
   filtering, sorting, pagination, CRUD, and typed APIs with OpenAPI output.
-- **Zelyra Studio:** a local web editor with compiler diagnostics, formatting,
-  navigation, completion, task help, a database workbench, and a project map.
+- **Zelyra Studio:** a local web editor with a persisted light/dark appearance,
+  compiler diagnostics, formatting, navigation, completion, task help, a
+  database workbench, and a project map.
   The map shows known relationships and explains unresolved or bounded links
   rather than guessing.
 - **Invoice tutorial:** a multi-file customer, item, and invoice application
@@ -62,20 +64,36 @@ proof that arbitrary applications are correct.
   array operations, deterministic typed maps, `Option`, `Result`, and pattern
   matching as either a statement or expression; a `match` expression returns
   a value whose type is checked consistently across all arms.
-- ✅ `Int` and `UInt` arithmetic is bounded to their 64-bit ranges; overflow,
+- ✅ `Int` and `UInt` arithmetic is bounded to their 64-bit ranges; the direct
+  literal `-9223372036854775808` is supported. Overflow,
   underflow, and division by zero return runtime errors. The modular
   `examples/type_system` checks supported types and expected compiler/runtime
-  errors, and documents partial or missing types. `Decimal` now uses fixed
-  point with nine fractional digits and exact base-10 arithmetic; it serializes
-  as a decimal string for lossless JSON round trips. `Date`, `Time`, `Duration`,
+  errors, and documents partial or missing types. `Decimal` uses fixed point
+  with nine fractional digits; `decimal_quantize_result` applies explicit
+  rounding without a Float intermediary, while multiplication/division may
+  truncate beyond nine fractional digits. Decimal serializes as an exact
+  decimal string. Calendar-day addition/difference, ordered Timestamp
+  comparisons, and checked UTC-duration arithmetic are available; time zones
+  and local DST are not. `Date`, `Time`, `Duration`,
   and `Bytes` now have runtime values, validating constructors, and JSON round
   trips. `List<T>` aliases `T[]`; heterogeneous `Tuple<A, B, ...>` and
   deterministic `Set<T>` values can be created, checked, iterated, and passed
-  through JSON. User-defined enums/generics and observable class identity
-  remain open.
+  through JSON. Payload-free user-defined enums support equality, JSON, and
+  exhaustive matching; payload variants, user-defined generics, function
+  values, and observable class identity remain unavailable. `record_with` and
+  `array_replace_result` return checked new values with value semantics.
+  `for i in start..end` iterates with an exclusive end.
+- ✅ Non-Unit functions must return a compatible value on every reachable path
+  (`E-TYPE-RETURN-001`); non-exhaustive matches report
+  `E-TYPE-MATCH-001`. Nested calls have a controlled runtime depth limit;
+  `zelyra run --max-steps <n>` opts into a statement/loop step budget, which is
+  unlimited by default.
 - ✅ Strings support lexicographic comparisons. `json_decode_result<T>`,
   `read_text_result`, and `write_text_result` return expected parse and file
-  errors as `Result`. `format_timestamp` renders UTC timestamps as ISO 8601;
+  errors as `Result`. The explicit tagged Result codec,
+  `json_encode_tagged_result` / `json_decode_tagged_result<T,E>`, preserves the
+  Ok or Err variant and its payload without changing existing `json_encode`
+  output. `format_timestamp` renders UTC timestamps as ISO 8601;
   capability grants and project filesystem boundaries still apply. Exclusive
   file creation, temporary writes with atomic replacement, append, copy, rename,
   and Result-based deletion are available. Literal text search, replacement,
@@ -107,19 +125,18 @@ See the [formal specification](specification.md),
 - ✅ Native SQL is checked against known schemas for tables, columns,
   parameters, nullability, and result mapping. Parameters are bound safely;
   transactions are available.
-- 🧪 The 0.9.5 branch adds `mail_queue` and `mail_deliver` for typed text/HTML
-  messages through the MariaDB transactional outbox. SMTP authentication,
-  STARTTLS, implicit TLS, explicit private CA roots, a five-second transport
-  timeout, message bounds, and a loopback test sink are covered. Delivery is
-  at least once; PostgreSQL outbox support, templates, and attachments are not
-  included in this milestone.
-- ✅ SQLite has tested schema and local database workflows. PostgreSQL schema
-  inspection/planning and selected safety checks are tested. 0.6.0 adds an
-  experimental native PostgreSQL 16 runtime slice for direct parameterized SQL
-  and transactions. It does not establish full PostgreSQL parity; generated
-  web/CRUD paths do not use this runtime yet. 0.7.0 adds typed MySQL queries
-  tested only against MySQL Server 8.4.11; schema/administration commands,
-  migrations, generated CRUD/web paths, and authentication are not included.
+- 🧪 Typed text/HTML application messages can be queued transactionally in a
+  MariaDB outbox and delivered through SMTP with authentication, STARTTLS,
+  implicit TLS, or explicitly configured private CA roots. A five-second
+  transport timeout, message bounds, and a loopback test sink are covered.
+  Delivery is at least once; exactly-once delivery, PostgreSQL outbox, named
+  templates, and file attachments are not promised in 0.9.8.
+- ✅ SQLite provides tested local schema workflows. PostgreSQL supports
+  selected runtime, schema, and safety checks. MySQL Server 8.4.11 supports
+  typed parameterized queries and an isolated schema workflow covering setup,
+  inspection, read-only project map, reviewed column plan, explicit apply, and
+  history. None of these results establishes complete
+  backend parity; see the exact [compatibility matrix](database-support.en.md).
 - 🧪 Schema planning classifies selected changes as safe, requiring review,
   destructive, or unsupported. Destructive and unsupported changes fail
   closed; selected populated-table and nullability changes receive read-only
@@ -154,11 +171,9 @@ The exact backend boundaries and tested MariaDB versions are in the
 - ✅ Generated MariaDB starters include minimal, CRUD, authentication, and
   business-application variants; the machine-management starter includes an
   optional fictional-data fixture.
-- 🧪 0.7.0 adds a tenant-aware CRUD path for exactly one explicitly declared
-  MariaDB table. Session, membership, permission, and generated queries are
-  checked in the supported path. This is not full multi-tenancy; relations,
-  custom SQL actions, TableViews, exports, migrations, and backfills are not
-  supported.
+- 🧪 Tenant-filtered CRUD checks authentication, membership, permission, and
+  generated database access in its documented MariaDB scope. This is not
+  general multi-tenancy for arbitrary SQL, exports, migrations, or jobs.
 
 For usage details see the [web and database quickstart](getting-started.md),
 [setup guide](setup-web.md), and [web chapters](handbook/en/handbook.md).
@@ -167,27 +182,20 @@ For usage details see the [web and database quickstart](getting-started.md),
 
 - 🧪 `zelyra editor [directory] [--port <port>] [--no-open]` starts local Studio on
   `127.0.0.1` with a project tree, tabs, search/replace, completion, compiler
-  diagnostics, and formatting. The CLI opens the system browser by default;
+  diagnostics, formatting, and a stored light/dark appearance. Theme controls
+  are keyboard-operable; browser checks cover contrast and the 360 CSS-pixel
+  layout. The CLI opens the system browser by default;
   `--no-open` skips it. Writes require a session token and same browser origin;
-  the database and web application are not started automatically. Version 0.8.0 adds a
-  read-only clickable relationship map for supported MariaDB/PostgreSQL
-  schemas and a guided CRUD source builder. Version 0.9.0 adds an impact view
-  for affected files, tables, declared relationships, and routes. The compiler
-  checks a candidate, Studio shows its diff, and writes only after explicit
-  apply with a fresh hash check. MySQL live introspection is not included.
-  Version 0.9.3 adds an explicit read-only record browser (at most 25 records
-  per request) and compiler-checked source changes to add or edit simple table
-  columns. Key, unique, and defaulted fields cannot be edited visually; every
-  change requires a fresh hash and explicit confirmation and does not apply a
-  migration. Studio can create a declared MariaDB database after confirmation
-  when a connection is already configured; schema application remains separate.
-  Backend/connection selection, PostgreSQL/MySQL database creation, and a
-  complete plan/risk editor remain open. See the [Studio guide](studio.en.md).
-  Version 0.9.2 adds contextual help, an action finder, AST-backed local
-  completion, live diagnostics, F12 definitions, lexical Shift+F12 occurrences,
-  a deterministic compiler project map, and a bounded explicit Run action.
-  Type inference, full semantic references, and dynamic project relationships
-  are not included.
+  the database and web application are not started automatically. The editor
+  includes file search, local completion, formatting, compiler diagnostics,
+  contextual help, an action finder, definition navigation, lexical occurrences,
+  and an explicit bounded Run action. A deterministic project map shows
+  resolvable relationships and reports analysis limits. The database workbench
+  compares schema metadata, displays foreign keys, loads records only on request
+  (at most 25 per page), and can apply simple column changes as checked source
+  previews. It does not apply migrations. MySQL live introspection, full
+  semantic references, and an unrestricted visual database designer are not
+  included. See the [Studio guide](studio.en.md).
 - ✅ `zelyra text edit <plan.zedit>` previews text edits from TOML plans using
   linear regular expressions, expected match counts, a source-bound plan ID,
   and explicit apply. Project boundaries and unchanged inputs are checked
@@ -218,15 +226,17 @@ For usage details see the [web and database quickstart](getting-started.md),
 ## Laravel Migrator
 
 - 🧪 `zelyra migrate laravel <project> --report <path>` statically inventories
-  recognized Laravel patterns in 0.9.3. PHP, Artisan, databases, and `.env`
+  recognized Laravel patterns. PHP, Artisan, databases, and `.env`
   files are not run, contacted, or read. The new report is written outside the
   source project and includes source locations, status, and next steps in
-  Markdown or JSON. The initial scanner covers Composer constraints, simple
+  Markdown or JSON. The scanner covers Composer constraints, simple
   routes, models, controllers, `Schema::create`, selected relationships,
-  validation entry points, jobs, Blade views, and integration calls. It is an
-  experimental pattern scanner, not a PHP parser or proof of business/security
-  parity. A linked project graph and optional scaffolds follow in later
-  releases. [Migrator details](laravel-migrator.en.md).
+  validation entry points, jobs, Blade views, and integration calls. The 0.9.8
+  analyzer version is separate from the 0.9.6 mapping ruleset; fixture coverage
+  names syntactic findings without claiming a route-to-data graph or behavior
+  transfer. It is an experimental pattern scanner, not a PHP parser or proof of
+  business/security parity. Its separate compiler-checked scaffold contains no
+  copied business behavior. [Migrator details](laravel-migrator.en.md).
 
 ## APIs, authentication, permissions, and audit
 
@@ -282,20 +292,11 @@ benchmark result is claimed here.
 
 ## Test and release evidence
 
-The earlier feature implementation passed CI on PR head `a35a5ee` in run
-[#38057534730](https://github.com/sf1976/zelyra/actions/runs/38057534730):
-workspace tests, four MariaDB compatibility jobs, PostgreSQL 16 runtime
-integration, fuzzing, dependency audit, and Linux/Windows CI. Package validation
-[#38057534736](https://github.com/sf1976/zelyra/actions/runs/38057534736) built
-deterministic Linux/Windows packages and verified checksums and SPDX SBOMs on
-the same feature head. Those runs verified the feature implementation before the version bump. The
-version-bumped candidate then passed CI #38058823265. The immutable tag
-`v0.6.0-rc.1` passed tag CI #38059555233; RC release workflow #38059555140 built the candidate packages. Stable release
-workflow #38060275164 built Linux and Windows packages, verified checksums and
-228-package SPDX SBOMs, and published GitHub attestations. Downloaded release assets passed checksum and
-SBOM verification; the Linux binary reports `zelyra 0.6.0`. See the
-[release verification record](release-readiness/0.6.0-candidate-verification.md).
-Zelyra 0.9.1 was published from merge commit `aeba34eb73d327cf9d2b65bfaa0e2ce477802af6`. Exact CI, artifact, checksum, SBOM, attestation, and website evidence is in the [0.9.1 release verification record](release-readiness/0.9.1-candidate-verification.md). Independent human acceptance remains reserved for 1.0.0.
+The stable [Zelyra 0.9.7 release](https://github.com/sf1976/zelyra/releases/tag/v0.9.7)
+includes Linux and Windows x86_64 artifacts, checksums, and SPDX SBOMs. Current
+backend checks and their limits are listed in the
+[database support matrix](database-support.en.md). Independent human product
+acceptance remains reserved for 1.0.0; automated evidence does not replace it.
 
 This page is updated when a delivered capability or its evidence changes. It
 does not turn a specification or roadmap entry into an implementation claim.

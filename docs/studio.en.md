@@ -16,6 +16,18 @@ The editor listens only on `127.0.0.1`. Its startup address contains a random
 session token. Mutating requests require that token and the same browser
 origin.
 
+## Choose an appearance
+
+Use the color control in the upper-right corner to switch between light and
+dark appearances. Studio stores the choice in this browser and applies it
+before loading the stylesheet on the next visit, avoiding a flash from the dark
+default. The control is a standard button and works with Tab, Enter, or
+Space. The editor, syntax colors, file tree, help panel, database workbench,
+and dialogs share the same theme tokens. The browser E2E check requires at
+least 4.5:1 contrast for light-theme text and syntax colors on the work
+surfaces. At the supported minimum width of 360 CSS pixels, the appearance
+control remains reachable without horizontal overflow.
+
 ## Use the IDE tools
 
 Press **F1** or choose the help action to see a description, options, and an

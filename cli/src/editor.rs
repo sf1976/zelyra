@@ -11,6 +11,7 @@ use zelyra_web::{parse_request, Request};
 const EDITOR_HTML: &str = include_str!("../assets/editor.html");
 const EDITOR_JS: &str = include_str!("../assets/editor.js");
 const EDITOR_CSS: &str = include_str!("../assets/editor.css");
+const EDITOR_THEME_JS: &str = include_str!("../assets/theme.js");
 const EDITOR_PATH: &str = "/__zelyra/editor";
 const EDITOR_MAX_CONNECTIONS: usize = 16;
 const EDITOR_MAX_FILE_BYTES: usize = 1_048_576;
@@ -315,6 +316,13 @@ fn editor_response(
     }
     if request.path == format!("{EDITOR_PATH}/assets/editor.css") && request.method == "GET" {
         return Ok((200, "text/css; charset=utf-8", EDITOR_CSS.into()));
+    }
+    if request.path == format!("{EDITOR_PATH}/assets/theme.js") && request.method == "GET" {
+        return Ok((
+            200,
+            "text/javascript; charset=utf-8",
+            EDITOR_THEME_JS.into(),
+        ));
     }
     let api_prefix = format!("{EDITOR_PATH}/api/");
     let Some(operation) = request.path.strip_prefix(&api_prefix) else {
@@ -1065,13 +1073,6 @@ fn editor_database_schemas(
             "the project schema could not be read; fix project diagnostics first".into(),
         )
     })?;
-    if declared
-        .database
-        .as_ref()
-        .is_some_and(|database| database.engine.eq_ignore_ascii_case("mysql"))
-    {
-        return Err((501, "MySQL schema introspection is not supported yet; the current MySQL runtime is limited to typed parameterized queries".into()));
-    }
     let database_name = declared
         .database
         .as_ref()
@@ -1223,7 +1224,7 @@ fn database_target_response(
         "engine": engine,
         "database": target_database,
         "configured": configured,
-        "creationSupported": engine.eq_ignore_ascii_case("mariadb") && configured,
+        "creationSupported": (engine.eq_ignore_ascii_case("mariadb") || engine.eq_ignore_ascii_case("mysql")) && configured,
     });
     Ok((200, "application/json; charset=utf-8", response.to_string()))
 }
@@ -1247,12 +1248,14 @@ fn create_project_database(
     })?;
     let database = declared.database.as_ref().ok_or((
         422,
-        "declare a MariaDB database in the project first".into(),
+        "declare a MariaDB or MySQL database in the project first".into(),
     ))?;
-    if !database.engine.eq_ignore_ascii_case("mariadb") {
+    if !database.engine.eq_ignore_ascii_case("mariadb")
+        && !database.engine.eq_ignore_ascii_case("mysql")
+    {
         return Err((
             501,
-            "Studio database creation currently supports MariaDB projects with existing connection configuration".into(),
+            "Studio database creation currently supports MariaDB and MySQL projects with existing connection configuration".into(),
         ));
     }
     let database_url = if let Some(url) = super::database_url_from_schema(&declared) {
@@ -1262,7 +1265,7 @@ fn create_project_database(
         if !environment_file.is_file() {
             return Err((
                 422,
-                "configure the MariaDB URL in the process environment or project .env file first"
+                "configure the MariaDB or MySQL URL in the process environment or project .env file first"
                     .into(),
             ));
         }
@@ -1274,7 +1277,7 @@ fn create_project_database(
         .map(|(url, _)| url)
         .ok_or((
             422,
-            "configure the MariaDB URL in the process environment or project .env file first"
+            "configure the MariaDB or MySQL URL in the process environment or project .env file first"
                 .into(),
         ))?
     };
@@ -1296,7 +1299,7 @@ fn create_project_database(
     creation.map_err(|_| {
         (
             502,
-            "MariaDB could not create or verify the declared database; check server access and privileges".into(),
+            "database server could not create or verify the declared database; check server access and privileges".into(),
         )
     })?;
     let target_database = database.database.clone().or_else(|| {
@@ -1307,7 +1310,7 @@ fn create_project_database(
     let response = json!({
         "created": true,
         "database": target_database,
-        "message": "The declared MariaDB database now exists. Review and apply its schema separately.",
+        "message": "The declared database now exists. Review and apply its schema separately.",
     });
     Ok((200, "application/json; charset=utf-8", response.to_string()))
 }
@@ -3391,6 +3394,33 @@ fn main() {}
     }
 
     #[test]
+    fn saved_light_theme_loads_from_a_local_script_before_the_stylesheet() {
+        let state = project();
+        let page = editor_response(&request("GET", EDITOR_PATH, &[]), &state)
+            .expect("Studio page should load");
+        let theme_script_position = page
+            .2
+            .find("/__zelyra/editor/assets/theme.js")
+            .expect("theme initializer should be external and local");
+        let stylesheet_position = page
+            .2
+            .find("/__zelyra/editor/assets/editor.css")
+            .expect("editor stylesheet should load");
+        assert!(theme_script_position < stylesheet_position);
+        assert!(
+            !page.2.contains("<script>"),
+            "the CSP blocks inline scripts"
+        );
+        let theme_script = editor_response(
+            &request("GET", "/__zelyra/editor/assets/theme.js", &[]),
+            &state,
+        )
+        .expect("local theme initializer should load");
+        assert!(theme_script.2.contains("zelyra-editor-theme"));
+        let _ = fs::remove_dir_all(state.root.clone());
+    }
+
+    #[test]
     fn database_record_browser_is_explicit_read_only_and_uses_session_protected_api() {
         let state = project();
         let page = editor_response(&request("GET", EDITOR_PATH, &[]), &state)
@@ -3626,6 +3656,16 @@ fn main() {}
         assert_eq!(value["configured"], true);
         assert_eq!(value["creationSupported"], true);
         assert!(!body.contains("studio_secret"));
+        fs::write(
+            state.root.join("main.zyl"),
+            "database main {\n    engine: mysql\n}\nfn main() {}\n",
+        )
+        .expect("write MySQL project source");
+        let (_, _, body) = database_target_response(&state).expect("inspect MySQL target metadata");
+        let value: Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(value["engine"], "mysql");
+        assert_eq!(value["creationSupported"], true);
+        assert!(!body.contains("studio_secret"));
         let _ = fs::remove_dir_all(state.root.clone());
     }
 
@@ -3672,7 +3712,7 @@ fn main() {}
     }
 
     #[test]
-    fn mysql_schema_introspection_is_reported_as_unsupported_without_secret_details() {
+    fn mysql_schema_introspection_requires_configuration_not_a_feature_fallback() {
         let state = project();
         fs::write(
             state.root.join("main.zyl"),
@@ -3684,12 +3724,11 @@ fn main() {}
             "/__zelyra/editor/api/database-schema",
             &[("x-zelyra-editor-token", "local-session-token")],
         );
-        let error = editor_response(&request, &state).expect_err("MySQL introspection is bounded");
-        assert_eq!(error.0, 501);
-        assert!(error
-            .1
-            .contains("MySQL schema introspection is not supported"));
-        assert!(!error.1.contains("password") && !error.1.contains("DATABASE_URL"));
+        let error = editor_response(&request, &state)
+            .expect_err("missing MySQL connection must be reported clearly");
+        assert_eq!(error.0, 422);
+        assert!(error.1.contains("database connection is not configured"));
+        assert!(!error.1.contains("password") && !error.1.contains("secret"));
         let _ = fs::remove_dir_all(state.root.clone());
     }
 

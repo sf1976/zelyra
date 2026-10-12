@@ -1,0 +1,7 @@
+enum Status { Draft Paid }
+fn main() {
+    status: Status = Status::Draft
+    match status {
+        Status::Draft => { print("draft") }
+    }
+}

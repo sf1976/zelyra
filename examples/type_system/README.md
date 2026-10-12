@@ -27,26 +27,27 @@ Programmlauf.
 
 | Typ oder Konzept | Status | Beobachtetes Verhalten |
 |---|---|---|
-| `Int` | ✅ unterstützt | Vorzeichenbehaftetes 64-Bit-Intervall; Addition, Subtraktion, Multiplikation, Division, Rest und Vergleiche; Überlauf und Division durch null ergeben Runtimefehler. |
+| `Int` | ✅ unterstützt | Vorzeichenbehaftetes 64-Bit-Intervall; auch `-9223372036854775808` ist direkt schreibbar. Addition, Subtraktion, Multiplikation, Division, Rest und Vergleiche; Überlauf und Division durch null ergeben Runtimefehler. |
 | `UInt` | ✅ unterstützt | Vorzeichenloses 64-Bit-Intervall; Rechenoperationen und Vergleiche; Überlauf, Unterlauf und Division durch null ergeben Runtimefehler. |
 | `Float` | ✅ unterstützt | IEEE-754 binary64; Rundungsabweichungen, Unendlich und NaN sind möglich. JSON lehnt nicht-endliche Werte ab. |
-| `Decimal` | ✅ unterstützt | `decimal("0.10")` erstellt einen Festkommawert mit neun Nachkommastellen und exakter Basis-10-Arithmetik. Addition, Subtraktion, Multiplikation, Division, Rest und Vergleiche sind implementiert; Überlauf und Division durch null ergeben Runtimefehler. Mehr als neun Nachkommastellen werden abgewiesen. JSON speichert Decimal als exakten Dezimalstring. |
+| `Decimal` | ✅ unterstützt | `decimal("0.10")` erstellt einen Festkommawert mit neun Nachkommastellen und exakter Basis-10-Arithmetik. Multiplikation und Division können Nachkommastellen nach neun Stellen abschneiden. `decimal_quantize_result(value, scale, mode)` rundet explizit ohne Float-Zwischenwert (`toward_zero`, `floor`, `ceiling`, `half_up`, `half_even`). JSON speichert Decimal als exakten Dezimalstring. |
 | `Bool` | ✅ unterstützt | `true`/`false`, logische Operationen und Gleichheit. |
 | `Char` | ✅ unterstützt | Ein Unicode-Skalarwert; JSON verwendet eine einstellige JSON-Zeichenkette. Graphemcluster mit mehreren Codepoints sind kein einzelnes `Char`. |
 | `String` | ✅ unterstützt | UTF-8, Unicode, Escape-Sequenzen, Gleichheit, lexikografische Vergleiche und Verkettung. `text_chars` zählt Unicode-Skalarwerte; eine Byte-Längenfunktion gibt es nicht. |
 | Null und optionale Werte | ✅ unterstützt | Kein eigenständiger Nulltyp. `Option<T>`, `Some` und `None` unterscheiden fehlende Werte von `0`, `false` und `""`. JSON bildet `None` auf `null` ab. |
-| Arrays | ✅ unterstützt | Typisierte, verschachtelte und leere Arrays; `append`/Verkettung liefern Werte zurück. Doppelte Elemente sind erlaubt. Falsche Typen werden beim Kompilieren, ungültige Indizes zur Laufzeit erkannt. |
+| Arrays | ✅ unterstützt | Typisierte, verschachtelte und leere Arrays; `append`, Verkettung und `array_replace_result` liefern neue Werte. Doppelte Elemente sind erlaubt. Falsche Typen werden beim Kompilieren, ungültige Indizes als `Err` erkannt. |
 | Listen | ✅ Alias | `List<T>` ist ein Typsynonym für `T[]`; Literale bleiben `[a, b]`, und Arrayoperationen gelten unverändert. Es gibt bewusst nur eine geordnete Sequenzsemantik. |
 | Tupel | ✅ unterstützt | `Tuple<A, B, ...>` und `tuple(a, b, ...)` bilden geordnete heterogene Werte. Konstante Indizes werden statisch typgeprüft; dynamische Tuple-Indizes sind nicht erlaubt. JSON verwendet ein positionsgetreues Array mit geprüfter Länge. |
 | Mengen | ✅ unterstützt | `Set<T>`, `set([a, b])`, `contains`, `set_add` und `set_remove`. Werte sind deterministisch sortiert, Duplikate werden entfernt. Unterstützt werden die skalar vergleichbaren Schlüsseltypen; JSON ist ein sortiertes Array. |
 | `Map<K,V>` | ✅ unterstützt | Typisierte Maps; erlaubte Schlüsseltypen sind `Int`, `UInt`, `String`, `Bool`, `Char` und `Timestamp`. Doppelte Literalschlüssel behalten einen Eintrag und der letzte Wert gewinnt. Ein fehlender `get`-Schlüssel ergibt `None`. JSON unterstützt nur String-Schlüssel. |
-| Records (`struct`) | ✅ unterstützt | Eigene, verschachtelte Records, Felder, Wertgleichheit und JSON-Roundtrip. Bindings sind standardmäßig unveränderlich; ein `mutable` Binding kann durch einen neuen Recordwert ersetzt werden. |
-| Enums | — nicht vorhanden | Kein benutzerdefinierter Enumtyp. `Option` und `Result` sind eingebaute Varianten-Typen. |
+| Records (`struct`) | ✅ unterstützt | Eigene, verschachtelte Records, Felder, Wertgleichheit und JSON-Roundtrip. `record_with(record, "feld", wert)` liefert einen typgeprüften neuen Record; der ursprüngliche Wert bleibt bestehen. |
+| Enums | ✅ unterstützt | Eigene payloadfreie Varianten mit `enum Status { Draft Paid }`, `Status::Draft`, Gleichheit, JSON-Roundtrip und exhaustivem `match`. Varianten mit Nutzdaten sind noch nicht verfügbar. |
 | Klassen/Objektidentität/Referenzen | — nicht vorhanden | Records werden als Werte behandelt. Es gibt keine beobachtbare Objektidentität oder Referenzsemantik und keine Mutation einzelner Recordfelder. |
-| `Timestamp` | ✅ teilweise nutzbar | `now()`, Gleichheit, UTC-Formatierung und JSON als Unix-Millisekunden. Keine allgemeine Datum-/Zeitrechnung oder geordnete Vergleiche im Sprachkern. |
-| `Date`, `Time`, `Duration`, `Bytes` | ✅ unterstützt | `date("YYYY-MM-DD")` validiert gregorianische Daten; `time("HH:MM:SS")` validiert Uhrzeiten; beide vergleichen chronologisch und werden als ISO-Text serialisiert. `duration_ms(Int)` liefert Millisekunden mit geprüfter Addition/Subtraktion und JSON als Integer. `bytes([Int, ...])` akzeptiert nur Werte von 0 bis 255 und wird als Integer-Array serialisiert. |
+| `Timestamp` | ✅ teilweise nutzbar | `now()`, Gleichheit, chronologische Vergleiche, UTC-Formatierung, JSON als Unix-Millisekunden sowie `timestamp_add_result` und `timestamp_difference_result` für UTC-Dauern. Operationen sind auf ISO-Jahre 0001–9999 begrenzt. Zeitzonen und lokale Sommerzeit sind nicht enthalten. |
+| `Date`, `Time`, `Duration`, `Bytes` | ✅ unterstützt | Validierte ISO-Daten und Uhrzeiten, chronologische Vergleiche, JSON-Roundtrips und geprüfte Daueraddition/-subtraktion. `date_add_days_result` und `date_days_between_result` rechnen Kalender-Tage inklusive Schaltjahren und Jahreswechseln. `Bytes` akzeptiert Werte 0–255. |
+| Bereichsschleife | ✅ unterstützt | `for i in start..end` verwendet Int-Grenzen mit exklusivem Ende. Negative Grenzen, leere Bereiche, `break` und `continue` funktionieren. Der Bereich wird in einer Schleife nicht als Array materialisiert. |
 | `Unit` | ✅ unterstützt | Leerer Rückgabewert, explizite Funktionstypen und JSON-Roundtrip mit `null`. |
-| `Result<T,E>` | ✅ unterstützt | `Ok`/`Err`, Pattern Matching und Rückgabe aus Funktionen. JSON kodiert `Ok` als enthaltenen Wert und `Err` als Objekt mit `error`; ein generischer `Result`-Decoder fehlt. |
+| `Result<T,E>` | ✅ unterstützt | `Ok`/`Err`, Pattern Matching und Rückgabe aus Funktionen. Das bisherige `json_encode`-Format bleibt unverändert; `json_encode_tagged_result` und `json_decode_tagged_result<T,E>` tauschen Results verlustfrei als `{"$result":"ok","value":...}` oder `{"$result":"err","error":...}` aus. `json_decode_result<T>` bleibt der Result-basierte Decoder für gewöhnliche JSON-Ziele. |
 | `HttpResult<T>`, `HttpResponse`, `HttpError` | 🧪 spezialisiert | HTTP-Subsystem-Typen für Netzwerkantworten und Fehler; keine allgemeinen Literal- oder Konstruktoren. |
 | Generics | 🧪 eingebaut | Generische Standardtypen wie `Option`, `Result`, `Map`, Arrays und `json_decode<T>` sind vorhanden. Eigene generische Funktionen und Datentypen sind nicht verfügbar. |
 | Typ-Aliase und eigene Typen | 🧪 teilweise | `type Name = ...` sowie Records sind vorhanden. Records werden ausgeführt und serialisiert; Aliase haben keine eigene Runtimeidentität. |
@@ -63,28 +64,29 @@ optionale Recordfelder erhalten beim JSON-Decodieren `None`.
 
 Zuweisungen und Parameterübergaben verhalten sich wertbasiert. Arrays und
 Records werden intern geklont; die Sprache bietet keine Referenzidentität und
-keine flachen oder tiefen Kopien als getrennte Operationen. Der getestete
-„Ändern“-Pfad ist das Neusetzen eines `mutable` Bindings, nicht das Ändern eines
-Recordfelds oder eines Arrayelements über einen Index.
+keine flachen oder tiefen Kopien als getrennte Operationen. `record_with` und
+`array_replace_result` liefern geänderte Werte zurück und erhalten das Original.
 
 ## Automatisierte Abnahme
 
 Der erfolgreiche Programmlauf prüft Zahlenbereiche, Rechenoperationen,
 Rundungsverhalten, Unicode, optionale Werte, Arrays, Listen-Aliase, Tupel,
-Mengen, Records und JSON.
-Der CLI-Integrationstest erwartet zusätzlich **7 Compilerfehler** und
+Mengen, Records, Enums, Kalender-/Zeitstempeloperationen, Decimal-Quantisierung,
+Bereiche und JSON.
+Der CLI-Integrationstest erwartet zusätzlich **8 Compilerfehler** und
 **18 Runtimefehler** (Typfehler, gemischte Arrays, unvollständiges Matching,
 Überlauf/Unterlauf, Division durch null, ungültiger Index, ungültige
 Date-/Time-/Bytes-/Decimal-Werte, falsche Tuple-Länge, nicht-endliche
-JSON-Zahl, nicht-stringbasierte Map-Serialisierung sowie nicht unterstützte
-`Result`-Decodierung). Ein erwarteter Fehler ist dabei ein
-positives Testergebnis. Bei erfolgreichem Integrationstest sind alle 8
+JSON-Zahl, nicht-stringbasierte Map-Serialisierung sowie nicht unterstützte allgemeine
+`json_decode<Result<...>>`-Decodierung; der separate getaggte Codec ist verfügbar). Ein erwarteter Fehler ist dabei ein
+positives Testergebnis. Bei erfolgreichem Integrationstest sind alle 10
 positiven Testgruppen bestanden und es gibt 0 unerwartete Fehler. Die
-aktuelle Matrix umfasst 17 unterstützte, 5 teilweise unterstützte und 3 noch
+aktuelle Matrix umfasst 18 unterstützte, 5 teilweise unterstützte und 2 noch
 nicht verfügbare Einträge; das Programm gibt diese drei Zahlen aus. Die
-Sprachmatrix weist noch nicht verfügbare Enumerationen, Funktionswerte und
-benutzerdefinierte Generics ausdrücklich aus. Records verwenden bewusst
-Wertsemantik; eigene Klassen-/Referenzidentität ist nicht implementiert.
+Sprachmatrix weist Funktionswerte und beobachtbare Klassen-/Referenzidentität
+ausdrücklich als nicht verfügbar aus. Eigene Generics und Enum-Varianten mit
+Nutzdaten fehlen ebenfalls; payloadfreie Enums sind enthalten. Records verwenden
+bewusst Wertsemantik.
 
 Das ist eine Abdeckung der vorhandenen Sprachoberfläche, keine Behauptung, dass
 alle Typen oder Konvertierungen bereits implementiert sind.

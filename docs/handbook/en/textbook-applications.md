@@ -542,7 +542,7 @@ page "/secure/{user_input}" {
 }
 ```
 
-**Example 4: Reusable view layouts and named slots (from Zelyra 0.1.41)**
+**Example 4: Reusable view layouts and named slots**
 Instead of repeating `<html>`, `<head>`, headers, and footers on every page, you declare reusable layout shells with `view`. A view defines exactly one default slot `<slot />` and optional named slots with safe fallback content:
 ```zelyra
 view AppShell {
@@ -573,7 +573,7 @@ page "/dashboard" {
 }
 ```
 
-**Example 5: Declarative search, filtering, and pagination (from Zelyra 0.1.40)**
+**Example 5: Declarative search, filtering, and pagination**
 For data-driven collection pages, Zelyra automatically generates semantic form controls for search, sorting, and pagination with full URL state preservation:
 ```zelyra
 database main {
@@ -840,7 +840,7 @@ crud Task -> tasks {
 }
 ```
 
-> **Automatic Detail Linking with Hidden ID (from version 0.1.50):**
+> **Automatic Detail Linking with Hidden ID:**
 > When the technical `id` column is omitted from the `fields` block (as shown here, where only `name` and `done` are visible), Zelyra automatically links the first displayed field (`name`) to the record detail page. This applies to both table (`table`) and card (`cards`) layouts.
 
 ### 4. Small, progressive examples
@@ -929,7 +929,7 @@ crud Task -> tasks {
 }
 ```
 
-**Example 3: CRUD resources with reusable view layouts (from Zelyra 0.1.43)**
+**Example 3: CRUD resources with reusable view layouts**
 With `layout: ViewName`, you automatically embed all generated CRUD screens (list, details, form, and delete dialogs) into an existing layout shell:
 ```zelyra
 view AppShell {
@@ -2704,10 +2704,10 @@ Navigate to `http://localhost:8080` in your browser—your own live Zelyra appli
 
 <a id="chapter-41-the-zelyra-roadmap-from-090-to-10"></a>
 
-## Chapter 41: The Zelyra Roadmap (From 0.9.0 to 1.0)
+## Chapter 41: Current scope and the road to Zelyra 1.0
 
 ### 1. What will I learn in this chapter?
-- The experimental scope of Zelyra 0.9.0 and the next development milestones.
+- The capabilities of the current Zelyra release and their limits.
 - How language compatibility line 0.1 remains separate from compiler releases.
 - Which technical evidence and human acceptance are still required for 1.0.0.
 
@@ -2715,45 +2715,24 @@ Navigate to `http://localhost:8080` in your browser—your own live Zelyra appli
 A programming language is a living ecosystem. When you invest time into mastering Zelyra, you want assurance that the language has a clear strategic roadmap, professional stewardship, and that existing code remains compatible in future releases.
 
 ### 3. Understandable explanation without unnecessary jargon: Roadmap Overview
-Zelyra uses compiler release numbers such as `0.8.0` and a separate language
-compatibility line such as `0.1`. Updating the compiler does not automatically
-change a project's language line.
+Compiler releases and the language compatibility line are separate: updating
+the compiler does not automatically change a project's `0.1` language line.
 
-- **0.8.0 (experimental):** Local Zelyra Studio provides a clickable,
-  read-only schema relationship map for supported MariaDB and PostgreSQL
-  paths. A guided CRUD builder generates source, checks it with the compiler,
-  and requires explicit apply. MySQL live introspection and visual database
-  changes are not included. The bounded local MariaDB outbox is not a general
-  queue platform.
-- **0.9.0 (experimental, published):** Guided CRUD preview shows affected
-  files, tables, relationships, and routes. The invoice tutorial covers
-  customers, items, the dashboard, and linked invoice lines. See the
-  [invoice tutorial](../../tutorials/invoice.en.md) for its existing scope.
-  `zelyra text edit`
-  uses named TOML plans, preview, match counts, and explicit apply. Local TOTP
-  for MariaDB is an optional security preview. MySQL/PostgreSQL workflows stay
-  within the published support matrix.
-- **0.9.1–0.9.2 (planned):** Grow Studio into an IDE with a multi-file
-  project tree, tabs, safe saving, diagnostics, completion, navigation,
-  formatting, and integrated compiler tasks.
-- **Invoice tutorial (0.9.1 in development):** The invoice view totals net
-  prices, calculates 19% VAT in the German learning example, and shows the
-  gross amount. A print-ready page can be saved as PDF through the browser's
-  print dialog. This is not native PDF generation; the tutorial documents its
-  tax assumptions and limits.
-- **0.9.3–0.9.4 (planned):** Add a database workbench and relational CRUD
-  design with reviewable previews, compiler checks, and explicit apply.
-- **0.9.5–0.9.6 (planned):** Implement complete local mail/SMTP support and a
-  tenant-scoped notification center with optional SMTP delivery.
-- **0.9.7–0.9.8 (planned):** Harden and rehearse MariaDB, MySQL, and PostgreSQL
-  workflows, security, authorization, upgrades/rollback, backup/restore,
-  dependencies, and production operations.
-- **0.9.9 (planned):** Finish implementation, freeze the feature scope, and
-  verify the immutable technical candidate. Human acceptance for 1.0.0 should
-  be the only remaining gate.
-- **1.0.0:** The first productive release follows technical gates and
-  independent human acceptance of the exact candidate. That acceptance has
-  not been replaced by CI or internal tests.
+The current stable version combines static type checking and diagnostics with
+schema-aware SQL, relational tables, web forms, CRUD, authentication, and APIs.
+Zelyra Studio provides a local multi-file editor, navigation, completion, help,
+diagnostics, database inspection, and compiler-checked source changes. The
+invoice tutorial guides users through customers, items, a dashboard, and
+printable invoices with 19% tax. Mail, authentication, notifications, the
+Laravel Migrator, and database support each have documented limits; see the
+[implemented capabilities](../../implemented.en.md) for details.
+
+The next development stage hardens installation, database workflows,
+authorization, migration, and Studio. Version 0.9.9 then freezes the technical
+feature scope. It is not the human acceptance release: independent onboarding
+and product acceptance are reserved for the exact 1.0.0 candidate. Zelyra 1.0.0
+will be published as the first productive release only after technical gates
+and that study pass.
 
 The [roadmap](../../ROADMAP.md) and
 [language compatibility policy](../../language-compatibility.en.md) record
@@ -2769,19 +2748,19 @@ are not part of the 1.0.0 commitment.
 - **Misconception:** "Studio can edit any database schema."
   *Correction:* The map reads schema metadata. The CRUD builder generates
   compiler-checked source and does not change the schema or records.
-- **Misconception:** "0.9.0 is production-ready because CI is green."
-  *Correction:* 0.9.0 remains experimental. CI proves automated checks, but
+- **Misconception:** "The current release is production-ready because CI is green."
+  *Correction:* Zelyra remains experimental. CI proves automated checks, but
   does not replace the planned human acceptance for 1.0.0.
 
 ### 6. Key takeaways
-1. 0.9.0 is an experimental compiler release; the language line remains 0.1.
+1. The compiler version does not change the experimental language line 0.1.
 2. Studio reads schema metadata and validates generated CRUD source before
    explicitly applying a change.
 3. 1.0.0 will be published only after technical evidence and human acceptance.
 
 ### 7. Exercises (Level 1 Easy, Level 2 Medium, Level 3 Challenging)
 - **Level 1 (Easy):** Read the official `CHANGELOG.md` in the Zelyra GitHub repository.
-- **Level 2 (Medium):** Compare the 0.9.1 IDE goals and 0.9.5 mail/SMTP goals in `docs/ROADMAP.md`.
+- **Level 2 (Medium):** Compare the current capabilities in `docs/implemented.en.md` with the next goals in `docs/ROADMAP.md`.
 - **Level 3 (Challenging):** Select a table in Studio, inspect a schema difference, and review how the CRUD preview treats changes before explicit apply.
 
 ### 8. Practical task: Check the Zelyra version and environment
@@ -2796,9 +2775,9 @@ zelyra doctor
 - Roadmap items are goals, not claims that a feature is already available.
 
 ### 10. Self-check review questions
-1. Which impacts does the CRUD preview show in 0.9.0, and which changes does Studio avoid?
+1. Which impacts does the CRUD preview show, and which changes does Studio avoid?
 2. What is the difference between compiler version and language compatibility line?
-3. What acceptance remains before the productive 1.0.0 release?
+3. Which technical gates must pass before human acceptance?
 
 ---
 

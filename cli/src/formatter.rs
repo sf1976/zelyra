@@ -389,6 +389,7 @@ fn token_text<'a>(token: &'a Token, source: &'a str) -> &'a str {
     match &token.kind {
         TokenKind::Ident(_)
         | TokenKind::Int(_)
+        | TokenKind::IntMinMagnitude
         | TokenKind::Float(_)
         | TokenKind::String(_)
         | TokenKind::Char(_) => source
@@ -399,6 +400,7 @@ fn token_text<'a>(token: &'a Token, source: &'a str) -> &'a str {
         TokenKind::Pub => "pub",
         TokenKind::Fn => "fn",
         TokenKind::Type => "type",
+        TokenKind::Enum => "enum",
         TokenKind::Struct => "struct",
         TokenKind::Database => "database",
         TokenKind::Table => "table",

@@ -17,6 +17,19 @@ Der Editor ist nur unter `127.0.0.1` erreichbar. Die Startadresse enthält ein
 zufälliges Sitzungstoken. Schreibende Anfragen benötigen dieses Token und
 müssen vom selben Browser-Origin kommen.
 
+## Darstellung wechseln
+
+Über das Farbsymbol oben rechts kannst du zwischen dunkler und heller
+Darstellung wechseln. Die Auswahl wird in diesem Browser gespeichert und beim
+nächsten Öffnen vor dem Laden des Studio-Stylesheets angewendet. So vermeidet
+Studio einen sichtbaren Wechsel aus dem dunklen Standard. Die Umschaltung ist
+eine normale Schaltfläche und lässt sich mit Tab sowie Eingabe- oder Leertaste
+bedienen. Editor, Syntaxfarben, Dateibaum, Hilfebereich, Datenbankwerkbank und
+Dialoge verwenden dieselben Farbwerte. Für die hellen Text- und Syntaxfarben
+prüft der Browser-E2E-Test mindestens 4,5:1 Kontrast auf den Arbeitsflächen.
+Auch bei der unterstützten Mindestbreite von 360 CSS-Pixeln bleibt der
+Darstellungsschalter erreichbar, ohne dass Studio horizontal überläuft.
+
 ## IDE-Werkzeuge verwenden
 
 Mit **F1** oder über die Hilfeaktion öffnest du Beschreibung, Optionen und ein

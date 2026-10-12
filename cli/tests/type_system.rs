@@ -75,8 +75,10 @@ fn type_coverage_program_passes_supported_tests_and_reports_expected_failures() 
         "PASS records, nested fields",
         "PASS Unit type, function return",
         "PASS Option, Result, records",
-        "Report: 8 positive type groups; 7 expected compiler errors and 18 expected runtime errors",
-        "Type matrix: 17 supported entries, 5 partial entries, 3 unavailable entries",
+        "PASS calendar arithmetic, Timestamp ordering, Decimal quantization, exclusive ranges",
+        "PASS unit enums, equality, exhaustive match and JSON round trip",
+        "Report: 10 positive type groups; 8 expected compiler errors and 18 expected runtime errors",
+        "Type matrix: 18 supported entries, 5 partial entries, 2 unavailable entries",
         "Unexpected failures: 0 when the CLI integration test passes",
         "alle ausführbaren Typprüfungen bestanden",
     ] {
@@ -90,6 +92,7 @@ fn type_coverage_program_passes_supported_tests_and_reports_expected_failures() 
         ("type_mismatch.zyl", "type mismatch"),
         ("mixed_array.zyl", "type mismatch"),
         ("non_exhaustive_match.zyl", "non-exhaustive match"),
+        ("non_exhaustive_enum.zyl", "non-exhaustive match"),
         ("invalid_operation.zyl", "numeric operands"),
         (
             "unsupported_type.zyl",

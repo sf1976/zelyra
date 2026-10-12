@@ -19,15 +19,22 @@ ersten Programm bis zur datenbankgestützten Webanwendung.
 Ein neues lokales Lernprojekt für Kunden, Artikel und Rechnungen erzeugst du
 mit [`zelyra --tutorial invoice`](../../tutorials/invoice.de.md).
 
-> **Projektstatus:** Zelyra 0.9.5 ist stabil veröffentlicht, bleibt aber
+> **Projektstatus:** Zelyra 0.9.7 ist stabil veröffentlicht, bleibt aber
 > experimentell und ist nicht für den Produktiveinsatz freigegeben. Die
 > unabhängige menschliche Abnahme früherer Releases ist auf 1.0.0 verschoben.
 > Siehe [Roadmap](../../ROADMAP.de.md) und
 > [Abnahmeentscheidung](../../release-readiness/1.0.0-human-acceptance.de.md).
 
-Version 0.9.5 ergänzt transaktionale Anwendungs-E-Mail über einen ausdrücklich
-gestarteten SMTP-Outbox-Worker. Siehe [Anwendungs-E-Mail](../mail.de.md) und
-[Release-Notizen 0.9.5](../../release-notes/0.9.5.de.md).
+Zelyra verbindet statische Typprüfung und verständliche Diagnosen mit
+compilergeprüften Datenbank- und Webdeklarationen. Zur Plattform gehören
+relationale Fremdschlüssel, CRUD, Authentifizierung, Audit, optionale lokale
+MFA, SMTP-Mail über eine transaktionale Outbox und ein lokales Studio mit
+Datenbankwerkbank. Das Rechnungstutorial führt durch Kunden, Artikel,
+Dashboard und druckbare Rechnungen mit 19 % Umsatzsteuer. Die Grenzen einzelner
+Funktionen, Datenbanken und Betriebsabläufe stehen in der
+[Implementierungsübersicht](../../implemented.de.md); Details zur
+[Anwendungs-E-Mail](../mail.de.md) und zum
+[Rechnungstutorial](../../tutorials/invoice.de.md) sind separat beschrieben.
 
 Die verbindlichen Produktziele zu digitaler Souveränität und ehrlichen
 Korrektheitsversprechen stehen im [Zelyra-Manifest](../../MANIFESTO.de.md).

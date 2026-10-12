@@ -853,15 +853,17 @@ Die folgenden Produktarbeiten bleiben Teil des 1.0.0-Ziels. Sie werden
 aufgeteilt, damit jede Version prüfbare Kriterien erhält und Sprach- und
 IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
 
-- [🗺️] Die Typabdeckung schrittweise erweitern: zählende Bereichsschleifen und
-  statisch typisierte Funktionswerte, danach nominale Enums, begrenzte generische
-  Funktionen/Records und bei einem konkreten Anwendungsfall eine
-  Zelyra-eigene Geschäftsentität mit Identität. Records bleiben Werttypen;
-  `Int`/`UInt` und `Float`/`Decimal` bleiben ausdrücklich getrennt. Compiler,
-  Runtime, Diagnosen, Kompatibilitäts-Fixtures, Studio-Hilfe und
-  `examples/type_system` gemeinsam aktualisieren. 0.9.9 führt positive,
-  erwartete Compiler-/Runtimefehler- und Serialisierungstests erneut aus; es
-  darf keine unerwarteten Fehler geben.
+- [🧪] Typabdeckung: exklusive Bereichsschleifen, payloadfreie nominale Enums,
+  Kalender-/UTC-Zeitstempeloperationen, Decimal-Quantisierung und sichere
+  wertsemantische Record-/Arrayänderungen sind in 0.9.8 ergänzt. Noch offen für
+  0.9.9 sind statisch typisierte Funktionswerte, begrenzte generische
+  Funktionen/Records und gegebenenfalls eine Zelyra-eigene Geschäftsentität mit
+  Identität. Records bleiben Werttypen; `Int`/`UInt` und `Float`/`Decimal`
+  bleiben ausdrücklich getrennt. Compiler, Runtime, Diagnosen,
+  Kompatibilitäts-Fixtures, Studio-Hilfe und `examples/type_system` gemeinsam
+  aktualisieren. Vor dem 0.9.9-Freeze müssen positive, erwartete
+  Compiler-/Runtimefehler- und Serialisierungstests ohne unerwartete Fehler
+  bestehen.
 - [🗺️] Den Laravel-Analyzer von Inventaren zu belegten Graphen aus Route,
   Middleware, Controller, Model/Beziehung, Migration/Tabelle und View ausbauen.
   Markdown und JSON mit Fundstellen, Paket- und Validierungsfunden, offenen
@@ -993,7 +995,28 @@ IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
 
 ## Release 0.9.8 — Probe der Produktionsreife
 
-- [🗺️] Den unterstützten Umfang des Laravel-Migrators und seine versionierte
+- [✅] Sprachstabilisierungsumfang umgesetzt: kontrollierte Grenzen für tiefe
+  Funktionsaufrufe, vollständige Rückgabepfade, direktes `Int::MIN`,
+  Kalender-/UTC-Arithmetik, Decimal-Quantisierung, payloadfreie Enums,
+  exklusive Integer-Bereiche, wertsemantische Record-/Arrayänderungen,
+  getaggter Result-JSON-Codec und iterative Verarbeitung langer Ausdrücke.
+  Workspace, Clippy, Formatierung, 324 Handbuchbeispiele, alle 80 Korpusfälle,
+  100 Wiederholungsläufe sowie 300 Integer-Division/Rest- und 100 Decimal-
+  Referenztests bestanden. 14 bekannte Beobachtungs-/Lückenfälle sind in
+  Spezifikation und Typmatrix ausgewiesen und verbindlich nach 0.9.9 übertragen.
+- [✅] Die helle Studio-Darstellung deckt Editor, Projektnavigation,
+  Eigenschaften, Hilfe, Datenbankwerkbank, Aktionssuche und Dialoge ab.
+  Browser-E2E prüft Speicherung, Tastaturbedienung, einheitliche Flächen und
+  mindestens 4,5:1 Kontrast für Text und Syntaxfarben. Bei 360 CSS-Pixeln
+  bleiben die Arbeitsfläche und der Theme-Schalter ohne horizontalen Überlauf
+  nutzbar. Die IDE-Arbeit geht mit den grafischen relationalen und
+  Diagrammabläufen für 0.9.9 weiter.
+- [✅] MySQL Server 8.4.11 besteht nun den isolierten Schemaablauf über
+  `db setup`, `inspect`, schreibgeschütztes `map`, geprüften `plan`, bestätigtes
+  `apply` und `history`. Der CI-Job prüft außerdem parametrisierte SQL-Abfragen.
+  Der Nachweis deckt kein vollständiges CRUD/Auth, MFA, TLS, Backup/Restore oder
+  allgemeine MariaDB-Parität ab; die Backendmatrix nennt die Grenzen.
+- [🗺️] Nach 0.9.9 übertragen: Den unterstützten Umfang des Laravel-Migrators und seine versionierte
   Kompatibilitätsmatrix abschließen. Schreibgeschützte Analyse,
   Geheimnis-/PII-Redaktion, Quellpositionsgenauigkeit, Routen-Daten-Beziehungen,
   Behandlung von Mehrdeutigkeiten, Pfadtrennung, Herkunftsverweise in
@@ -1001,11 +1024,11 @@ IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
   Fixtures prüfen. Erzeugte Anwendungen mit echten CRUD-Abläufen auf den
   unterstützten Datenbanken ausführen, einschließlich unterstützter Beziehungen,
   Mandanten, Berechtigungen, Transaktionen und Geldbeträge. Jede Zelyra-Funktion,
-  die eine angenommene Zuordnung blockiert, vor dem Abschluss von 0.9.8
+  die eine angenommene Zuordnung blockiert, vor dem Abschluss von 0.9.9
   implementieren. Unterstützte Laravel-/Paketmuster und Grenzen dokumentieren.
   Keine automatische Geschäftslogik- oder Sicherheitsparität behaupten; das
   Werkzeug liefert einen überprüfbaren Migrationsstartpunkt.
-- [🗺️] Saubere Installation, Upgrade, Rollback, Migration, Backup und Restore
+- [🗺️] Nach 0.9.9 übertragen: Saubere Installation, Upgrade, Rollback, Migration, Backup und Restore
   auf unterstützten Betriebssystemen und Datenbanken proben. Betreiber- und
   Nutzerdokumentation, Lizenz-/Abhängigkeitsreview, Ressourcenlimits,
   Geheimnisredaktion, reproduzierbare Artefakte, SBOM/Provenance und Offline-
@@ -1013,10 +1036,11 @@ IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
   barrierearme Lesbarkeit, stabile Exporte und Geheimnisfreiheit prüfen. Start,
   übliche CRUD-Abläufe und begrenzten Ressourcenbedarf messen und Ergebnisse
   ohne unbelegte Leistungsversprechen veröffentlichen.
-- Abschlusskriterien: Alle Proben bestehen in sauberen Umgebungen,
-  Handbuchbeispiele sind geprüft, bekannte Befunde haben Verantwortliche und
-  Entscheidungen, und keine 1.0-Anforderung ist unimplementiert. Siehe den
-  [0.9.8-Plan](release-plans/0.9.8.de.md).
+- [🗺️] Verbindliche 0.9.8-Übernahmen in 0.9.9 schließen: saubere Umgebungs-
+  und Datenbankproben, Sicherheits-/Abhängigkeitsentscheidungen, integrierter
+  Studio-/Tutorial-/Mail-/Benachrichtigungsablauf, Laravel-Migrator-E2E sowie
+  Diagramm- und Präsentationsnachweise. Siehe [0.9.8-Plan](release-plans/0.9.8.de.md)
+  und [0.9.9-Plan](release-plans/0.9.9.de.md).
 
 ## Release 0.9.9 — Feature-Freeze und letzter technischer Kandidat
 
@@ -1026,6 +1050,11 @@ IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
   Kandidaten ausführen. Materialien für die exakte 1.0.0-Menschenstudie
   vorbereiten. Danach sollte nur noch die unabhängige menschliche Abnahme offen
   sein; für 0.9.9 keine Abnahme und keine Produktivfreigabe behaupten.
+- [🗺️] Die aus 0.9.8 übernommenen Sprachlücken schließen: eigene Generics,
+  payloadtragende Enums, sichere Funktionswerte/indirekte Aufrufe,
+  unterscheidbarer generischer Result-JSON-Codec sowie sämtliche noch offenen
+  Korpus-, CLI-, Setup-, Datenbank-, Migrator- und Sicherheitsbefunde. Der
+  [0.9.9-Plan](release-plans/0.9.9.de.md) enthält die prüfbaren Kriterien.
 - Abschlusskriterien: Keine offenen Implementierungs-, Sicherheits-, Datenbank-,
   Migrations-, Paketierungs- oder Dokumentationsblocker. Bleibt einer offen, ist
   0.9.9 nicht fertig. Siehe den [0.9.9-Plan](release-plans/0.9.9.de.md).

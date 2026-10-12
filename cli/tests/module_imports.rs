@@ -3158,3 +3158,47 @@ fn check_resolves_relations_between_tables_in_imported_modules() {
     );
     fs::remove_dir_all(directory).unwrap();
 }
+
+#[test]
+fn deeply_nested_module_calls_stop_at_the_controlled_runtime_limit() {
+    const MODULES: usize = 40;
+    let mut files = vec![(
+        "main.zyl".to_owned(),
+        "import \"src/m0.zyl\" as m0\nfn main() { print(m0::call()) }".to_owned(),
+    )];
+    for index in 0..MODULES {
+        let body = if index + 1 == MODULES {
+            "pub fn call() -> Int { return 42 }".to_owned()
+        } else {
+            format!(
+                "import \"src/m{}.zyl\" as next\npub fn call() -> Int {{ return next::call() }}",
+                index + 1
+            )
+        };
+        files.push((format!("src/m{index}.zyl"), body));
+    }
+    let borrowed = files
+        .iter()
+        .map(|(path, source)| (path.as_str(), source.as_str()))
+        .collect::<Vec<_>>();
+    let directory = project(&borrowed);
+
+    let check = run(&directory, &["check", "main.zyl"]);
+    assert!(
+        check.status.success(),
+        "module chain should type-check: {}",
+        String::from_utf8_lossy(&check.stderr)
+    );
+    let execution = run(&directory, &["run", "main.zyl"]);
+    let stderr = String::from_utf8_lossy(&execution.stderr);
+    assert!(!execution.status.success(), "deep module chain should stop");
+    assert!(
+        stderr.contains("function call depth limit exceeded"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("main.zyl"),
+        "diagnostic should include a source location: {stderr}"
+    );
+    fs::remove_dir_all(directory).unwrap();
+}

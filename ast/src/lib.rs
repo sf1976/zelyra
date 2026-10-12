@@ -109,6 +109,7 @@ pub struct Program {
     pub tables: Vec<TableDef>,
     pub types: Vec<TypeDef>,
     pub records: Vec<RecordDef>,
+    pub enums: Vec<EnumDef>,
     pub views: Vec<ViewDef>,
     pub components: Vec<ComponentDef>,
     pub pages: Vec<PageDef>,
@@ -118,6 +119,14 @@ pub struct Program {
     pub auth: Vec<AuthDef>,
     pub apis: Vec<ApiDef>,
     pub functions: Vec<Function>,
+}
+
+#[derive(Clone, Debug)]
+pub struct EnumDef {
+    pub name: String,
+    pub is_public: bool,
+    pub variants: Vec<String>,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -258,6 +267,8 @@ pub struct CrudDef {
     pub table: String,
     /// Enables request-scoped tenant isolation on this generated CRUD resource.
     pub tenant_column: Option<String>,
+    /// Restricts generated CRUD to the authenticated user's records.
+    pub recipient_column: Option<String>,
     /// Nullable timestamp that marks an item as read; generated lists show an unread count.
     pub unread_column: Option<String>,
     /// Optional expiry timestamp; expired rows are hidden from generated lists.
@@ -647,6 +658,10 @@ pub enum PatternKind {
     Constructor {
         name: String,
         inner: Option<Box<Pattern>>,
+    },
+    EnumVariant {
+        enum_name: String,
+        variant: String,
     },
     Int(i64),
     Bool(bool),

@@ -9,7 +9,8 @@ const MAX_SOURCE_FILES: usize = 10_000;
 const MAX_SOURCE_FILE_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_TOTAL_SOURCE_BYTES: u64 = 256 * 1024 * 1024;
 const MAX_DIRECTORY_DEPTH: usize = 64;
-const ANALYZER_VERSION: &str = "0.9.6";
+const ANALYZER_VERSION: &str = "0.9.8";
+const MAPPING_RULESET_VERSION: &str = "0.9.6";
 
 #[derive(Clone)]
 struct Finding {
@@ -738,7 +739,7 @@ fn scan_source(file: &str, source: &str, findings: &mut Vec<Finding>) {
         );
     }
     let file_operation = Regex::new(
-        r"(?i)(UploadedFile|response\s*\(\s*\)\s*->\s*download|->\s*(?:store|storeAs|download)\s*\()",
+        r"(?i)(UploadedFile|response\s*\(\s*\)\s*->\s*download|->\s*(?:file|store|storeAs|download)\s*\()",
     )
     .expect("static file-operation regex");
     for matched in file_operation.find_iter(source) {
@@ -810,7 +811,7 @@ fn json_report(
 ) -> String {
     let counts = report_counts(findings);
     let findings = findings.iter().map(|finding| json!({"kind": finding.kind, "status": finding.status, "file": finding.file, "line": finding.line, "name": finding.name, "summary": finding.summary, "next_step": finding.next_step})).collect::<Vec<_>>();
-    serde_json::to_string_pretty(&json!({"schema_version": "1", "analyzer": format!("Zelyra Laravel Migrator {ANALYZER_VERSION}"), "mapping_ruleset": ANALYZER_VERSION, "source_project": root.file_name().and_then(|name| name.to_str()).unwrap_or("Laravel project"), "laravel_constraint": framework, "laravel_packages": packages, "execution": "static_read_only", "env_files_read": false, "summary": counts, "findings": findings})).expect("report JSON is serializable")
+    serde_json::to_string_pretty(&json!({"schema_version": "1", "analyzer": format!("Zelyra Laravel Migrator {ANALYZER_VERSION}"), "mapping_ruleset": MAPPING_RULESET_VERSION, "source_project": root.file_name().and_then(|name| name.to_str()).unwrap_or("Laravel project"), "laravel_constraint": framework, "laravel_packages": packages, "execution": "static_read_only", "env_files_read": false, "summary": counts, "findings": findings})).expect("report JSON is serializable")
 }
 
 fn markdown_report(
@@ -820,7 +821,7 @@ fn markdown_report(
     findings: &[Finding],
 ) -> String {
     let counts = report_counts(findings);
-    let mut report = format!("# Zelyra Laravel migration analysis\n\n- Analyzer: Zelyra Laravel Migrator {ANALYZER_VERSION}\n- Mapping ruleset: {ANALYZER_VERSION}\n- Project: {}\n- Laravel constraint: {}\n- Laravel packages: {}\n- Method: static, read-only source scan; PHP and Artisan were not run; `.env` files were not read.\n- Findings: {} total · {} partial · {} manual · {} unresolved\n\n", root.file_name().and_then(|name| name.to_str()).unwrap_or("Laravel project"), framework.as_deref().unwrap_or("not detected"), if packages.is_empty() { "none detected".into() } else { packages.join(", ") }, findings.len(), counts["partial"], counts["manual"], counts["unresolved"]);
+    let mut report = format!("# Zelyra Laravel migration analysis\n\n- Analyzer: Zelyra Laravel Migrator {ANALYZER_VERSION}\n- Mapping ruleset: {MAPPING_RULESET_VERSION}\n- Project: {}\n- Laravel constraint: {}\n- Laravel packages: {}\n- Method: static, read-only source scan; PHP and Artisan were not run; `.env` files were not read.\n- Findings: {} total · {} partial · {} manual · {} unresolved\n\n", root.file_name().and_then(|name| name.to_str()).unwrap_or("Laravel project"), framework.as_deref().unwrap_or("not detected"), if packages.is_empty() { "none detected".into() } else { packages.join(", ") }, findings.len(), counts["partial"], counts["manual"], counts["unresolved"]);
     report.push_str("| Status | Kind | Source location | Finding |\n|---|---|---|---|\n");
     for finding in findings {
         let summary = finding.summary.replace('|', "\\|").replace('\n', " ");
@@ -885,7 +886,7 @@ mod tests {
         let analysis = analyze(&root, &report, "json").unwrap();
         let body = fs::read_to_string(&analysis.report_path).unwrap();
         assert!(body.contains("/orders"));
-        assert!(body.contains("Zelyra Laravel Migrator 0.9.6"));
+        assert!(body.contains("Zelyra Laravel Migrator 0.9.8"));
         assert!(body.contains("\"mapping_ruleset\": \"0.9.6\""));
         assert!(!body.contains("must-not-be-read-or-reported"));
         assert!(!body.contains("/secret"));

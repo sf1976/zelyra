@@ -146,6 +146,10 @@ pub enum HirPatternKind {
         name: String,
         inner: Option<Box<HirPattern>>,
     },
+    EnumVariant {
+        enum_name: String,
+        variant: String,
+    },
     Int(i64),
     Bool(bool),
     String(String),
@@ -173,6 +177,10 @@ pub enum HirExprKind {
         fields: Vec<(String, HirExpr)>,
     },
     Local(LocalId),
+    EnumVariant {
+        enum_name: String,
+        variant: String,
+    },
     Index {
         target: Box<HirExpr>,
         index: Box<HirExpr>,
@@ -195,6 +203,10 @@ pub enum HirExprKind {
         left: Box<HirExpr>,
         op: BinaryOp,
         right: Box<HirExpr>,
+    },
+    BinaryChain {
+        first: Box<HirExpr>,
+        operations: Vec<(BinaryOp, HirExpr)>,
     },
     Sql {
         result_type: Type,
@@ -515,6 +527,10 @@ impl<'a> Resolver<'a> {
                 name: name.clone(),
                 inner: inner.as_ref().map(|inner| Box::new(self.pattern(inner))),
             },
+            PatternKind::EnumVariant { enum_name, variant } => HirPatternKind::EnumVariant {
+                enum_name: enum_name.clone(),
+                variant: variant.clone(),
+            },
             PatternKind::Int(value) => HirPatternKind::Int(*value),
             PatternKind::Bool(value) => HirPatternKind::Bool(*value),
             PatternKind::String(value) => HirPatternKind::String(value.clone()),
@@ -526,6 +542,9 @@ impl<'a> Resolver<'a> {
         }
     }
     fn expr(&mut self, expr: &Expr) -> HirExpr {
+        if matches!(expr.kind, ExprKind::Binary { .. }) {
+            return self.binary_expr_chain(expr);
+        }
         let kind = match &expr.kind {
             ExprKind::Int(value) => HirExprKind::Int(*value),
             ExprKind::UInt(value) => HirExprKind::UInt(*value),
@@ -551,6 +570,13 @@ impl<'a> Resolver<'a> {
             },
             ExprKind::Variable(name) => match self.lookup(name) {
                 Some(local) => HirExprKind::Local(local),
+                None if name.split_once("::").is_some() => {
+                    let (enum_name, variant) = name.split_once("::").unwrap();
+                    HirExprKind::EnumVariant {
+                        enum_name: enum_name.to_owned(),
+                        variant: variant.to_owned(),
+                    }
+                }
                 None if name == "None" => HirExprKind::Call {
                     name: name.clone(),
                     function: None,
@@ -574,6 +600,9 @@ impl<'a> Resolver<'a> {
                         "print"
                             | "assert"
                             | "len"
+                            | "range"
+                            | "array_replace_result"
+                            | "record_with"
                             | "append"
                             | "tuple"
                             | "set"
@@ -602,8 +631,10 @@ impl<'a> Resolver<'a> {
                             | "http_get"
                             | "http_request"
                             | "json_encode"
+                            | "json_encode_tagged_result"
                             | "json_decode"
                             | "json_decode_result"
+                            | "json_decode_tagged_result"
                             | "csv_decode_result"
                             | "csv_encode"
                             | "text_contains"
@@ -613,6 +644,11 @@ impl<'a> Resolver<'a> {
                             | "text_split_result"
                             | "decimal_scaled_result"
                             | "format_scaled_result"
+                            | "date_add_days_result"
+                            | "date_days_between_result"
+                            | "timestamp_add_result"
+                            | "timestamp_difference_result"
+                            | "decimal_quantize_result"
                             | "http_json"
                             | "http_result"
                             | "mail_queue"
@@ -683,6 +719,25 @@ impl<'a> Resolver<'a> {
         };
         HirExpr {
             kind,
+            span: expr.span,
+        }
+    }
+    fn binary_expr_chain(&mut self, expr: &Expr) -> HirExpr {
+        let mut cursor = expr;
+        let mut operations = Vec::new();
+        while let ExprKind::Binary { left, op, right } = &cursor.kind {
+            operations.push((*op, right.as_ref()));
+            cursor = left;
+        }
+        HirExpr {
+            kind: HirExprKind::BinaryChain {
+                first: Box::new(self.expr(cursor)),
+                operations: operations
+                    .into_iter()
+                    .rev()
+                    .map(|(op, right)| (op, self.expr(right)))
+                    .collect(),
+            },
             span: expr.span,
         }
     }

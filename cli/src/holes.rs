@@ -355,8 +355,19 @@ impl Collector {
                 } else {
                     None
                 };
+                let mut cursor = left.as_ref();
+                while let ExprKind::Binary { left, right, .. } = &cursor.kind {
+                    self.expression(
+                        right,
+                        operand_type.clone(),
+                        scope,
+                        capabilities,
+                        contract_spans,
+                    );
+                    cursor = left;
+                }
                 self.expression(
-                    left,
+                    cursor,
                     operand_type.clone(),
                     scope,
                     capabilities,
@@ -460,7 +471,8 @@ fn add_pattern_values(scope: &mut Scope, pattern: &Pattern) {
         | PatternKind::Int(_)
         | PatternKind::Bool(_)
         | PatternKind::String(_)
-        | PatternKind::Char(_) => {}
+        | PatternKind::Char(_)
+        | PatternKind::EnumVariant { .. } => {}
     }
 }
 

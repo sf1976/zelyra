@@ -11,13 +11,13 @@ Business-, Datenbank- und Webanwendungen. Schemaabhängiges SQL, Formulare,
 CRUD, Views und Geschäftslogik greifen ineinander; gewöhnlicher Programmcode
 und natives SQL bleiben jederzeit möglich.
 
-> **Aktueller stabiler Compilerstand: 0.9.6 · Sprachkompatibilitätslinie: 0.1 · experimentell**
+> **Aktueller stabiler Compilerstand: 0.9.7 · Sprachkompatibilitätslinie: 0.1 · experimentell**
 >
 > Zelyra 0.9.6 bleibt experimentell und ist nicht für den Produktiveinsatz freigegeben. „Korrektheit
 > beweisen“ ist ein Entwicklungsziel: Der aktuelle Verifier deckt nur einen
 > begrenzten Teil ab und beweist nicht die Korrektheit beliebiger Anwendungen.
 
-Das stabile [`v0.9.6`-Release](https://github.com/sf1976/zelyra/releases/tag/v0.9.6) bleibt experimentell und ist nicht für den Produktiveinsatz freigegeben. Es ergänzt eine compilergeprüfte Laravel-Gerüstvorschau und einen gemeinsamen mandantengebundenen Benachrichtigungsfeed. Persönliche Lesebestätigungen und ereignisgesteuerte Mail gehören zum nächsten Entwicklungsschritt. Die unabhängige menschliche Abnahme bleibt für 1.0.0 reserviert; dieses README ist kein Abnahmenachweis. Siehe die [Release-Notizen 0.9.6](docs/release-notes/0.9.6.de.md), die [Datenbank-Supportmatrix](docs/database-support.de.md) und den [1.0.0-Releaseplan](docs/release-plans/1.0.0.de.md).
+Das stabile [`v0.9.7`-Release](https://github.com/sf1976/zelyra/releases/tag/v0.9.7) bleibt experimentell und ist nicht für den Produktiveinsatz freigegeben. Es verbessert das mehrteilige Rechnungstutorial mit lokalem Tabler-CSS und macht die Projektkarte im Studio aussagekräftiger. Persönliche Lesebestätigungen und empfängerbezogene Benachrichtigungen werden noch entwickelt. Die unabhängige menschliche Abnahme ist für 1.0.0 reserviert. Siehe die [Release-Notizen 0.9.7](docs/release-notes/0.9.7.de.md), die [Datenbank-Supportmatrix](docs/database-support.de.md) und den [1.0.0-Releaseplan](docs/release-plans/1.0.0.de.md).
 
 ## Was Zelyra 0.9.7 kann
 

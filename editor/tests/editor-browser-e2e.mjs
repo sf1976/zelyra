@@ -114,7 +114,50 @@ try {
   assert.equal(new URL(page.url()).hash, "", "the session token must be removed from the address bar");
   await page.locator(".cm-content[contenteditable=true]").waitFor({ timeout: 10_000 });
   await page.locator('.tree-item.file[title="main.zyl"]').waitFor();
+  const themeButton = page.locator("#theme-button");
+  await themeButton.click();
+  assert.equal(await page.locator("html").getAttribute("data-theme"), "light");
+  assert.equal(await themeButton.getAttribute("aria-label"), "Dunkles Farbschema aktivieren");
+  assert.equal(await page.locator(".cm-editor").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)");
+  assert.equal(await page.locator(".topbar").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)");
+  assert.equal(await page.locator(".explorer").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(248, 249, 252)");
+  assert.equal(await page.locator("#project-map-dialog").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)");
+  const lightThemeContrast = await page.locator("html").evaluate((root) => {
+    const css = getComputedStyle(root);
+    const rgb = (name) => {
+      const hex = css.getPropertyValue(name).trim().match(/^#([\da-f]{3}|[\da-f]{6})$/i)?.[1];
+      if (!hex) throw new Error(`light theme color ${name} is not a hex color`);
+      const channels = hex.length === 3 ? [...hex].map((part) => part + part) : hex.match(/[\da-f]{2}/gi);
+      return channels.map((part) => Number.parseInt(part, 16) / 255);
+    };
+    const luminance = (color) => color.map((channel) => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4).reduce((sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index], 0);
+    const foregrounds = ["--ink", "--muted", "--faint", "--accent", "--danger", "--success", "--warning", "--token-keyword", "--token-type", "--token-name", "--token-string", "--token-number", "--token-comment", "--token-operator", "--token-punctuation"];
+    const backgrounds = ["--canvas", "--surface", "--surface-raised", "--editor-bg", "--editor-gutter", "--sidebar"];
+    return Object.fromEntries(foregrounds.map((foreground) => [foreground, Object.fromEntries(backgrounds.map((background) => {
+      const contrast = (Math.max(luminance(rgb(foreground)), luminance(rgb(background))) + 0.05) / (Math.min(luminance(rgb(foreground)), luminance(rgb(background))) + 0.05);
+      return [background, contrast];
+    }))]));
+  });
+  assert.ok(Object.values(lightThemeContrast).flatMap(Object.values).every((ratio) => ratio >= 4.5), `light-theme text contrast must be at least 4.5:1: ${JSON.stringify(lightThemeContrast)}`);
+  await page.reload();
+  await page.locator(".cm-content[contenteditable=true]").waitFor({ timeout: 10_000 });
+  assert.equal(await page.locator("html").getAttribute("data-theme"), "light", "the selected appearance must survive reload");
+  assert.equal(await page.locator(".cm-editor").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)", "CodeMirror must use the selected light appearance");
+  await themeButton.focus();
+  await page.keyboard.press("Space");
+  assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");
+  assert.equal(await themeButton.getAttribute("aria-label"), "Helles Farbschema aktivieren");
+  await page.locator(".cm-content[contenteditable=true]").focus();
+  await page.keyboard.press("F1");
+  await page.locator("#assistant-help-view").waitFor({ state: "visible" });
+  assert.equal(await page.locator("#studio-assistant").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(17, 24, 42)");
+  await page.keyboard.press("F1");
+  await page.locator("#assistant-help-view").waitFor({ state: "hidden" });
+  await themeButton.focus();
+  await page.keyboard.press("Space");
+  assert.equal(await page.locator("html").getAttribute("data-theme"), "light", "keyboard users must be able to switch the Studio appearance");
   await page.locator("#task-finder-button").click();
+  assert.equal(await page.locator("#task-finder").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)");
   await page.locator("#task-finder-input").fill("no such studio action");
   await page.locator("#task-finder-empty").waitFor();
   await page.locator("#task-finder-input").clear();
@@ -123,6 +166,15 @@ try {
   assert.ok(await page.locator(".task-finder-item").allTextContents().then((items) => items.some((item) => /format/i.test(item))));
   await page.keyboard.press("Escape");
   await page.locator("#task-finder").waitFor({ state: "hidden" });
+  await page.locator("#task-finder-button").click();
+  await page.locator("#task-finder-input").fill("properties");
+  await page.locator(".task-finder-item", { hasText: /Dateieigenschaften öffnen/ }).click();
+  await page.locator("#assistant-properties-tab").waitFor({ state: "visible" });
+  assert.equal(await page.locator("#studio-assistant").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)");
+  await page.locator("#task-finder-button").click();
+  await page.locator("#task-finder-input").fill("properties");
+  await page.locator(".task-finder-item", { hasText: /Dateieigenschaften öffnen/ }).click();
+  await page.locator("#assistant-properties-tab").waitFor({ state: "hidden" });
 
   const editor = page.locator(".cm-content[contenteditable=true]");
   const initialEditorWidth = await editor.evaluate((element) => element.getBoundingClientRect().width);
@@ -134,6 +186,10 @@ try {
   initialEditorWidth);
   await page.setViewportSize({ width: 800, height: 600 });
   await page.waitForFunction(() => document.querySelector(".cm-content")?.getBoundingClientRect().width > 0);
+  await page.setViewportSize({ width: 360, height: 740 });
+  await page.waitForFunction(() => window.innerWidth === 360);
+  assert.ok(await page.locator("#theme-button").isVisible(), "theme control must remain reachable on a narrow screen");
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), "Studio must not clip horizontally at its supported 360px minimum width");
   await page.setViewportSize({ width: 1280, height: 900 });
   await sidebarToggle.click();
   assert.equal(await sidebarToggle.getAttribute("aria-expanded"), "true");
@@ -174,6 +230,7 @@ try {
 
   await page.locator("#database-button").click();
   await page.locator("#database-create").waitFor({ state: "visible" });
+  assert.equal(await page.locator(".database-header").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)");
   page.once("dialog", async (dialog) => {
     assert.match(dialog.message(), /studio_db/);
     await dialog.accept();

@@ -342,6 +342,7 @@ mod tests {
             tables: Vec::new(),
             types: Vec::new(),
             records: Vec::new(),
+            enums: Vec::new(),
             views: Vec::new(),
             components: Vec::new(),
             pages: Vec::new(),

@@ -11,13 +11,13 @@ for database-backed business and web applications. It brings schema-aware SQL,
 forms, CRUD, views, and application logic together while keeping ordinary code
 and native SQL available.
 
-> **Current stable compiler release: 0.9.6 · language compatibility line: 0.1 · experimental**
+> **Current stable compiler release: 0.9.7 · language compatibility line: 0.1 · experimental**
 >
 > Zelyra 0.9.6 remains experimental and is not approved for production use. “Prove correctness” is a
 > design goal: the current verifier covers a bounded subset and does not prove
 > arbitrary applications correct.
 
-The stable [`v0.9.6` release](https://github.com/sf1976/zelyra/releases/tag/v0.9.6) remains experimental and is not production-approved. It adds a compiler-checked Laravel scaffold preview and a shared tenant-scoped notification feed. Personal read receipts and event-triggered mail belong to the next development step. Independent human acceptance remains reserved for 1.0.0; this README is not acceptance evidence. See the [0.9.6 release notes](docs/release-notes/0.9.6.en.md), [database support matrix](docs/database-support.en.md), and [1.0.0 release plan](docs/release-plans/1.0.0.en.md).
+The stable [`v0.9.7` release](https://github.com/sf1976/zelyra/releases/tag/v0.9.7) remains experimental and is not approved for production use. It improves the multi-file invoice tutorial with local Tabler CSS and makes the Studio project map more informative. Personal read receipts and recipient-scoped notifications are still in development. Independent human acceptance is reserved for 1.0.0. See the [0.9.7 release notes](docs/release-notes/0.9.7.en.md), [database support matrix](docs/database-support.en.md), and [1.0.0 release plan](docs/release-plans/1.0.0.en.md).
 
 ## What Zelyra 0.9.7 can do
 

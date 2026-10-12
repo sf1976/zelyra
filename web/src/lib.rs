@@ -351,6 +351,8 @@ pub struct FormRoute {
     pub schema: Option<Schema>,
     /// Tenant key for generated CRUD forms; resolved from the authenticated request.
     pub tenant_column: Option<String>,
+    /// Optional request-scoped owner key for generated recipient CRUD forms.
+    pub recipient_column: Option<String>,
     pub tenant_membership_table: Option<String>,
     pub requires_auth: bool,
     pub permissions: Vec<String>,
@@ -376,6 +378,8 @@ pub struct CrudRoute {
     pub title: String,
     pub table: String,
     pub tenant_column: Option<String>,
+    /// Restricts this resource to the authenticated user's records.
+    pub recipient_column: Option<String>,
     pub unread_column: Option<String>,
     pub expires_column: Option<String>,
     pub list_columns: Vec<String>,
@@ -474,6 +478,12 @@ struct TenantContext {
     user_id: i64,
     tenant_id: i64,
     membership_table: String,
+}
+
+struct CrudRequestContext<'a> {
+    actor_user_id: Option<i64>,
+    tenant_context: Option<&'a TenantContext>,
+    language: UiLanguage,
 }
 
 struct CrudMutationContext<'a> {
@@ -643,7 +653,11 @@ fn preserve_tenant_selector_in_html(html: &str, tenant_id: i64) -> String {
     output
 }
 
-fn tenant_cache_policy(mut response: Response, tenant_context: Option<&TenantContext>) -> Response {
+fn tenant_cache_policy(
+    mut response: Response,
+    tenant_context: Option<&TenantContext>,
+    recipient_scoped: bool,
+) -> Response {
     if let Some(tenant_context) = tenant_context {
         response.body = preserve_tenant_selector_in_html(&response.body, tenant_context.tenant_id);
         if let Some(location) = response.location.as_mut() {
@@ -651,7 +665,11 @@ fn tenant_cache_policy(mut response: Response, tenant_context: Option<&TenantCon
         }
         response.with_header("Cache-Control", "private, no-store")
     } else {
-        response
+        if recipient_scoped {
+            response.with_header("Cache-Control", "private, no-store")
+        } else {
+            response
+        }
     }
 }
 
@@ -662,6 +680,20 @@ fn execute_crud_mutation(
     scoped_record_check: Option<&zelyra_database::Query>,
 ) -> Result<(), zelyra_database::DatabaseError> {
     let Some(tenant_context) = tenant_context else {
+        if let Some(scoped_record_check) = scoped_record_check {
+            return zelyra_database::with_mariadb_transaction(database_url, |transaction| {
+                if transaction.execute(scoped_record_check)?.rows.is_empty() {
+                    return Err(zelyra_database::DatabaseError {
+                        message: "ZELYRA_TENANT_DENIED: record is not available to this user"
+                            .into(),
+                    });
+                }
+                for query in queries {
+                    transaction.execute(query)?;
+                }
+                Ok(())
+            });
+        }
         zelyra_database::execute_mariadb_queries(database_url, queries, true)?;
         return Ok(());
     };
@@ -1293,6 +1325,7 @@ impl WebApp {
                         form.layout_html.as_deref(),
                     ),
                     tenant_context.as_ref(),
+                    form.recipient_column.is_some(),
                 );
             }
         }
@@ -1326,12 +1359,21 @@ impl WebApp {
                             request,
                             self.database_url.as_deref(),
                             crud_ui_actions(crud, request, self),
-                            tenant_context.as_ref(),
-                            self.ui_language,
+                            CrudRequestContext {
+                                actor_user_id: session_from_request(
+                                    self,
+                                    request,
+                                    self.database_url.as_deref(),
+                                )
+                                .and_then(|session| session.user_id),
+                                tenant_context: tenant_context.as_ref(),
+                                language: self.ui_language,
+                            },
                         ),
                         crud.layout_html.as_deref(),
                     ),
                     tenant_context.as_ref(),
+                    crud.recipient_column.is_some(),
                 );
             }
             for action in &crud.actions {
@@ -1382,6 +1424,60 @@ impl WebApp {
                             action.form.layout_html.as_deref(),
                         ),
                         tenant_context.as_ref(),
+                        action.form.recipient_column.is_some(),
+                    );
+                }
+            }
+            if crud.unread_column.is_some() {
+                let read_path = format!("{}/{{id}}/read", crud.path.trim_end_matches('/'));
+                if let Some(path_params) = match_path(&read_path, &request.path) {
+                    if self.database_capability_granted == Some(false) {
+                        return database_capability_denied();
+                    }
+                    if let Some(response) = authorize(
+                        crud.requires_auth,
+                        &crud.permissions,
+                        request,
+                        self,
+                        self.database_url.as_deref(),
+                    ) {
+                        return response;
+                    }
+                    let tenant_context = match resolve_tenant_context(
+                        self,
+                        crud.tenant_column.as_deref(),
+                        request,
+                        self.database_url.as_deref(),
+                    ) {
+                        Ok(context) => context,
+                        Err(status) => return tenant_resolution_error(status),
+                    };
+                    return tenant_cache_policy(
+                        dispatch_crud_mark_read(
+                            crud,
+                            request,
+                            &path_params,
+                            CrudMutationContext {
+                                database_url: self.database_url.as_deref(),
+                                audit_table: self
+                                    .auth_route
+                                    .as_ref()
+                                    .and_then(|auth| auth.audit_table.as_deref()),
+                                audit_chain: self
+                                    .auth_route
+                                    .as_ref()
+                                    .is_some_and(|auth| auth.audit_chain),
+                                actor_user_id: session_from_request(
+                                    self,
+                                    request,
+                                    self.database_url.as_deref(),
+                                )
+                                .and_then(|session| session.user_id),
+                                tenant_context: tenant_context.as_ref(),
+                            },
+                        ),
+                        tenant_context.as_ref(),
+                        crud.recipient_column.is_some(),
                     );
                 }
             }
@@ -1436,6 +1532,7 @@ impl WebApp {
                         crud.layout_html.as_deref(),
                     ),
                     tenant_context.as_ref(),
+                    crud.recipient_column.is_some(),
                 );
             }
             let delete_path = format!("{}/{{id}}/delete", crud.path.trim_end_matches('/'));
@@ -1489,6 +1586,7 @@ impl WebApp {
                         crud.layout_html.as_deref(),
                     ),
                     tenant_context.as_ref(),
+                    crud.recipient_column.is_some(),
                 );
             }
             let detail_path = format!("{}/{{id}}", crud.path.trim_end_matches('/'));
@@ -1522,12 +1620,21 @@ impl WebApp {
                             &path_params,
                             self.database_url.as_deref(),
                             crud_ui_actions(crud, request, self),
-                            tenant_context.as_ref(),
-                            self.ui_language,
+                            CrudRequestContext {
+                                actor_user_id: session_from_request(
+                                    self,
+                                    request,
+                                    self.database_url.as_deref(),
+                                )
+                                .and_then(|session| session.user_id),
+                                tenant_context: tenant_context.as_ref(),
+                                language: self.ui_language,
+                            },
                         ),
                         crud.layout_html.as_deref(),
                     ),
                     tenant_context.as_ref(),
+                    crud.recipient_column.is_some(),
                 );
             }
         }
@@ -5366,6 +5473,9 @@ fn dispatch_form_with_language(
     if form.tenant_column.is_some() && tenant_context.is_none() {
         return Response::html(403, "<h1>403 Forbidden</h1>");
     }
+    if form.recipient_column.is_some() && actor_user_id.is_none() {
+        return Response::html(403, "<h1>403 Forbidden</h1>");
+    }
     let confirmation_view = form
         .form
         .actions
@@ -5399,6 +5509,7 @@ fn dispatch_form_with_language(
                 path_params,
                 database_url,
                 tenant_context,
+                actor_user_id,
             ) {
                 Ok(Some(values)) => values,
                 Ok(None) => return Response::html(404, "<h1>404 Not Found</h1>"),
@@ -5636,6 +5747,7 @@ fn load_existing_form_values(
     path_params: &HashMap<String, String>,
     database_url: Option<&str>,
     tenant_context: Option<&TenantContext>,
+    actor_user_id: Option<i64>,
 ) -> Result<Option<HashMap<String, String>>, String> {
     let Some(database_url) = database_url else {
         return Err("DATABASE_URL is required for edit forms".into());
@@ -5666,8 +5778,13 @@ fn load_existing_form_values(
         (Some(_), None) => return Err("tenant context is required for this form".into()),
         _ => String::new(),
     };
+    let recipient_condition = match (form.recipient_column.as_deref(), actor_user_id) {
+        (Some(column), Some(_)) => format!(" AND {} = :zelyra_user_id", quote_identifier(column)),
+        (Some(_), None) => return Err("authenticated user is required for this form".into()),
+        _ => String::new(),
+    };
     let query = format!(
-        "SELECT {} FROM {} WHERE {} = :id{}",
+        "SELECT {} FROM {} WHERE {} = :id{}{}",
         columns
             .iter()
             .map(|column| quote_identifier(column))
@@ -5675,11 +5792,20 @@ fn load_existing_form_values(
             .join(", "),
         quote_identifier(table_name),
         quote_identifier("id"),
-        tenant_condition
+        tenant_condition,
+        recipient_condition
     );
     let mut params = vec![("id".into(), zelyra_database::QueryValue::Int(id))];
     if let Some(tenant_context) = tenant_context {
         params.extend(tenant_query_params(tenant_context));
+    }
+    if let Some(user_id) =
+        actor_user_id.filter(|_| form.recipient_column.is_some() && tenant_context.is_none())
+    {
+        params.push((
+            "zelyra_user_id".into(),
+            zelyra_database::QueryValue::Int(user_id),
+        ));
     }
     let result = zelyra_database::execute_mariadb_query(database_url, &query, params)
         .map_err(|error| error.to_string())?;
@@ -6012,9 +6138,13 @@ fn dispatch_crud(
     request: &Request,
     database_url: Option<&str>,
     ui_actions: CrudUiActions,
-    tenant_context: Option<&TenantContext>,
-    language: UiLanguage,
+    context: CrudRequestContext<'_>,
 ) -> Response {
+    let CrudRequestContext {
+        actor_user_id,
+        tenant_context,
+        language,
+    } = context;
     if request.method != "GET" {
         return Response::html(405, "<h1>405 Method Not Allowed</h1>");
     }
@@ -6026,6 +6156,9 @@ fn dispatch_crud(
             "DATABASE_URL is required for CRUD lists.",
         );
     };
+    if crud.recipient_column.is_some() && actor_user_id.is_none() {
+        return Response::html(403, "<h1>403 Forbidden</h1>");
+    }
     let query_string = request
         .target
         .split_once('?')
@@ -6062,6 +6195,7 @@ fn dispatch_crud(
         .columns
         .iter()
         .filter(|column| crud.tenant_column.as_deref() != Some(column.name.as_str()))
+        .filter(|column| crud.recipient_column.as_deref() != Some(column.name.as_str()))
         .map(|column| column.name.as_str())
         .collect::<Vec<_>>();
     if all_columns.is_empty() {
@@ -6283,6 +6417,13 @@ fn dispatch_crud(
     } else if crud.tenant_column.is_some() {
         return Response::html(403, "<h1>403 Forbidden</h1>");
     }
+    if let Some(recipient_column) = crud.recipient_column.as_deref() {
+        conditions.push(format!(
+            "{}.{} = :zelyra_user_id",
+            quote_identifier("base"),
+            quote_identifier(recipient_column)
+        ));
+    }
     if !conditions.is_empty() {
         query.push_str(" WHERE ");
         query.push_str(&conditions.join(" AND "));
@@ -6304,6 +6445,14 @@ fn dispatch_crud(
     ];
     if let Some(tenant_context) = tenant_context {
         params.extend(tenant_query_params(tenant_context));
+    }
+    if let Some(user_id) =
+        actor_user_id.filter(|_| crud.recipient_column.is_some() && tenant_context.is_none())
+    {
+        params.push((
+            "zelyra_user_id".into(),
+            zelyra_database::QueryValue::Int(user_id),
+        ));
     }
     if !search.is_empty() && !search_columns.is_empty() {
         params.push((
@@ -6362,12 +6511,26 @@ fn dispatch_crud(
         } else if crud.tenant_column.is_some() {
             return Response::html(403, "<h1>403 Forbidden</h1>");
         }
+        if let Some(recipient_column) = crud.recipient_column.as_deref() {
+            count_conditions.push(format!(
+                "{} = :zelyra_user_id",
+                quote_identifier(recipient_column)
+            ));
+        }
         let count_sql = format!(
             "SELECT COUNT(*) FROM {} WHERE {}",
             quote_identifier(&crud.table),
             count_conditions.join(" AND ")
         );
-        let count_params = tenant_context.map(tenant_query_params).unwrap_or_default();
+        let mut count_params = tenant_context.map(tenant_query_params).unwrap_or_default();
+        if let Some(user_id) =
+            actor_user_id.filter(|_| crud.recipient_column.is_some() && tenant_context.is_none())
+        {
+            count_params.push((
+                "zelyra_user_id".into(),
+                zelyra_database::QueryValue::Int(user_id),
+            ));
+        }
         match zelyra_database::execute_mariadb_query(database_url, &count_sql, count_params) {
             Ok(result) => result
                 .rows
@@ -6886,9 +7049,13 @@ fn dispatch_crud_detail(
     path_params: &HashMap<String, String>,
     database_url: Option<&str>,
     ui_actions: CrudUiActions,
-    tenant_context: Option<&TenantContext>,
-    language: UiLanguage,
+    context: CrudRequestContext<'_>,
 ) -> Response {
+    let CrudRequestContext {
+        actor_user_id,
+        tenant_context,
+        language,
+    } = context;
     if request.method != "GET" {
         return Response::html(405, "<h1>405 Method Not Allowed</h1>");
     }
@@ -6900,6 +7067,9 @@ fn dispatch_crud_detail(
             "DATABASE_URL is required for CRUD details.",
         );
     };
+    if crud.recipient_column.is_some() && actor_user_id.is_none() {
+        return Response::html(403, "<h1>403 Forbidden</h1>");
+    }
     let Some(id) = path_params.get("id") else {
         return Response::html(400, "<h1>400 Bad Request</h1>");
     };
@@ -6925,6 +7095,7 @@ fn dispatch_crud_detail(
         .columns
         .iter()
         .filter(|column| crud.tenant_column.as_deref() != Some(column.name.as_str()))
+        .filter(|column| crud.recipient_column.as_deref() != Some(column.name.as_str()))
         .map(|column| column.name.as_str())
         .collect::<Vec<_>>();
     let soft_delete_condition = crud
@@ -6948,8 +7119,19 @@ fn dispatch_crud_detail(
         (Some(_), None) => return Response::html(403, "<h1>403 Forbidden</h1>"),
         (None, _) => String::new(),
     };
+    let recipient_condition = crud
+        .recipient_column
+        .as_deref()
+        .map(|column| {
+            format!(
+                " AND {}.{} = :zelyra_user_id",
+                quote_identifier("base"),
+                quote_identifier(column)
+            )
+        })
+        .unwrap_or_default();
     let query = format!(
-        "SELECT {} FROM {} WHERE {} = :id{}{}",
+        "SELECT {} FROM {} WHERE {} = :id{}{}{}",
         columns
             .iter()
             .map(|column| {
@@ -6969,11 +7151,20 @@ fn dispatch_crud_detail(
         ),
         format_args!("{}.{}", quote_identifier("base"), quote_identifier("id")),
         soft_delete_condition,
-        tenant_condition
+        tenant_condition,
+        recipient_condition
     );
     let mut params = vec![("id".into(), zelyra_database::QueryValue::Int(id))];
     if let Some(tenant_context) = tenant_context {
         params.extend(tenant_query_params(tenant_context));
+    }
+    if let Some(user_id) =
+        actor_user_id.filter(|_| crud.recipient_column.is_some() && tenant_context.is_none())
+    {
+        params.push((
+            "zelyra_user_id".into(),
+            zelyra_database::QueryValue::Int(user_id),
+        ));
     }
     let result = match zelyra_database::execute_mariadb_query(database_url, &query, params) {
         Ok(result) => result,
@@ -6994,6 +7185,174 @@ fn dispatch_crud_detail(
         200,
         render_crud_detail_with_actions(crud, &columns, row, &id_text, ui_actions, language),
     )
+}
+
+fn dispatch_crud_mark_read(
+    crud: &CrudRoute,
+    request: &Request,
+    path_params: &HashMap<String, String>,
+    context: CrudMutationContext<'_>,
+) -> Response {
+    let CrudMutationContext {
+        database_url,
+        audit_table,
+        audit_chain,
+        actor_user_id,
+        tenant_context,
+    } = context;
+    if request.method != "POST" {
+        return Response::html(405, "<h1>405 Method Not Allowed</h1>");
+    }
+    let Some(unread_column) = crud.unread_column.as_deref() else {
+        return Response::html(404, "<h1>404 Not Found</h1>");
+    };
+    let Some(database_url) = database_url else {
+        return crud_error_response(
+            crud,
+            503,
+            "Service Unavailable",
+            "DATABASE_URL is required for notification actions.",
+        );
+    };
+    if crud.recipient_column.is_some() && actor_user_id.is_none() {
+        return Response::html(403, "<h1>403 Forbidden</h1>");
+    }
+    let Some(id) = path_params.get("id") else {
+        return Response::html(400, "<h1>400 Bad Request</h1>");
+    };
+    let Ok(id) = id.parse::<i64>() else {
+        return Response::html(400, "<h1>400 Bad Request</h1><p>id must be an integer.</p>");
+    };
+    let input = match parse_urlencoded(&request.body) {
+        Ok(input) => input,
+        Err(error) => {
+            return Response::html(400, format!("<h1>400 Bad Request</h1><p>{error}</p>"))
+        }
+    };
+    if !verify_csrf_request(
+        request,
+        &crud.csrf,
+        input.get("_zelyra_csrf").map(String::as_str),
+    ) {
+        return Response::html(403, "<h1>403 Forbidden</h1><p>Invalid CSRF token.</p>");
+    }
+    if crud.tenant_column.is_some() && tenant_context.is_none() {
+        return Response::html(403, "<h1>403 Forbidden</h1>");
+    }
+
+    let mut conditions = vec![format!("{} IS NULL", quote_identifier(unread_column))];
+    if let Some(soft_delete) = &crud.soft_delete {
+        conditions.push(format!("{} IS NULL", quote_identifier(&soft_delete.column)));
+    }
+    if let Some(expires_column) = crud.expires_column.as_deref() {
+        conditions.push(format!(
+            "({} IS NULL OR {} > CURRENT_TIMESTAMP)",
+            quote_identifier(expires_column),
+            quote_identifier(expires_column)
+        ));
+    }
+    if let (Some(tenant_column), Some(tenant_context)) =
+        (crud.tenant_column.as_deref(), tenant_context)
+    {
+        conditions.push(format!(
+            "{} = :zelyra_tenant_id AND {}",
+            quote_identifier(tenant_column),
+            tenant_membership_predicate(tenant_context)
+        ));
+    }
+    if let Some(recipient_column) = crud.recipient_column.as_deref() {
+        conditions.push(format!(
+            "{} = :zelyra_user_id",
+            quote_identifier(recipient_column)
+        ));
+    }
+    let scope_sql = conditions.join(" AND ");
+    let record_check = zelyra_database::Query {
+        sql: format!(
+            "SELECT {} FROM {} WHERE {} = :id AND {} FOR UPDATE",
+            quote_identifier("id"),
+            quote_identifier(&crud.table),
+            quote_identifier("id"),
+            scope_sql
+        ),
+        params: crud_scope_params(
+            id,
+            actor_user_id,
+            tenant_context,
+            crud.recipient_column.is_some(),
+        ),
+    };
+    let mutation = zelyra_database::Query {
+        sql: format!(
+            "UPDATE {} SET {} = CURRENT_TIMESTAMP WHERE {} = :id AND {}",
+            quote_identifier(&crud.table),
+            quote_identifier(unread_column),
+            quote_identifier("id"),
+            scope_sql
+        ),
+        params: crud_scope_params(
+            id,
+            actor_user_id,
+            tenant_context,
+            crud.recipient_column.is_some(),
+        ),
+    };
+    let mut queries = vec![mutation];
+    if let Some(audit_table) = audit_table {
+        let mut details = format!(
+            "table={};operation=notification.read;record_id={}",
+            audit_component(&crud.table),
+            id
+        );
+        if let Some(tenant_context) = tenant_context {
+            details.push_str(&format!(";tenant_id={}", tenant_context.tenant_id));
+        }
+        queries.extend(audit_insert_queries(
+            audit_table,
+            audit_chain,
+            actor_user_id,
+            "notification.read",
+            Some(id),
+            &details,
+        ));
+    }
+    let result = execute_crud_mutation(database_url, &queries, tenant_context, Some(&record_check));
+    if let Err(error) = result {
+        eprintln!("zelyra web: CRUD mark-read failed: {error}");
+        if error.message.starts_with("ZELYRA_TENANT_DENIED:") {
+            return Response::html(404, "<h1>404 Not Found</h1>");
+        }
+        return crud_error_response(
+            crud,
+            500,
+            "Internal Server Error",
+            "The notification could not be marked as read.",
+        );
+    }
+    Response::redirect(append_query_parameter(
+        &crud.path,
+        "zelyra_success",
+        "@i18n:crud.marked_read",
+    ))
+}
+
+fn crud_scope_params(
+    id: i64,
+    actor_user_id: Option<i64>,
+    tenant_context: Option<&TenantContext>,
+    recipient_scoped: bool,
+) -> Vec<(String, zelyra_database::QueryValue)> {
+    let mut params = vec![("id".into(), zelyra_database::QueryValue::Int(id))];
+    if let Some(tenant_context) = tenant_context {
+        params.extend(tenant_query_params(tenant_context));
+    }
+    if let Some(user_id) = actor_user_id.filter(|_| recipient_scoped && tenant_context.is_none()) {
+        params.push((
+            "zelyra_user_id".into(),
+            zelyra_database::QueryValue::Int(user_id),
+        ));
+    }
+    params
 }
 
 fn dispatch_crud_delete(
@@ -7020,6 +7379,9 @@ fn dispatch_crud_delete(
             "DATABASE_URL is required for CRUD actions.",
         );
     };
+    if crud.recipient_column.is_some() && actor_user_id.is_none() {
+        return Response::html(403, "<h1>403 Forbidden</h1>");
+    }
     let Some(id) = path_params.get("id") else {
         return Response::html(400, "<h1>400 Bad Request</h1>");
     };
@@ -7042,35 +7404,42 @@ fn dispatch_crud_delete(
     if crud.tenant_column.is_some() && tenant_context.is_none() {
         return Response::html(403, "<h1>403 Forbidden</h1>");
     }
-    let tenant_condition = match (crud.tenant_column.as_deref(), tenant_context) {
-        (Some(column), Some(context)) => format!(
-            " AND {} = :zelyra_tenant_id AND {}",
+    let mut scope_conditions = Vec::new();
+    let mut scope_params = vec![("id".into(), zelyra_database::QueryValue::Int(id))];
+    if let (Some(column), Some(context)) = (crud.tenant_column.as_deref(), tenant_context) {
+        scope_conditions.push(format!(
+            "{} = :zelyra_tenant_id AND {}",
             quote_identifier(column),
             tenant_membership_predicate(context)
+        ));
+        scope_params.extend(tenant_query_params(context));
+    } else if crud.tenant_column.is_some() {
+        return Response::html(403, "<h1>403 Forbidden</h1>");
+    }
+    if let Some(column) = crud.recipient_column.as_deref() {
+        scope_conditions.push(format!("{} = :zelyra_user_id", quote_identifier(column)));
+        scope_params.push((
+            "zelyra_user_id".into(),
+            zelyra_database::QueryValue::Int(actor_user_id.expect("recipient session checked")),
+        ));
+    }
+    if let Some(soft_delete) = &crud.soft_delete {
+        scope_conditions.push(format!("{} IS NULL", quote_identifier(&soft_delete.column)));
+    }
+    let tenant_condition = scope_conditions
+        .iter()
+        .map(|condition| format!(" AND {condition}"))
+        .collect::<String>();
+    let scoped_record_check = (!scope_conditions.is_empty()).then(|| zelyra_database::Query {
+        sql: format!(
+            "SELECT {} FROM {} WHERE {} = :id AND {} FOR UPDATE",
+            quote_identifier("id"),
+            quote_identifier(&crud.table),
+            quote_identifier("id"),
+            scope_conditions.join(" AND ")
         ),
-        _ => String::new(),
-    };
-    let scoped_record_check = match (crud.tenant_column.as_deref(), tenant_context) {
-        (Some(tenant_column), Some(context)) => {
-            let mut params = vec![("id".into(), zelyra_database::QueryValue::Int(id))];
-            params.extend(tenant_query_params(context));
-            Some(zelyra_database::Query {
-                sql: format!(
-                    "SELECT {} FROM {} WHERE {} = :id AND {} = :zelyra_tenant_id AND {}{} FOR UPDATE",
-                    quote_identifier("id"),
-                    quote_identifier(&crud.table),
-                    quote_identifier("id"),
-                    quote_identifier(tenant_column),
-                    tenant_membership_predicate(context),
-                    crud.soft_delete.as_ref().map_or_else(String::new, |soft_delete| {
-                        format!(" AND {} IS NULL", quote_identifier(&soft_delete.column))
-                    })
-                ),
-                params,
-            })
-        }
-        _ => None,
-    };
+        params: scope_params,
+    });
     let (query, success_message) = if let Some(soft_delete) = &crud.soft_delete {
         (
             format!(
@@ -7111,6 +7480,14 @@ fn dispatch_crud_delete(
     let mut delete_params = vec![("id".into(), zelyra_database::QueryValue::Int(id))];
     if let Some(tenant_context) = tenant_context {
         delete_params.extend(tenant_query_params(tenant_context));
+    }
+    if let Some(user_id) =
+        actor_user_id.filter(|_| crud.recipient_column.is_some() && tenant_context.is_none())
+    {
+        delete_params.push((
+            "zelyra_user_id".into(),
+            zelyra_database::QueryValue::Int(user_id),
+        ));
     }
     let mut queries = vec![zelyra_database::Query {
         sql: query,
@@ -7177,6 +7554,9 @@ fn dispatch_crud_restore(
             "DATABASE_URL is required for CRUD actions.",
         );
     };
+    if crud.recipient_column.is_some() && actor_user_id.is_none() {
+        return Response::html(403, "<h1>403 Forbidden</h1>");
+    }
     let Some(id) = path_params.get("id") else {
         return Response::html(400, "<h1>400 Bad Request</h1>");
     };
@@ -7199,33 +7579,44 @@ fn dispatch_crud_restore(
     if crud.tenant_column.is_some() && tenant_context.is_none() {
         return Response::html(403, "<h1>403 Forbidden</h1>");
     }
-    let tenant_condition = match (crud.tenant_column.as_deref(), tenant_context) {
-        (Some(column), Some(context)) => format!(
-            " AND {} = :zelyra_tenant_id AND {}",
+    let mut scope_conditions = Vec::new();
+    let mut scope_params = vec![("id".into(), zelyra_database::QueryValue::Int(id))];
+    if let (Some(column), Some(context)) = (crud.tenant_column.as_deref(), tenant_context) {
+        scope_conditions.push(format!(
+            "{} = :zelyra_tenant_id AND {}",
             quote_identifier(column),
             tenant_membership_predicate(context)
+        ));
+        scope_params.extend(tenant_query_params(context));
+    } else if crud.tenant_column.is_some() {
+        return Response::html(403, "<h1>403 Forbidden</h1>");
+    }
+    if let Some(column) = crud.recipient_column.as_deref() {
+        scope_conditions.push(format!("{} = :zelyra_user_id", quote_identifier(column)));
+        scope_params.push((
+            "zelyra_user_id".into(),
+            zelyra_database::QueryValue::Int(actor_user_id.expect("recipient session checked")),
+        ));
+    }
+    scope_conditions.push(format!(
+        "{} IS NOT NULL",
+        quote_identifier(&soft_delete.column)
+    ));
+    let tenant_condition = scope_conditions
+        .iter()
+        .take(scope_conditions.len().saturating_sub(1))
+        .map(|condition| format!(" AND {condition}"))
+        .collect::<String>();
+    let scoped_record_check = (!scope_conditions.is_empty()).then(|| zelyra_database::Query {
+        sql: format!(
+            "SELECT {} FROM {} WHERE {} = :id AND {} FOR UPDATE",
+            quote_identifier("id"),
+            quote_identifier(&crud.table),
+            quote_identifier("id"),
+            scope_conditions.join(" AND ")
         ),
-        _ => String::new(),
-    };
-    let scoped_record_check = match (crud.tenant_column.as_deref(), tenant_context) {
-        (Some(tenant_column), Some(context)) => {
-            let mut params = vec![("id".into(), zelyra_database::QueryValue::Int(id))];
-            params.extend(tenant_query_params(context));
-            Some(zelyra_database::Query {
-                sql: format!(
-                    "SELECT {} FROM {} WHERE {} = :id AND {} = :zelyra_tenant_id AND {} AND {} IS NOT NULL FOR UPDATE",
-                    quote_identifier("id"),
-                    quote_identifier(&crud.table),
-                    quote_identifier("id"),
-                    quote_identifier(tenant_column),
-                    tenant_membership_predicate(context),
-                    quote_identifier(&soft_delete.column)
-                ),
-                params,
-            })
-        }
-        _ => None,
-    };
+        params: scope_params,
+    });
     let query = format!(
         "UPDATE {} SET {} = NULL WHERE {} = :id AND {} IS NOT NULL{}",
         quote_identifier(&crud.table),
@@ -7245,6 +7636,14 @@ fn dispatch_crud_restore(
     let mut restore_params = vec![("id".into(), zelyra_database::QueryValue::Int(id))];
     if let Some(tenant_context) = tenant_context {
         restore_params.extend(tenant_query_params(tenant_context));
+    }
+    if let Some(user_id) =
+        actor_user_id.filter(|_| crud.recipient_column.is_some() && tenant_context.is_none())
+    {
+        restore_params.push((
+            "zelyra_user_id".into(),
+            zelyra_database::QueryValue::Int(user_id),
+        ));
     }
     let mut queries = vec![zelyra_database::Query {
         sql: query,
@@ -8156,6 +8555,22 @@ fn render_crud_detail_with_actions(
             html.push_str("</button></form>");
         }
     }
+    if let Some(unread_column) = crud.unread_column.as_deref() {
+        let is_unread = columns
+            .iter()
+            .position(|column| *column == unread_column)
+            .and_then(|index| row.get(index))
+            .is_some_and(|value| value == "\\N");
+        if is_unread {
+            html.push_str("<form method=\"post\" action=\"");
+            html.push_str(&html_escape(&format!("{}/{}/read", crud.path, id)));
+            html.push_str("\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
+            html.push_str(&html_escape(crud.csrf.token()));
+            html.push_str("\"><button type=\"submit\">");
+            html.push_str(&tr(language, "crud.mark_read"));
+            html.push_str("</button></form>");
+        }
+    }
     if ui_actions.restore {
         html.push_str("<form method=\"post\" action=\"");
         html.push_str(&html_escape(&format!("{}/{}/restore", crud.path, id)));
@@ -8411,6 +8826,17 @@ fn execute_form_action(
     if let Some(tenant_context) = tenant_context {
         parameters.extend(tenant_query_params(tenant_context));
     }
+    if form.recipient_column.is_some() {
+        let user_id = actor_user_id.ok_or_else(|| {
+            "ZELYRA_TENANT_DENIED: authenticated recipient is required".to_owned()
+        })?;
+        if tenant_context.is_none() {
+            parameters.push((
+                "zelyra_user_id".into(),
+                zelyra_database::QueryValue::Int(user_id),
+            ));
+        }
+    }
     for (name, value) in path_params {
         let parsed = value
             .parse::<i64>()
@@ -8441,6 +8867,11 @@ fn execute_form_action(
                 message: "tenant context is required for this form".into(),
             });
         }
+        if form.recipient_column.is_some() && actor_user_id.is_none() {
+            return Err(zelyra_database::DatabaseError {
+                message: "ZELYRA_TENANT_DENIED: authenticated recipient is required".into(),
+            });
+        }
         if let Some(tenant_context) = tenant_context {
             let membership_check = zelyra_database::Query {
                 sql: format!(
@@ -8453,6 +8884,56 @@ fn execute_form_action(
                 return Err(zelyra_database::DatabaseError {
                     message: "ZELYRA_TENANT_DENIED: membership is no longer active".into(),
                 });
+            }
+        }
+        if form.post_only {
+            if let (Some(recipient_column), Some(table_name), Some(id), Some(user_id)) = (
+                form.recipient_column.as_deref(),
+                form.form.table.as_deref(),
+                path_params.get("id").and_then(|id| id.parse::<i64>().ok()),
+                actor_user_id,
+            ) {
+                let tenant_condition = match (form.tenant_column.as_deref(), tenant_context) {
+                    (Some(column), Some(context)) => format!(
+                        " AND {} = :zelyra_tenant_id AND {}",
+                        quote_identifier(column),
+                        tenant_membership_predicate(context)
+                    ),
+                    (Some(_), None) => {
+                        return Err(zelyra_database::DatabaseError {
+                            message: "ZELYRA_TENANT_DENIED: tenant context is required".into(),
+                        })
+                    }
+                    _ => String::new(),
+                };
+                let query = zelyra_database::Query {
+                    sql: format!(
+                        "SELECT {} FROM {} WHERE {} = :id AND {} = :zelyra_user_id{} FOR UPDATE",
+                        quote_identifier("id"),
+                        quote_identifier(table_name),
+                        quote_identifier("id"),
+                        quote_identifier(recipient_column),
+                        tenant_condition
+                    ),
+                    params: {
+                        let mut params = vec![
+                            ("id".into(), zelyra_database::QueryValue::Int(id)),
+                            (
+                                "zelyra_user_id".into(),
+                                zelyra_database::QueryValue::Int(user_id),
+                            ),
+                        ];
+                        if let Some(context) = tenant_context {
+                            params.extend(tenant_query_params(context));
+                        }
+                        params
+                    },
+                };
+                if transaction.execute(&query)?.rows.is_empty() {
+                    return Err(zelyra_database::DatabaseError {
+                        message: "ZELYRA_TENANT_DENIED: recipient record is unavailable".into(),
+                    });
+                }
             }
         }
         let before_values = if let Some(expected_snapshot) = expected_snapshot {
@@ -8490,9 +8971,21 @@ fn execute_form_action(
                 }
                 _ => String::new(),
             };
+            let recipient_condition = match (form.recipient_column.as_deref(), actor_user_id) {
+                (Some(column), Some(_)) => {
+                    format!(" AND {} = :zelyra_user_id", quote_identifier(column))
+                }
+                (Some(_), None) => {
+                    return Err(zelyra_database::DatabaseError {
+                        message: "ZELYRA_TENANT_DENIED: authenticated recipient is required"
+                            .into(),
+                    })
+                }
+                _ => String::new(),
+            };
             let query = zelyra_database::Query {
                 sql: format!(
-                    "SELECT {} FROM {} WHERE {} = :id{} FOR UPDATE",
+                    "SELECT {} FROM {} WHERE {} = :id{}{} FOR UPDATE",
                     columns
                         .iter()
                         .map(|column| quote_identifier(column))
@@ -8500,12 +8993,21 @@ fn execute_form_action(
                         .join(", "),
                     quote_identifier(table_name),
                     quote_identifier("id"),
-                    tenant_condition
+                    tenant_condition,
+                    recipient_condition
                 ),
                 params: {
                     let mut params = vec![("id".into(), zelyra_database::QueryValue::Int(id))];
                     if let Some(tenant_context) = tenant_context {
                         params.extend(tenant_query_params(tenant_context));
+                    }
+                    if let Some(user_id) = actor_user_id
+                        .filter(|_| form.recipient_column.is_some() && tenant_context.is_none())
+                    {
+                        params.push((
+                            "zelyra_user_id".into(),
+                            zelyra_database::QueryValue::Int(user_id),
+                        ));
                     }
                     params
                 },

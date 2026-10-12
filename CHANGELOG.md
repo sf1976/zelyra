@@ -4,6 +4,27 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language compatibility line remains `0.1`. Compiler and repository
 releases follow Semantic Versioning independently of the language line.
 
+## 0.9.8 — 2026-10-12
+
+- Bound function-call recursion and opt-in statement/loop execution budgets;
+  require compatible return values on all reachable non-Unit paths with stable
+  diagnostics. / Funktionsrekursion begrenzen und optionale Anweisungs-/
+  Schleifenbudgets ergänzen; passende Rückgaben auf allen erreichbaren Pfaden
+  für Nicht-Unit-Funktionen mit stabilen Diagnosen verlangen.
+- Support the direct `Int::MIN` literal, calendar-day and UTC timestamp
+  arithmetic, explicit Decimal quantization, payload-free enums, exclusive
+  integer ranges, and value-semantic record/array updates. / Das direkte
+  `Int::MIN`-Literal, Kalender-/UTC-Zeitstempelarithmetik, explizite Decimal-
+  Quantisierung, payloadfreie Enums, exklusive Integer-Bereiche und
+  wertsemantische Record-/Arrayänderungen unterstützen.
+- Add an explicit tagged Result JSON codec while preserving existing HTTP and
+  generic `json_encode` wire formats. / Einen ausdrücklich getaggten Result-
+  JSON-Codec ergänzen und bestehende HTTP- und `json_encode`-Wireformate
+  erhalten.
+- Handle long left-associated expressions iteratively to avoid compiler and
+  runtime stack exhaustion. / Lange linksassoziierte Ausdrücke iterativ
+  verarbeiten, um Compiler- und Laufzeit-Stacküberläufe zu vermeiden.
+
 ## 0.9.7 — 2026-10-12
 
 - Expand the invoice tutorial into a responsive multi-file business app with

@@ -140,7 +140,7 @@ fn usage() {
     eprintln!("  setup supports `--database`, `--schema`, `--all`, `--host-port`, `--db-host-port`, and `--web [--port <port>]`");
     eprintln!("  outbox: `setup [file.zyl]`, `list [file.zyl] [--limit <1..200>] [--format text|json]`, `requeue <event-id> [file.zyl]`, or `run [file.zyl] --handler <event.type=function_name> [--once] [--lease-seconds <5..3600>]");
     eprintln!("  Detailhilfe / detailed help: `zelyra fmt --help`, `zelyra init --help`, or `zelyra db plan --help` shows options and examples");
-    eprintln!("Zelyra {}\n\nUsage:\n  zelyra --help\n  zelyra --version\n  zelyra version\n  zelyra update [--check]\n  zelyra --tutorial invoice [directory] [--no-start]\n  zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] [--database|--schema|--all] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] --web [--port <port>]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra config <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra routes <entry.zyl> [--format human|json]\n  zelyra editor [directory] [--port <port>] [--no-open]\n  zelyra migrate laravel <project> [--report <path>] [--output <target>] [--format markdown|json]\n  zelyra module plan <entry.zyl> <module.zyl|resource-id>\n  zelyra module bundle <entry.zyl> <module.zyl|resource-id> --output <dir> [--docker --compiler-ref <40-character-commit>]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra outbox <setup|list|requeue|run> [file.zyl] [options]\n  zelyra db <create|setup|bootstrap|inspect|map|plan|apply|history> <file.zyl>\n\nSchnelleinstieg\n  Geführtes Rechnungstutorial:\n    zelyra --tutorial invoice                 Erstellt Projekt, Datenbank und Schema, startet die Anwendung und öffnet den Browser.\n    Die ausgegebene Anwendungsadresse manuell öffnen, falls kein Browser startet.\n    zelyra editor invoice-tutorial            Öffnet Studio für das Tutorialprojekt.\n  Kleines eigenes Projekt:\n    zelyra init ./mein-projekt                Erstellt ein minimales Projekt ohne Datenbank.\n    cd mein-projekt && zelyra run main.zyl    Startet das Programm direkt.\n    zelyra editor                              Startet Studio im aktuellen Ordner und öffnet den Standardbrowser.\n\nWichtige Befehle\n  init/new  Projektgerüst erstellen; init ist der kurze Einstieg, new bietet Vorlagen und Optionen.\n  check     Datei oder Projekt auf Syntax- und Compilerfehler prüfen.\n  run       Ein Zelyra-Programm direkt ausführen.\n  serve     Eine Webanwendung lokal starten.\n  setup     MariaDB-Projekt vorbereiten; `--all` startet Stack und Schema sichtbar. `.` bedeutet aktuelles Verzeichnis, `./test_a` einen Unterordner.\n  db plan   Schemaänderungen zuerst nur anzeigen; db apply setzt einen geprüften Plan um.\n  db create Gibt CREATE-SQL aus; `db setup` richtet das MariaDB-Schema ein.\n  outbox    Transaktionale Ereignisse einrichten, prüfen und mit Handlern verarbeiten.\n  routes    `zelyra routes main.zyl` listet deklarierte Seiten, APIs und erzeugte Ressourcenrouten; `--format json` liefert maschinenlesbare Ausgabe.\n  editor    Startet den lokalen Studio-Server und öffnet den Standardbrowser; ohne Argument gilt der aktuelle Ordner. `--no-open` überspringt den Browserstart.\n\nGetting started\n  Guided invoice tutorial:\n    zelyra --tutorial invoice                 Creates the project, database, and schema, starts the app, and opens the browser.\n    Open the printed application URL manually if no browser starts.\n    zelyra editor invoice-tutorial            Opens Studio for the tutorial project.\n  Small project of your own:\n    zelyra init ./my-project                  Creates a minimal project without a database.\n    cd my-project && zelyra run main.zyl      Runs the program directly.\n    zelyra editor                              Starts Studio in the current folder and opens the default browser.\n\nKey commands\n  init/new  Create a project; init is the short path, new offers templates and options.\n  check     Check a file or project for syntax and compiler errors.\n  run       Execute a Zelyra program directly.\n  serve     Start a web application locally.\n  setup     Prepare a MariaDB project; `--all` visibly starts the stack and applies the schema. `.` is the current folder, `./test_a` a subfolder.\n  db plan   Preview schema changes; db apply applies a reviewed plan.\n  db create Emit CREATE SQL; `db setup` initializes the MariaDB database and schema.\n  outbox    Set up, inspect, and process transactional events with explicit handlers.\n  routes    `zelyra routes main.zyl` lists declared pages, APIs, and generated resource routes; use `--format json` for machine-readable output.\n  editor    Start the local Studio server and open the default browser; defaults to the current folder. Use `--no-open` to skip browser launch.", env!("CARGO_PKG_VERSION"));
+    eprintln!("Zelyra {}\n\nUsage:\n  zelyra --help\n  zelyra --version\n  zelyra version\n  zelyra update [--check]\n  zelyra --tutorial invoice [directory] [--no-start]\n  zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] [--database|--schema|--all] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] --web [--port <port>]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra config <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl> [--max-steps <n>]\n  zelyra serve <file.zyl> [address]\n  zelyra routes <entry.zyl> [--format human|json]\n  zelyra editor [directory] [--port <port>] [--no-open]\n  zelyra migrate laravel <project> [--report <path>] [--output <target>] [--format markdown|json]\n  zelyra module plan <entry.zyl> <module.zyl|resource-id>\n  zelyra module bundle <entry.zyl> <module.zyl|resource-id> --output <dir> [--docker --compiler-ref <40-character-commit>]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra outbox <setup|list|requeue|run> [file.zyl] [options]\n  zelyra db <create|setup|bootstrap|inspect|map|plan|apply|history> <file.zyl>\n\nSchnelleinstieg\n  Geführtes Rechnungstutorial:\n    zelyra --tutorial invoice                 Erstellt Projekt, Datenbank und Schema, startet die Anwendung und öffnet den Browser.\n    Die ausgegebene Anwendungsadresse manuell öffnen, falls kein Browser startet.\n    zelyra editor invoice-tutorial            Öffnet Studio für das Tutorialprojekt.\n  Kleines eigenes Projekt:\n    zelyra init ./mein-projekt                Erstellt ein minimales Projekt ohne Datenbank.\n    cd mein-projekt && zelyra run main.zyl    Startet das Programm direkt.\n    zelyra editor                              Startet Studio im aktuellen Ordner und öffnet den Standardbrowser.\n\nWichtige Befehle\n  init/new  Projektgerüst erstellen; init ist der kurze Einstieg, new bietet Vorlagen und Optionen.\n  check     Datei oder Projekt auf Syntax- und Compilerfehler prüfen.\n  run       Ein Zelyra-Programm direkt ausführen.\n  serve     Eine Webanwendung lokal starten.\n  setup     MariaDB-Projekt vorbereiten; `--all` startet Stack und Schema sichtbar. `.` bedeutet aktuelles Verzeichnis, `./test_a` einen Unterordner.\n  db plan   Schemaänderungen zuerst nur anzeigen; db apply setzt einen geprüften Plan um.\n  db create Gibt CREATE-SQL aus; `db setup` richtet das MariaDB-Schema ein.\n  outbox    Transaktionale Ereignisse einrichten, prüfen und mit Handlern verarbeiten.\n  routes    `zelyra routes main.zyl` listet deklarierte Seiten, APIs und erzeugte Ressourcenrouten; `--format json` liefert maschinenlesbare Ausgabe.\n  editor    Startet den lokalen Studio-Server und öffnet den Standardbrowser; ohne Argument gilt der aktuelle Ordner. `--no-open` überspringt den Browserstart.\n\nGetting started\n  Guided invoice tutorial:\n    zelyra --tutorial invoice                 Creates the project, database, and schema, starts the app, and opens the browser.\n    Open the printed application URL manually if no browser starts.\n    zelyra editor invoice-tutorial            Opens Studio for the tutorial project.\n  Small project of your own:\n    zelyra init ./my-project                  Creates a minimal project without a database.\n    cd my-project && zelyra run main.zyl      Runs the program directly.\n    zelyra editor                              Starts Studio in the current folder and opens the default browser.\n\nKey commands\n  init/new  Create a project; init is the short path, new offers templates and options.\n  check     Check a file or project for syntax and compiler errors.\n  run       Execute a Zelyra program directly.\n  serve     Start a web application locally.\n  setup     Prepare a MariaDB project; `--all` visibly starts the stack and applies the schema. `.` is the current folder, `./test_a` a subfolder.\n  db plan   Preview schema changes; db apply applies a reviewed plan.\n  db create Emit CREATE SQL; `db setup` initializes the MariaDB database and schema.\n  outbox    Set up, inspect, and process transactional events with explicit handlers.\n  routes    `zelyra routes main.zyl` lists declared pages, APIs, and generated resource routes; use `--format json` for machine-readable output.\n  editor    Start the local Studio server and open the default browser; defaults to the current folder. Use `--no-open` to skip browser launch.", env!("CARGO_PKG_VERSION"));
 }
 
 fn version_command() -> ExitCode {
@@ -164,7 +164,7 @@ thread_local! {
 
 fn database_usage() {
     eprintln!(
-        "Usage:\n  zelyra db create <file.zyl>\n  zelyra db setup <file.zyl>\n  zelyra db bootstrap <file.zyl>\n  zelyra db inspect <file.zyl>\n  zelyra db map <file.zyl> [--format=text|json]\n  zelyra db plan <file.zyl> [--format=text|json]\n  zelyra db apply <file.zyl> [--plan-id <sha256:...>] [--allow-risky]\n  zelyra db history <file.zyl> [--format=text|json]\n\n`db create` prints checked CREATE SQL and does not connect to or create a database. `db setup` initializes the MariaDB database and schema; for PostgreSQL use `db apply`.\nFor a generated local MariaDB project, `zelyra setup <directory> --all` starts its Docker stack and applies the schema.\nUse a plan id from `db plan --format=json` to refuse applying a plan if the database schema changed after review.\nThe read-only database map groups declared tables by source module and reports live tables without a declaration; module ownership is advisory.\nMariaDB migrations are journaled; use `db history` to inspect progress and interrupted runs.\n--allow-destructive remains available for DESTRUCTIVE plans only.\nA project database uses ZELYRA_DATABASE_<NAME>_URL (for example ZELYRA_DATABASE_MAIN_URL); DATABASE_URL remains a compatibility fallback."
+        "Usage:\n  zelyra db create <file.zyl>\n  zelyra db setup <file.zyl>\n  zelyra db bootstrap <file.zyl>\n  zelyra db inspect <file.zyl>\n  zelyra db map <file.zyl> [--format=text|json]\n  zelyra db plan <file.zyl> [--format=text|json]\n  zelyra db apply <file.zyl> [--plan-id <sha256:...>] [--allow-risky]\n  zelyra db history <file.zyl> [--format=text|json]\n\n`db create` prints checked CREATE SQL and does not connect to or create a database. `db setup` supports MariaDB, MySQL, and SQLite; for PostgreSQL use `db apply`.\nFor a generated local MariaDB project, `zelyra setup <directory> --all` starts its Docker stack and applies the schema.\nUse a plan id from `db plan --format=json` to refuse applying a plan if the database schema changed after review.\nThe read-only database map groups declared tables by source module and reports live tables without a declaration; module ownership is advisory.\nMariaDB and MySQL schema migrations are journaled; use `db history` to inspect progress and interrupted runs.\n--allow-destructive remains available for DESTRUCTIVE plans only.\nA project database uses ZELYRA_DATABASE_<NAME>_URL (for example ZELYRA_DATABASE_MAIN_URL); DATABASE_URL remains a compatibility fallback."
     );
 }
 
@@ -1455,7 +1455,7 @@ fn validate_program(
     if !program.functions.is_empty() {
         if let Err(errors) = check(&program) {
             for error in errors {
-                diagnostic_with_span(path, "E-TYPE-001", &error.message, error.span);
+                diagnostic_with_span(path, error.code, &error.message, error.span);
             }
             return Err(());
         }
@@ -5741,6 +5741,7 @@ fn project_runtime_policy(path: &str) -> Result<Option<RuntimePolicy>, String> {
             network,
             process,
             mail,
+            step_budget: None,
         }))
     }
 }
@@ -6971,6 +6972,18 @@ fn validate_cruds(path: &str, program: &zelyra_ast::Program, schema: &Schema) ->
                 valid = false;
             }
         }
+        if crud.unread_column.is_some()
+            && (!crud.requires_auth
+                || !program.auth.iter().any(|auth| auth.session_table.is_some()))
+        {
+            diagnostic_with_span(
+                path,
+                "E-CRUD-007",
+                "CRUD unread markers require `requires auth` and database-backed auth sessions",
+                crud.span,
+            );
+            valid = false;
+        }
         if let Some(tenant_column) = crud.tenant_column.as_deref() {
             let fail_tenant = |message: &str| {
                 diagnostic_with_span(path, "E-TENANT-002", message, crud.span);
@@ -7035,6 +7048,86 @@ fn validate_cruds(path: &str, program: &zelyra_ast::Program, schema: &Schema) ->
                 .any(|column| column == tenant_column)
             {
                 fail_tenant("tenant key must not be exposed as a CRUD field, list, search, or filter column");
+                valid = false;
+            }
+        }
+        if let Some(recipient_column) = crud.recipient_column.as_deref() {
+            let fail_recipient = |message: &str| {
+                diagnostic_with_span(path, "E-CRUD-008", message, crud.span);
+            };
+            if !crud.requires_auth {
+                fail_recipient("recipient-scoped CRUD must declare `requires auth`");
+                valid = false;
+            }
+            if !program.auth.iter().any(|auth| auth.session_table.is_some()) {
+                fail_recipient("recipient-scoped CRUD requires auth with database sessions");
+                valid = false;
+            }
+            match crud_table
+                .columns
+                .iter()
+                .find(|column| column.name == recipient_column)
+            {
+                Some(column)
+                    if tenant_sql_type_is_integer(&column.sql_type)
+                        && !column.nullable
+                        && !column.primary_key
+                        && !column.auto => {}
+                Some(_) => {
+                    fail_recipient(
+                        "recipient user ID column must be a non-null integer that is not the primary or auto-generated key",
+                    );
+                    valid = false;
+                }
+                None => {
+                    fail_recipient(&format!(
+                        "recipient user ID column `{recipient_column}` does not exist in table `{}`",
+                        crud.table
+                    ));
+                    valid = false;
+                }
+            }
+            if Some(recipient_column) == crud.tenant_column.as_deref() {
+                fail_recipient("recipient user ID column must be different from the tenant key");
+                valid = false;
+            }
+            if crud
+                .view
+                .fields
+                .iter()
+                .chain(&crud.list)
+                .chain(&crud.search)
+                .chain(&crud.filters)
+                .any(|column| column == recipient_column)
+            {
+                fail_recipient(
+                    "recipient user ID must not be exposed as a CRUD field, list, search, or filter column",
+                );
+                valid = false;
+            }
+            let recipient_storage_column =
+                storage_column_name(schema, &crud.table, recipient_column);
+            let unsafe_outgoing_relation = crud_table.foreign_keys.iter().any(|foreign_key| {
+                foreign_key.column != recipient_storage_column
+                    || foreign_key.referenced_table
+                        != program
+                            .auth
+                            .iter()
+                            .find(|auth| auth.session_table.is_some())
+                            .map(|auth| auth.table.as_str())
+                            .unwrap_or_default()
+                    || foreign_key.referenced_column != "id"
+            });
+            let incoming_relation = schema.tables.iter().any(|source_table| {
+                source_table
+                    .foreign_keys
+                    .iter()
+                    .any(|foreign_key| foreign_key.referenced_table == crud.table)
+            });
+            if unsafe_outgoing_relation || incoming_relation {
+                fail_recipient(
+                    "recipient-owned tables may only relate through their recipient key; other relations can reveal another user's records",
+                );
                 valid = false;
             }
         }
@@ -7137,7 +7230,13 @@ fn validate_tenant_access_boundaries(
         .filter(|crud| crud.tenant_column.is_some())
         .map(|crud| crud.table.clone())
         .collect::<HashSet<_>>();
-    if tenant_tables.is_empty() {
+    let recipient_tables = program
+        .cruds
+        .iter()
+        .filter(|crud| crud.recipient_column.is_some())
+        .map(|crud| crud.table.clone())
+        .collect::<HashSet<_>>();
+    if tenant_tables.is_empty() && recipient_tables.is_empty() {
         return true;
     }
     let protected_tables = program
@@ -7145,6 +7244,7 @@ fn validate_tenant_access_boundaries(
         .iter()
         .filter_map(|auth| auth.membership_table.clone())
         .chain(tenant_tables.iter().cloned())
+        .chain(recipient_tables.iter().cloned())
         .collect::<HashSet<_>>();
     let known_tables = schema
         .tables
@@ -7158,8 +7258,12 @@ fn validate_tenant_access_boundaries(
         if operation.is_none() {
             diagnostic_with_span(
                 path,
-                "E-TENANT-003",
-                "tenant-enabled projects may use only SQL forms whose table access can be checked",
+                if recipient_tables.is_empty() {
+                    "E-TENANT-003"
+                } else {
+                    "E-CRUD-008"
+                },
+                "projects with tenant- or recipient-scoped data may use only SQL forms whose table access can be checked",
                 span,
             );
             return false;
@@ -7169,14 +7273,32 @@ fn validate_tenant_access_boundaries(
             if access.table.is_empty() {
                 diagnostic_with_span(
                     path,
-                    "E-TENANT-003",
-                    "quoted SQL table references cannot be verified in a tenant-enabled project",
+                    if recipient_tables.is_empty() {
+                        "E-TENANT-003"
+                    } else {
+                        "E-CRUD-008"
+                    },
+                    "quoted SQL table references cannot be verified in a project with scoped data",
                     span,
                 );
                 query_valid = false;
                 continue;
             }
-            if protected_tables
+            if recipient_tables
+                .iter()
+                .any(|table| table.eq_ignore_ascii_case(&access.table))
+            {
+                diagnostic_with_span(
+                    path,
+                    "E-CRUD-008",
+                    &format!(
+                        "unscoped SQL access to `{}` is not allowed; use its recipient-scoped CRUD route",
+                        access.table
+                    ),
+                    span,
+                );
+                query_valid = false;
+            } else if protected_tables
                 .iter()
                 .any(|table| table.eq_ignore_ascii_case(&access.table))
             {
@@ -7201,10 +7323,23 @@ fn validate_tenant_access_boundaries(
                 .iter()
                 .any(|protected| protected.eq_ignore_ascii_case(table))
         }) {
+            let recipient_form = form.table.as_ref().is_some_and(|table| {
+                recipient_tables
+                    .iter()
+                    .any(|protected| protected.eq_ignore_ascii_case(table))
+            });
             diagnostic_with_span(
                 path,
-                "E-TENANT-003",
-                "forms cannot access tenant-owned or membership tables outside the generated tenant CRUD route",
+                if recipient_form {
+                    "E-CRUD-008"
+                } else {
+                    "E-TENANT-003"
+                },
+                if recipient_form {
+                    "forms cannot access recipient-owned tables outside their generated recipient CRUD route"
+                } else {
+                    "forms cannot access tenant-owned or membership tables outside the generated tenant CRUD route"
+                },
                 form.span,
             );
             valid = false;
@@ -7233,14 +7368,47 @@ fn validate_tenant_access_boundaries(
             );
             valid = false;
         }
-        for action in &crud.actions {
-            visit_block_sql(
-                &zelyra_ast::Block {
-                    statements: action.statements.clone(),
-                    span: action.span,
-                },
-                &mut |query, span| valid &= check_query(query, span),
-            );
+        if let Some(expected_recipient_column) = program
+            .cruds
+            .iter()
+            .find(|candidate| {
+                candidate.recipient_column.is_some()
+                    && candidate.table.eq_ignore_ascii_case(&crud.table)
+            })
+            .and_then(|candidate| candidate.recipient_column.as_deref())
+        {
+            if crud.recipient_column.as_deref() != Some(expected_recipient_column) {
+                diagnostic_with_span(
+                    path,
+                    "E-CRUD-008",
+                    "every CRUD resource for a recipient-owned table must use the same declared recipient column",
+                    crud.span,
+                );
+                valid = false;
+            }
+            if !crud.actions.is_empty() {
+                diagnostic_with_span(
+                    path,
+                    "E-CRUD-008",
+                    "recipient-scoped CRUD does not allow custom SQL actions; use generated edit forms so record ownership remains enforced",
+                    crud.span,
+                );
+                valid = false;
+            }
+        }
+        if !recipient_tables
+            .iter()
+            .any(|table| table.eq_ignore_ascii_case(&crud.table))
+        {
+            for action in &crud.actions {
+                visit_block_sql(
+                    &zelyra_ast::Block {
+                        statements: action.statements.clone(),
+                        span: action.span,
+                    },
+                    &mut |query, span| valid &= check_query(query, span),
+                );
+            }
         }
     }
     for page in &program.pages {
@@ -7925,6 +8093,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             table,
             schema: Some(schema.clone()),
             tenant_column: None,
+            recipient_column: None,
             tenant_membership_table: None,
             requires_auth: false,
             permissions: Vec::new(),
@@ -8045,6 +8214,10 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             table: crud.table.clone(),
             tenant_column: crud
                 .tenant_column
+                .as_deref()
+                .map(|column| storage_column_name(&schema, &crud.table, column)),
+            recipient_column: crud
+                .recipient_column
                 .as_deref()
                 .map(|column| storage_column_name(&schema, &crud.table, column)),
             unread_column: crud
@@ -8193,6 +8366,7 @@ fn generated_crud_form(
         .iter()
         .filter(|column| !column.primary_key && !column.auto)
         .filter(|column| crud.tenant_column.as_deref() != Some(column.name.as_str()))
+        .filter(|column| crud.recipient_column.as_deref() != Some(column.name.as_str()))
         .filter(|column| crud.unread_column.as_deref() != Some(column.name.as_str()))
         .filter(|column| crud.expires_column.as_deref() != Some(column.name.as_str()))
         .filter(|column| {
@@ -8225,6 +8399,10 @@ fn generated_crud_form(
             quote_identifier(membership_table)
         )
     });
+    let recipient_column = crud
+        .recipient_column
+        .as_deref()
+        .map(|column| storage_column_name(schema, &crud.table, column));
     let query = if edit {
         let assignments = storage_columns
             .iter()
@@ -8233,7 +8411,7 @@ fn generated_crud_form(
             .collect::<Vec<_>>()
             .join(", ");
         format!(
-            "UPDATE {} SET {} WHERE {} = :id{}{}",
+            "UPDATE {} SET {} WHERE {} = :id{}{}{}",
             quote_identifier(&crud.table),
             assignments,
             quote_identifier("id"),
@@ -8244,6 +8422,11 @@ fn generated_crud_form(
                         " AND {} = :zelyra_tenant_id",
                         quote_identifier(&storage_column_name(schema, &crud.table, column))
                     )
+                }),
+            recipient_column
+                .as_ref()
+                .map_or_else(String::new, |column| {
+                    format!(" AND {} = :zelyra_user_id", quote_identifier(column))
                 }),
             membership_guard.clone().unwrap_or_default()
         )
@@ -8257,7 +8440,11 @@ fn generated_crud_form(
             insert_columns.push(storage_column_name(schema, &crud.table, tenant_column));
             insert_values.push(":zelyra_tenant_id".into());
         }
-        let insert_select = if crud.tenant_column.is_some() {
+        if let Some(recipient_column) = &recipient_column {
+            insert_columns.push(recipient_column.clone());
+            insert_values.push(":zelyra_user_id".into());
+        }
+        let insert_select = if crud.tenant_column.is_some() || recipient_column.is_some() {
             format!(
                 " SELECT {} WHERE true{}",
                 insert_values.join(", "),
@@ -8319,6 +8506,10 @@ fn generated_crud_form(
             .tenant_column
             .as_deref()
             .map(|column| storage_column_name(schema, &crud.table, column)),
+        recipient_column: crud
+            .recipient_column
+            .as_deref()
+            .map(|column| storage_column_name(schema, &crud.table, column)),
         tenant_membership_table: context.membership_table,
         requires_auth: crud.requires_auth,
         permissions,
@@ -8368,6 +8559,10 @@ fn generated_crud_action(
             schema: Some(schema.clone()),
             tenant_column: crud
                 .tenant_column
+                .as_deref()
+                .map(|column| storage_column_name(schema, &crud.table, column)),
+            recipient_column: crud
+                .recipient_column
                 .as_deref()
                 .map(|column| storage_column_name(schema, &crud.table, column)),
             tenant_membership_table: context.membership_table,
@@ -8731,6 +8926,10 @@ fn api_json_value_node(value: &RuntimeValue) -> serde_json::Value {
         RuntimeValue::Bool(value) => serde_json::Value::from(*value),
         RuntimeValue::String(value) => serde_json::Value::String(value.clone()),
         RuntimeValue::Char(value) => serde_json::Value::String(value.to_string()),
+        RuntimeValue::Enum { type_name, variant } => serde_json::json!({
+            "$enum": type_name,
+            "variant": variant,
+        }),
         RuntimeValue::Timestamp(value) => serde_json::Value::from(*value),
         RuntimeValue::Date(value) | RuntimeValue::Time(value) => {
             serde_json::Value::String(value.clone())
@@ -8771,7 +8970,7 @@ fn api_json_value_node(value: &RuntimeValue) -> serde_json::Value {
             object.insert("error".into(), api_json_value_node(value));
             serde_json::Value::Object(object)
         }
-        RuntimeValue::Rows { columns, rows } => serde_json::Value::Array(
+        RuntimeValue::Rows { columns, rows, .. } => serde_json::Value::Array(
             rows.iter()
                 .map(|row| {
                     let object = columns

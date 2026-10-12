@@ -24,11 +24,15 @@ transaction APIs. Each finding includes its file, line, status, description,
 and next review step. JSON is intended for tools; Markdown is directly
 readable.
 
-The 0.9.5 mapping ruleset adds explicit review findings for common authorization
-calls and policy classes, tenant-like identifiers, money and aggregate
-calculations, and file upload/download operations. JSON reports identify both
-the analyzer and mapping ruleset version. These findings describe evidence for
-review; they do not determine whether a control is complete or correct.
+Analyzer and mapping ruleset versions are separate. Zelyra 0.9.8 reports
+analyzer version `0.9.8` and mapping ruleset `0.9.6`. The ruleset adds explicit
+review findings for common authorization calls and policy classes, tenant-like
+identifiers, money and aggregate calculations, and file upload/download
+operations. The 0.9.8 fixtures cover routes, models, controllers, migrations,
+selected relationships, validation, jobs, authorization clues, tenant-like
+fields, money calculations, files, integrations, transactions, and Blade
+views. These findings describe evidence for review; they do not determine
+whether a control is complete or correct.
 
 ## Limits
 
@@ -40,6 +44,9 @@ functional or security parity. A pattern that was not recognized does not mean
 the feature is absent. Manually review tenant boundaries, permissions,
 transactions, money, file storage, and external side effects.
 
-Analysis leaves the Laravel directory unchanged. Optional project scaffolds, a
-versioned compatibility catalog, and source-graph linking are scheduled for
-later 0.9.x releases.
+Analysis leaves the Laravel directory unchanged. An explicitly requested
+scaffold is separate and compiler-checkable, but contains no copied business
+logic, credentials, or application data. The scanner reports individual
+findings, not a complete route-to-data graph, and does not claim any Laravel
+behavior is directly supported. Source-graph linking and runnable behavior
+mappings remain future work.
