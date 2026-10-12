@@ -14,6 +14,7 @@ password="ZelyraNotification-${suffix}-Password"
 tenant_a_title="Tenant A notice ${suffix}"
 tenant_a_expired="Expired notice ${suffix}"
 tenant_a_read="Read notice ${suffix}"
+tenant_a_archived="Archived notice ${suffix}"
 tenant_b_title="Tenant B notice ${suffix}"
 temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/zelyra-notifications-e2e.XXXXXX")"
 server_pid=""
@@ -50,7 +51,7 @@ cleanup() {
         cat "${temp_dir}/tenant-a.html" >&2
     fi
     client --batch --skip-column-names >/dev/null 2>&1 <<SQL || true
-DELETE FROM notifications WHERE title IN ('${tenant_a_title}', '${tenant_a_expired}', '${tenant_a_read}', '${tenant_b_title}');
+DELETE FROM notifications WHERE title IN ('${tenant_a_title}', '${tenant_a_expired}', '${tenant_a_read}', '${tenant_a_archived}', '${tenant_b_title}');
 DELETE FROM tenant_memberships WHERE user_id IN (SELECT id FROM users WHERE email = '${email}');
 DELETE FROM user_permissions WHERE user_id IN (SELECT id FROM users WHERE email = '${email}');
 DELETE FROM auth_sessions WHERE user_id IN (SELECT id FROM users WHERE email = '${email}');
@@ -79,6 +80,7 @@ INSERT INTO notifications (tenant_id, title, message, category, read_at, archive
 VALUES (101, '${tenant_a_title}', 'Visible only in tenant A', 'orders', NULL, NULL, NULL),
        (101, '${tenant_a_expired}', 'Expired item', 'orders', NULL, NULL, DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 1 DAY)),
        (101, '${tenant_a_read}', 'Already read', 'orders', CURRENT_TIMESTAMP, NULL, NULL),
+       (101, '${tenant_a_archived}', 'Archived item', 'orders', NULL, CURRENT_TIMESTAMP, NULL),
        (202, '${tenant_b_title}', 'Visible only in tenant B', 'orders', NULL, NULL, NULL);
 SQL
 notification_a_id="$(client --batch --skip-column-names -e "SELECT id FROM notifications WHERE title = '${tenant_a_title}'")"
@@ -110,6 +112,7 @@ status_a="$(curl --silent --show-error --output "${temp_dir}/tenant-a.html" --wr
 [[ "${status_a}" == "200" ]]
 grep -Fq "${tenant_a_title}" "${temp_dir}/tenant-a.html"
 ! grep -Fq "${tenant_a_expired}" "${temp_dir}/tenant-a.html"
+! grep -Fq "${tenant_a_archived}" "${temp_dir}/tenant-a.html"
 grep -Fq "${tenant_a_read}" "${temp_dir}/tenant-a.html"
 ! grep -Fq "${tenant_b_title}" "${temp_dir}/tenant-a.html"
 ! grep -Fq '\\N' "${temp_dir}/tenant-a.html"

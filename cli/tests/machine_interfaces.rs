@@ -560,6 +560,10 @@ fn laravel_migrator_creates_a_separate_compiler_checked_scaffold() {
     assert!(report_text.contains("routes/web.php"));
     assert!(!report_text.contains("secret-that-must-not-leak"));
     assert_eq!(
+        fs::read_to_string(project.join("routes/web.php")).unwrap(),
+        "<?php\nRoute::post('/orders', [OrderController::class, 'store']);\n"
+    );
+    assert_eq!(
         fs::read_to_string(project.join(".env")).unwrap(),
         "APP_KEY=secret-that-must-not-leak"
     );
@@ -643,6 +647,21 @@ fn laravel_migrator_creates_a_separate_compiler_checked_scaffold() {
     ]);
     assert!(!traversal.status.success());
     assert!(!parent.parent().unwrap().join("escaped.json").exists());
+
+    let missing_report_target = parent.join("missing-parent/report.json");
+    let scaffold_for_missing_report = parent.join("no-partial-scaffold");
+    let missing_report_parent = run(&[
+        "migrate",
+        "laravel",
+        project.to_str().unwrap(),
+        "--report",
+        missing_report_target.to_str().unwrap(),
+        "--output",
+        scaffold_for_missing_report.to_str().unwrap(),
+    ]);
+    assert!(!missing_report_parent.status.success());
+    assert!(!scaffold_for_missing_report.exists());
+    assert!(!missing_report_target.exists());
 
     #[cfg(unix)]
     {
