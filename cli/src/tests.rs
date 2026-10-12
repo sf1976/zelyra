@@ -2674,6 +2674,7 @@ fn generated_mariadb_template_uses_selected_web_port() {
         .contains("ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS: ${ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS:-10}"));
     assert!(compose.contains("ZELYRA_DB_TLS_MODE: ${ZELYRA_DB_TLS_MODE:-disabled}"));
     assert!(compose.contains("ZELYRA_DB_TLS_CA_CERT_FILE: ${ZELYRA_DB_TLS_CA_CERT_FILE:-}"));
+    assert!(compose.contains("ZELYRA_SMTP_SECURITY: ${ZELYRA_SMTP_SECURITY:-}"));
     assert!(compose.contains("0.0.0.0:${ZELYRA_WEB_PORT:-8080}"));
     assert!(compose.contains(&format!(
         "127.0.0.1:${{ZELYRA_HOST_PORT:-{host_port}}}:${{ZELYRA_WEB_PORT:-8080}}"
