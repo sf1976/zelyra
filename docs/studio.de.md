@@ -105,10 +105,13 @@ ausführen.
 
 Für ein MariaDB-Projekt mit bereits konfigurierter Verbindung kann **MariaDB-
 Datenbank anlegen** die deklarierte Datenbank ausdrücklich anlegen oder ihre
-Existenz sicherstellen. Studio fragt vorher nach Bestätigung und verwendet die
-Verbindung nur serverseitig. Die Aktion wendet keine Tabellenmigration an.
-Backend- und Zugangsdaten lassen sich in dieser Version noch nicht in Studio
-konfigurieren; PostgreSQL- und MySQL-Datenbankanlage sind nicht enthalten.
+Existenz sicherstellen. Studio fragt vorher nach Bestätigung. Bei einem lokal
+generierten Compose-Projekt verwendet es dafür das geschützte
+`MARIADB_ROOT_PASSWORD` aus `.env`; andernfalls versucht es die konfigurierte
+Datenbankverbindung. Zugangsdaten bleiben serverseitig. Die Aktion wendet
+keine Tabellenmigration an. Backend- und Zugangsdaten lassen sich in dieser
+Version noch nicht in Studio konfigurieren; PostgreSQL- und MySQL-
+Datenbankanlage sind nicht enthalten.
 
 In dieser Version unterstützt die visuelle Live-Introspektion MariaDB und
 PostgreSQL entsprechend der geprüften `db map`-Unterstützung. Für MySQL zeigt

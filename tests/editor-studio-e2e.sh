@@ -102,7 +102,7 @@ fn main() {
 ZELYRA
 
 port="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')"
-PATH="$work_root/no-host-db-client" DATABASE_URL="$database_url" "$zelyra_bin" editor "$project" --port "$port" \
+DATABASE_URL="$database_url" "$zelyra_bin" editor "$project" --port "$port" \
   >"$work_root/editor.log" 2>&1 &
 server_pid=$!
 

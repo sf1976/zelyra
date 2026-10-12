@@ -824,7 +824,13 @@ Arbeitsumfang und technische Gates stehen im [Releaseplan 0.9.3](release-plans/0
   `--no-start` bereitstellen. Aus Studio prüfen, dass die Vorschau die
   Projektdatenbank verwendet, und Laden, Anlegen, Weiterleitung und Liste beim
   Kundenformular durchspielen. Bei fehlgeschlagener Abfrage einen sicheren
-  nächsten Schritt für Datenbank und angewendetes Schema anzeigen.
+  nächsten Schritt für Datenbank und angewendetes Schema anzeigen. Nach
+  erfolgreichem Tutorialstart den Standardbrowser öffnen und die Adresse in
+  Headless-Umgebungen ausgeben.
+- [✅] Aus Studio eine noch fehlende MariaDB-Datenbank anlegen: nach sichtbarer
+  Bestätigung die geschützten lokalen Compose-Adminzugangsdaten verwenden,
+  sonst das konfigurierte Konto versuchen. Kein Host-Programm `mariadb`
+  voraussetzen und keine Zugangsdaten an den Browser senden.
 - Abschlussnachweis: Zweisprachige Befehls- und Hilfeabdeckung ohne fehlenden
   dokumentierten Befehl; `setup --all` gegen ein isoliertes MariaDB-Compose-
   Projekt; Studio-kompatibler Kundenablauf gegen MariaDB; vollständige

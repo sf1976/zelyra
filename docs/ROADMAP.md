@@ -825,7 +825,13 @@ Scope and technical gates are in the [0.9.3 release plan](release-plans/0.9.3.en
 - [✅] Kept the invoice tutorial's protected `.env` available with and without
   `--no-start`. Verify from Studio that the preview uses the project database,
   then exercise customer form load, create, redirect, and list. When a query
-  fails, show a safe next step to check the database and applied schema.
+  fails, show a safe next step to check the database and applied schema. Open
+  the default browser after successful tutorial startup and print the URL in
+  headless environments.
+- [✅] Create a missing MariaDB database from Studio: after explicit user
+  confirmation, use protected local Compose admin credentials when available,
+  otherwise try the configured account. Do not require a host `mariadb`
+  executable or send credentials to the browser.
 - Exit evidence: bilingual command/help coverage has no missing documented
   command; `setup --all` is exercised against an isolated MariaDB Compose
   project; the Studio-compatible customer flow passes against MariaDB; and the

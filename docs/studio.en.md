@@ -93,10 +93,12 @@ and apply any database migration separately.
 
 For a MariaDB project with an existing connection configuration, **Create
 MariaDB database** can explicitly create or ensure the declared database
-exists. Studio asks for confirmation first and uses the connection only on the
-local server. The action does not apply table migrations. Backend and
-credentials cannot yet be configured in Studio; PostgreSQL and MySQL database
-creation are not included.
+exists. Studio asks for confirmation first. For a locally generated Compose
+project, it uses the protected `MARIADB_ROOT_PASSWORD` from `.env`; otherwise
+it tries the configured database connection. Credentials stay on the server.
+The action does not apply table migrations. Backend and credentials cannot yet
+be configured in Studio; PostgreSQL and MySQL database creation are not
+included.
 
 In this release, visual live introspection supports MariaDB and PostgreSQL as
 covered by the tested `db map` support. Studio clearly reports that MySQL
