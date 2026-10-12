@@ -540,7 +540,7 @@ page "/sicher/{eingabe}" {
 }
 ```
 
-**Beispiel 4: Wiederverwendbare View-Layouts und Slots (ab Zelyra 0.1.41)**
+**Beispiel 4: Wiederverwendbare View-Layouts und Slots**
 Statt auf jeder Seite `<html>`, `<head>`, Header und Footer neu zu schreiben, definierst du mit `view` ein Layout. Ein View besitzt genau einen Hauptslot `<slot />` sowie optionale benannte Slots mit sicherem Standardinhalt:
 ```zelyra
 view AppShell {
@@ -571,7 +571,7 @@ page "/dashboard" {
 }
 ```
 
-**Beispiel 5: Deklarative Suche, Filterung und Pagination (ab Zelyra 0.1.40)**
+**Beispiel 5: Deklarative Suche, Filterung und Pagination**
 Für datengetriebene Seiten erzeugt Zelyra semantische Steuerungen für Suche, Sortierung und Seitenaufteilung automatisch, inklusive URL-Zustandserhalt:
 ```zelyra
 database main {
@@ -836,7 +836,7 @@ crud Task -> tasks {
 }
 ```
 
-> **Automatische Detail-Verlinkung bei ausgeblendeter ID (ab Version 0.1.50):**
+> **Automatische Detail-Verlinkung bei ausgeblendeter ID:**
 > Wenn die technische `id`-Spalte im Block `fields` nicht aufgeführt ist (wie hier, wo nur `name` und `erledigt` sichtbar sind), verlinkt Zelyra automatisch das erste angezeigte Feld (`name`) mit der Detailseite des Datensatzes. Dies gilt sowohl für Tabellen- (`table`) als auch für Kachel-Layouts (`cards`).
 
 ### 4. Kleine, aufeinander aufbauende Beispiele
@@ -925,7 +925,7 @@ crud Task -> tasks {
 }
 ```
 
-**Beispiel 3: CRUD-Ressource mit wiederverwendbarem View-Layout (ab Zelyra 0.1.43)**
+**Beispiel 3: CRUD-Ressource mit wiederverwendbarem View-Layout**
 Mit `layout: ViewName` bettest du alle generierten CRUD-Ansichten (Listen-, Detail-, Formular- und Löschdialoge) automatisch in ein zuvor deklariertes Seitenlayout ein:
 ```zelyra
 view AppShell {
@@ -2697,10 +2697,10 @@ zelyra serve src/main.zyl 0.0.0.0:8080
 
 <a id="kapitel-41-die-zelyra-roadmap-von-090-bis-10"></a>
 
-## Kapitel 41: Die Zelyra-Roadmap (Von 0.9.0 bis 1.0)
+## Kapitel 41: Aktueller Stand und Weg zu Zelyra 1.0
 
 ### 1. Was lerne ich in diesem Kapitel?
-- Den experimentellen Stand von Zelyra 0.9.0 und die nächsten Entwicklungsschritte.
+- Welche Fähigkeiten die aktuelle Zelyra-Version bietet und wo ihre Grenzen liegen.
 - Wie die Sprachkompatibilitätslinie 0.1 von den Compiler-Releases getrennt bleibt.
 - Welche technischen Nachweise und menschliche Abnahme für 1.0.0 noch erforderlich sind.
 
@@ -2708,46 +2708,25 @@ zelyra serve src/main.zyl 0.0.0.0:8080
 Eine Programmiersprache ist ein lebendiges Ökosystem. Wer heute Zeit investiert, um Zelyra zu lernen, möchte sicher sein, dass die Sprache eine klare Zukunft hat, professionell weiterentwickelt wird und bestehender Code auch in kommenden Versionen lauffähig bleibt.
 
 ### 3. Verständliche Erklärung: Die Roadmap im Überblick
-Zelyra verwendet Compiler-Releases wie `0.8.0` und eine getrennte
-Sprachkompatibilitätslinie wie `0.1`. Ein Upgrade des Compilers ändert die
-Sprachlinie eines Projekts nicht automatisch.
+Compiler-Releases und Sprachkompatibilitätslinie sind getrennt: ein Update des
+Compilers ändert die `0.1`-Sprachlinie eines Projekts nicht automatisch.
 
-- **0.8.0 (experimentell):** Das lokale Zelyra Studio zeigt eine anklickbare,
-  schreibgeschützte Datenbank-Beziehungskarte für unterstützte MariaDB- und
-  PostgreSQL-Pfade. Ein CRUD-Assistent erzeugt Quelltext, prüft ihn mit dem
-  Compiler und verlangt das ausdrückliche Anwenden. MySQL-Live-Introspektion
-  und visuelle Datenbankänderungen sind nicht enthalten. Die begrenzte lokale
-  MariaDB-Outbox bietet keine allgemeine Queue.
-- **0.9.0 (experimentell, veröffentlicht):** Die geführte CRUD-Vorschau zeigt
-  betroffene Dateien, Tabellen, Beziehungen und Routen. Das Rechnungstutorial
-  deckt Kunden, Artikel, Dashboard und verknüpfte Rechnungspositionen ab.
-  `zelyra text edit` nutzt benannte TOML-Pläne, Vorschau, Trefferzahlen und
-  ausdrückliches Anwenden. Lokales TOTP für MariaDB ist eine optionale
-  Sicherheitsvorschau. MySQL-/PostgreSQL-Pfade bleiben auf die veröffentlichte
-  Supportmatrix beschränkt.
-- **0.9.1–0.9.2 (geplant):** Studio mit Mehrdatei-Projektbaum, Tabs,
-  sicherem Speichern, Diagnosen, Vervollständigung, Navigation, Formatierung
-  und integrierten Compileraufgaben zur IDE ausbauen.
-- **Rechnungstutorial (0.9.1 in Entwicklung):** Die Rechnungsansicht summiert
-  Nettopreise, berechnet im deutschen Lernbeispiel 19% Umsatzsteuer und Brutto.
-  Eine druckoptimierte Seite kann über den Browser-Druckdialog als PDF
-  gespeichert werden. Das ist keine native PDF-Erzeugung; Steuersatzannahmen
-  und Grenzen beschreibt das [Tutorial](../../tutorials/invoice.de.md).
-- **0.9.3–0.9.4 (geplant):** Datenbankwerkbank und relationalen CRUD-Entwurf
-  mit nachvollziehbarer Vorschau, Compilerprüfung und ausdrücklicher Übernahme
-  ergänzen.
-- **0.9.5–0.9.6 (geplant):** Vollständige lokale Mail-/SMTP-Unterstützung und
-  mandantengebundenes Benachrichtigungszentrum mit optionalem SMTP-Versand
-  implementieren.
-- **0.9.7–0.9.8 (geplant):** MariaDB-, MySQL- und PostgreSQL-Abläufe,
-  Sicherheit, Autorisierung, Upgrade/Rollback, Backup/Restore, Abhängigkeiten
-  und Produktionsbetrieb technisch härten und proben.
-- **0.9.9 (geplant):** Alle Umsetzungsarbeiten abschließen, Funktionsumfang
-  einfrieren und den unveränderlichen technischen Kandidaten prüfen. Danach
-  sollte nur die menschliche Abnahme für 1.0.0 fehlen.
-- **1.0.0:** Die erste produktive Version erscheint erst nach bestandenen
-  technischen Gates und unabhängiger menschlicher Abnahme des exakten
-  Kandidaten. Diese Abnahme wurde nicht durch CI oder interne Tests ersetzt.
+Die aktuelle stabile Version verbindet statische Typprüfung und Diagnosen mit
+schemaabhängigem SQL, relationalen Tabellen, Webformularen, CRUD, Authentifizierung
+und APIs. Zelyra Studio bietet einen lokalen Mehrdatei-Editor, Navigation,
+Vervollständigung, Hilfe, Diagnosen, Datenbankansicht und compilergeprüfte
+Quelltextänderungen. Das Rechnungstutorial führt durch Kunden, Artikel,
+Dashboard und druckbare Rechnungen mit 19 % Umsatzsteuer. Mail, Authentifizierung,
+Benachrichtigungen, Migrator und Datenbankunterstützung besitzen jeweils
+dokumentierte Grenzen; Details stehen in der
+[Implementierungsübersicht](../../implemented.de.md).
+
+Der nächste Entwicklungsabschnitt härtet Installation, Datenbankabläufe,
+Autorisierung, Migration und Studio. Danach friert 0.9.9 den technischen
+Funktionsumfang ein. 0.9.9 ist noch keine menschliche Abnahme: unabhängige
+Einsteiger- und Produktprüfung ist ausschließlich für den exakten 1.0.0-
+Kandidaten vorgesehen. 1.0.0 wird erst nach bestandenen technischen Gates und
+dieser Prüfung als erste produktive Version veröffentlicht.
 
 Die [Roadmap](../../ROADMAP.de.md) und die
 [Sprachkompatibilitätsrichtlinie](../../language-compatibility.de.md) führen
@@ -2763,12 +2742,12 @@ sind nicht für 1.0.0 versprochen.
 - **Missverständnis:** „Das Studio kann jedes Datenbankschema bearbeiten.“
   *Richtigstellung:* Die Karte liest Schema-Metadaten. Der CRUD-Assistent
   erzeugt compilergeprüften Quelltext und ändert weder Schema noch Datensätze.
-- **Missverständnis:** „0.9.0 ist produktionsreif, weil CI grün ist.“
-  *Richtigstellung:* 0.9.0 bleibt experimentell. CI belegt automatisierte
+- **Missverständnis:** „Die aktuelle Version ist produktionsreif, weil CI grün ist.“
+  *Richtigstellung:* Zelyra bleibt experimentell. CI belegt automatisierte
   Prüfungen, ersetzt aber nicht die geplante menschliche Abnahme für 1.0.0.
 
 ### 6. Merksätze
-1. 0.9.0 ist ein experimentelles Compiler-Release; die Sprachlinie bleibt 0.1.
+1. Die Compiler-Version ändert die experimentelle Sprachlinie 0.1 nicht.
 2. Das Studio liest Schema-Metadaten und prüft erzeugten CRUD-Quelltext, bevor
    es eine Änderung ausdrücklich übernimmt.
 3. 1.0.0 wird erst nach technischen Nachweisen und menschlicher Abnahme
@@ -2776,7 +2755,7 @@ sind nicht für 1.0.0 versprochen.
 
 ### 7. Übungsaufgaben
 - **Stufe 1 (Leicht):** Lies das offizielle `CHANGELOG.md` im Zelyra-Repository.
-- **Stufe 2 (Mittel):** Vergleiche die in `docs/ROADMAP.de.md` dokumentierten IDE-Ziele für 0.9.1 und die Mail-/SMTP-Ziele für 0.9.5.
+- **Stufe 2 (Mittel):** Vergleiche den aktuellen Funktionsumfang in `docs/implemented.de.md` mit den nächsten Zielen in `docs/ROADMAP.de.md`.
 - **Stufe 3 (Anspruchsvoll):** Wähle eine Tabelle in Studio, untersuche eine Schemaabweichung und prüfe, wie die CRUD-Vorschau Änderungen bis zum ausdrücklichen Anwenden behandelt.
 
 ### 8. Praxisaufgabe: Zelyra-Version und Umgebung prüfen
@@ -2791,9 +2770,9 @@ zelyra doctor
 - Roadmap-Einträge sind Ziele und keine Garantie, dass ein Feature bereits verfügbar ist.
 
 ### 10. Kontrollfragen zur Selbstprüfung
-1. Welche Auswirkungen zeigt die CRUD-Vorschau in 0.9.0, und welche Änderungen führt Studio ausdrücklich nicht aus?
+1. Welche Auswirkungen zeigt die CRUD-Vorschau, und welche Änderungen führt Studio ausdrücklich nicht aus?
 2. Was unterscheidet Compiler-Version und Sprachkompatibilitätslinie?
-3. Welche Abnahme ist vor der produktiven Veröffentlichung 1.0.0 noch offen?
+3. Welche technische Freigabe muss vor der menschlichen Abnahme noch bestehen?
 
 ---
 

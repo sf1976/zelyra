@@ -115,20 +115,18 @@ Siehe die [formale Sprachspezifikation](specification.de.md), die
 - ✅ Natives SQL wird anhand bekannter Schemata auf Tabellen, Spalten,
   Parameter, Nullability und Ergebnis-Mapping geprüft. Parameter werden sicher
   gebunden; Transaktionen stehen zur Verfügung.
-- 🧪 Der 0.9.5-Branch ergänzt `mail_queue` und `mail_deliver` für typisierte
-  Text-/HTML-Nachrichten über die transaktionale MariaDB-Outbox. SMTP-
-  Authentifizierung, STARTTLS, implizites TLS, ausdrückliche private CA-Wurzeln,
-  ein fünfsekündiges Transport-Timeout, Nachrichtengrenzen und eine Loopback-
-  Testsenke werden geprüft. Die Zustellung erfolgt mindestens einmal;
-  PostgreSQL-Outbox, Templates und Anhänge sind nicht Teil dieses Meilensteins.
-- ✅ SQLite besitzt getestete Schema- und lokale Datenbankabläufe. PostgreSQL-
-  Schema-Inspektion/-Planung und ausgewählte Sicherheitsprüfungen sind
-  getestet. 0.6.0 ergänzt eine experimentelle native PostgreSQL-16-Runtime-
-  Teilmenge für direkte parametrisierte SQL-Abfragen und Transaktionen. Sie
-  belegt keine vollständige PostgreSQL-Parität; generierte Web-/CRUD-Pfade
-  nutzen sie noch nicht. 0.7.0 ergänzt getestete typisierte MySQL-Abfragen
-  ausschließlich auf MySQL Server 8.4.11; Schema-/Administrationsbefehle,
-  Migrationen, generiertes CRUD/Web und Authentifizierung sind nicht enthalten.
+- 🧪 Typisierte Text-/HTML-Anwendungsnachrichten können transaktional in eine
+  MariaDB-Outbox eingereiht und über SMTP mit Authentifizierung, STARTTLS,
+  implizitem TLS oder ausdrücklich konfigurierten privaten CA-Wurzeln zugestellt
+  werden. Ein fünfsekündiges Transport-Timeout, Nachrichtengrenzen und eine
+  Loopback-Testsenke sind geprüft. Die Zustellung erfolgt mindestens einmal;
+  genau-einmalige Zustellung, PostgreSQL-Outbox, Vorlagen und Anhänge sind nicht
+  zugesagt.
+- ✅ SQLite bietet geprüfte lokale Schemaabläufe. PostgreSQL unterstützt
+  ausgewählte Laufzeit-, Schema- und Sicherheitsprüfungen. MySQL Server 8.4.11
+  unterstützt typisierte parametrisierte Abfragen. Keines dieser Ergebnisse
+  belegt vollständige Backend-Parität; siehe die genaue
+  [Kompatibilitätsmatrix](database-support.de.md).
 - 🧪 Der Schema-Planer stuft ausgewählte Änderungen als sicher,
   prüfungsbedürftig, destruktiv oder nicht unterstützt ein. Destruktive und
   nicht unterstützte Änderungen werden fail-closed behandelt; ausgewählte
@@ -168,11 +166,10 @@ Die genauen Backend-Grenzen und getesteten MariaDB-Versionen stehen in der
 - ✅ Erzeugte MariaDB-Starter umfassen Minimal-, CRUD-, Authentifizierungs- und
   Businessvarianten; die Maschinenverwaltung enthält optionale fiktionale
   Beispieldaten.
-- 🧪 0.7.0 ergänzt einen mandantenbewussten CRUD-Pfad für genau eine
-  ausdrücklich deklarierte MariaDB-Tabelle. Sitzung, Membership, Berechtigung
-  und generierte Abfragen werden im unterstützten Pfad geprüft. Das ist keine
-  vollständige Multi-Tenancy; Beziehungen, eigene SQL-Aktionen, TableViews,
-  Exporte, Migrationen und Backfills sind nicht unterstützt.
+- 🧪 Mandantengefiltertes CRUD prüft Anmeldung, Mitgliedschaft, Berechtigung
+  und generierte Datenbankzugriffe im dokumentierten MariaDB-Umfang. Das ist
+  keine allgemeine Multi-Tenancy für beliebige SQL-, Export-, Migrations- oder
+  Hintergrundjob-Abläufe.
 
 Details stehen im [Schnelleinstieg für Web und Datenbank](getting-started.de.md),
 der [Setup-Anleitung](setup-web.de.md) und den
@@ -185,25 +182,16 @@ der [Setup-Anleitung](setup-web.de.md) und den
   Compilerdiagnosen und Formatierung. Standardmäßig öffnet die CLI den
   Systembrowser; `--no-open` überspringt dies. Schreibzugriffe benötigen
   Sitzungstoken und denselben Browser-Origin; Datenbank/Webanwendung starten nicht mit.
-  0.8.0 ergänzt eine lesende, anklickbare Beziehungskarte für unterstützte
-  MariaDB-/PostgreSQL-Schemata sowie einen geführten CRUD-Quelltextassistenten.
-  0.9.0 zeigt dazu betroffene Dateien, Tabellen, deklarierte Beziehungen und
-  Routen. Der Kandidat wird mit dem Compiler geprüft, als Diff angezeigt und
-  erst nach ausdrücklichem Anwenden mit erneutem Hashvergleich geschrieben.
-  0.9.2 ergänzt Kontexthilfe, Aktionsfinder, AST-basierte lokale
-  Vervollständigung, Live-Diagnosen, F12-Definitionen, lexikalische
-  Umschalt+F12-Fundstellen, eine deterministische Compiler-Projektkarte und
-  einen begrenzten ausdrücklichen Run-Befehl. Typinferenz, vollständige
-  semantische Referenzen und dynamische Projektbeziehungen sind nicht enthalten.
-  MySQL-Live-Introspektion ist hier nicht enthalten. 0.9.3 ergänzt den
-  expliziten schreibgeschützten Datenbrowser (höchstens 25 Datensätze pro
-  Anfrage) sowie compilergeprüftes Ergänzen und Bearbeiten einfacher
-  Tabellenspalten im Quelltext. Schlüssel-, eindeutige und Default-Felder sind
-  vom visuellen Edit ausgeschlossen; jede Änderung verlangt Hashprüfung und
-  Bestätigung und wendet keine Migration an. Eine deklarierte MariaDB kann
-  nach Bestätigung angelegt werden, sofern ihre Verbindung bereits konfiguriert
-  ist; Schemaanwendung bleibt getrennt. Backend-/Verbindungswahl, PostgreSQL-/
-  MySQL-Datenbankanlage und ein vollständiger Plan-/Risikoeditor fehlen noch.
+  Der Editor bietet Dateisuche, lokale Vervollständigung, Formatierung,
+  Compilerdiagnosen, Kontexthilfe, Aktionssuche, Navigation zu Definitionen,
+  lexikalische Fundstellen und einen ausdrücklichen, begrenzten Run-Befehl.
+  Eine deterministische Projektkarte zeigt auflösbare Beziehungen und benennt
+  Analysegrenzen. Die Datenbankwerkbank vergleicht Schema-Metadaten, zeigt
+  Fremdschlüssel, lädt Datensätze nur auf ausdrückliche Anfrage (höchstens 25
+  pro Seite) und kann einfache Spaltenänderungen als geprüfte Quelltextvorschau
+  übernehmen. Sie wendet keine Migration an. MySQL-Live-Introspektion,
+  vollständige semantische Referenzen und ein allgemeiner visueller
+  Datenbankdesigner sind nicht enthalten.
   Einzelheiten: [Studio-Anleitung](studio.de.md).
 - ✅ `zelyra text edit <plan.zedit>` bietet vorschau-basierte Textänderungen aus
   TOML-Plänen mit linearen regulären Ausdrücken, erwarteter Trefferzahl,
@@ -236,12 +224,12 @@ der [Setup-Anleitung](setup-web.de.md) und den
 
 ## Laravel-Migrator
 
-- 🧪 `zelyra migrate laravel <projekt> --report <pfad>` inventarisiert in
-  0.9.3 erkannte Laravel-Muster ausschließlich statisch. PHP, Artisan,
+- 🧪 `zelyra migrate laravel <projekt> --report <pfad>` inventarisiert
+  erkannte Laravel-Muster ausschließlich statisch. PHP, Artisan,
   Datenbanken und `.env`-Dateien werden nicht ausgeführt, verbunden oder
   gelesen. Der neue Bericht liegt außerhalb des Quellprojekts und enthält
   Fundstellen, Status und nächste Prüfschritte als Markdown oder JSON. Der
-  erste Scanner deckt Composer-Vorgaben, einfache Routen, Models, Controller,
+  Scanner deckt Composer-Vorgaben, einfache Routen, Models, Controller,
   `Schema::create`, ausgewählte Beziehungen, Validierungseinstiege, Jobs,
   Blade-Views und Integrationsaufrufe ab. Er ist ein experimenteller
   Muster-Scanner, kein PHP-Parser und kein Nachweis für Geschäftslogik- oder
@@ -307,22 +295,11 @@ vergleichenden Benchmark-Ergebnisse behauptet.
 
 ## Test- und Release-Nachweise
 
-Der historische Funktionsstand wurde auf PR-Head `a35a5ee` durch CI-Lauf
-[#38057534730](https://github.com/sf1976/zelyra/actions/runs/38057534730)
-geprüft: Workspace-Tests, vier MariaDB-Kompatibilitätsjobs, PostgreSQL-16-
-Runtime-Integration, Fuzzing, Dependency-Audit sowie Linux-/Windows-CI
-bestanden. Paketprüfung [#38057534736](https://github.com/sf1976/zelyra/actions/runs/38057534736)
-erstellte deterministische Linux-/Windows-Pakete und prüfte Prüfsummen sowie
-SPDX-SBOMs für denselben Funktions-Head. Diese Läufe prüften die Funktionsimplementierung vor der Versionsanhebung.
-Der versionsangehobene Kandidat bestand anschließend CI-Lauf #38058823265.
-Der unveränderliche Tag `v0.6.0-rc.1` bestand Tag-CI #38059555233; Release-
-Workflow #38059555140 erstellte die RC-Pakete. Der stabile Release-Workflow
-#38060275164 erstellte Linux-/Windows-Pakete, prüfte Prüfsummen und SPDX-SBOMs
-mit 228 Paketen und veröffentlichte GitHub-Attestierungen.
-Heruntergeladene Release-Artefakte bestanden Prüfsummen- und SBOM-Prüfung; das
-Linux-Binary meldet `zelyra 0.6.0`. Siehe den
-[Release-Prüfnachweis](release-readiness/0.6.0-candidate-verification.md).
-Zelyra 0.9.1 wurde in Merge-Commit `aeba34eb73d327cf9d2b65bfaa0e2ce477802af6` veröffentlicht. Exakte CI-, Artefakt-, Prüfsummen-, SBOM-, Attestierungs- und Website-Nachweise stehen im [0.9.1-Releaseprüfnachweis](release-readiness/0.9.1-candidate-verification.md). Die unabhängige menschliche Abnahme bleibt für 1.0.0 reserviert.
+Das stabile [Zelyra-0.9.7-Release](https://github.com/sf1976/zelyra/releases/tag/v0.9.7)
+enthält Linux- und Windows-x86_64-Artefakte, Prüfsummen und SPDX-SBOMs. Die
+laufenden Prüfungen und ihre Grenzen stehen in der
+[Datenbankmatrix](database-support.de.md). Die menschliche Produktabnahme ist
+für 1.0.0 reserviert und wird durch automatisierte Nachweise nicht ersetzt.
 
 Diese Übersicht wird angepasst, wenn sich ausgelieferte Funktionen oder ihre
 Nachweise ändern. Ein Spezifikations- oder Roadmap-Eintrag allein wird hier

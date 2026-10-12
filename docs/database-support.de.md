@@ -3,9 +3,8 @@
 Diese Matrix nennt konkrete Server und die Workflows, die Zelyras CI gegen
 diese Server ausführt. Ein Eintrag bedeutet keine vollständige SQL- oder
 Runtime-Parität. Die CI-Matrix steht in
-[`ci.yml`](../.github/workflows/ci.yml). Der veröffentlichte 0.9.0-Kandidat
-bestand seine Prüfungen am exakten Stand; Meilenstein 0.9.7 erweitert die
-Matrix auf die für 1.0.0 zugesagten Abläufe.
+[`ci.yml`](../.github/workflows/ci.yml). Diese Tabelle nennt den derzeit
+geprüften Umfang und seine Grenzen je Backend.
 
 | Server | Geprüfte Abläufe | Grenzen des Nachweises |
 | --- | --- | --- |
@@ -17,7 +16,6 @@ Matrix auf die für 1.0.0 zugesagten Abläufe.
 ## Konsequenz für Zelyra 1.0.0
 
 MariaDB, MySQL und PostgreSQL bleiben Ziele für die erste produktive Version.
-Der aktuelle 0.9-Nachweis ist je Backend unterschiedlich. Die Releases 0.9.3
-und 0.9.7 ergänzen und prüfen die benötigten Produktabläufe und dokumentieren
-ihre Einschränkungen; 0.9.9 darf den 1.0.0-Supportumfang erst danach einfrieren.
+Der geprüfte Umfang unterscheidet sich je Backend. 0.9.9 darf den
+1.0.0-Supportumfang erst einfrieren, wenn jeder zugesagte Ablauf belegt ist.
 Die bloße Annahme einer URL wie `mysql://` ist kein Nachweis für MySQL Server.

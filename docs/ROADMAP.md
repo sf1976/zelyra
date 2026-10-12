@@ -978,6 +978,11 @@ language backlog as one 0.9.4 change.
 
 ## Release 0.9.8 — production-readiness rehearsal
 
+- [✅] Studio's light appearance now covers the editor, project navigation,
+  properties, help, database workbench, task finder, and dialogs. Browser E2E
+  verifies persistence, keyboard access, consistent surfaces, and at least
+  4.5:1 contrast for text and syntax tokens. The broader IDE work continues
+  with the visual relational and chart workflows planned for 0.9.9.
 - [🗺️] Complete the supported Laravel Migrator scope and its versioned
   compatibility matrix. Verify read-only analysis, secret/PII redaction,
   source-location accuracy, route-to-data relationship reports, ambiguity

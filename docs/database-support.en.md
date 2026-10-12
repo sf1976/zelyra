@@ -2,9 +2,8 @@
 
 This matrix names the concrete servers and workflows that Zelyra CI runs
 against them. An entry does not imply complete SQL or runtime parity. The CI
-matrix is in [`ci.yml`](../.github/workflows/ci.yml). The published 0.9.0
-candidate passed its exact-head checks; milestone 0.9.7 will expand the matrix
-to the workflows promised for 1.0.0.
+matrix is in [`ci.yml`](../.github/workflows/ci.yml). This table describes the
+currently checked scope and its limits for each backend.
 
 | Server | Verified workflows | Limits of the evidence |
 | --- | --- | --- |
@@ -16,7 +15,6 @@ to the workflows promised for 1.0.0.
 ## Consequence for Zelyra 1.0.0
 
 MariaDB, MySQL, and PostgreSQL remain targets for the first productive release.
-The current 0.9 evidence differs by backend. Releases 0.9.3 and 0.9.7 add and verify the
-required product workflows and document their limits; 0.9.9 can freeze the
-1.0.0 support scope only after that evidence exists. Accepting a URL such as
+The verified scope differs by backend. 0.9.9 can freeze the 1.0.0 support
+scope only after each promised workflow has evidence. Accepting a URL such as
 `mysql://` is not evidence for MySQL Server support.

@@ -147,6 +147,13 @@ try {
   await page.keyboard.press("Space");
   assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");
   assert.equal(await themeButton.getAttribute("aria-label"), "Helles Farbschema aktivieren");
+  await page.locator(".cm-content[contenteditable=true]").focus();
+  await page.keyboard.press("F1");
+  await page.locator("#assistant-help-view").waitFor({ state: "visible" });
+  assert.equal(await page.locator("#studio-assistant").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(17, 24, 42)");
+  await page.keyboard.press("F1");
+  await page.locator("#assistant-help-view").waitFor({ state: "hidden" });
+  await themeButton.focus();
   await page.keyboard.press("Space");
   assert.equal(await page.locator("html").getAttribute("data-theme"), "light", "keyboard users must be able to switch the Studio appearance");
   await page.locator("#task-finder-button").click();
@@ -159,6 +166,15 @@ try {
   assert.ok(await page.locator(".task-finder-item").allTextContents().then((items) => items.some((item) => /format/i.test(item))));
   await page.keyboard.press("Escape");
   await page.locator("#task-finder").waitFor({ state: "hidden" });
+  await page.locator("#task-finder-button").click();
+  await page.locator("#task-finder-input").fill("properties");
+  await page.locator(".task-finder-item", { hasText: /Dateieigenschaften öffnen/ }).click();
+  await page.locator("#assistant-properties-tab").waitFor({ state: "visible" });
+  assert.equal(await page.locator("#studio-assistant").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)");
+  await page.locator("#task-finder-button").click();
+  await page.locator("#task-finder-input").fill("properties");
+  await page.locator(".task-finder-item", { hasText: /Dateieigenschaften öffnen/ }).click();
+  await page.locator("#assistant-properties-tab").waitFor({ state: "hidden" });
 
   const editor = page.locator(".cm-content[contenteditable=true]");
   const initialEditorWidth = await editor.evaluate((element) => element.getBoundingClientRect().width);
