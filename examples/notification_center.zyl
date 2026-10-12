@@ -1,5 +1,5 @@
-# Tenant-scoped notification inbox starter for MariaDB projects.
-# Every generated notification route verifies the authenticated membership.
+# Tenant- and recipient-scoped notification inbox starter for MariaDB projects.
+# Generated routes verify both the authenticated membership and record owner.
 
 auth users {
     table: users
@@ -38,6 +38,7 @@ table tenant_memberships {
 table notifications {
     id: Id primary auto
     tenant_id: Id required
+    user_id: Id required
     title: String(160) required
     message: String(4000) required
     category: String(40) required
@@ -50,6 +51,7 @@ table notifications {
 crud Notification -> notifications {
     title: "Notifications"
     tenant: tenant_id
+    recipient: user_id
     unread: read_at
     expires: expires_at
     requires auth
