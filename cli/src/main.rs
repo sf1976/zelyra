@@ -7092,14 +7092,28 @@ fn validate_cruds(path: &str, program: &zelyra_ast::Program, schema: &Schema) ->
                 );
                 valid = false;
             }
-            if schema.tables.iter().any(|source_table| {
+            let recipient_storage_column =
+                storage_column_name(schema, &crud.table, recipient_column);
+            let unsafe_outgoing_relation = crud_table.foreign_keys.iter().any(|foreign_key| {
+                foreign_key.column != recipient_storage_column
+                    || foreign_key.referenced_table
+                        != program
+                            .auth
+                            .iter()
+                            .find(|auth| auth.session_table.is_some())
+                            .map(|auth| auth.table.as_str())
+                            .unwrap_or_default()
+                    || foreign_key.referenced_column != "id"
+            });
+            let incoming_relation = schema.tables.iter().any(|source_table| {
                 source_table
                     .foreign_keys
                     .iter()
                     .any(|foreign_key| foreign_key.referenced_table == crud.table)
-            }) {
+            });
+            if unsafe_outgoing_relation || incoming_relation {
                 fail_recipient(
-                    "recipient-owned tables cannot be referenced by foreign keys because relation views could reveal another user's records",
+                    "recipient-owned tables may only relate through their recipient key; other relations can reveal another user's records",
                 );
                 valid = false;
             }
