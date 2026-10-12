@@ -11,13 +11,21 @@ Business-, Datenbank- und Webanwendungen. Schemaabhängiges SQL, Formulare,
 CRUD, Views und Geschäftslogik greifen ineinander; gewöhnlicher Programmcode
 und natives SQL bleiben jederzeit möglich.
 
-> **Aktueller stabiler Compilerstand: 0.9.5 · Sprachkompatibilitätslinie: 0.1 · experimentell**
+> **Aktueller stabiler Compilerstand: 0.9.6 · Sprachkompatibilitätslinie: 0.1 · experimentell**
 >
-> Zelyra 0.9.5 bleibt experimentell und ist nicht für den Produktiveinsatz freigegeben. „Korrektheit
+> Zelyra 0.9.6 bleibt experimentell und ist nicht für den Produktiveinsatz freigegeben. „Korrektheit
 > beweisen“ ist ein Entwicklungsziel: Der aktuelle Verifier deckt nur einen
 > begrenzten Teil ab und beweist nicht die Korrektheit beliebiger Anwendungen.
 
-Das stabile [`v0.9.5`-Release](https://github.com/sf1976/zelyra/releases/tag/v0.9.5) bleibt experimentell und ist nicht für den Produktiveinsatz freigegeben. Es ergänzt expliziten SMTP-Mailversand über die transaktionale MariaDB-Outbox. Die unabhängige menschliche Abnahme bleibt für 1.0.0 reserviert; dieses README ist kein Abnahmenachweis. Siehe die [Release-Notizen 0.9.5](docs/release-notes/0.9.5.de.md), die [Datenbank-Supportmatrix](docs/database-support.de.md) und den [1.0.0-Releaseplan](docs/release-plans/1.0.0.de.md).
+Das stabile [`v0.9.6`-Release](https://github.com/sf1976/zelyra/releases/tag/v0.9.6) bleibt experimentell und ist nicht für den Produktiveinsatz freigegeben. Es ergänzt eine compilergeprüfte Laravel-Gerüstvorschau und einen gemeinsamen mandantengebundenen Benachrichtigungsfeed. Persönliche Lesebestätigungen und ereignisgesteuerte Mail gehören zum nächsten Entwicklungsschritt. Die unabhängige menschliche Abnahme bleibt für 1.0.0 reserviert; dieses README ist kein Abnahmenachweis. Siehe die [Release-Notizen 0.9.6](docs/release-notes/0.9.6.de.md), die [Datenbank-Supportmatrix](docs/database-support.de.md) und den [1.0.0-Releaseplan](docs/release-plans/1.0.0.de.md).
+
+## Was ist neu in 0.9.6?
+
+- Der Laravel-Migrator kann auf ausdrückliche Anfrage ein separates, compilergeprüftes Zelyra-Grundgerüst mit Fundstellen, Zuordnungs-IDs und offenen TODOs erzeugen. Laravel-Geschäftslogik wird dabei nicht übertragen.
+- Der gemeinsame In-App-Benachrichtigungsfeed filtert nach Mandant und Ablauf, zeigt eine ungelesene Anzahl und archiviert per Soft Delete.
+- Dieser Benachrichtigungsschritt ist gegen MariaDB geprüft. Persönliche Lesebestätigungen, geplante Aufbewahrung und SMTP-Ereignisversand gehören zum nächsten Schritt.
+
+Siehe [Release-Notizen 0.9.6](docs/release-notes/0.9.6.de.md) und den [0.9.6-Releaseplan](docs/release-plans/0.9.6.de.md).
 
 ## Was ist neu in 0.9.5?
 

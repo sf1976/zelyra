@@ -429,7 +429,8 @@ fn command_help_explains_options_without_running_the_command() {
     let migrator = run(&["migrate", "laravel", "--help"]);
     assert!(migrator.status.success());
     let migrator_help = String::from_utf8_lossy(&migrator.stdout);
-    assert!(migrator_help.contains("zelyra migrate laravel <projekt> --report <pfad>"));
+    assert!(migrator_help
+        .contains("zelyra migrate laravel <projekt> [--report <pfad>] [--output <ziel>]"));
     assert!(migrator_help.contains("`.env`-Dateien werden nicht"));
 
     let migration_group = run(&["migrate", "--help"]);
@@ -509,6 +510,175 @@ fn laravel_migrator_cli_writes_machine_report_outside_read_only_source() {
     assert!(!project.join("report.json").exists());
     let _ = fs::remove_dir_all(project);
     let _ = fs::remove_dir_all(reports);
+}
+
+#[test]
+fn laravel_migrator_creates_a_separate_compiler_checked_scaffold() {
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock is available")
+        .as_nanos();
+    let parent = std::env::temp_dir().join(format!("zelyra-laravel-scaffold-{unique}"));
+    let project = parent.join("legacy-app");
+    fs::create_dir_all(project.join("routes")).expect("Laravel project fixture is created");
+    fs::write(project.join(".env"), "APP_KEY=secret-that-must-not-leak")
+        .expect("environment fixture is written");
+    fs::write(
+        project.join("routes/web.php"),
+        "<?php\nRoute::post('/orders', [OrderController::class, 'store']);\n",
+    )
+    .expect("route fixture is written");
+    let report = parent.join("migration.json");
+    let target = parent.join("zelyra-project");
+    let result = run(&[
+        "migrate",
+        "laravel",
+        project.to_str().unwrap(),
+        "--report",
+        report.to_str().unwrap(),
+        "--output",
+        target.to_str().unwrap(),
+        "--format",
+        "json",
+    ]);
+    assert!(
+        result.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&result.stdout),
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(target.join("main.zyl").is_file());
+    assert!(target.join("zelyra.toml").is_file());
+    assert!(target.join("MIGRATION_REPORT.md").is_file());
+    let todo = fs::read_to_string(target.join("MIGRATION_TODO.md")).unwrap();
+    assert!(todo.contains("No Laravel business logic has been transferred"));
+    assert!(
+        todo.contains("0.9.6/route"),
+        "TODO entries need versioned mapping IDs: {todo}"
+    );
+    let report_text = fs::read_to_string(&report).unwrap();
+    assert!(report_text.contains("routes/web.php"));
+    assert!(!report_text.contains("secret-that-must-not-leak"));
+    assert_eq!(
+        fs::read_to_string(project.join("routes/web.php")).unwrap(),
+        "<?php\nRoute::post('/orders', [OrderController::class, 'store']);\n"
+    );
+    assert_eq!(
+        fs::read_to_string(project.join(".env")).unwrap(),
+        "APP_KEY=secret-that-must-not-leak"
+    );
+    let check = run(&["check", target.join("main.zyl").to_str().unwrap()]);
+    assert!(
+        check.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&check.stdout),
+        String::from_utf8_lossy(&check.stderr)
+    );
+
+    let output_only_target = parent.join("output-only-scaffold");
+    let output_only = run(&[
+        "migrate",
+        "laravel",
+        project.to_str().unwrap(),
+        "--output",
+        output_only_target.to_str().unwrap(),
+    ]);
+    assert!(
+        output_only.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output_only.stdout),
+        String::from_utf8_lossy(&output_only.stderr)
+    );
+    assert!(output_only_target.join("main.zyl").is_file());
+    assert!(!String::from_utf8_lossy(&output_only.stdout).contains("Report:"));
+
+    let blocked_target = parent.join("existing");
+    fs::create_dir(&blocked_target).unwrap();
+    fs::write(blocked_target.join("keep.txt"), "unchanged").unwrap();
+    let blocked = run(&[
+        "migrate",
+        "laravel",
+        project.to_str().unwrap(),
+        "--output",
+        blocked_target.to_str().unwrap(),
+    ]);
+    assert!(!blocked.status.success());
+    assert_eq!(
+        fs::read_to_string(blocked_target.join("keep.txt")).unwrap(),
+        "unchanged"
+    );
+
+    let inside_source = project.join("generated");
+    let overlap = run(&[
+        "migrate",
+        "laravel",
+        project.to_str().unwrap(),
+        "--output",
+        inside_source.to_str().unwrap(),
+    ]);
+    assert!(!overlap.status.success());
+    assert!(!inside_source.exists());
+
+    let occupied_report = parent.join("occupied-report.json");
+    fs::write(&occupied_report, "keep this report").unwrap();
+    let target_for_report = parent.join("must-not-appear");
+    let report_collision = run(&[
+        "migrate",
+        "laravel",
+        project.to_str().unwrap(),
+        "--report",
+        occupied_report.to_str().unwrap(),
+        "--output",
+        target_for_report.to_str().unwrap(),
+    ]);
+    assert!(!report_collision.status.success());
+    assert_eq!(
+        fs::read_to_string(&occupied_report).unwrap(),
+        "keep this report"
+    );
+    assert!(!target_for_report.exists());
+
+    let traversal = run(&[
+        "migrate",
+        "laravel",
+        project.to_str().unwrap(),
+        "--report",
+        parent.join("../escaped.json").to_str().unwrap(),
+    ]);
+    assert!(!traversal.status.success());
+    assert!(!parent.parent().unwrap().join("escaped.json").exists());
+
+    let missing_report_target = parent.join("missing-parent/report.json");
+    let scaffold_for_missing_report = parent.join("no-partial-scaffold");
+    let missing_report_parent = run(&[
+        "migrate",
+        "laravel",
+        project.to_str().unwrap(),
+        "--report",
+        missing_report_target.to_str().unwrap(),
+        "--output",
+        scaffold_for_missing_report.to_str().unwrap(),
+    ]);
+    assert!(!missing_report_parent.status.success());
+    assert!(!scaffold_for_missing_report.exists());
+    assert!(!missing_report_target.exists());
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::symlink;
+        let symlink_target = parent.join("target-link");
+        symlink(&target, &symlink_target).unwrap();
+        let through_symlink = run(&[
+            "migrate",
+            "laravel",
+            project.to_str().unwrap(),
+            "--output",
+            symlink_target.to_str().unwrap(),
+        ]);
+        assert!(!through_symlink.status.success());
+        assert!(target.join("main.zyl").is_file());
+    }
+    fs::remove_dir_all(parent).unwrap();
 }
 
 #[test]

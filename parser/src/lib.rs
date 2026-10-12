@@ -580,6 +580,8 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::Arrow, "`->` after CRUD resource name")?;
         let (table, table_span) = self.ident("table name after `->`")?;
         let mut tenant_column = None;
+        let mut unread_column = None;
+        let mut expires_column = None;
         let mut title = None;
         let mut layout = None;
         let mut layout_slots = Vec::new();
@@ -604,6 +606,16 @@ impl<'a> Parser<'a> {
                         self.advance();
                         self.expect(TokenKind::Colon, "colon after CRUD tenant")?;
                         tenant_column = Some(self.ident("tenant key column")?.0);
+                    }
+                    TokenKind::Ident(name) if name == "unread" => {
+                        self.advance();
+                        self.expect(TokenKind::Colon, "colon after CRUD unread marker")?;
+                        unread_column = Some(self.ident("nullable read timestamp column")?.0);
+                    }
+                    TokenKind::Ident(name) if name == "expires" => {
+                        self.advance();
+                        self.expect(TokenKind::Colon, "colon after CRUD expiry")?;
+                        expires_column = Some(self.ident("expiry timestamp column")?.0);
                     }
                     TokenKind::Title => {
                         self.advance();
@@ -685,6 +697,8 @@ impl<'a> Parser<'a> {
                 name,
                 table,
                 tenant_column,
+                unread_column,
+                expires_column,
                 title,
                 layout,
                 layout_slots,
@@ -707,6 +721,8 @@ impl<'a> Parser<'a> {
             name,
             table,
             tenant_column,
+            unread_column,
+            expires_column,
             title,
             layout,
             layout_slots,
@@ -3155,6 +3171,8 @@ mod tests {
         let program = parse(
             &lex(r#"crud Customer -> customers {
                     title: "Customers"
+                    unread: read_at
+                    expires: expires_at
                     soft_delete { column: deleted_at }
                     list { customer_number name }
                     search { name }
@@ -3165,6 +3183,8 @@ mod tests {
         .unwrap();
         let crud = &program.cruds[0];
         assert_eq!(crud.title.as_deref(), Some("Customers"));
+        assert_eq!(crud.unread_column.as_deref(), Some("read_at"));
+        assert_eq!(crud.expires_column.as_deref(), Some("expires_at"));
         assert_eq!(
             crud.soft_delete
                 .as_ref()

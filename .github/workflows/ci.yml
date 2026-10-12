@@ -378,13 +378,23 @@ jobs:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
           ZELYRA_PROTECTED_E2E_DB_PASSWORD: root
           ZELYRA_BIN: target/debug/zelyra
-          ZELYRA_PROTECTED_E2E_ADDRESS: 127.0.0.1:38510
+          ZELYRA_PROTECTED_E2E_ADDRESS: 127.0.0.1:25010
         run: ./tests/mariadb-protected-e2e.sh
       - name: Run tenant-scoped CRUD integration test
         env:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
           ZELYRA_BIN: target/debug/zelyra
         run: ./tests/mariadb-tenant-crud-e2e.sh
+      - name: Create isolated notification-center test database
+        env:
+          MYSQL_PWD: root
+        run: mariadb --protocol=tcp --host=127.0.0.1 --port=3306 --user=root --batch --skip-column-names -e "CREATE DATABASE IF NOT EXISTS zelyra_notifications_ci"
+      - name: Verify tenant-scoped notification center
+        env:
+          DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_notifications_ci
+          ZELYRA_BIN: target/debug/zelyra
+          ZELYRA_NOTIFICATION_E2E_ADDRESS: 127.0.0.1:38519
+        run: ./tests/mariadb-notification-center-e2e.sh
       - name: Run guided invoice tutorial integration test
         env:
           MYSQL_PWD: root

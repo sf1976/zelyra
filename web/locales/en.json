@@ -199,6 +199,7 @@
   "shell.environment_label": "ZELYRA APPLICATION",
   "shell.overview": "Overview",
   "crud.archive.active": "Show active records",
+  "crud.unread_count": "Unread notifications",
   "crud.archive.archived": "Show archived records",
   "crud.create": "Create new",
   "query.legend": "Search and filters",
