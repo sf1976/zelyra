@@ -189,7 +189,7 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-fn has_graphical_session() -> bool {
+pub(super) fn has_graphical_session() -> bool {
     if env::var_os("CI").is_some() {
         return false;
     }
@@ -207,7 +207,7 @@ fn has_graphical_session() -> bool {
     }
 }
 
-fn open_system_browser(url: &str) -> bool {
+pub(super) fn open_system_browser(url: &str) -> bool {
     #[cfg(target_os = "windows")]
     let mut command = {
         let mut command = Command::new("cmd.exe");
@@ -1219,7 +1219,22 @@ fn create_project_database(
                 .into(),
         ))?
     };
-    zelyra_database::create_mariadb_database(&database_url).map_err(|_| {
+    let root_password = env::var("MARIADB_ROOT_PASSWORD").ok().or_else(|| {
+        let environment_file = state.root.join(".env");
+        read_env_value(&environment_file.to_string_lossy(), "MARIADB_ROOT_PASSWORD")
+            .ok()
+            .flatten()
+    });
+    let creation = root_password
+        .and_then(|root_password| root_mariadb_url(&database_url, &root_password).ok())
+        .and_then(|admin_url| {
+            create_mariadb_database_with_admin_url(&database_url, &admin_url).ok()
+        })
+        .map_or_else(
+            || zelyra_database::create_mariadb_database(&database_url).map_err(|_| ()),
+            |_| Ok(()),
+        );
+    creation.map_err(|_| {
         (
             502,
             "MariaDB could not create or verify the declared database; check server access and privileges".into(),
@@ -1236,6 +1251,14 @@ fn create_project_database(
         "message": "The declared MariaDB database now exists. Review and apply its schema separately.",
     });
     Ok((200, "application/json; charset=utf-8", response.to_string()))
+}
+
+fn root_mariadb_url(database_url: &str, root_password: &str) -> Result<String, ()> {
+    let mut url = url::Url::parse(database_url).map_err(|_| ())?;
+    url.set_username("root").map_err(|_| ())?;
+    url.set_password(Some(root_password)).map_err(|_| ())?;
+    url.set_path("/mysql");
+    Ok(url.to_string())
 }
 
 fn database_rows_response(
@@ -3478,6 +3501,22 @@ mod tests {
             501
         );
         let _ = fs::remove_dir_all(state.root.clone());
+    }
+
+    #[test]
+    fn studio_admin_database_url_uses_root_credentials_without_changing_target() {
+        let admin_url = root_mariadb_url(
+            "mariadb://app-user:app-pass@127.0.0.1:3307/new_business_db",
+            "root@secret:with/slash",
+        )
+        .expect("construct the local administrative connection");
+        let parsed = url::Url::parse(&admin_url).expect("parse generated URL");
+        assert_eq!(parsed.username(), "root");
+        assert_eq!(parsed.password(), Some("root%40secret%3Awith%2Fslash"));
+        assert_eq!(parsed.host_str(), Some("127.0.0.1"));
+        assert_eq!(parsed.port(), Some(3307));
+        assert_eq!(parsed.path(), "/mysql");
+        assert_ne!(parsed.path(), "/new_business_db");
     }
 
     #[test]

@@ -1086,10 +1086,36 @@ fn type_change_risk(current: &str, desired: &str, backend: Backend) -> Risk {
 }
 
 fn sql_types_equivalent(current: &str, desired: &str, backend: Backend) -> bool {
+    if backend == Backend::MariaDb {
+        return mariadb_storage_type(current) == mariadb_storage_type(desired);
+    }
     if backend != Backend::Postgres {
         return current == desired;
     }
     postgres_storage_type(current) == postgres_storage_type(desired)
+}
+
+fn mariadb_storage_type(sql_type: &str) -> String {
+    let normalized = sql_type
+        .chars()
+        .filter(|character| !character.is_ascii_whitespace())
+        .flat_map(char::to_uppercase)
+        .collect::<String>();
+    let Some((name, arguments)) = normalized.split_once('(') else {
+        return match normalized.as_str() {
+            "DECIMAL" | "NUMERIC" => "DECIMAL(10,0)".into(),
+            _ => normalized,
+        };
+    };
+    let arguments = arguments.trim_end_matches(')');
+    if name != "DECIMAL" && name != "NUMERIC" {
+        return normalized;
+    }
+    match arguments.split_once(',') {
+        Some((precision, scale)) => format!("DECIMAL({precision},{scale})"),
+        None if !arguments.is_empty() => format!("DECIMAL({arguments},0)"),
+        _ => "DECIMAL(10,0)".into(),
+    }
 }
 
 fn postgres_storage_type(sql_type: &str) -> &str {
@@ -3017,8 +3043,18 @@ pub fn fuzz_bind_named_parameters(sql: &str) -> Result<(String, Vec<String>), St
 }
 
 pub fn create_mariadb_database(database_url: &str) -> Result<(), DatabaseError> {
-    let connection = parse_mariadb_url(database_url)?;
-    let database = &connection.database;
+    create_mariadb_database_with_admin_url(database_url, database_url)
+}
+
+/// Creates the database named by `database_url` through a separate MariaDB
+/// account that has database-creation privileges. The admin URL is only used
+/// to connect to the server; its database path is ignored.
+pub fn create_mariadb_database_with_admin_url(
+    database_url: &str,
+    admin_url: &str,
+) -> Result<(), DatabaseError> {
+    let target = parse_mariadb_url(database_url)?;
+    let database = &target.database;
     if database.is_empty() {
         return Err(DatabaseError {
             message: "MariaDB DATABASE_URL must include a database name".into(),
@@ -3028,7 +3064,38 @@ pub fn create_mariadb_database(database_url: &str) -> Result<(), DatabaseError> 
         "CREATE DATABASE IF NOT EXISTS {} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;",
         quote_identifier(database, Backend::MariaDb)
     );
-    run_mariadb_sql(database_url, &sql, Some("mysql"))
+    let mut connection = server_level_mariadb_connection(admin_url)?;
+    connection.query_drop(sql).map_err(mariadb_driver_error)
+}
+
+fn server_level_mariadb_connection(database_url: &str) -> Result<Conn, DatabaseError> {
+    let connection = parse_mariadb_url(database_url)?;
+    let port = connection.port.parse::<u16>().map_err(|_| DatabaseError {
+        message: "MariaDB URL has an invalid TCP port".into(),
+    })?;
+    let timeouts = MariaDbTimeouts::from_env()?;
+    let tls = MariaDbTlsSettings::from_env()?;
+    let options = OptsBuilder::new()
+        .ip_or_hostname(Some(connection.host.clone()))
+        .tcp_port(port)
+        .prefer_socket(false)
+        .user(Some(connection.user))
+        .pass(Some(connection.password))
+        .db_name(None::<String>)
+        .connect_attrs(None::<HashMap<String, String>>)
+        .tcp_connect_timeout(Some(Duration::from_secs(u64::from(
+            timeouts.connect_seconds,
+        ))))
+        .read_timeout(Some(Duration::from_secs(u64::from(timeouts.query_seconds))))
+        .init(vec![mysql_session_timeout_statement(
+            database_url,
+            timeouts.query_seconds,
+        )]);
+    let options = match tls.ssl_opts_for_host(&connection.host) {
+        Some(ssl_opts) => options.ssl_opts(Some(ssl_opts)),
+        None => options,
+    };
+    Conn::new(options).map_err(mariadb_driver_error)
 }
 
 pub fn inspect_sqlite(database_url: &str) -> Result<Schema, DatabaseError> {
@@ -4983,6 +5050,35 @@ mod tests {
         assert!(!sql_types_equivalent(
             "BIGINT",
             "BIGSERIAL",
+            Backend::MariaDb
+        ));
+    }
+
+    #[test]
+    fn compares_unqualified_mariadb_decimal_to_its_server_default_storage_type() {
+        assert!(sql_types_equivalent(
+            "DECIMAL(10,0)",
+            "DECIMAL",
+            Backend::MariaDb
+        ));
+        assert!(sql_types_equivalent(
+            "NUMERIC(10)",
+            "DECIMAL",
+            Backend::MariaDb
+        ));
+        assert!(sql_types_equivalent(
+            "DECIMAL(12,0)",
+            "NUMERIC(12)",
+            Backend::MariaDb
+        ));
+        assert!(!sql_types_equivalent(
+            "DECIMAL(10,2)",
+            "DECIMAL",
+            Backend::MariaDb
+        ));
+        assert!(!sql_types_equivalent(
+            "DECIMAL(12,0)",
+            "DECIMAL(10,0)",
             Backend::MariaDb
         ));
     }

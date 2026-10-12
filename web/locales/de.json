@@ -93,6 +93,7 @@
   "error.active_column_required": "Zum Aktivieren von Benutzern ist eine active-Spalte erforderlich.",
   "error.database_capability_denied": "Die Datenbank-Capability wurde nicht freigegeben.",
   "error.database_unavailable": "Die Datenbank ist nicht verfügbar.",
+  "error.crud_data_unavailable": "Die angeforderten Daten konnten nicht geladen werden. Prüfe, ob die Datenbank läuft und das Projektschema eingerichtet wurde.",
   "error.page_data_unavailable": "Die Seitendaten konnten nicht geladen werden.",
   "error.unknown_sort_column": "Unbekannte Sortierspalte.",
   "error.view_not_sortable": "Diese Tabellenansicht kann nicht sortiert werden.",

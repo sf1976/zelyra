@@ -33,14 +33,34 @@ Compilerdiagnosen werden während der Bearbeitung gespeicherter Zelyra-
 Projektdateien aktualisiert. Die Prüfung arbeitet auf einer privaten
 temporären Projektkopie und schreibt nicht in den ungespeicherten Editorpuffer.
 **Starten** führt `main.zyl` ausdrücklich aus, höchstens 15 Sekunden und mit
-64 KiB je Ausgabekanal. Erkannte geheime Umgebungs- und lokale `.env`-Werte
-werden redigiert. Studio startet Anwendung und Datenbank nicht automatisch und
-bietet dem Programm keine interaktive Eingabe.
+64 KiB je Ausgabekanal. Bei Webprojekten startet die Aktion eine lokale
+Webvorschau; die Datenbank startet Studio nicht automatisch. Erkannte geheime
+Umgebungs- und lokale `.env`-Werte werden redigiert. Das Programm erhält keine
+interaktive Eingabe.
 
 Die **Projektkarte** zeigt nur eindeutige Beziehungen aus dem Compiler-
 Projektmodell und verknüpft Knoten mit gespeicherten Quellpositionen. Dynamische
 und nicht aufgelöste Beziehungen bleiben sichtbar unvollständig, statt
 hergeleitet zu werden.
+
+## Rechnungstutorial in Studio starten
+
+Das Tutorial benötigt eine laufende MariaDB und ein eingerichtetes Schema,
+bevor die Kunden- und Artikellisten Daten laden können. Nach einem Tutorialstart
+mit `--no-start` im Projektordner ausführen:
+
+```sh
+zelyra setup --all
+zelyra editor .
+```
+
+`setup --all` startet MariaDB und die Webanwendung, wendet das Schema an und
+zeigt während des Starts den Fortschritt sowie die Anwendungsadresse. In Studio
+`main.zyl` starten und die Kundenliste unter `/customers` öffnen. Die lokale
+Vorschau liest die Projektverbindung aus der geschützten `.env`. Meldet eine
+CRUD-Seite, dass Daten nicht geladen werden können, prüfen, ob MariaDB läuft
+und das Projektschema angewendet wurde; Verbindungsfehler und Zugangsdaten
+werden nicht in der Seite ausgegeben.
 
 ## Quellcode bearbeiten
 
@@ -85,10 +105,13 @@ ausführen.
 
 Für ein MariaDB-Projekt mit bereits konfigurierter Verbindung kann **MariaDB-
 Datenbank anlegen** die deklarierte Datenbank ausdrücklich anlegen oder ihre
-Existenz sicherstellen. Studio fragt vorher nach Bestätigung und verwendet die
-Verbindung nur serverseitig. Die Aktion wendet keine Tabellenmigration an.
-Backend- und Zugangsdaten lassen sich in dieser Version noch nicht in Studio
-konfigurieren; PostgreSQL- und MySQL-Datenbankanlage sind nicht enthalten.
+Existenz sicherstellen. Studio fragt vorher nach Bestätigung. Bei einem lokal
+generierten Compose-Projekt verwendet es dafür das geschützte
+`MARIADB_ROOT_PASSWORD` aus `.env`; andernfalls versucht es die konfigurierte
+Datenbankverbindung. Zugangsdaten bleiben serverseitig. Die Aktion wendet
+keine Tabellenmigration an. Backend- und Zugangsdaten lassen sich in dieser
+Version noch nicht in Studio konfigurieren; PostgreSQL- und MySQL-
+Datenbankanlage sind nicht enthalten.
 
 In dieser Version unterstützt die visuelle Live-Introspektion MariaDB und
 PostgreSQL entsprechend der geprüften `db map`-Unterstützung. Für MySQL zeigt

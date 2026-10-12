@@ -2704,6 +2704,22 @@ fn setup_does_not_create_mariadb_credentials_for_minimal_init_project() {
 }
 
 #[test]
+fn schema_setup_retries_only_transient_database_startup_errors() {
+    assert!(schema_setup_error_is_transient(
+        "DriverError { error: IoError(ConnectionRefused) }"
+    ));
+    assert!(schema_setup_error_is_transient(
+        "Database connection timed out while MariaDB was starting"
+    ));
+    assert!(!schema_setup_error_is_transient(
+        "error[E-DB-004]: schema changes requiring review were refused"
+    ));
+    assert!(!schema_setup_error_is_transient(
+        "Access denied for user zelyra"
+    ));
+}
+
+#[test]
 fn setup_action_prepare_is_idempotent_and_does_not_replace_credentials() {
     let path = env::temp_dir().join(format!(
         "zelyra-cli-setup-action-{}-{}",

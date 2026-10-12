@@ -808,65 +808,64 @@ Arbeitsumfang und technische Gates stehen im [Releaseplan 0.9.3](release-plans/0
   abgewiesen; Änderungen sind gegen Vorschau-Hash und aktuellen Datenbankstand
   geschützt. Schreibgeschütztes Browsen ist der Standard.
 
-## Release 0.9.4 — Visueller CRUD-Entwurf
+## Release 0.9.4 — CLI-, Setup- und Tutorial-Zuverlässigkeit (abgeschlossen)
 
-- [🗺️] Die in `examples/type_system` erfassten Lücken vor 0.9.9 schließen:
-  nominale Enum-Varianten mit exhaustivem Matching und typisierten JSON-
-  Roundtrips einführen; sicher typisierte Funktionswerte und benutzerdefinierte
-  generische Funktionen/Records in klar begrenzter, dokumentierter Form
-  ergänzen; und einen Zelyra-eigenen identitätsbehafteten Geschäftsentitätstyp
-  definieren, falls neben wertbasierten Records echte Objektidentität gebraucht
-  wird. Zelyras ausdrückliches `Int`/`UInt`- und `Float`/`Decimal`-Modell bleibt
-  bestehen; Breitenvarianten werden nur bei belegtem Geschäftsnutzen ergänzt.
-  Jede Erweiterung aktualisiert Compiler/Runtime, Diagnosen,
-  Kompatibilitätsfixtures, Studio-Hilfe und Typmatrix. Das 0.9.9-Gate führt
-  positive Prüfungen, erwartete Compiler-/Runtimefehler und Serialisierung
-  erneut aus und muss null unerwartete Fehler melden. Für jeden dann noch
-  fehlenden Punkt ist eine ausdrückliche Produktentscheidung nötig.
-- [🗺️] Ergänze in 0.9.4 eine zählende Bereichsschleife in klarer Zelyra-
-  Schreibweise, zum Beispiel `for index in 0..count` mit exklusivem Endwert.
-  Leere Bereiche, Grenzen und Überlauf, Typprüfung sowie `break`/`continue`
-  müssen festgelegt und getestet werden. Sammlungsschleifen, `while` und `loop`
-  bleiben für ihre jeweiligen Abläufe erhalten; eine C-artige Kopfzeile oder
-  ein zusätzliches `do while` ist nicht erforderlich.
-- [🗺️] Die Laravel-Analyse zu einem belegbaren Projektgraphen ausbauen:
-  Route → Middleware/Controller → Model/Beziehung → Migration/Tabelle → View,
-  einschließlich Validierungsregeln, Paketabhängigkeiten, Datei- und
-  Zeilenpositionen sowie ausdrücklich unaufgelöster Verbindungen. Lesbare
-  Markdown- und maschinenlesbare JSON-Berichte ausgeben. Versionierte
-  Kompatibilitätsregeln beschreiben Auswirkungen und nötige manuelle Arbeit;
-  ähnliche Syntax belegt kein gleiches Verhalten.
-- [🗺️] Verständliche relationale CRUD-Abläufe in Studio ermöglichen: Tabellen
-  und Beziehungen wählen, Felder und Formulare entwerfen, Routen und Quelltext
-  vorschauen, den gesamten Änderungsumfang prüfen, Compilerchecks ausführen und
-  Änderungen ausdrücklich übernehmen oder verwerfen. Diagramme werden zu
-  bearbeitbaren Einstiegen in diese Arbeitsabläufe. Ein geführter
-  Kennzahlen-/Diagramm-Entwurf lässt Nutzer eine deklarierte Datenquelle,
-  Kennzahl (zum Beispiel Anzahl oder Summe), Gruppierung (etwa Monat), Zeitraum
-  und Darstellungsform auswählen. So entstehen Fälle wie Neukunden pro Monat,
-  monatlicher Rechnungsumsatz oder ein Dashboard-Kennwert, ohne dass Nutzer
-  Diagramm-API-Befehle oder frei formuliertes SQL lernen müssen. Die
-  Generierung verwendet typisierte, lesende Abfragen und bleibt an bestehende
-  Datenbank-Capabilities, Autorisierung und Mandantengrenzen gebunden.
-  Erzeugte relationale CRUD-Abläufe können referenzierte Datensätze auswählen,
-  verknüpfte Datensätze anzeigen und gültige Fremdschlüsselwerte speichern,
-  ohne handgeschriebenes Join-SQL vorauszusetzen. Einfügen, Ändern, Löschen und
-  eingeschränktes Löschen werden für MariaDB, MySQL und PostgreSQL geprüft;
-  nicht unterstützte Beziehungsoperationen stehen ausdrücklich in der
-  Supportmatrix.
-  Zusätzlich wird ein deklaratives Präsentationsmodell für Geschäftsanwendungen
-  geplant: geprüfte Folien mit Text, Tabellen, Diagrammen und explizit
-  typisierten Datenquellen, mit Studio-Vorschau und eigenständigem HTML-/Druck-
-  export. Präsentationen und Dashboards bleiben versionierbarer Zelyra-Quelltext;
-  beliebige Client-Hydration und versteckte Datenbankzugriffe gehören nicht
-  dazu. Das Rechnungstutorial wird zu einem praktischen IDE-Workflow erweitert.
-- Nachweis: Kunden-, Artikel-, Rechnungs- und Positionsabläufe bestehen
-  Mehrdatenbank-Integrationstests und bleiben normaler, änderbarer Zelyra-
-  Quelltext. Zeitreihen, Gruppierungen, leere Datensätze, Datenbankfehler,
-  Berechtigungen, Mandantentrennung, Ausgabe-Escaping, barrierearme Diagramme,
-  Präsentationsdatenquellen und Export werden in gültigen und ungültigen
-  Projekten geprüft. Veraltete oder ungültige Vorschauen lassen sich nicht
-  übernehmen.
+- [✅] Jeden dokumentierten obersten und verschachtelten CLI-Befehl mit
+  Optionen, Hilfe, Erfolgsweg und erwarteten Fehlern prüfen. Die gemeldeten
+  Setup- und Datenbankprobleme nachvollziehen, Verhalten und Erklärungen
+  korrigieren und eine zweisprachige Befehlsmatrix mit Regressionstests führen.
+  `db create` muss eindeutig nur SQL ausgeben; `db setup` und
+  `setup <verzeichnis> --all` müssen ihre tatsächlichen Datenbank- und
+  Schemaaktionen benennen.
+- [✅] Fortschritt sichtbar ausgeben, während Docker Compose baut und startet.
+  Den letzten Fehler beim Schema-Setup ohne Zugangsdaten offenlegen und nach
+  dem Start die tatsächliche Anwendungsadresse ausgeben.
+- [✅] Die geschützte `.env` des Rechnungstutorials sowohl mit als auch ohne
+  `--no-start` bereitstellen. Aus Studio prüfen, dass die Vorschau die
+  Projektdatenbank verwendet, und Laden, Anlegen, Weiterleitung und Liste beim
+  Kundenformular durchspielen. Bei fehlgeschlagener Abfrage einen sicheren
+  nächsten Schritt für Datenbank und angewendetes Schema anzeigen. Nach
+  erfolgreichem Tutorialstart den Standardbrowser öffnen und die Adresse in
+  Headless-Umgebungen ausgeben.
+- [✅] Aus Studio eine noch fehlende MariaDB-Datenbank anlegen: nach sichtbarer
+  Bestätigung die geschützten lokalen Compose-Adminzugangsdaten verwenden,
+  sonst das konfigurierte Konto versuchen. Kein Host-Programm `mariadb`
+  voraussetzen und keine Zugangsdaten an den Browser senden.
+- Abschlussnachweis: Zweisprachige Befehls- und Hilfeabdeckung ohne fehlenden
+  dokumentierten Befehl; `setup --all` gegen ein isoliertes MariaDB-Compose-
+  Projekt; Studio-kompatibler Kundenablauf gegen MariaDB; vollständige
+  Workspace-Tests und konsistente Release-Metadaten.
+
+## Gestaffelte Arbeit für 0.9.5–0.9.8
+
+Die folgenden Produktarbeiten bleiben Teil des 1.0.0-Ziels. Sie werden
+aufgeteilt, damit jede Version prüfbare Kriterien erhält und Sprach- und
+IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
+
+- [🗺️] Die Typabdeckung schrittweise erweitern: zählende Bereichsschleifen und
+  statisch typisierte Funktionswerte, danach nominale Enums, begrenzte generische
+  Funktionen/Records und bei einem konkreten Anwendungsfall eine
+  Zelyra-eigene Geschäftsentität mit Identität. Records bleiben Werttypen;
+  `Int`/`UInt` und `Float`/`Decimal` bleiben ausdrücklich getrennt. Compiler,
+  Runtime, Diagnosen, Kompatibilitäts-Fixtures, Studio-Hilfe und
+  `examples/type_system` gemeinsam aktualisieren. 0.9.9 führt positive,
+  erwartete Compiler-/Runtimefehler- und Serialisierungstests erneut aus; es
+  darf keine unerwarteten Fehler geben.
+- [🗺️] Den Laravel-Analyzer von Inventaren zu belegten Graphen aus Route,
+  Middleware, Controller, Model/Beziehung, Migration/Tabelle und View ausbauen.
+  Markdown und JSON mit Fundstellen, Paket- und Validierungsfunden, offenen
+  Kanten, versionierten Zuordnungen sowie manuellen und sicherheitsrelevanten
+  Prüfhinweisen ausgeben. Später eine ausdrücklich angeforderte
+  Gerüstgenerierung in ein separates Projekt mit Herkunftsangaben ergänzen;
+  nie Geheimnisse oder Produktionsdaten kopieren und keine automatische
+  Geschäftsparität behaupten.
+- [🗺️] Studio von sicheren Schema- und CRUD-Werkzeugen zu geprüfter relationaler
+  CRUD-Gestaltung, Fremdschlüsselauswahl und typisierten Diagrammoptionen in der
+  Eigenschaftsseitenleiste ausbauen. Danach compilergeprüfte Diagramme und
+  Präsentationsexporte ergänzen. Generierte Abfragen bleiben typisiert und
+  lesend; Berechtigungen und Mandantengrenzen gelten. Vor dem ausdrücklich
+  bestätigten Übernehmen den gesamten Diff zeigen. Datenbankoperationen nur je
+  Backend-Zusage testen; beliebige Client-Hydration bleibt ausgeschlossen.
 
 ## Release 0.9.5 — Eigene Mail- und SMTP-Unterstützung
 

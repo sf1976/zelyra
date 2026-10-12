@@ -24,7 +24,11 @@ cleanup() {
 trap cleanup EXIT
 
 project="${temporary_root}/invoice"
-"${binary}" --tutorial invoice "${project}"
+"${binary}" --tutorial invoice "${project}" --no-start
+DATABASE_URL="${database_url}" ZELYRA_DATABASE_MAIN_URL="${database_url}" \
+  "${binary}" db setup "${project}/main.zyl"
+# Reapplying the unchanged tutorial schema must not propose destructive
+# DECIMAL changes caused by MariaDB's default DECIMAL(10,0) metadata.
 DATABASE_URL="${database_url}" ZELYRA_DATABASE_MAIN_URL="${database_url}" \
   "${binary}" db setup "${project}/main.zyl"
 
@@ -66,4 +70,36 @@ if [[ "${theme}" != *"--tutorial-shadow"* ]]; then
   echo "invoice tutorial theme stylesheet did not contain its project CSS" >&2
   exit 1
 fi
-echo "invoice tutorial schema and all customer, item, invoice, and dashboard routes passed"
+form_page="${temporary_root}/customer-form.html"
+cookie_jar="${temporary_root}/cookies.txt"
+curl --silent --show-error --fail --cookie-jar "${cookie_jar}" \
+  "http://${address}/customers/new" >"${form_page}"
+csrf_token="$(python3 - "${form_page}" <<'PY'
+import pathlib, re, sys
+page = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+match = re.search(r'name="_zelyra_csrf"\s+value="([^"]+)"', page)
+if not match:
+    raise SystemExit("customer form did not include a CSRF token")
+print(match.group(1))
+PY
+)"
+customer_name="Zelyra invoice E2E ${$}"
+curl --silent --show-error --fail --output /dev/null --dump-header "${temporary_root}/customer-post.headers" \
+  --cookie "${cookie_jar}" --cookie-jar "${cookie_jar}" \
+  --header "Origin: http://${address}" \
+  --data-urlencode "_zelyra_csrf=${csrf_token}" \
+  --data-urlencode "name=${customer_name}" \
+  --data-urlencode "email=zelyra-e2e-${$}@example.invalid" \
+  "http://${address}/customers/new"
+if ! grep -Eiq '^HTTP/[^ ]+ 303' "${temporary_root}/customer-post.headers"; then
+  echo "creating a tutorial customer did not redirect after saving" >&2
+  cat "${temporary_root}/server.log" >&2
+  exit 1
+fi
+customer_list="$(curl --silent --show-error --fail "http://${address}/customers")"
+if [[ "${customer_list}" != *"${customer_name}"* ]]; then
+  echo "the saved tutorial customer was not shown in the customer list" >&2
+  cat "${temporary_root}/server.log" >&2
+  exit 1
+fi
+echo "invoice tutorial schema, routes, theme, and Studio-compatible customer create/list flow passed"

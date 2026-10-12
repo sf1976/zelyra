@@ -11,26 +11,22 @@ Business-, Datenbank- und Webanwendungen. Schemaabhängiges SQL, Formulare,
 CRUD, Views und Geschäftslogik greifen ineinander; gewöhnlicher Programmcode
 und natives SQL bleiben jederzeit möglich.
 
-> **Aktueller stabiler Compilerstand: 0.9.3 · Sprachkompatibilitätslinie: 0.1 · experimentell**
+> **Aktueller stabiler Compilerstand: 0.9.4 · Sprachkompatibilitätslinie: 0.1 · experimentell**
 >
-> Zelyra 0.9.3 bleibt experimentell und ist nicht für den Produktiveinsatz freigegeben. „Korrektheit
+> Zelyra 0.9.4 bleibt experimentell und ist nicht für den Produktiveinsatz freigegeben. „Korrektheit
 > beweisen“ ist ein Entwicklungsziel: Der aktuelle Verifier deckt nur einen
 > begrenzten Teil ab und beweist nicht die Korrektheit beliebiger Anwendungen.
 
-Das stabile [`v0.9.3`-Release](https://github.com/sf1976/zelyra/releases/tag/v0.9.3) bleibt experimentell und ist nicht für den Produktiveinsatz freigegeben. Die unabhängige menschliche Abnahme bleibt für 1.0.0 reserviert; dieses README ist kein Abnahmenachweis. Siehe die [Release-Notizen 0.9.3](docs/release-notes/0.9.3.de.md), die [Datenbank-Supportmatrix](docs/database-support.de.md) und den [1.0.0-Releaseplan](docs/release-plans/1.0.0.de.md).
+Das stabile [`v0.9.4`-Release](https://github.com/sf1976/zelyra/releases/tag/v0.9.4) bleibt experimentell und ist nicht für den Produktiveinsatz freigegeben. Die unabhängige menschliche Abnahme bleibt für 1.0.0 reserviert; dieses README ist kein Abnahmenachweis. Siehe die [Release-Notizen 0.9.4](docs/release-notes/0.9.4.de.md), die [Datenbank-Supportmatrix](docs/database-support.de.md) und den [1.0.0-Releaseplan](docs/release-plans/1.0.0.de.md).
 
-## Was ist neu in 0.9.3?
+## Was ist neu in 0.9.4?
 
-Studio ergänzt einen begrenzten schreibgeschützten Datenbankbrowser,
-compilergeprüfte Quellspaltenänderungen und die bestätigte Anlage einer
-MariaDB-Datenbank bei vorhandener Verbindung. Die CLI erstellt ein erstes
-schreibgeschütztes Laravel-Inventar. Native Werte für Decimal, Date, Time,
-Duration, Bytes, Tuple und Set unterstützen die CSV- und Labyrinthbeispiele.
-Die Typmatrix führt weiterhin teilweise und nicht verfügbare Konzepte auf;
-vollständige Typabdeckung wird für dieses Release nicht behauptet. Siehe
-[Release-Notizen](docs/release-notes/0.9.3.de.md),
-[Typinventar](examples/type_system/README.md), [Studio-Anleitung](docs/studio.de.md)
-und [Laravel-Migrator-Anleitung](docs/laravel-migrator.de.md).
+- Setup-Fortschritt und Compose-Ausgabe sind sichtbar; die gewählte Anwendungsadresse wird ausgegeben.
+- Die Datenbankhilfe unterscheidet SQL-Erzeugung vom Anwenden einer Datenbank- und Schemaeinrichtung.
+- Der Kundenablauf des Rechnungstutorials im Studio wurde gegen MariaDB geprüft. Bei fehlgeschlagenen CRUD-Abfragen erklärt die Meldung, wie Datenbank und Schema geprüft werden.
+- MariaDB-`DECIMAL`-Prüfungen bleiben idempotent; nicht vorübergehende Setup-Fehler warten nicht mehr unnötig auf Wiederholungen.
+
+Siehe [Release-Notizen 0.9.4](docs/release-notes/0.9.4.de.md) und den [CLI-Prüfbericht](docs/release-readiness/0.9.4-cli-audit.md).
 
 ## Was ist neu in 0.9.2?
 
@@ -94,7 +90,7 @@ unter Unix nur Besitzerrechte (`0600`). Unter Windows gelten die ACLs des
 Verzeichnisses; vorhandene `.env`-Dateien werden nicht nachträglich mit neuen
 Rechten versehen. Die Datei darf nicht committet oder geteilt werden. Für den
 Produktiveinsatz geeignete Secret-Verwaltung und eigene Zugangsdaten nutzen;
-0.9.3 ist nicht für den Produktiveinsatz freigegeben.
+0.9.4 ist nicht für den Produktiveinsatz freigegeben.
 
 Ein neu erzeugtes MariaDB-Projekt verwendet standardmäßig Deutsch und den
 Lernmodus. Mit `ZELYRA_LANGUAGE=de|en` und `ZELYRA_LEVEL=learn|work` in der
@@ -106,12 +102,12 @@ weitere Einstellungen stehen in der Umgebungsreferenz.
 | Wenn du … | lies … |
 | --- | --- |
 | Zelyra Schritt für Schritt lernen möchtest | [Getting Started](docs/getting-started.de.md) · [Deutsches Handbuch](docs/handbook/de/handbuch.md) · [English handbook](docs/handbook/en/handbook.md) |
-| sehen möchtest, was Compiler 0.9.3 tatsächlich kann | [Umgesetzte Funktionen](docs/implemented.de.md) · [English](docs/implemented.en.md) |
+| sehen möchtest, was Compiler 0.9.4 tatsächlich kann | [Umgesetzte Funktionen](docs/implemented.de.md) · [English](docs/implemented.en.md) |
 | wissen möchtest, was die Sprache spezifiziert | [Sprachspezifikation](docs/specification.de.md) · [Quellenlandkarte und Prüfanleitung](docs/source-authority.de.md) |
 | Projekt oder Umgebung konfigurieren möchtest | [Umgebung und Konfiguration](docs/env.md) · [English reference](docs/env.en.md) |
 | Datenbankunterstützung prüfen möchtest | [Datenbank-Supportmatrix](docs/database-support.de.md) · [English](docs/database-support.en.md) |
 | den lokalen Editor oder sichere Regex-Änderungen nutzen möchtest | [Zelyra Studio](docs/web-editor.de.md) · [Textänderungsbefehl](docs/text-edit.de.md) |
-| aktuelle und geplante Arbeiten prüfen möchtest | [Roadmap](docs/ROADMAP.de.md) · [Releaseplan 0.9.3](docs/release-plans/0.9.3.de.md) · [Releaseplan 1.0.0](docs/release-plans/1.0.0.de.md) |
+| aktuelle und geplante Arbeiten prüfen möchtest | [Roadmap](docs/ROADMAP.de.md) · [Releaseplan 0.9.4](docs/release-plans/0.9.4.de.md) · [Releaseplan 1.0.0](docs/release-plans/1.0.0.de.md) |
 | die Entwicklungsrichtung verstehen möchtest | [Manifest](docs/MANIFESTO.de.md) · [KI-native Architektur](docs/architecture/ai-native-development.de.md) · [Entwurf lesbarer Regex-Textbearbeitung](docs/design/readable-regex-text-editing.de.md) |
 | konkrete Release-Änderungen suchst | [Changelog](CHANGELOG.md) · [GitHub-Releases](https://github.com/sf1976/zelyra/releases) |
 

@@ -189,7 +189,7 @@ fi
 
 echo "[4/5] checking recovery, CRUD pages, and published ports"
 if ! recovery_output="$(COMPOSE_PROJECT_NAME="${compose_project}" \
-    "${zelyra_bin}" setup --all "${project_dir}" 2>&1)"; then
+    "${zelyra_bin}" setup "${project_dir}" --all 2>&1)"; then
     printf '%s\n' "${recovery_output}" >&2
     exit 1
 fi
