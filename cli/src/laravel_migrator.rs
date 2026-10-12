@@ -775,8 +775,8 @@ mod tests {
         let (written, counts) = analyze(&root, &report, "json").unwrap();
         let body = fs::read_to_string(&written).unwrap();
         assert!(body.contains("/orders"));
-        assert!(body.contains("Zelyra Laravel Migrator 0.9.5"));
-        assert!(body.contains("\"mapping_ruleset\": \"0.9.5\""));
+        assert!(body.contains("Zelyra Laravel Migrator 0.9.6"));
+        assert!(body.contains("\"mapping_ruleset\": \"0.9.6\""));
         assert!(!body.contains("must-not-be-read-or-reported"));
         assert!(!body.contains("/secret"));
         assert!(counts.0 >= 1);

@@ -892,9 +892,9 @@ IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
   Zertifizierungsstellen, begrenzte Nachrichten und Anbindung an die bestehende
   MariaDB-Outbox. Der Worker stellt nur ausdrücklich zu; TLS wird nie
   stillschweigend abgestuft. Mail-Capabilities und lokale Testsenke dokumentieren.
-- [ ] In 0.9.6 sichere benannte Templates und begrenzte Datei-Anhänge ergänzen,
-  die Notification-Vorlagen darauf aufbauen und die gleiche Größen-, Escape-
-  und Herkunftsprüfung verwenden.
+- [ ] Sichere benannte Templates und begrenzte Datei-Anhänge in 0.9.7 zusammen
+  mit empfängergebundener Benachrichtigungszustellung ergänzen; gemeinsame
+  Größen-, Escape- und Herkunftsprüfungen verwenden.
 - Abschlusskriterien bestanden am exakten Kandidaten: lokaler SMTP-End-to-End-Test mit vertrauenswürdiger
   lokaler CA, STARTTLS und Authentifizierung; außerdem Tests für
   Konfigurationsablehnung, Größenlimit, Header-Injection, Geheimnisredaktion,
@@ -915,19 +915,25 @@ IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
   Blockaden angenommener Zuordnungen werden als Zelyra-Umsetzungsaufgabe in
   derselben Release-Reihe geführt und behoben, bevor die Zuordnung als
   unterstützt gilt.
-- [🗺️] Ein persistentes, mandantengebundenes In-App-Benachrichtigungszentrum mit
-  ungelesener Anzahl, Gelesen-/Archiviert-Aktionen, Seitennavigation,
-  Einstellungen und klaren Aufbewahrungsregeln bauen. Anwendungsereignisse
-  optional über den SMTP-Pfad aus 0.9.5 versenden; In-App-Nachrichten müssen auch
-  ohne Mail funktionieren. Die Outbox übernimmt wiederholbare Zustellung,
-  Duplikatverhalten wird ausdrücklich geregelt.
-- Nachweis: Autorisierungstests verhindern Auflistung, Änderung oder Zählung der
-  Nachrichten anderer Mandanten. Wiederholungen, Idempotenz, Aufbewahrung,
-  Barrierefreiheit und Fehlerzustände sind integriert geprüft. Ein externer
-  Pushdienst ist nicht erforderlich.
+- [🗺️] Einen mandantengebundenen gemeinsamen In-App-Benachrichtigungsfeed mit
+  ungelesener Anzahl, Seitennavigation, Ablauf-Filter, Soft-Delete-Archiv und
+  bearbeitbaren Einstellungsdatensätzen ergänzen. Dieser erste Schritt behauptet
+  noch keine persönlichen Lesebestätigungen, geplante Löschung nach Ablauf oder
+  ereignisgesteuerte E-Mail; dafür sind empfängergebundene Zustellung und 0.9.7
+  vorgesehen. Der Feed bleibt ohne SMTP nutzbar.
+- Nachweis: MariaDB-Integration belegt, dass Mitglieder Nachrichten anderer
+  Mandanten weder auflisten noch zählen können, archivierte und abgelaufene
+  Einträge wie konfiguriert ausgeblendet werden und erratene mandantenfremde IDs
+  verborgen bleiben. Lokalisierung, erzeugte Formulare und Fehlerzustände sind
+  abgedeckt. Ein externer Pushdienst ist nicht erforderlich.
 
 ## Release 0.9.7 — Datenbank- und Sicherheitshärtung
 
+- [🗺️] Das Benachrichtigungszentrum um persönliche Lesebestätigungen,
+  Empfängerautorisierung, begrenzte Aufbewahrung, sichere benannte Templates und
+  optionale SMTP-Zustellung über die transaktionale Outbox erweitern. Atomare
+  Einreihung, idempotente Wiederholungen, mandanten- und empfängerfremde
+  ID-Angriffe sowie SMTP-Duplikatverhalten prüfen.
 - [🗺️] Die Laravel-Analyse für Mandantengrenzen, Autorisierung,
   Datei-Downloads/-Uploads, Zahlungs-/Buchhaltungsabläufe und öffentliche
   Endpunkte härten. Soweit die unterstützte Syntax reicht, Belege über Routen,

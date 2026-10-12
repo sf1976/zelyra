@@ -429,7 +429,8 @@ fn command_help_explains_options_without_running_the_command() {
     let migrator = run(&["migrate", "laravel", "--help"]);
     assert!(migrator.status.success());
     let migrator_help = String::from_utf8_lossy(&migrator.stdout);
-    assert!(migrator_help.contains("zelyra migrate laravel <projekt> --report <pfad>"));
+    assert!(migrator_help
+        .contains("zelyra migrate laravel <projekt> [--report <pfad>] [--output <ziel>]"));
     assert!(migrator_help.contains("`.env`-Dateien werden nicht"));
 
     let migration_group = run(&["migrate", "--help"]);

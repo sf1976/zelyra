@@ -888,8 +888,8 @@ language backlog as one 0.9.4 change.
   certificate authorities, bounded messages, and integration with the existing
   MariaDB outbox. Dispatch remains explicit; TLS never silently downgrades.
   Document email capabilities and the local test sink.
-- [ ] Add safe named templates and bounded file attachments in 0.9.6; build
-  notification templates on that path with shared size, escaping, and source
+- [ ] Add safe named templates and bounded file attachments in 0.9.7 alongside
+  recipient-aware notification delivery; use shared size, escaping, and source
   checks.
 - Exit evidence passed on the exact candidate: local SMTP end-to-end test with a trusted local CA, STARTTLS,
   and authentication; plus tests for rejected configuration, size limits,
@@ -909,18 +909,23 @@ language backlog as one 0.9.4 change.
   behavior, and every generated project must pass the matching Zelyra compiler.
   Treat each blocker in an accepted mapping as a Zelyra implementation item in
   the same release train, and close it before calling that mapping supported.
-- [🗺️] Add a persistent, tenant-scoped in-app notification center with unread
-  counts, read/archive actions, pagination, preferences, and clear retention
-  rules. Connect application events to optional email through the 0.9.5 SMTP
-  path; keep in-app notifications useful with mail disabled. Use the outbox for
-  retryable delivery and make duplicate handling explicit.
-- Exit evidence: authorization tests prove users cannot list, change, or count
-  another tenant's notifications; retries, idempotency, retention, accessibility,
-  and failure states have integration coverage. No external push service is
-  required.
+- [🗺️] Add a tenant-scoped shared in-app notification feed with unread counts,
+  pagination, expiry filtering, soft-delete archive, and editable preference
+  records. This first slice does not claim per-user read receipts, scheduled
+  retention deletion, or event-triggered email; those require recipient-aware
+  delivery and are planned for 0.9.7. Keep this slice useful with SMTP disabled.
+- Exit evidence: MariaDB integration proves a member cannot list or count a
+  different tenant's notifications, archived and expired items are excluded as
+  configured, and guessed cross-tenant IDs stay hidden. Localization, generated
+  forms, and failure states have coverage. No external push service is required.
 
 ## Release 0.9.7 — database and security hardening
 
+- [🗺️] Extend the notification center with per-user read receipts, recipient
+  authorization, bounded retention, safe named templates, and optional SMTP
+  delivery through the transactional outbox. Verify atomic enqueueing,
+  idempotent retries, cross-tenant and cross-recipient ID attacks, and duplicate
+  SMTP delivery behavior.
 - [🗺️] Harden Laravel migration analysis for tenant boundaries, authorization,
   downloads/uploads, payments/accounting, and public endpoints. Trace evidence
   through routes, middleware, controllers, models, and relations where the
