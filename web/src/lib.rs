@@ -434,6 +434,9 @@ pub enum TableViewFilterKind {
     Decimal,
     Integer,
     Unsigned,
+    Date,
+    Time,
+    Timestamp,
     Bool,
     Other,
 }
@@ -7792,7 +7795,10 @@ fn tableview_filter_operator_supported(
         TableViewFilterKind::Numeric
         | TableViewFilterKind::Decimal
         | TableViewFilterKind::Integer
-        | TableViewFilterKind::Unsigned => matches!(
+        | TableViewFilterKind::Unsigned
+        | TableViewFilterKind::Date
+        | TableViewFilterKind::Time
+        | TableViewFilterKind::Timestamp => matches!(
             operator,
             FilterOperator::Equal
                 | FilterOperator::GreaterThan
@@ -7822,7 +7828,10 @@ fn tableview_filter_operator_options(kind: TableViewFilterKind) -> &'static [Fil
         TableViewFilterKind::Numeric
         | TableViewFilterKind::Decimal
         | TableViewFilterKind::Integer
-        | TableViewFilterKind::Unsigned => &[
+        | TableViewFilterKind::Unsigned
+        | TableViewFilterKind::Date
+        | TableViewFilterKind::Time
+        | TableViewFilterKind::Timestamp => &[
             FilterOperator::Equal,
             FilterOperator::GreaterThan,
             FilterOperator::GreaterThanOrEqual,
@@ -7902,6 +7911,9 @@ fn numeric_filter_query_value(
             .filter(|v| v.is_finite())
             .map(QueryValue::Float)
             .ok_or_else(|| "must be a finite number".into()),
+        TableViewFilterKind::Date => temporal_query_value(&Type::Date, value),
+        TableViewFilterKind::Time => temporal_query_value(&Type::Time, value),
+        TableViewFilterKind::Timestamp => temporal_query_value(&Type::Timestamp, value),
         TableViewFilterKind::Bool => match value {
             "true" | "1" => Ok(QueryValue::Bool(true)),
             "false" | "0" => Ok(QueryValue::Bool(false)),
@@ -7913,9 +7925,29 @@ fn numeric_filter_query_value(
     }
 }
 
+fn temporal_query_value(ty: &Type, value: &str) -> Result<QueryValue, String> {
+    match ty {
+        Type::Date if zelyra_ast::temporal::valid_date(value) => Ok(QueryValue::Date(value.into())),
+        Type::Time if zelyra_ast::temporal::valid_time(value) => Ok(QueryValue::Time(value.into())),
+        Type::Timestamp => zelyra_ast::temporal::parse_timestamp_input(value)
+            .map(QueryValue::Timestamp)
+            .ok_or_else(|| "must be a valid UTC Timestamp".into()),
+        _ => Err(format!("must be a valid {ty}")),
+    }
+}
+
 fn column_is_text(column: &zelyra_database::Column) -> bool {
     let sql_type = column.sql_type.to_ascii_uppercase();
     sql_type.contains("CHAR") || sql_type.contains("TEXT")
+}
+
+fn column_is_temporal(column: &zelyra_database::Column) -> bool {
+    let ty = column.sql_type.to_ascii_uppercase();
+    ty == "DATE"
+        || ty == "TIME"
+        || ty.starts_with("TIME(")
+        || ty.contains("TIMESTAMP")
+        || ty.contains("DATETIME")
 }
 
 fn column_is_numeric(column: &zelyra_database::Column) -> bool {
@@ -7937,7 +7969,9 @@ fn filter_operator_supported(column: &zelyra_database::Column, operator: FilterO
         FilterOperator::GreaterThan
         | FilterOperator::GreaterThanOrEqual
         | FilterOperator::LessThan
-        | FilterOperator::LessThanOrEqual => column_is_numeric(column) || column_is_text(column),
+        | FilterOperator::LessThanOrEqual => {
+            column_is_numeric(column) || column_is_text(column) || column_is_temporal(column)
+        }
     }
 }
 
@@ -7951,7 +7985,7 @@ fn filter_operator_options(column: &zelyra_database::Column) -> &'static [Filter
             FilterOperator::IsNull,
             FilterOperator::IsNotNull,
         ]
-    } else if column_is_numeric(column) {
+    } else if column_is_numeric(column) || column_is_temporal(column) {
         &[
             FilterOperator::Equal,
             FilterOperator::GreaterThan,
@@ -8050,6 +8084,15 @@ fn filter_query_value(
     value: &str,
 ) -> Result<zelyra_database::QueryValue, String> {
     let sql_type = column.sql_type.to_ascii_uppercase();
+    if sql_type == "DATE" {
+        return temporal_query_value(&Type::Date, value);
+    }
+    if sql_type == "TIME" || sql_type.starts_with("TIME(") {
+        return temporal_query_value(&Type::Time, value);
+    }
+    if sql_type.contains("TIMESTAMP") || sql_type.contains("DATETIME") {
+        return temporal_query_value(&Type::Timestamp, value);
+    }
     if sql_type.contains("BOOL") {
         return match value {
             "true" | "1" => Ok(zelyra_database::QueryValue::Bool(true)),
@@ -9192,6 +9235,14 @@ fn form_query_parameters(
                 .map_err(|error| format!("form field `{}` {error}", field.name))?,
             Some(Type::Named(name)) if name == "Money" => money_query_value(value)
                 .map_err(|error| format!("form field `{}` {error}", field.name))?,
+            Some(ty @ (Type::Date | Type::Time | Type::Timestamp)) => {
+                temporal_query_value(ty, value)
+                    .map_err(|error| format!("form field `{}` {error}", field.name))?
+            }
+            Some(Type::Duration) => value
+                .parse::<i64>()
+                .map(QueryValue::Int)
+                .map_err(|_| format!("form field `{}` must be integer milliseconds", field.name))?,
             Some(Type::Bool) => {
                 zelyra_database::QueryValue::Bool(matches!(value.as_str(), "true" | "1"))
             }
@@ -9712,6 +9763,11 @@ fn page_query_value(ty: &Type, value: &str) -> Result<QueryValue, String> {
         Type::Float => numeric_filter_query_value(TableViewFilterKind::Numeric, value),
         Type::Decimal => exact_query_value(value),
         Type::Named(name) if name == "Money" => money_query_value(value),
+        Type::Date | Type::Time | Type::Timestamp => temporal_query_value(ty, value),
+        Type::Duration => value
+            .parse::<i64>()
+            .map(QueryValue::Int)
+            .map_err(|_| "query parameter must be integer milliseconds".into()),
         Type::Bool => match value {
             "true" | "1" => Ok(QueryValue::Bool(true)),
             "false" | "0" => Ok(QueryValue::Bool(false)),

@@ -109,3 +109,8 @@ kontrollierte Fehler.
 Aktuelle Date-/Time-/Timestamp-/Duration-Regeln und unabhängige Nachweise:
 [Datum und UTC-Dauern](../../docs/dates.de.md). Timestamp-Eingaben außerhalb
 der ISO-Jahre 0001–9999 werden kontrolliert abgewiesen.
+
+Native SQL-Parameter/Speicherung für Date, Time und UTC-Timestamp sind auf
+MariaDB/MySQL/PostgreSQL geprüft: [SQL-Nachweise](../../docs/release-readiness/0.9.9-calendar-sql.de.md).
+MariaDB/MySQL beginnen bei Jahr 1000, PostgreSQL bei Jahr 0001. Typisierte
+SQL-Ergebnisverwendung bleibt offen; Rohzeilen sind keine Date-Variablen.

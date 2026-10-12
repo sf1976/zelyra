@@ -99,3 +99,8 @@ cover scaled minimum/maximum values, valid wide intermediates, and controlled er
 Current Date/Time/Timestamp/Duration rules and independent evidence:
 [Dates and UTC durations](../../docs/dates.en.md). Timestamp input outside
 ISO years 0001–9999 fails in a controlled way.
+
+Native Date/Time/UTC Timestamp SQL parameters/storage are verified against
+MariaDB/MySQL/PostgreSQL: [SQL evidence](../../docs/release-readiness/0.9.9-calendar-sql.en.md).
+MariaDB/MySQL begin at year 1000, PostgreSQL at year 0001. Typed SQL result
+consumption remains open; raw rows are not Date variables.

@@ -80,17 +80,17 @@ pub(super) fn validate(path: &str, auth: &AuthDef, schema: &Schema) -> bool {
             column.sql_type.eq_ignore_ascii_case("varchar(64)") && !column.nullable && !column.auto
         })
         && window.is_some_and(|column| {
-            column.sql_type.eq_ignore_ascii_case("timestamp") && !column.nullable && !column.auto
+            column.sql_type.eq_ignore_ascii_case("datetime(3)") && !column.nullable && !column.auto
         })
         && count.is_some_and(|column| {
             column.sql_type.eq_ignore_ascii_case("bigint") && !column.nullable && !column.auto
         })
         && blocked.is_some_and(|column| {
-            column.sql_type.eq_ignore_ascii_case("timestamp") && column.nullable && !column.auto
+            column.sql_type.eq_ignore_ascii_case("datetime(3)") && column.nullable && !column.auto
         });
     let mut valid = true;
     if !compatible_columns {
-        report("E-AUTH-040", &format!("password reset rate-limit table {table_name} requires unique non-null bucket_key VARCHAR(64), non-null window_started TIMESTAMP and request_count BIGINT, and nullable blocked_until TIMESTAMP; these columns cannot be auto-generated"));
+        report("E-AUTH-040", &format!("password reset rate-limit table {table_name} requires unique non-null bucket_key VARCHAR(64), non-null window_started DATETIME(3) and request_count BIGINT, and nullable blocked_until DATETIME(3); these columns cannot be auto-generated"));
         valid = false;
     }
     if !table.indexes.iter().chain(&table.uniques).any(|index| {

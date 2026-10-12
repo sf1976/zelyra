@@ -23,6 +23,7 @@ use zelyra_ast::*;
 mod numeric;
 pub mod outbox;
 pub mod sql;
+mod temporal;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DatabaseConfig {
@@ -231,6 +232,15 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
                 (definition.auto && matches!(definition.ty, Type::Timestamp))
                     .then(|| "CURRENT_TIMESTAMP".into())
             });
+            let default = default.map(|value| {
+                if value == "CURRENT_TIMESTAMP"
+                    && matches!(sql_type.as_str(), "DATETIME(3)" | "TIMESTAMPTZ(3)")
+                {
+                    "CURRENT_TIMESTAMP(3)".into()
+                } else {
+                    value
+                }
+            });
             columns.push(Column {
                 name: storage_name,
                 sql_type,
@@ -425,12 +435,15 @@ fn column_mapping(
             Backend::Sqlite => "BLOB",
         },
         Type::Timestamp => match backend {
-            Backend::Postgres => "TIMESTAMPTZ",
-            Backend::MariaDb => "TIMESTAMP",
+            Backend::Postgres => "TIMESTAMPTZ(3)",
+            Backend::MariaDb => "DATETIME(3)",
             Backend::Sqlite => "TEXT",
         },
         Type::Date => "DATE",
-        Type::Time => "TIME",
+        Type::Time => match backend {
+            Backend::Postgres => "TIME(0)",
+            Backend::MariaDb | Backend::Sqlite => "TIME",
+        },
         Type::Duration => match backend {
             Backend::Sqlite => "INTEGER",
             Backend::Postgres | Backend::MariaDb => "BIGINT",
@@ -1446,6 +1459,13 @@ fn is_numeric_sql_literal(bytes: &[u8]) -> bool {
 fn normalize_default(value: &str) -> String {
     let trimmed = value.trim();
     let upper = trimmed.to_ascii_uppercase();
+    if upper
+        .strip_prefix("CURRENT_TIMESTAMP(")
+        .and_then(|value| value.strip_suffix(')'))
+        .is_some_and(|value| matches!(value, "0" | "1" | "2" | "3" | "4" | "5" | "6"))
+    {
+        return upper;
+    }
     match upper.as_str() {
         "CURRENT_TIMESTAMP()" => "CURRENT_TIMESTAMP".into(),
         "TRUE" | "FALSE" | "CURRENT_TIMESTAMP" => upper,
@@ -1976,9 +1996,10 @@ pub fn inspect_postgres(database_url: &str) -> Result<Schema, DatabaseError> {
                 c.data_type,
                 c.numeric_precision,
                 c.numeric_scale,
+                c.datetime_precision,
                 c.udt_name,
                 c.is_nullable,
-                COALESCE(c.character_maximum_length::text, '') AS character_maximum_length,
+                COALESCE(c.character_maximum_length::text, c.datetime_precision::text, '') AS character_maximum_length,
                 c.ordinal_position,
                 EXISTS (
                     SELECT 1
@@ -2125,7 +2146,12 @@ fn inspected_sql_type(data_type: &str, _udt_name: &str, length: &str) -> String 
     match data_type {
         "character varying" if !length.is_empty() => format!("VARCHAR({length})"),
         "character varying" => "TEXT".into(),
+        "timestamp with time zone" if !length.is_empty() => format!("TIMESTAMPTZ({length})"),
         "timestamp with time zone" => "TIMESTAMPTZ".into(),
+        "time without time zone" if !length.is_empty() => {
+            format!("TIME({length})")
+        }
+        "time without time zone" => "TIME".into(),
         "double precision" => "DOUBLE PRECISION".into(),
         "integer" => "INTEGER".into(),
         "bigint" => "BIGINT".into(),
@@ -2216,7 +2242,7 @@ pub fn apply_postgres(database_url: &str, sql: &str) -> Result<(), DatabaseError
 pub fn inspect_mariadb(database_url: &str) -> Result<Schema, DatabaseError> {
     let output = run_mariadb(
         database_url,
-        "SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_KEY, EXTRA, COALESCE(CHARACTER_MAXIMUM_LENGTH, ''), COALESCE(NUMERIC_PRECISION, ''), COALESCE(NUMERIC_SCALE, ''), CASE WHEN COLUMN_DEFAULT IS NULL THEN 'N' ELSE CONCAT('V', HEX(CAST(COLUMN_DEFAULT AS CHAR CHARACTER SET utf8mb4))) END FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME <> '_zelyra_schema_history' ORDER BY TABLE_NAME, ORDINAL_POSITION",
+        "SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_KEY, EXTRA, COALESCE(CHARACTER_MAXIMUM_LENGTH, DATETIME_PRECISION, ''), COALESCE(NUMERIC_PRECISION, ''), COALESCE(NUMERIC_SCALE, ''), CASE WHEN COLUMN_DEFAULT IS NULL THEN 'N' ELSE CONCAT('V', HEX(CAST(COLUMN_DEFAULT AS CHAR CHARACTER SET utf8mb4))) END FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME <> '_zelyra_schema_history' ORDER BY TABLE_NAME, ORDINAL_POSITION",
         None,
     )?;
     let mut schema = parse_mariadb_columns(&output)?;
@@ -2515,6 +2541,9 @@ pub enum QueryValue {
     Float(f64),
     /// Exact fixed-point text; bound as a numeric value rather than binary Float.
     Decimal(String),
+    Date(String),
+    Time(String),
+    Timestamp(i64),
     Bool(bool),
     String(String),
 }
@@ -2719,6 +2748,9 @@ fn postgres_parameter_value(
         QueryValue::Float(_) => Err(DatabaseError {
             message: "PostgreSQL floating-point parameters must be finite".into(),
         }),
+        QueryValue::Date(value) => Ok(Box::new(temporal::Parameter::Date(value.clone()))),
+        QueryValue::Time(value) => Ok(Box::new(temporal::Parameter::Time(value.clone()))),
+        QueryValue::Timestamp(value) => Ok(Box::new(temporal::Parameter::Timestamp(*value))),
         QueryValue::Bool(value) => Ok(Box::new(*value)),
         QueryValue::String(value) => Ok(Box::new(value.clone())),
     }
@@ -2776,6 +2808,7 @@ fn postgres_row_strings(row: &r2d2_postgres::postgres::Row) -> Result<Vec<String
                 PostgresType::FLOAT4 => value!(f32),
                 PostgresType::FLOAT8 => value!(f64),
                 PostgresType::NUMERIC => value!(numeric::NumericText),
+                PostgresType::DATE | PostgresType::TIME | PostgresType::TIMESTAMPTZ => value!(temporal::TemporalText),
                 PostgresType::TEXT | PostgresType::VARCHAR | PostgresType::BPCHAR | PostgresType::NAME => value!(String),
                 _ => Err(DatabaseError {
                     message: format!("PostgreSQL result type `{}` is not supported by the bounded runtime query API", column.type_()),
@@ -2872,6 +2905,82 @@ fn check_decimal_metadata(schema: &Schema, rows: &[Vec<String>]) -> Result<(), D
         }
     }
     Ok(())
+}
+
+/// Verify calendar, whole-second clock, and UTC millisecond storage before use.
+/// This read-only check never approves or executes a schema migration.
+pub fn validate_temporal_storage(database_url: &str, schema: &Schema) -> Result<(), DatabaseError> {
+    if !schema.tables.iter().any(|table| {
+        table.columns.iter().any(|column| {
+            temporal_storage_kind(&column.sql_type, is_postgres_url(database_url)).is_some()
+        })
+    }) {
+        return Ok(());
+    }
+    let sql = if is_postgres_url(database_url) {
+        "SELECT table_name::text, column_name::text, data_type::text, COALESCE(datetime_precision::text, '') AS precision_value FROM information_schema.columns WHERE table_schema = 'public'"
+    } else {
+        "SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, COALESCE(CAST(DATETIME_PRECISION AS CHAR), '') AS precision_value FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE()"
+    };
+    let result = execute_query(database_url, sql, Vec::new()).map_err(|_| DatabaseError {
+        message: "could not verify Date/Time/UTC Timestamp storage; check database access and metadata privileges".into(),
+    })?;
+    check_temporal_metadata(schema, &result.rows, is_postgres_url(database_url))
+}
+
+fn temporal_storage_kind(sql_type: &str, postgres: bool) -> Option<(&'static str, &'static str)> {
+    match sql_type {
+        "DATE" => Some(("date", "")),
+        "TIME" | "TIME(0)" => Some((
+            if postgres {
+                "time without time zone"
+            } else {
+                "time"
+            },
+            "0",
+        )),
+        "DATETIME(3)" | "TIMESTAMPTZ(3)" => Some((
+            if postgres {
+                "timestamp with time zone"
+            } else {
+                "datetime"
+            },
+            "3",
+        )),
+        _ => None,
+    }
+}
+
+fn check_temporal_metadata(
+    schema: &Schema,
+    rows: &[Vec<String>],
+    postgres: bool,
+) -> Result<(), DatabaseError> {
+    for table in &schema.tables {
+        for column in &table.columns {
+            let Some((kind, precision)) = temporal_storage_kind(&column.sql_type, postgres) else {
+                continue;
+            };
+            if !rows.iter().any(|row| {
+                row.len() == 4
+                    && row[0] == table.name
+                    && row[1] == column.name
+                    && row[2] == kind
+                    && (kind == "date" || row[3] == precision)
+            }) {
+                return Err(DatabaseError { message: format!("temporal storage for `{}.{}` must match {}; run `zelyra db plan` and review/apply the schema; no automatic migration was performed", table.name, column.name, column.sql_type) });
+            }
+        }
+    }
+    Ok(())
+}
+
+fn configure_postgres_utc(config: &mut PostgresConfig) {
+    let options = config
+        .get_options()
+        .map(|value| format!("{value} -c TimeZone=UTC"))
+        .unwrap_or_else(|| "-c TimeZone=UTC".into());
+    config.options(&options);
 }
 
 /// Executes a statement batch using the engine selected by the connection URL.
@@ -3084,6 +3193,18 @@ fn mysql_parameter_value(value: &QueryValue) -> Result<Value, DatabaseError> {
         QueryValue::Decimal(value) => {
             validate_exact_parameter(value)?;
             Value::Bytes(value.as_bytes().to_vec())
+        }
+        QueryValue::Date(value) => {
+            temporal::mysql_parameter(&temporal::Parameter::Date(value.clone()))
+                .map_err(postgres_driver_error)?
+        }
+        QueryValue::Time(value) => {
+            temporal::mysql_parameter(&temporal::Parameter::Time(value.clone()))
+                .map_err(postgres_driver_error)?
+        }
+        QueryValue::Timestamp(value) => {
+            temporal::mysql_parameter(&temporal::Parameter::Timestamp(*value))
+                .map_err(postgres_driver_error)?
         }
         QueryValue::Bool(value) => Value::Int(i64::from(*value)),
         QueryValue::String(value) => Value::Bytes(value.as_bytes().to_vec()),
@@ -3685,6 +3806,7 @@ fn build_postgres_pool(
             message: "PostgreSQL DATABASE_URL must include a host".into(),
         });
     }
+    configure_postgres_utc(&mut config);
     config.connect_timeout(Duration::from_secs(u64::from(settings.connect_seconds)));
     let use_tls = tls.mode == MariaDbTlsMode::Required
         || (tls.mode == MariaDbTlsMode::Auto
@@ -3783,10 +3905,10 @@ fn build_mariadb_pool(
             settings.connect_seconds,
         ))))
         .read_timeout(Some(Duration::from_secs(u64::from(settings.query_seconds))))
-        .init(vec![mysql_session_timeout_statement(
-            database_url,
-            settings.query_seconds,
-        )]);
+        .init(vec![
+            mysql_session_timeout_statement(database_url, settings.query_seconds),
+            "SET SESSION time_zone = '+00:00'".into(),
+        ]);
     let options = match ssl_opts {
         Some(ssl_opts) => options.ssl_opts(Some(ssl_opts)),
         None => options,
@@ -4033,11 +4155,11 @@ fn mariadb_default_value(
     if nullable && value.eq_ignore_ascii_case("NULL") {
         return Ok(None);
     }
-    let default = if sql_type == "TIMESTAMP"
-        && (value.eq_ignore_ascii_case("current_timestamp")
-            || value.eq_ignore_ascii_case("current_timestamp()"))
+    let normalized = normalize_default(&value);
+    let default = if (sql_type.starts_with("TIMESTAMP") || sql_type.starts_with("DATETIME"))
+        && (normalized == "CURRENT_TIMESTAMP" || normalized.starts_with("CURRENT_TIMESTAMP("))
     {
-        "CURRENT_TIMESTAMP".into()
+        normalized
     } else if sql_type == "BOOLEAN" && (value == "1" || value == "0") {
         if value == "1" {
             "TRUE".into()
@@ -4085,6 +4207,9 @@ fn mariadb_sql_type(data_type: &str, length: &str, precision: &str, scale: &str)
         "tinyint" => "BOOLEAN".into(),
         "int" | "integer" => "INTEGER".into(),
         "double" => "DOUBLE".into(),
+        "datetime" | "timestamp" | "time" if !length.is_empty() && length != "0" => {
+            format!("{}({length})", data_type.to_ascii_uppercase())
+        }
         "longblob" | "mediumblob" | "tinyblob" => "BLOB".into(),
         other => other.to_uppercase(),
     }
@@ -4406,6 +4531,88 @@ mod tests {
     use super::*;
 
     include!("../../tests/support/bounded_mutations.rs");
+
+    #[test]
+    fn temporal_metadata_rejects_missing_wrong_kind_and_lossy_precision() {
+        for (engine, postgres, stamp_kind, time_kind) in [
+            ("mariadb", false, "datetime", "time"),
+            (
+                "postgres",
+                true,
+                "timestamp with time zone",
+                "time without time zone",
+            ),
+        ] {
+            let desired = schema(&format!("database Main {{ engine: {engine} }} table calendar {{ id: Id primary day: Date required clock: Time required stamp: Timestamp required }}"));
+            let rows: Vec<Vec<String>> = vec![
+                vec!["calendar".into(), "day".into(), "date".into(), "".into()],
+                vec![
+                    "calendar".into(),
+                    "clock".into(),
+                    time_kind.into(),
+                    "0".into(),
+                ],
+                vec![
+                    "calendar".into(),
+                    "stamp".into(),
+                    stamp_kind.into(),
+                    "3".into(),
+                ],
+            ];
+            assert!(check_temporal_metadata(&desired, &rows, postgres).is_ok());
+            let mut date_precision = rows.clone();
+            date_precision[0][3] = "0".into();
+            assert!(check_temporal_metadata(&desired, &date_precision, postgres).is_ok());
+            for (index, field, value) in [
+                (0, 2, "text"),
+                (1, 3, "6"),
+                (2, 3, "0"),
+                (2, 2, "timestamp without time zone"),
+            ] {
+                let mut bad = rows.clone();
+                bad[index][field] = value.into();
+                let error = check_temporal_metadata(&desired, &bad, postgres).unwrap_err();
+                assert!(error.message.contains("db plan"));
+                assert!(error
+                    .message
+                    .contains(&format!("calendar.{}", rows[index][1])));
+            }
+            assert!(check_temporal_metadata(&desired, &[], postgres).is_err());
+        }
+    }
+
+    #[test]
+    fn postgres_startup_options_keep_existing_settings_and_force_utc() {
+        let mut config = PostgresConfig::new();
+        config.options("-c search_path=public -c TimeZone=Europe/Berlin");
+        configure_postgres_utc(&mut config);
+        assert_eq!(
+            config.get_options(),
+            Some("-c search_path=public -c TimeZone=Europe/Berlin -c TimeZone=UTC")
+        );
+        let mut config = PostgresConfig::new();
+        configure_postgres_utc(&mut config);
+        assert_eq!(config.get_options(), Some("-c TimeZone=UTC"));
+    }
+
+    #[test]
+    fn timestamp_now_defaults_match_the_declared_millisecond_precision() {
+        for engine in ["mariadb", "mysql", "postgres"] {
+            let desired = schema(&format!("database Main {{ engine: {engine} }} table dates {{ id: Id primary stamp: Timestamp default now }}"));
+            assert_eq!(
+                desired.tables[0].columns[1].default.as_deref(),
+                Some("CURRENT_TIMESTAMP(3)")
+            );
+        }
+    }
+
+    #[test]
+    fn timestamp_storage_retains_milliseconds_and_post_2038_instants() {
+        for (engine, expected) in [("mariadb", "DATETIME(3)"), ("postgres", "TIMESTAMPTZ(3)")] {
+            let schema = schema(&format!("database main {{ engine: {engine} }} table dates {{ id: Id primary stamp: Timestamp required }}"));
+            assert_eq!(schema.tables[0].columns[1].sql_type, expected);
+        }
+    }
 
     #[test]
     fn decimal_schema_check_rejects_old_or_missing_precision() {
@@ -6157,7 +6364,7 @@ mod tests {
             }
             "#,
         );
-        assert!(schema.create_sql().contains("`deleted_at` TIMESTAMP"));
+        assert!(schema.create_sql().contains("`deleted_at` DATETIME(3)"));
     }
 
     #[test]
