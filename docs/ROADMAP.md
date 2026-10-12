@@ -913,7 +913,7 @@ language backlog as one 0.9.4 change.
   pagination, expiry filtering, soft-delete archive, and editable preference
   records. This first slice does not claim per-user read receipts, scheduled
   retention deletion, or event-triggered email; those require recipient-aware
-  delivery and are planned for 0.9.7. Keep this slice useful with SMTP disabled.
+  delivery and are planned for 0.9.8. Keep this slice useful with SMTP disabled.
 - Exit evidence: MariaDB integration proves a member cannot list or count a
   different tenant's notifications, archived and expired items are excluded as
   configured, and guessed cross-tenant IDs stay hidden. Localization, generated
@@ -921,24 +921,24 @@ language backlog as one 0.9.4 change.
 
 ## Release 0.9.7 — Studio, invoice tutorial, and hardening
 
-- [🧪] Split the invoice tutorial between `main.zyl` and feature modules, with
+- [✅] Split the invoice tutorial between `main.zyl` and feature modules, with
   a desktop dashboard backed by real metrics and a guided customer/item/invoice
   flow. The Tabler CSS component is optional, local, and MIT-licensed; no CDN
   dependency. Keep the learning path's net, 19% VAT, and gross print output.
-- [🧪] Fix project-map gaps: resolve views across modules only within the local
+- [✅] Fix project-map gaps: resolve views across modules only within the local
   module or through imported public views, include CRUD layouts, and show table
   views. Explain limits and unresolved relationships with localized stable
   reasons; do not guess SQL relationships.
-- [🗺️] Add responsive browser E2E for desktop and narrow viewports, real
+- [✅] Add responsive browser E2E for desktop and narrow viewports, real
   metrics, generated CRUD forms, offline local Tabler delivery, and printable
   invoices.
 - [🗺️] Deliver personal read receipts and recipient authorization, bounded
-  retention, safe templates/attachments, and optional SMTP. Verify atomic
-  enqueueing, idempotent retries, cross-tenant/recipient IDs, and duplicate
-  delivery behavior.
+  retention, safe templates/attachments, and optional SMTP in 0.9.8. Verify
+  atomic enqueueing, idempotent retries, cross-tenant/recipient IDs, and
+  duplicate delivery behavior.
 - [🗺️] Harden Laravel analysis for tenant boundaries, authorization,
-  downloads/uploads, payments/accounting, and public endpoints. Missing or
-  ambiguous evidence requires manual review.
+  downloads/uploads, payments/accounting, and public endpoints by 0.9.8.
+  Missing or ambiguous evidence requires manual review.
 - [🗺️] Close the promised MariaDB, MySQL, and PostgreSQL workflow matrix for
   1.0; document exact server versions, supported workflows, and limitations.
   Verify relations, TLS, backup/restore, and tenant-filtered CRUD with negative

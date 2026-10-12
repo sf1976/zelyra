@@ -4,6 +4,25 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language compatibility line remains `0.1`. Compiler and repository
 releases follow Semantic Versioning independently of the language line.
 
+## 0.9.7 — 2026-10-12
+
+- Expand the invoice tutorial into a responsive multi-file business app with
+  stored-record dashboard metrics, a local Tabler CSS baseline, and desktop,
+  mobile, and print layouts. Browser checks cover its CRUD paths and ensure no
+  external assets are requested. / Das Rechnungstutorial zu einer responsiven
+  mehrteiligen Geschäftsanwendung mit Kennzahlen gespeicherter Datensätze,
+  lokalem Tabler-CSS-Grundstil sowie Desktop-, Mobil- und Drucklayouts
+  ausbauen. Browserprüfungen decken CRUD-Wege ab und sichern lokale Assets.
+- Resolve project-map page and CRUD views only within their module or through
+  explicit public imports, include table views, and report stable localized
+  diagnostics for unresolved and limited relationships. / Seiten- und CRUD-
+  Ansichten der Projektkarte nur im eigenen Modul oder über ausdrückliche
+  öffentliche Importe auflösen, TableViews aufnehmen und offene sowie
+  begrenzte Beziehungen mit stabilen lokalisierten Diagnosen ausgeben.
+- Make Studio browser navigation wait for virtualized source lines before
+  attempting editor actions. / Studio-Browsernavigation wartet auf virtuell
+  gerenderte Quelltextzeilen, bevor Editoraktionen darauf zugreifen.
+
 ## 0.9.6 — 2026-10-12
 
 - Add an opt-in Laravel scaffold preview alongside static analysis. It writes a
@@ -18,10 +37,10 @@ releases follow Semantic Versioning independently of the language line.
 - Add a tenant-scoped shared notification feed with unread counts, expiry
   filtering, soft-delete archive, and editable preference records. Personal
   read receipts, scheduled retention, and event-triggered mail remain planned
-  for 0.9.7. / Mandantengebundenen gemeinsamen Benachrichtigungsfeed mit
+  for 0.9.8. / Mandantengebundenen gemeinsamen Benachrichtigungsfeed mit
   ungelesener Anzahl, Ablauf-Filter, Soft-Delete-Archiv und bearbeitbaren
   Einstellungsdatensätzen ergänzen. Persönliche Lesebestätigungen, geplante
-  Aufbewahrung und ereignisgesteuerte Mail bleiben für 0.9.7 vorgesehen.
+  Aufbewahrung und ereignisgesteuerte Mail bleiben für 0.9.8 vorgesehen.
 - Harden generated paths and report handling against overlap, traversal,
   symlink escape, pre-existing targets, and partial output. / Generierte Pfade
   und Berichte gegen Überschneidung, Traversal, Symlink-Ausbruch, vorhandene
