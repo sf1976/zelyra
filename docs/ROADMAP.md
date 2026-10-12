@@ -1057,6 +1057,16 @@ language backlog as one 0.9.4 change.
   also pass focused positive and negative tests, including capability
   propagation. General constraints/traits, generic aliases, closures, and
   generic function references remain outside this supported scope.
+- [🧪] Studio charts now support fixed aggregates, exact text filters,
+  inclusive `DATE` ranges, safe parameter binding, saving and reloading chart
+  configurations, and local presentation/PDF previews. MariaDB and PostgreSQL
+  browser/database E2E checks pass. Saved SQL views, application-page embedding,
+  compiler validation of report files, and full accessibility/export evidence
+  remain open release criteria.
+- [🧪] The Records value model does not provide classes, methods, reference
+  mutation, or observable object identity. These were previously listed as a
+  deliberate exclusion; the current 0.9.9 scope requires a bounded Zelyra-style
+  class model before freeze. Inheritance remains a separate, unpromised choice.
 - Exit criteria: no open implementation, security, database, migration,
   packaging, or documentation blocker remains. If one remains, 0.9.9 is not
   complete. See the [0.9.9 plan](release-plans/0.9.9.en.md).

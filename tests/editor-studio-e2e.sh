@@ -61,7 +61,7 @@ else
   psql --host=127.0.0.1 --port="$database_port" --username=zelyra_ci --dbname=zelyra_ci \
     --command="CREATE DATABASE \"$database_name\"" >/dev/null
   psql --host=127.0.0.1 --port="$database_port" --username=zelyra_ci --dbname="$database_name" \
-    --command='CREATE TABLE departments (id BIGSERIAL PRIMARY KEY, name VARCHAR(80) NOT NULL); CREATE TABLE customers (id BIGSERIAL PRIMARY KEY, department_id BIGINT NOT NULL REFERENCES departments(id), name VARCHAR(120) NOT NULL, legacy_code VARCHAR(20))' >/dev/null
+    --command='CREATE TABLE departments (id BIGSERIAL PRIMARY KEY, name VARCHAR(80) NOT NULL); CREATE TABLE customers (id BIGSERIAL PRIMARY KEY, department_id BIGINT NOT NULL REFERENCES departments(id), name VARCHAR(120) NOT NULL, amount NUMERIC(10,2) NOT NULL, legacy_code VARCHAR(20))' >/dev/null
   engine="postgres"
 fi
 database_created=1
@@ -96,12 +96,14 @@ database main {
 table departments {
     id: Id primary auto
     name: String(80) required
+    created_at: Date?
 }
 
 table customers {
     id: Id primary auto
     department: Department required
     name: String(120) required
+    amount: Decimal required
     description: String?
 }
 
@@ -190,7 +192,10 @@ assert result["database"] == os.environ["ZELYRA_STUDIO_E2E_DATABASE"], result
 PY
   mariadb --protocol=tcp --host=127.0.0.1 --port="$database_port" --user=root \
     --batch --skip-column-names \
-    -e "CREATE TABLE \`$database_name\`.departments (id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, name VARCHAR(80) NOT NULL) ENGINE=InnoDB; CREATE TABLE \`$database_name\`.customers (id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, department_id BIGINT NOT NULL, name VARCHAR(120) NOT NULL, legacy_code VARCHAR(20) NULL, CONSTRAINT fk_studio_customer_department FOREIGN KEY (department_id) REFERENCES \`$database_name\`.departments(id)) ENGINE=InnoDB"
+    -e "CREATE TABLE \`$database_name\`.departments (id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, name VARCHAR(80) NOT NULL, created_at DATE NULL) ENGINE=InnoDB; CREATE TABLE \`$database_name\`.customers (id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, department_id BIGINT NOT NULL, name VARCHAR(120) NOT NULL, amount DECIMAL(10,2) NOT NULL, legacy_code VARCHAR(20) NULL, CONSTRAINT fk_studio_customer_department FOREIGN KEY (department_id) REFERENCES \`$database_name\`.departments(id)) ENGINE=InnoDB; INSERT INTO \`$database_name\`.departments (name, created_at) VALUES ('Sales', '2026-10-01'), ('Support', '2026-10-05'), ('Sales', '2026-10-11'); INSERT INTO \`$database_name\`.customers (department_id, name, amount) VALUES (1, 'Alice', 12.50), (2, 'Bert', 7.00)"
+else
+  psql --host=127.0.0.1 --port="$database_port" --username=zelyra_ci --dbname="$database_name" \
+    --command="ALTER TABLE departments ADD COLUMN created_at DATE NULL; INSERT INTO departments (name, created_at) VALUES ('Sales', '2026-10-01'), ('Support', '2026-10-05'), ('Sales', '2026-10-11'); INSERT INTO customers (department_id, name, amount) VALUES (1, 'Alice', 12.50), (2, 'Bert', 7.00)" >/dev/null
 fi
 
 ZELYRA_STUDIO_E2E_PORT="$port" \
@@ -266,6 +271,81 @@ assert any(
     for edge in project_map["edges"]
 ), "project map must resolve views imported from another module"
 
+chart = request("database-chart-preview", "POST", {
+    "version": 1,
+    "title": "Department counts",
+    "table": "departments",
+    "groupBy": "name",
+    "aggregation": "count",
+    "measure": None,
+    "kind": "bar",
+})
+assert chart["readOnly"] is True and chart["limit"] == 20, chart
+assert chart["columns"] == ["name", "value"]
+assert chart["rows"] == [["Sales", "2"], ["Support", "1"]], chart
+filtered_chart = request("database-chart-preview", "POST", {
+    "table": "departments",
+    "groupBy": "name",
+    "aggregation": "count",
+    "measure": None,
+    "filter": {"column": "name", "value": "Sales"},
+    "dateRange": {"column": "created_at", "from": "2026-10-01", "to": "2026-10-05"},
+})
+assert filtered_chart["rows"] == [["Sales", "1"]], filtered_chart
+decimal_chart = request("database-chart-preview", "POST", {
+    "table": "customers",
+    "groupBy": "name",
+    "aggregation": "sum",
+    "measure": "amount",
+})
+assert decimal_chart["rows"] == [["Alice", "12.50"], ["Bert", "7.00"]], decimal_chart
+injection_filter = request("database-chart-preview", "POST", {
+    "table": "departments",
+    "groupBy": "name",
+    "aggregation": "count",
+    "measure": None,
+    "filter": {"column": "name", "value": "Sales' OR 1=1 --"},
+})
+assert injection_filter["rows"] == [], injection_filter
+request("database-chart-preview", "POST", {
+    "table": "departments",
+    "groupBy": "name",
+    "aggregation": "count",
+    "measure": None,
+    "dateRange": {"column": "created_at", "from": "2026-02-30", "to": None},
+}, expect=400)
+request("database-chart-preview", "POST", {
+    "table": "departments",
+    "groupBy": "name",
+    "aggregation": "count",
+    "measure": None,
+    "dateRange": {"column": "created_at", "from": "2026-10-05", "to": "2026-10-01"},
+}, expect=400)
+request("database-chart-preview", "POST", {
+    "table": "departments; DROP TABLE customers",
+    "groupBy": "name",
+    "aggregation": "count",
+    "measure": None,
+}, expect=422)
+request("database-chart-preview", "POST", {
+    "table": "departments",
+    "groupBy": "name",
+    "aggregation": "sum",
+    "measure": "name",
+}, expect=422)
+request("database-chart-preview", "POST", {
+    "table": "customers",
+    "groupBy": "legacy_code",
+    "aggregation": "count",
+    "measure": None,
+}, expect=422)
+request("database-chart-preview", "POST", {
+    "table": "departments",
+    "groupBy": "name",
+    "aggregation": "sum) FROM customers; --",
+    "measure": "name",
+}, expect=400)
+
 path = "file?path=" + urllib.parse.quote("main.zyl")
 original = request(path)
 payload = {"path": "main.zyl", "baseHash": original["hash"], "table": "customers", "fields": ["name"], "resourceName": "Customer", "title": "Customer"}
@@ -312,5 +392,5 @@ else
   table_count="$(xargs <<<"$table_count")"
   row_count="$(xargs <<<"$row_count")"
 fi
-[[ "$table_count" == 2 && "$row_count" == 0 ]]
+[[ "$table_count" == 2 && "$row_count" == 2 ]]
 echo "Zelyra Studio $backend database creation, schema, compiler preview, stale-file conflict, and explicit apply passed"

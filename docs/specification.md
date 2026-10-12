@@ -586,9 +586,11 @@ Zelyra's core model uses value-semantic records. Domain identity lives in
 explicit ID fields; `record_with` creates a new record for an update. The
 language currently defines no `class` construct, mutable shared object
 references, object-identity comparisons, or inheritance. This boundary avoids
-hidden alias mutations and keeps database and JSON values inspectable. A future
-object model would first need defined lifetime, mutation, and shared-state
-rules.
+hidden alias mutations and keeps database and JSON values inspectable. This
+describes the implemented scope of the reviewed source build. A bounded class
+model with defined reference identity and field mutation remains open for the
+0.9.9 freeze; see the [0.9.9 release plan](release-plans/0.9.9.en.md). Do not
+read this pending feature as already supported.
 
 ### Named function values in 0.9.9
 

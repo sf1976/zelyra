@@ -379,6 +379,9 @@ fn editor_response(
         ("GET", "database-schema") => database_schema_response(state),
         ("GET", "database-target") => database_target_response(state),
         ("GET", "database-rows") => database_rows_response(state, request),
+        ("POST", "database-chart-preview") => {
+            database_chart_preview(state, parse_json_body(&request.body)?)
+        }
         ("GET", "symbols") => {
             let query = request
                 .target
@@ -1463,6 +1466,515 @@ fn database_rows_response(
         "truncated": truncated,
     });
     Ok((200, "application/json; charset=utf-8", response.to_string()))
+}
+
+fn database_chart_preview(
+    state: &EditorState,
+    value: Value,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    const MAX_GROUPS: usize = 20;
+    const MAX_CELL_CHARACTERS: usize = 256;
+
+    let table_name = value
+        .get("table")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty() && value.len() <= 128)
+        .ok_or((
+            400,
+            "table must be a non-empty name of at most 128 bytes".into(),
+        ))?;
+    let group_name = value
+        .get("groupBy")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty() && value.len() <= 128)
+        .ok_or((
+            400,
+            "groupBy must be a non-empty column name of at most 128 bytes".into(),
+        ))?;
+    let aggregation = value
+        .get("aggregation")
+        .and_then(Value::as_str)
+        .filter(|value| matches!(*value, "count" | "sum" | "avg" | "min" | "max"))
+        .ok_or((
+            400,
+            "aggregation must be count, sum, avg, min, or max".into(),
+        ))?;
+    let measure_name = value
+        .get("measure")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty() && value.len() <= 128);
+    if aggregation != "count" && measure_name.is_none() {
+        return Err((400, "measure is required for this aggregation".into()));
+    }
+    let filter = match value.get("filter") {
+        None | Some(Value::Null) => None,
+        Some(filter) => {
+            let column = filter
+                .get("column")
+                .and_then(Value::as_str)
+                .filter(|value| !value.is_empty() && value.len() <= 128)
+                .ok_or((400, "filter.column must be a non-empty column name".into()))?;
+            let filter_value = filter
+                .get("value")
+                .and_then(Value::as_str)
+                .filter(|value| value.len() <= 256)
+                .ok_or((400, "filter.value must be text up to 256 bytes".into()))?;
+            Some((column.to_owned(), filter_value.to_owned()))
+        }
+    };
+    let date_range = match value.get("dateRange") {
+        None | Some(Value::Null) => None,
+        Some(range) => {
+            let column = range
+                .get("column")
+                .and_then(Value::as_str)
+                .filter(|value| !value.is_empty() && value.len() <= 128)
+                .ok_or((
+                    400,
+                    "dateRange.column must be a non-empty column name".into(),
+                ))?;
+            let parse_date = |key: &str| -> Result<Option<String>, (u16, String)> {
+                match range.get(key) {
+                    None | Some(Value::Null) => Ok(None),
+                    Some(value) => {
+                        let value = value
+                            .as_str()
+                            .ok_or((400, format!("dateRange.{key} must be an ISO date")))?;
+                        if value.is_empty() {
+                            return Ok(None);
+                        }
+                        if !is_valid_chart_date(value) {
+                            return Err((
+                                400,
+                                format!("dateRange.{key} must be a valid YYYY-MM-DD date"),
+                            ));
+                        }
+                        Ok(Some(value.to_owned()))
+                    }
+                }
+            };
+            let from = parse_date("from")?;
+            let to = parse_date("to")?;
+            if from.is_none() && to.is_none() {
+                None
+            } else {
+                if from
+                    .as_deref()
+                    .zip(to.as_deref())
+                    .is_some_and(|(from, to)| from > to)
+                {
+                    return Err((400, "dateRange.from must not be after dateRange.to".into()));
+                }
+                Some((column.to_owned(), from, to))
+            }
+        }
+    };
+
+    let (declared, live, _) = editor_database_schemas(state)?;
+    let declared_table = declared
+        .tables
+        .iter()
+        .find(|table| table.name == table_name);
+    if declared_table.is_none() {
+        return Err((
+            422,
+            "charts can only query tables declared in the current Zelyra project".into(),
+        ));
+    }
+    let declared_table = declared_table.expect("declared table presence was checked above");
+    if !declared_table
+        .columns
+        .iter()
+        .any(|column| column.name == group_name)
+    {
+        return Err((
+            422,
+            "the grouping column must be declared in the current Zelyra project".into(),
+        ));
+    }
+    let live_table = live
+        .tables
+        .iter()
+        .find(|table| table.name == table_name)
+        .ok_or((
+            409,
+            "the declared chart table is missing from the live database".into(),
+        ))?;
+    let group_column = live_table
+        .columns
+        .iter()
+        .find(|column| column.name == group_name)
+        .ok_or((
+            409,
+            "the selected grouping column is missing from the live table".into(),
+        ))?;
+    if is_binary_sql_type(&group_column.sql_type) {
+        return Err((
+            422,
+            "chart grouping does not support binary database columns".into(),
+        ));
+    }
+    let measure = match measure_name {
+        Some(name) => {
+            if !declared_table
+                .columns
+                .iter()
+                .any(|column| column.name == name)
+            {
+                return Err((
+                    422,
+                    "the measure column must be declared in the current Zelyra project".into(),
+                ));
+            }
+            Some(
+                live_table
+                    .columns
+                    .iter()
+                    .find(|column| column.name == name)
+                    .ok_or((
+                        409,
+                        "the selected measure column is missing from the live table".into(),
+                    ))?,
+            )
+        }
+        None => None,
+    };
+    if let Some((filter_column, _)) = &filter {
+        if !declared_table
+            .columns
+            .iter()
+            .any(|column| column.name == *filter_column)
+        {
+            return Err((
+                422,
+                "the filter column must be declared in the current Zelyra project".into(),
+            ));
+        }
+        let column = live_table
+            .columns
+            .iter()
+            .find(|column| column.name == *filter_column)
+            .ok_or((
+                409,
+                "the selected filter column is missing from the live table".into(),
+            ))?;
+        if !is_text_sql_type(&column.sql_type) {
+            return Err((
+                422,
+                "exact chart filters currently require a text database column".into(),
+            ));
+        }
+    }
+    if let Some((date_column, _, _)) = &date_range {
+        if !declared_table
+            .columns
+            .iter()
+            .any(|column| column.name == *date_column)
+        {
+            return Err((
+                422,
+                "the date-range column must be declared in the current Zelyra project".into(),
+            ));
+        }
+        let column = live_table
+            .columns
+            .iter()
+            .find(|column| column.name == *date_column)
+            .ok_or((
+                409,
+                "the selected date-range column is missing from the live table".into(),
+            ))?;
+        if !is_date_sql_type(&column.sql_type) {
+            return Err((
+                422,
+                "chart date ranges require a DATE database column".into(),
+            ));
+        }
+    }
+    if matches!(aggregation, "sum" | "avg")
+        && !measure.is_some_and(|column| is_numeric_sql_type(&column.sql_type))
+    {
+        return Err((
+            422,
+            "sum and avg require a numeric live database column".into(),
+        ));
+    }
+    if matches!(aggregation, "min" | "max")
+        && !measure.is_some_and(|column| is_orderable_chart_sql_type(&column.sql_type))
+    {
+        return Err((
+            422,
+            "min and max require a numeric, text, date, or time live database column".into(),
+        ));
+    }
+
+    let backend = declared.backend();
+    if backend == zelyra_database::Backend::Sqlite {
+        return Err((
+            501,
+            "Studio chart previews currently support MariaDB, MySQL, and PostgreSQL projects"
+                .into(),
+        ));
+    }
+    let sql = database_chart_sql(
+        ChartSqlRequest {
+            table: table_name,
+            group_by: group_name,
+            aggregation,
+            measure: measure_name,
+            filter_column: filter.as_ref().map(|(column, _)| column.as_str()),
+            date_column: date_range
+                .as_ref()
+                .map(|(column, from, to)| (column.as_str(), from.is_some(), to.is_some())),
+        },
+        backend,
+        MAX_GROUPS + 1,
+    );
+    let database_name = declared
+        .database
+        .as_ref()
+        .map(|database| database.name.as_str());
+    let database_url = if let Some(url) = super::database_url_from_schema(&declared) {
+        url
+    } else {
+        let environment_file = state.root.join(".env");
+        if !environment_file.is_file() {
+            return Err((
+                422,
+                "database connection is not configured; set DATABASE_URL in the environment or project .env file".into(),
+            ));
+        }
+        super::database_url_from_env_file(&environment_file.to_string_lossy(), database_name)
+            .map_err(|_| (422, "the project environment file could not be read".into()))?
+            .map(|(url, _)| url)
+            .ok_or((
+                422,
+                "database connection is not configured; set DATABASE_URL in the environment or project .env file".into(),
+            ))?
+    };
+    let mut params = Vec::new();
+    if let Some((_, filter_value)) = &filter {
+        params.push((
+            "zelyra_chart_filter".into(),
+            zelyra_database::QueryValue::String(filter_value.clone()),
+        ));
+    }
+    if let Some((_, from, to)) = &date_range {
+        if let Some(from) = from {
+            params.push((
+                "zelyra_chart_from".into(),
+                zelyra_database::QueryValue::String(from.clone()),
+            ));
+        }
+        if let Some(to) = to {
+            params.push((
+                "zelyra_chart_to".into(),
+                zelyra_database::QueryValue::String(to.clone()),
+            ));
+        }
+    }
+    let result = zelyra_database::execute_query(&database_url, &sql, params).map_err(|_| {
+        (
+            502,
+            "chart data could not be loaded; check the local database connection and selected columns".into(),
+        )
+    })?;
+    let truncated = result.rows.len() > MAX_GROUPS;
+    let rows = result
+        .rows
+        .into_iter()
+        .take(MAX_GROUPS)
+        .map(|row| {
+            row.into_iter()
+                .map(|cell| {
+                    let mut characters = cell.chars();
+                    let shown = characters
+                        .by_ref()
+                        .take(MAX_CELL_CHARACTERS)
+                        .collect::<String>();
+                    if characters.next().is_some() {
+                        format!("{shown}…")
+                    } else {
+                        shown
+                    }
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    let response = json!({
+        "readOnly": true,
+        "table": table_name,
+        "groupBy": group_name,
+        "aggregation": aggregation,
+        "measure": measure_name,
+        "columns": [group_name, "value"],
+        "rows": rows,
+        "limit": MAX_GROUPS,
+        "truncated": truncated,
+    });
+    Ok((200, "application/json; charset=utf-8", response.to_string()))
+}
+
+fn is_numeric_sql_type(sql_type: &str) -> bool {
+    let normalized = sql_type.trim().to_ascii_uppercase();
+    [
+        "INT",
+        "INTEGER",
+        "BIGINT",
+        "SMALLINT",
+        "TINYINT",
+        "MEDIUMINT",
+        "DECIMAL",
+        "NUMERIC",
+        "FLOAT",
+        "DOUBLE",
+        "REAL",
+    ]
+    .iter()
+    .any(|prefix| normalized.starts_with(prefix))
+}
+
+fn is_binary_sql_type(sql_type: &str) -> bool {
+    let normalized = sql_type.trim().to_ascii_uppercase();
+    ["BINARY", "VARBINARY", "BLOB", "BYTEA", "IMAGE"]
+        .iter()
+        .any(|prefix| normalized.starts_with(prefix))
+}
+
+fn is_text_sql_type(sql_type: &str) -> bool {
+    let normalized = sql_type.trim().to_ascii_uppercase();
+    [
+        "CHAR",
+        "VARCHAR",
+        "TEXT",
+        "TINYTEXT",
+        "MEDIUMTEXT",
+        "LONGTEXT",
+        "ENUM",
+        "SET",
+        "UUID",
+        "CHARACTER",
+    ]
+    .iter()
+    .any(|prefix| normalized.starts_with(prefix))
+}
+
+fn is_date_sql_type(sql_type: &str) -> bool {
+    sql_type.trim().eq_ignore_ascii_case("DATE")
+}
+
+fn is_orderable_chart_sql_type(sql_type: &str) -> bool {
+    let normalized = sql_type.trim().to_ascii_uppercase();
+    is_numeric_sql_type(&normalized)
+        || is_text_sql_type(&normalized)
+        || ["DATE", "TIME", "TIMESTAMP", "DATETIME"]
+            .iter()
+            .any(|prefix| normalized.starts_with(prefix))
+}
+
+fn is_valid_chart_date(value: &str) -> bool {
+    if value.len() != 10 || !value.is_ascii() {
+        return false;
+    }
+    let mut parts = value.split('-');
+    let (Some(year), Some(month), Some(day), None) =
+        (parts.next(), parts.next(), parts.next(), parts.next())
+    else {
+        return false;
+    };
+    let (Ok(year), Ok(month), Ok(day)) =
+        (year.parse::<u16>(), month.parse::<u8>(), day.parse::<u8>())
+    else {
+        return false;
+    };
+    if year == 0 || !(1..=12).contains(&month) {
+        return false;
+    }
+    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let days = match month {
+        2 if leap => 29,
+        2 => 28,
+        4 | 6 | 9 | 11 => 30,
+        _ => 31,
+    };
+    (1..=days).contains(&day)
+}
+
+struct ChartSqlRequest<'a> {
+    table: &'a str,
+    group_by: &'a str,
+    aggregation: &'a str,
+    measure: Option<&'a str>,
+    filter_column: Option<&'a str>,
+    date_column: Option<(&'a str, bool, bool)>,
+}
+
+fn database_chart_sql(
+    request: ChartSqlRequest<'_>,
+    backend: zelyra_database::Backend,
+    limit: usize,
+) -> String {
+    let quote = |identifier: &str| match backend {
+        zelyra_database::Backend::Postgres | zelyra_database::Backend::Sqlite => {
+            format!("\"{}\"", identifier.replace('\"', "\"\""))
+        }
+        zelyra_database::Backend::MariaDb => format!("`{}`", identifier.replace('`', "``")),
+    };
+    let aggregate = match request.aggregation {
+        "count" => "COUNT(*)".to_owned(),
+        "sum" => format!("SUM({})", quote(request.measure.unwrap_or_default())),
+        "avg" => format!("AVG({})", quote(request.measure.unwrap_or_default())),
+        "min" => format!("MIN({})", quote(request.measure.unwrap_or_default())),
+        "max" => format!("MAX({})", quote(request.measure.unwrap_or_default())),
+        _ => unreachable!("aggregation is validated before SQL generation"),
+    };
+    let as_text = |expression: &str| match backend {
+        zelyra_database::Backend::Postgres => format!("CAST({expression} AS TEXT)"),
+        _ => format!("CAST({expression} AS CHAR)"),
+    };
+    let mut query = format!(
+        "SELECT {}, {} AS {} FROM {}",
+        as_text(&quote(request.group_by)),
+        as_text(&aggregate),
+        quote("value"),
+        quote(request.table)
+    );
+    let mut predicates = Vec::new();
+    if let Some(column) = request.filter_column {
+        predicates.push(format!("{} = :zelyra_chart_filter", quote(column)));
+    }
+    if let Some((column, has_from, has_to)) = request.date_column {
+        let date_value = |parameter: &str| match backend {
+            zelyra_database::Backend::Postgres => {
+                format!("TO_DATE(:{parameter}, 'YYYY-MM-DD')")
+            }
+            _ => format!("CAST(:{parameter} AS DATE)"),
+        };
+        if has_from {
+            predicates.push(format!(
+                "{} >= {}",
+                quote(column),
+                date_value("zelyra_chart_from")
+            ));
+        }
+        if has_to {
+            predicates.push(format!(
+                "{} <= {}",
+                quote(column),
+                date_value("zelyra_chart_to")
+            ));
+        }
+    }
+    if !predicates.is_empty() {
+        query.push_str(" WHERE ");
+        query.push_str(&predicates.join(" AND "));
+    }
+    query.push_str(&format!(
+        " GROUP BY {} ORDER BY {} ASC LIMIT {limit}",
+        quote(request.group_by),
+        quote(request.group_by)
+    ));
+    query
 }
 
 fn database_rows_sql(
@@ -3493,6 +4005,55 @@ fn main() {}
     }
 
     #[test]
+    fn database_chart_queries_accept_only_fixed_aggregations_and_quote_identifiers() {
+        let postgres = database_chart_sql(
+            ChartSqlRequest {
+                table: "order\"items",
+                group_by: "product\"name",
+                aggregation: "sum",
+                measure: Some("net_total"),
+                filter_column: Some("state"),
+                date_column: Some(("created_at", true, true)),
+            },
+            zelyra_database::Backend::Postgres,
+            21,
+        );
+        assert_eq!(
+            postgres,
+            "SELECT CAST(\"product\"\"name\" AS TEXT), CAST(SUM(\"net_total\") AS TEXT) AS \"value\" FROM \"order\"\"items\" WHERE \"state\" = :zelyra_chart_filter AND \"created_at\" >= TO_DATE(:zelyra_chart_from, 'YYYY-MM-DD') AND \"created_at\" <= TO_DATE(:zelyra_chart_to, 'YYYY-MM-DD') GROUP BY \"product\"\"name\" ORDER BY \"product\"\"name\" ASC LIMIT 21"
+        );
+        let mariadb = database_chart_sql(
+            ChartSqlRequest {
+                table: "orders",
+                group_by: "status",
+                aggregation: "count",
+                measure: None,
+                filter_column: None,
+                date_column: None,
+            },
+            zelyra_database::Backend::MariaDb,
+            21,
+        );
+        assert_eq!(
+            mariadb,
+            "SELECT CAST(`status` AS CHAR), CAST(COUNT(*) AS CHAR) AS `value` FROM `orders` GROUP BY `status` ORDER BY `status` ASC LIMIT 21"
+        );
+        assert!(is_numeric_sql_type("DECIMAL(12, 2)"));
+        assert!(is_numeric_sql_type("bigint unsigned"));
+        assert!(!is_numeric_sql_type("VARCHAR(100)"));
+        assert!(is_binary_sql_type("BYTEA"));
+        assert!(!is_binary_sql_type("TEXT"));
+        assert!(is_text_sql_type("VARCHAR(80)"));
+        assert!(is_date_sql_type("DATE"));
+        assert!(!is_date_sql_type("DATETIME"));
+        assert!(is_orderable_chart_sql_type("TIMESTAMP WITH TIME ZONE"));
+        assert!(!is_orderable_chart_sql_type("JSONB"));
+        assert!(is_valid_chart_date("2000-02-29"));
+        assert!(!is_valid_chart_date("1900-02-29"));
+        assert!(!is_valid_chart_date("2026-02-30"));
+    }
+
+    #[test]
     fn schema_column_preview_is_compiler_checked_and_apply_requires_confirmation() {
         let state = project();
         let source = "table customers {\n    id: Id primary auto\n    name: String(100) required\n}\n\nfn main() {}\n";
@@ -3609,6 +4170,7 @@ fn main() {}
             ("POST", "/__zelyra/editor/api/file-rename"),
             ("DELETE", "/__zelyra/editor/api/file"),
             ("POST", "/__zelyra/editor/api/database-create"),
+            ("POST", "/__zelyra/editor/api/database-chart-preview"),
         ] {
             let request = request(
                 method,
@@ -3632,6 +4194,7 @@ fn main() {}
             "/__zelyra/editor/api/database-schema",
             "/__zelyra/editor/api/database-target",
             "/__zelyra/editor/api/database-rows?table=users",
+            "/__zelyra/editor/api/database-chart-preview",
             "/__zelyra/editor/api/database-create",
             "/__zelyra/editor/api/crud-preview",
             "/__zelyra/editor/api/crud-apply",

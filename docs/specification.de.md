@@ -563,8 +563,11 @@ steht in expliziten ID-Feldern; Änderungen erzeugen mit `record_with` einen
 neuen Record. Die Sprache definiert derzeit weder ein `class`-Konstrukt noch
 veränderliche gemeinsam referenzierte Objekte, Objektidentitätsvergleiche oder
 Vererbung. Diese Grenze verhindert versteckte Aliasänderungen und hält
-Datenbank- und JSON-Werte nachvollziehbar. Ein späteres Objektmodell bräuchte
-zuerst festgelegte Regeln für Lebensdauer, Mutation und geteilten Zustand.
+Datenbank- und JSON-Werte nachvollziehbar. Diese Beschreibung gilt für den
+implementierten Sprachumfang des geprüften Quellbuilds. Für den 0.9.9-Freeze ist
+ein begrenztes Klassenmodell mit definierter Referenzidentität und Feldmutation
+zusätzlich offen; siehe den [0.9.9-Releaseplan](release-plans/0.9.9.de.md).
+Es darf nicht als bereits unterstützt verstanden werden.
 
 ### Benannte Funktionswerte in 0.9.9
 

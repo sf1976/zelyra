@@ -91,8 +91,8 @@ abgelehnt; lade die Datei neu und wiederhole die Aktion.
 
 Wähle **Datenbank** und lade das Schema. Studio benötigt eine
 `DATABASE_URL` aus der Prozessumgebung oder der lokalen Projektdatei `.env`.
-Das Studio liest nur Tabellen- und Spaltenmetadaten. Es liest keine
-Datensätze und führt keine Schemaänderungen aus.
+Das Studio liest Tabellen- und Spaltenmetadaten. Datenbankänderungen führt es
+nicht ohne eigene, bestätigte Aktion aus.
 
 Die Übersicht enthält eine anklickbare Beziehungskarte mit Tabellen und
 Fremdschlüsselpfeilen. Sie gruppiert deklarierte Tabellen nach bekanntem
@@ -106,6 +106,36 @@ Seiten mit höchstens 25 Zeilen. Er ist schreibgeschützt; Tabellen- und
 Spaltennamen stammen aus der geladenen Schemaansicht, die SQL-Bezeichner werden
 backendgerecht maskiert, und Werte werden als Text dargestellt. Studio lädt
 keine Datensätze automatisch beim Öffnen der Werkbank.
+
+Der **Diagramm-Assistent** erstellt aus einer deklarierten Live-Tabelle ein
+gruppiertes Balken- oder Liniendiagramm. Gruppierung und Kennzahl wählst du
+über Felder aus; verfügbar sind Anzahl sowie Summe, Durchschnitt, Minimum und
+Maximum. Summe und Durchschnitt lassen nur numerische Datenbankspalten zu.
+Studio erzeugt die Abfrage aus Schema-Bezeichnern, führt sie lesend aus und
+zeigt höchstens 20 Gruppen. Es gibt kein frei eingebbares SQL. Du kannst einen
+exakten Textfilter und einen inklusiven Zeitraum auf einer `DATE`-Spalte
+setzen. Werte werden als Parameter gebunden; Tabellen- und Spaltenauswahl
+bleiben an die deklarierten und live vorhandenen Projektfelder gebunden. Die
+Konfiguration wird als `chart-<name>.zchart.json` gespeichert und enthält keine
+abgefragten Datensätze. Beim Laden wird sie geprüft und die Vorschau erneut aus
+der aktuellen Datenbank berechnet. Ein vorhandener Zelyra-Bericht desselben
+Typs lässt sich aktualisieren; eine gleichnamige fremde Datei wird nicht
+überschrieben.
+
+Mehrere Diagramme können als Folien zu einer lokalen Präsentation mit Titel
+und Einleitung zusammengestellt werden. Die Konfiguration wird als
+`presentation-<name>.zelyra-presentation.json` gespeichert. **Druckansicht /
+PDF** erstellt eine Folienvorschau und öffnet den Druckdialog des Browsers; dort
+kann die PDF-Datei lokal gespeichert werden. Die Folien speichern geprüfte
+Diagrammkonfigurationen statt eines Datenbank-Schnappschusses. Beim Laden einer
+Präsentation bleiben Titel, Einleitung und Folien erhalten; beim Erstellen der
+Druckansicht werden die Diagrammabfragen erneut ausgeführt.
+
+Dieser Studio-Ausschnitt bietet keine frei formulierbaren Filter,
+Zeitstempel- oder Zeitzonenbereiche, Einbindung gespeicherter Diagramme in
+laufende Anwendungsseiten oder Compiler-Typprüfung für die JSON-Dateien. Die
+Präsentation ist ein einfacher Folien- und Druckablauf, kein allgemeiner
+Diagramm- oder Präsentationseditor.
 
 Im geführten **Spaltenassistenten** lassen sich neue Tabellenfelder ergänzen
 und einfache bestehende Felder ändern. Schlüssel-, eindeutige und Felder mit
