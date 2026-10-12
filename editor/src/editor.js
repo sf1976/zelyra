@@ -90,7 +90,7 @@ const messages = {
     renameFile: "Umbenennen", deleteFile: "Löschen", renamePrompt: "Neuer Projektpfad (zum Beispiel src/customer-new.zyl)",
     renameConfirm: "Datei {0} umbenennen? Importverweise werden nicht angepasst.", deleteConfirm: "Datei {0} endgültig löschen?",
     fileRenamed: "Datei umbenannt: {0}", fileDeleted: "Datei gelöscht: {0}",
-    switchLanguage: "Sprache wechseln", switchTheme: "Farbschema wechseln",
+    switchLanguage: "Sprache wechseln", themeLightAction: "Helles Farbschema aktivieren", themeDarkAction: "Dunkles Farbschema aktivieren",
     format: "Formatieren", check: "Projekt prüfen", welcome: "Willkommen in Zelyra Studio",
     welcomeHint: "Öffne links eine Datei und entwickle direkt in deinem Projekt.", problems: "Probleme",
     noProblems: "Keine Probleme gefunden. Dein Projekt ist bereit.", close: "Panel schließen", loadingFiles: "Dateien werden geladen",
@@ -181,7 +181,7 @@ const messages = {
     renameFile: "Rename", deleteFile: "Delete", renamePrompt: "New project path (for example src/customer-new.zyl)",
     renameConfirm: "Rename {0}? Import references will not be updated.", deleteConfirm: "Permanently delete {0}?",
     fileRenamed: "File renamed: {0}", fileDeleted: "File deleted: {0}",
-    switchLanguage: "Switch language", switchTheme: "Switch color scheme",
+    switchLanguage: "Switch language", themeLightAction: "Use light appearance", themeDarkAction: "Use dark appearance",
     format: "Format", check: "Check project", welcome: "Welcome to Zelyra Studio",
     welcomeHint: "Open a file on the left and work directly in your project.", problems: "Problems",
     noProblems: "No problems found. Your project is ready.", close: "Close panel", loadingFiles: "Loading files",
@@ -244,12 +244,16 @@ const messages = {
 };
 let language = localStorage.getItem("zelyra-editor-language") === "en" ? "en" : "de";
 function t(key, value) { return (messages[language][key] || key).replace("{0}", value ?? ""); }
+function updateThemeControl() {
+  const label = t(root.dataset.theme === "dark" ? "themeLightAction" : "themeDarkAction");
+  $("theme-button").setAttribute("aria-label", label);
+  $("theme-button").title = label;
+}
 function setLanguage(next) {
   language = next;
   document.documentElement.lang = language;
   $("language-button").textContent = language.toUpperCase();
-  $("theme-button").setAttribute("aria-label", t("switchTheme"));
-  $("theme-button").title = t("switchTheme");
+  updateThemeControl();
   for (const element of document.querySelectorAll("[data-i18n]")) element.textContent = messages[language][element.dataset.i18n] || element.textContent;
   for (const element of document.querySelectorAll("[data-i18n-title]")) element.title = messages[language][element.dataset.i18nTitle] || element.title;
   for (const element of document.querySelectorAll("[data-i18n-placeholder]")) element.placeholder = messages[language][element.dataset.i18nPlaceholder] || element.placeholder;
@@ -2000,6 +2004,7 @@ $("tree-filter").addEventListener("input", (event) => { activeFilter = event.tar
 $("theme-button").addEventListener("click", () => {
   root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
   localStorage.setItem("zelyra-editor-theme", root.dataset.theme);
+  updateThemeControl();
   if (editor) editor.dispatch({ effects: editorTheme.reconfigure(createZelyraTheme()) });
 });
 $("language-button").addEventListener("click", () => setLanguage(language === "de" ? "en" : "de"));
