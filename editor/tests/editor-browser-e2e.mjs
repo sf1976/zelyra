@@ -122,6 +122,23 @@ try {
   assert.equal(await page.locator(".topbar").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)");
   assert.equal(await page.locator(".explorer").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(248, 249, 252)");
   assert.equal(await page.locator("#project-map-dialog").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)");
+  const lightThemeContrast = await page.locator("html").evaluate((root) => {
+    const css = getComputedStyle(root);
+    const rgb = (name) => {
+      const hex = css.getPropertyValue(name).trim().match(/^#([\da-f]{3}|[\da-f]{6})$/i)?.[1];
+      if (!hex) throw new Error(`light theme color ${name} is not a hex color`);
+      const channels = hex.length === 3 ? [...hex].map((part) => part + part) : hex.match(/[\da-f]{2}/gi);
+      return channels.map((part) => Number.parseInt(part, 16) / 255);
+    };
+    const luminance = (color) => color.map((channel) => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4).reduce((sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index], 0);
+    const foregrounds = ["--ink", "--muted", "--faint", "--accent", "--danger", "--success", "--warning", "--token-keyword", "--token-type", "--token-name", "--token-string", "--token-number", "--token-comment", "--token-operator", "--token-punctuation"];
+    const backgrounds = ["--canvas", "--surface", "--surface-raised", "--editor-bg", "--editor-gutter", "--sidebar"];
+    return Object.fromEntries(foregrounds.map((foreground) => [foreground, Object.fromEntries(backgrounds.map((background) => {
+      const contrast = (Math.max(luminance(rgb(foreground)), luminance(rgb(background))) + 0.05) / (Math.min(luminance(rgb(foreground)), luminance(rgb(background))) + 0.05);
+      return [background, contrast];
+    }))]));
+  });
+  assert.ok(Object.values(lightThemeContrast).flatMap(Object.values).every((ratio) => ratio >= 4.5), `light-theme text contrast must be at least 4.5:1: ${JSON.stringify(lightThemeContrast)}`);
   await page.reload();
   await page.locator(".cm-content[contenteditable=true]").waitFor({ timeout: 10_000 });
   assert.equal(await page.locator("html").getAttribute("data-theme"), "light", "the selected appearance must survive reload");
