@@ -55,6 +55,16 @@ principles; the roadmap below tracks what is actually implemented.
   remains 17 supported, 5 partial, and 3 unavailable. See the
   [0.9.3 candidate verification](release-readiness/0.9.3-candidate-verification.md). Human product acceptance
   remains reserved for 1.0.0.
+- [x] **0.9.5 stable release published:** typed application mail queues through
+  the MariaDB transactional outbox and an explicit SMTP worker with required
+  TLS, authentication, private CA roots, bounded messages, and redacted errors.
+  Versioned Laravel findings cover authorization, tenant-like fields, money,
+  and file operations. The release remains experimental, mail delivery is at
+  least once, and PostgreSQL outbox support, templates, and attachments are
+  deferred. Exact release CI, MariaDB 10.11/11.4/11.8/12.3, MySQL 8.4,
+  Linux/Windows builds, SBOMs, and attestations are attached to the
+  [0.9.5 release](https://github.com/sf1976/zelyra/releases/tag/v0.9.5).
+  Human acceptance remains reserved for 1.0.0.
 
 - [~] The 0.4 development branch adds administrative listing/revocation of
   persistent sessions, CSRF/permission checks and an audit request event.
@@ -867,21 +877,21 @@ language backlog as one 0.9.4 change.
 
 ## Release 0.9.5 — first-party mail and SMTP
 
-- [🗺️] Expand the existing Laravel analysis into a versioned compatibility
+- [x] Expanded the existing Laravel analysis into a versioned compatibility
   ruleset for authentication, policies/permissions, business logic,
   transactions, money fields, jobs, integrations, file handling, and views.
   Mark security-sensitive or behavior-dependent findings for human review,
   including status changes, totals, side effects, and failure handling. Keep
   static analysis independent of PHP packages and a running Laravel environment.
-- [🗺️] Provide the first explicit application mail API without a mandatory
+- [x] Added the first explicit application mail API without a mandatory
   provider: MIME text/HTML, SMTP authentication, implicit TLS, STARTTLS, private
   certificate authorities, bounded messages, and integration with the existing
   MariaDB outbox. Dispatch remains explicit; TLS never silently downgrades.
   Document email capabilities and the local test sink.
-- [🗺️] Add safe named templates and bounded file attachments in 0.9.6; build
+- [ ] Add safe named templates and bounded file attachments in 0.9.6; build
   notification templates on that path with shared size, escaping, and source
   checks.
-- Exit evidence: local SMTP end-to-end test with a trusted local CA, STARTTLS,
+- Exit evidence passed on the exact candidate: local SMTP end-to-end test with a trusted local CA, STARTTLS,
   and authentication; plus tests for rejected configuration, size limits,
   header injection, secret redaction, capability checks, and transactional
   enqueueing. Document delivery and its duplicate window in both languages.

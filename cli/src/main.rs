@@ -316,6 +316,15 @@ ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS=10
 ZELYRA_DB_TLS_MODE=disabled
 # Optional absolute CA path, readable inside the Zelyra container/process.
 # ZELYRA_DB_TLS_CA_CERT_FILE=
+# Optional transactional application email. Grant the Email capability and
+# allow this exact host in [network].allowed_hosts. For local development,
+# use a loopback SMTP test sink; never point local tests at real recipients.
+# ZELYRA_SMTP_HOST=127.0.0.1
+# ZELYRA_SMTP_PORT=1025
+# ZELYRA_SMTP_SECURITY=local_plaintext
+# ZELYRA_SMTP_FROM=Zelyra <no-reply@example.test>
+# Queue with mail_queue and deliver only through an explicit outbox worker.
+# See https://github.com/sf1976/zelyra/blob/main/docs/mail.en.md
 # Optional password recovery mail delivery. Configure these values only when
 # auth declares a reset_tokens table; credentials remain local secrets.
 # ZELYRA_PUBLIC_BASE_URL=https://app.example.test

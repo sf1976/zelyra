@@ -4,7 +4,7 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language compatibility line remains `0.1`. Compiler and repository
 releases follow Semantic Versioning independently of the language line.
 
-## 0.9.5 — in development
+## 0.9.5 — 2026-10-12
 
 - Add first-party typed text/HTML email with SMTP authentication, implicit TLS,
   STARTTLS, private CA roots, message bounds, explicit host allowlisting, and

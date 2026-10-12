@@ -19,11 +19,15 @@ program and ending with a database-backed web application.
 Create a new local learning project for customers, items, and invoices with
 [`zelyra --tutorial invoice`](../../tutorials/invoice.en.md).
 
-> **Project status:** Zelyra 0.9.0 is stably published, remains experimental,
+> **Project status:** Zelyra 0.9.5 is stably published, remains experimental,
 > and is not approved for production use. Independent human acceptance for
 > earlier releases is deferred to 1.0.0. See the
 > [roadmap](../../ROADMAP.md) and
 > [acceptance decision](../../release-readiness/1.0.0-human-acceptance.en.md).
+
+Version 0.9.5 adds transactional application mail through an explicit SMTP
+outbox worker. See [Application email](../mail.en.md) and
+[the 0.9.5 release notes](../../release-notes/0.9.5.en.md).
 
 The binding product goals for digital sovereignty and evidence-based
 correctness claims are described in the [Zelyra manifesto](../../MANIFESTO.md).
