@@ -26,6 +26,8 @@ import {
 } from "@codemirror/view";
 
 const root = document.documentElement;
+const storedTheme = localStorage.getItem("zelyra-editor-theme");
+root.dataset.theme = storedTheme === "light" ? "light" : "dark";
 const editorSessionStorageKey = "zelyra-editor-session-token";
 const fragmentToken = location.hash.slice(1);
 const token = /^[0-9a-f]{64}$/.test(fragmentToken)
@@ -2037,7 +2039,6 @@ window.addEventListener("keydown", (event) => {
   }
 });
 
-if (["light", "dark"].includes(localStorage.getItem("zelyra-editor-theme"))) root.dataset.theme = localStorage.getItem("zelyra-editor-theme");
 setLanguage(language);
 $("project-name").textContent = document.body.dataset.project || "Zelyra-Projekt";
 $("project-name-side").textContent = (document.body.dataset.project || "ZELYRA-PROJEKT").toLocaleUpperCase();
