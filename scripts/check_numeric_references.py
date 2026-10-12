@@ -16,6 +16,17 @@ def decimal_text(micros: int) -> str:
     return f"{sign}{whole}.{fractional:06d}"
 
 
+def nano_text(value: int) -> str:
+    sign = "-" if value < 0 else ""
+    whole, fraction = divmod(abs(value), 1_000_000_000)
+    return f"{sign}{whole}.{fraction:09d}"
+
+
+def truncated_quotient(left: int, right: int) -> int:
+    value = abs(left) // abs(right)
+    return -value if (left < 0) != (right < 0) else value
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--compiler", type=Path, required=True)
@@ -51,6 +62,22 @@ def main() -> int:
             f'decimal("{decimal_text(total)}"), "decimal addition reference")'
         )
 
+    for operator in ["*", "/"]:
+        for _ in range(100):
+            left = randomizer.randint(-(2**127) + 1, 2**127 - 1)
+            right = randomizer.randint(-999_999_999, 999_999_999) or 1
+            if operator == "/":
+                right = randomizer.randint(1_000_000_000, 2**127 - 1)
+                if randomizer.choice([True, False]): right = -right
+                result = truncated_quotient(left * 1_000_000_000, right)
+            else:
+                result = truncated_quotient(left * right, 1_000_000_000)
+            source.append(
+                f'    assert(decimal("{nano_text(left)}") {operator} '
+                f'decimal("{nano_text(right)}") == decimal("{nano_text(result)}"), '
+                '"wide Decimal arithmetic reference")'
+            )
+
     source.extend(['    print("PASS")', "}"])
     with tempfile.TemporaryDirectory(prefix="zelyra-numeric-reference-") as directory:
         program = Path(directory) / "main.zyl"
@@ -78,7 +105,7 @@ def main() -> int:
             print(executed.stderr, end="")
             return executed.returncode or 1
 
-    print("PASS: 300 integer division/remainder pairs and 100 Decimal additions")
+    print("PASS: 300 integer division/remainder pairs, 100 Decimal additions, 100 multiplications, 100 divisions")
     return 0
 
 

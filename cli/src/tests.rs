@@ -2333,6 +2333,18 @@ fn accepts_persistent_auth_tables() {
 }
 
 #[test]
+fn decimal_api_inputs_use_decimal_values_without_float_conversion() {
+    let program = parse(&lex("fn main() {}\n").unwrap()).unwrap();
+    let value: Value = serde_json::from_str("9999999999999999.99").unwrap();
+    let decoded = api_value_json(&value, &Type::Decimal, &program).unwrap();
+    assert!(matches!(decoded, RuntimeValue::Decimal(_)));
+    assert_eq!(decoded.output(), "9999999999999999.99");
+    let value: Value = serde_json::from_str("0.000000001").unwrap();
+    let decoded = api_value_json(&value, &Type::Decimal, &program).unwrap();
+    assert_eq!(decoded.output(), "0.000000001");
+}
+
+#[test]
 fn accepts_password_reset_schema_with_audit_and_single_use_token_storage() {
     let source = r#"
         auth users {
@@ -3045,4 +3057,22 @@ fn explicit_port_conflicts_are_rejected() {
         .expect_err("an explicitly occupied port must be rejected");
     assert!(error.contains("already in use"));
     assert!(error.contains("choose a different port"));
+}
+
+#[test]
+fn decimal_api_docs_describe_exact_string_outputs() {
+    assert_eq!(docs::typescript_type(&Type::Decimal), "string");
+    let schema = zelyra_ast::json::parse(&docs::openapi_schema(&Type::Decimal)).unwrap();
+    assert_eq!(schema["type"], "string");
+    assert_eq!(schema["format"], "decimal");
+}
+
+#[test]
+fn precision_diagnostics_locate_the_mismatched_alias_column() {
+    let program = parse(&lex("type Amount = Decimal table bills { id: Id primary amount: Amount required quantity: UInt required }").unwrap()).unwrap();
+    let message = "fixed-point storage for `bills.amount` must match DECIMAL(39,9)";
+    assert_eq!(
+        decimal_storage_error_span(&program, message),
+        program.tables[0].columns[1].span
+    );
 }

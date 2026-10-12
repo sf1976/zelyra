@@ -755,3 +755,16 @@ Namens. Schemaerstellung, Migrationspläne und die Erkennung verwalteter Objekte
 verwenden dieselbe deterministische Regel. Bestehende PostgreSQL-Objekte, deren
 alte Namen der Server still gekürzt hat, können eine geprüfte Übernahme
 erfordern; sie werden nicht still umbenannt oder gelöscht.
+
+## Exakte Dezimalgrenzen in 0.9.9
+
+`betrag: Decimal = decimal("119.00")` deklariert einen exakten Festkommawert.
+Formulare, HTTP und SQL verwenden geprüfte Dezimaltexte. MariaDB/MySQL speichern
+`Decimal` ausdrücklich als `DECIMAL(39,9)`, PostgreSQL als `NUMERIC(39,9)`.
+Alte oder abweichende feste Skalen verhindern SQL-Ausführung beziehungsweise
+Serverstart mit einer quellbezogenen Diagnose. `Money` behält `(19,4)`.
+Multiplikation/Division prüfen das Endergebnis mit einem begrenzten exakten
+Zwischenwert; Restbildung am negativen Minimum verursacht keinen Panic.
+JSON-Ausgaben bleiben Dezimalstrings. Siehe [vollständige Regeln](decimals.de.md)
+und [Beispiel](../examples/decimal_money.zyl). Das belegt keine volle
+PostgreSQL-CRUD-/Auth-Parität oder Produktivfreigabe.

@@ -754,3 +754,15 @@ characters of the full name's SHA-256 digest. Schema creation, migration plans,
 and recognition of managed objects use the same deterministic rule. Existing
 PostgreSQL objects whose old names were silently truncated by the server may
 require reviewed adoption; they are not silently renamed or dropped.
+
+## Exact decimal boundaries in 0.9.9
+
+`amount: Decimal = decimal("119.00")` declares exact fixed point. Forms, HTTP,
+and SQL use validated decimal text. MariaDB/MySQL store `Decimal` explicitly
+as `DECIMAL(39,9)`, PostgreSQL as `NUMERIC(39,9)`. Legacy or mismatched fixed
+scales prevent SQL execution or server startup with source-related diagnostics.
+`Money` retains `(19,4)`. Multiplication/division check the final result with a
+bounded exact intermediate; remainder at the signed minimum no longer panics.
+JSON outputs remain decimal strings. See the [full rules](decimals.en.md) and
+[example](../examples/decimal_money.zyl). This does not establish complete
+PostgreSQL CRUD/auth parity or production approval.

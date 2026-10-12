@@ -205,7 +205,7 @@ fn generate_scaffold(
         let staged_report = staging.join("MIGRATION_REPORT.json");
         let analysis = analyze(&root, &staged_report, "json")?;
         let counts = analysis.counts;
-        let report_json: Value = serde_json::from_slice(
+        let report_json: Value = zelyra_ast::json::parse_slice(
             &fs::read(&staged_report)
                 .map_err(|error| format!("could not read staged report: {error}"))?,
         )
@@ -607,8 +607,8 @@ fn read_composer_metadata(root: &Path) -> Result<(Option<String>, Vec<String>), 
     if source.len() as u64 > MAX_SOURCE_FILE_BYTES {
         return Err("composer.json exceeds the 2 MiB file limit".into());
     }
-    let value: Value =
-        serde_json::from_str(&source).map_err(|_| "composer.json is not valid JSON".to_owned())?;
+    let value: Value = zelyra_ast::json::parse(&source)
+        .map_err(|_| "composer.json is not valid JSON".to_owned())?;
     let dependencies = ["require", "require-dev"]
         .into_iter()
         .filter_map(|key| value.get(key).and_then(Value::as_object))

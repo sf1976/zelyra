@@ -121,6 +121,8 @@
   "validation.integer": "Enter an integer.",
   "validation.unsigned_integer": "Enter a non-negative integer.",
   "validation.number": "Enter a number.",
+  "validation.decimal": "Enter an exact decimal with at most 9 fractional digits.",
+  "validation.money": "Enter an exact money amount with at most 15 integer and 4 fractional digits.",
   "validation.boolean": "Enter true or false.",
   "validation.email": "Enter a valid email address.",
   "validation.url": "Enter a valid HTTP URL.",

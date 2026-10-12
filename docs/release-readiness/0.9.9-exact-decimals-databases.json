@@ -1,0 +1,20 @@
+[
+  {
+    "engine": "mariadb",
+    "server_version": "11.4.13-MariaDB-ubu2404",
+    "compiler_sha256": "a5769ca235ff2350b14f9c5f3c40fa3d91b3baac18b442cfc841d8a97093f9e1",
+    "exact_forms_sql_filters_api_generics_null_and_legacy_schema": "passed"
+  },
+  {
+    "engine": "mysql",
+    "server_version": "8.4.11",
+    "compiler_sha256": "a5769ca235ff2350b14f9c5f3c40fa3d91b3baac18b442cfc841d8a97093f9e1",
+    "exact_forms_sql_filters_api_generics_null_and_legacy_schema": "passed"
+  },
+  {
+    "engine": "postgres",
+    "server_version": "PostgreSQL 16.15 (Debian 16.15-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "compiler_sha256": "a5769ca235ff2350b14f9c5f3c40fa3d91b3baac18b442cfc841d8a97093f9e1",
+    "exact_forms_sql_filters_api_generics_null_and_legacy_schema": "passed"
+  }
+]

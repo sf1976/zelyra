@@ -159,7 +159,7 @@ fn fetch_bytes(agent: &ureq::Agent, url: &str, maximum: u64) -> Result<Vec<u8>, 
 }
 
 fn parse_latest_release(body: &[u8]) -> Result<LatestRelease, String> {
-    let document: Value = serde_json::from_slice(body)
+    let document: Value = zelyra_ast::json::parse_slice(body)
         .map_err(|error| format!("GitHub returned invalid release metadata: {error}"))?;
     if document.get("draft").and_then(Value::as_bool) != Some(false)
         || document.get("prerelease").and_then(Value::as_bool) != Some(false)

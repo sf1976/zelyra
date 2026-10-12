@@ -20,6 +20,7 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use zelyra_ast::*;
 
+mod numeric;
 pub mod outbox;
 pub mod sql;
 
@@ -136,6 +137,18 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
                         "duplicate column {} in table {}",
                         definition.name, table.name
                     ),
+                    span: definition.span,
+                });
+                continue;
+            }
+            let resolved = resolve_type(&definition.ty, &program.types);
+            let resolved_inner = match &resolved {
+                Type::Option(inner) => inner.as_ref(),
+                other => other,
+            };
+            if matches!(resolved_inner, Type::Unknown) {
+                errors.push(SchemaError {
+                    message: "cyclic or unresolved database column type alias".into(),
                     span: definition.span,
                 });
                 continue;
@@ -394,8 +407,8 @@ fn column_mapping(
             Backend::Sqlite => "REAL",
         },
         Type::Decimal => match backend {
-            Backend::MariaDb => "DECIMAL",
-            Backend::Postgres | Backend::Sqlite => "NUMERIC",
+            Backend::MariaDb => "DECIMAL(39,9)",
+            Backend::Postgres | Backend::Sqlite => "NUMERIC(39,9)",
         },
         Type::Bool => match backend {
             Backend::Postgres | Backend::MariaDb => "BOOLEAN",
@@ -464,15 +477,29 @@ fn column_mapping(
 }
 
 fn resolve_type(ty: &Type, definitions: &[TypeDef]) -> Type {
-    if let Type::Named(name) = ty {
-        if let Some(definition) = definitions
-            .iter()
-            .find(|definition| definition.name == *name)
-        {
-            return resolve_type(&definition.target, definitions);
+    fn resolve(ty: &Type, definitions: &[TypeDef], visiting: &mut HashSet<String>) -> Type {
+        match ty {
+            Type::Named(name) => {
+                let Some(definition) = definitions
+                    .iter()
+                    .find(|definition| definition.name == *name)
+                else {
+                    return ty.clone();
+                };
+                if visiting.len() >= 64 || !visiting.insert(name.clone()) {
+                    return Type::Unknown;
+                }
+                let resolved = resolve(&definition.target, definitions, visiting);
+                visiting.remove(name);
+                resolved
+            }
+            Type::Option(inner) => Type::Option(Box::new(resolve(inner, definitions, visiting))),
+            Type::Array(inner) => Type::Array(Box::new(resolve(inner, definitions, visiting))),
+
+            _ => ty.clone(),
         }
     }
-    ty.clone()
+    resolve(ty, definitions, &mut HashSet::new())
 }
 
 fn contains_function_type(
@@ -1947,6 +1974,8 @@ pub fn inspect_postgres(database_url: &str) -> Result<Schema, DatabaseError> {
                 c.table_name,
                 c.column_name,
                 c.data_type,
+                c.numeric_precision,
+                c.numeric_scale,
                 c.udt_name,
                 c.is_nullable,
                 COALESCE(c.character_maximum_length::text, '') AS character_maximum_length,
@@ -1979,7 +2008,9 @@ pub fn inspect_postgres(database_url: &str) -> Result<Schema, DatabaseError> {
         SELECT
             table_name,
             column_name,
-            data_type,
+            CASE WHEN data_type = 'numeric' AND numeric_precision IS NOT NULL
+                THEN 'NUMERIC(' || numeric_precision::text || ',' || numeric_scale::text || ')'
+                ELSE data_type END AS data_type,
             udt_name,
             is_nullable,
             character_maximum_length,
@@ -2482,6 +2513,8 @@ pub enum QueryValue {
     Int(i64),
     UInt(u64),
     Float(f64),
+    /// Exact fixed-point text; bound as a numeric value rather than binary Float.
+    Decimal(String),
     Bool(bool),
     String(String),
 }
@@ -2645,7 +2678,15 @@ fn execute_postgres_prepared_batch(
 fn prepare_postgres_query(
     query: &Query,
 ) -> Result<(String, Vec<Box<dyn PostgresToSql + Sync>>), DatabaseError> {
-    let (postgres_sql, parameter_order) = bind_named_parameters_for(&query.sql, true)?;
+    let exact_parameters = query
+        .params
+        .iter()
+        .filter_map(|(name, value)| {
+            matches!(value, QueryValue::Decimal(_) | QueryValue::UInt(_)).then_some(name.as_str())
+        })
+        .collect::<HashSet<_>>();
+    let (postgres_sql, parameter_order) =
+        bind_exact_parameters(&query.sql, true, &exact_parameters)?;
     let parameters = parameter_order
         .iter()
         .map(|parameter_name| {
@@ -2667,13 +2708,13 @@ fn postgres_parameter_value(
     value: &QueryValue,
 ) -> Result<Box<dyn PostgresToSql + Sync>, DatabaseError> {
     match value {
-        QueryValue::Null => Ok(Box::new(Option::<String>::None)),
+        QueryValue::Null => Ok(Box::new(numeric::SqlNull)),
         QueryValue::Int(value) => Ok(Box::new(*value)),
-        QueryValue::UInt(value) => i64::try_from(*value)
-            .map(|value| Box::new(value) as Box<dyn PostgresToSql + Sync>)
-            .map_err(|_| DatabaseError {
-                message: "PostgreSQL integer parameters cannot exceed 9223372036854775807 in this runtime slice".into(),
-            }),
+        QueryValue::UInt(value) => Ok(Box::new(value.to_string())),
+        QueryValue::Decimal(value) => {
+            validate_exact_parameter(value)?;
+            Ok(Box::new(value.clone()))
+        }
         QueryValue::Float(value) if value.is_finite() => Ok(Box::new(*value)),
         QueryValue::Float(_) => Err(DatabaseError {
             message: "PostgreSQL floating-point parameters must be finite".into(),
@@ -2734,6 +2775,7 @@ fn postgres_row_strings(row: &r2d2_postgres::postgres::Row) -> Result<Vec<String
                 PostgresType::INT8 => value!(i64),
                 PostgresType::FLOAT4 => value!(f32),
                 PostgresType::FLOAT8 => value!(f64),
+                PostgresType::NUMERIC => value!(numeric::NumericText),
                 PostgresType::TEXT | PostgresType::VARCHAR | PostgresType::BPCHAR | PostgresType::NAME => value!(String),
                 _ => Err(DatabaseError {
                     message: format!("PostgreSQL result type `{}` is not supported by the bounded runtime query API", column.type_()),
@@ -2781,6 +2823,55 @@ pub fn execute_query(
     } else {
         execute_mariadb_query(database_url, sql, params)
     }
+}
+
+/// Check declared fixed-point storage before application queries. This performs
+/// read-only metadata access; it never migrates an existing schema.
+pub fn validate_decimal_storage(database_url: &str, schema: &Schema) -> Result<(), DatabaseError> {
+    if !schema.tables.iter().any(|table| {
+        table
+            .columns
+            .iter()
+            .any(|column| decimal_storage_precision(&column.sql_type).is_some())
+    }) {
+        return Ok(());
+    }
+    let sql = if is_postgres_url(database_url) {
+        "SELECT table_name::text, column_name::text, COALESCE(numeric_precision::text, '') AS precision, COALESCE(numeric_scale::text, '') AS scale FROM information_schema.columns WHERE table_schema = 'public' AND data_type = 'numeric'"
+    } else {
+        "SELECT TABLE_NAME, COLUMN_NAME, COALESCE(CAST(NUMERIC_PRECISION AS CHAR), '') AS precision_value, COALESCE(CAST(NUMERIC_SCALE AS CHAR), '') AS scale_value FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND DATA_TYPE IN ('decimal', 'numeric')"
+    };
+    let result = execute_query(database_url, sql, Vec::new()).map_err(|_| DatabaseError {
+        message: "could not verify declared Decimal/Money/UInt storage; check database access and metadata privileges".into()
+    })?;
+    check_decimal_metadata(schema, &result.rows)
+}
+
+fn decimal_storage_precision(sql_type: &str) -> Option<(&str, &str)> {
+    sql_type
+        .strip_prefix("DECIMAL(")
+        .or_else(|| sql_type.strip_prefix("NUMERIC("))?
+        .strip_suffix(')')?
+        .split_once(',')
+}
+
+fn check_decimal_metadata(schema: &Schema, rows: &[Vec<String>]) -> Result<(), DatabaseError> {
+    for table in &schema.tables {
+        for column in &table.columns {
+            let Some((precision, scale)) = decimal_storage_precision(&column.sql_type) else {
+                continue;
+            };
+            let row = rows
+                .iter()
+                .find(|row| row.len() == 4 && row[0] == table.name && row[1] == column.name);
+            if !row.is_some_and(|row| row[2] == precision && row[3] == scale) {
+                return Err(DatabaseError { message: format!(
+                    "fixed-point storage for `{}.{}` must match {}; run `zelyra db plan` and review/apply the schema before starting the application; no automatic migration was performed",
+                    table.name, column.name, column.sql_type) });
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Executes a statement batch using the engine selected by the connection URL.
@@ -2911,10 +3002,8 @@ fn execute_mariadb_queries_on_pool(
                     message: "request deadline exceeded before database statement".into(),
                 });
             }
-            if let Err(error) = connection
-                .connection
-                .query_drop(format!("SET SESSION max_statement_time={seconds:.6}"))
-            {
+            let timeout_sql = mysql_timeout_statement(connection.mysql, seconds)?;
+            if let Err(error) = connection.connection.query_drop(timeout_sql) {
                 if transaction {
                     let _ = connection.connection.query_drop("ROLLBACK");
                 }
@@ -2935,10 +3024,9 @@ fn execute_mariadb_queries_on_pool(
     }
 
     if QUERY_DEADLINE.with(Cell::get).is_some() {
-        if let Err(error) = connection.connection.query_drop(format!(
-            "SET SESSION max_statement_time={}",
-            settings.query_seconds
-        )) {
+        let timeout_sql =
+            mysql_timeout_statement(connection.mysql, f64::from(settings.query_seconds))?;
+        if let Err(error) = connection.connection.query_drop(timeout_sql) {
             if transaction {
                 let _ = connection.connection.query_drop("ROLLBACK");
             }
@@ -2957,7 +3045,14 @@ fn execute_mariadb_queries_on_pool(
 }
 
 fn prepare_mariadb_query(query: &Query) -> Result<(String, Vec<Value>), DatabaseError> {
-    let (sql, parameter_order) = bind_named_parameters(&query.sql)?;
+    let exact_parameters = query
+        .params
+        .iter()
+        .filter_map(|(name, value)| {
+            matches!(value, QueryValue::Decimal(_)).then_some(name.as_str())
+        })
+        .collect::<HashSet<_>>();
+    let (sql, parameter_order) = bind_exact_parameters(&query.sql, false, &exact_parameters)?;
     let parameters = parameter_order
         .iter()
         .map(|parameter_name| {
@@ -2969,21 +3064,36 @@ fn prepare_mariadb_query(query: &Query) -> Result<(String, Vec<Value>), Database
                 .ok_or_else(|| DatabaseError {
                     message: format!("missing SQL parameter `:{parameter_name}`"),
                 })
+                .and_then(|value| value)
         })
         .collect::<Result<Vec<_>, _>>()?;
     Ok((sql, parameters))
 }
 
-fn mysql_parameter_value(value: &QueryValue) -> Value {
-    match value {
+fn mysql_parameter_value(value: &QueryValue) -> Result<Value, DatabaseError> {
+    Ok(match value {
         QueryValue::Null => Value::NULL,
         QueryValue::Int(value) => Value::Int(*value),
         QueryValue::UInt(value) => Value::UInt(*value),
         QueryValue::Float(value) if value.is_finite() => Value::Double(*value),
-        QueryValue::Float(_) => Value::NULL,
+        QueryValue::Float(_) => {
+            return Err(DatabaseError {
+                message: "MariaDB/MySQL floating-point parameters must be finite".into(),
+            })
+        }
+        QueryValue::Decimal(value) => {
+            validate_exact_parameter(value)?;
+            Value::Bytes(value.as_bytes().to_vec())
+        }
         QueryValue::Bool(value) => Value::Int(i64::from(*value)),
         QueryValue::String(value) => Value::Bytes(value.as_bytes().to_vec()),
-    }
+    })
+}
+
+fn validate_exact_parameter(value: &str) -> Result<(), DatabaseError> {
+    zelyra_ast::decimal::parse_scaled(value, 9).map(|_| ()).ok_or_else(|| DatabaseError {
+        message: "SQL Decimal parameter must be a finite exact Decimal with at most 9 fractional digits".into(),
+    })
 }
 
 fn execute_prepared_mariadb_query(
@@ -3046,6 +3156,7 @@ fn mariadb_driver_error(error: mysql::Error) -> DatabaseError {
     }
 }
 
+#[cfg(any(test, feature = "fuzzing"))]
 fn bind_named_parameters(sql: &str) -> Result<(String, Vec<String>), DatabaseError> {
     bind_named_parameters_for(sql, false)
 }
@@ -3053,6 +3164,14 @@ fn bind_named_parameters(sql: &str) -> Result<(String, Vec<String>), DatabaseErr
 fn bind_named_parameters_for(
     sql: &str,
     postgres: bool,
+) -> Result<(String, Vec<String>), DatabaseError> {
+    bind_exact_parameters(sql, postgres, &HashSet::new())
+}
+
+fn bind_exact_parameters(
+    sql: &str,
+    postgres: bool,
+    exact_parameters: &HashSet<&str>,
 ) -> Result<(String, Vec<String>), DatabaseError> {
     let bytes = sql.as_bytes();
     let mut bound = String::with_capacity(sql.len());
@@ -3101,6 +3220,24 @@ fn bind_named_parameters_for(
             continue;
         }
         if let Some(active_quote) = quote {
+            if postgres && active_quote == b'`' {
+                if byte == b'`' && bytes.get(index + 1) == Some(&b'`') {
+                    bound.push('`');
+                    index += 2;
+                    continue;
+                }
+                if byte == b'`' {
+                    bound.push('"');
+                    quote = None;
+                } else if byte == b'"' {
+                    bound.push_str("\"\"");
+                } else {
+                    bound.push(byte as char);
+                }
+                index += 1;
+                continue;
+            }
+
             bound.push(byte as char);
             if byte == b'\\' && (active_quote == b'\'' || active_quote == b'"') {
                 if let Some(next) = bytes.get(index + 1) {
@@ -3139,7 +3276,11 @@ fn bind_named_parameters_for(
         }
         if byte == b'\'' || byte == b'"' || byte == b'`' {
             quote = Some(byte);
-            bound.push(byte as char);
+            bound.push(if postgres && byte == b'`' {
+                '"'
+            } else {
+                byte as char
+            });
             index += 1;
             continue;
         }
@@ -3170,12 +3311,23 @@ fn bind_named_parameters_for(
                 continue;
             }
             let name = sql[start..end].to_owned();
+            let exact = exact_parameters.contains(name.as_str());
             parameters.push(name);
+            if exact {
+                bound.push_str("CAST(");
+            }
             if postgres {
                 bound.push('$');
                 bound.push_str(&parameters.len().to_string());
             } else {
                 bound.push('?');
+            }
+            if exact {
+                bound.push_str(if postgres {
+                    "::TEXT AS NUMERIC)"
+                } else {
+                    " AS DECIMAL(39,9))"
+                });
             }
             index = end;
             continue;
@@ -3361,10 +3513,12 @@ struct MariaConnection {
 
 struct MariaDbConnectionManager {
     options: mysql::Opts,
+    mysql: bool,
 }
 
 struct ManagedMariaDbConnection {
     connection: Conn,
+    mysql: bool,
     discard: bool,
 }
 
@@ -3376,6 +3530,7 @@ impl ManageConnection for MariaDbConnectionManager {
         Conn::new(self.options.clone()).map(|connection| ManagedMariaDbConnection {
             connection,
             discard: false,
+            mysql: self.mysql,
         })
     }
 
@@ -3638,6 +3793,7 @@ fn build_mariadb_pool(
     };
     let manager = MariaDbConnectionManager {
         options: options.into(),
+        mysql: database_url.starts_with("mysql://"),
     };
     Pool::builder()
         .max_size(settings.pool_max_size)
@@ -3649,6 +3805,22 @@ fn build_mariadb_pool(
         .map_err(|_| DatabaseError {
             message: "could not initialize the MariaDB connection pool".into(),
         })
+}
+
+fn mysql_timeout_statement(mysql: bool, seconds: f64) -> Result<String, DatabaseError> {
+    if !seconds.is_finite() || seconds < 0.001 || seconds * 1000.0 > f64::from(u32::MAX) {
+        return Err(DatabaseError {
+            message: "request deadline exceeded before database statement".into(),
+        });
+    }
+    Ok(if mysql {
+        format!(
+            "SET SESSION max_execution_time={}",
+            (seconds * 1000.0).floor() as u32
+        )
+    } else {
+        format!("SET SESSION max_statement_time={seconds:.6}")
+    })
 }
 
 fn mysql_session_timeout_statement(database_url: &str, query_seconds: u32) -> String {
@@ -4234,6 +4406,101 @@ mod tests {
     use super::*;
 
     include!("../../tests/support/bounded_mutations.rs");
+
+    #[test]
+    fn decimal_schema_check_rejects_old_or_missing_precision() {
+        let desired = schema("database Main { engine: mariadb } table amounts { id: Id primary amount: Decimal required price: Money required }");
+        let rows = vec![
+            vec!["amounts".into(), "amount".into(), "39".into(), "9".into()],
+            vec!["amounts".into(), "price".into(), "19".into(), "4".into()],
+        ];
+        assert!(check_decimal_metadata(&desired, &rows).is_ok());
+        let mut old = rows.clone();
+        old[0][2] = "10".into();
+        old[0][3] = "0".into();
+        assert!(check_decimal_metadata(&desired, &old)
+            .unwrap_err()
+            .message
+            .contains("db plan"));
+        assert!(check_decimal_metadata(&desired, &rows[..1]).is_err());
+        let old_schema = schema("database Main { engine: postgres } table amounts { id: Id primary amount: Decimal required }");
+        let inspected =
+            parse_inspection_output("amounts\tamount\tNUMERIC(39,9)\tnumeric\tNO\t\tf\tf\tN\n")
+                .unwrap();
+        assert_eq!(inspected.tables[0].columns[0].sql_type, "NUMERIC(39,9)");
+        assert_eq!(old_schema.tables[0].columns[1].sql_type, "NUMERIC(39,9)");
+    }
+
+    #[test]
+    fn cyclic_column_aliases_fail_with_a_source_span_without_recursing_forever() {
+        let program = parse(
+            &lex("type A = B type B = A table entries { id: Id primary amount: A? }").unwrap(),
+        )
+        .unwrap();
+        let errors = build_schema(&program).unwrap_err();
+        assert!(errors.iter().any(|error| error.message.contains("cyclic")
+            && error.span.line == 1
+            && error.span.column > 1));
+    }
+
+    #[test]
+    fn nullable_decimal_aliases_keep_exact_storage() {
+        let schema = schema("type Amount = Decimal table bills { id: Id primary amount: Amount? }");
+        assert_eq!(schema.tables[0].columns[1].sql_type, "DECIMAL(39,9)");
+        assert!(schema.tables[0].columns[1].nullable);
+    }
+
+    #[test]
+    fn postgres_generated_identifier_translation_preserves_literals_and_parameters() {
+        let (sql, names) = bind_named_parameters_for("SELECT `a:b`, `a``b`, `a\"b`, ':text `x`', $tag$`x` :ignored$tag$ /* `x` */ FROM `items` WHERE `amount`=:amount", true).unwrap();
+        assert_eq!(sql, "SELECT \"a:b\", \"a`b\", \"a\"\"b\", ':text `x`', $tag$`x` :ignored$tag$ /* `x` */ FROM \"items\" WHERE \"amount\"=$1");
+        assert_eq!(names, ["amount"]);
+    }
+
+    #[test]
+    fn decimal_storage_preserves_the_full_language_scale() {
+        for (engine, expected) in [("mariadb", "DECIMAL(39,9)"), ("postgres", "NUMERIC(39,9)")] {
+            let desired = schema(&format!("database Main {{ engine: {engine} }} table amounts {{ id: Id primary amount: Decimal required }}"));
+            assert_eq!(desired.tables[0].columns[1].sql_type, expected);
+        }
+    }
+
+    #[test]
+    fn exact_numeric_parameters_never_pass_through_float_or_sql_null() {
+        let query = Query {
+            sql: "SELECT :amount, ':amount', /* :amount */ :id, :amount".into(),
+            params: vec![
+                (
+                    "amount".into(),
+                    QueryValue::Decimal("9007199254740993.123456789".into()),
+                ),
+                ("id".into(), QueryValue::UInt(u64::MAX)),
+            ],
+        };
+        let (sql, values) = prepare_mariadb_query(&query).unwrap();
+        assert_eq!(
+            sql,
+            "SELECT CAST(? AS DECIMAL(39,9)), ':amount', /* :amount */ ?, CAST(? AS DECIMAL(39,9))"
+        );
+        assert_eq!(
+            values[0],
+            Value::Bytes(b"9007199254740993.123456789".to_vec())
+        );
+        assert_eq!(values[1], Value::UInt(u64::MAX));
+        let (sql, values) = prepare_postgres_query(&query).unwrap();
+        assert_eq!(sql, "SELECT CAST($1::TEXT AS NUMERIC), ':amount', /* :amount */ CAST($2::TEXT AS NUMERIC), CAST($3::TEXT AS NUMERIC)");
+        assert_eq!(values.len(), 3);
+        for value in [
+            QueryValue::Float(f64::NAN),
+            QueryValue::Float(f64::INFINITY),
+            QueryValue::Decimal("NaN".into()),
+            QueryValue::Decimal("1e3".into()),
+            QueryValue::Decimal("0.0000000001".into()),
+        ] {
+            assert!(mysql_parameter_value(&value).is_err());
+            assert!(postgres_parameter_value(&value).is_err());
+        }
+    }
 
     #[test]
     fn sql_binder_keeps_utf8_after_backslash_in_quoted_text() {
@@ -4970,6 +5237,19 @@ mod tests {
             .contains("rejected authentication"));
         assert!(mariadb_pool_acquisition_message("timed out").contains("pool saturation"));
         assert!(!mariadb_pool_acquisition_message("password=secret").contains("secret"));
+    }
+
+    #[test]
+    fn mysql_deadline_timeout_uses_its_own_server_variable() {
+        assert_eq!(
+            mysql_timeout_statement(true, 0.300).unwrap(),
+            "SET SESSION max_execution_time=300"
+        );
+        assert_eq!(
+            mysql_timeout_statement(false, 0.300).unwrap(),
+            "SET SESSION max_statement_time=0.300000"
+        );
+        assert!(mysql_timeout_statement(true, 0.0001).is_err());
     }
 
     #[test]

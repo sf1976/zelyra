@@ -257,7 +257,7 @@ pub fn enqueue_mariadb_event(
     validate_event_id(&event.id)?;
     validate_event_type(&event.event_type)?;
     if event.payload_json.len() > MAX_EVENT_PAYLOAD_BYTES
-        || serde_json::from_str::<serde_json::Value>(&event.payload_json).is_err()
+        || zelyra_ast::json::parse(&event.payload_json).is_err()
     {
         return Err(DatabaseError {
             message: "outbox event payload must be valid JSON within the 65536 byte limit".into(),
@@ -373,7 +373,7 @@ fn claim_mariadb_event_for_types(
         validate_event_id(&event.id)?;
         validate_event_type(&event.event_type)?;
         if event.payload_json.len() > MAX_EVENT_PAYLOAD_BYTES
-            || serde_json::from_str::<serde_json::Value>(&event.payload_json).is_err()
+            || zelyra_ast::json::parse(&event.payload_json).is_err()
         {
             return Err(DatabaseError {
                 message: "stored outbox event payload is invalid".into(),

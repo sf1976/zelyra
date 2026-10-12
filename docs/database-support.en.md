@@ -18,3 +18,14 @@ MariaDB, MySQL, and PostgreSQL remain targets for the first productive release.
 The verified scope differs by backend. 0.9.9 can freeze the 1.0.0 support
 scope only after each promised workflow has evidence. Accepting a URL such as
 `mysql://` is not evidence for MySQL Server support.
+
+## Additional local evidence: exact decimals (0.9.9 development)
+
+MariaDB 11.4.13, MySQL 8.4.11, and PostgreSQL 16.15 pass isolated round trips
+for Decimal/Money forms, SQL storage, exact CRUD filters, HTTP/generic JSON
+data, optional NULLs, and legacy-scale rejection. New CI steps execute the
+same probe. See the [package evidence](release-readiness/0.9.9-exact-decimals.en.md).
+Plain PostgreSQL form actions are transactional; tenant/recipient, edit-snapshot,
+and audit decisions remain separate technical gates. MySQL's server timer
+applies to SELECT; this does not prove hard interruption bounds for writes.
+It is not general backend approval.

@@ -1463,7 +1463,7 @@ fn validate_program(
         }
         return Err(());
     }
-    if !program.functions.is_empty() {
+    if !program.functions.is_empty() || !program.types.is_empty() {
         if let Err(errors) = check(&program) {
             for error in errors {
                 diagnostic_with_span(path, error.code, &error.message, error.span);
@@ -2531,7 +2531,7 @@ fn edit_command(arguments: impl Iterator<Item = String>) -> ExitCode {
             )
         }
     };
-    let request: Value = match serde_json::from_str(&request_source) {
+    let request: Value = match zelyra_ast::json::parse(&request_source) {
         Ok(request) => request,
         Err(error) => {
             return edit_error_document(
@@ -3122,8 +3122,10 @@ fn component_prop_accepts(prop: &zelyra_ast::ComponentProp, value: &str) -> bool
             },
             value,
         ),
-        Type::Int | Type::UInt => value.parse::<i64>().is_ok(),
-        Type::Float | Type::Decimal => value.parse::<f64>().is_ok(),
+        Type::Int => value.parse::<i64>().is_ok(),
+        Type::UInt => value.parse::<u64>().is_ok(),
+        Type::Float => value.parse::<f64>().is_ok_and(|value| value.is_finite()),
+        Type::Decimal => zelyra_ast::decimal::parse_scaled(value, 9).is_some(),
         Type::Bool => matches!(value, "true" | "false"),
         _ => true,
     }
@@ -7748,7 +7750,12 @@ fn tableview_type_filter_kind(ty: &Type) -> TableViewFilterKind {
         _ => ty,
     };
     match ty {
-        Type::Int | Type::UInt | Type::Float | Type::Decimal => TableViewFilterKind::Numeric,
+        Type::Int => TableViewFilterKind::Integer,
+        Type::UInt => TableViewFilterKind::Unsigned,
+        Type::Float => TableViewFilterKind::Numeric,
+        Type::Decimal => TableViewFilterKind::Decimal,
+        Type::Named(name) if name == "Money" => TableViewFilterKind::Decimal,
+        Type::Named(name) if name == "Id" => TableViewFilterKind::Integer,
         Type::Bool => TableViewFilterKind::Bool,
         Type::String | Type::Char => TableViewFilterKind::Text,
         Type::Named(name) if matches!(name.as_str(), "Email" | "Url" | "Uuid") => {
@@ -7764,12 +7771,16 @@ fn tableview_sql_filter_kind(sql_type: &str) -> TableViewFilterKind {
         TableViewFilterKind::Bool
     } else if sql_type.contains("CHAR") || sql_type.contains("TEXT") {
         TableViewFilterKind::Text
-    } else if sql_type.contains("INT")
-        || sql_type.contains("DECIMAL")
-        || sql_type.contains("NUMERIC")
-        || sql_type.contains("DOUBLE")
-        || sql_type.contains("FLOAT")
-        || sql_type.contains("REAL")
+    } else if sql_type.contains("INT") && sql_type.contains("UNSIGNED")
+        || sql_type == "DECIMAL(20,0)"
+        || sql_type == "NUMERIC(20,0)"
+    {
+        TableViewFilterKind::Unsigned
+    } else if sql_type.contains("INT") {
+        TableViewFilterKind::Integer
+    } else if sql_type.contains("DECIMAL") || sql_type.contains("NUMERIC") {
+        TableViewFilterKind::Decimal
+    } else if sql_type.contains("DOUBLE") || sql_type.contains("FLOAT") || sql_type.contains("REAL")
     {
         TableViewFilterKind::Numeric
     } else {
@@ -7819,6 +7830,26 @@ fn configured_crud_filter_columns(
         .filter(|column| crud_column_exists(program, schema, crud, column))
         .cloned()
         .collect()
+}
+
+fn decimal_storage_error_span(program: &zelyra_ast::Program, message: &str) -> zelyra_ast::Span {
+    program
+        .tables
+        .iter()
+        .find_map(|table| {
+            table
+                .columns
+                .iter()
+                .find(|column| message.contains(&format!("`{}.{}`", table.name, column.name)))
+                .map(|column| column.span)
+        })
+        .unwrap_or_else(|| {
+            program
+                .tables
+                .first()
+                .map(|table| table.span)
+                .unwrap_or_default()
+        })
 }
 
 fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
@@ -8299,6 +8330,15 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     let database_capability_granted = capability_grants
         .as_ref()
         .is_none_or(|grants| grants.contains("Database"));
+    if database_capability_granted {
+        if let Some(url) = database_url_from_program(&program) {
+            if let Err(error) = zelyra_database::validate_decimal_storage(&url, &schema) {
+                let span = decimal_storage_error_span(&program, &error.to_string());
+                diagnostic_with_span(&path, "E-DB-PRECISION", &error.to_string(), span);
+                return ExitCode::from(1);
+            }
+        }
+    }
     let api_routes = generated_api_routes(
         &program,
         capability_grants.as_ref(),
@@ -8869,11 +8909,24 @@ fn api_value_json(
             .or_else(|| value.as_str().and_then(|value| value.parse().ok()))
             .map(RuntimeValue::UInt)
             .ok_or_else(|| format!("invalid UInt JSON value `{value}`")),
-        Type::Float | Type::Decimal => value
+        Type::Float => value
             .as_f64()
             .or_else(|| value.as_str().and_then(|value| value.parse().ok()))
+            .filter(|value| value.is_finite())
             .map(RuntimeValue::Float)
             .ok_or_else(|| format!("invalid numeric JSON value `{value}`")),
+        Type::Decimal => {
+            let exact = match value {
+                Value::String(value) => zelyra_ast::decimal::parse_scaled(value, 9),
+                Value::Number(value) => {
+                    zelyra_ast::decimal::parse_json_number(&value.to_string(), 9)
+                }
+                _ => None,
+            };
+            exact
+                .map(RuntimeValue::Decimal)
+                .ok_or_else(|| "invalid exact Decimal JSON value".into())
+        }
         Type::Bool => value
             .as_bool()
             .or_else(|| {
@@ -9218,7 +9271,7 @@ fn api_error_response_with_details(
 }
 
 fn parse_api_json_object(source: &str) -> Result<HashMap<String, serde_json::Value>, String> {
-    let value: serde_json::Value = serde_json::from_str(source)
+    let value: serde_json::Value = zelyra_ast::json::parse(source)
         .map_err(|error| format!("invalid JSON request body: {error}"))?;
     let serde_json::Value::Object(object) = value else {
         return Err("JSON request body must be an object".into());

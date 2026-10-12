@@ -10,8 +10,11 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use zelyra_ast::*;
 
 mod csv;
+mod decimal_math;
 mod filesystem;
 mod mail;
+mod parallel;
+mod records;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypeError {
@@ -4017,6 +4020,7 @@ struct FunctionSignature {
 }
 
 struct Checker<'a> {
+    type_aliases: HashMap<String, Type>,
     functions: HashMap<String, FunctionSignature>,
     known_types: std::collections::HashSet<String>,
     generic_arities: HashMap<String, usize>,
@@ -4094,6 +4098,20 @@ pub fn check(program: &Program) -> Result<(), Vec<TypeError>> {
         known_types.insert(table.name.clone());
         if let Some(singular) = singular_table_type(&table.name) {
             known_types.insert(singular);
+        }
+    }
+    let aliases: HashMap<_, _> = program
+        .types
+        .iter()
+        .map(|definition| (definition.name.clone(), definition.target.clone()))
+        .collect();
+    for definition in &program.types {
+        if let Err(message) = expand_type_aliases(&Type::Named(definition.name.clone()), &aliases) {
+            errors.push(TypeError {
+                code: "E-TYPE-ALIAS-001",
+                message: message.into(),
+                span: definition.span,
+            });
         }
     }
     for definition in &program.types {
@@ -4198,6 +4216,11 @@ pub fn check(program: &Program) -> Result<(), Vec<TypeError>> {
         });
     }
     let mut checker = Checker {
+        type_aliases: program
+            .types
+            .iter()
+            .map(|definition| (definition.name.clone(), definition.target.clone()))
+            .collect(),
         functions,
         known_types,
         generic_arities,
@@ -5176,8 +5199,20 @@ impl<'a> Checker<'a> {
             );
         }
     }
+    fn normalize_alias(&mut self, ty: &Type, span: Span) -> Type {
+        match expand_type_aliases(ty, &self.type_aliases) {
+            Ok(ty) => ty,
+            Err(message) => {
+                self.error_with_code("E-TYPE-ALIAS-001", span, message);
+                Type::Unknown
+            }
+        }
+    }
+
     fn expect_type(&mut self, expected: &Type, actual: &Type, span: Span) {
-        if !compatible(expected, actual) {
+        let resolved_expected = self.normalize_alias(expected, span);
+        let resolved_actual = self.normalize_alias(actual, span);
+        if !compatible(&resolved_expected, &resolved_actual) {
             self.error(
                 span,
                 format!("type mismatch: expected `{expected}`, found `{actual}`"),
@@ -5185,6 +5220,10 @@ impl<'a> Checker<'a> {
         }
     }
     fn check_expr(&mut self, expr: &Expr, scopes: &[HashMap<String, Variable>]) -> Type {
+        let ty = self.check_expr_inner(expr, scopes);
+        self.normalize_alias(&ty, expr.span)
+    }
+    fn check_expr_inner(&mut self, expr: &Expr, scopes: &[HashMap<String, Variable>]) -> Type {
         match &expr.kind {
             ExprKind::Int(_) => Type::Int,
             ExprKind::UInt(_) => Type::UInt,
@@ -5565,6 +5604,8 @@ impl<'a> Checker<'a> {
                                         .collect::<HashMap<_, _>>();
                                     let field_type =
                                         substitute_generic_type(&field.ty, &substitutions);
+                                    let field_type =
+                                        self.normalize_alias(&field_type, args[2].span);
                                     if !compatible(&field_type, &value_type) {
                                         self.error_with_code(
                                             "E-TYPE-CLASS-001",
@@ -7075,6 +7116,57 @@ fn infer_generic_types(
     }
 }
 
+fn alias_shape_has_names(ty: &Type, aliases: &HashMap<String, Type>) -> Result<bool, &'static str> {
+    let mut stack = vec![(ty, 0)];
+    let mut nodes = 0;
+    let mut has_alias = false;
+    while let Some((ty, depth)) = stack.pop() {
+        nodes += 1;
+        if nodes > 4096 || depth > 64 {
+            return Err("type alias expansion exceeds 64 levels or 4096 type nodes");
+        }
+        match ty {
+            Type::Named(name) => has_alias |= aliases.contains_key(name),
+            Type::Option(inner)
+            | Type::Array(inner)
+            | Type::Set(inner)
+            | Type::HttpResult(inner) => stack.push((inner, depth + 1)),
+            Type::Result(left, right) | Type::Map(left, right) => {
+                stack.push((left, depth + 1));
+                stack.push((right, depth + 1));
+            }
+            Type::Tuple(items) | Type::Applied { args: items, .. } => {
+                stack.extend(items.iter().map(|item| (item, depth + 1)))
+            }
+            Type::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                stack.extend(params.iter().map(|item| (item, depth + 1)));
+                stack.push((return_type, depth + 1));
+            }
+            _ => {}
+        }
+    }
+    Ok(has_alias)
+}
+
+fn expand_type_aliases(ty: &Type, aliases: &HashMap<String, Type>) -> Result<Type, &'static str> {
+    let mut resolved = ty.clone();
+    for _ in 0..=aliases.len().min(64) {
+        if !alias_shape_has_names(&resolved, aliases)? {
+            return Ok(resolved);
+        }
+        let next = substitute_generic_type(&resolved, aliases);
+        if next == resolved {
+            return Err("cyclic type alias");
+        }
+        resolved = next;
+    }
+    Err("cyclic or excessively deep type alias")
+}
+
 fn substitute_generic_type(ty: &Type, substitutions: &HashMap<String, Type>) -> Type {
     match ty {
         Type::Named(name) => substitutions
@@ -7824,6 +7916,8 @@ pub fn execute_function_with_capabilities_and_policies(
         step_budget: policy.as_ref().and_then(|policy| policy.step_budget),
         call_depth: 0,
         database_url: database_url.map(str::to_owned),
+        storage_schema: zelyra_database::build_schema(program),
+        storage_checked: false,
         granted_capabilities: grants.cloned(),
         filesystem_policy: policy.and_then(|policy| policy.filesystem.clone()),
         network_policy: policy.and_then(|policy| policy.network.clone()),
@@ -7910,6 +8004,8 @@ fn execute_internal(
         step_budget: policy.as_ref().and_then(|policy| policy.step_budget),
         call_depth: 0,
         database_url,
+        storage_schema: zelyra_database::build_schema(program),
+        storage_checked: false,
         granted_capabilities,
         filesystem_policy: policy.as_ref().and_then(|policy| policy.filesystem.clone()),
         network_policy: policy.as_ref().and_then(|policy| policy.network.clone()),
@@ -7948,6 +8044,8 @@ struct Interpreter<'program> {
     step_budget: Option<usize>,
     call_depth: usize,
     database_url: Option<String>,
+    storage_schema: Result<zelyra_database::Schema, Vec<zelyra_database::SchemaError>>,
+    storage_checked: bool,
     granted_capabilities: Option<HashSet<String>>,
     filesystem_policy: Option<FileSystemPolicy>,
     network_policy: Option<NetworkPolicy>,
@@ -8150,6 +8248,30 @@ fn is_runtime_builtin(name: &str) -> bool {
 }
 
 impl<'program> Interpreter<'program> {
+    fn runtime_alias_type(&self, ty: &Type, span: Span) -> Result<Type, RuntimeError> {
+        expand_type_aliases(ty, &self.type_aliases)
+            .map_err(|message| self.runtime_error(span, message))
+    }
+
+    fn ensure_decimal_storage(&mut self, span: Span) -> Result<(), RuntimeError> {
+        if !self.storage_checked {
+            if let Some(url) = &self.database_url {
+                let schema = self.storage_schema.as_ref().map_err(|errors| {
+                    self.runtime_error(
+                        span,
+                        errors
+                            .first()
+                            .map_or("invalid database schema", |error| error.message.as_str()),
+                    )
+                })?;
+                zelyra_database::validate_decimal_storage(url, schema)
+                    .map_err(|error| self.runtime_error(span, error.to_string()))?;
+            }
+            self.storage_checked = true;
+        }
+        Ok(())
+    }
+
     fn consume_step(&mut self, span: Span) -> Result<(), RuntimeError> {
         self.steps = self.steps.saturating_add(1);
         if self.step_budget.is_some_and(|budget| self.steps > budget) {
@@ -8583,7 +8705,7 @@ impl<'program> Interpreter<'program> {
         error_type: &Type,
         span: Span,
     ) -> Result<Value, String> {
-        let value: serde_json::Value = serde_json::from_str(source)
+        let value: serde_json::Value = zelyra_ast::json::parse(source)
             .map_err(|error| format!("invalid tagged Result JSON: {error}"))?;
         let object = value
             .as_object()
@@ -8723,7 +8845,7 @@ impl<'program> Interpreter<'program> {
     }
 
     fn json_decode(&self, source: &str, target: &Type, span: Span) -> Result<Value, RuntimeError> {
-        let value: serde_json::Value = serde_json::from_str(source).map_err(|error| {
+        let value: serde_json::Value = zelyra_ast::json::parse(source).map_err(|error| {
             self.runtime_error(span, format!("json_decode received invalid JSON: {error}"))
         })?;
         self.json_decode_value(&value, target, span)
@@ -9379,7 +9501,8 @@ impl<'program> Interpreter<'program> {
         let expected_return = function
             .return_type
             .as_ref()
-            .map(|ty| substitute_generic_type(ty, &substitutions));
+            .map(|ty| self.runtime_alias_type(&substitute_generic_type(ty, &substitutions), span))
+            .transpose()?;
         if let Some(grants) = &self.granted_capabilities {
             if let Some(capability) = function
                 .capabilities
@@ -9430,7 +9553,8 @@ impl<'program> Interpreter<'program> {
                         format!("function `{name}` reached its end without returning `{expected}`"),
                     ));
                 }
-                if returned && !compatible(expected, &result.ty()) {
+                if returned && !compatible(expected, &self.runtime_alias_type(&result.ty(), span)?)
+                {
                     return Err(self.runtime_error(
                         function.body.span,
                         format!(
@@ -9678,6 +9802,7 @@ impl<'program> Interpreter<'program> {
                     unreachable!();
                 };
                 let queries = transaction_queries(self, body, env, *span)?;
+                self.ensure_decimal_storage(*span)?;
                 zelyra_database::execute_queries(&database_url, &queries, true).map_err(
                     |error| {
                         self.runtime_error(*span, format!("database transaction failed: {error}"))
@@ -9685,104 +9810,7 @@ impl<'program> Interpreter<'program> {
                 )?;
                 Ok(Flow::Continue)
             }
-            Stmt::Parallel { body, span } => {
-                let mut branches = Vec::new();
-                let mut names = HashSet::new();
-                for statement in &body.statements {
-                    let Stmt::BindOrAssign { name, value, .. } = statement else {
-                        return Err(self.runtime_error(
-                            *span,
-                            "parallel blocks may contain only `name = await expression` bindings",
-                        ));
-                    };
-                    let ExprKind::Await(inner) = &value.kind else {
-                        return Err(self.runtime_error(
-                            value.span,
-                            "parallel bindings must await their expression",
-                        ));
-                    };
-                    if !names.insert(name.clone()) {
-                        return Err(self.runtime_error(
-                            value.span,
-                            format!("parallel binding `{name}` is declared twice"),
-                        ));
-                    }
-                    branches.push((name.as_str(), inner.as_ref(), value.span));
-                }
-                let mut results = Vec::new();
-                let mut first_error = None;
-                std::thread::scope(|scope| {
-                    let handles = branches
-                        .iter()
-                        .map(|(name, expression, branch_span)| {
-                            let mut child = Interpreter {
-                                functions: self.functions.clone(),
-                                output: Vec::new(),
-                                next_class_object_id: Arc::clone(&self.next_class_object_id),
-                                parallel_worker: true,
-                                steps: 0,
-                                step_budget: self.step_budget,
-                                call_depth: 0,
-                                database_url: self.database_url.clone(),
-                                granted_capabilities: self.granted_capabilities.clone(),
-                                filesystem_policy: self.filesystem_policy.clone(),
-                                network_policy: self.network_policy.clone(),
-                                process_policy: self.process_policy.clone(),
-                                mail_policy: self.mail_policy.clone(),
-                                record_definitions: self.record_definitions.clone(),
-                                type_aliases: self.type_aliases.clone(),
-                                enum_definitions: self.enum_definitions.clone(),
-                                active_capabilities: self.active_capabilities.clone(),
-                                active_type_substitutions: self.active_type_substitutions.clone(),
-                            };
-                            let mut child_env = env.clone();
-                            scope.spawn(move || {
-                                child
-                                    .eval(expression, &mut child_env)
-                                    .map(|value| ((*name).to_owned(), value, child.output))
-                                    .map_err(|error| (*branch_span, error))
-                            })
-                        })
-                        .collect::<Vec<_>>();
-                    for handle in handles {
-                        match handle.join() {
-                            Ok(Ok(result)) => results.push(result),
-                            Ok(Err((_, error))) => {
-                                if first_error.is_none() {
-                                    first_error = Some(error);
-                                }
-                            }
-                            Err(_) => {
-                                if first_error.is_none() {
-                                    first_error =
-                                        Some(self.runtime_error(*span, "parallel task panicked"));
-                                }
-                            }
-                        }
-                    }
-                });
-                if let Some(error) = first_error {
-                    return Err(error);
-                }
-                for (name, value, output) in results {
-                    self.output.extend(output);
-                    if env.contains(&name) {
-                        env.assign(&name, value).map_err(|reason| {
-                            self.runtime_error(
-                                *span,
-                                if reason == "immutable" {
-                                    format!("cannot assign to immutable variable `{name}`")
-                                } else {
-                                    format!("unknown variable `{name}`")
-                                },
-                            )
-                        })?;
-                    } else {
-                        env.declare(name, value, false);
-                    }
-                }
-                Ok(Flow::Continue)
-            }
+            Stmt::Parallel { body, span } => self.exec_parallel(body, *span, env),
         }
     }
     fn expect_bool(&self, value: Value, span: Span) -> Result<bool, RuntimeError> {
@@ -10057,7 +10085,10 @@ impl<'program> Interpreter<'program> {
                 for ((argument, payload), expected) in
                     args.iter().zip(&payloads).zip(&instantiated_payloads)
                 {
-                    if !compatible(expected, &payload.ty()) {
+                    if !compatible(
+                        &self.runtime_alias_type(expected, span)?,
+                        &self.runtime_alias_type(&payload.ty(), span)?,
+                    ) {
                         return Err(self.runtime_error(
                             argument.span,
                             format!(
@@ -10243,7 +10274,10 @@ impl<'program> Interpreter<'program> {
                 .map(|(parameter, argument)| (parameter.clone(), argument.clone()))
                 .collect::<HashMap<_, _>>();
             let expected = substitute_generic_type(&field.ty, &substitutions);
-            if !compatible(&expected, &value.ty()) {
+            if !compatible(
+                &self.runtime_alias_type(&expected, span)?,
+                &self.runtime_alias_type(&value.ty(), span)?,
+            ) {
                 return Err(self.runtime_error(
                     args[2].span,
                     format!(
@@ -10309,7 +10343,10 @@ impl<'program> Interpreter<'program> {
                 .map(|(parameter, argument)| (parameter.clone(), argument.clone()))
                 .collect::<HashMap<_, _>>();
             let field_type = substitute_generic_type(&field.ty, &substitutions);
-            if !compatible(&field_type, &value.ty()) {
+            if !compatible(
+                &self.runtime_alias_type(&field_type, span)?,
+                &self.runtime_alias_type(&value.ty(), span)?,
+            ) {
                 return Err(self.runtime_error(
                     args[2].span,
                     format!(
@@ -11521,87 +11558,7 @@ impl<'program> Interpreter<'program> {
                 type_name,
                 type_args,
                 fields,
-            } => {
-                let mut values = HashMap::new();
-                for (field, value) in fields {
-                    values.insert(field.clone(), self.eval(value, env)?);
-                }
-                let definition = self.record_definitions.get(type_name).ok_or_else(|| {
-                    self.runtime_error(expr.span, format!("unknown record type `{type_name}`"))
-                })?;
-                for field in &definition.fields {
-                    if !values.contains_key(&field.name) && matches!(&field.ty, Type::Option(_)) {
-                        values.insert(field.name.clone(), Value::Option(None));
-                    }
-                }
-                let concrete_args = if !type_args.is_empty() {
-                    type_args.clone()
-                } else if definition.type_params.is_empty() {
-                    Vec::new()
-                } else {
-                    let parameters = definition
-                        .type_params
-                        .iter()
-                        .cloned()
-                        .collect::<HashSet<_>>();
-                    let mut substitutions = HashMap::new();
-                    for field in &definition.fields {
-                        if let Some(actual) = values.get(&field.name) {
-                            infer_generic_types(
-                                &field.ty,
-                                &actual.ty(),
-                                &parameters,
-                                &mut substitutions,
-                            );
-                        }
-                    }
-                    definition
-                        .type_params
-                        .iter()
-                        .map(|parameter| substitutions.get(parameter).cloned())
-                        .collect::<Option<Vec<_>>>()
-                        .ok_or_else(|| {
-                            self.runtime_error(
-                                expr.span,
-                                format!("cannot infer generic arguments for `{type_name}`"),
-                            )
-                        })?
-                };
-                if definition.is_class {
-                    let object_id = loop {
-                        let current = self.next_class_object_id.load(Ordering::Relaxed);
-                        let next = current.checked_add(1).ok_or_else(|| {
-                            self.runtime_error(expr.span, "class object identity space exhausted")
-                        })?;
-                        if self
-                            .next_class_object_id
-                            .compare_exchange_weak(
-                                current,
-                                next,
-                                Ordering::Relaxed,
-                                Ordering::Relaxed,
-                            )
-                            .is_ok()
-                        {
-                            break current;
-                        }
-                    };
-                    let reference = ClassObjectRef {
-                        object_id,
-                        object: Arc::new(Mutex::new(RuntimeClassObject { fields: values })),
-                    };
-                    return Ok(Value::ClassRef {
-                        reference,
-                        type_name: type_name.clone(),
-                        type_args: concrete_args,
-                    });
-                }
-                Ok(Value::Object {
-                    type_name: type_name.clone(),
-                    type_args: concrete_args,
-                    fields: values,
-                })
-            }
+            } => self.eval_record_value(type_name, type_args, fields, expr.span, env),
             ExprKind::Variable(name) => {
                 if let Some(value) = env.get(name) {
                     return Ok(value);
@@ -11756,6 +11713,7 @@ impl<'program> Interpreter<'program> {
                     );
                 };
                 let params = query_parameters(query, env, expr.span)?;
+                self.ensure_decimal_storage(expr.span)?;
                 let result = zelyra_database::execute_query(&database_url, query, params).map_err(
                     |error| {
                         self.runtime_error(expr.span, format!("database query failed: {error}"))
@@ -11854,23 +11812,27 @@ impl<'program> Interpreter<'program> {
                 .checked_sub(b)
                 .map(Value::Decimal)
                 .ok_or_else(|| self.runtime_error(span, "Decimal overflow")),
-            (Value::Decimal(a), Multiply, Value::Decimal(b)) => a
-                .checked_mul(b)
-                .and_then(|value| value.checked_div(DECIMAL_SCALE))
-                .map(Value::Decimal)
-                .ok_or_else(|| self.runtime_error(span, "Decimal overflow")),
+            (Value::Decimal(a), Multiply, Value::Decimal(b)) => {
+                decimal_math::scaled_product(a, b, DECIMAL_SCALE)
+                    .map(Value::Decimal)
+                    .ok_or_else(|| self.runtime_error(span, "Decimal overflow"))
+            }
             (Value::Decimal(_), Divide, Value::Decimal(0)) => {
                 Err(self.runtime_error(span, "division by zero"))
             }
-            (Value::Decimal(a), Divide, Value::Decimal(b)) => a
-                .checked_mul(DECIMAL_SCALE)
-                .and_then(|value| value.checked_div(b))
-                .map(Value::Decimal)
-                .ok_or_else(|| self.runtime_error(span, "Decimal overflow")),
+            (Value::Decimal(a), Divide, Value::Decimal(b)) => {
+                decimal_math::scaled_product(a, DECIMAL_SCALE, b)
+                    .map(Value::Decimal)
+                    .ok_or_else(|| self.runtime_error(span, "Decimal overflow"))
+            }
             (Value::Decimal(_), Remainder, Value::Decimal(0)) => {
                 Err(self.runtime_error(span, "division by zero"))
             }
-            (Value::Decimal(a), Remainder, Value::Decimal(b)) => Ok(Value::Decimal(a % b)),
+            (Value::Decimal(a), Remainder, Value::Decimal(b)) => {
+                // i128::MIN % -1 has a representable zero remainder, but the
+                // machine division used for `%` traps before returning it.
+                Ok(Value::Decimal(if b == -1 { 0 } else { a % b }))
+            }
             (Value::String(a), Add, Value::String(b)) => Ok(Value::String(a + &b)),
             (Value::Duration(a), Add, Value::Duration(b)) => a
                 .checked_add(b)
@@ -12037,32 +11999,7 @@ fn canonical_set(mut values: Vec<Value>) -> Vec<Value> {
 }
 
 fn parse_decimal(value: &str) -> Option<i128> {
-    let (negative, unsigned) = value
-        .strip_prefix('-')
-        .map_or((false, value), |value| (true, value));
-    let (whole, fraction) = unsigned.split_once('.').unwrap_or((unsigned, ""));
-    if whole.is_empty()
-        || !whole.bytes().all(|byte| byte.is_ascii_digit())
-        || fraction.len() > 9
-        || !fraction.bytes().all(|byte| byte.is_ascii_digit())
-    {
-        return None;
-    }
-    let whole = whole.parse::<i128>().ok()?.checked_mul(DECIMAL_SCALE)?;
-    let fraction_value = if fraction.is_empty() {
-        0
-    } else {
-        fraction
-            .parse::<i128>()
-            .ok()?
-            .checked_mul(10_i128.checked_pow((9 - fraction.len()) as u32)?)?
-    };
-    let value = whole.checked_add(fraction_value)?;
-    if negative {
-        value.checked_neg()
-    } else {
-        Some(value)
-    }
+    zelyra_ast::decimal::parse_scaled(value, zelyra_ast::decimal::SCALE_DIGITS)
 }
 
 fn format_decimal(value: i128) -> String {
@@ -12199,7 +12136,7 @@ fn value_to_query_value(
         Value::Int(value) => Ok(QueryValue::Int(*value)),
         Value::UInt(value) => Ok(QueryValue::UInt(*value)),
         Value::Float(value) => Ok(QueryValue::Float(*value)),
-        Value::Decimal(value) => Ok(QueryValue::String(format_decimal(*value))),
+        Value::Decimal(value) => Ok(QueryValue::Decimal(format_decimal(*value))),
         Value::Bool(value) => Ok(QueryValue::Bool(*value)),
         Value::String(value) => Ok(QueryValue::String(value.clone())),
         Value::Char(value) => Ok(QueryValue::String(value.to_string())),

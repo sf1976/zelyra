@@ -91,3 +91,7 @@ use explicit records with domain IDs for APIs and persistence.
 
 This is coverage of the existing language surface, not a claim that every type
 or conversion is implemented.
+
+Additional exact Decimal/Money boundaries, SQL scales, and alias rules:
+[Decimal and monetary amounts](../../docs/decimals.en.md). Boundary regressions
+cover scaled minimum/maximum values, valid wide intermediates, and controlled errors.

@@ -614,3 +614,13 @@ Commit in dieser Datei ergänzt werden. Der Eintrag muss mindestens enthalten:
 
 Eine Einstellung gilt nicht als vollständig dokumentiert, wenn sie nur im
 Compiler oder in einem Template auftaucht.
+
+## DATABASE_URL: feste Dezimalpräzision im 0.9.9-Entwicklungszweig
+
+Mit einer konfigurierten Datenbank und freigegebener Database-Fähigkeit
+prüfen `serve` sowie die erste SQL-Ausführung eines Interpreters deklarierte
+Decimal-/Money-/UInt-Präzision anhand schreibgeschützter Metadaten.
+Metadatenzugriff ist erforderlich; ein altes oder inkompatibles Schema wird
+nicht still verwendet oder migriert. Es gibt keinen Abschaltschalter.
+Die bestehenden URL-Prioritäts- und Geheimnisregeln bleiben wirksam.
+Siehe [Regeln und Tests](decimals.de.md).

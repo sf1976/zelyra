@@ -122,6 +122,38 @@ fn form_route() -> FormRoute {
 }
 
 #[test]
+fn monetary_form_and_query_parameters_preserve_every_digit() {
+    for ty in [
+        Type::Decimal,
+        Type::Named("Money".into()),
+        Type::Option(Box::new(Type::Decimal)),
+    ] {
+        let mut form = form_route();
+        form.form.fields[0].ty = Some(ty.clone());
+        let text = "999999999999999.9999";
+        let parameters =
+            form_query_parameters(&form, &HashMap::from([("name".into(), text.into())])).unwrap();
+        assert!(
+            matches!(&parameters[0].1, QueryValue::Decimal(value) if value == text),
+            "money was converted to Float"
+        );
+        let value = page_query_value(&ty, text).unwrap();
+        assert!(matches!(value, QueryValue::Decimal(value) if value == text));
+    }
+    let column = zelyra_database::Column {
+        name: "price".into(),
+        sql_type: "DECIMAL(18,2)".into(),
+        nullable: false,
+        primary_key: false,
+        auto: false,
+        unique: false,
+        default: None,
+    };
+    let value = filter_query_value(&column, "999999999999999.9999").unwrap();
+    assert!(matches!(value, QueryValue::Decimal(value) if value == "999999999999999.9999"));
+}
+
+#[test]
 fn edit_form_snapshots_are_signed_and_bound_to_csrf_key_and_field_set() {
     let csrf = CsrfProtection::new("session-specific-csrf-secret");
     let form = form_route().form;
@@ -3693,4 +3725,46 @@ fn form_action_requires_database_url() {
         )
         .unwrap();
     assert_eq!(app.dispatch(&request).status, 503);
+}
+
+#[test]
+fn typed_numeric_filters_reject_invalid_values_and_preserve_integer_limits() {
+    for kind in [
+        TableViewFilterKind::Decimal,
+        TableViewFilterKind::Integer,
+        TableViewFilterKind::Unsigned,
+        TableViewFilterKind::Numeric,
+    ] {
+        for invalid in ["NaN", "inf", "-inf", "1e999"] {
+            assert!(numeric_filter_query_value(kind, invalid).is_err());
+        }
+        assert!(tableview_filter_operator_supported(
+            kind,
+            FilterOperator::LessThan
+        ));
+    }
+    assert!(matches!(
+        numeric_filter_query_value(TableViewFilterKind::Unsigned, "18446744073709551615").unwrap(),
+        QueryValue::UInt(u64::MAX)
+    ));
+    assert!(matches!(
+        numeric_filter_query_value(TableViewFilterKind::Integer, "-9223372036854775808").unwrap(),
+        QueryValue::Int(i64::MIN)
+    ));
+    assert!(numeric_filter_query_value(TableViewFilterKind::Decimal, "1.0000000001").is_err());
+    assert!(page_query_value(&Type::Float, "NaN").is_err());
+    assert!(page_query_value(&Type::Decimal, "1e-9").is_err());
+}
+
+#[test]
+fn decimal_fields_use_text_input_and_optional_blanks_bind_sql_null() {
+    let mut form = form_route();
+    form.form.fields[0].ty = Some(Type::Option(Box::new(Type::Decimal)));
+    form.form.fields[0].required = false;
+    let html = render_form(&form, &HashMap::new(), &[], None);
+    assert!(html.contains("type=\"text\" inputmode=\"decimal\""));
+    for values in [HashMap::new(), HashMap::from([("name".into(), "".into())])] {
+        let params = form_query_parameters(&form, &values).unwrap();
+        assert!(matches!(params[0].1, QueryValue::Null));
+    }
 }
