@@ -3535,7 +3535,12 @@ fn run_mariadb(
     let timeouts = MariaDbTimeouts::from_env()?;
     let tls = MariaDbTlsSettings::from_env()?;
     let database = database_override.unwrap_or(&connection.database);
-    let mut command = Command::new("mariadb");
+    let client = if database_url.starts_with("mysql://") {
+        "mysql"
+    } else {
+        "mariadb"
+    };
+    let mut command = Command::new(client);
     command
         .args([
             "--batch",
@@ -3553,11 +3558,18 @@ fn run_mariadb(
             query,
         ])
         .args(timeouts.connect_args())
-        .args(timeouts.query_args())
+        .args(if database_url.starts_with("mysql://") {
+            [format!(
+                "--init-command=SET SESSION max_execution_time={}",
+                timeouts.query_seconds * 1000
+            )]
+        } else {
+            timeouts.query_args()
+        })
         .args(tls.client_args_for_host(&connection.host)?)
         .env("MYSQL_PWD", &connection.password);
     let output = command.output().map_err(|error| DatabaseError {
-        message: format!("could not start mariadb: {error}"),
+        message: format!("could not start {client}: {error}"),
     })?;
     if !output.status.success() {
         return Err(DatabaseError {
@@ -3576,7 +3588,12 @@ fn run_mariadb_sql(
     let timeouts = MariaDbTimeouts::from_env()?;
     let tls = MariaDbTlsSettings::from_env()?;
     let database = database_override.unwrap_or(&connection.database);
-    let mut command = Command::new("mariadb");
+    let client = if database_url.starts_with("mysql://") {
+        "mysql"
+    } else {
+        "mariadb"
+    };
+    let mut command = Command::new(client);
     command
         .args([
             "--batch",
@@ -3590,14 +3607,21 @@ fn run_mariadb_sql(
             database,
         ])
         .args(timeouts.connect_args())
-        .args(timeouts.query_args())
+        .args(if database_url.starts_with("mysql://") {
+            [format!(
+                "--init-command=SET SESSION max_execution_time={}",
+                timeouts.query_seconds * 1000
+            )]
+        } else {
+            timeouts.query_args()
+        })
         .args(tls.client_args_for_host(&connection.host)?)
         .env("MYSQL_PWD", &connection.password)
         .stdin(Stdio::piped())
         .stdout(Stdio::inherit())
         .stderr(Stdio::piped());
     let mut child = command.spawn().map_err(|error| DatabaseError {
-        message: format!("could not start mariadb: {error}"),
+        message: format!("could not start {client}: {error}"),
     })?;
     child
         .stdin

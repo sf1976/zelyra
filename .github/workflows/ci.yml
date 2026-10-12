@@ -488,7 +488,7 @@ jobs:
       - name: Validate Handbook Code Snippets
         run: python3 scripts/validate_handbook.py
   mysql-compatibility:
-    name: MySQL 8.4.11 parameterized runtime
+    name: MySQL 8.4.11 schema and runtime
     runs-on: ubuntu-latest
     services:
       mysql:
@@ -525,3 +525,9 @@ jobs:
         env:
           DATABASE_URL: mysql://root:root@127.0.0.1:3306/zelyra_ci
         run: bash ./tests/mysql-runtime-e2e.sh
+      - name: Run MySQL schema and migration workflow
+        env:
+          DATABASE_URL: mysql://root:root@127.0.0.1:3306/zelyra_ci
+          ZELYRA_BIN: target/debug/zelyra
+          MYSQL_PWD: root
+        run: bash ./tests/mysql-schema-e2e.sh

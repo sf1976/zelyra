@@ -1000,6 +1000,11 @@ IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
   bleiben die Arbeitsfläche und der Theme-Schalter ohne horizontalen Überlauf
   nutzbar. Die IDE-Arbeit geht mit den grafischen relationalen und
   Diagrammabläufen für 0.9.9 weiter.
+- [✅] MySQL Server 8.4.11 besteht nun den isolierten Schemaablauf über
+  `db setup`, `inspect`, schreibgeschütztes `map`, geprüften `plan`, bestätigtes
+  `apply` und `history`. Der CI-Job prüft außerdem parametrisierte SQL-Abfragen.
+  Der Nachweis deckt kein vollständiges CRUD/Auth, MFA, TLS, Backup/Restore oder
+  allgemeine MariaDB-Parität ab; die Backendmatrix nennt die Grenzen.
 - [🗺️] Den unterstützten Umfang des Laravel-Migrators und seine versionierte
   Kompatibilitätsmatrix abschließen. Schreibgeschützte Analyse,
   Geheimnis-/PII-Redaktion, Quellpositionsgenauigkeit, Routen-Daten-Beziehungen,

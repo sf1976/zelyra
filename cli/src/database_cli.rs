@@ -60,6 +60,21 @@ fn print_plan(plan: &zelyra_database::SchemaPlan) {
     }
 }
 
+fn schema_backend_name(schema: &Schema) -> &'static str {
+    match schema
+        .database
+        .as_ref()
+        .map(|database| database.engine.to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("mysql") => "mysql",
+        Some("mariadb") => "mariadb",
+        Some("postgres" | "postgresql") => "postgres",
+        Some("sqlite" | "sqlite3") => "sqlite",
+        _ => schema.backend().name(),
+    }
+}
+
 pub(super) fn schema_fingerprint(schema: &Schema) -> String {
     let mut tables = schema.tables.iter().collect::<Vec<_>>();
     tables.sort_by(|left, right| left.name.cmp(&right.name));
@@ -134,7 +149,7 @@ pub(super) fn schema_fingerprint(schema: &Schema) -> String {
             })
         })
         .collect::<Vec<_>>();
-    let canonical = json!({ "backend": schema.backend().name(), "tables": tables });
+    let canonical = json!({ "backend": schema_backend_name(schema), "tables": tables });
     let bytes = serde_json::to_vec(&canonical).expect("schema fingerprint JSON is serializable");
     format!("{:x}", Sha256::digest(bytes))
 }
@@ -144,12 +159,18 @@ pub(super) fn schema_plan_json(
     current: &Schema,
     plan: &zelyra_database::SchemaPlan,
 ) -> Value {
-    let current_fingerprint = schema_fingerprint(current);
+    let mut current = current.clone();
+    if current.database.is_none() {
+        current.database = desired.database.clone();
+    }
+    let backend = schema_backend_name(desired);
+    let current_backend = schema_backend_name(&current);
+    let current_fingerprint = schema_fingerprint(&current);
     let desired_fingerprint = schema_fingerprint(desired);
     let changes = schema_plan_changes_json(plan);
     let preflights = schema_plan_preflights_json(plan);
     let plan_id = schema_plan_identifier(
-        desired.backend(),
+        backend,
         &current_fingerprint,
         &desired_fingerprint,
         &changes,
@@ -160,11 +181,11 @@ pub(super) fn schema_plan_json(
     // plan. It is bound to the expected post-migration schema fingerprint and
     // remains an explicit operator action because reverse DDL can discard data
     // written after the migration, even when the old schema can be restored.
-    let rollback_plan = zelyra_database::diff(current, desired);
+    let rollback_plan = zelyra_database::diff(&current, desired);
     let rollback_changes = schema_plan_changes_json(&rollback_plan);
     let rollback_preflights = schema_plan_preflights_json(&rollback_plan);
     let rollback_id = schema_plan_identifier(
-        current.backend(),
+        current_backend,
         &desired_fingerprint,
         &current_fingerprint,
         &rollback_changes,
@@ -174,7 +195,7 @@ pub(super) fn schema_plan_json(
         !plan.changes.is_empty() && !plan.has_unsupported() && !rollback_plan.has_unsupported();
     let identity = json!({
         "format": "zelyra.schema-plan/v1",
-        "backend": desired.backend().name(),
+        "backend": backend,
         "current_schema_sha256": current_fingerprint,
         "desired_schema_sha256": desired_fingerprint,
         "changes": changes,
@@ -190,7 +211,7 @@ pub(super) fn schema_plan_json(
     json!({
         "format": "zelyra.schema-plan/v1",
         "plan_id": plan_id,
-        "backend": desired.backend().name(),
+        "backend": backend,
         "current_schema_sha256": current_fingerprint,
         "desired_schema_sha256": desired_fingerprint,
         "drift": if plan.changes.is_empty() { "none" } else { "present" },
@@ -277,7 +298,7 @@ fn schema_plan_preflights_json(plan: &zelyra_database::SchemaPlan) -> Vec<Value>
 }
 
 fn schema_plan_identifier(
-    backend: Backend,
+    backend: &str,
     current_fingerprint: &str,
     desired_fingerprint: &str,
     changes: &[Value],
@@ -285,7 +306,7 @@ fn schema_plan_identifier(
 ) -> String {
     let identity = json!({
         "format": "zelyra.schema-plan/v1",
-        "backend": backend.name(),
+        "backend": backend,
         "current_schema_sha256": current_fingerprint,
         "desired_schema_sha256": desired_fingerprint,
         "changes": changes,
@@ -405,12 +426,22 @@ fn read_mariadb_migration_history(database_url: &str) -> Result<Value, DatabaseE
                 'started_at', DATE_FORMAT(started_at, '%Y-%m-%dT%H:%i:%s.%fZ'), \
                 'updated_at', DATE_FORMAT(updated_at, '%Y-%m-%dT%H:%i:%s.%fZ'), \
                 'finished_at', IF(finished_at IS NULL, NULL, DATE_FORMAT(finished_at, '%Y-%m-%dT%H:%i:%s.%fZ'))\
-            ) ORDER BY started_at DESC, plan_id DESC), JSON_ARRAY()) FROM `{MARIADB_SCHEMA_HISTORY_TABLE}`"
+            )), JSON_ARRAY()) FROM `{MARIADB_SCHEMA_HISTORY_TABLE}`"
         ),
     )?;
-    serde_json::from_str(output.trim()).map_err(|error| DatabaseError {
-        message: format!("MariaDB returned invalid migration history JSON: {error}"),
-    })
+    let mut history: Value =
+        serde_json::from_str(output.trim()).map_err(|error| DatabaseError {
+            message: format!("database server returned invalid migration history JSON: {error}"),
+        })?;
+    if let Some(entries) = history.as_array_mut() {
+        entries.sort_by(|left, right| {
+            right["started_at"]
+                .as_str()
+                .cmp(&left["started_at"].as_str())
+                .then_with(|| right["plan_id"].as_str().cmp(&left["plan_id"].as_str()))
+        });
+    }
+    Ok(history)
 }
 
 fn apply_mariadb_plan(
@@ -831,7 +862,7 @@ pub(super) fn database_map_json(
         "schema_version": 1,
         "read_only": true,
         "ownership_enforced": false,
-        "backend": declared.backend().name(),
+        "backend": schema_backend_name(declared),
         "database": declared.database.as_ref().and_then(|database| database.database.clone()),
         "modules": modules.into_iter().map(|(path, tables)| json!({
             "source_module": path,
@@ -843,7 +874,7 @@ pub(super) fn database_map_json(
 
 fn print_database_map(declared: &Schema, live: &Schema, owners: &HashMap<String, String>) {
     println!("Database map (read-only; module ownership is advisory)");
-    println!("Backend: {}", declared.backend().name());
+    println!("Backend: {}", schema_backend_name(declared));
     if let Some(database) = declared
         .database
         .as_ref()
@@ -929,16 +960,6 @@ pub(super) fn database_command(mut args: impl Iterator<Item = String>) -> ExitCo
         Ok(schema) => schema,
         Err(()) => return ExitCode::from(1),
     };
-    if schema
-        .database
-        .as_ref()
-        .is_some_and(|database| database.engine.eq_ignore_ascii_case("mysql"))
-    {
-        eprintln!(
-            "error[E-DB-019]: MySQL schema inspection, migrations, and database administration are not supported in this release; the experimental MySQL path is limited to typed, parameterized SQL queries"
-        );
-        return ExitCode::from(1);
-    }
     if schema.tables.iter().any(|table| {
         table
             .name

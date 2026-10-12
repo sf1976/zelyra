@@ -752,15 +752,39 @@ fn invoice_tutorial_creates_a_checkable_project_without_overwriting() {
 }
 
 #[test]
-fn mysql_schema_commands_fail_closed_while_typed_sql_is_the_only_supported_path() {
-    let path = example("mysql_runtime.zyl");
+fn mysql_schema_create_emits_checked_ddl_without_connecting_to_a_database() {
+    let source = r#"
+database main {
+    engine: mysql
+    database: "zelyra_ci"
+}
+
+table customers {
+    id: Id primary auto
+    email: String(100) required unique
+}
+
+fn main() {}
+"#;
+    let (directory, path) = temporary_project_source("mysql-schema-create", source);
     let check = run(&["check", path.to_str().unwrap()]);
-    assert!(check.status.success());
+    assert!(
+        check.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&check.stdout),
+        String::from_utf8_lossy(&check.stderr)
+    );
 
     let schema = run(&["db", "create", path.to_str().unwrap()]);
-    assert!(!schema.status.success());
-    assert!(String::from_utf8_lossy(&schema.stderr).contains("E-DB-019"));
-    assert!(String::from_utf8_lossy(&schema.stderr).contains("typed, parameterized SQL"));
+    assert!(
+        schema.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&schema.stdout),
+        String::from_utf8_lossy(&schema.stderr)
+    );
+    assert!(String::from_utf8_lossy(&schema.stdout).contains("CREATE TABLE"));
+    assert!(schema.stderr.is_empty());
+    fs::remove_dir_all(directory).unwrap();
 }
 
 #[test]

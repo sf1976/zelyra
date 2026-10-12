@@ -985,6 +985,11 @@ language backlog as one 0.9.4 change.
   surface and theme control stay usable without horizontal overflow. The
   broader IDE work continues with the visual relational and chart workflows
   planned for 0.9.9.
+- [✅] MySQL Server 8.4.11 now passes an isolated schema workflow through
+  `db setup`, `inspect`, read-only `map`, reviewed `plan`, explicitly approved
+  `apply`, and `history`. The CI job also checks parameterized SQL queries.
+  This does not prove full CRUD/auth, MFA, TLS, backup/restore, or general
+  MariaDB parity; the backend matrix states the limits.
 - [🗺️] Complete the supported Laravel Migrator scope and its versioned
   compatibility matrix. Verify read-only analysis, secret/PII redaction,
   source-location accuracy, route-to-data relationship reports, ambiguity
