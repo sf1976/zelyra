@@ -351,6 +351,7 @@ fn generated_login_page_uses_the_localized_default_shell() {
         login_rate_limit: DEFAULT_LOGIN_RATE_LIMIT,
         login_block_seconds: DEFAULT_LOGIN_BLOCK_SECONDS,
         reset_tokens_table: None,
+        reset_rate_limits_table: None,
         reset_rate_limit: DEFAULT_RESET_RATE_LIMIT,
         reset_block_seconds: DEFAULT_RESET_BLOCK_SECONDS,
         mfa_table: None,
@@ -377,6 +378,7 @@ fn generated_login_page_uses_the_localized_default_shell() {
 
     let mut reset_auth = auth;
     reset_auth.reset_tokens_table = Some("password_resets".into());
+    reset_auth.reset_rate_limits_table = Some("password_reset_limits".into());
     let reset_app = WebApp::new(Vec::new(), Vec::new())
         .with_auth_route(reset_auth)
         .with_ui_settings(UiLanguage::German, UiLevel::Work);
@@ -708,6 +710,7 @@ fn project_catalogs_override_generated_ui_and_parameterized_labels() {
         login_rate_limit: DEFAULT_LOGIN_RATE_LIMIT,
         login_block_seconds: DEFAULT_LOGIN_BLOCK_SECONDS,
         reset_tokens_table: None,
+        reset_rate_limits_table: None,
         reset_rate_limit: DEFAULT_RESET_RATE_LIMIT,
         reset_block_seconds: DEFAULT_RESET_BLOCK_SECONDS,
         mfa_table: None,
@@ -794,6 +797,7 @@ fn framework_errors_auth_labels_and_validation_use_the_locale_catalog() {
         login_rate_limit: DEFAULT_LOGIN_RATE_LIMIT,
         login_block_seconds: DEFAULT_LOGIN_BLOCK_SECONDS,
         reset_tokens_table: None,
+        reset_rate_limits_table: None,
         reset_rate_limit: DEFAULT_RESET_RATE_LIMIT,
         reset_block_seconds: DEFAULT_RESET_BLOCK_SECONDS,
         mfa_table: None,
@@ -1348,6 +1352,7 @@ fn logout_clears_session_cookie_with_the_matching_secure_attribute() {
         login_rate_limit: DEFAULT_LOGIN_RATE_LIMIT,
         login_block_seconds: DEFAULT_LOGIN_BLOCK_SECONDS,
         reset_tokens_table: None,
+        reset_rate_limits_table: None,
         reset_rate_limit: DEFAULT_RESET_RATE_LIMIT,
         reset_block_seconds: DEFAULT_RESET_BLOCK_SECONDS,
         mfa_table: None,
@@ -1919,6 +1924,7 @@ fn logout_requires_csrf() {
         login_rate_limit: DEFAULT_LOGIN_RATE_LIMIT,
         login_block_seconds: DEFAULT_LOGIN_BLOCK_SECONDS,
         reset_tokens_table: None,
+        reset_rate_limits_table: None,
         reset_rate_limit: DEFAULT_RESET_RATE_LIMIT,
         reset_block_seconds: DEFAULT_RESET_BLOCK_SECONDS,
         mfa_table: None,
@@ -2055,6 +2061,7 @@ fn rotating_memory_session_invalidates_previous_token() {
         login_rate_limit: DEFAULT_LOGIN_RATE_LIMIT,
         login_block_seconds: DEFAULT_LOGIN_BLOCK_SECONDS,
         reset_tokens_table: None,
+        reset_rate_limits_table: None,
         reset_rate_limit: DEFAULT_RESET_RATE_LIMIT,
         reset_block_seconds: DEFAULT_RESET_BLOCK_SECONDS,
         mfa_table: None,
@@ -2147,6 +2154,7 @@ fn session_administration_preserves_legacy_tables_and_escapes_rows() {
         login_rate_limit: DEFAULT_LOGIN_RATE_LIMIT,
         login_block_seconds: DEFAULT_LOGIN_BLOCK_SECONDS,
         reset_tokens_table: None,
+        reset_rate_limits_table: None,
         reset_rate_limit: DEFAULT_RESET_RATE_LIMIT,
         reset_block_seconds: DEFAULT_RESET_BLOCK_SECONDS,
         mfa_table: None,
@@ -3010,6 +3018,7 @@ fn database_capability_denies_persistent_login() {
         login_rate_limit: DEFAULT_LOGIN_RATE_LIMIT,
         login_block_seconds: DEFAULT_LOGIN_BLOCK_SECONDS,
         reset_tokens_table: None,
+        reset_rate_limits_table: None,
         reset_rate_limit: DEFAULT_RESET_RATE_LIMIT,
         reset_block_seconds: DEFAULT_RESET_BLOCK_SECONDS,
         mfa_table: None,

@@ -20,6 +20,23 @@ server_b_pid=""
 smtp_b_pid=""
 server_c_pid=""
 smtp_c_pid=""
+test_rate_table=""
+
+# Isolate mail-delivery/race checks from the deliberately smaller production
+# quota. Persistent quota behavior is tested in password-reset-rate-limit-e2e.sh.
+if [[ -z "${ZELYRA_PASSWORD_RESET_PROJECT:-}" ]]; then
+    test_rate_table="password_reset_delivery_e2e_${suffix}_$$"
+    python3 - "${project_file}" "${temp_dir}/password-reset.zyl" "${test_rate_table}" <<'PY'
+from pathlib import Path
+import sys
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+source = source.replace("reset_rate_limit: 10 per 900", "reset_rate_limit: 100 per 900", 1)
+source = source.replace("reset_rate_limits: password_reset_limits", f"reset_rate_limits: {sys.argv[3]}", 1)
+source = source.replace("table password_reset_limits {", f"table {sys.argv[3]} {{", 1)
+Path(sys.argv[2]).write_text(source, encoding="utf-8")
+PY
+    project_file="${temp_dir}/password-reset.zyl"
+fi
 
 if [[ "${database_url}" == mariadb://* ]]; then
     database_parts="${database_url#mariadb://}"
@@ -109,6 +126,9 @@ DELETE FROM auth_sessions WHERE user_id IN (SELECT id FROM users WHERE email = '
 DELETE FROM auth_audit_log WHERE target_user_id IN (SELECT id FROM users WHERE email = '${email}');
 DELETE FROM users WHERE email = '${email}';
 SQL
+    if [[ -n "${test_rate_table}" ]]; then
+        client -e "DROP TABLE IF EXISTS \`${test_rate_table}\`" >/dev/null 2>&1 || true
+    fi
     if [[ "${ZELYRA_KEEP_E2E_TEMP:-}" == "1" ]]; then
         echo "password-reset E2E diagnostics retained at ${temp_dir}"
     else

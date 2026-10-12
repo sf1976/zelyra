@@ -43,6 +43,7 @@ use zelyra_web::{
 };
 
 mod account_cli;
+mod auth_reset_limits;
 mod command_dispatch;
 mod database_cli;
 mod docs;
@@ -5977,6 +5978,7 @@ fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> 
     let mut valid = true;
     let mut names = HashSet::new();
     for auth in &program.auth {
+        valid &= auth_reset_limits::validate(path, auth, schema);
         if !names.insert(auth.name.clone()) {
             diagnostic(
                 path,
@@ -8046,6 +8048,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             }),
             login_block_seconds: auth.login_block_seconds.unwrap_or(60),
             reset_tokens_table: auth.reset_tokens_table.clone(),
+            reset_rate_limits_table: auth.reset_rate_limits_table.clone(),
             reset_rate_limit: auth
                 .reset_rate_limit
                 .unwrap_or(zelyra_web::DEFAULT_RESET_RATE_LIMIT),

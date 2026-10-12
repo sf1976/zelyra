@@ -106,6 +106,17 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
     let backend = backend.and_then(Result::ok).unwrap_or(Backend::MariaDb);
     let mut table_names = HashSet::new();
     for table in &program.tables {
+        if let Some(limit) = identifier_limit(backend).filter(|limit| table.name.len() > *limit) {
+            errors.push(SchemaError {
+                message: format!(
+                    "table identifier `{}` exceeds the {}-byte {} limit",
+                    table.name,
+                    limit,
+                    backend.name()
+                ),
+                span: table.span,
+            });
+        }
         if !table_names.insert(table.name.clone()) {
             errors.push(SchemaError {
                 message: format!("duplicate table definition {}", table.name),
@@ -169,6 +180,18 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
             }
             let (storage_name, sql_type, relation) =
                 column_mapping(definition, &table_names, &program.types, backend);
+            if let Some(limit) =
+                identifier_limit(backend).filter(|limit| storage_name.len() > *limit)
+            {
+                errors.push(SchemaError {
+                    message: format!(
+                        "column identifier `{storage_name}` exceeds the {limit}-byte {} limit",
+                        backend.name()
+                    ),
+                    span: definition.span,
+                });
+                continue;
+            }
             if let Some(relation) = relation {
                 if !table_names.contains(&relation) {
                     errors.push(SchemaError {
@@ -180,7 +203,10 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
                     });
                 } else {
                     foreign_keys.push(ForeignKey {
-                        name: Some(format!("fk_{}_{}", table.name, storage_name)),
+                        name: Some(generated_identifier(
+                            &format!("fk_{}_{}", table.name, storage_name),
+                            backend,
+                        )),
                         column: storage_name.clone(),
                         referenced_table: relation,
                         referenced_column: "id".into(),
@@ -210,14 +236,30 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
             .indexes
             .iter()
             .filter_map(|index| {
-                build_index(table, index, false, &storage_names, &columns, &mut errors)
+                build_index(
+                    table,
+                    index,
+                    false,
+                    &storage_names,
+                    &columns,
+                    &mut errors,
+                    backend,
+                )
             })
             .collect();
         let uniques = table
             .uniques
             .iter()
             .filter_map(|index| {
-                build_index(table, index, true, &storage_names, &columns, &mut errors)
+                build_index(
+                    table,
+                    index,
+                    true,
+                    &storage_names,
+                    &columns,
+                    &mut errors,
+                    backend,
+                )
             })
             .collect();
         tables.push(Table {
@@ -242,6 +284,28 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
     }
 }
 
+fn identifier_limit(backend: Backend) -> Option<usize> {
+    match backend {
+        Backend::MariaDb => Some(64),
+        Backend::Postgres => Some(63),
+        Backend::Sqlite => None,
+    }
+}
+
+/// Preserve established short names; shorten generated names with a stable
+/// digest of the entire original name so different suffixes remain distinct.
+fn generated_identifier(name: &str, backend: Backend) -> String {
+    let Some(limit) = identifier_limit(backend).filter(|limit| name.len() > *limit) else {
+        return name.to_owned();
+    };
+    let digest = format!("{:x}", Sha256::digest(name.as_bytes()));
+    let mut end = limit - 17;
+    while !name.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}_{}", &name[..end], &digest[..16])
+}
+
 fn build_index(
     table: &TableDef,
     definition: &IndexDef,
@@ -249,6 +313,7 @@ fn build_index(
     storage_names: &HashSet<String>,
     columns: &[Column],
     errors: &mut Vec<SchemaError>,
+    backend: Backend,
 ) -> Option<Index> {
     let mut storage_columns = Vec::new();
     for name in &definition.columns {
@@ -271,7 +336,10 @@ fn build_index(
     }
     let prefix = if unique { "uq" } else { "idx" };
     Some(Index {
-        name: format!("{}_{}_{}", prefix, table.name, storage_columns.join("_")),
+        name: generated_identifier(
+            &format!("{}_{}_{}", prefix, table.name, storage_columns.join("_")),
+            backend,
+        ),
         columns: storage_columns,
         unique,
         constraint_owned: unique,
@@ -611,10 +679,12 @@ fn table_create_sql(table: &Table, backend: Backend) -> String {
         )
     }));
     definitions.extend(table.foreign_keys.iter().map(|foreign_key| {
-        let name = foreign_key
-            .name
-            .clone()
-            .unwrap_or_else(|| format!("fk_{}_{}", table.name, foreign_key.column));
+        let name = foreign_key.name.clone().unwrap_or_else(|| {
+            generated_identifier(
+                &format!("fk_{}_{}", table.name, foreign_key.column),
+                backend,
+            )
+        });
         format!(
             "CONSTRAINT {} FOREIGN KEY ({}) REFERENCES {} ({})",
             quote_identifier(&name, backend),
@@ -982,8 +1052,8 @@ pub fn diff(desired: &Schema, current: &Schema) -> SchemaPlan {
                 });
             }
         }
-        let current_indexes = table_indexes(current_table);
-        let desired_indexes = table_indexes(desired_table);
+        let current_indexes = table_indexes(current_table, backend);
+        let desired_indexes = table_indexes(desired_table, backend);
         for index in &desired_indexes {
             if !current_indexes
                 .iter()
@@ -1073,7 +1143,7 @@ pub fn diff(desired: &Schema, current: &Schema) -> SchemaPlan {
                 .iter()
                 .any(|desired| same_foreign_key(foreign_key, desired))
             {
-                if !is_zelyra_managed_foreign_key(desired_table, foreign_key) {
+                if !is_zelyra_managed_foreign_key(desired_table, foreign_key, backend) {
                     plan.changes.push(SchemaChange {
                         description: format!(
                             "remove untracked foreign key {}.{}",
@@ -1356,7 +1426,7 @@ fn normalize_default(value: &str) -> String {
     }
 }
 
-fn table_indexes(table: &Table) -> Vec<Index> {
+fn table_indexes(table: &Table, backend: Backend) -> Vec<Index> {
     let mut indexes = table
         .indexes
         .iter()
@@ -1369,7 +1439,7 @@ fn table_indexes(table: &Table) -> Vec<Index> {
             .any(|index| index.unique && index.columns.as_slice() == [column.name.as_str()])
         {
             indexes.push(Index {
-                name: format!("ux_{}_{}", table.name, column.name),
+                name: generated_identifier(&format!("ux_{}_{}", table.name, column.name), backend),
                 columns: vec![column.name.clone()],
                 unique: true,
                 constraint_owned: true,
@@ -1407,12 +1477,21 @@ fn is_zelyra_managed_index(table: &Table, index: &Index, backend: Backend) -> bo
         generated_names.push(column.clone());
         generated_names.push(format!("{}_{}_key", table.name, column));
     }
-    generated_names.iter().any(|name| name == &index.name)
+    generated_names
+        .iter()
+        .any(|name| name == &index.name || generated_identifier(name, backend) == index.name)
 }
 
-fn is_zelyra_managed_foreign_key(table: &Table, foreign_key: &ForeignKey) -> bool {
+fn is_zelyra_managed_foreign_key(
+    table: &Table,
+    foreign_key: &ForeignKey,
+    backend: Backend,
+) -> bool {
     let expected = format!("fk_{}_{}", table.name, foreign_key.column);
-    foreign_key.name.as_deref() == Some(expected.as_str())
+    foreign_key
+        .name
+        .as_deref()
+        .is_some_and(|name| name == expected || name == generated_identifier(&expected, backend))
 }
 
 fn drop_index_sql(table: &Table, index: &Index, backend: Backend) -> (String, Risk) {
@@ -1456,10 +1535,12 @@ fn same_foreign_key(left: &ForeignKey, right: &ForeignKey) -> bool {
 }
 
 fn add_foreign_key_sql(table: &Table, foreign_key: &ForeignKey, backend: Backend) -> String {
-    let name = foreign_key
-        .name
-        .clone()
-        .unwrap_or_else(|| format!("fk_{}_{}", table.name, foreign_key.column));
+    let name = foreign_key.name.clone().unwrap_or_else(|| {
+        generated_identifier(
+            &format!("fk_{}_{}", table.name, foreign_key.column),
+            backend,
+        )
+    });
     format!(
         "ALTER TABLE {} ADD CONSTRAINT {} FOREIGN KEY ({}) REFERENCES {} ({});",
         quote_identifier(&table.name, backend),
@@ -5571,6 +5652,77 @@ mod tests {
         assert_eq!(plan.changes.len(), 1);
         assert_eq!(plan.changes[0].risk, Risk::Unsupported);
         assert!(plan.has_unsupported());
+    }
+
+    #[test]
+    fn generated_schema_identifiers_fit_each_backend_and_keep_distinct_suffixes() {
+        let table_name = format!("orders_{}", "x".repeat(54));
+        for (engine, limit) in [("mariadb", 64), ("postgres", 63)] {
+            let source = format!(
+                "database main {{ engine: {engine} }}\n\
+                 table users {{ id: Id primary }}\n\
+                 table {table_name} {{ id: Id primary owner: User required \
+                 first_reference: String(100) second_reference: String(100) \
+                 index {{ first_reference second_reference }} \
+                 unique {{ first_reference second_reference }} }}"
+            );
+            let desired = schema(&source);
+            assert_eq!(desired, schema(&source));
+            let table = &desired.tables[1];
+            let index = &table.indexes[0].name;
+            let unique = &table.uniques[0].name;
+            let foreign_key = table.foreign_keys[0].name.as_deref().unwrap();
+            assert!(index.len() <= limit, "overlong {engine} index: {index}");
+            assert!(unique.len() <= limit, "overlong {engine} unique: {unique}");
+            assert!(
+                foreign_key.len() <= limit,
+                "overlong {engine} foreign key: {foreign_key}"
+            );
+            assert_ne!(index, unique);
+            let mut current = desired.clone();
+            current.tables[1].indexes.clear();
+            current.tables[1].uniques.clear();
+            let additions = diff(&desired, &current);
+            assert!(additions
+                .changes
+                .iter()
+                .any(|change| change.sql.contains(index)));
+            assert!(additions
+                .changes
+                .iter()
+                .any(|change| change.sql.contains(unique)));
+            current.tables[1].foreign_keys.clear();
+            let removals = diff(&current, &desired);
+            assert!(!removals.has_unsupported());
+            assert_eq!(removals.changes.len(), 3);
+            assert!(removals
+                .changes
+                .iter()
+                .any(|change| change.sql.contains(foreign_key)));
+        }
+    }
+
+    #[test]
+    fn declared_sql_identifiers_over_the_backend_limit_report_the_source() {
+        for (engine, length) in [("mariadb", 65), ("postgres", 64)] {
+            let name = "t".repeat(length);
+            let source =
+                format!("database main {{ engine: {engine} }}\ntable {name} {{ id: Id primary }}");
+            let program = parse(&lex(&source).unwrap()).unwrap();
+            let errors =
+                build_schema(&program).expect_err("overlong table must fail before SQL execution");
+            assert!(errors
+                .iter()
+                .any(|error| error.span.line == 2 && error.message.contains("identifier")));
+        }
+        let name = "c".repeat(62);
+        let source =
+            format!("table users {{ id: Id primary }}\ntable orders {{\n{name}: User required\n}}");
+        let program = parse(&lex(&source).unwrap()).unwrap();
+        let errors = build_schema(&program).expect_err("the generated _id column must also fit");
+        assert!(errors
+            .iter()
+            .any(|error| error.span.line == 3 && error.message.contains("identifier")));
     }
 
     #[test]

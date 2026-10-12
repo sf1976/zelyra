@@ -77,8 +77,9 @@ principles; the roadmap below tracks what is actually implemented.
   process restart; the E2E verifies recovery after restart with no older worker
   active. Delivery is at least once, so the SMTP-acceptance/database-acknowledgement
   crash window can duplicate mail; key loss strands pending messages. Persistent
-  throttling and independent security review remain open, so this does not
-  complete the account lifecycle milestone.
+  throttling now uses a declared MariaDB table and a keyed fingerprint shared
+  across instances; independent security review and the complete account
+  lifecycle evidence remain open, so this does not complete the milestone.
   Legacy session tables without an `id` column retain their previous behavior;
   administrative listing and revocation still require that column.
 
@@ -1045,7 +1046,8 @@ language backlog as one 0.9.4 change.
   SHA `89b880d753e12ac09b2fbb4dc754586d18c7a808845b991b331cb1ae00153c0d`.
 - [🧪] Rust package tests, formatting, and Clippy plus installer, clean MariaDB
   onboarding, and generated Docker/module bundle E2E checks pass locally on
-  `1bf09ea`. The current GitHub CI run is still a release gate; see the
+  `1bf09ea`. CI and packaging passed on documentation descendant `8db093c`;
+  later source packages and the final candidate need their own CI. See the
   [technical rehearsal](release-readiness/0.9.9-technical-rehearsal-2026-10-12.en.md).
 - [🗺️] Close the remaining CLI, setup, database, migrator, security,
   documentation, and packaging gates. General constraints/traits, closures,
@@ -1069,6 +1071,17 @@ language backlog as one 0.9.4 change.
   browser/database E2E checks pass. Saved SQL views, application-page embedding,
   compiler validation of report files, and full accessibility/export evidence
   remain open release criteria.
+- [✅] Persistent MariaDB reset limits, bounded cleanup/capacity, safe operator
+  errors, and reset-storage module dependencies pass positive and negative
+  checks. Generated SQL names respect backend limits throughout creation and
+  planning; long declarations fail before SQL execution. Rust, MariaDB SMTP/
+  quota, and PostgreSQL schema checks are recorded in the
+  [package report](release-readiness/0.9.9-reset-and-schema.en.md).
+  Independent security review remains open.
+- [🗺️] Add visual form and output editors with a property sidebar for fields,
+  validation, database/table binding, column selection, filters, sorting,
+  search, pagination, and charts. Generate editable Zelyra source and local
+  styles with compiler-backed previews and protection for manual edits.
 - [✅] A bounded Zelyra-style class model now provides typed constructors,
   shared reference identity, identity equality, field reads/updates, generic
   classes, and optional fields. Runtime checks reject reference cycles and

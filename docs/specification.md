@@ -697,3 +697,60 @@ enable implicit conversions in assignments or string concatenation. Arrays,
 records, enums, option/result values, unit, and function values have no implicit
 display contract and are rejected. Decimal display omits insignificant trailing
 zeroes, so fixed-scale monetary output must use `format_scaled_result`.
+
+## Persistent password-reset quotas in 0.9.9
+
+An auth declaration that enables `reset_tokens` also requires
+`reset_rate_limits: <table>`. This is an explicit project schema dependency;
+the reset runtime creates no tables. The limiter table has a unique, non-null
+`bucket_key: String(64)`, required `window_started: Timestamp` and
+`request_count: Int`, nullable `blocked_until: Timestamp?`, and an index starting
+with `window_started`. Its core columns cannot use `auto`. The complete source
+is in [`examples/password_reset.zyl`](../examples/password_reset.zyl).
+
+The default quota remains three requests per 900 seconds, followed by a
+900-second block. Valid-CSRF forgot-password requests consume quota before an
+account lookup; reset-password submissions with valid CSRF and a syntactically
+valid token use the same bucket. A bucket follows the TCP peer IP, regardless
+of source port; forwarded IP headers are ignored. Persistent buckets survive
+restart and are shared by instances using the same writable MariaDB, quota settings, and
+`ZELYRA_RESET_DELIVERY_KEY`. HMAC-SHA256 with a purpose-specific domain derives
+the stored key; the database does not receive the peer IP. This is pseudonymous
+security state, not an anonymity guarantee.
+
+An advisory lock and transaction serialize quota updates and cap the table at
+4,096 buckets. Lock acquisition waits at most one second; database, lock, or
+key errors reject the reset attempt and emit sanitized operator diagnostic
+`E-AUTH-043` without account, token, IP, or connection details. The generic forgot-password HTTP response
+remains `202`; a rejected reset-password submission remains `400`. A block
+takes precedence over an expired request window. An unblocked expired window
+starts again with the current request counted as its first request. MariaDB's
+clock is authoritative. Each request removes at most 100 inactive buckets with
+a window older than 48 hours; no scheduled cleanup runs in the absence of
+requests. A full table rejects new buckets while retaining existing quotas.
+
+Existing experimental reset projects must add the auth option and table and
+review their additive migration before deploying the new compiler. Missing or
+incompatible storage reports `E-AUTH-039`/`E-AUTH-040`, a missing cleanup index
+reports `E-AUTH-041`, and an option without `reset_tokens` reports `E-AUTH-042`.
+These diagnostics retain the auth declaration's source file and span. Ordinary
+login declarations are unaffected. `context` adds optional reset-storage fields
+within schema version `1`; `impact`, module plans, table rights, and table
+renames now include reset, tenant-membership, and MFA storage references.
+Previously omitted cross-module auth references may require an explicit
+import path and `read_write` grant. See [configuration](env.en.md).
+
+### SQL identifier bounds
+
+Declared table and storage-column identifiers are checked before SQL execution:
+MariaDB/MySQL permit at most 64 bytes, PostgreSQL at most 63 bytes for Zelyra's
+ASCII identifiers. The storage column includes the generated `_id` suffix of
+a relationship. An excessive name reports `E-DB-001` at its declaration.
+SQLite does not receive this limit.
+
+Generated index, unique-index, and foreign-key names retain their established
+short spelling. Longer names use a bounded prefix plus the first 16 hexadecimal
+characters of the full name's SHA-256 digest. Schema creation, migration plans,
+and recognition of managed objects use the same deterministic rule. Existing
+PostgreSQL objects whose old names were silently truncated by the server may
+require reviewed adoption; they are not silently renamed or dropped.

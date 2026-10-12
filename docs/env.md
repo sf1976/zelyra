@@ -182,15 +182,44 @@ die Outbox. Der Worker stellt sie später über SMTP zu. Die Zustellung erfolgt
 mindestens einmal und kann Duplikate erzeugen. Konfiguration und vollständiges
 Beispiel stehen in [`mail.de.md`](mail.de.md).
 
-## Passwortwiederherstellung im 0.4-Entwicklungszweig
+## Passwortwiederherstellung
 
-Eine Auth-Deklaration kann `reset_tokens: password_resets` konfigurieren.
-Die Reset-Tabelle braucht `user_id`, einen eindeutigen `token_hash`,
-`expires_at`, `consumed_at`, `delivery_payload: String(2048)`, die nullable
-Spalte `delivery_retry_at: Timestamp` und einen Fremdschlüssel auf `users.id`; außerdem muss eine Auth-Audit-Tabelle
-konfiguriert sein. Das Feature läuft derzeit nur
-mit MariaDB. Reset-Limits sind pro Prozess und TCP-Peer-IP begrenzt; sie werden
-beim Neustart zurückgesetzt.
+Eine Auth-Deklaration mit `reset_tokens: password_resets` muss auch
+`reset_rate_limits: password_reset_limits` angeben. Die Reset-Tabelle braucht
+`user_id`, einen eindeutigen `token_hash`, `expires_at`, `consumed_at`,
+`delivery_payload: String(2048)`, die nullable Spalte
+`delivery_retry_at: Timestamp` und einen Fremdschlüssel auf `users.id`;
+außerdem muss eine Auth-Audit-Tabelle konfiguriert sein. Die separate Tabelle
+für Reset-Limits braucht `bucket_key: String(64) primary`,
+`window_started: Timestamp required`, `request_count: Int required`, `blocked_until: Timestamp?`
+und einen Index auf `window_started`. Ein vollständiges Beispiel steht in
+[`examples/password_reset.zyl`](../examples/password_reset.zyl).
+
+Die Limits gelten pro TCP-Peer-IP und gemeinsam für alle Instanzen, die dieselbe
+MariaDB, identische Limits und denselben Zustellschlüssel verwenden. Bei
+Datenbankfehlern wird der Reset-Versuch abgelehnt. Das Betreiberprotokoll meldet
+die bereinigte Diagnose `E-AUTH-043`; öffentliche Antworten bleiben generisch.
+Die Tabelle speichert keine IP-Adresse: `bucket_key`
+ist ein HMAC-Fingerabdruck mit dem Zustellschlüssel. Die Tabelle nimmt höchstens
+4.096 Einträge an; bei voller Tabelle werden neue Clients abgewiesen. Ein
+MariaDB-Advisory-Lock koordiniert Kapazität und Zähler aller Instanzen mit
+höchstens einer Sekunde Wartezeit. Bei weiteren Anfragen werden jeweils
+höchstens 100 abgelaufene Einträge entfernt, deren Fensterbeginn mehr als
+48 Stunden zurückliegt. Ohne weitere Anfragen gibt es keinen automatischen
+Bereinigungslauf. Forwarded-IP-Header werden ignoriert; hinter einem Proxy
+teilen sich dessen Clients daher ein Limit. Das ist ein
+Anwendungsschutz für Reset-Endpunkte und kein Netzwerkschutz gegen verteilte
+Überlastungsangriffe. Passwortwiederherstellung läuft derzeit nur mit MariaDB.
+
+`reset_rate_limits` hat keinen Standardwert und keinen Umgebungs-Override;
+die Auth-Deklaration ist maßgeblich. Die Tabelle enthält sicherheitsrelevanten
+Zustand. `check` und `serve` prüfen das Schema, `db setup` legt deklarierte
+Tabellen an. Bestehende Reset-Projekte müssen die Auth-Option und Tabelle
+ergänzen und einen geprüften additiven Schema-Plan anwenden. Die Diagnosen
+`E-AUTH-039` bis `E-AUTH-042` benennen fehlende, inkompatible oder verwaiste
+Konfiguration. Parser-, Schema-, Modulrechte- und Neustarttests sowie
+`tests/password-reset-rate-limit-e2e.sh` prüfen diesen Vertrag. Die normale
+Passwortanmeldung ohne Reset-Funktion benötigt diese Tabelle nicht.
 
 | Variable | Standard | Verwendung und Sicherheitsklasse |
 |---|---:|---|
@@ -201,7 +230,7 @@ beim Neustart zurückgesetzt.
 | `ZELYRA_SMTP_FROM` | keiner | Absenderadresse für Reset-E-Mails. |
 | `ZELYRA_SMTP_USERNAME` | keiner | Optionaler SMTP-Benutzer; muss zusammen mit dem Passwort gesetzt werden. Secret. |
 | `ZELYRA_SMTP_PASSWORD` | keiner | SMTP-Passwort. Secret; nie ausgeben oder committen. |
-| `ZELYRA_RESET_DELIVERY_KEY` | keiner | 32-Byte-Verschlüsselungsschlüssel als 64 hexadezimale Zeichen; für persistente Wiederaufnahme erforderlich. Secret. |
+| `ZELYRA_RESET_DELIVERY_KEY` | keiner | Stabiler 32-Byte-Schlüssel als 64 hexadezimale Zeichen für Outbox-Verschlüsselung und HMAC-Fingerabdrücke. Muss auf allen Instanzen identisch sein. Secret. |
 
 Für `zelyra serve` gilt Prozessumgebung vor Projekt-`.env`. Wenn die
 Auth-Deklaration `reset_tokens` enthält, startet `serve` ohne vollständige

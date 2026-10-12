@@ -290,6 +290,11 @@ der [Setup-Anleitung](setup-web.de.md) und den
   HttpOnly-Sessions. Direkte und rollenbasierte Berechtigungen, geschützte
   Aktionen, CSRF-geschützte Browserverwaltung und Schutz der letzten
   Administratorzuordnung sind implementiert.
+- 🧪 Passwortwiederherstellung verwendet in der 0.9.9-Entwicklung ein
+  transaktional gespeichertes, instanzübergreifendes Reset-Limit. Die Tabelle
+  speichert einen HMAC-Fingerabdruck statt einer IP-Adresse; Datenbankfehler
+  sperren den Vorgang. Unabhängige Sicherheitsprüfung und vollständige
+  Release-E2E bleiben offen.
 - ✅ Optionales MariaDB-Audit-Logging unterstützt Inspektion, begrenzten
   JSON-/CSV-Export, strukturelle Prüfung und ausdrücklich bestätigtes Bereinigen.
 - 🧪 Manipulationsnachweis durch kryptografische Audit-Verkettung ist optional

@@ -265,6 +265,10 @@ For usage details see the [web and database quickstart](getting-started.md),
   HttpOnly sessions. Direct and role-derived permissions, guarded actions,
   CSRF-protected browser administration, and last-administrator protection
   are implemented.
+- 🧪 Password recovery in the 0.9.9 development branch uses a transactional,
+  cross-instance reset limiter. Its table stores an HMAC fingerprint instead
+  of an IP address; database failures reject the operation. Independent
+  security review and complete release E2E remain open.
 - ✅ Optional MariaDB audit logging supports inspection, bounded JSON/CSV
   export, structural verification, and explicitly confirmed pruning.
 - 🧪 Tamper-evident audit chaining is available as an explicit opt-in and has

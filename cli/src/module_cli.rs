@@ -244,6 +244,8 @@ fn context_declarations(program: &zelyra_ast::Program, source: &str) -> Value {
                 "name": auth.name,
                 "table": auth.table,
                 "audit_table": auth.audit_table,
+                "reset_tokens_table": auth.reset_tokens_table,
+                "reset_rate_limits_table": auth.reset_rate_limits_table,
                 "audit_chain": auth.audit_chain,
                 "span": context_span(source, auth.span)
             })

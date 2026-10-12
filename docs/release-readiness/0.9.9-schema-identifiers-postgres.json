@@ -1,0 +1,29 @@
+{
+  "server_version": "16.15 (Debian 16.15-1.pgdg13+2)",
+  "binary_sha256": "c6a6b7166b421c780b85378c5b6158f78dc45f01e7c2a08eae8b2b141032863c",
+  "generated_names": [
+    "fk_orders_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_cac010bfc043c884",
+    "idx_orders_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_f5314506aa3ecad6",
+    "orders_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_pkey",
+    "uq_orders_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_d850b36d4584a635"
+  ],
+  "initial_drift": "none",
+  "removal_plan": [
+    {
+      "description": "drop foreign key orders_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.owner_id",
+      "risk": "requires_approval",
+      "sql": "ALTER TABLE \"orders_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\" DROP CONSTRAINT \"fk_orders_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_cac010bfc043c884\";"
+    },
+    {
+      "description": "drop index idx_orders_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_f5314506aa3ecad6",
+      "risk": "requires_approval",
+      "sql": "DROP INDEX IF EXISTS \"idx_orders_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_f5314506aa3ecad6\";"
+    },
+    {
+      "description": "drop unique index uq_orders_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_d850b36d4584a635",
+      "risk": "requires_approval",
+      "sql": "ALTER TABLE \"orders_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\" DROP CONSTRAINT \"uq_orders_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_d850b36d4584a635\";"
+    }
+  ],
+  "oversized_declaration_rejected": true
+}

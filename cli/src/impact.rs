@@ -309,11 +309,16 @@ fn semantic_references(
         let auth_span = span_value(auth.span, sources);
         for table in [
             Some(auth.table.as_str()),
+            auth.membership_table.as_deref(),
             auth.session_table.as_deref(),
             auth.permissions_table.as_deref(),
             auth.roles_table.as_deref(),
             auth.role_permissions_table.as_deref(),
             auth.audit_table.as_deref(),
+            auth.reset_tokens_table.as_deref(),
+            auth.reset_rate_limits_table.as_deref(),
+            auth.mfa_table.as_deref(),
+            auth.mfa_recovery_table.as_deref(),
         ]
         .into_iter()
         .flatten()
@@ -1977,6 +1982,46 @@ mod tests {
     use super::*;
     use zelyra_lexer::lex;
     use zelyra_parser::parse;
+
+    #[test]
+    fn authentication_impact_includes_reset_and_factor_storage_dependencies() {
+        let source = r#"
+            auth users {
+                table: users
+                memberships: memberships
+                reset_tokens: tokens
+                reset_rate_limits: reset_limits
+                mfa: factors
+                mfa_recovery: recovery_codes
+            }
+            table users { id: Id }
+            table memberships { id: Id }
+            table tokens { id: Id }
+            table reset_limits { id: Id }
+            table factors { id: Id }
+            table recovery_codes { id: Id }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let impact = build_impact_with_sources(&program, &[], source);
+        let references = impact["references"].as_array().unwrap();
+        for table in [
+            "users",
+            "memberships",
+            "tokens",
+            "reset_limits",
+            "factors",
+            "recovery_codes",
+        ] {
+            assert!(
+                references.iter().any(|reference| {
+                    reference["from"] == "auth:users"
+                        && reference["to"] == format!("table:{table}")
+                        && reference["kind"] == "auth_table"
+                }),
+                "missing authentication table dependency: {table}"
+            );
+        }
+    }
 
     #[test]
     fn builds_deterministic_source_impact() {

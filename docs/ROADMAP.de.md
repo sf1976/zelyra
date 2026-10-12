@@ -96,8 +96,9 @@ den tatsächlich implementierten Stand.
   Mailqueue werden übersprungen. Das MariaDB-E2E lehnt ein Token mit
   `expires_at = NOW()` ab und friert die Datenbankzeit ein, um das produktive
   Token-Prädikat vor, exakt bei und nach Ablauf zu prüfen. Gleichheit wird
-  abgelehnt. Persistente Reset-Limits und unabhängige Sicherheitsprüfung
-  bleiben offen; der Kontolebenszyklus ist nicht abgeschlossen.
+  abgelehnt. Reset-Limits verwenden jetzt eine deklarierte MariaDB-Tabelle und
+  einen instanzübergreifenden Schlüssel-Fingerabdruck. Unabhängige
+  Sicherheitsprüfung und vollständige Kontolebenszyklus-Nachweise bleiben offen.
   Bestehende Sitzungstabellen ohne `id`-Spalte behalten ihr bisheriges Verhalten;
   Anzeige und Sperrung im Verwaltungsbereich setzen diese Spalte weiterhin voraus.
 
@@ -1061,7 +1062,9 @@ IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
   wiederholt.
 - [🧪] Rust-Pakettests, Formatierung und Clippy sowie Installer-, sauberes
   MariaDB-Onboarding und generierte Docker-/Modul-Bundles bestehen auf `1bf09ea`
-  lokal. Der aktuelle GitHub-CI-Lauf ist noch ein Release-Gate; siehe das
+  lokal. CI und Paketierung bestehen auf dem Dokumentationsnachfolger `8db093c`;
+  folgende Quellcodepakete und der endgültige Kandidat brauchen ihre eigene CI.
+  Siehe das
   [Prüfprotokoll](release-readiness/0.9.9-technical-rehearsal-2026-10-12.de.md).
 - [🗺️] Verbleibende CLI-, Setup-, Datenbank-, Migrator-, Sicherheits-,
   Dokumentations- und Paketierungsgates schließen. Allgemeine Constraints/
@@ -1088,6 +1091,18 @@ IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
   Gespeicherte SQL-Ansichten, Einbindung in Anwendungsseiten, Compilerprüfung
   der Berichtsdateien sowie vollständige Barrierefreiheits- und Exportnachweise
   bleiben Releasekriterien.
+- [✅] Persistente MariaDB-Reset-Limits, begrenzte Bereinigung/Kapazität,
+  bereinigte Betreiberfehler und Reset-Speicherabhängigkeiten bestehen positive
+  und negative Prüfungen. Erzeugte SQL-Namen halten Backend-Grenzen bei
+  Erstellung und Planung ein; zu lange Deklarationen scheitern vor SQL.
+  Rust-, MariaDB-SMTP-/Limit- und PostgreSQL-Schemaprüfungen stehen im
+  [Paketprotokoll](release-readiness/0.9.9-reset-and-schema.de.md).
+  Unabhängige Sicherheitsprüfung bleibt offen.
+- [🗺️] Visuelle Formular- und Ausgabeeditoren mit Eigenschaftsleiste für
+  Felder, Prüfung, Datenbank-/Tabellenbindung, Spaltenauswahl, Filter,
+  Sortierung, Suche, Pagination und Diagramme ergänzen. Editierbaren
+  Zelyra-Code und lokale Styles mit Compiler-Vorschau und Schutz manueller
+  Änderungen erzeugen.
 - [✅] Ein begrenztes, Zelyra-gerechtes Klassenmodell bietet nun typisierte
   Konstruktoren, geteilte Referenzidentität, Identitätsgleichheit, Feldzugriffe
   und -updates, generische Klassen sowie optionale Felder. Runtimeprüfungen

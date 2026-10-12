@@ -430,6 +430,7 @@ impl<'a> Parser<'a> {
         let mut login_rate_limit = None;
         let mut login_block_seconds = None;
         let mut reset_tokens_table = None;
+        let mut reset_rate_limits_table = None;
         let mut reset_rate_limit = None;
         let mut reset_block_seconds = None;
         let mut mfa_table = None;
@@ -449,6 +450,7 @@ impl<'a> Parser<'a> {
                 TokenKind::LoginRateLimit => "login_rate_limit",
                 TokenKind::LoginBlockSeconds => "login_block_seconds",
                 TokenKind::ResetTokens => "reset_tokens",
+                TokenKind::Ident(name) if name == "reset_rate_limits" => "reset_rate_limits",
                 TokenKind::Ident(name) if name == "memberships" => "memberships",
                 TokenKind::ResetRateLimit => "reset_rate_limit",
                 TokenKind::ResetBlockSeconds => "reset_block_seconds",
@@ -547,6 +549,12 @@ impl<'a> Parser<'a> {
                 "admin_permission" => admin_permission = Some(value),
                 "admin_role" => admin_role = Some(value),
                 "reset_tokens" => reset_tokens_table = Some(value),
+                "reset_rate_limits" => {
+                    if reset_rate_limits_table.is_some() {
+                        return self.error("reset_rate_limits may only be declared once");
+                    }
+                    reset_rate_limits_table = Some(value);
+                }
                 "mfa" => mfa_table = Some(value),
                 "mfa_recovery" => mfa_recovery_table = Some(value),
                 _ => return self.error("unknown authentication option"),
@@ -576,6 +584,7 @@ impl<'a> Parser<'a> {
             login_rate_limit,
             login_block_seconds,
             reset_tokens_table,
+            reset_rate_limits_table,
             reset_rate_limit,
             reset_block_seconds,
             mfa_table,
@@ -4176,6 +4185,7 @@ mod tests {
             &lex(r#"auth users {
                     table: users
                     reset_tokens: password_resets
+                    reset_rate_limits: reset_limits
                     reset_rate_limit: 3 per 900
                     reset_block_seconds: 600
                 }
@@ -4186,6 +4196,10 @@ mod tests {
         assert_eq!(
             program.auth[0].reset_tokens_table.as_deref(),
             Some("password_resets")
+        );
+        assert_eq!(
+            program.auth[0].reset_rate_limits_table.as_deref(),
+            Some("reset_limits")
         );
         assert_eq!(
             program.auth[0].reset_rate_limit,
@@ -4216,6 +4230,7 @@ mod tests {
             r#"auth users { table: users reset_rate_limit: 5 per 0 } fn main() { }"#,
             r#"auth users { table: users reset_block_seconds: 86401 } fn main() { }"#,
             r#"auth users { table: users reset_rate_limit: 5 per 60 reset_rate_limit: 3 per 30 } fn main() { }"#,
+            r#"auth users { table: users reset_rate_limits: first reset_rate_limits: second } fn main() { }"#,
         ] {
             assert!(parse(&lex(source).unwrap()).is_err(), "accepted {source}");
         }

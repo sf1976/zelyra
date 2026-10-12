@@ -178,7 +178,7 @@ pub fn preview(
             "type" => Some(type_rename_spans(tokens, source_name)),
             "record" => Some(record_rename_spans(tokens, source_name)),
             "table" | "view" | "form" | "crud" | "tableview" => {
-                Some(resource_rename_spans(tokens, symbol, source_name))
+                Some(resource_rename_spans(program, tokens, symbol, source_name))
             }
             "component" => Some(component_rename_spans(tokens, source_name)),
             _ => None,
@@ -366,7 +366,12 @@ fn record_rename_spans(tokens: &[Token], name: &str) -> HashSet<(usize, usize)> 
     spans
 }
 
-fn resource_rename_spans(tokens: &[Token], symbol: &str, name: &str) -> HashSet<(usize, usize)> {
+fn resource_rename_spans(
+    program: &Program,
+    tokens: &[Token],
+    symbol: &str,
+    name: &str,
+) -> HashSet<(usize, usize)> {
     let keyword = match symbol {
         "table" => TokenKind::Table,
         "view" => TokenKind::View,
@@ -387,6 +392,29 @@ fn resource_rename_spans(tokens: &[Token], symbol: &str, name: &str) -> HashSet<
                 name,
             ));
             spans.extend(property_reference_spans(tokens, TokenKind::Table, name));
+            for property in [
+                TokenKind::Sessions,
+                TokenKind::Permissions,
+                TokenKind::Roles,
+                TokenKind::RolePermissions,
+                TokenKind::Audit,
+                TokenKind::ResetTokens,
+                TokenKind::Ident("memberships".into()),
+                TokenKind::Ident("reset_rate_limits".into()),
+                TokenKind::Ident("mfa".into()),
+                TokenKind::Ident("mfa_recovery".into()),
+            ] {
+                spans.extend(
+                    property_reference_spans(tokens, property, name)
+                        .into_iter()
+                        .filter(|(start, end)| {
+                            program
+                                .auth
+                                .iter()
+                                .any(|auth| auth.span.start <= *start && *end <= auth.span.end)
+                        }),
+                );
+            }
         }
         "view" => {
             spans.extend(property_reference_spans(tokens, TokenKind::View, name));
@@ -1169,6 +1197,38 @@ mod tests {
             .source
             .contains("SELECT id FROM clients WHERE note = 'customers'"));
         assert_eq!(preview.changed_tokens, 9);
+    }
+
+    #[test]
+    fn table_rename_updates_reset_storage_without_renaming_local_values() {
+        let source = r#"
+            auth users { table: users reset_tokens: tokens reset_rate_limits: rate_limits }
+            table rate_limits { bucket_key: String(64) primary }
+            struct Label { reset_rate_limits: String }
+            fn main() {
+                rate_limits: String = "rate_limits"
+                value = Label { reset_rate_limits: rate_limits }
+                print(value.reset_rate_limits)
+            }
+        "#;
+        let tokens = lex(source).unwrap();
+        let program = parse(&tokens).unwrap();
+        let request = json!({
+            "operations": [{"kind": "rename", "symbol": "table", "from": "rate_limits", "to": "reset_limits"}]
+        });
+        let result = preview(&program, source, &tokens, &request).unwrap();
+        let changed = parse(&lex(&result.source).unwrap()).unwrap();
+        assert_eq!(
+            changed.auth[0].reset_rate_limits_table.as_deref(),
+            Some("reset_limits")
+        );
+        assert!(result.source.contains("table reset_limits"));
+        assert!(result
+            .source
+            .contains("rate_limits: String = \"rate_limits\""));
+        assert!(result
+            .source
+            .contains("Label { reset_rate_limits: rate_limits }"));
     }
 
     #[test]

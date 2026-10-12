@@ -693,3 +693,65 @@ Zuweisungen oder Textverkettungen. Arrays, Records, Enums, Option-/Result-Werte,
 Unit und Funktionswerte besitzen keinen impliziten Anzeigestandard und werden
 abgewiesen. Bei Decimal werden bedeutungslose Nullen am Ende weggelassen; für
 Geldbeträge mit fester Nachkommastellenzahl ist `format_scaled_result` gedacht.
+
+## Persistente Passwort-Reset-Limits in 0.9.9
+
+Eine Auth-Deklaration mit `reset_tokens` benötigt auch
+`reset_rate_limits: <tabelle>`. Das ist eine ausdrückliche Schemaabhängigkeit;
+die Reset-Runtime legt keine Tabellen an. Die Limit-Tabelle hat ein eindeutiges,
+nicht-nullbares `bucket_key: String(64)`, erforderliche Felder
+`window_started: Timestamp` und `request_count: Int`, ein nullable
+`blocked_until: Timestamp?` sowie einen Index beginnend mit `window_started`.
+Die Kernspalten dürfen kein `auto` verwenden. Das vollständige Beispiel steht
+in [`examples/password_reset.zyl`](../examples/password_reset.zyl).
+
+Der Standard bleibt drei Anfragen je 900 Sekunden mit anschließender Sperre
+für 900 Sekunden. Forgot-Password-Anfragen mit gültigem CSRF verbrauchen das
+Limit vor der Kontosuche; Reset-Password-Formulare mit gültigem CSRF und
+syntaktisch gültigem Token verwenden denselben Eintrag. Maßgeblich ist die
+TCP-Peer-IP unabhängig vom Quellport; Forwarded-IP-Header werden ignoriert.
+Einträge bleiben nach Neustart bestehen und gelten gemeinsam für Instanzen mit
+derselben schreibbaren MariaDB, denselben Limits und demselben `ZELYRA_RESET_DELIVERY_KEY`.
+HMAC-SHA256 mit einer eigenen Zweckkennung leitet den gespeicherten Schlüssel
+ab; die Datenbank erhält keine Peer-IP. Es handelt sich um pseudonymisierten
+Sicherheitszustand, nicht um eine Anonymitätsgarantie.
+
+Advisory-Lock und Transaktion serialisieren Limitänderungen und begrenzen die
+Tabelle auf 4.096 Einträge. Das Lock wartet höchstens eine Sekunde; Datenbank-,
+Lock- und Schlüsselfehler verhindern den Reset-Versuch und melden die bereinigte
+Betreiberdiagnose `E-AUTH-043` ohne Konto-, Token-, IP- oder Verbindungsdetails. Die generische Antwort
+auf Forgot-Password bleibt HTTP `202`; abgewiesene Reset-Password-Formulare
+liefern weiterhin `400`. Eine aktive Sperre gilt auch nach Ablauf des
+Anfragefensters. Ein abgelaufenes, ungesperrtes Fenster beginnt mit der aktuellen
+Anfrage als erster Anfrage neu. Maßgeblich ist die MariaDB-Uhr. Pro Anfrage
+werden höchstens 100 inaktive Einträge mit einem mehr als 48 Stunden alten
+Fenster entfernt; ohne Anfragen läuft keine zeitgesteuerte Bereinigung. Eine
+volle Tabelle weist neue Einträge ab und behält bestehende Limits bei.
+
+Bestehende experimentelle Reset-Projekte müssen Auth-Option und Tabelle
+ergänzen und ihre additive Migration vor dem Compilerwechsel prüfen. Fehlende
+oder inkompatible Speicherung liefert `E-AUTH-039`/`E-AUTH-040`, ein fehlender
+Bereinigungsindex `E-AUTH-041` und die Option ohne `reset_tokens` `E-AUTH-042`.
+Die Diagnosen behalten Quelldatei und Span der Auth-Deklaration. Normale
+Login-Deklarationen sind unverändert. `context` ergänzt optionale Reset-Felder
+in Schemaversion `1`; `impact`, Modulpläne, Tabellenrechte und Tabellenumbenennung
+berücksichtigen jetzt Reset-, Tenant-Mitgliedschafts- und MFA-Speicherung.
+Für zuvor ausgelassene Auth-Tabellenreferenzen können ein ausdrücklicher
+Importpfad und eine `read_write`-Freigabe erforderlich sein. Siehe
+[Konfiguration](env.md).
+
+### Grenzen für SQL-Bezeichner
+
+Deklarierte Tabellen- und Speicherspaltennamen werden vor der SQL-Ausführung
+geprüft: MariaDB/MySQL erlauben höchstens 64 Bytes, PostgreSQL 63 Bytes für
+Zelyras ASCII-Bezeichner. Bei Beziehungen zählt die erzeugte Endung `_id`
+zum Speicherspaltennamen. Zu lange Namen liefern `E-DB-001` an der Deklaration.
+Für SQLite wird diese Grenze nicht gesetzt.
+
+Erzeugte Namen für Indizes, eindeutige Indizes und Fremdschlüssel behalten ihre
+bisherige kurze Schreibweise. Längere Namen erhalten einen begrenzten Präfix
+und die ersten 16 hexadezimalen Zeichen des SHA-256-Hashes ihres vollständigen
+Namens. Schemaerstellung, Migrationspläne und die Erkennung verwalteter Objekte
+verwenden dieselbe deterministische Regel. Bestehende PostgreSQL-Objekte, deren
+alte Namen der Server still gekürzt hat, können eine geprüfte Übernahme
+erfordern; sie werden nicht still umbenannt oder gelöscht.

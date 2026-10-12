@@ -460,6 +460,8 @@ pub struct AuthDef {
     pub login_rate_limit: Option<ApiRateLimit>,
     pub login_block_seconds: Option<u32>,
     pub reset_tokens_table: Option<String>,
+    /// MariaDB table storing keyed, persistent password-reset rate-limit buckets.
+    pub reset_rate_limits_table: Option<String>,
     pub reset_rate_limit: Option<ApiRateLimit>,
     pub reset_block_seconds: Option<u32>,
     /// Optional table for encrypted local TOTP factors.

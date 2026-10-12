@@ -2338,6 +2338,7 @@ fn accepts_password_reset_schema_with_audit_and_single_use_token_storage() {
         auth users {
             table: users
             reset_tokens: password_resets
+            reset_rate_limits: password_reset_limits
             audit: auth_audit_log
         }
 
@@ -2357,6 +2358,17 @@ fn accepts_password_reset_schema_with_audit_and_single_use_token_storage() {
             delivery_retry_at: Timestamp?
         }
 
+        table password_reset_limits {
+            bucket_key: String(64) primary
+            window_started: Timestamp required
+            request_count: Int required
+            blocked_until: Timestamp?
+
+            index {
+                window_started
+            }
+        }
+
         table auth_audit_log {
             id: Id primary auto
             actor_user_id: Int?
@@ -2369,6 +2381,48 @@ fn accepts_password_reset_schema_with_audit_and_single_use_token_storage() {
     let program = parse(&lex(source).unwrap()).unwrap();
     let mut schema = build_schema(&program).unwrap();
     assert!(validate_auth("test.zyl", &program, &schema));
+    let mut missing_rate_table = program.clone();
+    missing_rate_table.auth[0].reset_rate_limits_table = None;
+    assert!(!validate_auth("test.zyl", &missing_rate_table, &schema));
+    let mut orphan_rate_table = program.clone();
+    orphan_rate_table.auth[0].reset_tokens_table = None;
+    assert!(!validate_auth("test.zyl", &orphan_rate_table, &schema));
+    let mut conflicting_rate_table = program.clone();
+    conflicting_rate_table.auth[0].reset_rate_limits_table = Some("users".into());
+    assert!(!validate_auth("test.zyl", &conflicting_rate_table, &schema));
+    let mut malformed_rate_schema = schema.clone();
+    malformed_rate_schema
+        .tables
+        .iter_mut()
+        .find(|table| table.name == "password_reset_limits")
+        .unwrap()
+        .columns
+        .iter_mut()
+        .find(|column| column.name == "request_count")
+        .unwrap()
+        .sql_type = "varchar(20)".into();
+    assert!(!validate_auth("test.zyl", &program, &malformed_rate_schema));
+    let mut unindexed_rate_schema = schema.clone();
+    unindexed_rate_schema
+        .tables
+        .iter_mut()
+        .find(|table| table.name == "password_reset_limits")
+        .unwrap()
+        .indexes
+        .clear();
+    assert!(!validate_auth("test.zyl", &program, &unindexed_rate_schema));
+    let mut auto_rate_schema = schema.clone();
+    auto_rate_schema
+        .tables
+        .iter_mut()
+        .find(|table| table.name == "password_reset_limits")
+        .unwrap()
+        .columns
+        .iter_mut()
+        .find(|column| column.name == "window_started")
+        .unwrap()
+        .auto = true;
+    assert!(!validate_auth("test.zyl", &program, &auto_rate_schema));
     {
         let column = schema
             .tables
