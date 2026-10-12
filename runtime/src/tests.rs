@@ -45,6 +45,22 @@ fn recursion_is_bounded_and_reports_the_call_site_without_crashing() {
 }
 
 #[test]
+fn sql_rows_keep_the_declared_result_type_for_runtime_return_checks() {
+    let rows = Value::Rows {
+        columns: vec!["id".into(), "name".into()],
+        rows: vec![vec!["1".into(), "Ada".into()]],
+        result_type: Type::Named("Customer".into()),
+    };
+
+    assert_eq!(rows.ty(), Type::Named("Customer".into()));
+    assert_eq!(
+        rows.output(),
+        "[id=1, name=Ada]",
+        "type metadata must not change the existing row representation"
+    );
+}
+
+#[test]
 fn long_left_associative_expressions_are_checked_and_evaluated_without_stack_overflow() {
     let expression = std::iter::repeat_n("1", 5_000)
         .collect::<Vec<_>>()

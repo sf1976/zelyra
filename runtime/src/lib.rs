@@ -5666,6 +5666,7 @@ pub enum Value {
     Rows {
         columns: Vec<String>,
         rows: Vec<Vec<String>>,
+        result_type: Type,
     },
     Unit,
 }
@@ -5714,7 +5715,7 @@ impl Value {
             Value::Result(Err(value)) => {
                 Type::Result(Box::new(Type::Unknown), Box::new(value.ty()))
             }
-            Value::Rows { .. } => Type::Array(Box::new(Type::Unknown)),
+            Value::Rows { result_type, .. } => result_type.clone(),
             Value::Unit => Type::Unit,
         }
     }
@@ -5784,7 +5785,7 @@ impl Value {
             Value::Option(None) => "None".into(),
             Value::Result(Ok(v)) => format!("Ok({})", v.output()),
             Value::Result(Err(v)) => format!("Err({})", v.output()),
-            Value::Rows { columns, rows } => {
+            Value::Rows { columns, rows, .. } => {
                 let rendered_rows = rows
                     .iter()
                     .map(|row| {
@@ -6849,7 +6850,7 @@ impl<'program> Interpreter<'program> {
                 object.insert("error".into(), self.json_value(value, span)?);
                 Ok(serde_json::Value::Object(object))
             }
-            Value::Rows { columns, rows } => rows
+            Value::Rows { columns, rows, .. } => rows
                 .iter()
                 .map(|row| {
                     columns
@@ -9288,10 +9289,7 @@ impl<'program> Interpreter<'program> {
                 }
                 Ok(value)
             }
-            ExprKind::Sql { .. } => {
-                let ExprKind::Sql { query, .. } = &expr.kind else {
-                    unreachable!();
-                };
+            ExprKind::Sql { query, result_type } => {
                 let capability = sql_required_capability(query);
                 self.require_runtime_capability(capability, "SQL access", expr.span)?;
                 let Some(database_url) = self.database_url.clone() else {
@@ -9308,6 +9306,7 @@ impl<'program> Interpreter<'program> {
                 Ok(Value::Rows {
                     columns: result.columns,
                     rows: result.rows,
+                    result_type: result_type.clone(),
                 })
             }
             ExprKind::Await(inner) => self.eval(inner, env),

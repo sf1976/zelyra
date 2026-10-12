@@ -8970,7 +8970,7 @@ fn api_json_value_node(value: &RuntimeValue) -> serde_json::Value {
             object.insert("error".into(), api_json_value_node(value));
             serde_json::Value::Object(object)
         }
-        RuntimeValue::Rows { columns, rows } => serde_json::Value::Array(
+        RuntimeValue::Rows { columns, rows, .. } => serde_json::Value::Array(
             rows.iter()
                 .map(|row| {
                     let object = columns
