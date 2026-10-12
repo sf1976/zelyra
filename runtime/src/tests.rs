@@ -158,6 +158,156 @@ fn generic_functions_reject_conflicting_and_invalid_type_arguments() {
 }
 
 #[test]
+fn generic_records_infer_fields_update_copy_and_round_trip_json() {
+    let source = r#"
+struct Box<T> { value: T }
+struct Pair<First, Second> { first: First second: Second }
+
+fn main() {
+    explicit: Box<Int> = Box<Int> { value: 7 }
+    inferred = Box { value: "Grüße" }
+    pair = Pair { first: 3 second: "drei" }
+    print(explicit.value)
+    print(inferred.value)
+    print(pair.first)
+    print(pair.second)
+    changed = record_with(explicit, "value", 9)
+    print(changed.value)
+    print(explicit.value)
+    encoded = json_encode(explicit)
+    restored: Box<Int> = json_decode<Box<Int>>(encoded)
+    print(restored.value)
+    print(restored)
+}
+"#;
+    assert_eq!(
+        run(source),
+        [
+            "7",
+            "Grüße",
+            "3",
+            "drei",
+            "9",
+            "7",
+            "7",
+            "Box<Int>{value=7}"
+        ]
+    );
+
+    for (source, expected) in [
+        (
+            "struct Box<T> { value: T } fn main() { value: Box<Int> = Box<String> { value: \"wrong\" } }",
+            "type mismatch",
+        ),
+        (
+            "struct Box<T> { value: T } fn main() { value = Box<Int, String> { value: 1 } }",
+            "expects 1 type argument(s), found 2",
+        ),
+        (
+            "struct Pair<First, Second> { first: First second: Second } fn main() { value: Pair<Int> = Pair<Int> { first: 1 second: 2 } }",
+            "expects 2 type argument(s), found 1",
+        ),
+        (
+            "struct Box<T> { value: T } fn main() { value: Box = Box { value: 1 } }",
+            "requires 1 type argument(s)",
+        ),
+        (
+            "struct Box<T> { value: T } fn main() { value = Box<Int> { value: \"wrong\" } }",
+            "type mismatch",
+        ),
+        (
+            "struct Pair<T> { first: T second: T } fn main() { value = Pair { first: 1 second: \"wrong\" } }",
+            "type mismatch",
+        ),
+        (
+            "struct Box<T> { value: T } fn main() { value = Box { value: 1 } changed = record_with(value, \"value\", \"wrong\") }",
+            "type mismatch",
+        ),
+        (
+            "struct Empty<T> { marker: Int } fn main() { value = Empty { marker: 1 } }",
+            "cannot infer type parameter `T`",
+        ),
+        (
+            "struct Customer { name: String } fn main() { customer: Customer<Int> = Customer<Int> { name: \"Ada\" } }",
+            "does not accept type arguments",
+        ),
+    ] {
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let errors = check(&program).expect_err("invalid generic record use must be rejected");
+        assert!(
+            errors.iter().any(|error| error.message.contains(expected)),
+            "expected {expected:?}, got {errors:?}"
+        );
+    }
+}
+
+#[test]
+fn generic_enums_infer_payloads_match_exhaustively_and_round_trip_json() {
+    let source = r#"
+enum Maybe<T> { Some(T) None }
+
+fn describe(value: Maybe<Int>) -> Int {
+    match value {
+        Maybe::Some(number) => { return number }
+        Maybe::None => { return 0 }
+    }
+}
+
+fn main() {
+    some = Maybe::Some(42)
+    none = Maybe::None<String>()
+    print(describe(some))
+    match none {
+        Maybe::Some(text) => { print(text) }
+        Maybe::None => { print("empty") }
+    }
+    encoded = json_encode(some)
+    restored: Maybe<Int> = json_decode<Maybe<Int>>(encoded)
+    print(restored == some)
+}
+"#;
+    assert_eq!(run(source), ["42", "empty", "true"]);
+
+    for (source, expected) in [
+        (
+            "enum Maybe<T> { Some(T) None } fn main() { value: Maybe<Int> = Maybe::Some(\"wrong\") }",
+            "type mismatch",
+        ),
+        (
+            "enum Maybe<T> { Some(T) None } fn main() { value = Maybe::None }",
+            "requires explicit type arguments",
+        ),
+        (
+            "enum Maybe<T> { Some(T) None } fn main() { value = Maybe::None<Int, String>() }",
+            "expects 1 type argument(s), found 2",
+        ),
+        (
+            "enum Maybe<T> { Some(T) None } fn main() { value: Maybe<Int> = Maybe::Some<Int, String>(1) }",
+            "expects 1 type argument(s), found 2",
+        ),
+        (
+            "enum Maybe<T> { Some(T) None } fn main() { value: Maybe<Int> = Maybe::Some<String>(\"wrong\") }",
+            "type mismatch",
+        ),
+        (
+            "enum Maybe<T> { Some(T) None } fn main() { value: Maybe<Int> = Maybe::Some(1) match value { Maybe::Some(number) => { print(number) } } }",
+            "non-exhaustive match",
+        ),
+        (
+            "enum Maybe<Int> { Some(Int) None } fn main() { }",
+            "shadows a declared type",
+        ),
+    ] {
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let errors = check(&program).expect_err("invalid generic enum use must be rejected");
+        assert!(
+            errors.iter().any(|error| error.message.contains(expected)),
+            "expected {expected:?}, got {errors:?}"
+        );
+    }
+}
+
+#[test]
 fn named_function_values_are_typed_passed_called_and_keep_capability_requirements() {
     let source = r#"
 fn increment(value: Int) -> Int { return value + 1 }
@@ -1432,6 +1582,7 @@ fn sends_and_decodes_typed_json_http_request() {
             Value::String(format!("http://127.0.0.1:{port}/customers")),
             Value::Object {
                 type_name: "CustomerCreate".into(),
+                type_args: Vec::new(),
                 fields: HashMap::from([(String::from("name"), Value::String("Anna".into()))]),
             },
         ],
@@ -1612,6 +1763,7 @@ fn tagged_result_json_codec_preserves_ok_err_and_reports_invalid_data() {
 
     let customer = Value::Object {
         type_name: "Customer".into(),
+        type_args: Vec::new(),
         fields: HashMap::from([("name".into(), Value::String("Zoë".into()))]),
     };
     let encoded_ok = execute_function(
@@ -2618,6 +2770,43 @@ fn rejects_non_string_map_keys_at_the_api_boundary() {
     assert!(errors
         .iter()
         .all(|error| error.message.contains("JSON API maps require")));
+}
+
+#[test]
+fn generic_api_types_reject_function_payloads_and_allow_recursive_records() {
+    let wrong_arity = parse(
+        &lex("enum Maybe<T> { Some(T) None } api GET \"/maybe\" { output Maybe<Int, String> } fn main() { }")
+            .unwrap(),
+    )
+    .unwrap();
+    let errors =
+        check_apis(&wrong_arity).expect_err("API generic types must use their declared arity");
+    assert!(errors
+        .iter()
+        .any(|error| error.message.contains("unknown API output type")));
+
+    let unsupported = parse(
+        &lex("enum Callback<T> { Ready(T) } api GET \"/callback\" { output Callback<Function<() -> Int>> } fn main() { }")
+            .unwrap(),
+    )
+    .unwrap();
+    let errors = check_apis(&unsupported)
+        .expect_err("function values nested in generic enum payloads cannot cross JSON APIs");
+    assert!(
+        errors.iter().any(|error| {
+            error
+                .message
+                .contains("function values cannot cross an API JSON boundary")
+        }),
+        "{errors:?}"
+    );
+
+    let recursive = parse(
+        &lex("struct Node<T> { value: T next: Node<T>? } api GET \"/nodes\" { output Node<Int> } fn main() { }")
+            .unwrap(),
+    )
+    .unwrap();
+    check_apis(&recursive).expect("recursive generic records must not recurse in type validation");
 }
 
 #[test]

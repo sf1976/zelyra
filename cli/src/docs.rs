@@ -499,6 +499,14 @@ fn typescript_type(ty: &Type) -> String {
                 .join(", ");
             format!("({params}) => {}", typescript_type(return_type))
         }
+        Type::Applied { name, args } => format!(
+            "{}<{}>",
+            name,
+            args.iter()
+                .map(typescript_type)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
         Type::Named(name) => match name.as_str() {
             "Id" => "number".into(),
             "Email" | "Url" | "Uuid" | "Money" => "string".into(),

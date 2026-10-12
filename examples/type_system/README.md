@@ -40,8 +40,8 @@ Programmlauf.
 | Tupel | ✅ unterstützt | `Tuple<A, B, ...>` und `tuple(a, b, ...)` bilden geordnete heterogene Werte. Konstante Indizes werden statisch typgeprüft; dynamische Tuple-Indizes sind nicht erlaubt. JSON verwendet ein positionsgetreues Array mit geprüfter Länge. |
 | Mengen | ✅ unterstützt | `Set<T>`, `set([a, b])`, `contains`, `set_add` und `set_remove`. Werte sind deterministisch sortiert, Duplikate werden entfernt. Unterstützt werden die skalar vergleichbaren Schlüsseltypen; JSON ist ein sortiertes Array. |
 | `Map<K,V>` | ✅ unterstützt | Typisierte Maps; erlaubte Schlüsseltypen sind `Int`, `UInt`, `String`, `Bool`, `Char` und `Timestamp`. Doppelte Literalschlüssel behalten einen Eintrag und der letzte Wert gewinnt. Ein fehlender `get`-Schlüssel ergibt `None`. JSON unterstützt nur String-Schlüssel. |
-| Records (`struct`) | ✅ unterstützt | Eigene, verschachtelte Records, Felder, Wertgleichheit und JSON-Roundtrip. `record_with(record, "feld", wert)` liefert einen typgeprüften neuen Record; der ursprüngliche Wert bleibt bestehen. |
-| Enums | ✅ unterstützt | Eigene payloadfreie und payloadtragende Varianten mit `enum Event { Created(Int) Idle }`, typgeprüften Konstruktoren, Bindings in `match`, Exhaustivität, Wertgleichheit und JSON-Roundtrip. Öffentliche Enums funktionieren auch über Modulimporte. |
+| Records (`struct`) | ✅ unterstützt | Eigene, verschachtelte und generische Records, Felder, Wertgleichheit und typisierte JSON-Roundtrips. `record_with(record, "feld", wert)` liefert einen typgeprüften neuen Record; der ursprüngliche Wert bleibt bestehen. Generische Records sind keine SQL-Spaltentypen. |
+| Enums | ✅ unterstützt | Eigene payloadfreie, payloadtragende und generische Varianten mit typgeprüften Konstruktoren, Bindings in `match`, Exhaustivität, Wertgleichheit und JSON-Roundtrip. Typargumente werden abgeleitet oder ausdrücklich angegeben. Öffentliche Enums funktionieren auch über Modulimporte. |
 | Klassen/Objektidentität/Referenzen | — nicht vorhanden | Zelyra verwendet Records mit Wertsemantik und unveränderliche Funktionsabläufe. Klassen, beobachtbare Objektidentität und veränderliche Referenzen gehören derzeit nicht zur Sprachlinie. |
 | `Timestamp` | ✅ teilweise nutzbar | `now()`, Gleichheit, chronologische Vergleiche, UTC-Formatierung, JSON als Unix-Millisekunden sowie `timestamp_add_result` und `timestamp_difference_result` für UTC-Dauern. Operationen sind auf ISO-Jahre 0001–9999 begrenzt. Zeitzonen und lokale Sommerzeit sind nicht enthalten. |
 | `Date`, `Time`, `Duration`, `Bytes` | ✅ unterstützt | Validierte ISO-Daten und Uhrzeiten, chronologische Vergleiche, JSON-Roundtrips und geprüfte Daueraddition/-subtraktion. `date_add_days_result` und `date_days_between_result` rechnen Kalender-Tage inklusive Schaltjahren und Jahreswechseln. `Bytes` akzeptiert Werte 0–255. |
@@ -49,8 +49,8 @@ Programmlauf.
 | `Unit` | ✅ unterstützt | Leerer Rückgabewert, explizite Funktionstypen und JSON-Roundtrip mit `null`. |
 | `Result<T,E>` | ✅ unterstützt | `Ok`/`Err`, Pattern Matching und Rückgabe aus Funktionen. Das bisherige `json_encode`-Format bleibt unverändert; `json_encode_tagged_result` und `json_decode_tagged_result<T,E>` tauschen Results verlustfrei als `{"$result":"ok","value":...}` oder `{"$result":"err","error":...}` aus. `json_decode_result<T>` bleibt der Result-basierte Decoder für gewöhnliche JSON-Ziele. |
 | `HttpResult<T>`, `HttpResponse`, `HttpError` | 🧪 spezialisiert | HTTP-Subsystem-Typen für Netzwerkantworten und Fehler; keine allgemeinen Literal- oder Konstruktoren. |
-| Generics | 🧪 teilweise | Generische Standardtypen sowie eigene generische Funktionen (`fn identity<T>`) mit Typinferenz oder expliziten Typargumenten sind verfügbar. Eigene generische Records/Enums und allgemeine Constraints sind noch nicht verfügbar. |
-| Typ-Aliase und eigene Typen | 🧪 teilweise | `type Name = ...` sowie Records sind vorhanden. Records werden ausgeführt und serialisiert; Aliase haben keine eigene Runtimeidentität. |
+| Generics | 🧪 teilweise | Eigene generische Funktionen, Records und Enums mit Typinferenz oder expliziten Typargumenten sind verfügbar. Allgemeine Constraints/Traits, generische Typ-Aliase und generische Funktionsreferenzen sind nicht enthalten. Generische Parameter unterstützen nur Operationen, die für ihren konkreten Typ feststehen. |
+| Typ-Aliase und eigene Typen | 🧪 teilweise | `type Name = ...`, Records und Enums sind vorhanden. Generische Records und Enums behalten ihre nominalen Typargumente zur Laufzeit; Aliase haben keine eigene Runtimeidentität. |
 | `Id`, `Email`, `Url`, `Uuid`, `Money` | 🧪 spezialisiert | Benannte String-Domainwerte für API-/Datenschema-Nutzung; keine eigenen numerischen oder Identitätsregeln in der Runtime. |
 | Funktionen als Werte | 🧪 teilweise | Benannte, nicht generische Funktionen können mit `&name` gespeichert, übergeben und über einen typisierten `Function<(...) -> ...>`-Wert indirekt aufgerufen werden. Capabilities bleiben statisch und zur Laufzeit erhalten. Closures, erfasste lokale und generische Funktionswerte fehlen. |
 
@@ -72,8 +72,8 @@ keine flachen oder tiefen Kopien als getrennte Operationen. `record_with` und
 Der erfolgreiche Programmlauf prüft Zahlenbereiche, Rechenoperationen,
 Rundungsverhalten, Unicode, optionale Werte, Arrays, Listen-Aliase, Tupel,
 Mengen, Records, payloadfreie und payloadtragende Enums,
-Kalender-/Zeitstempeloperationen, Decimal-Quantisierung, Bereiche, JSON und
-benutzerdefinierte generische Funktionen.
+Kalender-/Zeitstempeloperationen, Decimal-Quantisierung, Bereiche, JSON sowie
+benutzerdefinierte generische Funktionen, Records und Enums.
 Der CLI-Integrationstest erwartet zusätzlich **19 Compilerfehler** und
 **19 Runtimefehler** (Typfehler, gemischte Arrays, unvollständiges Matching,
 Überlauf/Unterlauf, Division durch null, ungültiger Index, ungültige
@@ -84,11 +84,12 @@ positives Testergebnis. Bei erfolgreichem Integrationstest sind alle 12
 positiven Testgruppen bestanden und es gibt 0 unerwartete Fehler. Die
 aktuelle Matrix umfasst 18 unterstützte, 6 teilweise unterstützte und 1 noch
 nicht verfügbaren Eintrag; das Programm gibt diese drei Zahlen aus. Eigene
-generische Funktionen, payloadtragende Enums und benannte Funktionswerte werden im positiven
-Type-System-Beispiel sowie mit expliziten Compiler-Negativfällen geprüft.
-Generische Datentypen, Closures und generische Funktionswerte fehlen noch. Klassen und
+generische Funktionen und Datentypen, payloadtragende Enums und benannte
+Funktionswerte werden im positiven Type-System-Beispiel sowie mit expliziten
+Compiler-Negativfällen geprüft. Allgemeine Constraints, generische Typ-Aliase,
+Closures und generische Funktionswerte fehlen noch. Klassen und
 Referenzidentität sind eine bewusste Abweichung vom wertorientierten Recordmodell;
-sie sind keine Voraussetzung für Records, CRUD oder Datenbankbeziehungen.
+Entitäten bilden ihre Identität über normale fachliche ID-Felder ab.
 
 Das ist eine Abdeckung der vorhandenen Sprachoberfläche, keine Behauptung, dass
 alle Typen oder Konvertierungen bereits implementiert sind.

@@ -2396,7 +2396,7 @@ geplante oder derzeit nicht verfügbare Sprachmerkmale.
 | optionale Werte | `Email?` oder `Option<String>` | `Option<String>` | `?` ist Zelyras Kurzform für Option | ✅ |
 | fehlender Wert | `None` | `None` | gleiche Bezeichnung in verschiedenem Enum-Modell | ✅ |
 | Listen/Arrays | `Int[]`, `[1, 2, 3]` | `Vec<i64>`, `vec![1, 2, 3]` | Zelyra bietet keine Rust-Makrosyntax | ✅ |
-| benannte Datentypen | `type CustomerId = Id`, `struct Customer { ... }` | `type CustomerId = u64`, `struct Customer { ... }` | Zelyra-Records und Rust-Structs sind nicht austauschbar | ✅ |
+| benannte Datentypen | `type CustomerId = Id`, `struct Customer<T> { ... }`, `enum Event<T> { ... }` | `type CustomerId = u64`, `struct Customer<T> { ... }` | Zelyra-Records und Rust-Structs sind nicht austauschbar; Typargumente werden statisch geprüft | ✅ |
 | Bedingungen | `if ok { ... }` | `if ok { ... }` | Blocksemantik und Ausdrucksregeln unterscheiden sich | ✅ |
 | `else` | `else { ... }` | `else { ... }` | ähnliche Kontrollflussform | ✅ |
 | `match` | `match value { Some(x) => ... None => ... }` | `match value { Some(x) => ..., None => ... }` | Zelyra verlangt ebenfalls vollständige Fälle | ✅ |
@@ -2412,7 +2412,8 @@ geplante oder derzeit nicht verfügbare Sprachmerkmale.
 | Stringinterpolation | HTML kann `{name}` in `html`-Bodies verwenden | `format!("{name}")` oder `println!("{}", name)` | keine allgemeine Zelyra-Stringinterpolation dokumentieren | 🧪 |
 | Module | `pub fn`, `pub view`, `pub component` und weitere Deklarationen in importierten Dateien (Entwicklungszweig) | `mod name {}`, Dateien und Module | experimentell; Release 0.3.0 hat keine Module; UI-Sichtbarkeit und Namespace-Auflösung bleiben eingeschränkt | 🧪 |
 | Imports | `import "src/math.zyl" as math`, `math::add()` (Entwicklungszweig) | `use crate::module::Item;` | projektlokale Imports; `check`, `build`, `run`, `serve`, `context`, `verify`, `impact` verarbeiten den Graphen | 🧪 |
-| Generics | `Option<T>`, `Result<T, E>` und begrenzte Built-in-Typargumente | allgemeine Generics und Traits | keine benutzerdefinierten Zelyra-Generics | 🧪 |
+| Generics | `fn identity<T>(...)`, `struct Box<T>`, `enum Maybe<T>` | allgemeine Generics und Traits | eigene Funktionen, Records und Enums unterstützen Inferenz/Typangaben; allgemeine Constraints, generische Aliase und generische Funktionsreferenzen fehlen | 🧪 |
+| Funktionswerte | `callback: Function<(Int) -> Int>`, `&increment` | `fn(Int) -> Int` | benannte, nicht generische Funktionen können gespeichert, übergeben und indirekt aufgerufen werden; Closures fehlen | 🧪 |
 | asynchrone Funktionen | `async fn` nicht vorhanden; `await`/`parallel` nur eingeschränkt | `async fn`, `.await`, Futures | kein stabiles Zelyra-Async-Modell | 🧪 |
 | Tabellen | `table customers { ... }` | kein Sprachkonstrukt | Zelyra verbindet Tabelle und Schema | ✅ |
 | Datenbanktypen | `Id`, `String(100)`, `Email`, `Bool` | Rust-Typen und externe Mapping-Crates | Zelyra erzeugt SQL-Typen aus der Tabelle | ✅ |
@@ -2745,7 +2746,7 @@ Release-Datum.
 | Bereich | Aktueller Schwerpunkt | Noch offene Ausbaustufen |
 |---|---|---|
 | Einstieg und Distribution | Quellcode- und Release-Installer (Linux/Windows x86_64 per SHA-256), `zelyra new/init` mit Starter-Templates (`minimal`, `mariadb-crud`, `mariadb-auth`, `mariadb-business`), Docker-/DB-Ports, `zelyra setup`, `zelyra doctor`, E2E-Tests | signierte Binaries, interaktiver Verbindungsassistent, Reverse-Proxy-Automatisierung |
-| Sprache und Compiler | Lexer, Parser, AST/HIR, Typprüfung, `Option`, `Result`, Pattern Matching, Ausdrucks-Typed-Holes (`_`), kanonisches `zelyra fmt`; begrenzte projektlokale Importe sind im unveröffentlichten 0.4-Zweig experimentell | umfassendere Modul-Sichtbarkeit und Werkzeug-Integration, Generics, Lücken in Deklarationen und vollständige formale Verifikation |
+| Sprache und Compiler | Lexer, Parser, AST/HIR, Typprüfung, `Option`, `Result`, payloadtragende und generische Enums/Records, benannte Funktionswerte, projektlokale Importe und kanonisches `zelyra fmt` | umfassendere Tooling-Integration, generische Constraints/Aliase, Closures, deklarative Lücken und vollständige formale Verifikation |
 | Datenbankplattform | MariaDB, SQLite und PostgreSQL im Schema-CLI; typisiertes SQL | weitere Schemaabdeckung, robustere Produktionsabläufe |
 | Views und Web | Seiten, benannte Views, Komponenten, Default- und benannte Slots mit Fallback-Inhalten, sicherer Output | Themes, View-Vererbung, freie Styling-Komponenten |
 | Formulare und CRUD | Validierung, CSRF, Suche, Filter, Pagination, Aktionen, Soft Delete, gemeinsames CRUD-View-Feldprofil (`view.fields`) | permanente Löschung, Aufbewahrung, Archivierung und breitere View-Anpassung |

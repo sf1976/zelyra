@@ -2229,7 +2229,7 @@ and was checked with the installed Rust toolchain or Zelyra CLI. `🧪`, `🗺�
 | Optional value | `Email?` or `Option<String>` | `Option<String>` | `?` is Zelyra's Option shorthand | ✅ |
 | Missing value | `None` | `None` | same name in different enum models | ✅ |
 | Lists/arrays | `Int[]`, `[1, 2, 3]` | `Vec<i64>`, `vec![1, 2, 3]` | no Rust macro syntax in Zelyra | ✅ |
-| Named data types | `type CustomerId = Id`, `struct Customer { ... }` | `type CustomerId = u64`, `struct Customer { ... }` | records and structs are not interchangeable | ✅ |
+| Named data types | `type CustomerId = Id`, `struct Customer<T> { ... }`, `enum Event<T> { ... }` | `type CustomerId = u64`, `struct Customer<T> { ... }` | records and structs are not interchangeable; type arguments are checked statically | ✅ |
 | Conditions | `if ok { ... }` | `if ok { ... }` | block and expression rules differ | ✅ |
 | `else` | `else { ... }` | `else { ... }` | similar control-flow form | ✅ |
 | `match` | `match value { Some(x) => ... None => ... }` | `match value { Some(x) => ..., None => ... }` | both require exhaustive cases | ✅ |
@@ -2245,7 +2245,8 @@ and was checked with the installed Rust toolchain or Zelyra CLI. `🧪`, `🗺�
 | String interpolation | HTML bodies may use `{name}` | `format!("{name}")` or `println!("{}", name)` | no general Zelyra string interpolation | 🧪 |
 | Modules | `pub fn` and other declarations in imported files (development branch) | `mod name {}`, files and modules | experimental; release 0.3.0 has none, and views/components still lack visibility modifiers | 🧪 |
 | Imports | `import "src/math.zyl" as math`, `math::add()` (development branch) | `use crate::module::Item;` | project-local imports; `check`, `build`, `run`, `serve`, `context`, `verify`, and `impact` load the graph | 🧪 |
-| Generics | `Option<T>`, `Result<T, E>`, limited built-in type arguments | general generics and traits | no user-defined Zelyra generics | 🧪 |
+| Generics | `fn identity<T>(...)`, `struct Box<T>`, `enum Maybe<T>` | general generics and traits | user-defined functions, records, and enums support inference/explicit arguments; general constraints, generic aliases, and generic function references are unavailable | 🧪 |
+| Function values | `callback: Function<(Int) -> Int>`, `&increment` | `fn(Int) -> Int` | named non-generic functions can be stored, passed, and called indirectly; closures are unavailable | 🧪 |
 | Async functions | no `async fn`; `await`/`parallel` are limited | `async fn`, `.await`, futures | no stable Zelyra async model | 🧪 |
 | Tables | `table customers { ... }` | no language construct | Zelyra connects table and schema | ✅ |
 | Database types | `Id`, `String(100)`, `Email`, `Bool` | Rust types and external mapping crates | Zelyra emits SQL types from a table | ✅ |
@@ -2558,7 +2559,7 @@ is a development plan, not a release-date promise.
 | Area | Current focus | Open expansion |
 |---|---|---|
 | Beginner experience and distribution | source and release installers (Linux/Windows x86_64 via SHA-256), `zelyra new/init` with starter templates (`minimal`, `mariadb-crud`, `mariadb-auth`, `mariadb-business`), Docker/DB ports, `zelyra setup`, `zelyra doctor`, E2E tests | signed binaries, interactive connection assistant, reverse-proxy automation |
-| Language and compiler | lexer, parser, AST/HIR, type checking, `Option`, `Result`, pattern matching, expression typed holes (`_`), canonical `zelyra fmt`; limited project-local imports are experimental in the unreleased 0.4 branch | broader module visibility and tooling integration, generics, declaration holes, and complete formal verification |
+| Language and compiler | lexer, parser, AST/HIR, type checking, `Option`, `Result`, payload-carrying and generic enums/records, named function values, project-local imports, and canonical `zelyra fmt` | broader tooling integration, generic constraints/aliases, closures, declaration holes, and complete formal verification |
 | Database platform | MariaDB, SQLite, and PostgreSQL schema CLI; typed SQL | broader schema coverage and stronger production workflows |
 | Views and web | pages, named views, components, default and named slots with fallback content, safe output | themes, view inheritance, free-form styling components |
 | Forms and CRUD | validation, CSRF, search, filters, pagination, actions, soft delete, shared CRUD view field profile (`view.fields`) | permanent deletion, retention, archiving, and broader view customization |

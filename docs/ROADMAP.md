@@ -1036,19 +1036,20 @@ language backlog as one 0.9.4 change.
   human-study materials. At this point independent human acceptance should be
   the only remaining gate; do not claim production approval or run acceptance
   against 0.9.9.
-- [🗺️] Close remaining language gaps carried over from 0.9.8: generic
-  user-defined records/enums and general constraints, plus every remaining
-  corpus, CLI, setup, database, migrator, and security finding. The [0.9.9
+- [🗺️] Close remaining language and release gates: the full language corpus,
+  CLI, setup, database, migrator, security, documentation, and packaging
+  findings. General constraints/traits, closures, and generic function
+  references remain documented language boundaries. The [0.9.9
   plan](release-plans/0.9.9.en.md) lists testable criteria.
-- [🧪] Verified implementation slices on the 0.9.9 branch: generic functions
-  accept inferred or explicit type arguments, including type parameters nested
-  in arrays, `Option`, and `Result`. Conflicting and uninferable types have
-  regression coverage. The type-system example checks imported generic
-  functions, empty collections with explicit types, and compiler-negative
-  cases. Payload-carrying enums and typed named function values/indirect calls
+- [✅] Generic functions, records, and enums are implemented on the 0.9.9
+  branch. Type arguments are inferred or explicit, including through nested
+  records, arrays, `Option`, and `Result`. Conflicting, missing, and wrong-arity
+  types have regression coverage. The type-system example includes module
+  imports and positive/negative cases. Persistent SQL columns explicitly reject
+  generic records. Payload enums and named typed function values/indirect calls
   also pass focused positive and negative tests, including capability
-  propagation. Generic records/aliases and general constraints remain open;
-  these slices do not close the language gate.
+  propagation. General constraints/traits, generic aliases, closures, and
+  generic function references remain outside this supported scope.
 - Exit criteria: no open implementation, security, database, migration,
   packaging, or documentation blocker remains. If one remains, 0.9.9 is not
   complete. See the [0.9.9 plan](release-plans/0.9.9.en.md).

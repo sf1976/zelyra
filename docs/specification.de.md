@@ -511,8 +511,60 @@ eine falsche Anzahl expliziter Typargumente und Typparameter, die deklarierte
 Typen verdecken, verwenden `E-TYPE-GENERIC-001`. Generische Funktionen dürfen
 andere generische Funktionen aufrufen. Der Type-System-Beispiellauf deckt
 Inference, explizite Typen, Arrays, `Option`, Modulimporte und erwartete
-Compilerfehler ab. Eigene generische Records und Enums sowie allgemeine
-Constraints bleiben weitere 0.9.9-Arbeit.
+Compilerfehler ab. Generische Funktionen, Records und Enums sind verfügbar;
+allgemeine Constraints bleiben außerhalb des aktuellen Umfangs.
+
+### Generische nutzerdefinierte Typen in 0.9.9
+
+Records und Enums dürfen Typparameter deklarieren. Explizite Typargumente
+stehen in spitzen Klammern. Bei Record-Literalen und Enum-Payloads leitet der
+Compiler Typargumente ab, wenn alle Parameter aus den Feldern beziehungsweise
+Payloads hervorgehen:
+
+~~~zelyra
+struct Box<T> { value: T }
+enum Maybe<T> { Some(T) None }
+
+fn unwrap_or<T>(value: Maybe<T>, fallback: T) -> T {
+    match value {
+        Maybe::Some(found) => { return found }
+        Maybe::None => { return fallback }
+    }
+}
+
+fn main() {
+    box: Box<Int> = Box<Int> { value: 7 }
+    inferred = Box { value: "Artikel" }
+    some = Maybe::Some(42)
+    none: Maybe<String> = Maybe::None<String>()
+    print(unwrap_or(some, 0))
+    print(unwrap_or(none, "leer"))
+}
+~~~
+
+Ein generischer Enum-Unit-Konstruktor ohne Payload kann seinen Typ nicht
+ableiten und braucht deshalb die Form `Maybe::None<String>()`. In `match`
+werden Payload-Muster anhand der konkreten Enum-Typargumente geprüft; alle
+Varianten bleiben exhaustive abzudecken. `json_decode<Box<Int>>` und
+`json_decode<Maybe<Int>>` prüfen Payloads gegen den expliziten Zieltyp. Das
+bestehende JSON-Format fügt keine Typargumente hinzu. Records mit generischen
+Parametern sind keine SQL-Spaltentypen und werden dort ausdrücklich abgelehnt.
+
+Allgemeine Constraints/Traits (`T: Ord`), generische Typ-Aliase und generische
+Funktionsreferenzen werden nicht unterstützt. Generische Parameter dürfen nur
+Operationen verwenden, deren Typ für den konkreten Wert feststeht. Der
+Compiler meldet fehlende oder widersprüchliche Ableitungen mit
+`E-TYPE-GENERIC-001` beziehungsweise einem Typfehler.
+
+### Werte, Records und Klassen
+
+Zelyras Kernmodell verwendet Records mit Wertsemantik. Fachliche Identität
+steht in expliziten ID-Feldern; Änderungen erzeugen mit `record_with` einen
+neuen Record. Die Sprache definiert derzeit weder ein `class`-Konstrukt noch
+veränderliche gemeinsam referenzierte Objekte, Objektidentitätsvergleiche oder
+Vererbung. Diese Grenze verhindert versteckte Aliasänderungen und hält
+Datenbank- und JSON-Werte nachvollziehbar. Ein späteres Objektmodell bräuchte
+zuerst festgelegte Regeln für Lebensdauer, Mutation und geteilten Zustand.
 
 ### Benannte Funktionswerte in 0.9.9
 

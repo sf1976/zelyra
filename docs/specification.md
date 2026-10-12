@@ -537,8 +537,58 @@ compiler reports `E-TYPE-001`. Uninferable types, an incorrect number of
 explicit type arguments, and type parameters that shadow declared types use
 `E-TYPE-GENERIC-001`. Generic functions may call other generic functions. The
 type-system example covers inference, explicit types, arrays, `Option`, module
-imports, and expected compiler errors. Generic records and enums and general
-constraints remain 0.9.9 work.
+imports, and expected compiler errors. Generic functions, records, and enums are
+available; general constraints remain outside the current scope.
+
+### Generic user-defined types in 0.9.9
+
+Records and enums may declare type parameters. Explicit type arguments use angle
+brackets. For record literals and enum payloads, the compiler infers arguments
+when every parameter can be derived from the fields or payload values:
+
+~~~zelyra
+struct Box<T> { value: T }
+enum Maybe<T> { Some(T) None }
+
+fn unwrap_or<T>(value: Maybe<T>, fallback: T) -> T {
+    match value {
+        Maybe::Some(found) => { return found }
+        Maybe::None => { return fallback }
+    }
+}
+
+fn main() {
+    box: Box<Int> = Box<Int> { value: 7 }
+    inferred = Box { value: "Item" }
+    some = Maybe::Some(42)
+    none: Maybe<String> = Maybe::None<String>()
+    print(unwrap_or(some, 0))
+    print(unwrap_or(none, "empty"))
+}
+~~~
+
+A generic enum unit constructor has no payload from which to infer its type,
+so it uses the form `Maybe::None<String>()`. In `match`, payload patterns are
+checked against the enum's concrete type arguments, and every variant must
+still be covered. `json_decode<Box<Int>>` and `json_decode<Maybe<Int>>` validate
+payloads against the explicit target type. The existing JSON format gains no
+type-argument fields. Generic records are not SQL column types and are rejected
+explicitly at that boundary.
+
+General constraints/traits (`T: Ord`), generic type aliases, and generic
+function references are not supported. A generic parameter may use only
+operations whose types are known for the concrete value. Missing or conflicting
+inference produces `E-TYPE-GENERIC-001` or a type mismatch diagnostic.
+
+### Values, records, and classes
+
+Zelyra's core model uses value-semantic records. Domain identity lives in
+explicit ID fields; `record_with` creates a new record for an update. The
+language currently defines no `class` construct, mutable shared object
+references, object-identity comparisons, or inheritance. This boundary avoids
+hidden alias mutations and keeps database and JSON values inspectable. A future
+object model would first need defined lifetime, mutation, and shared-state
+rules.
 
 ### Named function values in 0.9.9
 

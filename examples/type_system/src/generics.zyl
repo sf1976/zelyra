@@ -20,6 +20,22 @@ pub fn option_or<T>(value: Option<T>, fallback: T) -> T {
         }
     }
 }
+pub struct Box<T> {
+    value: T
+}
+pub enum Maybe<T> {
+    Some(T) None
+}
+pub fn unwrap_or<T>(value: Maybe<T>, fallback: T) -> T {
+    match value {
+        Maybe::Some(found) => {
+            return found
+        }
+        Maybe::None => {
+            return fallback
+        }
+    }
+}
 pub fn run() {
     assert(preserve(7) == 7, "nested generic function call")
     assert(identity<String>("Grüße") == "Grüße", "explicit generic type argument")
@@ -27,5 +43,25 @@ pub fn run() {
     assert(first_or<String>([], "leer") == "leer", "empty generic array")
     assert(option_or(Some(12), 0) == 12, "generic Option parameter")
     assert(option_or<Int>(None, 0) == 0, "explicit generic Option type")
-    print("PASS user-defined generic functions, inference and explicit types")
+    boxed: Box<Int> = Box<Int> {
+        value: 25
+    }
+    inferred_box = Box {
+        value: "generisch"
+    }
+    assert(boxed.value == 25, "generic record keeps its concrete type")
+    assert(inferred_box.value == "generisch", "generic record infers its type")
+    changed = record_with(boxed, "value", 26)
+    assert(changed.value == 26 && boxed.value == 25, "generic record update preserves source")
+    maybe = Maybe::Some(31)
+    assert(unwrap_or(maybe, 0) == 31, "generic enum infers its payload type")
+    empty: Maybe<String> = Maybe::None<String>()
+    assert(unwrap_or(empty, "leer") == "leer", "generic unit variant takes explicit type")
+    encoded = json_encode(boxed)
+    restored: Box<Int> = json_decode<Box<Int>>(encoded)
+    assert(restored.value == boxed.value, "generic record JSON round trip")
+    encoded_maybe = json_encode(maybe)
+    restored_maybe: Maybe<Int> = json_decode<Maybe<Int>>(encoded_maybe)
+    assert(restored_maybe == maybe, "generic enum JSON round trip")
+    print("PASS user-defined generic functions, records, enums, inference, explicit types and JSON")
 }

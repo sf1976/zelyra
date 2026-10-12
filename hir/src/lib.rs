@@ -181,6 +181,7 @@ pub enum HirExprKind {
     Map(Vec<(HirExpr, HirExpr)>),
     Record {
         type_name: String,
+        type_args: Vec<Type>,
         fields: Vec<(String, HirExpr)>,
     },
     Local(LocalId),
@@ -593,8 +594,13 @@ impl<'a> Resolver<'a> {
                     .map(|(key, value)| (self.expr(key), self.expr(value)))
                     .collect(),
             ),
-            ExprKind::Record { type_name, fields } => HirExprKind::Record {
+            ExprKind::Record {
+                type_name,
+                type_args,
+                fields,
+            } => HirExprKind::Record {
                 type_name: type_name.clone(),
+                type_args: type_args.clone(),
                 fields: fields
                     .iter()
                     .map(|(name, value)| (name.clone(), self.expr(value)))

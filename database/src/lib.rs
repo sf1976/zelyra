@@ -139,6 +139,16 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
                 });
                 continue;
             }
+            if contains_applied_type(&definition.ty) {
+                errors.push(SchemaError {
+                    message: format!(
+                        "generic user-defined types cannot be stored in database column {}.{} yet",
+                        table.name, definition.name
+                    ),
+                    span: definition.span,
+                });
+                continue;
+            }
             if let Type::Named(name) = &definition.ty {
                 let known_named_type = ["Id", "Email", "Url", "Uuid", "Money"]
                     .contains(&name.as_str())
@@ -378,6 +388,7 @@ fn column_mapping(
         | Type::Map(_, _)
         | Type::HttpResult(_)
         | Type::Function { .. }
+        | Type::Applied { .. }
         | Type::Unit
         | Type::Unknown => "TEXT",
     };
@@ -426,6 +437,25 @@ fn contains_function_type(
             visiting.remove(name);
             found
         }
+        _ => false,
+    }
+}
+
+fn contains_applied_type(ty: &Type) -> bool {
+    match ty {
+        Type::Applied { .. } => true,
+        Type::Option(inner) | Type::Array(inner) | Type::Set(inner) | Type::HttpResult(inner) => {
+            contains_applied_type(inner)
+        }
+        Type::Result(ok, error) | Type::Map(ok, error) => {
+            contains_applied_type(ok) || contains_applied_type(error)
+        }
+        Type::Tuple(items) => items.iter().any(contains_applied_type),
+        Type::Function {
+            params,
+            return_type,
+            ..
+        } => params.iter().any(contains_applied_type) || contains_applied_type(return_type),
         _ => false,
     }
 }
@@ -5609,6 +5639,20 @@ mod tests {
                     .contains("function values cannot be stored in database column callbacks.callback")
             }));
         }
+    }
+
+    #[test]
+    fn rejects_generic_user_types_as_persistent_column_types() {
+        let source = "struct Box<T> { value: T } enum Maybe<T> { Some(T) None } table payloads { id: Id primary auto boxed: Box<Int> required maybe: Maybe<String> required }";
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let errors = build_schema(&program)
+            .expect_err("generic user-defined values are not SQL column types");
+        assert_eq!(errors.len(), 2, "both unsupported columns must be reported");
+        assert!(errors.iter().all(|error| {
+            error
+                .message
+                .contains("generic user-defined types cannot be stored in database column")
+        }));
     }
 
     #[test]

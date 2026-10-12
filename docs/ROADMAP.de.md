@@ -1051,19 +1051,22 @@ IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
   Kandidaten ausführen. Materialien für die exakte 1.0.0-Menschenstudie
   vorbereiten. Danach sollte nur noch die unabhängige menschliche Abnahme offen
   sein; für 0.9.9 keine Abnahme und keine Produktivfreigabe behaupten.
-- [🗺️] Verbleibende Sprachlücken schließen: generische nutzerdefinierte
-  Records/Enums und allgemeine Constraints sowie sämtliche noch offenen Korpus-,
-  CLI-, Setup-, Datenbank-, Migrator- und Sicherheitsbefunde. Der
+- [🗺️] Verbleibende Sprach- und Release-Gates schließen: vollständigen Sprachkorpus,
+  CLI-, Setup-, Datenbank-, Migrator- und Sicherheitsbefunde sowie
+  Dokumentations- und Paketierungsprüfungen. Allgemeine Constraints/Traits,
+  Closures und generische Funktionsreferenzen bleiben ausdrücklich dokumentierte
+  Grenzen der Sprachlinie. Der
   [0.9.9-Plan](release-plans/0.9.9.de.md) enthält die prüfbaren Kriterien.
-- [🧪] Geprüfte Umsetzungsschritte im 0.9.9-Branch: Generische Funktionen
-  leiten Typargumente ab oder akzeptieren sie ausdrücklich, auch innerhalb
-  von Arrays, `Option` und `Result`. Konfliktierende und nicht ableitbare Typen
-  besitzen Regressionstests. Das Type-System-Beispiel prüft generische
-  Modulimporte, leere Sammlungen mit expliziten Typen und Compiler-Negativfälle.
-  Payload-Enums, benannte typisierte Funktionswerte und indirekte Aufrufe bestehen
-  ebenfalls gezielte positive/negative Tests einschließlich Capability-
-  Weitergabe. Generische Records/Aliase und allgemeine Constraints bleiben
-  offen; diese Schritte schließen die Sprach-Gates nicht.
+- [✅] Generische Funktionen, Records und Enums sind im 0.9.9-Branch umgesetzt:
+  Typargumente werden abgeleitet oder ausdrücklich angegeben, auch in
+  verschachtelten Records, Arrays, `Option` und `Result`. Konfliktierende,
+  fehlende und falsch gezählte Typen haben Regressionstests. Das
+  Type-System-Beispiel deckt generische Modulimporte sowie positive und
+  negative Fälle ab. SQL-Spalten lehnen generische Records ausdrücklich ab.
+  Payload-Enums, benannte typisierte Funktionswerte und indirekte Aufrufe
+  bestehen ebenfalls gezielte Tests einschließlich Capability-Weitergabe.
+  Allgemeine Constraints/Traits, generische Aliase, Closures und generische
+  Funktionsreferenzen bleiben außerhalb des unterstützten Umfangs.
 - Abschlusskriterien: Keine offenen Implementierungs-, Sicherheits-, Datenbank-,
   Migrations-, Paketierungs- oder Dokumentationsblocker. Bleibt einer offen, ist
   0.9.9 nicht fertig. Siehe den [0.9.9-Plan](release-plans/0.9.9.de.md).

@@ -1248,6 +1248,12 @@ impl TypeLinker<'_> {
                 }
                 self.ensure_exported_type_is_public(return_type, span)?;
             }
+            Type::Applied { name, args } => {
+                self.ensure_exported_type_is_public(&Type::Named(name.clone()), span)?;
+                for argument in args {
+                    self.ensure_exported_type_is_public(argument, span)?;
+                }
+            }
             _ => {}
         }
         Ok(())
@@ -1309,6 +1315,17 @@ impl TypeLinker<'_> {
                         .is_some_and(|types| types.contains_key(name))
                 {
                     *name = internal_type_name(self.current_name, name);
+                }
+            }
+            Type::Applied { name, args } => {
+                let mut base = Type::Named(name.clone());
+                self.rewrite_type(&mut base, span)?;
+                let Type::Named(canonical_name) = base else {
+                    unreachable!("type application base remains a named type")
+                };
+                *name = canonical_name;
+                for argument in args {
+                    self.rewrite_type(argument, span)?;
                 }
             }
             Type::Option(inner)
@@ -1394,13 +1411,20 @@ impl TypeLinker<'_> {
                     self.rewrite_expression_types(value)?;
                 }
             }
-            ExprKind::Record { type_name, fields } => {
+            ExprKind::Record {
+                type_name,
+                type_args,
+                fields,
+            } => {
                 let mut ty = Type::Named(type_name.clone());
                 self.rewrite_type(&mut ty, expression.span)?;
                 let Type::Named(canonical_name) = ty else {
                     unreachable!("named record type remains a named type")
                 };
                 *type_name = canonical_name;
+                for argument in type_args {
+                    self.rewrite_type(argument, expression.span)?;
+                }
                 for (_, value) in fields {
                     self.rewrite_expression_types(value)?;
                 }
@@ -2408,6 +2432,24 @@ mod tests {
             .records
             .iter()
             .any(|record| record.name == "src/money.zyl::Amount"));
+        cleanup(&directory);
+    }
+
+    #[test]
+    fn imports_public_generic_records_enums_and_functions_across_modules() {
+        let directory = project(&[
+            (
+                "main.zyl",
+                "import \"src/models.zyl\" as models\nfn main() { value = models::Box<Int> { value: 17 } print(models::identity(value).value) event = models::Maybe::Some(23) print(models::unwrap(event)) }\n",
+            ),
+            (
+                "src/models.zyl",
+                "pub struct Box<T> { value: T }\npub enum Maybe<T> { Some(T) None }\npub fn identity<T>(value: T) -> T { return value }\npub fn unwrap(value: Maybe<Int>) -> Int { match value { Maybe::Some(number) => { return number } Maybe::None => { return 0 } } }\n",
+            ),
+        ]);
+        let loaded = load(directory.join("main.zyl").to_str().unwrap()).unwrap();
+        check(&loaded.program).unwrap_or_else(|errors| panic!("{errors:?}"));
+        assert_eq!(execute(&loaded.program).unwrap(), ["17", "23"]);
         cleanup(&directory);
     }
 

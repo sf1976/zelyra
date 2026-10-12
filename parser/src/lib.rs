@@ -1921,6 +1921,7 @@ impl<'a> Parser<'a> {
     fn record_definition(&mut self, is_public: bool) -> Result<RecordDef, ParseError> {
         let start = self.expect(TokenKind::Struct, "`struct`")?;
         let (name, _) = self.ident("record name")?;
+        let type_params = self.type_parameter_names()?;
         self.expect(TokenKind::LBrace, "`{` after record name")?;
         let mut fields = Vec::new();
         self.skip_newlines();
@@ -1946,6 +1947,7 @@ impl<'a> Parser<'a> {
         Ok(RecordDef {
             name,
             is_public,
+            type_params,
             fields,
             span: start.join(end),
         })
@@ -1954,6 +1956,7 @@ impl<'a> Parser<'a> {
     fn enum_definition(&mut self, is_public: bool) -> Result<zelyra_ast::EnumDef, ParseError> {
         let start = self.expect(TokenKind::Enum, "`enum`")?;
         let (name, _) = self.ident("enum name")?;
+        let type_params = self.type_parameter_names()?;
         self.expect(TokenKind::LBrace, "`{` after enum name")?;
         let mut variants = Vec::new();
         let mut variant_payloads = Vec::new();
@@ -2011,11 +2014,39 @@ impl<'a> Parser<'a> {
         Ok(zelyra_ast::EnumDef {
             name,
             is_public,
+            type_params,
             variants,
             variant_payloads,
             span: start.join(end),
         })
     }
+    fn type_parameter_names(&mut self) -> Result<Vec<String>, ParseError> {
+        if !self.at(&TokenKind::Less) {
+            return Ok(Vec::new());
+        }
+        self.advance();
+        let mut parameters = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        loop {
+            let (parameter, span) = self.ident("generic type parameter")?;
+            if !seen.insert(parameter.clone()) {
+                return Err(ParseError {
+                    message: format!(
+                        "generic type parameter `{parameter}` is declared more than once"
+                    ),
+                    span,
+                });
+            }
+            parameters.push(parameter);
+            if !self.at(&TokenKind::Comma) {
+                break;
+            }
+            self.advance();
+        }
+        self.expect(TokenKind::Greater, "`>` after generic type parameters")?;
+        Ok(parameters)
+    }
+
     fn function(&mut self, is_public: bool) -> Result<Function, ParseError> {
         let start = self.expect(TokenKind::Fn, "`fn`")?;
         let (name, _) = self.ident("function name")?;
@@ -2289,6 +2320,19 @@ impl<'a> Parser<'a> {
                     return_type: Box::new(return_type),
                     capabilities,
                 }
+            }
+            _ if self.at(&TokenKind::Less) => {
+                self.advance();
+                let mut args = Vec::new();
+                loop {
+                    args.push(self.type_name()?);
+                    if !self.at(&TokenKind::Comma) {
+                        break;
+                    }
+                    self.advance();
+                }
+                self.expect(TokenKind::Greater, "`>` after generic type arguments")?;
+                Type::Applied { name, args }
             }
             _ => Type::Named(name),
         };
@@ -2849,6 +2893,22 @@ impl<'a> Parser<'a> {
                     name.push_str("::");
                     name.push_str(&segment);
                 }
+                let record_type_args =
+                    if self.at(&TokenKind::Less) && self.looks_like_generic_record_literal() {
+                        self.advance();
+                        let mut type_args = Vec::new();
+                        loop {
+                            type_args.push(self.type_name()?);
+                            if !self.at(&TokenKind::Comma) {
+                                break;
+                            }
+                            self.advance();
+                        }
+                        self.expect(TokenKind::Greater, "`>` after record type arguments")?;
+                        type_args
+                    } else {
+                        Vec::new()
+                    };
                 let type_args = if self.at(&TokenKind::Less)
                     && (matches!(
                         name.as_str(),
@@ -2902,8 +2962,11 @@ impl<'a> Parser<'a> {
                 } else if name == "Map" && self.at(&TokenKind::LBrace) {
                     self.map_literal(token.span)
                 } else if self.at(&TokenKind::LBrace) && self.looks_like_record_literal() {
-                    self.record_literal(name, token.span)
+                    self.record_literal(name, record_type_args, token.span)
                 } else {
+                    if !record_type_args.is_empty() {
+                        return self.error("generic type arguments require a record literal here");
+                    }
                     Ok(Expr {
                         kind: ExprKind::Variable(name),
                         span: token.span,
@@ -2919,7 +2982,12 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn record_literal(&mut self, type_name: String, start: Span) -> Result<Expr, ParseError> {
+    fn record_literal(
+        &mut self,
+        type_name: String,
+        type_args: Vec<Type>,
+        start: Span,
+    ) -> Result<Expr, ParseError> {
         self.expect(TokenKind::LBrace, "`{` after record type")?;
         let mut fields = Vec::new();
         self.skip_newlines();
@@ -2936,9 +3004,37 @@ impl<'a> Parser<'a> {
         }
         let end = self.expect(TokenKind::RBrace, "`}` after record literal")?;
         Ok(Expr {
-            kind: ExprKind::Record { type_name, fields },
+            kind: ExprKind::Record {
+                type_name,
+                type_args,
+                fields,
+            },
             span: start.join(end),
         })
+    }
+
+    fn looks_like_generic_record_literal(&self) -> bool {
+        if !self.at(&TokenKind::Less) {
+            return false;
+        }
+        let mut depth = 0_usize;
+        for (offset, token) in self.tokens[self.pos..].iter().enumerate() {
+            match token.kind {
+                TokenKind::Less => depth += 1,
+                TokenKind::Greater => {
+                    depth = depth.saturating_sub(1);
+                    if depth == 0 {
+                        return self
+                            .tokens
+                            .get(self.pos + offset + 1)
+                            .is_some_and(|next| next.kind == TokenKind::LBrace);
+                    }
+                }
+                TokenKind::Eof | TokenKind::Newline => return false,
+                _ => {}
+            }
+        }
+        false
     }
 
     fn map_literal(&mut self, start: Span) -> Result<Expr, ParseError> {
@@ -4119,6 +4215,30 @@ mod tests {
             program.records[0].fields[1].ty,
             Type::Option(Box::new(Type::Named("Email".into())))
         );
+    }
+
+    #[test]
+    fn parses_generic_record_definitions_types_and_explicit_literals() {
+        let program = parse(
+            &lex("struct Box<T> { value: T } fn unwrap(boxed: Box<Int>) -> Int { return boxed.value } fn main() { boxed: Box<Int> = Box<Int> { value: 7 } print(unwrap(boxed)) }")
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(program.records[0].type_params, ["T"]);
+        assert!(matches!(
+            program.functions[0].params[0].ty,
+            Type::Applied { ref name, ref args }
+                if name == "Box" && args == &[Type::Int]
+        ));
+        let value = match &program.functions[1].body.statements[0] {
+            Stmt::BindOrAssign { value, .. } | Stmt::Let { value, .. } => value,
+            _ => panic!("expected typed generic record binding"),
+        };
+        assert!(matches!(
+            value.kind,
+            ExprKind::Record { ref type_name, ref type_args, .. }
+                if type_name == "Box" && type_args == &[Type::Int]
+        ));
     }
 
     #[test]

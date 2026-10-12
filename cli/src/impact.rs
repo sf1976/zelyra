@@ -1136,8 +1136,19 @@ fn add_expression_type_references(
                 );
             }
         }
-        ExprKind::Record { type_name, fields } => {
-            let ty = Type::Named(type_name.clone());
+        ExprKind::Record {
+            type_name,
+            type_args,
+            fields,
+        } => {
+            let ty = if type_args.is_empty() {
+                Type::Named(type_name.clone())
+            } else {
+                Type::Applied {
+                    name: type_name.clone(),
+                    args: type_args.clone(),
+                }
+            };
             add_type_references(
                 references,
                 owner.to_owned(),

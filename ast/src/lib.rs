@@ -63,6 +63,10 @@ pub enum Type {
         return_type: Box<Type>,
         capabilities: Vec<String>,
     },
+    Applied {
+        name: String,
+        args: Vec<Type>,
+    },
     Named(String),
     Unknown,
 }
@@ -116,6 +120,17 @@ impl fmt::Display for Type {
                 }
                 return Ok(());
             }
+            Type::Applied { name, args } => {
+                write!(
+                    f,
+                    "{name}<{}>",
+                    args.iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )?;
+                return Ok(());
+            }
             Type::Named(name) => name,
             Type::Unknown => "unknown",
         };
@@ -146,6 +161,7 @@ pub struct Program {
 pub struct EnumDef {
     pub name: String,
     pub is_public: bool,
+    pub type_params: Vec<String>,
     pub variants: Vec<String>,
     /// Payload field types keyed by variant name; variants absent from this
     /// list are unit variants.
@@ -555,6 +571,7 @@ pub struct TypeDef {
 pub struct RecordDef {
     pub name: String,
     pub is_public: bool,
+    pub type_params: Vec<String>,
     pub fields: Vec<RecordField>,
     pub span: Span,
 }
@@ -718,6 +735,7 @@ pub enum ExprKind {
     Map(Vec<(Expr, Expr)>),
     Record {
         type_name: String,
+        type_args: Vec<Type>,
         fields: Vec<(String, Expr)>,
     },
     FunctionValue(String),

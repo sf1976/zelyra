@@ -8797,7 +8797,26 @@ fn api_value_json(
             return api_value_json(value, &definition.target, program);
         }
         if let Some(record) = program.records.iter().find(|record| record.name == *name) {
-            return api_record_value(value, record, program);
+            return api_record_value(value, record, &[], program);
+        }
+        if let Some(definition) = program
+            .enums
+            .iter()
+            .find(|definition| definition.name == *name)
+        {
+            return api_enum_value(value, definition, &[], program);
+        }
+    }
+    if let Type::Applied { name, args } = ty {
+        if let Some(record) = program.records.iter().find(|record| record.name == *name) {
+            return api_record_value(value, record, args, program);
+        }
+        if let Some(definition) = program
+            .enums
+            .iter()
+            .find(|definition| definition.name == *name)
+        {
+            return api_enum_value(value, definition, args, program);
         }
     }
     match ty {
@@ -8870,8 +8889,23 @@ fn api_value_json(
 fn api_record_value(
     value: &serde_json::Value,
     record: &zelyra_ast::RecordDef,
+    type_args: &[Type],
     program: &zelyra_ast::Program,
 ) -> Result<RuntimeValue, String> {
+    if record.type_params.len() != type_args.len() {
+        return Err(format!(
+            "record `{}` expects {} generic type argument(s), found {}",
+            record.name,
+            record.type_params.len(),
+            type_args.len()
+        ));
+    }
+    let substitutions = record
+        .type_params
+        .iter()
+        .zip(type_args)
+        .map(|(parameter, argument)| (parameter.clone(), argument.clone()))
+        .collect::<HashMap<_, _>>();
     let Some(object) = value.as_object() else {
         return Err(format!("expected JSON object for record `{}`", record.name));
     };
@@ -8901,13 +8935,149 @@ fn api_record_value(
         };
         fields.insert(
             field.name.clone(),
-            api_value_json(value, &field.ty, program)?,
+            api_value_json(
+                value,
+                &api_substitute_type(&field.ty, &substitutions),
+                program,
+            )?,
         );
     }
     Ok(RuntimeValue::Object {
         type_name: record.name.clone(),
+        type_args: type_args.to_vec(),
         fields,
     })
+}
+
+fn api_enum_value(
+    value: &serde_json::Value,
+    definition: &zelyra_ast::EnumDef,
+    type_args: &[Type],
+    program: &zelyra_ast::Program,
+) -> Result<RuntimeValue, String> {
+    if definition.type_params.len() != type_args.len() {
+        return Err(format!(
+            "enum `{}` expects {} generic type argument(s), found {}",
+            definition.name,
+            definition.type_params.len(),
+            type_args.len()
+        ));
+    }
+    let Some(object) = value.as_object() else {
+        return Err(format!(
+            "expected a JSON object for enum `{}`",
+            definition.name
+        ));
+    };
+    if object.get("$enum").and_then(serde_json::Value::as_str) != Some(&definition.name) {
+        return Err(format!("expected enum `{}`", definition.name));
+    }
+    let Some(variant) = object.get("variant").and_then(serde_json::Value::as_str) else {
+        return Err("expected enum variant String".into());
+    };
+    if !definition
+        .variants
+        .iter()
+        .any(|candidate| candidate == variant)
+    {
+        return Err(format!("unknown `{}` variant `{variant}`", definition.name));
+    }
+    let payload_types = definition
+        .variant_payloads
+        .iter()
+        .find(|(candidate, _)| candidate == variant)
+        .map(|(_, payloads)| payloads.as_slice())
+        .unwrap_or_default();
+    let payload_values = if payload_types.is_empty() {
+        if object.len() != 2 || object.contains_key("payload") {
+            return Err(format!(
+                "unit enum variant `{variant}` must not have a payload"
+            ));
+        }
+        Vec::new()
+    } else {
+        if object.len() != 3 {
+            return Err(format!("enum variant `{variant}` requires a payload array"));
+        }
+        let Some(values) = object.get("payload").and_then(serde_json::Value::as_array) else {
+            return Err(format!("enum variant `{variant}` requires a payload array"));
+        };
+        if values.len() != payload_types.len() {
+            return Err(format!(
+                "enum variant `{variant}` expects {} payload value(s), found {}",
+                payload_types.len(),
+                values.len()
+            ));
+        }
+        let substitutions = definition
+            .type_params
+            .iter()
+            .zip(type_args)
+            .map(|(parameter, argument)| (parameter.clone(), argument.clone()))
+            .collect::<HashMap<_, _>>();
+        values
+            .iter()
+            .zip(payload_types)
+            .map(|(value, ty)| {
+                api_value_json(value, &api_substitute_type(ty, &substitutions), program)
+            })
+            .collect::<Result<Vec<_>, _>>()?
+    };
+    Ok(RuntimeValue::Enum {
+        type_name: definition.name.clone(),
+        type_args: type_args.to_vec(),
+        variant: variant.to_owned(),
+        payloads: payload_values,
+    })
+}
+
+fn api_substitute_type(ty: &Type, substitutions: &HashMap<String, Type>) -> Type {
+    match ty {
+        Type::Named(name) => substitutions
+            .get(name)
+            .cloned()
+            .unwrap_or_else(|| ty.clone()),
+        Type::Applied { name, args } => Type::Applied {
+            name: name.clone(),
+            args: args
+                .iter()
+                .map(|argument| api_substitute_type(argument, substitutions))
+                .collect(),
+        },
+        Type::Option(inner) => Type::Option(Box::new(api_substitute_type(inner, substitutions))),
+        Type::Result(ok, error) => Type::Result(
+            Box::new(api_substitute_type(ok, substitutions)),
+            Box::new(api_substitute_type(error, substitutions)),
+        ),
+        Type::Array(inner) => Type::Array(Box::new(api_substitute_type(inner, substitutions))),
+        Type::Tuple(items) => Type::Tuple(
+            items
+                .iter()
+                .map(|item| api_substitute_type(item, substitutions))
+                .collect(),
+        ),
+        Type::Set(inner) => Type::Set(Box::new(api_substitute_type(inner, substitutions))),
+        Type::Map(key, value) => Type::Map(
+            Box::new(api_substitute_type(key, substitutions)),
+            Box::new(api_substitute_type(value, substitutions)),
+        ),
+        Type::HttpResult(inner) => {
+            Type::HttpResult(Box::new(api_substitute_type(inner, substitutions)))
+        }
+        Type::Function {
+            params,
+            return_type,
+            capabilities,
+        } => Type::Function {
+            params: params
+                .iter()
+                .map(|parameter| api_substitute_type(parameter, substitutions))
+                .collect(),
+            return_type: Box::new(api_substitute_type(return_type, substitutions)),
+            capabilities: capabilities.clone(),
+        },
+        _ => ty.clone(),
+    }
 }
 
 fn api_json_value(value: &RuntimeValue) -> String {
@@ -8931,6 +9101,7 @@ fn api_json_value_node(value: &RuntimeValue) -> serde_json::Value {
             type_name,
             variant,
             payloads,
+            ..
         } => {
             let mut encoded = serde_json::json!({
                 "$enum": type_name,

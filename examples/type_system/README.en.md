@@ -39,16 +39,16 @@ diagnostic. These cases do not belong in the successful program run.
 | Tuples | ✅ supported | `Tuple<A, B, ...>` and `tuple(a, b, ...)` create ordered heterogeneous values. Constant indices are checked statically; dynamic tuple indices are rejected. JSON uses a positional array with an exact length check. |
 | Sets | ✅ supported | `Set<T>`, `set([a, b])`, `contains`, `set_add`, and `set_remove`. Values have deterministic ordering and duplicates are removed. Supported elements are scalar comparable key types; JSON uses a sorted array. |
 | `Map<K,V>` | ✅ supported | Typed maps; supported key types are `Int`, `UInt`, `String`, `Bool`, `Char`, and `Timestamp`. Duplicate literal keys keep one entry and the last value wins. A missing `get` key returns `None`. JSON supports only string keys. |
-| Records (`struct`) | ✅ supported | User-defined nested records, fields, value equality, and JSON round trips. `record_with(record, "field", value)` returns a statically checked copy with one field changed; the source record is preserved. |
-| Enums | ✅ supported | User-defined unit and payload variants (`enum Event { Created(Int) Idle }`), checked constructors, pattern bindings, exhaustive matching, value equality, and JSON round trips. Public enums also work across module imports. |
+| Records (`struct`) | ✅ supported | User-defined nested and generic records, fields, value equality, and typed JSON round trips. `record_with(record, "field", value)` returns a statically checked copy with one field changed; the source record is preserved. Generic records are not SQL column types. |
+| Enums | ✅ supported | User-defined unit, payload, and generic variants with checked constructors, pattern bindings, exhaustive matching, value equality, and JSON round trips. Type arguments are inferred or explicit. Public enums also work across module imports. |
 | Classes/object identity/references | — unavailable | Zelyra uses value-semantics records and immutable function flows. Classes, observable object identity, and mutable references are not currently part of the language line. |
 | `Timestamp` | ✅ limited | `now()`, equality/order comparisons, UTC formatting, JSON as Unix milliseconds, and checked UTC-duration helpers `timestamp_add_result` / `timestamp_difference_result`. Years are bounded to 0001–9999; zones and local DST are out of scope. |
 | `Date`, `Time`, `Duration`, `Bytes` | ✅ supported | Validated ISO dates/times, checked duration operations, and bytes 0–255. `date_add_days_result` and `date_days_between_result` implement calendar-day math, including leap years and year boundaries. |
 | `Unit` | ✅ supported | Empty return value, explicit function type, and JSON round trip with `null`. |
 | `Result<T,E>` | ✅ supported | `Ok`/`Err`, matching, and function returns. Existing `json_encode` output is unchanged; `json_encode_tagged_result` and `json_decode_tagged_result<T,E>` exchange Results losslessly as `{"$result":"ok","value":...}` or `{"$result":"err","error":...}`. `json_decode_result<T>` remains the Result-based decoder for ordinary JSON targets. |
 | `HttpResult<T>`, `HttpResponse`, `HttpError` | 🧪 specialized | HTTP subsystem types for network responses and errors; no general literals or constructors. |
-| Generics | 🧪 partial | Generic standard types and user-defined generic functions (`fn identity<T>`) with inference or explicit type arguments are available. User-defined generic records/enums and general constraints are not available yet. |
-| Type aliases and custom types | 🧪 partial | `type Name = ...` and records exist. Records execute and serialize; aliases have no separate runtime identity. |
+| Generics | 🧪 partial | User-defined generic functions, records, and enums support inference or explicit type arguments. General constraints/traits, generic aliases, and generic function values are out of scope. Generic parameters support operations only when the concrete type is known. |
+| Type aliases and custom types | 🧪 partial | `type Name = ...`, records, and enums exist. Generic records and enums retain nominal type arguments at runtime; aliases have no separate runtime identity. |
 | `Id`, `Email`, `Url`, `Uuid`, `Money` | 🧪 specialized | Named string domain values for API/schema use; no separate numeric or identity rules in the runtime. |
 | Functions as values | 🧪 partial | Named, non-generic functions can be stored with `&name`, passed, and called indirectly through a typed `Function<(...) -> ...>` value. Capabilities remain checked statically and at runtime. Closures, captured local functions, and generic function values are not supported. |
 
@@ -68,7 +68,7 @@ separate shallow/deep copy operations. The value-update helpers return a new rec
 The successful run checks numeric ranges, arithmetic, rounding behavior,
 Unicode, optional values, arrays, List aliases, tuples, sets, records, unit and
 payload enums, named function values and indirect calls, calendar and timestamp operations, Decimal quantization, ranges,
-JSON, and user-defined generic functions. The CLI integration test also expects **19 compiler errors** and **19 runtime errors** (type mismatch,
+JSON, and user-defined generic functions, records, and enums. The CLI integration test also expects **19 compiler errors** and **19 runtime errors** (type mismatch,
 mixed arrays, non-exhaustive matching, overflow/underflow, division by zero,
 invalid index, invalid Date/Time/Bytes/Decimal values, wrong tuple length,
 non-finite JSON number, non-string-keyed Map serialization, and unsupported general
@@ -76,10 +76,12 @@ non-finite JSON number, non-string-keyed Map serialization, and unsupported gene
 test result. When the integration test passes, all 12 positive groups pass and
 there are 0 unexpected failures. The current matrix has 18 supported, 6 partial,
 and 1 unavailable entry; the program prints these counts. User-defined
-generic functions, payload enums, and named function values are covered by the positive type-system
-example and explicit compiler-negative cases. Generic data types, closures, and generic function values remain unavailable. Classes and reference identity are a deliberate departure
-from the value-oriented record model; they are not required for records, CRUD,
-or database relationships.
+generic functions and data types, payload enums, and named function values are
+covered by the positive type-system example and explicit compiler-negative
+cases. General constraints, generic aliases, closures, and generic function
+values remain unavailable. Classes and reference identity are a deliberate
+departure from the value-oriented record model; entities express identity with
+ordinary domain ID fields.
 
 This is coverage of the existing language surface, not a claim that every type
 or conversion is implemented.

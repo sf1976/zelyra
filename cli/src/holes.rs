@@ -314,7 +314,9 @@ impl Collector {
                     );
                 }
             }
-            ExprKind::Record { type_name, fields } => {
+            ExprKind::Record {
+                type_name, fields, ..
+            } => {
                 for (name, value) in fields {
                     let field_type = self
                         .record_fields

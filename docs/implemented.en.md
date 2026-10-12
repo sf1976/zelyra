@@ -78,9 +78,11 @@ proof that arbitrary applications are correct.
   and `Bytes` now have runtime values, validating constructors, and JSON round
   trips. `List<T>` aliases `T[]`; heterogeneous `Tuple<A, B, ...>` and
   deterministic `Set<T>` values can be created, checked, iterated, and passed
-  through JSON. Payload-free user-defined enums support equality, JSON, and
-  exhaustive matching; payload variants, user-defined generics, function
-  values, and observable class identity remain unavailable. `record_with` and
+  through JSON. User-defined enums support payloads, generics, equality, JSON,
+  and exhaustive matching. User-defined generic functions, records, and enums
+  accept explicit or inferred type arguments; general constraints, generic
+  aliases, and generic function references are unavailable. Named typed
+  function values are implemented; closures remain out of scope. `record_with` and
   `array_replace_result` return checked new values with value semantics.
   `for i in start..end` iterates with an exclusive end.
 - ✅ Non-Unit functions must return a compatible value on every reachable path

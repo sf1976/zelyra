@@ -82,9 +82,12 @@ den Beweis, dass beliebige Anwendungen korrekt sind.
   Runtimewerte, geprüfte Konstruktoren und JSON-Roundtrips. `List<T>` ist ein
   Alias für `T[]`; heterogene `Tuple<A, B, ...>`-Werte und deterministische
   `Set<T>`-Werte lassen sich erstellen, prüfen, iterieren und als JSON
-  austauschen. Payloadfreie benutzerdefinierte Enums unterstützen Gleichheit,
-  JSON und exhaustives Matching; Enum-Payloads, eigene Generics, Funktionswerte
-  und beobachtbare Klassenidentität bleiben offen. `record_with` und
+  austauschen. Benutzerdefinierte Enums unterstützen Nutzdaten, Generics,
+  Gleichheit, JSON und exhaustives Matching. Eigene generische Funktionen,
+  Records und Enums erlauben explizite oder abgeleitete Typargumente; allgemeine
+  Constraints, generische Aliase und generische Funktionsreferenzen fehlen.
+  Benannte typisierte Funktionswerte sind implementiert; Closures bleiben
+  außerhalb des Umfangs. `record_with` und
   `array_replace_result` liefern typgeprüfte neue Werte mit Wertsemantik.
   `for i in start..end` iteriert mit exklusivem Ende.
 - ✅ Nicht-Unit-Funktionen müssen auf jedem erreichbaren Pfad einen passenden
