@@ -596,6 +596,51 @@ fn laravel_migrator_creates_a_separate_compiler_checked_scaffold() {
     ]);
     assert!(!overlap.status.success());
     assert!(!inside_source.exists());
+
+    let occupied_report = parent.join("occupied-report.json");
+    fs::write(&occupied_report, "keep this report").unwrap();
+    let target_for_report = parent.join("must-not-appear");
+    let report_collision = run(&[
+        "migrate",
+        "laravel",
+        project.to_str().unwrap(),
+        "--report",
+        occupied_report.to_str().unwrap(),
+        "--output",
+        target_for_report.to_str().unwrap(),
+    ]);
+    assert!(!report_collision.status.success());
+    assert_eq!(
+        fs::read_to_string(&occupied_report).unwrap(),
+        "keep this report"
+    );
+    assert!(!target_for_report.exists());
+
+    let traversal = run(&[
+        "migrate",
+        "laravel",
+        project.to_str().unwrap(),
+        "--report",
+        parent.join("../escaped.json").to_str().unwrap(),
+    ]);
+    assert!(!traversal.status.success());
+    assert!(!parent.parent().unwrap().join("escaped.json").exists());
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::symlink;
+        let symlink_target = parent.join("target-link");
+        symlink(&target, &symlink_target).unwrap();
+        let through_symlink = run(&[
+            "migrate",
+            "laravel",
+            project.to_str().unwrap(),
+            "--output",
+            symlink_target.to_str().unwrap(),
+        ]);
+        assert!(!through_symlink.status.success());
+        assert!(target.join("main.zyl").is_file());
+    }
     fs::remove_dir_all(parent).unwrap();
 }
 
