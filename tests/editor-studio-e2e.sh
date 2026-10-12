@@ -79,6 +79,12 @@ cat >"$project/src/math.zyl" <<'ZELYRA'
 pub fn sum(left: Int, right: Int) -> Int {
     return left + right
 }
+
+pub view SharedLayout {
+    html {
+        <html><body><slot /></body></html>
+    }
+}
 ZELYRA
 cat >"$project/main.zyl" <<ZELYRA
 import "src/math.zyl" as math
@@ -97,6 +103,22 @@ table customers {
     department: Department required
     name: String(120) required
     description: String?
+}
+
+struct CustomerSummary {
+    name: String
+}
+
+tableview CustomerSummaryView {
+    source sql<CustomerSummary[]> {
+        SELECT name FROM customers
+    }
+    columns { name }
+}
+
+page "/" {
+    view: SharedLayout
+    html { <h1>Customer summary</h1> }
 }
 
 fn main() {
@@ -232,6 +254,17 @@ assert any(
     and edge["label"] == "imports"
     for edge in project_map["edges"]
 ), "project map must include the imported module edge"
+assert not project_map["incomplete"], f"cross-module view should resolve: {project_map.get('issues')}"
+assert any(
+    node["kind"] == "tableview" and node["label"] == "CustomerSummaryView"
+    for node in project_map["nodes"]
+), "project map must include table views"
+assert any(
+    edge["from"] == "page:main.zyl:/"
+    and edge["to"] == "view:src/math.zyl:SharedLayout"
+    and edge["label"] == "uses view"
+    for edge in project_map["edges"]
+), "project map must resolve views imported from another module"
 
 path = "file?path=" + urllib.parse.quote("main.zyl")
 original = request(path)

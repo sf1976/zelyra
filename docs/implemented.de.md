@@ -1,126 +1,50 @@
-# In Zelyra 0.9.6 umgesetzt
+# In Zelyra 0.9.7 umgesetzt
 
-**Stand:** stabiles Release 0.9.6 · Sprachkompatibilitätslinie `0.1` · 2026-10-12
+**Stand:** stabiles Release 0.9.7 · Sprachkompatibilitätslinie `0.1` · 2026-10-12
 **Reifegrad:** experimentell; nicht für den Produktiveinsatz freigegeben
 
-Diese Übersicht führt Funktionen auf, die im stabilen Release Zelyra 0.9.6
-tatsächlich implementiert sind. Eine menschliche Abnahme wird nicht behauptet;
-sie bleibt bis 1.0.0 offen. Sie beschreibt den ausgelieferten Umfang,
-nicht die gesamte Sprachvision oder zukünftige Vorhaben. Die
-[Roadmap](ROADMAP.de.md) dokumentiert offene Arbeiten; das
-[Changelog](../CHANGELOG.md) hält die Änderungen der Releases fest. Die Links
-führen zu ausführlichen Anleitungen und Testnachweisen, damit diese Seite das
-Handbuch nicht doppelt wiedergibt.
+Diese Übersicht beschreibt, was die aktuelle Zelyra-Version kann. Sie führt die
+Funktionen nach Anwendungsbereichen statt nach einzelnen Versionsnummern auf.
+Ältere und neue Releases stehen im [Changelog](../CHANGELOG.md); offene Arbeit
+steht in der [Roadmap](ROADMAP.de.md). Eine unabhängige menschliche Abnahme ist
+für 1.0.0 vorgesehen.
 
-## Änderungen in 0.9.6
+## Was Zelyra 0.9.7 bietet
 
-- ✅ `zelyra migrate laravel <quelle> --output <ziel>` erzeugt auf ausdrückliche
-  Anfrage ein separates Zelyra-Grundgerüst; `--report` kann parallel oder
-  allein angegeben werden. Herkunft, Regelsatzversion, Zuordnungs-IDs und
-  ungelöste Aufgaben werden kenntlich gemacht. Geschäftslogik, Zugangsdaten,
-  `.env` und Produktionsdaten werden nicht übertragen. Der Kandidat prüft
-  Pfadüberschneidungen, Traversal, Symlinks und vorhandene Ausgabeziele und
-  validiert erzeugte Dateien mit dem Compiler. Siehe [Migrator](laravel-migrator.de.md).
-- ✅ Der gemeinsame Benachrichtigungsfeed begrenzt Abfragen auf die aktive
-  Mandantenmitgliedschaft, zählt ungelesene Einträge und blendet abgelaufene
-  sowie archivierte Einträge aus. Einstellungsdatensätze sind bearbeitbar.
-  Integrationstests decken zwei Mandanten und erratene fremde IDs ab. Dieser
-  Funktionsschritt ist gegen MariaDB geprüft; persönliche Lesebestätigungen,
-  geplante Aufbewahrung und ereignisgesteuerte Mail sind nicht enthalten.
-- ✅ CI und die für 0.9.6 vorgesehenen Datenbank-/Plattformprüfungen werden im
-  [Kandidaten-Prüfnachweis](release-readiness/0.9.6-candidate-verification.md)
-  festgehalten. Das Release bleibt experimentell; menschliche Abnahme ist für
-  1.0.0 reserviert.
+- **Sprache und Compiler:** eine statisch geprüfte Sprache mit Funktionen,
+  Records, typisierten Sammlungen, `Option` und `Result`, Pattern Matching,
+  Modulen, Contracts, Effekten und compilergeprüften SQL-/Webdeklarationen.
+  Die genaue Typabdeckung und ihre Grenzen stehen im Abschnitt
+  [Sprache und Compiler](#sprache-und-compiler).
+- **Datenbanken:** schemaabhängige Abfragen, relationale Fremdschlüssel,
+  Datenbankinspektion und geprüfte Setup-/Migrationspläne. MariaDB ist die
+  primäre Laufzeitreferenz; MySQL und PostgreSQL werden für die in der
+  [Supportmatrix](database-support.de.md) ausgewiesenen Abläufe geprüft.
+- **Geschäftsanwendungen:** Seiten, wiederverwendbare Views, Formulare,
+  Tabellenansichten, Suche, Filter, Sortierung, Pagination, CRUD und typisierte
+  APIs mit OpenAPI-Ausgabe.
+- **Zelyra Studio:** lokaler Webeditor mit Compilerdiagnosen, Formatierung,
+  Navigation, Vervollständigung, Aufgabenhilfe, Datenbankwerkbank und
+  Projektkarte. Die Karte zeigt bekannte Beziehungen und begründet offene oder
+  begrenzte Zuordnungen, statt sie zu erraten.
+- **Rechnungstutorial:** eine mehrteilige Anwendung für Kunden, Artikel und
+  Rechnungen mit Kennzahlen aus gespeicherten Daten. Tabler Core 1.6.1 wird
+  lokal als CSS-Grundlage geladen. Dashboard, CRUD-Wege und druckbare Netto-,
+  19%-Steuer- und Bruttoansicht sind für Desktop, schmale Bildschirme und Druck
+  ausgelegt. Summen enthalten Entwürfe und sind keine gebuchte Umsatzstatistik.
+- **Betrieb und Sicherheit:** CLI für Projektstart und Setup, Routenübersicht,
+  Formatierung, Diagnose, Datenbank- und Schemawerkzeuge, Audit und
+  Releaseprüfung. Authentifizierung, Rollen, tenant-gefiltertes CRUD, optionale
+  lokale MFA und SMTP-Mail über eine transaktionale MariaDB-Outbox sind im
+  jeweiligen dokumentierten Umfang verfügbar.
+- **Migration:** ein statischer Laravel-Bericht und ein ausdrücklich
+  angefordertes separates Zelyra-Grundgerüst mit Fundstellen und offenen
+  Zuordnungen. Es wird keine Geschäfts- oder Sicherheitsparität behauptet.
 
-## Änderungen in 0.9.5
-
-- ✅ Anwendungen reihen begrenzte Text-/HTML-Mails mit `mail_queue` innerhalb
-  der Geschäftstransaktion ein und stellen sie über den ausdrücklich gestarteten
-  `zelyra outbox run`-Worker zu. SMTP unterstützt Authentifizierung, implizites
-  TLS, verpflichtendes STARTTLS, ausdrücklich vertraute private CA-Wurzeln,
-  Hostfreigaben und fünf Sekunden Transport-Timeout. Die Zustellung erfolgt
-  mindestens einmal; die MariaDB-Outbox ist keine allgemeine Queue.
-- ✅ Positive und negative Mailtests prüfen MIME-Inhalt, lokales authentifiziertes
-  STARTTLS, vertrauenswürdige und abgelehnte Zertifikate, Timeout, Wiederholung,
-  transaktionales Einreihen und Geheimnisredaktion. Siehe den [Mail-Leitfaden](mail.de.md).
-- ✅ Der versionierte Laravel-Migrator ergänzt quellenbezogene Prüffunde zu
-  Autorisierung, mandantenähnlichen Feldern, Geldberechnungen und Dateioperationen.
-  Er bleibt ein statisches Inventar, kein PHP-Parser oder automatischer Port.
-- ✅ Release-CI bestand für Linux- und Windows-Artefakte sowie die dokumentierte
-  MariaDB-/MySQL-Matrix. Die unabhängige menschliche Abnahme bleibt für 1.0.0.
-
-## Änderungen in 0.9.4
-
-- ✅ Setup leitet Compose-Fortschritt weiter, gibt die Anwendungsadresse aus und bricht bei nicht vorübergehenden Schemafehlern mit sicheren Hinweisen sofort ab.
-- ✅ Die Datenbankhilfe erklärt: `db create` gibt SQL aus; `db setup` und `setup <verzeichnis> --all` führen Einrichtungsschritte aus.
-- ✅ Das Rechnungstutorial legt seine geschützte `.env` auch mit `--no-start` an. Kundenanlage und -liste im MariaDB-gestützten Studio-Ablauf sowie wiederholtes Schema-Setup sind abgedeckt.
-- ✅ CRUD-Abfragefehler im Studio empfehlen, Datenbank und angewendetes Projektschema zu prüfen, ohne Treiberdetails offenzulegen.
-- ✅ Die Gleichbehandlung von unqualifiziertem MariaDB-`DECIMAL` verhindert falsche destruktive Schemaabweichungen beim erneuten Setup.
-- ✅ CLI-Hilfematrix, Beispiele, Setup und Hinweise bei API-Ratenbegrenzung haben Regressionstests. Siehe [CLI-Prüfbericht](release-readiness/0.9.4-cli-audit.md).
-
-## Änderungen in 0.9.3
-
-- ✅ Das mehrteilige `examples/type_system` prüft jetzt auch native
-  Festkomma-, Kalender-, Zeit-, Dauer-, Byte-, Tupel- und Mengenwerte. Der
-  Bericht trennt unterstützte, teilweise und nicht verfügbare Konzepte.
-  Enumtypen, Funktionswerte und benutzerdefinierte Generics fehlen weiterhin;
-  Records folgen Wertsemantik ohne beobachtbare Klassenidentität. Siehe das
-  [Typinventar](../examples/type_system/README.md).
-- ✅ `examples/csv_catalog` verarbeitet UTF-8-CSV mit Semikolon, Quotes und
-  Zeilenumbrüchen, prüft Datensätze, exportiert Fehler und gültige Artikel und
-  berechnet Dezimalpreise ohne Float.
-- ✅ `examples/labyrinth_solver` prüft und lädt Rasterdateien, sucht mit
-  Breitensuche einen kürzesten Weg und gibt Weg, Schritte und Suchzähler aus.
-- ✅ Das Studio erhält einen sitzungsgeschützten schreibgeschützten
-  Datenbrowser, compilergeprüfte und bestätigte Quellspaltenänderungen sowie
-  die bestätigte Anlage einer MariaDB-Datenbank bei vorhandener Verbindung.
-  Es wendet dabei keine Tabellenmigration an.
-- 🧪 `zelyra migrate laravel <projekt> --report <pfad>` erstellt ein
-  schreibgeschütztes Markdown-/JSON-Inventar mit Quellpositionen und offenen
-  Befunden. Der musterbasierte Scanner ist noch kein PHP-Parser oder
-  automatischer Migrator.
-- ✅ Tutorial- und Studio-Startabläufe sowie die gestaffelte CLI-Detailhilfe
-  sind ergänzt. Unabhängige menschliche Produkt- und Barrierefreiheitsabnahme
-  bleibt für 1.0.0 vorgesehen.
-
-## Änderungen in 0.9.2
-
-- ✅ Studio zeigt Kontexthilfe und einen durchsuchbaren Aktionsfinder. Die
-  Vervollständigung berücksichtigt deklarierte Projektbegriffe und lokale
-  Bindungen aus dem Compiler-AST; Live-Diagnosen prüfen auch ungespeicherte
-  Änderungen, ohne Projektdateien zu verändern.
-- ✅ F12 öffnet eindeutige Definitionen im aktuellen oder direkt importierten
-  Modul. Umschalt+F12 findet lexikalisch gleiche Bezeichner in gespeicherten
-  `.zyl`-Dateien; die Suche löst keine Gültigkeitsbereiche auf.
-- ✅ Die deterministische Projektkarte zeigt Compiler-erfasste Module,
-  Importe, Tabellen, Views, CRUD-Ressourcen, Seiten, APIs und Funktionen mit
-  Quellpositionen. Mehrdeutige, dynamische oder begrenzungsbedingt fehlende
-  Beziehungen werden nicht geraten.
-- ✅ Die ausdrückliche Studio-Aktion **Starten** begrenzt Programme auf
-  15 Sekunden und 64 KiB je Ausgabekanal und redigiert erkannte Geheimnisse aus
-  Prozessumgebung und `.env`. Studio startet nichts selbstständig; interaktive
-  stdin-Eingabe ist nicht verfügbar.
-- ✅ `zelyra --tutorial invoice` erzeugt das Rechnungstutorial, startet die
-  MariaDB-/Web-Compose-Anwendung und richtet ihr Schema ein. `--no-start`
-  überspringt den Docker-Start. Das Beispiel berechnet Netto, 19% Umsatzsteuer
-  und Brutto und stellt eine druckbare Browseransicht bereit.
-- ✅ Automatisierte Browser- und Tastaturprüfungen ergänzen die Editor-
-  Sprachdienste; unabhängige Screenreader-, Kontrast- und Produktabnahme bleibt
-  für 1.0.0 vorgesehen.
-
-## Änderungen in 0.9.1
-
-- ✅ Studio setzt seine lokale Sitzung nach dem Neuladen eines Tabs fort. Das
-  Sitzungstoken wird aus der Adresszeile entfernt und tab-lokal gehalten.
-- ✅ Ungespeicherte Änderungen werden angezeigt; `Strg+S` speichert den aktuellen
-  Editorinhalt. Compilerdiagnosen erscheinen im Problems-Bereich.
-- ✅ Chromium-E2E deckt Speichern, Neuladen, Fehlerdiagnosen und Neustart mit
-  MariaDB- und PostgreSQL-Studioabläufen ab.
-- ✅ Das Rechnungstutorial berechnet Netto, 19% Umsatzsteuer und Brutto aus
-  verknüpften Positionen. Die druckoptimierte Ansicht nutzt den Browser-PDF-
-  Export; es gibt keine native PDF-Engine oder Rechtskonformitätszusage.
-- ✅ `#`-Zeilenkommentare und alleinstehende `##`-Blockgrenzen gehören zur
-  Sprachlinie 0.1. `//` bleibt für vorhandene Programme kompatibel.
+Die Oberfläche und Tools sind lokal nutzbar. Verbindliche Cloud-Dienste,
+Telemetrie und externe KI-Anbieter sind nicht erforderlich. Zelyra bleibt
+experimentell: CI und automatisierte Prüfungen ersetzen keine menschliche
+Produkt- oder Sicherheitsabnahme.
 
 ## Statuszeichen
 

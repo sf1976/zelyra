@@ -615,12 +615,12 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
     })?;
     let mut nodes = BTreeMap::<String, Value>::new();
     let mut edges = BTreeSet::<(String, String, String)>::new();
-    let mut incomplete = false;
+    let mut issues = BTreeSet::<String>::new();
     let node_limit = 500;
     for module in &loaded.modules {
         let id = format!("module:{}", module.path);
         if nodes.len() >= node_limit {
-            incomplete = true;
+            issues.insert("limit.nodes".into());
             break;
         }
         nodes.insert(
@@ -636,7 +636,7 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
             {
                 edges.insert((id.clone(), target, "imports".into()));
             } else {
-                incomplete = true;
+                issues.insert("import.unresolved".into());
             }
         }
     }
@@ -645,11 +645,13 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
     let mut cruds = Vec::<(String, String)>::new();
     let mut api_handlers = Vec::<(String, String)>::new();
     let mut functions_by_name = BTreeMap::<String, Vec<String>>::new();
-    let mut views_by_path_and_name = BTreeMap::<(String, String), String>::new();
+    let mut views_by_name = BTreeMap::<String, Vec<(String, String, bool)>>::new();
+    let mut page_views = Vec::<(String, String, String)>::new();
+    let mut crud_layouts = Vec::<(String, String, String)>::new();
     {
         let mut node_sink = ProjectMapNodeSink {
             nodes: &mut nodes,
-            incomplete: &mut incomplete,
+            issues: &mut issues,
             limit: node_limit,
         };
         for source in &loaded.sources {
@@ -685,8 +687,24 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
                     &source.text,
                     view.span,
                 );
-                views_by_path_and_name.insert((source.path.clone(), view.name.clone()), id.clone());
+                views_by_name.entry(view.name.clone()).or_default().push((
+                    id.clone(),
+                    source.path.clone(),
+                    view.is_public,
+                ));
                 edges.insert((module_id.clone(), id, "declares".into()));
+            }
+            for tableview in &program.tableviews {
+                let id = format!("tableview:{}:{}", source.path, tableview.name);
+                node_sink.insert(
+                    &id,
+                    "tableview",
+                    &tableview.name,
+                    &source.path,
+                    &source.text,
+                    tableview.span,
+                );
+                edges.insert((module_id.clone(), id.clone(), "declares".into()));
             }
             for crud in &program.cruds {
                 let id = format!("crud:{}:{}", source.path, crud.name);
@@ -699,7 +717,10 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
                     crud.span,
                 );
                 edges.insert((module_id.clone(), id.clone(), "declares".into()));
-                cruds.push((id, crud.table.clone()));
+                cruds.push((id.clone(), crud.table.clone()));
+                if let Some(layout) = &crud.layout {
+                    crud_layouts.push((id, layout.clone(), source.path.clone()));
+                }
             }
             for page in &program.pages {
                 let id = format!("page:{}:{}", source.path, page.path);
@@ -713,13 +734,7 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
                 );
                 edges.insert((module_id.clone(), id.clone(), "declares".into()));
                 if let Some(view) = &page.view {
-                    if let Some(target) =
-                        views_by_path_and_name.get(&(source.path.clone(), view.clone()))
-                    {
-                        edges.insert((id, target.clone(), "uses view".into()));
-                    } else {
-                        *node_sink.incomplete = true;
-                    }
+                    page_views.push((id, view.clone(), source.path.clone()));
                 }
             }
             for api in &program.apis {
@@ -761,7 +776,43 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
             Some(targets) if targets.len() == 1 => {
                 edges.insert((crud, targets[0].clone(), "uses table".into()));
             }
-            _ => incomplete = true,
+            _ => {
+                issues.insert("crud.table_unresolved".into());
+            }
+        }
+    }
+    for (page, view, source_path) in page_views.into_iter().chain(crud_layouts) {
+        let imported_paths = loaded
+            .modules
+            .iter()
+            .find(|module| module.path == source_path)
+            .map(|module| {
+                module
+                    .imports
+                    .iter()
+                    .map(|import| import.path.as_str())
+                    .collect::<BTreeSet<_>>()
+            })
+            .unwrap_or_default();
+        let candidates = views_by_name
+            .get(&view)
+            .into_iter()
+            .flatten()
+            .filter(|(_, view_path, is_public)| {
+                view_path == &source_path
+                    || (*is_public && imported_paths.contains(view_path.as_str()))
+            })
+            .collect::<Vec<_>>();
+        match candidates.as_slice() {
+            [(target, _, _)] => {
+                edges.insert((page, target.clone(), "uses view".into()));
+            }
+            [_, ..] => {
+                issues.insert("view.ambiguous".into());
+            }
+            [] => {
+                issues.insert("view.unresolved".into());
+            }
         }
     }
     for (route, handler) in api_handlers {
@@ -769,18 +820,25 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
             Some(targets) if targets.len() == 1 => {
                 edges.insert((route, targets[0].clone(), "handled by".into()));
             }
-            _ => incomplete = true,
+            _ => {
+                issues.insert("api.handler_unresolved".into());
+            }
         }
     }
+    // Table-view SQL may contain joins and aliases that the visual map cannot
+    // safely infer yet. Keep declarations visible; do not invent table edges.
     edges.retain(|(from, to, _)| {
         let keep = nodes.contains_key(from) && nodes.contains_key(to);
-        incomplete |= !keep;
+        if !keep {
+            issues.insert("edge.target_missing".into());
+        }
         keep
     });
     if edges.len() > 1_000 {
-        incomplete = true;
+        issues.insert("limit.edges".into());
         edges = edges.into_iter().take(1_000).collect();
     }
+    let incomplete = !issues.is_empty();
     Ok((
         200,
         "application/json; charset=utf-8",
@@ -788,6 +846,7 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
             "nodes": nodes.into_values().collect::<Vec<_>>(),
             "edges": edges.into_iter().map(|(from, to, label)| json!({"from": from, "to": to, "label": label})).collect::<Vec<_>>(),
             "incomplete": incomplete,
+            "issues": issues,
         })
         .to_string(),
     ))
@@ -795,7 +854,7 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
 
 struct ProjectMapNodeSink<'a> {
     nodes: &'a mut BTreeMap<String, Value>,
-    incomplete: &'a mut bool,
+    issues: &'a mut BTreeSet<String>,
     limit: usize,
 }
 
@@ -810,7 +869,7 @@ impl ProjectMapNodeSink<'_> {
         span: zelyra_ast::Span,
     ) {
         if self.nodes.len() >= self.limit {
-            *self.incomplete = true;
+            self.issues.insert("limit.nodes".into());
             return;
         }
         self.nodes.insert(
@@ -3195,6 +3254,99 @@ mod tests {
         assert_eq!(active.load(Ordering::Acquire), EDITOR_MAX_CONNECTIONS);
         assert!(!acquire_editor_connection(&active));
         assert_eq!(active.load(Ordering::Acquire), EDITOR_MAX_CONNECTIONS);
+    }
+
+    #[test]
+    fn project_map_resolves_views_across_modules_and_lists_table_views() {
+        let state = project();
+        fs::create_dir_all(state.root.join("src")).expect("create module directory");
+        fs::write(
+            state.root.join("src/layout.zyl"),
+            r#"pub view SharedLayout {
+    html {
+        <!doctype html>
+        <html><body><slot /></body></html>
+    }
+}
+"#,
+        )
+        .expect("write shared layout");
+        fs::write(
+            state.root.join("main.zyl"),
+            r#"import "src/layout.zyl" as ui
+database main {
+    engine: mariadb
+}
+
+table customers {
+    id: Id primary auto
+    name: String(80) required
+}
+
+page "/" {
+    view: SharedLayout
+    html { <h1>Home</h1> }
+}
+
+struct Summary {
+    name: String
+}
+
+tableview SummaryView {
+    source sql<Summary[]> { SELECT name FROM customers }
+    columns { name }
+}
+
+crud SummaryResource -> customers {
+    layout: SharedLayout
+    list { name }
+}
+
+fn main() {}
+"#,
+        )
+        .expect("write entry source");
+
+        let entry = state.root.join("main.zyl");
+        project::load(&entry.to_string_lossy()).expect("test project should load");
+        let (_, _, body) = editor_project_map(&state).expect("build project map");
+        let map: Value = serde_json::from_str(&body).expect("parse project map JSON");
+        assert_eq!(map["incomplete"], false);
+        assert_eq!(map["issues"], json!([]));
+        assert!(map["nodes"]
+            .as_array()
+            .expect("nodes")
+            .iter()
+            .any(|node| { node["kind"] == "tableview" && node["label"] == "SummaryView" }));
+        assert!(map["edges"].as_array().expect("edges").iter().any(|edge| {
+            edge["from"] == "page:main.zyl:/"
+                && edge["to"] == "view:src/layout.zyl:SharedLayout"
+                && edge["label"] == "uses view"
+        }));
+        assert!(map["edges"].as_array().expect("edges").iter().any(|edge| {
+            edge["from"] == "crud:main.zyl:SummaryResource"
+                && edge["to"] == "view:src/layout.zyl:SharedLayout"
+                && edge["label"] == "uses view"
+        }));
+
+        fs::write(
+            state.root.join("main.zyl"),
+            r#"page "/broken" {
+    view: MissingLayout
+    html { <h1>Missing view</h1> }
+}
+fn main() {}
+"#,
+        )
+        .expect("write unresolved-view fixture");
+        let (_, _, body) = editor_project_map(&state).expect("build incomplete project map");
+        let incomplete: Value = serde_json::from_str(&body).expect("parse project map JSON");
+        assert_eq!(incomplete["incomplete"], true);
+        assert!(incomplete["issues"]
+            .as_array()
+            .expect("issues")
+            .contains(&json!("view.unresolved")));
+        let _ = fs::remove_dir_all(state.root.clone());
     }
 
     fn project() -> EditorState {

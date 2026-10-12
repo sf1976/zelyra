@@ -1,4 +1,4 @@
-# Shared page layout. Each feature can use the same navigation and theme.
+# A shared Tabler-style shell keeps every CRUD screen in the same workspace.
 pub view InvoiceTutorialShell {
     html {
         <!doctype html>
@@ -6,20 +6,33 @@ pub view InvoiceTutorialShell {
             <head>
                 <meta charset="utf-8" />
                 <meta name="viewport" content="width=device-width, initial-scale=1" />
-                <title>Rechnungstutorial mit Zelyra</title>
+                <title>Rechnungsbüro · Zelyra</title>
             </head>
             <body>
-                <header>
-                    <h1>Rechnungsbüro</h1>
-                    <nav>
-                        <a href="/">Übersicht</a>
-                        <a href="/customers">Kunden</a>
-                        <a href="/items">Artikel</a>
-                        <a href="/invoices">Rechnungen</a>
-                        <a href="/invoice_lines">Positionen</a>
-                    </nav>
-                </header>
-                <main><slot /></main>
+                <div class="page-wrapper tutorial-app">
+                    <header class="navbar navbar-expand-md tutorial-navbar">
+                        <div class="container-xl tutorial-navbar-inner">
+                            <a class="navbar-brand" href="/">
+                                <span class="tutorial-brand-mark">Z</span>
+                                <span><strong>Rechnungsbüro</strong><small>Geschäftsübersicht</small></span>
+                            </a>
+                            <nav class="navbar-nav tutorial-nav" aria-label="Hauptnavigation">
+                                <a class="nav-link" href="/">Übersicht</a>
+                                <a class="nav-link" href="/customers">Kunden</a>
+                                <a class="nav-link" href="/items">Artikel</a>
+                                <a class="nav-link" href="/invoices">Rechnungen</a>
+                                <a class="nav-link" href="/invoice_lines">Positionen</a>
+                            </nav>
+                            <a class="btn btn-primary tutorial-new-invoice" href="/invoices/new">+ Rechnung schreiben</a>
+                        </div>
+                    </header>
+                    <main class="page-body">
+                        <div class="container-xl tutorial-content"><slot /></div>
+                    </main>
+                    <footer class="tutorial-footer">
+                        <div class="container-xl">Lokales Zelyra-Beispiel · Geschäftsdaten bleiben in deiner Projektumgebung</div>
+                    </footer>
+                </div>
             </body>
         </html>
     }

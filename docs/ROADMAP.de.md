@@ -919,7 +919,7 @@ IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
   ungelesener Anzahl, Seitennavigation, Ablauf-Filter, Soft-Delete-Archiv und
   bearbeitbaren Einstellungsdatensätzen ergänzen. Dieser erste Schritt behauptet
   noch keine persönlichen Lesebestätigungen, geplante Löschung nach Ablauf oder
-  ereignisgesteuerte E-Mail; dafür sind empfängergebundene Zustellung und 0.9.7
+  ereignisgesteuerte E-Mail; dafür sind empfängergebundene Zustellung und 0.9.8
   vorgesehen. Der Feed bleibt ohne SMTP nutzbar.
 - Nachweis: MariaDB-Integration belegt, dass Mitglieder Nachrichten anderer
   Mandanten weder auflisten noch zählen können, archivierte und abgelaufene
@@ -927,7 +927,37 @@ IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
   verborgen bleiben. Lokalisierung, erzeugte Formulare und Fehlerzustände sind
   abgedeckt. Ein externer Pushdienst ist nicht erforderlich.
 
-## Release 0.9.7 — Datenbank- und Sicherheitshärtung
+## Release 0.9.7 — Studio, Rechnungstutorial und Härtung
+
+- [✅] Das Rechnungstutorial wird in `main.zyl` und Fachmodule gegliedert und
+  erhält ein Desktop-Dashboard mit echten Kennzahlen sowie einen geführten
+  Kunden-/Artikel-/Rechnungsablauf. Der Tabler-CSS-Bestandteil ist lokal,
+  optional und MIT-lizenziert; keine CDN-Abhängigkeit. Druckausgabe mit Netto,
+  19% Umsatzsteuer und Brutto bleibt Teil des Lernpfads.
+- [✅] Projektkarten-Fehler beheben: Views über Modulgrenzen nur innerhalb des
+  eigenen Moduls oder über importierte öffentliche Views auflösen, CRUD-Layouts
+  berücksichtigen und TableViews anzeigen. Begrenzungen und offene Beziehungen
+  über lokalisierte, stabile Gründe erklären; keine SQL-Beziehungen erraten.
+- [✅] Responsives Browser-E2E für Desktop und schmale Ansichten, reale
+  Kennzahlen, generierte CRUD-Formulare, lokale Tabler-Auslieferung ohne
+  Netzwerk und druckbare Rechnung ergänzen.
+- [🗺️] Persönliche Lesebestätigungen und Empfängerautorisierung,
+  Aufbewahrung, sichere Templates/Anhänge und optionale SMTP-Zustellung in
+  begrenztem Umfang in 0.9.8 liefern. Atomare Einreihung, idempotente
+  Wiederholungen, fremde Mandanten-/Empfänger-IDs und Zustellungsduplikate
+  prüfen.
+- [🗺️] Die Laravel-Analyse für Mandantengrenzen, Autorisierung,
+  Datei-Downloads/-Uploads, Zahlungs-/Buchhaltungsabläufe und öffentliche
+  Endpunkte bis 0.9.8 härten. Fehlende und mehrdeutige Belege erfordern
+  manuelle Prüfung.
+- [🗺️] Die für 1.0 zugesagte MariaDB-, MySQL- und PostgreSQL-Ablaufmatrix
+  schließen; genaue Serverversionen, unterstützte Abläufe und Grenzen
+  dokumentieren. Beziehungen, TLS, Backups, Wiederherstellung und
+  mandanten-gefiltertes CRUD mit negativen Autorisierungstests prüfen.
+- Abschlusskriterien: Der Projektkarten-Regressionstest löst das importierte
+  Tutorial-Layout auf, die Browserprüfung zeigt echte Kennzahlen und alle
+  Befunde/Backendgrenzen sind dokumentiert. Der vollständige Umfang steht im
+  [0.9.7-Plan](release-plans/0.9.7.de.md).
 
 - [🗺️] Das Benachrichtigungszentrum um persönliche Lesebestätigungen,
   Empfängerautorisierung, begrenzte Aufbewahrung, sichere benannte Templates und

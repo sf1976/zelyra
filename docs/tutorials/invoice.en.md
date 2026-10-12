@@ -27,8 +27,10 @@ The ready application runs at the local address printed by the command
 1. **Customers** — create and search customer records at `/customers`.
 2. **Items** — maintain reusable products, prices, and active status at
    `/items`.
-3. **Dashboard** — start at `/` and inspect the searchable invoice overview at
-   `/views/invoicedashboard`.
+3. **Dashboard** — start at `/`. Real data shows customer and invoice counts,
+   stored net and gross invoice values, and VAT. Totals include drafts and are
+   not a posted-revenue report. A guided four-step flow links to the forms and
+   invoice overview.
 4. **Invoices** — create a draft, select its customer, and manage its number
    and status at `/invoices`.
 5. **Invoice lines** — select an invoice and item, then enter quantity and net
@@ -59,9 +61,13 @@ runtime check the complete imported project together. Run `zelyra check
 main.zyl` and `zelyra routes main.zyl` from the project directory. Studio shows
 the same source files in its project tree.
 
-The responsive theme styles navigation, forms, buttons, tables, and a dedicated
-print view. Run `zelyra editor invoice-tutorial` to open Studio and inspect or
-edit the program and its database declarations.
+The desktop dashboard uses four metric cards, a guided workflow, and a summary
+of customer, invoice, and line relationships. Navigation and CRUD views adapt
+to tablet and narrow screens; tables remain horizontally usable. Tabler Core
+1.6.1 ships with Zelyra and is served locally. The application does not load a
+CDN or Tabler JavaScript. The print view hides navigation and controls. Run
+`zelyra editor invoice-tutorial` to open Studio and inspect or edit the source
+and database declarations.
 
 ## View and save an invoice as PDF
 

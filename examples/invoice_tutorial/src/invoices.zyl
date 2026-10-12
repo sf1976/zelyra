@@ -26,7 +26,7 @@ table invoices {
     issued_at: Timestamp required default now
     status: String(20) default "draft"
     access {
-        read: ["src/dashboard.zyl"]
+        read: ["src/dashboard.zyl", "main.zyl"]
     }
 }
 
@@ -37,7 +37,7 @@ table invoice_lines {
     quantity: Int required
     unit_price: Decimal required
     access {
-        read: ["src/dashboard.zyl"]
+        read: ["src/dashboard.zyl", "main.zyl"]
     }
 }
 

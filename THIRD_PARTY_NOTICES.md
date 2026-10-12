@@ -67,3 +67,11 @@ from a third-party host at runtime.
 
 The original license text for each package is included in its npm package.
 The bundled editor remains subject to those MIT notices.
+
+## Tabler Core 1.6.1
+
+The optional locally served Tabler Core stylesheet is included at
+`assets/vendor/tabler/tabler.min.css` under the MIT License. Source package:
+`@tabler/core@1.6.1`, npm integrity
+`sha512-lgmR9gcxRp5JlLxcmRi9Rz85JrEvH6Bz71KnlcPVSa97wtwQNjgSs3g3fxwbAlulHyRMghhIV04QUuW3pqDsIg==`.
+The project does not load Tabler from a CDN and does not include Tabler JavaScript.

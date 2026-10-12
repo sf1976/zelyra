@@ -282,6 +282,19 @@ Verzeichnis wie die angegebene `.zyl`-Datei und bindet sie nach dem eingebauten
 Design ein. Fehlt die Datei, bleibt das Standarddesign unverändert. Es gibt
 keine Theme-Auswahlvariable und keine zusätzliche Konfigurationspriorität.
 
+Ein Projekt kann das mitgelieferte Tabler-Core-Stylesheet 1.6.1 aktivieren,
+indem diese Markierung allein in einer Zeile der `zelyra.theme.css` steht:
+
+```css
+/* zelyra:tabler */
+```
+
+Zelyra liefert das MIT-lizenzierte Stylesheet lokal vor dem Projekt-CSS aus;
+es wird weder ein CDN verwendet noch Tabler-JavaScript geladen. Das Limit von
+128 KiB gilt für die vom Projekt geschriebene Datei; das eingebaute Stylesheet
+ist Bestandteil der Zelyra-CLI-Distribution. Die Markierung ändert nur die
+Darstellung.
+
 Die Datei kann die folgenden öffentlichen CSS-Variablen überschreiben:
 
 ```css

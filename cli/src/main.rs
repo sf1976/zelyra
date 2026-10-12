@@ -84,6 +84,7 @@ const MACHINE_MANAGEMENT_DEMO_DATA: &str =
 const MARIADB_MINIMAL_TEMPLATE: &str = include_str!("../../examples/mariadb_starter.zyl");
 const MARIADB_AUTH_TEMPLATE: &str = include_str!("../../examples/auth.zyl");
 const MARIADB_BUSINESS_TEMPLATE: &str = include_str!("../../examples/auth_crud_api.zyl");
+const TABLER_CORE_CSS: &str = include_str!("../../assets/vendor/tabler/tabler.min.css");
 const MARIADB_DATABASE_DECLARATION: &str = "database main {\n    engine: mariadb\n}\n\n";
 const MARIADB_DATABASE_MODULE: &str = "database main {\n    engine: mariadb\n}\n";
 const PROJECT_THEME_TEMPLATE: &str = r#"/*
@@ -3888,9 +3889,16 @@ fn project_theme_css(path: &str) -> Result<Option<String>, String> {
             "`{PROJECT_THEME_CSS_FILE}` exceeds the 128 KiB size limit"
         ));
     }
-    String::from_utf8(bytes)
-        .map(Some)
-        .map_err(|_| format!("`{PROJECT_THEME_CSS_FILE}` must contain UTF-8 text"))
+    let css = String::from_utf8(bytes)
+        .map_err(|_| format!("`{PROJECT_THEME_CSS_FILE}` must contain UTF-8 text"))?;
+    if css.lines().any(|line| line.trim() == "/* zelyra:tabler */") {
+        Ok(Some(format!(
+            "{TABLER_CORE_CSS}\n{}",
+            css.replace("/* zelyra:tabler */", "")
+        )))
+    } else {
+        Ok(Some(css))
+    }
 }
 
 fn project_ui_catalogs(path: &str) -> Result<ProjectUiCatalogs, String> {
