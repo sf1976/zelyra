@@ -7038,6 +7038,72 @@ fn validate_cruds(path: &str, program: &zelyra_ast::Program, schema: &Schema) ->
                 valid = false;
             }
         }
+        if let Some(recipient_column) = crud.recipient_column.as_deref() {
+            let fail_recipient = |message: &str| {
+                diagnostic_with_span(path, "E-CRUD-008", message, crud.span);
+            };
+            if !crud.requires_auth {
+                fail_recipient("recipient-scoped CRUD must declare `requires auth`");
+                valid = false;
+            }
+            if !program.auth.iter().any(|auth| auth.session_table.is_some()) {
+                fail_recipient("recipient-scoped CRUD requires auth with database sessions");
+                valid = false;
+            }
+            match crud_table
+                .columns
+                .iter()
+                .find(|column| column.name == recipient_column)
+            {
+                Some(column)
+                    if tenant_sql_type_is_integer(&column.sql_type)
+                        && !column.nullable
+                        && !column.primary_key
+                        && !column.auto => {}
+                Some(_) => {
+                    fail_recipient(
+                        "recipient user ID column must be a non-null integer that is not the primary or auto-generated key",
+                    );
+                    valid = false;
+                }
+                None => {
+                    fail_recipient(&format!(
+                        "recipient user ID column `{recipient_column}` does not exist in table `{}`",
+                        crud.table
+                    ));
+                    valid = false;
+                }
+            }
+            if Some(recipient_column) == crud.tenant_column.as_deref() {
+                fail_recipient("recipient user ID column must be different from the tenant key");
+                valid = false;
+            }
+            if crud
+                .view
+                .fields
+                .iter()
+                .chain(&crud.list)
+                .chain(&crud.search)
+                .chain(&crud.filters)
+                .any(|column| column == recipient_column)
+            {
+                fail_recipient(
+                    "recipient user ID must not be exposed as a CRUD field, list, search, or filter column",
+                );
+                valid = false;
+            }
+            if schema.tables.iter().any(|source_table| {
+                source_table
+                    .foreign_keys
+                    .iter()
+                    .any(|foreign_key| foreign_key.referenced_table == crud.table)
+            }) {
+                fail_recipient(
+                    "recipient-owned tables cannot be referenced by foreign keys because relation views could reveal another user's records",
+                );
+                valid = false;
+            }
+        }
         if let Some(soft_delete) = &crud.soft_delete {
             let Some(column) = schema
                 .tables
@@ -7137,7 +7203,13 @@ fn validate_tenant_access_boundaries(
         .filter(|crud| crud.tenant_column.is_some())
         .map(|crud| crud.table.clone())
         .collect::<HashSet<_>>();
-    if tenant_tables.is_empty() {
+    let recipient_tables = program
+        .cruds
+        .iter()
+        .filter(|crud| crud.recipient_column.is_some())
+        .map(|crud| crud.table.clone())
+        .collect::<HashSet<_>>();
+    if tenant_tables.is_empty() && recipient_tables.is_empty() {
         return true;
     }
     let protected_tables = program
@@ -7145,6 +7217,7 @@ fn validate_tenant_access_boundaries(
         .iter()
         .filter_map(|auth| auth.membership_table.clone())
         .chain(tenant_tables.iter().cloned())
+        .chain(recipient_tables.iter().cloned())
         .collect::<HashSet<_>>();
     let known_tables = schema
         .tables
@@ -7158,8 +7231,12 @@ fn validate_tenant_access_boundaries(
         if operation.is_none() {
             diagnostic_with_span(
                 path,
-                "E-TENANT-003",
-                "tenant-enabled projects may use only SQL forms whose table access can be checked",
+                if recipient_tables.is_empty() {
+                    "E-TENANT-003"
+                } else {
+                    "E-CRUD-008"
+                },
+                "projects with tenant- or recipient-scoped data may use only SQL forms whose table access can be checked",
                 span,
             );
             return false;
@@ -7169,14 +7246,32 @@ fn validate_tenant_access_boundaries(
             if access.table.is_empty() {
                 diagnostic_with_span(
                     path,
-                    "E-TENANT-003",
-                    "quoted SQL table references cannot be verified in a tenant-enabled project",
+                    if recipient_tables.is_empty() {
+                        "E-TENANT-003"
+                    } else {
+                        "E-CRUD-008"
+                    },
+                    "quoted SQL table references cannot be verified in a project with scoped data",
                     span,
                 );
                 query_valid = false;
                 continue;
             }
-            if protected_tables
+            if recipient_tables
+                .iter()
+                .any(|table| table.eq_ignore_ascii_case(&access.table))
+            {
+                diagnostic_with_span(
+                    path,
+                    "E-CRUD-008",
+                    &format!(
+                        "unscoped SQL access to `{}` is not allowed; use its recipient-scoped CRUD route",
+                        access.table
+                    ),
+                    span,
+                );
+                query_valid = false;
+            } else if protected_tables
                 .iter()
                 .any(|table| table.eq_ignore_ascii_case(&access.table))
             {
@@ -7201,10 +7296,23 @@ fn validate_tenant_access_boundaries(
                 .iter()
                 .any(|protected| protected.eq_ignore_ascii_case(table))
         }) {
+            let recipient_form = form.table.as_ref().is_some_and(|table| {
+                recipient_tables
+                    .iter()
+                    .any(|protected| protected.eq_ignore_ascii_case(table))
+            });
             diagnostic_with_span(
                 path,
-                "E-TENANT-003",
-                "forms cannot access tenant-owned or membership tables outside the generated tenant CRUD route",
+                if recipient_form {
+                    "E-CRUD-008"
+                } else {
+                    "E-TENANT-003"
+                },
+                if recipient_form {
+                    "forms cannot access recipient-owned tables outside their generated recipient CRUD route"
+                } else {
+                    "forms cannot access tenant-owned or membership tables outside the generated tenant CRUD route"
+                },
                 form.span,
             );
             valid = false;
@@ -7233,14 +7341,47 @@ fn validate_tenant_access_boundaries(
             );
             valid = false;
         }
-        for action in &crud.actions {
-            visit_block_sql(
-                &zelyra_ast::Block {
-                    statements: action.statements.clone(),
-                    span: action.span,
-                },
-                &mut |query, span| valid &= check_query(query, span),
-            );
+        if let Some(expected_recipient_column) = program
+            .cruds
+            .iter()
+            .find(|candidate| {
+                candidate.recipient_column.is_some()
+                    && candidate.table.eq_ignore_ascii_case(&crud.table)
+            })
+            .and_then(|candidate| candidate.recipient_column.as_deref())
+        {
+            if crud.recipient_column.as_deref() != Some(expected_recipient_column) {
+                diagnostic_with_span(
+                    path,
+                    "E-CRUD-008",
+                    "every CRUD resource for a recipient-owned table must use the same declared recipient column",
+                    crud.span,
+                );
+                valid = false;
+            }
+            if !crud.actions.is_empty() {
+                diagnostic_with_span(
+                    path,
+                    "E-CRUD-008",
+                    "recipient-scoped CRUD does not allow custom SQL actions; use generated edit forms so record ownership remains enforced",
+                    crud.span,
+                );
+                valid = false;
+            }
+        }
+        if !recipient_tables
+            .iter()
+            .any(|table| table.eq_ignore_ascii_case(&crud.table))
+        {
+            for action in &crud.actions {
+                visit_block_sql(
+                    &zelyra_ast::Block {
+                        statements: action.statements.clone(),
+                        span: action.span,
+                    },
+                    &mut |query, span| valid &= check_query(query, span),
+                );
+            }
         }
     }
     for page in &program.pages {
@@ -7925,6 +8066,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             table,
             schema: Some(schema.clone()),
             tenant_column: None,
+            recipient_column: None,
             tenant_membership_table: None,
             requires_auth: false,
             permissions: Vec::new(),
@@ -8045,6 +8187,10 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             table: crud.table.clone(),
             tenant_column: crud
                 .tenant_column
+                .as_deref()
+                .map(|column| storage_column_name(&schema, &crud.table, column)),
+            recipient_column: crud
+                .recipient_column
                 .as_deref()
                 .map(|column| storage_column_name(&schema, &crud.table, column)),
             unread_column: crud
@@ -8193,6 +8339,7 @@ fn generated_crud_form(
         .iter()
         .filter(|column| !column.primary_key && !column.auto)
         .filter(|column| crud.tenant_column.as_deref() != Some(column.name.as_str()))
+        .filter(|column| crud.recipient_column.as_deref() != Some(column.name.as_str()))
         .filter(|column| crud.unread_column.as_deref() != Some(column.name.as_str()))
         .filter(|column| crud.expires_column.as_deref() != Some(column.name.as_str()))
         .filter(|column| {
@@ -8225,6 +8372,10 @@ fn generated_crud_form(
             quote_identifier(membership_table)
         )
     });
+    let recipient_column = crud
+        .recipient_column
+        .as_deref()
+        .map(|column| storage_column_name(schema, &crud.table, column));
     let query = if edit {
         let assignments = storage_columns
             .iter()
@@ -8233,7 +8384,7 @@ fn generated_crud_form(
             .collect::<Vec<_>>()
             .join(", ");
         format!(
-            "UPDATE {} SET {} WHERE {} = :id{}{}",
+            "UPDATE {} SET {} WHERE {} = :id{}{}{}",
             quote_identifier(&crud.table),
             assignments,
             quote_identifier("id"),
@@ -8244,6 +8395,11 @@ fn generated_crud_form(
                         " AND {} = :zelyra_tenant_id",
                         quote_identifier(&storage_column_name(schema, &crud.table, column))
                     )
+                }),
+            recipient_column
+                .as_ref()
+                .map_or_else(String::new, |column| {
+                    format!(" AND {} = :zelyra_user_id", quote_identifier(column))
                 }),
             membership_guard.clone().unwrap_or_default()
         )
@@ -8257,7 +8413,11 @@ fn generated_crud_form(
             insert_columns.push(storage_column_name(schema, &crud.table, tenant_column));
             insert_values.push(":zelyra_tenant_id".into());
         }
-        let insert_select = if crud.tenant_column.is_some() {
+        if let Some(recipient_column) = &recipient_column {
+            insert_columns.push(recipient_column.clone());
+            insert_values.push(":zelyra_user_id".into());
+        }
+        let insert_select = if crud.tenant_column.is_some() || recipient_column.is_some() {
             format!(
                 " SELECT {} WHERE true{}",
                 insert_values.join(", "),
@@ -8319,6 +8479,10 @@ fn generated_crud_form(
             .tenant_column
             .as_deref()
             .map(|column| storage_column_name(schema, &crud.table, column)),
+        recipient_column: crud
+            .recipient_column
+            .as_deref()
+            .map(|column| storage_column_name(schema, &crud.table, column)),
         tenant_membership_table: context.membership_table,
         requires_auth: crud.requires_auth,
         permissions,
@@ -8368,6 +8532,10 @@ fn generated_crud_action(
             schema: Some(schema.clone()),
             tenant_column: crud
                 .tenant_column
+                .as_deref()
+                .map(|column| storage_column_name(schema, &crud.table, column)),
+            recipient_column: crud
+                .recipient_column
                 .as_deref()
                 .map(|column| storage_column_name(schema, &crud.table, column)),
             tenant_membership_table: context.membership_table,

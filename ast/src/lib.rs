@@ -258,6 +258,8 @@ pub struct CrudDef {
     pub table: String,
     /// Enables request-scoped tenant isolation on this generated CRUD resource.
     pub tenant_column: Option<String>,
+    /// Restricts generated CRUD to the authenticated user's records.
+    pub recipient_column: Option<String>,
     /// Nullable timestamp that marks an item as read; generated lists show an unread count.
     pub unread_column: Option<String>,
     /// Optional expiry timestamp; expired rows are hidden from generated lists.

@@ -580,6 +580,7 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::Arrow, "`->` after CRUD resource name")?;
         let (table, table_span) = self.ident("table name after `->`")?;
         let mut tenant_column = None;
+        let mut recipient_column = None;
         let mut unread_column = None;
         let mut expires_column = None;
         let mut title = None;
@@ -606,6 +607,11 @@ impl<'a> Parser<'a> {
                         self.advance();
                         self.expect(TokenKind::Colon, "colon after CRUD tenant")?;
                         tenant_column = Some(self.ident("tenant key column")?.0);
+                    }
+                    TokenKind::Ident(name) if name == "recipient" => {
+                        self.advance();
+                        self.expect(TokenKind::Colon, "colon after CRUD recipient")?;
+                        recipient_column = Some(self.ident("recipient user ID column")?.0);
                     }
                     TokenKind::Ident(name) if name == "unread" => {
                         self.advance();
@@ -686,7 +692,7 @@ impl<'a> Parser<'a> {
                     }
                     _ => {
                         return self.error(
-                            "expected title, layout, slots, list, search, filter, view, requires auth, permits, or action in CRUD definition",
+                            "expected title, layout, slots, tenant, recipient, unread, expires, list, search, filter, view, requires auth, permits, or action in CRUD definition",
                         )
                     }
                 }
@@ -697,6 +703,7 @@ impl<'a> Parser<'a> {
                 name,
                 table,
                 tenant_column,
+                recipient_column,
                 unread_column,
                 expires_column,
                 title,
@@ -721,6 +728,7 @@ impl<'a> Parser<'a> {
             name,
             table,
             tenant_column,
+            recipient_column,
             unread_column,
             expires_column,
             title,
