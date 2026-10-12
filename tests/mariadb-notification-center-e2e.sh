@@ -55,6 +55,7 @@ cleanup() {
     fi
     client --batch --skip-column-names >/dev/null 2>&1 <<SQL || true
 DELETE FROM notifications WHERE title IN ('${tenant_a_title}', '${tenant_a_other_title}', '${tenant_a_expired}', '${tenant_a_read}', '${tenant_a_archived}', '${tenant_b_title}');
+DELETE FROM auth_audit_log WHERE actor_user_id IN (SELECT id FROM users WHERE email IN ('${email}', '${other_email}'));
 DELETE FROM tenant_memberships WHERE user_id IN (SELECT id FROM users WHERE email IN ('${email}', '${other_email}'));
 DELETE FROM user_permissions WHERE user_id IN (SELECT id FROM users WHERE email IN ('${email}', '${other_email}'));
 DELETE FROM auth_sessions WHERE user_id IN (SELECT id FROM users WHERE email IN ('${email}', '${other_email}'));
@@ -192,6 +193,8 @@ for unavailable_id in "${notification_expired_id}" "${notification_archived_id}"
 done
 grep -Eq 'Unread notifications: 0|Ungelesene Benachrichtigungen: 0' "${temp_dir}/post-read.html"
 grep -Eq 'Notification marked as read\.|Benachrichtigung als gelesen markiert\.' "${temp_dir}/post-read.html"
+audit_count="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM auth_audit_log WHERE event = 'notification.read' AND actor_user_id = (SELECT id FROM users WHERE email = '${email}')")"
+[[ "${audit_count}" == "1" ]]
 read_detail_status="$(curl --silent --show-error --output "${temp_dir}/read-detail.html" --write-out '%{http_code}' \
     --cookie "${cookie}" "${base_url}/notifications/${notification_a_id}?tenant_id=101")"
 [[ "${read_detail_status}" == "200" ]]
