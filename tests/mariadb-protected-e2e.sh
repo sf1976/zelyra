@@ -5,7 +5,9 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_dir="$(cd -- "${script_dir}/.." && pwd)"
 project_file="${ZELYRA_PROTECTED_E2E_PROJECT:-${repo_dir}/examples/auth_crud_api.zyl}"
 zelyra_bin="${ZELYRA_BIN:-${repo_dir}/target/debug/zelyra}"
-address="${ZELYRA_PROTECTED_E2E_ADDRESS:-127.0.0.1:38510}"
+# Keep the fixed local test port below Linux's usual ephemeral port range so
+# outbound sockets in unrelated integration steps cannot claim it first.
+address="${ZELYRA_PROTECTED_E2E_ADDRESS:-127.0.0.1:25010}"
 base_url="http://${address}"
 readiness_path="${ZELYRA_PROTECTED_E2E_READINESS_PATH:-}"
 database_url="${DATABASE_URL:-}"
