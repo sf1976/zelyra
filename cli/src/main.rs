@@ -4264,7 +4264,10 @@ fn compose_start_failure_message(command: DockerComposeCommand, details: &str) -
     }
 }
 
-fn start_mariadb_compose(directory: &std::path::Path) -> Result<String, String> {
+fn start_mariadb_compose(
+    directory: &std::path::Path,
+    database_only: bool,
+) -> Result<String, String> {
     if !directory.join("docker-compose.mariadb.yml").is_file() {
         return Err(
             "docker-compose.mariadb.yml is missing; use `zelyra init --mariadb` first".into(),
@@ -4273,8 +4276,13 @@ fn start_mariadb_compose(directory: &std::path::Path) -> Result<String, String> 
     let Some(command) = detect_docker_compose() else {
         return Err(docker_compose_install_hint());
     };
+    let args = if database_only {
+        vec!["up", "-d", "mariadb"]
+    } else {
+        vec!["up", "-d", "--build", "web"]
+    };
     let child = compose_command(directory, command)
-        .args(["up", "-d", "--build"])
+        .args(args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -4282,7 +4290,12 @@ fn start_mariadb_compose(directory: &std::path::Path) -> Result<String, String> 
     let output = wait_with_live_output(child)?;
     if output.status.success() {
         Ok(format!(
-            "MariaDB and the application were started with {}",
+            "{} were started with {}",
+            if database_only {
+                "MariaDB services"
+            } else {
+                "MariaDB and the application"
+            },
             command.label()
         ))
     } else {
@@ -4388,15 +4401,42 @@ fn run_local_schema_setup(directory: &std::path::Path) -> Result<(), String> {
     }
 }
 
+fn container_schema_setup_args() -> Vec<&'static str> {
+    vec![
+        "run",
+        "--rm",
+        "--no-deps",
+        "-T",
+        "web",
+        "zelyra",
+        "db",
+        "apply",
+        "main.zyl",
+    ]
+}
+
 fn run_container_schema_setup(directory: &std::path::Path) -> Result<(), String> {
     let Some(command) = detect_docker_compose() else {
         return Err(docker_compose_install_hint());
     };
+    let build = compose_command(directory, command)
+        .args(["build", "web"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| format!("could not build the schema/application image: {error}"))?;
+    let output = wait_with_live_output(build)?;
+    if !output.status.success() {
+        return Err(
+            "could not build the schema/application image; no schema command was started".into(),
+        );
+    }
     eprint!("Waiting for MariaDB and applying the project schema");
     let _ = std::io::stderr().flush();
     for attempt in 0..20 {
         let output = compose_command(directory, command)
-            .args(["exec", "-T", "web", "zelyra", "db", "apply", "main.zyl"])
+            .args(container_schema_setup_args())
+            .stdin(Stdio::null())
             .output()
             .map_err(|error| {
                 format!("could not run schema setup in the application container: {error}")
@@ -4451,12 +4491,7 @@ fn setup_action(path: &str, action: &str, options: &SetupOptions) -> Result<Stri
         "kept existing .env; credentials were not changed".to_owned()
     });
     if matches!(action, "database" | "schema" | "all") {
-        let web_url = project_web_url(&directory)?;
-        messages.push(
-            start_mariadb_compose(&directory)
-                .map_err(|error| format!("{error}\napplication URL after startup: {web_url}"))?,
-        );
-        messages.push(format!("open: {web_url}"));
+        messages.push(start_mariadb_compose(&directory, true)?);
     }
     if matches!(action, "schema" | "all") {
         let schema_result = if directory.join("docker-compose.mariadb.yml").is_file() {
@@ -4469,6 +4504,14 @@ fn setup_action(path: &str, action: &str, options: &SetupOptions) -> Result<Stri
             format!("{error}\napplication URL: {web_url}")
         })?;
         messages.push("database schema setup completed".into());
+    }
+    if action == "all" {
+        let web_url = project_web_url(&directory)?;
+        messages.push(
+            start_mariadb_compose(&directory, false)
+                .map_err(|error| format!("{error}\napplication URL after startup: {web_url}"))?,
+        );
+        messages.push(format!("open: {web_url}"));
     }
     Ok(messages.join("\n"))
 }

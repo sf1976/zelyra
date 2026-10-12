@@ -3076,3 +3076,15 @@ fn precision_diagnostics_locate_the_mismatched_alias_column() {
         program.tables[0].columns[1].span
     );
 }
+
+#[test]
+fn schema_setup_runs_independently_of_web_server_readiness() {
+    let args = container_schema_setup_args();
+    assert_eq!(args[0], "run");
+    assert!(args.contains(&"--rm"));
+    assert!(args.contains(&"--no-deps"));
+    assert_eq!(
+        &args[args.len() - 4..],
+        ["zelyra", "db", "apply", "main.zyl"]
+    );
+}

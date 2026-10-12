@@ -1047,6 +1047,10 @@ IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
 
 ## Release 0.9.9 — Feature-Freeze und letzter technischer Kandidat
 
+- [✅] Setup-Abhängigkeit nach Präzisionshärtung korrigieren: MariaDB zuerst,
+  Schema im separaten Containerlauf, Webdienst erst nach Erfolg starten;
+  Migrationsfreigaben bleiben wirksam.
+
 - [✅] Dezimalpaket: feste SQL-Skala, verlustfreier JSON-Transport, exakte
   Formulare/Filter und PostgreSQL-NUMERIC-Dekodierung; Alias- und Grenzwerte,
   Zwischenüberlauf und kontrollierte Ressourcenfehler werden geprüft.
