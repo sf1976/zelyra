@@ -1,121 +1,49 @@
-# Implemented in Zelyra 0.9.6
+# Implemented in Zelyra 0.9.7
 
-**Snapshot:** stable 0.9.6 · language compatibility line `0.1` · 2026-10-12
+**Snapshot:** stable 0.9.7 · language compatibility line `0.1` · 2026-10-12
 **Maturity:** experimental; not approved for production use
 
-This is an inventory of capabilities implemented in the stable Zelyra 0.9.6
-release. It does not claim human acceptance; that remains scheduled for 1.0.0. It records delivered scope, not the full language vision
-or future plans. The [roadmap](ROADMAP.md) remains the source for unfinished
-work; the [changelog](../CHANGELOG.md) records what changed in each release.
-Links below lead to detailed instructions and test evidence so this page does
-not duplicate the handbook.
+This inventory describes what the current Zelyra release can do. Capabilities
+are grouped by use, not by historical release number. Older and newer releases
+are listed in the [changelog](../CHANGELOG.md); unfinished work is tracked in
+the [roadmap](ROADMAP.md). Independent human acceptance is reserved for 1.0.0.
 
-## Changes in 0.9.6
+## What Zelyra 0.9.7 provides
 
-- ✅ On explicit request, `zelyra migrate laravel <source> --output <target>`
-  creates a separate Zelyra scaffold; `--report` may be supplied alongside it
-  or by itself. Provenance, ruleset version, mapping IDs, and unresolved tasks
-  are explicit. Business logic, credentials, `.env`, and production data are
-  not transferred. The candidate rejects overlapping paths, traversal,
-  symlinks, and existing targets, then validates generated files with the
-  compiler. See the [Migrator guide](laravel-migrator.en.md).
-- ✅ The shared notification feed scopes queries to active tenant membership,
-  counts unread entries, and hides expired and archived entries. Preference
-  records are editable. Integration tests cover two tenants and guessed foreign
-  IDs. This slice is tested against MariaDB; personal read receipts, scheduled
-  retention, and event-triggered mail are not included.
-- ✅ CI and the 0.9.6 database/platform checks are recorded in the
-  [candidate verification record](release-readiness/0.9.6-candidate-verification.md).
-  The release remains experimental; human acceptance is reserved for 1.0.0.
+- **Language and compiler:** a statically checked language with functions,
+  records, typed collections, `Option` and `Result`, pattern matching, modules,
+  contracts, effects, and compiler-checked SQL/web declarations. See
+  [Language and compiler](#language-and-compiler) for the supported subset and
+  its limits.
+- **Databases:** schema-aware queries, relational foreign keys, database
+  inspection, and checked setup/migration plans. MariaDB is the primary runtime
+  reference; MySQL and PostgreSQL are verified for the workflows listed in the
+  [support matrix](database-support.en.md).
+- **Business applications:** pages, reusable views, forms, table views, search,
+  filtering, sorting, pagination, CRUD, and typed APIs with OpenAPI output.
+- **Zelyra Studio:** a local web editor with compiler diagnostics, formatting,
+  navigation, completion, task help, a database workbench, and a project map.
+  The map shows known relationships and explains unresolved or bounded links
+  rather than guessing.
+- **Invoice tutorial:** a multi-file customer, item, and invoice application
+  with metrics from stored records. Tabler Core 1.6.1 is loaded locally as the
+  CSS baseline. The dashboard, CRUD paths, and printable net, 19% tax, and gross
+  view are designed for desktop, narrow screens, and print. Totals include
+  drafts and are not posted revenue.
+- **Operations and security:** CLI project creation and setup, route inventory,
+  formatting, diagnostics, database/schema tools, audit, and release checks.
+  Authentication, roles, tenant-filtered CRUD, optional local MFA, and SMTP mail
+  through a transactional MariaDB outbox are available within their documented
+  scope.
+- **Migration:** static Laravel reports and an explicitly requested separate
+  Zelyra scaffold with source locations and unresolved mappings. It does not
+  claim business or security parity.
 
-## Changes in 0.9.5
+The editor and tools can run locally. Required cloud services, telemetry, and
+external AI providers are not part of the product. Zelyra remains experimental:
+CI and automated checks do not replace human product or security acceptance.
 
-- ✅ Applications can queue bounded text/HTML messages transactionally through
-  `mail_queue` and deliver them through the explicit `zelyra outbox run` worker.
-  SMTP supports authentication, implicit TLS, required STARTTLS, explicitly
-  trusted private CA roots, host allowlisting, and a five-second transport
-  timeout. Delivery is at least once; the MariaDB outbox is not a general queue.
-- ✅ Positive and negative mail tests cover MIME content, local authenticated
-  STARTTLS, trusted/untrusted certificates, timeouts, retry, transactional
-  enqueueing, and secret redaction. See the [mail guide](mail.en.md).
-- ✅ The versioned Laravel Migrator adds source-located review findings for
-  authorization, tenant-like fields, money calculations, and file operations.
-  It remains a static inventory, not a PHP parser or automatic behavior port.
-- ✅ Release CI passed for the Linux and Windows artifacts and the documented
-  MariaDB/MySQL matrix. Independent human acceptance remains reserved for 1.0.0.
-
-## Changes in 0.9.4
-
-- ✅ Setup streams Compose progress and prints the application URL; non-transient schema errors return immediately with safe guidance.
-- ✅ Database help explains that `db create` emits SQL, while `db setup` and `setup <directory> --all` perform setup actions.
-- ✅ The invoice tutorial creates its protected `.env` even with `--no-start`; its MariaDB-backed Studio customer create/list flow and repeated schema application are covered.
-- ✅ Studio CRUD query failures now say to check database availability and applied project schema without exposing driver details.
-- ✅ MariaDB unqualified `DECIMAL` equivalence prevents false destructive schema drift on repeat setup.
-- ✅ The CLI help matrix, command examples, setup behavior, and update API rate-limit guidance have regression coverage. See the [0.9.4 CLI audit](release-readiness/0.9.4-cli-audit.md).
-
-## Changes in 0.9.3
-
-- ✅ The modular `examples/type_system` now also checks native fixed-point,
-  calendar, time, duration, byte, tuple, and set values. Its report separates
-  supported, partial, and unavailable concepts. Enum types, function values,
-  and user-defined generics remain unavailable; records have value semantics
-  without observable class identity. See the [type inventory](../examples/type_system/README.md).
-- ✅ `examples/csv_catalog` handles UTF-8 CSV with semicolons, quotes, and
-  newlines, validates records, exports errors and valid items, and calculates
-  decimal prices without Float.
-- ✅ `examples/labyrinth_solver` validates and loads grid files, uses
-  breadth-first search for a shortest path, and reports the path, steps, and
-  search counters.
-- ✅ Studio adds a session-protected read-only data browser, compiler-checked
-  and confirmed source-column edits, and confirmed MariaDB database creation
-  when a connection is already configured. It does not apply table migrations.
-- 🧪 `zelyra migrate laravel <project> --report <path>` creates a read-only
-  Markdown/JSON inventory with source locations and unresolved findings. The
-  pattern-based scanner is not yet a PHP parser or automatic migrator.
-- ✅ Tutorial and Studio startup flows and nested CLI command help are improved.
-  Independent human product and accessibility acceptance remains scheduled
-  for 1.0.0.
-
-## Changes in 0.9.2
-
-- ✅ Studio provides contextual help and a searchable action finder.
-  Completion includes compiler-known project declarations and local AST
-  bindings; live diagnostics also check unsaved edits without modifying project
-  files.
-- ✅ F12 opens unambiguous definitions in the current or a directly imported
-  module. Shift+F12 finds lexically identical identifiers in saved `.zyl`
-  files; it does not resolve scopes.
-- ✅ The deterministic project map displays compiler-known modules, imports,
-  tables, views, CRUD resources, pages, APIs, and functions with source
-  positions. Ambiguous, dynamic, or limit-truncated relationships are not
-  guessed.
-- ✅ The explicit Studio **Run** action limits programs to 15 seconds and 64
-  KiB per output stream, and redacts recognized secrets from the process
-  environment and `.env`. Studio does not run programs automatically and does
-  not provide interactive stdin.
-- ✅ `zelyra --tutorial invoice` creates the invoice tutorial, starts its local
-  MariaDB/web Compose application, and applies its schema. `--no-start` skips
-  Docker startup. The example calculates net, 19% VAT, and gross and provides a
-  browser-printable invoice view.
-- ✅ Automated browser and keyboard checks cover the new editor language
-  services. Independent screen-reader, contrast, and product acceptance remain
-  scheduled for 1.0.0.
-
-## Changes in 0.9.1
-
-- ✅ Studio restores its local session after a tab reload. It removes the
-  session token from the address bar and keeps it for the current tab.
-- ✅ Unsaved edits are visible; `Ctrl+S` saves the current editor content.
-  Compiler diagnostics appear in the Problems panel.
-- ✅ Chromium E2E covers saving, reload, diagnostics, and restart with MariaDB
-  and PostgreSQL Studio workflows.
-- ✅ The invoice tutorial calculates net, 19% VAT, and gross from linked lines.
-  Its print view uses browser PDF export; there is no native PDF engine or legal
-  compliance claim.
-- ✅ `#` line comments and standalone `##` block delimiters are part of language
-  line 0.1. Existing `//` comments remain compatible.
-
-## How to read this inventory
+## Status legend
 
 - ✅ **Implemented and exercised:** available in the stated scope, with tests
   or a documented release/CI check.

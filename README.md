@@ -19,49 +19,26 @@ and native SQL available.
 
 The stable [`v0.9.6` release](https://github.com/sf1976/zelyra/releases/tag/v0.9.6) remains experimental and is not production-approved. It adds a compiler-checked Laravel scaffold preview and a shared tenant-scoped notification feed. Personal read receipts and event-triggered mail belong to the next development step. Independent human acceptance remains reserved for 1.0.0; this README is not acceptance evidence. See the [0.9.6 release notes](docs/release-notes/0.9.6.en.md), [database support matrix](docs/database-support.en.md), and [1.0.0 release plan](docs/release-plans/1.0.0.en.md).
 
-## What changed in 0.9.6
+## What Zelyra 0.9.7 can do
 
-- On explicit request, the Laravel Migrator can create a separate compiler-checked Zelyra starter scaffold with source locations, mapping IDs, and open TODOs. It does not transfer Laravel business logic.
-- The shared in-app notification feed scopes by tenant and expiry, reports an unread count, and archives entries with soft deletion.
-- This notification slice is tested against MariaDB. Personal read receipts, scheduled retention, and SMTP event delivery belong to the next step.
+Zelyra connects its language, compiler, database, web application, and Studio in
+one workflow. The current release provides:
 
-See the [0.9.6 release notes](docs/release-notes/0.9.6.en.md) and [0.9.6 release plan](docs/release-plans/0.9.6.en.md).
+- statically checked business logic and schema-aware SQL;
+- MariaDB as the primary runtime, plus verified MySQL and PostgreSQL workflows;
+- generated forms, table views, CRUD, relationships, and APIs;
+- Studio with an editor, compiler feedback, database workbench, and project map;
+- a multi-file invoice tutorial with local Tabler CSS, desktop dashboard, and
+  printable net/tax/gross view;
+- CLI tools for routes, setup, diagnostics, databases, audit, SMTP, and static
+  Laravel migration reports.
 
-## What changed in 0.9.5
-
-- Applications can queue bounded text/HTML mail in the same transaction as business writes and deliver through an explicit SMTP outbox worker.
-- SMTP supports authentication, STARTTLS, implicit TLS, private CA roots, and a loopback-only plaintext mode for local test sinks.
-- The Laravel Migrator adds versioned findings for authorization, tenant-like fields, money calculations, and file operations.
-- Delivery is at least once; PostgreSQL outbox, mail templates, attachments, and production approval are not included.
-
-See the [0.9.5 release notes](docs/release-notes/0.9.5.en.md) and [mail guide](docs/mail.en.md).
-
-## What changed in 0.9.4
-
-- Setup progress and Compose output are visible, and the selected application URL is printed.
-- Database command help distinguishes SQL generation from applying database and schema setup.
-- Studio's invoice tutorial customer flow is verified against MariaDB; failed CRUD reads explain how to check database and schema readiness.
-- MariaDB `DECIMAL` schema rechecks are idempotent, and non-transient setup errors no longer wait through connection retries.
-
-See the [0.9.4 release notes](docs/release-notes/0.9.4.en.md) and [CLI readiness audit](docs/release-readiness/0.9.4-cli-audit.md).
-
-## What changed in 0.9.2
-
-Studio added contextual command help, a searchable action finder, compiler
-completion and diagnostics, cross-file navigation, a project map, and an
-explicit bounded run action. The invoice tutorial gained a guided local start.
-See the [0.9.2 release notes](docs/release-notes/0.9.2.en.md).
-
-## What changed in 0.9.1
-
-Studio now keeps its local session across tab reloads, removes the session token from the address bar, shows unsaved changes, saves with `Ctrl+S`, and displays compiler diagnostics in its Problems panel. Chromium browser checks cover these workflows with MariaDB and PostgreSQL. The invoice tutorial calculates net, 19% VAT, and gross totals; the browser can save its print view as PDF. `#` line comments and standalone `##` block delimiters are standard; legacy `//` comments remain compatible. The release is still experimental and has not received independent human acceptance. See the [release notes](docs/release-notes/0.9.1.en.md) and [Studio guide](docs/studio.en.md).
-
-## What changed in 0.9.0
-
-Zelyra 0.9.0 expands Studio's guided CRUD preview with affected files, tables, relationships, and routes; extends the invoice tutorial; and adds preview-first `zelyra text edit` plans for bounded regular-expression changes. It also expands the language compatibility corpus and includes an optional, local MariaDB TOTP MFA preview. MFA is not independently security-approved. MySQL and PostgreSQL support remains limited to the workflows in the published matrix; this release does not claim full SQL parity or production readiness. See the [release notes](docs/release-notes/0.9.0.en.md) and [Studio guide](docs/studio.en.md).
-
-The [roadmap](docs/ROADMAP.md) tracks implementation status and limitations.
-This README is a project overview, not a second handbook or changelog.
+Zelyra remains experimental and is not approved for production. The support
+matrix lists tested database workflows and limits. The
+[implementation inventory](docs/implemented.en.md) describes current
+capabilities; the [roadmap](docs/ROADMAP.md) and [changelog](CHANGELOG.md) track
+unfinished and historical work. Independent human acceptance remains reserved
+for 1.0.0.
 
 ## Start here
 

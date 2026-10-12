@@ -19,49 +19,26 @@ und natives SQL bleiben jederzeit möglich.
 
 Das stabile [`v0.9.6`-Release](https://github.com/sf1976/zelyra/releases/tag/v0.9.6) bleibt experimentell und ist nicht für den Produktiveinsatz freigegeben. Es ergänzt eine compilergeprüfte Laravel-Gerüstvorschau und einen gemeinsamen mandantengebundenen Benachrichtigungsfeed. Persönliche Lesebestätigungen und ereignisgesteuerte Mail gehören zum nächsten Entwicklungsschritt. Die unabhängige menschliche Abnahme bleibt für 1.0.0 reserviert; dieses README ist kein Abnahmenachweis. Siehe die [Release-Notizen 0.9.6](docs/release-notes/0.9.6.de.md), die [Datenbank-Supportmatrix](docs/database-support.de.md) und den [1.0.0-Releaseplan](docs/release-plans/1.0.0.de.md).
 
-## Was ist neu in 0.9.6?
+## Was Zelyra 0.9.7 kann
 
-- Der Laravel-Migrator kann auf ausdrückliche Anfrage ein separates, compilergeprüftes Zelyra-Grundgerüst mit Fundstellen, Zuordnungs-IDs und offenen TODOs erzeugen. Laravel-Geschäftslogik wird dabei nicht übertragen.
-- Der gemeinsame In-App-Benachrichtigungsfeed filtert nach Mandant und Ablauf, zeigt eine ungelesene Anzahl und archiviert per Soft Delete.
-- Dieser Benachrichtigungsschritt ist gegen MariaDB geprüft. Persönliche Lesebestätigungen, geplante Aufbewahrung und SMTP-Ereignisversand gehören zum nächsten Schritt.
+Zelyra verbindet Sprache, Compiler, Datenbank, Webanwendung und Studio in
+Einem Arbeitsablauf. Die aktuelle Version bietet:
 
-Siehe [Release-Notizen 0.9.6](docs/release-notes/0.9.6.de.md) und den [0.9.6-Releaseplan](docs/release-plans/0.9.6.de.md).
+- statisch geprüfte Geschäftslogik und schemaabhängiges SQL;
+- MariaDB als primäre Laufzeit sowie geprüfte MySQL- und PostgreSQL-Abläufe;
+- generierte Formulare, Tabellenansichten, CRUD, Beziehungen und APIs;
+- Studio mit Editor, Compilerhinweisen, Datenbankwerkbank und Projektkarte;
+- ein mehrteiliges Rechnungstutorial mit lokalem Tabler-CSS, Desktop-Dashboard
+  und druckbarer Netto-/Steuer-/Bruttoansicht;
+- CLI-Werkzeuge für Routen, Setup, Diagnose, Datenbank, Audit, SMTP und statische
+  Laravel-Migrationsberichte.
 
-## Was ist neu in 0.9.5?
-
-- Anwendungen können begrenzte Text-/HTML-Mails in derselben Transaktion wie Geschäftsdaten einreihen und mit einem ausdrücklich gestarteten SMTP-Outbox-Worker zustellen.
-- SMTP unterstützt Authentifizierung, STARTTLS, implizites TLS, private CA-Wurzeln und Klartext ausschließlich zu lokalen Testsenken.
-- Der Laravel-Migrator ergänzt versionierte Prüffunde zu Autorisierung, mandantenähnlichen Feldern, Geldberechnungen und Dateioperationen.
-- Die Zustellung erfolgt mindestens einmal. PostgreSQL-Outbox, Mail-Templates, Anhänge und Produktivfreigabe sind nicht enthalten.
-
-Siehe [Release-Notizen 0.9.5](docs/release-notes/0.9.5.de.md) und den [Mail-Leitfaden](docs/mail.de.md).
-
-## Was ist neu in 0.9.4?
-
-- Setup-Fortschritt und Compose-Ausgabe sind sichtbar; die gewählte Anwendungsadresse wird ausgegeben.
-- Die Datenbankhilfe unterscheidet SQL-Erzeugung vom Anwenden einer Datenbank- und Schemaeinrichtung.
-- Der Kundenablauf des Rechnungstutorials im Studio wurde gegen MariaDB geprüft. Bei fehlgeschlagenen CRUD-Abfragen erklärt die Meldung, wie Datenbank und Schema geprüft werden.
-- MariaDB-`DECIMAL`-Prüfungen bleiben idempotent; nicht vorübergehende Setup-Fehler warten nicht mehr unnötig auf Wiederholungen.
-
-Siehe [Release-Notizen 0.9.4](docs/release-notes/0.9.4.de.md) und den [CLI-Prüfbericht](docs/release-readiness/0.9.4-cli-audit.md).
-
-## Was ist neu in 0.9.2?
-
-Studio ergänzte Kontexthilfe, Aktionssuche, compilergeprüfte Vervollständigung
-und Diagnosen, dateiübergreifende Navigation, eine Projektkarte und einen
-ausdrücklichen begrenzten Startbefehl. Das Rechnungstutorial erhielt einen
-geführten lokalen Start. Siehe [Release-Notizen 0.9.2](docs/release-notes/0.9.2.de.md).
-
-## Was ist neu in 0.9.1?
-
-Studio behält seine lokale Sitzung beim Neuladen des Tabs, entfernt das Sitzungstoken aus der Adresszeile, zeigt ungespeicherte Änderungen und speichert mit `Strg+S`. Compilerdiagnosen erscheinen im Problems-Bereich. Chromium-Browserprüfungen decken diese Abläufe mit MariaDB und PostgreSQL ab. Das Rechnungstutorial berechnet Netto, 19% Umsatzsteuer und Brutto; die Druckansicht kann der Browser als PDF speichern. `#`-Zeilenkommentare und alleinstehende `##`-Blockgrenzen sind Standard; vorhandene `//`-Kommentare bleiben kompatibel. Das Release bleibt experimentell; eine unabhängige menschliche Abnahme fand nicht statt. Siehe [Release-Notizen](docs/release-notes/0.9.1.de.md) und [Studio-Anleitung](docs/studio.de.md).
-
-## Was ist neu in 0.9.0?
-
-Zelyra 0.9.0 erweitert die geführte CRUD-Vorschau im Studio um betroffene Dateien, Tabellen, Beziehungen und Routen, baut das Rechnungstutorial aus und ergänzt vorschau-basierte `zelyra text edit`-Pläne für begrenzte reguläre Ausdrücke. Dazu kommen ein erweitertes Sprachkompatibilitätskorpus und eine optionale lokale MariaDB-TOTP-MFA-Vorschau. MFA ist nicht unabhängig sicherheitsgeprüft. Die Unterstützung von MySQL und PostgreSQL bleibt auf die Abläufe der veröffentlichten Matrix begrenzt; vollständige SQL-Parität und Produktionsreife werden nicht behauptet. Siehe [Release-Notizen](docs/release-notes/0.9.0.de.md) und [Studio-Anleitung](docs/studio.de.md).
-
-Die [Roadmap](docs/ROADMAP.de.md) hält Implementierungsstand und Grenzen fest.
-Das README ist ein Projektüberblick und kein zweites Handbuch oder Changelog.
+Zelyra ist weiterhin experimentell und nicht produktiv freigegeben. Die
+Supportmatrix beschreibt die geprüften Datenbankabläufe und Grenzen. Die
+[Implementierungsübersicht](docs/implemented.de.md) beschreibt den aktuellen
+Funktionsumfang; die [Roadmap](docs/ROADMAP.de.md) und das
+[Changelog](CHANGELOG.md) enthalten offene beziehungsweise historische Arbeit.
+Die unabhängige menschliche Abnahme bleibt für 1.0.0 vorgesehen.
 
 ## Schnellstart
 
