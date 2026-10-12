@@ -1047,6 +1047,9 @@ IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
 
 ## Release 0.9.9 — Feature-Freeze und letzter technischer Kandidat
 
+- [✅] Typisierte Decimal-Tabellenansicht zeigt exakte Werte ohne zusätzliche
+  Nullauffüllung; normale Texte und Rohdaten behalten ihre Darstellung.
+
 - [✅] Setup-Abhängigkeit nach Präzisionshärtung korrigieren: MariaDB zuerst,
   Schema im separaten Containerlauf, Webdienst erst nach Erfolg starten;
   Migrationsfreigaben bleiben wirksam.
