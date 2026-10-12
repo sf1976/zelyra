@@ -20,6 +20,7 @@ fi
 
 work_root="$(mktemp -d)"
 database_name="zelyra_studio_e2e_$$"
+cli_database_name="${database_name}_cli"
 application_user="zelyra_studio_e2e_$$"
 application_password="studio_test_password"
 database_created=0
@@ -36,6 +37,8 @@ cleanup() {
     if [[ "$backend" == "mariadb" ]]; then
       mariadb --protocol=tcp --host=127.0.0.1 --port="$database_port" --user=root \
         --batch --skip-column-names -e "DROP DATABASE IF EXISTS \`$database_name\`" >/dev/null
+      mariadb --protocol=tcp --host=127.0.0.1 --port="$database_port" --user=root \
+        --batch --skip-column-names -e "DROP DATABASE IF EXISTS \`$cli_database_name\`" >/dev/null
       mariadb --protocol=tcp --host=127.0.0.1 --port="$database_port" --user=root \
         --batch --skip-column-names -e "DROP USER IF EXISTS '$application_user'@'%'" >/dev/null
     else
@@ -100,6 +103,14 @@ fn main() {
     print(math::sum(1, 2))
 }
 ZELYRA
+
+if [[ "$backend" == "mariadb" ]]; then
+  cli_database_url="${ZELYRA_STUDIO_E2E_DATABASE_URL%/*}/$cli_database_name"
+  cli_setup_output="$(DATABASE_URL="$cli_database_url" \
+    ZELYRA_DATABASE_MAIN_URL="$cli_database_url" \
+    "$zelyra_bin" db setup "$project/main.zyl")"
+  [[ "$cli_setup_output" == *"database setup completed successfully"* ]]
+fi
 
 port="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')"
 DATABASE_URL="$database_url" "$zelyra_bin" editor "$project" --port "$port" \
