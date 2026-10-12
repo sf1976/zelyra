@@ -12,6 +12,307 @@ fn run(source: &str) -> Vec<String> {
 }
 
 #[test]
+fn recursion_is_bounded_and_reports_the_call_site_without_crashing() {
+    let direct = "fn dive(depth: Int) -> Int { if depth == 0 { return 0 } return dive(depth - 1) + 1 } fn main() { print(dive(10000)) }";
+    let program = parse(&lex(direct).unwrap()).unwrap();
+    check(&program).unwrap();
+    let error = execute(&program).expect_err("deep recursion must be stopped by the runtime");
+    assert!(
+        error.message.contains("call depth limit"),
+        "{}",
+        error.message
+    );
+    assert!(
+        error.span.start > 0,
+        "the diagnostic should identify the recursive call"
+    );
+
+    let mutual = "fn even(depth: Int) -> Bool { if depth == 0 { return true } return odd(depth - 1) } fn odd(depth: Int) -> Bool { if depth == 0 { return false } return even(depth - 1) } fn main() { print(even(10000)) }";
+    let program = parse(&lex(mutual).unwrap()).unwrap();
+    check(&program).unwrap();
+    let error = execute(&program).expect_err("mutual recursion shares the call depth bound");
+    assert!(
+        error.message.contains("call depth limit"),
+        "{}",
+        error.message
+    );
+    assert!(error.span.start > 0);
+
+    assert_eq!(
+        run("fn sum(depth: Int) -> Int { if depth == 0 { return 0 } return depth + sum(depth - 1) } fn main() { print(sum(16)) }"),
+        ["136"]
+    );
+}
+
+#[test]
+fn long_left_associative_expressions_are_checked_and_evaluated_without_stack_overflow() {
+    let expression = std::iter::repeat_n("1", 5_000)
+        .collect::<Vec<_>>()
+        .join(" + ");
+    let source = format!("fn main() {{ print({expression}) }}");
+    let program = parse(&lex(&source).unwrap()).unwrap();
+    check(&program).unwrap();
+    let result = execute(&program).unwrap();
+    assert_eq!(result, ["5000"]);
+}
+
+#[test]
+fn calendar_timestamp_and_decimal_helpers_are_checked_and_lossless() {
+    let source = r#"
+fn main() {
+    match date_add_days_result(date("2024-02-28"), 1) {
+        Ok(value) => { print(value) }
+        Err(reason) => { print(reason) }
+    }
+    match date_add_days_result(date("2024-02-28"), 2) {
+        Ok(value) => { print(value) }
+        Err(reason) => { print(reason) }
+    }
+    match date_days_between_result(date("2023-12-31"), date("2024-01-02")) {
+        Ok(value) => { print(value) }
+        Err(reason) => { print(reason) }
+    }
+    match date_add_days_result(date("9999-12-31"), 1) {
+        Ok(value) => { print(value) }
+        Err(reason) => { print("date-range-error") }
+    }
+    first: Timestamp = json_decode<Timestamp>("1704067200000")
+    later: Timestamp = json_decode<Timestamp>("1704067200001")
+    print(first < later)
+    match timestamp_add_result(first, duration_ms(1)) {
+        Ok(value) => { print(value == later) }
+        Err(reason) => { print(reason) }
+    }
+    match timestamp_difference_result(later, first) {
+        Ok(value) => { print(value) }
+        Err(reason) => { print(reason) }
+    }
+    match decimal_quantize_result(decimal("1.245"), 2, "half_even") {
+        Ok(value) => { print(value) }
+        Err(reason) => { print(reason) }
+    }
+    match decimal_quantize_result(decimal("-1.245"), 2, "half_up") {
+        Ok(value) => { print(value) }
+        Err(reason) => { print(reason) }
+    }
+    match decimal_quantize_result(decimal("-1.231"), 2, "floor") {
+        Ok(value) => { print(value) }
+        Err(reason) => { print(reason) }
+    }
+}
+"#;
+    assert_eq!(
+        run(source),
+        [
+            "2024-02-29",
+            "2024-03-01",
+            "2",
+            "date-range-error",
+            "true",
+            "true",
+            "1ms",
+            "1.24",
+            "-1.25",
+            "-1.24"
+        ]
+    );
+}
+
+#[test]
+fn decimal_quantize_rejects_invalid_scale_and_rounding_mode() {
+    assert!(quantize_decimal(1, 10, "half_up").is_err());
+    assert!(quantize_decimal(1, 2, "bankers_maybe").is_err());
+    assert_eq!(
+        quantize_decimal(1_245_000_000, 2, "half_even").unwrap(),
+        1_240_000_000
+    );
+    assert_eq!(
+        quantize_decimal(1_255_000_000, 2, "half_even").unwrap(),
+        1_260_000_000
+    );
+    assert_eq!(
+        quantize_decimal(-1_245_000_000, 2, "half_even").unwrap(),
+        -1_240_000_000
+    );
+    assert_eq!(
+        quantize_decimal(-1_245_000_000, 2, "half_up").unwrap(),
+        -1_250_000_000
+    );
+}
+
+#[test]
+fn exclusive_integer_ranges_handle_empty_bounds_break_and_continue() {
+    let source = r#"
+fn main() {
+    mutable total = 0
+    for position in -2..3 {
+        if position == 0 { continue }
+        total = total + position
+    }
+    print(total)
+    for position in 5..2 { print(position) }
+    for position in 3..8 {
+        if position == 5 { break }
+        print(position)
+    }
+    print(range(2, 5))
+}
+"#;
+    assert_eq!(run(source), ["0", "3", "4", "[2, 3, 4]"]);
+}
+
+#[test]
+fn value_semantic_array_and_record_updates_leave_originals_unchanged() {
+    let source = r#"
+struct Customer { name: String city: String }
+fn main() {
+    customer = Customer { name: "Ada" city: "Berlin" }
+    updated = record_with(customer, "city", "Hamburg")
+    print(customer.city)
+    print(updated.city)
+    numbers = [3, 4, 5]
+    match array_replace_result(numbers, 1, 9) {
+        Ok(changed) => { print(changed) }
+        Err(reason) => { print(reason) }
+    }
+    print(numbers)
+    match array_replace_result(numbers, 8, 9) {
+        Ok(changed) => { print(changed) }
+        Err(reason) => { print("bounds-error") }
+    }
+}
+"#;
+    assert_eq!(
+        run(source),
+        [
+            "Berlin",
+            "Hamburg",
+            "[3, 9, 5]",
+            "[3, 4, 5]",
+            "bounds-error"
+        ]
+    );
+
+    let wrong_field_type = parse(
+        &lex(r#"struct Customer { city: String } fn main() { customer = Customer { city: "X" } changed = record_with(customer, "city", 1) }"#).unwrap(),
+    )
+    .unwrap();
+    assert!(check(&wrong_field_type).is_err());
+}
+
+#[test]
+fn unit_enums_support_typed_values_exhaustive_matches_and_json_round_trips() {
+    let source = r#"
+enum OrderStatus { Draft Pending Paid }
+fn main() {
+    status: OrderStatus = OrderStatus::Paid
+    match status {
+        OrderStatus::Draft => { print("draft") }
+        OrderStatus::Pending => { print("pending") }
+        OrderStatus::Paid => { print("paid") }
+    }
+    encoded = json_encode(status)
+    print(encoded)
+    restored: OrderStatus = json_decode<OrderStatus>(encoded)
+    print(restored == status)
+}
+
+"#;
+    assert_eq!(
+        run(source),
+        [
+            "paid",
+            r#"{"$enum":"OrderStatus","variant":"Paid"}"#,
+            "true"
+        ]
+    );
+
+    let incomplete = parse(
+        &lex("enum Status { Draft Paid } fn main() { status: Status = Status::Draft match status { Status::Draft => { print(1) } } }").unwrap(),
+    )
+    .unwrap();
+    let errors = check(&incomplete).expect_err("an enum match must cover every declared variant");
+    assert!(errors
+        .iter()
+        .any(|error| error.message.contains("non-exhaustive match")
+            && error.message.contains("Status::Paid")));
+    assert!(errors.iter().any(|error| error.code == "E-TYPE-MATCH-001"));
+
+    let unknown =
+        parse(&lex("enum Status { Draft } fn main() { status = Status::Missing }").unwrap())
+            .unwrap();
+    assert!(
+        check(&unknown).is_err(),
+        "unknown enum variants must be rejected"
+    );
+}
+
+#[test]
+fn opt_in_statement_budget_stops_empty_infinite_loops_with_source_span() {
+    let program = parse(&lex("fn main() { loop { } }").unwrap()).unwrap();
+    check(&program).unwrap();
+    let policy = RuntimePolicy {
+        step_budget: Some(25),
+        ..RuntimePolicy::default()
+    };
+    let error = execute_with_capabilities_and_policies(&program, None, Some(&policy))
+        .expect_err("the activated step budget should stop an empty loop");
+    assert!(error.message.contains("step budget exceeded"));
+    assert!(error.span.start > 0);
+
+    let finite = parse(&lex("fn main() { for value in 0..3 { print(value) } }").unwrap()).unwrap();
+    let output = execute_with_capabilities_and_policies(&finite, None, Some(&policy)).unwrap();
+    assert_eq!(output, ["0", "1", "2"]);
+}
+
+#[test]
+fn declared_non_unit_return_types_require_all_reachable_paths_to_return() {
+    for source in [
+        "fn answer() -> Int { } fn main() { }",
+        "fn answer(flag: Bool) -> Int { if flag { return 7 } } fn main() { }",
+        "fn answer(flag: Bool) -> Int { while flag { return 7 } } fn main() { }",
+        "fn answer(values: Int[]) -> Int { for value in values { return value } } fn main() { }",
+        "fn answer() -> Int { loop { break } } fn main() { }",
+    ] {
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let errors = check(&program).expect_err("a reachable function end must be rejected");
+        let error = errors
+            .iter()
+            .find(|error| error.code == "E-TYPE-RETURN-001")
+            .expect("missing-return diagnostic should have its stable code");
+        assert!(error.message.contains("can reach its end"));
+        assert!(error.span.start > 0);
+    }
+
+    for source in [
+        "fn answer(flag: Bool) -> Int { if flag { return 7 } else { return 9 } } fn main() { print(answer(true)) }",
+        "fn answer(flag: Bool) -> Int { match flag { true => { return 7 } false => { return 9 } } } fn main() { print(answer(false)) }",
+        "fn answer(value: Option<Int>) -> Int { match value { Some(number) => { return number } None => { return 0 } } } fn main() { print(answer(None)) }",
+        "fn answer() -> Int { loop { return 7 } } fn main() { print(answer()) }",
+        "fn answer() -> Int { while true { return 7 } } fn main() { print(answer()) }",
+    ] {
+        let program = parse(&lex(source).unwrap()).unwrap();
+        check(&program).unwrap_or_else(|errors| panic!("valid control flow rejected: {errors:?}"));
+    }
+}
+
+#[test]
+fn runtime_defensively_rejects_invalid_non_unit_returns() {
+    for (source, expected) in [
+        ("fn answer() -> Int { } fn main() { }", "reached its end"),
+        (
+            "fn answer() -> Int { return \"wrong\" } fn main() { }",
+            "returned `String`, expected `Int`",
+        ),
+    ] {
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let error = execute_function(&program, "answer", Vec::new(), None)
+            .expect_err("invalid return must be caught even when the caller skips check");
+        assert!(error.message.contains(expected), "{}", error.message);
+    }
+}
+
+#[test]
 fn assert_is_type_checked_and_fails_execution_with_message() {
     let passing =
         run("fn main() { assert(2 + 2 == 4) assert(true, \"expected true\") print(\"done\") }");
@@ -86,6 +387,35 @@ fn unsigned_integer_arithmetic_comparisons_and_overflow_are_consistent() {
         let error = execute(&program).expect_err("overflow must return a runtime error");
         assert!(error.message.contains(expected), "{}", error.message);
     }
+}
+
+#[test]
+fn int_minimum_literal_is_valid_but_out_of_range_values_remain_errors() {
+    assert_eq!(
+        run("fn main() { value: Int = -9223372036854775808 print(value) }").as_slice(),
+        ["-9223372036854775808"]
+    );
+    for source in [
+        "fn main() { value = 9223372036854775808 }",
+        "fn main() { value = -9223372036854775809 }",
+    ] {
+        let lexed = lex(source);
+        if let Ok(tokens) = lexed {
+            let parsed = parse(&tokens);
+            assert!(
+                parsed.is_err(),
+                "out-of-range expression was parsed: {source}"
+            );
+        } else {
+            assert!(lexed.is_err());
+        }
+    }
+    let source = "fn main() { value = -(-9223372036854775808) }";
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap();
+    let error = execute(&program).expect_err("negating Int::MIN must overflow");
+    assert!(error.message.contains("Int overflow"));
+    assert!(error.span.start > 0);
 }
 
 #[test]
@@ -663,6 +993,7 @@ fn performs_http_get_with_network_policy() {
         }),
         process: None,
         mail: None,
+        step_budget: None,
     };
     let body = execute_function_with_capabilities_and_policies(
         &program,
@@ -693,6 +1024,7 @@ fn rejects_http_get_outside_network_allowlist() {
         }),
         process: None,
         mail: None,
+        step_budget: None,
     };
     let error = execute_function_with_capabilities_and_policies(
         &program,
@@ -750,6 +1082,7 @@ fn sends_typed_http_request_and_returns_structured_response() {
         }),
         process: None,
         mail: None,
+        step_budget: None,
     };
     let response = execute_function_with_capabilities_and_policies(
         &program,
@@ -823,6 +1156,7 @@ fn sends_and_decodes_typed_json_http_request() {
         }),
         process: None,
         mail: None,
+        step_budget: None,
     };
     let customer = execute_function_with_capabilities_and_policies(
         &program,
@@ -881,6 +1215,7 @@ fn returns_structured_http_result_for_http_errors() {
         }),
         process: None,
         mail: None,
+        step_budget: None,
     };
     let result = execute_function_with_capabilities_and_policies(
         &program,
@@ -926,6 +1261,7 @@ fn rejects_http_request_body_for_get() {
         }),
         process: None,
         mail: None,
+        step_budget: None,
     };
     let error = execute_function_with_capabilities_and_policies(
         &program,
@@ -993,6 +1329,80 @@ fn decodes_and_encodes_typed_json_records() {
 }
 
 #[test]
+fn tagged_result_json_codec_preserves_ok_err_and_reports_invalid_data() {
+    let source = r#"
+        struct Customer { name: String }
+        fn encode(value: Result<Customer, String>) -> String {
+            return json_encode_tagged_result(value)
+        }
+        fn decode(payload: String) -> Result<Result<Customer, String>, String> {
+            return json_decode_tagged_result<Customer, String>(payload)
+        }
+        fn main() { }
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap();
+
+    let customer = Value::Object {
+        type_name: "Customer".into(),
+        fields: HashMap::from([("name".into(), Value::String("Zoë".into()))]),
+    };
+    let encoded_ok = execute_function(
+        &program,
+        "encode",
+        vec![Value::Result(Ok(Box::new(customer.clone())))],
+        None,
+    )
+    .unwrap();
+    let Value::String(encoded_ok) = encoded_ok else {
+        panic!("expected JSON text");
+    };
+    let json: serde_json::Value = serde_json::from_str(&encoded_ok).unwrap();
+    assert_eq!(
+        json,
+        serde_json::json!({"$result":"ok", "value":{"name":"Zoë"}})
+    );
+    let decoded_ok =
+        execute_function(&program, "decode", vec![Value::String(encoded_ok)], None).unwrap();
+    assert_eq!(
+        decoded_ok,
+        Value::Result(Ok(Box::new(Value::Result(Ok(Box::new(customer))))))
+    );
+
+    let encoded_err = execute_function(
+        &program,
+        "encode",
+        vec![Value::Result(Err(Box::new(Value::String(
+            "blocked".into(),
+        ))))],
+        None,
+    )
+    .unwrap();
+    let Value::String(encoded_err) = encoded_err else {
+        panic!("expected JSON text");
+    };
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&encoded_err).unwrap(),
+        serde_json::json!({"$result":"err", "error":"blocked"})
+    );
+    let decoded_err =
+        execute_function(&program, "decode", vec![Value::String(encoded_err)], None).unwrap();
+    let expected_err = Value::Result(Ok(Box::new(Value::Result(Err(Box::new(Value::String(
+        "blocked".into(),
+    )))))));
+    assert_eq!(decoded_err, expected_err);
+
+    let malformed = execute_function(
+        &program,
+        "decode",
+        vec![Value::String(r#"{"$result":"maybe"}"#.into())],
+        None,
+    )
+    .unwrap();
+    assert!(matches!(malformed, Value::Result(Err(_))));
+}
+
+#[test]
 fn rejects_json_decode_unknown_record_field() {
     let source = "struct Customer { name: String } fn decode(body: String) -> Customer { return json_decode<Customer>(body) } fn main() { }";
     let program = parse(&lex(source).unwrap()).unwrap();
@@ -1045,6 +1455,7 @@ fn runs_allowlisted_process_without_a_shell() {
             max_output_bytes: 100,
         }),
         mail: None,
+        step_budget: None,
     };
     let output = execute_function_with_capabilities_and_policies(
         &program,
@@ -1085,6 +1496,7 @@ fn rejects_processes_outside_allowlist_and_output_limit() {
             max_output_bytes: 3,
         }),
         mail: None,
+        step_budget: None,
     };
     let error = execute_function_with_capabilities_and_policies(
         &program,

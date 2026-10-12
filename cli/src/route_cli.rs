@@ -273,6 +273,7 @@ mod tests {
             imports: vec![],
             tables: vec![],
             records: vec![],
+            enums: vec![],
             types: vec![],
             components: vec![],
             views: vec![],

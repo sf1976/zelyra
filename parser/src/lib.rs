@@ -130,6 +130,7 @@ impl<'a> Parser<'a> {
         let mut tables = Vec::new();
         let mut types = Vec::new();
         let mut records = Vec::new();
+        let mut enums = Vec::new();
         let mut views = Vec::new();
         let mut components = Vec::new();
         let mut pages = Vec::new();
@@ -156,13 +157,15 @@ impl<'a> Parser<'a> {
                     types.push(self.type_definition(true)?);
                 } else if self.at(&TokenKind::Struct) {
                     records.push(self.record_definition(true)?);
+                } else if self.at(&TokenKind::Enum) {
+                    enums.push(self.enum_definition(true)?);
                 } else if self.at(&TokenKind::View) {
                     views.push(self.view_definition(true)?);
                 } else if self.at(&TokenKind::Component) {
                     components.push(self.component_definition(true)?);
                 } else {
                     return self
-                        .error("`pub` currently applies only to functions, types, records, views, and components");
+                        .error("`pub` currently applies only to functions, types, enums, records, views, and components");
                 }
             } else if self.at(&TokenKind::Database) {
                 declarations_started = true;
@@ -176,6 +179,9 @@ impl<'a> Parser<'a> {
             } else if self.at(&TokenKind::Struct) {
                 declarations_started = true;
                 records.push(self.record_definition(false)?);
+            } else if self.at(&TokenKind::Enum) {
+                declarations_started = true;
+                enums.push(self.enum_definition(false)?);
             } else if self.at(&TokenKind::View) {
                 declarations_started = true;
                 views.push(self.view_definition(false)?);
@@ -212,6 +218,7 @@ impl<'a> Parser<'a> {
             tables,
             types,
             records,
+            enums,
             views,
             components,
             pages,
@@ -1943,6 +1950,43 @@ impl<'a> Parser<'a> {
             span: start.join(end),
         })
     }
+
+    fn enum_definition(&mut self, is_public: bool) -> Result<zelyra_ast::EnumDef, ParseError> {
+        let start = self.expect(TokenKind::Enum, "`enum`")?;
+        let (name, _) = self.ident("enum name")?;
+        self.expect(TokenKind::LBrace, "`{` after enum name")?;
+        let mut variants = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        self.skip_newlines();
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            let (variant, span) = self.ident("unit enum variant")?;
+            if !seen.insert(variant.clone()) {
+                return Err(ParseError {
+                    message: format!("enum variant `{variant}` is declared more than once"),
+                    span,
+                });
+            }
+            variants.push(variant);
+            self.skip_newlines();
+            if self.at(&TokenKind::Comma) {
+                self.advance();
+                self.skip_newlines();
+            }
+        }
+        let end = self.expect(TokenKind::RBrace, "`}` after enum definition")?;
+        if variants.is_empty() {
+            return Err(ParseError {
+                message: "enum must contain at least one unit variant".into(),
+                span: start.join(end),
+            });
+        }
+        Ok(zelyra_ast::EnumDef {
+            name,
+            is_public,
+            variants,
+            span: start.join(end),
+        })
+    }
     fn function(&mut self, is_public: bool) -> Result<Function, ParseError> {
         let start = self.expect(TokenKind::Fn, "`fn`")?;
         let (name, _) = self.ident("function name")?;
@@ -2347,6 +2391,17 @@ impl<'a> Parser<'a> {
                 span: token.span,
             }),
             TokenKind::Ident(name) => {
+                if self.at(&TokenKind::DoubleColon) {
+                    self.advance();
+                    let (variant, end) = self.ident("enum variant after `::`")?;
+                    return Ok(Pattern {
+                        kind: PatternKind::EnumVariant {
+                            enum_name: name,
+                            variant,
+                        },
+                        span: token.span.join(end),
+                    });
+                }
                 if self.at(&TokenKind::LParen) {
                     self.advance();
                     let inner = if self.at(&TokenKind::RParen) {
@@ -2396,6 +2451,20 @@ impl<'a> Parser<'a> {
         let mut left = self.unary()?;
         loop {
             self.skip_newlines();
+            if min_prec == 0 && self.at(&TokenKind::DotDot) {
+                self.advance();
+                let right = self.binary(1)?;
+                let span = left.span.join(right.span);
+                left = Expr {
+                    kind: ExprKind::Call {
+                        name: "range".into(),
+                        type_args: Vec::new(),
+                        args: vec![left, right],
+                    },
+                    span,
+                };
+                continue;
+            }
             let (op, prec) = match self.current().kind {
                 TokenKind::OrOr => (BinaryOp::Or, 1),
                 TokenKind::AndAnd => (BinaryOp::And, 2),
@@ -2446,6 +2515,13 @@ impl<'a> Parser<'a> {
         }
         if self.at(&TokenKind::Minus) {
             let span = self.advance().span;
+            if self.at(&TokenKind::IntMinMagnitude) {
+                let magnitude = self.advance().span;
+                return Ok(Expr {
+                    kind: ExprKind::Int(i64::MIN),
+                    span: span.join(magnitude),
+                });
+            }
             let expr = self.unary()?;
             return Ok(Expr {
                 span: span.join(expr.span),
@@ -2502,6 +2578,10 @@ impl<'a> Parser<'a> {
         match token.kind {
             TokenKind::Int(value) => Ok(Expr {
                 kind: ExprKind::Int(value),
+                span: token.span,
+            }),
+            TokenKind::IntMinMagnitude => Err(ParseError {
+                message: "the Int minimum magnitude is valid only after unary `-`".into(),
                 span: token.span,
             }),
             TokenKind::Float(value) => Ok(Expr {
@@ -2590,7 +2670,11 @@ impl<'a> Parser<'a> {
                 }
                 let type_args = if matches!(
                     name.as_str(),
-                    "json_decode" | "json_decode_result" | "http_json" | "http_result"
+                    "json_decode"
+                        | "json_decode_result"
+                        | "json_decode_tagged_result"
+                        | "http_json"
+                        | "http_result"
                 ) && self.at(&TokenKind::Less)
                 {
                     self.advance();
@@ -2748,6 +2832,24 @@ mod tests {
         let program = parse(&lex("fn main() { print(1 + 2 * 3) }").unwrap()).unwrap();
         assert_eq!(program.functions.len(), 1);
         assert_eq!(program.functions[0].name, "main");
+    }
+
+    #[test]
+    fn parses_min_int_literal_with_whitespace_and_parenthesized_expression() {
+        for source in [
+            "fn main() { value = - 9223372036854775808 }",
+            "fn main() { value = (-9223372036854775808) }",
+        ] {
+            let program = parse(&lex(source).unwrap()).unwrap();
+            let Stmt::BindOrAssign { value, .. } = &program.functions[0].body.statements[0] else {
+                panic!("expected binding expression");
+            };
+            assert!(matches!(value.kind, ExprKind::Int(i64::MIN)));
+        }
+        let error = parse(&lex("fn main() { value = -(9223372036854775808) }").unwrap())
+            .expect_err("an out-of-range positive inner literal must not be accepted");
+        assert!(error.message.contains("valid only after unary `-`"));
+        assert!(error.span.start > 0);
     }
     #[test]
     fn parses_nested_array_types_for_tabular_text_data() {
@@ -3918,7 +4020,7 @@ mod tests {
             parse(&lex("pub table customers { id: Id primary auto }").unwrap()).unwrap_err();
         assert!(invalid_visibility
             .message
-            .contains("functions, types, records, views, and components"));
+            .contains("functions, types, enums, records, views, and components"));
     }
 
     #[test]

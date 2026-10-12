@@ -1220,10 +1220,22 @@ fn add_expression_type_references(
             sources,
         ),
         ExprKind::Binary { left, right, .. } => {
+            let mut cursor = left.as_ref();
+            while let ExprKind::Binary { left, right, .. } = &cursor.kind {
+                add_expression_type_references(
+                    references,
+                    owner,
+                    right,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+                cursor = left;
+            }
             add_expression_type_references(
                 references,
                 owner,
-                left,
+                cursor,
                 type_names,
                 record_names,
                 sources,
@@ -1485,7 +1497,12 @@ fn collect_expression_calls(
             collect_expression_calls(expr, function_names, calls);
         }
         ExprKind::Binary { left, right, .. } => {
-            collect_expression_calls(left, function_names, calls);
+            let mut cursor = left.as_ref();
+            while let ExprKind::Binary { left, right, .. } = &cursor.kind {
+                collect_expression_calls(right, function_names, calls);
+                cursor = left;
+            }
+            collect_expression_calls(cursor, function_names, calls);
             collect_expression_calls(right, function_names, calls);
         }
         ExprKind::Match { value, arms } => {
@@ -1809,7 +1826,12 @@ fn collect_expr_sql(
             collect_expr_sql(expr, owner, kind, table_names, sources, entries)
         }
         ExprKind::Binary { left, right, .. } => {
-            collect_expr_sql(left, owner, kind, table_names, sources, entries);
+            let mut cursor = left.as_ref();
+            while let ExprKind::Binary { left, right, .. } = &cursor.kind {
+                collect_expr_sql(right, owner, kind, table_names, sources, entries);
+                cursor = left;
+            }
+            collect_expr_sql(cursor, owner, kind, table_names, sources, entries);
             collect_expr_sql(right, owner, kind, table_names, sources, entries);
         }
         ExprKind::Match { value, arms } => {

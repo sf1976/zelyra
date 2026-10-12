@@ -1,0 +1,39 @@
+pub fn run() {
+    assert(-9223372036854775808 == json_decode<Int>("-9223372036854775808"), "direct Int minimum literal")
+    february = match date_add_days_result(date("2024-02-28"), 1) {
+        Ok(value) => value
+        Err(reason) => date("0001-01-01")
+    }
+    assert(february == date("2024-02-29"), "calendar-day arithmetic handles leap years")
+    days = match date_days_between_result(date("2023-12-31"), date("2024-01-02")) {
+        Ok(value) => value
+        Err(reason) => -1
+    }
+    assert(days == 2, "calendar-day difference spans year boundaries")
+    first: Timestamp = json_decode<Timestamp>("1704067200000")
+    later: Timestamp = json_decode<Timestamp>("1704067200001")
+    assert(first < later, "Timestamp supports chronological ordering")
+    elapsed = match timestamp_difference_result(later, first) {
+        Ok(value) => value
+        Err(reason) => duration_ms(-1)
+    }
+    assert(elapsed == duration_ms(1), "Timestamp difference returns a UTC duration")
+    rounded = match decimal_quantize_result(decimal("-1.245"), 2, "half_up") {
+        Ok(value) => value
+        Err(reason) => decimal("0")
+    }
+    assert(rounded == decimal("-1.25"), "Decimal half-up rounds negative ties away from zero")
+    mutable sum = 0
+    for value in -2..3 {
+        if value == 0 { continue }
+        sum = sum + value
+    }
+    assert(sum == 0, "integer ranges are exclusive and support continue")
+    values = [3, 4, 5]
+    replaced = match array_replace_result(values, 1, 9) {
+        Ok(updated) => updated
+        Err(reason) => []
+    }
+    assert(replaced == [3, 9, 5] && values == [3, 4, 5], "array_replace_result preserves the original array")
+    print("PASS calendar arithmetic, Timestamp ordering, Decimal quantization, exclusive ranges")
+}

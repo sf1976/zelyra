@@ -464,7 +464,26 @@ pub(super) fn run() -> ExitCode {
         usage();
         return ExitCode::from(2);
     };
-    if args.next().is_some() {
+    let mut step_budget = None;
+    if command == "run" {
+        while let Some(argument) = args.next() {
+            if argument != "--max-steps" || step_budget.is_some() {
+                usage();
+                return ExitCode::from(2);
+            }
+            let Some(value) = args.next() else {
+                eprintln!("error[E-CLI-001]: --max-steps requires a positive integer");
+                return ExitCode::from(2);
+            };
+            step_budget = match value.parse::<usize>() {
+                Ok(value) if value > 0 => Some(value),
+                _ => {
+                    eprintln!("error[E-CLI-001]: --max-steps requires a positive integer");
+                    return ExitCode::from(2);
+                }
+            };
+        }
+    } else if args.next().is_some() {
         usage();
         return ExitCode::from(2);
     }
@@ -485,13 +504,18 @@ pub(super) fn run() -> ExitCode {
                     return Err(());
                 }
             };
-            let runtime_policy = match project_runtime_policy(&path) {
+            let mut runtime_policy = match project_runtime_policy(&path) {
                 Ok(policy) => policy,
                 Err(error) => {
                     diagnostic(&path, "E-POLICY-002", &error, 1, 1);
                     return Err(());
                 }
             };
+            if let Some(step_budget) = step_budget {
+                runtime_policy
+                    .get_or_insert_with(RuntimePolicy::default)
+                    .step_budget = Some(step_budget);
+            }
             let result = match database_url_from_program(&program) {
                 Some(database_url) => execute_with_database_and_capabilities_and_policies(
                     &program,

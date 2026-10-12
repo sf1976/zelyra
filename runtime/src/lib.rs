@@ -14,6 +14,7 @@ mod mail;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypeError {
+    pub code: &'static str,
     pub message: String,
     pub span: Span,
 }
@@ -913,6 +914,7 @@ fn add_pattern_bindings<'a>(
                 add_pattern_bindings(&args[0], inner, bindings);
             }
         }
+        PatternKind::EnumVariant { .. } => {}
         PatternKind::Wildcard
         | PatternKind::Int(_)
         | PatternKind::Bool(_)
@@ -1828,7 +1830,7 @@ fn constraints_for_pattern(
             }
             Some(alternatives)
         }
-        PatternKind::String(_) | PatternKind::Char(_) => None,
+        PatternKind::String(_) | PatternKind::Char(_) | PatternKind::EnumVariant { .. } => None,
         PatternKind::Constructor { name, .. } => {
             let expression = value as *const Expr as usize;
             let mut constraints = vec![PathConstraint::Constructor {
@@ -3166,213 +3168,216 @@ fn check_capability_expr(
     declared: &HashSet<&str>,
     errors: &mut Vec<CapabilityError>,
 ) {
-    match &expression.kind {
-        ExprKind::Sql { query, .. } => {
-            let capability = sql_required_capability(query);
-            require_capability(
-                capability,
-                "SQL access",
-                expression.span,
-                function,
-                declared,
-                errors,
-            );
-        }
-        ExprKind::Call { name, args, .. } => {
-            if name == "read_console" {
+    let mut pending = vec![expression];
+    while let Some(expression) = pending.pop() {
+        match &expression.kind {
+            ExprKind::Sql { query, .. } => {
+                let capability = sql_required_capability(query);
                 require_capability(
-                    "Console",
-                    "console input",
-                    expression.span,
-                    function,
-                    declared,
-                    errors,
-                );
-            } else if name == "now" {
-                require_capability(
-                    "Clock",
-                    "clock access",
-                    expression.span,
-                    function,
-                    declared,
-                    errors,
-                );
-            } else if name == "env" {
-                require_capability(
-                    "Environment",
-                    "environment access",
-                    expression.span,
-                    function,
-                    declared,
-                    errors,
-                );
-            } else if name == "random_int" {
-                require_capability(
-                    "Random",
-                    "random access",
-                    expression.span,
-                    function,
-                    declared,
-                    errors,
-                );
-            } else if matches!(
-                name.as_str(),
-                "http_get" | "http_request" | "http_json" | "http_result"
-            ) {
-                require_capability(
-                    "Network",
-                    "network access",
-                    expression.span,
-                    function,
-                    declared,
-                    errors,
-                );
-            } else if name == "mail_queue" {
-                require_capability(
-                    "Email",
-                    "email delivery",
-                    expression.span,
-                    function,
-                    declared,
-                    errors,
-                );
-                require_capability(
-                    "Database(write)",
-                    "transactional mail queue write",
-                    expression.span,
-                    function,
-                    declared,
-                    errors,
-                );
-            } else if name == "mail_deliver" {
-                require_capability(
-                    "Email",
-                    "email delivery",
-                    expression.span,
-                    function,
-                    declared,
-                    errors,
-                );
-            } else if name == "run_process" {
-                require_capability(
-                    "Process",
-                    "process execution",
-                    expression.span,
-                    function,
-                    declared,
-                    errors,
-                );
-            } else if name == "read_text" || name == "read_text_result" {
-                require_capability(
-                    "FileSystem",
-                    "file-system read access",
-                    expression.span,
-                    function,
-                    declared,
-                    errors,
-                );
-            } else if matches!(
-                name.as_str(),
-                "write_text"
-                    | "write_text_result"
-                    | "write_text_new_result"
-                    | "atomic_write_text_result"
-                    | "append_text_result"
-                    | "copy_file_new_result"
-                    | "rename_file_result"
-            ) {
-                require_capability(
-                    "FileSystem",
-                    "file-system write access",
-                    expression.span,
-                    function,
-                    declared,
-                    errors,
-                );
-            } else if name == "delete_file" || name == "delete_file_result" {
-                require_capability(
-                    "FileSystem",
-                    "file-system delete access",
-                    expression.span,
-                    function,
-                    declared,
-                    errors,
-                );
-            } else if name == "list_dir" {
-                require_capability(
-                    "FileSystem",
-                    "file-system read access",
+                    capability,
+                    "SQL access",
                     expression.span,
                     function,
                     declared,
                     errors,
                 );
             }
-            if let Some(callee) = functions.get(name.as_str()) {
-                for capability in &callee.capabilities {
-                    if KNOWN_CAPABILITIES.contains(&capability.as_str())
-                        && !function_declares_capability(declared, capability)
-                    {
-                        errors.push(CapabilityError {
+            ExprKind::Call { name, args, .. } => {
+                if name == "read_console" {
+                    require_capability(
+                        "Console",
+                        "console input",
+                        expression.span,
+                        function,
+                        declared,
+                        errors,
+                    );
+                } else if name == "now" {
+                    require_capability(
+                        "Clock",
+                        "clock access",
+                        expression.span,
+                        function,
+                        declared,
+                        errors,
+                    );
+                } else if name == "env" {
+                    require_capability(
+                        "Environment",
+                        "environment access",
+                        expression.span,
+                        function,
+                        declared,
+                        errors,
+                    );
+                } else if name == "random_int" {
+                    require_capability(
+                        "Random",
+                        "random access",
+                        expression.span,
+                        function,
+                        declared,
+                        errors,
+                    );
+                } else if matches!(
+                    name.as_str(),
+                    "http_get" | "http_request" | "http_json" | "http_result"
+                ) {
+                    require_capability(
+                        "Network",
+                        "network access",
+                        expression.span,
+                        function,
+                        declared,
+                        errors,
+                    );
+                } else if name == "mail_queue" {
+                    require_capability(
+                        "Email",
+                        "email delivery",
+                        expression.span,
+                        function,
+                        declared,
+                        errors,
+                    );
+                    require_capability(
+                        "Database(write)",
+                        "transactional mail queue write",
+                        expression.span,
+                        function,
+                        declared,
+                        errors,
+                    );
+                } else if name == "mail_deliver" {
+                    require_capability(
+                        "Email",
+                        "email delivery",
+                        expression.span,
+                        function,
+                        declared,
+                        errors,
+                    );
+                } else if name == "run_process" {
+                    require_capability(
+                        "Process",
+                        "process execution",
+                        expression.span,
+                        function,
+                        declared,
+                        errors,
+                    );
+                } else if name == "read_text" || name == "read_text_result" {
+                    require_capability(
+                        "FileSystem",
+                        "file-system read access",
+                        expression.span,
+                        function,
+                        declared,
+                        errors,
+                    );
+                } else if matches!(
+                    name.as_str(),
+                    "write_text"
+                        | "write_text_result"
+                        | "write_text_new_result"
+                        | "atomic_write_text_result"
+                        | "append_text_result"
+                        | "copy_file_new_result"
+                        | "rename_file_result"
+                ) {
+                    require_capability(
+                        "FileSystem",
+                        "file-system write access",
+                        expression.span,
+                        function,
+                        declared,
+                        errors,
+                    );
+                } else if name == "delete_file" || name == "delete_file_result" {
+                    require_capability(
+                        "FileSystem",
+                        "file-system delete access",
+                        expression.span,
+                        function,
+                        declared,
+                        errors,
+                    );
+                } else if name == "list_dir" {
+                    require_capability(
+                        "FileSystem",
+                        "file-system read access",
+                        expression.span,
+                        function,
+                        declared,
+                        errors,
+                    );
+                }
+                if let Some(callee) = functions.get(name.as_str()) {
+                    for capability in &callee.capabilities {
+                        if KNOWN_CAPABILITIES.contains(&capability.as_str())
+                            && !function_declares_capability(declared, capability)
+                        {
+                            errors.push(CapabilityError {
                             message: format!(
                                 "function `{}` calls `{name}`, which requires capability `{capability}`; declare `uses {capability}`",
                                 function.name
                             ),
                             span: expression.span,
                         });
+                        }
                     }
                 }
+                for argument in args {
+                    pending.push(argument);
+                }
             }
-            for argument in args {
-                check_capability_expr(argument, function, functions, declared, errors);
+            ExprKind::Unary { expr, .. } => {
+                pending.push(expr);
             }
-        }
-        ExprKind::Unary { expr, .. } => {
-            check_capability_expr(expr, function, functions, declared, errors);
-        }
-        ExprKind::Binary { left, right, .. } => {
-            check_capability_expr(left, function, functions, declared, errors);
-            check_capability_expr(right, function, functions, declared, errors);
-        }
-        ExprKind::Array(values) => {
-            for value in values {
-                check_capability_expr(value, function, functions, declared, errors);
+            ExprKind::Binary { left, right, .. } => {
+                pending.push(left);
+                pending.push(right);
             }
-        }
-        ExprKind::Map(entries) => {
-            for (key, value) in entries {
-                check_capability_expr(key, function, functions, declared, errors);
-                check_capability_expr(value, function, functions, declared, errors);
+            ExprKind::Array(values) => {
+                for value in values {
+                    pending.push(value);
+                }
             }
-        }
-        ExprKind::Record { fields, .. } => {
-            for (_, value) in fields {
-                check_capability_expr(value, function, functions, declared, errors);
+            ExprKind::Map(entries) => {
+                for (key, value) in entries {
+                    pending.push(key);
+                    pending.push(value);
+                }
             }
-        }
-        ExprKind::Index { target, index } => {
-            check_capability_expr(target, function, functions, declared, errors);
-            check_capability_expr(index, function, functions, declared, errors);
-        }
-        ExprKind::Field { target, .. } => {
-            check_capability_expr(target, function, functions, declared, errors);
-        }
-        ExprKind::Await(inner) => {
-            check_capability_expr(inner, function, functions, declared, errors);
-        }
-        ExprKind::Match { value, arms } => {
-            check_capability_expr(value, function, functions, declared, errors);
-            for arm in arms {
-                check_capability_expr(&arm.value, function, functions, declared, errors);
+            ExprKind::Record { fields, .. } => {
+                for (_, value) in fields {
+                    pending.push(value);
+                }
             }
+            ExprKind::Index { target, index } => {
+                pending.push(target);
+                pending.push(index);
+            }
+            ExprKind::Field { target, .. } => {
+                pending.push(target);
+            }
+            ExprKind::Await(inner) => {
+                pending.push(inner);
+            }
+            ExprKind::Match { value, arms } => {
+                pending.push(value);
+                for arm in arms {
+                    pending.push(&arm.value);
+                }
+            }
+            ExprKind::Int(..)
+            | ExprKind::UInt(..)
+            | ExprKind::Float(..)
+            | ExprKind::Bool(..)
+            | ExprKind::String(..)
+            | ExprKind::Char(..)
+            | ExprKind::Variable(..) => {}
         }
-        ExprKind::Int(..)
-        | ExprKind::UInt(..)
-        | ExprKind::Float(..)
-        | ExprKind::Bool(..)
-        | ExprKind::String(..)
-        | ExprKind::Char(..)
-        | ExprKind::Variable(..) => {}
     }
 }
 
@@ -3487,6 +3492,7 @@ pub fn check(program: &Program) -> Result<(), Vec<TypeError>> {
     for definition in &program.types {
         if !known_types.insert(definition.name.clone()) {
             errors.push(TypeError {
+                code: "E-TYPE-001",
                 message: format!("duplicate type `{}`", definition.name),
                 span: definition.span,
             });
@@ -3495,8 +3501,18 @@ pub fn check(program: &Program) -> Result<(), Vec<TypeError>> {
     for record in &program.records {
         if !known_types.insert(record.name.clone()) {
             errors.push(TypeError {
+                code: "E-TYPE-001",
                 message: format!("duplicate type `{}`", record.name),
                 span: record.span,
+            });
+        }
+    }
+    for definition in &program.enums {
+        if !known_types.insert(definition.name.clone()) {
+            errors.push(TypeError {
+                code: "E-TYPE-001",
+                message: format!("duplicate type `{}`", definition.name),
+                span: definition.span,
             });
         }
     }
@@ -3519,6 +3535,7 @@ pub fn check(program: &Program) -> Result<(), Vec<TypeError>> {
         for field in &record.fields {
             if !fields.insert(field.name.clone()) {
                 errors.push(TypeError {
+                    code: "E-TYPE-001",
                     message: format!(
                         "duplicate field `{}` in record `{}`",
                         field.name, record.name
@@ -3533,6 +3550,7 @@ pub fn check(program: &Program) -> Result<(), Vec<TypeError>> {
     for function in &program.functions {
         if functions.contains_key(&function.name) {
             errors.push(TypeError {
+                code: "E-TYPE-001",
                 message: format!("duplicate function `{}`", function.name),
                 span: function.span,
             });
@@ -3552,6 +3570,7 @@ pub fn check(program: &Program) -> Result<(), Vec<TypeError>> {
     }
     if !functions.contains_key("main") {
         errors.push(TypeError {
+            code: "E-TYPE-001",
             message: "program must define `fn main()`".into(),
             span: Span::default(),
         });
@@ -3583,9 +3602,108 @@ pub fn check(program: &Program) -> Result<(), Vec<TypeError>> {
     }
 }
 
+const FLOW_FALLTHROUGH: u8 = 1;
+const FLOW_RETURN: u8 = 2;
+const FLOW_BREAK: u8 = 4;
+const FLOW_CONTINUE: u8 = 8;
+
+fn flow_outcomes(block: &Block) -> u8 {
+    let mut outcomes = FLOW_FALLTHROUGH;
+    for statement in &block.statements {
+        if outcomes & FLOW_FALLTHROUGH == 0 {
+            break;
+        }
+        outcomes = (outcomes & !FLOW_FALLTHROUGH) | statement_flow(statement);
+    }
+    outcomes
+}
+
+fn statement_flow(statement: &Stmt) -> u8 {
+    match statement {
+        Stmt::Return { .. } => FLOW_RETURN,
+        Stmt::Break { .. } => FLOW_BREAK,
+        Stmt::Continue { .. } => FLOW_CONTINUE,
+        Stmt::If {
+            then_block,
+            else_block,
+            ..
+        } => {
+            flow_outcomes(then_block)
+                | else_block
+                    .as_ref()
+                    .map(flow_outcomes)
+                    .unwrap_or(FLOW_FALLTHROUGH)
+        }
+        Stmt::Match { arms, .. } => {
+            let mut outcomes = arms
+                .iter()
+                .map(|arm| flow_outcomes(&arm.body))
+                .fold(0, |all, arm| all | arm);
+            if !match_arms_are_exhaustive(arms) {
+                outcomes |= FLOW_FALLTHROUGH;
+            }
+            outcomes
+        }
+        Stmt::Loop { body, .. } => {
+            let body_outcomes = flow_outcomes(body);
+            let mut outcomes = body_outcomes & FLOW_RETURN;
+            if body_outcomes & FLOW_BREAK != 0 {
+                outcomes |= FLOW_FALLTHROUGH;
+            }
+            outcomes
+        }
+        Stmt::While {
+            condition, body, ..
+        } => {
+            let body_outcomes = flow_outcomes(body);
+            let mut outcomes = body_outcomes & FLOW_RETURN;
+            if !matches!(condition.kind, ExprKind::Bool(true)) || body_outcomes & FLOW_BREAK != 0 {
+                outcomes |= FLOW_FALLTHROUGH;
+            }
+            outcomes
+        }
+        Stmt::For { body, .. } => FLOW_FALLTHROUGH | (flow_outcomes(body) & FLOW_RETURN),
+        Stmt::Transaction { body, .. } => flow_outcomes(body),
+        Stmt::Let { .. } | Stmt::BindOrAssign { .. } | Stmt::Expr(_) | Stmt::Parallel { .. } => {
+            FLOW_FALLTHROUGH
+        }
+    }
+}
+
+fn match_arms_are_exhaustive(arms: &[MatchArm]) -> bool {
+    let mut covered = HashSet::new();
+    for arm in arms {
+        match &arm.pattern.kind {
+            PatternKind::Wildcard | PatternKind::Variable(_) => return true,
+            PatternKind::Bool(value) => {
+                covered.insert(if *value { "true" } else { "false" });
+            }
+            PatternKind::Constructor { name, inner } => {
+                let irrefutable_inner = inner.as_deref().is_none_or(|inner| {
+                    matches!(inner.kind, PatternKind::Wildcard | PatternKind::Variable(_))
+                });
+                if irrefutable_inner {
+                    covered.insert(name.as_str());
+                }
+            }
+            PatternKind::Int(_)
+            | PatternKind::String(_)
+            | PatternKind::Char(_)
+            | PatternKind::EnumVariant { .. } => {}
+        }
+    }
+    (covered.contains("true") && covered.contains("false"))
+        || (covered.contains("Some") && covered.contains("None"))
+        || (covered.contains("Ok") && covered.contains("Err"))
+}
+
 impl<'a> Checker<'a> {
     fn error(&mut self, span: Span, message: impl Into<String>) {
+        self.error_with_code("E-TYPE-001", span, message);
+    }
+    fn error_with_code(&mut self, code: &'static str, span: Span, message: impl Into<String>) {
         self.errors.push(TypeError {
+            code,
             message: message.into(),
             span,
         });
@@ -3634,6 +3752,22 @@ impl<'a> Checker<'a> {
                 let actual = self.check_expr(contract, &scopes);
                 self.expect_type(&Type::Bool, &actual, contract.span);
             }
+        }
+        if function
+            .return_type
+            .as_ref()
+            .is_some_and(|return_type| *return_type != Type::Unit)
+            && flow_outcomes(&function.body) & FLOW_FALLTHROUGH != 0
+        {
+            let return_type = function.return_type.as_ref().expect("checked above");
+            self.error_with_code(
+                "E-TYPE-RETURN-001",
+                function.body.span,
+                format!(
+                    "function `{}` can reach its end without returning `{return_type}`",
+                    function.name
+                ),
+            );
         }
     }
     fn check_block(
@@ -3980,6 +4114,29 @@ impl<'a> Checker<'a> {
                     ),
                 }
             }
+            PatternKind::EnumVariant { enum_name, variant } => match expected {
+                Type::Named(expected_name) if expected_name == enum_name => {
+                    let valid = self._program.enums.iter().any(|definition| {
+                        definition.name == *enum_name
+                            && definition.variants.iter().any(|item| item == variant)
+                    });
+                    if valid {
+                        if top_level {
+                            covered.insert(format!("{enum_name}::{variant}"));
+                        }
+                    } else {
+                        self.error(
+                            pattern.span,
+                            format!("unknown enum variant `{enum_name}::{variant}`"),
+                        );
+                    }
+                }
+                Type::Unknown => {}
+                other => self.error(
+                    pattern.span,
+                    format!("enum variant `{enum_name}::{variant}` does not match `{other}`"),
+                ),
+            },
             PatternKind::Int(_) => self.expect_type(&Type::Int, expected, pattern.span),
             PatternKind::Bool(value) => {
                 if top_level {
@@ -4031,10 +4188,29 @@ impl<'a> Checker<'a> {
                 }
                 missing.join(", ")
             }
+            Type::Named(name) => self
+                ._program
+                .enums
+                .iter()
+                .find(|definition| definition.name == *name)
+                .map(|definition| {
+                    definition
+                        .variants
+                        .iter()
+                        .filter(|variant| !covered.contains(&format!("{name}::{variant}")))
+                        .map(|variant| format!("{name}::{variant}"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                })
+                .unwrap_or_default(),
             _ => String::new(),
         };
         if !missing.is_empty() {
-            self.error(span, format!("non-exhaustive match; missing: {missing}"));
+            self.error_with_code(
+                "E-TYPE-MATCH-001",
+                span,
+                format!("non-exhaustive match; missing: {missing}"),
+            );
         }
     }
     fn expect_type(&mut self, expected: &Type, actual: &Type, span: Span) {
@@ -4136,20 +4312,38 @@ impl<'a> Checker<'a> {
                 }
                 Type::Named(type_name.clone())
             }
-            ExprKind::Variable(name) => self
-                .lookup(scopes, name)
-                .map(|v| v.ty.clone())
-                .or_else(|| {
-                    if name == "None" {
-                        Some(Type::Option(Box::new(Type::Unknown)))
+            ExprKind::Variable(name) => {
+                if let Some((enum_name, variant)) = name.split_once("::") {
+                    if self
+                        ._program
+                        .enums
+                        .iter()
+                        .find(|definition| definition.name == enum_name)
+                        .is_some_and(|definition| {
+                            definition.variants.iter().any(|item| item == variant)
+                        })
+                    {
+                        Type::Named(enum_name.to_owned())
                     } else {
-                        None
+                        self.error(expr.span, format!("unknown enum variant `{name}`"));
+                        Type::Unknown
                     }
-                })
-                .unwrap_or_else(|| {
-                    self.error(expr.span, format!("unknown variable `{name}`"));
-                    Type::Unknown
-                }),
+                } else {
+                    self.lookup(scopes, name)
+                        .map(|v| v.ty.clone())
+                        .or_else(|| {
+                            if name == "None" {
+                                Some(Type::Option(Box::new(Type::Unknown)))
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or_else(|| {
+                            self.error(expr.span, format!("unknown variable `{name}`"));
+                            Type::Unknown
+                        })
+                }
+            }
             ExprKind::Call {
                 name,
                 type_args,
@@ -4189,6 +4383,90 @@ impl<'a> Checker<'a> {
                         self.expect_type(&Type::String, &message_type, message.span);
                     }
                     Type::Unit
+                } else if name == "range" {
+                    if !type_args.is_empty() || args.len() != 2 {
+                        self.error(
+                            expr.span,
+                            "range expects two Int bounds and no type arguments",
+                        );
+                        return Type::Unknown;
+                    }
+                    let start = self.check_expr(&args[0], scopes);
+                    let end = self.check_expr(&args[1], scopes);
+                    self.expect_type(&Type::Int, &start, args[0].span);
+                    self.expect_type(&Type::Int, &end, args[1].span);
+                    Type::Array(Box::new(Type::Int))
+                } else if name == "array_replace_result" {
+                    if !type_args.is_empty() || args.len() != 3 {
+                        self.error(
+                            expr.span,
+                            "array_replace_result expects an array, Int index, and value",
+                        );
+                        return Type::Unknown;
+                    }
+                    let array = self.check_expr(&args[0], scopes);
+                    let index = self.check_expr(&args[1], scopes);
+                    let value = self.check_expr(&args[2], scopes);
+                    self.expect_type(&Type::Int, &index, args[1].span);
+                    match array {
+                        Type::Array(element) => {
+                            self.expect_type(&element, &value, args[2].span);
+                            Type::Result(Box::new(Type::Array(element)), Box::new(Type::String))
+                        }
+                        Type::Unknown => Type::Unknown,
+                        other => {
+                            self.error(
+                                args[0].span,
+                                format!("array_replace_result expects an array, found `{other}`"),
+                            );
+                            Type::Unknown
+                        }
+                    }
+                } else if name == "record_with" {
+                    if !type_args.is_empty() || args.len() != 3 {
+                        self.error(
+                            expr.span,
+                            "record_with expects a record, literal field name, and value",
+                        );
+                        return Type::Unknown;
+                    }
+                    let record_type = self.check_expr(&args[0], scopes);
+                    let field_name = match &args[1].kind {
+                        ExprKind::String(name) => Some(name.as_str()),
+                        _ => {
+                            self.error(
+                                args[1].span,
+                                "record_with field name must be a String literal",
+                            );
+                            None
+                        }
+                    };
+                    let value = self.check_expr(&args[2], scopes);
+                    if let (Type::Named(type_name), Some(field_name)) = (&record_type, field_name) {
+                        if let Some(record) = self
+                            ._program
+                            .records
+                            .iter()
+                            .find(|record| record.name == *type_name)
+                        {
+                            if let Some(field) =
+                                record.fields.iter().find(|field| field.name == field_name)
+                            {
+                                self.expect_type(&field.ty, &value, args[2].span);
+                            } else {
+                                self.error(
+                                    args[1].span,
+                                    format!("unknown field `{field_name}` in record `{type_name}`"),
+                                );
+                            }
+                        } else {
+                            self.error(
+                                args[0].span,
+                                format!("record_with expects a record, found `{record_type}`"),
+                            );
+                        }
+                    }
+                    record_type
                 } else if name == "len" {
                     if args.len() != 1 {
                         self.error(expr.span, "`len` expects exactly one argument");
@@ -4550,6 +4828,48 @@ impl<'a> Checker<'a> {
                     }
                     self.check_expr(&args[0], scopes);
                     Type::String
+                } else if name == "json_encode_tagged_result" {
+                    if !type_args.is_empty() || args.len() != 1 {
+                        self.error(
+                            expr.span,
+                            "json_encode_tagged_result expects one Result value and no type arguments",
+                        );
+                        return Type::Unknown;
+                    }
+                    let value = self.check_expr(&args[0], scopes);
+                    if !matches!(value, Type::Result(_, _)) {
+                        self.error(
+                            args[0].span,
+                            "json_encode_tagged_result expects a Result value",
+                        );
+                    }
+                    Type::String
+                } else if name == "json_decode_tagged_result" {
+                    if type_args.len() != 2 {
+                        self.error(
+                            expr.span,
+                            "json_decode_tagged_result expects Ok and Err type arguments",
+                        );
+                    } else {
+                        self.check_type(&type_args[0], expr.span);
+                        self.check_type(&type_args[1], expr.span);
+                    }
+                    if args.len() != 1 {
+                        self.error(
+                            expr.span,
+                            "json_decode_tagged_result expects one String value",
+                        );
+                        return Type::Unknown;
+                    }
+                    let source = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::String, &source, args[0].span);
+                    Type::Result(
+                        Box::new(Type::Result(
+                            Box::new(type_args.first().cloned().unwrap_or(Type::Unknown)),
+                            Box::new(type_args.get(1).cloned().unwrap_or(Type::Unknown)),
+                        )),
+                        Box::new(Type::String),
+                    )
                 } else if name == "json_decode" {
                     if type_args.len() != 1 {
                         self.error(expr.span, "json_decode expects exactly one type argument");
@@ -4659,6 +4979,64 @@ impl<'a> Checker<'a> {
                     self.expect_type(&Type::Int, &value, args[0].span);
                     self.expect_type(&Type::Int, &scale, args[1].span);
                     Type::Result(Box::new(Type::String), Box::new(Type::String))
+                } else if matches!(
+                    name.as_str(),
+                    "date_add_days_result" | "date_days_between_result"
+                ) {
+                    if !type_args.is_empty() || args.len() != 2 {
+                        self.error(
+                            expr.span,
+                            format!("{name} expects two arguments and no type arguments"),
+                        );
+                        return Type::Unknown;
+                    }
+                    let left = self.check_expr(&args[0], scopes);
+                    let right = self.check_expr(&args[1], scopes);
+                    if name == "date_add_days_result" {
+                        self.expect_type(&Type::Date, &left, args[0].span);
+                        self.expect_type(&Type::Int, &right, args[1].span);
+                        Type::Result(Box::new(Type::Date), Box::new(Type::String))
+                    } else {
+                        self.expect_type(&Type::Date, &left, args[0].span);
+                        self.expect_type(&Type::Date, &right, args[1].span);
+                        Type::Result(Box::new(Type::Int), Box::new(Type::String))
+                    }
+                } else if matches!(
+                    name.as_str(),
+                    "timestamp_add_result" | "timestamp_difference_result"
+                ) {
+                    if !type_args.is_empty() || args.len() != 2 {
+                        self.error(
+                            expr.span,
+                            format!("{name} expects two arguments and no type arguments"),
+                        );
+                        return Type::Unknown;
+                    }
+                    let left = self.check_expr(&args[0], scopes);
+                    let right = self.check_expr(&args[1], scopes);
+                    self.expect_type(&Type::Timestamp, &left, args[0].span);
+                    if name == "timestamp_add_result" {
+                        self.expect_type(&Type::Duration, &right, args[1].span);
+                        Type::Result(Box::new(Type::Timestamp), Box::new(Type::String))
+                    } else {
+                        self.expect_type(&Type::Timestamp, &right, args[1].span);
+                        Type::Result(Box::new(Type::Duration), Box::new(Type::String))
+                    }
+                } else if name == "decimal_quantize_result" {
+                    if !type_args.is_empty() || args.len() != 3 {
+                        self.error(
+                            expr.span,
+                            "decimal_quantize_result expects Decimal, scale Int, and mode String",
+                        );
+                        return Type::Unknown;
+                    }
+                    let value = self.check_expr(&args[0], scopes);
+                    let scale = self.check_expr(&args[1], scopes);
+                    let mode = self.check_expr(&args[2], scopes);
+                    self.expect_type(&Type::Decimal, &value, args[0].span);
+                    self.expect_type(&Type::Int, &scale, args[1].span);
+                    self.expect_type(&Type::String, &mode, args[2].span);
+                    Type::Result(Box::new(Type::Decimal), Box::new(Type::String))
                 } else if name == "http_json" {
                     if type_args.len() != 2 {
                         self.error(
@@ -4987,62 +5365,8 @@ impl<'a> Checker<'a> {
                 }
             }
             ExprKind::Binary { left, op, right } => {
-                let left_ty = self.check_expr(left, scopes);
-                let right_ty = self.check_expr(right, scopes);
-                match op {
-                    BinaryOp::Add => {
-                        if left_ty == Type::String && right_ty == Type::String {
-                            Type::String
-                        } else if left_ty == Type::Duration && right_ty == Type::Duration {
-                            Type::Duration
-                        } else if let (Type::Array(left), Type::Array(right)) =
-                            (&left_ty, &right_ty)
-                        {
-                            self.expect_type(left, right, expr.span);
-                            Type::Array(left.clone())
-                        } else {
-                            self.numeric_result(&left_ty, &right_ty, expr.span)
-                        }
-                    }
-                    BinaryOp::Subtract
-                    | BinaryOp::Multiply
-                    | BinaryOp::Divide
-                    | BinaryOp::Remainder => {
-                        if *op == BinaryOp::Subtract
-                            && left_ty == Type::Duration
-                            && right_ty == Type::Duration
-                        {
-                            Type::Duration
-                        } else {
-                            self.numeric_result(&left_ty, &right_ty, expr.span)
-                        }
-                    }
-                    BinaryOp::Equal | BinaryOp::NotEqual => {
-                        self.expect_type(&left_ty, &right_ty, right.span);
-                        Type::Bool
-                    }
-                    BinaryOp::Less
-                    | BinaryOp::LessEqual
-                    | BinaryOp::Greater
-                    | BinaryOp::GreaterEqual => {
-                        if left_ty == right_ty
-                            && matches!(
-                                left_ty,
-                                Type::String | Type::Date | Type::Time | Type::Duration
-                            )
-                        {
-                            Type::Bool
-                        } else {
-                            self.numeric_result(&left_ty, &right_ty, expr.span);
-                            Type::Bool
-                        }
-                    }
-                    BinaryOp::And | BinaryOp::Or => {
-                        self.expect_type(&Type::Bool, &left_ty, left.span);
-                        self.expect_type(&Type::Bool, &right_ty, right.span);
-                        Type::Bool
-                    }
-                }
+                let _ = (left, op, right);
+                self.check_binary_chain(expr, scopes)
             }
             ExprKind::Sql { result_type, .. } => {
                 self.check_type(result_type, expr.span);
@@ -5080,6 +5404,77 @@ impl<'a> Checker<'a> {
                 result_type
             }
         }
+    }
+    fn check_binary_chain(&mut self, expr: &Expr, scopes: &[HashMap<String, Variable>]) -> Type {
+        let mut cursor = expr;
+        let mut operations = Vec::new();
+        while let ExprKind::Binary { left, op, right } = &cursor.kind {
+            operations.push((*op, right.as_ref(), cursor.span, left.span));
+            cursor = left;
+        }
+        let mut left_type = self.check_expr(cursor, scopes);
+        for (op, right, span, left_span) in operations.into_iter().rev() {
+            let right_type = self.check_expr(right, scopes);
+            left_type = match op {
+                BinaryOp::Add => {
+                    if left_type == Type::String && right_type == Type::String {
+                        Type::String
+                    } else if left_type == Type::Duration && right_type == Type::Duration {
+                        Type::Duration
+                    } else if let (Type::Array(left), Type::Array(right)) =
+                        (&left_type, &right_type)
+                    {
+                        self.expect_type(left, right, span);
+                        Type::Array(left.clone())
+                    } else {
+                        self.numeric_result(&left_type, &right_type, span)
+                    }
+                }
+                BinaryOp::Subtract
+                | BinaryOp::Multiply
+                | BinaryOp::Divide
+                | BinaryOp::Remainder => {
+                    if op == BinaryOp::Subtract
+                        && left_type == Type::Duration
+                        && right_type == Type::Duration
+                    {
+                        Type::Duration
+                    } else {
+                        self.numeric_result(&left_type, &right_type, span)
+                    }
+                }
+                BinaryOp::Equal | BinaryOp::NotEqual => {
+                    self.expect_type(&left_type, &right_type, right.span);
+                    Type::Bool
+                }
+                BinaryOp::Less
+                | BinaryOp::LessEqual
+                | BinaryOp::Greater
+                | BinaryOp::GreaterEqual => {
+                    if left_type == right_type
+                        && matches!(
+                            left_type,
+                            Type::String
+                                | Type::Date
+                                | Type::Time
+                                | Type::Duration
+                                | Type::Timestamp
+                        )
+                    {
+                        Type::Bool
+                    } else {
+                        self.numeric_result(&left_type, &right_type, span);
+                        Type::Bool
+                    }
+                }
+                BinaryOp::And | BinaryOp::Or => {
+                    self.expect_type(&Type::Bool, &left_type, left_span);
+                    self.expect_type(&Type::Bool, &right_type, right.span);
+                    Type::Bool
+                }
+            };
+        }
+        left_type
     }
     fn numeric_result(&mut self, left: &Type, right: &Type, span: Span) -> Type {
         if left == &Type::Unknown || right == &Type::Unknown {
@@ -5171,6 +5566,7 @@ fn compatible(expected: &Type, actual: &Type) -> bool {
             compatible(expected_key, actual_key) && compatible(expected_value, actual_value)
         }
         (Type::HttpResult(expected), Type::HttpResult(actual)) => compatible(expected, actual),
+        (Type::HttpResult(_), Type::Named(actual)) if actual == "HttpResult" => true,
         _ => expected == actual,
     }
 }
@@ -5193,6 +5589,7 @@ fn validate_type(
 ) {
     match ty {
         Type::Named(name) if !known_types.contains(name) => errors.push(TypeError {
+            code: "E-TYPE-001",
             message: format!("unknown type `{name}`"),
             span,
         }),
@@ -5212,6 +5609,7 @@ fn validate_type(
             validate_type(value, known_types, errors, span);
             if !matches!(key.as_ref(), Type::Unknown) && !is_map_key_type(key) {
                 errors.push(TypeError {
+                    code: "E-TYPE-001",
                     message: format!(
                         "Map keys must be Int, UInt, String, Bool, Char, or Timestamp; found `{key}`"
                     ),
@@ -5246,6 +5644,10 @@ pub enum Value {
     Bool(bool),
     String(String),
     Char(char),
+    Enum {
+        type_name: String,
+        variant: String,
+    },
     Timestamp(i64),
     Date(String),
     Time(String),
@@ -5278,6 +5680,7 @@ impl Value {
             Value::Bool(_) => Type::Bool,
             Value::String(_) => Type::String,
             Value::Char(_) => Type::Char,
+            Value::Enum { type_name, .. } => Type::Named(type_name.clone()),
             Value::Timestamp(_) => Type::Timestamp,
             Value::Date(_) => Type::Date,
             Value::Time(_) => Type::Time,
@@ -5324,6 +5727,7 @@ impl Value {
             Value::Bool(v) => v.to_string(),
             Value::String(v) => v.clone(),
             Value::Char(v) => v.to_string(),
+            Value::Enum { type_name, variant } => format!("{type_name}::{variant}"),
             Value::Timestamp(v) => v.to_string(),
             Value::Date(v) | Value::Time(v) => v.clone(),
             Value::Duration(v) => format!("{v}ms"),
@@ -5472,6 +5876,9 @@ pub struct RuntimePolicy {
     pub network: Option<NetworkPolicy>,
     pub process: Option<ProcessPolicy>,
     pub mail: Option<MailPolicy>,
+    /// Optional statement budget for CLI, sandbox, and untrusted-code runs.
+    /// `None` leaves long-running server handlers unrestricted.
+    pub step_budget: Option<usize>,
 }
 
 impl fmt::Display for RuntimeError {
@@ -5587,6 +5994,7 @@ pub fn execute_with_capabilities_and_filesystem_policy(
             network: None,
             process: None,
             mail: None,
+            step_budget: None,
         }),
     )
 }
@@ -5614,6 +6022,7 @@ pub fn execute_with_database_and_capabilities_and_filesystem_policy(
             network: None,
             process: None,
             mail: None,
+            step_budget: None,
         }),
     )
 }
@@ -5660,10 +6069,12 @@ pub fn execute_function_with_capabilities_and_policies(
         functions: program
             .functions
             .iter()
-            .map(|function| (function.name.clone(), function.clone()))
+            .map(|function| (function.name.clone(), function))
             .collect(),
         output: Vec::new(),
         steps: 0,
+        step_budget: policy.as_ref().and_then(|policy| policy.step_budget),
+        call_depth: 0,
         database_url: database_url.map(str::to_owned),
         granted_capabilities: grants.cloned(),
         filesystem_policy: policy.and_then(|policy| policy.filesystem.clone()),
@@ -5679,6 +6090,11 @@ pub fn execute_function_with_capabilities_and_policies(
             .types
             .iter()
             .map(|definition| (definition.name.clone(), definition.target.clone()))
+            .collect(),
+        enum_definitions: program
+            .enums
+            .iter()
+            .map(|definition| (definition.name.clone(), definition.clone()))
             .collect(),
         active_capabilities: Vec::new(),
     };
@@ -5721,6 +6137,7 @@ pub fn execute_function_with_capabilities_and_filesystem_policy(
             network: None,
             process: None,
             mail: None,
+            step_budget: None,
         }),
     )
 }
@@ -5735,10 +6152,12 @@ fn execute_internal(
         functions: program
             .functions
             .iter()
-            .map(|f| (f.name.clone(), f.clone()))
+            .map(|f| (f.name.clone(), f))
             .collect(),
         output: Vec::new(),
         steps: 0,
+        step_budget: policy.as_ref().and_then(|policy| policy.step_budget),
+        call_depth: 0,
         database_url,
         granted_capabilities,
         filesystem_policy: policy.as_ref().and_then(|policy| policy.filesystem.clone()),
@@ -5755,16 +6174,25 @@ fn execute_internal(
             .iter()
             .map(|definition| (definition.name.clone(), definition.target.clone()))
             .collect(),
+        enum_definitions: program
+            .enums
+            .iter()
+            .map(|definition| (definition.name.clone(), definition.clone()))
+            .collect(),
         active_capabilities: Vec::new(),
     };
     interpreter.call("main", Vec::new(), Span::default())?;
     Ok(interpreter.output)
 }
 
-struct Interpreter {
-    functions: HashMap<String, Function>,
+const MAX_FUNCTION_CALL_DEPTH: usize = 32;
+
+struct Interpreter<'program> {
+    functions: HashMap<String, &'program Function>,
     output: Vec<String>,
     steps: usize,
+    step_budget: Option<usize>,
+    call_depth: usize,
     database_url: Option<String>,
     granted_capabilities: Option<HashSet<String>>,
     filesystem_policy: Option<FileSystemPolicy>,
@@ -5773,7 +6201,26 @@ struct Interpreter {
     mail_policy: Option<MailPolicy>,
     record_definitions: HashMap<String, RecordDef>,
     type_aliases: HashMap<String, Type>,
+    enum_definitions: HashMap<String, zelyra_ast::EnumDef>,
     active_capabilities: Vec<HashSet<String>>,
+}
+
+fn statement_span(statement: &Stmt) -> Span {
+    match statement {
+        Stmt::Let { span, .. }
+        | Stmt::BindOrAssign { span, .. }
+        | Stmt::Return { span, .. }
+        | Stmt::If { span, .. }
+        | Stmt::While { span, .. }
+        | Stmt::For { span, .. }
+        | Stmt::Loop { span, .. }
+        | Stmt::Break { span }
+        | Stmt::Continue { span }
+        | Stmt::Match { span, .. }
+        | Stmt::Transaction { span, .. }
+        | Stmt::Parallel { span, .. } => *span,
+        Stmt::Expr(expression) => expression.span,
+    }
 }
 
 fn read_console_line(prompt: &str) -> io::Result<Option<String>> {
@@ -5805,6 +6252,9 @@ fn is_runtime_builtin(name: &str) -> bool {
         "print"
             | "assert"
             | "len"
+            | "range"
+            | "array_replace_result"
+            | "record_with"
             | "append"
             | "tuple"
             | "set"
@@ -5835,8 +6285,10 @@ fn is_runtime_builtin(name: &str) -> bool {
             | "mail_queue"
             | "mail_deliver"
             | "json_encode"
+            | "json_encode_tagged_result"
             | "json_decode"
             | "json_decode_result"
+            | "json_decode_tagged_result"
             | "csv_decode_result"
             | "csv_encode"
             | "text_contains"
@@ -5846,6 +6298,11 @@ fn is_runtime_builtin(name: &str) -> bool {
             | "text_split_result"
             | "decimal_scaled_result"
             | "format_scaled_result"
+            | "date_add_days_result"
+            | "date_days_between_result"
+            | "timestamp_add_result"
+            | "timestamp_difference_result"
+            | "decimal_quantize_result"
             | "http_json"
             | "http_result"
             | "run_process"
@@ -5864,7 +6321,20 @@ fn is_runtime_builtin(name: &str) -> bool {
     )
 }
 
-impl Interpreter {
+impl<'program> Interpreter<'program> {
+    fn consume_step(&mut self, span: Span) -> Result<(), RuntimeError> {
+        self.steps = self.steps.saturating_add(1);
+        if self.step_budget.is_some_and(|budget| self.steps > budget) {
+            return Err(self.runtime_error(
+                span,
+                format!(
+                    "execution step budget exceeded (limit {})",
+                    self.step_budget.unwrap()
+                ),
+            ));
+        }
+        Ok(())
+    }
     fn runtime_error(&self, span: Span, message: impl Into<String>) -> RuntimeError {
         RuntimeError {
             message: message.into(),
@@ -6251,6 +6721,68 @@ impl Interpreter {
         })
     }
 
+    fn json_encode_tagged_result(&self, value: &Value, span: Span) -> Result<String, RuntimeError> {
+        let tagged = match value {
+            Value::Result(Ok(value)) => serde_json::json!({
+                "$result": "ok",
+                "value": self.json_value(value, span)?,
+            }),
+            Value::Result(Err(error)) => serde_json::json!({
+                "$result": "err",
+                "error": self.json_value(error, span)?,
+            }),
+            _ => {
+                return Err(
+                    self.runtime_error(span, "json_encode_tagged_result expects a Result value")
+                );
+            }
+        };
+        serde_json::to_string(&tagged).map_err(|error| {
+            self.runtime_error(
+                span,
+                format!("json_encode_tagged_result failed to serialize value: {error}"),
+            )
+        })
+    }
+
+    fn json_decode_tagged_result(
+        &self,
+        source: &str,
+        ok_type: &Type,
+        error_type: &Type,
+        span: Span,
+    ) -> Result<Value, String> {
+        let value: serde_json::Value = serde_json::from_str(source)
+            .map_err(|error| format!("invalid tagged Result JSON: {error}"))?;
+        let object = value
+            .as_object()
+            .ok_or_else(|| "tagged Result JSON must be an object".to_owned())?;
+        match object.get("$result").and_then(serde_json::Value::as_str) {
+            Some("ok") if object.len() == 2 => {
+                let payload = object
+                    .get("value")
+                    .ok_or_else(|| "tagged Ok JSON is missing `value`".to_owned())?;
+                let decoded = self
+                    .json_decode_value(payload, ok_type, span)
+                    .map_err(|error| error.message)?;
+                Ok(Value::Result(Ok(Box::new(decoded))))
+            }
+            Some("err") if object.len() == 2 => {
+                let payload = object
+                    .get("error")
+                    .ok_or_else(|| "tagged Err JSON is missing `error`".to_owned())?;
+                let decoded = self
+                    .json_decode_value(payload, error_type, span)
+                    .map_err(|error| error.message)?;
+                Ok(Value::Result(Err(Box::new(decoded))))
+            }
+            Some("ok") | Some("err") => {
+                Err("tagged Result JSON has missing or unexpected fields".to_owned())
+            }
+            _ => Err("tagged Result JSON requires `$result` to be `ok` or `err`".to_owned()),
+        }
+    }
+
     fn json_value(&self, value: &Value, span: Span) -> Result<serde_json::Value, RuntimeError> {
         match value {
             Value::Int(value) => Ok(serde_json::Value::from(*value)),
@@ -6264,6 +6796,10 @@ impl Interpreter {
             Value::Bool(value) => Ok(serde_json::Value::from(*value)),
             Value::String(value) => Ok(serde_json::Value::String(value.clone())),
             Value::Char(value) => Ok(serde_json::Value::String(value.to_string())),
+            Value::Enum { type_name, variant } => Ok(serde_json::json!({
+                "$enum": type_name,
+                "variant": variant,
+            })),
             Value::Timestamp(value) => Ok(serde_json::Value::from(*value)),
             Value::Date(value) | Value::Time(value) => Ok(serde_json::Value::String(value.clone())),
             Value::Duration(value) => Ok(serde_json::Value::from(*value)),
@@ -6354,6 +6890,31 @@ impl Interpreter {
         if let Type::Named(name) = target {
             if let Some(alias) = self.type_aliases.get(name) {
                 return self.json_decode_value(value, alias, span);
+            }
+            if let Some(definition) = self._enum_definition(name) {
+                let Some(object) = value.as_object() else {
+                    return Err(self.json_type_error("enum object", value, span));
+                };
+                if object.get("$enum").and_then(serde_json::Value::as_str) != Some(name) {
+                    return Err(
+                        self.runtime_error(span, format!("json_decode expected enum `{name}`"))
+                    );
+                }
+                let Some(variant) = object.get("variant").and_then(serde_json::Value::as_str)
+                else {
+                    return Err(
+                        self.runtime_error(span, "json_decode expected enum variant String")
+                    );
+                };
+                if !definition.variants.iter().any(|item| item == variant) {
+                    return Err(
+                        self.runtime_error(span, format!("unknown `{name}` variant `{variant}`"))
+                    );
+                }
+                return Ok(Value::Enum {
+                    type_name: name.clone(),
+                    variant: variant.to_owned(),
+                });
             }
             if let Some(record) = self.record_definitions.get(name) {
                 return self.json_decode_record(value, record, span);
@@ -6526,6 +7087,12 @@ impl Interpreter {
                     format!("json_decode does not support target type `{target}`"),
                 )),
         }
+    }
+
+    fn _enum_definition(&self, name: &str) -> Option<&zelyra_ast::EnumDef> {
+        // Enum definitions are attached to the source Program; Interpreter keeps
+        // their variant names as a compact map to avoid cloning AST nodes.
+        self.enum_definitions.get(name)
     }
 
     fn json_decode_string(
@@ -6741,7 +7308,7 @@ impl Interpreter {
         let function = self
             .functions
             .get(name)
-            .cloned()
+            .copied()
             .ok_or_else(|| self.runtime_error(span, format!("unknown function `{name}`")))?;
         if function.params.len() != args.len() {
             return Err(self.runtime_error(
@@ -6764,6 +7331,13 @@ impl Interpreter {
                 ));
             }
         }
+        if self.call_depth >= MAX_FUNCTION_CALL_DEPTH {
+            return Err(self.runtime_error(
+                span,
+                format!("function call depth limit exceeded (maximum {MAX_FUNCTION_CALL_DEPTH})"),
+            ));
+        }
+        self.call_depth += 1;
         self.active_capabilities
             .push(function.capabilities.iter().cloned().collect());
         let result = (|| {
@@ -6781,10 +7355,29 @@ impl Interpreter {
                     ));
                 }
             }
-            let result = match self.exec_block(&function.body, &mut env)? {
+            let flow = self.exec_block(&function.body, &mut env)?;
+            let returned = matches!(&flow, Flow::Return(_));
+            let result = match flow {
                 Flow::Return(value) => value,
                 Flow::Continue | Flow::LoopContinue | Flow::Break => Value::Unit,
             };
+            if let Some(expected) = function.return_type.as_ref() {
+                if *expected != Type::Unit && !returned {
+                    return Err(self.runtime_error(
+                        function.body.span,
+                        format!("function `{name}` reached its end without returning `{expected}`"),
+                    ));
+                }
+                if returned && !compatible(expected, &result.ty()) {
+                    return Err(self.runtime_error(
+                        function.body.span,
+                        format!(
+                            "function `{name}` returned `{}`, expected `{expected}`",
+                            result.ty()
+                        ),
+                    ));
+                }
+            }
             if !function.ensures.is_empty() {
                 env.declare("result".into(), result.clone(), false);
                 for contract in &function.ensures {
@@ -6801,6 +7394,7 @@ impl Interpreter {
             Ok(result)
         })();
         self.active_capabilities.pop();
+        self.call_depth -= 1;
         result
     }
     fn check_loop_invariants(
@@ -6840,10 +7434,7 @@ impl Interpreter {
         statement: &Stmt,
         env: &mut Environment,
     ) -> Result<Flow, RuntimeError> {
-        self.steps += 1;
-        if self.steps > 10_000_000 {
-            return Err(self.runtime_error(Span::default(), "execution step limit exceeded"));
-        }
+        self.consume_step(statement_span(statement))?;
         match statement {
             Stmt::Let {
                 name,
@@ -6906,6 +7497,7 @@ impl Interpreter {
                 span,
             } => {
                 loop {
+                    self.consume_step(*span)?;
                     self.check_loop_invariants(invariants, env, *span, "before")?;
                     let condition_value = self.eval(condition, env)?;
                     if !self.expect_bool(condition_value, *span)? {
@@ -6928,18 +7520,42 @@ impl Interpreter {
                 body,
                 span,
             } => {
-                let iterable = self.eval(iterable, env)?;
-                let values = match iterable {
-                    Value::Array(values) => values,
-                    Value::Set(values) => values,
-                    value => {
-                        return Err(self.runtime_error(
-                            *span,
-                            format!("`for ... in` expects an array, found {}", value.ty()),
-                        ));
+                let values: Box<dyn Iterator<Item = Value>> = match &iterable.kind {
+                    ExprKind::Call {
+                        name: call,
+                        type_args,
+                        args,
+                    } if call == "range" => {
+                        if !type_args.is_empty() || args.len() != 2 {
+                            return Err(self.runtime_error(*span, "range expects two Int bounds"));
+                        }
+                        let start = self.eval(&args[0], env)?;
+                        let end = self.eval(&args[1], env)?;
+                        let (Value::Int(start), Value::Int(end)) = (start, end) else {
+                            return Err(self.runtime_error(*span, "range expects two Int bounds"));
+                        };
+                        Box::new((start..end).map(Value::Int))
+                    }
+                    _ => {
+                        let iterable_value = self.eval(iterable, env)?;
+                        match iterable_value {
+                            Value::Array(values) | Value::Set(values) => {
+                                Box::new(values.into_iter())
+                            }
+                            value => {
+                                return Err(self.runtime_error(
+                                    *span,
+                                    format!(
+                                        "`for ... in` expects an array or Set, found {}",
+                                        value.ty()
+                                    ),
+                                ));
+                            }
+                        }
                     }
                 };
                 for value in values {
+                    self.consume_step(*span)?;
                     env.push();
                     env.declare(name.clone(), value, false);
                     let flow = self.exec_block(body, env)?;
@@ -6958,6 +7574,7 @@ impl Interpreter {
                 span,
             } => {
                 loop {
+                    self.consume_step(*span)?;
                     self.check_loop_invariants(invariants, env, *span, "before")?;
                     let flow = self.exec_block(body, env)?;
                     self.check_loop_invariants(invariants, env, *span, "after")?;
@@ -7027,52 +7644,57 @@ impl Interpreter {
                             format!("parallel binding `{name}` is declared twice"),
                         ));
                     }
-                    branches.push((name.clone(), (**inner).clone(), value.span));
+                    branches.push((name.as_str(), inner.as_ref(), value.span));
                 }
-                let handles = branches
-                    .into_iter()
-                    .map(|(name, expression, span)| {
-                        let mut child = Interpreter {
-                            functions: self.functions.clone(),
-                            output: Vec::new(),
-                            steps: 0,
-                            database_url: self.database_url.clone(),
-                            granted_capabilities: self.granted_capabilities.clone(),
-                            filesystem_policy: self.filesystem_policy.clone(),
-                            network_policy: self.network_policy.clone(),
-                            process_policy: self.process_policy.clone(),
-                            mail_policy: self.mail_policy.clone(),
-                            record_definitions: self.record_definitions.clone(),
-                            type_aliases: self.type_aliases.clone(),
-                            active_capabilities: self.active_capabilities.clone(),
-                        };
-                        let mut child_env = env.clone();
-                        std::thread::spawn(move || {
-                            child
-                                .eval(&expression, &mut child_env)
-                                .map(|value| (name, value, child.output))
-                                .map_err(|error| (span, error))
-                        })
-                    })
-                    .collect::<Vec<_>>();
                 let mut results = Vec::new();
                 let mut first_error = None;
-                for handle in handles {
-                    match handle.join() {
-                        Ok(Ok(result)) => results.push(result),
-                        Ok(Err((_, error))) => {
-                            if first_error.is_none() {
-                                first_error = Some(error);
+                std::thread::scope(|scope| {
+                    let handles = branches
+                        .iter()
+                        .map(|(name, expression, branch_span)| {
+                            let mut child = Interpreter {
+                                functions: self.functions.clone(),
+                                output: Vec::new(),
+                                steps: 0,
+                                step_budget: self.step_budget,
+                                call_depth: 0,
+                                database_url: self.database_url.clone(),
+                                granted_capabilities: self.granted_capabilities.clone(),
+                                filesystem_policy: self.filesystem_policy.clone(),
+                                network_policy: self.network_policy.clone(),
+                                process_policy: self.process_policy.clone(),
+                                mail_policy: self.mail_policy.clone(),
+                                record_definitions: self.record_definitions.clone(),
+                                type_aliases: self.type_aliases.clone(),
+                                enum_definitions: self.enum_definitions.clone(),
+                                active_capabilities: self.active_capabilities.clone(),
+                            };
+                            let mut child_env = env.clone();
+                            scope.spawn(move || {
+                                child
+                                    .eval(expression, &mut child_env)
+                                    .map(|value| ((*name).to_owned(), value, child.output))
+                                    .map_err(|error| (*branch_span, error))
+                            })
+                        })
+                        .collect::<Vec<_>>();
+                    for handle in handles {
+                        match handle.join() {
+                            Ok(Ok(result)) => results.push(result),
+                            Ok(Err((_, error))) => {
+                                if first_error.is_none() {
+                                    first_error = Some(error);
+                                }
                             }
-                        }
-                        Err(_) => {
-                            if first_error.is_none() {
-                                first_error =
-                                    Some(self.runtime_error(*span, "parallel task panicked"));
+                            Err(_) => {
+                                if first_error.is_none() {
+                                    first_error =
+                                        Some(self.runtime_error(*span, "parallel task panicked"));
+                                }
                             }
                         }
                     }
-                }
+                });
                 if let Some(error) = first_error {
                     return Err(error);
                 }
@@ -7331,6 +7953,102 @@ impl Interpreter {
             } else {
                 Err(self.runtime_error(span, message.unwrap_or_else(|| "assertion failed".into())))
             }
+        } else if name == "array_replace_result" {
+            if !type_args.is_empty() || args.len() != 3 {
+                return Err(self.runtime_error(
+                    span,
+                    "array_replace_result expects an array, Int index, and value",
+                ));
+            }
+            let array = self.eval(&args[0], env)?;
+            let index = self.eval(&args[1], env)?;
+            let value = self.eval(&args[2], env)?;
+            let (Value::Array(mut values), Value::Int(index)) = (array, index) else {
+                return Err(
+                    self.runtime_error(span, "array_replace_result expects an array and Int index")
+                );
+            };
+            let result = if let Ok(index) = usize::try_from(index) {
+                if let Some(slot) = values.get_mut(index) {
+                    *slot = value;
+                    Ok(Value::Array(values))
+                } else {
+                    Err("array_replace_result index is out of bounds".to_owned())
+                }
+            } else {
+                Err("array_replace_result index is out of bounds".to_owned())
+            };
+            Ok(Value::Result(
+                result
+                    .map(Box::new)
+                    .map_err(|message| Box::new(Value::String(message))),
+            ))
+        } else if name == "record_with" {
+            if !type_args.is_empty() || args.len() != 3 {
+                return Err(self.runtime_error(
+                    span,
+                    "record_with expects a record, literal field name, and value",
+                ));
+            }
+            let record = self.eval(&args[0], env)?;
+            let field_name = self.eval(&args[1], env)?;
+            let value = self.eval(&args[2], env)?;
+            let (
+                Value::Object {
+                    type_name,
+                    mut fields,
+                },
+                Value::String(field_name),
+            ) = (record, field_name)
+            else {
+                return Err(
+                    self.runtime_error(span, "record_with expects a record and String field name")
+                );
+            };
+            let definition = self.record_definitions.get(&type_name).ok_or_else(|| {
+                self.runtime_error(span, format!("unknown record type `{type_name}`"))
+            })?;
+            let field = definition
+                .fields
+                .iter()
+                .find(|field| field.name == field_name)
+                .ok_or_else(|| {
+                    self.runtime_error(
+                        args[1].span,
+                        format!("unknown field `{field_name}` in record `{type_name}`"),
+                    )
+                })?;
+            if !compatible(&field.ty, &value.ty()) {
+                return Err(self.runtime_error(
+                    args[2].span,
+                    format!(
+                        "record field `{field_name}` expects `{}`, found `{}`",
+                        field.ty,
+                        value.ty()
+                    ),
+                ));
+            }
+            fields.insert(field_name, value);
+            Ok(Value::Object { type_name, fields })
+        } else if name == "range" {
+            if !type_args.is_empty() || args.len() != 2 {
+                return Err(self.runtime_error(span, "range expects two Int bounds"));
+            }
+            let start = self.eval(&args[0], env)?;
+            let end = self.eval(&args[1], env)?;
+            let (Value::Int(start), Value::Int(end)) = (start, end) else {
+                return Err(self.runtime_error(span, "range expects two Int bounds"));
+            };
+            let count = i128::from(end) - i128::from(start);
+            if count <= 0 {
+                return Ok(Value::Array(Vec::new()));
+            }
+            if count > 1_000_000 {
+                return Err(
+                    self.runtime_error(span, "range array exceeds the 1,000,000 element limit")
+                );
+            }
+            Ok(Value::Array((start..end).map(Value::Int).collect()))
         } else if name == "len" {
             if args.len() != 1 {
                 return Err(self.runtime_error(span, "`len` expects exactly one argument"));
@@ -7668,6 +8386,16 @@ impl Interpreter {
             }
             let value = self.eval(&args[0], env)?;
             self.json_encode(&value, span).map(Value::String)
+        } else if name == "json_encode_tagged_result" {
+            if !type_args.is_empty() || args.len() != 1 {
+                return Err(self.runtime_error(
+                    span,
+                    "json_encode_tagged_result expects one Result value and no type arguments",
+                ));
+            }
+            let value = self.eval(&args[0], env)?;
+            self.json_encode_tagged_result(&value, span)
+                .map(Value::String)
         } else if name == "json_decode" {
             if type_args.len() != 1 || args.len() != 1 {
                 return Err(self.runtime_error(
@@ -7698,6 +8426,27 @@ impl Interpreter {
                     Ok(value) => Ok(Box::new(value)),
                     Err(error) => Err(Box::new(Value::String(error.message))),
                 },
+            ))
+        } else if name == "json_decode_tagged_result" {
+            if type_args.len() != 2 || args.len() != 1 {
+                return Err(self.runtime_error(
+                    span,
+                    "json_decode_tagged_result expects Ok and Err type arguments and one String value",
+                ));
+            }
+            let value = self.eval(&args[0], env)?;
+            let Value::String(source) = value else {
+                return Err(self.runtime_error(
+                    args[0].span,
+                    "json_decode_tagged_result expects a String value",
+                ));
+            };
+            let decoded =
+                self.json_decode_tagged_result(&source, &type_args[0], &type_args[1], span);
+            Ok(Value::Result(
+                decoded
+                    .map(Box::new)
+                    .map_err(|error| Box::new(Value::String(error))),
             ))
         } else if name == "csv_decode_result" {
             if !type_args.is_empty() || args.len() != 2 {
@@ -7786,6 +8535,103 @@ impl Interpreter {
             Ok(Value::Result(
                 csv::format_scaled(value, scale)
                     .map(|value| Box::new(Value::String(value)))
+                    .map_err(|message| Box::new(Value::String(message))),
+            ))
+        } else if matches!(name, "date_add_days_result" | "date_days_between_result") {
+            if !type_args.is_empty() || args.len() != 2 {
+                return Err(self.runtime_error(
+                    span,
+                    format!("{name} expects two arguments and no type arguments"),
+                ));
+            }
+            let left = self.eval(&args[0], env)?;
+            let right = self.eval(&args[1], env)?;
+            let result = if name == "date_add_days_result" {
+                match (left, right) {
+                    (Value::Date(date), Value::Int(days)) => date_epoch_days(&date)
+                        .and_then(|start| start.checked_add(days))
+                        .and_then(epoch_days_date)
+                        .map(Value::Date)
+                        .ok_or_else(|| {
+                            "date arithmetic is outside years 0001 through 9999".to_owned()
+                        }),
+                    _ => Err("date_add_days_result expects Date and Int".to_owned()),
+                }
+            } else {
+                match (left, right) {
+                    (Value::Date(start), Value::Date(end)) => date_epoch_days(&end)
+                        .and_then(|end| {
+                            date_epoch_days(&start).and_then(|start| end.checked_sub(start))
+                        })
+                        .map(Value::Int)
+                        .ok_or_else(|| "date difference overflow".to_owned()),
+                    _ => Err("date_days_between_result expects two Dates".to_owned()),
+                }
+            };
+            Ok(Value::Result(
+                result
+                    .map(Box::new)
+                    .map_err(|message| Box::new(Value::String(message))),
+            ))
+        } else if matches!(name, "timestamp_add_result" | "timestamp_difference_result") {
+            if !type_args.is_empty() || args.len() != 2 {
+                return Err(self.runtime_error(
+                    span,
+                    format!("{name} expects two arguments and no type arguments"),
+                ));
+            }
+            let left = self.eval(&args[0], env)?;
+            let right = self.eval(&args[1], env)?;
+            let result = if name == "timestamp_add_result" {
+                match (left, right) {
+                    (Value::Timestamp(timestamp), Value::Duration(duration)) => timestamp
+                        .checked_add(duration)
+                        .filter(|value| {
+                            timestamp_bounds_millis()
+                                .is_some_and(|(min, max)| (min..=max).contains(value))
+                        })
+                        .map(Value::Timestamp)
+                        .ok_or_else(|| {
+                            "timestamp arithmetic is outside years 0001 through 9999".to_owned()
+                        }),
+                    _ => Err("timestamp_add_result expects Timestamp and Duration".to_owned()),
+                }
+            } else {
+                match (left, right) {
+                    (Value::Timestamp(end), Value::Timestamp(start)) => end
+                        .checked_sub(start)
+                        .map(Value::Duration)
+                        .ok_or_else(|| "timestamp difference overflow".to_owned()),
+                    _ => Err("timestamp_difference_result expects two Timestamps".to_owned()),
+                }
+            };
+            Ok(Value::Result(
+                result
+                    .map(Box::new)
+                    .map_err(|message| Box::new(Value::String(message))),
+            ))
+        } else if name == "decimal_quantize_result" {
+            if !type_args.is_empty() || args.len() != 3 {
+                return Err(self.runtime_error(
+                    span,
+                    "decimal_quantize_result expects Decimal, scale Int, and mode String",
+                ));
+            }
+            let value = self.eval(&args[0], env)?;
+            let scale = self.eval(&args[1], env)?;
+            let mode = self.eval(&args[2], env)?;
+            let result = match (value, scale, mode) {
+                (Value::Decimal(value), Value::Int(scale), Value::String(mode)) => {
+                    u32::try_from(scale)
+                        .map_err(|_| "decimal scale must be between 0 and 9".to_owned())
+                        .and_then(|scale| quantize_decimal(value, scale, &mode))
+                        .map(Value::Decimal)
+                }
+                _ => Err("decimal_quantize_result expects Decimal, Int, and String".to_owned()),
+            };
+            Ok(Value::Result(
+                result
+                    .map(Box::new)
                     .map_err(|message| Box::new(Value::String(message))),
             ))
         } else if name == "http_json" {
@@ -8339,6 +9185,11 @@ impl Interpreter {
                 .or_else(|| {
                     if name == "None" {
                         Some(Value::Option(None))
+                    } else if let Some((type_name, variant)) = name.split_once("::") {
+                        Some(Value::Enum {
+                            type_name: type_name.to_owned(),
+                            variant: variant.to_owned(),
+                        })
                     } else {
                         None
                     }
@@ -8415,16 +9266,27 @@ impl Interpreter {
                     )),
                 }
             }
-            ExprKind::Binary { left, op, right } => {
-                let l = self.eval(left, env)?;
-                if *op == BinaryOp::And && matches!(l, Value::Bool(false)) {
-                    return Ok(Value::Bool(false));
+            ExprKind::Binary { .. } => {
+                let mut cursor = expr;
+                let mut operations = Vec::new();
+                while let ExprKind::Binary { left, op, right } = &cursor.kind {
+                    operations.push((*op, right.as_ref(), cursor.span));
+                    cursor = left;
                 }
-                if *op == BinaryOp::Or && matches!(l, Value::Bool(true)) {
-                    return Ok(Value::Bool(true));
+                let mut value = self.eval(cursor, env)?;
+                for (op, right, span) in operations.into_iter().rev() {
+                    if op == BinaryOp::And && matches!(&value, Value::Bool(false)) {
+                        value = Value::Bool(false);
+                        continue;
+                    }
+                    if op == BinaryOp::Or && matches!(&value, Value::Bool(true)) {
+                        value = Value::Bool(true);
+                        continue;
+                    }
+                    let right = self.eval(right, env)?;
+                    value = self.binary(value, op, right, span)?;
                 }
-                let r = self.eval(right, env)?;
-                self.binary(l, *op, r, expr.span)
+                Ok(value)
             }
             ExprKind::Sql { .. } => {
                 let ExprKind::Sql { query, .. } = &expr.kind else {
@@ -8596,6 +9458,10 @@ impl Interpreter {
             | (Value::Time(a), Greater, Value::Time(b)) => Ok(Value::Bool(a > b)),
             (Value::Date(a), GreaterEqual, Value::Date(b))
             | (Value::Time(a), GreaterEqual, Value::Time(b)) => Ok(Value::Bool(a >= b)),
+            (Value::Timestamp(a), Less, Value::Timestamp(b)) => Ok(Value::Bool(a < b)),
+            (Value::Timestamp(a), LessEqual, Value::Timestamp(b)) => Ok(Value::Bool(a <= b)),
+            (Value::Timestamp(a), Greater, Value::Timestamp(b)) => Ok(Value::Bool(a > b)),
+            (Value::Timestamp(a), GreaterEqual, Value::Timestamp(b)) => Ok(Value::Bool(a >= b)),
             (Value::Duration(a), Less, Value::Duration(b)) => Ok(Value::Bool(a < b)),
             (Value::Duration(a), LessEqual, Value::Duration(b)) => Ok(Value::Bool(a <= b)),
             (Value::Duration(a), Greater, Value::Duration(b)) => Ok(Value::Bool(a > b)),
@@ -8615,6 +9481,93 @@ impl Interpreter {
 }
 
 const DECIMAL_SCALE: i128 = 1_000_000_000;
+
+fn date_epoch_days(value: &str) -> Option<i64> {
+    if !valid_date(value) {
+        return None;
+    }
+    let (year, month_day) = value.split_once('-')?;
+    let (month, day) = month_day.split_once('-')?;
+    let mut year = year.parse::<i64>().ok()?;
+    let month = month.parse::<i64>().ok()?;
+    let day = day.parse::<i64>().ok()?;
+    year -= i64::from(month <= 2);
+    let era = year.div_euclid(400);
+    let year_of_era = year - era * 400;
+    let shifted_month = month + if month > 2 { -3 } else { 9 };
+    let day_of_year = (153 * shifted_month + 2) / 5 + day - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    Some(era * 146_097 + day_of_era - 719_468)
+}
+
+fn epoch_days_date(days: i64) -> Option<String> {
+    let shifted = days.checked_add(719_468)?;
+    let era = shifted.div_euclid(146_097);
+    let day_of_era = shifted - era * 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let mut year = year_of_era + era * 400;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_prime = (5 * day_of_year + 2) / 153;
+    let day = day_of_year - (153 * month_prime + 2) / 5 + 1;
+    let month = month_prime + if month_prime < 10 { 3 } else { -9 };
+    year += i64::from(month <= 2);
+    if !(1..=9_999).contains(&year) {
+        return None;
+    }
+    Some(format!("{year:04}-{month:02}-{day:02}"))
+}
+
+fn timestamp_bounds_millis() -> Option<(i64, i64)> {
+    let first = date_epoch_days("0001-01-01")?.checked_mul(86_400_000)?;
+    let last = date_epoch_days("9999-12-31")?
+        .checked_add(1)?
+        .checked_mul(86_400_000)?
+        .checked_sub(1)?;
+    Some((first, last))
+}
+
+fn quantize_decimal(value: i128, scale: u32, mode: &str) -> Result<i128, String> {
+    if scale > 9 {
+        return Err("decimal scale must be between 0 and 9".into());
+    }
+    if !matches!(
+        mode,
+        "toward_zero" | "floor" | "ceiling" | "half_up" | "half_even"
+    ) {
+        return Err(
+            "rounding mode must be toward_zero, floor, ceiling, half_up, or half_even".into(),
+        );
+    }
+    let factor = 10_i128.pow(9 - scale);
+    let quotient = value / factor;
+    let remainder = value % factor;
+    if remainder == 0 || mode == "toward_zero" {
+        return quotient
+            .checked_mul(factor)
+            .ok_or_else(|| "Decimal overflow while quantizing".into());
+    }
+    let negative = value < 0;
+    let increment = match mode {
+        "floor" => negative,
+        "ceiling" => !negative,
+        "half_up" => remainder.unsigned_abs() * 2 >= factor as u128,
+        "half_even" => {
+            let doubled = remainder.unsigned_abs() * 2;
+            doubled > factor as u128 || (doubled == factor as u128 && quotient % 2 != 0)
+        }
+        _ => false,
+    };
+    let rounded = if increment {
+        quotient.checked_add(if negative { -1 } else { 1 })
+    } else {
+        Some(quotient)
+    }
+    .ok_or_else(|| "Decimal overflow while quantizing".to_owned())?;
+    rounded
+        .checked_mul(factor)
+        .ok_or_else(|| "Decimal overflow while quantizing".into())
+}
 
 fn canonical_set(mut values: Vec<Value>) -> Vec<Value> {
     values.sort_by_key(Value::output);
@@ -8799,6 +9752,7 @@ fn value_to_query_value(
         | Value::Set(_)
         | Value::Map(_)
         | Value::Object { .. }
+        | Value::Enum { .. }
         | Value::Rows { .. }
         | Value::Bytes(_)
         | Value::Result(_) => Err(RuntimeError {
@@ -8974,6 +9928,13 @@ fn match_pattern(value: &Value, pattern: &Pattern) -> Option<Vec<(String, Value)
         },
         PatternKind::Char(expected) => match value {
             Value::Char(actual) if actual == expected => Some(Vec::new()),
+            _ => None,
+        },
+        PatternKind::EnumVariant { enum_name, variant } => match value {
+            Value::Enum {
+                type_name,
+                variant: actual,
+            } if type_name == enum_name && actual == variant => Some(Vec::new()),
             _ => None,
         },
         PatternKind::Constructor { name, inner } => match (name.as_str(), value) {

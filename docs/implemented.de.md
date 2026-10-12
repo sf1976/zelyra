@@ -1,6 +1,6 @@
-# In Zelyra 0.9.7 umgesetzt
+# In Zelyra 0.9.8 umgesetzt
 
-**Stand:** stabiles Release 0.9.7 · Sprachkompatibilitätslinie `0.1` · 2026-10-12
+**Stand:** Release-Kandidat 0.9.8 · Sprachkompatibilitätslinie `0.1` · 2026-10-12
 **Reifegrad:** experimentell; nicht für den Produktiveinsatz freigegeben
 
 Diese Übersicht beschreibt, was die aktuelle Zelyra-Version kann. Sie führt die
@@ -9,7 +9,7 @@ Funktionen nach Anwendungsbereichen statt nach einzelnen Versionsnummern auf.
 steht in der [Roadmap](ROADMAP.de.md). Eine unabhängige menschliche Abnahme ist
 für 1.0.0 vorgesehen.
 
-## Was Zelyra 0.9.7 bietet
+## Was Zelyra 0.9.8 bietet
 
 - **Sprache und Compiler:** eine statisch geprüfte Sprache mit Funktionen,
   Records, typisierten Sammlungen, `Option` und `Result`, Pattern Matching,
@@ -18,14 +18,15 @@ für 1.0.0 vorgesehen.
   [Sprache und Compiler](#sprache-und-compiler).
 - **Datenbanken:** schemaabhängige Abfragen, relationale Fremdschlüssel,
   Datenbankinspektion und geprüfte Setup-/Migrationspläne. MariaDB ist die
-  primäre Laufzeitreferenz; MySQL und PostgreSQL werden für die in der
+  primäre Laufzeitreferenz. MySQL 8.4.11 hat neben parametrisierten Abfragen
+  nun einen isolierten Schemaablauf; PostgreSQL wird für die in der
   [Supportmatrix](database-support.de.md) ausgewiesenen Abläufe geprüft.
 - **Geschäftsanwendungen:** Seiten, wiederverwendbare Views, Formulare,
   Tabellenansichten, Suche, Filter, Sortierung, Pagination, CRUD und typisierte
   APIs mit OpenAPI-Ausgabe.
-- **Zelyra Studio:** lokaler Webeditor mit Compilerdiagnosen, Formatierung,
-  Navigation, Vervollständigung, Aufgabenhilfe, Datenbankwerkbank und
-  Projektkarte. Die Karte zeigt bekannte Beziehungen und begründet offene oder
+- **Zelyra Studio:** lokaler Webeditor mit gespeicherter heller und dunkler
+  Darstellung, Compilerdiagnosen, Formatierung, Navigation, Vervollständigung,
+  Aufgabenhilfe, Datenbankwerkbank und Projektkarte. Die Karte zeigt bekannte Beziehungen und begründet offene oder
   begrenzte Zuordnungen, statt sie zu erraten.
 - **Rechnungstutorial:** eine mehrteilige Anwendung für Kunden, Artikel und
   Rechnungen mit Kennzahlen aus gespeicherten Daten. Tabler Core 1.6.1 wird
@@ -65,22 +66,38 @@ den Beweis, dass beliebige Anwendungen korrekt sind.
   gebräuchlichen Operationen, deterministische typisierte Maps, `Option`,
   `Result` und exhaustives Pattern Matching als Anweisung oder Ausdruck; ein
   `match`-Ausdruck liefert einen einheitlich typgeprüften Wert.
-- ✅ `Int` und `UInt` rechnen innerhalb ihrer 64-Bit-Bereiche; Überlauf,
+- ✅ `Int` und `UInt` rechnen innerhalb ihrer 64-Bit-Bereiche; das direkt
+  geschriebene `-9223372036854775808` wird unterstützt. Überlauf,
   Unterlauf und Division durch null werden als Runtimefehler gemeldet. Das
   mehrteilige `examples/type_system` prüft unterstützte Typen, erwartete
   Compiler-/Runtimefehler und dokumentiert partielle sowie fehlende Typen.
   `Unit` ist in Typsignaturen und JSON-`null`-Roundtrips nutzbar. `Decimal`
-  verwendet nun Festkomma mit neun Nachkommastellen und exakter Basis-10-
-  Arithmetik; für verlustfreie JSON-Roundtrips wird es als Dezimalstring
-  serialisiert. `Date`, `Time`, `Duration` und `Bytes` haben jetzt echte
+  verwendet Festkomma mit neun Nachkommastellen und exakter Basis-10-Arithmetik.
+  `decimal_quantize_result` rundet mit explizitem Modus ohne Float-Zwischenwert;
+  Multiplikation und Division können über neun Nachkommastellen abschneiden.
+  Für verlustfreie JSON-Roundtrips wird Decimal als Dezimalstring serialisiert.
+  Kalender-Tagesaddition/-differenz, geordnete Timestampvergleiche und geprüfte
+  UTC-Dauerarithmetik sind verfügbar; Zeitzonen und Sommerzeit nicht. `Date`,
+  `Time`, `Duration` und `Bytes` haben echte
   Runtimewerte, geprüfte Konstruktoren und JSON-Roundtrips. `List<T>` ist ein
   Alias für `T[]`; heterogene `Tuple<A, B, ...>`-Werte und deterministische
   `Set<T>`-Werte lassen sich erstellen, prüfen, iterieren und als JSON
-  austauschen. Benutzerdefinierte Enums/Generics und beobachtbare
-  Klassenidentität bleiben offen.
+  austauschen. Payloadfreie benutzerdefinierte Enums unterstützen Gleichheit,
+  JSON und exhaustives Matching; Enum-Payloads, eigene Generics, Funktionswerte
+  und beobachtbare Klassenidentität bleiben offen. `record_with` und
+  `array_replace_result` liefern typgeprüfte neue Werte mit Wertsemantik.
+  `for i in start..end` iteriert mit exklusivem Ende.
+- ✅ Nicht-Unit-Funktionen müssen auf jedem erreichbaren Pfad einen passenden
+  Rückgabewert liefern (`E-TYPE-RETURN-001`); nicht exhaustive Matches melden
+  `E-TYPE-MATCH-001`. Die Laufzeit begrenzt verschachtelte
+  Funktionsaufrufe kontrolliert; `zelyra run --max-steps <n>` aktiviert ein
+  optionales Schrittbudget, standardmäßig bleibt es unbegrenzt.
 - ✅ Stringwerte lassen sich lexikografisch vergleichen. `json_decode_result<T>`,
   `read_text_result` und `write_text_result` geben erwartbare Parse- und
-  Dateifehler als `Result` zurück. `format_timestamp` zeigt UTC-Zeitstempel als
+  Dateifehler als `Result` zurück. Der explizite getaggte Result-Codec
+  `json_encode_tagged_result`/`json_decode_tagged_result<T,E>` erhält Ok- und
+  Err-Variante sowie ihren jeweiligen Payload, ohne das bisherige
+  `json_encode`-Wireformat zu ändern. `format_timestamp` zeigt UTC-Zeitstempel als
   ISO-8601; Capability- und Projektgrenzen bleiben aktiv. Exklusive
   Dateierstellung, temporäres Schreiben mit atomarem Austausch, Anhängen,
   Kopieren, Umbenennen und Result-basiertes Löschen sind verfügbar. Wörtliche
@@ -120,11 +137,13 @@ Siehe die [formale Sprachspezifikation](specification.de.md), die
   implizitem TLS oder ausdrücklich konfigurierten privaten CA-Wurzeln zugestellt
   werden. Ein fünfsekündiges Transport-Timeout, Nachrichtengrenzen und eine
   Loopback-Testsenke sind geprüft. Die Zustellung erfolgt mindestens einmal;
-  genau-einmalige Zustellung, PostgreSQL-Outbox, Vorlagen und Anhänge sind nicht
-  zugesagt.
+  genau-einmalige Zustellung, PostgreSQL-Outbox, benannte Vorlagen und
+  Dateianhänge sind in 0.9.8 nicht zugesagt.
 - ✅ SQLite bietet geprüfte lokale Schemaabläufe. PostgreSQL unterstützt
   ausgewählte Laufzeit-, Schema- und Sicherheitsprüfungen. MySQL Server 8.4.11
-  unterstützt typisierte parametrisierte Abfragen. Keines dieser Ergebnisse
+  unterstützt typisierte parametrisierte Abfragen sowie einen isolierten
+  Schemaablauf mit Setup, Inspektion, schreibgeschützter Projektkarte,
+  geprüftem Spaltenplan, ausdrücklicher Anwendung und Historie. Keines dieser Ergebnisse
   belegt vollständige Backend-Parität; siehe die genaue
   [Kompatibilitätsmatrix](database-support.de.md).
 - 🧪 Der Schema-Planer stuft ausgewählte Änderungen als sicher,
@@ -179,7 +198,9 @@ der [Setup-Anleitung](setup-web.de.md) und den
 
 - 🧪 `zelyra editor [directory] [--port <port>] [--no-open]` startet ein lokales Studio
   auf `127.0.0.1` mit Dateibaum, Tabs, Suche/Ersetzen, Vervollständigung,
-  Compilerdiagnosen und Formatierung. Standardmäßig öffnet die CLI den
+  Compilerdiagnosen, Formatierung und gespeicherter heller/dunkler Darstellung.
+  Tastaturbedienung, Kontrast und Layout bei 360 CSS-Pixeln werden im Browser
+  geprüft. Standardmäßig öffnet die CLI den
   Systembrowser; `--no-open` überspringt dies. Schreibzugriffe benötigen
   Sitzungstoken und denselben Browser-Origin; Datenbank/Webanwendung starten nicht mit.
   Der Editor bietet Dateisuche, lokale Vervollständigung, Formatierung,
@@ -231,10 +252,12 @@ der [Setup-Anleitung](setup-web.de.md) und den
   Fundstellen, Status und nächste Prüfschritte als Markdown oder JSON. Der
   Scanner deckt Composer-Vorgaben, einfache Routen, Models, Controller,
   `Schema::create`, ausgewählte Beziehungen, Validierungseinstiege, Jobs,
-  Blade-Views und Integrationsaufrufe ab. Er ist ein experimenteller
-  Muster-Scanner, kein PHP-Parser und kein Nachweis für Geschäftslogik- oder
-  Sicherheitsparität. Der verknüpfte Projektgraph und optionale Gerüste folgen
-  später. [Details zum Migrator](laravel-migrator.de.md).
+  Blade-Views und Integrationsaufrufe ab. Analyzer-Version 0.9.8 und Regelwerk
+  0.9.6 sind getrennt; Fixture-Prüfungen benennen erkannte Syntax, behaupten
+  jedoch weder einen Routen-Daten-Graphen noch Funktionsübertragung. Der
+  experimentelle Muster-Scanner ist kein PHP-Parser und kein Nachweis für
+  Geschäftslogik- oder Sicherheitsparität. Das getrennte, compilergeprüfte
+  Gerüst enthält keine kopierte Geschäftslogik. [Details zum Migrator](laravel-migrator.de.md).
 
 ## APIs, Authentifizierung, Berechtigungen und Audit
 

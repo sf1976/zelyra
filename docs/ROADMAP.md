@@ -853,14 +853,17 @@ The product work below remains part of the 1.0.0 plan, but is staged so each
 release has testable acceptance criteria instead of treating the full IDE and
 language backlog as one 0.9.4 change.
 
-- [🗺️] Grow the language type coverage in bounded steps: counted range loops and
-  statically typed function values, followed by nominal enums, bounded generic
-  functions/records, and a Zelyra-native identity-bearing business entity when
-  a concrete use case requires it. Keep records value-based and preserve the
-  explicit `Int`/`UInt` and `Float`/`Decimal` model. Update the compiler,
-  runtime, diagnostics, compatibility fixtures, Studio help, and
-  `examples/type_system`; 0.9.9 must rerun positive, expected-compiler-error,
-  expected-runtime-error, and serialization checks with no unexpected failures.
+- [🧪] Language type coverage: exclusive range loops, payload-free nominal
+  enums, calendar/UTC timestamp operations, Decimal quantization, and safe
+  value-semantic record/array updates are added in 0.9.8. Still required for
+  0.9.9 are statically typed function values, bounded generic functions/records,
+  and possibly a Zelyra-native identity-bearing business entity if a concrete
+  use case requires it. Keep records value-based and preserve the explicit
+  `Int`/`UInt` and `Float`/`Decimal` model. Update compiler, runtime,
+  diagnostics, compatibility fixtures, Studio help, and `examples/type_system`.
+  Before the 0.9.9 freeze, positive, expected-compiler-error,
+  expected-runtime-error, and serialization checks must pass with no unexpected
+  failures.
 - [🗺️] Extend the Laravel analyzer from inventories to evidence-linked route,
   middleware, controller, model/relation, migration/table, and view graphs.
   Emit Markdown and JSON with source locations, package and validation findings,
@@ -978,6 +981,15 @@ language backlog as one 0.9.4 change.
 
 ## Release 0.9.8 — production-readiness rehearsal
 
+- [✅] Delivered the language-stabilization slice: controlled deep-call
+  limits, complete return paths, direct `Int::MIN`, calendar/UTC arithmetic,
+  Decimal quantization, payload-free enums, exclusive integer ranges,
+  value-semantic record/array updates, a tagged Result JSON codec, and
+  iterative handling of long expressions. Workspace tests, Clippy, formatting,
+  324 handbook examples, all 80 corpus cases, 100 repeat runs, and 300 integer
+  division/remainder plus 100 Decimal reference checks passed. Fourteen known
+  observation/gap cases are documented in the specification and type matrix
+  and are mandatory 0.9.9 carry-over.
 - [✅] Studio's light appearance now covers the editor, project navigation,
   properties, help, database workbench, task finder, and dialogs. Browser E2E
   verifies persistence, keyboard access, consistent surfaces, and at least
@@ -990,18 +1002,18 @@ language backlog as one 0.9.4 change.
   `apply`, and `history`. The CI job also checks parameterized SQL queries.
   This does not prove full CRUD/auth, MFA, TLS, backup/restore, or general
   MariaDB parity; the backend matrix states the limits.
-- [🗺️] Complete the supported Laravel Migrator scope and its versioned
+- [🗺️] Carried to 0.9.9: complete the supported Laravel Migrator scope and its versioned
   compatibility matrix. Verify read-only analysis, secret/PII redaction,
   source-location accuracy, route-to-data relationship reports, ambiguity
   handling, path separation, provenance in generated files, and compiler-valid
   output on representative Laravel fixtures. Run generated applications through
   real CRUD workflows on the supported databases, including the supported
   relation, tenant, permission, transaction, and money cases. Resolve any
-  Zelyra capability that blocks an accepted mapping before 0.9.8 exits. Document
+  Zelyra capability that blocks an accepted mapping before 0.9.9 exits. Document
   supported Laravel and package patterns plus known limits. No automatic
   business-logic or security parity claim is made; the tool supplies an
   auditable migration starting point.
-- [🗺️] Rehearse clean installation, upgrades, rollback, migration, backup and
+- [🗺️] Carried to 0.9.9: rehearse clean installation, upgrades, rollback, migration, backup and
   restore on supported operating systems and databases. Finish operator and
   user documentation, dependency/license review, resource limits, error
   redaction, reproducible artifacts, SBOM/provenance, and offline workflows.
@@ -1009,10 +1021,11 @@ language backlog as one 0.9.4 change.
   reading, stable exports, and secret redaction. Measure startup, common CRUD
   paths, and bounded resource use; publish results without unsupported
   performance promises.
-- Exit criteria: all rehearsal scripts pass from clean environments, handbook
-  examples validate, known findings have owners and dispositions, and no
-  unimplemented 1.0 requirement remains. See the
-  [0.9.8 plan](release-plans/0.9.8.en.md).
+- [🗺️] Close the mandatory 0.9.8 carry-over in 0.9.9: clean-environment and
+  database rehearsals, security/dependency dispositions, integrated
+  Studio/tutorial/mail/notification flows, Laravel Migrator E2E, and chart and
+  presentation evidence. See the [0.9.8 plan](release-plans/0.9.8.en.md) and
+  [0.9.9 plan](release-plans/0.9.9.en.md).
 
 ## Release 0.9.9 — feature freeze and final technical candidate
 
@@ -1022,6 +1035,11 @@ language backlog as one 0.9.4 change.
   human-study materials. At this point independent human acceptance should be
   the only remaining gate; do not claim production approval or run acceptance
   against 0.9.9.
+- [🗺️] Close the language gaps carried over from 0.9.8: user-defined generics,
+  payload-carrying enums, safe function values/indirect calls, a distinguishable
+  generic Result JSON codec, and every remaining corpus, CLI, setup, database,
+  migrator, and security finding. The [0.9.9 plan](release-plans/0.9.9.en.md)
+  lists testable criteria.
 - Exit criteria: no open implementation, security, database, migration,
   packaging, or documentation blocker remains. If one remains, 0.9.9 is not
   complete. See the [0.9.9 plan](release-plans/0.9.9.en.md).

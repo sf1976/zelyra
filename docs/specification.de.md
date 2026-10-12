@@ -427,3 +427,62 @@ Query-Steuerungsformular und bewahrt den aktuellen URL-Zustand. Pagination
 führt zusätzlich eine sichere Zählabfrage aus und stellt `total` und `pages`
 als `UInt`-Seitenbindungen bereit. Seiten, die ausschließlich explizite
 `input`-Deklarationen verwenden, bleiben bewusst manuell.
+
+## Sprach- und Laufzeitergänzungen für 0.9.8
+
+Diese Ergänzungen erweitern die Sprachlinie `0.1` und sind durch positive und
+negative Regressionstests abgedeckt. Sie ändern keine bestehenden gültigen
+Konstrukte absichtlich.
+
+- Ein ganzzahliges Minus direkt vor der Magnitude `9223372036854775808` bildet
+  `Int::MIN` (`-9223372036854775808`). Die positive Magnitude allein und Werte
+  unterhalb des Minimums bleiben ungültig; eine erneute Negation des Minimums
+  ergibt einen kontrollierten Laufzeitfehler.
+- Funktionen mit deklariertem Nicht-`Unit`-Rückgabetyp müssen jeden erreichbaren
+  Pfad mit einem Wert dieses Typs beenden. Andernfalls meldet der Compiler
+  `E-TYPE-RETURN-001`. Unvollständige Varianten-Matches verwenden den stabilen
+  Code `E-TYPE-MATCH-001`. Die Analyse behandelt Sequenzen, Bedingungen, `match`,
+  Schleifen und Kontrollflussabbrüche konservativ; eine möglicherweise
+  terminierende Schleife gilt nicht als garantierte Rückgabe.
+- Verschachtelte Funktionsaufrufe sind auf 32 Ebenen begrenzt und werden bei
+  Überschreitung mit einer quellgebundenen Runtime-Diagnose abgebrochen. Das
+  schützt vor Stackabstürzen, ist aber kein konfigurierbares Rekursionslimit.
+- Eigene Enums besitzen aktuell payloadfreie Varianten: `enum Status { Draft
+  Paid }`, Werte wie `Status::Draft` und exhaustive `match`-Arme. JSON verwendet
+  für diese Typen `{"$enum":"Status","variant":"Draft"}`. Varianten mit
+  Nutzdaten und Enum-Imports über Modulgrenzen sind noch nicht verfügbar.
+- `for item in start..end` durchläuft Integerwerte mit exklusivem Ende. Leere
+  Bereiche sind erlaubt; negative Werte, `break` und `continue` funktionieren.
+  Ein direkt verwendeter `range(start, end)`-Arraywert ist auf eine Million
+  Elemente begrenzt.
+- `record_with(record, "field", value)` erstellt einen statisch geprüften
+  Record mit einem ersetzten Feld. `array_replace_result(array, index, value)`
+  gibt einen neuen Arraywert als `Result` zurück und meldet ungültige Indizes
+  als `Err`; beide Operationen bewahren den Eingabewert.
+- `date_add_days_result` und `date_days_between_result` rechnen in
+  gregorianischen Kalendertagen. `timestamp_add_result` und
+  `timestamp_difference_result` rechnen mit UTC-Dauern; Vergleiche ordnen
+  Zeitstempel chronologisch. Unterstützt sind ISO-Jahre 0001–9999. Zeitzonen
+  und lokale Sommerzeit sind nicht enthalten.
+- `decimal_quantize_result(value, scale, mode)` begrenzt auf 0 bis 9
+  Nachkommastellen und unterstützt `toward_zero`, `floor`, `ceiling`, `half_up`
+  und `half_even`. Die Berechnung verwendet Ganzzahlen. Die vorhandene
+  Festkommadivision kann weiterhin jenseits der neunten Stelle abschneiden.
+- `zelyra run file.zyl --max-steps N` aktiviert eine optionale Obergrenze für
+  ausgeführte Anweisungen und Schleifeniterationen. Ohne Option bleibt das
+  Budget unbegrenzt. Das Budget ist keine Prozessisolation. Funktionswerte,
+  benutzerdefinierte Generics und Enum-Payloads sind noch nicht Teil der
+  Sprachlinie.
+
+### Getaggter JSON-Codec für `Result`
+
+`json_encode_tagged_result(value)` serialisiert ausschließlich einen
+`Result<T,E>`-Wert in ein explizites Objekt mit Discriminator. `Ok(value)` wird
+als `{"$result":"ok","value":...}` kodiert, `Err(error)` als
+`{"$result":"err","error":...}`. `json_decode_tagged_result<T,E>(text)`
+liest dieses Format als `Result<Result<T,E>, String>`: Der äußere Fehler enthält
+JSON-, Form- oder Payloadfehler, der innere Wert ist die dekodierte fachliche
+`Ok`-/`Err`-Variante. Unbekannte Discriminators, fehlende oder zusätzliche
+Felder und ungültige Payloads liefern einen äußeren `Err`. Das bestehende
+`json_encode`-Format wird nicht verändert; HTTP- und API-Wireformate bleiben
+damit kompatibel.

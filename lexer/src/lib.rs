@@ -6,6 +6,7 @@ pub enum TokenKind {
     Pub,
     Fn,
     Type,
+    Enum,
     Struct,
     Database,
     Table,
@@ -100,6 +101,7 @@ pub enum TokenKind {
     False,
     Ident(String),
     Int(i64),
+    IntMinMagnitude,
     Float(f64),
     String(String),
     Char(char),
@@ -290,6 +292,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                 "pub" => TokenKind::Pub,
                 "fn" => TokenKind::Fn,
                 "type" => TokenKind::Type,
+                "enum" => TokenKind::Enum,
                 "struct" => TokenKind::Struct,
                 "database" => TokenKind::Database,
                 "table" => TokenKind::Table,
@@ -423,9 +426,11 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                     message: format!("invalid float literal `{raw}`"),
                     span: span(i),
                 })?)
+            } else if raw == "9223372036854775808" {
+                TokenKind::IntMinMagnitude
             } else {
                 TokenKind::Int(raw.parse().map_err(|_| LexError {
-                    message: format!("invalid integer literal `{raw}`"),
+                    message: format!("integer literal `{raw}` is outside the Int range"),
                     span: span(i),
                 })?)
             };
@@ -676,6 +681,27 @@ mod tests {
         let tokens = lex("fn main() { return 1 + 2 >= 3 }").unwrap();
         assert!(tokens.iter().any(|t| t.kind == TokenKind::Fn));
         assert!(tokens.iter().any(|t| t.kind == TokenKind::GreaterEqual));
+    }
+
+    #[test]
+    fn recognizes_only_the_min_int_magnitude_as_a_signed_literal_candidate() {
+        assert_eq!(
+            lex("9223372036854775807").unwrap()[0].kind,
+            TokenKind::Int(i64::MAX)
+        );
+        assert_eq!(
+            lex("9223372036854775808").unwrap()[0].kind,
+            TokenKind::IntMinMagnitude
+        );
+        let signed = lex("- 9223372036854775808").unwrap();
+        assert_eq!(signed[0].kind, TokenKind::Minus);
+        assert_eq!(signed[1].kind, TokenKind::IntMinMagnitude);
+        for too_large in ["9223372036854775809", "18446744073709551616"] {
+            let error = lex(too_large).expect_err("out-of-range magnitude must be diagnosed");
+            assert!(error.message.contains("outside the Int range"));
+            assert_eq!(error.span.start, 0);
+            assert_eq!(error.span.end, too_large.len());
+        }
     }
 
     #[test]

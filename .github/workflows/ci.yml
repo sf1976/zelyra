@@ -101,7 +101,7 @@ jobs:
           --health-timeout=5s
           --health-retries=30
       postgres:
-        image: postgres:16
+        image: postgres:16.15
         env:
           POSTGRES_DB: zelyra_ci
           POSTGRES_USER: zelyra_ci
@@ -133,6 +133,17 @@ jobs:
           components: rustfmt, clippy
       - name: Install database clients and curl
         run: sudo apt-get update && sudo apt-get install --yes mariadb-client postgresql-client sqlite3 curl openssl
+      - name: Verify PostgreSQL server version
+        env:
+          PGPASSWORD: zelyra_ci
+        run: |
+          server_version="$(psql --host=127.0.0.1 --port=5432 --username=zelyra_ci --dbname=zelyra_ci --tuples-only --no-align --command='SHOW server_version')"
+          case "${server_version}" in
+            16.15*) ;;
+            *) echo "Expected PostgreSQL 16.15, got ${server_version}" >&2; exit 1 ;;
+          esac
+          echo "Testing PostgreSQL ${server_version}" >> "${GITHUB_STEP_SUMMARY}"
+          docker image inspect postgres:16.15 --format '{{json .RepoDigests}}'
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Validate source installer

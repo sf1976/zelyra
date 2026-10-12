@@ -1,6 +1,6 @@
-# Implemented in Zelyra 0.9.7
+# Implemented in Zelyra 0.9.8
 
-**Snapshot:** stable 0.9.7 · language compatibility line `0.1` · 2026-10-12
+**Snapshot:** 0.9.8 release candidate · language compatibility line `0.1` · 2026-10-12
 **Maturity:** experimental; not approved for production use
 
 This inventory describes what the current Zelyra release can do. Capabilities
@@ -8,7 +8,7 @@ are grouped by use, not by historical release number. Older and newer releases
 are listed in the [changelog](../CHANGELOG.md); unfinished work is tracked in
 the [roadmap](ROADMAP.md). Independent human acceptance is reserved for 1.0.0.
 
-## What Zelyra 0.9.7 provides
+## What Zelyra 0.9.8 provides
 
 - **Language and compiler:** a statically checked language with functions,
   records, typed collections, `Option` and `Result`, pattern matching, modules,
@@ -17,12 +17,14 @@ the [roadmap](ROADMAP.md). Independent human acceptance is reserved for 1.0.0.
   its limits.
 - **Databases:** schema-aware queries, relational foreign keys, database
   inspection, and checked setup/migration plans. MariaDB is the primary runtime
-  reference; MySQL and PostgreSQL are verified for the workflows listed in the
-  [support matrix](database-support.en.md).
+  reference. MySQL 8.4.11 has an isolated schema workflow as well as
+  parameterized queries; PostgreSQL is verified for the workflows listed in
+  the [support matrix](database-support.en.md).
 - **Business applications:** pages, reusable views, forms, table views, search,
   filtering, sorting, pagination, CRUD, and typed APIs with OpenAPI output.
-- **Zelyra Studio:** a local web editor with compiler diagnostics, formatting,
-  navigation, completion, task help, a database workbench, and a project map.
+- **Zelyra Studio:** a local web editor with a persisted light/dark appearance,
+  compiler diagnostics, formatting, navigation, completion, task help, a
+  database workbench, and a project map.
   The map shows known relationships and explains unresolved or bounded links
   rather than guessing.
 - **Invoice tutorial:** a multi-file customer, item, and invoice application
@@ -62,20 +64,36 @@ proof that arbitrary applications are correct.
   array operations, deterministic typed maps, `Option`, `Result`, and pattern
   matching as either a statement or expression; a `match` expression returns
   a value whose type is checked consistently across all arms.
-- ✅ `Int` and `UInt` arithmetic is bounded to their 64-bit ranges; overflow,
+- ✅ `Int` and `UInt` arithmetic is bounded to their 64-bit ranges; the direct
+  literal `-9223372036854775808` is supported. Overflow,
   underflow, and division by zero return runtime errors. The modular
   `examples/type_system` checks supported types and expected compiler/runtime
-  errors, and documents partial or missing types. `Decimal` now uses fixed
-  point with nine fractional digits and exact base-10 arithmetic; it serializes
-  as a decimal string for lossless JSON round trips. `Date`, `Time`, `Duration`,
+  errors, and documents partial or missing types. `Decimal` uses fixed point
+  with nine fractional digits; `decimal_quantize_result` applies explicit
+  rounding without a Float intermediary, while multiplication/division may
+  truncate beyond nine fractional digits. Decimal serializes as an exact
+  decimal string. Calendar-day addition/difference, ordered Timestamp
+  comparisons, and checked UTC-duration arithmetic are available; time zones
+  and local DST are not. `Date`, `Time`, `Duration`,
   and `Bytes` now have runtime values, validating constructors, and JSON round
   trips. `List<T>` aliases `T[]`; heterogeneous `Tuple<A, B, ...>` and
   deterministic `Set<T>` values can be created, checked, iterated, and passed
-  through JSON. User-defined enums/generics and observable class identity
-  remain open.
+  through JSON. Payload-free user-defined enums support equality, JSON, and
+  exhaustive matching; payload variants, user-defined generics, function
+  values, and observable class identity remain unavailable. `record_with` and
+  `array_replace_result` return checked new values with value semantics.
+  `for i in start..end` iterates with an exclusive end.
+- ✅ Non-Unit functions must return a compatible value on every reachable path
+  (`E-TYPE-RETURN-001`); non-exhaustive matches report
+  `E-TYPE-MATCH-001`. Nested calls have a controlled runtime depth limit;
+  `zelyra run --max-steps <n>` opts into a statement/loop step budget, which is
+  unlimited by default.
 - ✅ Strings support lexicographic comparisons. `json_decode_result<T>`,
   `read_text_result`, and `write_text_result` return expected parse and file
-  errors as `Result`. `format_timestamp` renders UTC timestamps as ISO 8601;
+  errors as `Result`. The explicit tagged Result codec,
+  `json_encode_tagged_result` / `json_decode_tagged_result<T,E>`, preserves the
+  Ok or Err variant and its payload without changing existing `json_encode`
+  output. `format_timestamp` renders UTC timestamps as ISO 8601;
   capability grants and project filesystem boundaries still apply. Exclusive
   file creation, temporary writes with atomic replacement, append, copy, rename,
   and Result-based deletion are available. Literal text search, replacement,
@@ -111,11 +129,13 @@ See the [formal specification](specification.md),
   MariaDB outbox and delivered through SMTP with authentication, STARTTLS,
   implicit TLS, or explicitly configured private CA roots. A five-second
   transport timeout, message bounds, and a loopback test sink are covered.
-  Delivery is at least once; exactly-once delivery, PostgreSQL outbox, templates,
-  and attachments are not promised.
+  Delivery is at least once; exactly-once delivery, PostgreSQL outbox, named
+  templates, and file attachments are not promised in 0.9.8.
 - ✅ SQLite provides tested local schema workflows. PostgreSQL supports
   selected runtime, schema, and safety checks. MySQL Server 8.4.11 supports
-  typed parameterized queries. None of these results establishes complete
+  typed parameterized queries and an isolated schema workflow covering setup,
+  inspection, read-only project map, reviewed column plan, explicit apply, and
+  history. None of these results establishes complete
   backend parity; see the exact [compatibility matrix](database-support.en.md).
 - 🧪 Schema planning classifies selected changes as safe, requiring review,
   destructive, or unsupported. Destructive and unsupported changes fail
@@ -162,7 +182,9 @@ For usage details see the [web and database quickstart](getting-started.md),
 
 - 🧪 `zelyra editor [directory] [--port <port>] [--no-open]` starts local Studio on
   `127.0.0.1` with a project tree, tabs, search/replace, completion, compiler
-  diagnostics, and formatting. The CLI opens the system browser by default;
+  diagnostics, formatting, and a stored light/dark appearance. Theme controls
+  are keyboard-operable; browser checks cover contrast and the 360 CSS-pixel
+  layout. The CLI opens the system browser by default;
   `--no-open` skips it. Writes require a session token and same browser origin;
   the database and web application are not started automatically. The editor
   includes file search, local completion, formatting, compiler diagnostics,
@@ -209,10 +231,12 @@ For usage details see the [web and database quickstart](getting-started.md),
   source project and includes source locations, status, and next steps in
   Markdown or JSON. The scanner covers Composer constraints, simple
   routes, models, controllers, `Schema::create`, selected relationships,
-  validation entry points, jobs, Blade views, and integration calls. It is an
-  experimental pattern scanner, not a PHP parser or proof of business/security
-  parity. A linked project graph and optional scaffolds follow in later
-  releases. [Migrator details](laravel-migrator.en.md).
+  validation entry points, jobs, Blade views, and integration calls. The 0.9.8
+  analyzer version is separate from the 0.9.6 mapping ruleset; fixture coverage
+  names syntactic findings without claiming a route-to-data graph or behavior
+  transfer. It is an experimental pattern scanner, not a PHP parser or proof of
+  business/security parity. Its separate compiler-checked scaffold contains no
+  copied business behavior. [Migrator details](laravel-migrator.en.md).
 
 ## APIs, authentication, permissions, and audit
 
