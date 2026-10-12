@@ -22,6 +22,25 @@ struct Finding {
     next_step: &'static str,
 }
 
+#[derive(Clone, Copy, Debug)]
+struct FindingCounts {
+    total: usize,
+    unresolved: usize,
+    partial: usize,
+}
+
+#[derive(Debug)]
+struct AnalysisOutput {
+    report_path: PathBuf,
+    counts: FindingCounts,
+}
+
+struct CommandOutput {
+    report_path: Option<PathBuf>,
+    scaffold_path: Option<PathBuf>,
+    counts: FindingCounts,
+}
+
 pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     if arguments.next().as_deref() != Some("laravel") {
         eprintln!("Usage: zelyra migrate laravel <project> [--report <path>] [--output <target>] [--format markdown|json]");
@@ -76,21 +95,25 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
             report.as_deref().expect("report required without output"),
             format,
         )
-        .map(|(path, counts)| (Some(path), None, counts))
+        .map(|analysis| CommandOutput {
+            report_path: Some(analysis.report_path),
+            scaffold_path: None,
+            counts: analysis.counts,
+        })
     };
     match result {
-        Ok((report_path, output_path, counts)) => {
+        Ok(output) => {
             println!("Laravel source analyzed without executing PHP or reading environment files.");
-            if let Some(path) = report_path {
+            if let Some(path) = output.report_path {
                 println!("Report: {}", path.display());
             }
-            if let Some(path) = output_path {
+            if let Some(path) = output.scaffold_path {
                 println!("Separate Zelyra scaffold: {}", path.display());
                 println!("Transferred business logic: none; review MIGRATION_TODO.md and MIGRATION_REPORT.md.");
             }
             println!(
                 "Findings: {} · unresolved/manual: {} · partial: {}",
-                counts.0, counts.1, counts.2
+                output.counts.total, output.counts.unresolved, output.counts.partial
             );
             ExitCode::SUCCESS
         }
@@ -106,7 +129,7 @@ fn generate_scaffold(
     external_report: Option<&Path>,
     output: &Path,
     format: &str,
-) -> Result<(Option<PathBuf>, Option<PathBuf>, (usize, usize, usize)), String> {
+) -> Result<CommandOutput, String> {
     let root = fs::canonicalize(project)
         .map_err(|_| "Laravel project directory does not exist or is not readable".to_owned())?;
     if !root.is_dir() {
@@ -178,7 +201,8 @@ fn generate_scaffold(
     let staging = staging.ok_or("could not allocate a unique staging directory")?;
     let result = (|| {
         let staged_report = staging.join("MIGRATION_REPORT.json");
-        let (_, counts) = analyze(&root, &staged_report, "json")?;
+        let analysis = analyze(&root, &staged_report, "json")?;
+        let counts = analysis.counts;
         let report_json: Value = serde_json::from_slice(
             &fs::read(&staged_report)
                 .map_err(|error| format!("could not read staged report: {error}"))?,
@@ -254,7 +278,7 @@ fn generate_scaffold(
 
         let external_report_path =
             if let Some((destination, requested_path)) = report_target.as_ref() {
-                let (_, _) = analyze(&root, requested_path, format)?;
+                let _ = analyze(&root, requested_path, format)?;
                 Some(destination.clone())
             } else {
                 None
@@ -262,7 +286,11 @@ fn generate_scaffold(
         super::module_cli::publish_directory_no_replace(&staging, &target).map_err(|error| {
             format!("could not publish scaffold without replacing an existing target: {error}")
         })?;
-        Ok((external_report_path, Some(target.clone()), counts))
+        Ok(CommandOutput {
+            report_path: external_report_path,
+            scaffold_path: Some(target.clone()),
+            counts,
+        })
     })();
     if staging.exists() {
         let _ = fs::remove_dir_all(&staging);
@@ -284,11 +312,7 @@ fn write_new_file(path: &Path, contents: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn analyze(
-    project: &Path,
-    report: &Path,
-    format: &str,
-) -> Result<(PathBuf, (usize, usize, usize)), String> {
+fn analyze(project: &Path, report: &Path, format: &str) -> Result<AnalysisOutput, String> {
     let root = fs::canonicalize(project)
         .map_err(|_| "Laravel project directory does not exist or is not readable".to_owned())?;
     if !root.is_dir() {
@@ -387,7 +411,14 @@ fn analyze(
         let _ = fs::remove_file(&canonical_output);
         format!("could not write report: {error}")
     })?;
-    Ok((canonical_output, (findings.len(), unresolved, partial)))
+    Ok(AnalysisOutput {
+        report_path: canonical_output,
+        counts: FindingCounts {
+            total: findings.len(),
+            unresolved,
+            partial,
+        },
+    })
 }
 
 fn resolve_new_report_path(report: &Path) -> Result<PathBuf, String> {
@@ -772,20 +803,20 @@ mod tests {
             std::process::id(),
             rand_core::OsRng.next_u64()
         ));
-        let (written, counts) = analyze(&root, &report, "json").unwrap();
-        let body = fs::read_to_string(&written).unwrap();
+        let analysis = analyze(&root, &report, "json").unwrap();
+        let body = fs::read_to_string(&analysis.report_path).unwrap();
         assert!(body.contains("/orders"));
         assert!(body.contains("Zelyra Laravel Migrator 0.9.6"));
         assert!(body.contains("\"mapping_ruleset\": \"0.9.6\""));
         assert!(!body.contains("must-not-be-read-or-reported"));
         assert!(!body.contains("/secret"));
-        assert!(counts.0 >= 1);
+        assert!(analysis.counts.total >= 1);
         assert_eq!(
             fs::read_to_string(root.join(".env")).unwrap(),
             "APP_KEY=must-not-be-read-or-reported"
         );
         let _ = fs::remove_dir_all(root);
-        let _ = fs::remove_file(written);
+        let _ = fs::remove_file(analysis.report_path);
     }
 
     #[test]
@@ -888,11 +919,12 @@ Mail::to($email)->send($message);
             std::process::id(),
             rand_core::OsRng.next_u64()
         ));
-        let (written, counts) = analyze(&root, &report, "json").unwrap();
-        let value: Value = serde_json::from_str(&fs::read_to_string(&written).unwrap()).unwrap();
+        let analysis = analyze(&root, &report, "json").unwrap();
+        let value: Value =
+            serde_json::from_str(&fs::read_to_string(&analysis.report_path).unwrap()).unwrap();
         assert_eq!(value["summary"]["unresolved"], 1);
-        assert_eq!(counts.0, 1);
+        assert_eq!(analysis.counts.total, 1);
         let _ = fs::remove_dir_all(root);
-        let _ = fs::remove_file(written);
+        let _ = fs::remove_file(analysis.report_path);
     }
 }
