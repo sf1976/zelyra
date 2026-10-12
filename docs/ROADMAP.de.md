@@ -1056,7 +1056,13 @@ IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
   Ergebnisse, 20 Aufgaben, 35 kontrollierte Negativfälle, 100 Wiederholungen
   und 400 unabhängige Zahlenvergleiche bestanden. Die vier Beobachtungen und
   der Linux-only-Umfang sind im [Prüfbericht](release-readiness/0.9.9-language-review.de.md)
-  festgehalten.
+  festgehalten. Nach dem Clippy-Kompatibilitätsfix in `1bf09ea` wurde die
+  Prüfung mit Compiler-SHA `89b880d753e12ac09b2fbb4dc754586d18c7a808845b991b331cb1ae00153c0d`
+  wiederholt.
+- [🧪] Rust-Pakettests, Formatierung und Clippy sowie Installer-, sauberes
+  MariaDB-Onboarding und generierte Docker-/Modul-Bundles bestehen auf `1bf09ea`
+  lokal. Der aktuelle GitHub-CI-Lauf ist noch ein Release-Gate; siehe das
+  [Prüfprotokoll](release-readiness/0.9.9-technical-rehearsal-2026-10-12.de.md).
 - [🗺️] Verbleibende CLI-, Setup-, Datenbank-, Migrator-, Sicherheits-,
   Dokumentations- und Paketierungsgates schließen. Allgemeine Constraints/
   Traits, Closures und generische Funktionsreferenzen bleiben ausdrücklich

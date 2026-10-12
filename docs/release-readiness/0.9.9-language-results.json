@@ -1,6 +1,6 @@
 {
   "version": "zelyra 0.9.9",
-  "compiler_sha256": "24672758740e056d079901be0485a8476f2841b5a676fabd3d572241299e7353",
+  "compiler_sha256": "89b880d753e12ac09b2fbb4dc754586d18c7a808845b991b331cb1ae00153c0d",
   "platform": "Linux-6.12.111+deb13-amd64-x86_64-with-glibc2.41",
   "limits": {
     "address_space_mib": 512,
@@ -25,7 +25,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 7.06,
+        "elapsed_ms": 4.57,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -36,7 +36,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 6.45,
+        "elapsed_ms": 4.62,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -58,7 +58,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 6.62,
+        "elapsed_ms": 4.78,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -69,7 +69,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.11,
+        "elapsed_ms": 4.58,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -91,7 +91,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 4.98,
+        "elapsed_ms": 4.75,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -102,7 +102,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 6.03,
+        "elapsed_ms": 4.68,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -124,7 +124,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 6.18,
+        "elapsed_ms": 4.93,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -135,7 +135,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 6.46,
+        "elapsed_ms": 4.72,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -157,7 +157,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 4.96,
+        "elapsed_ms": 4.69,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -168,7 +168,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.3,
+        "elapsed_ms": 4.56,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -190,7 +190,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.6,
+        "elapsed_ms": 5.85,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -201,7 +201,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 6.41,
+        "elapsed_ms": 5.6,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -223,7 +223,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 6.0,
+        "elapsed_ms": 5.69,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -234,7 +234,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.68,
+        "elapsed_ms": 4.9,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -256,7 +256,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 6.39,
+        "elapsed_ms": 5.66,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -267,7 +267,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.77,
+        "elapsed_ms": 4.69,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -289,7 +289,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.19,
+        "elapsed_ms": 4.73,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -300,7 +300,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 6.85,
+        "elapsed_ms": 4.32,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -322,7 +322,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 6.71,
+        "elapsed_ms": 5.0,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -333,7 +333,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 7.27,
+        "elapsed_ms": 4.58,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -355,7 +355,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.86,
+        "elapsed_ms": 5.04,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -366,7 +366,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 6.0,
+        "elapsed_ms": 4.97,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -388,7 +388,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 6.26,
+        "elapsed_ms": 4.48,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -399,7 +399,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 6.11,
+        "elapsed_ms": 4.94,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -422,7 +422,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.45,
+        "elapsed_ms": 4.44,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -433,7 +433,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.53,
+        "elapsed_ms": 4.14,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -455,7 +455,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.29,
+        "elapsed_ms": 4.61,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -466,7 +466,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.19,
+        "elapsed_ms": 4.77,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -488,7 +488,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 4.62,
+        "elapsed_ms": 4.69,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -499,7 +499,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.06,
+        "elapsed_ms": 4.76,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -521,7 +521,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 4.85,
+        "elapsed_ms": 4.49,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -532,7 +532,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 7.71,
+        "elapsed_ms": 6.34,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -554,7 +554,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 4.85,
+        "elapsed_ms": 4.77,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -565,7 +565,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.09,
+        "elapsed_ms": 4.54,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -587,7 +587,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 4.45,
+        "elapsed_ms": 4.64,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -598,7 +598,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 4.54,
+        "elapsed_ms": 4.9,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -620,7 +620,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.16,
+        "elapsed_ms": 5.27,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -631,7 +631,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.43,
+        "elapsed_ms": 5.21,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -653,7 +653,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 4.5,
+        "elapsed_ms": 5.09,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -664,7 +664,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 4.49,
+        "elapsed_ms": 4.31,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -686,7 +686,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 6.76,
+        "elapsed_ms": 7.3,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -697,7 +697,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 7.99,
+        "elapsed_ms": 7.19,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -719,7 +719,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 6.66,
+        "elapsed_ms": 6.49,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -730,7 +730,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 6.71,
+        "elapsed_ms": 6.33,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -752,7 +752,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 4.8,
+        "elapsed_ms": 4.65,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -763,7 +763,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 114.53,
+        "elapsed_ms": 107.58,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -796,7 +796,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 5.07,
+        "elapsed_ms": 4.78,
         "stdout": "",
         "stderr": "error[E-RUNTIME-001]: Int overflow\n\n --> main.zyl:2:7\n"
       }
@@ -818,7 +818,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.63,
+        "elapsed_ms": 4.94,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -829,7 +829,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 5.65,
+        "elapsed_ms": 4.7,
         "stdout": "",
         "stderr": "error[E-RUNTIME-001]: Int overflow\n\n --> main.zyl:2:7\n"
       }
@@ -851,7 +851,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.24,
+        "elapsed_ms": 4.84,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -862,7 +862,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 5.03,
+        "elapsed_ms": 4.39,
         "stdout": "",
         "stderr": "error[E-RUNTIME-001]: division by zero\n\n --> main.zyl:2:7\n"
       }
@@ -884,7 +884,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.63,
+        "elapsed_ms": 5.0,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -895,7 +895,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 5.49,
+        "elapsed_ms": 4.62,
         "stdout": "",
         "stderr": "error[E-RUNTIME-001]: UInt underflow\n\n --> main.zyl:2:7\n"
       }
@@ -917,7 +917,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.01,
+        "elapsed_ms": 4.78,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -928,7 +928,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 5.33,
+        "elapsed_ms": 4.55,
         "stdout": "",
         "stderr": "error[E-RUNTIME-001]: UInt overflow\n\n --> main.zyl:2:7\n"
       }
@@ -950,7 +950,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.17,
+        "elapsed_ms": 4.71,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -961,7 +961,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 5.87,
+        "elapsed_ms": 4.37,
         "stdout": "",
         "stderr": "error[E-RUNTIME-001]: array index must be Int or UInt, found Int\n\n --> main.zyl:3:7\n"
       }
@@ -983,7 +983,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 4.27,
+        "elapsed_ms": 4.56,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -994,7 +994,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 4.49,
+        "elapsed_ms": 5.01,
         "stdout": "",
         "stderr": "error[E-RUNTIME-001]: array index 2 is out of bounds\n\n --> main.zyl:3:7\n"
       }
@@ -1016,7 +1016,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 4.6,
+        "elapsed_ms": 4.75,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -1027,7 +1027,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 5.21,
+        "elapsed_ms": 4.5,
         "stdout": "",
         "stderr": "error[E-RUNTIME-001]: array index 0 is out of bounds\n\n --> main.zyl:3:7\n"
       }
@@ -1049,7 +1049,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.01,
+        "elapsed_ms": 5.48,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -1060,7 +1060,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 4.87,
+        "elapsed_ms": 5.04,
         "stdout": "",
         "stderr": "error[E-RUNTIME-001]: date received invalid value `2023-02-29`; expected YYYY-MM-DD\n\n --> main.zyl:2:12\n"
       }
@@ -1082,7 +1082,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 4.57,
+        "elapsed_ms": 4.97,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -1093,7 +1093,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 4.81,
+        "elapsed_ms": 5.02,
         "stdout": "",
         "stderr": "error[E-RUNTIME-001]: time received invalid value `25:00:00`; expected HH:MM:SS\n\n --> main.zyl:2:12\n"
       }
@@ -1115,7 +1115,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 4.6,
+        "elapsed_ms": 5.3,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -1126,7 +1126,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 4.85,
+        "elapsed_ms": 5.04,
         "stdout": "",
         "stderr": "error[E-RUNTIME-001]: bytes values must be between 0 and 255\n\n --> main.zyl:2:13\n"
       }
@@ -1148,7 +1148,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 4.69,
+        "elapsed_ms": 5.37,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -1159,7 +1159,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 4.74,
+        "elapsed_ms": 4.9,
         "stdout": "",
         "stderr": "error[E-RUNTIME-001]: decimal expects a base-10 value with at most 9 fractional digits\n\n --> main.zyl:2:15\n"
       }
@@ -1181,7 +1181,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 4.18,
+        "elapsed_ms": 5.2,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -1192,7 +1192,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 4.92,
+        "elapsed_ms": 5.03,
         "stdout": "",
         "stderr": "error[E-RUNTIME-001]: division by zero\n\n --> main.zyl:2:7\n"
       }
@@ -1214,7 +1214,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 4.65,
+        "elapsed_ms": 5.72,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -1225,7 +1225,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 5.2,
+        "elapsed_ms": 5.04,
         "stdout": "",
         "stderr": "error[E-RUNTIME-001]: json_decode received invalid JSON: expected value at line 1 column 1\n\n --> main.zyl:2:7\n"
       }
@@ -1247,7 +1247,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 4.84,
+        "elapsed_ms": 5.6,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -1258,7 +1258,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 5.03,
+        "elapsed_ms": 5.13,
         "stdout": "",
         "stderr": "error[E-RUNTIME-001]: json_encode cannot serialize non-finite Float\n\n --> main.zyl:2:7\n"
       }
@@ -1280,7 +1280,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 4.68,
+        "elapsed_ms": 4.54,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -1291,7 +1291,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 5.42,
+        "elapsed_ms": 4.36,
         "stdout": "",
         "stderr": "error[E-RUNTIME-001]: json_encode supports only Map<String, Value> objects\n\n --> main.zyl:3:7\n"
       }
@@ -1313,7 +1313,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 4.37,
+        "elapsed_ms": 5.01,
         "stdout": "",
         "stderr": "error[E-TYPE-001]: type mismatch: expected `Int`, found `String`\n\n --> main.zyl:2:15\n"
       },
@@ -1336,7 +1336,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 4.7,
+        "elapsed_ms": 4.59,
         "stdout": "",
         "stderr": "error[E-TYPE-001]: type mismatch: expected `Int`, found `String`\n\n --> main.zyl:2:13\n"
       },
@@ -1359,7 +1359,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 4.02,
+        "elapsed_ms": 4.81,
         "stdout": "",
         "stderr": "error[E-TYPE-001]: cannot assign to immutable variable `amount`\n\n --> main.zyl:3:1\n"
       },
@@ -1382,7 +1382,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 4.94,
+        "elapsed_ms": 4.64,
         "stdout": "",
         "stderr": "error[E-TYPE-MATCH-001]: non-exhaustive match; missing: None\n\n --> main.zyl:3:1\n"
       },
@@ -1405,7 +1405,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 4.93,
+        "elapsed_ms": 4.76,
         "stdout": "",
         "stderr": "error[E-TYPE-001]: missing field `age` in record `Customer`\n\n --> main.zyl:3:9\n"
       },
@@ -1428,7 +1428,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 4.8,
+        "elapsed_ms": 4.44,
         "stdout": "",
         "stderr": "error[E-CAP-001]: function `main` uses file-system read access but does not declare capability `FileSystem`; add `uses FileSystem`\n\n --> main.zyl:2:7\n"
       },
@@ -1451,7 +1451,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 5.16,
+        "elapsed_ms": 5.01,
         "stdout": "",
         "stderr": "error[E-TYPE-001]: tuple index must be a non-negative integer literal\n\n --> main.zyl:4:12\n"
       },
@@ -1474,7 +1474,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 3.88,
+        "elapsed_ms": 3.31,
         "stdout": "",
         "stderr": "error[E-LEX-001]: unterminated block comment; expected a standalone `##` line\n\n --> main.zyl:1:1\n"
       },
@@ -1497,7 +1497,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.24,
+        "elapsed_ms": 5.43,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -1508,7 +1508,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.05,
+        "elapsed_ms": 4.97,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -1530,7 +1530,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 6.5,
+        "elapsed_ms": 5.93,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -1541,7 +1541,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 6.44,
+        "elapsed_ms": 5.23,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -1563,7 +1563,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 6.08,
+        "elapsed_ms": 5.48,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -1574,7 +1574,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.94,
+        "elapsed_ms": 5.09,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -1596,7 +1596,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.74,
+        "elapsed_ms": 5.67,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -1607,7 +1607,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 5.43,
+        "elapsed_ms": 5.7,
         "stdout": "",
         "stderr": "error[E-RUNTIME-001]: Int overflow\n\n --> main.zyl:2:7\n"
       }
@@ -1629,7 +1629,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 7.06,
+        "elapsed_ms": 6.1,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -1640,7 +1640,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 7.28,
+        "elapsed_ms": 5.53,
         "stdout": "",
         "stderr": "error[E-RUNTIME-001]: Int overflow\n\n --> main.zyl:2:7\n"
       }
@@ -1662,7 +1662,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.25,
+        "elapsed_ms": 5.75,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -1673,7 +1673,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.83,
+        "elapsed_ms": 4.82,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -1695,7 +1695,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 6.9,
+        "elapsed_ms": 5.17,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -1706,7 +1706,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 6.84,
+        "elapsed_ms": 11.4,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -1728,7 +1728,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.42,
+        "elapsed_ms": 6.19,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -1739,7 +1739,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 6.62,
+        "elapsed_ms": 4.86,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -1761,7 +1761,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.8,
+        "elapsed_ms": 4.89,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -1772,7 +1772,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.96,
+        "elapsed_ms": 4.43,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -1794,7 +1794,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.88,
+        "elapsed_ms": 4.89,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -1805,7 +1805,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.96,
+        "elapsed_ms": 4.42,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -1827,7 +1827,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.5,
+        "elapsed_ms": 5.06,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -1838,7 +1838,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.48,
+        "elapsed_ms": 4.26,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -1860,7 +1860,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.52,
+        "elapsed_ms": 4.68,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -1871,7 +1871,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.6,
+        "elapsed_ms": 4.51,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -1893,7 +1893,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.91,
+        "elapsed_ms": 5.83,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -1904,7 +1904,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.56,
+        "elapsed_ms": 4.98,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -1926,7 +1926,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.81,
+        "elapsed_ms": 5.65,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -1937,7 +1937,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 6.03,
+        "elapsed_ms": 4.73,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -1959,7 +1959,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 4.88,
+        "elapsed_ms": 4.81,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -1970,7 +1970,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.09,
+        "elapsed_ms": 4.44,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -1992,7 +1992,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 4.74,
+        "elapsed_ms": 4.85,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -2003,7 +2003,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 6.36,
+        "elapsed_ms": 5.78,
         "stdout": "",
         "stderr": "error[E-RUNTIME-001]: function call depth limit exceeded (maximum 24)\n\n --> main.zyl:1:64\n"
       }
@@ -2025,7 +2025,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.81,
+        "elapsed_ms": 4.76,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -2036,7 +2036,7 @@
         ],
         "returncode": -9,
         "timeout": true,
-        "elapsed_ms": 1004.63,
+        "elapsed_ms": 1003.66,
         "stdout": "",
         "stderr": ""
       }
@@ -2058,7 +2058,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 6.02,
+        "elapsed_ms": 6.45,
         "stdout": "",
         "stderr": "error[E-TYPE-RETURN-001]: function `answer` can reach its end without returning `Int`\n\n --> main.zyl:1:20\n"
       },
@@ -2081,7 +2081,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 5.55,
+        "elapsed_ms": 5.45,
         "stdout": "",
         "stderr": "error[E-TYPE-RETURN-001]: function `answer` can reach its end without returning `Int`\n\n --> main.zyl:1:30\n"
       },
@@ -2104,7 +2104,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 5.09,
+        "elapsed_ms": 5.28,
         "stdout": "",
         "stderr": "error[E-TYPE-001]: `break` is only valid inside a loop\n\n --> main.zyl:1:13\n"
       },
@@ -2127,7 +2127,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 4.89,
+        "elapsed_ms": 4.94,
         "stdout": "",
         "stderr": "error[E-TYPE-001]: `continue` is only valid inside a loop\n\n --> main.zyl:1:13\n"
       },
@@ -2150,7 +2150,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 4.95,
+        "elapsed_ms": 4.82,
         "stdout": "",
         "stderr": "error[E-TYPE-001]: type mismatch: expected `Int`, found `String`\n\n --> main.zyl:1:22\n"
       },
@@ -2173,7 +2173,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.59,
+        "elapsed_ms": 5.35,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -2184,7 +2184,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.66,
+        "elapsed_ms": 4.93,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -2206,7 +2206,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.65,
+        "elapsed_ms": 5.38,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -2217,7 +2217,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 7.39,
+        "elapsed_ms": 5.2,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -2239,7 +2239,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.99,
+        "elapsed_ms": 9.5,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -2250,7 +2250,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 6.8,
+        "elapsed_ms": 5.99,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -2272,7 +2272,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.91,
+        "elapsed_ms": 5.63,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -2283,7 +2283,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 6.5,
+        "elapsed_ms": 6.94,
         "stdout": "0\n0.333333333\n",
         "stderr": ""
       }
@@ -2305,7 +2305,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.51,
+        "elapsed_ms": 6.42,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -2316,7 +2316,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.51,
+        "elapsed_ms": 5.34,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -2338,7 +2338,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 4.94,
+        "elapsed_ms": 7.13,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -2349,7 +2349,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.18,
+        "elapsed_ms": 6.04,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -2371,7 +2371,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 4.89,
+        "elapsed_ms": 6.19,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -2382,7 +2382,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 5.0,
+        "elapsed_ms": 5.55,
         "stdout": "PASS\n",
         "stderr": ""
       }
@@ -2404,7 +2404,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 7.02,
+        "elapsed_ms": 5.5,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -2415,7 +2415,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 5.9,
+        "elapsed_ms": 4.96,
         "stdout": "",
         "stderr": "error[E-RUNTIME-001]: precondition failed for function `half`\n\n --> main.zyl:1:39\n"
       }
@@ -2437,7 +2437,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 6.65,
+        "elapsed_ms": 6.5,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -2448,7 +2448,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 6.71,
+        "elapsed_ms": 5.42,
         "stdout": "",
         "stderr": "error[E-RUNTIME-001]: postcondition failed for function `wrong`\n\n --> main.zyl:1:39\n"
       }
@@ -2470,7 +2470,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 11.32,
+        "elapsed_ms": 13.99,
         "stdout": "ok: main.zyl\n",
         "stderr": ""
       },
@@ -2481,7 +2481,7 @@
         ],
         "returncode": 0,
         "timeout": false,
-        "elapsed_ms": 12.68,
+        "elapsed_ms": 12.96,
         "stdout": "5000\n",
         "stderr": ""
       }
@@ -2503,7 +2503,7 @@
         ],
         "returncode": 1,
         "timeout": false,
-        "elapsed_ms": 4.42,
+        "elapsed_ms": 4.84,
         "stdout": "",
         "stderr": "error[E-PARSE-001]: maximum parser nesting depth of 32 exceeded\n\n --> main.zyl:1:89\n"
       },

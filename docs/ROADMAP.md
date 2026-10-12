@@ -1040,7 +1040,13 @@ language backlog as one 0.9.4 change.
   unexpected outcomes, 20 tasks, 35 controlled negative cases, 100 repeats,
   and 400 independent numeric comparisons passed. The four observations and
   Linux-only scope are recorded in the
-  [review report](release-readiness/0.9.9-language-review.en.md).
+  [review report](release-readiness/0.9.9-language-review.en.md). The corpus
+  was rerun after the Clippy compatibility fix in `1bf09ea`, using compiler
+  SHA `89b880d753e12ac09b2fbb4dc754586d18c7a808845b991b331cb1ae00153c0d`.
+- [🧪] Rust package tests, formatting, and Clippy plus installer, clean MariaDB
+  onboarding, and generated Docker/module bundle E2E checks pass locally on
+  `1bf09ea`. The current GitHub CI run is still a release gate; see the
+  [technical rehearsal](release-readiness/0.9.9-technical-rehearsal-2026-10-12.en.md).
 - [🗺️] Close the remaining CLI, setup, database, migrator, security,
   documentation, and packaging gates. General constraints/traits, closures,
   and generic function references remain explicit language boundaries. The
