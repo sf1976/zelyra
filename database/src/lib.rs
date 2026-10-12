@@ -3043,8 +3043,18 @@ pub fn fuzz_bind_named_parameters(sql: &str) -> Result<(String, Vec<String>), St
 }
 
 pub fn create_mariadb_database(database_url: &str) -> Result<(), DatabaseError> {
-    let connection = parse_mariadb_url(database_url)?;
-    let database = &connection.database;
+    create_mariadb_database_with_admin_url(database_url, database_url)
+}
+
+/// Creates the database named by `database_url` through a separate MariaDB
+/// account that has database-creation privileges. The admin URL is only used
+/// to connect to the server; its database path is ignored.
+pub fn create_mariadb_database_with_admin_url(
+    database_url: &str,
+    admin_url: &str,
+) -> Result<(), DatabaseError> {
+    let target = parse_mariadb_url(database_url)?;
+    let database = &target.database;
     if database.is_empty() {
         return Err(DatabaseError {
             message: "MariaDB DATABASE_URL must include a database name".into(),
@@ -3054,7 +3064,38 @@ pub fn create_mariadb_database(database_url: &str) -> Result<(), DatabaseError> 
         "CREATE DATABASE IF NOT EXISTS {} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;",
         quote_identifier(database, Backend::MariaDb)
     );
-    run_mariadb_sql(database_url, &sql, Some("mysql"))
+    let mut connection = server_level_mariadb_connection(admin_url)?;
+    connection.query_drop(sql).map_err(mariadb_driver_error)
+}
+
+fn server_level_mariadb_connection(database_url: &str) -> Result<Conn, DatabaseError> {
+    let connection = parse_mariadb_url(database_url)?;
+    let port = connection.port.parse::<u16>().map_err(|_| DatabaseError {
+        message: "MariaDB URL has an invalid TCP port".into(),
+    })?;
+    let timeouts = MariaDbTimeouts::from_env()?;
+    let tls = MariaDbTlsSettings::from_env()?;
+    let options = OptsBuilder::new()
+        .ip_or_hostname(Some(connection.host.clone()))
+        .tcp_port(port)
+        .prefer_socket(false)
+        .user(Some(connection.user))
+        .pass(Some(connection.password))
+        .db_name(None::<String>)
+        .connect_attrs(None::<HashMap<String, String>>)
+        .tcp_connect_timeout(Some(Duration::from_secs(u64::from(
+            timeouts.connect_seconds,
+        ))))
+        .read_timeout(Some(Duration::from_secs(u64::from(timeouts.query_seconds))))
+        .init(vec![mysql_session_timeout_statement(
+            database_url,
+            timeouts.query_seconds,
+        )]);
+    let options = match tls.ssl_opts_for_host(&connection.host) {
+        Some(ssl_opts) => options.ssl_opts(Some(ssl_opts)),
+        None => options,
+    };
+    Conn::new(options).map_err(mariadb_driver_error)
 }
 
 pub fn inspect_sqlite(database_url: &str) -> Result<Schema, DatabaseError> {

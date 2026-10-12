@@ -20,6 +20,8 @@ fi
 
 work_root="$(mktemp -d)"
 database_name="zelyra_studio_e2e_$$"
+application_user="zelyra_studio_e2e_$$"
+application_password="studio_test_password"
 database_created=0
 server_pid=""
 export MYSQL_PWD="${ZELYRA_STUDIO_E2E_ROOT_PASSWORD:-root}"
@@ -34,6 +36,8 @@ cleanup() {
     if [[ "$backend" == "mariadb" ]]; then
       mariadb --protocol=tcp --host=127.0.0.1 --port="$database_port" --user=root \
         --batch --skip-column-names -e "DROP DATABASE IF EXISTS \`$database_name\`" >/dev/null
+      mariadb --protocol=tcp --host=127.0.0.1 --port="$database_port" --user=root \
+        --batch --skip-column-names -e "DROP USER IF EXISTS '$application_user'@'%'" >/dev/null
     else
       psql --host=127.0.0.1 --port="$database_port" --username=zelyra_ci --dbname=zelyra_ci \
         --command="DROP DATABASE IF EXISTS \"$database_name\"" >/dev/null
@@ -47,7 +51,8 @@ database_url="${database_url%/*}/$database_name"
 if [[ "$backend" == "mariadb" ]]; then
   mariadb --protocol=tcp --host=127.0.0.1 --port="$database_port" --user=root \
     --batch --skip-column-names \
-    -e "CREATE DATABASE \`$database_name\`; CREATE TABLE \`$database_name\`.departments (id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, name VARCHAR(80) NOT NULL) ENGINE=InnoDB; CREATE TABLE \`$database_name\`.customers (id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, department_id BIGINT NOT NULL, name VARCHAR(120) NOT NULL, legacy_code VARCHAR(20) NULL, CONSTRAINT fk_studio_customer_department FOREIGN KEY (department_id) REFERENCES \`$database_name\`.departments(id)) ENGINE=InnoDB"
+    -e "CREATE USER '$application_user'@'%' IDENTIFIED BY '$application_password'; GRANT ALL PRIVILEGES ON \`$database_name\`.* TO '$application_user'@'%';"
+  database_url="mariadb://$application_user:$application_password@127.0.0.1:$database_port/$database_name"
   engine="mariadb"
 else
   psql --host=127.0.0.1 --port="$database_port" --username=zelyra_ci --dbname=zelyra_ci \
@@ -61,6 +66,12 @@ database_created=1
 project="$work_root/project"
 mkdir -p "$project"
 mkdir -p "$project/src"
+if [[ "$backend" == "mariadb" ]]; then
+  cat >"$project/.env" <<ENV
+DATABASE_URL=$database_url
+MARIADB_ROOT_PASSWORD=${ZELYRA_STUDIO_E2E_ROOT_PASSWORD:-root}
+ENV
+fi
 cat >"$project/src/math.zyl" <<'ZELYRA'
 pub fn sum(left: Int, right: Int) -> Int {
     return left + right
@@ -91,7 +102,7 @@ fn main() {
 ZELYRA
 
 port="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')"
-DATABASE_URL="$database_url" "$zelyra_bin" editor "$project" --port "$port" \
+PATH="$work_root/no-host-db-client" DATABASE_URL="$database_url" "$zelyra_bin" editor "$project" --port "$port" \
   >"$work_root/editor.log" 2>&1 &
 server_pid=$!
 
@@ -114,6 +125,40 @@ if not match:
 print(match.group(1))
 PY
 )"
+
+if [[ "$backend" == "mariadb" ]]; then
+  ZELYRA_STUDIO_E2E_PORT="$port" \
+  ZELYRA_STUDIO_E2E_TOKEN="$token" \
+  ZELYRA_STUDIO_E2E_DATABASE="$database_name" \
+  python3 <<'PY'
+import json
+import os
+import urllib.error
+import urllib.request
+
+base = f"http://127.0.0.1:{os.environ['ZELYRA_STUDIO_E2E_PORT']}/__zelyra/editor/api/database-create"
+request = urllib.request.Request(
+    base,
+    data=json.dumps({"confirm": True}).encode(),
+    headers={
+        "Content-Type": "application/json",
+        "Origin": f"http://127.0.0.1:{os.environ['ZELYRA_STUDIO_E2E_PORT']}",
+        "X-Zelyra-Editor-Token": os.environ["ZELYRA_STUDIO_E2E_TOKEN"],
+    },
+    method="POST",
+)
+try:
+    with urllib.request.urlopen(request, timeout=20) as response:
+        result = json.loads(response.read())
+except urllib.error.HTTPError as error:
+    raise SystemExit(f"Studio database creation failed: HTTP {error.code}: {error.read().decode(errors='replace')}")
+assert result["created"] is True, result
+assert result["database"] == os.environ["ZELYRA_STUDIO_E2E_DATABASE"], result
+PY
+  mariadb --protocol=tcp --host=127.0.0.1 --port="$database_port" --user=root \
+    --batch --skip-column-names \
+    -e "CREATE TABLE \`$database_name\`.departments (id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, name VARCHAR(80) NOT NULL) ENGINE=InnoDB; CREATE TABLE \`$database_name\`.customers (id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, department_id BIGINT NOT NULL, name VARCHAR(120) NOT NULL, legacy_code VARCHAR(20) NULL, CONSTRAINT fk_studio_customer_department FOREIGN KEY (department_id) REFERENCES \`$database_name\`.departments(id)) ENGINE=InnoDB"
+fi
 
 ZELYRA_STUDIO_E2E_PORT="$port" \
 ZELYRA_STUDIO_E2E_TOKEN="$token" \
@@ -224,4 +269,4 @@ else
   row_count="$(xargs <<<"$row_count")"
 fi
 [[ "$table_count" == 2 && "$row_count" == 0 ]]
-echo "Zelyra Studio $backend schema, compiler preview, stale-file conflict, and explicit apply passed"
+echo "Zelyra Studio $backend database creation, schema, compiler preview, stale-file conflict, and explicit apply passed"

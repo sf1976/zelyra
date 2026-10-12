@@ -18,8 +18,9 @@ use std::{
 use zelyra_ast::Type;
 use zelyra_database::{
     apply_mariadb, apply_postgres, apply_sqlite, build_schema, count_duplicate_value_groups,
-    count_foreign_key_orphans, count_null_values, create_mariadb_database, diff, inspect_mariadb,
-    inspect_postgres, inspect_sqlite, mariadb_schema_migration_lock_is_held, query_mariadb,
+    count_foreign_key_orphans, count_null_values, create_mariadb_database,
+    create_mariadb_database_with_admin_url, diff, inspect_mariadb, inspect_postgres,
+    inspect_sqlite, mariadb_schema_migration_lock_is_held, query_mariadb,
     sql::check_program as check_sql_program, table_has_rows, with_mariadb_schema_lock, Backend,
     DatabaseError, Query, QueryResult, QueryValue, Risk, Schema,
 };
