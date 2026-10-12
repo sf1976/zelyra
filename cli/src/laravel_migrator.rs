@@ -293,7 +293,7 @@ fn generate_scaffold(
                     std::process::id(),
                     OsRng.next_u64()
                 ));
-                match fs::create_dir(&candidate) {
+                match create_private_directory(&candidate) {
                     Ok(()) => {
                         temporary_report_directory = Some(candidate);
                         break;
@@ -374,6 +374,16 @@ fn write_new_file(path: &Path, contents: &str) -> Result<(), String> {
         return Err(format!("could not write scaffold file: {error}"));
     }
     Ok(())
+}
+
+fn create_private_directory(path: &Path) -> std::io::Result<()> {
+    let mut builder = fs::DirBuilder::new();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        builder.mode(0o700);
+    }
+    builder.create(path)
 }
 
 fn analyze(project: &Path, report: &Path, format: &str) -> Result<AnalysisOutput, String> {
@@ -465,9 +475,14 @@ fn analyze(project: &Path, report: &Path, format: &str) -> Result<AnalysisOutput
     } else {
         markdown_report(&root, &composer.0, &composer.1, &findings)
     };
-    let mut file = fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options
         .open(&canonical_output)
         .map_err(|error| format!("could not create report: {error}"))?;
     use std::io::Write;
