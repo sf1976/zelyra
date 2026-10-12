@@ -1,0 +1,20 @@
+pub fn deliver_mail(event_id: String, event_type: String, payload_json: String) -> Bool uses Email {
+  if event_type == "zelyra.mail.send" {
+    match mail_deliver(event_id, payload_json) {
+      Ok(_) => { return true }
+      Err(_) => { return false }
+    }
+  }
+  return false
+}
+
+fn main() uses Email, Database(write) {
+  transaction {
+    mail_queue(
+      "customer@example.test",
+      "Your Zelyra order",
+      "Your order has been recorded.",
+      "<p>Your order has been recorded.</p>"
+    )
+  }
+}

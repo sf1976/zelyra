@@ -9,6 +9,7 @@ const MAX_SOURCE_FILES: usize = 10_000;
 const MAX_SOURCE_FILE_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_TOTAL_SOURCE_BYTES: u64 = 256 * 1024 * 1024;
 const MAX_DIRECTORY_DEPTH: usize = 64;
+const ANALYZER_VERSION: &str = "0.9.5";
 
 #[derive(Clone)]
 struct Finding {
@@ -373,6 +374,72 @@ fn scan_source(file: &str, source: &str, findings: &mut Vec<Finding>) {
     for capture in queued.captures_iter(source) {
         add_match(findings, file, source, capture.get(0).unwrap().range(), "job", "manual", capture.get(1).unwrap().as_str(), "Queued job found; retries, idempotency, transaction boundaries, and failure handling are not transferred.", "Review delivery guarantees and side effects before mapping the job.");
     }
+    let authorization = Regex::new(
+        r"(?i)(\$this\s*->\s*authorize\s*\(|\bGate\s*::\s*(?:authorize|allows|denies)\s*\(|\bcan\s*:\s*[A-Za-z0-9_.-]+|\bclass\s+\w+Policy\b)",
+    )
+    .expect("static authorization regex");
+    for matched in authorization.find_iter(source) {
+        add_match(
+            findings,
+            file,
+            source,
+            matched.range(),
+            "authorization",
+            "manual",
+            "authorization or policy check",
+            "Laravel authorization syntax found; this scan does not prove which records or actions the rule protects.",
+            "Trace the authenticated principal, resource ownership, tenant boundary, and every create/read/update/delete path.",
+        );
+    }
+    let tenant = Regex::new(r"(?i)\b(?:tenant_id|account_id|organization_id|workspace_id)\b")
+        .expect("static tenant identifier regex");
+    for matched in tenant.find_iter(source) {
+        add_match(
+            findings,
+            file,
+            source,
+            matched.range(),
+            "tenant_boundary",
+            "manual",
+            "tenant-scoped field",
+            "A tenant-like identifier appears in source; the analyzer cannot establish that every query and relation is scoped to it.",
+            "Review list, detail, mutation, relationship, and background-job access for cross-tenant ID manipulation.",
+        );
+    }
+    let financial = Regex::new(
+        r"(?i)(\b(?:subtotal|grand_total|total|tax|vat|price|amount|discount)\b\s*(?:=|\+=)|->\s*sum\s*\()",
+    )
+    .expect("static financial expression regex");
+    for matched in financial.find_iter(source) {
+        add_match(
+            findings,
+            file,
+            source,
+            matched.range(),
+            "financial_rule",
+            "manual",
+            "money or total calculation",
+            "A money-like field or aggregate is calculated; decimal precision, rounding, tax rules, and currency are not inferred.",
+            "Specify currency, decimal precision, rounding mode, tax basis, and transaction boundaries, then add numeric acceptance tests.",
+        );
+    }
+    let file_operation = Regex::new(
+        r"(?i)(UploadedFile|response\s*\(\s*\)\s*->\s*download|->\s*(?:store|storeAs|download)\s*\()",
+    )
+    .expect("static file-operation regex");
+    for matched in file_operation.find_iter(source) {
+        add_match(
+            findings,
+            file,
+            source,
+            matched.range(),
+            "file_access",
+            "manual",
+            "file upload or download",
+            "A file upload/download operation appears; path confinement, content validation, authorization, and storage exposure are not analyzed.",
+            "Review size and content limits, path traversal, tenant ownership, authorization, and download response headers.",
+        );
+    }
     for (needle, kind, label) in [
         ("Mail::", "integration", "mail integration"),
         ("Notification::", "integration", "notification integration"),
@@ -429,7 +496,7 @@ fn json_report(
 ) -> String {
     let counts = report_counts(findings);
     let findings = findings.iter().map(|finding| json!({"kind": finding.kind, "status": finding.status, "file": finding.file, "line": finding.line, "name": finding.name, "summary": finding.summary, "next_step": finding.next_step})).collect::<Vec<_>>();
-    serde_json::to_string_pretty(&json!({"schema_version": "1", "analyzer": "Zelyra Laravel Migrator 0.9.3", "source_project": root.file_name().and_then(|name| name.to_str()).unwrap_or("Laravel project"), "laravel_constraint": framework, "laravel_packages": packages, "execution": "static_read_only", "env_files_read": false, "summary": counts, "findings": findings})).expect("report JSON is serializable")
+    serde_json::to_string_pretty(&json!({"schema_version": "1", "analyzer": format!("Zelyra Laravel Migrator {ANALYZER_VERSION}"), "mapping_ruleset": ANALYZER_VERSION, "source_project": root.file_name().and_then(|name| name.to_str()).unwrap_or("Laravel project"), "laravel_constraint": framework, "laravel_packages": packages, "execution": "static_read_only", "env_files_read": false, "summary": counts, "findings": findings})).expect("report JSON is serializable")
 }
 
 fn markdown_report(
@@ -439,7 +506,7 @@ fn markdown_report(
     findings: &[Finding],
 ) -> String {
     let counts = report_counts(findings);
-    let mut report = format!("# Zelyra Laravel migration analysis\n\n- Analyzer: Zelyra Laravel Migrator 0.9.3\n- Project: {}\n- Laravel constraint: {}\n- Laravel packages: {}\n- Method: static, read-only source scan; PHP and Artisan were not run; `.env` files were not read.\n- Findings: {} total · {} partial · {} manual · {} unresolved\n\n", root.file_name().and_then(|name| name.to_str()).unwrap_or("Laravel project"), framework.as_deref().unwrap_or("not detected"), if packages.is_empty() { "none detected".into() } else { packages.join(", ") }, findings.len(), counts["partial"], counts["manual"], counts["unresolved"]);
+    let mut report = format!("# Zelyra Laravel migration analysis\n\n- Analyzer: Zelyra Laravel Migrator {ANALYZER_VERSION}\n- Mapping ruleset: {ANALYZER_VERSION}\n- Project: {}\n- Laravel constraint: {}\n- Laravel packages: {}\n- Method: static, read-only source scan; PHP and Artisan were not run; `.env` files were not read.\n- Findings: {} total · {} partial · {} manual · {} unresolved\n\n", root.file_name().and_then(|name| name.to_str()).unwrap_or("Laravel project"), framework.as_deref().unwrap_or("not detected"), if packages.is_empty() { "none detected".into() } else { packages.join(", ") }, findings.len(), counts["partial"], counts["manual"], counts["unresolved"]);
     report.push_str("| Status | Kind | Source location | Finding |\n|---|---|---|---|\n");
     for finding in findings {
         let summary = finding.summary.replace('|', "\\|").replace('\n', " ");
@@ -504,6 +571,8 @@ mod tests {
         let (written, counts) = analyze(&root, &report, "json").unwrap();
         let body = fs::read_to_string(&written).unwrap();
         assert!(body.contains("/orders"));
+        assert!(body.contains("Zelyra Laravel Migrator 0.9.5"));
+        assert!(body.contains("\"mapping_ruleset\": \"0.9.5\""));
         assert!(!body.contains("must-not-be-read-or-reported"));
         assert!(!body.contains("/secret"));
         assert!(counts.0 >= 1);
@@ -549,6 +618,11 @@ class Customer extends Model {
 class CustomerController {}
 Schema::create('customers', function ($table) {});
 class SendInvoice implements ShouldQueue {}
+class InvoicePolicy {}
+Gate::authorize('update', $invoice);
+$invoice->tenant_id = $tenantId;
+$total = $invoice->price * $invoice->quantity;
+$path = $request->file('attachment')->store('invoices');
 $request->validate([]);
 return $this->hasMany(Invoice::class);
 Mail::to($email)->send($message);
@@ -575,6 +649,18 @@ Mail::to($email)->send($message);
         assert!(findings
             .iter()
             .any(|item| item.kind == "job" && item.name == "SendInvoice"));
+        assert!(findings
+            .iter()
+            .any(|item| item.kind == "authorization" && item.status == "manual"));
+        assert!(findings
+            .iter()
+            .any(|item| item.kind == "tenant_boundary" && item.status == "manual"));
+        assert!(findings
+            .iter()
+            .any(|item| item.kind == "financial_rule" && item.status == "manual"));
+        assert!(findings
+            .iter()
+            .any(|item| item.kind == "file_access" && item.status == "manual"));
         assert!(findings
             .iter()
             .any(|item| item.kind == "integration" && item.name == "mail integration"));

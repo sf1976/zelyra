@@ -2757,3 +2757,26 @@ passing tests, tokens, security failures, missed dependencies, unsafe schema
 changes, and human review effort. No comparative results have been published.
 A secret leak or unapproved destructive change is a security failure and cannot
 be balanced by claimed productivity.
+
+## 24. Application email (0.9.5)
+
+Zelyra exposes `mail_queue` for queuing text and optional HTML alternatives
+inside a database `transaction`. The outbox row commits atomically with the
+business writes. `mail_deliver(event_id, payload_json)` is for an explicit
+outbox handler and returns `Result<Unit, String>`; a successful handler
+acknowledges the row and an error schedules a retry.
+
+This initial API uses the MariaDB/MySQL outbox. PostgreSQL outbox support is
+not present yet, and the runtime rejects queue attempts on PostgreSQL before
+submitting outbox SQL. Delivery is at least once, so a process failure between
+SMTP acceptance and outbox acknowledgement can produce a duplicate.
+
+SMTP settings use `ZELYRA_SMTP_HOST`, `ZELYRA_SMTP_PORT`,
+`ZELYRA_SMTP_SECURITY`, `ZELYRA_SMTP_FROM`, and optional username/password
+variables. `implicit_tls` and `starttls` verify certificates and never fall
+back to plaintext. A private root may be added through `ZELYRA_SMTP_CA_CERT`;
+hostname verification remains on. Plaintext is limited to loopback and cannot
+use credentials. The configured host must also be in the network allowlist.
+Messages are limited to 64 KiB of combined text and HTML body. See
+[`docs/mail.en.md`](../../mail.en.md) for setup, the worker example, and the
+local TLS SMTP integration test.

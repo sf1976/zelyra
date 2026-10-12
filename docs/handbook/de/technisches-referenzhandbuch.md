@@ -2959,3 +2959,27 @@ Abhängigkeiten, unsichere Schemaänderungen und menschlichen Prüfaufwand messe
 Es gibt noch keine veröffentlichten Vergleichsergebnisse. Ein Secret-Leak oder
 eine nicht freigegebene destruktive Änderung bleibt ein Sicherheitsfehler und
 wird nicht durch vermeintliche Produktivität aufgewogen.
+
+## 24. Anwendungs-E-Mail (0.9.5)
+
+Zelyra bietet `mail_queue` zum Einreihen von Text und optionalen HTML-
+Alternativen innerhalb einer Datenbank-`transaction`. Der Outbox-Eintrag wird
+atomar mit den Geschäftsänderungen gespeichert. `mail_deliver(event_id,
+payload_json)` ist für einen ausdrücklich gestarteten Outbox-Handler bestimmt
+und liefert `Result<Unit, String>`; Erfolg quittiert den Eintrag, ein Fehler
+plant einen Retry.
+
+Diese erste API verwendet die MariaDB-/MySQL-Outbox. PostgreSQL-Outbox wird
+noch nicht unterstützt; die Runtime weist entsprechende Mail-Queues vor dem
+Outbox-SQL ab. Die Zustellung erfolgt mindestens einmal. Ein Ausfall zwischen
+SMTP-Annahme und Outbox-Quittierung kann daher ein Duplikat verursachen.
+
+SMTP-Einstellungen verwenden `ZELYRA_SMTP_HOST`, `ZELYRA_SMTP_PORT`,
+`ZELYRA_SMTP_SECURITY`, `ZELYRA_SMTP_FROM` und optionale Benutzer-/Passwort-
+Variablen. `implicit_tls` und `starttls` prüfen Zertifikate und wechseln nie
+auf Klartext. Eine private CA kann über `ZELYRA_SMTP_CA_CERT` ergänzt werden;
+die Hostnamenprüfung bleibt aktiv. Klartext ist auf Loopback begrenzt und
+verträgt keine Zugangsdaten. Der konfigurierte Host muss auch in der
+Netzwerk-Allowlist stehen. Text- und HTML-Body sind zusammen auf 64 KiB
+begrenzt. Einrichtung, Workerbeispiel und lokaler TLS-SMTP-Test stehen in
+[`docs/mail.de.md`](../../mail.de.md).

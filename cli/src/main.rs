@@ -32,8 +32,8 @@ use zelyra_runtime::{
     check, check_apis, check_capabilities_with_grants,
     execute_function_with_capabilities_and_policies, execute_with_capabilities_and_policies,
     execute_with_database_and_capabilities_and_policies, verify as verify_program,
-    FileSystemPolicy, NetworkPolicy, ProcessPolicy, RuntimePolicy, Value as RuntimeValue,
-    VerificationResult, VerificationStatus, KNOWN_CAPABILITIES,
+    FileSystemPolicy, MailPolicy, NetworkPolicy, ProcessPolicy, RuntimePolicy,
+    Value as RuntimeValue, VerificationResult, VerificationStatus, KNOWN_CAPABILITIES,
 };
 use zelyra_web::{
     audit_insert_queries, html_escape, parse_urlencoded, serve_app, ApiRoute, AuthRoute,
@@ -673,6 +673,7 @@ zelyra = "0.1"
 [capabilities]
 database = true
 network = false
+email = false
 console = false
 "#,
         version = env!("CARGO_PKG_VERSION"),
@@ -5714,15 +5715,118 @@ fn project_runtime_policy(path: &str) -> Result<Option<RuntimePolicy>, String> {
     let filesystem = project_filesystem_policy(path)?;
     let network = project_network_policy(path)?;
     let process = project_process_policy(path)?;
-    if filesystem.is_none() && network.is_none() && process.is_none() {
+    let mail = project_mail_policy(path)?;
+    if filesystem.is_none() && network.is_none() && process.is_none() && mail.is_none() {
         Ok(None)
     } else {
         Ok(Some(RuntimePolicy {
             filesystem,
             network,
             process,
+            mail,
         }))
     }
+}
+
+fn project_mail_policy(path: &str) -> Result<Option<MailPolicy>, String> {
+    let host = project_optional_setting(path, "ZELYRA_SMTP_HOST")?;
+    let raw_port = project_optional_setting(path, "ZELYRA_SMTP_PORT")?;
+    let security = project_optional_setting(path, "ZELYRA_SMTP_SECURITY")?;
+    let username = project_optional_setting(path, "ZELYRA_SMTP_USERNAME")?;
+    let password = project_optional_setting(path, "ZELYRA_SMTP_PASSWORD")?;
+    let ca_certificate_path = project_optional_setting(path, "ZELYRA_SMTP_CA_CERT")?;
+    let from = project_optional_setting(path, "ZELYRA_SMTP_FROM")?;
+    if [
+        host.as_ref(),
+        raw_port.as_ref(),
+        security.as_ref(),
+        username.as_ref(),
+        password.as_ref(),
+        ca_certificate_path.as_ref(),
+        from.as_ref(),
+    ]
+    .into_iter()
+    .all(|value| value.is_none())
+    {
+        return Ok(None);
+    }
+    let host = host.ok_or("ZELYRA_SMTP_HOST is required when SMTP mail is configured")?;
+    let from = from.ok_or("ZELYRA_SMTP_FROM is required when SMTP mail is configured")?;
+    if username.is_some() != password.is_some() {
+        return Err("ZELYRA_SMTP_USERNAME and ZELYRA_SMTP_PASSWORD must be set together".into());
+    }
+    let security = security.unwrap_or_else(|| "implicit_tls".into());
+    let default_port = match security.as_str() {
+        "implicit_tls" => 465,
+        "starttls" => 587,
+        "local_plaintext" => 25,
+        _ => {
+            return Err(
+                "ZELYRA_SMTP_SECURITY must be implicit_tls, starttls, or local_plaintext".into(),
+            )
+        }
+    };
+    let port = raw_port
+        .map(|value| {
+            value
+                .parse::<u16>()
+                .ok()
+                .filter(|port| *port > 0)
+                .ok_or_else(|| "ZELYRA_SMTP_PORT must be between 1 and 65535".to_owned())
+        })
+        .transpose()?
+        .unwrap_or(default_port);
+    let ca_certificate_pem = ca_certificate_path
+        .as_deref()
+        .map(|certificate_path| project_smtp_ca_certificate(path, certificate_path))
+        .transpose()?;
+    Ok(Some(MailPolicy {
+        host: Some(host),
+        port: Some(port),
+        security: Some(security),
+        username,
+        password,
+        ca_certificate_pem,
+        from: Some(from),
+    }))
+}
+
+fn project_smtp_ca_certificate(entry_path: &str, configured_path: &str) -> Result<Vec<u8>, String> {
+    const MAX_SMTP_CA_CERTIFICATE_BYTES: u64 = 128 * 1024;
+    let configured_path = std::path::PathBuf::from(configured_path);
+    let project_directory = std::path::Path::new(entry_path)
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| std::path::Path::new("."));
+    let certificate_path = if configured_path.is_absolute() {
+        configured_path
+    } else {
+        project_directory.join(configured_path)
+    };
+    let metadata = fs::symlink_metadata(&certificate_path).map_err(|error| {
+        format!(
+            "cannot inspect ZELYRA_SMTP_CA_CERT file {}: {error}",
+            certificate_path.display()
+        )
+    })?;
+    if metadata.file_type().is_symlink()
+        || !metadata.is_file()
+        || metadata.len() == 0
+        || metadata.len() > MAX_SMTP_CA_CERTIFICATE_BYTES
+    {
+        return Err(
+            "ZELYRA_SMTP_CA_CERT must name a regular PEM file no larger than 128 KiB".into(),
+        );
+    }
+    let contents = fs::read(&certificate_path).map_err(|error| {
+        format!(
+            "cannot read ZELYRA_SMTP_CA_CERT file {}: {error}",
+            certificate_path.display()
+        )
+    })?;
+    zelyra_mail::validate_ca_certificate(&contents)
+        .map_err(|_| "ZELYRA_SMTP_CA_CERT must contain a valid PEM certificate".to_owned())?;
+    Ok(contents)
 }
 
 fn project_cors_policy(path: &str) -> Result<Option<CorsPolicy>, String> {
@@ -6731,6 +6835,10 @@ fn password_reset_mailer_from_environment(
         .unwrap_or(default_port);
     let username = project_optional_setting(path, "ZELYRA_SMTP_USERNAME")?;
     let password = project_optional_setting(path, "ZELYRA_SMTP_PASSWORD")?;
+    let ca_certificate_pem = project_optional_setting(path, "ZELYRA_SMTP_CA_CERT")?
+        .as_deref()
+        .map(|configured_path| project_smtp_ca_certificate(path, configured_path))
+        .transpose()?;
     let from = required("ZELYRA_SMTP_FROM")?;
     let base_url = required("ZELYRA_PUBLIC_BASE_URL")?;
     let delivery_key = required("ZELYRA_RESET_DELIVERY_KEY")?;
@@ -6740,6 +6848,7 @@ fn password_reset_mailer_from_environment(
         security: &security,
         username: username.as_deref(),
         password: password.as_deref(),
+        ca_certificate_pem: ca_certificate_pem.as_deref(),
         from: &from,
         base_url: &base_url,
         database_url,

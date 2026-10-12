@@ -1,5 +1,67 @@
 use super::*;
 
+#[test]
+fn project_mail_policy_reads_local_smtp_settings_and_redacts_secrets() {
+    let directory = std::env::temp_dir().join(format!(
+        "zelyra-mail-policy-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&directory).unwrap();
+    let ca_certificate = include_bytes!("../../tests/fixtures/smtp-test-ca.pem");
+    fs::write(directory.join("smtp-ca.pem"), ca_certificate).unwrap();
+    fs::write(
+        directory.join(".env"),
+        "ZELYRA_SMTP_HOST=mail.example.test\nZELYRA_SMTP_SECURITY=starttls\nZELYRA_SMTP_FROM=Zelyra <noreply@example.test>\nZELYRA_SMTP_USERNAME=mail-user\nZELYRA_SMTP_PASSWORD=mail-secret-value\nZELYRA_SMTP_CA_CERT=smtp-ca.pem\n",
+    )
+    .unwrap();
+    let entry = directory.join("main.zyl");
+    fs::write(&entry, "fn main() {}\n").unwrap();
+    let policy = project_mail_policy(entry.to_str().unwrap())
+        .unwrap()
+        .unwrap();
+    assert_eq!(policy.host.as_deref(), Some("mail.example.test"));
+    assert_eq!(policy.port, Some(587));
+    assert_eq!(policy.security.as_deref(), Some("starttls"));
+    assert_eq!(
+        policy.ca_certificate_pem.as_deref(),
+        Some(ca_certificate.as_slice())
+    );
+    assert!(format!("{policy:?}").contains("<redacted>"));
+    assert!(!format!("{policy:?}").contains("mail-secret-value"));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn smtp_ca_configuration_rejects_symlink_files() {
+    use std::os::unix::fs::symlink;
+
+    let directory = std::env::temp_dir().join(format!(
+        "zelyra-smtp-ca-symlink-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&directory).unwrap();
+    let entry = directory.join("main.zyl");
+    fs::write(&entry, "fn main() {}\n").unwrap();
+    fs::write(
+        directory.join("ca.pem"),
+        include_bytes!("../../tests/fixtures/smtp-test-ca.pem"),
+    )
+    .unwrap();
+    symlink("ca.pem", directory.join("ca-link.pem")).unwrap();
+    let error = project_smtp_ca_certificate(entry.to_str().unwrap(), "ca-link.pem").unwrap_err();
+    assert!(error.contains("regular PEM file"));
+    fs::remove_dir_all(directory).unwrap();
+}
+
 fn migration_fixture_schema(columns: Vec<zelyra_database::Column>) -> Schema {
     Schema {
         database: Some(zelyra_database::DatabaseConfig {

@@ -615,6 +615,8 @@ impl<'a> Resolver<'a> {
                             | "format_scaled_result"
                             | "http_json"
                             | "http_result"
+                            | "mail_queue"
+                            | "mail_deliver"
                             | "run_process"
                             | "read_text"
                             | "read_text_result"

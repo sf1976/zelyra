@@ -869,21 +869,26 @@ IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
 
 ## Release 0.9.5 — Eigene Mail- und SMTP-Unterstützung
 
-- [🗺️] Eine versionierte Kompatibilitätsanalyse für Laravel-Authentifizierung,
-  Policies/Berechtigungen, Geschäftslogik, Transaktionen, Geldfelder, Jobs,
-  Integrationen, Dateiablage und Views ergänzen. Sicherheitskritische oder
-  verhaltensabhängige Funde müssen zur menschlichen Prüfung markiert werden,
-  darunter Statuswechsel, Summen, Nebenwirkungen und Fehlerbehandlung. Die
-  Analyse muss ohne PHP-Pakete und laufende Laravel-Umgebung funktionieren.
-- [🗺️] Explizite Mailunterstützung ohne verpflichtenden Anbieter vervollständigen:
-  MIME-Text/HTML, kodierte Header, SMTP-Authentifizierung, implizites TLS,
-  STARTTLS, Timeouts, begrenzte Wiederholungen und Anbindung an die vorhandene
-  transaktionale Outbox. Lokale Projektkonfiguration und ein verständlicher
-  SMTP-Testsenken-Workflow gehören dazu. TLS wird nie stillschweigend abgestuft.
-- Abschlusskriterien: lokale SMTP-Senkentests decken Erfolg, Auth-/TLS-Fehler,
-  Timeout, Neustart, Wiederholung, Duplikatfenster, Template-Escaping und
-  Geheimnisredaktion ab. Mail-Capabilities und Zustellsemantik sind zweisprachig
-  dokumentiert. Siehe den [0.9.5-Plan](release-plans/0.9.5.de.md).
+- [🗺️] Die bestehende Laravel-Analyse zu einem versionierten Regelwerk für
+  Authentifizierung, Policies/Berechtigungen, Geschäftslogik, Transaktionen,
+  Geldfelder, Jobs, Integrationen, Dateiablage und Views erweitern.
+  Sicherheitskritische oder verhaltensabhängige Funde müssen zur menschlichen
+  Prüfung markiert werden, darunter Statuswechsel, Summen, Nebenwirkungen und
+  Fehlerbehandlung. Die statische Analyse bleibt ohne PHP-Pakete und laufende
+  Laravel-Umgebung nutzbar.
+- [🗺️] Eine erste explizite Mail-API ohne verpflichtenden Anbieter bereitstellen:
+  MIME-Text/HTML, SMTP-Authentifizierung, implizites TLS, STARTTLS, private
+  Zertifizierungsstellen, begrenzte Nachrichten und Anbindung an die bestehende
+  MariaDB-Outbox. Der Worker stellt nur ausdrücklich zu; TLS wird nie
+  stillschweigend abgestuft. Mail-Capabilities und lokale Testsenke dokumentieren.
+- [🗺️] In 0.9.6 sichere benannte Templates und begrenzte Datei-Anhänge ergänzen,
+  die Notification-Vorlagen darauf aufbauen und die gleiche Größen-, Escape-
+  und Herkunftsprüfung verwenden.
+- Abschlusskriterien: lokaler SMTP-End-to-End-Test mit vertrauenswürdiger
+  lokaler CA, STARTTLS und Authentifizierung; außerdem Tests für
+  Konfigurationsablehnung, Größenlimit, Header-Injection, Geheimnisredaktion,
+  Capability-Prüfung und transaktionales Einreihen. Zustellung und Duplikatfenster
+  zweisprachig dokumentieren. Siehe den [0.9.5-Plan](release-plans/0.9.5.de.md).
 
 ## Release 0.9.6 — Benachrichtigungszentrum
 

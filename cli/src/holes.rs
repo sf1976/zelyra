@@ -412,6 +412,8 @@ fn visible_functions(program: &zelyra_ast::Program) -> Vec<String> {
         "http_request",
         "http_json",
         "http_result",
+        "mail_queue",
+        "mail_deliver",
         "json_encode",
         "json_decode",
         "run_process",
@@ -496,6 +498,10 @@ mod tests {
             .visible_functions
             .iter()
             .any(|function| function == "read_console"));
+        assert!(holes[0]
+            .visible_functions
+            .iter()
+            .any(|function| function == "mail_queue"));
         assert_eq!(holes[0].capabilities, Vec::<String>::new());
         assert_eq!(holes[0].contract_spans.len(), 2);
     }

@@ -141,6 +141,35 @@ project. Machine API/JSON contracts and compiler diagnostics remain language
 neutral or in their defined technical language; the UI locale does not change
 them.
 
+## Application email in 0.9.5
+
+The Zelyra email API uses the same SMTP variables as password recovery. Set
+`[capabilities].email = true` as well, and add the exact SMTP host to
+`[network].allowed_hosts`. The 0.9.5 mail outbox supports MariaDB and must be
+created explicitly with `zelyra outbox setup main.zyl`.
+
+| Variable | Default | Use and security classification |
+|---|---:|---|
+| `ZELYRA_SMTP_HOST` | none | Required SMTP host for delivery. |
+| `ZELYRA_SMTP_PORT` | `465` / `587` / `25` | Port for `implicit_tls` / `starttls` / `local_plaintext`; plaintext is limited to loopback without authentication. |
+| `ZELYRA_SMTP_SECURITY` | `implicit_tls` | `implicit_tls`, `starttls`, or `local_plaintext`; TLS failure never falls back to plaintext. |
+| `ZELYRA_SMTP_FROM` | none | Required sender address. |
+| `ZELYRA_SMTP_USERNAME` | none | Optional SMTP user; must be set together with the password. Secret. |
+| `ZELYRA_SMTP_PASSWORD` | none | SMTP password. Secret; never print or commit it. |
+| `ZELYRA_SMTP_CA_CERT` | none | Optional PEM root certificate, relative to the project or absolute; regular non-symlink file up to 128 KiB. Public trust material; hostname checks remain enabled. |
+
+Set up the table and explicitly run a delivery worker:
+
+```sh
+zelyra outbox setup main.zyl
+zelyra outbox run main.zyl --handler zelyra.mail.send=deliver_mail --once
+```
+
+`mail_queue` writes the message to the outbox inside a database transaction.
+The worker later sends it over SMTP. Delivery is at least once and may produce
+duplicates. Configuration and a complete example are in
+[`mail.en.md`](mail.en.md).
+
 ## Password recovery in the 0.4 development branch
 
 An auth declaration can set `reset_tokens: password_resets`. The reset table

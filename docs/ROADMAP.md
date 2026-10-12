@@ -867,20 +867,24 @@ language backlog as one 0.9.4 change.
 
 ## Release 0.9.5 — first-party mail and SMTP
 
-- [🗺️] Add versioned compatibility analysis for Laravel authentication,
-  policies/permissions, business logic, transactions, money fields, jobs,
-  integrations, file handling, and views. Mark security-sensitive or
-  behavior-dependent findings for human review, including status changes,
-  totals, side effects, and failure handling. Keep this analyzer useful without
-  PHP packages or a running Laravel environment.
-- [🗺️] Complete explicit application mail support without a mandatory provider:
-  MIME text/HTML messages, encoded headers, SMTP authentication, implicit TLS,
-  STARTTLS, timeouts, bounded retries, and integration with the existing
-  transactional outbox. Provide local project configuration and a clear SMTP
-  test sink workflow. Never silently downgrade TLS.
-- Exit criteria: local SMTP sink tests cover success, auth/TLS failure, timeout,
-  restart, retry, duplicate window, template escaping, and secret redaction.
-  Mail capabilities and delivery semantics are documented in both languages.
+- [🗺️] Expand the existing Laravel analysis into a versioned compatibility
+  ruleset for authentication, policies/permissions, business logic,
+  transactions, money fields, jobs, integrations, file handling, and views.
+  Mark security-sensitive or behavior-dependent findings for human review,
+  including status changes, totals, side effects, and failure handling. Keep
+  static analysis independent of PHP packages and a running Laravel environment.
+- [🗺️] Provide the first explicit application mail API without a mandatory
+  provider: MIME text/HTML, SMTP authentication, implicit TLS, STARTTLS, private
+  certificate authorities, bounded messages, and integration with the existing
+  MariaDB outbox. Dispatch remains explicit; TLS never silently downgrades.
+  Document email capabilities and the local test sink.
+- [🗺️] Add safe named templates and bounded file attachments in 0.9.6; build
+  notification templates on that path with shared size, escaping, and source
+  checks.
+- Exit evidence: local SMTP end-to-end test with a trusted local CA, STARTTLS,
+  and authentication; plus tests for rejected configuration, size limits,
+  header injection, secret redaction, capability checks, and transactional
+  enqueueing. Document delivery and its duplicate window in both languages.
   See the [0.9.5 plan](release-plans/0.9.5.en.md).
 
 ## Release 0.9.6 — notification center

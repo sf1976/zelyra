@@ -1,9 +1,9 @@
 [workspace]
-members = ["ast", "lexer", "parser", "hir", "database", "runtime", "web", "forms", "cli"]
+members = ["ast", "lexer", "parser", "hir", "database", "mail", "runtime", "web", "forms", "cli"]
 resolver = "2"
 
 [workspace.package]
-version = "0.9.4"
+version = "0.9.5"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 
@@ -35,6 +35,7 @@ zelyra-lexer = { path = "lexer", version = "0.9" }
 zelyra-parser = { path = "parser", version = "0.9" }
 zelyra-hir = { path = "hir", version = "0.9" }
 zelyra-database = { path = "database", version = "0.9" }
+zelyra-mail = { path = "mail", version = "0.9" }
 zelyra-runtime = { path = "runtime", version = "0.9" }
 zelyra-web = { path = "web", version = "0.9" }
 zelyra-forms = { path = "forms", version = "0.9" }

@@ -132,7 +132,7 @@ jobs:
         with:
           components: rustfmt, clippy
       - name: Install database clients and curl
-        run: sudo apt-get update && sudo apt-get install --yes mariadb-client postgresql-client sqlite3 curl
+        run: sudo apt-get update && sudo apt-get install --yes mariadb-client postgresql-client sqlite3 curl openssl
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Validate source installer
@@ -288,6 +288,11 @@ jobs:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
           ZELYRA_BIN: target/debug/zelyra
         run: bash ./tests/password-reset-e2e.sh
+      - name: Run transactional mail outbox end-to-end test
+        env:
+          DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+          ZELYRA_BIN: target/debug/zelyra
+        run: bash ./tests/mail-outbox-e2e.sh
       - name: Run generated machine authorization end-to-end test
         env:
           ZELYRA_MACHINE_AUTH_GENERATED_ROOT_PASSWORD: root
