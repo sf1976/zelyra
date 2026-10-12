@@ -19,11 +19,15 @@ ersten Programm bis zur datenbankgestützten Webanwendung.
 Ein neues lokales Lernprojekt für Kunden, Artikel und Rechnungen erzeugst du
 mit [`zelyra --tutorial invoice`](../../tutorials/invoice.de.md).
 
-> **Projektstatus:** Zelyra 0.9.0 ist stabil veröffentlicht, bleibt aber
+> **Projektstatus:** Zelyra 0.9.5 ist stabil veröffentlicht, bleibt aber
 > experimentell und ist nicht für den Produktiveinsatz freigegeben. Die
 > unabhängige menschliche Abnahme früherer Releases ist auf 1.0.0 verschoben.
 > Siehe [Roadmap](../../ROADMAP.de.md) und
 > [Abnahmeentscheidung](../../release-readiness/1.0.0-human-acceptance.de.md).
+
+Version 0.9.5 ergänzt transaktionale Anwendungs-E-Mail über einen ausdrücklich
+gestarteten SMTP-Outbox-Worker. Siehe [Anwendungs-E-Mail](../mail.de.md) und
+[Release-Notizen 0.9.5](../../release-notes/0.9.5.de.md).
 
 Die verbindlichen Produktziele zu digitaler Souveränität und ehrlichen
 Korrektheitsversprechen stehen im [Zelyra-Manifest](../../MANIFESTO.de.md).

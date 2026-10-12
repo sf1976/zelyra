@@ -1,14 +1,30 @@
-# Implemented in Zelyra 0.9.4
+# Implemented in Zelyra 0.9.5
 
-**Snapshot:** stable 0.9.4 · language compatibility line `0.1` · 2026-10-12
+**Snapshot:** stable 0.9.5 · language compatibility line `0.1` · 2026-10-12
 **Maturity:** experimental; not approved for production use
 
-This is an inventory of capabilities implemented in the stable Zelyra 0.9.4
+This is an inventory of capabilities implemented in the stable Zelyra 0.9.5
 release. It does not claim human acceptance; that remains scheduled for 1.0.0. It records delivered scope, not the full language vision
 or future plans. The [roadmap](ROADMAP.md) remains the source for unfinished
 work; the [changelog](../CHANGELOG.md) records what changed in each release.
 Links below lead to detailed instructions and test evidence so this page does
 not duplicate the handbook.
+
+## Changes in 0.9.5
+
+- ✅ Applications can queue bounded text/HTML messages transactionally through
+  `mail_queue` and deliver them through the explicit `zelyra outbox run` worker.
+  SMTP supports authentication, implicit TLS, required STARTTLS, explicitly
+  trusted private CA roots, host allowlisting, and a five-second transport
+  timeout. Delivery is at least once; the MariaDB outbox is not a general queue.
+- ✅ Positive and negative mail tests cover MIME content, local authenticated
+  STARTTLS, trusted/untrusted certificates, timeouts, retry, transactional
+  enqueueing, and secret redaction. See the [mail guide](mail.en.md).
+- ✅ The versioned Laravel Migrator adds source-located review findings for
+  authorization, tenant-like fields, money calculations, and file operations.
+  It remains a static inventory, not a PHP parser or automatic behavior port.
+- ✅ Release CI passed for the Linux and Windows artifacts and the documented
+  MariaDB/MySQL matrix. Independent human acceptance remains reserved for 1.0.0.
 
 ## Changes in 0.9.4
 

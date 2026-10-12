@@ -1,9 +1,9 @@
-# In Zelyra 0.9.4 umgesetzt
+# In Zelyra 0.9.5 umgesetzt
 
-**Stand:** stabiles Release 0.9.4 · Sprachkompatibilitätslinie `0.1` · 2026-10-12
+**Stand:** stabiles Release 0.9.5 · Sprachkompatibilitätslinie `0.1` · 2026-10-12
 **Reifegrad:** experimentell; nicht für den Produktiveinsatz freigegeben
 
-Diese Übersicht führt Funktionen auf, die im stabilen Release Zelyra 0.9.4
+Diese Übersicht führt Funktionen auf, die im stabilen Release Zelyra 0.9.5
 tatsächlich implementiert sind. Eine menschliche Abnahme wird nicht behauptet;
 sie bleibt bis 1.0.0 offen. Sie beschreibt den ausgelieferten Umfang,
 nicht die gesamte Sprachvision oder zukünftige Vorhaben. Die
@@ -11,6 +11,23 @@ nicht die gesamte Sprachvision oder zukünftige Vorhaben. Die
 [Changelog](../CHANGELOG.md) hält die Änderungen der Releases fest. Die Links
 führen zu ausführlichen Anleitungen und Testnachweisen, damit diese Seite das
 Handbuch nicht doppelt wiedergibt.
+
+## Änderungen in 0.9.5
+
+- ✅ Anwendungen reihen begrenzte Text-/HTML-Mails mit `mail_queue` innerhalb
+  der Geschäftstransaktion ein und stellen sie über den ausdrücklich gestarteten
+  `zelyra outbox run`-Worker zu. SMTP unterstützt Authentifizierung, implizites
+  TLS, verpflichtendes STARTTLS, ausdrücklich vertraute private CA-Wurzeln,
+  Hostfreigaben und fünf Sekunden Transport-Timeout. Die Zustellung erfolgt
+  mindestens einmal; die MariaDB-Outbox ist keine allgemeine Queue.
+- ✅ Positive und negative Mailtests prüfen MIME-Inhalt, lokales authentifiziertes
+  STARTTLS, vertrauenswürdige und abgelehnte Zertifikate, Timeout, Wiederholung,
+  transaktionales Einreihen und Geheimnisredaktion. Siehe den [Mail-Leitfaden](mail.de.md).
+- ✅ Der versionierte Laravel-Migrator ergänzt quellenbezogene Prüffunde zu
+  Autorisierung, mandantenähnlichen Feldern, Geldberechnungen und Dateioperationen.
+  Er bleibt ein statisches Inventar, kein PHP-Parser oder automatischer Port.
+- ✅ Release-CI bestand für Linux- und Windows-Artefakte sowie die dokumentierte
+  MariaDB-/MySQL-Matrix. Die unabhängige menschliche Abnahme bleibt für 1.0.0.
 
 ## Änderungen in 0.9.4
 

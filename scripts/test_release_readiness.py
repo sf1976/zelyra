@@ -41,7 +41,7 @@ class ReleaseReadinessTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         for version, plans in RELEASE_PLAN_CHECKLISTS.items():
             failures = unfinished_gates(root, version)
-            if version in {"0.7.0", "0.8.0", "0.9.0", "0.9.3"}:
+            if version in {"0.7.0", "0.8.0", "0.9.0", "0.9.3", "0.9.5"}:
                 self.assertEqual(
                     failures,
                     [],
@@ -50,6 +50,12 @@ class ReleaseReadinessTests(unittest.TestCase):
                 continue
             self.assertTrue(failures, f"{version} must stay blocked while its gates are open")
             for relative_path, _heading in plans:
+                if version == "0.9.9" and "0.9.5." in relative_path:
+                    self.assertFalse(
+                        any(relative_path in failure for failure in failures),
+                        f"completed 0.9.5 gates must not block {version}",
+                    )
+                    continue
                 self.assertTrue(
                     any(relative_path in failure for failure in failures),
                     f"{version} must report incomplete gates from {relative_path}",

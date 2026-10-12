@@ -58,6 +58,17 @@ den tatsächlich implementierten Stand.
   Attestierungen sind veröffentlicht. Die Typmatrix bleibt bei 17 unterstützt,
   5 teilweise und 3 nicht verfügbar. Nachweis: [0.9.3-Kandidatenprüfung](release-readiness/0.9.3-candidate-verification.md). Die menschliche
   Produktabnahme bleibt für 1.0.0 reserviert.
+- [x] **Stabiles Release 0.9.5 veröffentlicht:** Typisierte Anwendungs-Mails
+  werden transaktional in die MariaDB-Outbox eingereiht und über einen
+  ausdrücklich gestarteten SMTP-Worker mit verpflichtendem TLS,
+  Authentifizierung, privaten CA-Wurzeln, begrenzten Nachrichten und redigierten
+  Fehlern zugestellt. Versionierte Laravel-Prüffunde decken Autorisierung,
+  mandantenähnliche Felder, Geldberechnungen und Dateioperationen ab. Das
+  Release bleibt experimentell; Zustellung erfolgt mindestens einmal und
+  PostgreSQL-Outbox, Templates und Anhänge bleiben offen. Exakte Release-CI,
+  MariaDB 10.11/11.4/11.8/12.3, MySQL 8.4, Linux-/Windows-Builds, SBOMs und
+  Attestierungen sind am [0.9.5-Release](https://github.com/sf1976/zelyra/releases/tag/v0.9.5)
+  angehängt. Die menschliche Abnahme bleibt für 1.0.0 reserviert.
 
 - [~] Der 0.4-Entwicklungszweig ergänzt Anzeige und Sperrung dauerhafter
   Sitzungen mit Verwaltungsrecht, CSRF-Prüfung und Audit-Anfrageereignis.
@@ -869,22 +880,22 @@ IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
 
 ## Release 0.9.5 — Eigene Mail- und SMTP-Unterstützung
 
-- [🗺️] Die bestehende Laravel-Analyse zu einem versionierten Regelwerk für
+- [x] Die bestehende Laravel-Analyse wurde zu einem versionierten Regelwerk für
   Authentifizierung, Policies/Berechtigungen, Geschäftslogik, Transaktionen,
   Geldfelder, Jobs, Integrationen, Dateiablage und Views erweitern.
   Sicherheitskritische oder verhaltensabhängige Funde müssen zur menschlichen
   Prüfung markiert werden, darunter Statuswechsel, Summen, Nebenwirkungen und
   Fehlerbehandlung. Die statische Analyse bleibt ohne PHP-Pakete und laufende
   Laravel-Umgebung nutzbar.
-- [🗺️] Eine erste explizite Mail-API ohne verpflichtenden Anbieter bereitstellen:
+- [x] Eine erste explizite Mail-API ohne verpflichtenden Anbieter wurde ergänzt:
   MIME-Text/HTML, SMTP-Authentifizierung, implizites TLS, STARTTLS, private
   Zertifizierungsstellen, begrenzte Nachrichten und Anbindung an die bestehende
   MariaDB-Outbox. Der Worker stellt nur ausdrücklich zu; TLS wird nie
   stillschweigend abgestuft. Mail-Capabilities und lokale Testsenke dokumentieren.
-- [🗺️] In 0.9.6 sichere benannte Templates und begrenzte Datei-Anhänge ergänzen,
+- [ ] In 0.9.6 sichere benannte Templates und begrenzte Datei-Anhänge ergänzen,
   die Notification-Vorlagen darauf aufbauen und die gleiche Größen-, Escape-
   und Herkunftsprüfung verwenden.
-- Abschlusskriterien: lokaler SMTP-End-to-End-Test mit vertrauenswürdiger
+- Abschlusskriterien bestanden am exakten Kandidaten: lokaler SMTP-End-to-End-Test mit vertrauenswürdiger
   lokaler CA, STARTTLS und Authentifizierung; außerdem Tests für
   Konfigurationsablehnung, Größenlimit, Header-Injection, Geheimnisredaktion,
   Capability-Prüfung und transaktionales Einreihen. Zustellung und Duplikatfenster

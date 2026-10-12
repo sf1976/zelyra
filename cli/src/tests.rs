@@ -2665,6 +2665,9 @@ fn generated_mariadb_template_uses_selected_web_port() {
     assert!(env_example.contains("ZELYRA_DB_POOL_MAX_SIZE=8"));
     assert!(env_example.contains("ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS=10"));
     assert!(env_example.contains("ZELYRA_DB_TLS_MODE=disabled"));
+    assert!(env_example.contains("ZELYRA_SMTP_HOST=127.0.0.1"));
+    assert!(env_example.contains("ZELYRA_SMTP_SECURITY=local_plaintext"));
+    assert!(env_example.contains("never point local tests at real recipients"));
     assert!(
         compose.contains("ZELYRA_DB_CONNECT_TIMEOUT_SECS: ${ZELYRA_DB_CONNECT_TIMEOUT_SECS:-10}")
     );
