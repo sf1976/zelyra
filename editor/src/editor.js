@@ -12,7 +12,7 @@ import {
 } from "@codemirror/language";
 import { linter, setDiagnostics } from "@codemirror/lint";
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
-import { EditorState, StateEffect } from "@codemirror/state";
+import { Compartment, EditorState, StateEffect } from "@codemirror/state";
 import { tags } from "@lezer/highlight";
 import {
   crosshairCursor,
@@ -387,7 +387,9 @@ const zelyraLanguage = StreamLanguage.define({
   },
 });
 
-const zelyraTheme = EditorView.theme({
+const editorTheme = new Compartment();
+function createZelyraTheme() {
+  return EditorView.theme({
   "&": { height: "100%", fontSize: "14px", backgroundColor: "var(--editor-bg)", color: "var(--ink)" },
   ".cm-scroller": { fontFamily: "'JetBrains Mono', 'Cascadia Code', ui-monospace, monospace", lineHeight: "1.65", overflow: "auto" },
   ".cm-content": { padding: "18px 0", caretColor: "var(--accent)" },
@@ -399,7 +401,8 @@ const zelyraTheme = EditorView.theme({
   ".cm-tooltip": { border: "1px solid var(--border)", backgroundColor: "var(--surface)", color: "var(--ink)", boxShadow: "0 12px 35px #11182722" },
   ".cm-tooltip-autocomplete ul li[aria-selected]": { background: "var(--accent)", color: "white" },
   ".cm-lintRange-error": { backgroundImage: "none", borderBottom: "2px wavy var(--danger)" },
-}, { dark: document.documentElement.dataset.theme === "dark" });
+  }, { dark: document.documentElement.dataset.theme !== "light" });
+}
 const zelyraHighlight = syntaxHighlighting(HighlightStyle.define([
   { tag: tags.keyword, color: "var(--token-keyword)", fontWeight: "600" },
   { tag: tags.typeName, color: "var(--token-type)" },
@@ -803,7 +806,7 @@ function createView(path, state) {
       if (update.selectionSet || update.docChanged) renderContextHelp(update.state, path);
     }),
     EditorView.lineWrapping,
-    zelyraTheme,
+    editorTheme.of(createZelyraTheme()),
     EditorView.contentAttributes.of({ "aria-label": `${path} im Zelyra-Webeditor` }),
   ];
   return new EditorView({
@@ -1995,6 +1998,7 @@ $("tree-filter").addEventListener("input", (event) => { activeFilter = event.tar
 $("theme-button").addEventListener("click", () => {
   root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
   localStorage.setItem("zelyra-editor-theme", root.dataset.theme);
+  if (editor) editor.dispatch({ effects: editorTheme.reconfigure(createZelyraTheme()) });
 });
 $("language-button").addEventListener("click", () => setLanguage(language === "de" ? "en" : "de"));
 $("sidebar-toggle").addEventListener("click", (event) => {

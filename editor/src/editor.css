@@ -12,7 +12,7 @@
 :root[data-theme="light"] {
   color-scheme: light;
   --canvas: #eef1f7; --surface: #fff; --surface-raised: #f6f7fb; --editor-bg: #fff;
-  --editor-gutter: #f7f8fb; --ink: #192238; --muted: #65728a; --faint: #8792a5;
+  --editor-gutter: #f7f8fb; --editor-active: #1922380a; --ink: #192238; --muted: #65728a; --faint: #8792a5;
   --border: #dfe4ee; --accent: #6655db; --accent-strong: #5745c3; --accent-soft: #6655db18;
   --selection: #8675ef44; --danger: #c3354b; --success: #137a61; --warning: #9d6405;
   --sidebar: #f8f9fc; --shadow: 0 18px 50px #25345416;
