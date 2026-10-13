@@ -382,3 +382,11 @@ Array-Ergebnisse mit Kardinalitäts- und NULL-Prüfung; das Rohzeilen-JSON-Forma
 bleibt unverändert. Siehe [Regeln](dates.de.md),
 [HTTP-Nachweise](release-readiness/0.9.9-calendar-http.de.md) und
 [SQL-Nachweise](release-readiness/0.9.9-calendar-sql.de.md).
+
+## NULL-bewusster Edit-Schutz im Entwicklungsbranch
+
+Natives NULL und Literaltext `\N` bleiben in signierten Edit-Snapshots und
+Formulareingaben verschieden. Veraltete MariaDB-/MySQL-Updates scheitern mit
+HTTP 409 vor der Änderung. Fehlende implizit nullable Felder binden SQL-NULL;
+Pflicht-/Readonly-Prüfungen bleiben. [Regeln](edit-snapshots.de.md),
+[Nachweise](release-readiness/0.9.9-null-edit-snapshots.de.md).

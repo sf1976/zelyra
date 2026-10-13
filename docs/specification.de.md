@@ -783,3 +783,10 @@ Array-Ergebnisse mit Kardinalitäts- und NULL-Prüfung; das Rohzeilen-JSON-Forma
 bleibt unverändert. Siehe [Regeln](dates.de.md),
 [HTTP-Nachweise](release-readiness/0.9.9-calendar-http.de.md) und
 [SQL-Nachweise](release-readiness/0.9.9-calendar-sql.de.md).
+
+## NULL-bewusste optimistische Edits in 0.9.9
+
+Erzeugte MariaDB-/MySQL-Editformulare signieren natives NULL getrennt von Text
+und prüfen die gesperrte aktuelle Zeile vor dem Schreiben. NULL-/Literal-`\N`-
+Wechsel liefern für veraltete Formulare HTTP 409. Fehlende nullable Felder binden
+SQL-NULL; Pflicht-/Readonly-Prüfungen bleiben. [Regeln und Grenzen](edit-snapshots.de.md).

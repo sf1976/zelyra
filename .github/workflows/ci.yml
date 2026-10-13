@@ -367,6 +367,7 @@ jobs:
         run: |
           python3 ./tests/temporal-sql-e2e.py
           python3 ./tests/typed-sql-results-e2e.py
+          python3 ./tests/null-edit-snapshots-e2e.py
       - name: Verify exact decimal forms, filters, APIs, and legacy schemas on PostgreSQL
         env:
           DATABASE_URL: postgres://zelyra_ci:zelyra_ci@127.0.0.1:5432/zelyra_ci
@@ -589,3 +590,4 @@ jobs:
         run: |
           python3 ./tests/temporal-sql-e2e.py
           python3 ./tests/typed-sql-results-e2e.py
+          python3 ./tests/null-edit-snapshots-e2e.py

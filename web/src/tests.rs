@@ -157,7 +157,10 @@ fn monetary_form_and_query_parameters_preserve_every_digit() {
 fn edit_form_snapshots_are_signed_and_bound_to_csrf_key_and_field_set() {
     let csrf = CsrfProtection::new("session-specific-csrf-secret");
     let form = form_route().form;
-    let values = HashMap::from([("name".to_owned(), "original".to_owned())]);
+    let values = EditValues {
+        values: HashMap::from([("name".to_owned(), "original".to_owned())]),
+        nulls: HashSet::new(),
+    };
     let token = sign_form_snapshot(&csrf, &values).unwrap();
     let signature = verify_form_snapshot(&token).unwrap();
 
@@ -170,13 +173,19 @@ fn edit_form_snapshots_are_signed_and_bound_to_csrf_key_and_field_set() {
     assert!(!form_snapshot_matches(
         &csrf,
         &signature,
-        &HashMap::from([("name".to_owned(), "modified".to_owned())])
+        &EditValues {
+            values: HashMap::from([("name".to_owned(), "modified".to_owned())]),
+            nulls: HashSet::new()
+        }
     ));
     assert!(verify_form_snapshot(&format!("{token}00")).is_none());
 
     let mut mismatched_form = form.clone();
     mismatched_form.fields[0].name = "email".into();
-    let mismatched_values = HashMap::from([("email".to_owned(), "original".to_owned())]);
+    let mismatched_values = EditValues {
+        values: HashMap::from([("email".to_owned(), "original".to_owned())]),
+        nulls: HashSet::new(),
+    };
     assert!(!form_snapshot_matches(
         &csrf,
         &signature,
@@ -3782,5 +3791,112 @@ fn decimal_presentation_retains_digits_without_padding_or_float_conversion() {
         display_database_value("150.000000000"),
         "150.000000000",
         "ordinary text stays unchanged"
+    );
+}
+
+#[test]
+fn edit_snapshots_distinguish_native_null_literal_marker_and_empty_text() {
+    let csrf = CsrfProtection::new("snapshot-key");
+    let literal = EditValues {
+        values: HashMap::from([("note".into(), "\\N".into())]),
+        nulls: HashSet::new(),
+    };
+    let null = EditValues {
+        values: literal.values.clone(),
+        nulls: HashSet::from(["note".into()]),
+    };
+    let empty = EditValues {
+        values: HashMap::from([("note".into(), "".into())]),
+        nulls: HashSet::new(),
+    };
+    let token = sign_form_snapshot(&csrf, &null).unwrap();
+    let signature = verify_form_snapshot(&token).unwrap();
+    assert!(form_snapshot_matches(&csrf, &signature, &null));
+    assert!(!form_snapshot_matches(&csrf, &signature, &literal));
+    assert!(!form_snapshot_matches(&csrf, &signature, &empty));
+    assert_eq!(null.rendered_values()["note"], "");
+    assert_eq!(literal.rendered_values()["note"], "\\N");
+    let legacy = serde_json::to_vec(&literal.values.iter().collect::<BTreeMap<_, _>>()).unwrap();
+    let key = hmac::Key::new(hmac::HMAC_SHA256, csrf.token.as_bytes());
+    assert_eq!(
+        sign_form_snapshot(&csrf, &literal).unwrap(),
+        hex_encode(hmac::sign(&key, &legacy).as_ref())
+    );
+}
+
+#[test]
+fn edit_snapshots_fail_closed_on_missing_or_invalid_native_metadata() {
+    let form = form_route();
+    let mut result = zelyra_database::QueryResult {
+        columns: vec!["name".into()],
+        rows: vec![vec!["\\N".into()]],
+        ..Default::default()
+    };
+    assert!(EditValues::from_result(&form, &result).is_err());
+    result.nulls = vec![vec![false]];
+    assert_eq!(
+        EditValues::from_result(&form, &result)
+            .unwrap()
+            .unwrap()
+            .rendered_values()["name"],
+        "\\N"
+    );
+    result.nulls = vec![vec![true]];
+    assert_eq!(
+        EditValues::from_result(&form, &result)
+            .unwrap()
+            .unwrap()
+            .rendered_values()["name"],
+        ""
+    );
+    result.nulls[0].clear();
+    assert!(EditValues::from_result(&form, &result).is_err());
+    let invalid = EditValues {
+        values: HashMap::new(),
+        nulls: HashSet::from(["missing".into()]),
+    };
+    assert!(sign_form_snapshot(&CsrfProtection::new("key"), &invalid).is_none());
+}
+
+#[test]
+fn nullable_storage_binds_omitted_text_as_null_without_weakening_required_fields() {
+    let mut form = form_route();
+    form.form.table = Some("notes".into());
+    form.form.fields[0].required = false;
+    form.schema = Some(Schema {
+        database: None,
+        tables: vec![zelyra_database::Table {
+            name: "notes".into(),
+            columns: vec![zelyra_database::Column {
+                name: "name".into(),
+                sql_type: "VARCHAR(100)".into(),
+                nullable: true,
+                primary_key: false,
+                auto: false,
+                unique: false,
+                default: None,
+            }],
+            foreign_keys: Vec::new(),
+            indexes: Vec::new(),
+            uniques: Vec::new(),
+        }],
+    });
+    let empty = HashMap::new();
+    assert!(validate(&form.form, None, form.schema.as_ref(), &empty)
+        .errors
+        .is_empty());
+    let params = form_query_parameters(&form, &empty).unwrap();
+    assert!(matches!(&params[0], (name, QueryValue::Null) if name == "name"));
+    let literal = HashMap::from([("name".into(), "\\N".into())]);
+    let params = form_query_parameters(&form, &literal).unwrap();
+    assert!(
+        matches!(&params[0], (name, QueryValue::String(value)) if name == "name" && value == "\\N")
+    );
+    form.form.fields[0].required = true;
+    assert_eq!(
+        validate(&form.form, None, form.schema.as_ref(), &empty)
+            .errors
+            .len(),
+        1
     );
 }

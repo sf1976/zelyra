@@ -154,6 +154,13 @@ pub fn field_value_type(
     schema: Option<&Schema>,
     field: &FormField,
 ) -> Option<Type> {
+    let storage_column = schema.and_then(|schema| {
+        schema
+            .tables
+            .iter()
+            .find(|table| Some(table.name.as_str()) == form.table.as_deref())
+            .and_then(|table| find_column(table, &field.name))
+    });
     let ty = field.ty.clone().or_else(|| {
         table.and_then(|table| {
             table
@@ -163,6 +170,25 @@ pub fn field_value_type(
                 .map(|column| column.ty.clone())
         })
     })?;
+    // Storage nullability also applies to ordinary `String`/numeric declarations
+    // without an explicit Option. Validation still enforces required form fields.
+    let nullable = storage_column
+        .map(|column| column.nullable)
+        .unwrap_or_else(|| {
+            table
+                .and_then(|table| {
+                    table
+                        .columns
+                        .iter()
+                        .find(|column| column.name == field.name)
+                })
+                .is_some_and(|column| !column.required && !column.primary_key && !column.auto)
+        });
+    let ty = if nullable && !matches!(ty, Type::Option(_)) {
+        Type::Option(Box::new(ty))
+    } else {
+        ty
+    };
     let inner = match &ty {
         Type::Option(inner) => inner.as_ref(),
         other => other,
