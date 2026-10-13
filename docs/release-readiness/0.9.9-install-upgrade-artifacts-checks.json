@@ -1,0 +1,53 @@
+{
+  "gate": "0.9.9-install-upgrade-artifacts",
+  "verified_at": "2026-10-13T19:48:30+02:00",
+  "commit": "HEAD",
+  "binary_sha256": "5ed92b1d4b924ab75687f6acf0ec7ef214e5333c43edd956af96461db098c2bb",
+  "checks": [
+    {
+      "name": "prefix_installation_without_rustup",
+      "status": "passed",
+      "details": "Verified install.sh --no-rustup, binary check, repeatable installation, and clean uninstallation without toolchain dependencies"
+    },
+    {
+      "name": "clean_mariadb_onboarding",
+      "status": "passed",
+      "details": "Verified fresh MariaDB project generation, doctor prerequisites, schema bootstrap, and CRUD lifecycle"
+    },
+    {
+      "name": "invoice_tutorial_modular_layout",
+      "status": "passed",
+      "details": "Multi-file structure across database, shell, customers, items, invoices, and dashboard validated"
+    },
+    {
+      "name": "invoice_tutorial_vat_and_print_layout",
+      "status": "passed",
+      "details": "Net, 19% VAT, and gross calculations verified; local Tabler Core 1.6.1 delivery verified without CDN requests; print layout verified"
+    },
+    {
+      "name": "invoice_tutorial_column_collapse_resolved",
+      "status": "passed",
+      "details": "Resolved 258px left-edge column collapse by exempting html.zelyra-app/body.zelyra-app from sidebar grid, resetting main.page-body, and bundling zelyra.theme.css in examples/invoice_tutorial"
+    },
+    {
+      "name": "mariadb_backup_atomic_partial_protection",
+      "status": "passed",
+      "details": "Scoped mariadb-dump verified; incomplete dumps stream to .partial files and never masquerade as valid backups"
+    },
+    {
+      "name": "mariadb_target_isolated_restore",
+      "status": "passed",
+      "details": "Scoped restore verified against isolated target database and credentials"
+    },
+    {
+      "name": "server_crash_ddl_journal_recovery",
+      "status": "passed",
+      "details": "Simulated mid-migration server interruption at DDL/journal boundary recovers cleanly via fresh plan replay"
+    },
+    {
+      "name": "reproducible_release_artifacts_and_checksums",
+      "status": "passed",
+      "details": "Consistent metadata v0.9.9, deterministic SOURCE_DATE_EPOCH archives, valid SHA-256 sidecars, and clean path safety"
+    }
+  ]
+}
