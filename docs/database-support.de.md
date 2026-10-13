@@ -38,6 +38,17 @@ Eine Scoped-Callback-API besteht Commit, bedingte Lese-/Schreibsichtbarkeit,
 Rollback bei Rückgabe-/SQL-/ignorierten Fehlern und Unwind, Deadline-Prüfung vor
 Statements/Commit und Wiederverwendung mit Ein-Verbindungs-Pool auf MariaDB
 11.4.13, MySQL 8.4.11 und PostgreSQL 16.15. PostgreSQL-Statementabbruch ist geprüft.
-Keine Freigabe für geschützte Formular-/Auth-Adapterparität oder harte MySQL-
+Keine Freigabe für allgemeine Auth-Adapterparität oder harte MySQL-
 Schreibgrenzen. [Regeln](decision-transactions.de.md),
 [Nachweise](release-readiness/0.9.9-decision-transactions.de.md).
+
+## PostgreSQL-Formularentscheidungen (0.9.9-Entwicklung)
+
+Formularentscheidungen für PostgreSQL verbinden Mandantenmitgliedschaft,
+Empfängerberechtigung, Zeilensperrung, optimistische Snapshotvergleiche
+(NULL vs. `\N`), Geschäftsänderung und atomare unverkettete Audits innerhalb
+einer einzigen Transaktion und Verbindung. Manipulierte Mandanten-/Fremdschlüssel,
+Mitgliedschaftsentzug während Lock-Wait (Zwei-Verbindungs-Rennen) und Audit-
+Fehler rollen die Transaktion atomar zurück. Verkettetes PostgreSQL-Audit
+bleibt gesperrt und wird mit klarer Diagnose abgewiesen.
+Siehe [Nachweise](release-readiness/0.9.9-postgres-form-decisions.de.md).

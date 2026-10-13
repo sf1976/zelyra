@@ -36,6 +36,16 @@ A scoped callback API now passes commit, conditional read/write visibility,
 rollback on returned/SQL/ignored errors and unwind, deadline checks before
 statements/commit and connection reuse on MariaDB 11.4.13, MySQL 8.4.11 and
 PostgreSQL 16.15 with a one-connection pool. PostgreSQL statement cancellation
-is tested. This does not close guarded form/auth adapter parity or MySQL hard
+is tested. This does not close general auth adapter parity or MySQL hard
 write bounds. [Rules](decision-transactions.en.md),
 [evidence](release-readiness/0.9.9-decision-transactions.en.md).
+
+## PostgreSQL form decisions (0.9.9 development)
+
+Form decisions on PostgreSQL combine tenant membership, recipient authorization,
+row locking, optimistic snapshot comparisons (NULL vs. `\N`), business mutation,
+and atomic unchained audit logging within a single transaction and connection.
+Tampered tenant/foreign keys, membership revocation during lock wait (two-connection
+race), and audit errors roll back the transaction atomically. Chained PostgreSQL
+audit remains locked and diagnostically rejected.
+See [evidence](release-readiness/0.9.9-postgres-form-decisions.en.md).

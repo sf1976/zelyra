@@ -6079,11 +6079,11 @@ fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> 
                 );
                 valid = false;
             }
-            if schema.backend() != Backend::MariaDb {
+            if !matches!(schema.backend(), Backend::MariaDb | Backend::Postgres) {
                 diagnostic_with_span(
                     path,
                     "E-TENANT-001",
-                    "tenant memberships currently require the MariaDB runtime",
+                    "tenant memberships require MariaDB or PostgreSQL runtime",
                     auth.span,
                 );
                 valid = false;
@@ -7085,18 +7085,6 @@ fn validate_cruds(path: &str, program: &zelyra_ast::Program, schema: &Schema) ->
                     valid = false;
                 }
             }
-            if !table.foreign_keys.is_empty() {
-                fail_tenant(
-                    "tenant-scoped CRUD does not yet support relations; remove foreign keys from this table",
-                );
-                valid = false;
-            }
-            if !crud.actions.is_empty() {
-                fail_tenant(
-                    "tenant-scoped CRUD does not support custom actions because their SQL is not tenant-scoped",
-                );
-                valid = false;
-            }
             if crud
                 .view
                 .fields
@@ -7167,6 +7155,9 @@ fn validate_cruds(path: &str, program: &zelyra_ast::Program, schema: &Schema) ->
             let recipient_storage_column =
                 storage_column_name(schema, &crud.table, recipient_column);
             let unsafe_outgoing_relation = crud_table.foreign_keys.iter().any(|foreign_key| {
+                if crud.tenant_column.is_some() {
+                    return false;
+                }
                 foreign_key.column != recipient_storage_column
                     || foreign_key.referenced_table
                         != program
@@ -7311,7 +7302,7 @@ fn validate_tenant_access_boundaries(
         .map(|table| table.name.clone())
         .collect::<Vec<_>>();
     let mut valid = true;
-    let check_query = |query: &str, span: zelyra_ast::Span| -> bool {
+    let check_query = |query: &str, span: zelyra_ast::Span, allowed_table: Option<&str>| -> bool {
         let (operation, accesses) =
             zelyra_database::sql::analyze_table_access(query, &known_tables);
         if operation.is_none() {
@@ -7342,6 +7333,11 @@ fn validate_tenant_access_boundaries(
                 );
                 query_valid = false;
                 continue;
+            }
+            if let Some(allowed) = allowed_table {
+                if allowed.eq_ignore_ascii_case(&access.table) {
+                    continue;
+                }
             }
             if recipient_tables
                 .iter()
@@ -7409,7 +7405,7 @@ fn validate_tenant_access_boundaries(
                     statements: action.statements.clone(),
                     span: action.span,
                 },
-                &mut |query, span| valid &= check_query(query, span),
+                &mut |query, span| valid &= check_query(query, span, None),
             );
         }
     }
@@ -7445,7 +7441,7 @@ fn validate_tenant_access_boundaries(
                 );
                 valid = false;
             }
-            if !crud.actions.is_empty() {
+            if crud.tenant_column.is_none() && !crud.actions.is_empty() {
                 diagnostic_with_span(
                     path,
                     "E-CRUD-008",
@@ -7455,9 +7451,10 @@ fn validate_tenant_access_boundaries(
                 valid = false;
             }
         }
-        if !recipient_tables
-            .iter()
-            .any(|table| table.eq_ignore_ascii_case(&crud.table))
+        if crud.tenant_column.is_some()
+            || !recipient_tables
+                .iter()
+                .any(|table| table.eq_ignore_ascii_case(&crud.table))
         {
             for action in &crud.actions {
                 visit_block_sql(
@@ -7465,27 +7462,27 @@ fn validate_tenant_access_boundaries(
                         statements: action.statements.clone(),
                         span: action.span,
                     },
-                    &mut |query, span| valid &= check_query(query, span),
+                    &mut |query, span| valid &= check_query(query, span, Some(&crud.table)),
                 );
             }
         }
     }
     for page in &program.pages {
         for data in &page.data {
-            valid &= check_query(&data.query, data.span);
+            valid &= check_query(&data.query, data.span, None);
         }
     }
     for tableview in &program.tableviews {
-        valid &= check_query(&tableview.source, tableview.span);
+        valid &= check_query(&tableview.source, tableview.span, None);
     }
     for function in &program.functions {
         for expression in function.requires.iter().chain(&function.ensures) {
             visit_expression_sql(expression, &mut |query, span| {
-                valid &= check_query(query, span)
+                valid &= check_query(query, span, None)
             });
         }
         visit_block_sql(&function.body, &mut |query, span| {
-            valid &= check_query(query, span)
+            valid &= check_query(query, span, None)
         });
     }
     valid
@@ -8510,10 +8507,11 @@ fn generated_crud_form(
         .iter()
         .map(|field| storage_column_name(schema, &crud.table, &field.name))
         .collect::<Vec<_>>();
+    let is_postgres = schema.backend() == Backend::Postgres;
     let membership_guard = context.membership_table.as_deref().map(|membership_table| {
         format!(
             " AND EXISTS (SELECT 1 FROM {} AS zelyra_membership WHERE zelyra_membership.user_id = :zelyra_user_id AND zelyra_membership.tenant_id = :zelyra_tenant_id AND zelyra_membership.active = true)",
-            quote_identifier(membership_table)
+            quote_ident(membership_table, is_postgres)
         )
     });
     let recipient_column = crud
@@ -8524,26 +8522,34 @@ fn generated_crud_form(
         let assignments = storage_columns
             .iter()
             .zip(&fields)
-            .map(|(column, field)| format!("{} = :{}", quote_identifier(column), field.name))
+            .map(|(column, field)| {
+                format!("{} = :{}", quote_ident(column, is_postgres), field.name)
+            })
             .collect::<Vec<_>>()
             .join(", ");
         format!(
             "UPDATE {} SET {} WHERE {} = :id{}{}{}",
-            quote_identifier(&crud.table),
+            quote_ident(&crud.table, is_postgres),
             assignments,
-            quote_identifier("id"),
+            quote_ident("id", is_postgres),
             crud.tenant_column
                 .as_deref()
                 .map_or_else(String::new, |column| {
                     format!(
                         " AND {} = :zelyra_tenant_id",
-                        quote_identifier(&storage_column_name(schema, &crud.table, column))
+                        quote_ident(
+                            &storage_column_name(schema, &crud.table, column),
+                            is_postgres
+                        )
                     )
                 }),
             recipient_column
                 .as_ref()
                 .map_or_else(String::new, |column| {
-                    format!(" AND {} = :zelyra_user_id", quote_identifier(column))
+                    format!(
+                        " AND {} = :zelyra_user_id",
+                        quote_ident(column, is_postgres)
+                    )
                 }),
             membership_guard.clone().unwrap_or_default()
         )
@@ -8572,10 +8578,10 @@ fn generated_crud_form(
         };
         format!(
             "INSERT INTO {} ({}){}",
-            quote_identifier(&crud.table),
+            quote_ident(&crud.table, is_postgres),
             insert_columns
                 .iter()
-                .map(|column| quote_identifier(column))
+                .map(|column| quote_ident(column, is_postgres))
                 .collect::<Vec<_>>()
                 .join(", "),
             insert_select
@@ -9535,8 +9541,16 @@ fn expand_view_components(program: &zelyra_ast::Program, mut html: String) -> St
     html
 }
 
+fn quote_ident(identifier: &str, is_postgres: bool) -> String {
+    if is_postgres {
+        format!("\"{}\"", identifier.replace('"', "\"\""))
+    } else {
+        format!("`{}`", identifier.replace('`', "``"))
+    }
+}
+
 fn quote_identifier(identifier: &str) -> String {
-    format!("`{}`", identifier.replace('`', "``"))
+    quote_ident(identifier, false)
 }
 
 fn form_usage() {

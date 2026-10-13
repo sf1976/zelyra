@@ -2371,12 +2371,20 @@ fn builds_safe_filter_conditions_for_text_and_null_checks() {
         uniques: Vec::new(),
     };
     assert_eq!(
-        filter_condition(&table, "name", FilterOperator::Contains),
+        filter_condition(&table, "name", FilterOperator::Contains, false),
         "`base`.`name` LIKE CONCAT('%', :filter_name, '%')"
     );
     assert_eq!(
-        filter_condition(&table, "name", FilterOperator::IsNull),
+        filter_condition(&table, "name", FilterOperator::IsNull, false),
         "`base`.`name` IS NULL"
+    );
+    assert_eq!(
+        filter_condition(&table, "name", FilterOperator::Contains, true),
+        "\"base\".\"name\" LIKE CONCAT('%', :filter_name, '%')"
+    );
+    assert_eq!(
+        filter_condition(&table, "name", FilterOperator::IsNull, true),
+        "\"base\".\"name\" IS NULL"
     );
 }
 
@@ -3899,4 +3907,82 @@ fn nullable_storage_binds_omitted_text_as_null_without_weakening_required_fields
             .len(),
         1
     );
+}
+
+#[test]
+fn postgres_audit_insert_rejects_chained_and_accepts_unchained() {
+    let unchained = audit_insert_queries_for(
+        "audit_log",
+        false,
+        Some(42),
+        "user.created",
+        Some(10),
+        "details",
+        true,
+    )
+    .unwrap();
+    assert_eq!(unchained.len(), 1);
+    assert!(unchained[0].sql.starts_with("INSERT INTO \"audit_log\""));
+
+    let chained = audit_insert_queries_for(
+        "audit_log",
+        true,
+        Some(42),
+        "user.created",
+        Some(10),
+        "details",
+        true,
+    );
+    assert!(chained.is_err());
+    assert!(chained
+        .unwrap_err()
+        .contains("PostgreSQL does not support chained audit tables"));
+}
+
+#[test]
+fn execute_form_action_rejects_postgres_chained_audit() {
+    let mut form = form_route();
+    form.audit_table = Some("audit_log".into());
+    form.audit_chain = true;
+    let action = zelyra_ast::FormAction {
+        name: "save".into(),
+        label: None,
+        icon: None,
+        confirm: None,
+        confirm_page: None,
+        success_page: None,
+        error_page: None,
+        statements: vec![zelyra_ast::Stmt::Expr(zelyra_ast::Expr {
+            kind: zelyra_ast::ExprKind::Sql {
+                result_type: Type::Unit,
+                query: "UPDATE customers SET name = :name WHERE id = :id".into(),
+            },
+            span: zelyra_ast::Span::default(),
+        })],
+        fields: Vec::new(),
+        requires_auth: false,
+        permissions: Vec::new(),
+        success: None,
+        redirect: None,
+        span: zelyra_ast::Span::default(),
+    };
+    let values = HashMap::from([("name".into(), "Alice".into())]);
+    let path_params = HashMap::from([("id".into(), "1".into())]);
+    let context = FormExecutionContext {
+        actor_user_id: Some(1),
+        expected_snapshot: None,
+        tenant_context: None,
+    };
+    let err = execute_form_action(
+        &form,
+        &action,
+        &values,
+        &path_params,
+        "postgres://user:pass@localhost:5432/db",
+        context,
+    );
+    assert!(err.is_err());
+    assert!(err
+        .unwrap_err()
+        .contains("PostgreSQL does not support chained audit tables"));
 }
