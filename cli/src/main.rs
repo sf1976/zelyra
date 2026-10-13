@@ -4321,8 +4321,42 @@ fn start_mariadb_compose(
     }
 }
 
-fn expanded_database_url(directory: &std::path::Path) -> Result<String, String> {
+fn database_url_for_project(
+    directory: &std::path::Path,
+    database_name: Option<&str>,
+) -> Result<Option<String>, String> {
     let env_path = directory.join(".env");
+    let from_environment = database_url_from_environment(database_name);
+    let from_file = if from_environment.is_none() && env_path.is_file() {
+        database_url_from_env_file(&env_path.to_string_lossy(), database_name)?.map(|(url, _)| url)
+    } else {
+        None
+    };
+    let Some(url) = from_environment.or(from_file) else {
+        return Ok(None);
+    };
+    Ok(Some(expand_project_database_url(directory, &url)?))
+}
+
+fn expand_project_database_url(directory: &std::path::Path, url: &str) -> Result<String, String> {
+    let env_path = directory.join(".env");
+    let port = match env::var("ZELYRA_DB_HOST_PORT") {
+        Ok(port) => port,
+        Err(_) if env_path.is_file() => {
+            read_env_value(&env_path.to_string_lossy(), "ZELYRA_DB_HOST_PORT")?
+                .unwrap_or_else(|| DEFAULT_DATABASE_HOST_PORT.to_string())
+        }
+        Err(_) => DEFAULT_DATABASE_HOST_PORT.to_string(),
+    };
+    Ok(expand_database_host_port(url, &port))
+}
+
+fn expand_database_host_port(url: &str, port: &str) -> String {
+    url.replace("${ZELYRA_DB_HOST_PORT:-3306}", port)
+        .replace("${ZELYRA_DB_HOST_PORT}", port)
+}
+
+fn expanded_database_url(directory: &std::path::Path) -> Result<String, String> {
     let database_name = directory
         .join("main.zyl")
         .to_str()
@@ -4334,15 +4368,8 @@ fn expanded_database_url(directory: &std::path::Path) -> Result<String, String> 
                 .first()
                 .map(|database| database.name.clone())
         });
-    let url = database_url_from_env_file(
-        env_path.to_str().unwrap_or(".env"),
-        database_name.as_deref(),
-    )?
-    .map(|(url, _)| url)
-    .ok_or_else(|| "`.env` does not define the project database URL or DATABASE_URL".to_owned())?;
-    let port = read_env_value(env_path.to_str().unwrap_or(".env"), "ZELYRA_DB_HOST_PORT")?
-        .unwrap_or_else(|| DEFAULT_DATABASE_HOST_PORT.to_string());
-    Ok(url.replace("${ZELYRA_DB_HOST_PORT:-3306}", &port))
+    database_url_for_project(directory, database_name.as_deref())?
+        .ok_or_else(|| "`.env` does not define the project database URL or DATABASE_URL".to_owned())
 }
 
 fn schema_setup_error_is_transient(details: &str) -> bool {
@@ -4352,6 +4379,9 @@ fn schema_setup_error_is_transient(details: &str) -> bool {
         "connectionrefused",
         "connection reset",
         "connectionreset",
+        "server disconnected",
+        "connection closed",
+        "unexpected eof",
         "error connecting to server",
         "can't connect to server",
         "could not connect to server",
@@ -4397,21 +4427,49 @@ fn project_web_url_with_host_port(
 
 fn run_local_schema_setup(directory: &std::path::Path) -> Result<(), String> {
     let database_url = expanded_database_url(directory)?;
-    let executable =
-        env::current_exe().map_err(|error| format!("cannot locate zelyra: {error}"))?;
-    let status = Command::new(executable)
+    let executable = editor::zelyra_executable().map_err(|(_, error)| error)?;
+    let database_name = directory
+        .join("main.zyl")
+        .to_str()
+        .and_then(|path| database_cli::load_schema(path).ok())
+        .and_then(|schema| schema.database.map(|database| database.name));
+    let mut command = Command::new(executable);
+    command
         .current_dir(directory)
         .args(["db", "setup", "main.zyl"])
-        .env("DATABASE_URL", database_url)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map_err(|error| format!("could not run schema setup: {error}"))?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err("schema setup failed; verify that MariaDB is reachable and the configured credentials are correct".into())
+        .env("DATABASE_URL", &database_url)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    if let Some(database_name) = database_name {
+        command.env(database_url_environment_name(&database_name), &database_url);
     }
+    for attempt in 0..30 {
+        let output = command
+            .output()
+            .map_err(|error| format!("could not run schema setup: {error}"))?;
+        if output.status.success() {
+            return Ok(());
+        }
+        let details = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        if !schema_setup_error_is_transient(&details) {
+            return Err(format!(
+                "schema setup stopped on a non-retryable error; no schema change was applied automatically:\n{}",
+                details.trim()
+            ));
+        }
+        if attempt == 29 {
+            return Err(format!(
+                "schema setup did not succeed after waiting for MariaDB; last attempt: {}",
+                details.trim()
+            ));
+        }
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+    unreachable!("the local schema setup retry loop returns on its final attempt")
 }
 
 fn container_schema_setup_args() -> Vec<&'static str> {

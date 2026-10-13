@@ -14,7 +14,21 @@ fi
 
 temporary_root="$(mktemp -d)"
 server_pid=""
+editor_pid=""
+studio_port=""
+studio_token=""
 cleanup() {
+  if [[ -n "${studio_port}" && -n "${studio_token}" ]]; then
+    curl --silent --show-error --max-time 3 -X POST \
+      -H "Origin: http://127.0.0.1:${studio_port}" \
+      -H "X-Zelyra-Editor-Token: ${studio_token}" \
+      -H 'Content-Type: application/json' --data '{}' \
+      "http://127.0.0.1:${studio_port}/__zelyra/editor/api/stop-web-preview" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "${editor_pid}" ]]; then
+    kill "${editor_pid}" 2>/dev/null || true
+    wait "${editor_pid}" 2>/dev/null || true
+  fi
   if [[ -n "${server_pid}" ]]; then
     kill "${server_pid}" 2>/dev/null || true
     wait "${server_pid}" 2>/dev/null || true
@@ -126,5 +140,74 @@ if [[ "${customer_list}" != *"${customer_name}"* ]]; then
 fi
 if [[ "${ZELYRA_INVOICE_BROWSER_E2E:-0}" == "1" ]]; then
   ZELYRA_INVOICE_E2E_URL="http://${address}" node editor/tests/invoice-tutorial-browser-e2e.mjs
+
+  # Exercise the generated .env placeholder exactly as Studio receives it. The
+  # integration database is already running outside this temporary project.
+  DATABASE_URL="${database_url}" python3 - "${project}/.env" <<'PY'
+import os
+import pathlib
+import urllib.parse
+import sys
+
+path = pathlib.Path(sys.argv[1])
+source = path.read_text(encoding="utf-8").splitlines()
+parsed = urllib.parse.urlsplit(os.environ["DATABASE_URL"])
+host = parsed.hostname or "127.0.0.1"
+if ":" in host and not host.startswith("["):
+    host = f"[{host}]"
+credentials = urllib.parse.quote(parsed.username or "", safe="")
+if parsed.password is not None:
+    credentials += ":" + urllib.parse.quote(parsed.password, safe="")
+credentials += "@"
+port = parsed.port or 3306
+env_url = urllib.parse.urlunsplit((
+    parsed.scheme,
+    f"{credentials}{host}:${{ZELYRA_DB_HOST_PORT:-3306}}",
+    parsed.path,
+    parsed.query,
+    parsed.fragment,
+))
+updates = {
+    "ZELYRA_DB_HOST_PORT": str(port),
+    "ZELYRA_DATABASE_MAIN_URL": env_url,
+    "DATABASE_URL": env_url,
+}
+output = [line for line in source if line.split("=", 1)[0].strip() not in updates]
+output.extend(f"{key}={value}" for key, value in updates.items())
+path.write_text("\n".join(output) + "\n", encoding="utf-8")
+PY
+  rm -f "${project}/docker-compose.mariadb.yml"
+  studio_port="$(python3 - <<'PY'
+import socket
+with socket.socket() as sock:
+    sock.bind(("127.0.0.1", 0))
+    print(sock.getsockname()[1])
+PY
+)"
+  env -u DATABASE_URL -u ZELYRA_DATABASE_MAIN_URL -u ZELYRA_DB_HOST_PORT \
+    "${binary}" editor "${project}" --port "${studio_port}" --no-open \
+    >"${temporary_root}/studio.log" 2>&1 &
+  editor_pid=$!
+  for _ in $(seq 1 100); do
+    if grep -q '/__zelyra/editor/#' "${temporary_root}/studio.log"; then break; fi
+    if ! kill -0 "${editor_pid}" 2>/dev/null; then
+      cat "${temporary_root}/studio.log" >&2
+      exit 1
+    fi
+    sleep 0.1
+  done
+  studio_token="$(python3 - "${temporary_root}/studio.log" <<'PY'
+import re
+import sys
+text = open(sys.argv[1], encoding="utf-8").read()
+match = re.search(r"/__zelyra/editor/#([0-9a-f]{64})", text)
+if not match:
+    raise SystemExit("invoice Studio did not print a session URL")
+print(match.group(1))
+PY
+)"
+  ZELYRA_INVOICE_STUDIO_E2E_PORT="${studio_port}" \
+  ZELYRA_INVOICE_STUDIO_E2E_TOKEN="${studio_token}" \
+    node editor/tests/invoice-studio-browser-e2e.mjs
 fi
-echo "invoice tutorial schema, routes, theme, and Studio-compatible customer create/list flow passed"
+echo "invoice tutorial schema, routes, theme, customer flow, and Studio launch passed"

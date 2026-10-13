@@ -403,6 +403,24 @@ fn named_database_url_in_env_file_precedes_legacy_url_and_falls_back() {
 }
 
 #[test]
+fn project_database_url_expands_the_configured_local_host_port() {
+    assert_eq!(
+        expand_database_host_port(
+            "mariadb://zelyra:secret@127.0.0.1:${ZELYRA_DB_HOST_PORT:-3306}/invoice",
+            "43127",
+        ),
+        "mariadb://zelyra:secret@127.0.0.1:43127/invoice"
+    );
+    assert_eq!(
+        expand_database_host_port(
+            "mariadb://zelyra:secret@127.0.0.1:${ZELYRA_DB_HOST_PORT}/invoice",
+            "43127",
+        ),
+        "mariadb://zelyra:secret@127.0.0.1:43127/invoice"
+    );
+}
+
+#[test]
 fn feature_defaults_are_simple_and_enabled() {
     let features = feature_defaults();
     assert_eq!(features.len(), PROJECT_FEATURES.len());

@@ -463,6 +463,10 @@ jobs:
           ZELYRA_REF: ${{ github.head_ref || github.ref_name }}
           ZELYRA_INVOICE_BROWSER_E2E: '1'
         run: bash ./tests/invoice-tutorial-e2e.sh
+      - name: Verify invoice tutorial first-click Studio startup from a cold Docker database
+        env:
+          ZELYRA_BIN: target/debug/zelyra
+        run: bash ./tests/invoice-studio-cold-compose-e2e.sh
   mariadb-compatibility:
     name: MariaDB ${{ matrix.version }} compatibility
     runs-on: ubuntu-latest
