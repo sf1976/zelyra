@@ -1190,21 +1190,35 @@ werden dem exakt getesteten Commit zugeordnet. Der Studienumfang muss zum
 endgültigen 1.0.0-Produkt passen. Automatisierte CI, interne Rehearsals und
 Rückmeldungen des Projektverantwortlichen ersetzen keinen Teilnehmertest.
 
-## Zukünftige Sprach- und Ergonomie-Evolution (nach 1.0.0)
+## Zukünftige Sprach-, Datenbank- und Ergonomie-Evolution (nach 1.0.0)
 
-Um die Produktivität und Entwicklerergonomie zu steigern, ohne die Grundsäulen von Zelyra (statische
+Um die Produktivität, Flexibilität und Entwicklerergonomie zu steigern, ohne die Grundsäulen von Zelyra (statische
 Sicherheitsverifikation von Mandanten-/Empfängergrenzen, deterministische Geschäftsarithmetik,
-digitale Souveränität) aufzuweichen, sind folgende Erweiterungen für die post-1.0-Entwicklung geplant:
+digitale Souveränität) aufzuweichen, sind folgende Erweiterungen für die post-1.0-Entwicklung fest eingeplant:
 
+- [ ] **Modulare Datenbank-Adapter-Architektur (`DatabaseAdapter` SPI / Traits):**
+  Ablösung der fest verdrahteten backend-spezifischen Verzweigungen im Core durch eine erweiterbare
+  Adapter-Schnittstelle. Jeder Treiber-Adapter kapselt Introspektion, Schemamigration (`db apply`),
+  Datentyp-Mapping, Transaktionslebenszyklus, Sperrmechanismen (`FOR UPDATE`, Timeout- und Deadline-Steuerung)
+  sowie dialektspezifische SQL-Codegenerierung. Dies ermöglicht das saubere Hinzufügen weiterer relationaler
+  und spezialisierter Datenbanksysteme (z. B. Microsoft SQL Server, Oracle, CockroachDB) über modulare
+  Adapter, ohne den Compilerkern oder das Web-Framework umschreiben zu müssen.
+- [ ] **Multi-Datenbank-Integration (Mehrere Datenquellen / Polyglot Persistence):**
+  Unterstützung für die Deklaration und parallele Verwaltung mehrerer unabhängiger Datenquellen
+  innerhalb eines Zelyra-Projekts (z. B. primäre relationale OLTP-Datenbank für transaktionale Mandanten-
+  und CRUD-Daten, getrennte Read-Replicas oder separate Datenbanken für Analytics, Berichte, Archivierung
+  oder Drittsystem-Synchronisation). Deklarative Bindung von Schemas, Modulen und Queries an benannte
+  Datenbankadapter (`database "secondary" { ... }`) unter voller Beibehaltung der statischen
+  Mandanten-Isolation und Capability-Prüfung.
+- [ ] **Einheitlicher nativer Query-AST:** Ablösung verbliebener String-Quoting-Pfade in
+  der Codeerzeugung durch einen internen Abfrage-Syntaxbaum, der dialektneutral und typgeprüft
+  auf MariaDB, MySQL, PostgreSQL und künftige Adapter zielt.
 - [ ] **Capture-lose Lambdas (`|x| expr`):** Syntaktische Unterstützung für kompakte,
   anonyme Transformationsfunktionen ohne äußere Umgebungserfassung. Erfordert weder Heap-Allokation
   noch Garbage Collection und bewahrt das deterministische Speichermodell.
 - [ ] **Headless Hintergrund-Tasks (`task Name { ... }`):** Dedizierte Syntax und Laufzeit-
   Unterstützung für periodische Aufgaben, Datenpipelines und Hintergrundjobs unter Beibehaltung
   derselben statischen Tenant- und Datenbank-Capability-Grenzen, jedoch ohne HTTP-Web-Zwang.
-- [ ] **Einheitlicher nativer Query-AST:** Ablösung verbliebener String-Quoting-Pfade in
-  der Codeerzeugung durch einen internen Abfrage-Syntaxbaum, der dialektneutral und typgeprüft
-  auf MariaDB, MySQL und PostgreSQL zielt.
 - [ ] **Aktionsfähige Compiler-Diagnosen („Did you mean?“):** Erweiterung von Typ- und
   Schemamismatch-Diagnosen (`E-SQL`, `E-CRUD`) um präzise, quelltextbezogene Korrekturvorschläge
   zur Steigerung der Entwicklerergonomie bei unveränderter Typprüfungsstrenge.

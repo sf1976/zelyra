@@ -19,6 +19,9 @@ MariaDB, MySQL und PostgreSQL bleiben Ziele für die erste produktive Version.
 Der geprüfte Umfang unterscheidet sich je Backend. 0.9.9 darf den
 1.0.0-Supportumfang erst einfrieren, wenn jeder zugesagte Ablauf belegt ist.
 Die bloße Annahme einer URL wie `mysql://` ist kein Nachweis für MySQL Server.
+Für die Weiterentwicklung nach 1.0.0 ist eine modulare Adapter-Architektur
+(`DatabaseAdapter` SPI) sowie Multi-Datenbank-Unterstützung (Einbindung mehrerer
+getrennter Datenquellen pro Anwendung) in der Roadmap verankert.
 
 ## Zusätzlich lokal geprüft: exakte Dezimalgrenzen (0.9.9-Entwicklung)
 

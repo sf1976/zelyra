@@ -18,6 +18,9 @@ MariaDB, MySQL, and PostgreSQL remain targets for the first productive release.
 The verified scope differs by backend. 0.9.9 can freeze the 1.0.0 support
 scope only after each promised workflow has evidence. Accepting a URL such as
 `mysql://` is not evidence for MySQL Server support.
+For post-1.0 development, a modular database adapter architecture
+(`DatabaseAdapter` SPI) and multi-database support (binding multiple
+independent data sources per application) are formally anchored in the roadmap.
 
 ## Additional local evidence: exact decimals (0.9.9 development)
 

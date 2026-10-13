@@ -1159,21 +1159,34 @@ redacted observations and the owner decision against the exact tested commit.
 The study scope must match the final 1.0.0 product; automated CI, internal
 rehearsals, and owner feedback do not substitute for participant testing.
 
-## Future language and ergonomics evolution (post-1.0.0)
+## Future language, database, and ergonomics evolution (post-1.0.0)
 
-To boost developer ergonomics without compromising Zelyra's core tenets (static security
-boundaries, deterministic business arithmetic, digital sovereignty), the following extensions
-are scheduled for post-1.0 development:
+To boost developer ergonomics, flexibility, and architectural modularity without compromising
+Zelyra's core tenets (static security boundaries, deterministic business arithmetic, digital
+sovereignty), the following extensions are explicitly scheduled for post-1.0 development:
 
+- [ ] **Modular database adapter architecture (`DatabaseAdapter` SPI / traits):**
+  Replacing hardcoded backend branching in core crates with an extensible adapter interface.
+  Each driver adapter encapsulates introspection, schema migration (`db apply`), data type mapping,
+  transaction lifecycle, lock management (`FOR UPDATE`, query deadline and timeout steering),
+  and dialect-specific SQL emission. This enables integrating additional relational and specialized
+  databases (e.g. Microsoft SQL Server, Oracle, CockroachDB) via modular adapters without modifying
+  the compiler core or web framework.
+- [ ] **Multi-database integration (multiple databases / polyglot persistence):**
+  Support for declaring and managing multiple independent database connections within a single
+  Zelyra application (e.g. primary relational OLTP database for tenant CRUD transactions, dedicated
+  read replicas, or separate databases for analytics, reporting, cold storage, or third-party legacy
+  data). Declarative binding of schemas, modules, and queries to named database adapters
+  (`database "secondary" { ... }`) with full static tenant isolation and capability enforcement.
+- [ ] **Unified native Query AST:** Replacing residual string-interpolated query paths with
+  an internal query syntax tree targeting MariaDB, MySQL, PostgreSQL, and future adapters in
+  a dialect-neutral, type-checked manner.
 - [ ] **Non-capturing lambdas (`|x| expr`):** Syntactic support for compact, anonymous
   transformation functions without outer environment capture. Incurs zero heap allocation or GC
   overhead and preserves the deterministic memory model.
 - [ ] **Headless background tasks (`task Name { ... }`):** Dedicated syntax and runtime
   support for periodic jobs, batch pipelines, and background processing while enforcing the
   same static tenant and database capability boundaries without HTTP routing constraints.
-- [ ] **Unified native Query AST:** Replacing residual string-interpolated query paths with
-  an internal query syntax tree targeting MariaDB, MySQL, and PostgreSQL in a dialect-neutral,
-  type-checked manner.
 - [ ] **Actionable compiler diagnostics ("Did you mean?"):** Enriching type and schema
   mismatch diagnostics (`E-SQL`, `E-CRUD`) with exact, source-anchored fix suggestions to
   streamline developer experience while maintaining strict type enforcement.
