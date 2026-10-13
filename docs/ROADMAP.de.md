@@ -64,45 +64,74 @@ den tatsächlich implementierten Stand.
   leeren Bereichen bei falscher Richtung und geprüfter Schrittweite ungleich 0
   unterstützen. `range(start, end, step)` liefert dieselbe Folge als begrenztes
   Array. Parser-, Laufzeit-, Typ- und Grenztests bestehen.
-- [ ] **Geplant für 1.0.3 — zugängliche Algorithmusübungen:** 17 vollständige,
+- [ ] **Geplant für 1.0.3 — Zelyra-eigene Sprachkonstrukte:** Verkettete
+  `else if`-Zweige, typisierte `if`-Ausdrücke, Tuple-Destructuring und
+  markiertes `break`/`continue` für verschachtelte Schleifen ergänzen;
+  Schleifenabbrüche mit Rückgabewert benötigen ausdrückliche, typgeprüfte
+  Regeln. Klammerblöcke, statische Typen, ausdrückliche Effekte und geprüfte
+  Fehler bleiben erhalten. Für häufige Parserfehler wie einen fehlenden Block
+  nach `else if` gezielte Vorschläge mit genauer Quellposition und korrigierter
+  Form anzeigen. Schrittweiten einschließlich negativer Werte und rückwärts
+  laufender Bereiche sind bereits in 1.0.2 enthalten. Benutzerdefinierte
+  Operatoren für eigene Typen über ein ausdrückliches, typgeprüftes Protokoll
+  mit fester Rangfolge, eindeutiger Auflösung und Effektregeln unterstützen;
+  eigene Rangfolgen dürfen nicht deklariert werden.
+- [ ] **Geplant für 1.0.3 — native String- und Math-Bibliotheken:** Die bereits
+  teilweise vorhandene String-API (`text_contains`, `text_trim`,
+  `text_replace_result`, `text_split_result`) um Klein-/Großschreibung, Länge,
+  Verbinden, Trimmen, Enthaltensein, Ersetzen, Teilen sowie Präfix-/Suffix-
+  Prüfungen vervollständigen. Bisherige `text_*`-Namen und geprüfte Fehler
+  kompatibel halten. Eine typisierte Zelyra-Pipeline für lesbare
+  Funktionsverkettung ergänzen, zum Beispiel `text |> trim |> to_lower`, mit
+  klarer Typ- und Effektprüfung. Native `abs`, `min`, `max`, `floor`, `ceil`,
+  `round`, `sqrt` und `pow` mit festgelegten Typen, Rundungs-/Genauigkeitsregeln
+  und geprüften Überlauf-/Definitionsbereichsfehlern ergänzen. Lesbare,
+  typgeprüfte String-Interpolation mit Escape-Regel für geschweifte Klammern
+  in einer für Zelyra entworfenen Syntax bereitstellen. Effizientes typisiertes
+  `concat<T>(left, right)` ergänzen.
+- [ ] **Geplant für 1.0.3 — Sammlungen und funktionale Operationen:** Normale
+  Arrays und Maps bleiben wertbasiert. Opt-in veränderliche typisierte Arrays
+  und Stacks mit geprüften O(1)-Indexupdates und effizientem `push`/`pop`
+  ergänzen; `pop` liefert einen ausdrücklichen Leerfall. Veränderliche Arrays
+  müssen geprüfte zusammengesetzte Indexupdates wie `items[i] += 1` erlauben.
+  Typisierte Map-Iteration, `get_or_default` und einen sicheren
+  Zähler-/Updatehelfer ergänzen.
+  Maps, `Map<K, V>` und `Map { ... }`-Literale, `get`, `put`, `keys`, `values`
+  und `contains` sind bereits vorhanden; es fehlen die komfortable Iteration
+  und der Standardwertzugriff, nicht Maps an sich. Typisierte anonyme
+  Funktionen mit ausdrücklichen Capture-/Effektregeln sowie Standard-
+  Kombinatoren `map`, `filter` und `fold` bereitstellen. Komposition über die
+  Zelyra-Pipeline unterstützen und klare Typinferenz/Diagnosen erhalten. Die
+  Rucksack-DP-Tabelle muss direkt aktualisiert werden und O(Gegenstände ×
+  Kapazität) Zeit sowie O(Kapazität) Speicher einhalten, statt pro Zelle das
+  ganze Array zu kopieren.
+- [ ] **Geplant für 1.0.3 — interaktive Studio-Konsole:** Studio-Run erhält
+  ein interaktives Eingabefeld für `read_console`: ausstehende Eingabeaufforderung
+  anzeigen, eine Zeile entgegennehmen und absenden, das laufende Programm
+  fortsetzen sowie explizites EOF/Abbrechen und begrenzte Ausführung
+  unterstützen. Eine Eingabeanforderung darf nicht stillschweigend zu EOF oder
+  einem Timeout werden. CLI-Eingabe muss weiter funktionieren; dasselbe
+  Zahlenratespiel wird in CLI und Studio getestet.
+- [ ] **Geplant für 1.0.3 — idiomatische Algorithmusübungen:** 17 vollständige,
   ausführbare Konsolenbeispiele bereitstellen: FizzBuzz, Palindromprüfung,
   Fakultät, Zahlenraten, Wort-/Zeichenzählung, Minimum/Maximum einer Liste,
   Primzahlprüfung, umgekehrte Wortreihenfolge, Caesar-Verschiebung, Bubble
   Sort, Quicksort, binäre Suche, Klammerprüfung mit einem Stack, iterative
-  Fibonacci-Berechnung mit dynamischer Programmierung und
-  Lauflängenkodierung, N-Damen-Zählung mit rekursivem Backtracking und
-  0/1-Rucksack mit dynamischer Programmierung. Zu jeder Übung wichtige Zeilen,
-  erwartete Ergebnisse, Grenzfälle, typische Fehler und Zeit-/Speicherbedarf
-  erläutern. Die Expertenbeispiele müssen für 4 und 8 Damen 2 und 92 Lösungen
-  sowie für den dokumentierten Rucksackfall den Wert 8 liefern. Größen und
-  Eingaben prüfen, Arithmetik absichern und Aufwand begrenzen, damit zu große
-  Werte kontrolliert und verständlich fehlschlagen. Statische Typen,
-  ausdrückliche `Console`-/`Random`-Effekte, `Option`-/`Result`-Behandlung
-  und wertbasierte Arrays bleiben erhalten. Beispiele in CI kompilieren und mit
-  erwarteter Ausgabe sowie Grenzfalltests ausführen. Wichtige Zeilen,
-  typische Fehler und Zeit-/Speicherbedarf erläutern. Die Beispiele sollen
-  erkennbar Zelyra bleiben und keine andere Sprache an der Oberfläche kopieren.
-- [ ] **Geplant für 1.0.3 — Ergonomie der Kernsprache:** Lesbare verkettete
-  `else if`-Zweige im Parser unterstützen. Schrittweiten mit negativen Werten
-  und rückwärts laufende Bereiche sind bereits in 1.0.2 enthalten und sollen
-  vom Rucksackbeispiel verwendet werden. Die String-API vervollständigen und
-  vereinheitlichen: `text_contains`, `text_trim`, `text_replace_result` und
-  `text_split_result` bilden bereits einen Teil der Grundlage; ergänzen um
-  Kleinschreibung, Länge/Verbinden und ergonomische eingebaute String-
-  Operationen, wobei ungültige Ersetzungen geprüfte Fehler behalten.
-  Explizite String-Interpolation wie `f"{wert}: {anzahl}"` mit geprüften
-  Namen/Typen und Escaping für wörtliche geschweifte Klammern ergänzen.
-  Geprüftes Integer-`abs` mit definiertem Überlaufverhalten und effizientes
-  typisiertes `concat<T>(left: T[], right: T[])`, das ein neues Array liefert,
-  bereitstellen. Opt-in veränderliche typisierte Array-/Stack-Strukturen mit
-  geprüften O(1)-Indexupdates und effizientem Push/Pop ergänzen; `pop` liefert
-  einen ausdrücklichen Leerfall. Einen typisierten Zähler-/Map-Updatehelfer
-  vorsehen, damit `count[key]` keine wiederholten manuellen `match`-Blöcke
-  braucht. Normale Arrays und Maps bleiben standardmäßig wertbasiert. Die
-  Rucksack-DP-Tabelle muss direkt aktualisiert werden und O(Gegenstände ×
-  Kapazität) Zeit sowie O(Kapazität) Speicher einhalten, statt das gesamte
-  Array für jede Zelle zu kopieren. Ausgabe mit Interpolation oder direkter
-  skalarer Formatierung lesbar halten, nicht JSON als Anzeige-Umweg verwenden.
+  Fibonacci-Berechnung mit dynamischer Programmierung, Lauflängenkodierung,
+  N-Damen-Zählung mit rekursivem Backtracking und 0/1-Rucksack mit dynamischer
+  Programmierung. Beispiele sollen neue Zelyra-Syntax und APIs nutzen, wo dies
+  den Code verständlicher macht, statt Python-/PHP-Behelfslösungen wie JSON
+  zur Anzeige, manuelles Neuerstellen des Stacks oder wiederholtes Kopieren
+  von Arrays beizubehalten. Wichtige Zeilen, Ergebnisse, Grenzfälle, typische
+  Fehler und Zeit-/Speicherbedarf erklären. Für N=4 und N=8 müssen 2 und 92,
+  für den dokumentierten Rucksackfall 8 herauskommen. Eingaben und Größen
+  validieren, Arithmetik prüfen, Aufwand begrenzen und Kompilierung, Ausgabe
+  sowie Grenzfälle in CI testen.
+- [ ] **Geplant für 1.0.3 — Compilerdiagnosen:** Verschachtelte Syntax- und
+  Typfehler mit gezielten Vorschlägen, Quellpositionen und kurzem korrigiertem
+  Zelyra-Beispiel verbessern. Fehlende Blöcke, Interpolationsnamen/-typen,
+  Pipeline-Typkonflikte, Tuple-Arity, Sammlungs-Callbacks und ungültige
+  Zahleneingaben mit positiven und negativen Tests abdecken.
 - [x] **1.0.1 Sprachprüfung des veröffentlichten Artefakts:** 80 Fälle,
   100 Aufgaben-Wiederholungen, 600 Zahlenvergleiche und 1.408 Kalender-/UTC-
   Referenzfälle ohne unerwartete Befunde geprüft; Installation/Update/Rückkehr
