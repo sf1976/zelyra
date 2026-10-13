@@ -1,0 +1,20 @@
+[
+  {
+    "engine": "mariadb",
+    "stdout": "\nrunning 1 test\nnative decisions: commit, same-connection visibility, denied decision, SQL error, unwind, pre-statement/pre-commit deadline and reuse passed\ntest decision::tests::decision_transactions_commit_rollback_unwind_and_deadline_on_native_backend ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 114 filtered out; finished in 0.63s\n\n",
+    "stderr": "\nthread 'decision::tests::decision_transactions_commit_rollback_unwind_and_deadline_on_native_backend' (35875) panicked at database/src/decision.rs:234:17:\ncontrolled transaction unwind\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n",
+    "exit": 0
+  },
+  {
+    "engine": "mysql",
+    "stdout": "\nrunning 1 test\nnative decisions: commit, same-connection visibility, denied decision, SQL error, unwind, pre-statement/pre-commit deadline and reuse passed\ntest decision::tests::decision_transactions_commit_rollback_unwind_and_deadline_on_native_backend ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 114 filtered out; finished in 0.64s\n\n",
+    "stderr": "\nthread 'decision::tests::decision_transactions_commit_rollback_unwind_and_deadline_on_native_backend' (36074) panicked at database/src/decision.rs:234:17:\ncontrolled transaction unwind\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n",
+    "exit": 0
+  },
+  {
+    "engine": "postgres",
+    "stdout": "\nrunning 1 test\nnative decisions: commit, same-connection visibility, denied decision, SQL error, unwind, pre-statement/pre-commit deadline and reuse passed\ntest decision::tests::decision_transactions_commit_rollback_unwind_and_deadline_on_native_backend ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 114 filtered out; finished in 0.91s\n\n",
+    "stderr": "\nthread 'decision::tests::decision_transactions_commit_rollback_unwind_and_deadline_on_native_backend' (35361) panicked at database/src/decision.rs:234:17:\ncontrolled transaction unwind\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n",
+    "exit": 0
+  }
+]

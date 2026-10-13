@@ -29,3 +29,13 @@ Plain PostgreSQL form actions are transactional; tenant/recipient, edit-snapshot
 and audit decisions remain separate technical gates. MySQL's server timer
 applies to SELECT; this does not prove hard interruption bounds for writes.
 It is not general backend approval.
+
+## Native decision foundation (0.9.9 development)
+
+A scoped callback API now passes commit, conditional read/write visibility,
+rollback on returned/SQL/ignored errors and unwind, deadline checks before
+statements/commit and connection reuse on MariaDB 11.4.13, MySQL 8.4.11 and
+PostgreSQL 16.15 with a one-connection pool. PostgreSQL statement cancellation
+is tested. This does not close guarded form/auth adapter parity or MySQL hard
+write bounds. [Rules](decision-transactions.en.md),
+[evidence](release-readiness/0.9.9-decision-transactions.en.md).

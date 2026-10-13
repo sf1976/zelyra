@@ -1,0 +1,26 @@
+{
+  "source_baseline": "c1278cb2fec8b86bb523af3b9b4a6ef6d932e764",
+  "integrated_baseline": "534cad5bfbd4f681de62d359e58841953fed9eca",
+  "rust_passed": 854,
+  "rust_failed": 0,
+  "ordinary_ignored_tests": 2,
+  "full_clippy": "passed",
+  "fmt": "passed",
+  "handbook_snippets": 324,
+  "release_metadata": "passed",
+  "native_pool_max_size": 1,
+  "native_backends": [
+    "MariaDB 11.4.13",
+    "MySQL 8.4.11",
+    "PostgreSQL 16.15"
+  ],
+  "source_sha256": {
+    "database/src/lib.rs": "e44ec77070b9f6d51ca46ac710131354733d80f76f1e2a371522d397a448ab3a",
+    "database/src/decision.rs": "7fab6db1963fd6e5ee78b9a86c92d43d94b4e92006f689a5fbf39bb70c80189c"
+  },
+  "artifacts_sha256": {
+    "/tmp/zelyra-decisions-test.bin": "f995acdbcee68adf37b8da195d78ec18630939d625ac000de8194293654d0fc9",
+    "/tmp/zelyra-decisions-cli.bin": "a8320fc4dcdb439df0018209c615ded867b5d21417f938c8293e9e9a2caa9bff"
+  },
+  "remote_ci": "pending; see pull request checks; local evidence only"
+}

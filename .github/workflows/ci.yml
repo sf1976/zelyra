@@ -360,6 +360,11 @@ jobs:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
           ZELYRA_BIN: target/debug/zelyra
         run: python3 ./tests/exact-numbers-e2e.py
+      - name: Verify scoped decision transactions on MariaDB
+        env:
+          DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+          ZELYRA_DB_POOL_MAX_SIZE: '1'
+        run: cargo test --locked -p zelyra-database --lib decision_transactions_commit_rollback_unwind_and_deadline_on_native_backend -- --ignored --nocapture
       - name: Verify native dates, times, UTC milliseconds, and legacy schemas on MariaDB
         env:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
@@ -373,6 +378,11 @@ jobs:
           DATABASE_URL: postgres://zelyra_ci:zelyra_ci@127.0.0.1:5432/zelyra_ci
           ZELYRA_BIN: target/debug/zelyra
         run: python3 ./tests/exact-numbers-e2e.py
+      - name: Verify scoped decision transactions on PostgreSQL
+        env:
+          DATABASE_URL: postgres://zelyra_ci:zelyra_ci@127.0.0.1:5432/zelyra_ci
+          ZELYRA_DB_POOL_MAX_SIZE: '1'
+        run: cargo test --locked -p zelyra-database --lib decision_transactions_commit_rollback_unwind_and_deadline_on_native_backend -- --ignored --nocapture
       - name: Verify native dates, times, UTC milliseconds, and legacy schemas on PostgreSQL
         env:
           DATABASE_URL: postgres://zelyra_ci:zelyra_ci@127.0.0.1:5432/zelyra_ci
@@ -583,6 +593,11 @@ jobs:
           DATABASE_URL: mysql://root:root@127.0.0.1:3306/zelyra_ci
           ZELYRA_BIN: target/debug/zelyra
         run: python3 ./tests/exact-numbers-e2e.py
+      - name: Verify scoped decision transactions on MySQL
+        env:
+          DATABASE_URL: mysql://root:root@127.0.0.1:3306/zelyra_ci
+          ZELYRA_DB_POOL_MAX_SIZE: '1'
+        run: cargo test --locked -p zelyra-database --lib decision_transactions_commit_rollback_unwind_and_deadline_on_native_backend -- --ignored --nocapture
       - name: Verify native dates, times, UTC milliseconds, and legacy schemas on MySQL
         env:
           DATABASE_URL: mysql://root:root@127.0.0.1:3306/zelyra_ci
