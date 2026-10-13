@@ -1,0 +1,2859 @@
+{
+  "compiler_sha256": "0290de2e27ea17606a709a913f7aff80c57bba37e9af63685e7d97c8484b6978",
+  "task_runs": 100,
+  "successful_task_runs": 100,
+  "observations": [
+    {
+      "id": "01-rechnung",
+      "repetition": 1,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 4.35,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.73,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "01-rechnung",
+      "repetition": 2,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.92,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.23,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "01-rechnung",
+      "repetition": 3,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.2,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.25,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "01-rechnung",
+      "repetition": 4,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.44,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.32,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "01-rechnung",
+      "repetition": 5,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.93,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.85,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "02-versand",
+      "repetition": 1,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 4.23,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.72,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "02-versand",
+      "repetition": 2,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.05,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.09,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "02-versand",
+      "repetition": 3,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.45,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.45,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "02-versand",
+      "repetition": 4,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.6,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.46,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "02-versand",
+      "repetition": 5,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.47,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.31,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "03-lager",
+      "repetition": 1,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.11,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.29,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "03-lager",
+      "repetition": 2,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.19,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.23,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "03-lager",
+      "repetition": 3,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.29,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.42,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "03-lager",
+      "repetition": 4,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.15,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.34,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "03-lager",
+      "repetition": 5,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.75,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.04,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "04-wortzaehler",
+      "repetition": 1,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.08,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.72,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "04-wortzaehler",
+      "repetition": 2,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.05,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.55,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "04-wortzaehler",
+      "repetition": 3,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.0,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.98,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "04-wortzaehler",
+      "repetition": 4,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.66,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.15,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "04-wortzaehler",
+      "repetition": 5,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.75,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.02,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "05-unicode",
+      "repetition": 1,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.34,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.87,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "05-unicode",
+      "repetition": 2,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.22,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.98,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "05-unicode",
+      "repetition": 3,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.84,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.87,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "05-unicode",
+      "repetition": 4,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.88,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.88,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "05-unicode",
+      "repetition": 5,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.09,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.88,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "06-csv",
+      "repetition": 1,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.94,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.15,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "06-csv",
+      "repetition": 2,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.97,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.95,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "06-csv",
+      "repetition": 3,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.9,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.96,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "06-csv",
+      "repetition": 4,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.78,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.03,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "06-csv",
+      "repetition": 5,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.49,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.35,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "07-json",
+      "repetition": 1,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.1,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.91,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "07-json",
+      "repetition": 2,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.82,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.92,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "07-json",
+      "repetition": 3,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.94,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.9,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "07-json",
+      "repetition": 4,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.88,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.01,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "07-json",
+      "repetition": 5,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.82,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.93,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "08-schicht",
+      "repetition": 1,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.82,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.83,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "08-schicht",
+      "repetition": 2,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.83,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.82,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "08-schicht",
+      "repetition": 3,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.71,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.79,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "08-schicht",
+      "repetition": 4,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.59,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.74,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "08-schicht",
+      "repetition": 5,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.66,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.73,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "09-kundenkopie",
+      "repetition": 1,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.57,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.92,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "09-kundenkopie",
+      "repetition": 2,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.77,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.45,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "09-kundenkopie",
+      "repetition": 3,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.76,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.78,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "09-kundenkopie",
+      "repetition": 4,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.53,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.71,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "09-kundenkopie",
+      "repetition": 5,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.97,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.07,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "10-teilnehmer",
+      "repetition": 1,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.94,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.73,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "10-teilnehmer",
+      "repetition": 2,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.98,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.37,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "10-teilnehmer",
+      "repetition": 3,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.9,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.57,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "10-teilnehmer",
+      "repetition": 4,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.32,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.11,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "10-teilnehmer",
+      "repetition": 5,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.35,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.29,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "11-modul",
+      "repetition": 1,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.22,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.87,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "11-modul",
+      "repetition": 2,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.94,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.02,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "11-modul",
+      "repetition": 3,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.89,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.4,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "11-modul",
+      "repetition": 4,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.15,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.88,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "11-modul",
+      "repetition": 5,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.81,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.97,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "12-datei",
+      "repetition": 1,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.84,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.23,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "12-datei",
+      "repetition": 2,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.02,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.13,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "12-datei",
+      "repetition": 3,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.82,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.05,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "12-datei",
+      "repetition": 4,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.86,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.07,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "12-datei",
+      "repetition": 5,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.28,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.1,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "13-konsole",
+      "repetition": 1,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.79,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.18,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "13-konsole",
+      "repetition": 2,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.12,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.34,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "13-konsole",
+      "repetition": 3,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.97,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.05,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "13-konsole",
+      "repetition": 4,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.83,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.87,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "13-konsole",
+      "repetition": 5,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.97,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.77,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "14-suchfunktion",
+      "repetition": 1,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.84,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.91,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "14-suchfunktion",
+      "repetition": 2,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.15,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.14,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "14-suchfunktion",
+      "repetition": 3,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.03,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.13,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "14-suchfunktion",
+      "repetition": 4,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.98,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.86,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "14-suchfunktion",
+      "repetition": 5,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.75,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.1,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "15-sortierung",
+      "repetition": 1,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.8,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.83,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "15-sortierung",
+      "repetition": 2,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.87,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.86,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "15-sortierung",
+      "repetition": 3,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.78,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.97,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "15-sortierung",
+      "repetition": 4,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.82,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.98,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "15-sortierung",
+      "repetition": 5,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.01,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.11,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "16-rekursion",
+      "repetition": 1,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.0,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.46,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "16-rekursion",
+      "repetition": 2,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.6,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.48,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "16-rekursion",
+      "repetition": 3,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.98,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.55,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "16-rekursion",
+      "repetition": 4,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.02,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.46,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "16-rekursion",
+      "repetition": 5,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.59,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 4.32,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "17-vertrag",
+      "repetition": 1,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.38,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.98,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "17-vertrag",
+      "repetition": 2,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.82,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.04,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "17-vertrag",
+      "repetition": 3,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.02,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.64,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "17-vertrag",
+      "repetition": 4,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.36,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.52,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "17-vertrag",
+      "repetition": 5,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.22,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.26,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "18-kommentare",
+      "repetition": 1,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.92,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.77,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "18-kommentare",
+      "repetition": 2,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.73,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.8,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "18-kommentare",
+      "repetition": 3,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.83,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.85,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "18-kommentare",
+      "repetition": 4,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.77,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.94,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "18-kommentare",
+      "repetition": 5,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.06,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.97,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "19-byte-tupel",
+      "repetition": 1,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.93,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.11,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "19-byte-tupel",
+      "repetition": 2,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.7,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.78,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "19-byte-tupel",
+      "repetition": 3,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.71,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.91,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "19-byte-tupel",
+      "repetition": 4,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.69,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.7,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "19-byte-tupel",
+      "repetition": 5,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.88,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.86,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "20-betragseingaben",
+      "repetition": 1,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.63,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.83,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "20-betragseingaben",
+      "repetition": 2,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.73,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.8,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "20-betragseingaben",
+      "repetition": 3,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.74,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.82,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "20-betragseingaben",
+      "repetition": 4,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.67,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.74,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "20-betragseingaben",
+      "repetition": 5,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.63,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.83,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "behavior-min-int-literal",
+      "repetition": 1,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.81,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.88,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "behavior-min-int-literal",
+      "repetition": 2,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.95,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.94,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "behavior-min-int-literal",
+      "repetition": 3,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.75,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.69,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "resource-recursion",
+      "repetition": 1,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.61,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 2.77,
+        "stdout": "",
+        "stderr": "error[E-RUNTIME-001]: function call depth limit exceeded (maximum 24)\n\n --> main.zyl:1:64\n"
+      }
+    },
+    {
+      "id": "resource-recursion",
+      "repetition": 2,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.6,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 2.81,
+        "stdout": "",
+        "stderr": "error[E-RUNTIME-001]: function call depth limit exceeded (maximum 24)\n\n --> main.zyl:1:64\n"
+      }
+    },
+    {
+      "id": "resource-recursion",
+      "repetition": 3,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.7,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 2.91,
+        "stdout": "",
+        "stderr": "error[E-RUNTIME-001]: function call depth limit exceeded (maximum 24)\n\n --> main.zyl:1:64\n"
+      }
+    },
+    {
+      "id": "behavior-missing-return",
+      "repetition": 1,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 2.9,
+        "stdout": "",
+        "stderr": "error[E-TYPE-RETURN-001]: function `answer` can reach its end without returning `Int`\n\n --> main.zyl:1:20\n"
+      },
+      "run": null
+    },
+    {
+      "id": "behavior-missing-return",
+      "repetition": 2,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 2.67,
+        "stdout": "",
+        "stderr": "error[E-TYPE-RETURN-001]: function `answer` can reach its end without returning `Int`\n\n --> main.zyl:1:20\n"
+      },
+      "run": null
+    },
+    {
+      "id": "behavior-missing-return",
+      "repetition": 3,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 2.87,
+        "stdout": "",
+        "stderr": "error[E-TYPE-RETURN-001]: function `answer` can reach its end without returning `Int`\n\n --> main.zyl:1:20\n"
+      },
+      "run": null
+    },
+    {
+      "id": "behavior-partial-return",
+      "repetition": 1,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 2.85,
+        "stdout": "",
+        "stderr": "error[E-TYPE-RETURN-001]: function `answer` can reach its end without returning `Int`\n\n --> main.zyl:1:30\n"
+      },
+      "run": null
+    },
+    {
+      "id": "behavior-partial-return",
+      "repetition": 2,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 2.98,
+        "stdout": "",
+        "stderr": "error[E-TYPE-RETURN-001]: function `answer` can reach its end without returning `Int`\n\n --> main.zyl:1:30\n"
+      },
+      "run": null
+    },
+    {
+      "id": "behavior-partial-return",
+      "repetition": 3,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 3.03,
+        "stdout": "",
+        "stderr": "error[E-TYPE-RETURN-001]: function `answer` can reach its end without returning `Int`\n\n --> main.zyl:1:30\n"
+      },
+      "run": null
+    }
+  ]
+}

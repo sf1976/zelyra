@@ -1,0 +1,77 @@
+{
+  "release_tag": "v1.0.1",
+  "source_commit": "bc243e6137a05f3a1e0dcfa6f38c2ce9016cdfe0",
+  "compiler_sha256": "0290de2e27ea17606a709a913f7aff80c57bba37e9af63685e7d97c8484b6978",
+  "release_published_at": "2026-10-13T21:41:30Z",
+  "post_publication_suites": [
+    {
+      "suite": "language-corpus",
+      "exit_code": 0
+    },
+    {
+      "suite": "language-repeats",
+      "exit_code": 0
+    },
+    {
+      "suite": "numeric-references",
+      "exit_code": 0
+    },
+    {
+      "suite": "calendar-references",
+      "exit_code": 0
+    }
+  ],
+  "database_and_http_results": [
+    {
+      "engine": "mariadb",
+      "server_version": "11.8.8-MariaDB-ubu2404",
+      "compiler_sha256": "0290de2e27ea17606a709a913f7aff80c57bba37e9af63685e7d97c8484b6978",
+      "exact_forms_sql_filters_api_generics_null_and_legacy_schema": "passed"
+    },
+    {
+      "engine": "mariadb",
+      "server_version": "11.8.8-MariaDB-ubu2404",
+      "compiler_sha256": "0290de2e27ea17606a709a913f7aff80c57bba37e9af63685e7d97c8484b6978",
+      "native_temporal_forms_filters_parameters_nulls_precision": "passed"
+    },
+    {
+      "engine": "postgres",
+      "server_version": "PostgreSQL 16.15 (Debian 16.15-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+      "compiler_sha256": "0290de2e27ea17606a709a913f7aff80c57bba37e9af63685e7d97c8484b6978",
+      "exact_forms_sql_filters_api_generics_null_and_legacy_schema": "passed"
+    },
+    {
+      "engine": "postgres",
+      "server_version": "PostgreSQL 16.15 (Debian 16.15-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+      "compiler_sha256": "0290de2e27ea17606a709a913f7aff80c57bba37e9af63685e7d97c8484b6978",
+      "native_temporal_forms_filters_parameters_nulls_precision": "passed"
+    },
+    {
+      "compiler_sha256": "0290de2e27ea17606a709a913f7aff80c57bba37e9af63685e7d97c8484b6978",
+      "typed_temporal_http_round_trips": "passed",
+      "invalid_inputs": 13
+    }
+  ],
+  "invoice_editor": "passed: real published binary, multi-file invoice tutorial, MariaDB, preview start/dashboard/stop",
+  "published_install_upgrade_rollback": "passed: v1.0.1 -> v1.0.0 -> update to v1.0.1",
+  "release_artifacts": "Linux and Windows archives/checksums/SBOMs verified; 240 packages per SBOM",
+  "prepublication_ci_run": "https://github.com/sf1976/zelyra/actions/runs/38469017164",
+  "release_workflow_run": "https://github.com/sf1976/zelyra/actions/runs/38471356009",
+  "language_counts": {
+    "cases": 80,
+    "passed_expected": 76,
+    "observations": 4,
+    "unexpected": 0,
+    "tasks": 20,
+    "expected_compile_rejections": 14,
+    "expected_runtime_rejections": 20,
+    "observed_recursion_rejection": 1,
+    "task_repeats": 100,
+    "boundary_repeats": 12,
+    "numeric_references": 600,
+    "date_pairs": 1008,
+    "utc_duration_pairs": 200,
+    "utc_format_checks": 200
+  },
+  "website_release_pages": "German and English public release pages expose v1.0.1; version/release metadata synchronized and view caches cleared"
+}
