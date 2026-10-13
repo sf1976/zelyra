@@ -16,6 +16,7 @@ use zelyra_ast::{
 };
 use zelyra_database::{QueryValue, Schema};
 use zelyra_forms::{validate, FieldError};
+mod edit_snapshot;
 mod forms;
 mod http;
 mod i18n;
@@ -23,6 +24,7 @@ mod mfa;
 mod password_reset;
 mod server;
 mod ui;
+use edit_snapshot::{form_snapshot_matches, sign_form_snapshot, verify_form_snapshot, EditValues};
 use forms::*;
 pub use forms::{localized_identifier, render_form};
 use http::*;
@@ -5521,10 +5523,16 @@ fn dispatch_form_with_language(
                 Err(error) => return relation_options_error(database_url, error),
             }
         } else {
-            HashMap::new()
+            EditValues::default()
         };
-        let mut html =
-            render_form_with_language(&rendered_form, &values, &[], None, &options, language);
+        let mut html = render_form_with_language(
+            &rendered_form,
+            &values.rendered_values(),
+            &[],
+            None,
+            &options,
+            language,
+        );
         if is_edit_form(form) {
             let Some(snapshot) = sign_form_snapshot(&form.csrf, &values) else {
                 return Response::html(500, "<h1>500 Internal Server Error</h1>");
@@ -5753,7 +5761,7 @@ fn load_existing_form_values(
     database_url: Option<&str>,
     tenant_context: Option<&TenantContext>,
     actor_user_id: Option<i64>,
-) -> Result<Option<HashMap<String, String>>, String> {
+) -> Result<Option<EditValues>, String> {
     let Some(database_url) = database_url else {
         return Err("DATABASE_URL is required for edit forms".into());
     };
@@ -5814,17 +5822,7 @@ fn load_existing_form_values(
     }
     let result = zelyra_database::execute_mariadb_query(database_url, &query, params)
         .map_err(|error| error.to_string())?;
-    let Some(row) = result.rows.first() else {
-        return Ok(None);
-    };
-    let values = form
-        .form
-        .fields
-        .iter()
-        .zip(row)
-        .map(|(field, value)| (field.name.clone(), value.clone()))
-        .collect();
-    Ok(Some(values))
+    EditValues::from_result(form, &result).map_err(|error| error.to_string())
 }
 
 fn form_value_columns(form: &FormRoute, schema_table: &zelyra_database::Table) -> Vec<String> {
@@ -5846,43 +5844,6 @@ fn form_value_columns(form: &FormRoute, schema_table: &zelyra_database::Table) -
 
 fn is_edit_form(form: &FormRoute) -> bool {
     form.form.name.ends_with("Edit")
-}
-
-fn sign_form_snapshot(csrf: &CsrfProtection, values: &HashMap<String, String>) -> Option<String> {
-    let signature = form_snapshot_signature(csrf, values)?;
-    Some(hex_encode(&signature))
-}
-
-fn form_snapshot_signature(
-    csrf: &CsrfProtection,
-    values: &HashMap<String, String>,
-) -> Option<Vec<u8>> {
-    let snapshot = values.iter().collect::<BTreeMap<_, _>>();
-    let payload = serde_json::to_vec(&snapshot).ok()?;
-    let key = hmac::Key::new(hmac::HMAC_SHA256, csrf.token.as_bytes());
-    Some(hmac::sign(&key, &payload).as_ref().to_vec())
-}
-
-fn verify_form_snapshot(token: &str) -> Option<Vec<u8>> {
-    if token.len() != 64 {
-        return None;
-    }
-    let signature = hex_decode(token)?;
-    if signature.len() != 32 {
-        return None;
-    }
-    Some(signature)
-}
-
-fn form_snapshot_matches(
-    csrf: &CsrfProtection,
-    expected_signature: &[u8],
-    values: &HashMap<String, String>,
-) -> bool {
-    let Some(snapshot) = form_snapshot_signature(csrf, values) else {
-        return false;
-    };
-    constant_time_equal(expected_signature, &snapshot)
 }
 
 fn attach_form_snapshot(html: &str, snapshot: &str) -> String {
@@ -9127,7 +9088,7 @@ fn execute_form_action(
                 },
             };
             let result = transaction.execute(&query)?;
-            let Some(row) = result.rows.first() else {
+            let Some(current_values) = EditValues::from_result(form, &result)? else {
                 return Err(zelyra_database::DatabaseError {
                     message: if tenant_context.is_some() {
                         "ZELYRA_TENANT_DENIED: record is not available in this tenant".into()
@@ -9136,20 +9097,13 @@ fn execute_form_action(
                     },
                 });
             };
-            let current_values = form
-                .form
-                .fields
-                .iter()
-                .zip(row)
-                .map(|(field, value)| (field.name.clone(), value.clone()))
-                .collect::<HashMap<_, _>>();
             if !form_snapshot_matches(&form.csrf, expected_snapshot, &current_values) {
                 return Err(zelyra_database::DatabaseError {
                     message: "ZELYRA_CONFLICT: edited record changed after the form was loaded"
                         .into(),
                 });
             }
-            Some(current_values)
+            Some(current_values.values)
         } else {
             None
         };

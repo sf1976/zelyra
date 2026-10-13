@@ -347,3 +347,10 @@ with a source position before application use. Explicit
 [`sql_decode<T>`](sql-results.en.md) provides typed scalar/record/array results,
 cardinality and NULL checks; the legacy raw-row JSON format stays unchanged. See [rules](dates.en.md), [HTTP evidence](release-readiness/0.9.9-calendar-http.en.md)
 and [SQL evidence](release-readiness/0.9.9-calendar-sql.en.md).
+
+## NULL-aware edit protection on the development branch
+
+Native NULL and literal `\N` remain distinct in signed edit snapshots and
+form inputs. MariaDB/MySQL stale updates fail with 409 before mutation. Implicitly
+nullable omitted fields bind SQL NULL; required/readonly checks remain.
+[Rules](edit-snapshots.en.md), [evidence](release-readiness/0.9.9-null-edit-snapshots.en.md).

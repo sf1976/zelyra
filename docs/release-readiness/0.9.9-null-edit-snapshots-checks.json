@@ -1,0 +1,22 @@
+{
+  "source_baseline": "5a5ea060f31a46ef0444a7365374445dd981bed1",
+  "compiler_sha256": "f4da854ec9f92e165bd324e21a7ae8c70bc6a327664681475905acaee04387e7",
+  "rust_passed": 853,
+  "rust_failed": 0,
+  "ordinary_ignored_smtp_clock_test": 1,
+  "full_clippy": "passed",
+  "fmt": "passed",
+  "handbook_snippets": 324,
+  "native_http_backends": [
+    "MariaDB 11.4.13",
+    "MySQL 8.4.11"
+  ],
+  "generated_business_rehearsal": "passed on same artifact",
+  "source_sha256": {
+    "forms/src/lib.rs": "0343223ed3d1a6b8fbedd18392fbbca00351ce6a2cf2f11e232ee843729a0ce4",
+    "web/src/lib.rs": "2cf802e7ea2436ca705b55c82b824aed012a0598288b10a4064e08353ba78172",
+    "web/src/edit_snapshot.rs": "7d0e338b8bea417b4bd896273f86bf2939f9c31bde3423ef90a19759714a3b6b",
+    "web/src/tests.rs": "8194036fe75f2d76030f0eb4238f9d9c8adc67d9a0f0eb694998e9080347b145",
+    "tests/null-edit-snapshots-e2e.py": "95d09d2bb7db760d1b0927cfc7a0c581365b63fbca5150c9cd748a4885bcc4d2"
+  }
+}

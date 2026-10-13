@@ -1056,6 +1056,12 @@ language backlog as one 0.9.4 change.
   backends; legacy raw-row HTTP/JSON is retained. See [rules](sql-results.en.md)
   and [evidence](release-readiness/0.9.9-typed-sql-results.en.md).
 
+- [✅] Edit snapshots preserve native NULL flags, reject stale NULL/literal-text
+  changes before writing, and render NULL separately from literal `\N`.
+  Omitted implicitly nullable fields bind SQL NULL; required/readonly rules stay.
+  MariaDB/MySQL HTTP and malformed-metadata regressions pass. See
+  [rules](edit-snapshots.en.md) and [evidence](release-readiness/0.9.9-null-edit-snapshots.en.md).
+
 - [🗺️] Freeze language, CLI, runtime, databases, IDE, mail, notification, and
   tutorial scope. Complete every accepted 0.9.1–0.9.8 requirement and run the
   complete technical gates on an immutable candidate. Prepare exact 1.0.0

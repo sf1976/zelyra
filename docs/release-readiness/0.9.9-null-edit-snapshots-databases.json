@@ -1,0 +1,16 @@
+[
+  {
+    "engine": "mariadb",
+    "server_version": "11.4.13-MariaDB-ubu2404",
+    "compiler_sha256": "f4da854ec9f92e165bd324e21a7ae8c70bc6a327664681475905acaee04387e7",
+    "nullable_edit_snapshots_and_rendering": "passed",
+    "controlled_stale_edits": 3
+  },
+  {
+    "engine": "mysql",
+    "server_version": "8.4.11",
+    "compiler_sha256": "f4da854ec9f92e165bd324e21a7ae8c70bc6a327664681475905acaee04387e7",
+    "nullable_edit_snapshots_and_rendering": "passed",
+    "controlled_stale_edits": 3
+  }
+]
