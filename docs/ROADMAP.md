@@ -1048,6 +1048,8 @@ language backlog as one 0.9.4 change.
   and [SQL evidence](release-readiness/0.9.9-calendar-sql.en.md).
   The SMTP/reset fixture accounts for guarded suppression of superseded
   delivery jobs and verifies the retained replacement token before continuing.
+  Generated-business readiness checks honor mandatory metadata access before
+  startup, including controlled, redacted failure when the database is absent.
 - [🗺️] Close typed downstream SQL results/cardinality and distinguish NULL
   from text; raw rows alone do not demonstrate typed calendar operations.
 
