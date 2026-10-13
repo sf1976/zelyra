@@ -29,6 +29,12 @@ den tatsächlich implementierten Stand.
 
 ## Aktuelle Meilensteine
 
+- [x] **1.0.1 Tutorialstart korrigiert:** Compose v2 oder neuer voraussetzen
+  und Python Compose v1 vor dem Start abweisen. `ContainerConfig`-Fehler und
+  Ubuntu-Crashreport-Rechte von Docker-Socket-Zugriff unterscheiden. Erzeugte
+  Projekte und Datenbank-Volumes für Wiederholung erhalten. Den Studio-
+  Projekteinstieg für Konsole und Webvorschau korrigieren; siehe die
+  [Tutorialanleitung](tutorials/invoice.de.md).
 - [x] **0.8.0 stabil veröffentlicht:** Zelyra Studio enthält eine lokale,
   schreibgeschützte Datenbankkarte für MariaDB und PostgreSQL sowie eine
   geführte CRUD-Quelltextvorschau mit Compilerprüfung und ausdrücklicher

@@ -4113,37 +4113,44 @@ fn docker_compose_check() -> DoctorCheck {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DockerComposeCommand {
     Plugin,
-    Legacy,
+    Standalone,
 }
 
 impl DockerComposeCommand {
     fn label(self) -> &'static str {
         match self {
             Self::Plugin => "docker compose",
-            Self::Legacy => "docker-compose",
+            Self::Standalone => "docker-compose",
         }
     }
 }
 
 fn detect_docker_compose() -> Option<DockerComposeCommand> {
     let plugin = Command::new("docker")
-        .args(["compose", "version"])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
+        .args(["compose", "version", "--short"])
+        .output()
         .ok()
-        .is_some_and(|status| status.success());
+        .is_some_and(|output| {
+            output.status.success()
+                && supported_compose_version(&String::from_utf8_lossy(&output.stdout))
+        });
     if plugin {
         return Some(DockerComposeCommand::Plugin);
     }
-    let legacy = Command::new("docker-compose")
-        .arg("version")
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
+    let standalone = Command::new("docker-compose")
+        .args(["version", "--short"])
+        .output()
         .ok()
-        .is_some_and(|status| status.success());
-    legacy.then_some(DockerComposeCommand::Legacy)
+        .is_some_and(|output| {
+            output.status.success()
+                && supported_compose_version(&String::from_utf8_lossy(&output.stdout))
+        });
+    standalone.then_some(DockerComposeCommand::Standalone)
+}
+
+fn supported_compose_version(version: &str) -> bool {
+    semver::Version::parse(version.trim().trim_start_matches('v'))
+        .is_ok_and(|version| version.major >= 2)
 }
 
 fn docker_compose_install_hint() -> String {
@@ -4166,7 +4173,7 @@ fn docker_compose_install_hint() -> String {
         )
     };
     format!(
-        "Docker Compose is unavailable. Install Docker for {platform} from:\n{url}\nAfter installation, verify with `docker compose version`, then run this step again."
+        "Docker Compose v2 or newer is required. Python docker-compose v1 is unsupported and can fail with ContainerConfig on current Docker engines. Install or update the Docker Compose plugin for {platform} from:\n{url}\nAfter installation, verify with `docker compose version`, then run this step again."
     )
 }
 
@@ -4187,7 +4194,7 @@ fn compose_command(directory: &std::path::Path, command: DockerComposeCommand) -
             process.arg("compose");
             process
         }
-        DockerComposeCommand::Legacy => Command::new("docker-compose"),
+        DockerComposeCommand::Standalone => Command::new("docker-compose"),
     };
     process
         .current_dir(directory)
@@ -4246,9 +4253,15 @@ fn wait_with_live_output(mut child: Child) -> Result<Output, String> {
 
 fn compose_start_failure_message(command: DockerComposeCommand, details: &str) -> String {
     let details = details.to_ascii_lowercase();
-    if details.contains("permission denied")
-        && (details.contains("docker.sock") || details.contains("docker"))
-    {
+    if details.contains("containerconfig") {
+        format!(
+            "Docker Compose is incompatible with this Docker engine (ContainerConfig). {}",
+            docker_compose_install_hint()
+        )
+    } else if details.lines().any(|line| {
+        line.contains("permission denied")
+            && (line.contains("docker.sock") || line.contains("docker daemon socket"))
+    }) {
         "Docker access was denied. On Linux, add the current user to the `docker` group with `sudo usermod -aG docker $USER`, then either fully sign out and sign in again or run these commands in the current terminal:\n  newgrp docker\n  id -nG\n  docker ps\nRetry setup when `docker` appears in the group list and `docker ps` succeeds. Opening another terminal window alone may not refresh group membership. Alternatively follow your distribution's Docker setup instructions.".into()
     } else if details.contains("address already in use")
         || details.contains("port is already allocated")

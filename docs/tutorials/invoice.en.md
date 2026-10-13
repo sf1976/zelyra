@@ -37,6 +37,15 @@ The ready application runs at the local address printed by the command
    unit price at `/invoice_lines`. The invoice view calculates net, 19% VAT,
    and gross amounts from these lines.
 
+Docker Compose v2 or newer is required (`docker compose version`). The old
+Python `docker-compose` 1.29.2 is not used: it fails on current Docker engines
+with `KeyError: 'ContainerConfig'`. Install the Compose plugin following the
+[official instructions](https://docs.docker.com/compose/install/linux/), verify
+`docker compose version`, then run `zelyra setup --all` in the existing tutorial
+directory. The existing `.env` and database volumes are preserved; fixing this
+error does not require deleting data. Permission errors under `/var/crash`
+refer to Ubuntu crash reporting and do not prove denied Docker socket access.
+
 ## Project structure: one responsibility per file
 
 The tutorial is a real multi-file project. `main.zyl` is the entry point and

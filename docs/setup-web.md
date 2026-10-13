@@ -61,7 +61,9 @@ local port; an explicitly requested occupied `--port` is rejected.
 ## Docker boundary
 
 If Docker Compose is available, Zelyra starts the generated MariaDB container
-and application with `docker compose` or the legacy `docker-compose` command.
+and application with `docker compose` (v2 or newer), or a modern standalone
+`docker-compose` binary (v2 or newer). Python Compose v1 is unsupported because
+current Docker engines no longer provide its required `ContainerConfig` field.
 MariaDB is therefore installed as a container when it is not already running.
 Zelyra does not install Docker itself, modify operating-system packages, or
 request root privileges. If Docker is missing, the assistant reports that

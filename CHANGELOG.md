@@ -4,6 +4,26 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language compatibility line remains `0.1`. Compiler and repository
 releases follow Semantic Versioning independently of the language line.
 
+## 1.0.1 — 2026-10-13
+
+- Require Docker Compose v2 or newer for tutorial, setup, and doctor; prefer
+  the plugin and accept modern standalone binaries. Reject Python Compose v1
+  before starting containers, avoiding `KeyError: 'ContainerConfig'`.
+  / Docker Compose v2 oder neuer für Tutorial, Setup und Doctor voraussetzen;
+  Plugin bevorzugen und moderne eigenständige Programme akzeptieren. Python
+  Compose v1 vor dem Containerstart abweisen und so den Absturz vermeiden.
+- Report Compose compatibility failures separately from Docker socket access
+  failures. Ubuntu `/var/crash` permissions no longer trigger Docker group advice.
+  Preserve project files, credentials, and database volumes for setup retry.
+  / Compose-Kompatibilitätsfehler von Docker-Socket-Zugriffsfehlern unterscheiden.
+  Ubuntu-Rechtefehler unter `/var/crash` lösen keinen Docker-Gruppenhinweis mehr
+  aus. Projektdateien, Zugangsdaten und Datenbank-Volumes bleiben erhalten.
+
+- Fix Studio Run entry-point selection: use the project tree instead of an
+  undefined `files` variable, restoring console execution and web preview.
+  / Studio-Ausführen korrigieren: Projekteinstieg anhand des Dateibaums statt
+  der undefinierten Variablen `files` wählen; Konsole und Webvorschau starten.
+
 ## 1.0.0 — 2026-10-13
 
 - First major productive release of Zelyra. All deferred human onboarding and

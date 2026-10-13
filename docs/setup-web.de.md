@@ -66,8 +66,10 @@ lokalen Port; ein ausdrücklich angegebener belegter `--port` wird abgelehnt.
 ## Docker-Grenze
 
 Wenn Docker Compose verfügbar ist, startet Zelyra den erzeugten MariaDB-
-Container und die Anwendung mit `docker compose` oder dem Legacy-Befehl
-`docker-compose`. MariaDB wird damit als Container eingerichtet, wenn sie
+Container und die Anwendung mit `docker compose` (v2 oder neuer) oder einem
+modernen eigenständigen `docker-compose`-Programm (v2 oder neuer). Python
+Compose v1 wird nicht unterstützt, weil aktuelle Docker-Engines das benötigte
+`ContainerConfig`-Feld nicht mehr bereitstellen. MariaDB wird als Container eingerichtet, wenn sie
 noch nicht läuft. Zelyra installiert Docker selbst nicht, verändert keine
 Betriebssystempakete und fordert keine Root-Rechte an. Fehlt Docker, meldet
 der Assistent dies; anschließend muss Docker Desktop oder Docker Engine mit

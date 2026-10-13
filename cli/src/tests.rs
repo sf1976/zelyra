@@ -3017,7 +3017,7 @@ fn web_port_validation_rejects_zero_and_non_numeric_values() {
 #[test]
 fn docker_compose_hint_is_actionable_and_platform_specific() {
     let hint = docker_compose_install_hint();
-    assert!(hint.contains("Docker Compose is unavailable"));
+    assert!(hint.contains("Docker Compose v2 or newer is required"));
     assert!(hint.contains("https://docs.docker.com/"));
     assert!(hint.contains("docker compose version"));
 }
@@ -3026,7 +3026,7 @@ fn docker_compose_hint_is_actionable_and_platform_specific() {
 fn compose_start_errors_are_actionable_without_exposing_output() {
     let secret = "mariadb://zelyra:secret-value@127.0.0.1:3306/zelyra_app";
     let permission = compose_start_failure_message(
-        DockerComposeCommand::Legacy,
+        DockerComposeCommand::Standalone,
         &format!("permission denied while connecting to docker.sock: {secret}"),
     );
     assert!(permission.contains("usermod -aG docker"));
@@ -3119,4 +3119,36 @@ fn temporal_client_schemas_match_existing_wire_formats() {
     let timestamp_schema =
         zelyra_ast::json::parse(&docs::openapi_schema(&Type::Timestamp)).unwrap();
     assert_eq!(timestamp_schema["type"], "integer");
+}
+
+#[test]
+fn compose_versions_reject_python_v1_and_accept_current_compose() {
+    for version in [
+        "1.29.2",
+        "v1.29.2",
+        "",
+        "unknown",
+        "Docker Compose version v2.0.0",
+    ] {
+        assert!(!supported_compose_version(version), "{version}");
+    }
+    for version in ["2.0.0", "v2.29.1\n", "2.40.0-desktop.1", "v5.6.0"] {
+        assert!(supported_compose_version(version), "{version}");
+    }
+}
+
+#[test]
+fn compose_containerconfig_with_apport_failure_is_not_a_socket_permission_error() {
+    let message = compose_start_failure_message(
+        DockerComposeCommand::Standalone,
+        "KeyError: 'ContainerConfig'\nPermissionError: [Errno 13] Permission denied: '/var/crash/_usr_bin_docker-compose.1000.crash'",
+    );
+    assert!(message.contains("ContainerConfig"));
+    assert!(message.contains("v2 or newer"));
+    assert!(!message.contains("usermod"));
+    let crash_only = compose_start_failure_message(
+        DockerComposeCommand::Standalone,
+        "PermissionError: [Errno 13] Permission denied: '/var/crash/_usr_bin_docker-compose.1000.crash'",
+    );
+    assert!(!crash_only.contains("usermod"));
 }
