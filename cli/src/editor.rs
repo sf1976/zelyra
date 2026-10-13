@@ -3417,8 +3417,11 @@ fn start_editor_web_app(
     // trigger either Compose startup or automatic schema changes there.
     let has_compose_file = state.root.join("docker-compose.mariadb.yml").is_file();
     let project_file_database_url = if has_compose_file {
-        super::database_url_from_project_file(&state.root, database_name)
-            .map_err(|_| (422, "the project environment file could not be read".into()))?
+        super::project_file_database_url_for_compose(
+            database_url.as_deref(),
+            super::database_url_from_project_file(&state.root, database_name),
+        )
+        .map_err(|_| (422, "the project environment file could not be read".into()))?
     } else {
         None
     };

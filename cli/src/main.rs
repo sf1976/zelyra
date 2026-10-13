@@ -4354,8 +4354,22 @@ fn database_url_from_project_file(
 }
 
 fn expand_project_database_url(directory: &std::path::Path, url: &str) -> Result<String, String> {
+    if !url.contains("${ZELYRA_DB_HOST_PORT") {
+        return Ok(url.to_owned());
+    }
     let port = project_database_host_port(directory)?;
     Ok(expand_database_host_port(url, &port))
+}
+
+fn project_file_database_url_for_compose(
+    active_database_url: Option<&str>,
+    project_file_database_url: Result<Option<String>, String>,
+) -> Result<Option<String>, String> {
+    match project_file_database_url {
+        Ok(database_url) => Ok(database_url),
+        Err(_) if active_database_url.is_some() => Ok(None),
+        Err(error) => Err(error),
+    }
 }
 
 fn project_database_host_port(directory: &std::path::Path) -> Result<String, String> {

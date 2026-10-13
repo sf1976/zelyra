@@ -437,6 +437,45 @@ fn empty_database_host_ports_use_the_compose_fallback() {
 }
 
 #[test]
+fn resolved_database_urls_do_not_require_reading_the_project_port_file() {
+    let directory = std::env::temp_dir().join(format!(
+        "zelyra-resolved-db-url-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&directory).unwrap();
+    fs::write(directory.join(".env"), [0xff, 0xfe]).unwrap();
+    let resolved_url = "mariadb://external:secret@db.example.test:3307/invoice";
+    assert_eq!(
+        expand_project_database_url(&directory, resolved_url).unwrap(),
+        resolved_url
+    );
+    assert!(expand_project_database_url(
+        &directory,
+        "mariadb://local:secret@127.0.0.1:${ZELYRA_DB_HOST_PORT:-3306}/invoice"
+    )
+    .is_err());
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn unreadable_project_database_file_skips_compose_when_process_url_is_available() {
+    let external_url = "mariadb://external:secret@db.example.test:3307/invoice";
+    assert_eq!(
+        project_file_database_url_for_compose(Some(external_url), Err("unreadable".into()))
+            .unwrap(),
+        None
+    );
+    assert_eq!(
+        project_file_database_url_for_compose(None, Err("unreadable".into())),
+        Err("unreadable".into())
+    );
+}
+
+#[test]
 fn studio_compose_target_requires_the_generated_local_mariadb_endpoint() {
     assert!(is_project_mariadb_compose_target(
         "mariadb://zelyra:secret@127.0.0.1:3308/invoice",
