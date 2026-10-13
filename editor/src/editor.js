@@ -28,6 +28,10 @@ import {
 const root = document.documentElement;
 const storedTheme = localStorage.getItem("zelyra-editor-theme");
 root.dataset.theme = storedTheme === "light" ? "light" : "dark";
+const storedFontSize = localStorage.getItem("zelyra-editor-font-size");
+if (storedFontSize && ["medium", "large"].includes(storedFontSize)) {
+  root.dataset.fontSize = storedFontSize;
+}
 const editorSessionStorageKey = "zelyra-editor-session-token";
 const fragmentToken = location.hash.slice(1);
 const token = /^[0-9a-f]{64}$/.test(fragmentToken)
@@ -94,7 +98,7 @@ const messages = {
     renameFile: "Umbenennen", deleteFile: "Löschen", renamePrompt: "Neuer Projektpfad (zum Beispiel src/customer-new.zyl)",
     renameConfirm: "Datei {0} umbenennen? Importverweise werden nicht angepasst.", deleteConfirm: "Datei {0} endgültig löschen?",
     fileRenamed: "Datei umbenannt: {0}", fileDeleted: "Datei gelöscht: {0}",
-    switchLanguage: "Sprache wechseln", themeLightAction: "Helles Farbschema aktivieren", themeDarkAction: "Dunkles Farbschema aktivieren",
+    switchLanguage: "Sprache wechseln", switchFontSize: "Schriftgröße anpassen", fontSizeDefaultAction: "Standard-Schriftgröße (100%)", fontSizeDefaultHelp: "Schriftgröße der Elemente und des Editors auf Standard zurücksetzen", fontSizeMediumAction: "Mittlere Schriftgröße (+15%)", fontSizeMediumHelp: "Schriftgröße um 15% vergrößern", fontSizeLargeAction: "Große Schriftgröße (+30%)", fontSizeLargeHelp: "Schriftgröße um 30% vergrößern", themeLightAction: "Helles Farbschema aktivieren", themeDarkAction: "Dunkles Farbschema aktivieren",
     format: "Formatieren", check: "Projekt prüfen", welcome: "Willkommen in Zelyra Studio",
     welcomeHint: "Öffne links eine Datei und entwickle direkt in deinem Projekt.", problems: "Probleme",
     noProblems: "Keine Probleme gefunden. Dein Projekt ist bereit.", close: "Panel schließen", loadingFiles: "Dateien werden geladen",
@@ -189,7 +193,7 @@ const messages = {
     renameFile: "Rename", deleteFile: "Delete", renamePrompt: "New project path (for example src/customer-new.zyl)",
     renameConfirm: "Rename {0}? Import references will not be updated.", deleteConfirm: "Permanently delete {0}?",
     fileRenamed: "File renamed: {0}", fileDeleted: "File deleted: {0}",
-    switchLanguage: "Switch language", themeLightAction: "Use light appearance", themeDarkAction: "Use dark appearance",
+    switchLanguage: "Switch language", switchFontSize: "Adjust font size", fontSizeDefaultAction: "Default font size (100%)", fontSizeDefaultHelp: "Reset font size of UI elements and editor to default", fontSizeMediumAction: "Medium font size (+15%)", fontSizeMediumHelp: "Increase font size by 15%", fontSizeLargeAction: "Large font size (+30%)", fontSizeLargeHelp: "Increase font size by 30%", themeLightAction: "Use light appearance", themeDarkAction: "Use dark appearance",
     format: "Format", check: "Check project", welcome: "Welcome to Zelyra Studio",
     welcomeHint: "Open a file on the left and work directly in your project.", problems: "Problems",
     noProblems: "No problems found. Your project is ready.", close: "Close panel", loadingFiles: "Loading files",
@@ -266,11 +270,54 @@ function updateThemeControl() {
   $("theme-button").setAttribute("aria-label", label);
   $("theme-button").title = label;
 }
+function currentFontSize() {
+  const size = root.dataset.fontSize;
+  return size === "medium" || size === "large" ? size : "default";
+}
+function updateFontSizeControl() {
+  const btn = $("font-size-button");
+  if (!btn) return;
+  const size = currentFontSize();
+  if (size === "large") {
+    btn.textContent = "aA⁺⁺";
+    const label = `${t("switchFontSize")} (${t("fontSizeLargeAction")})`;
+    btn.setAttribute("aria-label", label);
+    btn.title = label;
+  } else if (size === "medium") {
+    btn.textContent = "aA⁺";
+    const label = `${t("switchFontSize")} (${t("fontSizeMediumAction")})`;
+    btn.setAttribute("aria-label", label);
+    btn.title = label;
+  } else {
+    btn.textContent = "aA";
+    const label = `${t("switchFontSize")} (${t("fontSizeDefaultAction")})`;
+    btn.setAttribute("aria-label", label);
+    btn.title = label;
+  }
+}
+function setFontSize(nextSize) {
+  if (nextSize === "medium" || nextSize === "large") {
+    root.dataset.fontSize = nextSize;
+    try { localStorage.setItem("zelyra-editor-font-size", nextSize); } catch {}
+  } else {
+    delete root.dataset.fontSize;
+    try { localStorage.removeItem("zelyra-editor-font-size"); } catch {}
+  }
+  updateFontSizeControl();
+  if (editor) editor.dispatch({ effects: editorTheme.reconfigure(createZelyraTheme()) });
+}
+function cycleFontSize() {
+  const current = currentFontSize();
+  if (current === "default") setFontSize("medium");
+  else if (current === "medium") setFontSize("large");
+  else setFontSize("default");
+}
 function setLanguage(next) {
   language = next;
   document.documentElement.lang = language;
   $("language-button").textContent = language.toUpperCase();
   updateThemeControl();
+  updateFontSizeControl();
   for (const element of document.querySelectorAll("[data-i18n]")) element.textContent = messages[language][element.dataset.i18n] || element.textContent;
   for (const element of document.querySelectorAll("[data-i18n-title]")) element.title = messages[language][element.dataset.i18nTitle] || element.title;
   for (const element of document.querySelectorAll("[data-i18n-placeholder]")) element.placeholder = messages[language][element.dataset.i18nPlaceholder] || element.placeholder;
@@ -412,8 +459,10 @@ const zelyraLanguage = StreamLanguage.define({
 
 const editorTheme = new Compartment();
 function createZelyraTheme() {
+  const size = currentFontSize();
+  const fontSize = size === "large" ? "18px" : size === "medium" ? "16px" : "14px";
   return EditorView.theme({
-  "&": { height: "100%", fontSize: "14px", backgroundColor: "var(--editor-bg)", color: "var(--ink)" },
+  "&": { height: "100%", fontSize, backgroundColor: "var(--editor-bg)", color: "var(--ink)" },
   ".cm-scroller": { fontFamily: "'JetBrains Mono', 'Cascadia Code', ui-monospace, monospace", lineHeight: "1.65", overflow: "auto" },
   ".cm-content": { padding: "18px 0", caretColor: "var(--accent)" },
   ".cm-gutters": { backgroundColor: "var(--editor-gutter)", color: "var(--muted)", border: "none", minWidth: "52px" },
@@ -631,6 +680,9 @@ const studioTasks = [
   ["taskGoToDefinition", "taskGoToDefinitionHelp", ["definition", "symbol", "function", "type", "f12"], () => void goToDefinition()],
   ["taskFindReferences", "taskFindReferencesHelp", ["references", "usages", "occurrences", "symbol", "shift f12"], () => void findIdentifierOccurrences()],
   ["projectSearch", "projectSearchHelp", ["project", "search", "find", "all files"], () => openProjectSearch()],
+  ["fontSizeDefaultAction", "fontSizeDefaultHelp", ["font", "size", "zoom", "schriftgröße", "default", "standard", "100"], () => setFontSize("default")],
+  ["fontSizeMediumAction", "fontSizeMediumHelp", ["font", "size", "zoom", "schriftgröße", "medium", "mittel", "115"], () => setFontSize("medium")],
+  ["fontSizeLargeAction", "fontSizeLargeHelp", ["font", "size", "zoom", "schriftgröße", "large", "groß", "130"], () => setFontSize("large")],
 ];
 let selectedTaskIndex = 0;
 
@@ -2502,6 +2554,7 @@ $("theme-button").addEventListener("click", () => {
   if (editor) editor.dispatch({ effects: editorTheme.reconfigure(createZelyraTheme()) });
 });
 $("language-button").addEventListener("click", () => setLanguage(language === "de" ? "en" : "de"));
+$("font-size-button").addEventListener("click", cycleFontSize);
 $("sidebar-toggle").addEventListener("click", (event) => {
   const hidden = document.body.classList.toggle("sidebar-hidden");
   event.currentTarget.setAttribute("aria-expanded", String(!hidden));
@@ -2514,6 +2567,22 @@ window.addEventListener("beforeunload", (event) => {
 });
 window.addEventListener("keydown", (event) => {
   if (event.defaultPrevented) return;
+  if ((event.ctrlKey || event.metaKey) && (event.key === "+" || event.key === "=")) {
+    event.preventDefault();
+    const cur = currentFontSize();
+    if (cur === "default") setFontSize("medium");
+    else if (cur === "medium") setFontSize("large");
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key === "-") {
+    event.preventDefault();
+    const cur = currentFontSize();
+    if (cur === "large") setFontSize("medium");
+    else if (cur === "medium") setFontSize("default");
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key === "0") {
+    event.preventDefault();
+    setFontSize("default");
+  }
   if ((event.ctrlKey || event.metaKey) && event.code === "Space" && editor) {
     event.preventDefault();
     startCompletion(editor);

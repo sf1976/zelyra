@@ -3,6 +3,10 @@
     if (localStorage.getItem("zelyra-editor-theme") === "light") {
       document.documentElement.dataset.theme = "light";
     }
+    const fontSize = localStorage.getItem("zelyra-editor-font-size");
+    if (fontSize && ["medium", "large"].includes(fontSize)) {
+      document.documentElement.dataset.fontSize = fontSize;
+    }
   } catch {
     // Keep the dark default if the browser blocks local storage.
   }

@@ -176,6 +176,41 @@ try {
   await themeButton.focus();
   await page.keyboard.press("Space");
   assert.equal(await page.locator("html").getAttribute("data-theme"), "light", "keyboard users must be able to switch the Studio appearance");
+
+  const fontSizeButton = page.locator("#font-size-button");
+  assert.equal(await fontSizeButton.textContent(), "aA");
+  assert.equal(await page.locator("html").getAttribute("data-font-size"), null);
+  await fontSizeButton.click();
+  assert.equal(await page.locator("html").getAttribute("data-font-size"), "medium");
+  assert.equal(await fontSizeButton.textContent(), "aA⁺");
+  assert.equal(await page.locator(".cm-editor").evaluate((element) => getComputedStyle(element).fontSize), "16px");
+
+  await fontSizeButton.click();
+  assert.equal(await page.locator("html").getAttribute("data-font-size"), "large");
+  assert.equal(await fontSizeButton.textContent(), "aA⁺⁺");
+  assert.equal(await page.locator(".cm-editor").evaluate((element) => getComputedStyle(element).fontSize), "18px");
+
+  await fontSizeButton.click();
+  assert.equal(await page.locator("html").getAttribute("data-font-size"), null);
+  assert.equal(await fontSizeButton.textContent(), "aA");
+  assert.equal(await page.locator(".cm-editor").evaluate((element) => getComputedStyle(element).fontSize), "14px");
+
+  await page.keyboard.press("Control+=");
+  assert.equal(await page.locator("html").getAttribute("data-font-size"), "medium");
+  await page.keyboard.press("Control+=");
+  assert.equal(await page.locator("html").getAttribute("data-font-size"), "large");
+
+  await page.reload();
+  await page.locator(".cm-content[contenteditable=true]").waitFor({ timeout: 10_000 });
+  assert.equal(await page.locator("html").getAttribute("data-font-size"), "large", "the selected font size must survive reload");
+  assert.equal(await page.locator(".cm-editor").evaluate((element) => getComputedStyle(element).fontSize), "18px");
+
+  await page.keyboard.press("Control+-");
+  assert.equal(await page.locator("html").getAttribute("data-font-size"), "medium");
+  await page.keyboard.press("Control+0");
+  assert.equal(await page.locator("html").getAttribute("data-font-size"), null);
+  assert.equal(await page.locator(".cm-editor").evaluate((element) => getComputedStyle(element).fontSize), "14px");
+
   await page.locator("#task-finder-button").click();
   assert.equal(await page.locator("#task-finder").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)");
   await page.locator("#task-finder-input").fill("no such studio action");
