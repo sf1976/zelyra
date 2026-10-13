@@ -40,6 +40,16 @@ Bereiche:
    auswählen und Menge sowie Netto-Stückpreis eintragen. Aus den Positionen
    berechnet die Rechnungsansicht Nettobetrag, 19% Umsatzsteuer und Brutto.
 
+Docker Compose v2 oder neuer ist erforderlich (`docker compose version`). Das
+alte Python-Programm `docker-compose` 1.29.2 wird nicht verwendet: Auf aktuellen
+Docker-Engines scheitert es mit `KeyError: 'ContainerConfig'`. Installiere das
+Compose-Plugin nach der [offiziellen Anleitung](https://docs.docker.com/compose/install/linux/),
+prüfe `docker compose version` und starte im vorhandenen Tutorialordner
+`zelyra setup --all`. Die vorhandene `.env` und Datenbank-Volumes bleiben
+erhalten; zum Beheben dieses Fehlers ist kein Löschen von Daten erforderlich.
+Ein Berechtigungsfehler unter `/var/crash` betrifft den Ubuntu-Crashreport und
+ist kein Nachweis für fehlenden Zugriff auf den Docker-Socket.
+
 ## Projektaufbau: eine Aufgabe pro Datei
 
 Das Tutorial ist ein echtes Mehrdateienprojekt. `main.zyl` ist der Einstieg und
