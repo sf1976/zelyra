@@ -76,26 +76,33 @@ den tatsächlich implementierten Stand.
   erläutern. Die Expertenbeispiele müssen für 4 und 8 Damen 2 und 92 Lösungen
   sowie für den dokumentierten Rucksackfall den Wert 8 liefern. Größen und
   Eingaben prüfen, Arithmetik absichern und Aufwand begrenzen, damit zu große
-  Werte kontrolliert und verständlich fehlschlagen.
-  Die dabei sichtbaren Lücken mit einer kleinen, einheitlichen, Zelyra-artigen
-  API schließen: Textlänge/-teilen/-verbinden und Groß-/Kleinschreibung,
-  geprüfte Zahleneingabe, Zeichenverarbeitung, geprüftes Integer-`abs` mit
-  definiertem Überlaufverhalten und effizientes typisiertes
-  `concat<T>(left: T[], right: T[])`, das ein neues Array liefert. Explizite
-  veränderliche Array- und Stack-Strukturen mit geprüften indizierten Updates
-  sowie effizienten Push-/Pop-Operationen ergänzen; ein Stack-Pop muss den
-  leeren Stack ausdrücklich behandeln. Normale Arrays bleiben wertbasiert,
-  Mutation wird ausdrücklich gewählt. Lesbare `else if`-Ketten ohne künstlich
-  verschachtelte Blöcke unterstützen. Das Rucksackbeispiel soll absteigende
-  Schrittweiten verwenden, die bereits seit 1.0.2 unterstützt werden, und die
-  DP-Tabelle direkt aktualisieren: O(Gegenstände × Kapazität) Zeit und
-  O(Kapazität) Speicher statt Arraykopien für jede Zelle. Statische Typen,
-  explizite `Console`-/`Random`-Effekte, `Option`-/`Result`-Behandlung und
-  wertbasierte Standardarrays bleiben erhalten. Beispiele müssen in CI
-  kompilieren und mit erwarteter Ausgabe sowie Grenzfalltests laufen;
-  Konsolenausgaben verwenden direkte skalare Ausgabe oder ausdrückliches
-  `format_text` statt JSON als Anzeige-Umweg. Syntax und APIs sollen erkennbar
-  Zelyra bleiben und keine andere Sprache an der Oberfläche kopieren.
+  Werte kontrolliert und verständlich fehlschlagen. Statische Typen,
+  ausdrückliche `Console`-/`Random`-Effekte, `Option`-/`Result`-Behandlung
+  und wertbasierte Arrays bleiben erhalten. Beispiele in CI kompilieren und mit
+  erwarteter Ausgabe sowie Grenzfalltests ausführen. Wichtige Zeilen,
+  typische Fehler und Zeit-/Speicherbedarf erläutern. Die Beispiele sollen
+  erkennbar Zelyra bleiben und keine andere Sprache an der Oberfläche kopieren.
+- [ ] **Geplant für 1.0.3 — Ergonomie der Kernsprache:** Lesbare verkettete
+  `else if`-Zweige im Parser unterstützen. Schrittweiten mit negativen Werten
+  und rückwärts laufende Bereiche sind bereits in 1.0.2 enthalten und sollen
+  vom Rucksackbeispiel verwendet werden. Die String-API vervollständigen und
+  vereinheitlichen: `text_contains`, `text_trim`, `text_replace_result` und
+  `text_split_result` bilden bereits einen Teil der Grundlage; ergänzen um
+  Kleinschreibung, Länge/Verbinden und ergonomische eingebaute String-
+  Operationen, wobei ungültige Ersetzungen geprüfte Fehler behalten.
+  Explizite String-Interpolation wie `f"{wert}: {anzahl}"` mit geprüften
+  Namen/Typen und Escaping für wörtliche geschweifte Klammern ergänzen.
+  Geprüftes Integer-`abs` mit definiertem Überlaufverhalten und effizientes
+  typisiertes `concat<T>(left: T[], right: T[])`, das ein neues Array liefert,
+  bereitstellen. Opt-in veränderliche typisierte Array-/Stack-Strukturen mit
+  geprüften O(1)-Indexupdates und effizientem Push/Pop ergänzen; `pop` liefert
+  einen ausdrücklichen Leerfall. Einen typisierten Zähler-/Map-Updatehelfer
+  vorsehen, damit `count[key]` keine wiederholten manuellen `match`-Blöcke
+  braucht. Normale Arrays und Maps bleiben standardmäßig wertbasiert. Die
+  Rucksack-DP-Tabelle muss direkt aktualisiert werden und O(Gegenstände ×
+  Kapazität) Zeit sowie O(Kapazität) Speicher einhalten, statt das gesamte
+  Array für jede Zelle zu kopieren. Ausgabe mit Interpolation oder direkter
+  skalarer Formatierung lesbar halten, nicht JSON als Anzeige-Umweg verwenden.
 - [x] **1.0.1 Sprachprüfung des veröffentlichten Artefakts:** 80 Fälle,
   100 Aufgaben-Wiederholungen, 600 Zahlenvergleiche und 1.408 Kalender-/UTC-
   Referenzfälle ohne unerwartete Befunde geprüft; Installation/Update/Rückkehr

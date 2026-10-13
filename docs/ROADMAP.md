@@ -70,24 +70,30 @@ principles; the roadmap below tracks what is actually implemented.
   8-Queens as 2 and 92, and solve the documented knapsack fixture as 8; they
   must validate sizes and inputs, use checked arithmetic, and bound work so
   oversized inputs fail clearly instead of consuming unbounded resources.
-  Close the gaps these examples expose with a small, consistent, Zelyra-style
-  API: text length/splitting/joining and case conversion, checked numeric
-  input, character processing, checked integer `abs` with a defined
-  overflow case, and efficient typed `concat<T>(left: T[], right: T[])`
-  returning a new array. Add explicit mutable array and stack structures with
-  checked indexed updates and efficient push/pop operations; stack pop must
-  handle an empty stack explicitly. Keep ordinary arrays value-based and
-  make mutation opt-in. Support readable `else if` chains without requiring
-  artificial nested blocks. The knapsack example should use descending stepped
-  ranges, already supported since 1.0.2, and update its DP table in place so
-  the implementation retains O(item-count × capacity) time and O(capacity)
-  space instead of copying the full array for every cell update.
   Preserve static types, explicit `Console` and `Random` effects,
   `Option`/`Result` handling, and value-based arrays. Examples must compile
-  and run in CI with expected-output and edge-case tests; console output should
-  use direct scalar printing or explicit `format_text`, not JSON encoding as a
-  display workaround. Keep the syntax and APIs recognizably Zelyra rather than
-  copying another language's surface syntax.
+  and run in CI with expected-output and edge-case tests. Explain important
+  lines, common errors, and time/space costs. Keep the examples recognizably
+  Zelyra rather than copying another language's surface syntax.
+- [ ] **Planned for 1.0.3 — core language ergonomics:** Add parser support for
+  readable chained `else if` branches. Stepped ranges, including negative
+  steps and descending loops, are already supported in 1.0.2 and must be used
+  by the knapsack example. Complete and standardize the String API: the current
+  `text_contains`, `text_trim`, `text_replace_result`, and `text_split_result`
+  provide part of the foundation; add lowercase conversion, length/joining,
+  and ergonomic built-in String operations while preserving checked errors for
+  invalid replacements. Add an explicit interpolated-string form such as
+  `f"{value}: {count}"`, with checked names/types and an escape for literal
+  braces. Add checked integer `abs` with a defined overflow case and an
+  efficient typed `concat<T>(left: T[], right: T[])` that returns a new array.
+  Provide opt-in mutable typed array/stack structures with checked O(1) indexed
+  updates and efficient push/pop; pop returns an explicit empty case. Add a
+  typed counter/map update helper so `count[key]` updates do not require
+  repeated manual `match` boilerplate. Ordinary arrays and maps remain
+  value-based by default. The knapsack DP table must update in place and retain
+  O(item-count × capacity) time and O(capacity) space instead of copying the
+  full array for each cell. Keep output readable through interpolation or
+  direct scalar formatting, not JSON encoding as a display workaround.
 - [x] **1.0.1 published-artifact language review:** 80 cases, 100 task repeats,
   600 numeric comparisons and 1,408 calendar/UTC reference cases passed with
   no unexpected findings; published installation/upgrade/rollback and
