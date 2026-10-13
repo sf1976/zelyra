@@ -528,6 +528,11 @@ fn studio_compose_bootstrap_rejects_ambient_database_overrides() {
         None
     );
     assert_eq!(
+        project_compose_database_url(Some(project_url), Some(project_url), "3308", true),
+        None,
+        "an environment override must not authorize automatic schema setup even when its URL matches the project file"
+    );
+    assert_eq!(
         project_compose_database_url(Some(project_url), Some(project_url), "3308", false),
         Some(project_url)
     );
