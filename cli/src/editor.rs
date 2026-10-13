@@ -3412,8 +3412,19 @@ fn start_editor_web_app(
     let database_url = super::database_url_for_project(&state.root, database_name)
         .map_err(|_| (422, "the project environment file could not be read".into()))?;
 
-    // If this project defines a MariaDB compose service, make sure the database container is running.
-    if state.root.join("docker-compose.mariadb.yml").is_file() {
+    // Start the generated MariaDB service only when the active database URL
+    // points at its published loopback port. Projects may keep the generated
+    // Compose file while using an external database.
+    let should_start_compose = if state.root.join("docker-compose.mariadb.yml").is_file() {
+        let project_host_port = super::project_database_host_port(&state.root)
+            .map_err(|_| (422, "the project environment file could not be read".into()))?;
+        database_url.as_deref().is_some_and(|database_url| {
+            super::is_project_mariadb_compose_target(database_url, &project_host_port)
+        })
+    } else {
+        false
+    };
+    if should_start_compose {
         start_mariadb_compose(&state.root, true).map_err(|error| {
             let secrets = editor_secret_values(state);
             (502, redact_editor_secrets(error, &secrets))

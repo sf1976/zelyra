@@ -4339,6 +4339,11 @@ fn database_url_for_project(
 }
 
 fn expand_project_database_url(directory: &std::path::Path, url: &str) -> Result<String, String> {
+    let port = project_database_host_port(directory)?;
+    Ok(expand_database_host_port(url, &port))
+}
+
+fn project_database_host_port(directory: &std::path::Path) -> Result<String, String> {
     let env_path = directory.join(".env");
     let port = match env::var("ZELYRA_DB_HOST_PORT") {
         Ok(port) => port,
@@ -4348,7 +4353,22 @@ fn expand_project_database_url(directory: &std::path::Path, url: &str) -> Result
         }
         Err(_) => DEFAULT_DATABASE_HOST_PORT.to_string(),
     };
-    Ok(expand_database_host_port(url, &port))
+    Ok(port)
+}
+
+fn is_project_mariadb_compose_target(database_url: &str, project_host_port: &str) -> bool {
+    let Ok(url) = url::Url::parse(database_url) else {
+        return false;
+    };
+    let Ok(project_host_port) = project_host_port.parse::<u16>() else {
+        return false;
+    };
+    if !matches!(url.scheme(), "mariadb" | "mysql")
+        || !matches!(url.host_str(), Some("localhost" | "127.0.0.1"))
+    {
+        return false;
+    }
+    url.port().unwrap_or(3306) == project_host_port
 }
 
 fn expand_database_host_port(url: &str, port: &str) -> String {

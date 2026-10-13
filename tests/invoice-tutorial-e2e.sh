@@ -160,15 +160,16 @@ if parsed.password is not None:
     credentials += ":" + urllib.parse.quote(parsed.password, safe="")
 credentials += "@"
 port = parsed.port or 3306
+compose_port = port + 1 if port < 65535 else port - 1
 env_url = urllib.parse.urlunsplit((
     parsed.scheme,
-    f"{credentials}{host}:${{ZELYRA_DB_HOST_PORT:-3306}}",
+    f"{credentials}{host}:{port}",
     parsed.path,
     parsed.query,
     parsed.fragment,
 ))
 updates = {
-    "ZELYRA_DB_HOST_PORT": str(port),
+    "ZELYRA_DB_HOST_PORT": str(compose_port),
     "ZELYRA_DATABASE_MAIN_URL": env_url,
     "DATABASE_URL": env_url,
 }
@@ -176,7 +177,14 @@ output = [line for line in source if line.split("=", 1)[0].strip() not in update
 output.extend(f"{key}={value}" for key, value in updates.items())
 path.write_text("\n".join(output) + "\n", encoding="utf-8")
 PY
-  rm -f "${project}/docker-compose.mariadb.yml"
+  no_docker_path="${temporary_root}/no-docker-bin"
+  mkdir -p "${no_docker_path}"
+  for database_client in mariadb mysql; do
+    database_client_path="$(command -v "${database_client}" || true)"
+    if [[ -n "${database_client_path}" ]]; then
+      ln -s "${database_client_path}" "${no_docker_path}/${database_client}"
+    fi
+  done
   studio_port="$(python3 - <<'PY'
 import socket
 with socket.socket() as sock:
@@ -185,6 +193,7 @@ with socket.socket() as sock:
 PY
 )"
   env -u DATABASE_URL -u ZELYRA_DATABASE_MAIN_URL -u ZELYRA_DB_HOST_PORT \
+    PATH="${no_docker_path}" \
     "${binary}" editor "${project}" --port "${studio_port}" --no-open \
     >"${temporary_root}/studio.log" 2>&1 &
   editor_pid=$!

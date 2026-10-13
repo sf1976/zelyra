@@ -348,12 +348,12 @@ jobs:
           body: |
             ## Zelyra ${{ needs.validate.outputs.release_tag }}
 
-            ${{ startsWith(needs.validate.outputs.release_tag, 'v1.') && 'This is a stable release in the 1.x series.' || 'This is an experimental release. Do not use it for production.' }}
+            ${{ startsWith(needs.validate.outputs.release_tag, 'v1.') && !contains(needs.validate.outputs.release_tag, '-') && 'This is a stable release in the 1.x series.' || 'This is an experimental release. Do not use it for production.' }}
             ${{ needs.validate.outputs.release_tag == 'v1.0.2' && '[English release notes](https://github.com/sf1976/zelyra/blob/v1.0.2/docs/release-notes/1.0.2.en.md)' || '' }}
 
             ## Zelyra ${{ needs.validate.outputs.release_tag }} (Deutsch)
 
-            ${{ startsWith(needs.validate.outputs.release_tag, 'v1.') && 'Dies ist ein stabiles Release der 1.x-Serie.' || 'Dies ist eine experimentelle Version. Nicht für Produktivsysteme verwenden.' }}
+            ${{ startsWith(needs.validate.outputs.release_tag, 'v1.') && !contains(needs.validate.outputs.release_tag, '-') && 'Dies ist ein stabiles Release der 1.x-Serie.' || 'Dies ist eine experimentelle Version. Nicht für Produktivsysteme verwenden.' }}
             ${{ needs.validate.outputs.release_tag == 'v1.0.2' && '[Deutsche Release-Hinweise](https://github.com/sf1976/zelyra/blob/v1.0.2/docs/release-notes/1.0.2.de.md)' || '' }}
 
             ${{ needs.validate.outputs.release_tag == 'v0.3.0' && 'No independent human onboarding study was conducted for 0.3.0. The project owner explicitly deferred it to 0.4.0; this is not usability evidence. See the [decision record](https://github.com/sf1976/zelyra/blob/v0.3.0/docs/release-readiness/0.3.0-human-gate-decision.en.md).' || '' }}

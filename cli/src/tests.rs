@@ -421,6 +421,30 @@ fn project_database_url_expands_the_configured_local_host_port() {
 }
 
 #[test]
+fn studio_compose_target_requires_the_generated_local_mariadb_endpoint() {
+    assert!(is_project_mariadb_compose_target(
+        "mariadb://zelyra:secret@127.0.0.1:3308/invoice",
+        "3308",
+    ));
+    assert!(is_project_mariadb_compose_target(
+        "mysql://zelyra:secret@localhost/invoice",
+        "3306",
+    ));
+    assert!(!is_project_mariadb_compose_target(
+        "mariadb://zelyra:secret@db.example.test:3308/invoice",
+        "3308",
+    ));
+    assert!(!is_project_mariadb_compose_target(
+        "mariadb://zelyra:secret@127.0.0.1:3306/invoice",
+        "3308",
+    ));
+    assert!(!is_project_mariadb_compose_target(
+        "postgres://zelyra:secret@127.0.0.1:3308/invoice",
+        "3308",
+    ));
+}
+
+#[test]
 fn feature_defaults_are_simple_and_enabled() {
     let features = feature_defaults();
     assert_eq!(features.len(), PROJECT_FEATURES.len());
