@@ -4362,14 +4362,14 @@ fn expand_project_database_url(directory: &std::path::Path, url: &str) -> Result
 }
 
 fn project_file_database_url_for_compose(
-    active_database_url: Option<&str>,
-    project_file_database_url: Result<Option<String>, String>,
+    directory: &std::path::Path,
+    database_name: Option<&str>,
+    has_process_database_url_override: bool,
 ) -> Result<Option<String>, String> {
-    match project_file_database_url {
-        Ok(database_url) => Ok(database_url),
-        Err(_) if active_database_url.is_some() => Ok(None),
-        Err(error) => Err(error),
+    if has_process_database_url_override {
+        return Ok(None);
     }
+    database_url_from_project_file(directory, database_name)
 }
 
 fn project_database_host_port(directory: &std::path::Path) -> Result<String, String> {
@@ -4413,7 +4413,11 @@ fn project_compose_database_url<'a>(
     active_database_url: Option<&'a str>,
     project_file_database_url: Option<&'a str>,
     project_host_port: &str,
+    has_process_database_url_override: bool,
 ) -> Option<&'a str> {
+    if has_process_database_url_override {
+        return None;
+    }
     let project_file_database_url = project_file_database_url?;
     (active_database_url == Some(project_file_database_url)
         && is_project_mariadb_compose_target(project_file_database_url, project_host_port))

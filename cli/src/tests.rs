@@ -464,14 +464,26 @@ fn resolved_database_urls_do_not_require_reading_the_project_port_file() {
 #[test]
 fn unreadable_project_database_file_skips_compose_when_process_url_is_available() {
     let external_url = "mariadb://external:secret@db.example.test:3307/invoice";
+    let directory = std::env::temp_dir().join(format!(
+        "zelyra-unreadable-compose-url-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&directory).unwrap();
+    fs::write(directory.join(".env"), [0xff, 0xfe]).unwrap();
     assert_eq!(
-        project_file_database_url_for_compose(Some(external_url), Err("unreadable".into()))
-            .unwrap(),
+        project_file_database_url_for_compose(&directory, Some("main"), true).unwrap(),
         None
     );
+    assert!(project_file_database_url_for_compose(&directory, Some("main"), false).is_err());
+    fs::remove_dir_all(directory).unwrap();
     assert_eq!(
-        project_file_database_url_for_compose(None, Err("unreadable".into())),
-        Err("unreadable".into())
+        project_compose_database_url(Some(external_url), Some(external_url), "3307", true),
+        None,
+        "process override provenance must win even when URL text matches .env"
     );
 }
 
@@ -507,11 +519,12 @@ fn studio_compose_bootstrap_rejects_ambient_database_overrides() {
             Some("mariadb://external:secret@db.example.test:3308/invoice"),
             Some(project_url),
             "3308",
+            true,
         ),
         None
     );
     assert_eq!(
-        project_compose_database_url(Some(project_url), Some(project_url), "3308"),
+        project_compose_database_url(Some(project_url), Some(project_url), "3308", false),
         Some(project_url)
     );
     assert_eq!(
@@ -519,6 +532,7 @@ fn studio_compose_bootstrap_rejects_ambient_database_overrides() {
             Some("mariadb://project:secret@127.0.0.1:3308/another_database"),
             Some(project_url),
             "3308",
+            false,
         ),
         None
     );

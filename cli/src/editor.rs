@@ -3412,14 +3412,17 @@ fn start_editor_web_app(
     let database_url = super::database_url_for_project(&state.root, database_name)
         .map_err(|_| (422, "the project environment file could not be read".into()))?;
 
-    // Bootstrap only the database configured by this project's .env. An
-    // ambient DATABASE_URL may point at an external database and must not
-    // trigger either Compose startup or automatic schema changes there.
+    // Bootstrap only a URL sourced from this project's .env. An environment
+    // override may point at an external service even when its URL text matches
+    // .env, so it must not trigger Compose startup or automatic schema changes.
     let has_compose_file = state.root.join("docker-compose.mariadb.yml").is_file();
+    let has_process_database_url_override =
+        super::database_url_from_environment(database_name).is_some();
     let project_file_database_url = if has_compose_file {
         super::project_file_database_url_for_compose(
-            database_url.as_deref(),
-            super::database_url_from_project_file(&state.root, database_name),
+            &state.root,
+            database_name,
+            has_process_database_url_override,
         )
         .map_err(|_| (422, "the project environment file could not be read".into()))?
     } else {
@@ -3436,6 +3439,7 @@ fn start_editor_web_app(
             database_url.as_deref(),
             project_file_database_url.as_deref(),
             &project_host_port,
+            has_process_database_url_override,
         )
     } else {
         None
