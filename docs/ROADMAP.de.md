@@ -64,27 +64,38 @@ den tatsächlich implementierten Stand.
   leeren Bereichen bei falscher Richtung und geprüfter Schrittweite ungleich 0
   unterstützen. `range(start, end, step)` liefert dieselbe Folge als begrenztes
   Array. Parser-, Laufzeit-, Typ- und Grenztests bestehen.
-- [ ] **Geplant für 1.0.3 — zugängliche Algorithmusübungen:** 15 vollständige,
+- [ ] **Geplant für 1.0.3 — zugängliche Algorithmusübungen:** 17 vollständige,
   ausführbare Konsolenbeispiele bereitstellen: FizzBuzz, Palindromprüfung,
   Fakultät, Zahlenraten, Wort-/Zeichenzählung, Minimum/Maximum einer Liste,
   Primzahlprüfung, umgekehrte Wortreihenfolge, Caesar-Verschiebung, Bubble
   Sort, Quicksort, binäre Suche, Klammerprüfung mit einem Stack, iterative
   Fibonacci-Berechnung mit dynamischer Programmierung und
-  Lauflängenkodierung. Zu jeder Übung die wichtigen Zeilen sowie erwartete
-  Ergebnisse, Grenzfälle und typische Fehler erläutern. Die dabei sichtbaren
-  Lücken mit einer kleinen, einheitlichen, Zelyra-artigen API schließen:
-  Textlänge/-teilen/-verbinden und Groß-/Kleinschreibung, geprüfte
-  Zahleneingabe, Zeichenverarbeitung, sichere indizierte Updates, effizientes
-  typisiertes `concat<T>(left: T[], right: T[])`, das ein neues Array liefert,
-  sowie sichere Stack-Operationen, deren `pop` ein leeres Stack-Ergebnis
-  ausdrücklich behandelt. Lesbare `else if`-Ketten ohne künstlich
-  verschachtelte Blöcke unterstützen. Statische Typen, explizite
-  `Console`-/`Random`-Effekte, `Option`-/`Result`-Behandlung und wertbasierte
-  Arrays bleiben erhalten. Beispiele müssen in CI kompilieren und mit
-  erwarteter Ausgabe sowie Grenzfalltests laufen; Konsolenausgaben verwenden
-  direkte skalare Ausgabe oder ausdrückliches `format_text` statt JSON als
-  Anzeige-Umweg. Syntax und APIs sollen erkennbar Zelyra bleiben und keine
-  andere Sprache an der Oberfläche kopieren.
+  Lauflängenkodierung, N-Damen-Zählung mit rekursivem Backtracking und
+  0/1-Rucksack mit dynamischer Programmierung. Zu jeder Übung wichtige Zeilen,
+  erwartete Ergebnisse, Grenzfälle, typische Fehler und Zeit-/Speicherbedarf
+  erläutern. Die Expertenbeispiele müssen für 4 und 8 Damen 2 und 92 Lösungen
+  sowie für den dokumentierten Rucksackfall den Wert 8 liefern. Größen und
+  Eingaben prüfen, Arithmetik absichern und Aufwand begrenzen, damit zu große
+  Werte kontrolliert und verständlich fehlschlagen.
+  Die dabei sichtbaren Lücken mit einer kleinen, einheitlichen, Zelyra-artigen
+  API schließen: Textlänge/-teilen/-verbinden und Groß-/Kleinschreibung,
+  geprüfte Zahleneingabe, Zeichenverarbeitung, geprüftes Integer-`abs` mit
+  definiertem Überlaufverhalten und effizientes typisiertes
+  `concat<T>(left: T[], right: T[])`, das ein neues Array liefert. Explizite
+  veränderliche Array- und Stack-Strukturen mit geprüften indizierten Updates
+  sowie effizienten Push-/Pop-Operationen ergänzen; ein Stack-Pop muss den
+  leeren Stack ausdrücklich behandeln. Normale Arrays bleiben wertbasiert,
+  Mutation wird ausdrücklich gewählt. Lesbare `else if`-Ketten ohne künstlich
+  verschachtelte Blöcke unterstützen. Das Rucksackbeispiel soll absteigende
+  Schrittweiten verwenden, die bereits seit 1.0.2 unterstützt werden, und die
+  DP-Tabelle direkt aktualisieren: O(Gegenstände × Kapazität) Zeit und
+  O(Kapazität) Speicher statt Arraykopien für jede Zelle. Statische Typen,
+  explizite `Console`-/`Random`-Effekte, `Option`-/`Result`-Behandlung und
+  wertbasierte Standardarrays bleiben erhalten. Beispiele müssen in CI
+  kompilieren und mit erwarteter Ausgabe sowie Grenzfalltests laufen;
+  Konsolenausgaben verwenden direkte skalare Ausgabe oder ausdrückliches
+  `format_text` statt JSON als Anzeige-Umweg. Syntax und APIs sollen erkennbar
+  Zelyra bleiben und keine andere Sprache an der Oberfläche kopieren.
 - [x] **1.0.1 Sprachprüfung des veröffentlichten Artefakts:** 80 Fälle,
   100 Aufgaben-Wiederholungen, 600 Zahlenvergleiche und 1.408 Kalender-/UTC-
   Referenzfälle ohne unerwartete Befunde geprüft; Installation/Update/Rückkehr

@@ -58,19 +58,30 @@ principles; the roadmap below tracks what is actually implemented.
   direction mismatches, and a checked nonzero step. `range(start, end, step)`
   provides the same sequence as a bounded array. Parser, runtime, type, and
   boundary tests pass.
-- [ ] **Planned for 1.0.3 — approachable algorithm exercises:** Ship 15
+- [ ] **Planned for 1.0.3 — approachable algorithm exercises:** Ship 17
   complete, runnable console examples: FizzBuzz, palindrome checks, factorial,
   number guessing, word/character counts, list minimum/maximum, prime checks,
   reversed word order, Caesar shifts, bubble sort, quicksort, binary search,
   balanced-parentheses checking with a stack, iterative dynamic-programming
-  Fibonacci, and run-length encoding. Explain the important lines and analyze
-  expected results, boundary cases, and common mistakes for each exercise.
+  Fibonacci, run-length encoding, N-Queens counting with recursive
+  backtracking, and 0/1 knapsack with dynamic programming. Explain the important
+  lines and analyze expected results, boundary cases, common mistakes, and
+  time/space costs for each exercise. The expert examples must count 4- and
+  8-Queens as 2 and 92, and solve the documented knapsack fixture as 8; they
+  must validate sizes and inputs, use checked arithmetic, and bound work so
+  oversized inputs fail clearly instead of consuming unbounded resources.
   Close the gaps these examples expose with a small, consistent, Zelyra-style
   API: text length/splitting/joining and case conversion, checked numeric
-  input, character processing, safe indexed updates, efficient typed
-  `concat<T>(left: T[], right: T[])` returning a new array, and safe stack
-  operations whose pop result handles an empty stack explicitly. Support
-  readable `else if` chains without requiring artificial nested blocks.
+  input, character processing, checked integer `abs` with a defined
+  overflow case, and efficient typed `concat<T>(left: T[], right: T[])`
+  returning a new array. Add explicit mutable array and stack structures with
+  checked indexed updates and efficient push/pop operations; stack pop must
+  handle an empty stack explicitly. Keep ordinary arrays value-based and
+  make mutation opt-in. Support readable `else if` chains without requiring
+  artificial nested blocks. The knapsack example should use descending stepped
+  ranges, already supported since 1.0.2, and update its DP table in place so
+  the implementation retains O(item-count × capacity) time and O(capacity)
+  space instead of copying the full array for every cell update.
   Preserve static types, explicit `Console` and `Random` effects,
   `Option`/`Result` handling, and value-based arrays. Examples must compile
   and run in CI with expected-output and edge-case tests; console output should
