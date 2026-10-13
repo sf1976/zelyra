@@ -20,8 +20,8 @@ import uuid
 ROOT = Path(__file__).resolve().parents[1]
 BIN = Path(os.environ.get("ZELYRA_BIN", ROOT / "target/debug/zelyra")).resolve()
 ORIGINAL = urlsplit(os.environ.get("DATABASE_URL", ""))
-if ORIGINAL.scheme not in ("mariadb", "mysql"):
-    raise SystemExit("DATABASE_URL must identify a disposable MariaDB/MySQL database")
+if ORIGINAL.scheme not in ("mariadb", "mysql", "postgres", "postgresql"):
+    raise SystemExit("DATABASE_URL must identify a disposable MariaDB/MySQL/PostgreSQL database")
 ENGINE = "postgres" if ORIGINAL.scheme in ("postgres", "postgresql") else ORIGINAL.scheme
 PARTS = ORIGINAL
 DATABASE = "zelyra_edit_nulls_" + uuid.uuid4().hex[:16]
@@ -112,7 +112,10 @@ try:
                 original_inputs = Inputs(page).fields
                 assert '_zelyra_snapshot' in original_inputs and '_zelyra_csrf' in original_inputs
                 # First demonstrate the stale-edit vulnerability independently of UI.
-                sql("UPDATE notes SET note=CONCAT(CHAR(92),'N') WHERE id=1")
+                if ENGINE == "postgres":
+                    sql(r"UPDATE notes SET note=E'\\N' WHERE id=1")
+                else:
+                    sql("UPDATE notes SET note=CONCAT(CHAR(92),'N') WHERE id=1")
                 status, body = request(port,'POST','/notes/1/edit',dict(original_inputs,title='overwritten',note='posted'))
                 assert status == 409, f'NULL-to-literal stale edit must conflict, got {status}; {log_path.read_text()}'
                 assert sql("SELECT title FROM notes WHERE id=1") == 'original'
@@ -124,7 +127,7 @@ try:
                 # Unchanged literal values can be saved without becoming SQL NULL.
                 status, _ = request(port,'POST','/notes/1/edit',dict(literal_inputs,title='literal saved'))
                 assert status==303, status
-                assert sql("SELECT note IS NULL FROM notes WHERE id=1")=='0'
+                assert sql("SELECT note IS NULL FROM notes WHERE id=1") in ('0', 'f')
                 # Reverse transition also conflicts and preserves the untouched title.
                 status, page = request(port,'GET','/notes/1/edit'); assert status==200
                 literal_inputs = Inputs(page).fields
@@ -137,7 +140,7 @@ try:
                 null_inputs = Inputs(page).fields
                 status, _ = request(port,'POST','/notes/1/edit',dict(null_inputs,title='NULL saved'))
                 assert status==303, status
-                assert sql('SELECT note IS NULL FROM notes WHERE id=1')=='1'
+                assert sql('SELECT note IS NULL FROM notes WHERE id=1') in ('1', 't')
                 # Reusing a snapshot after an ordinary content change is denied.
                 status, _ = request(port,'POST','/notes/1/edit',dict(null_inputs,title='stale'))
                 assert status==409, status
@@ -149,4 +152,6 @@ try:
         print(json.dumps({'engine':ENGINE,'server_version':sql('SELECT VERSION()'),'compiler_sha256':hashlib.sha256(BIN.read_bytes()).hexdigest(),'nullable_edit_snapshots_and_rendering':'passed','controlled_stale_edits':3}))
 finally:
     PARTS = ORIGINAL
+    if ENGINE == "postgres":
+        sql(f"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{DATABASE}' AND pid <> pg_backend_pid()")
     sql(f'DROP DATABASE IF EXISTS {DATABASE}')

@@ -51,7 +51,10 @@ fn paint(text: &str, style: ColorStyle, enabled: bool) -> String {
 }
 
 pub(super) fn help(text: &str) -> String {
-    let enabled = color_enabled(std::io::stderr().is_terminal());
+    format_help(text, color_enabled(std::io::stderr().is_terminal()))
+}
+
+fn format_help(text: &str, enabled: bool) -> String {
     text.lines()
         .map(|line| {
             let trimmed = line.trim();
@@ -87,7 +90,7 @@ pub(super) fn success(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{enabled_for, help, paint, ColorStyle};
+    use super::{enabled_for, format_help, paint, ColorStyle};
 
     #[test]
     fn automatic_color_respects_terminal_and_no_color() {
@@ -115,8 +118,18 @@ mod tests {
 
     #[test]
     fn help_styles_only_recognized_headings_and_commands() {
-        let plain = help("Zelyra 0.9.9\n\nUsage:\n  zelyra run main.zyl\nopaque");
+        let plain = format_help(
+            "Zelyra 0.9.9\n\nUsage:\n  zelyra run main.zyl\nopaque",
+            false,
+        );
         assert!(!plain.contains("\x1b["));
         assert!(plain.contains("zelyra run main.zyl"));
+
+        let styled = format_help(
+            "Zelyra 0.9.9\n\nUsage:\n  zelyra run main.zyl\nopaque",
+            true,
+        );
+        assert!(styled.contains("\x1b["));
+        assert!(styled.contains("opaque"));
     }
 }

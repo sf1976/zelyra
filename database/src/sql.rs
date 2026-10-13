@@ -269,6 +269,12 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
                     ),
                 );
             }
+            if action.requires_auth {
+                environment.insert("zelyra_user_id".into(), Type::Int);
+            }
+            if program.auth.iter().any(|a| a.membership_table.is_some()) {
+                environment.insert("zelyra_tenant_id".into(), Type::Int);
+            }
             let block = Block {
                 statements: action.statements.clone(),
                 span: action.span,
@@ -290,6 +296,14 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
                 .and_then(|table| table.columns.iter().find(|column| column.name == "id"))
             {
                 environment.insert("id".into(), id_column.ty.clone());
+            }
+            if crud.requires_auth || action.requires_auth {
+                environment.insert("zelyra_user_id".into(), Type::Int);
+            }
+            if crud.tenant_column.is_some()
+                || program.auth.iter().any(|a| a.membership_table.is_some())
+            {
+                environment.insert("zelyra_tenant_id".into(), Type::Int);
             }
             for field in &action.fields {
                 let field_type = field.ty.clone().or_else(|| {

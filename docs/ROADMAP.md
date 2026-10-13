@@ -1062,10 +1062,16 @@ language backlog as one 0.9.4 change.
   MariaDB/MySQL HTTP and malformed-metadata regressions pass. See
   [rules](edit-snapshots.en.md) and [evidence](release-readiness/0.9.9-null-edit-snapshots.en.md).
 
-- [🧪] Native decision transaction foundation covers PostgreSQL/MariaDB/MySQL
+- [✅] Native decision transaction foundation covers PostgreSQL/MariaDB/MySQL
   on one connection, rollback/unwind, swallowed SQL errors and pre-commit/request
-  deadlines. Guarded PostgreSQL form adapters and MySQL hard write bounds remain.
-  [Rules](decision-transactions.en.md), [evidence](release-readiness/0.9.9-decision-transactions.en.md).
+  deadlines. [Rules](decision-transactions.en.md), [evidence](release-readiness/0.9.9-decision-transactions.en.md).
+
+- [✅] PostgreSQL form decisions execute tenant membership, resource recipient
+  checks, locked row snapshots (NULL vs. `\N`), business mutations, and atomic
+  unchained audit writes within the same native transaction and connection.
+  Tampered tenant/foreign keys, revoked membership during lock wait (two-connection
+  race), and audit errors roll back atomically. Chained PostgreSQL audit remains
+  diagnostically rejected. [Evidence](release-readiness/0.9.9-postgres-form-decisions.en.md).
 
 - [🗺️] Freeze language, CLI, runtime, databases, IDE, mail, notification, and
   tutorial scope. Complete every accepted 0.9.1–0.9.8 requirement and run the

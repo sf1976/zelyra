@@ -3057,7 +3057,7 @@ pub fn execute_queries(
     }
 }
 
-fn is_postgres_url(database_url: &str) -> bool {
+pub fn is_postgres_url(database_url: &str) -> bool {
     database_url.starts_with("postgres://") || database_url.starts_with("postgresql://")
 }
 
