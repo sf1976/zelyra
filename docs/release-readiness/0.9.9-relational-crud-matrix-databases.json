@@ -1,0 +1,50 @@
+[
+  {
+    "engine": "mariadb",
+    "suite": "tests/db-matrix-relational-crud-e2e.py",
+    "server_version": "11.4.13-MariaDB-ubu2404",
+    "steps_passed": 6,
+    "steps_failed": 0,
+    "scenarios": [
+      "1. Schema setup & FK introspection (fk_projects_customer_id)",
+      "2. Migration preflight orphan rejection (E-DB-005) & data preservation",
+      "3. Bounded write lock timeout (innodb_lock_wait_timeout) & rollback abort (~1.02s)",
+      "4. Seeding multi-tenant users, memberships, and relational rows",
+      "5. Ephemeral HTTP server launch & authenticated tenant session",
+      "6. Relational tenant CRUD: isolated dropdowns, 422 anti-tampering, joined customer display, 500 restrictive deletion guard, ordered child-then-parent deletion"
+    ],
+    "exit": 0
+  },
+  {
+    "engine": "mysql",
+    "suite": "tests/db-matrix-relational-crud-e2e.py",
+    "server_version": "8.4.11",
+    "steps_passed": 6,
+    "steps_failed": 0,
+    "scenarios": [
+      "1. Schema setup & FK introspection (fk_projects_customer_id)",
+      "2. Migration preflight orphan rejection (E-DB-005) & data preservation",
+      "3. Bounded write lock timeout (innodb_lock_wait_timeout) & rollback abort (~1.02s)",
+      "4. Seeding multi-tenant users, memberships, and relational rows",
+      "5. Ephemeral HTTP server launch & authenticated tenant session",
+      "6. Relational tenant CRUD: isolated dropdowns, 422 anti-tampering, joined customer display, 500 restrictive deletion guard, ordered child-then-parent deletion"
+    ],
+    "exit": 0
+  },
+  {
+    "engine": "postgres",
+    "suite": "tests/db-matrix-relational-crud-e2e.py",
+    "server_version": "PostgreSQL 16.15 (Debian 16.15-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "steps_passed": 6,
+    "steps_failed": 0,
+    "scenarios": [
+      "1. Schema apply & FK introspection (fk_projects_customer_id)",
+      "2. Migration preflight orphan rejection (E-DB-005) & data preservation",
+      "3. Bounded lock wait / statement timeouts",
+      "4. Seeding multi-tenant users, memberships, and relational rows",
+      "5. Ephemeral HTTP server launch & authenticated tenant session",
+      "6. Relational tenant CRUD: isolated dropdowns, 422 anti-tampering, joined customer display, 500 restrictive deletion guard, ordered child-then-parent deletion"
+    ],
+    "exit": 0
+  }
+]

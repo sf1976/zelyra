@@ -1,0 +1,24 @@
+{
+  "source_baseline": "7b1ae3343fa5a06a9d9f43e13ccba60d2fea1a09",
+  "rust_passed": 856,
+  "rust_failed": 0,
+  "ordinary_ignored_tests": 2,
+  "full_clippy": "passed",
+  "fmt": "passed",
+  "handbook_snippets": 324,
+  "release_metadata": "passed",
+  "readiness_helpers": 14,
+  "native_backends": [
+    "MariaDB 11.4.13",
+    "MySQL 8.4.11",
+    "PostgreSQL 16.15"
+  ],
+  "source_sha256": {
+    "database/src/lib.rs": "b9d82c1ccbbc99491905e0418c6f19e74b74e7f8907d251fe4b8232da5aa82f0",
+    "tests/db-matrix-relational-crud-e2e.py": "929d086a4e09849f587492da299aef82819837b80e3f0797181bf74359f36a9b"
+  },
+  "artifacts_sha256": {
+    "/tmp/zelyra-db-matrix.bin": "0386a712b5a704b7949cec76f3679a2074994cbd145f7765bb18558eb8e8ff49"
+  },
+  "remote_ci": "pending; see pull request checks; local evidence only"
+}

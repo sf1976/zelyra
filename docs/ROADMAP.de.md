@@ -1090,6 +1090,14 @@ IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
   Fehler rollen atomar zurück. Verkettetes PostgreSQL-Audit bleibt diagnostiziert
   verweigert. [Nachweise](release-readiness/0.9.9-postgres-form-decisions.de.md).
 
+- [✅] Datenbankmatrix, Transaktionen und relationales CRUD auf MariaDB 11.4.13,
+  MySQL 8.4.11 und PostgreSQL 16.15: Setup/Inspektion echter Fremdschlüssel,
+  Preflight-Waisenabweisung (`error[E-DB-005]`) mit Datenerhalt, gehärtete
+  MySQL-Schreibsperren (`innodb_lock_wait_timeout`), mandantenisolierte
+  Auswahllisten, Manipulationsschutz (422), relationale Join-Darstellung
+  und restriktiver Löschschutz mit geordnetem Löschzyklus.
+  Siehe [Nachweise](release-readiness/0.9.9-relational-crud-matrix.de.md).
+
 - [🗺️] Sprach-, CLI-, Runtime-, Datenbank-, IDE-, Mail-, Benachrichtigungs- und
   Tutorialumfang einfrieren. Alle angenommenen Anforderungen aus 0.9.1–0.9.8
   umsetzen und die vollständigen technischen Gates an einem unveränderlichen
@@ -1181,6 +1189,39 @@ redigierte Beobachtungen und die Entscheidung des Projektverantwortlichen
 werden dem exakt getesteten Commit zugeordnet. Der Studienumfang muss zum
 endgültigen 1.0.0-Produkt passen. Automatisierte CI, interne Rehearsals und
 Rückmeldungen des Projektverantwortlichen ersetzen keinen Teilnehmertest.
+
+## Zukünftige Sprach-, Datenbank- und Ergonomie-Evolution (nach 1.0.0)
+
+Um die Produktivität, Flexibilität und Entwicklerergonomie zu steigern, ohne die Grundsäulen von Zelyra (statische
+Sicherheitsverifikation von Mandanten-/Empfängergrenzen, deterministische Geschäftsarithmetik,
+digitale Souveränität) aufzuweichen, sind folgende Erweiterungen für die post-1.0-Entwicklung fest eingeplant:
+
+- [ ] **Modulare Datenbank-Adapter-Architektur (`DatabaseAdapter` SPI / Traits):**
+  Ablösung der fest verdrahteten backend-spezifischen Verzweigungen im Core durch eine erweiterbare
+  Adapter-Schnittstelle. Jeder Treiber-Adapter kapselt Introspektion, Schemamigration (`db apply`),
+  Datentyp-Mapping, Transaktionslebenszyklus, Sperrmechanismen (`FOR UPDATE`, Timeout- und Deadline-Steuerung)
+  sowie dialektspezifische SQL-Codegenerierung. Dies ermöglicht das saubere Hinzufügen weiterer relationaler
+  und spezialisierter Datenbanksysteme (z. B. Microsoft SQL Server, Oracle, CockroachDB) über modulare
+  Adapter, ohne den Compilerkern oder das Web-Framework umschreiben zu müssen.
+- [ ] **Multi-Datenbank-Integration (Mehrere Datenquellen / Polyglot Persistence):**
+  Unterstützung für die Deklaration und parallele Verwaltung mehrerer unabhängiger Datenquellen
+  innerhalb eines Zelyra-Projekts (z. B. primäre relationale OLTP-Datenbank für transaktionale Mandanten-
+  und CRUD-Daten, getrennte Read-Replicas oder separate Datenbanken für Analytics, Berichte, Archivierung
+  oder Drittsystem-Synchronisation). Deklarative Bindung von Schemas, Modulen und Queries an benannte
+  Datenbankadapter (`database "secondary" { ... }`) unter voller Beibehaltung der statischen
+  Mandanten-Isolation und Capability-Prüfung.
+- [ ] **Einheitlicher nativer Query-AST:** Ablösung verbliebener String-Quoting-Pfade in
+  der Codeerzeugung durch einen internen Abfrage-Syntaxbaum, der dialektneutral und typgeprüft
+  auf MariaDB, MySQL, PostgreSQL und künftige Adapter zielt.
+- [ ] **Capture-lose Lambdas (`|x| expr`):** Syntaktische Unterstützung für kompakte,
+  anonyme Transformationsfunktionen ohne äußere Umgebungserfassung. Erfordert weder Heap-Allokation
+  noch Garbage Collection und bewahrt das deterministische Speichermodell.
+- [ ] **Headless Hintergrund-Tasks (`task Name { ... }`):** Dedizierte Syntax und Laufzeit-
+  Unterstützung für periodische Aufgaben, Datenpipelines und Hintergrundjobs unter Beibehaltung
+  derselben statischen Tenant- und Datenbank-Capability-Grenzen, jedoch ohne HTTP-Web-Zwang.
+- [ ] **Aktionsfähige Compiler-Diagnosen („Did you mean?“):** Erweiterung von Typ- und
+  Schemamismatch-Diagnosen (`E-SQL`, `E-CRUD`) um präzise, quelltextbezogene Korrekturvorschläge
+  zur Steigerung der Entwicklerergonomie bei unveränderter Typprüfungsstrenge.
 
 ## Akzeptanzanwendungen aus der Praxis
 

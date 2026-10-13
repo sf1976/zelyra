@@ -7,9 +7,9 @@ currently checked scope and its limits for each backend.
 
 | Server | Verified workflows | Limits of the evidence |
 | --- | --- | --- |
-| MariaDB 10.11.19, 11.4.13, 11.8.9, 12.3.3 | Studio database map and CRUD builder; local TOTP MFA; parameters, pool limits, and statement timeouts; TLS; database/CRUD HTTP E2E; schema safety; backup and restore; handbook examples | MFA remains an explicitly configured preview. CI is neither an independent security review nor product acceptance. Not every optional database driver path is run on every version. |
-| MySQL Server 8.4.11 | Parameterized Zelyra SQL queries; schema setup, inspection, read-only project map, and a reviewed safe column migration with history | Limited compatibility evidence. No proof for full CRUD, authentication, MFA, TLS, or backup/restore. The schema E2E covers one additive safe column change; do not infer full MariaDB parity. |
-| PostgreSQL 16.15 | Studio introspection, parameterized runtime queries, and schema safety | No proof for full CRUD, authentication, MFA, TLS, backup/restore, or general SQL portability. CI pins the minor server version and checks it before the integration steps. |
+| MariaDB 10.11.19, 11.4.13, 11.8.9, 12.3.3 | Studio database map and CRUD builder; local TOTP MFA; parameters, pool limits, and statement timeouts; TLS; database/CRUD HTTP E2E; relational tenant CRUD with real foreign keys and orphan rejection (E-DB-005); schema safety; backup and restore; handbook examples | MFA remains an explicitly configured preview. CI is neither an independent security review nor product acceptance. Not every optional database driver path is run on every version. |
+| MySQL Server 8.4.11 | Parameterized Zelyra SQL queries; schema setup, inspection, read-only project map, and a reviewed safe column migration with history; relational tenant CRUD with real foreign keys, orphan rejection (E-DB-005), and hardened write lock wait bounds (`innodb_lock_wait_timeout`) | Limited compatibility evidence. No proof for authentication outside relational CRUD sessions, MFA, TLS, or backup/restore. The schema E2E covers additive safe column changes; do not infer full MariaDB parity. |
+| PostgreSQL 16.15 | Studio introspection, parameterized runtime queries, schema safety, native form decisions with unchained audit, and relational tenant CRUD with real foreign keys and orphan rejection (E-DB-005) | No proof for full authentication backend, MFA, TLS, backup/restore, or general SQL portability. Chained audit remains locked. CI pins the minor server version and checks it before the integration steps. |
 | SQLite (CI image system version) | Schema integration, parameterization, and basic CRUD workflows | Local development option; not a substitute for the tested server databases and not a 1.0 production promise. |
 
 ## Consequence for Zelyra 1.0.0
@@ -18,6 +18,9 @@ MariaDB, MySQL, and PostgreSQL remain targets for the first productive release.
 The verified scope differs by backend. 0.9.9 can freeze the 1.0.0 support
 scope only after each promised workflow has evidence. Accepting a URL such as
 `mysql://` is not evidence for MySQL Server support.
+For post-1.0 development, a modular database adapter architecture
+(`DatabaseAdapter` SPI) and multi-database support (binding multiple
+independent data sources per application) are formally anchored in the roadmap.
 
 ## Additional local evidence: exact decimals (0.9.9 development)
 
@@ -49,3 +52,19 @@ Tampered tenant/foreign keys, membership revocation during lock wait (two-connec
 race), and audit errors roll back the transaction atomically. Chained PostgreSQL
 audit remains locked and diagnostically rejected.
 See [evidence](release-readiness/0.9.9-postgres-form-decisions.en.md).
+
+## Database matrix, transactions, and relational CRUD (0.9.9 development)
+
+On MariaDB 11.4.13, MySQL 8.4.11, and PostgreSQL 16.15, the relational CRUD cycle
+with real foreign key constraints is proven:
+- Migration preflight with orphan checks (`error[E-DB-005]`) preserves data and
+  prevents invalid constraint creation.
+- Dynamic foreign-key options (`load_relation_options`) filter strictly by active
+  tenant membership.
+- Tampered foreign keys belonging to other tenants return HTTP 422 Unprocessable Entity.
+- Relational join display renders parent display values instead of raw IDs.
+- Restrictive deletion safely halts deletion of referenced records with HTTP 500
+  without internal leakage; ordered deletion (child before parent) succeeds.
+- On MySQL and MariaDB, `innodb_lock_wait_timeout` enforces hard, bounded abort
+  thresholds for row locks (~1s instead of 50s).
+See [evidence](release-readiness/0.9.9-relational-crud-matrix.en.md).

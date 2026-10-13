@@ -2323,6 +2323,7 @@ pub fn with_mariadb_advisory_transaction<T>(
             message: "timed out waiting for the MariaDB advisory lock".into(),
         });
     }
+    let mysql = connection.mysql;
     let lock_guard = MariaDbSchemaLockGuard {
         connection: &mut connection.connection,
         lock_name: lock_name.to_owned(),
@@ -2335,6 +2336,8 @@ pub fn with_mariadb_advisory_transaction<T>(
     let result = {
         let mut transaction = MariaDbTransaction {
             connection: lock_guard.connection,
+            mysql,
+            settings,
         };
         operation(&mut transaction)
     };
@@ -3079,10 +3082,26 @@ pub fn execute_mariadb_queries_in_transaction(
 /// the closure passed to `with_mariadb_transaction`.
 pub struct MariaDbTransaction<'a> {
     connection: &'a mut Conn,
+    mysql: bool,
+    settings: MariaDbTimeouts,
 }
 
 impl MariaDbTransaction<'_> {
     pub fn execute(&mut self, query: &Query) -> Result<QueryResult, DatabaseError> {
+        if let Some(remaining) = remaining_query_budget()? {
+            let seconds = remaining
+                .as_secs_f64()
+                .min(f64::from(self.settings.query_seconds));
+            if seconds < 0.001 {
+                return Err(DatabaseError {
+                    message: "request deadline exceeded before database statement".into(),
+                });
+            }
+            let timeout_sql = mysql_timeout_statement(self.mysql, seconds)?;
+            self.connection
+                .query_drop(timeout_sql)
+                .map_err(mariadb_driver_error)?;
+        }
         let (sql, parameters) = prepare_mariadb_query(query)?;
         execute_prepared_mariadb_query(self.connection, &sql, parameters)
     }
@@ -3111,6 +3130,7 @@ pub fn with_mariadb_transaction<T>(
     let tls = MariaDbTlsSettings::from_env()?;
     let pool = mariadb_pool(database_url, settings, tls)?;
     let mut connection = acquire_mariadb_connection(&pool, settings)?;
+    let mysql = connection.mysql;
     if let Err(error) = connection.connection.query_drop("START TRANSACTION") {
         connection.discard = true;
         return Err(mariadb_driver_error(error));
@@ -3122,12 +3142,22 @@ pub fn with_mariadb_transaction<T>(
     let result = {
         let mut transaction = MariaDbTransaction {
             connection: &mut guard.connection.connection,
+            mysql,
+            settings,
         };
         operation(&mut transaction)
     };
     match result {
         Ok(value) => {
             remaining_query_budget()?;
+            if QUERY_DEADLINE.with(Cell::get).is_some() {
+                let reset_timeout =
+                    mysql_timeout_statement(mysql, f64::from(settings.query_seconds))?;
+                if let Err(error) = guard.connection.connection.query_drop(reset_timeout) {
+                    guard.connection.discard = true;
+                    return Err(mariadb_driver_error(error));
+                }
+            }
             guard
                 .connection
                 .connection
@@ -4065,9 +4095,11 @@ fn mysql_timeout_statement(mysql: bool, seconds: f64) -> Result<String, Database
         });
     }
     Ok(if mysql {
+        let lock_wait_seconds = (seconds.ceil() as u32).max(1);
         format!(
-            "SET SESSION max_execution_time={}",
-            (seconds * 1000.0).floor() as u32
+            "SET SESSION max_execution_time={}, innodb_lock_wait_timeout={}",
+            (seconds * 1000.0).floor() as u32,
+            lock_wait_seconds
         )
     } else {
         format!("SET SESSION max_statement_time={seconds:.6}")
@@ -4076,7 +4108,12 @@ fn mysql_timeout_statement(mysql: bool, seconds: f64) -> Result<String, Database
 
 fn mysql_session_timeout_statement(database_url: &str, query_seconds: u32) -> String {
     if database_url.starts_with("mysql://") {
-        format!("SET SESSION max_execution_time={}", query_seconds * 1000)
+        let lock_wait_seconds = query_seconds.max(1);
+        format!(
+            "SET SESSION max_execution_time={}, innodb_lock_wait_timeout={}",
+            query_seconds * 1000,
+            lock_wait_seconds
+        )
     } else {
         format!("SET SESSION max_statement_time={query_seconds}")
     }
@@ -4138,9 +4175,11 @@ fn run_mariadb(
         ])
         .args(timeouts.connect_args())
         .args(if database_url.starts_with("mysql://") {
+            let lock_wait_seconds = timeouts.query_seconds.max(1);
             [format!(
-                "--init-command=SET SESSION max_execution_time={}",
-                timeouts.query_seconds * 1000
+                "--init-command=SET SESSION max_execution_time={}, innodb_lock_wait_timeout={}",
+                timeouts.query_seconds * 1000,
+                lock_wait_seconds
             )]
         } else {
             timeouts.query_args()
@@ -4187,9 +4226,11 @@ fn run_mariadb_sql(
         ])
         .args(timeouts.connect_args())
         .args(if database_url.starts_with("mysql://") {
+            let lock_wait_seconds = timeouts.query_seconds.max(1);
             [format!(
-                "--init-command=SET SESSION max_execution_time={}",
-                timeouts.query_seconds * 1000
+                "--init-command=SET SESSION max_execution_time={}, innodb_lock_wait_timeout={}",
+                timeouts.query_seconds * 1000,
+                lock_wait_seconds
             )]
         } else {
             timeouts.query_args()
@@ -5579,7 +5620,7 @@ mod tests {
     fn mysql_deadline_timeout_uses_its_own_server_variable() {
         assert_eq!(
             mysql_timeout_statement(true, 0.300).unwrap(),
-            "SET SESSION max_execution_time=300"
+            "SET SESSION max_execution_time=300, innodb_lock_wait_timeout=1"
         );
         assert_eq!(
             mysql_timeout_statement(false, 0.300).unwrap(),
@@ -5592,7 +5633,7 @@ mod tests {
     fn mysql_and_mariadb_session_timeouts_use_their_server_variables() {
         assert_eq!(
             mysql_session_timeout_statement("mysql://user:pass@localhost/app", 12),
-            "SET SESSION max_execution_time=12000"
+            "SET SESSION max_execution_time=12000, innodb_lock_wait_timeout=12"
         );
         assert_eq!(
             mysql_session_timeout_statement("mariadb://user:pass@localhost/app", 12),
