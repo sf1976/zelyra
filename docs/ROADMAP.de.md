@@ -38,6 +38,16 @@ den tatsächlich implementierten Stand.
   Zustimmung oder in nicht interaktiven Läufen wird nichts mit erhöhten
   Rechten geändert. Die Hinweise machen klar, dass Docker-Compose-Tutorials
   bis zur Installation nicht startbereit sind.
+- [ ] **Geplant für 1.0.2 — interaktive Konsolenmenüs:** Eine leicht
+  deklarierbare Menü-API und `zelyra new --template console-menu` sollen aus
+  Titel, Beschreibung und Auswahlpunkten in wenigen Zeilen ein vollständiges
+  Terminalmenü erzeugen. Das Menü erhält eine hochwertige Darstellung mit
+  klarer Auswahlhervorhebung, Tastaturbedienung, einem Layout für schmale
+  Terminals und einem nummerierten Fallback. Farb- und Unicode-Ausgabe
+  berücksichtigen Terminalfähigkeiten, `ZELYRA_COLOR` und `NO_COLOR`; ohne
+  ANSI-Unterstützung erscheint eine einfache Textauswahl. EOF beendet die
+  Auswahl ohne Hängen. Der Starter, ein lauffähiges Beispiel und Tests decken
+  Auswahl, EOF, schmale Breiten sowie Farb- und Fallback-Modus ab.
 - [x] **1.0.1 Sprachprüfung des veröffentlichten Artefakts:** 80 Fälle,
   100 Aufgaben-Wiederholungen, 600 Zahlenvergleiche und 1.408 Kalender-/UTC-
   Referenzfälle ohne unerwartete Befunde geprüft; Installation/Update/Rückkehr

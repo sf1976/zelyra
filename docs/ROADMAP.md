@@ -35,6 +35,15 @@ principles; the roadmap below tracks what is actually implemented.
   show suitable installation guidance. No elevated changes happen without
   confirmation or in non-interactive runs. The guidance explains that
   Docker-based tutorials cannot start until Compose is installed.
+- [ ] **Planned for 1.0.2 — interactive console menus:** A simple declarative
+  menu API and `zelyra new --template console-menu` create a complete terminal
+  menu from a title, description, and choices in only a few lines. The menu
+  provides a polished presentation with a clear selection highlight, keyboard
+  navigation, a layout for narrow terminals, and a numbered fallback. Color
+  and Unicode output respect terminal capabilities, `ZELYRA_COLOR`, and
+  `NO_COLOR`; terminals without ANSI support receive a plain-text menu. EOF
+  exits cleanly without hanging. The starter, a runnable example, and tests
+  cover selection, EOF, narrow widths, color, and fallback behavior.
 - [x] **1.0.1 published-artifact language review:** 80 cases, 100 task repeats,
   600 numeric comparisons and 1,408 calendar/UTC reference cases passed with
   no unexpected findings; published installation/upgrade/rollback and
