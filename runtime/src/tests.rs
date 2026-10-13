@@ -110,7 +110,14 @@ fn sql_rows_keep_the_declared_result_type_for_runtime_return_checks() {
     let rows = Value::Rows {
         columns: vec!["id".into(), "name".into()],
         rows: vec![vec!["1".into(), "Ada".into()]],
-        result_type: Type::Named("Customer".into()),
+        metadata: Box::new(SqlRowsMetadata {
+            nulls: vec![vec![false, false]],
+            column_types: vec![
+                zelyra_database::QueryColumnType::Integer,
+                zelyra_database::QueryColumnType::Text,
+            ],
+        }),
+        result_type: Box::new(Type::Named("Customer".into())),
     };
 
     assert_eq!(rows.ty(), Type::Named("Customer".into()));
@@ -3030,4 +3037,398 @@ fn timestamp_decoding_rejects_values_outside_the_documented_calendar_range() {
             "1969-12-31T23:59:59.999Z"
         ]
     );
+}
+
+// Inject driver-shaped results into the decoder without opening a database.
+// The public language entry point separately requires a direct SQL expression.
+fn decode_sql_fixture(
+    target: &str,
+    definitions: &str,
+    columns: &[&str],
+    kinds: Vec<zelyra_database::QueryColumnType>,
+    rows: Vec<Vec<&str>>,
+    nulls: Vec<Vec<bool>>,
+) -> Result<Value, RuntimeError> {
+    let source = format!("{definitions} fn decode(rows: Int[]) {{ return sql_decode<{target}>(rows) }} fn main() {{ }}");
+    let program = parse(&lex(&source).unwrap()).unwrap();
+    execute_function(
+        &program,
+        "decode",
+        vec![Value::Rows {
+            columns: columns.iter().map(|value| (*value).into()).collect(),
+            rows: rows
+                .iter()
+                .map(|row| row.iter().map(|value| (*value).into()).collect())
+                .collect(),
+            metadata: Box::new(SqlRowsMetadata {
+                nulls,
+                column_types: kinds,
+            }),
+            result_type: Box::new(Type::Array(Box::new(Type::Int))),
+        }],
+        None,
+    )
+}
+
+#[test]
+fn typed_sql_results_preserve_null_and_literal_sentinel() {
+    use zelyra_database::QueryColumnType::Text;
+    let value = decode_sql_fixture(
+        "Option<String>[]",
+        "",
+        &["value"],
+        vec![Text],
+        vec![vec!["\\N"], vec!["\\N"]],
+        vec![vec![true], vec![false]],
+    )
+    .unwrap();
+    assert_eq!(
+        value,
+        Value::Array(vec![
+            Value::Option(None),
+            Value::Option(Some(Box::new(Value::String("\\N".into()))))
+        ])
+    );
+}
+
+#[test]
+fn typed_sql_results_enforce_cardinality_and_projection_even_when_empty() {
+    use zelyra_database::QueryColumnType::Integer;
+    let error =
+        decode_sql_fixture("Int", "", &["value"], vec![Integer], vec![], vec![]).unwrap_err();
+    assert!(error.message.contains("exactly one row"));
+    assert!(error.span.start > 0);
+    assert_eq!(
+        decode_sql_fixture("Option<Int>", "", &["value"], vec![Integer], vec![], vec![]).unwrap(),
+        Value::Option(None)
+    );
+    let error = decode_sql_fixture(
+        "Option<Int>",
+        "",
+        &["value"],
+        vec![Integer],
+        vec![vec!["1"], vec!["2"]],
+        vec![vec![false], vec![false]],
+    )
+    .unwrap_err();
+    assert!(error.message.contains("at most one row"));
+    assert_eq!(
+        decode_sql_fixture("Int[]", "", &["value"], vec![Integer], vec![], vec![]).unwrap(),
+        Value::Array(vec![])
+    );
+    let error = decode_sql_fixture(
+        "Customer[]",
+        "struct Customer { id: Int name: String }",
+        &["id"],
+        vec![Integer],
+        vec![],
+        vec![],
+    )
+    .unwrap_err();
+    assert!(error.message.contains("missing column `name`"));
+}
+
+#[test]
+fn typed_sql_results_use_exact_numbers_and_reject_float_shortcuts() {
+    use zelyra_database::QueryColumnType::{Decimal, Float, Integer};
+    assert_eq!(
+        decode_sql_fixture(
+            "UInt",
+            "",
+            &["value"],
+            vec![Decimal],
+            vec![vec!["18446744073709551615"]],
+            vec![vec![false]]
+        )
+        .unwrap(),
+        Value::UInt(u64::MAX)
+    );
+    assert_eq!(
+        decode_sql_fixture(
+            "Decimal",
+            "",
+            &["value"],
+            vec![Decimal],
+            vec![vec!["119.000000000"]],
+            vec![vec![false]]
+        )
+        .unwrap(),
+        Value::Decimal(119_000_000_000)
+    );
+    for (target, kind, value) in [
+        ("UInt", Decimal, "18446744073709551616"),
+        ("UInt", Integer, "-1"),
+        ("Int", Decimal, "1.5"),
+        ("Decimal", Float, "0.1"),
+        ("Decimal", Decimal, "0.0000000001"),
+        ("Float", Float, "NaN"),
+        ("Bool", Integer, "2"),
+    ] {
+        let error = decode_sql_fixture(
+            target,
+            "",
+            &["value"],
+            vec![kind],
+            vec![vec![value]],
+            vec![vec![false]],
+        )
+        .unwrap_err();
+        assert!(
+            error.message.contains("column `value`"),
+            "{}",
+            error.message
+        );
+    }
+}
+
+#[test]
+fn typed_sql_opt_in_checks_direct_query_and_class_boundary() {
+    for source in [
+        "fn main() { value = sql_decode<Int>(1) }",
+        "fn main() uses Database(write) { value = sql_decode<Int>(sql { DELETE FROM customers }) }",
+        "fn main() uses Database(read) { value = sql_decode<Int>() }",
+        "class Customer { name: String } fn main() uses Database(read) { value = sql_decode<Customer>(sql<Int> { SELECT 1 }) }",
+    ] {
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(check(&program).is_err(), "accepted {source}");
+    }
+    let program = parse(&lex("fn main() uses Database(read) { value = sql_decode<Int>(sql<Int> { SELECT 1 }) print(value + 1) }").unwrap()).unwrap();
+    check(&program).unwrap();
+}
+
+#[test]
+fn typed_sql_records_aliases_generics_and_table_rows_are_usable() {
+    use zelyra_database::QueryColumnType::{Decimal, Integer, Text};
+    let value = decode_sql_fixture(
+        "Envelope<Decimal>",
+        "type Amount = Decimal struct Envelope<T> { total: T note: Option<String> }",
+        &["note", "total"],
+        vec![Text, Decimal],
+        vec![vec!["\\N", "119.000000000"]],
+        vec![vec![true, false]],
+    )
+    .unwrap();
+    assert_eq!(
+        value,
+        Value::Object {
+            type_name: "Envelope".into(),
+            type_args: vec![Type::Decimal],
+            fields: HashMap::from([
+                ("total".into(), Value::Decimal(119_000_000_000)),
+                ("note".into(), Value::Option(None))
+            ])
+        }
+    );
+    let value = decode_sql_fixture(
+        "Customer",
+        "table customers { id: Id primary auto name: String(100) required note: String(100) }",
+        &["name", "id", "note"],
+        vec![Text, Integer, Text],
+        vec![vec!["Ada", "1", "\\N"]],
+        vec![vec![false, false, true]],
+    )
+    .unwrap();
+    let Value::Object { fields, .. } = value else {
+        panic!("expected typed table record")
+    };
+    assert_eq!(fields["id"], Value::Int(1));
+    assert_eq!(fields["note"], Value::Option(None));
+    let program = parse(&lex("table customers { id: Id primary auto name: String(100) required } fn main() uses Database(read) { customers = sql_decode<Customer[]>(sql<Customer[]> { SELECT id, name FROM customers }) print(customers[0].name) }").unwrap()).unwrap();
+    check(&program).unwrap();
+}
+
+#[test]
+fn typed_sql_temporal_values_preserve_midnight_and_milliseconds() {
+    use zelyra_database::QueryColumnType::{Date, Time, Timestamp};
+    assert_eq!(
+        decode_sql_fixture(
+            "Date",
+            "",
+            &["value"],
+            vec![Date],
+            vec![vec!["2000-02-29"]],
+            vec![vec![false]]
+        )
+        .unwrap(),
+        Value::Date("2000-02-29".into())
+    );
+    assert_eq!(
+        decode_sql_fixture(
+            "Time",
+            "",
+            &["value"],
+            vec![Time],
+            vec![vec!["00:00:00"]],
+            vec![vec![false]]
+        )
+        .unwrap(),
+        Value::Time("00:00:00".into())
+    );
+    for (source, expected) in [
+        ("1970-01-01", 0),
+        ("1969-12-31 23:59:59.999000", -1),
+        ("1969-12-31T23:59:59.999Z", -1),
+        ("2039-03-01 00:00:00.001000", 2182550400001),
+    ] {
+        assert_eq!(
+            decode_sql_fixture(
+                "Timestamp",
+                "",
+                &["value"],
+                vec![Timestamp],
+                vec![vec![source]],
+                vec![vec![false]]
+            )
+            .unwrap(),
+            Value::Timestamp(expected)
+        );
+    }
+    for (target, kind, source) in [
+        ("Date", Date, "1900-02-29"),
+        ("Time", Time, "24:00:00"),
+        ("Timestamp", Timestamp, "1970-01-01 00:00:00.000001"),
+        ("Timestamp", Timestamp, "0000-01-01"),
+        ("Timestamp", Timestamp, "2039-03-01T00:00:00+00:00"),
+    ] {
+        assert!(
+            decode_sql_fixture(
+                target,
+                "",
+                &["value"],
+                vec![kind],
+                vec![vec![source]],
+                vec![vec![false]]
+            )
+            .is_err(),
+            "accepted {source}"
+        );
+    }
+}
+
+#[test]
+fn typed_sql_domains_do_not_round_money_or_overflow_ids() {
+    use zelyra_database::QueryColumnType::{Decimal, Integer};
+    assert_eq!(
+        decode_sql_fixture(
+            "Money",
+            "",
+            &["value"],
+            vec![Decimal],
+            vec![vec!["999999999999999.9999"]],
+            vec![vec![false]]
+        )
+        .unwrap(),
+        Value::Decimal(999999999999999999900000)
+    );
+    for source in ["1000000000000000.0000", "0.00001", "-1000000000000000.0000"] {
+        assert!(decode_sql_fixture(
+            "Money",
+            "",
+            &["value"],
+            vec![Decimal],
+            vec![vec![source]],
+            vec![vec![false]]
+        )
+        .is_err());
+    }
+    assert_eq!(
+        decode_sql_fixture(
+            "Id",
+            "",
+            &["value"],
+            vec![Integer],
+            vec![vec!["9223372036854775807"]],
+            vec![vec![false]]
+        )
+        .unwrap(),
+        Value::Int(i64::MAX)
+    );
+    assert!(decode_sql_fixture(
+        "Id",
+        "",
+        &["value"],
+        vec![Integer],
+        vec![vec!["9223372036854775808"]],
+        vec![vec![false]]
+    )
+    .is_err());
+}
+
+#[test]
+fn typed_sql_rejects_ambiguous_columns_and_invalid_metadata() {
+    use zelyra_database::QueryColumnType::{Integer, Text};
+    for (columns, kinds, rows, nulls, expected) in [
+        (
+            vec!["id", "id"],
+            vec![Integer, Integer],
+            vec![vec!["1", "2"]],
+            vec![vec![false, false]],
+            "duplicate column",
+        ),
+        (
+            vec!["id", "other"],
+            vec![Integer, Text],
+            vec![vec!["1", "Ada"]],
+            vec![vec![false, false]],
+            "unexpected column",
+        ),
+        (
+            vec!["id"],
+            vec![Integer],
+            vec![vec!["1"]],
+            vec![],
+            "inconsistent native",
+        ),
+        (
+            vec!["id"],
+            vec![Integer],
+            vec![vec!["\\N"]],
+            vec![vec![true]],
+            "row 1, column",
+        ),
+    ] {
+        let error = decode_sql_fixture(
+            "Customer[]",
+            "struct Customer { id: Int }",
+            &columns,
+            kinds,
+            rows,
+            nulls,
+        )
+        .unwrap_err();
+        assert!(error.message.contains(expected), "{}", error.message);
+    }
+    for target in ["Bytes", "Int[][]", "Customer"] {
+        let source = format!("struct Customer {{ id: Int nested: Int[] }} fn main() uses Database(read) {{ rows = sql_decode<{target}>(sql<Int> {{ SELECT 1 }}) }}");
+        let program = parse(&lex(&source).unwrap()).unwrap();
+        let errors = check(&program).unwrap_err();
+        assert!(errors.iter().any(|error| error.code == "E-TYPE-SQL-DECODE"));
+    }
+}
+
+#[test]
+fn typed_sql_preserves_explicit_domain_aliases_and_rejects_nested_domain_records() {
+    use zelyra_database::QueryColumnType::Float;
+    assert_eq!(
+        decode_sql_fixture(
+            "Money",
+            "type Money = Float",
+            &["value"],
+            vec![Float],
+            vec![vec!["0.125"]],
+            vec![vec![false]]
+        )
+        .unwrap(),
+        Value::Float(0.125)
+    );
+    let program = parse(&lex("type Money = Decimal fn main() uses Database(read) { value = sql_decode<Money>(sql<Decimal> { SELECT 1 }) }").unwrap()).unwrap();
+    check(&program).unwrap();
+    for definitions in [
+        "struct Money { value: Int } struct Packet { price: Money }",
+        "enum Money { Zero } struct Packet { price: Money }",
+    ] {
+        let source = format!("{definitions} fn main() uses Database(read) {{ value = sql_decode<Packet>(sql<Int> {{ SELECT 1 }}) }}");
+        let program = parse(&lex(&source).unwrap()).unwrap();
+        assert!(check(&program).is_err());
+    }
 }

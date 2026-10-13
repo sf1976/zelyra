@@ -35,6 +35,11 @@ sql {
 }
 ```
 
+In the unreleased 0.9.9 branch, this annotation retains the compatibility raw
+row representation. Use [`sql_decode<T>`](sql-results.en.md) explicitly for
+materialized scalar/record/array values, checked cardinality and real NULL
+semantics. See [the runnable example](../examples/typed_sql_results.zyl).
+
 ## Checking
 
 ```bash

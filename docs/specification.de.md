@@ -778,6 +778,8 @@ Date-/Time-/Timestamp-/Duration-Werte. JSON-Ausgaben bleiben unverändert;
 generierte Clients werden daran angepasst. Native Date-/Time-/UTC-Timestamp-
 Parameter und Millisekundenspeicherung sind auf MariaDB, MySQL und PostgreSQL
 geprüft. Falsche Speichertypen/Präzision scheitern vor Anwendung mit Fundstelle.
-Typisierte SQL-Ergebnisverwendung bleibt ein Gate. Siehe [Regeln](dates.de.md),
+Explizites [`sql_decode<T>`](sql-results.de.md) liefert typisierte Skalar-/Record-/
+Array-Ergebnisse mit Kardinalitäts- und NULL-Prüfung; das Rohzeilen-JSON-Format
+bleibt unverändert. Siehe [Regeln](dates.de.md),
 [HTTP-Nachweise](release-readiness/0.9.9-calendar-http.de.md) und
 [SQL-Nachweise](release-readiness/0.9.9-calendar-sql.de.md).

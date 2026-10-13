@@ -36,6 +36,11 @@ sql {
 }
 ```
 
+Im unveröffentlichten 0.9.9-Branch erhält diese Annotation die kompatible
+Rohzeilendarstellung. [`sql_decode<T>`](sql-results.de.md) liefert ausdrücklich
+umgewandelte Skalar-/Record-/Arraywerte, geprüfte Kardinalität und echte
+NULL-Semantik. Siehe [ausführbares Beispiel](../examples/typed_sql_results.zyl).
+
 ## Prüfung
 
 ```bash

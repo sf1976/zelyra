@@ -29,7 +29,7 @@ fn main() uses Database {
     rows = sql<calendar_events[]> {
         SELECT id, issued, clock, occurred FROM calendar_events ORDER BY id
     }
-    # SQL liefert hier noch Rohzeilen; typisierte Folgeoperationen sind separat.
-    # SQL still returns raw rows here; typed downstream operations are separate.
+    # Kompatible Rohzeilen; für Berechnungen sql_decode verwenden.
+    # Compatible raw rows; use sql_decode for calculations.
     print(rows)
 }

@@ -52,7 +52,7 @@ Programmlauf.
 | `HttpResult<T>`, `HttpResponse`, `HttpError` | 🧪 spezialisiert | HTTP-Subsystem-Typen für Netzwerkantworten und Fehler; keine allgemeinen Literal- oder Konstruktoren. |
 | Generics | 🧪 teilweise | Eigene generische Funktionen, Records und Enums mit Typinferenz oder expliziten Typargumenten sind verfügbar. Allgemeine Constraints/Traits, generische Typ-Aliase und generische Funktionsreferenzen sind nicht enthalten. Generische Parameter unterstützen nur Operationen, die für ihren konkreten Typ feststehen. |
 | Typ-Aliase und eigene Typen | 🧪 teilweise | `type Name = ...`, Records und Enums sind vorhanden. Generische Records und Enums behalten ihre nominalen Typargumente zur Laufzeit; Aliase haben keine eigene Runtimeidentität. |
-| `Id`, `Email`, `Url`, `Uuid`, `Money` | 🧪 spezialisiert | Benannte String-Domainwerte für API-/Datenschema-Nutzung; keine eigenen numerischen oder Identitätsregeln in der Runtime. |
+| `Id`, `Email`, `Url`, `Uuid`, `Money` | 🧪 spezialisiert | API-/Schema-Skalardomains. Explizite SQL-Decodierung verwendet geprüftes Int für Id, DECIMAL(19,4) für Money und Text für Email/Url/Uuid. Keine neuen Identitäts- oder Domain-Inhaltsregeln; ausdrückliche Aliase haben Vorrang. |
 | Funktionen als Werte | 🧪 teilweise | Benannte, nicht generische Funktionen können mit `&name` gespeichert, übergeben und über einen typisierten `Function<(...) -> ...>`-Wert indirekt aufgerufen werden. Capabilities bleiben statisch und zur Laufzeit erhalten. Closures, erfasste lokale und generische Funktionswerte fehlen. |
 
 ## Konvertierungen, Standardwerte und Kopien
@@ -112,5 +112,7 @@ der ISO-Jahre 0001–9999 werden kontrolliert abgewiesen.
 
 Native SQL-Parameter/Speicherung für Date, Time und UTC-Timestamp sind auf
 MariaDB/MySQL/PostgreSQL geprüft: [SQL-Nachweise](../../docs/release-readiness/0.9.9-calendar-sql.de.md).
-MariaDB/MySQL beginnen bei Jahr 1000, PostgreSQL bei Jahr 0001. Typisierte
-SQL-Ergebnisverwendung bleibt offen; Rohzeilen sind keine Date-Variablen.
+MariaDB/MySQL beginnen bei Jahr 1000, PostgreSQL bei Jahr 0001.
+[`sql_decode<T>`](../../docs/sql-results.de.md) erzeugt typisierte Skalar-/Record-/
+Array-Ergebnisse mit Kardinalitäts-, nativer Typ- und NULL-Prüfung. Rohzeilen
+bleiben mit ihrer bisherigen Text-/HTTP-Darstellung verfügbar.

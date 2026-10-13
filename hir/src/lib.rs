@@ -688,6 +688,7 @@ impl<'a> Resolver<'a> {
                             | "json_encode_tagged_result"
                             | "json_decode"
                             | "json_decode_result"
+                            | "sql_decode"
                             | "json_decode_tagged_result"
                             | "csv_decode_result"
                             | "csv_encode"

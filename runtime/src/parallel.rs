@@ -53,6 +53,7 @@ impl Interpreter<'_> {
                         process_policy: self.process_policy.clone(),
                         mail_policy: self.mail_policy.clone(),
                         record_definitions: self.record_definitions.clone(),
+                        sql_record_definitions: self.sql_record_definitions.clone(),
                         type_aliases: self.type_aliases.clone(),
                         enum_definitions: self.enum_definitions.clone(),
                         active_capabilities: self.active_capabilities.clone(),

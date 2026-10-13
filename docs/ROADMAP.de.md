@@ -1064,8 +1064,11 @@ IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
   Siehe [Regeln](dates.de.md) und [SQL-Nachweise](release-readiness/0.9.9-calendar-sql.de.md).
   Die SMTP-/Reset-Fixture berücksichtigt unterdrückte ersetzte Zustelljobs
   und prüft vor dem Fortsetzen das tatsächlich gespeicherte Ersatztoken.
-- [🗺️] Typisierte SQL-Folgeergebnisse/Kardinalität schließen und NULL von Text
-  unterscheiden; Rohzeilen belegen noch keine typisierten Kalenderoperationen.
+- [✅] Explizites `sql_decode<T>(sql<…> { … })` erzeugt Skalar-/Record-/Array-
+  Werte mit geprüfter Kardinalität, Projektion, nativen Typfamilien und NULL-
+  Masken. Exakte Zahlen und Kalenderfolgeoperationen bestehen auf drei realen
+  Backends; bestehendes Rohzeilen-HTTP-/JSON bleibt erhalten. Siehe
+  [Regeln](sql-results.de.md) und [Nachweise](release-readiness/0.9.9-typed-sql-results.de.md).
 
 - [🗺️] Sprach-, CLI-, Runtime-, Datenbank-, IDE-, Mail-, Benachrichtigungs- und
   Tutorialumfang einfrieren. Alle angenommenen Anforderungen aus 0.9.1–0.9.8

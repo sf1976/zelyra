@@ -1,0 +1,46 @@
+# DATABASE_URL auf eine eigene Testdatenbank setzen, dann db apply und run.
+# Point DATABASE_URL at an owned test database, then run db apply and run.
+# Für PostgreSQL/MySQL unten engine: postgres bzw. engine: mysql setzen.
+# For PostgreSQL/MySQL use engine: postgres or engine: mysql below.
+database Main {
+    engine: mariadb
+}
+table calendar_events {
+    id: Id primary auto
+    issued: Date required
+    occurred: Timestamp required
+    amount: Decimal required
+    note: String(100)
+}
+struct CalendarValue {
+    issued: Date
+    occurred: Timestamp
+    amount: Decimal
+    note: Option<String>
+}
+fn main() uses Database {
+    issued = date("2000-02-29")
+    occurred = json_decode<Timestamp>("2182550400001")
+    amount = decimal("119.00")
+    sql {
+        INSERT INTO calendar_events (issued, occurred, amount, note)
+        VALUES (:issued, :occurred, :amount, NULL)
+    }
+    events = sql_decode<CalendarValue[]>(sql<calendar_events[]> {
+        SELECT issued, occurred, amount, note FROM calendar_events ORDER BY id
+    }
+    )
+    for event in events {
+        match date_add_days_result(event.issued, 1) {
+            Ok(next_day) => {
+                print(next_day)
+            }
+            Err(reason) => {
+                print(reason)
+            }
+        }
+        print(event.amount + decimal("0.000000001"))
+        print(format_timestamp(event.occurred))
+    }
+    print(json_encode(events))
+}

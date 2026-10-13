@@ -19,6 +19,7 @@ mod filesystem;
 mod mail;
 mod parallel;
 mod records;
+mod sql_results;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypeError {
@@ -4087,6 +4088,9 @@ pub fn check(program: &Program) -> Result<(), Vec<TypeError>> {
             });
         }
     }
+    // Schema scalar domains also work in function/decoder annotations. Keep
+    // existing explicit definitions authoritative rather than reserving names.
+    known_types.extend(["Money", "Email", "Url", "Uuid"].map(String::from));
     let generic_arities = program
         .records
         .iter()
@@ -6152,6 +6156,43 @@ impl<'a> Checker<'a> {
                         )),
                         Box::new(Type::String),
                     )
+                } else if name == "sql_decode" {
+                    if type_args.len() != 1 || args.len() != 1 {
+                        self.error_with_code(
+                            "E-TYPE-SQL-DECODE",
+                            expr.span,
+                            "sql_decode expects one type argument and one direct SQL expression",
+                        );
+                        for argument in args {
+                            self.check_expr(argument, scopes);
+                        }
+                        return Type::Unknown;
+                    }
+                    self.check_type(&type_args[0], expr.span);
+                    self.check_expr(&args[0], scopes);
+                    if let ExprKind::Sql { query, .. } = &args[0].kind {
+                        if zelyra_database::sql::analyze_table_access(query, &[]).0
+                            != Some("SELECT")
+                        {
+                            self.error_with_code(
+                                "E-TYPE-SQL-DECODE",
+                                args[0].span,
+                                "sql_decode requires a SELECT query",
+                            );
+                        }
+                    }
+                    if !matches!(args[0].kind, ExprKind::Sql { .. }) {
+                        self.error_with_code(
+                            "E-TYPE-SQL-DECODE",
+                            args[0].span,
+                            "sql_decode requires a direct SQL expression",
+                        );
+                    }
+                    if let Err(message) = sql_results::validate_target(&type_args[0], self._program)
+                    {
+                        self.error_with_code("E-TYPE-SQL-DECODE", expr.span, message);
+                    }
+                    type_args[0].clone()
                 } else if name == "json_decode" {
                     if type_args.len() != 1 {
                         self.error(expr.span, "json_decode expects exactly one type argument");
@@ -6962,6 +7003,13 @@ impl<'a> Checker<'a> {
                     .find(|candidate| candidate.name == field)
                     .map(|candidate| substitute_generic_type(&candidate.ty, &substitutions));
             }
+            if let Some(record) = sql_results::definitions(self._program).get(name) {
+                return record
+                    .fields
+                    .iter()
+                    .find(|candidate| candidate.name == field)
+                    .map(|candidate| candidate.ty.clone());
+            }
             let alias = self
                 ._program
                 .types
@@ -7349,6 +7397,12 @@ fn singular_table_type(name: &str) -> Option<String> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct SqlRowsMetadata {
+    pub nulls: Vec<Vec<bool>>,
+    pub column_types: Vec<zelyra_database::QueryColumnType>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum Value {
     Int(i64),
     UInt(u64),
@@ -7388,7 +7442,8 @@ pub enum Value {
     Rows {
         columns: Vec<String>,
         rows: Vec<Vec<String>>,
-        result_type: Type,
+        metadata: Box<SqlRowsMetadata>,
+        result_type: Box<Type>,
     },
     Unit,
 }
@@ -7490,7 +7545,7 @@ impl Value {
             Value::Result(Err(value)) => {
                 Type::Result(Box::new(Type::Unknown), Box::new(value.ty()))
             }
-            Value::Rows { result_type, .. } => result_type.clone(),
+            Value::Rows { result_type, .. } => result_type.as_ref().clone(),
             Value::Unit => Type::Unit,
         }
     }
@@ -7927,6 +7982,7 @@ pub fn execute_function_with_capabilities_and_policies(
         network_policy: policy.and_then(|policy| policy.network.clone()),
         process_policy: policy.and_then(|policy| policy.process.clone()),
         mail_policy: policy.and_then(|policy| policy.mail.clone()),
+        sql_record_definitions: sql_results::definitions(program),
         record_definitions: program
             .records
             .iter()
@@ -8015,6 +8071,7 @@ fn execute_internal(
         network_policy: policy.as_ref().and_then(|policy| policy.network.clone()),
         process_policy: policy.as_ref().and_then(|policy| policy.process.clone()),
         mail_policy: policy.as_ref().and_then(|policy| policy.mail.clone()),
+        sql_record_definitions: sql_results::definitions(program),
         record_definitions: program
             .records
             .iter()
@@ -8056,6 +8113,7 @@ struct Interpreter<'program> {
     process_policy: Option<ProcessPolicy>,
     mail_policy: Option<MailPolicy>,
     record_definitions: HashMap<String, RecordDef>,
+    sql_record_definitions: HashMap<String, RecordDef>,
     type_aliases: HashMap<String, Type>,
     enum_definitions: HashMap<String, zelyra_ast::EnumDef>,
     active_capabilities: Vec<HashSet<String>>,
@@ -8218,6 +8276,7 @@ fn is_runtime_builtin(name: &str) -> bool {
             | "json_encode_tagged_result"
             | "json_decode"
             | "json_decode_result"
+            | "sql_decode"
             | "json_decode_tagged_result"
             | "csv_decode_result"
             | "csv_encode"
@@ -8253,8 +8312,18 @@ fn is_runtime_builtin(name: &str) -> bool {
 
 impl<'program> Interpreter<'program> {
     fn runtime_alias_type(&self, ty: &Type, span: Span) -> Result<Type, RuntimeError> {
-        expand_type_aliases(ty, &self.type_aliases)
-            .map_err(|message| self.runtime_error(span, message))
+        let mut aliases = HashMap::from([
+            ("Id".into(), Type::Int),
+            ("Money".into(), Type::Decimal),
+            ("Email".into(), Type::String),
+            ("Url".into(), Type::String),
+            ("Uuid".into(), Type::String),
+        ]);
+        aliases.retain(|name, _| {
+            !self.record_definitions.contains_key(name) && !self.enum_definitions.contains_key(name)
+        });
+        aliases.extend(self.type_aliases.clone());
+        expand_type_aliases(ty, &aliases).map_err(|message| self.runtime_error(span, message))
     }
 
     fn ensure_decimal_storage(&mut self, span: Span) -> Result<(), RuntimeError> {
@@ -10771,6 +10840,8 @@ impl<'program> Interpreter<'program> {
             let value = self.eval(&args[0], env)?;
             self.json_encode_tagged_result(&value, span)
                 .map(Value::String)
+        } else if name == "sql_decode" {
+            self.eval_sql_decode(type_args, args, env, span)
         } else if name == "json_decode" {
             if type_args.len() != 1 || args.len() != 1 {
                 return Err(self.runtime_error(
@@ -11736,7 +11807,11 @@ impl<'program> Interpreter<'program> {
                 Ok(Value::Rows {
                     columns: result.columns,
                     rows: result.rows,
-                    result_type: result_type.clone(),
+                    metadata: Box::new(SqlRowsMetadata {
+                        nulls: result.nulls,
+                        column_types: result.column_types,
+                    }),
+                    result_type: Box::new(result_type.clone()),
                 })
             }
             ExprKind::Await(inner) => self.eval(inner, env),

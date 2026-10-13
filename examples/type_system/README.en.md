@@ -50,7 +50,7 @@ diagnostic. These cases do not belong in the successful program run.
 | `HttpResult<T>`, `HttpResponse`, `HttpError` | 🧪 specialized | HTTP subsystem types for network responses and errors; no general literals or constructors. |
 | Generics | 🧪 partial | User-defined generic functions, records, and enums support inference or explicit type arguments. General constraints/traits, generic aliases, and generic function values are out of scope. Generic parameters support operations only when the concrete type is known. |
 | Type aliases and custom types | 🧪 partial | `type Name = ...`, records, and enums exist. Generic records and enums retain nominal type arguments at runtime; aliases have no separate runtime identity. |
-| `Id`, `Email`, `Url`, `Uuid`, `Money` | 🧪 specialized | Named string domain values for API/schema use; no separate numeric or identity rules in the runtime. |
+| `Id`, `Email`, `Url`, `Uuid`, `Money` | 🧪 specialized | API/schema scalar domains. Explicit SQL decoding uses checked Int for Id, DECIMAL(19,4) for Money, and text for Email/Url/Uuid. No new identity or domain-content rules; explicit aliases retain precedence. |
 | Functions as values | 🧪 partial | Named, non-generic functions can be stored with `&name`, passed, and called indirectly through a typed `Function<(...) -> ...>` value. Capabilities remain checked statically and at runtime. Closures, captured local functions, and generic function values are not supported. |
 
 ## Conversions, defaults, and copies
@@ -102,5 +102,7 @@ ISO years 0001–9999 fails in a controlled way.
 
 Native Date/Time/UTC Timestamp SQL parameters/storage are verified against
 MariaDB/MySQL/PostgreSQL: [SQL evidence](../../docs/release-readiness/0.9.9-calendar-sql.en.md).
-MariaDB/MySQL begin at year 1000, PostgreSQL at year 0001. Typed SQL result
-consumption remains open; raw rows are not Date variables.
+MariaDB/MySQL begin at year 1000, PostgreSQL at year 0001.
+[`sql_decode<T>`](../../docs/sql-results.en.md) materializes typed scalar/record/
+array results with cardinality, native type and NULL checks. Raw rows remain
+available with their existing text/HTTP representation.

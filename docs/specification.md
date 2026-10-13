@@ -775,6 +775,7 @@ is bounded to ISO years 0001–9999. API handlers receive real Date/Time/Timesta
 Duration values. JSON output stays unchanged; generated clients match it.
 Native Date/Time/UTC Timestamp parameters and millisecond storage are verified
 on MariaDB, MySQL and PostgreSQL. Incompatible schema types/precision fail
-with a source position before application use. Typed SQL result consumption
-remains a gate. See [rules](dates.en.md), [HTTP evidence](release-readiness/0.9.9-calendar-http.en.md)
+with a source position before application use. Explicit
+[`sql_decode<T>`](sql-results.en.md) provides typed scalar/record/array results,
+cardinality and NULL checks; the legacy raw-row JSON format stays unchanged. See [rules](dates.en.md), [HTTP evidence](release-readiness/0.9.9-calendar-http.en.md)
 and [SQL evidence](release-readiness/0.9.9-calendar-sql.en.md).
