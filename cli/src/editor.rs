@@ -3331,6 +3331,28 @@ fn check_project(
     ))
 }
 
+fn zelyra_executable() -> Result<PathBuf, (u16, String)> {
+    if let Some(path) = option_env!("CARGO_BIN_EXE_zelyra") {
+        let candidate = PathBuf::from(path);
+        if candidate.is_file() {
+            return Ok(candidate);
+        }
+    }
+    if let Ok(current) = env::current_exe() {
+        if let Some(name) = current.file_name().and_then(|n| n.to_str()) {
+            if name.starts_with("zelyra-") {
+                if let Some(bin) = current.parent().and_then(|p| p.parent()).map(|p| p.join("zelyra")) {
+                    if bin.is_file() {
+                        return Ok(bin);
+                    }
+                }
+            }
+        }
+        return Ok(current);
+    }
+    Err((500, "could not locate the running Zelyra CLI".into()))
+}
+
 fn run_editor_program(
     state: &EditorState,
     value: &Value,
@@ -3363,8 +3385,8 @@ fn run_editor_program(
             return start_editor_web_app(state, relative, database_name.as_deref());
         }
     }
-    let executable =
-        env::current_exe().map_err(|_| (500, "could not locate the running Zelyra CLI".into()))?;
+
+    let executable = zelyra_executable()?;
     let mut child = Command::new(executable)
         .arg("run")
         .arg(relative)
@@ -3429,8 +3451,31 @@ fn start_editor_web_app(
     relative: &str,
     database_name: Option<&str>,
 ) -> Result<(u16, &'static str, String), (u16, String)> {
-    let executable =
-        env::current_exe().map_err(|_| (500, "could not locate the running Zelyra CLI".into()))?;
+    let executable = zelyra_executable()?;
+
+    // If this project defines a MariaDB compose service, make sure the database container is running.
+    if state.root.join("docker-compose.mariadb.yml").is_file() {
+        let _ = start_mariadb_compose(&state.root, true);
+        if let Ok(db_url) = expanded_database_url(&state.root) {
+            if let Ok(parsed) = url::Url::parse(&db_url) {
+                if let Some(host) = parsed.host_str() {
+                    let port = parsed.port().unwrap_or(3306);
+                    let addr_str = format!("{host}:{port}");
+                    if let Ok(sock_addr) = addr_str.parse() {
+                        for _ in 0..10 {
+                            if TcpStream::connect_timeout(&sock_addr, Duration::from_millis(200)).is_ok() {
+                                break;
+                            }
+                            thread::sleep(Duration::from_millis(200));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // Attempt local schema bootstrap if configured, ensuring tables and fixed-point precisions exist.
+    let _ = run_local_schema_setup(&state.root);
+
     let listener = std::net::TcpListener::bind("127.0.0.1:0")
         .map_err(|_| (500, "could not reserve a local preview port".into()))?;
     let address = listener
@@ -3453,8 +3498,25 @@ fn start_editor_web_app(
         .arg(address.to_string())
         .current_dir(&state.root)
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let env_path = state.root.join(".env");
+    if let Ok(content) = fs::read_to_string(&env_path) {
+        for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            let line = line.strip_prefix("export ").unwrap_or(line);
+            if let Some((key, value)) = line.split_once('=') {
+                let key = key.trim();
+                let value = value.trim().trim_matches('"').trim_matches('\'');
+                if !key.is_empty() && env::var(key).is_err() {
+                    command.env(key, value);
+                }
+            }
+        }
+    }
     if database_url_from_environment(database_name).is_none() {
         if let Ok(database_url) = expanded_database_url(&state.root) {
             command.env("DATABASE_URL", &database_url);
@@ -3467,6 +3529,18 @@ fn start_editor_web_app(
         .spawn()
         .map_err(|_| (500, "could not start the local web application".into()))?;
 
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or((500, "could not capture web application output".into()))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or((500, "could not capture web application errors".into()))?;
+    let stdout_reader = read_editor_output(stdout);
+    let stderr_reader = read_editor_output(stderr);
+    let started = std::time::Instant::now();
+
     let preview_url = format!("http://{address}");
     let ready_by = std::time::Instant::now() + Duration::from_secs(10);
     loop {
@@ -3474,9 +3548,31 @@ fn start_editor_web_app(
             .try_wait()
             .map_err(|_| (500, "could not read the web application status".into()))?
         {
-            return Err((
-                422,
-                format!("web application exited with {status}; check the project and database configuration"),
+            let (stdout_bytes, stdout_truncated) = collect_editor_output(stdout_reader);
+            let (stderr_bytes, stderr_truncated) = collect_editor_output(stderr_reader);
+            let secrets = editor_secret_values(state);
+            let stdout = redact_editor_secrets(String::from_utf8_lossy(&stdout_bytes).into_owned(), &secrets);
+            let mut stderr = redact_editor_secrets(String::from_utf8_lossy(&stderr_bytes).into_owned(), &secrets);
+            if stderr.contains("E-DB-PRECISION")
+                || stderr.contains("could not verify declared Decimal/Money/UInt storage")
+                || stderr.contains("fixed-point storage")
+                || stderr.to_ascii_lowercase().contains("connection refused")
+            {
+                stderr.push_str("\n\nHinweis: Die MariaDB-Datenbank ist nicht erreichbar oder das Datenbankschema wurde noch nicht eingerichtet.\nFühre im Projektverzeichnis `zelyra setup . --all` oder `zelyra db apply main.zyl` aus, oder starte den MariaDB-Dienst.");
+            }
+            return Ok((
+                200,
+                "application/json; charset=utf-8",
+                json!({
+                    "success": false,
+                    "webApp": false,
+                    "exitCode": status.code(),
+                    "durationMs": started.elapsed().as_millis(),
+                    "stdout": stdout,
+                    "stderr": stderr,
+                    "truncated": stdout_truncated || stderr_truncated,
+                })
+                .to_string(),
             ));
         }
         if TcpStream::connect_timeout(&address, Duration::from_millis(100)).is_ok() {
@@ -3490,7 +3586,7 @@ fn start_editor_web_app(
                     "webUrl": preview_url,
                     "stdout": "",
                     "stderr": "",
-                    "durationMs": 0,
+                    "durationMs": started.elapsed().as_millis(),
                     "truncated": false,
                 })
                 .to_string(),
@@ -3499,9 +3595,36 @@ fn start_editor_web_app(
         if std::time::Instant::now() >= ready_by {
             let _ = child.kill();
             let _ = child.wait();
-            return Err((
-                504,
-                "web application did not become ready within 10 seconds".into(),
+            let (stdout_bytes, stdout_truncated) = collect_editor_output(stdout_reader);
+            let (stderr_bytes, stderr_truncated) = collect_editor_output(stderr_reader);
+            let secrets = editor_secret_values(state);
+            let stdout = redact_editor_secrets(String::from_utf8_lossy(&stdout_bytes).into_owned(), &secrets);
+            let mut stderr = redact_editor_secrets(String::from_utf8_lossy(&stderr_bytes).into_owned(), &secrets);
+            if stderr.is_empty() {
+                stderr = "Web application did not become ready within 10 seconds; check project and database configuration.".to_string();
+            }
+            if stderr.contains("E-DB-PRECISION")
+                || stderr.contains("could not verify declared Decimal/Money/UInt storage")
+                || stderr.contains("fixed-point storage")
+                || stderr.to_ascii_lowercase().contains("connection refused")
+                || stderr.contains("within 10 seconds")
+            {
+                stderr.push_str("\n\nHinweis: Die MariaDB-Datenbank ist nicht erreichbar oder das Datenbankschema wurde noch nicht eingerichtet.\nFühre im Projektverzeichnis `zelyra setup . --all` oder `zelyra db apply main.zyl` aus, oder starte den MariaDB-Dienst.");
+            }
+            return Ok((
+                200,
+                "application/json; charset=utf-8",
+                json!({
+                    "success": false,
+                    "webApp": false,
+                    "timedOut": true,
+                    "exitCode": None::<i32>,
+                    "durationMs": started.elapsed().as_millis(),
+                    "stdout": stdout,
+                    "stderr": stderr,
+                    "truncated": stdout_truncated || stderr_truncated,
+                })
+                .to_string(),
             ));
         }
         thread::sleep(Duration::from_millis(50));
@@ -4570,5 +4693,32 @@ fn main() {}
         );
         drop(preview);
         assert!(!path.exists(), "preview directory is cleaned up");
+    }
+
+    #[test]
+    fn run_editor_program_reports_diagnostics_when_web_app_fails_preflight() {
+        let state = project();
+        let path = state.root.join("main.zyl");
+        fs::write(
+            state.root.join("zelyra.toml"),
+            "name = \"test\"\n\n[capabilities]\ndatabase = true\n",
+        ).expect("write config");
+        let source = "database main { engine: mariadb }\ntable items { id: Id primary auto unit_price: Decimal required }\npage \"/\" { html { <h1>Test</h1> } }\n";
+        fs::write(&path, source).expect("write web fixture");
+        fs::write(
+            state.root.join(".env"),
+            "DATABASE_URL=mariadb://invalid:invalid@127.0.0.1:1/nonexistent\nZELYRA_DB_CONNECT_TIMEOUT_SECS=1\n",
+        ).expect("write invalid env");
+
+        let response = run_editor_program(&state, &json!({"path": "main.zyl"}))
+            .expect("should return a formatted response instead of throwing 422");
+        assert_eq!(response.0, 200);
+        let payload: Value = serde_json::from_str(&response.2).expect("decode result");
+        assert_eq!(payload["success"], false);
+        assert_eq!(payload["webApp"], false);
+        let stderr = payload["stderr"].as_str().unwrap_or_default();
+        assert!(stderr.contains("E-DB-PRECISION"));
+        assert!(stderr.contains("Hinweis:"));
+        let _ = fs::remove_dir_all(state.root.clone());
     }
 }
