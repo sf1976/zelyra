@@ -4375,10 +4375,7 @@ fn project_file_database_url_for_compose(
 fn project_database_host_port(directory: &std::path::Path) -> Result<String, String> {
     let env_path = directory.join(".env");
     let process_port = env::var("ZELYRA_DB_HOST_PORT").ok();
-    let process_port_is_set = process_port
-        .as_deref()
-        .is_some_and(|port| !port.trim().is_empty());
-    let file_port = if !process_port_is_set && env_path.is_file() {
+    let file_port = if process_port.is_none() && env_path.is_file() {
         read_env_value(&env_path.to_string_lossy(), "ZELYRA_DB_HOST_PORT")?
     } else {
         None
@@ -4387,11 +4384,14 @@ fn project_database_host_port(directory: &std::path::Path) -> Result<String, Str
 }
 
 fn resolve_database_host_port(process_port: Option<String>, file_port: Option<String>) -> String {
-    process_port
-        .filter(|port| !port.trim().is_empty())
-        .or_else(|| file_port.filter(|port| !port.trim().is_empty()))
-        .map(|port| port.trim().to_owned())
-        .unwrap_or_else(|| DEFAULT_DATABASE_HOST_PORT.to_string())
+    match process_port {
+        Some(port) if port.is_empty() => DEFAULT_DATABASE_HOST_PORT.to_string(),
+        Some(port) => port,
+        None => file_port
+            .filter(|port| !port.trim().is_empty())
+            .map(|port| port.trim().to_owned())
+            .unwrap_or_else(|| DEFAULT_DATABASE_HOST_PORT.to_string()),
+    }
 }
 
 fn is_project_mariadb_compose_target(database_url: &str, project_host_port: &str) -> bool {

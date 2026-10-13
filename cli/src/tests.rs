@@ -423,16 +423,20 @@ fn project_database_url_expands_the_configured_local_host_port() {
 #[test]
 fn empty_database_host_ports_use_the_compose_fallback() {
     assert_eq!(
-        resolve_database_host_port(Some(String::new()), None),
+        resolve_database_host_port(Some(String::new()), Some("3308".into())),
         "3306"
     );
     assert_eq!(
         resolve_database_host_port(Some("  ".into()), Some("3308".into())),
-        "3308"
+        "  "
     );
     assert_eq!(
         resolve_database_host_port(Some("3307".into()), Some("3308".into())),
         "3307"
+    );
+    assert_eq!(
+        resolve_database_host_port(None, Some("3308".into())),
+        "3308"
     );
 }
 
