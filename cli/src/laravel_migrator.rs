@@ -9,8 +9,8 @@ const MAX_SOURCE_FILES: usize = 10_000;
 const MAX_SOURCE_FILE_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_TOTAL_SOURCE_BYTES: u64 = 256 * 1024 * 1024;
 const MAX_DIRECTORY_DEPTH: usize = 64;
-const ANALYZER_VERSION: &str = "0.9.8";
-const MAPPING_RULESET_VERSION: &str = "0.9.6";
+const ANALYZER_VERSION: &str = "0.9.9";
+const MAPPING_RULESET_VERSION: &str = "0.9.9";
 
 #[derive(Clone)]
 struct Finding {
@@ -205,7 +205,7 @@ fn generate_scaffold(
         let staged_report = staging.join("MIGRATION_REPORT.json");
         let analysis = analyze(&root, &staged_report, "json")?;
         let counts = analysis.counts;
-        let report_json: Value = serde_json::from_slice(
+        let report_json: Value = zelyra_ast::json::parse_slice(
             &fs::read(&staged_report)
                 .map_err(|error| format!("could not read staged report: {error}"))?,
         )
@@ -607,8 +607,8 @@ fn read_composer_metadata(root: &Path) -> Result<(Option<String>, Vec<String>), 
     if source.len() as u64 > MAX_SOURCE_FILE_BYTES {
         return Err("composer.json exceeds the 2 MiB file limit".into());
     }
-    let value: Value =
-        serde_json::from_str(&source).map_err(|_| "composer.json is not valid JSON".to_owned())?;
+    let value: Value = zelyra_ast::json::parse(&source)
+        .map_err(|_| "composer.json is not valid JSON".to_owned())?;
     let dependencies = ["require", "require-dev"]
         .into_iter()
         .filter_map(|key| value.get(key).and_then(Value::as_object))
@@ -624,7 +624,14 @@ fn read_composer_metadata(root: &Path) -> Result<(Option<String>, Vec<String>), 
         .map(|(_, version)| version.clone());
     let relevant = dependencies
         .into_iter()
-        .filter(|(name, _)| name.starts_with("laravel/") || name.starts_with("illuminate/"))
+        .filter(|(name, _)| {
+            name.starts_with("laravel/")
+                || name.starts_with("illuminate/")
+                || name.starts_with("spatie/")
+                || name == "stripe/stripe-php"
+                || name.starts_with("inertiajs/")
+                || name.starts_with("livewire/")
+        })
         .map(|(name, version)| format!("{name} {version}"))
         .collect();
     Ok((framework, relevant))
@@ -753,6 +760,56 @@ fn scan_source(file: &str, source: &str, findings: &mut Vec<Finding>) {
             "file upload or download",
             "A file upload/download operation appears; path confinement, content validation, authorization, and storage exposure are not analyzed.",
             "Review size and content limits, path traversal, tenant ownership, authorization, and download response headers.",
+        );
+    }
+    let payment = Regex::new(
+        r"(?i)(\b(?:charge|paymentMethod|checkout|subscribe|subscription|refund)\s*\(|Cashier\s*::|Stripe\s*::)",
+    )
+    .expect("static payment regex");
+    for matched in payment.find_iter(source) {
+        add_match(
+            findings,
+            file,
+            source,
+            matched.range(),
+            "payment_rule",
+            "manual",
+            "payment or billing operation",
+            "A payment, checkout, or billing operation appears; payment processor contracts, webhooks, idempotency keys, and refunds are not analyzed.",
+            "Map payment flows to explicit external webhooks and verified transaction records with numeric precision.",
+        );
+    }
+    let ambiguity = Regex::new(
+        r"(?i)(DB\s*::\s*(?:raw|selectRaw|whereRaw|havingRaw|orderByRaw)\s*\(|eval\s*\(|call_user_func(?:_array)?\s*\(|->\s*action\s*\(\s*\$)",
+    )
+    .expect("static ambiguity regex");
+    for matched in ambiguity.find_iter(source) {
+        add_match(
+            findings,
+            file,
+            source,
+            matched.range(),
+            "ambiguity",
+            "manual",
+            "dynamic or unparsed SQL/execution ambiguity",
+            "Dynamic dispatch, raw SQL expression, or runtime execution found; static type safety and dialect compatibility cannot be verified.",
+            "Replace raw SQL or dynamic dispatch with structured Zelyra typed queries and explicit routes.",
+        );
+    }
+    let env_call =
+        Regex::new(r#"(?i)\benv\s*\(\s*['"]([^'"]+)['"]"#).expect("static env call regex");
+    for capture in env_call.captures_iter(source) {
+        let var_name = capture.get(1).unwrap().as_str();
+        add_match(
+            findings,
+            file,
+            source,
+            capture.get(0).unwrap().range(),
+            "environment_access",
+            "manual",
+            format!("env('{var_name}') access"),
+            "Direct env() access in source code; environment variables outside config files are fragile and values are never read or copied into reports.",
+            "Define explicit Zelyra configuration or module capabilities instead of runtime env lookups.",
         );
     }
     for (needle, kind, label) in [
@@ -886,8 +943,8 @@ mod tests {
         let analysis = analyze(&root, &report, "json").unwrap();
         let body = fs::read_to_string(&analysis.report_path).unwrap();
         assert!(body.contains("/orders"));
-        assert!(body.contains("Zelyra Laravel Migrator 0.9.8"));
-        assert!(body.contains("\"mapping_ruleset\": \"0.9.6\""));
+        assert!(body.contains("Zelyra Laravel Migrator 0.9.9"));
+        assert!(body.contains("\"mapping_ruleset\": \"0.9.9\""));
         assert!(!body.contains("must-not-be-read-or-reported"));
         assert!(!body.contains("/secret"));
         assert!(analysis.counts.total >= 1);
@@ -941,6 +998,9 @@ $path = $request->file('attachment')->store('invoices');
 $request->validate([]);
 return $this->hasMany(Invoice::class);
 Mail::to($email)->send($message);
+$customer->charge(5000);
+DB::raw("NOW()");
+$key = env('STRIPE_SECRET');
 "#;
         let mut findings = Vec::new();
         scan_source("app/Customer.php", source, &mut findings);
@@ -976,6 +1036,15 @@ Mail::to($email)->send($message);
         assert!(findings
             .iter()
             .any(|item| item.kind == "file_access" && item.status == "manual"));
+        assert!(findings
+            .iter()
+            .any(|item| item.kind == "payment_rule" && item.status == "manual"));
+        assert!(findings
+            .iter()
+            .any(|item| item.kind == "ambiguity" && item.status == "manual"));
+        assert!(findings
+            .iter()
+            .any(|item| item.kind == "environment_access" && item.status == "manual"));
         assert!(findings
             .iter()
             .any(|item| item.kind == "integration" && item.name == "mail integration"));

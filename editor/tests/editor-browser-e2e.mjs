@@ -12,6 +12,7 @@ try {
   const browserErrors = [];
   const liveChecks = [];
   const databaseRowRequests = [];
+  const chartRequests = [];
   let databaseCreateRequest = null;
   let schemaApplyRequest = null;
   let schemaSourceHash = "";
@@ -31,9 +32,13 @@ try {
         name: "customers", status: "matched", declared_columns: [
           { name: "id", type: "BIGINT", nullable: false, primary_key: true, auto_increment: true, unique: false },
           { name: "name", type: "VARCHAR(100)", zelyra_type: "String(100)", zelyra_required: true, nullable: false, primary_key: false, auto_increment: false, unique: false },
+          { name: "amount", type: "DECIMAL(10,2)", sql_type: "DECIMAL(10,2)", zelyra_type: "Decimal", zelyra_required: true, nullable: false, primary_key: false, auto_increment: false, unique: false },
+          { name: "created_at", type: "DATE", sql_type: "DATE", zelyra_type: "Date?", nullable: true, primary_key: false, auto_increment: false, unique: false },
         ], live_columns: [
           { name: "id", type: "BIGINT", nullable: false, primary_key: true, auto_increment: true, unique: false },
           { name: "name", type: "VARCHAR(100)", zelyra_type: "String(100)", zelyra_required: true, nullable: false, primary_key: false, auto_increment: false, unique: false },
+          { name: "amount", type: "DECIMAL(10,2)", sql_type: "DECIMAL(10,2)", zelyra_type: "Decimal", zelyra_required: true, nullable: false, primary_key: false, auto_increment: false, unique: false },
+          { name: "created_at", type: "DATE", sql_type: "DATE", zelyra_type: "Date?", nullable: true, primary_key: false, auto_increment: false, unique: false },
         ], foreign_keys: [], live_foreign_keys: [],
       }] }], unmapped_live_tables: [], crud_resources: [{ table: "customers", name: "CustomerResource" }], crud_targets: ["main.zyl"],
     }),
@@ -69,6 +74,17 @@ try {
         nextOffset: url.searchParams.get("offset") === "25" ? null : 25,
         truncated: false,
       }),
+    });
+  });
+  await page.route("**/__zelyra/editor/api/database-chart-preview", async (route) => {
+    const request = route.request();
+    assert.equal(request.headers()["x-zelyra-editor-token"], token, "chart queries must use the local editor session token");
+    const spec = request.postDataJSON();
+    chartRequests.push(spec);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ readOnly: true, table: spec.table, groupBy: spec.groupBy, aggregation: spec.aggregation, measure: spec.measure, columns: [spec.groupBy, "value"], rows: [["Anna <script>", "12.5"], ["Bert & Co", "7"]], limit: 20, truncated: false }),
     });
   });
   await page.route("**/__zelyra/editor/api/schema-column-preview", async (route) => {
@@ -110,10 +126,14 @@ try {
       }),
     });
   });
-  await page.goto(url);
+  await page.goto(url, { waitUntil: "domcontentloaded" });
   assert.equal(new URL(page.url()).hash, "", "the session token must be removed from the address bar");
+  const startupSplash = page.locator("#studio-splash");
+  await startupSplash.waitFor({ state: "visible" });
+  assert.equal(await startupSplash.getAttribute("aria-label"), "Zelyra Studio wird gestartet");
   await page.locator(".cm-content[contenteditable=true]").waitFor({ timeout: 10_000 });
   await page.locator('.tree-item.file[title="main.zyl"]').waitFor();
+  await startupSplash.waitFor({ state: "detached", timeout: 5_000 });
   const themeButton = page.locator("#theme-button");
   await themeButton.click();
   assert.equal(await page.locator("html").getAttribute("data-theme"), "light");
@@ -156,6 +176,41 @@ try {
   await themeButton.focus();
   await page.keyboard.press("Space");
   assert.equal(await page.locator("html").getAttribute("data-theme"), "light", "keyboard users must be able to switch the Studio appearance");
+
+  const fontSizeButton = page.locator("#font-size-button");
+  assert.equal(await fontSizeButton.textContent(), "aA");
+  assert.equal(await page.locator("html").getAttribute("data-font-size"), null);
+  await fontSizeButton.click();
+  assert.equal(await page.locator("html").getAttribute("data-font-size"), "medium");
+  assert.equal(await fontSizeButton.textContent(), "aA⁺");
+  assert.equal(await page.locator(".cm-editor").evaluate((element) => getComputedStyle(element).fontSize), "16px");
+
+  await fontSizeButton.click();
+  assert.equal(await page.locator("html").getAttribute("data-font-size"), "large");
+  assert.equal(await fontSizeButton.textContent(), "aA⁺⁺");
+  assert.equal(await page.locator(".cm-editor").evaluate((element) => getComputedStyle(element).fontSize), "18px");
+
+  await fontSizeButton.click();
+  assert.equal(await page.locator("html").getAttribute("data-font-size"), null);
+  assert.equal(await fontSizeButton.textContent(), "aA");
+  assert.equal(await page.locator(".cm-editor").evaluate((element) => getComputedStyle(element).fontSize), "14px");
+
+  await page.keyboard.press("Control+=");
+  assert.equal(await page.locator("html").getAttribute("data-font-size"), "medium");
+  await page.keyboard.press("Control+=");
+  assert.equal(await page.locator("html").getAttribute("data-font-size"), "large");
+
+  await page.reload();
+  await page.locator(".cm-content[contenteditable=true]").waitFor({ timeout: 10_000 });
+  assert.equal(await page.locator("html").getAttribute("data-font-size"), "large", "the selected font size must survive reload");
+  assert.equal(await page.locator(".cm-editor").evaluate((element) => getComputedStyle(element).fontSize), "18px");
+
+  await page.keyboard.press("Control+-");
+  assert.equal(await page.locator("html").getAttribute("data-font-size"), "medium");
+  await page.keyboard.press("Control+0");
+  assert.equal(await page.locator("html").getAttribute("data-font-size"), null);
+  assert.equal(await page.locator(".cm-editor").evaluate((element) => getComputedStyle(element).fontSize), "14px");
+
   await page.locator("#task-finder-button").click();
   assert.equal(await page.locator("#task-finder").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)");
   await page.locator("#task-finder-input").fill("no such studio action");
@@ -254,6 +309,86 @@ try {
   ]);
   await page.locator("#database-record-previous").click();
   await page.getByRole("cell", { name: "1" }).waitFor();
+  await page.locator("#schema-column-operation").selectOption("edit");
+
+  await page.locator("#chart-name").fill("Umsatz nach Kunde");
+  await page.locator("#chart-group").selectOption("name");
+  await page.locator("#chart-aggregation").selectOption("sum");
+  await page.locator("#chart-measure").selectOption("amount");
+  await page.locator("#chart-kind").selectOption("line");
+  await page.locator("#chart-filter-column").selectOption("name");
+  await page.locator("#chart-filter-value").fill("Anna' OR 1=1 --");
+  await page.locator("#chart-period-column").selectOption("created_at");
+  await page.locator("#chart-period-from").fill("2026-10-01");
+  await page.locator("#chart-period-to").fill("2026-10-31");
+  await page.locator("#chart-preview-button").click();
+  try {
+    await page.locator("#chart-svg .chart-line").waitFor();
+  } catch (error) {
+    throw new Error(`${error.message}\nchart state: ${await page.locator("#chart-state").textContent()}\nrequests: ${JSON.stringify(chartRequests)}\nbrowser errors: ${JSON.stringify(browserErrors)}`);
+  }
+  assert.equal(await page.locator("#chart-data-table-wrap").innerText(), "Gruppe\tWert\nAnna <script>\t12,5\nBert & Co\t7");
+  assert.equal(await page.locator("#chart-data-table-wrap script").count(), 0, "chart labels must render as text, not markup");
+  assert.equal(chartRequests.at(-1).aggregation, "sum");
+  assert.equal(chartRequests.at(-1).measure, "amount");
+  assert.deepEqual(chartRequests.at(-1).filter, { column: "name", value: "Anna' OR 1=1 --" });
+  assert.deepEqual(chartRequests.at(-1).dateRange, { column: "created_at", from: "2026-10-01", to: "2026-10-31" });
+  await page.locator("#chart-save-button").click();
+  try {
+    await page.waitForFunction(() => document.querySelector("#chart-state")?.textContent.includes("chart-umsatz-nach-kunde.zchart.json"));
+  } catch (error) {
+    throw new Error(`${error.message}\nchart state after save: ${await page.locator("#chart-state").textContent()}\nstatus bar: ${await page.locator("#status-message").textContent()}\nbrowser errors: ${JSON.stringify(browserErrors)}`);
+  }
+  await page.locator("#saved-chart-select").selectOption("chart-umsatz-nach-kunde.zchart.json");
+  await page.locator("#saved-chart-add").click();
+  await page.waitForFunction(() => document.querySelectorAll("#presentation-slide-list .presentation-slide-chip").length === 1);
+  assert.equal(chartRequests.at(-1).title, "Umsatz nach Kunde", "loading a saved chart must restore and recheck its configuration");
+
+  await page.locator("#chart-name").fill("Kundenzahl nach Name");
+  await page.locator("#chart-aggregation").selectOption("count");
+  await page.locator("#chart-kind").selectOption("bar");
+  await page.locator("#chart-filter-column").selectOption("");
+  await page.locator("#chart-filter-value").clear();
+  await page.locator("#chart-period-column").selectOption("");
+  await page.locator("#chart-period-from").fill("");
+  await page.locator("#chart-period-to").fill("");
+  await page.locator("#chart-preview-button").click();
+  await page.locator("#chart-svg .chart-bar").first().waitFor();
+  await page.locator("#presentation-add-button").click();
+  await page.locator("#presentation-name").fill("Monatsbericht");
+  await page.locator("#presentation-note").fill("Die wichtigsten Kennzahlen im Überblick.");
+  await page.locator("#presentation-save-button").click();
+  await page.getByText("Präsentation gespeichert: presentation-monatsbericht.zelyra-presentation.json").waitFor();
+  await page.locator("#presentation-note").fill("Die wichtigsten Kennzahlen im Überblick, aktualisiert.");
+  const presentationUpdate = page.waitForResponse((response) =>
+    response.url().includes("/api/file") && response.request().method() === "PUT",
+  );
+  await page.locator("#presentation-save-button").click();
+  assert.equal((await presentationUpdate).status(), 200, "updating a saved Zelyra presentation must use the hash-checked file API");
+  const savedPresentation = await page.evaluate(async ({ base, token }) => {
+    const response = await fetch(`${base}/api/file?path=presentation-monatsbericht.zelyra-presentation.json`, { headers: { "X-Zelyra-Editor-Token": token } });
+    return response.json();
+  }, { base, token });
+  const presentation = JSON.parse(savedPresentation.content);
+  assert.equal(presentation.schema, "zelyra.presentation.v1");
+  assert.equal(presentation.charts.length, 2, "presentations must preserve several reviewed chart configurations");
+  assert.equal(presentation.introduction, "Die wichtigsten Kennzahlen im Überblick, aktualisiert.", "saving a report again must update the existing Zelyra report safely");
+  await page.locator("#presentation-name").fill("Geänderter Titel");
+  await page.locator("#saved-presentation-select").selectOption("presentation-monatsbericht.zelyra-presentation.json");
+  await page.locator("#saved-presentation-load").click();
+  await page.waitForFunction(() => document.querySelector("#presentation-name")?.value === "Monatsbericht");
+  assert.equal(await page.locator("#presentation-note").inputValue(), "Die wichtigsten Kennzahlen im Überblick, aktualisiert.");
+  assert.equal(await page.locator("#presentation-slide-list .presentation-slide-chip").count(), 2);
+  const printPopupPromise = page.waitForEvent("popup");
+  await page.locator("#presentation-print-button").click();
+  const printPopup = await printPopupPromise;
+  await printPopup.locator(".chart-print-page").nth(2).waitFor();
+  assert.equal(await printPopup.locator("h1").innerText(), "Monatsbericht");
+  assert.equal(await printPopup.locator(".chart-print-page").count(), 3, "the print view includes a cover and both chart slides");
+  const pdf = await printPopup.pdf({ format: "A4", printBackground: true });
+  assert.ok(pdf.subarray(0, 4).toString() === "%PDF", "the presentation print view must produce a PDF");
+  await printPopup.close();
+
   await page.locator("#schema-column-operation").selectOption("edit");
   await page.locator("#schema-column-existing").selectOption("name");
   assert.equal(await page.locator("#schema-column-name").inputValue(), "name");

@@ -1,0 +1,16 @@
+class Customer {
+    id: Int
+    name: String
+}
+
+fn rename(customer: Customer, name: String) {
+    customer.name = name
+}
+
+fn main() {
+    customer = Customer { id: 1 name: "Ada" }
+    alias = customer
+    rename(customer, "Grace")
+    assert(alias.name == "Grace", "class fields are shared through aliases")
+    assert(customer == alias, "class equality compares identity")
+}

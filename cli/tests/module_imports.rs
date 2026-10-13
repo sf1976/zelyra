@@ -1029,8 +1029,9 @@ fn module_plan_and_docker_bundle_export_password_reset_smtp_contracts() {
         ),
         (
             "src/auth.zyl",
-            "auth users { table: users sessions: auth_sessions reset_tokens: password_resets audit: auth_audit_log }\ntable users { id: Id primary auto email: Email required unique password_hash: String(255) required }\ntable auth_sessions { id: Id primary auto user: User required token_hash: String(64) required unique expires_at: Timestamp required }\ntable password_resets { id: Id primary auto user: User required token_hash: String(64) required unique expires_at: Timestamp required consumed_at: Timestamp? delivery_payload: String(2048) delivery_retry_at: Timestamp? }\ntable auth_audit_log { id: Id primary auto actor_user_id: Int? event: String(100) required target_user_id: Int? details: String(1000) required created_at: Timestamp default now }\n",
+            "import \"src/reset_limits.zyl\" as reset_storage\nauth users { table: users sessions: auth_sessions reset_tokens: password_resets reset_rate_limits: password_reset_limits audit: auth_audit_log }\ntable users { id: Id primary auto email: Email required unique password_hash: String(255) required }\ntable auth_sessions { id: Id primary auto user: User required token_hash: String(64) required unique expires_at: Timestamp required }\ntable password_resets { id: Id primary auto user: User required token_hash: String(64) required unique expires_at: Timestamp required consumed_at: Timestamp? delivery_payload: String(2048) delivery_retry_at: Timestamp? }\ntable auth_audit_log { id: Id primary auto actor_user_id: Int? event: String(100) required target_user_id: Int? details: String(1000) required created_at: Timestamp default now }\n",
         ),
+        ("src/reset_limits.zyl", "table password_reset_limits { bucket_key: String(64) primary window_started: Timestamp required request_count: Int required blocked_until: Timestamp? index { window_started } access { read_write: [\"src/auth.zyl\"] } }\n"),
     ]);
     let plan = run(&directory, &["module", "plan", "main.zyl", "src/auth.zyl"]);
     assert!(
@@ -1040,6 +1041,11 @@ fn module_plan_and_docker_bundle_export_password_reset_smtp_contracts() {
         String::from_utf8_lossy(&plan.stderr)
     );
     let document: Value = serde_json::from_slice(&plan.stdout).unwrap();
+    assert!(document["plan"]["modules"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|module| module["path"] == "src/reset_limits.zyl"));
     assert_eq!(
         document["plan"]["external_service_contracts"][0]["kind"],
         "smtp"
@@ -1124,6 +1130,47 @@ fn module_plan_and_docker_bundle_export_password_reset_smtp_contracts() {
         1
     );
     assert!(!env_example.contains("must-not-be-copied"));
+    let check = run(&bundle, &["check", "main.zyl"]);
+    assert!(
+        check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&check.stderr)
+    );
+    let context = run(&directory, &["context", "main.zyl", "--format=json"]);
+    assert!(context.status.success());
+    let context: Value = serde_json::from_slice(&context.stdout).unwrap();
+    assert_eq!(
+        context["declarations"]["auth"][0]["reset_rate_limits_table"],
+        "password_reset_limits"
+    );
+    let rate_path = directory.join("src/reset_limits.zyl");
+    let rate_source = fs::read_to_string(&rate_path).unwrap();
+    fs::write(
+        &rate_path,
+        rate_source.replace("index { window_started }", ""),
+    )
+    .unwrap();
+    let invalid = run(&directory, &["check", "main.zyl", "--format=json"]);
+    assert!(!invalid.status.success());
+    let invalid: Value = serde_json::from_slice(&invalid.stdout).unwrap();
+    assert!(invalid["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|diagnostic| {
+            diagnostic["code"] == "E-AUTH-041" && diagnostic["file"] == "src/auth.zyl"
+        }));
+    fs::write(&rate_path, rate_source.replace("read_write:", "read:")).unwrap();
+    let denied = run(&directory, &["check", "main.zyl", "--format=json"]);
+    assert!(!denied.status.success());
+    let denied: Value = serde_json::from_slice(&denied.stdout).unwrap();
+    assert!(denied["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|diagnostic| {
+            diagnostic["code"] == "E-MOD-021" && diagnostic["file"] == "src/auth.zyl"
+        }));
     fs::remove_dir_all(bundle).unwrap();
     fs::remove_dir_all(directory).unwrap();
 }

@@ -1,0 +1,6 @@
+fn increment(value: Int) -> Int { return value + 1 }
+fn main() {
+    left = &increment
+    right = &increment
+    assert(left == right)
+}

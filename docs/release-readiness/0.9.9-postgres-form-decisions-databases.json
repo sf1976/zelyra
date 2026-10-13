@@ -1,0 +1,42 @@
+[
+  {
+    "engine": "postgres",
+    "suite": "tests/postgres-form-decisions-e2e.py",
+    "server_version": "PostgreSQL 16.15 (Debian 16.15-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "tests_passed": 9,
+    "tests_failed": 0,
+    "scenarios": [
+      "1. Form presentation & cross-tenant FK option isolation",
+      "2. Successful edit mutation & atomic audit on PostgreSQL",
+      "3. Cross-tenant FK tampering rejection (422 Unprocessable Entity)",
+      "4. Optimistic edit snapshots (NULL <-> literal \\N) on PostgreSQL",
+      "5. Two-connection race on membership revocation during lock wait",
+      "6. Atomic rollback of business mutation on audit trigger failure",
+      "7. Successful action retry & connection pool reuse after rollback",
+      "8. Post-only recipient guard reassignment rejection",
+      "9. Unauthorized tenant selection and missing membership rejection"
+    ],
+    "exit": 0
+  },
+  {
+    "engine": "postgres",
+    "suite": "tests/null-edit-snapshots-e2e.py",
+    "server_version": "PostgreSQL 16.15 (Debian 16.15-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "controlled_stale_edits": 3,
+    "exit": 0
+  },
+  {
+    "engine": "mariadb",
+    "suite": "tests/null-edit-snapshots-e2e.py",
+    "server_version": "11.4.13-MariaDB-ubu2404",
+    "controlled_stale_edits": 3,
+    "exit": 0
+  },
+  {
+    "engine": "mysql",
+    "suite": "tests/null-edit-snapshots-e2e.py",
+    "server_version": "8.4.11",
+    "controlled_stale_edits": 3,
+    "exit": 0
+  }
+]

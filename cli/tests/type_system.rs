@@ -66,6 +66,27 @@ fn type_coverage_program_passes_supported_tests_and_reports_expected_failures() 
         String::from_utf8_lossy(&run.stderr)
     );
     let output = String::from_utf8_lossy(&run.stdout);
+    let generic_example = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("examples/generic_functions.zyl");
+    for source in [
+        project.join("main.zyl"),
+        project.join("src/generics.zyl"),
+        generic_example,
+    ] {
+        let result = Command::new(binary())
+            .args(["fmt", "--check"])
+            .arg(&source)
+            .current_dir(&project)
+            .output()
+            .expect("Zelyra formatter should run");
+        assert!(
+            result.status.success(),
+            "formatter rejected {}: {}",
+            source.display(),
+            String::from_utf8_lossy(&result.stderr)
+        );
+    }
     for expected in [
         "PASS Int/UInt ranges",
         "PASS Decimal exact base-10 arithmetic and Float binary precision",
@@ -75,10 +96,12 @@ fn type_coverage_program_passes_supported_tests_and_reports_expected_failures() 
         "PASS records, nested fields",
         "PASS Unit type, function return",
         "PASS Option, Result, records",
-        "PASS calendar arithmetic, Timestamp ordering, Decimal quantization, exclusive ranges",
-        "PASS unit enums, equality, exhaustive match and JSON round trip",
-        "Report: 10 positive type groups; 8 expected compiler errors and 18 expected runtime errors",
-        "Type matrix: 18 supported entries, 5 partial entries, 2 unavailable entries",
+        "PASS calendar arithmetic, Timestamp ordering, Decimal quantization, scalar text formatting, exclusive ranges",
+        "PASS unit and payload enums, equality, exhaustive match and JSON round trip",
+        "PASS named typed function values, argument checking and indirect calls",
+        "PASS classes, shared references, identity equality and checked field updates",
+        "Report: 13 positive type groups; 27 expected compiler errors and 21 expected runtime errors",
+        "Type matrix: 19 supported entries, 6 partial entries, 0 unavailable entries",
         "Unexpected failures: 0 when the CLI integration test passes",
         "alle ausführbaren Typprüfungen bestanden",
     ] {
@@ -103,12 +126,82 @@ fn type_coverage_program_passes_supported_tests_and_reports_expected_failures() 
             "unsupported_set.zyl",
             "Set elements must be scalar comparable types",
         ),
+        (
+            "generic_explicit_mismatch.zyl",
+            "type mismatch: expected `Int`, found `String`",
+        ),
+        ("generic_uninferred.zyl", "E-TYPE-GENERIC-001"),
+        ("generic_wrong_arity.zyl", "E-TYPE-GENERIC-001"),
+        (
+            "enum_payload_type.zyl",
+            "type mismatch: expected `Int`, found `String`",
+        ),
+        (
+            "enum_payload_arity.zyl",
+            "expects 2 payload value(s), found 1",
+        ),
+        ("enum_non_exhaustive_payload.zyl", "non-exhaustive match"),
+        ("enum_unknown_payload_type.zyl", "unknown type `Missing`"),
+        (
+            "function_value_argument_type.zyl",
+            "type mismatch: expected `Int`, found `String`",
+        ),
+        (
+            "function_value_generic_reference.zyl",
+            "cannot be stored as a function value yet",
+        ),
+        ("function_value_missing_capability.zyl", "Clock"),
+        ("unsupported_format_text.zyl", "E-TYPE-FORMAT-001"),
+        (
+            "function_value_equality.zyl",
+            "function values cannot be compared",
+        ),
+        (
+            "class_field_type.zyl",
+            "type mismatch: expected `Int`, found `String`",
+        ),
+        (
+            "record_field_mutation.zyl",
+            "field assignment requires a class instance",
+        ),
+        (
+            "class_json_encode.zyl",
+            "class references cannot be serialized directly",
+        ),
+        (
+            "class_json_decode.zyl",
+            "json_decode does not support class types",
+        ),
+        (
+            "class_nested_json_encode.zyl",
+            "class references cannot be serialized directly",
+        ),
+        (
+            "class_unknown_field.zyl",
+            "unknown field `missing` in class `Counter`",
+        ),
+        (
+            "class_record_with.zyl",
+            "record_with cannot copy or update a class reference",
+        ),
     ] {
         let path = format!("expected/compiler/{fixture}");
         let result = cli(&project, &["check", &path]);
         let stderr = String::from_utf8_lossy(&result.stderr);
         assert!(!result.status.success(), "{fixture} unexpectedly compiled");
         assert!(stderr.contains(expected), "{fixture}: {stderr}");
+        if matches!(
+            fixture,
+            "class_field_type.zyl"
+                | "class_unknown_field.zyl"
+                | "record_field_mutation.zyl"
+                | "class_record_with.zyl"
+        ) {
+            assert!(
+                stderr.contains("E-TYPE-CLASS-001"),
+                "{fixture} should use the stable class diagnostic: {stderr}"
+            );
+        }
     }
 
     for (fixture, expected) in [
@@ -144,6 +237,18 @@ fn type_coverage_program_passes_supported_tests_and_reports_expected_failures() 
         (
             "unsupported_result_json.zyl",
             "does not support target type `Result<Int, String>`",
+        ),
+        (
+            "function_value_json.zyl",
+            "cannot serialize a function value",
+        ),
+        (
+            "class_mutation_in_parallel.zyl",
+            "class field mutation is not allowed inside a `parallel` block",
+        ),
+        (
+            "class_reference_cycle.zyl",
+            "class field update would create a reference cycle",
         ),
     ] {
         let path = format!("expected/runtime/{fixture}");

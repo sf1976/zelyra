@@ -16,6 +16,7 @@ use zelyra_ast::{
 };
 use zelyra_database::{QueryValue, Schema};
 use zelyra_forms::{validate, FieldError};
+mod edit_snapshot;
 mod forms;
 mod http;
 mod i18n;
@@ -23,6 +24,7 @@ mod mfa;
 mod password_reset;
 mod server;
 mod ui;
+use edit_snapshot::{form_snapshot_matches, sign_form_snapshot, verify_form_snapshot, EditValues};
 use forms::*;
 pub use forms::{localized_identifier, render_form};
 use http::*;
@@ -431,6 +433,12 @@ pub struct TableViewRoute {
 pub enum TableViewFilterKind {
     Text,
     Numeric,
+    Decimal,
+    Integer,
+    Unsigned,
+    Date,
+    Time,
+    Timestamp,
     Bool,
     Other,
 }
@@ -457,6 +465,7 @@ pub struct AuthRoute {
     pub login_rate_limit: zelyra_ast::ApiRateLimit,
     pub login_block_seconds: u32,
     pub reset_tokens_table: Option<String>,
+    pub reset_rate_limits_table: Option<String>,
     pub reset_rate_limit: zelyra_ast::ApiRateLimit,
     pub reset_block_seconds: u32,
     pub mfa_table: Option<String>,
@@ -501,11 +510,23 @@ struct FormExecutionContext<'a> {
 }
 
 fn tenant_selector(request: &Request) -> Result<Option<String>, u16> {
-    let header_tenant = request
+    let header_zelyra = request
         .headers
         .iter()
         .find(|(name, _)| name.eq_ignore_ascii_case("x-zelyra-tenant"))
         .map(|(_, value)| value.clone());
+    let header_tenant_id = request
+        .headers
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case("x-tenant-id"))
+        .map(|(_, value)| value.clone());
+    if header_zelyra.is_some()
+        && header_tenant_id.is_some()
+        && header_zelyra.as_deref() != header_tenant_id.as_deref()
+    {
+        return Err(400);
+    }
+    let header_tenant = header_zelyra.or(header_tenant_id);
     let query_string = request
         .target
         .split_once('?')
@@ -531,6 +552,18 @@ fn tenant_selector(request: &Request) -> Result<Option<String>, u16> {
         return Err(400);
     }
     Ok(header_tenant.or(query_tenant))
+}
+
+fn quote_ident(identifier: &str, is_postgres: bool) -> String {
+    if is_postgres {
+        format!("\"{}\"", identifier.replace('"', "\"\""))
+    } else {
+        format!("`{}`", identifier.replace('`', "``"))
+    }
+}
+
+fn quote_identifier(identifier: &str) -> String {
+    quote_ident(identifier, false)
 }
 
 fn resolve_tenant_context(
@@ -564,9 +597,10 @@ fn resolve_tenant_context(
         },
         None => None,
     };
+    let is_postgres = zelyra_database::is_postgres_url(database_url);
     let mut query = format!(
         "SELECT tenant_id FROM {} WHERE user_id = :zelyra_user_id AND active = true",
-        quote_identifier(membership_table),
+        quote_ident(membership_table, is_postgres),
     );
     let mut params = vec![("zelyra_user_id".into(), QueryValue::Int(user_id))];
     if let Some(tenant_id) = selected_tenant_id {
@@ -577,11 +611,10 @@ fn resolve_tenant_context(
         ));
     }
     query.push_str(" ORDER BY tenant_id LIMIT 2");
-    let result =
-        zelyra_database::execute_mariadb_query(database_url, &query, params).map_err(|error| {
-            eprintln!("zelyra web: tenant membership lookup failed: {error}");
-            503u16
-        })?;
+    let result = zelyra_database::execute_query(database_url, &query, params).map_err(|error| {
+        eprintln!("zelyra web: tenant membership lookup failed: {error}");
+        503u16
+    })?;
     let tenant_ids = result
         .rows
         .iter()
@@ -609,10 +642,10 @@ fn tenant_resolution_error(status: u16) -> Response {
     Response::html(status, format!("<h1>{title}</h1>"))
 }
 
-fn tenant_membership_predicate(context: &TenantContext) -> String {
+fn tenant_membership_predicate(context: &TenantContext, is_postgres: bool) -> String {
     format!(
         "EXISTS (SELECT 1 FROM {} AS zelyra_membership WHERE zelyra_membership.user_id = :zelyra_user_id AND zelyra_membership.tenant_id = :zelyra_tenant_id AND zelyra_membership.active = true)",
-        quote_identifier(&context.membership_table)
+        quote_ident(&context.membership_table, is_postgres)
     )
 }
 
@@ -679,9 +712,10 @@ fn execute_crud_mutation(
     tenant_context: Option<&TenantContext>,
     scoped_record_check: Option<&zelyra_database::Query>,
 ) -> Result<(), zelyra_database::DatabaseError> {
+    let is_postgres = zelyra_database::is_postgres_url(database_url);
     let Some(tenant_context) = tenant_context else {
         if let Some(scoped_record_check) = scoped_record_check {
-            return zelyra_database::with_mariadb_transaction(database_url, |transaction| {
+            return zelyra_database::with_decision_transaction(database_url, |transaction| {
                 if transaction.execute(scoped_record_check)?.rows.is_empty() {
                     return Err(zelyra_database::DatabaseError {
                         message: "ZELYRA_TENANT_DENIED: record is not available to this user"
@@ -694,7 +728,7 @@ fn execute_crud_mutation(
                 Ok(())
             });
         }
-        zelyra_database::execute_mariadb_queries(database_url, queries, true)?;
+        zelyra_database::execute_queries(database_url, queries, true)?;
         return Ok(());
     };
     let Some((mutation, audit)) = queries.split_first() else {
@@ -702,11 +736,11 @@ fn execute_crud_mutation(
             message: "CRUD mutation transaction has no statement".into(),
         });
     };
-    zelyra_database::with_mariadb_transaction(database_url, |transaction| {
+    zelyra_database::with_decision_transaction(database_url, |transaction| {
         let membership_check = zelyra_database::Query {
             sql: format!(
                 "SELECT tenant_id FROM {} WHERE user_id = :zelyra_user_id AND tenant_id = :zelyra_tenant_id AND active = true FOR UPDATE",
-                quote_identifier(&tenant_context.membership_table)
+                quote_ident(&tenant_context.membership_table, is_postgres)
             ),
             params: tenant_query_params(tenant_context),
         };
@@ -805,7 +839,6 @@ pub struct WebApp {
     project_ui_catalogs: ProjectUiCatalogs,
     sessions: Arc<Mutex<HashMap<String, Session>>>,
     login_throttle: Arc<Mutex<HashMap<String, LoginThrottle>>>,
-    reset_throttle: Arc<Mutex<HashMap<String, LoginThrottle>>>,
     password_reset_issue_lock: Arc<Mutex<()>>,
     password_reset_mailer: Option<Arc<crate::password_reset::PasswordResetMailer>>,
     api_throttle: Arc<Mutex<HashMap<String, ApiThrottle>>>,
@@ -832,7 +865,6 @@ impl WebApp {
             project_ui_catalogs: ProjectUiCatalogs::default(),
             sessions: Arc::new(Mutex::new(HashMap::new())),
             login_throttle: Arc::new(Mutex::new(HashMap::new())),
-            reset_throttle: Arc::new(Mutex::new(HashMap::new())),
             password_reset_issue_lock: Arc::new(Mutex::new(())),
             password_reset_mailer: None,
             api_throttle: Arc::new(Mutex::new(HashMap::new())),
@@ -863,7 +895,6 @@ impl WebApp {
             project_ui_catalogs: ProjectUiCatalogs::default(),
             sessions: Arc::new(Mutex::new(HashMap::new())),
             login_throttle: Arc::new(Mutex::new(HashMap::new())),
-            reset_throttle: Arc::new(Mutex::new(HashMap::new())),
             password_reset_issue_lock: Arc::new(Mutex::new(())),
             password_reset_mailer: None,
             api_throttle: Arc::new(Mutex::new(HashMap::new())),
@@ -1358,7 +1389,7 @@ impl WebApp {
                             crud,
                             request,
                             self.database_url.as_deref(),
-                            crud_ui_actions(crud, request, self),
+                            crud_ui_actions(crud, request, self, tenant_context.as_ref()),
                             CrudRequestContext {
                                 actor_user_id: session_from_request(
                                     self,
@@ -1619,7 +1650,7 @@ impl WebApp {
                             request,
                             &path_params,
                             self.database_url.as_deref(),
-                            crud_ui_actions(crud, request, self),
+                            crud_ui_actions(crud, request, self, tenant_context.as_ref()),
                             CrudRequestContext {
                                 actor_user_id: session_from_request(
                                     self,
@@ -3993,14 +4024,15 @@ fn execute_auth_admin_mutation(
         .map(|_| zelyra_database::QueryResult::default())
 }
 
-pub fn audit_insert_queries(
+pub fn audit_insert_queries_for(
     audit_table: &str,
     chain: bool,
     actor_user_id: Option<i64>,
     event: &str,
     target_record_id: Option<i64>,
     details: &str,
-) -> Vec<zelyra_database::Query> {
+    is_postgres: bool,
+) -> Result<Vec<zelyra_database::Query>, String> {
     let details = details.chars().take(1000).collect::<String>();
     let params = vec![
         (
@@ -4027,15 +4059,18 @@ pub fn audit_insert_queries(
         ),
     ];
     if !chain {
-        return vec![zelyra_database::Query {
+        return Ok(vec![zelyra_database::Query {
             sql: format!(
                 "INSERT INTO {} (actor_user_id, event, target_user_id, details) VALUES (:actor_user_id, :event, :target_user_id, :details)",
-                quote_identifier(audit_table)
+                quote_ident(audit_table, is_postgres)
             ),
             params,
-        }];
+        }]);
     }
-    vec![
+    if is_postgres {
+        return Err("PostgreSQL does not support chained audit tables (@zelyra_prev_hash/SHA2); use unchained audit logging or MariaDB/MySQL".into());
+    }
+    Ok(vec![
         zelyra_database::Query {
             sql: "SET @zelyra_prev_hash = '';".into(),
             params: Vec::new(),
@@ -4043,18 +4078,38 @@ pub fn audit_insert_queries(
         zelyra_database::Query {
             sql: format!(
                 "SELECT COALESCE(entry_hash, '') INTO @zelyra_prev_hash FROM {} ORDER BY id DESC LIMIT 1 FOR UPDATE",
-                quote_identifier(audit_table)
+                quote_ident(audit_table, false)
             ),
             params: Vec::new(),
         },
         zelyra_database::Query {
             sql: format!(
                 "INSERT INTO {} (actor_user_id, event, target_user_id, details, previous_hash, entry_hash, created_at) VALUES (:actor_user_id, :event, :target_user_id, :details, @zelyra_prev_hash, SHA2(CONCAT(@zelyra_prev_hash, '|', COALESCE(:actor_user_id, 'NULL'), '|', :event, '|', COALESCE(:target_user_id, 'NULL'), '|', :details, '|', DATE_FORMAT(CURRENT_TIMESTAMP, '%Y-%m-%d %H:%i:%s')), 256), CURRENT_TIMESTAMP)",
-                quote_identifier(audit_table)
+                quote_ident(audit_table, false)
             ),
             params,
         },
-    ]
+    ])
+}
+
+pub fn audit_insert_queries(
+    audit_table: &str,
+    chain: bool,
+    actor_user_id: Option<i64>,
+    event: &str,
+    target_record_id: Option<i64>,
+    details: &str,
+) -> Vec<zelyra_database::Query> {
+    audit_insert_queries_for(
+        audit_table,
+        chain,
+        actor_user_id,
+        event,
+        target_record_id,
+        details,
+        false,
+    )
+    .unwrap_or_default()
 }
 
 fn audit_component(value: &str) -> String {
@@ -4913,13 +4968,14 @@ fn load_user_permissions(
     if !has_database_permissions {
         return Ok(fallback.to_vec());
     }
+    let is_postgres = zelyra_database::is_postgres_url(database_url);
     let mut permissions = Vec::new();
     if let Some(permissions_table) = &auth.permissions_table {
         let query = format!(
             "SELECT permission FROM {} WHERE user_id = :user_id",
-            quote_identifier(permissions_table)
+            quote_ident(permissions_table, is_postgres)
         );
-        let result = zelyra_database::execute_mariadb_query(
+        let result = zelyra_database::execute_query(
             database_url,
             &query,
             vec![("user_id".into(), zelyra_database::QueryValue::Int(user_id))],
@@ -4937,10 +4993,10 @@ fn load_user_permissions(
     {
         let query = format!(
             "SELECT rp.permission FROM {} AS ur INNER JOIN {} AS rp ON rp.role = ur.role WHERE ur.user_id = :user_id",
-            quote_identifier(roles_table),
-            quote_identifier(role_permissions_table),
+            quote_ident(roles_table, is_postgres),
+            quote_ident(role_permissions_table, is_postgres),
         );
-        let result = zelyra_database::execute_mariadb_query(
+        let result = zelyra_database::execute_query(
             database_url,
             &query,
             vec![("user_id".into(), zelyra_database::QueryValue::Int(user_id))],
@@ -5039,6 +5095,7 @@ fn account_sessions_test_auth() -> AuthRoute {
         login_rate_limit: DEFAULT_LOGIN_RATE_LIMIT,
         login_block_seconds: DEFAULT_LOGIN_BLOCK_SECONDS,
         reset_tokens_table: None,
+        reset_rate_limits_table: None,
         reset_rate_limit: DEFAULT_RESET_RATE_LIMIT,
         reset_block_seconds: DEFAULT_RESET_BLOCK_SECONDS,
         mfa_table: None,
@@ -5211,6 +5268,7 @@ fn session_from_request(
     if app.database_capability_granted == Some(false) {
         return None;
     }
+    let is_postgres = zelyra_database::is_postgres_url(database_url);
     let active_clause = auth
         .schema
         .tables
@@ -5225,21 +5283,21 @@ fn session_from_request(
     let query = if active_clause {
         format!(
             "SELECT s.user_id FROM {} AS s INNER JOIN {} AS u ON u.id = s.user_id WHERE s.token_hash = :token_hash AND s.expires_at > CURRENT_TIMESTAMP AND u.active = true{mfa_clause} LIMIT 1",
-            quote_identifier(session_table),
-            quote_identifier(&auth.table),
+            quote_ident(session_table, is_postgres),
+            quote_ident(&auth.table, is_postgres),
         )
     } else if auth.mfa_table.is_some() {
         format!(
             "SELECT s.user_id FROM {} AS s WHERE s.token_hash = :token_hash AND s.expires_at > CURRENT_TIMESTAMP{mfa_clause} LIMIT 1",
-            quote_identifier(session_table),
+            quote_ident(session_table, is_postgres),
         )
     } else {
         format!(
             "SELECT user_id FROM {} WHERE token_hash = :token_hash AND expires_at > CURRENT_TIMESTAMP LIMIT 1",
-            quote_identifier(session_table)
+            quote_ident(session_table, is_postgres)
         )
     };
-    let result = match zelyra_database::execute_mariadb_query(
+    let result = match zelyra_database::execute_query(
         database_url,
         &query,
         vec![(
@@ -5484,7 +5542,8 @@ fn dispatch_form_with_language(
     if request.method == "GET" {
         if let Some(confirmation_view) = confirmation_view {
             let rendered_form = form_with_path_params(form, path_params);
-            let options = match load_relation_options(&rendered_form, database_url) {
+            let options = match load_relation_options(&rendered_form, database_url, tenant_context)
+            {
                 Ok(options) => options,
                 Err(error) => return relation_options_error(database_url, error),
             };
@@ -5499,7 +5558,7 @@ fn dispatch_form_with_language(
     }
     let rendered_form = form_with_path_params(form, path_params);
     if request.method == "GET" {
-        let options = match load_relation_options(&rendered_form, database_url) {
+        let options = match load_relation_options(&rendered_form, database_url, tenant_context) {
             Ok(options) => options,
             Err(error) => return relation_options_error(database_url, error),
         };
@@ -5516,10 +5575,16 @@ fn dispatch_form_with_language(
                 Err(error) => return relation_options_error(database_url, error),
             }
         } else {
-            HashMap::new()
+            EditValues::default()
         };
-        let mut html =
-            render_form_with_language(&rendered_form, &values, &[], None, &options, language);
+        let mut html = render_form_with_language(
+            &rendered_form,
+            &values.rendered_values(),
+            &[],
+            None,
+            &options,
+            language,
+        );
         if is_edit_form(form) {
             let Some(snapshot) = sign_form_snapshot(&form.csrf, &values) else {
                 return Response::html(500, "<h1>500 Internal Server Error</h1>");
@@ -5567,7 +5632,8 @@ fn dispatch_form_with_language(
                 .or_insert_with(|| "false".into());
         }
     }
-    let relation_options = match load_relation_options(&rendered_form, database_url) {
+    let relation_options = match load_relation_options(&rendered_form, database_url, tenant_context)
+    {
         Ok(options) => options,
         Err(error) => return relation_options_error(database_url, error),
     };
@@ -5604,7 +5670,7 @@ fn dispatch_form_with_language(
         if let Err(error) = execute_form_action(
             form,
             action,
-            &values,
+            &validation.values,
             path_params,
             database_url,
             FormExecutionContext {
@@ -5748,10 +5814,11 @@ fn load_existing_form_values(
     database_url: Option<&str>,
     tenant_context: Option<&TenantContext>,
     actor_user_id: Option<i64>,
-) -> Result<Option<HashMap<String, String>>, String> {
+) -> Result<Option<EditValues>, String> {
     let Some(database_url) = database_url else {
         return Err("DATABASE_URL is required for edit forms".into());
     };
+    let is_postgres = zelyra_database::is_postgres_url(database_url);
     let Some(id) = path_params.get("id") else {
         return Err("edit form path parameter `id` is missing".into());
     };
@@ -5772,14 +5839,17 @@ fn load_existing_form_values(
     let tenant_condition = match (form.tenant_column.as_deref(), tenant_context) {
         (Some(column), Some(context)) => format!(
             " AND {} = :zelyra_tenant_id AND {}",
-            quote_identifier(column),
-            tenant_membership_predicate(context)
+            quote_ident(column, is_postgres),
+            tenant_membership_predicate(context, is_postgres)
         ),
         (Some(_), None) => return Err("tenant context is required for this form".into()),
         _ => String::new(),
     };
     let recipient_condition = match (form.recipient_column.as_deref(), actor_user_id) {
-        (Some(column), Some(_)) => format!(" AND {} = :zelyra_user_id", quote_identifier(column)),
+        (Some(column), Some(_)) => format!(
+            " AND {} = :zelyra_user_id",
+            quote_ident(column, is_postgres)
+        ),
         (Some(_), None) => return Err("authenticated user is required for this form".into()),
         _ => String::new(),
     };
@@ -5787,11 +5857,11 @@ fn load_existing_form_values(
         "SELECT {} FROM {} WHERE {} = :id{}{}",
         columns
             .iter()
-            .map(|column| quote_identifier(column))
+            .map(|column| quote_ident(column, is_postgres))
             .collect::<Vec<_>>()
             .join(", "),
-        quote_identifier(table_name),
-        quote_identifier("id"),
+        quote_ident(table_name, is_postgres),
+        quote_ident("id", is_postgres),
         tenant_condition,
         recipient_condition
     );
@@ -5807,19 +5877,9 @@ fn load_existing_form_values(
             zelyra_database::QueryValue::Int(user_id),
         ));
     }
-    let result = zelyra_database::execute_mariadb_query(database_url, &query, params)
+    let result = zelyra_database::execute_query(database_url, &query, params)
         .map_err(|error| error.to_string())?;
-    let Some(row) = result.rows.first() else {
-        return Ok(None);
-    };
-    let values = form
-        .form
-        .fields
-        .iter()
-        .zip(row)
-        .map(|(field, value)| (field.name.clone(), value.clone()))
-        .collect();
-    Ok(Some(values))
+    EditValues::from_result(form, &result).map_err(|error| error.to_string())
 }
 
 fn form_value_columns(form: &FormRoute, schema_table: &zelyra_database::Table) -> Vec<String> {
@@ -5841,43 +5901,6 @@ fn form_value_columns(form: &FormRoute, schema_table: &zelyra_database::Table) -
 
 fn is_edit_form(form: &FormRoute) -> bool {
     form.form.name.ends_with("Edit")
-}
-
-fn sign_form_snapshot(csrf: &CsrfProtection, values: &HashMap<String, String>) -> Option<String> {
-    let signature = form_snapshot_signature(csrf, values)?;
-    Some(hex_encode(&signature))
-}
-
-fn form_snapshot_signature(
-    csrf: &CsrfProtection,
-    values: &HashMap<String, String>,
-) -> Option<Vec<u8>> {
-    let snapshot = values.iter().collect::<BTreeMap<_, _>>();
-    let payload = serde_json::to_vec(&snapshot).ok()?;
-    let key = hmac::Key::new(hmac::HMAC_SHA256, csrf.token.as_bytes());
-    Some(hmac::sign(&key, &payload).as_ref().to_vec())
-}
-
-fn verify_form_snapshot(token: &str) -> Option<Vec<u8>> {
-    if token.len() != 64 {
-        return None;
-    }
-    let signature = hex_decode(token)?;
-    if signature.len() != 32 {
-        return None;
-    }
-    Some(signature)
-}
-
-fn form_snapshot_matches(
-    csrf: &CsrfProtection,
-    expected_signature: &[u8],
-    values: &HashMap<String, String>,
-) -> bool {
-    let Some(snapshot) = form_snapshot_signature(csrf, values) else {
-        return false;
-    };
-    constant_time_equal(expected_signature, &snapshot)
 }
 
 fn attach_form_snapshot(html: &str, snapshot: &str) -> String {
@@ -5917,39 +5940,64 @@ fn crud_relation_alias(table: &zelyra_database::Table, column: &str) -> Option<S
         .map(|index| format!("zelyra_relation_{index}"))
 }
 
-fn crud_column_expression(schema: &Schema, table: &zelyra_database::Table, column: &str) -> String {
+fn crud_column_expression(
+    schema: &Schema,
+    table: &zelyra_database::Table,
+    column: &str,
+    is_postgres: bool,
+) -> String {
     let Some(foreign_key) = crud_foreign_key(table, column) else {
-        return format!("{}.{}", quote_identifier("base"), quote_identifier(column));
+        return format!(
+            "{}.{}",
+            quote_ident("base", is_postgres),
+            quote_ident(column, is_postgres)
+        );
     };
     let Some(alias) = crud_relation_alias(table, &foreign_key.column) else {
-        return format!("{}.{}", quote_identifier("base"), quote_identifier(column));
+        return format!(
+            "{}.{}",
+            quote_ident("base", is_postgres),
+            quote_ident(column, is_postgres)
+        );
     };
     let Some(relation_table) = schema
         .tables
         .iter()
         .find(|candidate| candidate.name == foreign_key.referenced_table)
     else {
-        return format!("{}.{}", quote_identifier("base"), quote_identifier(column));
+        return format!(
+            "{}.{}",
+            quote_ident("base", is_postgres),
+            quote_ident(column, is_postgres)
+        );
     };
     format!(
         "{}.{}",
-        quote_identifier(&alias),
-        quote_identifier(relation_display_column(relation_table))
+        quote_ident(&alias, is_postgres),
+        quote_ident(relation_display_column(relation_table), is_postgres)
     )
 }
 
-fn crud_storage_expression(table: &zelyra_database::Table, column: &str) -> String {
+fn crud_storage_expression(
+    table: &zelyra_database::Table,
+    column: &str,
+    is_postgres: bool,
+) -> String {
     let storage_column = crud_foreign_key(table, column)
         .map(|foreign_key| foreign_key.column.as_str())
         .unwrap_or(column);
     format!(
         "{}.{}",
-        quote_identifier("base"),
-        quote_identifier(storage_column)
+        quote_ident("base", is_postgres),
+        quote_ident(storage_column, is_postgres)
     )
 }
 
-fn crud_relation_joins(schema: &Schema, table: &zelyra_database::Table) -> String {
+fn crud_relation_joins(
+    schema: &Schema,
+    table: &zelyra_database::Table,
+    is_postgres: bool,
+) -> String {
     table
         .foreign_keys
         .iter()
@@ -5962,12 +6010,12 @@ fn crud_relation_joins(schema: &Schema, table: &zelyra_database::Table) -> Strin
             let alias = format!("zelyra_relation_{index}");
             Some(format!(
                 " LEFT JOIN {} AS {} ON {}.{} = {}.{}",
-                quote_identifier(&relation_table.name),
-                quote_identifier(&alias),
-                quote_identifier("base"),
-                quote_identifier(&foreign_key.column),
-                quote_identifier(&alias),
-                quote_identifier(&foreign_key.referenced_column),
+                quote_ident(&relation_table.name, is_postgres),
+                quote_ident(&alias, is_postgres),
+                quote_ident("base", is_postgres),
+                quote_ident(&foreign_key.column, is_postgres),
+                quote_ident(&alias, is_postgres),
+                quote_ident(&foreign_key.referenced_column, is_postgres),
             ))
         })
         .collect()
@@ -6022,7 +6070,12 @@ struct CrudUiActionField {
     options: Vec<SelectOption>,
 }
 
-fn crud_ui_actions(crud: &CrudRoute, request: &Request, app: &WebApp) -> CrudUiActions {
+fn crud_ui_actions(
+    crud: &CrudRoute,
+    request: &Request,
+    app: &WebApp,
+    tenant_context: Option<&TenantContext>,
+) -> CrudUiActions {
     let detail_path = format!("{}/{{id}}", crud.path.trim_end_matches('/'));
     let include_relation_options = match_path(&detail_path, &request.path).is_some();
     let archived = request
@@ -6047,7 +6100,7 @@ fn crud_ui_actions(crud: &CrudRoute, request: &Request, app: &WebApp) -> CrudUiA
                     return None;
                 }
                 let relation_options = if include_relation_options {
-                    load_relation_options(&action.form, app.database_url.as_deref())
+                    load_relation_options(&action.form, app.database_url.as_deref(), tenant_context)
                         .unwrap_or_default()
                 } else {
                     HashMap::new()
@@ -6156,6 +6209,7 @@ fn dispatch_crud(
             "DATABASE_URL is required for CRUD lists.",
         );
     };
+    let is_postgres = zelyra_database::is_postgres_url(database_url);
     if crud.recipient_column.is_some() && actor_user_id.is_none() {
         return Response::html(403, "<h1>403 Forbidden</h1>");
     }
@@ -6359,17 +6413,17 @@ fn dispatch_crud(
             .map(|column| {
                 format!(
                     "{} AS {}",
-                    crud_column_expression(&crud.schema, table, column),
-                    quote_identifier(column)
+                    crud_column_expression(&crud.schema, table, column, is_postgres),
+                    quote_ident(column, is_postgres)
                 )
             })
             .collect::<Vec<_>>()
             .join(", "),
         format_args!(
             "{} AS {}{}",
-            quote_identifier(&crud.table),
-            quote_identifier("base"),
-            crud_relation_joins(&crud.schema, table)
+            quote_ident(&crud.table, is_postgres),
+            quote_ident("base", is_postgres),
+            crud_relation_joins(&crud.schema, table, is_postgres)
         )
     );
     let mut conditions = Vec::new();
@@ -6381,7 +6435,7 @@ fn dispatch_crud(
                 .map(|column| {
                     format!(
                         "{} LIKE CONCAT('%', :search, '%')",
-                        crud_column_expression(&crud.schema, table, column)
+                        crud_column_expression(&crud.schema, table, column, is_postgres)
                     )
                 })
                 .collect::<Vec<_>>()
@@ -6389,20 +6443,20 @@ fn dispatch_crud(
         ));
     }
     for (column, _, operator) in &filters {
-        conditions.push(filter_condition(table, column, *operator));
+        conditions.push(filter_condition(table, column, *operator, is_postgres));
     }
     if let Some(soft_delete) = &crud.soft_delete {
         conditions.push(format!(
             "{} IS {}",
-            crud_storage_expression(table, &soft_delete.column),
+            crud_storage_expression(table, &soft_delete.column, is_postgres),
             if archived { "NOT NULL" } else { "NULL" }
         ));
     }
     if let Some(expires_column) = &crud.expires_column {
         conditions.push(format!(
             "({} IS NULL OR {} > CURRENT_TIMESTAMP)",
-            quote_identifier(expires_column),
-            quote_identifier(expires_column)
+            quote_ident(expires_column, is_postgres),
+            quote_ident(expires_column, is_postgres)
         ));
     }
     if let (Some(tenant_column), Some(tenant_context)) =
@@ -6410,9 +6464,9 @@ fn dispatch_crud(
     {
         conditions.push(format!(
             "{}.{} = :zelyra_tenant_id AND {}",
-            quote_identifier("base"),
-            quote_identifier(tenant_column),
-            tenant_membership_predicate(tenant_context)
+            quote_ident("base", is_postgres),
+            quote_ident(tenant_column, is_postgres),
+            tenant_membership_predicate(tenant_context, is_postgres)
         ));
     } else if crud.tenant_column.is_some() {
         return Response::html(403, "<h1>403 Forbidden</h1>");
@@ -6420,8 +6474,8 @@ fn dispatch_crud(
     if let Some(recipient_column) = crud.recipient_column.as_deref() {
         conditions.push(format!(
             "{}.{} = :zelyra_user_id",
-            quote_identifier("base"),
-            quote_identifier(recipient_column)
+            quote_ident("base", is_postgres),
+            quote_ident(recipient_column, is_postgres)
         ));
     }
     if !conditions.is_empty() {
@@ -6430,7 +6484,7 @@ fn dispatch_crud(
     }
     query.push_str(&format!(
         " ORDER BY {} {} LIMIT :limit OFFSET :offset",
-        crud_column_expression(&crud.schema, table, sort_column),
+        crud_column_expression(&crud.schema, table, sort_column, is_postgres),
         order
     ));
     let mut params = vec![
@@ -6480,7 +6534,7 @@ fn dispatch_crud(
         };
         params.push((format!("filter_{column}"), value));
     }
-    let result = match zelyra_database::execute_mariadb_query(database_url, &query, params) {
+    let result = match zelyra_database::execute_query(database_url, &query, params) {
         Ok(result) => result,
         Err(error) => {
             eprintln!("zelyra web: CRUD query failed: {error}");
@@ -6489,15 +6543,21 @@ fn dispatch_crud(
         }
     };
     let unread_count = if let Some(unread_column) = crud.unread_column.as_deref() {
-        let mut count_conditions = vec![format!("{} IS NULL", quote_identifier(unread_column))];
+        let mut count_conditions = vec![format!(
+            "{} IS NULL",
+            quote_ident(unread_column, is_postgres)
+        )];
         if let Some(soft_delete) = &crud.soft_delete {
-            count_conditions.push(format!("{} IS NULL", quote_identifier(&soft_delete.column)));
+            count_conditions.push(format!(
+                "{} IS NULL",
+                quote_ident(&soft_delete.column, is_postgres)
+            ));
         }
         if let Some(expires_column) = &crud.expires_column {
             count_conditions.push(format!(
                 "({} IS NULL OR {} > CURRENT_TIMESTAMP)",
-                quote_identifier(expires_column),
-                quote_identifier(expires_column)
+                quote_ident(expires_column, is_postgres),
+                quote_ident(expires_column, is_postgres)
             ));
         }
         if let (Some(tenant_column), Some(tenant_context)) =
@@ -6505,8 +6565,8 @@ fn dispatch_crud(
         {
             count_conditions.push(format!(
                 "{} = :zelyra_tenant_id AND {}",
-                quote_identifier(tenant_column),
-                tenant_membership_predicate(tenant_context)
+                quote_ident(tenant_column, is_postgres),
+                tenant_membership_predicate(tenant_context, is_postgres)
             ));
         } else if crud.tenant_column.is_some() {
             return Response::html(403, "<h1>403 Forbidden</h1>");
@@ -6514,12 +6574,12 @@ fn dispatch_crud(
         if let Some(recipient_column) = crud.recipient_column.as_deref() {
             count_conditions.push(format!(
                 "{} = :zelyra_user_id",
-                quote_identifier(recipient_column)
+                quote_ident(recipient_column, is_postgres)
             ));
         }
         let count_sql = format!(
             "SELECT COUNT(*) FROM {} WHERE {}",
-            quote_identifier(&crud.table),
+            quote_ident(&crud.table, is_postgres),
             count_conditions.join(" AND ")
         );
         let mut count_params = tenant_context.map(tenant_query_params).unwrap_or_default();
@@ -6531,7 +6591,7 @@ fn dispatch_crud(
                 zelyra_database::QueryValue::Int(user_id),
             ));
         }
-        match zelyra_database::execute_mariadb_query(database_url, &count_sql, count_params) {
+        match zelyra_database::execute_query(database_url, &count_sql, count_params) {
             Ok(result) => result
                 .rows
                 .first()
@@ -6808,7 +6868,7 @@ fn dispatch_tableview(
         };
         params.push((format!("filter_{column}"), value));
     }
-    let result = match zelyra_database::execute_mariadb_query(database_url, &query, params) {
+    let result = match zelyra_database::execute_query(database_url, &query, params) {
         Ok(result) => result,
         Err(error) => {
             eprintln!("zelyra web: tableview query failed: {error}");
@@ -6971,9 +7031,17 @@ fn render_tableview(
             html.push_str("<tr>");
             for index in 0..tableview.columns.len() {
                 html.push_str("<td>");
-                html.push_str(&html_escape(display_database_value(
-                    row.get(index).map(String::as_str).unwrap_or(""),
-                )));
+                let value =
+                    display_database_value(row.get(index).map(String::as_str).unwrap_or(""));
+                let value = if tableview.filters.iter().any(|filter| {
+                    filter.name == tableview.columns[index]
+                        && filter.kind == TableViewFilterKind::Decimal
+                }) {
+                    display_exact_decimal_value(value)
+                } else {
+                    value
+                };
+                html.push_str(&html_escape(value));
                 html.push_str("</td>");
             }
             html.push_str("</tr>");
@@ -7067,6 +7135,7 @@ fn dispatch_crud_detail(
             "DATABASE_URL is required for CRUD details.",
         );
     };
+    let is_postgres = zelyra_database::is_postgres_url(database_url);
     if crud.recipient_column.is_some() && actor_user_id.is_none() {
         return Response::html(403, "<h1>403 Forbidden</h1>");
     }
@@ -7104,7 +7173,7 @@ fn dispatch_crud_detail(
         .map(|soft_delete| {
             format!(
                 " AND {} IS {}",
-                crud_storage_expression(table, &soft_delete.column),
+                crud_storage_expression(table, &soft_delete.column, is_postgres),
                 if archived { "NOT NULL" } else { "NULL" }
             )
         })
@@ -7112,9 +7181,9 @@ fn dispatch_crud_detail(
     let tenant_condition = match (crud.tenant_column.as_deref(), tenant_context) {
         (Some(tenant_column), Some(context)) => format!(
             " AND {}.{} = :zelyra_tenant_id AND {}",
-            quote_identifier("base"),
-            quote_identifier(tenant_column),
-            tenant_membership_predicate(context)
+            quote_ident("base", is_postgres),
+            quote_ident(tenant_column, is_postgres),
+            tenant_membership_predicate(context, is_postgres)
         ),
         (Some(_), None) => return Response::html(403, "<h1>403 Forbidden</h1>"),
         (None, _) => String::new(),
@@ -7125,8 +7194,8 @@ fn dispatch_crud_detail(
         .map(|column| {
             format!(
                 " AND {}.{} = :zelyra_user_id",
-                quote_identifier("base"),
-                quote_identifier(column)
+                quote_ident("base", is_postgres),
+                quote_ident(column, is_postgres)
             )
         })
         .unwrap_or_default();
@@ -7137,19 +7206,23 @@ fn dispatch_crud_detail(
             .map(|column| {
                 format!(
                     "{} AS {}",
-                    crud_column_expression(&crud.schema, table, column),
-                    quote_identifier(column)
+                    crud_column_expression(&crud.schema, table, column, is_postgres),
+                    quote_ident(column, is_postgres)
                 )
             })
             .collect::<Vec<_>>()
             .join(", "),
         format_args!(
             "{} AS {}{}",
-            quote_identifier(&crud.table),
-            quote_identifier("base"),
-            crud_relation_joins(&crud.schema, table)
+            quote_ident(&crud.table, is_postgres),
+            quote_ident("base", is_postgres),
+            crud_relation_joins(&crud.schema, table, is_postgres)
         ),
-        format_args!("{}.{}", quote_identifier("base"), quote_identifier("id")),
+        format_args!(
+            "{}.{}",
+            quote_ident("base", is_postgres),
+            quote_ident("id", is_postgres)
+        ),
         soft_delete_condition,
         tenant_condition,
         recipient_condition
@@ -7166,7 +7239,7 @@ fn dispatch_crud_detail(
             zelyra_database::QueryValue::Int(user_id),
         ));
     }
-    let result = match zelyra_database::execute_mariadb_query(database_url, &query, params) {
+    let result = match zelyra_database::execute_query(database_url, &query, params) {
         Ok(result) => result,
         Err(error) => {
             eprintln!("zelyra web: CRUD detail query failed: {error}");
@@ -7214,6 +7287,7 @@ fn dispatch_crud_mark_read(
             "DATABASE_URL is required for notification actions.",
         );
     };
+    let is_postgres = zelyra_database::is_postgres_url(database_url);
     if crud.recipient_column.is_some() && actor_user_id.is_none() {
         return Response::html(403, "<h1>403 Forbidden</h1>");
     }
@@ -7240,15 +7314,21 @@ fn dispatch_crud_mark_read(
         return Response::html(403, "<h1>403 Forbidden</h1>");
     }
 
-    let mut conditions = vec![format!("{} IS NULL", quote_identifier(unread_column))];
+    let mut conditions = vec![format!(
+        "{} IS NULL",
+        quote_ident(unread_column, is_postgres)
+    )];
     if let Some(soft_delete) = &crud.soft_delete {
-        conditions.push(format!("{} IS NULL", quote_identifier(&soft_delete.column)));
+        conditions.push(format!(
+            "{} IS NULL",
+            quote_ident(&soft_delete.column, is_postgres)
+        ));
     }
     if let Some(expires_column) = crud.expires_column.as_deref() {
         conditions.push(format!(
             "({} IS NULL OR {} > CURRENT_TIMESTAMP)",
-            quote_identifier(expires_column),
-            quote_identifier(expires_column)
+            quote_ident(expires_column, is_postgres),
+            quote_ident(expires_column, is_postgres)
         ));
     }
     if let (Some(tenant_column), Some(tenant_context)) =
@@ -7256,23 +7336,23 @@ fn dispatch_crud_mark_read(
     {
         conditions.push(format!(
             "{} = :zelyra_tenant_id AND {}",
-            quote_identifier(tenant_column),
-            tenant_membership_predicate(tenant_context)
+            quote_ident(tenant_column, is_postgres),
+            tenant_membership_predicate(tenant_context, is_postgres)
         ));
     }
     if let Some(recipient_column) = crud.recipient_column.as_deref() {
         conditions.push(format!(
             "{} = :zelyra_user_id",
-            quote_identifier(recipient_column)
+            quote_ident(recipient_column, is_postgres)
         ));
     }
     let scope_sql = conditions.join(" AND ");
     let record_check = zelyra_database::Query {
         sql: format!(
             "SELECT {} FROM {} WHERE {} = :id AND {} FOR UPDATE",
-            quote_identifier("id"),
-            quote_identifier(&crud.table),
-            quote_identifier("id"),
+            quote_ident("id", is_postgres),
+            quote_ident(&crud.table, is_postgres),
+            quote_ident("id", is_postgres),
             scope_sql
         ),
         params: crud_scope_params(
@@ -7285,9 +7365,9 @@ fn dispatch_crud_mark_read(
     let mutation = zelyra_database::Query {
         sql: format!(
             "UPDATE {} SET {} = CURRENT_TIMESTAMP WHERE {} = :id AND {}",
-            quote_identifier(&crud.table),
-            quote_identifier(unread_column),
-            quote_identifier("id"),
+            quote_ident(&crud.table, is_postgres),
+            quote_ident(unread_column, is_postgres),
+            quote_ident("id", is_postgres),
             scope_sql
         ),
         params: crud_scope_params(
@@ -7379,6 +7459,7 @@ fn dispatch_crud_delete(
             "DATABASE_URL is required for CRUD actions.",
         );
     };
+    let is_postgres = zelyra_database::is_postgres_url(database_url);
     if crud.recipient_column.is_some() && actor_user_id.is_none() {
         return Response::html(403, "<h1>403 Forbidden</h1>");
     }
@@ -7409,22 +7490,28 @@ fn dispatch_crud_delete(
     if let (Some(column), Some(context)) = (crud.tenant_column.as_deref(), tenant_context) {
         scope_conditions.push(format!(
             "{} = :zelyra_tenant_id AND {}",
-            quote_identifier(column),
-            tenant_membership_predicate(context)
+            quote_ident(column, is_postgres),
+            tenant_membership_predicate(context, is_postgres)
         ));
         scope_params.extend(tenant_query_params(context));
     } else if crud.tenant_column.is_some() {
         return Response::html(403, "<h1>403 Forbidden</h1>");
     }
     if let Some(column) = crud.recipient_column.as_deref() {
-        scope_conditions.push(format!("{} = :zelyra_user_id", quote_identifier(column)));
+        scope_conditions.push(format!(
+            "{} = :zelyra_user_id",
+            quote_ident(column, is_postgres)
+        ));
         scope_params.push((
             "zelyra_user_id".into(),
             zelyra_database::QueryValue::Int(actor_user_id.expect("recipient session checked")),
         ));
     }
     if let Some(soft_delete) = &crud.soft_delete {
-        scope_conditions.push(format!("{} IS NULL", quote_identifier(&soft_delete.column)));
+        scope_conditions.push(format!(
+            "{} IS NULL",
+            quote_ident(&soft_delete.column, is_postgres)
+        ));
     }
     let tenant_condition = scope_conditions
         .iter()
@@ -7433,9 +7520,9 @@ fn dispatch_crud_delete(
     let scoped_record_check = (!scope_conditions.is_empty()).then(|| zelyra_database::Query {
         sql: format!(
             "SELECT {} FROM {} WHERE {} = :id AND {} FOR UPDATE",
-            quote_identifier("id"),
-            quote_identifier(&crud.table),
-            quote_identifier("id"),
+            quote_ident("id", is_postgres),
+            quote_ident(&crud.table, is_postgres),
+            quote_ident("id", is_postgres),
             scope_conditions.join(" AND ")
         ),
         params: scope_params,
@@ -7444,10 +7531,10 @@ fn dispatch_crud_delete(
         (
             format!(
                 "UPDATE {} SET {} = CURRENT_TIMESTAMP WHERE {} = :id AND {} IS NULL{}",
-                quote_identifier(&crud.table),
-                quote_identifier(&soft_delete.column),
-                quote_identifier("id"),
-                quote_identifier(&soft_delete.column),
+                quote_ident(&crud.table, is_postgres),
+                quote_ident(&soft_delete.column, is_postgres),
+                quote_ident("id", is_postgres),
+                quote_ident(&soft_delete.column, is_postgres),
                 tenant_condition
             ),
             "Record archived.",
@@ -7456,8 +7543,8 @@ fn dispatch_crud_delete(
         (
             format!(
                 "DELETE FROM {} WHERE {} = :id{}",
-                quote_identifier(&crud.table),
-                quote_identifier("id"),
+                quote_ident(&crud.table, is_postgres),
+                quote_ident("id", is_postgres),
                 tenant_condition
             ),
             "Record deleted.",
@@ -7554,6 +7641,7 @@ fn dispatch_crud_restore(
             "DATABASE_URL is required for CRUD actions.",
         );
     };
+    let is_postgres = zelyra_database::is_postgres_url(database_url);
     if crud.recipient_column.is_some() && actor_user_id.is_none() {
         return Response::html(403, "<h1>403 Forbidden</h1>");
     }
@@ -7584,15 +7672,18 @@ fn dispatch_crud_restore(
     if let (Some(column), Some(context)) = (crud.tenant_column.as_deref(), tenant_context) {
         scope_conditions.push(format!(
             "{} = :zelyra_tenant_id AND {}",
-            quote_identifier(column),
-            tenant_membership_predicate(context)
+            quote_ident(column, is_postgres),
+            tenant_membership_predicate(context, is_postgres)
         ));
         scope_params.extend(tenant_query_params(context));
     } else if crud.tenant_column.is_some() {
         return Response::html(403, "<h1>403 Forbidden</h1>");
     }
     if let Some(column) = crud.recipient_column.as_deref() {
-        scope_conditions.push(format!("{} = :zelyra_user_id", quote_identifier(column)));
+        scope_conditions.push(format!(
+            "{} = :zelyra_user_id",
+            quote_ident(column, is_postgres)
+        ));
         scope_params.push((
             "zelyra_user_id".into(),
             zelyra_database::QueryValue::Int(actor_user_id.expect("recipient session checked")),
@@ -7600,7 +7691,7 @@ fn dispatch_crud_restore(
     }
     scope_conditions.push(format!(
         "{} IS NOT NULL",
-        quote_identifier(&soft_delete.column)
+        quote_ident(&soft_delete.column, is_postgres)
     ));
     let tenant_condition = scope_conditions
         .iter()
@@ -7610,19 +7701,19 @@ fn dispatch_crud_restore(
     let scoped_record_check = (!scope_conditions.is_empty()).then(|| zelyra_database::Query {
         sql: format!(
             "SELECT {} FROM {} WHERE {} = :id AND {} FOR UPDATE",
-            quote_identifier("id"),
-            quote_identifier(&crud.table),
-            quote_identifier("id"),
+            quote_ident("id", is_postgres),
+            quote_ident(&crud.table, is_postgres),
+            quote_ident("id", is_postgres),
             scope_conditions.join(" AND ")
         ),
         params: scope_params,
     });
     let query = format!(
         "UPDATE {} SET {} = NULL WHERE {} = :id AND {} IS NOT NULL{}",
-        quote_identifier(&crud.table),
-        quote_identifier(&soft_delete.column),
-        quote_identifier("id"),
-        quote_identifier(&soft_delete.column),
+        quote_ident(&crud.table, is_postgres),
+        quote_ident(&soft_delete.column, is_postgres),
+        quote_ident("id", is_postgres),
+        quote_ident(&soft_delete.column, is_postgres),
         tenant_condition
     );
     let mut details = format!(
@@ -7779,7 +7870,13 @@ fn tableview_filter_operator_supported(
                 | FilterOperator::IsNull
                 | FilterOperator::IsNotNull
         ),
-        TableViewFilterKind::Numeric => matches!(
+        TableViewFilterKind::Numeric
+        | TableViewFilterKind::Decimal
+        | TableViewFilterKind::Integer
+        | TableViewFilterKind::Unsigned
+        | TableViewFilterKind::Date
+        | TableViewFilterKind::Time
+        | TableViewFilterKind::Timestamp => matches!(
             operator,
             FilterOperator::Equal
                 | FilterOperator::GreaterThan
@@ -7806,7 +7903,13 @@ fn tableview_filter_operator_options(kind: TableViewFilterKind) -> &'static [Fil
             FilterOperator::IsNull,
             FilterOperator::IsNotNull,
         ],
-        TableViewFilterKind::Numeric => &[
+        TableViewFilterKind::Numeric
+        | TableViewFilterKind::Decimal
+        | TableViewFilterKind::Integer
+        | TableViewFilterKind::Unsigned
+        | TableViewFilterKind::Date
+        | TableViewFilterKind::Time
+        | TableViewFilterKind::Timestamp => &[
             FilterOperator::Equal,
             FilterOperator::GreaterThan,
             FilterOperator::GreaterThanOrEqual,
@@ -7848,25 +7951,81 @@ fn tableview_filter_query_value(
     filter: &TableViewFilter,
     value: &str,
 ) -> Result<zelyra_database::QueryValue, String> {
-    match filter.kind {
-        TableViewFilterKind::Bool => match value {
-            "true" | "1" => Ok(zelyra_database::QueryValue::Bool(true)),
-            "false" | "0" => Ok(zelyra_database::QueryValue::Bool(false)),
-            _ => Err(format!("filter_{} must be true or false", filter.name)),
-        },
+    numeric_filter_query_value(filter.kind, value)
+        .map_err(|error| format!("filter_{} {error}", filter.name))
+}
+
+fn exact_query_value(value: &str) -> Result<QueryValue, String> {
+    zelyra_ast::decimal::parse_scaled(value, 9)
+        .map(|_| QueryValue::Decimal(value.into()))
+        .ok_or_else(|| "must be an exact Decimal with at most 9 fractional digits".into())
+}
+
+fn money_query_value(value: &str) -> Result<QueryValue, String> {
+    zelyra_ast::decimal::parse_money(value)
+        .map(|_| QueryValue::Decimal(value.into()))
+        .ok_or_else(|| {
+            "must be an exact Money amount with at most 15 integer and 4 fractional digits".into()
+        })
+}
+
+fn numeric_filter_query_value(
+    kind: TableViewFilterKind,
+    value: &str,
+) -> Result<QueryValue, String> {
+    match kind {
+        TableViewFilterKind::Integer => value
+            .parse::<i64>()
+            .map(QueryValue::Int)
+            .map_err(|_| "must be an integer".into()),
+        TableViewFilterKind::Unsigned => value
+            .parse::<u64>()
+            .map(QueryValue::UInt)
+            .map_err(|_| "must be an unsigned integer".into()),
+        TableViewFilterKind::Decimal => exact_query_value(value),
         TableViewFilterKind::Numeric => value
             .parse::<f64>()
-            .map(zelyra_database::QueryValue::Float)
-            .map_err(|_| format!("filter_{} must be a number", filter.name)),
+            .ok()
+            .filter(|v| v.is_finite())
+            .map(QueryValue::Float)
+            .ok_or_else(|| "must be a finite number".into()),
+        TableViewFilterKind::Date => temporal_query_value(&Type::Date, value),
+        TableViewFilterKind::Time => temporal_query_value(&Type::Time, value),
+        TableViewFilterKind::Timestamp => temporal_query_value(&Type::Timestamp, value),
+        TableViewFilterKind::Bool => match value {
+            "true" | "1" => Ok(QueryValue::Bool(true)),
+            "false" | "0" => Ok(QueryValue::Bool(false)),
+            _ => Err("must be true or false".into()),
+        },
         TableViewFilterKind::Text | TableViewFilterKind::Other => {
-            Ok(zelyra_database::QueryValue::String(value.into()))
+            Ok(QueryValue::String(value.into()))
         }
+    }
+}
+
+fn temporal_query_value(ty: &Type, value: &str) -> Result<QueryValue, String> {
+    match ty {
+        Type::Date if zelyra_ast::temporal::valid_date(value) => Ok(QueryValue::Date(value.into())),
+        Type::Time if zelyra_ast::temporal::valid_time(value) => Ok(QueryValue::Time(value.into())),
+        Type::Timestamp => zelyra_ast::temporal::parse_timestamp_input(value)
+            .map(QueryValue::Timestamp)
+            .ok_or_else(|| "must be a valid UTC Timestamp".into()),
+        _ => Err(format!("must be a valid {ty}")),
     }
 }
 
 fn column_is_text(column: &zelyra_database::Column) -> bool {
     let sql_type = column.sql_type.to_ascii_uppercase();
     sql_type.contains("CHAR") || sql_type.contains("TEXT")
+}
+
+fn column_is_temporal(column: &zelyra_database::Column) -> bool {
+    let ty = column.sql_type.to_ascii_uppercase();
+    ty == "DATE"
+        || ty == "TIME"
+        || ty.starts_with("TIME(")
+        || ty.contains("TIMESTAMP")
+        || ty.contains("DATETIME")
 }
 
 fn column_is_numeric(column: &zelyra_database::Column) -> bool {
@@ -7888,7 +8047,9 @@ fn filter_operator_supported(column: &zelyra_database::Column, operator: FilterO
         FilterOperator::GreaterThan
         | FilterOperator::GreaterThanOrEqual
         | FilterOperator::LessThan
-        | FilterOperator::LessThanOrEqual => column_is_numeric(column) || column_is_text(column),
+        | FilterOperator::LessThanOrEqual => {
+            column_is_numeric(column) || column_is_text(column) || column_is_temporal(column)
+        }
     }
 }
 
@@ -7902,7 +8063,7 @@ fn filter_operator_options(column: &zelyra_database::Column) -> &'static [Filter
             FilterOperator::IsNull,
             FilterOperator::IsNotNull,
         ]
-    } else if column_is_numeric(column) {
+    } else if column_is_numeric(column) || column_is_temporal(column) {
         &[
             FilterOperator::Equal,
             FilterOperator::GreaterThan,
@@ -7975,8 +8136,9 @@ fn filter_condition(
     table: &zelyra_database::Table,
     column: &str,
     operator: FilterOperator,
+    is_postgres: bool,
 ) -> String {
-    let expression = crud_storage_expression(table, column);
+    let expression = crud_storage_expression(table, column, is_postgres);
     let parameter = format!(":filter_{column}");
     match operator {
         FilterOperator::Equal => format!("{expression} = {parameter}"),
@@ -8001,6 +8163,15 @@ fn filter_query_value(
     value: &str,
 ) -> Result<zelyra_database::QueryValue, String> {
     let sql_type = column.sql_type.to_ascii_uppercase();
+    if sql_type == "DATE" {
+        return temporal_query_value(&Type::Date, value);
+    }
+    if sql_type == "TIME" || sql_type.starts_with("TIME(") {
+        return temporal_query_value(&Type::Time, value);
+    }
+    if sql_type.contains("TIMESTAMP") || sql_type.contains("DATETIME") {
+        return temporal_query_value(&Type::Timestamp, value);
+    }
     if sql_type.contains("BOOL") {
         return match value {
             "true" | "1" => Ok(zelyra_database::QueryValue::Bool(true)),
@@ -8008,17 +8179,24 @@ fn filter_query_value(
             _ => Err(format!("filter_{} must be true or false", column.name)),
         };
     }
-    if sql_type.contains("INT") {
-        return value
-            .parse::<i64>()
-            .map(zelyra_database::QueryValue::Int)
-            .map_err(|_| format!("filter_{} must be an integer", column.name));
-    }
-    if sql_type.contains("DECIMAL") || sql_type.contains("NUMERIC") || sql_type.contains("DOUBLE") {
-        return value
-            .parse::<f64>()
-            .map(zelyra_database::QueryValue::Float)
-            .map_err(|_| format!("filter_{} must be a number", column.name));
+    let kind = if sql_type.contains("INT") && sql_type.contains("UNSIGNED")
+        || sql_type == "DECIMAL(20,0)"
+        || sql_type == "NUMERIC(20,0)"
+    {
+        Some(TableViewFilterKind::Unsigned)
+    } else if sql_type.contains("INT") {
+        Some(TableViewFilterKind::Integer)
+    } else if sql_type.contains("DECIMAL") || sql_type.contains("NUMERIC") {
+        Some(TableViewFilterKind::Decimal)
+    } else if sql_type.contains("DOUBLE") || sql_type.contains("FLOAT") || sql_type.contains("REAL")
+    {
+        Some(TableViewFilterKind::Numeric)
+    } else {
+        None
+    };
+    if let Some(kind) = kind {
+        return numeric_filter_query_value(kind, value)
+            .map_err(|error| format!("filter_{} {error}", column.name));
     }
     Ok(zelyra_database::QueryValue::String(value.into()))
 }
@@ -8686,8 +8864,10 @@ fn relation_options_error(database_url: Option<&str>, error: String) -> Response
 fn load_relation_options(
     form: &FormRoute,
     database_url: Option<&str>,
+    tenant_context: Option<&TenantContext>,
 ) -> Result<HashMap<String, Vec<SelectOption>>, String> {
     let mut options = HashMap::new();
+    let is_postgres = database_url.is_some_and(zelyra_database::is_postgres_url);
     for field in &form.form.fields {
         let Some(target_table) = relation_target_for_field(form, field) else {
             continue;
@@ -8709,14 +8889,37 @@ fn load_relation_options(
             })
             .ok_or_else(|| format!("relationship table `{target_table}` is missing from schema"))?;
         let display_column = relation_display_column(schema_table);
+        let target_tenant_column = schema_table
+            .columns
+            .iter()
+            .find(|col| {
+                col.name == "tenant_id" || form.tenant_column.as_deref() == Some(col.name.as_str())
+            })
+            .map(|col| col.name.as_str());
+
+        let mut params = Vec::new();
+        let where_clause = if let (Some(tenant_context), Some(tenant_col)) =
+            (tenant_context, target_tenant_column)
+        {
+            params.extend(tenant_query_params(tenant_context));
+            format!(
+                " WHERE {} = :zelyra_tenant_id AND {}",
+                quote_ident(tenant_col, is_postgres),
+                tenant_membership_predicate(tenant_context, is_postgres)
+            )
+        } else {
+            String::new()
+        };
+
         let query = format!(
-            "SELECT {}, {} FROM {} ORDER BY {}",
-            quote_identifier("id"),
-            quote_identifier(display_column),
-            quote_identifier(&target_table),
-            quote_identifier(display_column)
+            "SELECT {}, {} FROM {}{} ORDER BY {}",
+            quote_ident("id", is_postgres),
+            quote_ident(display_column, is_postgres),
+            quote_ident(&target_table, is_postgres),
+            where_clause,
+            quote_ident(display_column, is_postgres)
         );
-        let result = zelyra_database::execute_mariadb_query(database_url, &query, Vec::new())
+        let result = zelyra_database::execute_query(database_url, &query, params)
             .map_err(|error| error.to_string())?;
         let field_options = result
             .rows
@@ -8805,10 +9008,6 @@ fn relation_display_column(table: &zelyra_database::Table) -> &str {
         .unwrap_or("id")
 }
 
-fn quote_identifier(identifier: &str) -> String {
-    format!("`{}`", identifier.replace('`', "``"))
-}
-
 fn execute_form_action(
     form: &FormRoute,
     action: &zelyra_ast::FormAction,
@@ -8822,6 +9021,10 @@ fn execute_form_action(
         expected_snapshot,
         tenant_context,
     } = context;
+    let is_postgres = zelyra_database::is_postgres_url(database_url);
+    if is_postgres && form.audit_table.is_some() && form.audit_chain {
+        return Err("PostgreSQL does not support chained audit tables (@zelyra_prev_hash/SHA2); use unchained audit logging or MariaDB/MySQL".into());
+    }
     let mut parameters = form_query_parameters(form, values)?;
     if let Some(tenant_context) = tenant_context {
         parameters.extend(tenant_query_params(tenant_context));
@@ -8861,7 +9064,7 @@ fn execute_form_action(
     if queries.is_empty() {
         return Err("form action must contain at least one SQL statement".into());
     }
-    zelyra_database::with_mariadb_transaction(database_url, |transaction| {
+    zelyra_database::with_decision_transaction(database_url, |transaction| {
         if form.tenant_column.is_some() && tenant_context.is_none() {
             return Err(zelyra_database::DatabaseError {
                 message: "tenant context is required for this form".into(),
@@ -8876,7 +9079,7 @@ fn execute_form_action(
             let membership_check = zelyra_database::Query {
                 sql: format!(
                     "SELECT tenant_id FROM {} WHERE user_id = :zelyra_user_id AND tenant_id = :zelyra_tenant_id AND active = true FOR UPDATE",
-                    quote_identifier(&tenant_context.membership_table)
+                    quote_ident(&tenant_context.membership_table, is_postgres)
                 ),
                 params: tenant_query_params(tenant_context),
             };
@@ -8896,8 +9099,8 @@ fn execute_form_action(
                 let tenant_condition = match (form.tenant_column.as_deref(), tenant_context) {
                     (Some(column), Some(context)) => format!(
                         " AND {} = :zelyra_tenant_id AND {}",
-                        quote_identifier(column),
-                        tenant_membership_predicate(context)
+                        quote_ident(column, is_postgres),
+                        tenant_membership_predicate(context, is_postgres)
                     ),
                     (Some(_), None) => {
                         return Err(zelyra_database::DatabaseError {
@@ -8909,10 +9112,10 @@ fn execute_form_action(
                 let query = zelyra_database::Query {
                     sql: format!(
                         "SELECT {} FROM {} WHERE {} = :id AND {} = :zelyra_user_id{} FOR UPDATE",
-                        quote_identifier("id"),
-                        quote_identifier(table_name),
-                        quote_identifier("id"),
-                        quote_identifier(recipient_column),
+                        quote_ident("id", is_postgres),
+                        quote_ident(table_name, is_postgres),
+                        quote_ident("id", is_postgres),
+                        quote_ident(recipient_column, is_postgres),
                         tenant_condition
                     ),
                     params: {
@@ -8961,8 +9164,8 @@ fn execute_form_action(
             let tenant_condition = match (form.tenant_column.as_deref(), tenant_context) {
                 (Some(column), Some(context)) => format!(
                     " AND {} = :zelyra_tenant_id AND {}",
-                    quote_identifier(column),
-                    tenant_membership_predicate(context)
+                    quote_ident(column, is_postgres),
+                    tenant_membership_predicate(context, is_postgres)
                 ),
                 (Some(_), None) => {
                     return Err(zelyra_database::DatabaseError {
@@ -8973,7 +9176,7 @@ fn execute_form_action(
             };
             let recipient_condition = match (form.recipient_column.as_deref(), actor_user_id) {
                 (Some(column), Some(_)) => {
-                    format!(" AND {} = :zelyra_user_id", quote_identifier(column))
+                    format!(" AND {} = :zelyra_user_id", quote_ident(column, is_postgres))
                 }
                 (Some(_), None) => {
                     return Err(zelyra_database::DatabaseError {
@@ -8988,11 +9191,11 @@ fn execute_form_action(
                     "SELECT {} FROM {} WHERE {} = :id{}{} FOR UPDATE",
                     columns
                         .iter()
-                        .map(|column| quote_identifier(column))
+                        .map(|column| quote_ident(column, is_postgres))
                         .collect::<Vec<_>>()
                         .join(", "),
-                    quote_identifier(table_name),
-                    quote_identifier("id"),
+                    quote_ident(table_name, is_postgres),
+                    quote_ident("id", is_postgres),
                     tenant_condition,
                     recipient_condition
                 ),
@@ -9013,7 +9216,7 @@ fn execute_form_action(
                 },
             };
             let result = transaction.execute(&query)?;
-            let Some(row) = result.rows.first() else {
+            let Some(current_values) = EditValues::from_result(form, &result)? else {
                 return Err(zelyra_database::DatabaseError {
                     message: if tenant_context.is_some() {
                         "ZELYRA_TENANT_DENIED: record is not available in this tenant".into()
@@ -9022,20 +9225,13 @@ fn execute_form_action(
                     },
                 });
             };
-            let current_values = form
-                .form
-                .fields
-                .iter()
-                .zip(row)
-                .map(|(field, value)| (field.name.clone(), value.clone()))
-                .collect::<HashMap<_, _>>();
             if !form_snapshot_matches(&form.csrf, expected_snapshot, &current_values) {
                 return Err(zelyra_database::DatabaseError {
                     message: "ZELYRA_CONFLICT: edited record changed after the form was loaded"
                         .into(),
                 });
             }
-            Some(current_values)
+            Some(current_values.values)
         } else {
             None
         };
@@ -9056,14 +9252,17 @@ fn execute_form_action(
             if let Some(tenant_context) = tenant_context {
                 details.push_str(&format!(";tenant_id={}", tenant_context.tenant_id));
             }
-            for query in audit_insert_queries(
+            let audit_queries = audit_insert_queries_for(
                 audit_table,
                 form.audit_chain,
                 actor_user_id,
                 audit_event,
                 record_id,
                 &details,
-            ) {
+                is_postgres,
+            )
+            .map_err(|message| zelyra_database::DatabaseError { message })?;
+            for query in audit_queries {
                 transaction.execute(&query)?;
             }
         }
@@ -9078,17 +9277,25 @@ fn form_query_parameters(
 ) -> Result<Vec<(String, zelyra_database::QueryValue)>, String> {
     let mut parameters = Vec::new();
     for field in &form.form.fields {
+        let ty = zelyra_forms::field_value_type(
+            &form.form,
+            form.table.as_ref(),
+            form.schema.as_ref(),
+            field,
+        );
         let Some(value) = values.get(&field.name) else {
+            if matches!(ty, Some(Type::Option(_))) && !field.readonly {
+                parameters.push((field.name.clone(), QueryValue::Null));
+            }
             continue;
         };
-        let ty = field.ty.as_ref().or_else(|| {
-            form.table.as_ref().and_then(|table| {
-                table
-                    .columns
-                    .iter()
-                    .find(|column| column.name == field.name)
-                    .map(|column| &column.ty)
-            })
+        if value.is_empty() && matches!(ty, Some(Type::Option(_))) && !field.readonly {
+            parameters.push((field.name.clone(), QueryValue::Null));
+            continue;
+        }
+        let ty = ty.as_ref().map(|ty| match ty {
+            Type::Option(inner) => inner.as_ref(),
+            other => other,
         });
         let query_value = match ty {
             Some(Type::Int) => value
@@ -9107,14 +9314,20 @@ fn form_query_parameters(
                 .parse::<u64>()
                 .map(zelyra_database::QueryValue::UInt)
                 .map_err(|_| format!("form field `{}` is not an unsigned integer", field.name))?,
-            Some(Type::Float) | Some(Type::Decimal) => value
-                .parse::<f64>()
-                .map(zelyra_database::QueryValue::Float)
-                .map_err(|_| format!("form field `{}` is not a number", field.name))?,
-            Some(Type::Named(name)) if name == "Money" => value
-                .parse::<f64>()
-                .map(zelyra_database::QueryValue::Float)
-                .map_err(|_| format!("form field `{}` is not a number", field.name))?,
+            Some(Type::Float) => numeric_filter_query_value(TableViewFilterKind::Numeric, value)
+                .map_err(|error| format!("form field `{}` {error}", field.name))?,
+            Some(Type::Decimal) => exact_query_value(value)
+                .map_err(|error| format!("form field `{}` {error}", field.name))?,
+            Some(Type::Named(name)) if name == "Money" => money_query_value(value)
+                .map_err(|error| format!("form field `{}` {error}", field.name))?,
+            Some(ty @ (Type::Date | Type::Time | Type::Timestamp)) => {
+                temporal_query_value(ty, value)
+                    .map_err(|error| format!("form field `{}` {error}", field.name))?
+            }
+            Some(Type::Duration) => value
+                .parse::<i64>()
+                .map(QueryValue::Int)
+                .map_err(|_| format!("form field `{}` must be integer milliseconds", field.name))?,
             Some(Type::Bool) => {
                 zelyra_database::QueryValue::Bool(matches!(value.as_str(), "true" | "1"))
             }
@@ -9307,7 +9520,7 @@ fn load_route_data(
             let count_query = format!("SELECT COUNT(*) FROM ({count_source}) AS zelyra_page_count");
             let mut count_query_params = query_params.clone();
             count_query_params.extend(count_parameters);
-            let count_result = match zelyra_database::execute_mariadb_query(
+            let count_result = match zelyra_database::execute_query(
                 database_url,
                 &count_query,
                 count_query_params,
@@ -9356,14 +9569,13 @@ fn load_route_data(
             query = wrapped_query;
             query_params.extend(generated_params);
         }
-        let result =
-            match zelyra_database::execute_mariadb_query(database_url, &query, query_params) {
-                Ok(result) => result,
-                Err(error) => {
-                    eprintln!("zelyra web: page data query failed: {error}");
-                    return Err(RouteDataError::Query);
-                }
-            };
+        let result = match zelyra_database::execute_query(database_url, &query, query_params) {
+            Ok(result) => result,
+            Err(error) => {
+                eprintln!("zelyra web: page data query failed: {error}");
+                return Err(RouteDataError::Query);
+            }
+        };
         if data.collection {
             let rows = result
                 .rows
@@ -9615,21 +9827,8 @@ fn page_filter_condition(column: &str, operator: FilterOperator) -> String {
 }
 
 fn page_filter_query_value(filter: &PageFilterSelection) -> Result<QueryValue, String> {
-    match filter.kind {
-        TableViewFilterKind::Bool => match filter.value.as_str() {
-            "true" | "1" => Ok(QueryValue::Bool(true)),
-            "false" | "0" => Ok(QueryValue::Bool(false)),
-            _ => Err(format!("filter_{} must be true or false", filter.name)),
-        },
-        TableViewFilterKind::Numeric => filter
-            .value
-            .parse::<f64>()
-            .map(QueryValue::Float)
-            .map_err(|_| format!("filter_{} must be a number", filter.name)),
-        TableViewFilterKind::Text | TableViewFilterKind::Other => {
-            Ok(QueryValue::String(filter.value.clone()))
-        }
-    }
+    numeric_filter_query_value(filter.kind, &filter.value)
+        .map_err(|error| format!("filter_{} {error}", filter.name))
 }
 
 fn page_query_value(ty: &Type, value: &str) -> Result<QueryValue, String> {
@@ -9646,10 +9845,14 @@ fn page_query_value(ty: &Type, value: &str) -> Result<QueryValue, String> {
             .parse::<u64>()
             .map(QueryValue::UInt)
             .map_err(|_| "query parameter must be an unsigned integer".into()),
-        Type::Float | Type::Decimal => value
-            .parse::<f64>()
-            .map(QueryValue::Float)
-            .map_err(|_| "query parameter must be a number".into()),
+        Type::Float => numeric_filter_query_value(TableViewFilterKind::Numeric, value),
+        Type::Decimal => exact_query_value(value),
+        Type::Named(name) if name == "Money" => money_query_value(value),
+        Type::Date | Type::Time | Type::Timestamp => temporal_query_value(ty, value),
+        Type::Duration => value
+            .parse::<i64>()
+            .map(QueryValue::Int)
+            .map_err(|_| "query parameter must be integer milliseconds".into()),
         Type::Bool => match value {
             "true" | "1" => Ok(QueryValue::Bool(true)),
             "false" | "0" => Ok(QueryValue::Bool(false)),
@@ -9676,6 +9879,21 @@ fn route_data_row(
             (field.clone(), value)
         })
         .collect()
+}
+
+fn display_exact_decimal_value(value: &str) -> &str {
+    let unsigned = value.strip_prefix('-').unwrap_or(value);
+    let Some((whole, fraction)) = unsigned.split_once('.') else {
+        return value;
+    };
+    if whole.is_empty()
+        || fraction.is_empty()
+        || !whole.bytes().all(|byte| byte.is_ascii_digit())
+        || !fraction.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        return value;
+    }
+    value.trim_end_matches('0').trim_end_matches('.')
 }
 
 fn display_database_value(value: &str) -> &str {

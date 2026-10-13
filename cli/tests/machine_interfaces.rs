@@ -610,7 +610,7 @@ fn laravel_migrator_0_9_8_fixture_covers_business_security_and_integration_clues
     .unwrap();
     fs::write(
         project.join("app/Http/Controllers/OrderController.php"),
-        "<?php\nclass OrderController { function store($request) { $this->authorize('create', Order::class); $request->validate([]); $order->tenant_id = $tenantId; $order->total = $items->sum('price'); Storage::put('orders', $request->file('attachment')); DB::transaction(fn () => $order->save()); Mail::send('order'); } }\n",
+        "<?php\nclass OrderController { function store($request) { $this->authorize('create', Order::class); $request->validate([]); $order->tenant_id = $tenantId; $order->total = $items->sum('price'); Storage::put('orders', $request->file('attachment')); DB::transaction(fn () => $order->save()); Mail::send('order'); $order->charge(100); DB::raw('NOW()'); $secret = env('DB_PASSWORD'); } }\n",
     )
     .unwrap();
     fs::write(
@@ -655,8 +655,8 @@ fn laravel_migrator_0_9_8_fixture_covers_business_security_and_integration_clues
     );
     let report_bytes = fs::read(&report).unwrap();
     let parsed: serde_json::Value = serde_json::from_slice(&report_bytes).unwrap();
-    assert_eq!(parsed["analyzer"], "Zelyra Laravel Migrator 0.9.8");
-    assert_eq!(parsed["mapping_ruleset"], "0.9.6");
+    assert_eq!(parsed["analyzer"], "Zelyra Laravel Migrator 0.9.9");
+    assert_eq!(parsed["mapping_ruleset"], "0.9.9");
     assert_eq!(parsed["laravel_constraint"], "^11.0");
     let findings = parsed["findings"].as_array().unwrap();
     for kind in [
@@ -671,6 +671,9 @@ fn laravel_migrator_0_9_8_fixture_covers_business_security_and_integration_clues
         "tenant_boundary",
         "financial_rule",
         "file_access",
+        "payment_rule",
+        "ambiguity",
+        "environment_access",
         "integration",
         "transaction",
         "view",
@@ -686,7 +689,7 @@ fn laravel_migrator_0_9_8_fixture_covers_business_security_and_integration_clues
     assert!(!String::from_utf8_lossy(&report_bytes).contains("fixture-secret-must-not-appear"));
     assert_eq!(
         fs::read_to_string(project.join("app/Http/Controllers/OrderController.php")).unwrap(),
-        "<?php\nclass OrderController { function store($request) { $this->authorize('create', Order::class); $request->validate([]); $order->tenant_id = $tenantId; $order->total = $items->sum('price'); Storage::put('orders', $request->file('attachment')); DB::transaction(fn () => $order->save()); Mail::send('order'); } }\n"
+        "<?php\nclass OrderController { function store($request) { $this->authorize('create', Order::class); $request->validate([]); $order->tenant_id = $tenantId; $order->total = $items->sum('price'); Storage::put('orders', $request->file('attachment')); DB::transaction(fn () => $order->save()); Mail::send('order'); $order->charge(100); DB::raw('NOW()'); $secret = env('DB_PASSWORD'); } }\n"
     );
     fs::remove_dir_all(parent).unwrap();
 }
@@ -732,7 +735,7 @@ fn laravel_migrator_creates_a_separate_compiler_checked_scaffold() {
     let todo = fs::read_to_string(target.join("MIGRATION_TODO.md")).unwrap();
     assert!(todo.contains("No Laravel business logic has been transferred"));
     assert!(
-        todo.contains("0.9.6/route"),
+        todo.contains("0.9.9/route"),
         "TODO entries need versioned mapping IDs: {todo}"
     );
     let report_text = fs::read_to_string(&report).unwrap();

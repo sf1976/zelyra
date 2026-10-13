@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use zelyra_ast::{FormDef, Span, TableDef, Type};
+use zelyra_ast::{FormDef, FormField, Span, TableDef, Type};
 use zelyra_database::Schema;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -146,6 +146,91 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
     }
 }
 
+/// Resolve fixed-point form aliases through the checked storage schema. Domain
+/// Money keeps its established four-digit scale; ordinary Decimal keeps nine.
+pub fn field_value_type(
+    form: &FormDef,
+    table: Option<&TableDef>,
+    schema: Option<&Schema>,
+    field: &FormField,
+) -> Option<Type> {
+    let storage_column = schema.and_then(|schema| {
+        schema
+            .tables
+            .iter()
+            .find(|table| Some(table.name.as_str()) == form.table.as_deref())
+            .and_then(|table| find_column(table, &field.name))
+    });
+    let ty = field.ty.clone().or_else(|| {
+        table.and_then(|table| {
+            table
+                .columns
+                .iter()
+                .find(|column| column.name == field.name)
+                .map(|column| column.ty.clone())
+        })
+    })?;
+    // Storage nullability also applies to ordinary `String`/numeric declarations
+    // without an explicit Option. Validation still enforces required form fields.
+    let nullable = storage_column
+        .map(|column| column.nullable)
+        .unwrap_or_else(|| {
+            table
+                .and_then(|table| {
+                    table
+                        .columns
+                        .iter()
+                        .find(|column| column.name == field.name)
+                })
+                .is_some_and(|column| !column.required && !column.primary_key && !column.auto)
+        });
+    let ty = if nullable && !matches!(ty, Type::Option(_)) {
+        Type::Option(Box::new(ty))
+    } else {
+        ty
+    };
+    let inner = match &ty {
+        Type::Option(inner) => inner.as_ref(),
+        other => other,
+    };
+    if !matches!(inner, Type::Named(name) if !matches!(name.as_str(), "Money" | "Id" | "Email" | "Url" | "Uuid"))
+    {
+        return Some(ty);
+    }
+    let sql_type = schema
+        .and_then(|schema| {
+            schema
+                .tables
+                .iter()
+                .find(|table| Some(table.name.as_str()) == form.table.as_deref())
+        })
+        .and_then(|table| find_column(table, &field.name))
+        .map(|column| column.sql_type.as_str());
+    let resolved = match sql_type {
+        Some("DATE") => Type::Date,
+        Some("TIME") => Type::Time,
+        Some("TIMESTAMP" | "TIMESTAMPTZ") => Type::Timestamp,
+        Some(value)
+            if value.starts_with("TIMESTAMP(")
+                || value.starts_with("TIMESTAMPTZ(")
+                || value.starts_with("DATETIME") =>
+        {
+            Type::Timestamp
+        }
+        Some("DECIMAL(19,4)" | "NUMERIC(19,4)") => Type::Named("Money".into()),
+        Some("DECIMAL(20,0)" | "NUMERIC(20,0)") => Type::UInt,
+        Some(value) if value.starts_with("DECIMAL(") || value.starts_with("NUMERIC(") => {
+            Type::Decimal
+        }
+        _ => return Some(ty),
+    };
+    Some(if matches!(ty, Type::Option(_)) {
+        Type::Option(Box::new(resolved))
+    } else {
+        resolved
+    })
+}
+
 pub fn validate(
     form: &FormDef,
     table_definition: Option<&TableDef>,
@@ -217,11 +302,8 @@ pub fn validate(
             });
             continue;
         }
-        let ty = field
-            .ty
-            .as_ref()
-            .or_else(|| table_column.map(|column| &column.ty));
-        if let Some(ty) = ty {
+        let ty = field_value_type(form, table_definition, schema, field);
+        if let Some(ty) = &ty {
             if let Some(message) = type_error(ty, value) {
                 errors.push(FieldError {
                     field: field.name.clone(),
@@ -268,18 +350,25 @@ fn type_error(ty: &Type, value: &str) -> Option<&'static str> {
             .map(|_| ())
             .is_none()
             .then_some("must be an unsigned integer"),
-        Type::Float | Type::Decimal => value
+        Type::Float => value
             .parse::<f64>()
             .ok()
+            .filter(|value| value.is_finite())
             .map(|_| ())
             .is_none()
             .then_some("must be a number"),
-        Type::Named(name) if name == "Money" => value
-            .parse::<f64>()
-            .ok()
-            .map(|_| ())
+        Type::Decimal => zelyra_ast::decimal::parse_scaled(value, 9)
             .is_none()
-            .then_some("must be a number"),
+            .then_some("must be an exact Decimal with at most 9 fractional digits"),
+        Type::Named(name) if name == "Money" => {
+            zelyra_ast::decimal::parse_money(value).is_none().then_some(
+                "must be an exact Money amount with at most 15 integer and 4 fractional digits",
+            )
+        }
+        Type::Date => (!zelyra_ast::temporal::valid_date(value)).then_some("must be a valid Date in YYYY-MM-DD format"),
+        Type::Time => (!zelyra_ast::temporal::valid_time(value)).then_some("must be a valid Time in HH:MM:SS format"),
+        Type::Timestamp => zelyra_ast::temporal::parse_timestamp_input(value).is_none().then_some("must be a Timestamp in UTC ISO format or Unix milliseconds within years 0001 through 9999"),
+        Type::Duration => value.parse::<i64>().is_err().then_some("must be an integer duration in milliseconds"),
         Type::Bool => {
             (!matches!(value, "true" | "false" | "1" | "0")).then_some("must be true or false")
         }
@@ -304,7 +393,7 @@ fn type_error(ty: &Type, value: &str) -> Option<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use zelyra_ast::{ColumnDef, DefaultValue, FormField, TableDef};
+    use zelyra_ast::{ColumnDef, DefaultValue, TableDef};
     use zelyra_database::build_schema;
 
     fn field(name: &str, ty: Type, required: bool, max: Option<u32>) -> FormField {
@@ -335,6 +424,32 @@ mod tests {
     }
 
     #[test]
+    fn temporal_form_fields_reject_invalid_calendar_and_clock_values() {
+        for value in [
+            "",
+            "0000-01-01",
+            "1900-02-29",
+            "2026-02-30",
+            "2026-13-01",
+            "2026-1-01",
+            "2026-01-00",
+        ] {
+            assert!(
+                type_error(&Type::Date, value).is_some(),
+                "accepted Date: {value}"
+            );
+        }
+        for value in ["24:00:00", "12:60:00", "23:59:60", "1:02:03", "12:00:00Z"] {
+            assert!(
+                type_error(&Type::Time, value).is_some(),
+                "accepted Time: {value}"
+            );
+        }
+        assert!(type_error(&Type::Date, "2000-02-29").is_none());
+        assert!(type_error(&Type::Time, "23:59:59").is_none());
+    }
+
+    #[test]
     fn rejects_duplicate_form_names_in_the_linked_program() {
         let program = zelyra_ast::Program {
             imports: Vec::new(),
@@ -358,6 +473,45 @@ mod tests {
         assert!(errors
             .iter()
             .any(|error| error.message == "duplicate form definition `CustomerCreate`"));
+    }
+
+    #[test]
+    fn money_and_decimal_inputs_reject_lossy_or_nonfinite_values() {
+        let money = Type::Named("Money".into());
+        for value in ["0", "0.01", "-12.34", "999999999999999.9999"] {
+            assert!(
+                type_error(&money, value).is_none(),
+                "rejected valid Money: {value}"
+            );
+        }
+        for value in [
+            "NaN",
+            "inf",
+            "-inf",
+            "1e3",
+            "1.00001",
+            "1000000000000000.00",
+        ] {
+            assert!(
+                type_error(&money, value).is_some(),
+                "accepted invalid Money: {value}"
+            );
+        }
+        for value in ["0.000000001", "9007199254740993.123456789"] {
+            assert!(type_error(&Type::Decimal, value).is_none());
+        }
+        for value in ["NaN", "inf", "1e-999", "1.0000000001"] {
+            assert!(
+                type_error(&Type::Decimal, value).is_some(),
+                "accepted invalid Decimal: {value}"
+            );
+        }
+        for value in ["NaN", "inf", "-inf", "1e999"] {
+            assert!(
+                type_error(&Type::Float, value).is_some(),
+                "accepted nonfinite Float: {value}"
+            );
+        }
     }
 
     #[test]

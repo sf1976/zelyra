@@ -1,6 +1,7 @@
 use super::*;
 use rand_core::{OsRng, RngCore};
 use ring::aead::{Aad, LessSafeKey, Nonce, UnboundKey, AES_256_GCM};
+use ring::hmac::{self, HMAC_SHA256};
 use std::sync::mpsc::{SyncSender, TrySendError};
 #[cfg(not(test))]
 use std::{sync::mpsc::sync_channel, thread, time::Duration};
@@ -10,6 +11,11 @@ use zeroize::Zeroize;
 const RESET_TOKEN_TTL_MINUTES: u32 = 15;
 const RESET_COOKIE: &str = "zelyra_password_reset";
 const RESET_COOKIE_PATH: &str = "/reset-password";
+const RESET_RATE_KEY_DOMAIN: &[u8] = b"zelyra/password-reset-rate-limit/v1\0";
+const RESET_RATE_RETENTION_DAYS: u32 = 2;
+const RESET_RATE_CLEANUP_BATCH: u32 = 100;
+const RESET_RATE_MAX_BUCKETS: u32 = 4096;
+const RESET_RATE_LOCK_WAIT_SECONDS: u32 = 1;
 const RESET_ADVISORY_LOCK_WAIT_SECONDS: u32 = 10;
 #[cfg(not(test))]
 const RESET_OUTBOX_RETRY_DELAY_SECONDS: u32 = 30;
@@ -216,6 +222,26 @@ impl PasswordResetMailer {
             TrySendError::Full(_) => "password reset mail queue is full".to_owned(),
             TrySendError::Disconnected(_) => "password reset mail worker is unavailable".to_owned(),
         })
+    }
+
+    fn rate_limit_bucket_key(&self, request: &Request) -> Result<String, String> {
+        let key = self
+            .delivery_key
+            .as_ref()
+            .ok_or_else(|| "password reset rate-limit key is unavailable".to_owned())?;
+        let client_ip = request
+            .remote_addr
+            .map(|address| address.ip().to_string())
+            .unwrap_or_else(|| "unknown".to_owned());
+        let mut message = Vec::with_capacity(RESET_RATE_KEY_DOMAIN.len() + client_ip.len());
+        message.extend_from_slice(RESET_RATE_KEY_DOMAIN);
+        message.extend_from_slice(client_ip.as_bytes());
+        let digest = hmac::sign(&hmac::Key::new(HMAC_SHA256, &key.0), &message);
+        Ok(digest
+            .as_ref()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect())
     }
 
     fn enqueue_reset(
@@ -492,7 +518,8 @@ fn decrypt_delivery_payload(encrypted: &str, key: &[u8; 32]) -> Result<serde_jso
     let plaintext = key
         .open_in_place(nonce, Aad::from(b"zelyra-reset-mail-v1"), &mut ciphertext)
         .map_err(|_| "encrypted payload authentication failed".to_owned())?;
-    serde_json::from_slice(plaintext).map_err(|_| "decrypted payload is malformed".to_owned())
+    zelyra_ast::json::parse_slice(plaintext)
+        .map_err(|_| "decrypted payload is malformed".to_owned())
 }
 
 fn validate_public_base_url(value: &str) -> Result<(), String> {
@@ -549,8 +576,7 @@ pub(super) fn dispatch_password_reset(
             ) {
                 return reset_generic_response(app.ui_language, 202);
             }
-            let key = reset_rate_key(request);
-            if reset_rate_limited(app, &key, auth.reset_rate_limit, auth.reset_block_seconds) {
+            if !reset_rate_limit_allows_request(app, auth, request) {
                 return reset_generic_response(app.ui_language, 202);
             }
             let email = input
@@ -752,13 +778,11 @@ pub(super) fn dispatch_password_reset(
                 &auth.csrf,
                 input.get("_zelyra_csrf").map(String::as_str),
             ) || !token.as_deref().is_some_and(valid_token)
-                || reset_rate_limited(
-                    app,
-                    &reset_rate_key(request),
-                    auth.reset_rate_limit,
-                    auth.reset_block_seconds,
-                )
             {
+                return reset_invalid_response(app.ui_language)
+                    .with_header("Set-Cookie", clear_reset_cookie(request));
+            }
+            if !reset_rate_limit_allows_request(app, auth, request) {
                 return reset_invalid_response(app.ui_language)
                     .with_header("Set-Cookie", clear_reset_cookie(request));
             }
@@ -881,57 +905,155 @@ fn reset_invalid_response(language: UiLanguage) -> Response {
     .with_header("Referrer-Policy", "no-referrer")
 }
 
-fn reset_rate_key(request: &Request) -> String {
-    let ip = request
-        .remote_addr
-        .map(|address| address.ip().to_string())
-        .unwrap_or_else(|| "unknown".into());
-    format!("ip:{ip}")
+fn reset_rate_limit_allows_request(app: &WebApp, auth: &AuthRoute, request: &Request) -> bool {
+    match persistent_reset_rate_limited(app, auth, request) {
+        Ok(limited) => !limited,
+        Err(_) => {
+            eprintln!("zelyra web: error[E-AUTH-043]: persistent password reset rate-limit storage is unavailable; request rejected; check the declared table and database access");
+            false
+        }
+    }
 }
 
-fn reset_rate_limited(
+fn persistent_reset_rate_limited(
     app: &WebApp,
-    key: &str,
+    auth: &AuthRoute,
+    request: &Request,
+) -> Result<bool, String> {
+    let database_url = app
+        .database_url
+        .as_deref()
+        .ok_or_else(|| "password reset rate-limit database is unavailable".to_owned())?;
+    let table = auth
+        .reset_rate_limits_table
+        .as_deref()
+        .ok_or_else(|| "password reset rate-limit table is not configured".to_owned())?;
+    let mailer = app
+        .password_reset_mailer
+        .as_deref()
+        .ok_or_else(|| "password reset rate-limit key is unavailable".to_owned())?;
+    let bucket_key = mailer.rate_limit_bucket_key(request)?;
+    persistent_reset_rate_bucket(
+        database_url,
+        table,
+        &bucket_key,
+        auth.reset_rate_limit,
+        auth.reset_block_seconds,
+    )
+}
+
+fn persistent_reset_rate_bucket(
+    database_url: &str,
+    table: &str,
+    bucket_key: &str,
     policy: zelyra_ast::ApiRateLimit,
     block_seconds: u32,
-) -> bool {
-    let Ok(mut throttle) = app.reset_throttle.lock() else {
-        return true;
-    };
-    let now = Instant::now();
-    throttle.retain(|_, state| {
-        now.duration_since(state.window_started)
-            < Duration::from_secs(u64::from(state.window_seconds))
-            || state.blocked_until.is_some_and(|until| now < until)
-    });
-    if !throttle.contains_key(key) && throttle.len() >= LOGIN_THROTTLE_MAX_KEYS {
-        return true;
-    }
-    let state = throttle.entry(key.to_owned()).or_insert(LoginThrottle {
-        window_started: now,
-        window_seconds: policy.window_seconds,
-        failures: 0,
-        blocked_until: None,
-    });
-    if state.blocked_until.is_some_and(|until| now < until) {
-        return true;
-    }
-    if now.duration_since(state.window_started)
-        >= Duration::from_secs(u64::from(policy.window_seconds))
+) -> Result<bool, String> {
+    if bucket_key.len() != 64
+        || !bucket_key.bytes().all(|byte| byte.is_ascii_hexdigit())
+        || policy.requests == 0
+        || policy.requests > 1000
+        || policy.window_seconds == 0
+        || policy.window_seconds > 86_400
+        || block_seconds == 0
+        || block_seconds > 86_400
     {
-        *state = LoginThrottle {
-            window_started: now,
-            window_seconds: policy.window_seconds,
-            failures: 0,
-            blocked_until: None,
+        return Err("password reset rate-limit configuration is invalid".into());
+    }
+    let lock_name = zelyra_database::mariadb_advisory_lock_name(
+        database_url,
+        &format!("password-reset-rate-limit:{table}"),
+    )
+    .map_err(|_| "persistent password reset rate-limit storage is unavailable".to_owned())?;
+    let table = quote_identifier(table);
+    zelyra_database::with_mariadb_advisory_transaction(
+        database_url,
+        &lock_name,
+        RESET_RATE_LOCK_WAIT_SECONDS,
+        |transaction| {
+        transaction.execute(&zelyra_database::Query {
+            sql: format!(
+                "DELETE FROM {table} WHERE window_started < DATE_SUB(NOW(), INTERVAL {RESET_RATE_RETENTION_DAYS} DAY) AND (blocked_until IS NULL OR blocked_until <= NOW()) ORDER BY window_started LIMIT {RESET_RATE_CLEANUP_BATCH}"
+            ),
+            params: Vec::new(),
+        })?;
+        let state = transaction.execute(&zelyra_database::Query {
+            sql: format!(
+                "SELECT CAST(blocked_until IS NOT NULL AND blocked_until > NOW() AS UNSIGNED), CAST(window_started <= DATE_SUB(NOW(), INTERVAL {} SECOND) AS UNSIGNED), request_count FROM {table} WHERE bucket_key = :bucket_key FOR UPDATE",
+                policy.window_seconds
+            ),
+            params: vec![("bucket_key".into(), QueryValue::String(bucket_key.to_owned()))],
+        })?;
+        if state.rows.is_empty() {
+            let capacity = transaction.execute(&zelyra_database::Query {
+                sql: format!("SELECT COUNT(*) FROM {table}"),
+                params: Vec::new(),
+            })?;
+            let buckets = capacity.rows.first()
+                .and_then(|row| row.first())
+                .and_then(|value| value.parse::<u64>().ok())
+                .ok_or_else(|| zelyra_database::DatabaseError {
+                    message: "persistent password reset rate-limit capacity is invalid".into(),
+                })?;
+            if buckets >= u64::from(RESET_RATE_MAX_BUCKETS) {
+                return Ok(true);
+            }
+            transaction.execute(&zelyra_database::Query {
+                sql: format!(
+                    "INSERT INTO {table} (bucket_key, window_started, request_count, blocked_until) VALUES (:bucket_key, NOW(), 1, NULL)"
+                ),
+                params: vec![("bucket_key".into(), QueryValue::String(bucket_key.to_owned()))],
+            })?;
+            return Ok(false);
+        }
+        let row = state.rows.first().ok_or_else(|| zelyra_database::DatabaseError {
+            message: "persistent password reset rate-limit bucket could not be read".into(),
+        })?;
+        let is_blocked = row
+            .first()
+            .and_then(|value| value.parse::<u8>().ok())
+            .filter(|value| *value <= 1)
+            .map(|value| value == 1)
+            .ok_or_else(|| zelyra_database::DatabaseError {
+                message: "persistent password reset rate-limit block state is invalid".into(),
+            })?;
+        if is_blocked {
+            return Ok(true);
+        }
+        let window_expired = row
+            .get(1)
+            .and_then(|value| value.parse::<u8>().ok())
+            .filter(|value| *value <= 1)
+            .map(|value| value == 1)
+            .ok_or_else(|| zelyra_database::DatabaseError {
+                message: "persistent password reset rate-limit window state is invalid".into(),
+            })?;
+        let request_count = row
+            .get(2)
+            .and_then(|value| value.parse::<u32>().ok())
+            .ok_or_else(|| zelyra_database::DatabaseError {
+                message: "persistent password reset request count is invalid".into(),
+            })?;
+        let sql = if window_expired {
+            format!(
+                "UPDATE {table} SET window_started = NOW(), request_count = 1, blocked_until = NULL WHERE bucket_key = :bucket_key"
+            )
+        } else if request_count >= policy.requests {
+            format!(
+                "UPDATE {table} SET blocked_until = DATE_ADD(NOW(), INTERVAL {block_seconds} SECOND) WHERE bucket_key = :bucket_key"
+            )
+        } else {
+            format!(
+                "UPDATE {table} SET request_count = request_count + 1 WHERE bucket_key = :bucket_key"
+            )
         };
-    }
-    if state.failures >= policy.requests {
-        state.blocked_until = Some(now + Duration::from_secs(u64::from(block_seconds)));
-        return true;
-    }
-    state.failures += 1;
-    false
+        transaction.execute(&zelyra_database::Query {
+            sql,
+            params: vec![("bucket_key".into(), QueryValue::String(bucket_key.to_owned()))],
+        })?;
+        Ok(!window_expired && request_count >= policy.requests)
+    })
+    .map_err(|_| "persistent password reset rate-limit storage is unavailable".to_owned())
 }
 
 fn reset_token_exists(database_url: &str, reset_table: &str, token: &str) -> bool {
@@ -1229,14 +1351,56 @@ mod tests {
     }
 
     #[test]
-    fn reset_rate_limit_is_bounded_and_expires() {
-        let app = WebApp::new(Vec::new(), Vec::new());
-        let limit = zelyra_ast::ApiRateLimit {
-            requests: 1,
-            window_seconds: 30,
-        };
-        assert!(!reset_rate_limited(&app, "ip:127.0.0.1", limit, 60));
-        assert!(reset_rate_limited(&app, "ip:127.0.0.1", limit, 60));
+    fn reset_rate_limit_bucket_is_stable_and_does_not_expose_the_client_ip() {
+        let mailer = PasswordResetMailer::smtp(
+            "127.0.0.1",
+            2525,
+            "local_plaintext",
+            None,
+            None,
+            "no-reply@example.test",
+            "http://localhost",
+        )
+        .unwrap();
+        let mut request =
+            parse_request("GET /forgot-password HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+        request.remote_addr = Some("192.0.2.10:4242".parse().unwrap());
+        let first = mailer.rate_limit_bucket_key(&request).unwrap();
+        let repeated = mailer.rate_limit_bucket_key(&request).unwrap();
+        request.remote_addr = Some("192.0.2.11:4242".parse().unwrap());
+        let different_client = mailer.rate_limit_bucket_key(&request).unwrap();
+
+        assert_eq!(first, repeated);
+        assert_ne!(first, different_client);
+        assert_eq!(first.len(), 64);
+        assert!(first.bytes().all(|byte| byte.is_ascii_hexdigit()));
+        assert!(!first.contains("192.0.2.10"));
+    }
+
+    #[test]
+    fn persistent_reset_rate_bucket_rejects_invalid_limits_before_database_access() {
+        for (requests, window_seconds, block_seconds) in [
+            (0, 60, 60),
+            (1001, 60, 60),
+            (1, 0, 60),
+            (1, 86_401, 60),
+            (1, 60, 0),
+            (1, 60, 86_401),
+        ] {
+            assert_eq!(
+                persistent_reset_rate_bucket(
+                    "unavailable",
+                    "rate_limits",
+                    &"ab".repeat(32),
+                    zelyra_ast::ApiRateLimit {
+                        requests,
+                        window_seconds
+                    },
+                    block_seconds,
+                ),
+                Err("password reset rate-limit configuration is invalid".into())
+            );
+        }
     }
 
     #[test]

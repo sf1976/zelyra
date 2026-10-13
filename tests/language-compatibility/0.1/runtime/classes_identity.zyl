@@ -1,0 +1,15 @@
+class Counter {
+    value: Int
+}
+
+fn increment(counter: Counter) {
+    counter.value = counter.value + 1
+}
+
+fn main() {
+    counter = Counter { value: 1 }
+    alias = counter
+    increment(counter)
+    print(alias.value)
+    print(counter == alias)
+}

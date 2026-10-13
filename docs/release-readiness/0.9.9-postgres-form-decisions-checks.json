@@ -1,0 +1,30 @@
+{
+  "source_baseline": "4da11f72bd8039fa784adc9569b7444be68ed8ac",
+  "rust_passed": 856,
+  "rust_failed": 0,
+  "ordinary_ignored_tests": 2,
+  "full_clippy": "passed",
+  "fmt": "passed",
+  "handbook_snippets": 324,
+  "release_metadata": "passed",
+  "readiness_helpers": 14,
+  "native_backends": [
+    "PostgreSQL 16.15",
+    "MariaDB 11.4.13",
+    "MySQL 8.4.11"
+  ],
+  "source_sha256": {
+    "cli/src/main.rs": "fc1ad373c26bb8fe8cdbc8cdc059200699d714320ab6fa5f10dd5d332f9b4769",
+    "cli/src/terminal.rs": "3eb4fc8a50f9d130cbe3803cfaa6c160054c05eaa5288a233d80b2936691e406",
+    "database/src/lib.rs": "c88142c86aa17ddf4c440e58c7994ece2d1a4a8bafe02865b649946141921775",
+    "database/src/sql.rs": "e2431a3075483b4a1fbc852e095eabe184b81e158a1f86171b7c029140048d74",
+    "web/src/lib.rs": "e86fdd421e1b577cfdc08c69b071b70e124c9ef06974a4fec3e8d09d21a77aeb",
+    "web/src/tests.rs": "e6b5d8ba6c8120e58879408bc4a93fd2023cac26267c42cdcd21f8b3c38c219b",
+    "tests/postgres-form-decisions-e2e.py": "87632504392880f1a1fbb8ddb1fcc36a75aff8cdaeb45a4f1d628478dbf47cc1",
+    "tests/null-edit-snapshots-e2e.py": "7c967a5434d0963e4692d0713ef2f9352e79837b81614daca6083d2e6063c09b"
+  },
+  "artifacts_sha256": {
+    "/tmp/zelyra-pg-form-decisions.bin": "3407b6ecaa4ff0fe1a34b053b0d600e14ed2102c4d30286f206bc68bd6d92cf3"
+  },
+  "remote_ci": "pending; see pull request checks; local evidence only"
+}

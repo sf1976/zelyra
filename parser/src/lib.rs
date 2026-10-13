@@ -66,6 +66,9 @@ impl<'a> Parser<'a> {
     fn at(&self, kind: &TokenKind) -> bool {
         &self.current().kind == kind
     }
+    fn at_word(&self, word: &str) -> bool {
+        matches!(&self.current().kind, TokenKind::Ident(name) if name == word)
+    }
     fn advance(&mut self) -> &'a Token {
         let token = self.current();
         if !matches!(&token.kind, TokenKind::Eof) {
@@ -155,7 +158,7 @@ impl<'a> Parser<'a> {
                     functions.push(self.function(true)?);
                 } else if self.at(&TokenKind::Type) {
                     types.push(self.type_definition(true)?);
-                } else if self.at(&TokenKind::Struct) {
+                } else if self.at(&TokenKind::Struct) || self.at_word("class") {
                     records.push(self.record_definition(true)?);
                 } else if self.at(&TokenKind::Enum) {
                     enums.push(self.enum_definition(true)?);
@@ -165,7 +168,7 @@ impl<'a> Parser<'a> {
                     components.push(self.component_definition(true)?);
                 } else {
                     return self
-                        .error("`pub` currently applies only to functions, types, enums, records, views, and components");
+                        .error("`pub` currently applies only to functions, types, enums, records, classes, views, and components");
                 }
             } else if self.at(&TokenKind::Database) {
                 declarations_started = true;
@@ -176,7 +179,7 @@ impl<'a> Parser<'a> {
             } else if self.at(&TokenKind::Type) {
                 declarations_started = true;
                 types.push(self.type_definition(false)?);
-            } else if self.at(&TokenKind::Struct) {
+            } else if self.at(&TokenKind::Struct) || self.at_word("class") {
                 declarations_started = true;
                 records.push(self.record_definition(false)?);
             } else if self.at(&TokenKind::Enum) {
@@ -427,6 +430,7 @@ impl<'a> Parser<'a> {
         let mut login_rate_limit = None;
         let mut login_block_seconds = None;
         let mut reset_tokens_table = None;
+        let mut reset_rate_limits_table = None;
         let mut reset_rate_limit = None;
         let mut reset_block_seconds = None;
         let mut mfa_table = None;
@@ -446,6 +450,7 @@ impl<'a> Parser<'a> {
                 TokenKind::LoginRateLimit => "login_rate_limit",
                 TokenKind::LoginBlockSeconds => "login_block_seconds",
                 TokenKind::ResetTokens => "reset_tokens",
+                TokenKind::Ident(name) if name == "reset_rate_limits" => "reset_rate_limits",
                 TokenKind::Ident(name) if name == "memberships" => "memberships",
                 TokenKind::ResetRateLimit => "reset_rate_limit",
                 TokenKind::ResetBlockSeconds => "reset_block_seconds",
@@ -544,6 +549,12 @@ impl<'a> Parser<'a> {
                 "admin_permission" => admin_permission = Some(value),
                 "admin_role" => admin_role = Some(value),
                 "reset_tokens" => reset_tokens_table = Some(value),
+                "reset_rate_limits" => {
+                    if reset_rate_limits_table.is_some() {
+                        return self.error("reset_rate_limits may only be declared once");
+                    }
+                    reset_rate_limits_table = Some(value);
+                }
                 "mfa" => mfa_table = Some(value),
                 "mfa_recovery" => mfa_recovery_table = Some(value),
                 _ => return self.error("unknown authentication option"),
@@ -573,6 +584,7 @@ impl<'a> Parser<'a> {
             login_rate_limit,
             login_block_seconds,
             reset_tokens_table,
+            reset_rate_limits_table,
             reset_rate_limit,
             reset_block_seconds,
             mfa_table,
@@ -1919,8 +1931,13 @@ impl<'a> Parser<'a> {
     }
 
     fn record_definition(&mut self, is_public: bool) -> Result<RecordDef, ParseError> {
-        let start = self.expect(TokenKind::Struct, "`struct`")?;
+        let (start, is_class) = if self.at_word("class") {
+            (self.advance().span, true)
+        } else {
+            (self.expect(TokenKind::Struct, "`struct`")?, false)
+        };
         let (name, _) = self.ident("record name")?;
+        let type_params = self.type_parameter_names()?;
         self.expect(TokenKind::LBrace, "`{` after record name")?;
         let mut fields = Vec::new();
         self.skip_newlines();
@@ -1946,6 +1963,8 @@ impl<'a> Parser<'a> {
         Ok(RecordDef {
             name,
             is_public,
+            is_class,
+            type_params,
             fields,
             span: start.join(end),
         })
@@ -1954,19 +1973,48 @@ impl<'a> Parser<'a> {
     fn enum_definition(&mut self, is_public: bool) -> Result<zelyra_ast::EnumDef, ParseError> {
         let start = self.expect(TokenKind::Enum, "`enum`")?;
         let (name, _) = self.ident("enum name")?;
+        let type_params = self.type_parameter_names()?;
         self.expect(TokenKind::LBrace, "`{` after enum name")?;
         let mut variants = Vec::new();
+        let mut variant_payloads = Vec::new();
         let mut seen = std::collections::HashSet::new();
         self.skip_newlines();
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
-            let (variant, span) = self.ident("unit enum variant")?;
+            let (variant, span) = self.ident("enum variant")?;
             if !seen.insert(variant.clone()) {
                 return Err(ParseError {
                     message: format!("enum variant `{variant}` is declared more than once"),
                     span,
                 });
             }
+            let mut payload_types = Vec::new();
+            if self.at(&TokenKind::LParen) {
+                self.advance();
+                self.skip_newlines();
+                if !self.at(&TokenKind::RParen) {
+                    loop {
+                        payload_types.push(self.type_name()?);
+                        self.skip_newlines();
+                        if !self.at(&TokenKind::Comma) {
+                            break;
+                        }
+                        self.advance();
+                        self.skip_newlines();
+                    }
+                }
+                let end = self.expect(TokenKind::RParen, "`)` after enum payload types")?;
+                if payload_types.is_empty() {
+                    return Err(ParseError {
+                        message: "unit enum variants must not use empty parentheses; write the variant name without `()`".into(),
+                        span: span.join(end),
+                    });
+                }
+            }
             variants.push(variant);
+            variant_payloads.push((
+                variants.last().expect("variant was just pushed").clone(),
+                payload_types,
+            ));
             self.skip_newlines();
             if self.at(&TokenKind::Comma) {
                 self.advance();
@@ -1983,13 +2031,64 @@ impl<'a> Parser<'a> {
         Ok(zelyra_ast::EnumDef {
             name,
             is_public,
+            type_params,
             variants,
+            variant_payloads,
             span: start.join(end),
         })
     }
+    fn type_parameter_names(&mut self) -> Result<Vec<String>, ParseError> {
+        if !self.at(&TokenKind::Less) {
+            return Ok(Vec::new());
+        }
+        self.advance();
+        let mut parameters = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        loop {
+            let (parameter, span) = self.ident("generic type parameter")?;
+            if !seen.insert(parameter.clone()) {
+                return Err(ParseError {
+                    message: format!(
+                        "generic type parameter `{parameter}` is declared more than once"
+                    ),
+                    span,
+                });
+            }
+            parameters.push(parameter);
+            if !self.at(&TokenKind::Comma) {
+                break;
+            }
+            self.advance();
+        }
+        self.expect(TokenKind::Greater, "`>` after generic type parameters")?;
+        Ok(parameters)
+    }
+
     fn function(&mut self, is_public: bool) -> Result<Function, ParseError> {
         let start = self.expect(TokenKind::Fn, "`fn`")?;
         let (name, _) = self.ident("function name")?;
+        let mut type_params = Vec::new();
+        if self.at(&TokenKind::Less) {
+            self.advance();
+            let mut seen = std::collections::HashSet::new();
+            loop {
+                let (parameter, span) = self.ident("generic type parameter")?;
+                if !seen.insert(parameter.clone()) {
+                    return Err(ParseError {
+                        message: format!(
+                            "generic type parameter `{parameter}` is declared more than once"
+                        ),
+                        span,
+                    });
+                }
+                type_params.push(parameter);
+                if !self.at(&TokenKind::Comma) {
+                    break;
+                }
+                self.advance();
+            }
+            self.expect(TokenKind::Greater, "`>` after generic type parameters")?;
+        }
         self.expect(TokenKind::LParen, "`(`")?;
         let mut params = Vec::new();
         self.skip_newlines();
@@ -2058,6 +2157,7 @@ impl<'a> Parser<'a> {
         Ok(Function {
             name,
             is_public,
+            type_params,
             params,
             return_type,
             capabilities,
@@ -2083,6 +2183,30 @@ impl<'a> Parser<'a> {
     }
     fn type_name(&mut self) -> Result<Type, ParseError> {
         self.with_nesting(Self::type_name_inner)
+    }
+
+    fn looks_like_generic_call(&self) -> bool {
+        if !self.at(&TokenKind::Less) {
+            return false;
+        }
+        let mut depth = 0_usize;
+        for (offset, token) in self.tokens[self.pos..].iter().enumerate() {
+            match &token.kind {
+                TokenKind::Less => depth += 1,
+                TokenKind::Greater => {
+                    depth = depth.saturating_sub(1);
+                    if depth == 0 {
+                        return self
+                            .tokens
+                            .get(self.pos + offset + 1)
+                            .is_some_and(|next| next.kind == TokenKind::LParen);
+                    }
+                }
+                TokenKind::Eof | TokenKind::Newline => return false,
+                _ => {}
+            }
+        }
+        false
     }
 
     fn type_name_inner(&mut self) -> Result<Type, ParseError> {
@@ -2159,6 +2283,73 @@ impl<'a> Parser<'a> {
                 let response = self.type_name()?;
                 self.expect(TokenKind::Greater, "`>` after HttpResult type")?;
                 Type::HttpResult(Box::new(response))
+            }
+            "Function" => {
+                self.expect(TokenKind::Less, "`<` after `Function`")?;
+                self.expect(TokenKind::LParen, "`(` before function parameter types")?;
+                let mut params = Vec::new();
+                if !self.at(&TokenKind::RParen) {
+                    loop {
+                        params.push(self.type_name()?);
+                        if !self.at(&TokenKind::Comma) {
+                            break;
+                        }
+                        self.advance();
+                    }
+                }
+                self.expect(TokenKind::RParen, "`)` after function parameter types")?;
+                self.expect(TokenKind::Arrow, "`->` before function return type")?;
+                let return_type = self.type_name()?;
+                self.expect(TokenKind::Greater, "`>` after function type")?;
+                let mut capabilities = Vec::new();
+                if self.at(&TokenKind::Uses) {
+                    self.advance();
+                    self.expect(TokenKind::LBrace, "`{` after function-type `uses`")?;
+                    self.skip_newlines();
+                    while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                        let capability = match &self.current().kind {
+                            TokenKind::Ident(name) => name.clone(),
+                            TokenKind::Database => "Database".into(),
+                            _ => return self.error("expected a capability name in function type"),
+                        };
+                        let span = self.advance().span;
+                        if capabilities.contains(&capability) {
+                            return Err(ParseError {
+                                message: format!(
+                                    "capability `{capability}` is declared more than once"
+                                ),
+                                span,
+                            });
+                        }
+                        capabilities.push(capability);
+                        self.skip_newlines();
+                        if self.at(&TokenKind::Comma) {
+                            self.advance();
+                            self.skip_newlines();
+                        } else if !self.at(&TokenKind::RBrace) {
+                            return self.error("expected `,` or `}` in function-type capabilities");
+                        }
+                    }
+                    self.expect(TokenKind::RBrace, "`}` after function-type capabilities")?;
+                }
+                Type::Function {
+                    params,
+                    return_type: Box::new(return_type),
+                    capabilities,
+                }
+            }
+            _ if self.at(&TokenKind::Less) => {
+                self.advance();
+                let mut args = Vec::new();
+                loop {
+                    args.push(self.type_name()?);
+                    if !self.at(&TokenKind::Comma) {
+                        break;
+                    }
+                    self.advance();
+                }
+                self.expect(TokenKind::Greater, "`>` after generic type arguments")?;
+                Type::Applied { name, args }
             }
             _ => Type::Named(name),
         };
@@ -2377,7 +2568,33 @@ impl<'a> Parser<'a> {
                 });
             }
         }
-        Ok(Stmt::Expr(self.expression()?))
+        let expression = self.expression()?;
+        if self.at(&TokenKind::Equal) {
+            self.advance();
+            let value = self.expression()?;
+            let span = expression.span.join(value.span);
+            let ExprKind::Field { target, field } = expression.kind else {
+                return self
+                    .error("assignment target must be a class field such as `customer.name`");
+            };
+            let field_span = target.span.join(expression.span);
+            return Ok(Stmt::Expr(Expr {
+                kind: ExprKind::Call {
+                    name: "object_set_field".into(),
+                    type_args: Vec::new(),
+                    args: vec![
+                        *target,
+                        Expr {
+                            kind: ExprKind::String(field),
+                            span: field_span,
+                        },
+                        value,
+                    ],
+                },
+                span,
+            }));
+        }
+        Ok(Stmt::Expr(expression))
     }
     fn pattern(&mut self) -> Result<Pattern, ParseError> {
         self.with_nesting(Self::pattern_inner)
@@ -2392,12 +2609,49 @@ impl<'a> Parser<'a> {
             }),
             TokenKind::Ident(name) => {
                 if self.at(&TokenKind::DoubleColon) {
-                    self.advance();
-                    let (variant, end) = self.ident("enum variant after `::`")?;
+                    let mut path = name;
+                    let mut end = token.span;
+                    while self.at(&TokenKind::DoubleColon) {
+                        self.advance();
+                        let (segment, segment_span) = self.ident("enum path segment after `::`")?;
+                        path.push_str("::");
+                        path.push_str(&segment);
+                        end = segment_span;
+                    }
+                    let Some((enum_name, variant)) = path.rsplit_once("::") else {
+                        unreachable!("the path has at least two segments")
+                    };
+                    let enum_name = enum_name.to_owned();
+                    if self.at(&TokenKind::LParen) {
+                        self.advance();
+                        let mut payloads = Vec::new();
+                        self.skip_newlines();
+                        if !self.at(&TokenKind::RParen) {
+                            loop {
+                                payloads.push(self.pattern()?);
+                                self.skip_newlines();
+                                if !self.at(&TokenKind::Comma) {
+                                    break;
+                                }
+                                self.advance();
+                                self.skip_newlines();
+                            }
+                        }
+                        let close =
+                            self.expect(TokenKind::RParen, "`)` after enum payload pattern")?;
+                        return Ok(Pattern {
+                            kind: PatternKind::EnumVariantPayload {
+                                enum_name,
+                                variant: variant.to_owned(),
+                                payloads,
+                            },
+                            span: token.span.join(close),
+                        });
+                    }
                     return Ok(Pattern {
                         kind: PatternKind::EnumVariant {
-                            enum_name: name,
-                            variant,
+                            enum_name,
+                            variant: variant.to_owned(),
                         },
                         span: token.span.join(end),
                     });
@@ -2660,6 +2914,20 @@ impl<'a> Parser<'a> {
                 })
             }
             TokenKind::Sql => self.sql_expression(token.span),
+            TokenKind::Ampersand => {
+                let (mut name, mut end) = self.ident("function name after `&`")?;
+                while self.at(&TokenKind::DoubleColon) {
+                    self.advance();
+                    let (segment, segment_span) = self.ident("function name after `::`")?;
+                    name.push_str("::");
+                    name.push_str(&segment);
+                    end = segment_span;
+                }
+                Ok(Expr {
+                    kind: ExprKind::FunctionValue(name),
+                    span: token.span.join(end),
+                })
+            }
             TokenKind::Ident(name) => {
                 let mut name = name;
                 while self.at(&TokenKind::DoubleColon) {
@@ -2668,14 +2936,32 @@ impl<'a> Parser<'a> {
                     name.push_str("::");
                     name.push_str(&segment);
                 }
-                let type_args = if matches!(
-                    name.as_str(),
-                    "json_decode"
-                        | "json_decode_result"
-                        | "json_decode_tagged_result"
-                        | "http_json"
-                        | "http_result"
-                ) && self.at(&TokenKind::Less)
+                let record_type_args =
+                    if self.at(&TokenKind::Less) && self.looks_like_generic_record_literal() {
+                        self.advance();
+                        let mut type_args = Vec::new();
+                        loop {
+                            type_args.push(self.type_name()?);
+                            if !self.at(&TokenKind::Comma) {
+                                break;
+                            }
+                            self.advance();
+                        }
+                        self.expect(TokenKind::Greater, "`>` after record type arguments")?;
+                        type_args
+                    } else {
+                        Vec::new()
+                    };
+                let type_args = if self.at(&TokenKind::Less)
+                    && (matches!(
+                        name.as_str(),
+                        "json_decode"
+                            | "json_decode_result"
+                            | "sql_decode"
+                            | "json_decode_tagged_result"
+                            | "http_json"
+                            | "http_result"
+                    ) || self.looks_like_generic_call())
                 {
                     self.advance();
                     let mut type_args = Vec::new();
@@ -2720,8 +3006,11 @@ impl<'a> Parser<'a> {
                 } else if name == "Map" && self.at(&TokenKind::LBrace) {
                     self.map_literal(token.span)
                 } else if self.at(&TokenKind::LBrace) && self.looks_like_record_literal() {
-                    self.record_literal(name, token.span)
+                    self.record_literal(name, record_type_args, token.span)
                 } else {
+                    if !record_type_args.is_empty() {
+                        return self.error("generic type arguments require a record literal here");
+                    }
                     Ok(Expr {
                         kind: ExprKind::Variable(name),
                         span: token.span,
@@ -2737,7 +3026,12 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn record_literal(&mut self, type_name: String, start: Span) -> Result<Expr, ParseError> {
+    fn record_literal(
+        &mut self,
+        type_name: String,
+        type_args: Vec<Type>,
+        start: Span,
+    ) -> Result<Expr, ParseError> {
         self.expect(TokenKind::LBrace, "`{` after record type")?;
         let mut fields = Vec::new();
         self.skip_newlines();
@@ -2754,9 +3048,37 @@ impl<'a> Parser<'a> {
         }
         let end = self.expect(TokenKind::RBrace, "`}` after record literal")?;
         Ok(Expr {
-            kind: ExprKind::Record { type_name, fields },
+            kind: ExprKind::Record {
+                type_name,
+                type_args,
+                fields,
+            },
             span: start.join(end),
         })
+    }
+
+    fn looks_like_generic_record_literal(&self) -> bool {
+        if !self.at(&TokenKind::Less) {
+            return false;
+        }
+        let mut depth = 0_usize;
+        for (offset, token) in self.tokens[self.pos..].iter().enumerate() {
+            match token.kind {
+                TokenKind::Less => depth += 1,
+                TokenKind::Greater => {
+                    depth = depth.saturating_sub(1);
+                    if depth == 0 {
+                        return self
+                            .tokens
+                            .get(self.pos + offset + 1)
+                            .is_some_and(|next| next.kind == TokenKind::LBrace);
+                    }
+                }
+                TokenKind::Eof | TokenKind::Newline => return false,
+                _ => {}
+            }
+        }
+        false
     }
 
     fn map_literal(&mut self, start: Span) -> Result<Expr, ParseError> {
@@ -2832,6 +3154,132 @@ mod tests {
         let program = parse(&lex("fn main() { print(1 + 2 * 3) }").unwrap()).unwrap();
         assert_eq!(program.functions.len(), 1);
         assert_eq!(program.functions[0].name, "main");
+    }
+
+    #[test]
+    fn parses_generic_function_declarations_and_calls() {
+        let program = parse(
+            &lex("fn identity<T>(value: T) -> T { return value } fn main() { print(identity<Int>(7)) }")
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(program.functions[0].type_params, ["T"]);
+        let Stmt::Expr(outer) = &program.functions[1].body.statements[0] else {
+            panic!("expected call expression");
+        };
+        let ExprKind::Call { name, args, .. } = &outer.kind else {
+            panic!("expected outer print call");
+        };
+        assert_eq!(name, "print");
+        let ExprKind::Call {
+            name, type_args, ..
+        } = &args[0].kind
+        else {
+            panic!("expected inner generic call");
+        };
+        assert_eq!(name, "identity");
+        assert_eq!(type_args, &[Type::Int]);
+    }
+
+    #[test]
+    fn parses_named_function_values_and_typed_function_parameters() {
+        let program = parse(
+            &lex("fn increment(value: Int) -> Int { return value + 1 } fn apply(callback: Function<(Int) -> Int>, value: Int) -> Int { return callback(value) } fn main() { saved = &increment print(apply(saved, 4)) }")
+                .unwrap(),
+        )
+        .unwrap();
+        let Stmt::BindOrAssign { value, .. } = &program.functions[2].body.statements[0] else {
+            panic!("expected local function value");
+        };
+        assert!(matches!(value.kind, ExprKind::FunctionValue(ref name) if name == "increment"));
+        assert!(matches!(
+            program.functions[1].params[0].ty,
+            Type::Function { ref params, ref return_type, ref capabilities }
+                if params == &[Type::Int] && **return_type == Type::Int && capabilities.is_empty()
+        ));
+
+        let effectful = parse(
+            &lex("fn run_file(path: String) -> String uses FileSystem { return path } fn use_file(callback: Function<(String) -> String> uses {FileSystem}) { print(callback(\"x\")) } fn main() { }")
+                .unwrap(),
+        )
+        .unwrap();
+        assert!(matches!(
+            effectful.functions[1].params[0].ty,
+            Type::Function { ref capabilities, .. } if capabilities == &["FileSystem"]
+        ));
+
+        let compatibility = parse(
+            &lex("fn increment(value: Int) -> Int { return value + 1 } fn function() -> Int { return 9 } fn main() { function = &increment print(function(2)) }")
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(compatibility.functions[1].name, "function");
+        assert!(matches!(
+            compatibility.functions[2].body.statements[0],
+            Stmt::BindOrAssign { ref name, .. } if name == "function"
+        ));
+    }
+
+    #[test]
+    fn parses_payload_enum_definitions_constructors_and_patterns() {
+        let program = parse(
+            &lex("enum OrderStatus { Draft PaidAt(Date) Failed(String, Int) } fn main() { status = OrderStatus::PaidAt(date(\"2026-10-12\")) match status { OrderStatus::PaidAt(when) => { print(when) } OrderStatus::Failed(reason, code) => { print(reason) } OrderStatus::Draft => { print(\"draft\") } } }")
+                .unwrap(),
+        )
+        .unwrap();
+        let definition = &program.enums[0];
+        assert_eq!(definition.variants, ["Draft", "PaidAt", "Failed"]);
+        assert_eq!(
+            definition.variant_payloads,
+            [
+                ("Draft".into(), vec![]),
+                ("PaidAt".into(), vec![Type::Date]),
+                ("Failed".into(), vec![Type::String, Type::Int]),
+            ]
+        );
+        let Stmt::BindOrAssign { value, .. } = &program.functions[0].body.statements[0] else {
+            panic!("expected enum construction assignment");
+        };
+        assert!(
+            matches!(value.kind, ExprKind::Call { ref name, .. } if name == "OrderStatus::PaidAt")
+        );
+        let Stmt::Match { arms, .. } = &program.functions[0].body.statements[1] else {
+            panic!("expected enum match");
+        };
+        assert!(matches!(
+            arms[0].pattern.kind,
+            PatternKind::EnumVariantPayload { ref enum_name, ref variant, ref payloads }
+                if enum_name == "OrderStatus" && variant == "PaidAt" && payloads.len() == 1
+        ));
+
+        let imported = parse(
+            &lex("fn main() { match event { events::OrderStatus::PaidAt(when) => { print(when) } } }")
+                .unwrap(),
+        )
+        .unwrap();
+        let Stmt::Match { arms, .. } = &imported.functions[0].body.statements[0] else {
+            panic!("expected match statement");
+        };
+        assert!(matches!(
+            arms[0].pattern.kind,
+            PatternKind::EnumVariantPayload { ref enum_name, ref variant, .. }
+                if enum_name == "events::OrderStatus" && variant == "PaidAt"
+        ));
+
+        let empty = parse(&lex("enum Status { Draft() } fn main() { }").unwrap())
+            .expect_err("unit enum variants use the bare variant name");
+        assert!(empty.message.contains("empty parentheses"));
+        assert!(empty.span.start > 0);
+    }
+
+    #[test]
+    fn rejects_duplicate_generic_function_parameters() {
+        let error = parse(
+            &lex("fn pair<T, T>(left: T, right: T) -> T { return left } fn main() { }").unwrap(),
+        )
+        .expect_err("generic parameter names must be unique");
+        assert!(error.message.contains("declared more than once"));
+        assert!(error.span.start > 0);
     }
 
     #[test]
@@ -3738,6 +4186,7 @@ mod tests {
             &lex(r#"auth users {
                     table: users
                     reset_tokens: password_resets
+                    reset_rate_limits: reset_limits
                     reset_rate_limit: 3 per 900
                     reset_block_seconds: 600
                 }
@@ -3748,6 +4197,10 @@ mod tests {
         assert_eq!(
             program.auth[0].reset_tokens_table.as_deref(),
             Some("password_resets")
+        );
+        assert_eq!(
+            program.auth[0].reset_rate_limits_table.as_deref(),
+            Some("reset_limits")
         );
         assert_eq!(
             program.auth[0].reset_rate_limit,
@@ -3778,6 +4231,7 @@ mod tests {
             r#"auth users { table: users reset_rate_limit: 5 per 0 } fn main() { }"#,
             r#"auth users { table: users reset_block_seconds: 86401 } fn main() { }"#,
             r#"auth users { table: users reset_rate_limit: 5 per 60 reset_rate_limit: 3 per 30 } fn main() { }"#,
+            r#"auth users { table: users reset_rate_limits: first reset_rate_limits: second } fn main() { }"#,
         ] {
             assert!(parse(&lex(source).unwrap()).is_err(), "accepted {source}");
         }
@@ -3811,6 +4265,30 @@ mod tests {
             program.records[0].fields[1].ty,
             Type::Option(Box::new(Type::Named("Email".into())))
         );
+    }
+
+    #[test]
+    fn parses_generic_record_definitions_types_and_explicit_literals() {
+        let program = parse(
+            &lex("struct Box<T> { value: T } fn unwrap(boxed: Box<Int>) -> Int { return boxed.value } fn main() { boxed: Box<Int> = Box<Int> { value: 7 } print(unwrap(boxed)) }")
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(program.records[0].type_params, ["T"]);
+        assert!(matches!(
+            program.functions[0].params[0].ty,
+            Type::Applied { ref name, ref args }
+                if name == "Box" && args == &[Type::Int]
+        ));
+        let value = match &program.functions[1].body.statements[0] {
+            Stmt::BindOrAssign { value, .. } | Stmt::Let { value, .. } => value,
+            _ => panic!("expected typed generic record binding"),
+        };
+        assert!(matches!(
+            value.kind,
+            ExprKind::Record { ref type_name, ref type_args, .. }
+                if type_name == "Box" && type_args == &[Type::Int]
+        ));
     }
 
     #[test]
@@ -4020,7 +4498,7 @@ mod tests {
             parse(&lex("pub table customers { id: Id primary auto }").unwrap()).unwrap_err();
         assert!(invalid_visibility
             .message
-            .contains("functions, types, enums, records, views, and components"));
+            .contains("functions, types, enums, records, classes, views, and components"));
     }
 
     #[test]

@@ -364,6 +364,12 @@ MariaDB-Passwörtern. `zelyra setup` bleibt ein idempotenter Nachholbefehl.
 Eine vorhandene `.env` wird nicht überschrieben, und Zugangsdaten werden nicht
 ausgegeben. Lokale Zugangsdaten nicht als Produktions-Secrets verwenden.
 
+Projektpfade beziehen sich auf das aktuelle Verzeichnis. Für einen dort
+liegenden Ordner `test_a` lautet der Pfad `./test_a`; `/test_a` bezeichnet
+dagegen einen Ordner direkt unter dem Dateisystemstamm. Wenn der angegebene
+absolute Pfad fehlt und der gleichnamige Unterordner im aktuellen Verzeichnis
+existiert, schlägt `zelyra setup` den passenden relativen Befehl vor.
+
 Muss Setup eine fehlende `.env` erzeugen, wählt es freie veröffentlichte Web-
 und MariaDB-Ports, wenn die Vorlagen-Standardports belegt sind. Mit
 `zelyra setup . --host-port 18080 --db-host-port 3308` können genaue Ports

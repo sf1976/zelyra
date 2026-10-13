@@ -1,0 +1,14 @@
+class Counter {
+    value: Int
+}
+
+fn increment(counter: Counter) {
+    counter.value = counter.value + 1
+}
+
+fn main() {
+    counter = Counter { value: 0 }
+    parallel {
+        changed = await increment(counter)
+    }
+}

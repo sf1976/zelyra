@@ -244,6 +244,8 @@ fn context_declarations(program: &zelyra_ast::Program, source: &str) -> Value {
                 "name": auth.name,
                 "table": auth.table,
                 "audit_table": auth.audit_table,
+                "reset_tokens_table": auth.reset_tokens_table,
+                "reset_rate_limits_table": auth.reset_rate_limits_table,
                 "audit_chain": auth.audit_chain,
                 "span": context_span(source, auth.span)
             })
@@ -1128,7 +1130,7 @@ fn module_bundle_command(mut arguments: impl Iterator<Item = String>) -> ExitCod
         eprint!("{}", String::from_utf8_lossy(&plan_output.stdout));
         return ExitCode::from(1);
     }
-    let plan_document: Value = match serde_json::from_slice(&plan_output.stdout) {
+    let plan_document: Value = match zelyra_ast::json::parse_slice(&plan_output.stdout) {
         Ok(document) => document,
         Err(error) => {
             eprintln!("error[E-MOD-018]: dependency planner returned invalid JSON: {error}");

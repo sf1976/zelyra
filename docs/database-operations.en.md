@@ -130,9 +130,14 @@ verifying the target again.
   before tightening nullability, checks table emptiness before adding a
   required column without a default, checks duplicate non-NULL value groups
   before adding a unique index, and checks existing foreign-key values for
-  missing referenced rows. A failed or unavailable check blocks the whole
-  plan. These read-only checks do not lock out concurrent writers; repair data
-  and rerun the plan, and coordinate writes during a migration.
+  missing referenced rows (`error[E-DB-005]`). A failed or unavailable check blocks
+  the whole plan and existing row data remains untouched. These read-only checks
+  do not lock out concurrent writers; repair data and rerun the plan, and coordinate
+  writes during a migration.
+- On MySQL and MariaDB, `innodb_lock_wait_timeout` is dynamically adapted to match
+  the active query and deadline budget. This prevents transactions facing row locks
+  from stalling unnoticed for MySQL's 50-second default; exceeded budgets abort cleanly
+  and roll back, without reporting ambiguous commit states as successful.
 - `zelyra db apply` executes supported SQL steps. PostgreSQL plans run in a
   single transaction; SQLite plans use `BEGIN IMMEDIATE`, stop at the first SQL
   error, and roll back when a step fails. Integration tests verify that a

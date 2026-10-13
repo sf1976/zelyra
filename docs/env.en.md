@@ -170,15 +170,41 @@ The worker later sends it over SMTP. Delivery is at least once and may produce
 duplicates. Configuration and a complete example are in
 [`mail.en.md`](mail.en.md).
 
-## Password recovery in the 0.4 development branch
+## Password recovery
 
-An auth declaration can set `reset_tokens: password_resets`. The reset table
-needs `user_id`, a unique `token_hash`, `expires_at`, `consumed_at`, a nullable
-`delivery_payload: String(2048)`, nullable `delivery_retry_at: Timestamp`, and a
-foreign key to `users.id`; an
-auth audit table is also required. This feature
-currently runs only on MariaDB. Reset limits are process-local and keyed by
-the TCP peer IP; they reset on restart.
+An auth declaration with `reset_tokens: password_resets` must also set
+`reset_rate_limits: password_reset_limits`. The reset table needs `user_id`, a
+unique `token_hash`, `expires_at`, `consumed_at`,
+`delivery_payload: String(2048)`, nullable `delivery_retry_at: Timestamp`, and
+a foreign key to `users.id`; an auth audit table is also required. The separate
+rate-limit table needs `bucket_key: String(64) primary`,
+`window_started: Timestamp required`, `request_count: Int required`, `blocked_until: Timestamp?`,
+and an index on `window_started`. See the complete
+[`examples/password_reset.zyl`](../examples/password_reset.zyl) project.
+
+Limits are keyed by TCP peer IP and shared by instances using the same MariaDB
+and identical quota settings and delivery key. Database errors reject reset attempts.
+The operator log records the sanitized `E-AUTH-043` diagnostic; public responses
+remain generic. The table stores no IP
+address: `bucket_key` is an HMAC fingerprint made with the delivery key.
+The table admits at most 4,096 entries and rejects new clients when full. A
+MariaDB advisory lock coordinates capacity and counters across instances,
+waiting for at most one second. Each subsequent request removes at most 100
+expired entries whose window started more than 48 hours ago. No automatic
+cleanup runs without further requests. Forwarded-IP headers are ignored, so
+clients behind one proxy share its limit. This protects
+the application's reset endpoints; it is not a network-level defense against
+distributed denial-of-service attacks. Password recovery currently requires
+MariaDB.
+
+`reset_rate_limits` has no default or environment override; the auth
+declaration is authoritative. Its table holds security state. `check` and
+`serve` validate its schema, while `db setup` creates declared tables. Existing
+reset projects must add the auth option and table and apply a reviewed additive
+schema plan. Diagnostics `E-AUTH-039` through `E-AUTH-042` identify missing,
+incompatible, or orphaned configuration. Parser, schema, module-permission,
+restart tests, and `tests/password-reset-rate-limit-e2e.sh` cover this contract.
+Password login without recovery does not require this table.
 
 | Variable | Default | Use and security classification |
 |---|---:|---|
@@ -189,7 +215,7 @@ the TCP peer IP; they reset on restart.
 | `ZELYRA_SMTP_FROM` | none | Sender address for reset email. |
 | `ZELYRA_SMTP_USERNAME` | none | Optional SMTP user; must be set together with the password. Secret. |
 | `ZELYRA_SMTP_PASSWORD` | none | SMTP password. Secret; never print or commit it. |
-| `ZELYRA_RESET_DELIVERY_KEY` | none | 32-byte encryption key as 64 hexadecimal characters; required for persistent reset-mail recovery. Secret. |
+| `ZELYRA_RESET_DELIVERY_KEY` | none | Stable 32-byte key as 64 hexadecimal characters for outbox encryption and HMAC fingerprints. It must match on all instances. Secret. |
 
 For `zelyra serve`, process environment takes precedence over the project
 `.env`. If the auth declaration includes `reset_tokens`, `serve` will not start
@@ -440,6 +466,9 @@ diagnostics, context output, or logs.
 | Variable | Status | Use |
 |---|---|---|
 | `ZELYRA_INSTALL_ROOT` | implemented | user-local destination for install scripts |
+| `ZELYRA_COLOR` | implemented | `auto` (default), `always`, or `never`; controls ANSI color in CLI help and success messages |
+| `NO_COLOR` | implemented | When present, disables automatic color; `ZELYRA_COLOR=always` takes precedence |
+| `CLICOLOR_FORCE` | implemented | Any nonempty value other than `0` forces color when `ZELYRA_COLOR` is unset and `NO_COLOR` is absent |
 | `ZELYRA_DB_TIMEOUT_TEST_URL` | CI/test variable | MariaDB URL for timeout and pool integration tests; local/isolated test database only |
 | `ZELYRA_MARIADB_ROOT_PASSWORD` | test/development tool | password for local MariaDB test runs |
 | `ZELYRA_MARIADB_PASSWORD` | test/development tool | user password for local MariaDB test runs |
@@ -516,3 +545,21 @@ commit. The entry must include:
 
 A setting is not fully documented if it appears only in compiler code or a
 template.
+
+## DATABASE_URL: fixed decimal precision in 0.9.9 development
+
+With a configured database and a granted Database capability, `serve` and an
+interpreter's first SQL operation verify declared Decimal/Money/UInt precision
+using read-only metadata. Metadata access is required; a legacy or incompatible
+schema is not silently used or migrated. There is no bypass switch. Existing
+URL precedence and secret rules still apply. See [rules and tests](decimals.en.md).
+
+## DATABASE_URL: date/time on the 0.9.9 development branch
+
+Native runtime connections use UTC; existing PostgreSQL URL startup options are
+preserved with UTC appended. MariaDB/MySQL DATETIME contains no timezone, so
+external writers must use the same UTC convention. Before `serve` or the first
+interpreter SQL operation, read-only metadata verifies declared Date, Time and
+Timestamp storage. Missing columns, wrong kinds and incompatible time precision
+produce source-located errors; metadata access is required. Migrations retain
+explicit review. There is no new switch. See [date rules](dates.en.md).

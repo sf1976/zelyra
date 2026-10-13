@@ -134,10 +134,16 @@ nach Abschluss der Prüfung und erneuter Kontrolle des Ziels.
   einer Verschärfung der Nullbarkeit, Tabellen auf Leerheit vor einer neuen
   Pflichtspalte ohne Standardwert, Dublettengruppen aus Nicht-NULL-Werten vor
   einem neuen Unique-Index und vorhandene Fremdschlüsselwerte auf fehlende
-  referenzierte Zeilen. Bei einem Fehler oder einer nicht möglichen Prüfung
-  wird der gesamte Plan blockiert. Diese lesenden Prüfungen sperren parallele
+  referenzierte Zeilen (`error[E-DB-005]`). Bei einem Fehler oder einer nicht möglichen
+  Prüfung wird der gesamte Plan blockiert und bestehende Zeilendaten bleiben
+  unverändert erhalten. Diese lesenden Prüfungen sperren parallele
   Schreibzugriffe nicht aus; Daten müssen korrigiert und der Plan erneut
   geprüft werden. Schreibzugriffe während einer Migration sind abzustimmen.
+- Auf MySQL und MariaDB wird `innodb_lock_wait_timeout` dynamisch an das
+  konfigurierte Query- und Deadline-Budget angepasst. Dies verhindert, dass
+  Transaktionen bei Zeilensperren unbemerkt in den MySQL-Standard-Timeout von
+  50 Sekunden laufen; überschrittene Budgets brechen kontrolliert ab und rollen
+  zurück, ohne unbestimmte Commit-Zustände als erfolgreich zu melden.
 - `zelyra db apply` führt unterstützte SQL-Schritte aus. PostgreSQL-Pläne
   laufen in einer einzigen Transaktion. SQLite startet mit `BEGIN IMMEDIATE`,
   bricht beim ersten SQL-Fehler ab und rollt ohne Commit alle Schritte zurück.

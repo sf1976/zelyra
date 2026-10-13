@@ -1035,6 +1035,7 @@ fn formats_audit_rows_as_json_and_csv_without_losing_nulls() {
             "email=anna@example.test;note=\"unknown\"".into(),
             "2026-09-17 12:00:00".into(),
         ]],
+        ..QueryResult::default()
     };
     let json: serde_json::Value = serde_json::from_str(&audit_rows_json(&result)).unwrap();
     assert_eq!(json[0]["actor_user_id"], serde_json::Value::Null);
@@ -2333,11 +2334,24 @@ fn accepts_persistent_auth_tables() {
 }
 
 #[test]
+fn decimal_api_inputs_use_decimal_values_without_float_conversion() {
+    let program = parse(&lex("fn main() {}\n").unwrap()).unwrap();
+    let value: Value = serde_json::from_str("9999999999999999.99").unwrap();
+    let decoded = api_value_json(&value, &Type::Decimal, &program).unwrap();
+    assert!(matches!(decoded, RuntimeValue::Decimal(_)));
+    assert_eq!(decoded.output(), "9999999999999999.99");
+    let value: Value = serde_json::from_str("0.000000001").unwrap();
+    let decoded = api_value_json(&value, &Type::Decimal, &program).unwrap();
+    assert_eq!(decoded.output(), "0.000000001");
+}
+
+#[test]
 fn accepts_password_reset_schema_with_audit_and_single_use_token_storage() {
     let source = r#"
         auth users {
             table: users
             reset_tokens: password_resets
+            reset_rate_limits: password_reset_limits
             audit: auth_audit_log
         }
 
@@ -2357,6 +2371,17 @@ fn accepts_password_reset_schema_with_audit_and_single_use_token_storage() {
             delivery_retry_at: Timestamp?
         }
 
+        table password_reset_limits {
+            bucket_key: String(64) primary
+            window_started: Timestamp required
+            request_count: Int required
+            blocked_until: Timestamp?
+
+            index {
+                window_started
+            }
+        }
+
         table auth_audit_log {
             id: Id primary auto
             actor_user_id: Int?
@@ -2369,6 +2394,48 @@ fn accepts_password_reset_schema_with_audit_and_single_use_token_storage() {
     let program = parse(&lex(source).unwrap()).unwrap();
     let mut schema = build_schema(&program).unwrap();
     assert!(validate_auth("test.zyl", &program, &schema));
+    let mut missing_rate_table = program.clone();
+    missing_rate_table.auth[0].reset_rate_limits_table = None;
+    assert!(!validate_auth("test.zyl", &missing_rate_table, &schema));
+    let mut orphan_rate_table = program.clone();
+    orphan_rate_table.auth[0].reset_tokens_table = None;
+    assert!(!validate_auth("test.zyl", &orphan_rate_table, &schema));
+    let mut conflicting_rate_table = program.clone();
+    conflicting_rate_table.auth[0].reset_rate_limits_table = Some("users".into());
+    assert!(!validate_auth("test.zyl", &conflicting_rate_table, &schema));
+    let mut malformed_rate_schema = schema.clone();
+    malformed_rate_schema
+        .tables
+        .iter_mut()
+        .find(|table| table.name == "password_reset_limits")
+        .unwrap()
+        .columns
+        .iter_mut()
+        .find(|column| column.name == "request_count")
+        .unwrap()
+        .sql_type = "varchar(20)".into();
+    assert!(!validate_auth("test.zyl", &program, &malformed_rate_schema));
+    let mut unindexed_rate_schema = schema.clone();
+    unindexed_rate_schema
+        .tables
+        .iter_mut()
+        .find(|table| table.name == "password_reset_limits")
+        .unwrap()
+        .indexes
+        .clear();
+    assert!(!validate_auth("test.zyl", &program, &unindexed_rate_schema));
+    let mut auto_rate_schema = schema.clone();
+    auto_rate_schema
+        .tables
+        .iter_mut()
+        .find(|table| table.name == "password_reset_limits")
+        .unwrap()
+        .columns
+        .iter_mut()
+        .find(|column| column.name == "window_started")
+        .unwrap()
+        .auto = true;
+    assert!(!validate_auth("test.zyl", &program, &auto_rate_schema));
     {
         let column = schema
             .tables
@@ -2991,4 +3058,65 @@ fn explicit_port_conflicts_are_rejected() {
         .expect_err("an explicitly occupied port must be rejected");
     assert!(error.contains("already in use"));
     assert!(error.contains("choose a different port"));
+}
+
+#[test]
+fn decimal_api_docs_describe_exact_string_outputs() {
+    assert_eq!(docs::typescript_type(&Type::Decimal), "string");
+    let schema = zelyra_ast::json::parse(&docs::openapi_schema(&Type::Decimal)).unwrap();
+    assert_eq!(schema["type"], "string");
+    assert_eq!(schema["format"], "decimal");
+}
+
+#[test]
+fn precision_diagnostics_locate_the_mismatched_alias_column() {
+    let program = parse(&lex("type Amount = Decimal table bills { id: Id primary amount: Amount required quantity: UInt required }").unwrap()).unwrap();
+    let message = "fixed-point storage for `bills.amount` must match DECIMAL(39,9)";
+    assert_eq!(
+        decimal_storage_error_span(&program, message),
+        program.tables[0].columns[1].span
+    );
+}
+
+#[test]
+fn schema_setup_runs_independently_of_web_server_readiness() {
+    let args = container_schema_setup_args();
+    assert_eq!(args[0], "run");
+    assert!(args.contains(&"--rm"));
+    assert!(args.contains(&"--no-deps"));
+    assert_eq!(
+        &args[args.len() - 4..],
+        ["zelyra", "db", "apply", "main.zyl"]
+    );
+}
+
+#[test]
+fn temporal_api_inputs_produce_validated_runtime_types() {
+    let program = parse(&lex("fn main() {}").unwrap()).unwrap();
+    let date = api_value_json(&serde_json::json!("2000-02-29"), &Type::Date, &program).unwrap();
+    assert!(matches!(date, RuntimeValue::Date(value) if value == "2000-02-29"));
+    let time = api_value_json(&serde_json::json!("23:59:59"), &Type::Time, &program).unwrap();
+    assert!(matches!(time, RuntimeValue::Time(value) if value == "23:59:59"));
+    let timestamp = api_value_json(&serde_json::json!(-1), &Type::Timestamp, &program).unwrap();
+    assert!(matches!(timestamp, RuntimeValue::Timestamp(-1)));
+    for (ty, value) in [
+        (Type::Date, serde_json::json!("1900-02-29")),
+        (Type::Time, serde_json::json!("24:00:00")),
+        (Type::Timestamp, serde_json::json!(253402300800000_i64)),
+        (Type::Duration, serde_json::json!(true)),
+    ] {
+        assert!(api_value_json(&value, &ty, &program).is_err());
+    }
+}
+
+#[test]
+fn temporal_client_schemas_match_existing_wire_formats() {
+    assert_eq!(docs::typescript_type(&Type::Timestamp), "number");
+    assert_eq!(docs::typescript_type(&Type::Duration), "number");
+    assert_eq!(docs::typescript_type(&Type::Date), "string");
+    let date_schema = zelyra_ast::json::parse(&docs::openapi_schema(&Type::Date)).unwrap();
+    assert_eq!(date_schema["format"], "date");
+    let timestamp_schema =
+        zelyra_ast::json::parse(&docs::openapi_schema(&Type::Timestamp)).unwrap();
+    assert_eq!(timestamp_schema["type"], "integer");
 }

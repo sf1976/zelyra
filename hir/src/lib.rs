@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use zelyra_ast::*;
 
@@ -24,6 +24,7 @@ impl fmt::Display for ResolveError {
 pub struct HirProgram {
     pub types: Vec<TypeDef>,
     pub records: Vec<RecordDef>,
+    pub enums: Vec<EnumDef>,
     pub apis: Vec<ApiDef>,
     pub functions: Vec<HirFunction>,
     pub functions_by_name: HashMap<String, FunctionId>,
@@ -33,6 +34,7 @@ pub struct HirProgram {
 pub struct HirFunction {
     pub id: FunctionId,
     pub name: String,
+    pub type_params: Vec<String>,
     pub params: Vec<HirParam>,
     pub return_type: Option<Type>,
     pub capabilities: Vec<String>,
@@ -150,6 +152,11 @@ pub enum HirPatternKind {
         enum_name: String,
         variant: String,
     },
+    EnumVariantPayload {
+        enum_name: String,
+        variant: String,
+        payloads: Vec<HirPattern>,
+    },
     Int(i64),
     Bool(bool),
     String(String),
@@ -174,12 +181,17 @@ pub enum HirExprKind {
     Map(Vec<(HirExpr, HirExpr)>),
     Record {
         type_name: String,
+        type_args: Vec<Type>,
         fields: Vec<(String, HirExpr)>,
     },
     Local(LocalId),
     EnumVariant {
         enum_name: String,
         variant: String,
+    },
+    FunctionValue {
+        name: String,
+        function: Option<FunctionId>,
     },
     Index {
         target: Box<HirExpr>,
@@ -242,9 +254,15 @@ pub fn lower(program: &Program) -> Result<HirProgram, Vec<ResolveError>> {
     }
 
     let mut functions = Vec::new();
+    let enum_names = program
+        .enums
+        .iter()
+        .map(|definition| definition.name.clone())
+        .collect::<HashSet<_>>();
     for (index, function) in program.functions.iter().enumerate() {
         let mut resolver = Resolver {
             functions: &functions_by_name,
+            enum_names: &enum_names,
             errors: Vec::new(),
             scopes: vec![HashMap::new()],
             next_local: 0,
@@ -275,6 +293,7 @@ pub fn lower(program: &Program) -> Result<HirProgram, Vec<ResolveError>> {
         functions.push(HirFunction {
             id: FunctionId(index),
             name: function.name.clone(),
+            type_params: function.type_params.clone(),
             params,
             return_type: function.return_type.clone(),
             capabilities: function.capabilities.clone(),
@@ -289,6 +308,7 @@ pub fn lower(program: &Program) -> Result<HirProgram, Vec<ResolveError>> {
         Ok(HirProgram {
             types: program.types.clone(),
             records: program.records.clone(),
+            enums: program.enums.clone(),
             apis: program.apis.clone(),
             functions,
             functions_by_name,
@@ -300,6 +320,7 @@ pub fn lower(program: &Program) -> Result<HirProgram, Vec<ResolveError>> {
 
 struct Resolver<'a> {
     functions: &'a HashMap<String, FunctionId>,
+    enum_names: &'a HashSet<String>,
     errors: Vec<ResolveError>,
     scopes: Vec<HashMap<String, LocalId>>,
     next_local: usize,
@@ -531,6 +552,18 @@ impl<'a> Resolver<'a> {
                 enum_name: enum_name.clone(),
                 variant: variant.clone(),
             },
+            PatternKind::EnumVariantPayload {
+                enum_name,
+                variant,
+                payloads,
+            } => HirPatternKind::EnumVariantPayload {
+                enum_name: enum_name.clone(),
+                variant: variant.clone(),
+                payloads: payloads
+                    .iter()
+                    .map(|payload| self.pattern(payload))
+                    .collect(),
+            },
             PatternKind::Int(value) => HirPatternKind::Int(*value),
             PatternKind::Bool(value) => HirPatternKind::Bool(*value),
             PatternKind::String(value) => HirPatternKind::String(value.clone()),
@@ -561,13 +594,28 @@ impl<'a> Resolver<'a> {
                     .map(|(key, value)| (self.expr(key), self.expr(value)))
                     .collect(),
             ),
-            ExprKind::Record { type_name, fields } => HirExprKind::Record {
+            ExprKind::Record {
+                type_name,
+                type_args,
+                fields,
+            } => HirExprKind::Record {
                 type_name: type_name.clone(),
+                type_args: type_args.clone(),
                 fields: fields
                     .iter()
                     .map(|(name, value)| (name.clone(), self.expr(value)))
                     .collect(),
             },
+            ExprKind::FunctionValue(name) => {
+                let function = self.functions.get(name).copied();
+                if function.is_none() {
+                    self.error(expr.span, format!("unknown function `{name}`"));
+                }
+                HirExprKind::FunctionValue {
+                    name: name.clone(),
+                    function,
+                }
+            }
             ExprKind::Variable(name) => match self.lookup(name) {
                 Some(local) => HirExprKind::Local(local),
                 None if name.split_once("::").is_some() => {
@@ -595,6 +643,10 @@ impl<'a> Resolver<'a> {
             } => {
                 let function = self.functions.get(name).copied();
                 if function.is_none()
+                    && self.lookup(name).is_none()
+                    && !name
+                        .rsplit_once("::")
+                        .is_some_and(|(enum_name, _)| self.enum_names.contains(enum_name))
                     && !matches!(
                         name.as_str(),
                         "print"
@@ -602,6 +654,7 @@ impl<'a> Resolver<'a> {
                             | "len"
                             | "range"
                             | "array_replace_result"
+                            | "object_set_field"
                             | "record_with"
                             | "append"
                             | "tuple"
@@ -625,6 +678,7 @@ impl<'a> Resolver<'a> {
                             | "duration_ms"
                             | "bytes"
                             | "format_timestamp"
+                            | "format_text"
                             | "env"
                             | "random_int"
                             | "read_console"
@@ -634,6 +688,7 @@ impl<'a> Resolver<'a> {
                             | "json_encode_tagged_result"
                             | "json_decode"
                             | "json_decode_result"
+                            | "sql_decode"
                             | "json_decode_tagged_result"
                             | "csv_decode_result"
                             | "csv_encode"
@@ -765,6 +820,53 @@ mod tests {
     }
 
     #[test]
+    fn preserves_generic_function_parameters_in_hir() {
+        let program = parse(
+            &lex("pub fn identity<T, E>(value: Result<T, E>) -> Result<T, E> { return value } fn main() { }")
+                .unwrap(),
+        )
+        .unwrap();
+        let hir = lower(&program).unwrap();
+        assert_eq!(hir.functions[0].type_params, ["T", "E"]);
+        assert_eq!(
+            hir.functions[0].params[0].ty,
+            Type::Result(
+                Box::new(Type::Named("T".into())),
+                Box::new(Type::Named("E".into()))
+            )
+        );
+    }
+
+    #[test]
+    fn lowers_payload_enum_constructors_and_pattern_bindings() {
+        let program = parse(
+            &lex("enum ResultState { Failed(String) Ready } fn main() { state = ResultState::Failed(\"no\") match state { ResultState::Failed(message) => { print(message) } ResultState::Ready => { print(\"ready\") } } }")
+                .unwrap(),
+        )
+        .unwrap();
+        let hir = lower(&program).unwrap();
+        assert_eq!(hir.enums[0].variants, ["Failed", "Ready"]);
+        assert!(matches!(
+            &hir.functions[0].body.statements[0],
+            HirStmt::Let {
+                value: HirExpr {
+                    kind: HirExprKind::Call { name, .. },
+                    ..
+                },
+                ..
+            } if name == "ResultState::Failed"
+        ));
+        let HirStmt::Match { arms, .. } = &hir.functions[0].body.statements[1] else {
+            panic!("expected lowered payload enum match");
+        };
+        assert!(matches!(
+            &arms[0].pattern.kind,
+            HirPatternKind::EnumVariantPayload { payloads, .. }
+                if matches!(payloads[0].kind, HirPatternKind::Binding { ref name, .. } if name == "message")
+        ));
+    }
+
+    #[test]
     fn rejects_unresolved_names() {
         let program = parse(&lex("fn main() { print(missing) }").unwrap()).unwrap();
         let errors = lower(&program).unwrap_err();
@@ -812,6 +914,14 @@ mod tests {
             hir.functions[0].body.statements[6],
             HirStmt::For { ref name, .. } if name == "item"
         ));
+    }
+
+    #[test]
+    fn lowers_explicit_scalar_text_formatting_builtin() {
+        let program =
+            parse(&lex("fn main() { formatted = format_text(7) print(formatted) }").unwrap())
+                .unwrap();
+        lower(&program).expect("format_text is a known language builtin");
     }
 
     #[test]
@@ -969,6 +1079,39 @@ mod tests {
                 },
                 ..
             } if name == "read_console"
+        ));
+    }
+
+    #[test]
+    fn lowers_function_values_and_resolves_indirect_calls() {
+        let program = parse(
+            &lex("fn increment(value: Int) -> Int { return value + 1 } fn apply(callback: Function<(Int) -> Int>, value: Int) -> Int { return callback(value) } fn main() { saved = &increment print(apply(saved, 4)) }")
+                .unwrap(),
+        )
+        .unwrap();
+        let hir = lower(&program).unwrap();
+        assert!(matches!(
+            hir.functions[2].body.statements[0],
+            HirStmt::Let {
+                value: HirExpr {
+                    kind: HirExprKind::FunctionValue {
+                        ref name,
+                        function: Some(FunctionId(0)),
+                    },
+                    ..
+                },
+                ..
+            } if name == "increment"
+        ));
+        assert!(matches!(
+            hir.functions[1].body.statements[0],
+            HirStmt::Return {
+                value: Some(HirExpr {
+                    kind: HirExprKind::Call { ref name, function: None, .. },
+                    ..
+                }),
+                ..
+            } if name == "callback"
         ));
     }
 }

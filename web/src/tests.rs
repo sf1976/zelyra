@@ -122,10 +122,45 @@ fn form_route() -> FormRoute {
 }
 
 #[test]
+fn monetary_form_and_query_parameters_preserve_every_digit() {
+    for ty in [
+        Type::Decimal,
+        Type::Named("Money".into()),
+        Type::Option(Box::new(Type::Decimal)),
+    ] {
+        let mut form = form_route();
+        form.form.fields[0].ty = Some(ty.clone());
+        let text = "999999999999999.9999";
+        let parameters =
+            form_query_parameters(&form, &HashMap::from([("name".into(), text.into())])).unwrap();
+        assert!(
+            matches!(&parameters[0].1, QueryValue::Decimal(value) if value == text),
+            "money was converted to Float"
+        );
+        let value = page_query_value(&ty, text).unwrap();
+        assert!(matches!(value, QueryValue::Decimal(value) if value == text));
+    }
+    let column = zelyra_database::Column {
+        name: "price".into(),
+        sql_type: "DECIMAL(18,2)".into(),
+        nullable: false,
+        primary_key: false,
+        auto: false,
+        unique: false,
+        default: None,
+    };
+    let value = filter_query_value(&column, "999999999999999.9999").unwrap();
+    assert!(matches!(value, QueryValue::Decimal(value) if value == "999999999999999.9999"));
+}
+
+#[test]
 fn edit_form_snapshots_are_signed_and_bound_to_csrf_key_and_field_set() {
     let csrf = CsrfProtection::new("session-specific-csrf-secret");
     let form = form_route().form;
-    let values = HashMap::from([("name".to_owned(), "original".to_owned())]);
+    let values = EditValues {
+        values: HashMap::from([("name".to_owned(), "original".to_owned())]),
+        nulls: HashSet::new(),
+    };
     let token = sign_form_snapshot(&csrf, &values).unwrap();
     let signature = verify_form_snapshot(&token).unwrap();
 
@@ -138,13 +173,19 @@ fn edit_form_snapshots_are_signed_and_bound_to_csrf_key_and_field_set() {
     assert!(!form_snapshot_matches(
         &csrf,
         &signature,
-        &HashMap::from([("name".to_owned(), "modified".to_owned())])
+        &EditValues {
+            values: HashMap::from([("name".to_owned(), "modified".to_owned())]),
+            nulls: HashSet::new()
+        }
     ));
     assert!(verify_form_snapshot(&format!("{token}00")).is_none());
 
     let mut mismatched_form = form.clone();
     mismatched_form.fields[0].name = "email".into();
-    let mismatched_values = HashMap::from([("email".to_owned(), "original".to_owned())]);
+    let mismatched_values = EditValues {
+        values: HashMap::from([("email".to_owned(), "original".to_owned())]),
+        nulls: HashSet::new(),
+    };
     assert!(!form_snapshot_matches(
         &csrf,
         &signature,
@@ -351,6 +392,7 @@ fn generated_login_page_uses_the_localized_default_shell() {
         login_rate_limit: DEFAULT_LOGIN_RATE_LIMIT,
         login_block_seconds: DEFAULT_LOGIN_BLOCK_SECONDS,
         reset_tokens_table: None,
+        reset_rate_limits_table: None,
         reset_rate_limit: DEFAULT_RESET_RATE_LIMIT,
         reset_block_seconds: DEFAULT_RESET_BLOCK_SECONDS,
         mfa_table: None,
@@ -377,6 +419,7 @@ fn generated_login_page_uses_the_localized_default_shell() {
 
     let mut reset_auth = auth;
     reset_auth.reset_tokens_table = Some("password_resets".into());
+    reset_auth.reset_rate_limits_table = Some("password_reset_limits".into());
     let reset_app = WebApp::new(Vec::new(), Vec::new())
         .with_auth_route(reset_auth)
         .with_ui_settings(UiLanguage::German, UiLevel::Work);
@@ -708,6 +751,7 @@ fn project_catalogs_override_generated_ui_and_parameterized_labels() {
         login_rate_limit: DEFAULT_LOGIN_RATE_LIMIT,
         login_block_seconds: DEFAULT_LOGIN_BLOCK_SECONDS,
         reset_tokens_table: None,
+        reset_rate_limits_table: None,
         reset_rate_limit: DEFAULT_RESET_RATE_LIMIT,
         reset_block_seconds: DEFAULT_RESET_BLOCK_SECONDS,
         mfa_table: None,
@@ -794,6 +838,7 @@ fn framework_errors_auth_labels_and_validation_use_the_locale_catalog() {
         login_rate_limit: DEFAULT_LOGIN_RATE_LIMIT,
         login_block_seconds: DEFAULT_LOGIN_BLOCK_SECONDS,
         reset_tokens_table: None,
+        reset_rate_limits_table: None,
         reset_rate_limit: DEFAULT_RESET_RATE_LIMIT,
         reset_block_seconds: DEFAULT_RESET_BLOCK_SECONDS,
         mfa_table: None,
@@ -1348,6 +1393,7 @@ fn logout_clears_session_cookie_with_the_matching_secure_attribute() {
         login_rate_limit: DEFAULT_LOGIN_RATE_LIMIT,
         login_block_seconds: DEFAULT_LOGIN_BLOCK_SECONDS,
         reset_tokens_table: None,
+        reset_rate_limits_table: None,
         reset_rate_limit: DEFAULT_RESET_RATE_LIMIT,
         reset_block_seconds: DEFAULT_RESET_BLOCK_SECONDS,
         mfa_table: None,
@@ -1919,6 +1965,7 @@ fn logout_requires_csrf() {
         login_rate_limit: DEFAULT_LOGIN_RATE_LIMIT,
         login_block_seconds: DEFAULT_LOGIN_BLOCK_SECONDS,
         reset_tokens_table: None,
+        reset_rate_limits_table: None,
         reset_rate_limit: DEFAULT_RESET_RATE_LIMIT,
         reset_block_seconds: DEFAULT_RESET_BLOCK_SECONDS,
         mfa_table: None,
@@ -2055,6 +2102,7 @@ fn rotating_memory_session_invalidates_previous_token() {
         login_rate_limit: DEFAULT_LOGIN_RATE_LIMIT,
         login_block_seconds: DEFAULT_LOGIN_BLOCK_SECONDS,
         reset_tokens_table: None,
+        reset_rate_limits_table: None,
         reset_rate_limit: DEFAULT_RESET_RATE_LIMIT,
         reset_block_seconds: DEFAULT_RESET_BLOCK_SECONDS,
         mfa_table: None,
@@ -2147,6 +2195,7 @@ fn session_administration_preserves_legacy_tables_and_escapes_rows() {
         login_rate_limit: DEFAULT_LOGIN_RATE_LIMIT,
         login_block_seconds: DEFAULT_LOGIN_BLOCK_SECONDS,
         reset_tokens_table: None,
+        reset_rate_limits_table: None,
         reset_rate_limit: DEFAULT_RESET_RATE_LIMIT,
         reset_block_seconds: DEFAULT_RESET_BLOCK_SECONDS,
         mfa_table: None,
@@ -2322,12 +2371,20 @@ fn builds_safe_filter_conditions_for_text_and_null_checks() {
         uniques: Vec::new(),
     };
     assert_eq!(
-        filter_condition(&table, "name", FilterOperator::Contains),
+        filter_condition(&table, "name", FilterOperator::Contains, false),
         "`base`.`name` LIKE CONCAT('%', :filter_name, '%')"
     );
     assert_eq!(
-        filter_condition(&table, "name", FilterOperator::IsNull),
+        filter_condition(&table, "name", FilterOperator::IsNull, false),
         "`base`.`name` IS NULL"
+    );
+    assert_eq!(
+        filter_condition(&table, "name", FilterOperator::Contains, true),
+        "\"base\".\"name\" LIKE CONCAT('%', :filter_name, '%')"
+    );
+    assert_eq!(
+        filter_condition(&table, "name", FilterOperator::IsNull, true),
+        "\"base\".\"name\" IS NULL"
     );
 }
 
@@ -3010,6 +3067,7 @@ fn database_capability_denies_persistent_login() {
         login_rate_limit: DEFAULT_LOGIN_RATE_LIMIT,
         login_block_seconds: DEFAULT_LOGIN_BLOCK_SECONDS,
         reset_tokens_table: None,
+        reset_rate_limits_table: None,
         reset_rate_limit: DEFAULT_RESET_RATE_LIMIT,
         reset_block_seconds: DEFAULT_RESET_BLOCK_SECONDS,
         mfa_table: None,
@@ -3684,4 +3742,247 @@ fn form_action_requires_database_url() {
         )
         .unwrap();
     assert_eq!(app.dispatch(&request).status, 503);
+}
+
+#[test]
+fn typed_numeric_filters_reject_invalid_values_and_preserve_integer_limits() {
+    for kind in [
+        TableViewFilterKind::Decimal,
+        TableViewFilterKind::Integer,
+        TableViewFilterKind::Unsigned,
+        TableViewFilterKind::Numeric,
+    ] {
+        for invalid in ["NaN", "inf", "-inf", "1e999"] {
+            assert!(numeric_filter_query_value(kind, invalid).is_err());
+        }
+        assert!(tableview_filter_operator_supported(
+            kind,
+            FilterOperator::LessThan
+        ));
+    }
+    assert!(matches!(
+        numeric_filter_query_value(TableViewFilterKind::Unsigned, "18446744073709551615").unwrap(),
+        QueryValue::UInt(u64::MAX)
+    ));
+    assert!(matches!(
+        numeric_filter_query_value(TableViewFilterKind::Integer, "-9223372036854775808").unwrap(),
+        QueryValue::Int(i64::MIN)
+    ));
+    assert!(numeric_filter_query_value(TableViewFilterKind::Decimal, "1.0000000001").is_err());
+    assert!(page_query_value(&Type::Float, "NaN").is_err());
+    assert!(page_query_value(&Type::Decimal, "1e-9").is_err());
+}
+
+#[test]
+fn decimal_fields_use_text_input_and_optional_blanks_bind_sql_null() {
+    let mut form = form_route();
+    form.form.fields[0].ty = Some(Type::Option(Box::new(Type::Decimal)));
+    form.form.fields[0].required = false;
+    let html = render_form(&form, &HashMap::new(), &[], None);
+    assert!(html.contains("type=\"text\" inputmode=\"decimal\""));
+    for values in [HashMap::new(), HashMap::from([("name".into(), "".into())])] {
+        let params = form_query_parameters(&form, &values).unwrap();
+        assert!(matches!(params[0].1, QueryValue::Null));
+    }
+}
+
+#[test]
+fn decimal_presentation_retains_digits_without_padding_or_float_conversion() {
+    assert_eq!(display_exact_decimal_value("150.000000000"), "150");
+    assert_eq!(
+        display_exact_decimal_value("9007199254740993.123456789"),
+        "9007199254740993.123456789"
+    );
+    assert_eq!(display_exact_decimal_value("-12.340000000"), "-12.34");
+    assert_eq!(display_exact_decimal_value("0.000000001"), "0.000000001");
+    assert_eq!(
+        display_database_value("150.000000000"),
+        "150.000000000",
+        "ordinary text stays unchanged"
+    );
+}
+
+#[test]
+fn edit_snapshots_distinguish_native_null_literal_marker_and_empty_text() {
+    let csrf = CsrfProtection::new("snapshot-key");
+    let literal = EditValues {
+        values: HashMap::from([("note".into(), "\\N".into())]),
+        nulls: HashSet::new(),
+    };
+    let null = EditValues {
+        values: literal.values.clone(),
+        nulls: HashSet::from(["note".into()]),
+    };
+    let empty = EditValues {
+        values: HashMap::from([("note".into(), "".into())]),
+        nulls: HashSet::new(),
+    };
+    let token = sign_form_snapshot(&csrf, &null).unwrap();
+    let signature = verify_form_snapshot(&token).unwrap();
+    assert!(form_snapshot_matches(&csrf, &signature, &null));
+    assert!(!form_snapshot_matches(&csrf, &signature, &literal));
+    assert!(!form_snapshot_matches(&csrf, &signature, &empty));
+    assert_eq!(null.rendered_values()["note"], "");
+    assert_eq!(literal.rendered_values()["note"], "\\N");
+    let legacy = serde_json::to_vec(&literal.values.iter().collect::<BTreeMap<_, _>>()).unwrap();
+    let key = hmac::Key::new(hmac::HMAC_SHA256, csrf.token.as_bytes());
+    assert_eq!(
+        sign_form_snapshot(&csrf, &literal).unwrap(),
+        hex_encode(hmac::sign(&key, &legacy).as_ref())
+    );
+}
+
+#[test]
+fn edit_snapshots_fail_closed_on_missing_or_invalid_native_metadata() {
+    let form = form_route();
+    let mut result = zelyra_database::QueryResult {
+        columns: vec!["name".into()],
+        rows: vec![vec!["\\N".into()]],
+        ..Default::default()
+    };
+    assert!(EditValues::from_result(&form, &result).is_err());
+    result.nulls = vec![vec![false]];
+    assert_eq!(
+        EditValues::from_result(&form, &result)
+            .unwrap()
+            .unwrap()
+            .rendered_values()["name"],
+        "\\N"
+    );
+    result.nulls = vec![vec![true]];
+    assert_eq!(
+        EditValues::from_result(&form, &result)
+            .unwrap()
+            .unwrap()
+            .rendered_values()["name"],
+        ""
+    );
+    result.nulls[0].clear();
+    assert!(EditValues::from_result(&form, &result).is_err());
+    let invalid = EditValues {
+        values: HashMap::new(),
+        nulls: HashSet::from(["missing".into()]),
+    };
+    assert!(sign_form_snapshot(&CsrfProtection::new("key"), &invalid).is_none());
+}
+
+#[test]
+fn nullable_storage_binds_omitted_text_as_null_without_weakening_required_fields() {
+    let mut form = form_route();
+    form.form.table = Some("notes".into());
+    form.form.fields[0].required = false;
+    form.schema = Some(Schema {
+        database: None,
+        tables: vec![zelyra_database::Table {
+            name: "notes".into(),
+            columns: vec![zelyra_database::Column {
+                name: "name".into(),
+                sql_type: "VARCHAR(100)".into(),
+                nullable: true,
+                primary_key: false,
+                auto: false,
+                unique: false,
+                default: None,
+            }],
+            foreign_keys: Vec::new(),
+            indexes: Vec::new(),
+            uniques: Vec::new(),
+        }],
+    });
+    let empty = HashMap::new();
+    assert!(validate(&form.form, None, form.schema.as_ref(), &empty)
+        .errors
+        .is_empty());
+    let params = form_query_parameters(&form, &empty).unwrap();
+    assert!(matches!(&params[0], (name, QueryValue::Null) if name == "name"));
+    let literal = HashMap::from([("name".into(), "\\N".into())]);
+    let params = form_query_parameters(&form, &literal).unwrap();
+    assert!(
+        matches!(&params[0], (name, QueryValue::String(value)) if name == "name" && value == "\\N")
+    );
+    form.form.fields[0].required = true;
+    assert_eq!(
+        validate(&form.form, None, form.schema.as_ref(), &empty)
+            .errors
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn postgres_audit_insert_rejects_chained_and_accepts_unchained() {
+    let unchained = audit_insert_queries_for(
+        "audit_log",
+        false,
+        Some(42),
+        "user.created",
+        Some(10),
+        "details",
+        true,
+    )
+    .unwrap();
+    assert_eq!(unchained.len(), 1);
+    assert!(unchained[0].sql.starts_with("INSERT INTO \"audit_log\""));
+
+    let chained = audit_insert_queries_for(
+        "audit_log",
+        true,
+        Some(42),
+        "user.created",
+        Some(10),
+        "details",
+        true,
+    );
+    assert!(chained.is_err());
+    assert!(chained
+        .unwrap_err()
+        .contains("PostgreSQL does not support chained audit tables"));
+}
+
+#[test]
+fn execute_form_action_rejects_postgres_chained_audit() {
+    let mut form = form_route();
+    form.audit_table = Some("audit_log".into());
+    form.audit_chain = true;
+    let action = zelyra_ast::FormAction {
+        name: "save".into(),
+        label: None,
+        icon: None,
+        confirm: None,
+        confirm_page: None,
+        success_page: None,
+        error_page: None,
+        statements: vec![zelyra_ast::Stmt::Expr(zelyra_ast::Expr {
+            kind: zelyra_ast::ExprKind::Sql {
+                result_type: Type::Unit,
+                query: "UPDATE customers SET name = :name WHERE id = :id".into(),
+            },
+            span: zelyra_ast::Span::default(),
+        })],
+        fields: Vec::new(),
+        requires_auth: false,
+        permissions: Vec::new(),
+        success: None,
+        redirect: None,
+        span: zelyra_ast::Span::default(),
+    };
+    let values = HashMap::from([("name".into(), "Alice".into())]);
+    let path_params = HashMap::from([("id".into(), "1".into())]);
+    let context = FormExecutionContext {
+        actor_user_id: Some(1),
+        expected_snapshot: None,
+        tenant_context: None,
+    };
+    let err = execute_form_action(
+        &form,
+        &action,
+        &values,
+        &path_params,
+        "postgres://user:pass@localhost:5432/db",
+        context,
+    );
+    assert!(err.is_err());
+    assert!(err
+        .unwrap_err()
+        .contains("PostgreSQL does not support chained audit tables"));
 }

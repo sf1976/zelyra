@@ -1,0 +1,35 @@
+# Lokales SQL-Beispiel: DATABASE_URL auf eine eigene Testdatenbank setzen.
+# Local SQL example: point DATABASE_URL at a disposable test database.
+# zelyra db plan examples/calendar_storage.zyl
+# zelyra db apply examples/calendar_storage.zyl
+# zelyra run examples/calendar_storage.zyl
+# Für PostgreSQL engine: postgres setzen; vorher dessen Datenbank anlegen.
+# For PostgreSQL use engine: postgres and create its database first.
+database Main {
+    engine: mariadb
+}
+table calendar_events {
+    id: Id primary auto
+    issued: Date required
+    clock: Time required
+    occurred: Timestamp required
+    created: Timestamp default now
+}
+fn save_event(issued: Date, clock: Time, occurred: Timestamp) uses Database {
+    sql {
+        INSERT INTO calendar_events (issued, clock, occurred)
+        VALUES (:issued, :clock, :occurred)
+    }
+}
+fn main() uses Database {
+    issued: Date = date("2000-02-29")
+    clock: Time = time("12:34:56")
+    occurred: Timestamp = json_decode<Timestamp>("2182550400001")
+    save_event(issued, clock, occurred)
+    rows = sql<calendar_events[]> {
+        SELECT id, issued, clock, occurred FROM calendar_events ORDER BY id
+    }
+    # Kompatible Rohzeilen; für Berechnungen sql_decode verwenden.
+    # Compatible raw rows; use sql_decode for calculations.
+    print(rows)
+}

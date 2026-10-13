@@ -579,6 +579,18 @@ fn link_modules(
             record.name = internal_type_name(module_name, &record.name);
             linked.records.push(record);
         }
+        for mut definition in module.program.enums.clone() {
+            for (_, payload_types) in &mut definition.variant_payloads {
+                for ty in payload_types {
+                    if definition.is_public {
+                        linker.ensure_exported_type_is_public(ty, definition.span)?;
+                    }
+                    linker.rewrite_type(ty, definition.span)?;
+                }
+            }
+            definition.name = internal_type_name(module_name, &definition.name);
+            linked.enums.push(definition);
+        }
         for mut function in module.program.functions.clone() {
             linker.rewrite_function_types(&mut function)?;
             rewrite_function(
@@ -925,11 +937,20 @@ fn component_tags(html: &str, known_components: &HashSet<String>) -> Vec<String>
 }
 
 fn function_visibility(program: &Program) -> HashMap<String, bool> {
-    program
+    let mut visibility = program
         .functions
         .iter()
         .map(|function| (function.name.clone(), function.is_public))
-        .collect()
+        .collect::<HashMap<_, _>>();
+    for definition in &program.enums {
+        for variant in &definition.variants {
+            visibility.insert(
+                format!("{}::{variant}", definition.name),
+                definition.is_public,
+            );
+        }
+    }
+    visibility
 }
 
 fn type_visibility(program: &Program) -> HashMap<String, bool> {
@@ -942,6 +963,12 @@ fn type_visibility(program: &Program) -> HashMap<String, bool> {
                 .records
                 .iter()
                 .map(|record| (record.name.clone(), record.is_public)),
+        )
+        .chain(
+            program
+                .enums
+                .iter()
+                .map(|definition| (definition.name.clone(), definition.is_public)),
         )
         .collect()
 }
@@ -1024,6 +1051,15 @@ impl TypeLinker<'_> {
             if record.span.source_id == source_id {
                 for field in &mut record.fields {
                     self.rewrite_type(&mut field.ty, field.span)?;
+                }
+            }
+        }
+        for definition in &mut program.enums {
+            if definition.span.source_id == source_id {
+                for (_, payload_types) in &mut definition.variant_payloads {
+                    for ty in payload_types {
+                        self.rewrite_type(ty, definition.span)?;
+                    }
                 }
             }
         }
@@ -1202,6 +1238,22 @@ impl TypeLinker<'_> {
                 self.ensure_exported_type_is_public(ok, span)?;
                 self.ensure_exported_type_is_public(error, span)?;
             }
+            Type::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                for parameter in params {
+                    self.ensure_exported_type_is_public(parameter, span)?;
+                }
+                self.ensure_exported_type_is_public(return_type, span)?;
+            }
+            Type::Applied { name, args } => {
+                self.ensure_exported_type_is_public(&Type::Named(name.clone()), span)?;
+                for argument in args {
+                    self.ensure_exported_type_is_public(argument, span)?;
+                }
+            }
             _ => {}
         }
         Ok(())
@@ -1265,6 +1317,17 @@ impl TypeLinker<'_> {
                     *name = internal_type_name(self.current_name, name);
                 }
             }
+            Type::Applied { name, args } => {
+                let mut base = Type::Named(name.clone());
+                self.rewrite_type(&mut base, span)?;
+                let Type::Named(canonical_name) = base else {
+                    unreachable!("type application base remains a named type")
+                };
+                *name = canonical_name;
+                for argument in args {
+                    self.rewrite_type(argument, span)?;
+                }
+            }
             Type::Option(inner)
             | Type::Array(inner)
             | Type::Set(inner)
@@ -1279,6 +1342,16 @@ impl TypeLinker<'_> {
             Type::Result(ok, error) | Type::Map(ok, error) => {
                 self.rewrite_type(ok, span)?;
                 self.rewrite_type(error, span)?;
+            }
+            Type::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                for parameter in params {
+                    self.rewrite_type(parameter, span)?;
+                }
+                self.rewrite_type(return_type, span)?;
             }
             Type::Int
             | Type::UInt
@@ -1338,13 +1411,20 @@ impl TypeLinker<'_> {
                     self.rewrite_expression_types(value)?;
                 }
             }
-            ExprKind::Record { type_name, fields } => {
+            ExprKind::Record {
+                type_name,
+                type_args,
+                fields,
+            } => {
                 let mut ty = Type::Named(type_name.clone());
                 self.rewrite_type(&mut ty, expression.span)?;
                 let Type::Named(canonical_name) = ty else {
                     unreachable!("named record type remains a named type")
                 };
                 *type_name = canonical_name;
+                for argument in type_args {
+                    self.rewrite_type(argument, expression.span)?;
+                }
                 for (_, value) in fields {
                     self.rewrite_expression_types(value)?;
                 }
@@ -1386,7 +1466,8 @@ impl TypeLinker<'_> {
             | ExprKind::Bool(_)
             | ExprKind::String(_)
             | ExprKind::Char(_)
-            | ExprKind::Variable(_) => {}
+            | ExprKind::Variable(_)
+            | ExprKind::FunctionValue(_) => {}
         }
         Ok(())
     }
@@ -1657,6 +1738,16 @@ fn rewrite_block(
                     is_root,
                 )?;
                 for arm in arms {
+                    rewrite_pattern_enum_names(
+                        &mut arm.pattern,
+                        module_path,
+                        module_name,
+                        imports,
+                        function_sets,
+                        module_names,
+                        display_path,
+                        is_root,
+                    )?;
                     rewrite_block(
                         &mut arm.body,
                         module_path,
@@ -1860,15 +1951,11 @@ fn rewrite_expr(
             )?;
         }
         ExprKind::Call { name, args, .. } => {
-            if let Some((alias, function_name)) = name.split_once("::") {
-                if function_name.contains("::") {
-                    return Err(project_error(
-                        "E-MOD-006",
-                        "qualified function calls currently support one imported namespace",
-                        display_path,
-                        expression.span,
-                    ));
+            if local_functions.contains_key(name) {
+                if !is_root {
+                    *name = internal_name(module_name, name);
                 }
+            } else if let Some((alias, function_name)) = name.split_once("::") {
                 let target = imports.get(alias).ok_or_else(|| {
                     project_error(
                         "E-MOD-006",
@@ -1881,17 +1968,11 @@ fn rewrite_expr(
                     .get(target)
                     .and_then(|functions| functions.get(function_name))
                     .copied();
-                match visibility {
-                    None => return Err(project_error("E-MOD-006", format!("module `{alias}` has no function `{function_name}`"), display_path, expression.span)),
-                    Some(false) => return Err(project_error("E-MOD-007", format!("function `{function_name}` in module `{alias}` is private; declare it with `pub fn` to call it from another module"), display_path, expression.span)),
-                    Some(true) => {}
-                }
-                let target_module = function_sets
-                    .get(target)
-                    .expect("resolved module functions");
-                let imported = target_module.get(function_name).is_some();
-                if !imported {
-                    unreachable!();
+                match (visibility, function_name.contains("::")) {
+                    (None, _) => return Err(project_error("E-MOD-006", format!("module `{alias}` has no public function or enum variant `{function_name}`"), display_path, expression.span)),
+                    (Some(false), true) => return Err(project_error("E-MOD-007", format!("enum `{}` in module `{alias}` is private; declare it with `pub enum` to use its variants from another module", function_name.split_once("::").map_or(function_name, |(enum_name, _)| enum_name)), display_path, expression.span)),
+                    (Some(false), false) => return Err(project_error("E-MOD-007", format!("function `{function_name}` in module `{alias}` is private; declare it with `pub fn` to call it from another module"), display_path, expression.span)),
+                    (Some(true), _) => {}
                 }
                 let target_module_name = module_names.get(target).expect("resolved module name");
                 *name = internal_name(target_module_name, function_name);
@@ -1932,6 +2013,16 @@ fn rewrite_expr(
                 is_root,
             )?;
             for arm in arms {
+                rewrite_pattern_enum_names(
+                    &mut arm.pattern,
+                    module_path,
+                    module_name,
+                    imports,
+                    function_sets,
+                    module_names,
+                    display_path,
+                    is_root,
+                )?;
                 rewrite_expr(
                     &mut arm.value,
                     module_path,
@@ -1946,14 +2037,186 @@ fn rewrite_expr(
                 )?;
             }
         }
+        ExprKind::FunctionValue(name) => {
+            if name.contains("::") && local_functions.contains_key(name) {
+                return Err(project_error(
+                    "E-MOD-006",
+                    "enum variants cannot be stored as function values",
+                    display_path,
+                    expression.span,
+                ));
+            }
+            if local_functions.contains_key(name) {
+                if !is_root {
+                    *name = internal_name(module_name, name);
+                }
+            } else if let Some((alias, function_name)) = name.split_once("::") {
+                if function_name.contains("::") {
+                    return Err(project_error(
+                        "E-MOD-006",
+                        "enum variants are values, not function references",
+                        display_path,
+                        expression.span,
+                    ));
+                }
+                let target = imports.get(alias).ok_or_else(|| {
+                    project_error(
+                        "E-MOD-006",
+                        format!("unknown imported module alias `{alias}`"),
+                        display_path,
+                        expression.span,
+                    )
+                })?;
+                match function_sets
+                    .get(target)
+                    .and_then(|functions| functions.get(function_name))
+                    .copied()
+                {
+                    None => return Err(project_error("E-MOD-006", format!("module `{alias}` has no function `{function_name}`"), display_path, expression.span)),
+                    Some(false) => return Err(project_error("E-MOD-007", format!("function `{function_name}` in module `{alias}` is private; declare it with `pub fn` to store it from another module"), display_path, expression.span)),
+                    Some(true) => {}
+                }
+                let target_module_name = module_names.get(target).expect("resolved module name");
+                *name = internal_name(target_module_name, function_name);
+            } else if !is_root && root_functions.contains_key(name) {
+                return Err(project_error("E-MOD-007", format!("function `{name}` belongs to the entry module; import it through an explicit module namespace"), display_path, expression.span));
+            }
+        }
+        ExprKind::Variable(name) => {
+            if local_functions.contains_key(name) {
+                if !is_root {
+                    *name = internal_name(module_name, name);
+                }
+            } else if let Some((alias, variant_name)) = name.split_once("::") {
+                if variant_name.contains("::") {
+                    let target = imports.get(alias).ok_or_else(|| {
+                        project_error(
+                            "E-MOD-006",
+                            format!("unknown imported module alias `{alias}`"),
+                            display_path,
+                            expression.span,
+                        )
+                    })?;
+                    let visibility = function_sets
+                        .get(target)
+                        .and_then(|functions| functions.get(variant_name))
+                        .copied();
+                    match visibility {
+                        None => return Err(project_error("E-MOD-006", format!("module `{alias}` has no enum variant `{variant_name}`"), display_path, expression.span)),
+                        Some(false) => return Err(project_error("E-MOD-007", format!("enum `{}` in module `{alias}` is private; declare it with `pub enum` to use its variants from another module", variant_name.split_once("::").map_or(variant_name, |(enum_name, _)| enum_name)), display_path, expression.span)),
+                        Some(true) => {}
+                    }
+                    let target_module_name =
+                        module_names.get(target).expect("resolved module name");
+                    *name = internal_name(target_module_name, variant_name);
+                }
+            }
+        }
         ExprKind::Int(_)
         | ExprKind::UInt(_)
         | ExprKind::Float(_)
         | ExprKind::Bool(_)
         | ExprKind::String(_)
         | ExprKind::Char(_)
-        | ExprKind::Variable(_)
         | ExprKind::Sql { .. } => {}
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn rewrite_pattern_enum_names(
+    pattern: &mut zelyra_ast::Pattern,
+    module_path: &Path,
+    module_name: &str,
+    imports: &HashMap<String, PathBuf>,
+    function_sets: &HashMap<PathBuf, HashMap<String, bool>>,
+    module_names: &HashMap<PathBuf, String>,
+    display_path: &str,
+    is_root: bool,
+) -> Result<(), ProjectError> {
+    use zelyra_ast::PatternKind;
+    match &mut pattern.kind {
+        PatternKind::EnumVariant { enum_name, variant }
+        | PatternKind::EnumVariantPayload {
+            enum_name, variant, ..
+        } => {
+            if let Some((alias, imported_enum)) = enum_name.split_once("::") {
+                let target = imports.get(alias).ok_or_else(|| {
+                    project_error(
+                        "E-MOD-009",
+                        format!("unknown imported module alias `{alias}` in enum pattern"),
+                        display_path,
+                        pattern.span,
+                    )
+                })?;
+                let variant_key = format!("{imported_enum}::{variant}");
+                match function_sets
+                    .get(target)
+                    .and_then(|functions| functions.get(&variant_key))
+                    .copied()
+                {
+                    None => {
+                        return Err(project_error(
+                            "E-MOD-009",
+                            format!("module `{alias}` has no enum variant `{variant_key}`"),
+                            display_path,
+                            pattern.span,
+                        ));
+                    }
+                    Some(false) => {
+                        return Err(project_error(
+                            "E-MOD-007",
+                            format!("enum `{imported_enum}` in module `{alias}` is private; declare it with `pub enum` to match its variants from another module"),
+                            display_path,
+                            pattern.span,
+                        ));
+                    }
+                    Some(true) => {}
+                }
+                let target_module_name = module_names.get(target).expect("resolved module name");
+                *enum_name = internal_type_name(target_module_name, imported_enum);
+            } else if !is_root
+                && function_sets.get(module_path).is_some_and(|functions| {
+                    functions.contains_key(&format!("{enum_name}::{variant}"))
+                })
+            {
+                *enum_name = internal_type_name(module_name, enum_name);
+            }
+            if let PatternKind::EnumVariantPayload { payloads, .. } = &mut pattern.kind {
+                for payload in payloads {
+                    rewrite_pattern_enum_names(
+                        payload,
+                        module_path,
+                        module_name,
+                        imports,
+                        function_sets,
+                        module_names,
+                        display_path,
+                        is_root,
+                    )?;
+                }
+            }
+        }
+        PatternKind::Constructor { inner, .. } => {
+            if let Some(inner) = inner {
+                rewrite_pattern_enum_names(
+                    inner,
+                    module_path,
+                    module_name,
+                    imports,
+                    function_sets,
+                    module_names,
+                    display_path,
+                    is_root,
+                )?;
+            }
+        }
+        PatternKind::Wildcard
+        | PatternKind::Variable(_)
+        | PatternKind::Int(_)
+        | PatternKind::Bool(_)
+        | PatternKind::String(_)
+        | PatternKind::Char(_) => {}
     }
     Ok(())
 }
@@ -2042,6 +2305,72 @@ mod tests {
     }
 
     #[test]
+    fn imports_public_payload_enums_and_links_constructor_values_and_patterns() {
+        let directory = project(&[
+            (
+                "main.zyl",
+                "import \"src/events.zyl\" as events\nfn describe_event(event: events::Event) -> String { match event { events::Event::Created(id) => { return \"created\" } events::Event::Idle => { return \"idle\" } } } fn main() { print(describe_event(events::created(7))) print(describe_event(events::Event::Created(8))) print(describe_event(events::Event::Idle)) }\n",
+            ),
+            (
+                "src/events.zyl",
+                "pub enum Event { Created(Int) Idle } pub fn created(id: Int) -> Event { return Event::Created(id) }\n",
+            ),
+        ]);
+        let loaded = load(directory.join("main.zyl").to_str().unwrap()).unwrap();
+        assert_eq!(
+            execute(&loaded.program).unwrap(),
+            ["created", "created", "idle"]
+        );
+        assert!(check(&loaded.program).is_ok());
+        cleanup(&directory);
+
+        let private = project(&[
+            (
+                "main.zyl",
+                "import \"src/events.zyl\" as events\nfn main() { print(events::Event::Idle) }\n",
+            ),
+            ("src/events.zyl", "enum Event { Idle }\n"),
+        ]);
+        let error = load(private.join("main.zyl").to_str().unwrap())
+            .expect_err("private enum variants must not cross a module boundary");
+        assert_eq!(error.code, "E-MOD-007");
+        cleanup(&private);
+    }
+
+    #[test]
+    fn imports_public_functions_as_values_without_erasing_the_signature() {
+        let directory = project(&[
+            (
+                "main.zyl",
+                "import \"src/math.zyl\" as math\nfn apply(callback: Function<(Int) -> Int>, value: Int) -> Int { return callback(value) } fn main() { transform = &math::increment print(apply(transform, 8)) }\n",
+            ),
+            (
+                "src/math.zyl",
+                "pub fn increment(value: Int) -> Int { return value + 1 }\n",
+            ),
+        ]);
+        let loaded = load(directory.join("main.zyl").to_str().unwrap()).unwrap();
+        assert_eq!(execute(&loaded.program).unwrap(), ["9"]);
+        assert!(check(&loaded.program).is_ok());
+        cleanup(&directory);
+
+        let private = project(&[
+            (
+                "main.zyl",
+                "import \"src/math.zyl\" as math\nfn main() { transform = &math::increment }\n",
+            ),
+            (
+                "src/math.zyl",
+                "fn increment(value: Int) -> Int { return value + 1 }\n",
+            ),
+        ]);
+        let error = load(private.join("main.zyl").to_str().unwrap())
+            .expect_err("private functions must not be captured through function values");
+        assert_eq!(error.code, "E-MOD-007");
+        cleanup(&private);
+    }
+
+    #[test]
     fn reports_transitive_module_graph_in_stable_path_order() {
         let directory = project(&[
             (
@@ -2103,6 +2432,24 @@ mod tests {
             .records
             .iter()
             .any(|record| record.name == "src/money.zyl::Amount"));
+        cleanup(&directory);
+    }
+
+    #[test]
+    fn imports_public_generic_records_enums_and_functions_across_modules() {
+        let directory = project(&[
+            (
+                "main.zyl",
+                "import \"src/models.zyl\" as models\nfn main() { value = models::Box<Int> { value: 17 } print(models::identity(value).value) event = models::Maybe::Some(23) print(models::unwrap(event)) counter = models::Counter { value: 0 } alias = counter models::advance(counter) assert(alias.value == 1, \"imported class references share identity\") print(alias.value) }\n",
+            ),
+            (
+                "src/models.zyl",
+                "pub struct Box<T> { value: T }\npub enum Maybe<T> { Some(T) None }\npub class Counter { value: Int }\npub fn identity<T>(value: T) -> T { return value }\npub fn unwrap(value: Maybe<Int>) -> Int { match value { Maybe::Some(number) => { return number } Maybe::None => { return 0 } } }\npub fn advance(counter: Counter) { counter.value = counter.value + 1 }\n",
+            ),
+        ]);
+        let loaded = load(directory.join("main.zyl").to_str().unwrap()).unwrap();
+        check(&loaded.program).unwrap_or_else(|errors| panic!("{errors:?}"));
+        assert_eq!(execute(&loaded.program).unwrap(), ["17", "23", "1"]);
         cleanup(&directory);
     }
 

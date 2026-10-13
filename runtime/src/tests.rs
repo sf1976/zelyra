@@ -45,11 +45,79 @@ fn recursion_is_bounded_and_reports_the_call_site_without_crashing() {
 }
 
 #[test]
+fn classes_share_identity_and_mutate_checked_fields() {
+    let source = r#"
+class Counter { value: Int }
+
+fn increment(counter: Counter) {
+    counter.value = counter.value + 1
+}
+
+fn identity(counter: Counter) -> Counter {
+    return counter
+}
+
+fn main() {
+    original = Counter { value: 0 }
+    alias = original
+    increment(original)
+    returned = identity(alias)
+    assert(original == alias, "binding copies preserve object identity")
+    assert(returned == original, "function returns preserve object identity")
+    assert(alias.value == 1, "field mutation is shared through aliases")
+    fresh = Counter { value: 1 }
+    assert(fresh != original, "distinct objects with equal fields have distinct identity")
+    print("class references passed")
+}
+"#;
+    assert_eq!(run(source), ["class references passed"]);
+}
+
+#[test]
+fn class_references_are_rejected_at_json_api_boundaries() {
+    let program = parse(
+        &lex(
+            "class Customer { name: String } struct CustomerEnvelope { customer: Customer } api GET \"/customers\" { output CustomerEnvelope } fn main() { }",
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let errors = check_apis(&program)
+        .expect_err("class identity must not be silently flattened into API JSON");
+    assert!(errors.iter().any(|error| {
+        error
+            .message
+            .contains("class references of type `Customer` cannot cross an API JSON boundary")
+    }));
+
+    let alias = parse(
+        &lex(
+            "class Customer { name: String } type CustomerRef = Customer api GET \"/customers\" { output CustomerRef } fn main() { }",
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let errors = check_apis(&alias).expect_err("class aliases must retain the JSON boundary rule");
+    assert!(errors.iter().any(|error| {
+        error
+            .message
+            .contains("class references of type `Customer` cannot cross an API JSON boundary")
+    }));
+}
+
+#[test]
 fn sql_rows_keep_the_declared_result_type_for_runtime_return_checks() {
     let rows = Value::Rows {
         columns: vec!["id".into(), "name".into()],
         rows: vec![vec!["1".into(), "Ada".into()]],
-        result_type: Type::Named("Customer".into()),
+        metadata: Box::new(SqlRowsMetadata {
+            nulls: vec![vec![false, false]],
+            column_types: vec![
+                zelyra_database::QueryColumnType::Integer,
+                zelyra_database::QueryColumnType::Text,
+            ],
+        }),
+        result_type: Box::new(Type::Named("Customer".into())),
     };
 
     assert_eq!(rows.ty(), Type::Named("Customer".into()));
@@ -58,6 +126,347 @@ fn sql_rows_keep_the_declared_result_type_for_runtime_return_checks() {
         "[id=1, name=Ada]",
         "type metadata must not change the existing row representation"
     );
+}
+
+#[test]
+fn generic_functions_infer_and_accept_explicit_type_arguments() {
+    let source = r#"
+fn identity<T>(value: T) -> T {
+    return value
+}
+
+fn head_value<T>(values: T[]) -> T {
+    return values[0]
+}
+
+fn wrap<T>(value: T) -> Option<T> {
+    return Some(value)
+}
+
+fn result_or<T, E>(value: Result<T, E>, fallback: T) -> T {
+    match value {
+        Ok(found) => { return found }
+        Err(_) => { return fallback }
+    }
+}
+
+fn main() {
+    print(identity(42))
+    print(identity<String>("Grüße"))
+    print(head_value([7, 8]))
+    match wrap(true) {
+        Some(value) => { print(value) }
+        None => { print(false) }
+    }
+    print(result_or<Int, String>(Ok(7), 0))
+}
+"#;
+    assert_eq!(run(source), ["42", "Grüße", "7", "true", "7"]);
+}
+
+#[test]
+fn generic_functions_reject_conflicting_and_invalid_type_arguments() {
+    let conflicting = parse(
+        &lex("fn same<T>(left: T, right: T) -> T { return left } fn main() { print(same(1, \"one\")) }")
+            .unwrap(),
+    )
+    .unwrap();
+    let errors = check(&conflicting).expect_err("different types must not unify as one T");
+    assert!(errors.iter().any(|error| {
+        error
+            .message
+            .contains("type mismatch: expected `Int`, found `String`")
+    }));
+
+    let explicit = parse(
+        &lex("fn identity<T>(value: T) -> T { return value } fn main() { print(identity<Int>(\"one\")) }")
+            .unwrap(),
+    )
+    .unwrap();
+    let errors = check(&explicit).expect_err("an explicit type argument must be enforced");
+    assert!(errors.iter().any(|error| {
+        error
+            .message
+            .contains("type mismatch: expected `Int`, found `String`")
+    }));
+
+    let uninferred = parse(
+        &lex("fn ignored<T>(value: Int) -> Int { return value } fn main() { print(ignored(1)) }")
+            .unwrap(),
+    )
+    .unwrap();
+    let errors = check(&uninferred).expect_err("unconstrained type parameters need explicit types");
+    assert!(errors.iter().any(|error| {
+        error.code == "E-TYPE-GENERIC-001"
+            && error.message.contains("cannot infer type parameter `T`")
+    }));
+
+    let wrong_arity = parse(
+        &lex("fn identity<T>(value: T) -> T { return value } fn main() { print(identity<Int, String>(1)) }")
+            .unwrap(),
+    )
+    .unwrap();
+    let errors = check(&wrong_arity).expect_err("generic type argument count must be checked");
+    assert!(errors.iter().any(|error| {
+        error.code == "E-TYPE-GENERIC-001"
+            && error
+                .message
+                .contains("expects 1 type argument(s), found 2")
+    }));
+
+    let shadows_type = parse(
+        &lex("struct Customer { id: Int } fn identity<Customer>(value: Customer) -> Customer { return value } fn main() { }")
+            .unwrap(),
+    )
+    .unwrap();
+    let errors = check(&shadows_type).expect_err("generic parameters may not shadow domain types");
+    assert!(errors.iter().any(|error| {
+        error.code == "E-TYPE-GENERIC-001" && error.message.contains("shadows a declared type")
+    }));
+}
+
+#[test]
+fn generic_records_infer_fields_update_copy_and_round_trip_json() {
+    let source = r#"
+struct Box<T> { value: T }
+struct Pair<First, Second> { first: First second: Second }
+
+fn main() {
+    explicit: Box<Int> = Box<Int> { value: 7 }
+    inferred = Box { value: "Grüße" }
+    pair = Pair { first: 3 second: "drei" }
+    print(explicit.value)
+    print(inferred.value)
+    print(pair.first)
+    print(pair.second)
+    changed = record_with(explicit, "value", 9)
+    print(changed.value)
+    print(explicit.value)
+    encoded = json_encode(explicit)
+    restored: Box<Int> = json_decode<Box<Int>>(encoded)
+    print(restored.value)
+    print(restored)
+}
+"#;
+    assert_eq!(
+        run(source),
+        [
+            "7",
+            "Grüße",
+            "3",
+            "drei",
+            "9",
+            "7",
+            "7",
+            "Box<Int>{value=7}"
+        ]
+    );
+
+    for (source, expected) in [
+        (
+            "struct Box<T> { value: T } fn main() { value: Box<Int> = Box<String> { value: \"wrong\" } }",
+            "type mismatch",
+        ),
+        (
+            "struct Box<T> { value: T } fn main() { value = Box<Int, String> { value: 1 } }",
+            "expects 1 type argument(s), found 2",
+        ),
+        (
+            "struct Pair<First, Second> { first: First second: Second } fn main() { value: Pair<Int> = Pair<Int> { first: 1 second: 2 } }",
+            "expects 2 type argument(s), found 1",
+        ),
+        (
+            "struct Box<T> { value: T } fn main() { value: Box = Box { value: 1 } }",
+            "requires 1 type argument(s)",
+        ),
+        (
+            "struct Box<T> { value: T } fn main() { value = Box<Int> { value: \"wrong\" } }",
+            "type mismatch",
+        ),
+        (
+            "struct Pair<T> { first: T second: T } fn main() { value = Pair { first: 1 second: \"wrong\" } }",
+            "type mismatch",
+        ),
+        (
+            "struct Box<T> { value: T } fn main() { value = Box { value: 1 } changed = record_with(value, \"value\", \"wrong\") }",
+            "type mismatch",
+        ),
+        (
+            "struct Empty<T> { marker: Int } fn main() { value = Empty { marker: 1 } }",
+            "cannot infer type parameter `T`",
+        ),
+        (
+            "struct Customer { name: String } fn main() { customer: Customer<Int> = Customer<Int> { name: \"Ada\" } }",
+            "does not accept type arguments",
+        ),
+    ] {
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let errors = check(&program).expect_err("invalid generic record use must be rejected");
+        assert!(
+            errors.iter().any(|error| error.message.contains(expected)),
+            "expected {expected:?}, got {errors:?}"
+        );
+    }
+}
+
+#[test]
+fn generic_enums_infer_payloads_match_exhaustively_and_round_trip_json() {
+    let source = r#"
+enum Maybe<T> { Some(T) None }
+
+fn describe(value: Maybe<Int>) -> Int {
+    match value {
+        Maybe::Some(number) => { return number }
+        Maybe::None => { return 0 }
+    }
+}
+
+fn main() {
+    some = Maybe::Some(42)
+    none = Maybe::None<String>()
+    print(describe(some))
+    match none {
+        Maybe::Some(text) => { print(text) }
+        Maybe::None => { print("empty") }
+    }
+    encoded = json_encode(some)
+    restored: Maybe<Int> = json_decode<Maybe<Int>>(encoded)
+    print(restored == some)
+}
+"#;
+    assert_eq!(run(source), ["42", "empty", "true"]);
+
+    for (source, expected) in [
+        (
+            "enum Maybe<T> { Some(T) None } fn main() { value: Maybe<Int> = Maybe::Some(\"wrong\") }",
+            "type mismatch",
+        ),
+        (
+            "enum Maybe<T> { Some(T) None } fn main() { value = Maybe::None }",
+            "requires explicit type arguments",
+        ),
+        (
+            "enum Maybe<T> { Some(T) None } fn main() { value = Maybe::None<Int, String>() }",
+            "expects 1 type argument(s), found 2",
+        ),
+        (
+            "enum Maybe<T> { Some(T) None } fn main() { value: Maybe<Int> = Maybe::Some<Int, String>(1) }",
+            "expects 1 type argument(s), found 2",
+        ),
+        (
+            "enum Maybe<T> { Some(T) None } fn main() { value: Maybe<Int> = Maybe::Some<String>(\"wrong\") }",
+            "type mismatch",
+        ),
+        (
+            "enum Maybe<T> { Some(T) None } fn main() { value: Maybe<Int> = Maybe::Some(1) match value { Maybe::Some(number) => { print(number) } } }",
+            "non-exhaustive match",
+        ),
+        (
+            "enum Maybe<Int> { Some(Int) None } fn main() { }",
+            "shadows a declared type",
+        ),
+    ] {
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let errors = check(&program).expect_err("invalid generic enum use must be rejected");
+        assert!(
+            errors.iter().any(|error| error.message.contains(expected)),
+            "expected {expected:?}, got {errors:?}"
+        );
+    }
+}
+
+#[test]
+fn named_function_values_are_typed_passed_called_and_keep_capability_requirements() {
+    let source = r#"
+fn increment(value: Int) -> Int { return value + 1 }
+fn provide_increment() -> Function<(Int) -> Int> { return &increment }
+fn apply(callback: Function<(Int) -> Int>, value: Int) -> Int {
+    return callback(value)
+}
+fn main() {
+    saved = provide_increment()
+    print(saved(4))
+    print(apply(saved, 7))
+    print(saved)
+}
+"#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap();
+    check_capabilities(&program).unwrap();
+    assert_eq!(
+        execute(&program).unwrap(),
+        ["5", "8", "<function increment>"]
+    );
+
+    let mismatch = parse(
+        &lex("fn increment(value: Int) -> Int { return value + 1 } fn main() { saved = &increment print(saved(\"wrong\")) }")
+            .unwrap(),
+    )
+    .unwrap();
+    let errors = check(&mismatch).expect_err("indirect function arguments remain statically typed");
+    assert!(errors.iter().any(|error| {
+        error
+            .message
+            .contains("type mismatch: expected `Int`, found `String`")
+    }));
+
+    let hidden_effect = parse(
+        &lex("fn read_clock() -> Timestamp uses Clock { return now() } fn apply(callback: Function<() -> Timestamp>) -> Timestamp { return callback() } fn main() { reader = &read_clock print(apply(reader)) }")
+            .unwrap(),
+    )
+    .unwrap();
+    let errors = check(&hidden_effect).expect_err("a function type may not hide a Clock effect");
+    assert!(errors.iter().any(|error| {
+        error.message.contains("type mismatch") && error.message.contains("Clock")
+    }));
+
+    let propagated_effect = parse(
+        &lex("fn read_clock() -> Timestamp uses Clock { return now() } fn apply(callback: Function<() -> Timestamp> uses {Clock}) -> Timestamp { return callback() } fn main() uses Clock { reader = &read_clock print(apply(reader)) }")
+            .unwrap(),
+    )
+    .unwrap();
+    check(&propagated_effect).unwrap();
+    let errors = check_capabilities(&propagated_effect)
+        .expect_err("an indirect Clock call requires the containing function to declare it");
+    assert!(errors.iter().any(|error| error.message.contains("Clock")));
+
+    let authorized_effect = parse(
+        &lex("fn read_clock() -> Timestamp uses Clock { return now() } fn apply(callback: Function<() -> Timestamp> uses {Clock}) -> Timestamp uses Clock { return callback() } fn main() uses Clock { reader = &read_clock print(apply(reader)) }")
+            .unwrap(),
+    )
+    .unwrap();
+    check(&authorized_effect).unwrap();
+    check_capabilities(&authorized_effect).unwrap();
+    assert_eq!(execute(&authorized_effect).unwrap().len(), 1);
+
+    let encode = parse(
+        &lex("fn increment(value: Int) -> Int { return value + 1 } fn provide() -> Function<(Int) -> Int> { return &increment } fn main() { saved = provide() print(json_encode(saved)) }")
+            .unwrap(),
+    )
+    .unwrap();
+    check(&encode).unwrap();
+    let error = execute(&encode).expect_err("function values are not JSON data");
+    assert!(error.message.contains("cannot serialize a function value"));
+}
+
+#[test]
+fn format_text_is_an_explicit_scalar_conversion_without_json_quotes() {
+    let source = r#"
+fn main() {
+    print(format_text(42))
+    print(format_text(decimal("12.34")))
+    print(format_text(true))
+    print(format_text("Zelyra"))
+}
+"#;
+    assert_eq!(run(source), ["42", "12.34", "true", "Zelyra"]);
+
+    let non_scalar = parse(&lex("fn main() { print(format_text([1, 2])) }").unwrap()).unwrap();
+    let errors =
+        check(&non_scalar).expect_err("collections do not have an implicit display format");
+    assert!(errors.iter().any(|error| {
+        error.code == "E-TYPE-FORMAT-001" && error.message.contains("does not support `Int[]`")
+    }));
 }
 
 #[test]
@@ -232,7 +641,6 @@ fn main() {
     restored: OrderStatus = json_decode<OrderStatus>(encoded)
     print(restored == status)
 }
-
 "#;
     assert_eq!(
         run(source),
@@ -261,6 +669,87 @@ fn main() {
         check(&unknown).is_err(),
         "unknown enum variants must be rejected"
     );
+}
+
+#[test]
+fn payload_enums_typecheck_match_serialize_and_round_trip() {
+    let source = r#"
+enum Event { Created(Int) Renamed(String, Date) Idle }
+
+fn describe(event: Event) -> String {
+    match event {
+        Event::Created(id) => { return "created" }
+        Event::Renamed(name, date) => { return "renamed" }
+        Event::Idle => { return "idle" }
+    }
+}
+
+fn main() {
+    created = Event::Created(41)
+    renamed = Event::Renamed("Lager", date("2026-10-12"))
+    idle = Event::Idle
+    assert(created != idle, "payload variants remain distinct")
+    assert(describe(created) == "created", "payload is bound by pattern")
+    assert(describe(renamed) == "renamed", "multiple payloads are bound")
+    assert(describe(idle) == "idle", "unit variants remain compatible")
+    encoded = json_encode(renamed)
+    print(encoded)
+    restored: Event = json_decode<Event>(encoded)
+    assert(restored == renamed, "payload enum JSON round trip")
+    print(restored)
+}
+"#;
+    assert_eq!(
+        run(source),
+        [
+            r#"{"$enum":"Event","payload":["Lager","2026-10-12"],"variant":"Renamed"}"#,
+            "Event::Renamed(Lager, 2026-10-12)",
+        ]
+    );
+
+    for (source, code) in [
+        (
+            "enum Event { Created(Int) Idle } fn main() { event = Event::Created(\"wrong\") }",
+            "E-TYPE-001",
+        ),
+        (
+            "enum Event { Created(Int) Idle } fn main() { event = Event::Created() }",
+            "E-TYPE-ENUM-001",
+        ),
+        (
+            "enum Event { Created(Int) Idle } fn main() { event = Event::Idle() }",
+            "E-TYPE-ENUM-001",
+        ),
+        (
+            "enum Event { Created(Int) Idle } fn main() { event = Event::Created(1) match event { Event::Created(value) => { print(value) } } }",
+            "E-TYPE-MATCH-001",
+        ),
+        (
+            "enum Event { Created(Int) Idle } fn main() { event: Event = Event::Created(1) match event { Event::Created => { print(1) } Event::Idle => { print(0) } } }",
+            "E-TYPE-ENUM-001",
+        ),
+    ] {
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let errors = check(&program).expect_err("invalid payload enum use must be rejected");
+        assert!(errors.iter().any(|error| error.code == code), "{errors:?}");
+    }
+
+    let decode = parse(
+        &lex("enum Event { Created(Int) } fn decode(text: String) -> Event { return json_decode<Event>(text) } fn main() { }")
+            .unwrap(),
+    )
+    .unwrap();
+    check(&decode).unwrap();
+    let error = execute_function(
+        &decode,
+        "decode",
+        vec![Value::String(
+            r#"{"$enum":"Event","variant":"Created","payload":["wrong"]}"#.into(),
+        )],
+        None,
+    )
+    .expect_err("payload JSON must be decoded against the variant field type");
+    assert!(error.message.contains("expected Int"), "{}", error.message);
 }
 
 #[test]
@@ -1181,6 +1670,7 @@ fn sends_and_decodes_typed_json_http_request() {
             Value::String(format!("http://127.0.0.1:{port}/customers")),
             Value::Object {
                 type_name: "CustomerCreate".into(),
+                type_args: Vec::new(),
                 fields: HashMap::from([(String::from("name"), Value::String("Anna".into()))]),
             },
         ],
@@ -1361,6 +1851,7 @@ fn tagged_result_json_codec_preserves_ok_err_and_reports_invalid_data() {
 
     let customer = Value::Object {
         type_name: "Customer".into(),
+        type_args: Vec::new(),
         fields: HashMap::from([("name".into(), Value::String("Zoë".into()))]),
     };
     let encoded_ok = execute_function(
@@ -2343,6 +2834,20 @@ fn validates_api_handler_signature() {
 }
 
 #[test]
+fn rejects_generic_functions_as_api_handlers() {
+    let program = parse(
+        &lex("fn get_customer<T>(id: Id) -> Customer { } api GET \"/customers/{id}\" { handler get_customer input { id: Id } output Customer } fn main() { }")
+            .unwrap(),
+    )
+    .unwrap();
+    let errors = check_apis(&program).expect_err("API routes have no generic type argument syntax");
+    assert!(errors.iter().any(|error| {
+        error.message.contains("must be non-generic")
+            && error.message.contains("cannot supply type arguments")
+    }));
+}
+
+#[test]
 fn rejects_non_string_map_keys_at_the_api_boundary() {
     let program = parse(
             &lex("api POST \"/settings\" { input { settings: Map<Int, String> } output Map<Int, String> } fn main() { }").unwrap(),
@@ -2356,6 +2861,43 @@ fn rejects_non_string_map_keys_at_the_api_boundary() {
 }
 
 #[test]
+fn generic_api_types_reject_function_payloads_and_allow_recursive_records() {
+    let wrong_arity = parse(
+        &lex("enum Maybe<T> { Some(T) None } api GET \"/maybe\" { output Maybe<Int, String> } fn main() { }")
+            .unwrap(),
+    )
+    .unwrap();
+    let errors =
+        check_apis(&wrong_arity).expect_err("API generic types must use their declared arity");
+    assert!(errors
+        .iter()
+        .any(|error| error.message.contains("unknown API output type")));
+
+    let unsupported = parse(
+        &lex("enum Callback<T> { Ready(T) } api GET \"/callback\" { output Callback<Function<() -> Int>> } fn main() { }")
+            .unwrap(),
+    )
+    .unwrap();
+    let errors = check_apis(&unsupported)
+        .expect_err("function values nested in generic enum payloads cannot cross JSON APIs");
+    assert!(
+        errors.iter().any(|error| {
+            error
+                .message
+                .contains("function values cannot cross an API JSON boundary")
+        }),
+        "{errors:?}"
+    );
+
+    let recursive = parse(
+        &lex("struct Node<T> { value: T next: Node<T>? } api GET \"/nodes\" { output Node<Int> } fn main() { }")
+            .unwrap(),
+    )
+    .unwrap();
+    check_apis(&recursive).expect("recursive generic records must not recurse in type validation");
+}
+
+#[test]
 fn rejects_api_paths_without_declared_inputs() {
     let program =
         parse(&lex("api GET \"/customers/{id}\" { output String } fn main() { }").unwrap())
@@ -2364,4 +2906,541 @@ fn rejects_api_paths_without_declared_inputs() {
     assert!(errors
         .iter()
         .any(|error| error.message.contains("path parameter `id`")));
+}
+
+#[test]
+fn lossless_json_keeps_reserved_object_keys_and_decimal_string_contract() {
+    let output = run(r#"fn main() {
+        payload = "{\"$serde_json::private::Number\":\"12.34\"}"
+        object = json_decode<Map<String, String>>(payload)
+        assert(get(object, "$serde_json::private::Number") == Some("12.34"))
+        assert(json_encode(object) == payload)
+        amount = json_decode<Decimal>("\"9007199254740993.123456789\"")
+        assert(amount == decimal("9007199254740993.123456789"))
+        print(json_encode(amount))
+    }"#);
+    assert_eq!(output, ["\"9007199254740993.123456789\""]);
+    let program =
+        parse(&lex("fn main() { value = json_decode<Decimal>(\"1.25\") }").unwrap()).unwrap();
+    check(&program).unwrap();
+    assert!(execute(&program)
+        .unwrap_err()
+        .message
+        .contains("Decimal string"));
+}
+
+#[test]
+fn decimal_alias_returns_are_checked_against_the_underlying_value_type() {
+    let output = run(r#"type Amount = Decimal
+        fn echo_amount(amount: Amount) -> Amount { return amount }
+        fn echo_list(amounts: Amount[]) -> Amount[] { return amounts }
+        fn main() {
+            amount = decimal("9007199254740993.123456789")
+            assert(echo_amount(amount) == amount)
+            assert(echo_list([amount]) == [amount])
+            print("PASS")
+        }"#);
+    assert_eq!(output, ["PASS"]);
+    let bad = parse(
+        &lex("type Amount = Decimal fn bad() -> Amount { return \"not money\" } fn main() {} ")
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(check(&bad).is_err());
+    let error = execute_function(&bad, "bad", Vec::new(), None).unwrap_err();
+    assert!(error.message.contains("expected"));
+}
+
+#[test]
+fn recursive_type_aliases_are_rejected_even_without_a_use_site() {
+    for source in [
+        "type A = A fn main() {}",
+        "type A = B[] type B = A fn main() {}",
+    ] {
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let errors = check(&program).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.code == "E-TYPE-ALIAS-001" && error.span.line == 1));
+    }
+}
+
+#[test]
+fn decimal_boundary_arithmetic_checks_the_result_not_only_the_intermediate() {
+    let output = run(r#"fn main() {
+        largest = decimal("170141183460469231731687303715.884105727")
+        smallest = decimal("-170141183460469231731687303715.884105728")
+        one = decimal("1")
+        assert(largest * one == largest)
+        assert(largest / one == largest)
+        assert(largest / largest == one)
+        assert(smallest * one == smallest)
+        assert(smallest / smallest == one)
+        assert(largest * decimal("0.000000001") == decimal("170141183460469231731.687303715"))
+        print("PASS")
+    }"#);
+    assert_eq!(output, ["PASS"]);
+}
+
+#[test]
+fn decimal_extreme_remainder_and_invalid_operations_do_not_panic() {
+    let valid = run(r#"fn main() {
+        smallest = decimal("-170141183460469231731687303715.884105728")
+        assert(smallest % decimal("-0.000000001") == decimal("0"))
+        print("PASS")
+    }"#);
+    assert_eq!(valid, ["PASS"]);
+    for expression in [
+        "decimal(\"1\") / decimal(\"0\")",
+        "decimal(\"1\") % decimal(\"0\")",
+        "decimal(\"170141183460469231731687303715.884105727\") * decimal(\"2\")",
+        "decimal(\"-170141183460469231731687303715.884105728\") / decimal(\"-1\")",
+    ] {
+        let program =
+            parse(&lex(&format!("fn main() {{ print({expression}) }}")).unwrap()).unwrap();
+        check(&program).unwrap();
+        let error = execute(&program).unwrap_err();
+        assert!(error.span.start > 0);
+        assert!(error.message.contains("overflow") || error.message.contains("zero"));
+    }
+}
+
+#[test]
+fn timestamp_decoding_rejects_values_outside_the_documented_calendar_range() {
+    for value in [
+        "-62135596800001",
+        "253402300800000",
+        "9223372036854775807",
+        "-9223372036854775808",
+    ] {
+        let program = parse(
+            &lex(&format!(
+                "fn main() {{ value = json_decode<Timestamp>(\"{value}\") }}"
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        check(&program).unwrap();
+        let error = execute(&program).unwrap_err();
+        assert!(error.span.start > 0);
+        assert!(error.message.contains("Timestamp"));
+    }
+    assert_eq!(
+        run(r#"fn main() {
+        print(format_timestamp(json_decode<Timestamp>("-62135596800000")))
+        print(format_timestamp(json_decode<Timestamp>("253402300799999")))
+        print(format_timestamp(json_decode<Timestamp>("-1")))
+    }"#),
+        [
+            "0001-01-01T00:00:00.000Z",
+            "9999-12-31T23:59:59.999Z",
+            "1969-12-31T23:59:59.999Z"
+        ]
+    );
+}
+
+// Inject driver-shaped results into the decoder without opening a database.
+// The public language entry point separately requires a direct SQL expression.
+fn decode_sql_fixture(
+    target: &str,
+    definitions: &str,
+    columns: &[&str],
+    kinds: Vec<zelyra_database::QueryColumnType>,
+    rows: Vec<Vec<&str>>,
+    nulls: Vec<Vec<bool>>,
+) -> Result<Value, RuntimeError> {
+    let source = format!("{definitions} fn decode(rows: Int[]) {{ return sql_decode<{target}>(rows) }} fn main() {{ }}");
+    let program = parse(&lex(&source).unwrap()).unwrap();
+    execute_function(
+        &program,
+        "decode",
+        vec![Value::Rows {
+            columns: columns.iter().map(|value| (*value).into()).collect(),
+            rows: rows
+                .iter()
+                .map(|row| row.iter().map(|value| (*value).into()).collect())
+                .collect(),
+            metadata: Box::new(SqlRowsMetadata {
+                nulls,
+                column_types: kinds,
+            }),
+            result_type: Box::new(Type::Array(Box::new(Type::Int))),
+        }],
+        None,
+    )
+}
+
+#[test]
+fn typed_sql_results_preserve_null_and_literal_sentinel() {
+    use zelyra_database::QueryColumnType::Text;
+    let value = decode_sql_fixture(
+        "Option<String>[]",
+        "",
+        &["value"],
+        vec![Text],
+        vec![vec!["\\N"], vec!["\\N"]],
+        vec![vec![true], vec![false]],
+    )
+    .unwrap();
+    assert_eq!(
+        value,
+        Value::Array(vec![
+            Value::Option(None),
+            Value::Option(Some(Box::new(Value::String("\\N".into()))))
+        ])
+    );
+}
+
+#[test]
+fn typed_sql_results_enforce_cardinality_and_projection_even_when_empty() {
+    use zelyra_database::QueryColumnType::Integer;
+    let error =
+        decode_sql_fixture("Int", "", &["value"], vec![Integer], vec![], vec![]).unwrap_err();
+    assert!(error.message.contains("exactly one row"));
+    assert!(error.span.start > 0);
+    assert_eq!(
+        decode_sql_fixture("Option<Int>", "", &["value"], vec![Integer], vec![], vec![]).unwrap(),
+        Value::Option(None)
+    );
+    let error = decode_sql_fixture(
+        "Option<Int>",
+        "",
+        &["value"],
+        vec![Integer],
+        vec![vec!["1"], vec!["2"]],
+        vec![vec![false], vec![false]],
+    )
+    .unwrap_err();
+    assert!(error.message.contains("at most one row"));
+    assert_eq!(
+        decode_sql_fixture("Int[]", "", &["value"], vec![Integer], vec![], vec![]).unwrap(),
+        Value::Array(vec![])
+    );
+    let error = decode_sql_fixture(
+        "Customer[]",
+        "struct Customer { id: Int name: String }",
+        &["id"],
+        vec![Integer],
+        vec![],
+        vec![],
+    )
+    .unwrap_err();
+    assert!(error.message.contains("missing column `name`"));
+}
+
+#[test]
+fn typed_sql_results_use_exact_numbers_and_reject_float_shortcuts() {
+    use zelyra_database::QueryColumnType::{Decimal, Float, Integer};
+    assert_eq!(
+        decode_sql_fixture(
+            "UInt",
+            "",
+            &["value"],
+            vec![Decimal],
+            vec![vec!["18446744073709551615"]],
+            vec![vec![false]]
+        )
+        .unwrap(),
+        Value::UInt(u64::MAX)
+    );
+    assert_eq!(
+        decode_sql_fixture(
+            "Decimal",
+            "",
+            &["value"],
+            vec![Decimal],
+            vec![vec!["119.000000000"]],
+            vec![vec![false]]
+        )
+        .unwrap(),
+        Value::Decimal(119_000_000_000)
+    );
+    for (target, kind, value) in [
+        ("UInt", Decimal, "18446744073709551616"),
+        ("UInt", Integer, "-1"),
+        ("Int", Decimal, "1.5"),
+        ("Decimal", Float, "0.1"),
+        ("Decimal", Decimal, "0.0000000001"),
+        ("Float", Float, "NaN"),
+        ("Bool", Integer, "2"),
+    ] {
+        let error = decode_sql_fixture(
+            target,
+            "",
+            &["value"],
+            vec![kind],
+            vec![vec![value]],
+            vec![vec![false]],
+        )
+        .unwrap_err();
+        assert!(
+            error.message.contains("column `value`"),
+            "{}",
+            error.message
+        );
+    }
+}
+
+#[test]
+fn typed_sql_opt_in_checks_direct_query_and_class_boundary() {
+    for source in [
+        "fn main() { value = sql_decode<Int>(1) }",
+        "fn main() uses Database(write) { value = sql_decode<Int>(sql { DELETE FROM customers }) }",
+        "fn main() uses Database(read) { value = sql_decode<Int>() }",
+        "class Customer { name: String } fn main() uses Database(read) { value = sql_decode<Customer>(sql<Int> { SELECT 1 }) }",
+    ] {
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(check(&program).is_err(), "accepted {source}");
+    }
+    let program = parse(&lex("fn main() uses Database(read) { value = sql_decode<Int>(sql<Int> { SELECT 1 }) print(value + 1) }").unwrap()).unwrap();
+    check(&program).unwrap();
+}
+
+#[test]
+fn typed_sql_records_aliases_generics_and_table_rows_are_usable() {
+    use zelyra_database::QueryColumnType::{Decimal, Integer, Text};
+    let value = decode_sql_fixture(
+        "Envelope<Decimal>",
+        "type Amount = Decimal struct Envelope<T> { total: T note: Option<String> }",
+        &["note", "total"],
+        vec![Text, Decimal],
+        vec![vec!["\\N", "119.000000000"]],
+        vec![vec![true, false]],
+    )
+    .unwrap();
+    assert_eq!(
+        value,
+        Value::Object {
+            type_name: "Envelope".into(),
+            type_args: vec![Type::Decimal],
+            fields: HashMap::from([
+                ("total".into(), Value::Decimal(119_000_000_000)),
+                ("note".into(), Value::Option(None))
+            ])
+        }
+    );
+    let value = decode_sql_fixture(
+        "Customer",
+        "table customers { id: Id primary auto name: String(100) required note: String(100) }",
+        &["name", "id", "note"],
+        vec![Text, Integer, Text],
+        vec![vec!["Ada", "1", "\\N"]],
+        vec![vec![false, false, true]],
+    )
+    .unwrap();
+    let Value::Object { fields, .. } = value else {
+        panic!("expected typed table record")
+    };
+    assert_eq!(fields["id"], Value::Int(1));
+    assert_eq!(fields["note"], Value::Option(None));
+    let program = parse(&lex("table customers { id: Id primary auto name: String(100) required } fn main() uses Database(read) { customers = sql_decode<Customer[]>(sql<Customer[]> { SELECT id, name FROM customers }) print(customers[0].name) }").unwrap()).unwrap();
+    check(&program).unwrap();
+}
+
+#[test]
+fn typed_sql_temporal_values_preserve_midnight_and_milliseconds() {
+    use zelyra_database::QueryColumnType::{Date, Time, Timestamp};
+    assert_eq!(
+        decode_sql_fixture(
+            "Date",
+            "",
+            &["value"],
+            vec![Date],
+            vec![vec!["2000-02-29"]],
+            vec![vec![false]]
+        )
+        .unwrap(),
+        Value::Date("2000-02-29".into())
+    );
+    assert_eq!(
+        decode_sql_fixture(
+            "Time",
+            "",
+            &["value"],
+            vec![Time],
+            vec![vec!["00:00:00"]],
+            vec![vec![false]]
+        )
+        .unwrap(),
+        Value::Time("00:00:00".into())
+    );
+    for (source, expected) in [
+        ("1970-01-01", 0),
+        ("1969-12-31 23:59:59.999000", -1),
+        ("1969-12-31T23:59:59.999Z", -1),
+        ("2039-03-01 00:00:00.001000", 2182550400001),
+    ] {
+        assert_eq!(
+            decode_sql_fixture(
+                "Timestamp",
+                "",
+                &["value"],
+                vec![Timestamp],
+                vec![vec![source]],
+                vec![vec![false]]
+            )
+            .unwrap(),
+            Value::Timestamp(expected)
+        );
+    }
+    for (target, kind, source) in [
+        ("Date", Date, "1900-02-29"),
+        ("Time", Time, "24:00:00"),
+        ("Timestamp", Timestamp, "1970-01-01 00:00:00.000001"),
+        ("Timestamp", Timestamp, "0000-01-01"),
+        ("Timestamp", Timestamp, "2039-03-01T00:00:00+00:00"),
+    ] {
+        assert!(
+            decode_sql_fixture(
+                target,
+                "",
+                &["value"],
+                vec![kind],
+                vec![vec![source]],
+                vec![vec![false]]
+            )
+            .is_err(),
+            "accepted {source}"
+        );
+    }
+}
+
+#[test]
+fn typed_sql_domains_do_not_round_money_or_overflow_ids() {
+    assert_eq!(
+        run(
+            r#"fn price_roundtrip(price: Money) -> Money { return json_decode<Money>(json_encode(price)) } fn id_roundtrip(id: Id) -> Id { return json_decode<Id>(json_encode(id)) } fn main() { price = json_decode<Money>("\"19.99\"") print(json_encode(price_roundtrip(price))) id = json_decode<Id>("9223372036854775807") print(json_encode(id_roundtrip(id))) }"#
+        ),
+        ["\"19.99\"", "9223372036854775807"]
+    );
+    use zelyra_database::QueryColumnType::{Decimal, Integer};
+    assert_eq!(
+        decode_sql_fixture(
+            "Money",
+            "",
+            &["value"],
+            vec![Decimal],
+            vec![vec!["999999999999999.9999"]],
+            vec![vec![false]]
+        )
+        .unwrap(),
+        Value::Decimal(999999999999999999900000)
+    );
+    for source in ["1000000000000000.0000", "0.00001", "-1000000000000000.0000"] {
+        assert!(decode_sql_fixture(
+            "Money",
+            "",
+            &["value"],
+            vec![Decimal],
+            vec![vec![source]],
+            vec![vec![false]]
+        )
+        .is_err());
+    }
+    assert_eq!(
+        decode_sql_fixture(
+            "Id",
+            "",
+            &["value"],
+            vec![Integer],
+            vec![vec!["9223372036854775807"]],
+            vec![vec![false]]
+        )
+        .unwrap(),
+        Value::Int(i64::MAX)
+    );
+    assert!(decode_sql_fixture(
+        "Id",
+        "",
+        &["value"],
+        vec![Integer],
+        vec![vec!["9223372036854775808"]],
+        vec![vec![false]]
+    )
+    .is_err());
+}
+
+#[test]
+fn typed_sql_rejects_ambiguous_columns_and_invalid_metadata() {
+    use zelyra_database::QueryColumnType::{Integer, Text};
+    for (columns, kinds, rows, nulls, expected) in [
+        (
+            vec!["id", "id"],
+            vec![Integer, Integer],
+            vec![vec!["1", "2"]],
+            vec![vec![false, false]],
+            "duplicate column",
+        ),
+        (
+            vec!["id", "other"],
+            vec![Integer, Text],
+            vec![vec!["1", "Ada"]],
+            vec![vec![false, false]],
+            "unexpected column",
+        ),
+        (
+            vec!["id"],
+            vec![Integer],
+            vec![vec!["1"]],
+            vec![],
+            "inconsistent native",
+        ),
+        (
+            vec!["id"],
+            vec![Integer],
+            vec![vec!["\\N"]],
+            vec![vec![true]],
+            "row 1, column",
+        ),
+    ] {
+        let error = decode_sql_fixture(
+            "Customer[]",
+            "struct Customer { id: Int }",
+            &columns,
+            kinds,
+            rows,
+            nulls,
+        )
+        .unwrap_err();
+        assert!(error.message.contains(expected), "{}", error.message);
+    }
+    for target in ["Bytes", "Int[][]", "Customer"] {
+        let source = format!("struct Customer {{ id: Int nested: Int[] }} fn main() uses Database(read) {{ rows = sql_decode<{target}>(sql<Int> {{ SELECT 1 }}) }}");
+        let program = parse(&lex(&source).unwrap()).unwrap();
+        let errors = check(&program).unwrap_err();
+        assert!(errors.iter().any(|error| error.code == "E-TYPE-SQL-DECODE"));
+    }
+}
+
+#[test]
+fn typed_sql_preserves_explicit_domain_aliases_and_rejects_nested_domain_records() {
+    assert_eq!(
+        run(
+            r#"type Money = String fn echo(price: Money) -> Money { return json_decode<Money>(json_encode(price)) } fn main() { print(echo("legacy text")) print(json_decode<Id>("\"legacy-id\"")) }"#
+        ),
+        ["legacy text", "legacy-id"]
+    );
+    use zelyra_database::QueryColumnType::Float;
+    assert_eq!(
+        decode_sql_fixture(
+            "Money",
+            "type Money = Float",
+            &["value"],
+            vec![Float],
+            vec![vec!["0.125"]],
+            vec![vec![false]]
+        )
+        .unwrap(),
+        Value::Float(0.125)
+    );
+    let program = parse(&lex("type Money = Decimal fn main() uses Database(read) { value = sql_decode<Money>(sql<Decimal> { SELECT 1 }) }").unwrap()).unwrap();
+    check(&program).unwrap();
+    for definitions in [
+        "struct Money { value: Int } struct Packet { price: Money }",
+        "enum Money { Zero } struct Packet { price: Money }",
+    ] {
+        let source = format!("{definitions} fn main() uses Database(read) {{ value = sql_decode<Packet>(sql<Int> {{ SELECT 1 }}) }}");
+        let program = parse(&lex(&source).unwrap()).unwrap();
+        assert!(check(&program).is_err());
+    }
 }

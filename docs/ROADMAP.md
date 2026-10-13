@@ -77,8 +77,9 @@ principles; the roadmap below tracks what is actually implemented.
   process restart; the E2E verifies recovery after restart with no older worker
   active. Delivery is at least once, so the SMTP-acceptance/database-acknowledgement
   crash window can duplicate mail; key loss strands pending messages. Persistent
-  throttling and independent security review remain open, so this does not
-  complete the account lifecycle milestone.
+  throttling now uses a declared MariaDB table and a keyed fingerprint shared
+  across instances; independent security review and the complete account
+  lifecycle evidence remain open, so this does not complete the milestone.
   Legacy session tables without an `id` column retain their previous behavior;
   administrative listing and revocation still require that column.
 
@@ -363,7 +364,7 @@ architecture requirement for every phase, not a provider-specific feature.
 - [~] Deterministic bounded mutation regressions exercise the lexer/parser, SQL
   binder, template renderer, and HTTP parser in normal CI (2,048 inputs per
   path). Coverage-guided runs found a parser stack overflow; recursive syntax
-  now has a 32-frame recursion limit, focused regressions, and a retained crash
+  now has a 24-frame recursion limit, focused regressions, and a retained crash
   seed. Four post-fix 60-second local runs passed; the 15-second CI rerun for
   the fixed revision remains open.
 - [~] Security regression coverage and dependency/license scanning run in CI.
@@ -855,10 +856,11 @@ language backlog as one 0.9.4 change.
 
 - [🧪] Language type coverage: exclusive range loops, payload-free nominal
   enums, calendar/UTC timestamp operations, Decimal quantization, and safe
-  value-semantic record/array updates are added in 0.9.8. Still required for
-  0.9.9 are statically typed function values, bounded generic functions/records,
-  and possibly a Zelyra-native identity-bearing business entity if a concrete
-  use case requires it. Keep records value-based and preserve the explicit
+  value-semantic record/array updates are added in 0.9.8. The 0.9.9 branch adds
+  named typed function values, bounded generic functions, and payload enums.
+  Generic user-defined records/enums remain open; a Zelyra-native
+  identity-bearing business entity is not required unless a concrete use case
+  demonstrates a need. Keep records value-based and preserve the explicit
   `Int`/`UInt` and `Float`/`Decimal` model. Update compiler, runtime,
   diagnostics, compatibility fixtures, Studio help, and `examples/type_system`.
   Before the 0.9.9 freeze, positive, expected-compiler-error,
@@ -987,9 +989,9 @@ language backlog as one 0.9.4 change.
   value-semantic record/array updates, a tagged Result JSON codec, and
   iterative handling of long expressions. Workspace tests, Clippy, formatting,
   324 handbook examples, all 80 corpus cases, 100 repeat runs, and 300 integer
-  division/remainder plus 100 Decimal reference checks passed. Fourteen known
-  observation/gap cases are documented in the specification and type matrix
-  and are mandatory 0.9.9 carry-over.
+  division/remainder plus 100 Decimal reference checks passed. The 0.9.9
+  rerun closes the ten earlier language-gap probes; four bounded observations
+  are documented in the specification and type matrix.
 - [✅] Studio's light appearance now covers the editor, project navigation,
   properties, help, database workbench, task finder, and dialogs. Browser E2E
   verifies persistence, keyboard access, consistent surfaces, and at least
@@ -1029,17 +1031,113 @@ language backlog as one 0.9.4 change.
 
 ## Release 0.9.9 — feature freeze and final technical candidate
 
+- [✅] Typed Decimal tableview presentation retains exact digits without added
+  fractional padding; ordinary text and raw data keep their representation.
+
+- [✅] Correct setup dependency after precision hardening: MariaDB first,
+  schema in a separate container run, web service only after success;
+  migration approvals remain enforced.
+
+- [✅] Decimal package: explicit SQL scale, lossless JSON transport, exact
+  forms/filters and PostgreSQL NUMERIC decoding; aliases, numeric boundaries,
+  intermediate overflow and controlled resource errors are tested.
+  See [rules](decimals.en.md) and [package report](release-readiness/0.9.9-exact-decimals.en.md).
+- [✅] Calendar/UTC arithmetic, typed form/HTTP input and native SQL
+  Date/Time/Timestamp parameters/storage pass on MariaDB, MySQL and PostgreSQL;
+  UTC sessions and exact time precision are enforced. See [rules](dates.en.md)
+  and [SQL evidence](release-readiness/0.9.9-calendar-sql.en.md).
+  The SMTP/reset fixture accounts for guarded suppression of superseded
+  delivery jobs and verifies the retained replacement token before continuing.
+  Generated-business readiness checks honor mandatory metadata access before
+  startup, including controlled, redacted failure when the database is absent.
+- [✅] Explicit `sql_decode<T>(sql<…> { … })` materializes scalar/record/array
+  values with checked cardinality, projection, native type families and NULL
+  flags. Exact numbers and downstream calendar operations pass on three real
+  backends; legacy raw-row HTTP/JSON is retained. See [rules](sql-results.en.md)
+  and [evidence](release-readiness/0.9.9-typed-sql-results.en.md).
+
+- [✅] Edit snapshots preserve native NULL flags, reject stale NULL/literal-text
+  changes before writing, and render NULL separately from literal `\N`.
+  Omitted implicitly nullable fields bind SQL NULL; required/readonly rules stay.
+  MariaDB/MySQL HTTP and malformed-metadata regressions pass. See
+  [rules](edit-snapshots.en.md) and [evidence](release-readiness/0.9.9-null-edit-snapshots.en.md).
+
+- [✅] Native decision transaction foundation covers PostgreSQL/MariaDB/MySQL
+  on one connection, rollback/unwind, swallowed SQL errors and pre-commit/request
+  deadlines. [Rules](decision-transactions.en.md), [evidence](release-readiness/0.9.9-decision-transactions.en.md).
+
+- [✅] PostgreSQL form decisions execute tenant membership, resource recipient
+  checks, locked row snapshots (NULL vs. `\N`), business mutations, and atomic
+  unchained audit writes within the same native transaction and connection.
+  Tampered tenant/foreign keys, revoked membership during lock wait (two-connection
+  race), and audit errors roll back atomically. Chained PostgreSQL audit remains
+  diagnostically rejected. [Evidence](release-readiness/0.9.9-postgres-form-decisions.en.md).
+
+- [✅] Database matrix, transactions, and relational CRUD on MariaDB 11.4.13,
+  MySQL 8.4.11, and PostgreSQL 16.15: setup/introspection of real foreign keys,
+  migration preflight orphan rejection (`error[E-DB-005]`) with data preservation,
+  hardened MySQL write locks (`innodb_lock_wait_timeout`), tenant-isolated
+  selection lists, tamper protection (422), relational join display, and
+  restrictive deletion with ordered child-then-parent deletion.
+  See [evidence](release-readiness/0.9.9-relational-crud-matrix.en.md).
+
 - [🗺️] Freeze language, CLI, runtime, databases, IDE, mail, notification, and
   tutorial scope. Complete every accepted 0.9.1–0.9.8 requirement and run the
   complete technical gates on an immutable candidate. Prepare exact 1.0.0
   human-study materials. At this point independent human acceptance should be
   the only remaining gate; do not claim production approval or run acceptance
   against 0.9.9.
-- [🗺️] Close the language gaps carried over from 0.9.8: user-defined generics,
-  payload-carrying enums, safe function values/indirect calls, a distinguishable
-  generic Result JSON codec, and every remaining corpus, CLI, setup, database,
-  migrator, and security finding. The [0.9.9 plan](release-plans/0.9.9.en.md)
-  lists testable criteria.
+- [✅] Language review against the 0.9.9 source build: 80 cases with no
+  unexpected outcomes, 20 tasks, 35 controlled negative cases, 100 repeats,
+  and 400 independent numeric comparisons passed. The four observations and
+  Linux-only scope are recorded in the
+  [review report](release-readiness/0.9.9-language-review.en.md). The corpus
+  was rerun after the Clippy compatibility fix in `1bf09ea`, using compiler
+  SHA `89b880d753e12ac09b2fbb4dc754586d18c7a808845b991b331cb1ae00153c0d`.
+- [🧪] Rust package tests, formatting, and Clippy plus installer, clean MariaDB
+  onboarding, and generated Docker/module bundle E2E checks pass locally on
+  `1bf09ea`. CI and packaging passed on documentation descendant `8db093c`;
+  later source packages and the final candidate need their own CI. See the
+  [technical rehearsal](release-readiness/0.9.9-technical-rehearsal-2026-10-12.en.md).
+- [🗺️] Close the remaining CLI, setup, database, migrator, security,
+  documentation, and packaging gates. General constraints/traits, closures,
+  and generic function references remain explicit language boundaries. The
+  [0.9.9 plan](release-plans/0.9.9.en.md) lists the testable criteria.
+- [✅] Add and verify an optional colored CLI help mode with `ZELYRA_COLOR`,
+  `NO_COLOR`, and `CLICOLOR_FORCE`, plus a brief Studio startup splash that
+  respects the persisted appearance and reduced-motion preference.
+- [✅] Generic functions, records, and enums are implemented on the 0.9.9
+  branch. Type arguments are inferred or explicit, including through nested
+  records, arrays, `Option`, and `Result`. Conflicting, missing, and wrong-arity
+  types have regression coverage. The type-system example includes module
+  imports and positive/negative cases. Persistent SQL columns explicitly reject
+  generic records. Payload enums and named typed function values/indirect calls
+  also pass focused positive and negative tests, including capability
+  propagation. General constraints/traits, generic aliases, closures, and
+  generic function references remain outside this supported scope.
+- [🧪] Studio charts now support fixed aggregates, exact text filters,
+  inclusive `DATE` ranges, safe parameter binding, saving and reloading chart
+  configurations, and local presentation/PDF previews. MariaDB and PostgreSQL
+  browser/database E2E checks pass. Saved SQL views, application-page embedding,
+  compiler validation of report files, and full accessibility/export evidence
+  remain open release criteria.
+- [✅] Persistent MariaDB reset limits, bounded cleanup/capacity, safe operator
+  errors, and reset-storage module dependencies pass positive and negative
+  checks. Generated SQL names respect backend limits throughout creation and
+  planning; long declarations fail before SQL execution. Rust, MariaDB SMTP/
+  quota, and PostgreSQL schema checks are recorded in the
+  [package report](release-readiness/0.9.9-reset-and-schema.en.md).
+  Independent security review remains open.
+- [🗺️] Add visual form and output editors with a property sidebar for fields,
+  validation, database/table binding, column selection, filters, sorting,
+  search, pagination, and charts. Generate editable Zelyra source and local
+  styles with compiler-backed previews and protection for manual edits.
+- [✅] A bounded Zelyra-style class model now provides typed constructors,
+  shared reference identity, identity equality, field reads/updates, generic
+  classes, and optional fields. Runtime checks reject reference cycles and
+  parallel mutation; JSON/API/SQL boundaries reject class references. Behavior
+  uses ordinary functions with explicit receiver parameters. Methods, closures,
+  and inheritance syntax remain outside the 0.9.9 scope.
 - Exit criteria: no open implementation, security, database, migration,
   packaging, or documentation blocker remains. If one remains, 0.9.9 is not
   complete. See the [0.9.9 plan](release-plans/0.9.9.en.md).
@@ -1060,6 +1158,38 @@ candidate and shipped documentation, fix and re-verify any blockers, and record
 redacted observations and the owner decision against the exact tested commit.
 The study scope must match the final 1.0.0 product; automated CI, internal
 rehearsals, and owner feedback do not substitute for participant testing.
+
+## Future language, database, and ergonomics evolution (post-1.0.0)
+
+To boost developer ergonomics, flexibility, and architectural modularity without compromising
+Zelyra's core tenets (static security boundaries, deterministic business arithmetic, digital
+sovereignty), the following extensions are explicitly scheduled for post-1.0 development:
+
+- [ ] **Modular database adapter architecture (`DatabaseAdapter` SPI / traits):**
+  Replacing hardcoded backend branching in core crates with an extensible adapter interface.
+  Each driver adapter encapsulates introspection, schema migration (`db apply`), data type mapping,
+  transaction lifecycle, lock management (`FOR UPDATE`, query deadline and timeout steering),
+  and dialect-specific SQL emission. This enables integrating additional relational and specialized
+  databases (e.g. Microsoft SQL Server, Oracle, CockroachDB) via modular adapters without modifying
+  the compiler core or web framework.
+- [ ] **Multi-database integration (multiple databases / polyglot persistence):**
+  Support for declaring and managing multiple independent database connections within a single
+  Zelyra application (e.g. primary relational OLTP database for tenant CRUD transactions, dedicated
+  read replicas, or separate databases for analytics, reporting, cold storage, or third-party legacy
+  data). Declarative binding of schemas, modules, and queries to named database adapters
+  (`database "secondary" { ... }`) with full static tenant isolation and capability enforcement.
+- [ ] **Unified native Query AST:** Replacing residual string-interpolated query paths with
+  an internal query syntax tree targeting MariaDB, MySQL, PostgreSQL, and future adapters in
+  a dialect-neutral, type-checked manner.
+- [ ] **Non-capturing lambdas (`|x| expr`):** Syntactic support for compact, anonymous
+  transformation functions without outer environment capture. Incurs zero heap allocation or GC
+  overhead and preserves the deterministic memory model.
+- [ ] **Headless background tasks (`task Name { ... }`):** Dedicated syntax and runtime
+  support for periodic jobs, batch pipelines, and background processing while enforcing the
+  same static tenant and database capability boundaries without HTTP routing constraints.
+- [ ] **Actionable compiler diagnostics ("Did you mean?"):** Enriching type and schema
+  mismatch diagnostics (`E-SQL`, `E-CRUD`) with exact, source-anchored fix suggestions to
+  streamline developer experience while maintaining strict type enforcement.
 
 ## Real-world acceptance applications
 

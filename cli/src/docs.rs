@@ -461,17 +461,12 @@ fn format_typescript_operation(output: &mut String, api: &zelyra_ast::ApiDef) {
     output.push_str(";\n  }\n\n");
 }
 
-fn typescript_type(ty: &Type) -> String {
+pub(super) fn typescript_type(ty: &Type) -> String {
     match ty {
-        Type::Int | Type::UInt | Type::Float | Type::Decimal => "number".into(),
+        Type::Int | Type::UInt | Type::Float | Type::Timestamp | Type::Duration => "number".into(),
+        Type::Decimal => "string".into(),
         Type::Bool => "boolean".into(),
-        Type::String
-        | Type::Char
-        | Type::Bytes
-        | Type::Timestamp
-        | Type::Date
-        | Type::Time
-        | Type::Duration => "string".into(),
+        Type::String | Type::Char | Type::Bytes | Type::Date | Type::Time => "string".into(),
         Type::Unit => "void".into(),
         Type::Option(inner) => format!("{} | null", typescript_type(inner)),
         Type::Result(ok, _) => typescript_type(ok),
@@ -486,6 +481,27 @@ fn typescript_type(ty: &Type) -> String {
         ),
         Type::Map(_, value) => format!("Record<string, {}>", typescript_type(value)),
         Type::HttpResult(inner) => format!("HttpResult<{}>", typescript_type(inner)),
+        Type::Function {
+            params,
+            return_type,
+            ..
+        } => {
+            let params = params
+                .iter()
+                .enumerate()
+                .map(|(index, parameter)| format!("_arg{index}: {}", typescript_type(parameter)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("({params}) => {}", typescript_type(return_type))
+        }
+        Type::Applied { name, args } => format!(
+            "{}<{}>",
+            name,
+            args.iter()
+                .map(typescript_type)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
         Type::Named(name) => match name.as_str() {
             "Id" => "number".into(),
             "Email" | "Url" | "Uuid" | "Money" => "string".into(),
@@ -548,11 +564,16 @@ fn escape_typescript_template(value: &str) -> String {
         .replace("${", "\\${")
 }
 
-fn openapi_schema(ty: &Type) -> String {
+pub(super) fn openapi_schema(ty: &Type) -> String {
     match ty {
         Type::Int | Type::UInt => "{\"type\":\"integer\"}".into(),
-        Type::Float | Type::Decimal => "{\"type\":\"number\"}".into(),
+        Type::Float => "{\"type\":\"number\"}".into(),
+        Type::Decimal => "{\"type\":\"string\",\"format\":\"decimal\"}".into(),
         Type::Bool => "{\"type\":\"boolean\"}".into(),
+        Type::Date => "{\"type\":\"string\",\"format\":\"date\"}".into(),
+        Type::Time => "{\"type\":\"string\",\"format\":\"time\"}".into(),
+        Type::Timestamp => "{\"type\":\"integer\",\"format\":\"int64\",\"description\":\"UTC Unix milliseconds within years 0001 through 9999\"}".into(),
+        Type::Duration => "{\"type\":\"integer\",\"format\":\"int64\",\"description\":\"Signed duration in milliseconds\"}".into(),
         Type::Array(inner) => format!("{{\"type\":\"array\",\"items\":{}}}", openapi_schema(inner)),
         Type::Map(_, value) => format!(
             "{{\"type\":\"object\",\"additionalProperties\":{}}}",
@@ -576,7 +597,7 @@ fn openapi_schema(ty: &Type) -> String {
 }
 
 fn openapi_error_schema(payload: &Type) -> String {
-    let details = serde_json::from_str(&openapi_schema(payload))
+    let details = zelyra_ast::json::parse(&openapi_schema(payload))
         .unwrap_or_else(|_| serde_json::Value::Object(serde_json::Map::new()));
     serde_json::json!({
         "type": "object",

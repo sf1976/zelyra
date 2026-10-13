@@ -3,12 +3,14 @@ members = ["ast", "lexer", "parser", "hir", "database", "mail", "runtime", "web"
 resolver = "2"
 
 [workspace.package]
-version = "0.9.8"
+version = "0.9.9"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
-serde_json = "1.0"
+num-bigint = "=0.4.8"
+bytes = "1"
+serde_json = { version = "1.0", features = ["arbitrary_precision", "raw_value"] }
 regex = "1.13"
 toml = "0.8"
 glob = "0.3"

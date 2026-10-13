@@ -8,7 +8,7 @@ pub(crate) fn deliver_outbox_message(
     network: Option<&NetworkPolicy>,
 ) -> Result<(), &'static str> {
     let payload: serde_json::Value =
-        serde_json::from_str(payload_json).map_err(|_| "invalid mail outbox payload")?;
+        zelyra_ast::json::parse(payload_json).map_err(|_| "invalid mail outbox payload")?;
     let field = |name: &str| payload.get(name).and_then(serde_json::Value::as_str);
     let to = field("to").ok_or("invalid mail outbox payload")?;
     let subject = field("subject").ok_or("invalid mail outbox payload")?;

@@ -314,7 +314,9 @@ impl Collector {
                     );
                 }
             }
-            ExprKind::Record { type_name, fields } => {
+            ExprKind::Record {
+                type_name, fields, ..
+            } => {
                 for (name, value) in fields {
                     let field_type = self
                         .record_fields
@@ -397,6 +399,7 @@ impl Collector {
             | ExprKind::String(_)
             | ExprKind::Char(_)
             | ExprKind::Variable(_)
+            | ExprKind::FunctionValue(_)
             | ExprKind::Sql { .. } => {}
         }
     }
@@ -473,6 +476,11 @@ fn add_pattern_values(scope: &mut Scope, pattern: &Pattern) {
         | PatternKind::String(_)
         | PatternKind::Char(_)
         | PatternKind::EnumVariant { .. } => {}
+        PatternKind::EnumVariantPayload { payloads, .. } => {
+            for payload in payloads {
+                add_pattern_values(scope, payload);
+            }
+        }
     }
 }
 

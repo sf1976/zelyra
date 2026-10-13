@@ -1,0 +1,4 @@
+enum Event { Created(Int) }
+fn main() {
+    event = Event::Created("not an Int")
+}

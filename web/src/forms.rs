@@ -143,6 +143,24 @@ pub(super) fn render_form_with_language(
             html.push_str("\" type=\"");
             html.push_str(input_type);
             html.push('"');
+            let ty = zelyra_forms::field_value_type(
+                &route.form,
+                route.table.as_ref(),
+                route.schema.as_ref(),
+                field,
+            );
+            let ty = ty.as_ref().map(|ty| match ty {
+                Type::Option(inner) => inner.as_ref(),
+                other => other,
+            });
+            if matches!(ty, Some(Type::Decimal))
+                || matches!(ty, Some(Type::Named(name)) if name == "Money")
+            {
+                html.push_str(" inputmode=\"decimal\"");
+            }
+            if input_type == "number" && matches!(ty, Some(Type::Float | Type::Decimal)) {
+                html.push_str(" step=\"any\"");
+            }
             if input_type == "checkbox" {
                 html.push_str(" value=\"true\"");
                 if matches!(value, "true" | "1") {
@@ -208,7 +226,15 @@ pub(super) fn localized_validation_message(language: UiLanguage, message: &str) 
         "must be an integer" => "validation.integer",
         "must be an unsigned integer" => "validation.unsigned_integer",
         "must be a number" => "validation.number",
+        "must be an exact Decimal with at most 9 fractional digits" => "validation.decimal",
+        "must be an exact Money amount with at most 15 integer and 4 fractional digits" => {
+            "validation.money"
+        }
         "must be true or false" => "validation.boolean",
+        "must be a valid Date in YYYY-MM-DD format" => "validation.date",
+        "must be a valid Time in HH:MM:SS format" => "validation.time",
+        "must be a Timestamp in UTC ISO format or Unix milliseconds within years 0001 through 9999" => "validation.timestamp",
+        "must be an integer duration in milliseconds" => "validation.duration",
         "must be a valid email address" => "validation.email",
         "must be a valid HTTP URL" => "validation.url",
         "must be an integer identifier" => "validation.id",
@@ -235,18 +261,19 @@ pub(super) fn input_type(route: &FormRoute, field: &zelyra_ast::FormField) -> &'
             _ => "text",
         };
     }
-    let ty = field.ty.as_ref().or_else(|| {
-        route.table.as_ref().and_then(|table| {
-            table
-                .columns
-                .iter()
-                .find(|column| column.name == field.name)
-                .map(|column| &column.ty)
-        })
+    let ty = zelyra_forms::field_value_type(
+        &route.form,
+        route.table.as_ref(),
+        route.schema.as_ref(),
+        field,
+    );
+    let ty = ty.as_ref().map(|ty| match ty {
+        Type::Option(inner) => inner.as_ref(),
+        other => other,
     });
     match ty {
         Some(Type::Bool) => "checkbox",
-        Some(Type::Int | Type::UInt | Type::Float | Type::Decimal) => "number",
+        Some(Type::Int | Type::UInt | Type::Float) => "number",
         Some(Type::Named(name)) if name == "Email" => "email",
         Some(Type::Named(name)) if name == "Url" => "url",
         _ => "text",

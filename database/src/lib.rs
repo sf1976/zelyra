@@ -20,8 +20,12 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use zelyra_ast::*;
 
+mod decision;
+pub use decision::{with_decision_transaction, DecisionTransaction};
+mod numeric;
 pub mod outbox;
 pub mod sql;
+mod temporal;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DatabaseConfig {
@@ -106,6 +110,17 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
     let backend = backend.and_then(Result::ok).unwrap_or(Backend::MariaDb);
     let mut table_names = HashSet::new();
     for table in &program.tables {
+        if let Some(limit) = identifier_limit(backend).filter(|limit| table.name.len() > *limit) {
+            errors.push(SchemaError {
+                message: format!(
+                    "table identifier `{}` exceeds the {}-byte {} limit",
+                    table.name,
+                    limit,
+                    backend.name()
+                ),
+                span: table.span,
+            });
+        }
         if !table_names.insert(table.name.clone()) {
             errors.push(SchemaError {
                 message: format!("duplicate table definition {}", table.name),
@@ -124,6 +139,38 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
                     message: format!(
                         "duplicate column {} in table {}",
                         definition.name, table.name
+                    ),
+                    span: definition.span,
+                });
+                continue;
+            }
+            let resolved = resolve_type(&definition.ty, &program.types);
+            let resolved_inner = match &resolved {
+                Type::Option(inner) => inner.as_ref(),
+                other => other,
+            };
+            if matches!(resolved_inner, Type::Unknown) {
+                errors.push(SchemaError {
+                    message: "cyclic or unresolved database column type alias".into(),
+                    span: definition.span,
+                });
+                continue;
+            }
+            if contains_function_type(&definition.ty, &program.types, &mut HashSet::new()) {
+                errors.push(SchemaError {
+                    message: format!(
+                        "function values cannot be stored in database column {}.{}",
+                        table.name, definition.name
+                    ),
+                    span: definition.span,
+                });
+                continue;
+            }
+            if contains_applied_type(&definition.ty) {
+                errors.push(SchemaError {
+                    message: format!(
+                        "generic user-defined types cannot be stored in database column {}.{} yet",
+                        table.name, definition.name
                     ),
                     span: definition.span,
                 });
@@ -149,6 +196,18 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
             }
             let (storage_name, sql_type, relation) =
                 column_mapping(definition, &table_names, &program.types, backend);
+            if let Some(limit) =
+                identifier_limit(backend).filter(|limit| storage_name.len() > *limit)
+            {
+                errors.push(SchemaError {
+                    message: format!(
+                        "column identifier `{storage_name}` exceeds the {limit}-byte {} limit",
+                        backend.name()
+                    ),
+                    span: definition.span,
+                });
+                continue;
+            }
             if let Some(relation) = relation {
                 if !table_names.contains(&relation) {
                     errors.push(SchemaError {
@@ -160,7 +219,10 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
                     });
                 } else {
                     foreign_keys.push(ForeignKey {
-                        name: Some(format!("fk_{}_{}", table.name, storage_name)),
+                        name: Some(generated_identifier(
+                            &format!("fk_{}_{}", table.name, storage_name),
+                            backend,
+                        )),
                         column: storage_name.clone(),
                         referenced_table: relation,
                         referenced_column: "id".into(),
@@ -171,6 +233,15 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
             let default = definition.default.as_ref().map(default_sql).or_else(|| {
                 (definition.auto && matches!(definition.ty, Type::Timestamp))
                     .then(|| "CURRENT_TIMESTAMP".into())
+            });
+            let default = default.map(|value| {
+                if value == "CURRENT_TIMESTAMP"
+                    && matches!(sql_type.as_str(), "DATETIME(3)" | "TIMESTAMPTZ(3)")
+                {
+                    "CURRENT_TIMESTAMP(3)".into()
+                } else {
+                    value
+                }
             });
             columns.push(Column {
                 name: storage_name,
@@ -190,14 +261,30 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
             .indexes
             .iter()
             .filter_map(|index| {
-                build_index(table, index, false, &storage_names, &columns, &mut errors)
+                build_index(
+                    table,
+                    index,
+                    false,
+                    &storage_names,
+                    &columns,
+                    &mut errors,
+                    backend,
+                )
             })
             .collect();
         let uniques = table
             .uniques
             .iter()
             .filter_map(|index| {
-                build_index(table, index, true, &storage_names, &columns, &mut errors)
+                build_index(
+                    table,
+                    index,
+                    true,
+                    &storage_names,
+                    &columns,
+                    &mut errors,
+                    backend,
+                )
             })
             .collect();
         tables.push(Table {
@@ -222,6 +309,28 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
     }
 }
 
+fn identifier_limit(backend: Backend) -> Option<usize> {
+    match backend {
+        Backend::MariaDb => Some(64),
+        Backend::Postgres => Some(63),
+        Backend::Sqlite => None,
+    }
+}
+
+/// Preserve established short names; shorten generated names with a stable
+/// digest of the entire original name so different suffixes remain distinct.
+fn generated_identifier(name: &str, backend: Backend) -> String {
+    let Some(limit) = identifier_limit(backend).filter(|limit| name.len() > *limit) else {
+        return name.to_owned();
+    };
+    let digest = format!("{:x}", Sha256::digest(name.as_bytes()));
+    let mut end = limit - 17;
+    while !name.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}_{}", &name[..end], &digest[..16])
+}
+
 fn build_index(
     table: &TableDef,
     definition: &IndexDef,
@@ -229,6 +338,7 @@ fn build_index(
     storage_names: &HashSet<String>,
     columns: &[Column],
     errors: &mut Vec<SchemaError>,
+    backend: Backend,
 ) -> Option<Index> {
     let mut storage_columns = Vec::new();
     for name in &definition.columns {
@@ -251,7 +361,10 @@ fn build_index(
     }
     let prefix = if unique { "uq" } else { "idx" };
     Some(Index {
-        name: format!("{}_{}_{}", prefix, table.name, storage_columns.join("_")),
+        name: generated_identifier(
+            &format!("{}_{}_{}", prefix, table.name, storage_columns.join("_")),
+            backend,
+        ),
         columns: storage_columns,
         unique,
         constraint_owned: unique,
@@ -306,8 +419,8 @@ fn column_mapping(
             Backend::Sqlite => "REAL",
         },
         Type::Decimal => match backend {
-            Backend::MariaDb => "DECIMAL",
-            Backend::Postgres | Backend::Sqlite => "NUMERIC",
+            Backend::MariaDb => "DECIMAL(39,9)",
+            Backend::Postgres | Backend::Sqlite => "NUMERIC(39,9)",
         },
         Type::Bool => match backend {
             Backend::Postgres | Backend::MariaDb => "BOOLEAN",
@@ -324,12 +437,15 @@ fn column_mapping(
             Backend::Sqlite => "BLOB",
         },
         Type::Timestamp => match backend {
-            Backend::Postgres => "TIMESTAMPTZ",
-            Backend::MariaDb => "TIMESTAMP",
+            Backend::Postgres => "TIMESTAMPTZ(3)",
+            Backend::MariaDb => "DATETIME(3)",
             Backend::Sqlite => "TEXT",
         },
         Type::Date => "DATE",
-        Type::Time => "TIME",
+        Type::Time => match backend {
+            Backend::Postgres => "TIME(0)",
+            Backend::MariaDb | Backend::Sqlite => "TIME",
+        },
         Type::Duration => match backend {
             Backend::Sqlite => "INTEGER",
             Backend::Postgres | Backend::MariaDb => "BIGINT",
@@ -367,6 +483,8 @@ fn column_mapping(
         | Type::Set(_)
         | Type::Map(_, _)
         | Type::HttpResult(_)
+        | Type::Function { .. }
+        | Type::Applied { .. }
         | Type::Unit
         | Type::Unknown => "TEXT",
     };
@@ -374,15 +492,82 @@ fn column_mapping(
 }
 
 fn resolve_type(ty: &Type, definitions: &[TypeDef]) -> Type {
-    if let Type::Named(name) = ty {
-        if let Some(definition) = definitions
-            .iter()
-            .find(|definition| definition.name == *name)
-        {
-            return resolve_type(&definition.target, definitions);
+    fn resolve(ty: &Type, definitions: &[TypeDef], visiting: &mut HashSet<String>) -> Type {
+        match ty {
+            Type::Named(name) => {
+                let Some(definition) = definitions
+                    .iter()
+                    .find(|definition| definition.name == *name)
+                else {
+                    return ty.clone();
+                };
+                if visiting.len() >= 64 || !visiting.insert(name.clone()) {
+                    return Type::Unknown;
+                }
+                let resolved = resolve(&definition.target, definitions, visiting);
+                visiting.remove(name);
+                resolved
+            }
+            Type::Option(inner) => Type::Option(Box::new(resolve(inner, definitions, visiting))),
+            Type::Array(inner) => Type::Array(Box::new(resolve(inner, definitions, visiting))),
+
+            _ => ty.clone(),
         }
     }
-    ty.clone()
+    resolve(ty, definitions, &mut HashSet::new())
+}
+
+fn contains_function_type(
+    ty: &Type,
+    definitions: &[TypeDef],
+    visiting: &mut HashSet<String>,
+) -> bool {
+    match ty {
+        Type::Function { .. } => true,
+        Type::Option(inner) | Type::Array(inner) | Type::Set(inner) | Type::HttpResult(inner) => {
+            contains_function_type(inner, definitions, visiting)
+        }
+        Type::Result(ok, error) | Type::Map(ok, error) => {
+            contains_function_type(ok, definitions, visiting)
+                || contains_function_type(error, definitions, visiting)
+        }
+        Type::Tuple(items) => items
+            .iter()
+            .any(|item| contains_function_type(item, definitions, visiting)),
+        Type::Named(name) => {
+            if !visiting.insert(name.clone()) {
+                return false;
+            }
+            let found = definitions
+                .iter()
+                .find(|definition| definition.name == *name)
+                .is_some_and(|definition| {
+                    contains_function_type(&definition.target, definitions, visiting)
+                });
+            visiting.remove(name);
+            found
+        }
+        _ => false,
+    }
+}
+
+fn contains_applied_type(ty: &Type) -> bool {
+    match ty {
+        Type::Applied { .. } => true,
+        Type::Option(inner) | Type::Array(inner) | Type::Set(inner) | Type::HttpResult(inner) => {
+            contains_applied_type(inner)
+        }
+        Type::Result(ok, error) | Type::Map(ok, error) => {
+            contains_applied_type(ok) || contains_applied_type(error)
+        }
+        Type::Tuple(items) => items.iter().any(contains_applied_type),
+        Type::Function {
+            params,
+            return_type,
+            ..
+        } => params.iter().any(contains_applied_type) || contains_applied_type(return_type),
+        _ => false,
+    }
 }
 
 fn table_for_type(name: &str, table_names: &HashSet<String>) -> Option<String> {
@@ -536,10 +721,12 @@ fn table_create_sql(table: &Table, backend: Backend) -> String {
         )
     }));
     definitions.extend(table.foreign_keys.iter().map(|foreign_key| {
-        let name = foreign_key
-            .name
-            .clone()
-            .unwrap_or_else(|| format!("fk_{}_{}", table.name, foreign_key.column));
+        let name = foreign_key.name.clone().unwrap_or_else(|| {
+            generated_identifier(
+                &format!("fk_{}_{}", table.name, foreign_key.column),
+                backend,
+            )
+        });
         format!(
             "CONSTRAINT {} FOREIGN KEY ({}) REFERENCES {} ({})",
             quote_identifier(&name, backend),
@@ -907,8 +1094,8 @@ pub fn diff(desired: &Schema, current: &Schema) -> SchemaPlan {
                 });
             }
         }
-        let current_indexes = table_indexes(current_table);
-        let desired_indexes = table_indexes(desired_table);
+        let current_indexes = table_indexes(current_table, backend);
+        let desired_indexes = table_indexes(desired_table, backend);
         for index in &desired_indexes {
             if !current_indexes
                 .iter()
@@ -998,7 +1185,7 @@ pub fn diff(desired: &Schema, current: &Schema) -> SchemaPlan {
                 .iter()
                 .any(|desired| same_foreign_key(foreign_key, desired))
             {
-                if !is_zelyra_managed_foreign_key(desired_table, foreign_key) {
+                if !is_zelyra_managed_foreign_key(desired_table, foreign_key, backend) {
                     plan.changes.push(SchemaChange {
                         description: format!(
                             "remove untracked foreign key {}.{}",
@@ -1274,6 +1461,13 @@ fn is_numeric_sql_literal(bytes: &[u8]) -> bool {
 fn normalize_default(value: &str) -> String {
     let trimmed = value.trim();
     let upper = trimmed.to_ascii_uppercase();
+    if upper
+        .strip_prefix("CURRENT_TIMESTAMP(")
+        .and_then(|value| value.strip_suffix(')'))
+        .is_some_and(|value| matches!(value, "0" | "1" | "2" | "3" | "4" | "5" | "6"))
+    {
+        return upper;
+    }
     match upper.as_str() {
         "CURRENT_TIMESTAMP()" => "CURRENT_TIMESTAMP".into(),
         "TRUE" | "FALSE" | "CURRENT_TIMESTAMP" => upper,
@@ -1281,7 +1475,7 @@ fn normalize_default(value: &str) -> String {
     }
 }
 
-fn table_indexes(table: &Table) -> Vec<Index> {
+fn table_indexes(table: &Table, backend: Backend) -> Vec<Index> {
     let mut indexes = table
         .indexes
         .iter()
@@ -1294,7 +1488,7 @@ fn table_indexes(table: &Table) -> Vec<Index> {
             .any(|index| index.unique && index.columns.as_slice() == [column.name.as_str()])
         {
             indexes.push(Index {
-                name: format!("ux_{}_{}", table.name, column.name),
+                name: generated_identifier(&format!("ux_{}_{}", table.name, column.name), backend),
                 columns: vec![column.name.clone()],
                 unique: true,
                 constraint_owned: true,
@@ -1332,12 +1526,21 @@ fn is_zelyra_managed_index(table: &Table, index: &Index, backend: Backend) -> bo
         generated_names.push(column.clone());
         generated_names.push(format!("{}_{}_key", table.name, column));
     }
-    generated_names.iter().any(|name| name == &index.name)
+    generated_names
+        .iter()
+        .any(|name| name == &index.name || generated_identifier(name, backend) == index.name)
 }
 
-fn is_zelyra_managed_foreign_key(table: &Table, foreign_key: &ForeignKey) -> bool {
+fn is_zelyra_managed_foreign_key(
+    table: &Table,
+    foreign_key: &ForeignKey,
+    backend: Backend,
+) -> bool {
     let expected = format!("fk_{}_{}", table.name, foreign_key.column);
-    foreign_key.name.as_deref() == Some(expected.as_str())
+    foreign_key
+        .name
+        .as_deref()
+        .is_some_and(|name| name == expected || name == generated_identifier(&expected, backend))
 }
 
 fn drop_index_sql(table: &Table, index: &Index, backend: Backend) -> (String, Risk) {
@@ -1381,10 +1584,12 @@ fn same_foreign_key(left: &ForeignKey, right: &ForeignKey) -> bool {
 }
 
 fn add_foreign_key_sql(table: &Table, foreign_key: &ForeignKey, backend: Backend) -> String {
-    let name = foreign_key
-        .name
-        .clone()
-        .unwrap_or_else(|| format!("fk_{}_{}", table.name, foreign_key.column));
+    let name = foreign_key.name.clone().unwrap_or_else(|| {
+        generated_identifier(
+            &format!("fk_{}_{}", table.name, foreign_key.column),
+            backend,
+        )
+    });
     format!(
         "ALTER TABLE {} ADD CONSTRAINT {} FOREIGN KEY ({}) REFERENCES {} ({});",
         quote_identifier(&table.name, backend),
@@ -1791,9 +1996,12 @@ pub fn inspect_postgres(database_url: &str) -> Result<Schema, DatabaseError> {
                 c.table_name,
                 c.column_name,
                 c.data_type,
+                c.numeric_precision,
+                c.numeric_scale,
+                c.datetime_precision,
                 c.udt_name,
                 c.is_nullable,
-                COALESCE(c.character_maximum_length::text, '') AS character_maximum_length,
+                COALESCE(c.character_maximum_length::text, c.datetime_precision::text, '') AS character_maximum_length,
                 c.ordinal_position,
                 EXISTS (
                     SELECT 1
@@ -1823,7 +2031,9 @@ pub fn inspect_postgres(database_url: &str) -> Result<Schema, DatabaseError> {
         SELECT
             table_name,
             column_name,
-            data_type,
+            CASE WHEN data_type = 'numeric' AND numeric_precision IS NOT NULL
+                THEN 'NUMERIC(' || numeric_precision::text || ',' || numeric_scale::text || ')'
+                ELSE data_type END AS data_type,
             udt_name,
             is_nullable,
             character_maximum_length,
@@ -1938,7 +2148,12 @@ fn inspected_sql_type(data_type: &str, _udt_name: &str, length: &str) -> String 
     match data_type {
         "character varying" if !length.is_empty() => format!("VARCHAR({length})"),
         "character varying" => "TEXT".into(),
+        "timestamp with time zone" if !length.is_empty() => format!("TIMESTAMPTZ({length})"),
         "timestamp with time zone" => "TIMESTAMPTZ".into(),
+        "time without time zone" if !length.is_empty() => {
+            format!("TIME({length})")
+        }
+        "time without time zone" => "TIME".into(),
         "double precision" => "DOUBLE PRECISION".into(),
         "integer" => "INTEGER".into(),
         "bigint" => "BIGINT".into(),
@@ -2029,7 +2244,7 @@ pub fn apply_postgres(database_url: &str, sql: &str) -> Result<(), DatabaseError
 pub fn inspect_mariadb(database_url: &str) -> Result<Schema, DatabaseError> {
     let output = run_mariadb(
         database_url,
-        "SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_KEY, EXTRA, COALESCE(CHARACTER_MAXIMUM_LENGTH, ''), COALESCE(NUMERIC_PRECISION, ''), COALESCE(NUMERIC_SCALE, ''), CASE WHEN COLUMN_DEFAULT IS NULL THEN 'N' ELSE CONCAT('V', HEX(CAST(COLUMN_DEFAULT AS CHAR CHARACTER SET utf8mb4))) END FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME <> '_zelyra_schema_history' ORDER BY TABLE_NAME, ORDINAL_POSITION",
+        "SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_KEY, EXTRA, COALESCE(CHARACTER_MAXIMUM_LENGTH, DATETIME_PRECISION, ''), COALESCE(NUMERIC_PRECISION, ''), COALESCE(NUMERIC_SCALE, ''), CASE WHEN COLUMN_DEFAULT IS NULL THEN 'N' ELSE CONCAT('V', HEX(CAST(COLUMN_DEFAULT AS CHAR CHARACTER SET utf8mb4))) END FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME <> '_zelyra_schema_history' ORDER BY TABLE_NAME, ORDINAL_POSITION",
         None,
     )?;
     let mut schema = parse_mariadb_columns(&output)?;
@@ -2108,6 +2323,7 @@ pub fn with_mariadb_advisory_transaction<T>(
             message: "timed out waiting for the MariaDB advisory lock".into(),
         });
     }
+    let mysql = connection.mysql;
     let lock_guard = MariaDbSchemaLockGuard {
         connection: &mut connection.connection,
         lock_name: lock_name.to_owned(),
@@ -2120,6 +2336,8 @@ pub fn with_mariadb_advisory_transaction<T>(
     let result = {
         let mut transaction = MariaDbTransaction {
             connection: lock_guard.connection,
+            mysql,
+            settings,
         };
         operation(&mut transaction)
     };
@@ -2326,14 +2544,37 @@ pub enum QueryValue {
     Int(i64),
     UInt(u64),
     Float(f64),
+    /// Exact fixed-point text; bound as a numeric value rather than binary Float.
+    Decimal(String),
+    Date(String),
+    Time(String),
+    Timestamp(i64),
     Bool(bool),
     String(String),
+}
+
+/// Native result families retained independently of the legacy text view.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QueryColumnType {
+    Null,
+    Text,
+    Integer,
+    Decimal,
+    Float,
+    Bool,
+    Date,
+    Time,
+    Timestamp,
+    Unsupported,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct QueryResult {
     pub columns: Vec<String>,
+    /// Compatibility view: SQL NULL remains `\\N`; never infer nullness from it.
     pub rows: Vec<Vec<String>>,
+    pub nulls: Vec<Vec<bool>>,
+    pub column_types: Vec<QueryColumnType>,
 }
 
 #[derive(Clone, Debug)]
@@ -2359,8 +2600,9 @@ pub fn execute_mariadb_query(
 }
 
 /// Executes one parameterized PostgreSQL query using the process-wide pool.
-/// Boolean, integer, floating-point, and text results are returned as strings
-/// to match the existing MariaDB query API. Other result types are rejected.
+/// Supported native scalar results retain their type family and nullness;
+/// the legacy string view matches the MariaDB query API. Unsupported native
+/// result types are rejected.
 pub fn execute_postgres_query(
     database_url: &str,
     sql: &str,
@@ -2489,7 +2731,15 @@ fn execute_postgres_prepared_batch(
 fn prepare_postgres_query(
     query: &Query,
 ) -> Result<(String, Vec<Box<dyn PostgresToSql + Sync>>), DatabaseError> {
-    let (postgres_sql, parameter_order) = bind_named_parameters_for(&query.sql, true)?;
+    let exact_parameters = query
+        .params
+        .iter()
+        .filter_map(|(name, value)| {
+            matches!(value, QueryValue::Decimal(_) | QueryValue::UInt(_)).then_some(name.as_str())
+        })
+        .collect::<HashSet<_>>();
+    let (postgres_sql, parameter_order) =
+        bind_exact_parameters(&query.sql, true, &exact_parameters)?;
     let parameters = parameter_order
         .iter()
         .map(|parameter_name| {
@@ -2511,24 +2761,27 @@ fn postgres_parameter_value(
     value: &QueryValue,
 ) -> Result<Box<dyn PostgresToSql + Sync>, DatabaseError> {
     match value {
-        QueryValue::Null => Ok(Box::new(Option::<String>::None)),
+        QueryValue::Null => Ok(Box::new(numeric::SqlNull)),
         QueryValue::Int(value) => Ok(Box::new(*value)),
-        QueryValue::UInt(value) => i64::try_from(*value)
-            .map(|value| Box::new(value) as Box<dyn PostgresToSql + Sync>)
-            .map_err(|_| DatabaseError {
-                message: "PostgreSQL integer parameters cannot exceed 9223372036854775807 in this runtime slice".into(),
-            }),
+        QueryValue::UInt(value) => Ok(Box::new(value.to_string())),
+        QueryValue::Decimal(value) => {
+            validate_exact_parameter(value)?;
+            Ok(Box::new(value.clone()))
+        }
         QueryValue::Float(value) if value.is_finite() => Ok(Box::new(*value)),
         QueryValue::Float(_) => Err(DatabaseError {
             message: "PostgreSQL floating-point parameters must be finite".into(),
         }),
+        QueryValue::Date(value) => Ok(Box::new(temporal::Parameter::Date(value.clone()))),
+        QueryValue::Time(value) => Ok(Box::new(temporal::Parameter::Time(value.clone()))),
+        QueryValue::Timestamp(value) => Ok(Box::new(temporal::Parameter::Timestamp(*value))),
         QueryValue::Bool(value) => Ok(Box::new(*value)),
         QueryValue::String(value) => Ok(Box::new(value.clone())),
     }
 }
 
 fn execute_prepared_postgres_query(
-    client: &mut PostgresClient,
+    client: &mut impl postgres::GenericClient,
     sql: &str,
     params: &[Box<dyn PostgresToSql + Sync>],
 ) -> Result<QueryResult, DatabaseError> {
@@ -2543,14 +2796,36 @@ fn execute_prepared_postgres_query(
             .iter()
             .map(|column| column.name().to_owned())
             .collect();
+        let column_types = statement
+            .columns()
+            .iter()
+            .map(|column| postgres_column_type(column.type_()))
+            .collect();
         let rows = client
             .query(&statement, &params)
             .map_err(postgres_driver_error)?;
-        let rows = rows
+        let cells = rows
             .iter()
-            .map(postgres_row_strings)
+            .map(postgres_row_cells)
             .collect::<Result<Vec<_>, _>>()?;
-        Ok(QueryResult { columns, rows })
+        let nulls = cells
+            .iter()
+            .map(|row| row.iter().map(Option::is_none).collect())
+            .collect();
+        let rows = cells
+            .into_iter()
+            .map(|row| {
+                row.into_iter()
+                    .map(|cell| cell.unwrap_or_else(|| "\\N".into()))
+                    .collect()
+            })
+            .collect();
+        Ok(QueryResult {
+            columns,
+            rows,
+            nulls,
+            column_types,
+        })
     } else {
         client
             .execute(&statement, &params)
@@ -2559,7 +2834,25 @@ fn execute_prepared_postgres_query(
     }
 }
 
-fn postgres_row_strings(row: &r2d2_postgres::postgres::Row) -> Result<Vec<String>, DatabaseError> {
+fn postgres_column_type(ty: &PostgresType) -> QueryColumnType {
+    match *ty {
+        PostgresType::BOOL => QueryColumnType::Bool,
+        PostgresType::INT2 | PostgresType::INT4 | PostgresType::INT8 => QueryColumnType::Integer,
+        PostgresType::FLOAT4 | PostgresType::FLOAT8 => QueryColumnType::Float,
+        PostgresType::NUMERIC => QueryColumnType::Decimal,
+        PostgresType::DATE => QueryColumnType::Date,
+        PostgresType::TIME => QueryColumnType::Time,
+        PostgresType::TIMESTAMPTZ => QueryColumnType::Timestamp,
+        PostgresType::TEXT | PostgresType::VARCHAR | PostgresType::BPCHAR | PostgresType::NAME => {
+            QueryColumnType::Text
+        }
+        _ => QueryColumnType::Unsupported,
+    }
+}
+
+fn postgres_row_cells(
+    row: &r2d2_postgres::postgres::Row,
+) -> Result<Vec<Option<String>>, DatabaseError> {
     row.columns()
         .iter()
         .enumerate()
@@ -2567,7 +2860,7 @@ fn postgres_row_strings(row: &r2d2_postgres::postgres::Row) -> Result<Vec<String
             macro_rules! value {
                 ($type:ty) => {
                     row.try_get::<_, Option<$type>>(index)
-                        .map(|value| value.map(|value| value.to_string()).unwrap_or_else(|| "\\N".into()))
+                        .map(|value| value.map(|value| value.to_string()))
                         .map_err(postgres_driver_error)
                 };
             }
@@ -2578,6 +2871,8 @@ fn postgres_row_strings(row: &r2d2_postgres::postgres::Row) -> Result<Vec<String
                 PostgresType::INT8 => value!(i64),
                 PostgresType::FLOAT4 => value!(f32),
                 PostgresType::FLOAT8 => value!(f64),
+                PostgresType::NUMERIC => value!(numeric::NumericText),
+                PostgresType::DATE | PostgresType::TIME | PostgresType::TIMESTAMPTZ => value!(temporal::TemporalText),
                 PostgresType::TEXT | PostgresType::VARCHAR | PostgresType::BPCHAR | PostgresType::NAME => value!(String),
                 _ => Err(DatabaseError {
                     message: format!("PostgreSQL result type `{}` is not supported by the bounded runtime query API", column.type_()),
@@ -2627,6 +2922,131 @@ pub fn execute_query(
     }
 }
 
+/// Check declared fixed-point storage before application queries. This performs
+/// read-only metadata access; it never migrates an existing schema.
+pub fn validate_decimal_storage(database_url: &str, schema: &Schema) -> Result<(), DatabaseError> {
+    if !schema.tables.iter().any(|table| {
+        table
+            .columns
+            .iter()
+            .any(|column| decimal_storage_precision(&column.sql_type).is_some())
+    }) {
+        return Ok(());
+    }
+    let sql = if is_postgres_url(database_url) {
+        "SELECT table_name::text, column_name::text, COALESCE(numeric_precision::text, '') AS precision, COALESCE(numeric_scale::text, '') AS scale FROM information_schema.columns WHERE table_schema = 'public' AND data_type = 'numeric'"
+    } else {
+        "SELECT TABLE_NAME, COLUMN_NAME, COALESCE(CAST(NUMERIC_PRECISION AS CHAR), '') AS precision_value, COALESCE(CAST(NUMERIC_SCALE AS CHAR), '') AS scale_value FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND DATA_TYPE IN ('decimal', 'numeric')"
+    };
+    let result = execute_query(database_url, sql, Vec::new()).map_err(|_| DatabaseError {
+        message: "could not verify declared Decimal/Money/UInt storage; check database access and metadata privileges".into()
+    })?;
+    check_decimal_metadata(schema, &result.rows)
+}
+
+fn decimal_storage_precision(sql_type: &str) -> Option<(&str, &str)> {
+    sql_type
+        .strip_prefix("DECIMAL(")
+        .or_else(|| sql_type.strip_prefix("NUMERIC("))?
+        .strip_suffix(')')?
+        .split_once(',')
+}
+
+fn check_decimal_metadata(schema: &Schema, rows: &[Vec<String>]) -> Result<(), DatabaseError> {
+    for table in &schema.tables {
+        for column in &table.columns {
+            let Some((precision, scale)) = decimal_storage_precision(&column.sql_type) else {
+                continue;
+            };
+            let row = rows
+                .iter()
+                .find(|row| row.len() == 4 && row[0] == table.name && row[1] == column.name);
+            if !row.is_some_and(|row| row[2] == precision && row[3] == scale) {
+                return Err(DatabaseError { message: format!(
+                    "fixed-point storage for `{}.{}` must match {}; run `zelyra db plan` and review/apply the schema before starting the application; no automatic migration was performed",
+                    table.name, column.name, column.sql_type) });
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Verify calendar, whole-second clock, and UTC millisecond storage before use.
+/// This read-only check never approves or executes a schema migration.
+pub fn validate_temporal_storage(database_url: &str, schema: &Schema) -> Result<(), DatabaseError> {
+    if !schema.tables.iter().any(|table| {
+        table.columns.iter().any(|column| {
+            temporal_storage_kind(&column.sql_type, is_postgres_url(database_url)).is_some()
+        })
+    }) {
+        return Ok(());
+    }
+    let sql = if is_postgres_url(database_url) {
+        "SELECT table_name::text, column_name::text, data_type::text, COALESCE(datetime_precision::text, '') AS precision_value FROM information_schema.columns WHERE table_schema = 'public'"
+    } else {
+        "SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, COALESCE(CAST(DATETIME_PRECISION AS CHAR), '') AS precision_value FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE()"
+    };
+    let result = execute_query(database_url, sql, Vec::new()).map_err(|_| DatabaseError {
+        message: "could not verify Date/Time/UTC Timestamp storage; check database access and metadata privileges".into(),
+    })?;
+    check_temporal_metadata(schema, &result.rows, is_postgres_url(database_url))
+}
+
+fn temporal_storage_kind(sql_type: &str, postgres: bool) -> Option<(&'static str, &'static str)> {
+    match sql_type {
+        "DATE" => Some(("date", "")),
+        "TIME" | "TIME(0)" => Some((
+            if postgres {
+                "time without time zone"
+            } else {
+                "time"
+            },
+            "0",
+        )),
+        "DATETIME(3)" | "TIMESTAMPTZ(3)" => Some((
+            if postgres {
+                "timestamp with time zone"
+            } else {
+                "datetime"
+            },
+            "3",
+        )),
+        _ => None,
+    }
+}
+
+fn check_temporal_metadata(
+    schema: &Schema,
+    rows: &[Vec<String>],
+    postgres: bool,
+) -> Result<(), DatabaseError> {
+    for table in &schema.tables {
+        for column in &table.columns {
+            let Some((kind, precision)) = temporal_storage_kind(&column.sql_type, postgres) else {
+                continue;
+            };
+            if !rows.iter().any(|row| {
+                row.len() == 4
+                    && row[0] == table.name
+                    && row[1] == column.name
+                    && row[2] == kind
+                    && (kind == "date" || row[3] == precision)
+            }) {
+                return Err(DatabaseError { message: format!("temporal storage for `{}.{}` must match {}; run `zelyra db plan` and review/apply the schema; no automatic migration was performed", table.name, column.name, column.sql_type) });
+            }
+        }
+    }
+    Ok(())
+}
+
+fn configure_postgres_utc(config: &mut PostgresConfig) {
+    let options = config
+        .get_options()
+        .map(|value| format!("{value} -c TimeZone=UTC"))
+        .unwrap_or_else(|| "-c TimeZone=UTC".into());
+    config.options(&options);
+}
+
 /// Executes a statement batch using the engine selected by the connection URL.
 pub fn execute_queries(
     database_url: &str,
@@ -2640,7 +3060,7 @@ pub fn execute_queries(
     }
 }
 
-fn is_postgres_url(database_url: &str) -> bool {
+pub fn is_postgres_url(database_url: &str) -> bool {
     database_url.starts_with("postgres://") || database_url.starts_with("postgresql://")
 }
 
@@ -2662,17 +3082,46 @@ pub fn execute_mariadb_queries_in_transaction(
 /// the closure passed to `with_mariadb_transaction`.
 pub struct MariaDbTransaction<'a> {
     connection: &'a mut Conn,
+    mysql: bool,
+    settings: MariaDbTimeouts,
 }
 
 impl MariaDbTransaction<'_> {
     pub fn execute(&mut self, query: &Query) -> Result<QueryResult, DatabaseError> {
+        if let Some(remaining) = remaining_query_budget()? {
+            let seconds = remaining
+                .as_secs_f64()
+                .min(f64::from(self.settings.query_seconds));
+            if seconds < 0.001 {
+                return Err(DatabaseError {
+                    message: "request deadline exceeded before database statement".into(),
+                });
+            }
+            let timeout_sql = mysql_timeout_statement(self.mysql, seconds)?;
+            self.connection
+                .query_drop(timeout_sql)
+                .map_err(mariadb_driver_error)?;
+        }
         let (sql, parameters) = prepare_mariadb_query(query)?;
         execute_prepared_mariadb_query(self.connection, &sql, parameters)
     }
 }
 
+struct MariaDbTransactionGuard<'a> {
+    connection: &'a mut ManagedMariaDbConnection,
+    finished: bool,
+}
+impl Drop for MariaDbTransactionGuard<'_> {
+    fn drop(&mut self) {
+        if !self.finished {
+            self.connection.discard = true;
+            let _ = self.connection.connection.query_drop("ROLLBACK");
+        }
+    }
+}
+
 /// Runs a decision-making transaction on one MariaDB connection. Returning
-/// `Ok` commits; returning an error rolls back.
+/// `Ok` commits; error, expired deadline or unwind rolls back/discards it.
 pub fn with_mariadb_transaction<T>(
     database_url: &str,
     operation: impl FnOnce(&mut MariaDbTransaction<'_>) -> Result<T, DatabaseError>,
@@ -2681,28 +3130,46 @@ pub fn with_mariadb_transaction<T>(
     let tls = MariaDbTlsSettings::from_env()?;
     let pool = mariadb_pool(database_url, settings, tls)?;
     let mut connection = acquire_mariadb_connection(&pool, settings)?;
+    let mysql = connection.mysql;
     if let Err(error) = connection.connection.query_drop("START TRANSACTION") {
         connection.discard = true;
         return Err(mariadb_driver_error(error));
     }
+    let mut guard = MariaDbTransactionGuard {
+        connection: &mut connection,
+        finished: false,
+    };
     let result = {
         let mut transaction = MariaDbTransaction {
-            connection: &mut connection.connection,
+            connection: &mut guard.connection.connection,
+            mysql,
+            settings,
         };
         operation(&mut transaction)
     };
     match result {
         Ok(value) => {
-            if let Err(error) = connection.connection.query_drop("COMMIT") {
-                connection.discard = true;
-                Err(mariadb_driver_error(error))
-            } else {
-                Ok(value)
+            remaining_query_budget()?;
+            if QUERY_DEADLINE.with(Cell::get).is_some() {
+                let reset_timeout =
+                    mysql_timeout_statement(mysql, f64::from(settings.query_seconds))?;
+                if let Err(error) = guard.connection.connection.query_drop(reset_timeout) {
+                    guard.connection.discard = true;
+                    return Err(mariadb_driver_error(error));
+                }
             }
+            guard
+                .connection
+                .connection
+                .query_drop("COMMIT")
+                .map_err(mariadb_driver_error)?;
+            guard.finished = true;
+            Ok(value)
         }
         Err(error) => {
-            let _ = connection.connection.query_drop("ROLLBACK");
-            connection.discard = true;
+            let _ = guard.connection.connection.query_drop("ROLLBACK");
+            guard.connection.discard = true;
+            guard.finished = true;
             Err(error)
         }
     }
@@ -2755,10 +3222,8 @@ fn execute_mariadb_queries_on_pool(
                     message: "request deadline exceeded before database statement".into(),
                 });
             }
-            if let Err(error) = connection
-                .connection
-                .query_drop(format!("SET SESSION max_statement_time={seconds:.6}"))
-            {
+            let timeout_sql = mysql_timeout_statement(connection.mysql, seconds)?;
+            if let Err(error) = connection.connection.query_drop(timeout_sql) {
                 if transaction {
                     let _ = connection.connection.query_drop("ROLLBACK");
                 }
@@ -2779,10 +3244,9 @@ fn execute_mariadb_queries_on_pool(
     }
 
     if QUERY_DEADLINE.with(Cell::get).is_some() {
-        if let Err(error) = connection.connection.query_drop(format!(
-            "SET SESSION max_statement_time={}",
-            settings.query_seconds
-        )) {
+        let timeout_sql =
+            mysql_timeout_statement(connection.mysql, f64::from(settings.query_seconds))?;
+        if let Err(error) = connection.connection.query_drop(timeout_sql) {
             if transaction {
                 let _ = connection.connection.query_drop("ROLLBACK");
             }
@@ -2801,7 +3265,14 @@ fn execute_mariadb_queries_on_pool(
 }
 
 fn prepare_mariadb_query(query: &Query) -> Result<(String, Vec<Value>), DatabaseError> {
-    let (sql, parameter_order) = bind_named_parameters(&query.sql)?;
+    let exact_parameters = query
+        .params
+        .iter()
+        .filter_map(|(name, value)| {
+            matches!(value, QueryValue::Decimal(_)).then_some(name.as_str())
+        })
+        .collect::<HashSet<_>>();
+    let (sql, parameter_order) = bind_exact_parameters(&query.sql, false, &exact_parameters)?;
     let parameters = parameter_order
         .iter()
         .map(|parameter_name| {
@@ -2813,21 +3284,48 @@ fn prepare_mariadb_query(query: &Query) -> Result<(String, Vec<Value>), Database
                 .ok_or_else(|| DatabaseError {
                     message: format!("missing SQL parameter `:{parameter_name}`"),
                 })
+                .and_then(|value| value)
         })
         .collect::<Result<Vec<_>, _>>()?;
     Ok((sql, parameters))
 }
 
-fn mysql_parameter_value(value: &QueryValue) -> Value {
-    match value {
+fn mysql_parameter_value(value: &QueryValue) -> Result<Value, DatabaseError> {
+    Ok(match value {
         QueryValue::Null => Value::NULL,
         QueryValue::Int(value) => Value::Int(*value),
         QueryValue::UInt(value) => Value::UInt(*value),
         QueryValue::Float(value) if value.is_finite() => Value::Double(*value),
-        QueryValue::Float(_) => Value::NULL,
+        QueryValue::Float(_) => {
+            return Err(DatabaseError {
+                message: "MariaDB/MySQL floating-point parameters must be finite".into(),
+            })
+        }
+        QueryValue::Decimal(value) => {
+            validate_exact_parameter(value)?;
+            Value::Bytes(value.as_bytes().to_vec())
+        }
+        QueryValue::Date(value) => {
+            temporal::mysql_parameter(&temporal::Parameter::Date(value.clone()))
+                .map_err(postgres_driver_error)?
+        }
+        QueryValue::Time(value) => {
+            temporal::mysql_parameter(&temporal::Parameter::Time(value.clone()))
+                .map_err(postgres_driver_error)?
+        }
+        QueryValue::Timestamp(value) => {
+            temporal::mysql_parameter(&temporal::Parameter::Timestamp(*value))
+                .map_err(postgres_driver_error)?
+        }
         QueryValue::Bool(value) => Value::Int(i64::from(*value)),
         QueryValue::String(value) => Value::Bytes(value.as_bytes().to_vec()),
-    }
+    })
+}
+
+fn validate_exact_parameter(value: &str) -> Result<(), DatabaseError> {
+    zelyra_ast::decimal::parse_scaled(value, 9).map(|_| ()).ok_or_else(|| DatabaseError {
+        message: "SQL Decimal parameter must be a finite exact Decimal with at most 9 fractional digits".into(),
+    })
 }
 
 fn execute_prepared_mariadb_query(
@@ -2844,13 +3342,61 @@ fn execute_prepared_mariadb_query(
         .iter()
         .map(|column| column.name_str().into_owned())
         .collect();
-    let rows = result
-        .map(|row| {
-            row.map(|row| row.unwrap().into_iter().map(mariadb_value_string).collect())
-                .map_err(mariadb_driver_error)
-        })
-        .collect::<Result<Vec<Vec<String>>, _>>()?;
-    Ok(QueryResult { columns, rows })
+    let column_types = result
+        .columns()
+        .as_ref()
+        .iter()
+        .map(mysql_column_type)
+        .collect();
+    let mut rows = Vec::new();
+    let mut nulls = Vec::new();
+    for row in result {
+        let values = row.map_err(mariadb_driver_error)?.unwrap();
+        nulls.push(
+            values
+                .iter()
+                .map(|value| matches!(value, Value::NULL))
+                .collect(),
+        );
+        rows.push(values.into_iter().map(mariadb_value_string).collect());
+    }
+    Ok(QueryResult {
+        columns,
+        rows,
+        nulls,
+        column_types,
+    })
+}
+
+fn mysql_column_type(column: &mysql::Column) -> QueryColumnType {
+    use mysql::consts::ColumnType::*;
+    match column.column_type() {
+        MYSQL_TYPE_NULL => QueryColumnType::Null,
+        MYSQL_TYPE_TINY | MYSQL_TYPE_SHORT | MYSQL_TYPE_LONG | MYSQL_TYPE_LONGLONG
+        | MYSQL_TYPE_INT24 | MYSQL_TYPE_YEAR => QueryColumnType::Integer,
+        MYSQL_TYPE_DECIMAL | MYSQL_TYPE_NEWDECIMAL => QueryColumnType::Decimal,
+        MYSQL_TYPE_FLOAT | MYSQL_TYPE_DOUBLE => QueryColumnType::Float,
+        MYSQL_TYPE_DATE | MYSQL_TYPE_NEWDATE => QueryColumnType::Date,
+        MYSQL_TYPE_TIME | MYSQL_TYPE_TIME2 => QueryColumnType::Time,
+        MYSQL_TYPE_TIMESTAMP
+        | MYSQL_TYPE_TIMESTAMP2
+        | MYSQL_TYPE_DATETIME
+        | MYSQL_TYPE_DATETIME2 => QueryColumnType::Timestamp,
+        MYSQL_TYPE_VARCHAR
+        | MYSQL_TYPE_VAR_STRING
+        | MYSQL_TYPE_STRING
+        | MYSQL_TYPE_TINY_BLOB
+        | MYSQL_TYPE_MEDIUM_BLOB
+        | MYSQL_TYPE_LONG_BLOB
+        | MYSQL_TYPE_BLOB => {
+            if column.character_set() == 63 {
+                QueryColumnType::Unsupported
+            } else {
+                QueryColumnType::Text
+            }
+        }
+        _ => QueryColumnType::Unsupported,
+    }
 }
 
 fn mariadb_value_string(value: Value) -> String {
@@ -2890,6 +3436,7 @@ fn mariadb_driver_error(error: mysql::Error) -> DatabaseError {
     }
 }
 
+#[cfg(any(test, feature = "fuzzing"))]
 fn bind_named_parameters(sql: &str) -> Result<(String, Vec<String>), DatabaseError> {
     bind_named_parameters_for(sql, false)
 }
@@ -2897,6 +3444,14 @@ fn bind_named_parameters(sql: &str) -> Result<(String, Vec<String>), DatabaseErr
 fn bind_named_parameters_for(
     sql: &str,
     postgres: bool,
+) -> Result<(String, Vec<String>), DatabaseError> {
+    bind_exact_parameters(sql, postgres, &HashSet::new())
+}
+
+fn bind_exact_parameters(
+    sql: &str,
+    postgres: bool,
+    exact_parameters: &HashSet<&str>,
 ) -> Result<(String, Vec<String>), DatabaseError> {
     let bytes = sql.as_bytes();
     let mut bound = String::with_capacity(sql.len());
@@ -2945,6 +3500,24 @@ fn bind_named_parameters_for(
             continue;
         }
         if let Some(active_quote) = quote {
+            if postgres && active_quote == b'`' {
+                if byte == b'`' && bytes.get(index + 1) == Some(&b'`') {
+                    bound.push('`');
+                    index += 2;
+                    continue;
+                }
+                if byte == b'`' {
+                    bound.push('"');
+                    quote = None;
+                } else if byte == b'"' {
+                    bound.push_str("\"\"");
+                } else {
+                    bound.push(byte as char);
+                }
+                index += 1;
+                continue;
+            }
+
             bound.push(byte as char);
             if byte == b'\\' && (active_quote == b'\'' || active_quote == b'"') {
                 if let Some(next) = bytes.get(index + 1) {
@@ -2983,7 +3556,11 @@ fn bind_named_parameters_for(
         }
         if byte == b'\'' || byte == b'"' || byte == b'`' {
             quote = Some(byte);
-            bound.push(byte as char);
+            bound.push(if postgres && byte == b'`' {
+                '"'
+            } else {
+                byte as char
+            });
             index += 1;
             continue;
         }
@@ -3014,12 +3591,23 @@ fn bind_named_parameters_for(
                 continue;
             }
             let name = sql[start..end].to_owned();
+            let exact = exact_parameters.contains(name.as_str());
             parameters.push(name);
+            if exact {
+                bound.push_str("CAST(");
+            }
             if postgres {
                 bound.push('$');
                 bound.push_str(&parameters.len().to_string());
             } else {
                 bound.push('?');
+            }
+            if exact {
+                bound.push_str(if postgres {
+                    "::TEXT AS NUMERIC)"
+                } else {
+                    " AS DECIMAL(39,9))"
+                });
             }
             index = end;
             continue;
@@ -3205,10 +3793,12 @@ struct MariaConnection {
 
 struct MariaDbConnectionManager {
     options: mysql::Opts,
+    mysql: bool,
 }
 
 struct ManagedMariaDbConnection {
     connection: Conn,
+    mysql: bool,
     discard: bool,
 }
 
@@ -3220,6 +3810,7 @@ impl ManageConnection for MariaDbConnectionManager {
         Conn::new(self.options.clone()).map(|connection| ManagedMariaDbConnection {
             connection,
             discard: false,
+            mysql: self.mysql,
         })
     }
 
@@ -3374,6 +3965,7 @@ fn build_postgres_pool(
             message: "PostgreSQL DATABASE_URL must include a host".into(),
         });
     }
+    configure_postgres_utc(&mut config);
     config.connect_timeout(Duration::from_secs(u64::from(settings.connect_seconds)));
     let use_tls = tls.mode == MariaDbTlsMode::Required
         || (tls.mode == MariaDbTlsMode::Auto
@@ -3472,16 +4064,17 @@ fn build_mariadb_pool(
             settings.connect_seconds,
         ))))
         .read_timeout(Some(Duration::from_secs(u64::from(settings.query_seconds))))
-        .init(vec![mysql_session_timeout_statement(
-            database_url,
-            settings.query_seconds,
-        )]);
+        .init(vec![
+            mysql_session_timeout_statement(database_url, settings.query_seconds),
+            "SET SESSION time_zone = '+00:00'".into(),
+        ]);
     let options = match ssl_opts {
         Some(ssl_opts) => options.ssl_opts(Some(ssl_opts)),
         None => options,
     };
     let manager = MariaDbConnectionManager {
         options: options.into(),
+        mysql: database_url.starts_with("mysql://"),
     };
     Pool::builder()
         .max_size(settings.pool_max_size)
@@ -3495,9 +4088,32 @@ fn build_mariadb_pool(
         })
 }
 
+fn mysql_timeout_statement(mysql: bool, seconds: f64) -> Result<String, DatabaseError> {
+    if !seconds.is_finite() || seconds < 0.001 || seconds * 1000.0 > f64::from(u32::MAX) {
+        return Err(DatabaseError {
+            message: "request deadline exceeded before database statement".into(),
+        });
+    }
+    Ok(if mysql {
+        let lock_wait_seconds = (seconds.ceil() as u32).max(1);
+        format!(
+            "SET SESSION max_execution_time={}, innodb_lock_wait_timeout={}",
+            (seconds * 1000.0).floor() as u32,
+            lock_wait_seconds
+        )
+    } else {
+        format!("SET SESSION max_statement_time={seconds:.6}")
+    })
+}
+
 fn mysql_session_timeout_statement(database_url: &str, query_seconds: u32) -> String {
     if database_url.starts_with("mysql://") {
-        format!("SET SESSION max_execution_time={}", query_seconds * 1000)
+        let lock_wait_seconds = query_seconds.max(1);
+        format!(
+            "SET SESSION max_execution_time={}, innodb_lock_wait_timeout={}",
+            query_seconds * 1000,
+            lock_wait_seconds
+        )
     } else {
         format!("SET SESSION max_statement_time={query_seconds}")
     }
@@ -3559,9 +4175,11 @@ fn run_mariadb(
         ])
         .args(timeouts.connect_args())
         .args(if database_url.starts_with("mysql://") {
+            let lock_wait_seconds = timeouts.query_seconds.max(1);
             [format!(
-                "--init-command=SET SESSION max_execution_time={}",
-                timeouts.query_seconds * 1000
+                "--init-command=SET SESSION max_execution_time={}, innodb_lock_wait_timeout={}",
+                timeouts.query_seconds * 1000,
+                lock_wait_seconds
             )]
         } else {
             timeouts.query_args()
@@ -3608,9 +4226,11 @@ fn run_mariadb_sql(
         ])
         .args(timeouts.connect_args())
         .args(if database_url.starts_with("mysql://") {
+            let lock_wait_seconds = timeouts.query_seconds.max(1);
             [format!(
-                "--init-command=SET SESSION max_execution_time={}",
-                timeouts.query_seconds * 1000
+                "--init-command=SET SESSION max_execution_time={}, innodb_lock_wait_timeout={}",
+                timeouts.query_seconds * 1000,
+                lock_wait_seconds
             )]
         } else {
             timeouts.query_args()
@@ -3705,11 +4325,11 @@ fn mariadb_default_value(
     if nullable && value.eq_ignore_ascii_case("NULL") {
         return Ok(None);
     }
-    let default = if sql_type == "TIMESTAMP"
-        && (value.eq_ignore_ascii_case("current_timestamp")
-            || value.eq_ignore_ascii_case("current_timestamp()"))
+    let normalized = normalize_default(&value);
+    let default = if (sql_type.starts_with("TIMESTAMP") || sql_type.starts_with("DATETIME"))
+        && (normalized == "CURRENT_TIMESTAMP" || normalized.starts_with("CURRENT_TIMESTAMP("))
     {
-        "CURRENT_TIMESTAMP".into()
+        normalized
     } else if sql_type == "BOOLEAN" && (value == "1" || value == "0") {
         if value == "1" {
             "TRUE".into()
@@ -3757,6 +4377,9 @@ fn mariadb_sql_type(data_type: &str, length: &str, precision: &str, scale: &str)
         "tinyint" => "BOOLEAN".into(),
         "int" | "integer" => "INTEGER".into(),
         "double" => "DOUBLE".into(),
+        "datetime" | "timestamp" | "time" if !length.is_empty() && length != "0" => {
+            format!("{}({length})", data_type.to_ascii_uppercase())
+        }
         "longblob" | "mediumblob" | "tinyblob" => "BLOB".into(),
         other => other.to_uppercase(),
     }
@@ -4078,6 +4701,183 @@ mod tests {
     use super::*;
 
     include!("../../tests/support/bounded_mutations.rs");
+
+    #[test]
+    fn temporal_metadata_rejects_missing_wrong_kind_and_lossy_precision() {
+        for (engine, postgres, stamp_kind, time_kind) in [
+            ("mariadb", false, "datetime", "time"),
+            (
+                "postgres",
+                true,
+                "timestamp with time zone",
+                "time without time zone",
+            ),
+        ] {
+            let desired = schema(&format!("database Main {{ engine: {engine} }} table calendar {{ id: Id primary day: Date required clock: Time required stamp: Timestamp required }}"));
+            let rows: Vec<Vec<String>> = vec![
+                vec!["calendar".into(), "day".into(), "date".into(), "".into()],
+                vec![
+                    "calendar".into(),
+                    "clock".into(),
+                    time_kind.into(),
+                    "0".into(),
+                ],
+                vec![
+                    "calendar".into(),
+                    "stamp".into(),
+                    stamp_kind.into(),
+                    "3".into(),
+                ],
+            ];
+            assert!(check_temporal_metadata(&desired, &rows, postgres).is_ok());
+            let mut date_precision = rows.clone();
+            date_precision[0][3] = "0".into();
+            assert!(check_temporal_metadata(&desired, &date_precision, postgres).is_ok());
+            for (index, field, value) in [
+                (0, 2, "text"),
+                (1, 3, "6"),
+                (2, 3, "0"),
+                (2, 2, "timestamp without time zone"),
+            ] {
+                let mut bad = rows.clone();
+                bad[index][field] = value.into();
+                let error = check_temporal_metadata(&desired, &bad, postgres).unwrap_err();
+                assert!(error.message.contains("db plan"));
+                assert!(error
+                    .message
+                    .contains(&format!("calendar.{}", rows[index][1])));
+            }
+            assert!(check_temporal_metadata(&desired, &[], postgres).is_err());
+        }
+    }
+
+    #[test]
+    fn postgres_startup_options_keep_existing_settings_and_force_utc() {
+        let mut config = PostgresConfig::new();
+        config.options("-c search_path=public -c TimeZone=Europe/Berlin");
+        configure_postgres_utc(&mut config);
+        assert_eq!(
+            config.get_options(),
+            Some("-c search_path=public -c TimeZone=Europe/Berlin -c TimeZone=UTC")
+        );
+        let mut config = PostgresConfig::new();
+        configure_postgres_utc(&mut config);
+        assert_eq!(config.get_options(), Some("-c TimeZone=UTC"));
+    }
+
+    #[test]
+    fn timestamp_now_defaults_match_the_declared_millisecond_precision() {
+        for engine in ["mariadb", "mysql", "postgres"] {
+            let desired = schema(&format!("database Main {{ engine: {engine} }} table dates {{ id: Id primary stamp: Timestamp default now }}"));
+            assert_eq!(
+                desired.tables[0].columns[1].default.as_deref(),
+                Some("CURRENT_TIMESTAMP(3)")
+            );
+        }
+    }
+
+    #[test]
+    fn timestamp_storage_retains_milliseconds_and_post_2038_instants() {
+        for (engine, expected) in [("mariadb", "DATETIME(3)"), ("postgres", "TIMESTAMPTZ(3)")] {
+            let schema = schema(&format!("database main {{ engine: {engine} }} table dates {{ id: Id primary stamp: Timestamp required }}"));
+            assert_eq!(schema.tables[0].columns[1].sql_type, expected);
+        }
+    }
+
+    #[test]
+    fn decimal_schema_check_rejects_old_or_missing_precision() {
+        let desired = schema("database Main { engine: mariadb } table amounts { id: Id primary amount: Decimal required price: Money required }");
+        let rows = vec![
+            vec!["amounts".into(), "amount".into(), "39".into(), "9".into()],
+            vec!["amounts".into(), "price".into(), "19".into(), "4".into()],
+        ];
+        assert!(check_decimal_metadata(&desired, &rows).is_ok());
+        let mut old = rows.clone();
+        old[0][2] = "10".into();
+        old[0][3] = "0".into();
+        assert!(check_decimal_metadata(&desired, &old)
+            .unwrap_err()
+            .message
+            .contains("db plan"));
+        assert!(check_decimal_metadata(&desired, &rows[..1]).is_err());
+        let old_schema = schema("database Main { engine: postgres } table amounts { id: Id primary amount: Decimal required }");
+        let inspected =
+            parse_inspection_output("amounts\tamount\tNUMERIC(39,9)\tnumeric\tNO\t\tf\tf\tN\n")
+                .unwrap();
+        assert_eq!(inspected.tables[0].columns[0].sql_type, "NUMERIC(39,9)");
+        assert_eq!(old_schema.tables[0].columns[1].sql_type, "NUMERIC(39,9)");
+    }
+
+    #[test]
+    fn cyclic_column_aliases_fail_with_a_source_span_without_recursing_forever() {
+        let program = parse(
+            &lex("type A = B type B = A table entries { id: Id primary amount: A? }").unwrap(),
+        )
+        .unwrap();
+        let errors = build_schema(&program).unwrap_err();
+        assert!(errors.iter().any(|error| error.message.contains("cyclic")
+            && error.span.line == 1
+            && error.span.column > 1));
+    }
+
+    #[test]
+    fn nullable_decimal_aliases_keep_exact_storage() {
+        let schema = schema("type Amount = Decimal table bills { id: Id primary amount: Amount? }");
+        assert_eq!(schema.tables[0].columns[1].sql_type, "DECIMAL(39,9)");
+        assert!(schema.tables[0].columns[1].nullable);
+    }
+
+    #[test]
+    fn postgres_generated_identifier_translation_preserves_literals_and_parameters() {
+        let (sql, names) = bind_named_parameters_for("SELECT `a:b`, `a``b`, `a\"b`, ':text `x`', $tag$`x` :ignored$tag$ /* `x` */ FROM `items` WHERE `amount`=:amount", true).unwrap();
+        assert_eq!(sql, "SELECT \"a:b\", \"a`b\", \"a\"\"b\", ':text `x`', $tag$`x` :ignored$tag$ /* `x` */ FROM \"items\" WHERE \"amount\"=$1");
+        assert_eq!(names, ["amount"]);
+    }
+
+    #[test]
+    fn decimal_storage_preserves_the_full_language_scale() {
+        for (engine, expected) in [("mariadb", "DECIMAL(39,9)"), ("postgres", "NUMERIC(39,9)")] {
+            let desired = schema(&format!("database Main {{ engine: {engine} }} table amounts {{ id: Id primary amount: Decimal required }}"));
+            assert_eq!(desired.tables[0].columns[1].sql_type, expected);
+        }
+    }
+
+    #[test]
+    fn exact_numeric_parameters_never_pass_through_float_or_sql_null() {
+        let query = Query {
+            sql: "SELECT :amount, ':amount', /* :amount */ :id, :amount".into(),
+            params: vec![
+                (
+                    "amount".into(),
+                    QueryValue::Decimal("9007199254740993.123456789".into()),
+                ),
+                ("id".into(), QueryValue::UInt(u64::MAX)),
+            ],
+        };
+        let (sql, values) = prepare_mariadb_query(&query).unwrap();
+        assert_eq!(
+            sql,
+            "SELECT CAST(? AS DECIMAL(39,9)), ':amount', /* :amount */ ?, CAST(? AS DECIMAL(39,9))"
+        );
+        assert_eq!(
+            values[0],
+            Value::Bytes(b"9007199254740993.123456789".to_vec())
+        );
+        assert_eq!(values[1], Value::UInt(u64::MAX));
+        let (sql, values) = prepare_postgres_query(&query).unwrap();
+        assert_eq!(sql, "SELECT CAST($1::TEXT AS NUMERIC), ':amount', /* :amount */ CAST($2::TEXT AS NUMERIC), CAST($3::TEXT AS NUMERIC)");
+        assert_eq!(values.len(), 3);
+        for value in [
+            QueryValue::Float(f64::NAN),
+            QueryValue::Float(f64::INFINITY),
+            QueryValue::Decimal("NaN".into()),
+            QueryValue::Decimal("1e3".into()),
+            QueryValue::Decimal("0.0000000001".into()),
+        ] {
+            assert!(mysql_parameter_value(&value).is_err());
+            assert!(postgres_parameter_value(&value).is_err());
+        }
+    }
 
     #[test]
     fn sql_binder_keeps_utf8_after_backslash_in_quoted_text() {
@@ -4817,10 +5617,23 @@ mod tests {
     }
 
     #[test]
+    fn mysql_deadline_timeout_uses_its_own_server_variable() {
+        assert_eq!(
+            mysql_timeout_statement(true, 0.300).unwrap(),
+            "SET SESSION max_execution_time=300, innodb_lock_wait_timeout=1"
+        );
+        assert_eq!(
+            mysql_timeout_statement(false, 0.300).unwrap(),
+            "SET SESSION max_statement_time=0.300000"
+        );
+        assert!(mysql_timeout_statement(true, 0.0001).is_err());
+    }
+
+    #[test]
     fn mysql_and_mariadb_session_timeouts_use_their_server_variables() {
         assert_eq!(
             mysql_session_timeout_statement("mysql://user:pass@localhost/app", 12),
-            "SET SESSION max_execution_time=12000"
+            "SET SESSION max_execution_time=12000, innodb_lock_wait_timeout=12"
         );
         assert_eq!(
             mysql_session_timeout_statement("mariadb://user:pass@localhost/app", 12),
@@ -5499,6 +6312,77 @@ mod tests {
     }
 
     #[test]
+    fn generated_schema_identifiers_fit_each_backend_and_keep_distinct_suffixes() {
+        let table_name = format!("orders_{}", "x".repeat(54));
+        for (engine, limit) in [("mariadb", 64), ("postgres", 63)] {
+            let source = format!(
+                "database main {{ engine: {engine} }}\n\
+                 table users {{ id: Id primary }}\n\
+                 table {table_name} {{ id: Id primary owner: User required \
+                 first_reference: String(100) second_reference: String(100) \
+                 index {{ first_reference second_reference }} \
+                 unique {{ first_reference second_reference }} }}"
+            );
+            let desired = schema(&source);
+            assert_eq!(desired, schema(&source));
+            let table = &desired.tables[1];
+            let index = &table.indexes[0].name;
+            let unique = &table.uniques[0].name;
+            let foreign_key = table.foreign_keys[0].name.as_deref().unwrap();
+            assert!(index.len() <= limit, "overlong {engine} index: {index}");
+            assert!(unique.len() <= limit, "overlong {engine} unique: {unique}");
+            assert!(
+                foreign_key.len() <= limit,
+                "overlong {engine} foreign key: {foreign_key}"
+            );
+            assert_ne!(index, unique);
+            let mut current = desired.clone();
+            current.tables[1].indexes.clear();
+            current.tables[1].uniques.clear();
+            let additions = diff(&desired, &current);
+            assert!(additions
+                .changes
+                .iter()
+                .any(|change| change.sql.contains(index)));
+            assert!(additions
+                .changes
+                .iter()
+                .any(|change| change.sql.contains(unique)));
+            current.tables[1].foreign_keys.clear();
+            let removals = diff(&current, &desired);
+            assert!(!removals.has_unsupported());
+            assert_eq!(removals.changes.len(), 3);
+            assert!(removals
+                .changes
+                .iter()
+                .any(|change| change.sql.contains(foreign_key)));
+        }
+    }
+
+    #[test]
+    fn declared_sql_identifiers_over_the_backend_limit_report_the_source() {
+        for (engine, length) in [("mariadb", 65), ("postgres", 64)] {
+            let name = "t".repeat(length);
+            let source =
+                format!("database main {{ engine: {engine} }}\ntable {name} {{ id: Id primary }}");
+            let program = parse(&lex(&source).unwrap()).unwrap();
+            let errors =
+                build_schema(&program).expect_err("overlong table must fail before SQL execution");
+            assert!(errors
+                .iter()
+                .any(|error| error.span.line == 2 && error.message.contains("identifier")));
+        }
+        let name = "c".repeat(62);
+        let source =
+            format!("table users {{ id: Id primary }}\ntable orders {{\n{name}: User required\n}}");
+        let program = parse(&lex(&source).unwrap()).unwrap();
+        let errors = build_schema(&program).expect_err("the generated _id column must also fit");
+        assert!(errors
+            .iter()
+            .any(|error| error.span.line == 3 && error.message.contains("identifier")));
+    }
+
+    #[test]
     fn includes_declared_indexes_when_planning_a_new_table() {
         let desired = schema("table users { id: Id primary auto name: String index { name } }");
         let current = Schema {
@@ -5548,6 +6432,36 @@ mod tests {
         assert!(errors
             .iter()
             .any(|error| error.message.contains("MissingDepartment")));
+    }
+
+    #[test]
+    fn rejects_function_values_from_database_columns_and_aliases() {
+        for source in [
+            "table callbacks { id: Id primary auto callback: Function<() -> Int> required }",
+            "type Callback = Function<() -> Int> table callbacks { id: Id primary auto callback: Callback required }",
+        ] {
+            let program = parse(&lex(source).unwrap()).unwrap();
+            let errors = build_schema(&program).expect_err("function values are not persistent data");
+            assert!(errors.iter().any(|error| {
+                error
+                    .message
+                    .contains("function values cannot be stored in database column callbacks.callback")
+            }));
+        }
+    }
+
+    #[test]
+    fn rejects_generic_user_types_as_persistent_column_types() {
+        let source = "struct Box<T> { value: T } enum Maybe<T> { Some(T) None } table payloads { id: Id primary auto boxed: Box<Int> required maybe: Maybe<String> required }";
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let errors = build_schema(&program)
+            .expect_err("generic user-defined values are not SQL column types");
+        assert_eq!(errors.len(), 2, "both unsupported columns must be reported");
+        assert!(errors.iter().all(|error| {
+            error
+                .message
+                .contains("generic user-defined types cannot be stored in database column")
+        }));
     }
 
     #[test]
@@ -5620,7 +6534,7 @@ mod tests {
             }
             "#,
         );
-        assert!(schema.create_sql().contains("`deleted_at` TIMESTAMP"));
+        assert!(schema.create_sql().contains("`deleted_at` DATETIME(3)"));
     }
 
     #[test]

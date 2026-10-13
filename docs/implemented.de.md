@@ -1,7 +1,11 @@
-# In Zelyra 0.9.8 umgesetzt
+# In Zelyra 0.9.9 umgesetzt
 
-**Stand:** Release-Kandidat 0.9.8 · Sprachkompatibilitätslinie `0.1` · 2026-10-12
-**Reifegrad:** experimentell; nicht für den Produktiveinsatz freigegeben
+**Stand:** Entwicklungszweig 0.9.9 · Sprachkompatibilitätslinie `0.1` · 2026-10-12
+**Reifegrad:** Vorabentwicklung; nicht für den Produktiveinsatz freigegeben
+
+Dies ist eine Entwicklungsübersicht, kein veröffentlichtes 0.9.9-Release. Die
+offenen technischen Gates stehen im [Releaseplan 0.9.9](release-plans/0.9.9.de.md).
+Die menschliche Abnahme bleibt dem konkreten 1.0.0-Kandidaten vorbehalten.
 
 Diese Übersicht beschreibt, was die aktuelle Zelyra-Version kann. Sie führt die
 Funktionen nach Anwendungsbereichen statt nach einzelnen Versionsnummern auf.
@@ -9,11 +13,14 @@ Funktionen nach Anwendungsbereichen statt nach einzelnen Versionsnummern auf.
 steht in der [Roadmap](ROADMAP.de.md). Eine unabhängige menschliche Abnahme ist
 für 1.0.0 vorgesehen.
 
-## Was Zelyra 0.9.8 bietet
+## Was der Entwicklungszweig 0.9.9 bietet
 
 - **Sprache und Compiler:** eine statisch geprüfte Sprache mit Funktionen,
-  Records, typisierten Sammlungen, `Option` und `Result`, Pattern Matching,
-  Modulen, Contracts, Effekten und compilergeprüften SQL-/Webdeklarationen.
+  generischen Records, Enums und Klassen, benannten Funktionswerten, typisierten
+  Sammlungen, `Option` und `Result`, Pattern Matching, Modulen, Contracts,
+  Effekten und compilergeprüften SQL-/Webdeklarationen. Explizite skalare
+  Textformatierung, Kalender-Tagesrechnung, Decimal-Rundung und kontrollierte
+  Rekursion sind enthalten.
   Die genaue Typabdeckung und ihre Grenzen stehen im Abschnitt
   [Sprache und Compiler](#sprache-und-compiler).
 - **Datenbanken:** schemaabhängige Abfragen, relationale Fremdschlüssel,
@@ -26,7 +33,9 @@ für 1.0.0 vorgesehen.
   APIs mit OpenAPI-Ausgabe.
 - **Zelyra Studio:** lokaler Webeditor mit gespeicherter heller und dunkler
   Darstellung, Compilerdiagnosen, Formatierung, Navigation, Vervollständigung,
-  Aufgabenhilfe, Datenbankwerkbank und Projektkarte. Die Karte zeigt bekannte Beziehungen und begründet offene oder
+  Aufgabenhilfe, Datenbankwerkbank und Projektkarte. Ein kurzer Markenstart
+  überbrückt das Laden; die CLI verwendet auf Wunsch Terminalfarben. Die Karte
+  zeigt bekannte Beziehungen und begründet offene oder
   begrenzte Zuordnungen, statt sie zu erraten.
 - **Rechnungstutorial:** eine mehrteilige Anwendung für Kunden, Artikel und
   Rechnungen mit Kennzahlen aus gespeicherten Daten. Tabler Core 1.6.1 wird
@@ -65,7 +74,12 @@ den Beweis, dass beliebige Anwendungen korrekt sind.
 - ✅ Nominale Fachdaten-Typen, Records mit geprüftem Feldzugriff, Arrays mit
   gebräuchlichen Operationen, deterministische typisierte Maps, `Option`,
   `Result` und exhaustives Pattern Matching als Anweisung oder Ausdruck; ein
-  `match`-Ausdruck liefert einen einheitlich typgeprüften Wert.
+  `match`-Ausdruck liefert einen einheitlich typgeprüften Wert. `class`-Instanzen
+  teilen überprüfte Referenzidentität bei Zuweisung, Parameterübergabe, Rückgabe
+  und in Sammlungen; typisierte Feldupdates ändern die geteilte Instanz. Records
+  bleiben wertbasiert. Klassen haben ausdrücklich keine Methoden- oder
+  Vererbungssyntax, keine zyklischen Referenzgraphen und keine direkte JSON-,
+  HTTP- oder SQL-Serialisierung; API-Daten werden in Records übertragen.
 - ✅ `Int` und `UInt` rechnen innerhalb ihrer 64-Bit-Bereiche; das direkt
   geschriebene `-9223372036854775808` wird unterstützt. Überlauf,
   Unterlauf und Division durch null werden als Runtimefehler gemeldet. Das
@@ -82,9 +96,12 @@ den Beweis, dass beliebige Anwendungen korrekt sind.
   Runtimewerte, geprüfte Konstruktoren und JSON-Roundtrips. `List<T>` ist ein
   Alias für `T[]`; heterogene `Tuple<A, B, ...>`-Werte und deterministische
   `Set<T>`-Werte lassen sich erstellen, prüfen, iterieren und als JSON
-  austauschen. Payloadfreie benutzerdefinierte Enums unterstützen Gleichheit,
-  JSON und exhaustives Matching; Enum-Payloads, eigene Generics, Funktionswerte
-  und beobachtbare Klassenidentität bleiben offen. `record_with` und
+  austauschen. Benutzerdefinierte Enums unterstützen Nutzdaten, Generics,
+  Gleichheit, JSON und exhaustives Matching. Eigene generische Funktionen,
+  Records und Enums erlauben explizite oder abgeleitete Typargumente; allgemeine
+  Constraints, generische Aliase und generische Funktionsreferenzen fehlen.
+  Benannte typisierte Funktionswerte sind implementiert; Closures bleiben
+  außerhalb des Umfangs. `record_with` und
   `array_replace_result` liefern typgeprüfte neue Werte mit Wertsemantik.
   `for i in start..end` iteriert mit exklusivem Ende.
 - ✅ Nicht-Unit-Funktionen müssen auf jedem erreichbaren Pfad einen passenden
@@ -92,7 +109,12 @@ den Beweis, dass beliebige Anwendungen korrekt sind.
   `E-TYPE-MATCH-001`. Die Laufzeit begrenzt verschachtelte
   Funktionsaufrufe kontrolliert; `zelyra run --max-steps <n>` aktiviert ein
   optionales Schrittbudget, standardmäßig bleibt es unbegrenzt.
-- ✅ Stringwerte lassen sich lexikografisch vergleichen. `json_decode_result<T>`,
+- ✅ Stringwerte lassen sich lexikografisch vergleichen. `format_text(wert)`
+  formatiert skalare Werte ausdrücklich und ohne implizite Konvertierung;
+  Geldbeträge mit fester Skala verwenden `format_scaled_result`. Sammlungen,
+  Records, Klassen, Enums, `Result` und Funktionen besitzen keine
+  Anzeigekonvertierung.
+  `json_decode_result<T>`,
   `read_text_result` und `write_text_result` geben erwartbare Parse- und
   Dateifehler als `Result` zurück. Der explizite getaggte Result-Codec
   `json_encode_tagged_result`/`json_decode_tagged_result<T,E>` erhält Ok- und
@@ -138,7 +160,7 @@ Siehe die [formale Sprachspezifikation](specification.de.md), die
   werden. Ein fünfsekündiges Transport-Timeout, Nachrichtengrenzen und eine
   Loopback-Testsenke sind geprüft. Die Zustellung erfolgt mindestens einmal;
   genau-einmalige Zustellung, PostgreSQL-Outbox, benannte Vorlagen und
-  Dateianhänge sind in 0.9.8 nicht zugesagt.
+  Dateianhänge sind in 0.9.9 nicht zugesagt.
 - ✅ SQLite bietet geprüfte lokale Schemaabläufe. PostgreSQL unterstützt
   ausgewählte Laufzeit-, Schema- und Sicherheitsprüfungen. MySQL Server 8.4.11
   unterstützt typisierte parametrisierte Abfragen sowie einen isolierten
@@ -268,6 +290,11 @@ der [Setup-Anleitung](setup-web.de.md) und den
   HttpOnly-Sessions. Direkte und rollenbasierte Berechtigungen, geschützte
   Aktionen, CSRF-geschützte Browserverwaltung und Schutz der letzten
   Administratorzuordnung sind implementiert.
+- 🧪 Passwortwiederherstellung verwendet in der 0.9.9-Entwicklung ein
+  transaktional gespeichertes, instanzübergreifendes Reset-Limit. Die Tabelle
+  speichert einen HMAC-Fingerabdruck statt einer IP-Adresse; Datenbankfehler
+  sperren den Vorgang. Unabhängige Sicherheitsprüfung und vollständige
+  Release-E2E bleiben offen.
 - ✅ Optionales MariaDB-Audit-Logging unterstützt Inspektion, begrenzten
   JSON-/CSV-Export, strukturelle Prüfung und ausdrücklich bestätigtes Bereinigen.
 - 🧪 Manipulationsnachweis durch kryptografische Audit-Verkettung ist optional
@@ -327,3 +354,39 @@ für 1.0.0 reserviert und wird durch automatisierte Nachweise nicht ersetzt.
 Diese Übersicht wird angepasst, wenn sich ausgelieferte Funktionen oder ihre
 Nachweise ändern. Ein Spezifikations- oder Roadmap-Eintrag allein wird hier
 nicht als Implementierung ausgegeben.
+
+## Exakte Dezimalgrenzen in 0.9.9
+
+`betrag: Decimal = decimal("119.00")` deklariert einen exakten Festkommawert.
+Formulare, HTTP und SQL verwenden geprüfte Dezimaltexte. MariaDB/MySQL speichern
+`Decimal` ausdrücklich als `DECIMAL(39,9)`, PostgreSQL als `NUMERIC(39,9)`.
+Alte oder abweichende feste Skalen verhindern SQL-Ausführung beziehungsweise
+Serverstart mit einer quellbezogenen Diagnose. `Money` behält `(19,4)`.
+Multiplikation/Division prüfen das Endergebnis mit einem begrenzten exakten
+Zwischenwert; Restbildung am negativen Minimum verursacht keinen Panic.
+JSON-Ausgaben bleiben Dezimalstrings. Siehe [vollständige Regeln](decimals.de.md)
+und [Beispiel](../examples/decimal_money.zyl). Das belegt keine volle
+PostgreSQL-CRUD-/Auth-Parität oder Produktivfreigabe.
+
+## Datums-/Zeitgrenzen im Entwicklungszweig
+
+Kalender-Tagesrechnung und UTC-Millisekunden sind mit unabhängigen Python-
+Referenzen geprüft. Formulare und APIs weisen ungültige Kalender-/Uhrzeitwerte
+ab; Timestamp ist auf ISO-Jahre 0001–9999 begrenzt. API-Handler erhalten echte
+Date-/Time-/Timestamp-/Duration-Werte. JSON-Ausgaben bleiben unverändert;
+generierte Clients werden daran angepasst. Native Date-/Time-/UTC-Timestamp-
+Parameter und Millisekundenspeicherung sind auf MariaDB, MySQL und PostgreSQL
+geprüft. Falsche Speichertypen/Präzision scheitern vor Anwendung mit Fundstelle.
+Explizites [`sql_decode<T>`](sql-results.de.md) liefert typisierte Skalar-/Record-/
+Array-Ergebnisse mit Kardinalitäts- und NULL-Prüfung; das Rohzeilen-JSON-Format
+bleibt unverändert. Siehe [Regeln](dates.de.md),
+[HTTP-Nachweise](release-readiness/0.9.9-calendar-http.de.md) und
+[SQL-Nachweise](release-readiness/0.9.9-calendar-sql.de.md).
+
+## NULL-bewusster Edit-Schutz im Entwicklungsbranch
+
+Natives NULL und Literaltext `\N` bleiben in signierten Edit-Snapshots und
+Formulareingaben verschieden. Veraltete MariaDB-/MySQL-Updates scheitern mit
+HTTP 409 vor der Änderung. Fehlende implizit nullable Felder binden SQL-NULL;
+Pflicht-/Readonly-Prüfungen bleiben. [Regeln](edit-snapshots.de.md),
+[Nachweise](release-readiness/0.9.9-null-edit-snapshots.de.md).

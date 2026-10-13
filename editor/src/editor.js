@@ -28,6 +28,10 @@ import {
 const root = document.documentElement;
 const storedTheme = localStorage.getItem("zelyra-editor-theme");
 root.dataset.theme = storedTheme === "light" ? "light" : "dark";
+const storedFontSize = localStorage.getItem("zelyra-editor-font-size");
+if (storedFontSize && ["medium", "large"].includes(storedFontSize)) {
+  root.dataset.fontSize = storedFontSize;
+}
 const editorSessionStorageKey = "zelyra-editor-session-token";
 const fragmentToken = location.hash.slice(1);
 const token = /^[0-9a-f]{64}$/.test(fragmentToken)
@@ -56,6 +60,8 @@ let databaseRecordOffset = 0;
 let databaseRecordOffsets = [0];
 let databaseRecordRequest = 0;
 let databaseRecordBusy = false;
+let chartPreviewState = null;
+let presentationCharts = [];
 let schemaColumnPreview = null;
 let crudPreviewValid = false;
 let lastCrudPreviewRequest = null;
@@ -92,7 +98,7 @@ const messages = {
     renameFile: "Umbenennen", deleteFile: "Löschen", renamePrompt: "Neuer Projektpfad (zum Beispiel src/customer-new.zyl)",
     renameConfirm: "Datei {0} umbenennen? Importverweise werden nicht angepasst.", deleteConfirm: "Datei {0} endgültig löschen?",
     fileRenamed: "Datei umbenannt: {0}", fileDeleted: "Datei gelöscht: {0}",
-    switchLanguage: "Sprache wechseln", themeLightAction: "Helles Farbschema aktivieren", themeDarkAction: "Dunkles Farbschema aktivieren",
+    switchLanguage: "Sprache wechseln", switchFontSize: "Schriftgröße anpassen", fontSizeDefaultAction: "Standard-Schriftgröße (100%)", fontSizeDefaultHelp: "Schriftgröße der Elemente und des Editors auf Standard zurücksetzen", fontSizeMediumAction: "Mittlere Schriftgröße (+15%)", fontSizeMediumHelp: "Schriftgröße um 15% vergrößern", fontSizeLargeAction: "Große Schriftgröße (+30%)", fontSizeLargeHelp: "Schriftgröße um 30% vergrößern", themeLightAction: "Helles Farbschema aktivieren", themeDarkAction: "Dunkles Farbschema aktivieren",
     format: "Formatieren", check: "Projekt prüfen", welcome: "Willkommen in Zelyra Studio",
     welcomeHint: "Öffne links eine Datei und entwickle direkt in deinem Projekt.", problems: "Probleme",
     noProblems: "Keine Probleme gefunden. Dein Projekt ist bereit.", close: "Panel schließen", loadingFiles: "Dateien werden geladen",
@@ -133,6 +139,10 @@ const messages = {
     recordPreviewPage: "Zeilen {0}–{1}", recordPreviewEmpty: "Keine Datensätze auf dieser Seite.",
     recordPreviewIncomplete: "Die Vorschau ist begrenzt. Lange Werte oder zusätzliche Spalten wurden gekürzt.",
     recordPreviewFailed: "Datensätze konnten nicht geladen werden.",
+    chartEyebrow: "GESCHÄFTSDIAGRAMM", chartTitle: "Daten verständlich zeigen", chartIntro: "Wähle eine Gruppierung und eine Kennzahl. Studio fragt nur die ausgewählte Tabelle ab.",
+    chartName: "Diagrammtitel", chartGroup: "Gruppieren nach", chartAggregation: "Kennzahl", chartCount: "Anzahl Datensätze", chartSum: "Summe", chartAvg: "Durchschnitt", chartMin: "Kleinster Wert", chartMax: "Größter Wert", chartMeasure: "Wert aus Feld", chartKind: "Darstellung", chartBars: "Säulen", chartLine: "Linie", chartFilterColumn: "Textfilterfeld", chartFilterValue: "Exakter Filterwert", chartNoFilter: "Kein Filter", chartPeriodColumn: "Datumsfeld", chartPeriodFrom: "Von einschließlich", chartPeriodTo: "Bis einschließlich", chartPreview: "Diagramm ansehen", chartSave: "Diagramm speichern", chartPreviewRunning: "Berechne sichere Vorschau …", chartPreviewReady: "Vorschau bereit · höchstens 20 Gruppen", chartPreviewFailed: "Diagramm konnte nicht berechnet werden.", chartSaved: "Diagrammkonfiguration gespeichert: {0}", chartSaveFailed: "Diagramm konnte nicht gespeichert werden.", chartSaveFirst: "Zeige zuerst eine aktuelle Diagrammvorschau.", chartTruncated: "Die Vorschau zeigt höchstens 20 Gruppen.", chartEmpty: "Keine gruppierten Daten gefunden.", chartGroupLabel: "Gruppe", chartValueLabel: "Wert", chartAccessible: "{0} gruppiert nach {1}", chartDefaultTitle: "Auswertung {0}", chartInvalidNumber: "Nichtnumerischer Kennzahlwert",
+    presentationEyebrow: "PRÄSENTATION", presentationTitle: "Geschäftsergebnisse teilen", presentationIntro: "Füge geprüfte Diagramme hinzu und öffne eine druckfertige, lokal erzeugte PDF-Vorschau.", presentationName: "Titel", presentationNote: "Einleitung", presentationEmpty: "Noch keine Diagramme", presentationCount: "{0} Diagramm(e) · {1}", presentationAdd: "Zur Präsentation hinzufügen", presentationRemove: "Entfernen", presentationSave: "Präsentation speichern", presentationSaved: "Präsentation gespeichert: {0}", presentationLoaded: "Präsentation geladen: {0}", presentationSaveFailed: "Präsentation konnte nicht gespeichert werden: {0}", presentationPdf: "Druckansicht / PDF", presentationNeedCharts: "Füge mindestens ein Diagramm hinzu.", presentationPrintFailed: "Die Präsentationsansicht konnte nicht geöffnet werden.", presentationLoadFailed: "Ein Diagramm konnte für die Präsentation nicht geladen werden.", presentationKicker: "ZELYRA GESCHÄFTSAUSWERTUNG", presentationFooter: "Lokal erstellt mit Zelyra Studio", presentationNumber: "Folie {0} von {1}",
+    savedChart: "Gespeichertes Diagramm", savedChartAdd: "Laden und hinzufügen", savedPresentation: "Gespeicherte Präsentation", savedPresentationLoad: "Präsentation öffnen", reportFilesEmpty: "Keine gespeicherten Auswertungen gefunden.", chartInvalidConfig: "Die gespeicherte Diagrammdatei ist ungültig oder nicht unterstützt.", chartAdded: "Gespeichertes Diagramm zur Präsentation hinzugefügt.", reportFileConflict: "Am Ziel liegt bereits eine Datei mit anderem Inhaltstyp.", presentationInvalidConfig: "Die gespeicherte Präsentation ist ungültig oder nicht unterstützt.",
     createDatabase: "MariaDB-Datenbank anlegen", databaseTargetLoading: "Prüfe Projektziel …",
     databaseTargetMissing: "Kein unterstütztes MariaDB-Ziel mit Verbindung konfiguriert.",
     databaseTargetReady: "MariaDB-Ziel {0} · Verbindung konfiguriert",
@@ -183,7 +193,7 @@ const messages = {
     renameFile: "Rename", deleteFile: "Delete", renamePrompt: "New project path (for example src/customer-new.zyl)",
     renameConfirm: "Rename {0}? Import references will not be updated.", deleteConfirm: "Permanently delete {0}?",
     fileRenamed: "File renamed: {0}", fileDeleted: "File deleted: {0}",
-    switchLanguage: "Switch language", themeLightAction: "Use light appearance", themeDarkAction: "Use dark appearance",
+    switchLanguage: "Switch language", switchFontSize: "Adjust font size", fontSizeDefaultAction: "Default font size (100%)", fontSizeDefaultHelp: "Reset font size of UI elements and editor to default", fontSizeMediumAction: "Medium font size (+15%)", fontSizeMediumHelp: "Increase font size by 15%", fontSizeLargeAction: "Large font size (+30%)", fontSizeLargeHelp: "Increase font size by 30%", themeLightAction: "Use light appearance", themeDarkAction: "Use dark appearance",
     format: "Format", check: "Check project", welcome: "Welcome to Zelyra Studio",
     welcomeHint: "Open a file on the left and work directly in your project.", problems: "Problems",
     noProblems: "No problems found. Your project is ready.", close: "Close panel", loadingFiles: "Loading files",
@@ -224,6 +234,10 @@ const messages = {
     recordPreviewPage: "Rows {0}–{1}", recordPreviewEmpty: "No records on this page.",
     recordPreviewIncomplete: "The preview is bounded. Long values or additional columns were shortened.",
     recordPreviewFailed: "Could not load records.",
+    chartEyebrow: "BUSINESS CHART", chartTitle: "Make your data clear", chartIntro: "Choose a grouping and a measure. Studio queries only the selected table.",
+    chartName: "Chart title", chartGroup: "Group by", chartAggregation: "Measure", chartCount: "Record count", chartSum: "Sum", chartAvg: "Average", chartMin: "Minimum", chartMax: "Maximum", chartMeasure: "Value from field", chartKind: "Display", chartBars: "Bars", chartLine: "Line", chartFilterColumn: "Text filter field", chartFilterValue: "Exact filter value", chartNoFilter: "No filter", chartPeriodColumn: "Date field", chartPeriodFrom: "From inclusive", chartPeriodTo: "To inclusive", chartPreview: "Preview chart", chartSave: "Save chart", chartPreviewRunning: "Calculating a safe preview …", chartPreviewReady: "Preview ready · up to 20 groups", chartPreviewFailed: "Could not calculate the chart.", chartSaved: "Chart configuration saved: {0}", chartSaveFailed: "Could not save the chart.", chartSaveFirst: "Preview the current chart first.", chartTruncated: "The preview shows at most 20 groups.", chartEmpty: "No grouped data found.", chartGroupLabel: "Group", chartValueLabel: "Value", chartAccessible: "{0} grouped by {1}", chartDefaultTitle: "Report {0}", chartInvalidNumber: "Non-numeric measure value",
+    presentationEyebrow: "PRESENTATION", presentationTitle: "Share business results", presentationIntro: "Add reviewed charts and open a print-ready, locally generated PDF preview.", presentationName: "Title", presentationNote: "Introduction", presentationEmpty: "No charts yet", presentationCount: "{0} chart(s) · {1}", presentationAdd: "Add to presentation", presentationRemove: "Remove", presentationSave: "Save presentation", presentationSaved: "Presentation saved: {0}", presentationLoaded: "Presentation loaded: {0}", presentationSaveFailed: "Could not save the presentation: {0}", presentationPdf: "Print view / PDF", presentationNeedCharts: "Add at least one chart.", presentationPrintFailed: "Could not open the presentation preview.", presentationLoadFailed: "A chart could not be loaded for the presentation.", presentationKicker: "ZELYRA BUSINESS REPORT", presentationFooter: "Created locally with Zelyra Studio", presentationNumber: "Slide {0} of {1}",
+    savedChart: "Saved chart", savedChartAdd: "Load and add", savedPresentation: "Saved presentation", savedPresentationLoad: "Open presentation", reportFilesEmpty: "No saved reports found.", chartInvalidConfig: "The saved chart file is invalid or unsupported.", chartAdded: "Saved chart added to the presentation.", reportFileConflict: "A file with a different content type already exists at this path.", presentationInvalidConfig: "The saved presentation is invalid or unsupported.",
     createDatabase: "Create MariaDB database", databaseTargetLoading: "Checking project target …",
     databaseTargetMissing: "No supported MariaDB target with a configured connection.",
     databaseTargetReady: "MariaDB target {0} · connection configured",
@@ -245,17 +259,65 @@ const messages = {
   }
 };
 let language = localStorage.getItem("zelyra-editor-language") === "en" ? "en" : "de";
-function t(key, value) { return (messages[language][key] || key).replace("{0}", value ?? ""); }
+function t(key, ...values) {
+  return values.reduce(
+    (message, value, index) => message.replaceAll(`{${index}}`, value ?? ""),
+    messages[language][key] || key,
+  );
+}
 function updateThemeControl() {
   const label = t(root.dataset.theme === "dark" ? "themeLightAction" : "themeDarkAction");
   $("theme-button").setAttribute("aria-label", label);
   $("theme-button").title = label;
+}
+function currentFontSize() {
+  const size = root.dataset.fontSize;
+  return size === "medium" || size === "large" ? size : "default";
+}
+function updateFontSizeControl() {
+  const btn = $("font-size-button");
+  if (!btn) return;
+  const size = currentFontSize();
+  if (size === "large") {
+    btn.textContent = "aA⁺⁺";
+    const label = `${t("switchFontSize")} (${t("fontSizeLargeAction")})`;
+    btn.setAttribute("aria-label", label);
+    btn.title = label;
+  } else if (size === "medium") {
+    btn.textContent = "aA⁺";
+    const label = `${t("switchFontSize")} (${t("fontSizeMediumAction")})`;
+    btn.setAttribute("aria-label", label);
+    btn.title = label;
+  } else {
+    btn.textContent = "aA";
+    const label = `${t("switchFontSize")} (${t("fontSizeDefaultAction")})`;
+    btn.setAttribute("aria-label", label);
+    btn.title = label;
+  }
+}
+function setFontSize(nextSize) {
+  if (nextSize === "medium" || nextSize === "large") {
+    root.dataset.fontSize = nextSize;
+    try { localStorage.setItem("zelyra-editor-font-size", nextSize); } catch {}
+  } else {
+    delete root.dataset.fontSize;
+    try { localStorage.removeItem("zelyra-editor-font-size"); } catch {}
+  }
+  updateFontSizeControl();
+  if (editor) editor.dispatch({ effects: editorTheme.reconfigure(createZelyraTheme()) });
+}
+function cycleFontSize() {
+  const current = currentFontSize();
+  if (current === "default") setFontSize("medium");
+  else if (current === "medium") setFontSize("large");
+  else setFontSize("default");
 }
 function setLanguage(next) {
   language = next;
   document.documentElement.lang = language;
   $("language-button").textContent = language.toUpperCase();
   updateThemeControl();
+  updateFontSizeControl();
   for (const element of document.querySelectorAll("[data-i18n]")) element.textContent = messages[language][element.dataset.i18n] || element.textContent;
   for (const element of document.querySelectorAll("[data-i18n-title]")) element.title = messages[language][element.dataset.i18nTitle] || element.title;
   for (const element of document.querySelectorAll("[data-i18n-placeholder]")) element.placeholder = messages[language][element.dataset.i18nPlaceholder] || element.placeholder;
@@ -397,8 +459,10 @@ const zelyraLanguage = StreamLanguage.define({
 
 const editorTheme = new Compartment();
 function createZelyraTheme() {
+  const size = currentFontSize();
+  const fontSize = size === "large" ? "18px" : size === "medium" ? "16px" : "14px";
   return EditorView.theme({
-  "&": { height: "100%", fontSize: "14px", backgroundColor: "var(--editor-bg)", color: "var(--ink)" },
+  "&": { height: "100%", fontSize, backgroundColor: "var(--editor-bg)", color: "var(--ink)" },
   ".cm-scroller": { fontFamily: "'JetBrains Mono', 'Cascadia Code', ui-monospace, monospace", lineHeight: "1.65", overflow: "auto" },
   ".cm-content": { padding: "18px 0", caretColor: "var(--accent)" },
   ".cm-gutters": { backgroundColor: "var(--editor-gutter)", color: "var(--muted)", border: "none", minWidth: "52px" },
@@ -616,6 +680,9 @@ const studioTasks = [
   ["taskGoToDefinition", "taskGoToDefinitionHelp", ["definition", "symbol", "function", "type", "f12"], () => void goToDefinition()],
   ["taskFindReferences", "taskFindReferencesHelp", ["references", "usages", "occurrences", "symbol", "shift f12"], () => void findIdentifierOccurrences()],
   ["projectSearch", "projectSearchHelp", ["project", "search", "find", "all files"], () => openProjectSearch()],
+  ["fontSizeDefaultAction", "fontSizeDefaultHelp", ["font", "size", "zoom", "schriftgröße", "default", "standard", "100"], () => setFontSize("default")],
+  ["fontSizeMediumAction", "fontSizeMediumHelp", ["font", "size", "zoom", "schriftgröße", "medium", "mittel", "115"], () => setFontSize("medium")],
+  ["fontSizeLargeAction", "fontSizeLargeHelp", ["font", "size", "zoom", "schriftgröße", "large", "groß", "130"], () => setFontSize("large")],
 ];
 let selectedTaskIndex = 0;
 
@@ -979,6 +1046,7 @@ function renderTree() {
   };
   draw(tree, container);
   $("file-count").textContent = t("filesCount", treeFiles.length);
+  renderSavedReportChoices();
 }
 function fileIcon(name) { return name.endsWith(".zyl") ? "λ" : name.endsWith(".md") ? "M" : name.endsWith(".css") ? "#" : "·"; }
 
@@ -1218,6 +1286,7 @@ function selectDatabaseTable(name) {
   badge.dataset.state = tableStatus(selectedDatabaseTable);
   renderDatabaseColumns(selectedDatabaseTable);
   renderSchemaColumnEditor(selectedDatabaseTable);
+  configureChartBuilder(selectedDatabaseTable);
   renderCrudBuilder(selectedDatabaseTable);
   renderDatabaseTables();
   renderDatabaseGraph();
@@ -1406,6 +1475,465 @@ function renderDatabaseRecords(result) {
     : "";
   $("database-record-previous").disabled = databaseRecordOffsets.length <= 1;
   $("database-record-next").disabled = !Number.isInteger(result.nextOffset);
+}
+
+function chartIsBinary(column) {
+  return /\b(?:BINARY|VARBINARY|BLOB|BYTEA|IMAGE)\b/i.test(String(column.sql_type || column.type || ""));
+}
+
+function chartIsNumeric(column) {
+  return /^(?:TINYINT|SMALLINT|MEDIUMINT|INT|INTEGER|BIGINT|DECIMAL|NUMERIC|FLOAT|DOUBLE|REAL)\b/i.test(String(column.sql_type || column.type || "").trim());
+}
+
+function chartIsText(column) {
+  return /^(?:CHAR|VARCHAR|TEXT|TINYTEXT|MEDIUMTEXT|LONGTEXT|ENUM|SET|UUID|CHARACTER)\b/i.test(String(column.sql_type || column.type || "").trim());
+}
+
+function chartIsDate(column) {
+  return /^DATE\b/i.test(String(column.sql_type || column.type || "").trim());
+}
+
+function configureChartBuilder(table) {
+  const builder = $("chart-builder");
+  const columns = (table?.live_columns || []).filter((column) => !chartIsBinary(column));
+  builder.hidden = !table || !columns.length || table.status === "declared_missing_live";
+  chartPreviewState = null;
+  $("chart-preview").hidden = true;
+  $("chart-save-button").disabled = true;
+  $("presentation-add-button").disabled = true;
+  $("chart-state").textContent = "";
+  const group = $("chart-group");
+  const measure = $("chart-measure");
+  const filterColumn = $("chart-filter-column");
+  const periodColumn = $("chart-period-column");
+  group.replaceChildren();
+  measure.replaceChildren();
+  filterColumn.replaceChildren();
+  periodColumn.replaceChildren();
+  const noFilter = document.createElement("option");
+  noFilter.value = "";
+  noFilter.textContent = t("chartNoFilter");
+  filterColumn.append(noFilter);
+  const noPeriod = document.createElement("option");
+  noPeriod.value = "";
+  noPeriod.textContent = t("chartNoFilter");
+  periodColumn.append(noPeriod);
+  for (const column of columns) {
+    const option = document.createElement("option");
+    option.value = column.name;
+    option.textContent = column.name;
+    group.append(option);
+  }
+  for (const column of columns.filter(chartIsNumeric)) {
+    const option = document.createElement("option");
+    option.value = column.name;
+    option.textContent = column.name;
+    measure.append(option);
+  }
+  for (const column of columns.filter(chartIsText)) {
+    const option = document.createElement("option");
+    option.value = column.name;
+    option.textContent = column.name;
+    filterColumn.append(option);
+  }
+  for (const column of columns.filter(chartIsDate)) {
+    const option = document.createElement("option");
+    option.value = column.name;
+    option.textContent = column.name;
+    periodColumn.append(option);
+  }
+  $("chart-filter-value").value = "";
+  $("chart-period-from").value = "";
+  $("chart-period-to").value = "";
+  if (!$("chart-name").value.trim()) $("chart-name").value = t("chartDefaultTitle", table?.name || "");
+  updateChartMeasureAvailability();
+}
+
+function updateChartMeasureAvailability() {
+  const aggregation = $("chart-aggregation").value;
+  const count = aggregation === "count";
+  $("chart-measure").disabled = count;
+  $("chart-measure-wrap").hidden = count;
+  for (const option of $("chart-aggregation").options) {
+    if (["sum", "avg", "min", "max"].includes(option.value)) option.disabled = ![...$("chart-measure").options].some((item) => item.value);
+  }
+  if (!count && !$("chart-measure").value) {
+    $("chart-state").textContent = t("chartPreviewFailed");
+    $("chart-state").dataset.kind = "error";
+  }
+}
+
+function invalidateChartPreview() {
+  chartPreviewState = null;
+  $("chart-save-button").disabled = true;
+  $("presentation-add-button").disabled = true;
+  if ($("chart-preview").hidden) return;
+  $("chart-state").textContent = t("chartSaveFirst");
+  $("chart-state").dataset.kind = "warning";
+}
+
+function currentChartSpec() {
+  if (!selectedDatabaseTable) throw new Error(t("chartPreviewFailed"));
+  const aggregation = $("chart-aggregation").value;
+  const filterColumn = $("chart-filter-column").value;
+  const filterValue = $("chart-filter-value").value;
+  const periodColumn = $("chart-period-column").value;
+  const periodFrom = $("chart-period-from").value;
+  const periodTo = $("chart-period-to").value;
+  return {
+    version: 1,
+    title: $("chart-name").value.trim() || t("chartDefaultTitle", selectedDatabaseTable.name),
+    table: selectedDatabaseTable.name,
+    groupBy: $("chart-group").value,
+    aggregation,
+    measure: aggregation === "count" ? null : $("chart-measure").value,
+    kind: $("chart-kind").value,
+    filter: filterColumn && filterValue ? { column: filterColumn, value: filterValue } : null,
+    dateRange: periodColumn && (periodFrom || periodTo) ? { column: periodColumn, from: periodFrom || null, to: periodTo || null } : null,
+  };
+}
+
+function svgElement(doc, name, attributes = {}, text = null) {
+  const element = doc.createElementNS("http://www.w3.org/2000/svg", name);
+  for (const [key, value] of Object.entries(attributes)) element.setAttribute(key, String(value));
+  if (text !== null) element.textContent = text;
+  return element;
+}
+
+function chartNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function buildChartDisplay(spec, result, doc = document) {
+  if (result.readOnly !== true || !Array.isArray(result.rows) || result.rows.length > 20) {
+    throw new Error(t("chartPreviewFailed"));
+  }
+  const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 900 320");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", t("chartAccessible", spec.title, spec.groupBy));
+  svg.classList.add("chart-visualization");
+  svg.append(svgElement(doc, "title", {}, spec.title));
+  const rows = result.rows.map((row) => ({ label: String(row[0] ?? "—"), value: chartNumber(row[1]) }));
+  const table = doc.createElement("table");
+  table.className = "chart-data-table";
+  const head = table.createTHead().insertRow();
+  for (const label of [t("chartGroupLabel"), t("chartValueLabel")]) {
+    const cell = doc.createElement("th"); cell.scope = "col"; cell.textContent = label; head.append(cell);
+  }
+  const body = table.createTBody();
+  for (const row of rows) {
+    const tr = body.insertRow();
+    const label = tr.insertCell(); label.textContent = row.label;
+    const value = tr.insertCell(); value.textContent = row.value === null ? t("chartInvalidNumber") : new Intl.NumberFormat(language, { maximumFractionDigits: 2 }).format(row.value);
+  }
+  if (!rows.length) {
+    svg.append(svgElement(doc, "text", { x: 450, y: 160, "text-anchor": "middle", class: "chart-empty-label" }, t("chartEmpty")));
+    return { svg, table };
+  }
+  if (rows.some((row) => row.value === null)) throw new Error(t("chartInvalidNumber"));
+  const left = 64; const right = 24; const top = 32; const bottom = 62; const chartWidth = 900 - left - right; const chartHeight = 320 - top - bottom;
+  const values = rows.map((row) => row.value);
+  let minimum = Math.min(0, ...values); let maximum = Math.max(0, ...values);
+  if (minimum === maximum) maximum = minimum + 1;
+  const y = (value) => top + ((maximum - value) / (maximum - minimum)) * chartHeight;
+  const baseline = y(0);
+  svg.append(svgElement(doc, "line", { x1: left, y1: baseline, x2: 900 - right, y2: baseline, class: "chart-axis" }));
+  const ticks = 4;
+  for (let index = 0; index <= ticks; index += 1) {
+    const value = maximum - ((maximum - minimum) * index) / ticks;
+    const lineY = y(value);
+    svg.append(svgElement(doc, "line", { x1: left, y1: lineY, x2: 900 - right, y2: lineY, class: "chart-grid-line" }));
+    svg.append(svgElement(doc, "text", { x: left - 9, y: lineY + 4, "text-anchor": "end", class: "chart-tick" }, new Intl.NumberFormat(language, { maximumFractionDigits: 1 }).format(value)));
+  }
+  const slot = chartWidth / rows.length;
+  if (spec.kind === "line") {
+    const points = rows.map((row, index) => `${left + slot * (index + 0.5)},${y(row.value)}`).join(" ");
+    svg.append(svgElement(doc, "polyline", { points, class: "chart-line" }));
+    rows.forEach((row, index) => svg.append(svgElement(doc, "circle", { cx: left + slot * (index + 0.5), cy: y(row.value), r: 4, class: "chart-point" })));
+  } else {
+    rows.forEach((row, index) => {
+      const barWidth = Math.min(64, slot * 0.62);
+      const x = left + slot * index + (slot - barWidth) / 2;
+      const valueY = y(row.value);
+      svg.append(svgElement(doc, "rect", { x, y: Math.min(valueY, baseline), width: barWidth, height: Math.max(1, Math.abs(baseline - valueY)), rx: 4, class: "chart-bar" }));
+    });
+  }
+  rows.forEach((row, index) => {
+    const x = left + slot * (index + 0.5);
+    const label = row.label.length > 16 ? `${row.label.slice(0, 15)}…` : row.label;
+    svg.append(svgElement(doc, "text", { x, y: 320 - 31, "text-anchor": "middle", class: "chart-label" }, label));
+  });
+  return { svg, table };
+}
+
+function renderChartPreview(spec, result) {
+  const display = buildChartDisplay(spec, result);
+  display.svg.id = "chart-svg";
+  $("chart-svg").replaceWith(display.svg);
+  const tableWrap = $("chart-data-table-wrap");
+  tableWrap.replaceChildren(display.table);
+  $("chart-preview").hidden = false;
+  $("chart-truncated").hidden = result.truncated !== true;
+}
+
+async function previewChart() {
+  const state = $("chart-state");
+  state.textContent = t("chartPreviewRunning"); state.dataset.kind = "pending";
+  $("chart-preview-button").disabled = true;
+  $("chart-save-button").disabled = true;
+  $("presentation-add-button").disabled = true;
+  try {
+    const spec = currentChartSpec();
+    const result = await api("database-chart-preview", { method: "POST", body: JSON.stringify(spec) });
+    renderChartPreview(spec, result);
+    chartPreviewState = { spec, result };
+    $("chart-save-button").disabled = false;
+    $("presentation-add-button").disabled = false;
+    state.textContent = t("chartPreviewReady"); state.dataset.kind = "success";
+  } catch (error) {
+    chartPreviewState = null;
+    state.textContent = `${t("chartPreviewFailed")} ${error.message}`; state.dataset.kind = "error";
+    announce(state.textContent, "error");
+  } finally {
+    $("chart-preview-button").disabled = false;
+  }
+}
+
+function fileSlug(value) {
+  const slug = String(value).normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48);
+  return slug || "report";
+}
+
+async function saveStudioJson(path, value) {
+  const content = `${JSON.stringify(value, null, 2)}\n`;
+  if (treeFiles.includes(path)) {
+    const current = await api(`file?path=${encodeURIComponent(path)}`);
+    let existing;
+    try { existing = JSON.parse(current.content); } catch { throw new Error(t("reportFileConflict")); }
+    if (existing?.schema !== value.schema) throw new Error(t("reportFileConflict"));
+    await api("file", { method: "PUT", body: JSON.stringify({ path, content, baseHash: current.hash }) });
+  } else {
+    await api("file", { method: "POST", body: JSON.stringify({ path, content }) });
+  }
+  await refreshTree();
+  return path;
+}
+
+async function saveChart() {
+  if (!chartPreviewState) { announce(t("chartSaveFirst"), "warning"); return; }
+  const path = `chart-${fileSlug(chartPreviewState.spec.title)}.zchart.json`;
+  try {
+    await saveStudioJson(path, { schema: "zelyra.chart.v1", ...chartPreviewState.spec });
+    $("chart-state").textContent = t("chartSaved", path); $("chart-state").dataset.kind = "success";
+    announce(t("chartSaved", path), "success");
+  } catch (error) {
+    $("chart-state").textContent = `${t("chartSaveFailed")} ${error.message}`; $("chart-state").dataset.kind = "error";
+    announce($("chart-state").textContent, "error");
+  }
+}
+
+function renderSavedReportChoices() {
+  for (const [selectId, suffix, buttonId] of [
+    ["saved-chart-select", ".zchart.json", "saved-chart-add"],
+    ["saved-presentation-select", ".zelyra-presentation.json", "saved-presentation-load"],
+  ]) {
+    const select = $(selectId);
+    if (!select) continue;
+    const selected = select.value;
+    const files = treeFiles.filter((path) => path.endsWith(suffix));
+    select.replaceChildren();
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = files.length ? t("chooseFile") : t("reportFilesEmpty");
+    select.append(placeholder);
+    for (const path of files) {
+      const option = document.createElement("option");
+      option.value = path;
+      option.textContent = path;
+      select.append(option);
+    }
+    if (files.includes(selected)) select.value = selected;
+    $(buttonId).disabled = files.length === 0 || !select.value;
+  }
+}
+
+function normalizeSavedChart(value, requireSchema = false) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(t("chartInvalidConfig"));
+  if (requireSchema && value.schema !== "zelyra.chart.v1") throw new Error(t("chartInvalidConfig"));
+  if (value.version !== 1 || typeof value.title !== "string" || !value.title.trim() || value.title.length > 80) throw new Error(t("chartInvalidConfig"));
+  if (typeof value.table !== "string" || !value.table || value.table.length > 128) throw new Error(t("chartInvalidConfig"));
+  if (typeof value.groupBy !== "string" || !value.groupBy || value.groupBy.length > 128) throw new Error(t("chartInvalidConfig"));
+  if (!["count", "sum", "avg", "min", "max"].includes(value.aggregation)) throw new Error(t("chartInvalidConfig"));
+  if (value.aggregation === "count" ? value.measure !== null : (typeof value.measure !== "string" || !value.measure || value.measure.length > 128)) throw new Error(t("chartInvalidConfig"));
+  if (!["bar", "line"].includes(value.kind)) throw new Error(t("chartInvalidConfig"));
+  let filter = null;
+  if (value.filter !== null && value.filter !== undefined) {
+    if (!value.filter || typeof value.filter.column !== "string" || !value.filter.column || value.filter.column.length > 128 ||
+        typeof value.filter.value !== "string" || value.filter.value.length > 256) throw new Error(t("chartInvalidConfig"));
+    filter = { column: value.filter.column, value: value.filter.value };
+  }
+  let dateRange = null;
+  if (value.dateRange !== null && value.dateRange !== undefined) {
+    const from = value.dateRange?.from || null;
+    const to = value.dateRange?.to || null;
+    if (!value.dateRange || typeof value.dateRange.column !== "string" || !value.dateRange.column || value.dateRange.column.length > 128 ||
+        (from !== null && !/^\d{4}-\d{2}-\d{2}$/.test(from)) || (to !== null && !/^\d{4}-\d{2}-\d{2}$/.test(to))) throw new Error(t("chartInvalidConfig"));
+    dateRange = { column: value.dateRange.column, from, to };
+  }
+  return {
+    version: 1,
+    title: value.title,
+    table: value.table,
+    groupBy: value.groupBy,
+    aggregation: value.aggregation,
+    measure: value.measure,
+    kind: value.kind,
+    filter,
+    dateRange,
+  };
+}
+
+async function readStudioJson(path) {
+  const response = await api("file?path=" + encodeURIComponent(path));
+  try { return JSON.parse(response.content); }
+  catch { throw new Error(t("chartInvalidConfig")); }
+}
+
+async function loadSavedChart() {
+  const path = $("saved-chart-select").value;
+  if (!path) return;
+  try {
+    const spec = normalizeSavedChart(await readStudioJson(path), true);
+    const table = databaseTables.find((candidate) => candidate.name === spec.table && candidate.status !== "live_unmapped");
+    if (!table) throw new Error(t("chartInvalidConfig"));
+    selectDatabaseTable(table.name);
+    $("chart-name").value = spec.title;
+    $("chart-group").value = spec.groupBy;
+    $("chart-aggregation").value = spec.aggregation;
+    updateChartMeasureAvailability();
+    if (spec.measure !== null) $("chart-measure").value = spec.measure;
+    $("chart-kind").value = spec.kind;
+    $("chart-filter-column").value = spec.filter?.column || "";
+    $("chart-filter-value").value = spec.filter?.value || "";
+    $("chart-period-column").value = spec.dateRange?.column || "";
+    $("chart-period-from").value = spec.dateRange?.from || "";
+    $("chart-period-to").value = spec.dateRange?.to || "";
+    await previewChart();
+    if (!chartPreviewState) return;
+    addChartToPresentation();
+    announce(t("chartAdded"), "success");
+  } catch (error) {
+    announce(t("chartInvalidConfig") + " " + error.message, "error");
+  }
+}
+
+async function loadSavedPresentation() {
+  const path = $("saved-presentation-select").value;
+  if (!path) return;
+  try {
+    const value = await readStudioJson(path);
+    if (!value || value.schema !== "zelyra.presentation.v1" || typeof value.title !== "string" || value.title.length > 100 ||
+        typeof value.introduction !== "string" || value.introduction.length > 1000 ||
+        !Array.isArray(value.charts) || value.charts.length < 1 || value.charts.length > 24) {
+      throw new Error(t("presentationInvalidConfig"));
+    }
+    const charts = value.charts.map((chart) => normalizeSavedChart(chart));
+    $("presentation-name").value = value.title;
+    $("presentation-note").value = value.introduction;
+    presentationCharts = charts;
+    renderPresentationCharts();
+    announce(t("presentationLoaded", path), "success");
+  } catch (error) {
+    announce(t("presentationInvalidConfig") + " " + error.message, "error");
+  }
+}
+
+function renderPresentationCharts() {
+  const count = $("presentation-count");
+  count.textContent = presentationCharts.length
+    ? t("presentationCount", presentationCharts.length).replace("{1}", $("presentation-name").value.trim())
+    : t("presentationEmpty");
+  $("presentation-save-button").disabled = !presentationCharts.length;
+  $("presentation-print-button").disabled = !presentationCharts.length;
+  const old = $("presentation-slide-list");
+  if (old) old.remove();
+  if (!presentationCharts.length) return;
+  const list = document.createElement("div"); list.id = "presentation-slide-list"; list.className = "presentation-slides";
+  presentationCharts.forEach((spec, index) => {
+    const chip = document.createElement("span"); chip.className = "presentation-slide-chip";
+    const label = document.createElement("span"); label.textContent = `${index + 1}. ${spec.title}`;
+    const remove = document.createElement("button"); remove.type = "button"; remove.textContent = "×"; remove.title = t("presentationRemove"); remove.setAttribute("aria-label", `${t("presentationRemove")} ${spec.title}`);
+    remove.addEventListener("click", () => { presentationCharts.splice(index, 1); renderPresentationCharts(); });
+    chip.append(label, remove); list.append(chip);
+  });
+  $("presentation-count").parentElement.after(list);
+}
+
+function addChartToPresentation() {
+  if (!chartPreviewState) { announce(t("chartSaveFirst"), "warning"); return; }
+  const signature = JSON.stringify(chartPreviewState.spec);
+  if (!presentationCharts.some((item) => JSON.stringify(item) === signature)) presentationCharts.push(chartPreviewState.spec);
+  renderPresentationCharts();
+}
+
+function presentationPayload() {
+  return {
+    schema: "zelyra.presentation.v1",
+    title: $("presentation-name").value.trim() || t("presentationTitle"),
+    introduction: $("presentation-note").value.trim(),
+    charts: presentationCharts,
+  };
+}
+
+async function savePresentation() {
+  if (!presentationCharts.length) { announce(t("presentationNeedCharts"), "warning"); return; }
+  const payload = presentationPayload();
+  const path = `presentation-${fileSlug(payload.title)}.zelyra-presentation.json`;
+  try {
+    await saveStudioJson(path, payload);
+    announce(t("presentationSaved", path), "success");
+  } catch (error) {
+    announce(`${t("presentationSaveFailed", error.message)}`, "error");
+  }
+}
+
+async function printPresentation() {
+  if (!presentationCharts.length) { announce(t("presentationNeedCharts"), "warning"); return; }
+  const win = window.open("", "_blank");
+  if (!win) { announce(t("presentationPrintFailed"), "error"); return; }
+  const doc = win.document;
+  doc.open();
+  doc.write("<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Zelyra report</title><style>body{margin:0;padding:30px;background:#edf0f5;color:#172032;font:14px system-ui,sans-serif}.deck{max-width:980px;margin:auto}.chart-print-page{min-height:680px;margin:0 0 24px;padding:52px 58px;background:#fff;box-shadow:0 8px 40px #1b274022;page-break-after:always}.chart-print-page h1{font-size:30px;margin:0 0 8px}.chart-print-page h2{font-size:22px;margin:22px 0 4px}.chart-print-page p{color:#506076;line-height:1.55}.chart-print-kicker{color:#6557d9;font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase}.chart-print-page svg{width:100%;height:auto;max-height:420px;margin:22px 0}.chart-print-page table{width:100%;border-collapse:collapse}.chart-print-page th,.chart-print-page td{padding:8px;border-bottom:1px solid #dbe2ee;text-align:left}.chart-print-footer{margin-top:28px;color:#7a8596;font-size:9px}@media print{body{padding:0;background:#fff}.chart-print-page{min-height:0;margin:0;padding:16mm 17mm;box-shadow:none}.chart-print-page:last-child{page-break-after:auto}}</style></head><body><main class=\"deck\"></main></body></html>");
+  doc.close();
+  const chartStyles = doc.createElement("style");
+  chartStyles.textContent = ".chart-axis{stroke:#506076;stroke-width:1}.chart-grid-line{stroke:#dbe2ee;stroke-width:1}.chart-tick,.chart-label{fill:#506076;font:11px ui-monospace,monospace}.chart-bar{fill:#6557d9;opacity:.88}.chart-line{fill:none;stroke:#6557d9;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}.chart-point{fill:#6557d9;stroke:#fff;stroke-width:2}.chart-empty-label{fill:#506076;font:13px system-ui,sans-serif}";
+  doc.head.append(chartStyles);
+  const payload = presentationPayload();
+  doc.title = payload.title;
+  const deck = doc.querySelector(".deck");
+  const cover = doc.createElement("section"); cover.className = "chart-print-page";
+  const kicker = doc.createElement("p"); kicker.className = "chart-print-kicker"; kicker.textContent = t("presentationKicker");
+  const heading = doc.createElement("h1"); heading.textContent = payload.title;
+  const note = doc.createElement("p"); note.textContent = payload.introduction;
+  cover.append(kicker, heading, note); deck.append(cover);
+  try {
+    for (const [index, spec] of presentationCharts.entries()) {
+      const result = await api("database-chart-preview", { method: "POST", body: JSON.stringify(spec) });
+      const display = buildChartDisplay(spec, result, doc);
+      const slide = doc.createElement("section"); slide.className = "chart-print-page";
+      const slideKicker = doc.createElement("p"); slideKicker.className = "chart-print-kicker"; slideKicker.textContent = t("presentationNumber", `${index + 1} / ${presentationCharts.length}`);
+      const title = doc.createElement("h2"); title.textContent = spec.title;
+      const source = doc.createElement("p"); source.textContent = `${spec.table} · ${spec.groupBy} · ${spec.aggregation}${spec.measure ? ` (${spec.measure})` : ""}`;
+      const footer = doc.createElement("p"); footer.className = "chart-print-footer"; footer.textContent = t("presentationFooter");
+      slide.append(slideKicker, title, source, display.svg, display.table, footer); deck.append(slide);
+    }
+    win.setTimeout(() => win.print(), 400);
+  } catch (error) {
+    win.close(); announce(`${t("presentationLoadFailed")} ${error.message}`, "error");
+  }
 }
 
 async function loadDatabaseRecords(offset = 0) {
@@ -1990,6 +2518,22 @@ $("database-record-next").addEventListener("click", () => {
   if (databaseRecordBusy || $("database-record-next").disabled) return;
   void loadDatabaseRecords(databaseRecordOffset + 25);
 });
+$("chart-preview-button").addEventListener("click", () => { void previewChart(); });
+$("chart-save-button").addEventListener("click", () => { void saveChart(); });
+$("presentation-add-button").addEventListener("click", addChartToPresentation);
+$("presentation-save-button").addEventListener("click", () => { void savePresentation(); });
+$("presentation-print-button").addEventListener("click", () => { void printPresentation(); });
+$("saved-chart-select").addEventListener("change", () => { $("saved-chart-add").disabled = !$("saved-chart-select").value; });
+$("saved-chart-add").addEventListener("click", () => { void loadSavedChart(); });
+$("saved-presentation-select").addEventListener("change", () => { $("saved-presentation-load").disabled = !$("saved-presentation-select").value; });
+$("saved-presentation-load").addEventListener("click", () => { void loadSavedPresentation(); });
+$("chart-aggregation").addEventListener("change", () => { updateChartMeasureAvailability(); invalidateChartPreview(); });
+for (const id of ["chart-name", "chart-group", "chart-measure", "chart-kind", "chart-filter-column", "chart-filter-value", "chart-period-column", "chart-period-from", "chart-period-to"]) {
+  $(id).addEventListener("input", invalidateChartPreview);
+  $(id).addEventListener("change", invalidateChartPreview);
+}
+$("presentation-name").addEventListener("input", renderPresentationCharts);
+$("presentation-note").addEventListener("input", () => { $("presentation-save-button").disabled = !presentationCharts.length; });
 $("schema-column-preview").addEventListener("click", previewSchemaColumn);
 $("schema-column-apply").addEventListener("click", applySchemaColumn);
 $("schema-column-operation").addEventListener("change", updateSchemaColumnOperation);
@@ -2010,6 +2554,7 @@ $("theme-button").addEventListener("click", () => {
   if (editor) editor.dispatch({ effects: editorTheme.reconfigure(createZelyraTheme()) });
 });
 $("language-button").addEventListener("click", () => setLanguage(language === "de" ? "en" : "de"));
+$("font-size-button").addEventListener("click", cycleFontSize);
 $("sidebar-toggle").addEventListener("click", (event) => {
   const hidden = document.body.classList.toggle("sidebar-hidden");
   event.currentTarget.setAttribute("aria-expanded", String(!hidden));
@@ -2022,6 +2567,22 @@ window.addEventListener("beforeunload", (event) => {
 });
 window.addEventListener("keydown", (event) => {
   if (event.defaultPrevented) return;
+  if ((event.ctrlKey || event.metaKey) && (event.key === "+" || event.key === "=")) {
+    event.preventDefault();
+    const cur = currentFontSize();
+    if (cur === "default") setFontSize("medium");
+    else if (cur === "medium") setFontSize("large");
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key === "-") {
+    event.preventDefault();
+    const cur = currentFontSize();
+    if (cur === "large") setFontSize("medium");
+    else if (cur === "medium") setFontSize("default");
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key === "0") {
+    event.preventDefault();
+    setFontSize("default");
+  }
   if ((event.ctrlKey || event.metaKey) && event.code === "Space" && editor) {
     event.preventDefault();
     startCompletion(editor);

@@ -486,3 +486,303 @@ Zelyra automatically renders a semantic query-control form before the page
 content and preserves the current URL state. Pagination also performs a safe
 count query and exposes `total` and `pages` as `UInt` page bindings. Pages that
 use only explicit `input` declarations remain manual by design.
+
+## Language and runtime additions in 0.9.8
+
+The 0.9.8 development line adds tested language behavior without changing
+existing syntax: a directly written `-9223372036854775808` is `Int::MIN`;
+non-`Unit` functions must return a value on every reachable path; and
+non-exhaustive enum matches are rejected. The interpreter bounds nested function
+calls and reports the attempted call site before exceeding that limit. Extra
+0.9.9 tests found that the original bound could still overflow smaller runtime
+stacks, so the maximum is now 24 active frames. This conservative bound protects
+Rust-backed execution stacks but does not remove recursion depth limits.
+
+The line also adds unit enums, exclusive integer range loops, value-returning
+`record_with` and `array_replace_result` updates, Gregorian calendar-day
+helpers, UTC timestamp ordering and duration arithmetic, explicit fixed-point
+Decimal quantization, and an optional `zelyra run --max-steps N` execution
+budget. Date arithmetic is distinct from elapsed UTC durations; local time
+zones and daylight-saving rules are not included. Decimal multiplication and
+division still have nine fractional digits and may truncate beyond that
+precision. The step budget is not process isolation and is unlimited unless
+enabled. Payload-carrying enums are specified separately below.
+
+## Generic functions in 0.9.9
+
+The 0.9.9 development branch supports user-defined generic functions. Type
+parameters follow the function name. Calls may infer them from arguments or
+provide them explicitly:
+
+~~~zelyra
+fn identity<T>(value: T) -> T {
+    return value
+}
+
+fn first_or<T>(values: T[], fallback: T) -> T {
+    if len(values) > 0 { return values[0] }
+    return fallback
+}
+
+fn main() {
+    print(identity(42))
+    print(identity<String>("Zelyra"))
+    print(first_or(["Customer", "Item"], "unknown"))
+}
+~~~
+
+A type parameter must be inferable from the arguments or supplied explicitly.
+Repeated uses of one parameter must resolve to the same type; otherwise the
+compiler reports `E-TYPE-001`. Uninferable types, an incorrect number of
+explicit type arguments, and type parameters that shadow declared types use
+`E-TYPE-GENERIC-001`. Generic functions may call other generic functions. The
+type-system example covers inference, explicit types, arrays, `Option`, module
+imports, and expected compiler errors. Generic functions, records, and enums are
+available; general constraints remain outside the current scope.
+
+### Generic user-defined types in 0.9.9
+
+Records and enums may declare type parameters. Explicit type arguments use angle
+brackets. For record literals and enum payloads, the compiler infers arguments
+when every parameter can be derived from the fields or payload values:
+
+~~~zelyra
+struct Box<T> { value: T }
+enum Maybe<T> { Some(T) None }
+
+fn unwrap_or<T>(value: Maybe<T>, fallback: T) -> T {
+    match value {
+        Maybe::Some(found) => { return found }
+        Maybe::None => { return fallback }
+    }
+}
+
+fn main() {
+    box: Box<Int> = Box<Int> { value: 7 }
+    inferred = Box { value: "Item" }
+    some = Maybe::Some(42)
+    none: Maybe<String> = Maybe::None<String>()
+    print(unwrap_or(some, 0))
+    print(unwrap_or(none, "empty"))
+}
+~~~
+
+A generic enum unit constructor has no payload from which to infer its type,
+so it uses the form `Maybe::None<String>()`. In `match`, payload patterns are
+checked against the enum's concrete type arguments, and every variant must
+still be covered. `json_decode<Box<Int>>` and `json_decode<Maybe<Int>>` validate
+payloads against the explicit target type. The existing JSON format gains no
+type-argument fields. Generic records are not SQL column types and are rejected
+explicitly at that boundary.
+
+General constraints/traits (`T: Ord`), generic type aliases, and generic
+function references are not supported. A generic parameter may use only
+operations whose types are known for the concrete value. Missing or conflicting
+inference produces `E-TYPE-GENERIC-001` or a type mismatch diagnostic.
+
+### Records and classes
+
+`struct` records are values: assignment and parameter passing copy the record
+value, equality compares its fields, and `record_with` returns a changed copy.
+`class` instances instead have reference identity. `class` is contextual only
+before a class declaration; elsewhere it remains an ordinary identifier so
+valid language line `0.1` source can keep using `class` as a variable or
+function name. Constructors use the same readable field syntax:
+
+~~~zelyra
+class Counter {
+    value: Int
+}
+
+fn increment(counter: Counter) {
+    counter.value = counter.value + 1
+}
+
+fn main() {
+    first = Counter { value: 0 }
+    alias = first
+    increment(first)
+    print(alias.value) # 1
+    print(first == alias) # true
+}
+~~~
+
+Every non-optional field must be initialized. Field assignment is statically
+checked for its receiver, field name, and value type and updates the same
+instance; binding copies, function returns, and parameter passing preserve its
+identity. `==` and `!=` compare class instance identity, even when two
+instances have equal field values. Generic classes are supported when their
+type arguments can be inferred from the constructor or are explicit.
+
+Classes do not have method or inheritance syntax. Behavior is expressed as an
+ordinary function with an explicitly typed receiver parameter, keeping data
+flow visible and avoiding implicit `this`. `record_with` cannot update a
+class. A field update that would create a reference cycle is rejected with a
+controlled runtime diagnostic; field mutation inside a `parallel` block is
+also rejected at runtime. This prevents unbounded reference cycles and
+nondeterministic concurrent mutation.
+
+Class references cannot be serialized directly through JSON, HTTP APIs, or
+SQL because those formats do not preserve runtime object identity. Explicitly
+convert the fields needed for exchange into a `struct` DTO. Records and enum
+variants containing class references are also rejected at JSON boundaries.
+These rules describe the 0.9.9 development branch; inheritance, methods,
+closures, and a general object/ORM mapper remain outside this scope.
+
+### Named function values in 0.9.9
+
+The 0.9.9 development branch supports storing, passing, and indirectly calling
+references to named, non-generic functions. Prefix `&` marks a reference; it
+does not execute the function:
+
+~~~zelyra
+fn increment(value: Int) -> Int { return value + 1 }
+
+fn apply(callback: Function<(Int) -> Int>, value: Int) -> Int {
+    return callback(value)
+}
+
+fn main() {
+    transform = &increment
+    print(apply(transform, 8))
+}
+~~~
+
+Function values have explicit parameter and return types. An effectful function
+type also names its required capabilities with `uses {Capability}`. The
+referenced function's requirements must fit within the declared function type,
+and the caller of an indirect call must declare those requirements too. The
+checker follows function values through local bindings and assignments; the
+runtime repeats the capability check before dispatch. Public functions can be
+referenced through an explicit module alias, as in `&math::increment`; private
+functions cannot cross module boundaries. The bare identifier `function` is
+not a reserved word.
+
+This bounded step does not include closures, capturing local functions, or
+generic function references. Function values do not have equality or identity
+semantics; they are not JSON or SQL data and are rejected at those boundaries.
+Their signatures are available to compiler tools, but not exposed as HTTP
+schema values.
+
+## Payload-carrying enums in 0.9.9
+
+An enum variant may declare the types of the values it stores:
+
+~~~zelyra
+enum OrderEvent { Created(Int) Paid(Date, Decimal) Rejected(String) }
+
+fn describe(event: OrderEvent) -> String {
+    match event {
+        OrderEvent::Created(id) => { return "created" }
+        OrderEvent::Paid(day, total) => { return "paid" }
+        OrderEvent::Rejected(reason) => { return "rejected" }
+    }
+}
+~~~
+
+Constructors and patterns are checked against each variant's declared arity
+and payload types. Non-exhaustive matches report `E-TYPE-MATCH-001`; invalid
+variant or payload use reports `E-TYPE-ENUM-001`. Public enums, constructors,
+and patterns can cross explicit module imports. Payload variants use an
+explicit JSON object such as `{"$enum":"OrderEvent","payload":[7],"variant":"Created"}`;
+decoding validates each payload against the enum definition. The existing JSON
+shape for unit variants is unchanged.
+
+### Explicit scalar text formatting in 0.9.9
+
+`format_text(value)` explicitly converts one scalar value to display text. It
+accepts `Int`, `UInt`, `Float`, `Decimal`, `Bool`, `Char`, `String`, `Date`,
+`Time`, `Timestamp`, and `Duration`; it does not add JSON quotes and does not
+enable implicit conversions in assignments or string concatenation. Arrays,
+records, enums, option/result values, unit, and function values have no implicit
+display contract and are rejected. Decimal display omits insignificant trailing
+zeroes, so fixed-scale monetary output must use `format_scaled_result`.
+
+## Persistent password-reset quotas in 0.9.9
+
+An auth declaration that enables `reset_tokens` also requires
+`reset_rate_limits: <table>`. This is an explicit project schema dependency;
+the reset runtime creates no tables. The limiter table has a unique, non-null
+`bucket_key: String(64)`, required `window_started: Timestamp` and
+`request_count: Int`, nullable `blocked_until: Timestamp?`, and an index starting
+with `window_started`. Its core columns cannot use `auto`. The complete source
+is in [`examples/password_reset.zyl`](../examples/password_reset.zyl).
+
+The default quota remains three requests per 900 seconds, followed by a
+900-second block. Valid-CSRF forgot-password requests consume quota before an
+account lookup; reset-password submissions with valid CSRF and a syntactically
+valid token use the same bucket. A bucket follows the TCP peer IP, regardless
+of source port; forwarded IP headers are ignored. Persistent buckets survive
+restart and are shared by instances using the same writable MariaDB, quota settings, and
+`ZELYRA_RESET_DELIVERY_KEY`. HMAC-SHA256 with a purpose-specific domain derives
+the stored key; the database does not receive the peer IP. This is pseudonymous
+security state, not an anonymity guarantee.
+
+An advisory lock and transaction serialize quota updates and cap the table at
+4,096 buckets. Lock acquisition waits at most one second; database, lock, or
+key errors reject the reset attempt and emit sanitized operator diagnostic
+`E-AUTH-043` without account, token, IP, or connection details. The generic forgot-password HTTP response
+remains `202`; a rejected reset-password submission remains `400`. A block
+takes precedence over an expired request window. An unblocked expired window
+starts again with the current request counted as its first request. MariaDB's
+clock is authoritative. Each request removes at most 100 inactive buckets with
+a window older than 48 hours; no scheduled cleanup runs in the absence of
+requests. A full table rejects new buckets while retaining existing quotas.
+
+Existing experimental reset projects must add the auth option and table and
+review their additive migration before deploying the new compiler. Missing or
+incompatible storage reports `E-AUTH-039`/`E-AUTH-040`, a missing cleanup index
+reports `E-AUTH-041`, and an option without `reset_tokens` reports `E-AUTH-042`.
+These diagnostics retain the auth declaration's source file and span. Ordinary
+login declarations are unaffected. `context` adds optional reset-storage fields
+within schema version `1`; `impact`, module plans, table rights, and table
+renames now include reset, tenant-membership, and MFA storage references.
+Previously omitted cross-module auth references may require an explicit
+import path and `read_write` grant. See [configuration](env.en.md).
+
+### SQL identifier bounds
+
+Declared table and storage-column identifiers are checked before SQL execution:
+MariaDB/MySQL permit at most 64 bytes, PostgreSQL at most 63 bytes for Zelyra's
+ASCII identifiers. The storage column includes the generated `_id` suffix of
+a relationship. An excessive name reports `E-DB-001` at its declaration.
+SQLite does not receive this limit.
+
+Generated index, unique-index, and foreign-key names retain their established
+short spelling. Longer names use a bounded prefix plus the first 16 hexadecimal
+characters of the full name's SHA-256 digest. Schema creation, migration plans,
+and recognition of managed objects use the same deterministic rule. Existing
+PostgreSQL objects whose old names were silently truncated by the server may
+require reviewed adoption; they are not silently renamed or dropped.
+
+## Exact decimal boundaries in 0.9.9
+
+`amount: Decimal = decimal("119.00")` declares exact fixed point. Forms, HTTP,
+and SQL use validated decimal text. MariaDB/MySQL store `Decimal` explicitly
+as `DECIMAL(39,9)`, PostgreSQL as `NUMERIC(39,9)`. Legacy or mismatched fixed
+scales prevent SQL execution or server startup with source-related diagnostics.
+`Money` retains `(19,4)`. Multiplication/division check the final result with a
+bounded exact intermediate; remainder at the signed minimum no longer panics.
+JSON outputs remain decimal strings. See the [full rules](decimals.en.md) and
+[example](../examples/decimal_money.zyl). This does not establish complete
+PostgreSQL CRUD/auth parity or production approval.
+
+## Date/time boundaries on the development branch
+
+Calendar-day arithmetic and UTC milliseconds are checked against independent
+Python references. Forms/APIs reject invalid calendar/clock values; Timestamp
+is bounded to ISO years 0001–9999. API handlers receive real Date/Time/Timestamp/
+Duration values. JSON output stays unchanged; generated clients match it.
+Native Date/Time/UTC Timestamp parameters and millisecond storage are verified
+on MariaDB, MySQL and PostgreSQL. Incompatible schema types/precision fail
+with a source position before application use. Explicit
+[`sql_decode<T>`](sql-results.en.md) provides typed scalar/record/array results,
+cardinality and NULL checks; the legacy raw-row JSON format stays unchanged. See [rules](dates.en.md), [HTTP evidence](release-readiness/0.9.9-calendar-http.en.md)
+and [SQL evidence](release-readiness/0.9.9-calendar-sql.en.md).
+
+## NULL-aware optimistic edits in 0.9.9
+
+MariaDB/MySQL generated edit forms sign native NULL separately from text and
+check the locked current row before writing. NULL/literal `\N` transitions
+return 409 for stale forms. Omitted nullable fields bind SQL NULL; required and
+readonly checks remain. [Rules and limits](edit-snapshots.en.md).

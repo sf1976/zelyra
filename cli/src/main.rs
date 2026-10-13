@@ -43,6 +43,7 @@ use zelyra_web::{
 };
 
 mod account_cli;
+mod auth_reset_limits;
 mod command_dispatch;
 mod database_cli;
 mod docs;
@@ -57,6 +58,7 @@ mod module_cli;
 mod outbox_cli;
 mod project;
 mod route_cli;
+mod terminal;
 #[cfg(test)]
 mod tests;
 mod text_edit;
@@ -140,11 +142,14 @@ fn usage() {
     eprintln!("  setup supports `--database`, `--schema`, `--all`, `--host-port`, `--db-host-port`, and `--web [--port <port>]`");
     eprintln!("  outbox: `setup [file.zyl]`, `list [file.zyl] [--limit <1..200>] [--format text|json]`, `requeue <event-id> [file.zyl]`, or `run [file.zyl] --handler <event.type=function_name> [--once] [--lease-seconds <5..3600>]");
     eprintln!("  Detailhilfe / detailed help: `zelyra fmt --help`, `zelyra init --help`, or `zelyra db plan --help` shows options and examples");
-    eprintln!("Zelyra {}\n\nUsage:\n  zelyra --help\n  zelyra --version\n  zelyra version\n  zelyra update [--check]\n  zelyra --tutorial invoice [directory] [--no-start]\n  zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] [--database|--schema|--all] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] --web [--port <port>]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra config <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl> [--max-steps <n>]\n  zelyra serve <file.zyl> [address]\n  zelyra routes <entry.zyl> [--format human|json]\n  zelyra editor [directory] [--port <port>] [--no-open]\n  zelyra migrate laravel <project> [--report <path>] [--output <target>] [--format markdown|json]\n  zelyra module plan <entry.zyl> <module.zyl|resource-id>\n  zelyra module bundle <entry.zyl> <module.zyl|resource-id> --output <dir> [--docker --compiler-ref <40-character-commit>]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra outbox <setup|list|requeue|run> [file.zyl] [options]\n  zelyra db <create|setup|bootstrap|inspect|map|plan|apply|history> <file.zyl>\n\nSchnelleinstieg\n  Geführtes Rechnungstutorial:\n    zelyra --tutorial invoice                 Erstellt Projekt, Datenbank und Schema, startet die Anwendung und öffnet den Browser.\n    Die ausgegebene Anwendungsadresse manuell öffnen, falls kein Browser startet.\n    zelyra editor invoice-tutorial            Öffnet Studio für das Tutorialprojekt.\n  Kleines eigenes Projekt:\n    zelyra init ./mein-projekt                Erstellt ein minimales Projekt ohne Datenbank.\n    cd mein-projekt && zelyra run main.zyl    Startet das Programm direkt.\n    zelyra editor                              Startet Studio im aktuellen Ordner und öffnet den Standardbrowser.\n\nWichtige Befehle\n  init/new  Projektgerüst erstellen; init ist der kurze Einstieg, new bietet Vorlagen und Optionen.\n  check     Datei oder Projekt auf Syntax- und Compilerfehler prüfen.\n  run       Ein Zelyra-Programm direkt ausführen.\n  serve     Eine Webanwendung lokal starten.\n  setup     MariaDB-Projekt vorbereiten; `--all` startet Stack und Schema sichtbar. `.` bedeutet aktuelles Verzeichnis, `./test_a` einen Unterordner.\n  db plan   Schemaänderungen zuerst nur anzeigen; db apply setzt einen geprüften Plan um.\n  db create Gibt CREATE-SQL aus; `db setup` richtet das MariaDB-Schema ein.\n  outbox    Transaktionale Ereignisse einrichten, prüfen und mit Handlern verarbeiten.\n  routes    `zelyra routes main.zyl` listet deklarierte Seiten, APIs und erzeugte Ressourcenrouten; `--format json` liefert maschinenlesbare Ausgabe.\n  editor    Startet den lokalen Studio-Server und öffnet den Standardbrowser; ohne Argument gilt der aktuelle Ordner. `--no-open` überspringt den Browserstart.\n\nGetting started\n  Guided invoice tutorial:\n    zelyra --tutorial invoice                 Creates the project, database, and schema, starts the app, and opens the browser.\n    Open the printed application URL manually if no browser starts.\n    zelyra editor invoice-tutorial            Opens Studio for the tutorial project.\n  Small project of your own:\n    zelyra init ./my-project                  Creates a minimal project without a database.\n    cd my-project && zelyra run main.zyl      Runs the program directly.\n    zelyra editor                              Starts Studio in the current folder and opens the default browser.\n\nKey commands\n  init/new  Create a project; init is the short path, new offers templates and options.\n  check     Check a file or project for syntax and compiler errors.\n  run       Execute a Zelyra program directly.\n  serve     Start a web application locally.\n  setup     Prepare a MariaDB project; `--all` visibly starts the stack and applies the schema. `.` is the current folder, `./test_a` a subfolder.\n  db plan   Preview schema changes; db apply applies a reviewed plan.\n  db create Emit CREATE SQL; `db setup` initializes the MariaDB database and schema.\n  outbox    Set up, inspect, and process transactional events with explicit handlers.\n  routes    `zelyra routes main.zyl` lists declared pages, APIs, and generated resource routes; use `--format json` for machine-readable output.\n  editor    Start the local Studio server and open the default browser; defaults to the current folder. Use `--no-open` to skip browser launch.", env!("CARGO_PKG_VERSION"));
+    eprintln!("{}", terminal::help(&format!("Zelyra {}\n\nUsage:\n  zelyra --help\n  zelyra --version\n  zelyra version\n  zelyra update [--check]\n  zelyra --tutorial invoice [directory] [--no-start]\n  zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] [--database|--schema|--all] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] --web [--port <port>]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra config <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl> [--max-steps <n>]\n  zelyra serve <file.zyl> [address]\n  zelyra routes <entry.zyl> [--format human|json]\n  zelyra editor [directory] [--port <port>] [--no-open]\n  zelyra migrate laravel <project> [--report <path>] [--output <target>] [--format markdown|json]\n  zelyra module plan <entry.zyl> <module.zyl|resource-id>\n  zelyra module bundle <entry.zyl> <module.zyl|resource-id> --output <dir> [--docker --compiler-ref <40-character-commit>]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra outbox <setup|list|requeue|run> [file.zyl] [options]\n  zelyra db <create|setup|bootstrap|inspect|map|plan|apply|history> <file.zyl>\n\nSchnelleinstieg\n  Geführtes Rechnungstutorial:\n    zelyra --tutorial invoice                 Erstellt Projekt, Datenbank und Schema, startet die Anwendung und öffnet den Browser.\n    Die ausgegebene Anwendungsadresse manuell öffnen, falls kein Browser startet.\n    zelyra editor invoice-tutorial            Öffnet Studio für das Tutorialprojekt.\n  Kleines eigenes Projekt:\n    zelyra init ./mein-projekt                Erstellt ein minimales Projekt ohne Datenbank.\n    cd mein-projekt && zelyra run main.zyl    Startet das Programm direkt.\n    zelyra editor                              Startet Studio im aktuellen Ordner und öffnet den Standardbrowser.\n\nWichtige Befehle\n  init/new  Projektgerüst erstellen; init ist der kurze Einstieg, new bietet Vorlagen und Optionen.\n  check     Datei oder Projekt auf Syntax- und Compilerfehler prüfen.\n  run       Ein Zelyra-Programm direkt ausführen.\n  serve     Eine Webanwendung lokal starten.\n  setup     MariaDB-Projekt vorbereiten; `--all` startet Stack und Schema sichtbar. `.` bedeutet aktuelles Verzeichnis, `./test_a` einen Unterordner.\n  db plan   Schemaänderungen zuerst nur anzeigen; db apply setzt einen geprüften Plan um.\n  db create Gibt CREATE-SQL aus; `db setup` richtet das MariaDB-Schema ein.\n  outbox    Transaktionale Ereignisse einrichten, prüfen und mit Handlern verarbeiten.\n  routes    `zelyra routes main.zyl` listet deklarierte Seiten, APIs und erzeugte Ressourcenrouten; `--format json` liefert maschinenlesbare Ausgabe.\n  editor    Startet den lokalen Studio-Server und öffnet den Standardbrowser; ohne Argument gilt der aktuelle Ordner. `--no-open` überspringt den Browserstart.\n\nGetting started\n  Guided invoice tutorial:\n    zelyra --tutorial invoice                 Creates the project, database, and schema, starts the app, and opens the browser.\n    Open the printed application URL manually if no browser starts.\n    zelyra editor invoice-tutorial            Opens Studio for the tutorial project.\n  Small project of your own:\n    zelyra init ./my-project                  Creates a minimal project without a database.\n    cd my-project && zelyra run main.zyl      Runs the program directly.\n    zelyra editor                              Starts Studio in the current folder and opens the default browser.\n\nKey commands\n  init/new  Create a project; init is the short path, new offers templates and options.\n  check     Check a file or project for syntax and compiler errors.\n  run       Execute a Zelyra program directly.\n  serve     Start a web application locally.\n  setup     Prepare a MariaDB project; `--all` visibly starts the stack and applies the schema. `.` is the current folder, `./test_a` a subfolder.\n  db plan   Preview schema changes; db apply applies a reviewed plan.\n  db create Emit CREATE SQL; `db setup` initializes the MariaDB database and schema.\n  outbox    Set up, inspect, and process transactional events with explicit handlers.\n  routes    `zelyra routes main.zyl` lists declared pages, APIs, and generated resource routes; use `--format json` for machine-readable output.\n  editor    Start the local Studio server and open the default browser; defaults to the current folder. Use `--no-open` to skip browser launch.\n\nColor: set ZELYRA_COLOR=always|never|auto; NO_COLOR disables automatic ANSI output. Key help headings and commands use a terminal-safe palette.", env!("CARGO_PKG_VERSION"))));
 }
 
 fn version_command() -> ExitCode {
-    println!("zelyra {}", env!("CARGO_PKG_VERSION"));
+    println!(
+        "{}",
+        terminal::success(&format!("zelyra {}", env!("CARGO_PKG_VERSION")))
+    );
     ExitCode::SUCCESS
 }
 
@@ -890,7 +895,13 @@ CMD ["zelyra", "serve", "main.zyl", "0.0.0.0:__WEB_PORT__"]
             return ExitCode::from(1);
         }
     }
-    println!("created Zelyra project in {}", directory.display());
+    println!(
+        "{}",
+        terminal::success(&format!(
+            "created Zelyra project in {}",
+            directory.display()
+        ))
+    );
     if options.with_mariadb {
         println!(
             "application URL after startup: http://127.0.0.1:{}",
@@ -1452,7 +1463,7 @@ fn validate_program(
         }
         return Err(());
     }
-    if !program.functions.is_empty() {
+    if !program.functions.is_empty() || !program.types.is_empty() {
         if let Err(errors) = check(&program) {
             for error in errors {
                 diagnostic_with_span(path, error.code, &error.message, error.span);
@@ -2245,7 +2256,7 @@ fn check_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     }
     if format == OutputFormat::Human {
         return if validate(&path).is_ok() {
-            println!("ok: {path}");
+            println!("{}", terminal::success(&format!("ok: {path}")));
             ExitCode::SUCCESS
         } else {
             ExitCode::from(1)
@@ -2312,7 +2323,7 @@ fn fmt_command(arguments: impl Iterator<Item = String>) -> ExitCode {
     let formatted = format_source(&source, &tokens);
     if check_only {
         if source == formatted {
-            println!("ok: {path}");
+            println!("{}", terminal::success(&format!("ok: {path}")));
             ExitCode::SUCCESS
         } else {
             eprintln!("would reformat: {path}");
@@ -2520,7 +2531,7 @@ fn edit_command(arguments: impl Iterator<Item = String>) -> ExitCode {
             )
         }
     };
-    let request: Value = match serde_json::from_str(&request_source) {
+    let request: Value = match zelyra_ast::json::parse(&request_source) {
         Ok(request) => request,
         Err(error) => {
             return edit_error_document(
@@ -3111,8 +3122,10 @@ fn component_prop_accepts(prop: &zelyra_ast::ComponentProp, value: &str) -> bool
             },
             value,
         ),
-        Type::Int | Type::UInt => value.parse::<i64>().is_ok(),
-        Type::Float | Type::Decimal => value.parse::<f64>().is_ok(),
+        Type::Int => value.parse::<i64>().is_ok(),
+        Type::UInt => value.parse::<u64>().is_ok(),
+        Type::Float => value.parse::<f64>().is_ok_and(|value| value.is_finite()),
+        Type::Decimal => zelyra_ast::decimal::parse_scaled(value, 9).is_some(),
         Type::Bool => matches!(value, "true" | "false"),
         _ => true,
     }
@@ -4251,7 +4264,10 @@ fn compose_start_failure_message(command: DockerComposeCommand, details: &str) -
     }
 }
 
-fn start_mariadb_compose(directory: &std::path::Path) -> Result<String, String> {
+fn start_mariadb_compose(
+    directory: &std::path::Path,
+    database_only: bool,
+) -> Result<String, String> {
     if !directory.join("docker-compose.mariadb.yml").is_file() {
         return Err(
             "docker-compose.mariadb.yml is missing; use `zelyra init --mariadb` first".into(),
@@ -4260,8 +4276,13 @@ fn start_mariadb_compose(directory: &std::path::Path) -> Result<String, String> 
     let Some(command) = detect_docker_compose() else {
         return Err(docker_compose_install_hint());
     };
+    let args = if database_only {
+        vec!["up", "-d", "mariadb"]
+    } else {
+        vec!["up", "-d", "--build", "web"]
+    };
     let child = compose_command(directory, command)
-        .args(["up", "-d", "--build"])
+        .args(args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -4269,7 +4290,12 @@ fn start_mariadb_compose(directory: &std::path::Path) -> Result<String, String> 
     let output = wait_with_live_output(child)?;
     if output.status.success() {
         Ok(format!(
-            "MariaDB and the application were started with {}",
+            "{} were started with {}",
+            if database_only {
+                "MariaDB services"
+            } else {
+                "MariaDB and the application"
+            },
             command.label()
         ))
     } else {
@@ -4375,15 +4401,42 @@ fn run_local_schema_setup(directory: &std::path::Path) -> Result<(), String> {
     }
 }
 
+fn container_schema_setup_args() -> Vec<&'static str> {
+    vec![
+        "run",
+        "--rm",
+        "--no-deps",
+        "-T",
+        "web",
+        "zelyra",
+        "db",
+        "apply",
+        "main.zyl",
+    ]
+}
+
 fn run_container_schema_setup(directory: &std::path::Path) -> Result<(), String> {
     let Some(command) = detect_docker_compose() else {
         return Err(docker_compose_install_hint());
     };
+    let build = compose_command(directory, command)
+        .args(["build", "web"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| format!("could not build the schema/application image: {error}"))?;
+    let output = wait_with_live_output(build)?;
+    if !output.status.success() {
+        return Err(
+            "could not build the schema/application image; no schema command was started".into(),
+        );
+    }
     eprint!("Waiting for MariaDB and applying the project schema");
     let _ = std::io::stderr().flush();
     for attempt in 0..20 {
         let output = compose_command(directory, command)
-            .args(["exec", "-T", "web", "zelyra", "db", "apply", "main.zyl"])
+            .args(container_schema_setup_args())
+            .stdin(Stdio::null())
             .output()
             .map_err(|error| {
                 format!("could not run schema setup in the application container: {error}")
@@ -4438,12 +4491,7 @@ fn setup_action(path: &str, action: &str, options: &SetupOptions) -> Result<Stri
         "kept existing .env; credentials were not changed".to_owned()
     });
     if matches!(action, "database" | "schema" | "all") {
-        let web_url = project_web_url(&directory)?;
-        messages.push(
-            start_mariadb_compose(&directory)
-                .map_err(|error| format!("{error}\napplication URL after startup: {web_url}"))?,
-        );
-        messages.push(format!("open: {web_url}"));
+        messages.push(start_mariadb_compose(&directory, true)?);
     }
     if matches!(action, "schema" | "all") {
         let schema_result = if directory.join("docker-compose.mariadb.yml").is_file() {
@@ -4456,6 +4504,14 @@ fn setup_action(path: &str, action: &str, options: &SetupOptions) -> Result<Stri
             format!("{error}\napplication URL: {web_url}")
         })?;
         messages.push("database schema setup completed".into());
+    }
+    if action == "all" {
+        let web_url = project_web_url(&directory)?;
+        messages.push(
+            start_mariadb_compose(&directory, false)
+                .map_err(|error| format!("{error}\napplication URL after startup: {web_url}"))?,
+        );
+        messages.push(format!("open: {web_url}"));
     }
     Ok(messages.join("\n"))
 }
@@ -5967,6 +6023,7 @@ fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> 
     let mut valid = true;
     let mut names = HashSet::new();
     for auth in &program.auth {
+        valid &= auth_reset_limits::validate(path, auth, schema);
         if !names.insert(auth.name.clone()) {
             diagnostic(
                 path,
@@ -6022,11 +6079,11 @@ fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> 
                 );
                 valid = false;
             }
-            if schema.backend() != Backend::MariaDb {
+            if !matches!(schema.backend(), Backend::MariaDb | Backend::Postgres) {
                 diagnostic_with_span(
                     path,
                     "E-TENANT-001",
-                    "tenant memberships currently require the MariaDB runtime",
+                    "tenant memberships require MariaDB or PostgreSQL runtime",
                     auth.span,
                 );
                 valid = false;
@@ -6309,7 +6366,9 @@ fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> 
                                 || sql_type.contains("TEXT")
                                 || sql_type.contains("CLOB")
                         }
-                        "timestamp" => sql_type.contains("TIMESTAMP") || sql_type == "DATETIME",
+                        "timestamp" => {
+                            sql_type.contains("TIMESTAMP") || sql_type.starts_with("DATETIME")
+                        }
                         _ => false,
                     };
                     if !type_matches || (!may_be_nullable && column.nullable) {
@@ -6454,14 +6513,14 @@ fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> 
                 .iter()
                 .find(|column| column.name == "delivery_retry_at")
                 .is_some_and(|column| {
-                    column.nullable && column.sql_type.eq_ignore_ascii_case("timestamp")
+                    column.nullable && column.sql_type.eq_ignore_ascii_case("datetime(3)")
                 });
             if !delivery_retry_at_is_compatible {
                 diagnostic(
                     path,
                     "E-AUTH-038",
                     &format!(
-                        "authentication password reset table {} requires nullable delivery_retry_at TIMESTAMP",
+                        "authentication password reset table {} requires nullable delivery_retry_at DATETIME(3)",
                         reset_table_name
                     ),
                     auth.span.line,
@@ -7026,18 +7085,6 @@ fn validate_cruds(path: &str, program: &zelyra_ast::Program, schema: &Schema) ->
                     valid = false;
                 }
             }
-            if !table.foreign_keys.is_empty() {
-                fail_tenant(
-                    "tenant-scoped CRUD does not yet support relations; remove foreign keys from this table",
-                );
-                valid = false;
-            }
-            if !crud.actions.is_empty() {
-                fail_tenant(
-                    "tenant-scoped CRUD does not support custom actions because their SQL is not tenant-scoped",
-                );
-                valid = false;
-            }
             if crud
                 .view
                 .fields
@@ -7108,6 +7155,9 @@ fn validate_cruds(path: &str, program: &zelyra_ast::Program, schema: &Schema) ->
             let recipient_storage_column =
                 storage_column_name(schema, &crud.table, recipient_column);
             let unsafe_outgoing_relation = crud_table.foreign_keys.iter().any(|foreign_key| {
+                if crud.tenant_column.is_some() {
+                    return false;
+                }
                 foreign_key.column != recipient_storage_column
                     || foreign_key.referenced_table
                         != program
@@ -7252,7 +7302,7 @@ fn validate_tenant_access_boundaries(
         .map(|table| table.name.clone())
         .collect::<Vec<_>>();
     let mut valid = true;
-    let check_query = |query: &str, span: zelyra_ast::Span| -> bool {
+    let check_query = |query: &str, span: zelyra_ast::Span, allowed_table: Option<&str>| -> bool {
         let (operation, accesses) =
             zelyra_database::sql::analyze_table_access(query, &known_tables);
         if operation.is_none() {
@@ -7283,6 +7333,11 @@ fn validate_tenant_access_boundaries(
                 );
                 query_valid = false;
                 continue;
+            }
+            if let Some(allowed) = allowed_table {
+                if allowed.eq_ignore_ascii_case(&access.table) {
+                    continue;
+                }
             }
             if recipient_tables
                 .iter()
@@ -7350,7 +7405,7 @@ fn validate_tenant_access_boundaries(
                     statements: action.statements.clone(),
                     span: action.span,
                 },
-                &mut |query, span| valid &= check_query(query, span),
+                &mut |query, span| valid &= check_query(query, span, None),
             );
         }
     }
@@ -7386,7 +7441,7 @@ fn validate_tenant_access_boundaries(
                 );
                 valid = false;
             }
-            if !crud.actions.is_empty() {
+            if crud.tenant_column.is_none() && !crud.actions.is_empty() {
                 diagnostic_with_span(
                     path,
                     "E-CRUD-008",
@@ -7396,9 +7451,10 @@ fn validate_tenant_access_boundaries(
                 valid = false;
             }
         }
-        if !recipient_tables
-            .iter()
-            .any(|table| table.eq_ignore_ascii_case(&crud.table))
+        if crud.tenant_column.is_some()
+            || !recipient_tables
+                .iter()
+                .any(|table| table.eq_ignore_ascii_case(&crud.table))
         {
             for action in &crud.actions {
                 visit_block_sql(
@@ -7406,27 +7462,27 @@ fn validate_tenant_access_boundaries(
                         statements: action.statements.clone(),
                         span: action.span,
                     },
-                    &mut |query, span| valid &= check_query(query, span),
+                    &mut |query, span| valid &= check_query(query, span, Some(&crud.table)),
                 );
             }
         }
     }
     for page in &program.pages {
         for data in &page.data {
-            valid &= check_query(&data.query, data.span);
+            valid &= check_query(&data.query, data.span, None);
         }
     }
     for tableview in &program.tableviews {
-        valid &= check_query(&tableview.source, tableview.span);
+        valid &= check_query(&tableview.source, tableview.span, None);
     }
     for function in &program.functions {
         for expression in function.requires.iter().chain(&function.ensures) {
             visit_expression_sql(expression, &mut |query, span| {
-                valid &= check_query(query, span)
+                valid &= check_query(query, span, None)
             });
         }
         visit_block_sql(&function.body, &mut |query, span| {
-            valid &= check_query(query, span)
+            valid &= check_query(query, span, None)
         });
     }
     valid
@@ -7483,7 +7539,8 @@ fn visit_expression_sql<'a>(
         | ExprKind::Bool(_)
         | ExprKind::String(_)
         | ExprKind::Char(_)
-        | ExprKind::Variable(_) => {}
+        | ExprKind::Variable(_)
+        | ExprKind::FunctionValue(_) => {}
     }
 }
 
@@ -7735,7 +7792,15 @@ fn tableview_type_filter_kind(ty: &Type) -> TableViewFilterKind {
         _ => ty,
     };
     match ty {
-        Type::Int | Type::UInt | Type::Float | Type::Decimal => TableViewFilterKind::Numeric,
+        Type::Int => TableViewFilterKind::Integer,
+        Type::UInt => TableViewFilterKind::Unsigned,
+        Type::Float => TableViewFilterKind::Numeric,
+        Type::Decimal => TableViewFilterKind::Decimal,
+        Type::Date => TableViewFilterKind::Date,
+        Type::Time => TableViewFilterKind::Time,
+        Type::Timestamp => TableViewFilterKind::Timestamp,
+        Type::Named(name) if name == "Money" => TableViewFilterKind::Decimal,
+        Type::Named(name) if name == "Id" => TableViewFilterKind::Integer,
         Type::Bool => TableViewFilterKind::Bool,
         Type::String | Type::Char => TableViewFilterKind::Text,
         Type::Named(name) if matches!(name.as_str(), "Email" | "Url" | "Uuid") => {
@@ -7747,16 +7812,26 @@ fn tableview_type_filter_kind(ty: &Type) -> TableViewFilterKind {
 
 fn tableview_sql_filter_kind(sql_type: &str) -> TableViewFilterKind {
     let sql_type = sql_type.to_ascii_uppercase();
-    if sql_type.contains("BOOL") {
+    if sql_type == "DATE" {
+        TableViewFilterKind::Date
+    } else if sql_type == "TIME" || sql_type.starts_with("TIME(") {
+        TableViewFilterKind::Time
+    } else if sql_type.contains("TIMESTAMP") || sql_type.contains("DATETIME") {
+        TableViewFilterKind::Timestamp
+    } else if sql_type.contains("BOOL") {
         TableViewFilterKind::Bool
     } else if sql_type.contains("CHAR") || sql_type.contains("TEXT") {
         TableViewFilterKind::Text
-    } else if sql_type.contains("INT")
-        || sql_type.contains("DECIMAL")
-        || sql_type.contains("NUMERIC")
-        || sql_type.contains("DOUBLE")
-        || sql_type.contains("FLOAT")
-        || sql_type.contains("REAL")
+    } else if sql_type.contains("INT") && sql_type.contains("UNSIGNED")
+        || sql_type == "DECIMAL(20,0)"
+        || sql_type == "NUMERIC(20,0)"
+    {
+        TableViewFilterKind::Unsigned
+    } else if sql_type.contains("INT") {
+        TableViewFilterKind::Integer
+    } else if sql_type.contains("DECIMAL") || sql_type.contains("NUMERIC") {
+        TableViewFilterKind::Decimal
+    } else if sql_type.contains("DOUBLE") || sql_type.contains("FLOAT") || sql_type.contains("REAL")
     {
         TableViewFilterKind::Numeric
     } else {
@@ -7806,6 +7881,26 @@ fn configured_crud_filter_columns(
         .filter(|column| crud_column_exists(program, schema, crud, column))
         .cloned()
         .collect()
+}
+
+fn decimal_storage_error_span(program: &zelyra_ast::Program, message: &str) -> zelyra_ast::Span {
+    program
+        .tables
+        .iter()
+        .find_map(|table| {
+            table
+                .columns
+                .iter()
+                .find(|column| message.contains(&format!("`{}.{}`", table.name, column.name)))
+                .map(|column| column.span)
+        })
+        .unwrap_or_else(|| {
+            program
+                .tables
+                .first()
+                .map(|table| table.span)
+                .unwrap_or_default()
+        })
 }
 
 fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
@@ -8035,6 +8130,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             }),
             login_block_seconds: auth.login_block_seconds.unwrap_or(60),
             reset_tokens_table: auth.reset_tokens_table.clone(),
+            reset_rate_limits_table: auth.reset_rate_limits_table.clone(),
             reset_rate_limit: auth
                 .reset_rate_limit
                 .unwrap_or(zelyra_web::DEFAULT_RESET_RATE_LIMIT),
@@ -8285,6 +8381,24 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     let database_capability_granted = capability_grants
         .as_ref()
         .is_none_or(|grants| grants.contains("Database"));
+    if database_capability_granted {
+        if let Some(url) = database_url_from_program(&program) {
+            if let Err(error) = zelyra_database::validate_decimal_storage(&url, &schema) {
+                let span = decimal_storage_error_span(&program, &error.to_string());
+                diagnostic_with_span(&path, "E-DB-PRECISION", &error.to_string(), span);
+                return ExitCode::from(1);
+            }
+        }
+    }
+    if database_capability_granted {
+        if let Some(url) = database_url_from_program(&program) {
+            if let Err(error) = zelyra_database::validate_temporal_storage(&url, &schema) {
+                let span = decimal_storage_error_span(&program, &error.to_string());
+                diagnostic_with_span(&path, "E-DB-TEMPORAL", &error.to_string(), span);
+                return ExitCode::from(1);
+            }
+        }
+    }
     let api_routes = generated_api_routes(
         &program,
         capability_grants.as_ref(),
@@ -8393,10 +8507,11 @@ fn generated_crud_form(
         .iter()
         .map(|field| storage_column_name(schema, &crud.table, &field.name))
         .collect::<Vec<_>>();
+    let is_postgres = schema.backend() == Backend::Postgres;
     let membership_guard = context.membership_table.as_deref().map(|membership_table| {
         format!(
             " AND EXISTS (SELECT 1 FROM {} AS zelyra_membership WHERE zelyra_membership.user_id = :zelyra_user_id AND zelyra_membership.tenant_id = :zelyra_tenant_id AND zelyra_membership.active = true)",
-            quote_identifier(membership_table)
+            quote_ident(membership_table, is_postgres)
         )
     });
     let recipient_column = crud
@@ -8407,26 +8522,34 @@ fn generated_crud_form(
         let assignments = storage_columns
             .iter()
             .zip(&fields)
-            .map(|(column, field)| format!("{} = :{}", quote_identifier(column), field.name))
+            .map(|(column, field)| {
+                format!("{} = :{}", quote_ident(column, is_postgres), field.name)
+            })
             .collect::<Vec<_>>()
             .join(", ");
         format!(
             "UPDATE {} SET {} WHERE {} = :id{}{}{}",
-            quote_identifier(&crud.table),
+            quote_ident(&crud.table, is_postgres),
             assignments,
-            quote_identifier("id"),
+            quote_ident("id", is_postgres),
             crud.tenant_column
                 .as_deref()
                 .map_or_else(String::new, |column| {
                     format!(
                         " AND {} = :zelyra_tenant_id",
-                        quote_identifier(&storage_column_name(schema, &crud.table, column))
+                        quote_ident(
+                            &storage_column_name(schema, &crud.table, column),
+                            is_postgres
+                        )
                     )
                 }),
             recipient_column
                 .as_ref()
                 .map_or_else(String::new, |column| {
-                    format!(" AND {} = :zelyra_user_id", quote_identifier(column))
+                    format!(
+                        " AND {} = :zelyra_user_id",
+                        quote_ident(column, is_postgres)
+                    )
                 }),
             membership_guard.clone().unwrap_or_default()
         )
@@ -8455,10 +8578,10 @@ fn generated_crud_form(
         };
         format!(
             "INSERT INTO {} ({}){}",
-            quote_identifier(&crud.table),
+            quote_ident(&crud.table, is_postgres),
             insert_columns
                 .iter()
-                .map(|column| quote_identifier(column))
+                .map(|column| quote_ident(column, is_postgres))
                 .collect::<Vec<_>>()
                 .join(", "),
             insert_select
@@ -8796,7 +8919,26 @@ fn api_value_json(
             return api_value_json(value, &definition.target, program);
         }
         if let Some(record) = program.records.iter().find(|record| record.name == *name) {
-            return api_record_value(value, record, program);
+            return api_record_value(value, record, &[], program);
+        }
+        if let Some(definition) = program
+            .enums
+            .iter()
+            .find(|definition| definition.name == *name)
+        {
+            return api_enum_value(value, definition, &[], program);
+        }
+    }
+    if let Type::Applied { name, args } = ty {
+        if let Some(record) = program.records.iter().find(|record| record.name == *name) {
+            return api_record_value(value, record, args, program);
+        }
+        if let Some(definition) = program
+            .enums
+            .iter()
+            .find(|definition| definition.name == *name)
+        {
+            return api_enum_value(value, definition, args, program);
         }
     }
     match ty {
@@ -8836,11 +8978,33 @@ fn api_value_json(
             .or_else(|| value.as_str().and_then(|value| value.parse().ok()))
             .map(RuntimeValue::UInt)
             .ok_or_else(|| format!("invalid UInt JSON value `{value}`")),
-        Type::Float | Type::Decimal => value
+        Type::Float => value
             .as_f64()
             .or_else(|| value.as_str().and_then(|value| value.parse().ok()))
+            .filter(|value| value.is_finite())
             .map(RuntimeValue::Float)
             .ok_or_else(|| format!("invalid numeric JSON value `{value}`")),
+        Type::Decimal => {
+            let exact = match value {
+                Value::String(value) => zelyra_ast::decimal::parse_scaled(value, 9),
+                Value::Number(value) => {
+                    zelyra_ast::decimal::parse_json_number(&value.to_string(), 9)
+                }
+                _ => None,
+            };
+            exact
+                .map(RuntimeValue::Decimal)
+                .ok_or_else(|| "invalid exact Decimal JSON value".into())
+        }
+        Type::Date => value.as_str().filter(|value| zelyra_ast::temporal::valid_date(value))
+            .map(|value| RuntimeValue::Date(value.into())).ok_or_else(|| "invalid Date JSON value; expected YYYY-MM-DD".into()),
+        Type::Time => value.as_str().filter(|value| zelyra_ast::temporal::valid_time(value))
+            .map(|value| RuntimeValue::Time(value.into())).ok_or_else(|| "invalid Time JSON value; expected HH:MM:SS".into()),
+        Type::Timestamp => value.as_i64().filter(|value| zelyra_ast::temporal::valid_timestamp_millis(*value))
+            .or_else(|| value.as_str().and_then(zelyra_ast::temporal::parse_timestamp_input))
+            .map(RuntimeValue::Timestamp).ok_or_else(|| "invalid Timestamp JSON value; expected UTC ISO text or Unix milliseconds within years 0001 through 9999".into()),
+        Type::Duration => value.as_i64().or_else(|| value.as_str().and_then(|value| value.parse().ok()))
+            .map(RuntimeValue::Duration).ok_or_else(|| "invalid Duration JSON value; expected integer milliseconds".into()),
         Type::Bool => value
             .as_bool()
             .or_else(|| {
@@ -8869,8 +9033,23 @@ fn api_value_json(
 fn api_record_value(
     value: &serde_json::Value,
     record: &zelyra_ast::RecordDef,
+    type_args: &[Type],
     program: &zelyra_ast::Program,
 ) -> Result<RuntimeValue, String> {
+    if record.type_params.len() != type_args.len() {
+        return Err(format!(
+            "record `{}` expects {} generic type argument(s), found {}",
+            record.name,
+            record.type_params.len(),
+            type_args.len()
+        ));
+    }
+    let substitutions = record
+        .type_params
+        .iter()
+        .zip(type_args)
+        .map(|(parameter, argument)| (parameter.clone(), argument.clone()))
+        .collect::<HashMap<_, _>>();
     let Some(object) = value.as_object() else {
         return Err(format!("expected JSON object for record `{}`", record.name));
     };
@@ -8900,13 +9079,149 @@ fn api_record_value(
         };
         fields.insert(
             field.name.clone(),
-            api_value_json(value, &field.ty, program)?,
+            api_value_json(
+                value,
+                &api_substitute_type(&field.ty, &substitutions),
+                program,
+            )?,
         );
     }
     Ok(RuntimeValue::Object {
         type_name: record.name.clone(),
+        type_args: type_args.to_vec(),
         fields,
     })
+}
+
+fn api_enum_value(
+    value: &serde_json::Value,
+    definition: &zelyra_ast::EnumDef,
+    type_args: &[Type],
+    program: &zelyra_ast::Program,
+) -> Result<RuntimeValue, String> {
+    if definition.type_params.len() != type_args.len() {
+        return Err(format!(
+            "enum `{}` expects {} generic type argument(s), found {}",
+            definition.name,
+            definition.type_params.len(),
+            type_args.len()
+        ));
+    }
+    let Some(object) = value.as_object() else {
+        return Err(format!(
+            "expected a JSON object for enum `{}`",
+            definition.name
+        ));
+    };
+    if object.get("$enum").and_then(serde_json::Value::as_str) != Some(&definition.name) {
+        return Err(format!("expected enum `{}`", definition.name));
+    }
+    let Some(variant) = object.get("variant").and_then(serde_json::Value::as_str) else {
+        return Err("expected enum variant String".into());
+    };
+    if !definition
+        .variants
+        .iter()
+        .any(|candidate| candidate == variant)
+    {
+        return Err(format!("unknown `{}` variant `{variant}`", definition.name));
+    }
+    let payload_types = definition
+        .variant_payloads
+        .iter()
+        .find(|(candidate, _)| candidate == variant)
+        .map(|(_, payloads)| payloads.as_slice())
+        .unwrap_or_default();
+    let payload_values = if payload_types.is_empty() {
+        if object.len() != 2 || object.contains_key("payload") {
+            return Err(format!(
+                "unit enum variant `{variant}` must not have a payload"
+            ));
+        }
+        Vec::new()
+    } else {
+        if object.len() != 3 {
+            return Err(format!("enum variant `{variant}` requires a payload array"));
+        }
+        let Some(values) = object.get("payload").and_then(serde_json::Value::as_array) else {
+            return Err(format!("enum variant `{variant}` requires a payload array"));
+        };
+        if values.len() != payload_types.len() {
+            return Err(format!(
+                "enum variant `{variant}` expects {} payload value(s), found {}",
+                payload_types.len(),
+                values.len()
+            ));
+        }
+        let substitutions = definition
+            .type_params
+            .iter()
+            .zip(type_args)
+            .map(|(parameter, argument)| (parameter.clone(), argument.clone()))
+            .collect::<HashMap<_, _>>();
+        values
+            .iter()
+            .zip(payload_types)
+            .map(|(value, ty)| {
+                api_value_json(value, &api_substitute_type(ty, &substitutions), program)
+            })
+            .collect::<Result<Vec<_>, _>>()?
+    };
+    Ok(RuntimeValue::Enum {
+        type_name: definition.name.clone(),
+        type_args: type_args.to_vec(),
+        variant: variant.to_owned(),
+        payloads: payload_values,
+    })
+}
+
+fn api_substitute_type(ty: &Type, substitutions: &HashMap<String, Type>) -> Type {
+    match ty {
+        Type::Named(name) => substitutions
+            .get(name)
+            .cloned()
+            .unwrap_or_else(|| ty.clone()),
+        Type::Applied { name, args } => Type::Applied {
+            name: name.clone(),
+            args: args
+                .iter()
+                .map(|argument| api_substitute_type(argument, substitutions))
+                .collect(),
+        },
+        Type::Option(inner) => Type::Option(Box::new(api_substitute_type(inner, substitutions))),
+        Type::Result(ok, error) => Type::Result(
+            Box::new(api_substitute_type(ok, substitutions)),
+            Box::new(api_substitute_type(error, substitutions)),
+        ),
+        Type::Array(inner) => Type::Array(Box::new(api_substitute_type(inner, substitutions))),
+        Type::Tuple(items) => Type::Tuple(
+            items
+                .iter()
+                .map(|item| api_substitute_type(item, substitutions))
+                .collect(),
+        ),
+        Type::Set(inner) => Type::Set(Box::new(api_substitute_type(inner, substitutions))),
+        Type::Map(key, value) => Type::Map(
+            Box::new(api_substitute_type(key, substitutions)),
+            Box::new(api_substitute_type(value, substitutions)),
+        ),
+        Type::HttpResult(inner) => {
+            Type::HttpResult(Box::new(api_substitute_type(inner, substitutions)))
+        }
+        Type::Function {
+            params,
+            return_type,
+            capabilities,
+        } => Type::Function {
+            params: params
+                .iter()
+                .map(|parameter| api_substitute_type(parameter, substitutions))
+                .collect(),
+            return_type: Box::new(api_substitute_type(return_type, substitutions)),
+            capabilities: capabilities.clone(),
+        },
+        _ => ty.clone(),
+    }
 }
 
 fn api_json_value(value: &RuntimeValue) -> String {
@@ -8926,10 +9241,29 @@ fn api_json_value_node(value: &RuntimeValue) -> serde_json::Value {
         RuntimeValue::Bool(value) => serde_json::Value::from(*value),
         RuntimeValue::String(value) => serde_json::Value::String(value.clone()),
         RuntimeValue::Char(value) => serde_json::Value::String(value.to_string()),
-        RuntimeValue::Enum { type_name, variant } => serde_json::json!({
-            "$enum": type_name,
-            "variant": variant,
-        }),
+        RuntimeValue::Enum {
+            type_name,
+            variant,
+            payloads,
+            ..
+        } => {
+            let mut encoded = serde_json::json!({
+                "$enum": type_name,
+                "variant": variant,
+            });
+            if !payloads.is_empty() {
+                encoded
+                    .as_object_mut()
+                    .expect("enum JSON is an object")
+                    .insert(
+                        "payload".into(),
+                        serde_json::Value::Array(
+                            payloads.iter().map(api_json_value_node).collect(),
+                        ),
+                    );
+            }
+            encoded
+        }
         RuntimeValue::Timestamp(value) => serde_json::Value::from(*value),
         RuntimeValue::Date(value) | RuntimeValue::Time(value) => {
             serde_json::Value::String(value.clone())
@@ -8955,6 +9289,11 @@ fn api_json_value_node(value: &RuntimeValue) -> serde_json::Value {
                 .collect();
             serde_json::Value::Object(object)
         }
+        RuntimeValue::Function { .. } => serde_json::Value::Null,
+        // API schema validation rejects class references before execution.
+        // Keep this fallback non-panicking for internally invalid responses;
+        // the declared API boundary remains fail-closed.
+        RuntimeValue::ClassRef { .. } => serde_json::Value::Null,
         RuntimeValue::Object { fields, .. } => {
             let object = fields
                 .iter()
@@ -9010,7 +9349,7 @@ fn api_error_response_with_details(
 }
 
 fn parse_api_json_object(source: &str) -> Result<HashMap<String, serde_json::Value>, String> {
-    let value: serde_json::Value = serde_json::from_str(source)
+    let value: serde_json::Value = zelyra_ast::json::parse(source)
         .map_err(|error| format!("invalid JSON request body: {error}"))?;
     let serde_json::Value::Object(object) = value else {
         return Err("JSON request body must be an object".into());
@@ -9202,8 +9541,16 @@ fn expand_view_components(program: &zelyra_ast::Program, mut html: String) -> St
     html
 }
 
+fn quote_ident(identifier: &str, is_postgres: bool) -> String {
+    if is_postgres {
+        format!("\"{}\"", identifier.replace('"', "\"\""))
+    } else {
+        format!("`{}`", identifier.replace('`', "``"))
+    }
+}
+
 fn quote_identifier(identifier: &str) -> String {
-    format!("`{}`", identifier.replace('`', "``"))
+    quote_ident(identifier, false)
 }
 
 fn form_usage() {

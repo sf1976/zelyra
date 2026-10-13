@@ -1,0 +1,36 @@
+fn identity<T>(value: T) -> T {
+    return value
+}
+fn first_or<T>(values: T[], fallback: T) -> T {
+    if len(values) > 0 {
+        return values[0]
+    }
+    return fallback
+}
+fn option_or<T>(value: Option<T>, fallback: T) -> T {
+    match value {
+        Some(found) => {
+            return found
+        }
+        None => {
+            return fallback
+        }
+    }
+}
+fn result_or<T, E>(value: Result<T, E>, fallback: T) -> T {
+    match value {
+        Ok(found) => {
+            return found
+        }
+        Err(_) => {
+            return fallback
+        }
+    }
+}
+fn main() {
+    print(identity<Int>(42))
+    print(identity<String>("Zelyra bleibt lesbar"))
+    print(first_or(["Kunde", "Artikel"], "unbekannt"))
+    print(option_or(Some(true), false))
+    print(result_or<Int, String>(Ok(7), 0))
+}

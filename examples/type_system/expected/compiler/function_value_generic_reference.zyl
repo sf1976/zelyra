@@ -1,0 +1,5 @@
+fn identity<T>(value: T) -> T { return value }
+fn main() {
+    transform = &identity
+    print(transform(7))
+}

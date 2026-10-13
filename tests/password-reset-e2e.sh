@@ -20,6 +20,23 @@ server_b_pid=""
 smtp_b_pid=""
 server_c_pid=""
 smtp_c_pid=""
+test_rate_table=""
+
+# Isolate mail-delivery/race checks from the deliberately smaller production
+# quota. Persistent quota behavior is tested in password-reset-rate-limit-e2e.sh.
+if [[ -z "${ZELYRA_PASSWORD_RESET_PROJECT:-}" ]]; then
+    test_rate_table="password_reset_delivery_e2e_${suffix}_$$"
+    python3 - "${project_file}" "${temp_dir}/password-reset.zyl" "${test_rate_table}" <<'PY'
+from pathlib import Path
+import sys
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+source = source.replace("reset_rate_limit: 10 per 900", "reset_rate_limit: 100 per 900", 1)
+source = source.replace("reset_rate_limits: password_reset_limits", f"reset_rate_limits: {sys.argv[3]}", 1)
+source = source.replace("table password_reset_limits {", f"table {sys.argv[3]} {{", 1)
+Path(sys.argv[2]).write_text(source, encoding="utf-8")
+PY
+    project_file="${temp_dir}/password-reset.zyl"
+fi
 
 if [[ "${database_url}" == mariadb://* ]]; then
     database_parts="${database_url#mariadb://}"
@@ -109,6 +126,9 @@ DELETE FROM auth_sessions WHERE user_id IN (SELECT id FROM users WHERE email = '
 DELETE FROM auth_audit_log WHERE target_user_id IN (SELECT id FROM users WHERE email = '${email}');
 DELETE FROM users WHERE email = '${email}';
 SQL
+    if [[ -n "${test_rate_table}" ]]; then
+        client -e "DROP TABLE IF EXISTS \`${test_rate_table}\`" >/dev/null 2>&1 || true
+    fi
     if [[ "${ZELYRA_KEEP_E2E_TEMP:-}" == "1" ]]; then
         echo "password-reset E2E diagnostics retained at ${temp_dir}"
     else
@@ -193,6 +213,10 @@ unknown_status="$(curl --silent --show-error --output "${temp_dir}/unknown.html"
     --data-urlencode "_zelyra_csrf=${csrf}" --data-urlencode "email=${unknown_email}" "${base_url}/forgot-password")"
 [[ "${known_status}" == 202 && "${unknown_status}" == 202 ]]
 cmp -s "${temp_dir}/known.html" "${temp_dir}/unknown.html"
+# Capture the first issued token before racing replacements. The guarded
+# outbox deliberately skips a token superseded before its SMTP send begins.
+for _ in $(seq 1 40); do [[ "$(captured_message_count)" -ge 1 ]] && break; sleep 0.25; done
+[[ "$(captured_message_count)" -eq 1 ]]
 curl --silent --show-error --output "${temp_dir}/issue-race-a.html" --write-out '%{http_code}' \
     --header "Origin: ${base_url}" --data-urlencode "_zelyra_csrf=${csrf}" \
     --data-urlencode "email=${email}" "${base_url}/forgot-password" >"${temp_dir}/issue-race-a.status" &
@@ -207,8 +231,28 @@ wait "${issue_b_pid}"
 [[ "$(cat "${temp_dir}/issue-race-b.status")" == 202 ]]
 cmp -s "${temp_dir}/known.html" "${temp_dir}/issue-race-a.html"
 cmp -s "${temp_dir}/known.html" "${temp_dir}/issue-race-b.html"
-for _ in $(seq 1 40); do [[ "$(captured_message_count)" -ge 3 ]] && break; sleep 0.25; done
-[[ "$(captured_message_count)" -ge 3 ]]
+# Both HTTP requests must succeed; one or both replacement emails may be
+# sent, depending on when the outbox obtains the per-user lock. Require the
+# current replacement to finish, then freeze the observed capture baseline.
+for _ in $(seq 1 40); do
+    if [[ "$(captured_message_count)" -ge 2 ]] && \
+        [[ "$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM password_resets WHERE user_id = ${user_id} AND delivery_payload IS NULL")" == "1" ]]; then break; fi
+    sleep 0.25
+done
+race_message_count="$(captured_message_count)"
+[[ "${race_message_count}" -ge 2 && "${race_message_count}" -le 3 ]]
+[[ "$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM password_resets WHERE user_id = ${user_id} AND delivery_payload IS NULL")" == "1" ]]
+# The latest captured race token must be the one retained in the database.
+mapfile -t race_tokens < <(captured_reset_tokens)
+race_token_hash="$(python3 - "${race_tokens[-1]}" <<'PYHASH'
+import hashlib, sys
+print(hashlib.blake2s(sys.argv[1].encode()).hexdigest())
+PYHASH
+)"
+[[ "$(client --batch --skip-column-names -e "SELECT token_hash FROM password_resets WHERE user_id = ${user_id}")" == "${race_token_hash}" ]]
+echo "[4a/10] guarded replacement race captured $((race_message_count - 1)) email(s); current token verified"
+cross_message_index="${race_message_count}"
+expected_message_count="$((race_message_count + 1))"
 grep -Fq "${email}" "${temp_dir}/message.eml"
 ! grep -Fq "${unknown_email}" "${temp_dir}/message.eml"
 ! grep -Fq "${unknown_email}" "${temp_dir}"/message.eml.*
@@ -245,10 +289,10 @@ curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
     --data-urlencode "email=${email}" "${base_url}/forgot-password" >"${temp_dir}/cross-instance-a.status"
 [[ "$(cat "${temp_dir}/cross-instance-a.status")" == 202 ]]
 for _ in $(seq 1 40); do
-    if [[ -s "${temp_dir}/smtp.started" ]] && [[ "$(cat "${temp_dir}/smtp.started")" == 3 ]]; then break; fi
+    if [[ -s "${temp_dir}/smtp.started" ]] && [[ "$(cat "${temp_dir}/smtp.started")" == "${cross_message_index}" ]]; then break; fi
     sleep 0.05
 done
-[[ -s "${temp_dir}/smtp.started" && "$(cat "${temp_dir}/smtp.started")" == 3 ]]
+[[ -s "${temp_dir}/smtp.started" && "$(cat "${temp_dir}/smtp.started")" == "${cross_message_index}" ]]
 curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
     --header "Origin: ${base_url_b}" --data-urlencode "_zelyra_csrf=${csrf_b}" \
     --data-urlencode "email=${email}" "${base_url_b}/forgot-password" >"${temp_dir}/cross-instance-b.status" &
@@ -257,7 +301,7 @@ wait "${cross_b_pid}"
 [[ "$(cat "${temp_dir}/cross-instance-b.status")" == 202 ]]
 for _ in $(seq 1 40); do [[ -s "${temp_dir}/message-b.eml" ]] && break; sleep 0.1; done
 [[ -s "${temp_dir}/message-b.eml" ]]
-cross_token_a="$(python3 - "${temp_dir}/message.eml.3" <<'PY'
+cross_token_a="$(python3 - "${temp_dir}/message.eml.${cross_message_index}" <<'PY'
 from pathlib import Path
 import email, re, sys
 message = email.message_from_bytes(Path(sys.argv[1]).read_bytes())
@@ -284,16 +328,16 @@ print(hashlib.blake2s(sys.argv[1].encode()).hexdigest())
 PY
 )"
 [[ "$(client --batch --skip-column-names -e "SELECT token_hash FROM password_resets WHERE user_id = ${user_id}")" == "${cross_hash_b}" ]]
-[[ "${temp_dir}/message.eml.3" -ot "${temp_dir}/message-b.eml" ]]
+[[ "${temp_dir}/message.eml.${cross_message_index}" -ot "${temp_dir}/message-b.eml" ]]
 
 echo "[6/10] exchange email token for a clean URL and reset cookie"
-if [[ "$(captured_message_count)" -lt 3 ]]; then
+if [[ "$(captured_message_count)" -ne "${expected_message_count}" ]]; then
     echo "error: local SMTP sink did not capture all reset messages" >&2
     exit 1
 fi
 mapfile -t issued_tokens < <(captured_reset_tokens)
-if [[ "${#issued_tokens[@]}" -ne 4 ]]; then
-    echo "error: expected four captured reset tokens, got ${#issued_tokens[@]}" >&2
+if [[ "${#issued_tokens[@]}" -ne "${expected_message_count}" ]]; then
+    echo "error: expected ${expected_message_count} captured reset tokens, got ${#issued_tokens[@]}" >&2
     exit 1
 fi
 token="${cross_token_b}"

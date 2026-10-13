@@ -444,13 +444,20 @@ Konstrukte absichtlich.
   Code `E-TYPE-MATCH-001`. Die Analyse behandelt Sequenzen, Bedingungen, `match`,
   Schleifen und Kontrollflussabbrüche konservativ; eine möglicherweise
   terminierende Schleife gilt nicht als garantierte Rückgabe.
-- Verschachtelte Funktionsaufrufe sind auf 32 Ebenen begrenzt und werden bei
+- Verschachtelte Funktionsaufrufe werden zur Laufzeit begrenzt und bei
   Überschreitung mit einer quellgebundenen Runtime-Diagnose abgebrochen. Das
   schützt vor Stackabstürzen, ist aber kein konfigurierbares Rekursionslimit.
-- Eigene Enums besitzen aktuell payloadfreie Varianten: `enum Status { Draft
-  Paid }`, Werte wie `Status::Draft` und exhaustive `match`-Arme. JSON verwendet
-  für diese Typen `{"$enum":"Status","variant":"Draft"}`. Varianten mit
-  Nutzdaten und Enum-Imports über Modulgrenzen sind noch nicht verfügbar.
+  Zusätzliche Tests in 0.9.9 zeigten, dass die zuvor gewählte Grenze auf
+  kleinen Runtime-Stacks noch abstürzen konnte; sie ist deshalb auf 24 aktive
+  Aufruf-Frames abgesenkt.
+- Eigene Enums unterstützen payloadfreie und payloadtragende Varianten.
+  `enum Status { Draft Paid }` sowie `enum Event { Created(Int) Paid(Date) }`
+  erzeugen typsichere Werte. Muster binden Nutzdaten, und `match` muss jede
+  Variante abdecken. Öffentliche Enums samt Konstruktoren und Mustern dürfen
+  über explizite Modulimporte verwendet werden. Unit-Varianten behalten ihr
+  bisheriges JSON-Format `{"$enum":"Status","variant":"Draft"}`;
+  Varianten mit Nutzdaten verwenden zusätzlich ein `payload`-Array, zum
+  Beispiel `{"$enum":"Event","payload":[7],"variant":"Created"}`.
 - `for item in start..end` durchläuft Integerwerte mit exklusivem Ende. Leere
   Bereiche sind erlaubt; negative Werte, `break` und `continue` funktionieren.
   Ein direkt verwendeter `range(start, end)`-Arraywert ist auf eine Million
@@ -470,9 +477,198 @@ Konstrukte absichtlich.
   Festkommadivision kann weiterhin jenseits der neunten Stelle abschneiden.
 - `zelyra run file.zyl --max-steps N` aktiviert eine optionale Obergrenze für
   ausgeführte Anweisungen und Schleifeniterationen. Ohne Option bleibt das
-  Budget unbegrenzt. Das Budget ist keine Prozessisolation. Funktionswerte,
-  benutzerdefinierte Generics und Enum-Payloads sind noch nicht Teil der
-  Sprachlinie.
+  Budget unbegrenzt. Das Budget ist keine Prozessisolation. Benannte
+  Funktionswerte, benutzerdefinierte generische Datentypen und allgemeine
+  generische Constraints sind noch offen.
+
+### Generische Funktionen in 0.9.9
+
+Der 0.9.9-Entwicklungszweig unterstützt benutzerdefinierte generische
+Funktionen. Typparameter stehen direkt nach dem Funktionsnamen; Typen können
+beim Aufruf aus Argumenten abgeleitet oder ausdrücklich angegeben werden:
+
+~~~zelyra
+fn identity<T>(value: T) -> T {
+    return value
+}
+
+fn first_or<T>(values: T[], fallback: T) -> T {
+    if len(values) > 0 { return values[0] }
+    return fallback
+}
+
+fn main() {
+    print(identity(42))
+    print(identity<String>("Zelyra"))
+    print(first_or(["Kunde", "Artikel"], "unbekannt"))
+}
+~~~
+
+Ein Typparameter muss aus Argumenten ableitbar sein oder explizit angegeben
+werden. Wiederholte Verwendungen desselben Parameters müssen denselben Typ
+haben; andernfalls meldet der Compiler `E-TYPE-001`. Nicht ableitbare Typen,
+eine falsche Anzahl expliziter Typargumente und Typparameter, die deklarierte
+Typen verdecken, verwenden `E-TYPE-GENERIC-001`. Generische Funktionen dürfen
+andere generische Funktionen aufrufen. Der Type-System-Beispiellauf deckt
+Inference, explizite Typen, Arrays, `Option`, Modulimporte und erwartete
+Compilerfehler ab. Generische Funktionen, Records und Enums sind verfügbar;
+allgemeine Constraints bleiben außerhalb des aktuellen Umfangs.
+
+### Generische nutzerdefinierte Typen in 0.9.9
+
+Records und Enums dürfen Typparameter deklarieren. Explizite Typargumente
+stehen in spitzen Klammern. Bei Record-Literalen und Enum-Payloads leitet der
+Compiler Typargumente ab, wenn alle Parameter aus den Feldern beziehungsweise
+Payloads hervorgehen:
+
+~~~zelyra
+struct Box<T> { value: T }
+enum Maybe<T> { Some(T) None }
+
+fn unwrap_or<T>(value: Maybe<T>, fallback: T) -> T {
+    match value {
+        Maybe::Some(found) => { return found }
+        Maybe::None => { return fallback }
+    }
+}
+
+fn main() {
+    box: Box<Int> = Box<Int> { value: 7 }
+    inferred = Box { value: "Artikel" }
+    some = Maybe::Some(42)
+    none: Maybe<String> = Maybe::None<String>()
+    print(unwrap_or(some, 0))
+    print(unwrap_or(none, "leer"))
+}
+~~~
+
+Ein generischer Enum-Unit-Konstruktor ohne Payload kann seinen Typ nicht
+ableiten und braucht deshalb die Form `Maybe::None<String>()`. In `match`
+werden Payload-Muster anhand der konkreten Enum-Typargumente geprüft; alle
+Varianten bleiben exhaustive abzudecken. `json_decode<Box<Int>>` und
+`json_decode<Maybe<Int>>` prüfen Payloads gegen den expliziten Zieltyp. Das
+bestehende JSON-Format fügt keine Typargumente hinzu. Records mit generischen
+Parametern sind keine SQL-Spaltentypen und werden dort ausdrücklich abgelehnt.
+
+Allgemeine Constraints/Traits (`T: Ord`), generische Typ-Aliase und generische
+Funktionsreferenzen werden nicht unterstützt. Generische Parameter dürfen nur
+Operationen verwenden, deren Typ für den konkreten Wert feststeht. Der
+Compiler meldet fehlende oder widersprüchliche Ableitungen mit
+`E-TYPE-GENERIC-001` beziehungsweise einem Typfehler.
+
+### Records und Klassen
+
+`struct`-Records sind Werte: Zuweisung und Parameterübergabe kopieren den
+Recordwert, Gleichheit vergleicht seine Felder, und `record_with` erzeugt einen
+geänderten neuen Wert. `class`-Instanzen besitzen dagegen Referenzidentität.
+`class` ist nur vor einer Klassendeklaration ein Kontextwort. An allen anderen
+Stellen bleibt es ein normaler Bezeichner, damit gültiger Quelltext der
+Sprachlinie `0.1` mit einer Variable oder Funktion namens `class` gültig bleibt.
+Konstruktoren verwenden dieselbe lesbare Feldschreibweise:
+
+~~~zelyra
+class Counter {
+    value: Int
+}
+
+fn increment(counter: Counter) {
+    counter.value = counter.value + 1
+}
+
+fn main() {
+    first = Counter { value: 0 }
+    alias = first
+    increment(first)
+    print(alias.value) # 1
+    print(first == alias) # true
+}
+~~~
+
+Alle nicht-optionalen Felder müssen beim Erstellen angegeben werden. Eine
+Zuweisung an ein Feld wird statisch auf Empfänger, Feldname und Werttyp geprüft
+und aktualisiert dieselbe Instanz; Kopieren einer Bindung, Rückgabe aus einer
+Funktion und Übergabe als Parameter erhalten dieselbe Identität. `==` und `!=`
+vergleichen Klassenreferenzen anhand der Instanzidentität, auch wenn zwei
+Instanzen gleiche Feldwerte haben. Generische Klassen sind möglich, sofern ihre
+Typargumente aus dem Konstruktor ableitbar sind oder ausdrücklich angegeben
+werden.
+
+Klassen besitzen keine Methoden- oder Vererbungssyntax. Verhalten wird als
+gewöhnliche Funktion mit einem ausdrücklich typisierten Empfängerparameter
+geschrieben; dadurch bleibt der Datenfluss sichtbar und es gibt kein implizites
+`this`. `record_with` ist für Klassen unzulässig. Ein Feldupdate, das einen
+Referenzzyklus erzeugen würde, wird mit `E-RUNTIME-001` abgewiesen;
+Feldänderungen innerhalb eines `parallel`-Blocks liefern ebenfalls eine
+kontrollierte Runtime-Diagnose. Damit verhindert die Runtime unbeschränkte
+Referenzzyklen und nichtdeterministische gleichzeitige Mutationen.
+
+Klassenreferenzen lassen sich nicht direkt mit JSON, HTTP-APIs oder SQL
+serialisieren, weil diese Formate keine Runtime-Objektidentität bewahren.
+Konvertiere die für einen Austausch benötigten Felder ausdrücklich in einen
+`struct`-DTO. Auch Records und Varianten, die Klassenreferenzen enthalten,
+werden an JSON-Grenzen abgewiesen. Diese Klassenregeln gelten für den
+0.9.9-Entwicklungszweig; Vererbung, Methoden, Closures und ein allgemeiner
+Objekt-/ORM-Mapper bleiben außerhalb dieses Umfangs.
+
+### Benannte Funktionswerte in 0.9.9
+
+Der 0.9.9-Entwicklungszweig kann Referenzen auf benannte, nicht generische
+Funktionen speichern, übergeben und indirekt aufrufen. Ein vorangestelltes `&`
+kennzeichnet die Referenz; es ruft die Funktion nicht auf:
+
+~~~zelyra
+fn increment(value: Int) -> Int { return value + 1 }
+
+fn apply(callback: Function<(Int) -> Int>, value: Int) -> Int {
+    return callback(value)
+}
+
+fn main() {
+    transform = &increment
+    print(apply(transform, 8))
+}
+~~~
+
+Funktionswerte besitzen ausdrückliche Parameter- und Rückgabetypen. Ein
+effektbehafteter Funktionstyp nennt seine benötigten Capabilities mit
+`uses {Capability}`. Die Anforderungen der referenzierten Funktion müssen in
+den deklarierten Funktionstyp passen; auch die aufrufende Funktion eines
+indirekten Aufrufs muss diese Anforderungen deklarieren. Die Typprüfung folgt
+Funktionswerten durch lokale Bindungen und Zuweisungen; die Laufzeit prüft die
+Capability zusätzlich vor dem Aufruf. Öffentliche Funktionen dürfen über
+explizite Modulaliase referenziert werden, etwa `&math::increment`; private
+Funktionen sind nicht modulübergreifend verfügbar. `function` bleibt ein
+gewöhnlicher Bezeichner.
+
+Closures, eingefangene lokale Funktionen und Referenzen auf generische
+Funktionen sind in diesem begrenzten Schritt nicht enthalten. Funktionswerte
+haben keine Gleichheits- oder Identitätssemantik; sie sind keine JSON- oder
+SQL-Daten und werden an diesen Grenzen abgewiesen. Ihre Signaturen stehen
+Compilerwerkzeugen zur Verfügung, aber nicht als HTTP-Schemadaten.
+
+### Enum-Varianten mit Nutzdaten in 0.9.9
+
+Ein Enum kann bei jeder Variante die Typen ihrer gespeicherten Werte angeben:
+
+~~~zelyra
+enum OrderEvent { Created(Int) Paid(Date, Decimal) Rejected(String) }
+
+fn describe(event: OrderEvent) -> String {
+    match event {
+        OrderEvent::Created(id) => { return "created" }
+        OrderEvent::Paid(day, total) => { return "paid" }
+        OrderEvent::Rejected(reason) => { return "rejected" }
+    }
+}
+~~~
+
+Konstruktorargumente und Muster werden gegen die deklarierte Anzahl und die
+jeweiligen Typen geprüft. Ein unvollständiger Match liefert
+`E-TYPE-MATCH-001`; ein falscher Variant- oder Payload-Gebrauch liefert
+`E-TYPE-ENUM-001`. JSON für Payload-Varianten hat ein explizites
+`{"$enum": ..., "variant": ..., "payload": [...]}`-Format und wird beim
+Decodieren anhand der Enumdeklaration validiert. Das Format der bisherigen
+Payload-freien Varianten bleibt gleich.
 
 ### Getaggter JSON-Codec für `Result`
 
@@ -486,3 +682,111 @@ JSON-, Form- oder Payloadfehler, der innere Wert ist die dekodierte fachliche
 Felder und ungültige Payloads liefern einen äußeren `Err`. Das bestehende
 `json_encode`-Format wird nicht verändert; HTTP- und API-Wireformate bleiben
 damit kompatibel.
+
+### Explizite skalare Textformatierung in 0.9.9
+
+`format_text(wert)` wandelt ausdrücklich einen einzelnen skalaren Wert in
+Anzeigetext um. Zulässig sind `Int`, `UInt`, `Float`, `Decimal`, `Bool`, `Char`,
+`String`, `Date`, `Time`, `Timestamp` und `Duration`. Die Funktion fügt keine
+JSON-Anführungszeichen hinzu und erlaubt keine implizite Konvertierung in
+Zuweisungen oder Textverkettungen. Arrays, Records, Enums, Option-/Result-Werte,
+Unit und Funktionswerte besitzen keinen impliziten Anzeigestandard und werden
+abgewiesen. Bei Decimal werden bedeutungslose Nullen am Ende weggelassen; für
+Geldbeträge mit fester Nachkommastellenzahl ist `format_scaled_result` gedacht.
+
+## Persistente Passwort-Reset-Limits in 0.9.9
+
+Eine Auth-Deklaration mit `reset_tokens` benötigt auch
+`reset_rate_limits: <tabelle>`. Das ist eine ausdrückliche Schemaabhängigkeit;
+die Reset-Runtime legt keine Tabellen an. Die Limit-Tabelle hat ein eindeutiges,
+nicht-nullbares `bucket_key: String(64)`, erforderliche Felder
+`window_started: Timestamp` und `request_count: Int`, ein nullable
+`blocked_until: Timestamp?` sowie einen Index beginnend mit `window_started`.
+Die Kernspalten dürfen kein `auto` verwenden. Das vollständige Beispiel steht
+in [`examples/password_reset.zyl`](../examples/password_reset.zyl).
+
+Der Standard bleibt drei Anfragen je 900 Sekunden mit anschließender Sperre
+für 900 Sekunden. Forgot-Password-Anfragen mit gültigem CSRF verbrauchen das
+Limit vor der Kontosuche; Reset-Password-Formulare mit gültigem CSRF und
+syntaktisch gültigem Token verwenden denselben Eintrag. Maßgeblich ist die
+TCP-Peer-IP unabhängig vom Quellport; Forwarded-IP-Header werden ignoriert.
+Einträge bleiben nach Neustart bestehen und gelten gemeinsam für Instanzen mit
+derselben schreibbaren MariaDB, denselben Limits und demselben `ZELYRA_RESET_DELIVERY_KEY`.
+HMAC-SHA256 mit einer eigenen Zweckkennung leitet den gespeicherten Schlüssel
+ab; die Datenbank erhält keine Peer-IP. Es handelt sich um pseudonymisierten
+Sicherheitszustand, nicht um eine Anonymitätsgarantie.
+
+Advisory-Lock und Transaktion serialisieren Limitänderungen und begrenzen die
+Tabelle auf 4.096 Einträge. Das Lock wartet höchstens eine Sekunde; Datenbank-,
+Lock- und Schlüsselfehler verhindern den Reset-Versuch und melden die bereinigte
+Betreiberdiagnose `E-AUTH-043` ohne Konto-, Token-, IP- oder Verbindungsdetails. Die generische Antwort
+auf Forgot-Password bleibt HTTP `202`; abgewiesene Reset-Password-Formulare
+liefern weiterhin `400`. Eine aktive Sperre gilt auch nach Ablauf des
+Anfragefensters. Ein abgelaufenes, ungesperrtes Fenster beginnt mit der aktuellen
+Anfrage als erster Anfrage neu. Maßgeblich ist die MariaDB-Uhr. Pro Anfrage
+werden höchstens 100 inaktive Einträge mit einem mehr als 48 Stunden alten
+Fenster entfernt; ohne Anfragen läuft keine zeitgesteuerte Bereinigung. Eine
+volle Tabelle weist neue Einträge ab und behält bestehende Limits bei.
+
+Bestehende experimentelle Reset-Projekte müssen Auth-Option und Tabelle
+ergänzen und ihre additive Migration vor dem Compilerwechsel prüfen. Fehlende
+oder inkompatible Speicherung liefert `E-AUTH-039`/`E-AUTH-040`, ein fehlender
+Bereinigungsindex `E-AUTH-041` und die Option ohne `reset_tokens` `E-AUTH-042`.
+Die Diagnosen behalten Quelldatei und Span der Auth-Deklaration. Normale
+Login-Deklarationen sind unverändert. `context` ergänzt optionale Reset-Felder
+in Schemaversion `1`; `impact`, Modulpläne, Tabellenrechte und Tabellenumbenennung
+berücksichtigen jetzt Reset-, Tenant-Mitgliedschafts- und MFA-Speicherung.
+Für zuvor ausgelassene Auth-Tabellenreferenzen können ein ausdrücklicher
+Importpfad und eine `read_write`-Freigabe erforderlich sein. Siehe
+[Konfiguration](env.md).
+
+### Grenzen für SQL-Bezeichner
+
+Deklarierte Tabellen- und Speicherspaltennamen werden vor der SQL-Ausführung
+geprüft: MariaDB/MySQL erlauben höchstens 64 Bytes, PostgreSQL 63 Bytes für
+Zelyras ASCII-Bezeichner. Bei Beziehungen zählt die erzeugte Endung `_id`
+zum Speicherspaltennamen. Zu lange Namen liefern `E-DB-001` an der Deklaration.
+Für SQLite wird diese Grenze nicht gesetzt.
+
+Erzeugte Namen für Indizes, eindeutige Indizes und Fremdschlüssel behalten ihre
+bisherige kurze Schreibweise. Längere Namen erhalten einen begrenzten Präfix
+und die ersten 16 hexadezimalen Zeichen des SHA-256-Hashes ihres vollständigen
+Namens. Schemaerstellung, Migrationspläne und die Erkennung verwalteter Objekte
+verwenden dieselbe deterministische Regel. Bestehende PostgreSQL-Objekte, deren
+alte Namen der Server still gekürzt hat, können eine geprüfte Übernahme
+erfordern; sie werden nicht still umbenannt oder gelöscht.
+
+## Exakte Dezimalgrenzen in 0.9.9
+
+`betrag: Decimal = decimal("119.00")` deklariert einen exakten Festkommawert.
+Formulare, HTTP und SQL verwenden geprüfte Dezimaltexte. MariaDB/MySQL speichern
+`Decimal` ausdrücklich als `DECIMAL(39,9)`, PostgreSQL als `NUMERIC(39,9)`.
+Alte oder abweichende feste Skalen verhindern SQL-Ausführung beziehungsweise
+Serverstart mit einer quellbezogenen Diagnose. `Money` behält `(19,4)`.
+Multiplikation/Division prüfen das Endergebnis mit einem begrenzten exakten
+Zwischenwert; Restbildung am negativen Minimum verursacht keinen Panic.
+JSON-Ausgaben bleiben Dezimalstrings. Siehe [vollständige Regeln](decimals.de.md)
+und [Beispiel](../examples/decimal_money.zyl). Das belegt keine volle
+PostgreSQL-CRUD-/Auth-Parität oder Produktivfreigabe.
+
+## Datums-/Zeitgrenzen im Entwicklungszweig
+
+Kalender-Tagesrechnung und UTC-Millisekunden sind mit unabhängigen Python-
+Referenzen geprüft. Formulare und APIs weisen ungültige Kalender-/Uhrzeitwerte
+ab; Timestamp ist auf ISO-Jahre 0001–9999 begrenzt. API-Handler erhalten echte
+Date-/Time-/Timestamp-/Duration-Werte. JSON-Ausgaben bleiben unverändert;
+generierte Clients werden daran angepasst. Native Date-/Time-/UTC-Timestamp-
+Parameter und Millisekundenspeicherung sind auf MariaDB, MySQL und PostgreSQL
+geprüft. Falsche Speichertypen/Präzision scheitern vor Anwendung mit Fundstelle.
+Explizites [`sql_decode<T>`](sql-results.de.md) liefert typisierte Skalar-/Record-/
+Array-Ergebnisse mit Kardinalitäts- und NULL-Prüfung; das Rohzeilen-JSON-Format
+bleibt unverändert. Siehe [Regeln](dates.de.md),
+[HTTP-Nachweise](release-readiness/0.9.9-calendar-http.de.md) und
+[SQL-Nachweise](release-readiness/0.9.9-calendar-sql.de.md).
+
+## NULL-bewusste optimistische Edits in 0.9.9
+
+Erzeugte MariaDB-/MySQL-Editformulare signieren natives NULL getrennt von Text
+und prüfen die gesperrte aktuelle Zeile vor dem Schreiben. NULL-/Literal-`\N`-
+Wechsel liefern für veraltete Formulare HTTP 409. Fehlende nullable Felder binden
+SQL-NULL; Pflicht-/Readonly-Prüfungen bleiben. [Regeln und Grenzen](edit-snapshots.de.md).

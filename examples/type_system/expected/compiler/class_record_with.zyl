@@ -1,0 +1,9 @@
+class Counter {
+    value: Int
+}
+
+fn main() {
+    counter = Counter { value: 1 }
+    updated = record_with(counter, "value", 2)
+    print(updated.value)
+}

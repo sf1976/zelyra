@@ -82,7 +82,8 @@ a file after Studio loads it, the operation is rejected; reload before retrying.
 
 Choose **Database** and load the schema. Studio needs `DATABASE_URL` from the
 process environment or the local project `.env` file. It reads table and
-column metadata only. It does not read records or apply schema changes.
+column metadata. It does not apply database changes without a separate,
+confirmed action.
 
 The overview includes a clickable relationship map with tables and foreign-key
 arrows. It groups declared tables by their known source module and compares
@@ -95,6 +96,32 @@ The **record browser** loads rows only after an explicit click and pages at no
 more than 25 rows. It is read-only; table and column names come from the loaded
 schema, SQL identifiers are quoted for the selected backend, and values are
 rendered as text. Opening the workbench does not fetch records automatically.
+
+The **chart assistant** creates a grouped bar or line chart from a declared
+live table. Choose the grouping and measure from fields. Available operations
+are count, sum, average, minimum, and maximum. Sum and average require a
+numeric database column. Studio builds a read-only query from schema
+identifiers and displays at most 20 groups. It does not accept arbitrary SQL.
+You can set an exact text filter and an inclusive range on a `DATE` column.
+Values are bound as parameters, and table/column selections stay limited to
+declared project fields that also exist in the live database. The chart
+configuration is saved as `chart-<name>.zchart.json`; queried rows are not
+included. Loading a saved chart validates its shape and reruns the preview
+against current database contents. An existing Zelyra chart report can be
+updated; a same-named unrelated file is not overwritten.
+
+Add several charts as slides to a local presentation with a title and
+introduction. The configuration is saved as
+`presentation-<name>.zelyra-presentation.json`. **Print view / PDF** creates a
+slide preview and opens the browser print dialog, where the PDF can be saved
+locally. Slides store reviewed chart configurations rather than a database
+snapshot. Loading a presentation restores its title, introduction, and slides;
+chart queries run again when the print view is created.
+
+This Studio slice does not provide arbitrary filters, timestamp or timezone
+ranges, embedding saved charts into running application pages, or compiler
+type checking of these JSON files. The presentation feature is a simple slide
+and print workflow, not a general chart or presentation editor.
 
 The guided **column editor** can add table fields and edit simple existing
 fields. Key, unique, and defaulted columns are excluded from visual editing.

@@ -178,7 +178,7 @@ pub fn preview(
             "type" => Some(type_rename_spans(tokens, source_name)),
             "record" => Some(record_rename_spans(tokens, source_name)),
             "table" | "view" | "form" | "crud" | "tableview" => {
-                Some(resource_rename_spans(tokens, symbol, source_name))
+                Some(resource_rename_spans(program, tokens, symbol, source_name))
             }
             "component" => Some(component_rename_spans(tokens, source_name)),
             _ => None,
@@ -359,11 +359,19 @@ fn record_rename_spans(tokens: &[Token], name: &str) -> HashSet<(usize, usize)> 
     if let Some(span) = any_declaration_name_span(tokens, TokenKind::Struct, name) {
         spans.insert((span.start, span.end));
     }
+    if let Some(span) = any_class_declaration_name_span(tokens, name) {
+        spans.insert((span.start, span.end));
+    }
     spans.extend(record_literal_spans(tokens, name));
     spans
 }
 
-fn resource_rename_spans(tokens: &[Token], symbol: &str, name: &str) -> HashSet<(usize, usize)> {
+fn resource_rename_spans(
+    program: &Program,
+    tokens: &[Token],
+    symbol: &str,
+    name: &str,
+) -> HashSet<(usize, usize)> {
     let keyword = match symbol {
         "table" => TokenKind::Table,
         "view" => TokenKind::View,
@@ -384,6 +392,29 @@ fn resource_rename_spans(tokens: &[Token], symbol: &str, name: &str) -> HashSet<
                 name,
             ));
             spans.extend(property_reference_spans(tokens, TokenKind::Table, name));
+            for property in [
+                TokenKind::Sessions,
+                TokenKind::Permissions,
+                TokenKind::Roles,
+                TokenKind::RolePermissions,
+                TokenKind::Audit,
+                TokenKind::ResetTokens,
+                TokenKind::Ident("memberships".into()),
+                TokenKind::Ident("reset_rate_limits".into()),
+                TokenKind::Ident("mfa".into()),
+                TokenKind::Ident("mfa_recovery".into()),
+            ] {
+                spans.extend(
+                    property_reference_spans(tokens, property, name)
+                        .into_iter()
+                        .filter(|(start, end)| {
+                            program
+                                .auth
+                                .iter()
+                                .any(|auth| auth.span.start <= *start && *end <= auth.span.end)
+                        }),
+                );
+            }
         }
         "view" => {
             spans.extend(property_reference_spans(tokens, TokenKind::View, name));
@@ -599,6 +630,23 @@ fn any_declaration_name_span(tokens: &[Token], keyword: TokenKind, name: &str) -
     None
 }
 
+fn any_class_declaration_name_span(tokens: &[Token], name: &str) -> Option<Span> {
+    tokens
+        .windows(2)
+        .find_map(|pair| match (&pair[0].kind, &pair[1].kind) {
+            (TokenKind::Ident(keyword), TokenKind::Ident(candidate))
+                if keyword == "class" && candidate == name =>
+            {
+                Some(pair[1].span)
+            }
+            _ => None,
+        })
+}
+
+fn is_class_keyword(token: Option<&Token>) -> bool {
+    matches!(token.map(|token| &token.kind), Some(TokenKind::Ident(word)) if word == "class")
+}
+
 fn type_reference_spans(tokens: &[Token], name: &str) -> HashSet<(usize, usize)> {
     let record_literal_ranges = record_literal_ranges(tokens);
     let mut spans = HashSet::new();
@@ -722,18 +770,21 @@ fn record_literal_spans(tokens: &[Token], name: &str) -> HashSet<(usize, usize)>
         {
             continue;
         }
-        if matches!(
-            previous_token(tokens, index).map(|token| &token.kind),
-            Some(
-                TokenKind::Struct
-                    | TokenKind::Table
-                    | TokenKind::Form
-                    | TokenKind::Crud
-                    | TokenKind::View
-                    | TokenKind::Component
-                    | TokenKind::TableView
+        let previous = previous_token(tokens, index);
+        if is_class_keyword(previous)
+            || matches!(
+                previous.map(|token| &token.kind),
+                Some(
+                    TokenKind::Struct
+                        | TokenKind::Table
+                        | TokenKind::Form
+                        | TokenKind::Crud
+                        | TokenKind::View
+                        | TokenKind::Component
+                        | TokenKind::TableView
+                )
             )
-        ) {
+        {
             continue;
         }
         if matches!(
@@ -765,18 +816,19 @@ fn record_literal_ranges(tokens: &[Token]) -> Vec<(usize, usize)> {
                 Some(TokenKind::Ident(_)),
                 Some(TokenKind::Colon)
             )
-        ) && !matches!(
-            previous_token(tokens, index).map(|token| &token.kind),
-            Some(
-                TokenKind::Struct
-                    | TokenKind::Table
-                    | TokenKind::Form
-                    | TokenKind::Crud
-                    | TokenKind::View
-                    | TokenKind::Component
-                    | TokenKind::TableView
-            )
-        );
+        ) && !is_class_keyword(previous_token(tokens, index))
+            && !matches!(
+                previous_token(tokens, index).map(|token| &token.kind),
+                Some(
+                    TokenKind::Struct
+                        | TokenKind::Table
+                        | TokenKind::Form
+                        | TokenKind::Crud
+                        | TokenKind::View
+                        | TokenKind::Component
+                        | TokenKind::TableView
+                )
+            );
         if !is_literal {
             continue;
         }
@@ -968,6 +1020,7 @@ fn collect_function_expression(
         | zelyra_ast::ExprKind::String(_)
         | zelyra_ast::ExprKind::Char(_)
         | zelyra_ast::ExprKind::Variable(_)
+        | zelyra_ast::ExprKind::FunctionValue(_)
         | zelyra_ast::ExprKind::Sql { .. } => {}
     }
 }
@@ -1071,7 +1124,7 @@ mod tests {
 
     #[test]
     fn type_and_record_renames_follow_type_references_and_literals() {
-        let source = "type CustomerId = Id\nstruct Customer { id: CustomerId }\nfn load(id: CustomerId) -> CustomerId { return id }\nfn make() -> Customer { return Customer { id: 1 } }\nfn main() { load(1) }\n";
+        let source = "type CustomerId = Id\nstruct Customer { id: CustomerId }\nclass CustomerObject { id: Int }\nfn load(id: CustomerId) -> CustomerId { return id }\nfn make() -> Customer { return Customer { id: 1 } }\nfn find(value: CustomerObject) -> CustomerObject { return CustomerObject { id: value.id } }\nfn main() { load(1) }\n";
         let tokens = lex(source).expect("source should lex");
         let program = parse(&tokens).expect("source should parse");
         let request = json!({
@@ -1079,7 +1132,8 @@ mod tests {
             "entry": "main.zyl",
             "operations": [
                 {"kind": "rename", "symbol": "type", "from": "CustomerId", "to": "ClientId"},
-                {"kind": "rename", "symbol": "record", "from": "Customer", "to": "Client"}
+                {"kind": "rename", "symbol": "record", "from": "Customer", "to": "Client"},
+                {"kind": "rename", "symbol": "record", "from": "CustomerObject", "to": "Contact"}
             ]
         });
         let preview = preview(&program, source, &tokens, &request).expect("edit should preview");
@@ -1093,7 +1147,11 @@ mod tests {
         assert!(preview
             .source
             .contains("fn make() -> Client { return Client { id: 1 } }"));
-        assert_eq!(preview.changed_tokens, 7);
+        assert!(preview.source.contains("class Contact { id: Int }"));
+        assert!(preview
+            .source
+            .contains("fn find(value: Contact) -> Contact { return Contact { id: value.id } }"));
+        assert_eq!(preview.changed_tokens, 11);
     }
 
     #[test]
@@ -1139,6 +1197,38 @@ mod tests {
             .source
             .contains("SELECT id FROM clients WHERE note = 'customers'"));
         assert_eq!(preview.changed_tokens, 9);
+    }
+
+    #[test]
+    fn table_rename_updates_reset_storage_without_renaming_local_values() {
+        let source = r#"
+            auth users { table: users reset_tokens: tokens reset_rate_limits: rate_limits }
+            table rate_limits { bucket_key: String(64) primary }
+            struct Label { reset_rate_limits: String }
+            fn main() {
+                rate_limits: String = "rate_limits"
+                value = Label { reset_rate_limits: rate_limits }
+                print(value.reset_rate_limits)
+            }
+        "#;
+        let tokens = lex(source).unwrap();
+        let program = parse(&tokens).unwrap();
+        let request = json!({
+            "operations": [{"kind": "rename", "symbol": "table", "from": "rate_limits", "to": "reset_limits"}]
+        });
+        let result = preview(&program, source, &tokens, &request).unwrap();
+        let changed = parse(&lex(&result.source).unwrap()).unwrap();
+        assert_eq!(
+            changed.auth[0].reset_rate_limits_table.as_deref(),
+            Some("reset_limits")
+        );
+        assert!(result.source.contains("table reset_limits"));
+        assert!(result
+            .source
+            .contains("rate_limits: String = \"rate_limits\""));
+        assert!(result
+            .source
+            .contains("Label { reset_rate_limits: rate_limits }"));
     }
 
     #[test]

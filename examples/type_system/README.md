@@ -34,25 +34,26 @@ Programmlauf.
 | `Bool` | ✅ unterstützt | `true`/`false`, logische Operationen und Gleichheit. |
 | `Char` | ✅ unterstützt | Ein Unicode-Skalarwert; JSON verwendet eine einstellige JSON-Zeichenkette. Graphemcluster mit mehreren Codepoints sind kein einzelnes `Char`. |
 | `String` | ✅ unterstützt | UTF-8, Unicode, Escape-Sequenzen, Gleichheit, lexikografische Vergleiche und Verkettung. `text_chars` zählt Unicode-Skalarwerte; eine Byte-Längenfunktion gibt es nicht. |
+| `format_text` | ✅ unterstützt | Explizite Anzeigeformatierung für einzelne skalare Werte (`Int`, `UInt`, `Float`, `Decimal`, `Bool`, `Char`, `String`, `Date`, `Time`, `Timestamp`, `Duration`). Fügt keine JSON-Anführungszeichen hinzu. Sammlungen, Records, Klassen, Enums, `Result` und Funktionswerte werden abgewiesen; Geld mit fester Skala weiter über `format_scaled_result` formatieren. |
 | Null und optionale Werte | ✅ unterstützt | Kein eigenständiger Nulltyp. `Option<T>`, `Some` und `None` unterscheiden fehlende Werte von `0`, `false` und `""`. JSON bildet `None` auf `null` ab. |
 | Arrays | ✅ unterstützt | Typisierte, verschachtelte und leere Arrays; `append`, Verkettung und `array_replace_result` liefern neue Werte. Doppelte Elemente sind erlaubt. Falsche Typen werden beim Kompilieren, ungültige Indizes als `Err` erkannt. |
 | Listen | ✅ Alias | `List<T>` ist ein Typsynonym für `T[]`; Literale bleiben `[a, b]`, und Arrayoperationen gelten unverändert. Es gibt bewusst nur eine geordnete Sequenzsemantik. |
 | Tupel | ✅ unterstützt | `Tuple<A, B, ...>` und `tuple(a, b, ...)` bilden geordnete heterogene Werte. Konstante Indizes werden statisch typgeprüft; dynamische Tuple-Indizes sind nicht erlaubt. JSON verwendet ein positionsgetreues Array mit geprüfter Länge. |
 | Mengen | ✅ unterstützt | `Set<T>`, `set([a, b])`, `contains`, `set_add` und `set_remove`. Werte sind deterministisch sortiert, Duplikate werden entfernt. Unterstützt werden die skalar vergleichbaren Schlüsseltypen; JSON ist ein sortiertes Array. |
 | `Map<K,V>` | ✅ unterstützt | Typisierte Maps; erlaubte Schlüsseltypen sind `Int`, `UInt`, `String`, `Bool`, `Char` und `Timestamp`. Doppelte Literalschlüssel behalten einen Eintrag und der letzte Wert gewinnt. Ein fehlender `get`-Schlüssel ergibt `None`. JSON unterstützt nur String-Schlüssel. |
-| Records (`struct`) | ✅ unterstützt | Eigene, verschachtelte Records, Felder, Wertgleichheit und JSON-Roundtrip. `record_with(record, "feld", wert)` liefert einen typgeprüften neuen Record; der ursprüngliche Wert bleibt bestehen. |
-| Enums | ✅ unterstützt | Eigene payloadfreie Varianten mit `enum Status { Draft Paid }`, `Status::Draft`, Gleichheit, JSON-Roundtrip und exhaustivem `match`. Varianten mit Nutzdaten sind noch nicht verfügbar. |
-| Klassen/Objektidentität/Referenzen | — nicht vorhanden | Records werden als Werte behandelt. Es gibt keine beobachtbare Objektidentität oder Referenzsemantik und keine Mutation einzelner Recordfelder. |
+| Records (`struct`) | ✅ unterstützt | Eigene, verschachtelte und generische Records, Felder, Wertgleichheit und typisierte JSON-Roundtrips. `record_with(record, "feld", wert)` liefert einen typgeprüften neuen Record; der ursprüngliche Wert bleibt bestehen. Generische Records sind keine SQL-Spaltentypen. |
+| Enums | ✅ unterstützt | Eigene payloadfreie, payloadtragende und generische Varianten mit typgeprüften Konstruktoren, Bindings in `match`, Exhaustivität, Wertgleichheit und JSON-Roundtrip. Typargumente werden abgeleitet oder ausdrücklich angegeben. Öffentliche Enums funktionieren auch über Modulimporte. |
+| Klassen/Objektidentität/Referenzen | ✅ unterstützt | `class` erstellt Instanzen mit geteilter Referenzidentität. Kopieren, Übergaben, Rückgaben und Sammlungen bewahren die Instanz; `==`/`!=` vergleichen Identität. `objekt.feld = wert` ist typgeprüft. Generische Klassen und optionale Felder sind möglich. Keine Methoden- oder Vererbungssyntax; Funktionen erhalten den Empfänger ausdrücklich als Parameter. Direkte JSON-/HTTP-/SQL-Serialisierung wird abgewiesen; DTO-Records verwenden. Referenzzyklen und Änderungen innerhalb von `parallel` werden kontrolliert verhindert. |
 | `Timestamp` | ✅ teilweise nutzbar | `now()`, Gleichheit, chronologische Vergleiche, UTC-Formatierung, JSON als Unix-Millisekunden sowie `timestamp_add_result` und `timestamp_difference_result` für UTC-Dauern. Operationen sind auf ISO-Jahre 0001–9999 begrenzt. Zeitzonen und lokale Sommerzeit sind nicht enthalten. |
 | `Date`, `Time`, `Duration`, `Bytes` | ✅ unterstützt | Validierte ISO-Daten und Uhrzeiten, chronologische Vergleiche, JSON-Roundtrips und geprüfte Daueraddition/-subtraktion. `date_add_days_result` und `date_days_between_result` rechnen Kalender-Tage inklusive Schaltjahren und Jahreswechseln. `Bytes` akzeptiert Werte 0–255. |
 | Bereichsschleife | ✅ unterstützt | `for i in start..end` verwendet Int-Grenzen mit exklusivem Ende. Negative Grenzen, leere Bereiche, `break` und `continue` funktionieren. Der Bereich wird in einer Schleife nicht als Array materialisiert. |
 | `Unit` | ✅ unterstützt | Leerer Rückgabewert, explizite Funktionstypen und JSON-Roundtrip mit `null`. |
 | `Result<T,E>` | ✅ unterstützt | `Ok`/`Err`, Pattern Matching und Rückgabe aus Funktionen. Das bisherige `json_encode`-Format bleibt unverändert; `json_encode_tagged_result` und `json_decode_tagged_result<T,E>` tauschen Results verlustfrei als `{"$result":"ok","value":...}` oder `{"$result":"err","error":...}` aus. `json_decode_result<T>` bleibt der Result-basierte Decoder für gewöhnliche JSON-Ziele. |
 | `HttpResult<T>`, `HttpResponse`, `HttpError` | 🧪 spezialisiert | HTTP-Subsystem-Typen für Netzwerkantworten und Fehler; keine allgemeinen Literal- oder Konstruktoren. |
-| Generics | 🧪 eingebaut | Generische Standardtypen wie `Option`, `Result`, `Map`, Arrays und `json_decode<T>` sind vorhanden. Eigene generische Funktionen und Datentypen sind nicht verfügbar. |
-| Typ-Aliase und eigene Typen | 🧪 teilweise | `type Name = ...` sowie Records sind vorhanden. Records werden ausgeführt und serialisiert; Aliase haben keine eigene Runtimeidentität. |
-| `Id`, `Email`, `Url`, `Uuid`, `Money` | 🧪 spezialisiert | Benannte String-Domainwerte für API-/Datenschema-Nutzung; keine eigenen numerischen oder Identitätsregeln in der Runtime. |
-| Funktionen als Werte | — nicht vorhanden | Funktionen können aufgerufen, aber nicht als Werte gespeichert oder übergeben werden. |
+| Generics | 🧪 teilweise | Eigene generische Funktionen, Records und Enums mit Typinferenz oder expliziten Typargumenten sind verfügbar. Allgemeine Constraints/Traits, generische Typ-Aliase und generische Funktionsreferenzen sind nicht enthalten. Generische Parameter unterstützen nur Operationen, die für ihren konkreten Typ feststehen. |
+| Typ-Aliase und eigene Typen | 🧪 teilweise | `type Name = ...`, Records und Enums sind vorhanden. Generische Records und Enums behalten ihre nominalen Typargumente zur Laufzeit; Aliase haben keine eigene Runtimeidentität. |
+| `Id`, `Email`, `Url`, `Uuid`, `Money` | 🧪 spezialisiert | API-/Schema-Skalardomains. Explizite SQL-Decodierung verwendet geprüftes Int für Id, DECIMAL(19,4) für Money und Text für Email/Url/Uuid. Keine neuen Identitäts- oder Domain-Inhaltsregeln; ausdrückliche Aliase haben Vorrang. |
+| Funktionen als Werte | 🧪 teilweise | Benannte, nicht generische Funktionen können mit `&name` gespeichert, übergeben und über einen typisierten `Function<(...) -> ...>`-Wert indirekt aufgerufen werden. Capabilities bleiben statisch und zur Laufzeit erhalten. Closures, erfasste lokale und generische Funktionswerte fehlen. |
 
 ## Konvertierungen, Standardwerte und Kopien
 
@@ -62,31 +63,56 @@ Normale Bindings brauchen einen initialen Wert; `Option` ist die vorhandene
 Möglichkeit, das Fehlen eines Werts ausdrücklich darzustellen. Fehlende
 optionale Recordfelder erhalten beim JSON-Decodieren `None`.
 
-Zuweisungen und Parameterübergaben verhalten sich wertbasiert. Arrays und
-Records werden intern geklont; die Sprache bietet keine Referenzidentität und
-keine flachen oder tiefen Kopien als getrennte Operationen. `record_with` und
-`array_replace_result` liefern geänderte Werte zurück und erhalten das Original.
+Zuweisungen und Parameterübergaben verhalten sich bei Skalaren, Arrays und
+Records wertbasiert; Records und Arrays werden intern geklont. Klassen sind die
+ausdrückliche Ausnahme: eine Bindungskopie oder Parameterübergabe teilt die
+Instanzidentität und sieht Feldänderungen über alle Referenzen. `record_with`
+und `array_replace_result` liefern geänderte Werte zurück und erhalten das
+Original. Klassen haben keine Methoden- oder Vererbungssyntax und lassen sich
+nicht direkt serialisieren; Objektzyklen und parallele Klassenfeldänderungen
+werden abgewiesen.
 
 ## Automatisierte Abnahme
 
 Der erfolgreiche Programmlauf prüft Zahlenbereiche, Rechenoperationen,
 Rundungsverhalten, Unicode, optionale Werte, Arrays, Listen-Aliase, Tupel,
-Mengen, Records, Enums, Kalender-/Zeitstempeloperationen, Decimal-Quantisierung,
-Bereiche und JSON.
-Der CLI-Integrationstest erwartet zusätzlich **8 Compilerfehler** und
-**18 Runtimefehler** (Typfehler, gemischte Arrays, unvollständiges Matching,
+Mengen, Records, payloadfreie und payloadtragende Enums,
+Kalender-/Zeitstempeloperationen, Decimal-Quantisierung, explizite skalare
+Textformatierung, Bereiche, JSON sowie
+benutzerdefinierte generische Funktionen, Records, Enums und Klassen.
+Der CLI-Integrationstest erwartet zusätzlich **27 Compilerfehler** und
+**21 Runtimefehler** (Typfehler, gemischte Arrays, unvollständiges Matching,
 Überlauf/Unterlauf, Division durch null, ungültiger Index, ungültige
 Date-/Time-/Bytes-/Decimal-Werte, falsche Tuple-Länge, nicht-endliche
 JSON-Zahl, nicht-stringbasierte Map-Serialisierung sowie nicht unterstützte allgemeine
 `json_decode<Result<...>>`-Decodierung; der separate getaggte Codec ist verfügbar). Ein erwarteter Fehler ist dabei ein
-positives Testergebnis. Bei erfolgreichem Integrationstest sind alle 10
+positives Testergebnis. Bei erfolgreichem Integrationstest sind alle 13
 positiven Testgruppen bestanden und es gibt 0 unerwartete Fehler. Die
-aktuelle Matrix umfasst 18 unterstützte, 5 teilweise unterstützte und 2 noch
-nicht verfügbare Einträge; das Programm gibt diese drei Zahlen aus. Die
-Sprachmatrix weist Funktionswerte und beobachtbare Klassen-/Referenzidentität
-ausdrücklich als nicht verfügbar aus. Eigene Generics und Enum-Varianten mit
-Nutzdaten fehlen ebenfalls; payloadfreie Enums sind enthalten. Records verwenden
-bewusst Wertsemantik.
+aktuelle Matrix umfasst 19 unterstützte, 6 teilweise unterstützte und keinen
+nicht verfügbaren Eintrag; das Programm gibt diese drei Zahlen aus. Eigene
+generische Funktionen und Datentypen, payloadtragende Enums und benannte
+Funktionswerte sowie Klassenreferenzen werden im positiven Type-System-Beispiel
+sowie mit expliziten Compiler- und Runtime-Negativfällen geprüft. Allgemeine
+Constraints, generische Typ-Aliase, Closures, generische Funktionswerte,
+Methoden- und Vererbungssyntax fehlen. Klassenreferenzen sind nicht dasselbe
+wie fachliche Datenbank-IDs; für APIs und persistente Daten werden explizite
+Records mit fachlichen IDs verwendet.
 
 Das ist eine Abdeckung der vorhandenen Sprachoberfläche, keine Behauptung, dass
 alle Typen oder Konvertierungen bereits implementiert sind.
+
+Weitere exakte Decimal-/Money-Grenzen, SQL-Skalen und Alias-Regeln:
+[Decimal und Geldbeträge](../../docs/decimals.de.md). Die Grenzwertregressionen
+prüfen das skalierte Minimum/Maximum, gültige breite Zwischenwerte und
+kontrollierte Fehler.
+
+Aktuelle Date-/Time-/Timestamp-/Duration-Regeln und unabhängige Nachweise:
+[Datum und UTC-Dauern](../../docs/dates.de.md). Timestamp-Eingaben außerhalb
+der ISO-Jahre 0001–9999 werden kontrolliert abgewiesen.
+
+Native SQL-Parameter/Speicherung für Date, Time und UTC-Timestamp sind auf
+MariaDB/MySQL/PostgreSQL geprüft: [SQL-Nachweise](../../docs/release-readiness/0.9.9-calendar-sql.de.md).
+MariaDB/MySQL beginnen bei Jahr 1000, PostgreSQL bei Jahr 0001.
+[`sql_decode<T>`](../../docs/sql-results.de.md) erzeugt typisierte Skalar-/Record-/
+Array-Ergebnisse mit Kardinalitäts-, nativer Typ- und NULL-Prüfung. Rohzeilen
+bleiben mit ihrer bisherigen Text-/HTTP-Darstellung verfügbar.

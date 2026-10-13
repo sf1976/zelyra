@@ -1,18 +1,25 @@
-# Implemented in Zelyra 0.9.8
+# Implemented in Zelyra 0.9.9
 
-**Snapshot:** 0.9.8 release candidate · language compatibility line `0.1` · 2026-10-12
-**Maturity:** experimental; not approved for production use
+**Snapshot:** 0.9.9 development branch · language compatibility line `0.1` · 2026-10-12
+**Maturity:** pre-release engineering work; not approved for production use
+
+This is a development snapshot, not a published 0.9.9 release. Its remaining
+technical release gates are listed in the [0.9.9 plan](release-plans/0.9.9.en.md).
+Human acceptance remains reserved for the exact 1.0.0 candidate.
 
 This inventory describes what the current Zelyra release can do. Capabilities
 are grouped by use, not by historical release number. Older and newer releases
 are listed in the [changelog](../CHANGELOG.md); unfinished work is tracked in
 the [roadmap](ROADMAP.md). Independent human acceptance is reserved for 1.0.0.
 
-## What Zelyra 0.9.8 provides
+## What the 0.9.9 development branch provides
 
 - **Language and compiler:** a statically checked language with functions,
-  records, typed collections, `Option` and `Result`, pattern matching, modules,
-  contracts, effects, and compiler-checked SQL/web declarations. See
+  generic records, enums, and classes, named function values, typed collections,
+  `Option` and `Result`, pattern matching, modules, contracts, effects, and
+  compiler-checked SQL/web declarations. Explicit scalar text formatting,
+  calendar-day operations, Decimal rounding, and controlled recursion limits
+  are included. See
   [Language and compiler](#language-and-compiler) for the supported subset and
   its limits.
 - **Databases:** schema-aware queries, relational foreign keys, database
@@ -24,7 +31,8 @@ the [roadmap](ROADMAP.md). Independent human acceptance is reserved for 1.0.0.
   filtering, sorting, pagination, CRUD, and typed APIs with OpenAPI output.
 - **Zelyra Studio:** a local web editor with a persisted light/dark appearance,
   compiler diagnostics, formatting, navigation, completion, task help, a
-  database workbench, and a project map.
+  database workbench, and a project map. Startup includes a short branded
+  splash; the CLI uses a terminal palette when enabled by its output mode.
   The map shows known relationships and explains unresolved or bounded links
   rather than guessing.
 - **Invoice tutorial:** a multi-file customer, item, and invoice application
@@ -63,7 +71,12 @@ proof that arbitrary applications are correct.
 - ✅ Nominal domain types, records and checked field access, arrays and common
   array operations, deterministic typed maps, `Option`, `Result`, and pattern
   matching as either a statement or expression; a `match` expression returns
-  a value whose type is checked consistently across all arms.
+  a value whose type is checked consistently across all arms. `class` instances
+  preserve checked reference identity across assignments, parameters, returns,
+  and collections; typed field updates mutate the shared instance. Records
+  remain value-based. Classes explicitly have no method or inheritance syntax,
+  cyclic reference graphs, or direct JSON, HTTP, or SQL serialization; API data
+  is exchanged through records.
 - ✅ `Int` and `UInt` arithmetic is bounded to their 64-bit ranges; the direct
   literal `-9223372036854775808` is supported. Overflow,
   underflow, and division by zero return runtime errors. The modular
@@ -78,9 +91,11 @@ proof that arbitrary applications are correct.
   and `Bytes` now have runtime values, validating constructors, and JSON round
   trips. `List<T>` aliases `T[]`; heterogeneous `Tuple<A, B, ...>` and
   deterministic `Set<T>` values can be created, checked, iterated, and passed
-  through JSON. Payload-free user-defined enums support equality, JSON, and
-  exhaustive matching; payload variants, user-defined generics, function
-  values, and observable class identity remain unavailable. `record_with` and
+  through JSON. User-defined enums support payloads, generics, equality, JSON,
+  and exhaustive matching. User-defined generic functions, records, and enums
+  accept explicit or inferred type arguments; general constraints, generic
+  aliases, and generic function references are unavailable. Named typed
+  function values are implemented; closures remain out of scope. `record_with` and
   `array_replace_result` return checked new values with value semantics.
   `for i in start..end` iterates with an exclusive end.
 - ✅ Non-Unit functions must return a compatible value on every reachable path
@@ -88,7 +103,10 @@ proof that arbitrary applications are correct.
   `E-TYPE-MATCH-001`. Nested calls have a controlled runtime depth limit;
   `zelyra run --max-steps <n>` opts into a statement/loop step budget, which is
   unlimited by default.
-- ✅ Strings support lexicographic comparisons. `json_decode_result<T>`,
+- ✅ Strings support lexicographic comparisons. `format_text(value)` explicitly
+  formats scalar values without implicit coercion; fixed-scale monetary text
+  uses `format_scaled_result`. Collections, records, classes, enums, `Result`,
+  and functions have no display conversion. `json_decode_result<T>`,
   `read_text_result`, and `write_text_result` return expected parse and file
   errors as `Result`. The explicit tagged Result codec,
   `json_encode_tagged_result` / `json_decode_tagged_result<T,E>`, preserves the
@@ -130,7 +148,7 @@ See the [formal specification](specification.md),
   implicit TLS, or explicitly configured private CA roots. A five-second
   transport timeout, message bounds, and a loopback test sink are covered.
   Delivery is at least once; exactly-once delivery, PostgreSQL outbox, named
-  templates, and file attachments are not promised in 0.9.8.
+  templates, and file attachments are not promised in 0.9.9.
 - ✅ SQLite provides tested local schema workflows. PostgreSQL supports
   selected runtime, schema, and safety checks. MySQL Server 8.4.11 supports
   typed parameterized queries and an isolated schema workflow covering setup,
@@ -247,6 +265,10 @@ For usage details see the [web and database quickstart](getting-started.md),
   HttpOnly sessions. Direct and role-derived permissions, guarded actions,
   CSRF-protected browser administration, and last-administrator protection
   are implemented.
+- 🧪 Password recovery in the 0.9.9 development branch uses a transactional,
+  cross-instance reset limiter. Its table stores an HMAC fingerprint instead
+  of an IP address; database failures reject the operation. Independent
+  security review and complete release E2E remain open.
 - ✅ Optional MariaDB audit logging supports inspection, bounded JSON/CSV
   export, structural verification, and explicitly confirmed pruning.
 - 🧪 Tamper-evident audit chaining is available as an explicit opt-in and has
@@ -300,3 +322,35 @@ acceptance remains reserved for 1.0.0; automated evidence does not replace it.
 
 This page is updated when a delivered capability or its evidence changes. It
 does not turn a specification or roadmap entry into an implementation claim.
+
+## Exact decimal boundaries in 0.9.9
+
+`amount: Decimal = decimal("119.00")` declares exact fixed point. Forms, HTTP,
+and SQL use validated decimal text. MariaDB/MySQL store `Decimal` explicitly
+as `DECIMAL(39,9)`, PostgreSQL as `NUMERIC(39,9)`. Legacy or mismatched fixed
+scales prevent SQL execution or server startup with source-related diagnostics.
+`Money` retains `(19,4)`. Multiplication/division check the final result with a
+bounded exact intermediate; remainder at the signed minimum no longer panics.
+JSON outputs remain decimal strings. See the [full rules](decimals.en.md) and
+[example](../examples/decimal_money.zyl). This does not establish complete
+PostgreSQL CRUD/auth parity or production approval.
+
+## Date/time boundaries on the development branch
+
+Calendar-day arithmetic and UTC milliseconds are checked against independent
+Python references. Forms/APIs reject invalid calendar/clock values; Timestamp
+is bounded to ISO years 0001–9999. API handlers receive real Date/Time/Timestamp/
+Duration values. JSON output stays unchanged; generated clients match it.
+Native Date/Time/UTC Timestamp parameters and millisecond storage are verified
+on MariaDB, MySQL and PostgreSQL. Incompatible schema types/precision fail
+with a source position before application use. Explicit
+[`sql_decode<T>`](sql-results.en.md) provides typed scalar/record/array results,
+cardinality and NULL checks; the legacy raw-row JSON format stays unchanged. See [rules](dates.en.md), [HTTP evidence](release-readiness/0.9.9-calendar-http.en.md)
+and [SQL evidence](release-readiness/0.9.9-calendar-sql.en.md).
+
+## NULL-aware edit protection on the development branch
+
+Native NULL and literal `\N` remain distinct in signed edit snapshots and
+form inputs. MariaDB/MySQL stale updates fail with 409 before mutation. Implicitly
+nullable omitted fields bind SQL NULL; required/readonly checks remain.
+[Rules](edit-snapshots.en.md), [evidence](release-readiness/0.9.9-null-edit-snapshots.en.md).

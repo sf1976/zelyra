@@ -490,7 +490,7 @@ pub(super) fn run() -> ExitCode {
     match command.as_str() {
         "check" | "build" => {
             if validate(&path).is_ok() {
-                println!("ok: {path}");
+                println!("{}", terminal::success(&format!("ok: {path}")));
                 ExitCode::SUCCESS
             } else {
                 ExitCode::from(1)

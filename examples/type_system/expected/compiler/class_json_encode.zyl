@@ -1,0 +1,8 @@
+class Customer {
+    name: String
+}
+
+fn main() {
+    customer = Customer { name: "Ada" }
+    json_encode(customer)
+}

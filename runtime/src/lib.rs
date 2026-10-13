@@ -4,13 +4,22 @@ use std::fmt;
 use std::io::{self, BufRead, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use zelyra_ast::temporal::{
+    date_epoch_days, epoch_days_date, format_timestamp_utc, timestamp_bounds_millis, valid_date,
+    valid_time,
+};
 use zelyra_ast::*;
 
 mod csv;
+mod decimal_math;
 mod filesystem;
 mod mail;
+mod parallel;
+mod records;
+mod sql_results;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypeError {
@@ -97,12 +106,26 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
     for record in &program.records {
         known_types.insert(record.name.clone());
     }
+    for definition in &program.enums {
+        known_types.insert(definition.name.clone());
+    }
     for table in &program.tables {
         known_types.insert(table.name.clone());
         if let Some(singular) = singular_table_type(&table.name) {
             known_types.insert(singular);
         }
     }
+    let generic_arities = program
+        .records
+        .iter()
+        .map(|record| (record.name.clone(), record.type_params.len()))
+        .chain(
+            program
+                .enums
+                .iter()
+                .map(|definition| (definition.name.clone(), definition.type_params.len())),
+        )
+        .collect::<HashMap<_, _>>();
 
     let mut routes = HashSet::new();
     let functions = program
@@ -135,7 +158,7 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
                     span: field.span,
                 });
             }
-            if !api_type_known(&field.ty, &known_types) {
+            if !api_type_known(&field.ty, &known_types, &generic_arities) {
                 errors.push(ApiDiagnostic {
                     message: format!("unknown API input type `{}`", field.ty),
                     span: field.span,
@@ -159,7 +182,7 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
                 });
             }
         }
-        if !api_type_known(&api.output, &known_types) {
+        if !api_type_known(&api.output, &known_types, &generic_arities) {
             errors.push(ApiDiagnostic {
                 message: format!("unknown API output type `{}`", api.output),
                 span: api.span,
@@ -179,6 +202,15 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
                 });
                 continue;
             };
+            if !function.type_params.is_empty() {
+                errors.push(ApiDiagnostic {
+                    message: format!(
+                        "API handler `{handler}` must be non-generic because API routes cannot supply type arguments"
+                    ),
+                    span: function.span,
+                });
+                continue;
+            }
             if function.params.len() != api.input.len() {
                 errors.push(ApiDiagnostic {
                     message: format!(
@@ -223,7 +255,7 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
                 });
             }
             if let Some(payload) = &error.payload {
-                if !api_type_known(payload, &known_types) {
+                if !api_type_known(payload, &known_types, &generic_arities) {
                     errors.push(ApiDiagnostic {
                         message: format!(
                             "API error `{}` refers to unknown payload type `{payload}`",
@@ -266,18 +298,37 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
     }
 }
 
-fn api_type_known(ty: &Type, known_types: &HashSet<String>) -> bool {
+fn api_type_known(
+    ty: &Type,
+    known_types: &HashSet<String>,
+    generic_arities: &HashMap<String, usize>,
+) -> bool {
     match ty {
-        Type::Named(name) => known_types.contains(name),
-        Type::Option(inner) | Type::Array(inner) | Type::Set(inner) | Type::HttpResult(inner) => {
-            api_type_known(inner, known_types)
+        Type::Named(name) => {
+            known_types.contains(name) && generic_arities.get(name).is_none_or(|arity| *arity == 0)
         }
-        Type::Tuple(items) => items.iter().all(|item| api_type_known(item, known_types)),
+        Type::Applied { name, args } => {
+            known_types.contains(name)
+                && generic_arities
+                    .get(name)
+                    .is_some_and(|arity| *arity == args.len())
+                && args
+                    .iter()
+                    .all(|argument| api_type_known(argument, known_types, generic_arities))
+        }
+        Type::Option(inner) | Type::Array(inner) | Type::Set(inner) | Type::HttpResult(inner) => {
+            api_type_known(inner, known_types, generic_arities)
+        }
+        Type::Tuple(items) => items
+            .iter()
+            .all(|item| api_type_known(item, known_types, generic_arities)),
         Type::Map(key, value) => {
-            api_type_known(key, known_types) && api_type_known(value, known_types)
+            api_type_known(key, known_types, generic_arities)
+                && api_type_known(value, known_types, generic_arities)
         }
         Type::Result(ok, error) => {
-            api_type_known(ok, known_types) && api_type_known(error, known_types)
+            api_type_known(ok, known_types, generic_arities)
+                && api_type_known(error, known_types, generic_arities)
         }
         _ => true,
     }
@@ -311,7 +362,91 @@ fn api_json_type_error(
         }
         Type::Result(ok, error) => api_json_type_error(ok, program, visiting)
             .or_else(|| api_json_type_error(error, program, visiting)),
+        Type::Function { .. } => Some("function values cannot cross an API JSON boundary".into()),
+        Type::Applied { name, args } => {
+            if program
+                .records
+                .iter()
+                .any(|record| record.name == *name && record.is_class)
+            {
+                return Some(format!(
+                    "class references of type `{ty}` cannot cross an API JSON boundary"
+                ));
+            }
+            if let Some(error) = args
+                .iter()
+                .find_map(|argument| api_json_type_error(argument, program, visiting))
+            {
+                return Some(error);
+            }
+            let key = ty.to_string();
+            if !visiting.insert(key.clone()) {
+                return None;
+            }
+            let substitutions = program
+                .records
+                .iter()
+                .find(|record| record.name == *name)
+                .map(|record| {
+                    record
+                        .type_params
+                        .iter()
+                        .zip(args)
+                        .map(|(parameter, argument)| (parameter.clone(), argument.clone()))
+                        .collect::<HashMap<_, _>>()
+                })
+                .or_else(|| {
+                    program
+                        .enums
+                        .iter()
+                        .find(|definition| definition.name == *name)
+                        .map(|definition| {
+                            definition
+                                .type_params
+                                .iter()
+                                .zip(args)
+                                .map(|(parameter, argument)| (parameter.clone(), argument.clone()))
+                                .collect::<HashMap<_, _>>()
+                        })
+                });
+            let result = if let Some(substitutions) = substitutions {
+                if let Some(record) = program.records.iter().find(|record| record.name == *name) {
+                    record.fields.iter().find_map(|field| {
+                        let field_type = substitute_generic_type(&field.ty, &substitutions);
+                        api_json_type_error(&field_type, program, visiting)
+                    })
+                } else if let Some(definition) = program
+                    .enums
+                    .iter()
+                    .find(|definition| definition.name == *name)
+                {
+                    definition
+                        .variant_payloads
+                        .iter()
+                        .flat_map(|(_, payloads)| payloads)
+                        .find_map(|payload| {
+                            let payload_type = substitute_generic_type(payload, &substitutions);
+                            api_json_type_error(&payload_type, program, visiting)
+                        })
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            visiting.remove(&key);
+            result
+        }
         Type::Named(name) => {
+            if program
+                .records
+                .iter()
+                .any(|record| record.name == *name && record.is_class)
+            {
+                return Some(format!(
+                    "class references of type `{name}` cannot cross an API JSON boundary"
+                ));
+            }
             if !visiting.insert(name.clone()) {
                 return None;
             }
@@ -351,6 +486,139 @@ fn api_json_type_error(
         }
         _ => None,
     }
+}
+
+fn contains_class_reference_type(ty: &Type, program: &Program) -> bool {
+    fn contains(ty: &Type, program: &Program, visiting: &mut HashSet<String>) -> bool {
+        let record = |name: &str| program.records.iter().find(|item| item.name == name);
+        match ty {
+            Type::Named(name) => {
+                if record(name).is_some_and(|definition| definition.is_class) {
+                    return true;
+                }
+                if !visiting.insert(ty.to_string()) {
+                    return false;
+                }
+                let found = program
+                    .types
+                    .iter()
+                    .find(|alias| alias.name == *name)
+                    .is_some_and(|alias| contains(&alias.target, program, visiting))
+                    || record(name).is_some_and(|definition| {
+                        definition
+                            .fields
+                            .iter()
+                            .any(|field| contains(&field.ty, program, visiting))
+                    })
+                    || program
+                        .enums
+                        .iter()
+                        .find(|definition| definition.name == *name)
+                        .is_some_and(|definition| {
+                            definition
+                                .variant_payloads
+                                .iter()
+                                .flat_map(|(_, payloads)| payloads)
+                                .any(|payload| contains(payload, program, visiting))
+                        });
+                visiting.remove(&ty.to_string());
+                found
+            }
+            Type::Applied { name, args } => {
+                if record(name).is_some_and(|definition| definition.is_class)
+                    || args
+                        .iter()
+                        .any(|argument| contains(argument, program, visiting))
+                {
+                    return true;
+                }
+                let key = ty.to_string();
+                if !visiting.insert(key.clone()) {
+                    return false;
+                }
+                let substitutions = record(name)
+                    .map(|definition| {
+                        definition
+                            .type_params
+                            .iter()
+                            .zip(args)
+                            .map(|(parameter, argument)| (parameter.clone(), argument.clone()))
+                            .collect::<HashMap<_, _>>()
+                    })
+                    .or_else(|| {
+                        program
+                            .enums
+                            .iter()
+                            .find(|definition| definition.name == *name)
+                            .map(|definition| {
+                                definition
+                                    .type_params
+                                    .iter()
+                                    .zip(args)
+                                    .map(|(parameter, argument)| {
+                                        (parameter.clone(), argument.clone())
+                                    })
+                                    .collect::<HashMap<_, _>>()
+                            })
+                    });
+                let found = if let Some(substitutions) = substitutions {
+                    record(name)
+                        .map(|definition| {
+                            definition.fields.iter().any(|field| {
+                                let field_type = substitute_generic_type(&field.ty, &substitutions);
+                                contains(&field_type, program, visiting)
+                            })
+                        })
+                        .or_else(|| {
+                            program
+                                .enums
+                                .iter()
+                                .find(|definition| definition.name == *name)
+                                .map(|definition| {
+                                    definition
+                                        .variant_payloads
+                                        .iter()
+                                        .flat_map(|(_, payloads)| payloads)
+                                        .any(|payload| {
+                                            let payload_type =
+                                                substitute_generic_type(payload, &substitutions);
+                                            contains(&payload_type, program, visiting)
+                                        })
+                                })
+                        })
+                        .unwrap_or(false)
+                } else {
+                    false
+                };
+                visiting.remove(&key);
+                found
+            }
+            Type::Option(inner)
+            | Type::Array(inner)
+            | Type::Set(inner)
+            | Type::HttpResult(inner) => contains(inner, program, visiting),
+            Type::Result(ok, error) => {
+                contains(ok, program, visiting) || contains(error, program, visiting)
+            }
+            Type::Tuple(items) => items.iter().any(|item| contains(item, program, visiting)),
+            Type::Map(key, value) => {
+                contains(key, program, visiting) || contains(value, program, visiting)
+            }
+            Type::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                params
+                    .iter()
+                    .any(|parameter| contains(parameter, program, visiting))
+                    || contains(return_type, program, visiting)
+            }
+            _ => false,
+        }
+    }
+
+    contains(ty, program, &mut HashSet::new())
 }
 
 fn api_path_parameters(path: &str) -> Result<Vec<String>, String> {
@@ -915,6 +1183,7 @@ fn add_pattern_bindings<'a>(
             }
         }
         PatternKind::EnumVariant { .. } => {}
+        PatternKind::EnumVariantPayload { .. } => {}
         PatternKind::Wildcard
         | PatternKind::Int(_)
         | PatternKind::Bool(_)
@@ -1593,6 +1862,7 @@ fn expression_contains_variable(expression: &Expr, name: &str) -> bool {
         | ExprKind::Bool(..)
         | ExprKind::String(..)
         | ExprKind::Char(..)
+        | ExprKind::FunctionValue(..)
         | ExprKind::Sql { .. } => false,
     }
 }
@@ -1830,7 +2100,10 @@ fn constraints_for_pattern(
             }
             Some(alternatives)
         }
-        PatternKind::String(_) | PatternKind::Char(_) | PatternKind::EnumVariant { .. } => None,
+        PatternKind::String(_)
+        | PatternKind::Char(_)
+        | PatternKind::EnumVariant { .. }
+        | PatternKind::EnumVariantPayload { .. } => None,
         PatternKind::Constructor { name, .. } => {
             let expression = value as *const Expr as usize;
             let mut constraints = vec![PathConstraint::Constructor {
@@ -2956,6 +3229,7 @@ fn constant_value(expression: &Expr) -> Option<ConstantValue> {
         | ExprKind::Index { .. }
         | ExprKind::Field { .. }
         | ExprKind::Variable(_)
+        | ExprKind::FunctionValue(_)
         | ExprKind::Call { .. }
         | ExprKind::Sql { .. }
         | ExprKind::Await(_)
@@ -3079,6 +3353,23 @@ pub fn check_capabilities_with_grants(
             }
         }
         check_capability_block(&function.body, function, &functions, &declared, &mut errors);
+        let mut function_values = HashMap::new();
+        for parameter in &function.params {
+            if let Type::Function { capabilities, .. } = &parameter.ty {
+                function_values.insert(
+                    parameter.name.clone(),
+                    capabilities.iter().cloned().collect::<HashSet<_>>(),
+                );
+            }
+        }
+        check_indirect_capability_block(
+            &function.body,
+            function,
+            &functions,
+            &declared,
+            &mut function_values,
+            &mut errors,
+        );
         for contract in function.requires.iter().chain(&function.ensures) {
             check_capability_expr(contract, function, &functions, &declared, &mut errors);
         }
@@ -3088,6 +3379,281 @@ pub fn check_capabilities_with_grants(
         Ok(())
     } else {
         Err(errors)
+    }
+}
+
+fn function_value_capabilities(
+    expression: &Expr,
+    values: &HashMap<String, HashSet<String>>,
+    functions: &HashMap<&str, &Function>,
+) -> Option<HashSet<String>> {
+    match &expression.kind {
+        ExprKind::FunctionValue(name) => functions
+            .get(name.as_str())
+            .map(|function| function.capabilities.iter().cloned().collect()),
+        ExprKind::Variable(name) => values.get(name).cloned(),
+        ExprKind::Call { name, .. } => functions
+            .get(name.as_str())
+            .and_then(|function| function.return_type.as_ref())
+            .and_then(|ty| match ty {
+                Type::Function { capabilities, .. } => Some(capabilities.iter().cloned().collect()),
+                _ => None,
+            }),
+        ExprKind::Match { arms, .. } => {
+            let mut found = false;
+            let mut capabilities = HashSet::new();
+            for arm in arms {
+                if let Some(arm_capabilities) =
+                    function_value_capabilities(&arm.value, values, functions)
+                {
+                    found = true;
+                    capabilities.extend(arm_capabilities);
+                }
+            }
+            found.then_some(capabilities)
+        }
+        _ => None,
+    }
+}
+
+fn check_indirect_capability_block(
+    block: &Block,
+    function: &Function,
+    functions: &HashMap<&str, &Function>,
+    declared: &HashSet<&str>,
+    values: &mut HashMap<String, HashSet<String>>,
+    errors: &mut Vec<CapabilityError>,
+) {
+    for statement in &block.statements {
+        match statement {
+            Stmt::Let {
+                name, ty, value, ..
+            } => {
+                check_indirect_capability_expr(value, function, declared, values, errors);
+                let declared_effects = ty.as_ref().and_then(|ty| match ty {
+                    Type::Function { capabilities, .. } => {
+                        Some(capabilities.iter().cloned().collect())
+                    }
+                    _ => None,
+                });
+                if let Some(capabilities) = declared_effects
+                    .or_else(|| function_value_capabilities(value, values, functions))
+                {
+                    values.insert(name.clone(), capabilities);
+                }
+            }
+            Stmt::BindOrAssign { name, value, .. } => {
+                check_indirect_capability_expr(value, function, declared, values, errors);
+                if let Some(capabilities) = function_value_capabilities(value, values, functions) {
+                    values.entry(name.clone()).or_default().extend(capabilities);
+                } else {
+                    values.remove(name);
+                }
+            }
+            Stmt::Expr(expression)
+            | Stmt::Return {
+                value: Some(expression),
+                ..
+            } => {
+                check_indirect_capability_expr(expression, function, declared, values, errors);
+            }
+            Stmt::If {
+                condition,
+                then_block,
+                else_block,
+                ..
+            } => {
+                check_indirect_capability_expr(condition, function, declared, values, errors);
+                let before = values.clone();
+                let mut then_values = before.clone();
+                check_indirect_capability_block(
+                    then_block,
+                    function,
+                    functions,
+                    declared,
+                    &mut then_values,
+                    errors,
+                );
+                let mut else_values = before.clone();
+                if let Some(else_block) = else_block {
+                    check_indirect_capability_block(
+                        else_block,
+                        function,
+                        functions,
+                        declared,
+                        &mut else_values,
+                        errors,
+                    );
+                }
+                *values = merge_function_value_capabilities(&before, &[then_values, else_values]);
+            }
+            Stmt::While {
+                condition,
+                invariants,
+                body,
+                ..
+            } => {
+                check_indirect_capability_expr(condition, function, declared, values, errors);
+                for invariant in invariants {
+                    check_indirect_capability_expr(invariant, function, declared, values, errors);
+                }
+                let before = values.clone();
+                let mut body_values = before.clone();
+                check_indirect_capability_block(
+                    body,
+                    function,
+                    functions,
+                    declared,
+                    &mut body_values,
+                    errors,
+                );
+                *values = merge_function_value_capabilities(&before, &[body_values]);
+            }
+            Stmt::For { iterable, body, .. } => {
+                check_indirect_capability_expr(iterable, function, declared, values, errors);
+                let before = values.clone();
+                let mut body_values = before.clone();
+                check_indirect_capability_block(
+                    body,
+                    function,
+                    functions,
+                    declared,
+                    &mut body_values,
+                    errors,
+                );
+                *values = merge_function_value_capabilities(&before, &[body_values]);
+            }
+            Stmt::Loop {
+                invariants, body, ..
+            } => {
+                for invariant in invariants {
+                    check_indirect_capability_expr(invariant, function, declared, values, errors);
+                }
+                let before = values.clone();
+                let mut body_values = before.clone();
+                check_indirect_capability_block(
+                    body,
+                    function,
+                    functions,
+                    declared,
+                    &mut body_values,
+                    errors,
+                );
+                *values = merge_function_value_capabilities(&before, &[body_values]);
+            }
+            Stmt::Match { value, arms, .. } => {
+                check_indirect_capability_expr(value, function, declared, values, errors);
+                let before = values.clone();
+                let mut branches = Vec::new();
+                for arm in arms {
+                    let mut branch = before.clone();
+                    check_indirect_capability_block(
+                        &arm.body,
+                        function,
+                        functions,
+                        declared,
+                        &mut branch,
+                        errors,
+                    );
+                    branches.push(branch);
+                }
+                *values = merge_function_value_capabilities(&before, &branches);
+            }
+            Stmt::Transaction { body, .. } | Stmt::Parallel { body, .. } => {
+                let before = values.clone();
+                let mut nested = before.clone();
+                check_indirect_capability_block(
+                    body,
+                    function,
+                    functions,
+                    declared,
+                    &mut nested,
+                    errors,
+                );
+                *values = merge_function_value_capabilities(&before, &[nested]);
+            }
+            Stmt::Return { value: None, .. } | Stmt::Break { .. } | Stmt::Continue { .. } => {}
+        }
+    }
+}
+
+fn merge_function_value_capabilities(
+    before: &HashMap<String, HashSet<String>>,
+    branches: &[HashMap<String, HashSet<String>>],
+) -> HashMap<String, HashSet<String>> {
+    let mut merged = before.clone();
+    for name in before.keys() {
+        for branch in branches {
+            if let Some(capabilities) = branch.get(name) {
+                merged
+                    .entry(name.clone())
+                    .or_default()
+                    .extend(capabilities.iter().cloned());
+            }
+        }
+    }
+    merged
+}
+
+fn check_indirect_capability_expr(
+    expression: &Expr,
+    function: &Function,
+    declared: &HashSet<&str>,
+    values: &HashMap<String, HashSet<String>>,
+    errors: &mut Vec<CapabilityError>,
+) {
+    let mut pending = vec![expression];
+    while let Some(expression) = pending.pop() {
+        match &expression.kind {
+            ExprKind::Call { name, args, .. } => {
+                if let Some(capabilities) = values.get(name) {
+                    for capability in capabilities {
+                        require_capability(
+                            capability,
+                            &format!("indirect call through `{name}`"),
+                            expression.span,
+                            function,
+                            declared,
+                            errors,
+                        );
+                    }
+                }
+                pending.extend(args);
+            }
+            ExprKind::Unary { expr, .. } | ExprKind::Await(expr) => pending.push(expr),
+            ExprKind::Binary { left, right, .. } => {
+                pending.push(left);
+                pending.push(right);
+            }
+            ExprKind::Array(values) => pending.extend(values),
+            ExprKind::Map(entries) => {
+                for (key, value) in entries {
+                    pending.push(key);
+                    pending.push(value);
+                }
+            }
+            ExprKind::Record { fields, .. } => {
+                pending.extend(fields.iter().map(|(_, value)| value));
+            }
+            ExprKind::Index { target, index } => {
+                pending.push(target);
+                pending.push(index);
+            }
+            ExprKind::Field { target, .. } => pending.push(target),
+            ExprKind::Match { value, arms } => {
+                pending.push(value);
+                pending.extend(arms.iter().map(|arm| &arm.value));
+            }
+            ExprKind::Sql { .. }
+            | ExprKind::Int(_)
+            | ExprKind::UInt(_)
+            | ExprKind::Float(_)
+            | ExprKind::Bool(_)
+            | ExprKind::String(_)
+            | ExprKind::Char(_)
+            | ExprKind::FunctionValue(_)
+            | ExprKind::Variable(_) => {}
+        }
     }
 }
 
@@ -3376,7 +3942,8 @@ fn check_capability_expr(
             | ExprKind::Bool(..)
             | ExprKind::String(..)
             | ExprKind::Char(..)
-            | ExprKind::Variable(..) => {}
+            | ExprKind::Variable(..)
+            | ExprKind::FunctionValue(..) => {}
         }
     }
 }
@@ -3451,13 +4018,18 @@ struct Variable {
 
 #[derive(Clone)]
 struct FunctionSignature {
+    type_params: Vec<String>,
     params: Vec<Type>,
     return_type: Type,
+    capabilities: Vec<String>,
 }
 
 struct Checker<'a> {
+    type_aliases: HashMap<String, Type>,
     functions: HashMap<String, FunctionSignature>,
     known_types: std::collections::HashSet<String>,
+    generic_arities: HashMap<String, usize>,
+    active_type_parameters: HashSet<String>,
     errors: Vec<TypeError>,
     loop_depth: usize,
     parallel_depth: usize,
@@ -3516,22 +4088,64 @@ pub fn check(program: &Program) -> Result<(), Vec<TypeError>> {
             });
         }
     }
+    // Schema scalar domains also work in function/decoder annotations. Keep
+    // existing explicit definitions authoritative rather than reserving names.
+    known_types.extend(["Money", "Email", "Url", "Uuid"].map(String::from));
+    let generic_arities = program
+        .records
+        .iter()
+        .map(|record| (record.name.clone(), record.type_params.len()))
+        .chain(
+            program
+                .enums
+                .iter()
+                .map(|definition| (definition.name.clone(), definition.type_params.len())),
+        )
+        .collect::<HashMap<_, _>>();
     for table in &program.tables {
         known_types.insert(table.name.clone());
         if let Some(singular) = singular_table_type(&table.name) {
             known_types.insert(singular);
         }
     }
+    let aliases: HashMap<_, _> = program
+        .types
+        .iter()
+        .map(|definition| (definition.name.clone(), definition.target.clone()))
+        .collect();
+    for definition in &program.types {
+        if let Err(message) = expand_type_aliases(&Type::Named(definition.name.clone()), &aliases) {
+            errors.push(TypeError {
+                code: "E-TYPE-ALIAS-001",
+                message: message.into(),
+                span: definition.span,
+            });
+        }
+    }
     for definition in &program.types {
         validate_type(
             &definition.target,
             &known_types,
+            &generic_arities,
             &mut errors,
             definition.span,
         );
     }
     for record in &program.records {
         let mut fields = HashSet::new();
+        let mut record_types = known_types.clone();
+        record_types.extend(record.type_params.iter().cloned());
+        for parameter in &record.type_params {
+            if known_types.contains(parameter) {
+                errors.push(TypeError {
+                    code: "E-TYPE-GENERIC-001",
+                    message: format!(
+                        "generic type parameter `{parameter}` shadows a declared type"
+                    ),
+                    span: record.span,
+                });
+            }
+        }
         for field in &record.fields {
             if !fields.insert(field.name.clone()) {
                 errors.push(TypeError {
@@ -3543,7 +4157,39 @@ pub fn check(program: &Program) -> Result<(), Vec<TypeError>> {
                     span: field.span,
                 });
             }
-            validate_type(&field.ty, &known_types, &mut errors, field.span);
+            validate_type(
+                &field.ty,
+                &record_types,
+                &generic_arities,
+                &mut errors,
+                field.span,
+            );
+        }
+    }
+    for definition in &program.enums {
+        let mut enum_types = known_types.clone();
+        enum_types.extend(definition.type_params.iter().cloned());
+        for parameter in &definition.type_params {
+            if known_types.contains(parameter) {
+                errors.push(TypeError {
+                    code: "E-TYPE-GENERIC-001",
+                    message: format!(
+                        "generic type parameter `{parameter}` shadows a declared type"
+                    ),
+                    span: definition.span,
+                });
+            }
+        }
+        for (_, payload_types) in &definition.variant_payloads {
+            for ty in payload_types {
+                validate_type(
+                    ty,
+                    &enum_types,
+                    &generic_arities,
+                    &mut errors,
+                    definition.span,
+                );
+            }
         }
     }
     let mut functions = HashMap::new();
@@ -3558,12 +4204,14 @@ pub fn check(program: &Program) -> Result<(), Vec<TypeError>> {
             functions.insert(
                 function.name.clone(),
                 FunctionSignature {
+                    type_params: function.type_params.clone(),
                     params: function
                         .params
                         .iter()
                         .map(|param| param.ty.clone())
                         .collect(),
                     return_type: function.return_type.clone().unwrap_or(Type::Unknown),
+                    capabilities: function.capabilities.clone(),
                 },
             );
         }
@@ -3576,22 +4224,21 @@ pub fn check(program: &Program) -> Result<(), Vec<TypeError>> {
         });
     }
     let mut checker = Checker {
+        type_aliases: program
+            .types
+            .iter()
+            .map(|definition| (definition.name.clone(), definition.target.clone()))
+            .collect(),
         functions,
         known_types,
+        generic_arities,
+        active_type_parameters: HashSet::new(),
         errors,
         loop_depth: 0,
         parallel_depth: 0,
         transaction_depth: 0,
         _program: program,
     };
-    for function in &program.functions {
-        for parameter in &function.params {
-            checker.check_type(&parameter.ty, parameter.span);
-        }
-        if let Some(return_type) = &function.return_type {
-            checker.check_type(return_type, function.span);
-        }
-    }
     for function in &program.functions {
         checker.check_function(function);
     }
@@ -3607,18 +4254,18 @@ const FLOW_RETURN: u8 = 2;
 const FLOW_BREAK: u8 = 4;
 const FLOW_CONTINUE: u8 = 8;
 
-fn flow_outcomes(block: &Block) -> u8 {
+fn flow_outcomes(block: &Block, program: &Program) -> u8 {
     let mut outcomes = FLOW_FALLTHROUGH;
     for statement in &block.statements {
         if outcomes & FLOW_FALLTHROUGH == 0 {
             break;
         }
-        outcomes = (outcomes & !FLOW_FALLTHROUGH) | statement_flow(statement);
+        outcomes = (outcomes & !FLOW_FALLTHROUGH) | statement_flow(statement, program);
     }
     outcomes
 }
 
-fn statement_flow(statement: &Stmt) -> u8 {
+fn statement_flow(statement: &Stmt, program: &Program) -> u8 {
     match statement {
         Stmt::Return { .. } => FLOW_RETURN,
         Stmt::Break { .. } => FLOW_BREAK,
@@ -3628,24 +4275,24 @@ fn statement_flow(statement: &Stmt) -> u8 {
             else_block,
             ..
         } => {
-            flow_outcomes(then_block)
+            flow_outcomes(then_block, program)
                 | else_block
                     .as_ref()
-                    .map(flow_outcomes)
+                    .map(|block| flow_outcomes(block, program))
                     .unwrap_or(FLOW_FALLTHROUGH)
         }
         Stmt::Match { arms, .. } => {
             let mut outcomes = arms
                 .iter()
-                .map(|arm| flow_outcomes(&arm.body))
+                .map(|arm| flow_outcomes(&arm.body, program))
                 .fold(0, |all, arm| all | arm);
-            if !match_arms_are_exhaustive(arms) {
+            if !match_arms_are_exhaustive(arms, program) {
                 outcomes |= FLOW_FALLTHROUGH;
             }
             outcomes
         }
         Stmt::Loop { body, .. } => {
-            let body_outcomes = flow_outcomes(body);
+            let body_outcomes = flow_outcomes(body, program);
             let mut outcomes = body_outcomes & FLOW_RETURN;
             if body_outcomes & FLOW_BREAK != 0 {
                 outcomes |= FLOW_FALLTHROUGH;
@@ -3655,23 +4302,24 @@ fn statement_flow(statement: &Stmt) -> u8 {
         Stmt::While {
             condition, body, ..
         } => {
-            let body_outcomes = flow_outcomes(body);
+            let body_outcomes = flow_outcomes(body, program);
             let mut outcomes = body_outcomes & FLOW_RETURN;
             if !matches!(condition.kind, ExprKind::Bool(true)) || body_outcomes & FLOW_BREAK != 0 {
                 outcomes |= FLOW_FALLTHROUGH;
             }
             outcomes
         }
-        Stmt::For { body, .. } => FLOW_FALLTHROUGH | (flow_outcomes(body) & FLOW_RETURN),
-        Stmt::Transaction { body, .. } => flow_outcomes(body),
+        Stmt::For { body, .. } => FLOW_FALLTHROUGH | (flow_outcomes(body, program) & FLOW_RETURN),
+        Stmt::Transaction { body, .. } => flow_outcomes(body, program),
         Stmt::Let { .. } | Stmt::BindOrAssign { .. } | Stmt::Expr(_) | Stmt::Parallel { .. } => {
             FLOW_FALLTHROUGH
         }
     }
 }
 
-fn match_arms_are_exhaustive(arms: &[MatchArm]) -> bool {
+fn match_arms_are_exhaustive(arms: &[MatchArm], program: &Program) -> bool {
     let mut covered = HashSet::new();
+    let mut enum_covered = HashSet::new();
     for arm in arms {
         match &arm.pattern.kind {
             PatternKind::Wildcard | PatternKind::Variable(_) => return true,
@@ -3686,15 +4334,58 @@ fn match_arms_are_exhaustive(arms: &[MatchArm]) -> bool {
                     covered.insert(name.as_str());
                 }
             }
-            PatternKind::Int(_)
-            | PatternKind::String(_)
-            | PatternKind::Char(_)
-            | PatternKind::EnumVariant { .. } => {}
+            PatternKind::EnumVariant { enum_name, variant } => {
+                enum_covered.insert(format!("{enum_name}::{variant}"));
+            }
+            PatternKind::EnumVariantPayload {
+                enum_name,
+                variant,
+                payloads,
+            } => {
+                if payloads.iter().all(|payload| {
+                    matches!(
+                        payload.kind,
+                        PatternKind::Wildcard | PatternKind::Variable(_)
+                    )
+                }) {
+                    enum_covered.insert(format!("{enum_name}::{variant}"));
+                }
+            }
+            PatternKind::Int(_) | PatternKind::String(_) | PatternKind::Char(_) => {}
         }
     }
     (covered.contains("true") && covered.contains("false"))
         || (covered.contains("Some") && covered.contains("None"))
         || (covered.contains("Ok") && covered.contains("Err"))
+        || program.enums.iter().any(|definition| {
+            definition
+                .variants
+                .iter()
+                .all(|variant| enum_covered.contains(&format!("{}::{variant}", definition.name)))
+        })
+}
+
+fn instantiated_enum_payload_types(
+    definition: &zelyra_ast::EnumDef,
+    type_args: &[Type],
+    variant: &str,
+) -> Option<Vec<Type>> {
+    let substitutions = definition
+        .type_params
+        .iter()
+        .zip(type_args)
+        .map(|(parameter, argument)| (parameter.clone(), argument.clone()))
+        .collect::<HashMap<_, _>>();
+    definition
+        .variant_payloads
+        .iter()
+        .find(|(name, _)| name == variant)
+        .map(|(_, payloads)| {
+            payloads
+                .iter()
+                .map(|ty| substitute_generic_type(ty, &substitutions))
+                .collect()
+        })
 }
 
 impl<'a> Checker<'a> {
@@ -3708,6 +4399,135 @@ impl<'a> Checker<'a> {
             span,
         });
     }
+
+    fn check_enum_constructor(
+        &mut self,
+        name: &str,
+        type_args: &[Type],
+        args: &[Expr],
+        span: Span,
+        scopes: &[HashMap<String, Variable>],
+    ) -> Option<Type> {
+        let (enum_name, variant) = name.rsplit_once("::")?;
+        let definition = self
+            ._program
+            .enums
+            .iter()
+            .find(|definition| definition.name == enum_name)?;
+        let payload_types = definition
+            .variant_payloads
+            .iter()
+            .find(|(name, _)| name == variant)
+            .map(|(_, types)| types.clone());
+        let Some(payload_types) = payload_types else {
+            for argument in args {
+                self.check_expr(argument, scopes);
+            }
+            self.error_with_code(
+                "E-TYPE-ENUM-001",
+                span,
+                format!("unknown enum variant `{enum_name}::{variant}`"),
+            );
+            return Some(Type::Unknown);
+        };
+        if definition.type_params.is_empty() && !type_args.is_empty() {
+            self.error_with_code(
+                "E-TYPE-GENERIC-001",
+                span,
+                format!("enum `{enum_name}` does not accept type arguments"),
+            );
+        }
+        if !definition.type_params.is_empty() && !type_args.is_empty() {
+            if type_args.len() != definition.type_params.len() {
+                self.error_with_code(
+                    "E-TYPE-GENERIC-001",
+                    span,
+                    format!(
+                        "enum `{enum_name}` expects {} type argument(s), found {}",
+                        definition.type_params.len(),
+                        type_args.len()
+                    ),
+                );
+            }
+            for argument in type_args {
+                self.check_type(argument, span);
+            }
+        }
+        if payload_types.is_empty() && definition.type_params.is_empty() {
+            self.error_with_code(
+                "E-TYPE-ENUM-001",
+                span,
+                format!(
+                    "unit enum variant `{enum_name}::{variant}` is written without parentheses"
+                ),
+            );
+        } else if args.len() != payload_types.len() {
+            self.error_with_code(
+                "E-TYPE-ENUM-001",
+                span,
+                format!(
+                    "enum variant `{enum_name}::{variant}` expects {} payload value(s), found {}",
+                    payload_types.len(),
+                    args.len()
+                ),
+            );
+        }
+        let actual_types = args
+            .iter()
+            .map(|argument| self.check_expr(argument, scopes))
+            .collect::<Vec<_>>();
+        let generic_parameters = definition
+            .type_params
+            .iter()
+            .cloned()
+            .collect::<HashSet<_>>();
+        let mut substitutions = definition
+            .type_params
+            .iter()
+            .zip(type_args)
+            .map(|(parameter, argument)| (parameter.clone(), argument.clone()))
+            .collect::<HashMap<_, _>>();
+        if type_args.is_empty() {
+            for (expected, actual) in payload_types.iter().zip(&actual_types) {
+                infer_generic_types(expected, actual, &generic_parameters, &mut substitutions);
+            }
+        }
+        for parameter in &definition.type_params {
+            if !substitutions.contains_key(parameter) {
+                self.error_with_code(
+                    "E-TYPE-GENERIC-001",
+                    span,
+                    format!(
+                        "cannot infer type parameter `{parameter}` for enum `{enum_name}`; provide explicit type arguments"
+                    ),
+                );
+                substitutions.insert(parameter.clone(), Type::Unknown);
+            }
+        }
+        for ((argument, actual), expected) in
+            args.iter().zip(actual_types).zip(payload_types.iter())
+        {
+            let expected = substitute_generic_type(expected, &substitutions);
+            self.expect_type(&expected, &actual, argument.span);
+        }
+        if definition.type_params.is_empty() {
+            Some(Type::Named(enum_name.to_owned()))
+        } else {
+            Some(Type::Applied {
+                name: enum_name.to_owned(),
+                args: definition
+                    .type_params
+                    .iter()
+                    .map(|parameter| {
+                        substitutions
+                            .get(parameter)
+                            .cloned()
+                            .unwrap_or(Type::Unknown)
+                    })
+                    .collect(),
+            })
+        }
+    }
     fn lookup<'b>(
         &self,
         scopes: &'b [HashMap<String, Variable>],
@@ -3716,6 +4536,25 @@ impl<'a> Checker<'a> {
         scopes.iter().rev().find_map(|scope| scope.get(name))
     }
     fn check_function(&mut self, function: &Function) {
+        let previous_type_parameters = std::mem::replace(
+            &mut self.active_type_parameters,
+            function.type_params.iter().cloned().collect(),
+        );
+        for parameter in &function.type_params {
+            if self.known_types.contains(parameter) {
+                self.error_with_code(
+                    "E-TYPE-GENERIC-001",
+                    function.span,
+                    format!("generic type parameter `{parameter}` shadows a declared type"),
+                );
+            }
+        }
+        for parameter in &function.params {
+            self.check_type(&parameter.ty, parameter.span);
+        }
+        if let Some(return_type) = &function.return_type {
+            self.check_type(return_type, function.span);
+        }
         let mut scopes = vec![HashMap::new()];
         for parameter in &function.params {
             if scopes[0]
@@ -3757,7 +4596,7 @@ impl<'a> Checker<'a> {
             .return_type
             .as_ref()
             .is_some_and(|return_type| *return_type != Type::Unit)
-            && flow_outcomes(&function.body) & FLOW_FALLTHROUGH != 0
+            && flow_outcomes(&function.body, self._program) & FLOW_FALLTHROUGH != 0
         {
             let return_type = function.return_type.as_ref().expect("checked above");
             self.error_with_code(
@@ -3769,6 +4608,7 @@ impl<'a> Checker<'a> {
                 ),
             );
         }
+        self.active_type_parameters = previous_type_parameters;
     }
     fn check_block(
         &mut self,
@@ -4003,8 +4843,50 @@ impl<'a> Checker<'a> {
     }
     fn check_type(&mut self, ty: &Type, span: Span) {
         match ty {
-            Type::Named(name) if !self.known_types.contains(name) => {
+            Type::Named(name)
+                if !self.known_types.contains(name)
+                    && !self.active_type_parameters.contains(name) =>
+            {
                 self.error(span, format!("unknown type `{name}`"));
+            }
+            Type::Named(name)
+                if self
+                    .generic_arities
+                    .get(name)
+                    .is_some_and(|arity| *arity > 0) =>
+            {
+                let arity = self.generic_arities[name];
+                self.error_with_code(
+                    "E-TYPE-GENERIC-001",
+                    span,
+                    format!("generic type `{name}` requires {arity} type argument(s)"),
+                );
+            }
+            Type::Applied { name, args } => {
+                if !self.known_types.contains(name) {
+                    self.error(span, format!("unknown type `{name}`"));
+                }
+                if let Some(arity) = self.generic_arities.get(name) {
+                    if *arity != args.len() {
+                        self.error_with_code(
+                            "E-TYPE-GENERIC-001",
+                            span,
+                            format!(
+                                "generic type `{name}` expects {arity} type argument(s), found {}",
+                                args.len()
+                            ),
+                        );
+                    }
+                } else {
+                    self.error_with_code(
+                        "E-TYPE-GENERIC-001",
+                        span,
+                        format!("type `{name}` is not generic and does not accept type arguments"),
+                    );
+                }
+                for argument in args {
+                    self.check_type(argument, span);
+                }
             }
             Type::Option(inner) => self.check_type(inner, span),
             Type::Result(ok, error) => {
@@ -4039,6 +4921,25 @@ impl<'a> Checker<'a> {
                 }
             }
             Type::HttpResult(inner) => self.check_type(inner, span),
+            Type::Function {
+                params,
+                return_type,
+                capabilities,
+            } => {
+                for parameter in params {
+                    self.check_type(parameter, span);
+                }
+                self.check_type(return_type, span);
+                for capability in capabilities {
+                    if !KNOWN_CAPABILITIES.contains(&capability.as_str()) {
+                        self.error_with_code(
+                            "E-TYPE-FUNCTION-001",
+                            span,
+                            format!("unknown capability `{capability}` in function type"),
+                        );
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -4115,20 +5016,113 @@ impl<'a> Checker<'a> {
                 }
             }
             PatternKind::EnumVariant { enum_name, variant } => match expected {
-                Type::Named(expected_name) if expected_name == enum_name => {
-                    let valid = self._program.enums.iter().any(|definition| {
-                        definition.name == *enum_name
-                            && definition.variants.iter().any(|item| item == variant)
-                    });
-                    if valid {
+                Type::Named(expected_name)
+                | Type::Applied {
+                    name: expected_name,
+                    ..
+                } if expected_name == enum_name => {
+                    let type_args = match expected {
+                        Type::Applied { args, .. } => args.as_slice(),
+                        _ => &[],
+                    };
+                    let payload_types = self
+                        ._program
+                        .enums
+                        .iter()
+                        .find(|definition| definition.name == *enum_name)
+                        .and_then(|definition| {
+                            instantiated_enum_payload_types(definition, type_args, variant)
+                        });
+                    if let Some(payload_types) = payload_types {
+                        if !payload_types.is_empty() {
+                            self.error_with_code(
+                                "E-TYPE-ENUM-001",
+                                pattern.span,
+                                format!(
+                                    "enum variant `{enum_name}::{variant}` requires {} payload pattern(s)",
+                                    payload_types.len()
+                                ),
+                            );
+                        }
                         if top_level {
                             covered.insert(format!("{enum_name}::{variant}"));
                         }
                     } else {
-                        self.error(
+                        self.error_with_code(
+                            "E-TYPE-ENUM-001",
                             pattern.span,
                             format!("unknown enum variant `{enum_name}::{variant}`"),
                         );
+                    }
+                }
+                Type::Unknown => {}
+                other => self.error(
+                    pattern.span,
+                    format!("enum variant `{enum_name}::{variant}` does not match `{other}`"),
+                ),
+            },
+            PatternKind::EnumVariantPayload {
+                enum_name,
+                variant,
+                payloads,
+            } => match expected {
+                Type::Named(expected_name)
+                | Type::Applied {
+                    name: expected_name,
+                    ..
+                } if expected_name == enum_name => {
+                    let type_args = match expected {
+                        Type::Applied { args, .. } => args.as_slice(),
+                        _ => &[],
+                    };
+                    let payload_types = self
+                        ._program
+                        .enums
+                        .iter()
+                        .find(|definition| definition.name == *enum_name)
+                        .and_then(|definition| {
+                            instantiated_enum_payload_types(definition, type_args, variant)
+                        });
+                    let Some(payload_types) = payload_types else {
+                        self.error_with_code(
+                            "E-TYPE-ENUM-001",
+                            pattern.span,
+                            format!("unknown enum variant `{enum_name}::{variant}`"),
+                        );
+                        return;
+                    };
+                    if payload_types.is_empty() {
+                        self.error_with_code(
+                            "E-TYPE-ENUM-001",
+                            pattern.span,
+                            format!(
+                                "unit enum variant `{enum_name}::{variant}` is written without parentheses"
+                            ),
+                        );
+                    }
+                    if payloads.len() != payload_types.len() {
+                        self.error_with_code(
+                            "E-TYPE-ENUM-001",
+                            pattern.span,
+                            format!(
+                                "enum variant pattern `{enum_name}::{variant}` expects {} payload pattern(s), found {}",
+                                payload_types.len(),
+                                payloads.len()
+                            ),
+                        );
+                    }
+                    for (payload, payload_type) in payloads.iter().zip(&payload_types) {
+                        self.check_pattern(payload, payload_type, scope, covered, false);
+                    }
+                    if top_level
+                        && payloads.iter().all(|payload| {
+                            matches!(
+                                payload.kind,
+                                PatternKind::Wildcard | PatternKind::Variable(_)
+                            )
+                        })
+                    {
+                        covered.insert(format!("{enum_name}::{variant}"));
                     }
                 }
                 Type::Unknown => {}
@@ -4188,7 +5182,7 @@ impl<'a> Checker<'a> {
                 }
                 missing.join(", ")
             }
-            Type::Named(name) => self
+            Type::Named(name) | Type::Applied { name, .. } => self
                 ._program
                 .enums
                 .iter()
@@ -4213,8 +5207,20 @@ impl<'a> Checker<'a> {
             );
         }
     }
+    fn normalize_alias(&mut self, ty: &Type, span: Span) -> Type {
+        match expand_type_aliases(ty, &self.type_aliases) {
+            Ok(ty) => ty,
+            Err(message) => {
+                self.error_with_code("E-TYPE-ALIAS-001", span, message);
+                Type::Unknown
+            }
+        }
+    }
+
     fn expect_type(&mut self, expected: &Type, actual: &Type, span: Span) {
-        if !compatible(expected, actual) {
+        let resolved_expected = self.normalize_alias(expected, span);
+        let resolved_actual = self.normalize_alias(actual, span);
+        if !compatible(&resolved_expected, &resolved_actual) {
             self.error(
                 span,
                 format!("type mismatch: expected `{expected}`, found `{actual}`"),
@@ -4222,6 +5228,10 @@ impl<'a> Checker<'a> {
         }
     }
     fn check_expr(&mut self, expr: &Expr, scopes: &[HashMap<String, Variable>]) -> Type {
+        let ty = self.check_expr_inner(expr, scopes);
+        self.normalize_alias(&ty, expr.span)
+    }
+    fn check_expr_inner(&mut self, expr: &Expr, scopes: &[HashMap<String, Variable>]) -> Type {
         match &expr.kind {
             ExprKind::Int(_) => Type::Int,
             ExprKind::UInt(_) => Type::UInt,
@@ -4229,6 +5239,31 @@ impl<'a> Checker<'a> {
             ExprKind::Bool(_) => Type::Bool,
             ExprKind::String(_) => Type::String,
             ExprKind::Char(_) => Type::Char,
+            ExprKind::FunctionValue(name) => {
+                let Some(signature) = self.functions.get(name).cloned() else {
+                    self.error_with_code(
+                        "E-TYPE-FUNCTION-001",
+                        expr.span,
+                        format!("unknown function value `{name}`"),
+                    );
+                    return Type::Unknown;
+                };
+                if !signature.type_params.is_empty() {
+                    self.error_with_code(
+                        "E-TYPE-FUNCTION-001",
+                        expr.span,
+                        format!(
+                            "generic function `{name}` cannot be stored as a function value yet"
+                        ),
+                    );
+                    return Type::Unknown;
+                }
+                Type::Function {
+                    params: signature.params,
+                    return_type: Box::new(signature.return_type),
+                    capabilities: signature.capabilities,
+                }
+            }
             ExprKind::Array(values) => {
                 let mut element = Type::Unknown;
                 for value in values {
@@ -4268,7 +5303,11 @@ impl<'a> Checker<'a> {
                 }
                 Type::Map(Box::new(key_type), Box::new(value_type))
             }
-            ExprKind::Record { type_name, fields } => {
+            ExprKind::Record {
+                type_name,
+                type_args,
+                fields,
+            } => {
                 let Some(record) = self
                     ._program
                     .records
@@ -4282,7 +5321,37 @@ impl<'a> Checker<'a> {
                     self.error(expr.span, format!("unknown record type `{type_name}`"));
                     return Type::Unknown;
                 };
+                let generic_parameters = record.type_params.iter().cloned().collect::<HashSet<_>>();
+                if type_args.len() != record.type_params.len() {
+                    if record.type_params.is_empty() && !type_args.is_empty() {
+                        self.error_with_code(
+                            "E-TYPE-GENERIC-001",
+                            expr.span,
+                            format!("record `{type_name}` does not accept type arguments"),
+                        );
+                    } else if !type_args.is_empty() {
+                        self.error_with_code(
+                            "E-TYPE-GENERIC-001",
+                            expr.span,
+                            format!(
+                                "record `{type_name}` expects {} type argument(s), found {}",
+                                record.type_params.len(),
+                                type_args.len()
+                            ),
+                        );
+                    }
+                }
+                for argument in type_args {
+                    self.check_type(argument, expr.span);
+                }
+                let mut substitutions = record
+                    .type_params
+                    .iter()
+                    .zip(type_args)
+                    .map(|(parameter, argument)| (parameter.clone(), argument.clone()))
+                    .collect::<HashMap<_, _>>();
                 let mut provided = HashSet::new();
+                let mut checked_fields = Vec::new();
                 for (field_name, value) in fields {
                     let actual = self.check_expr(value, scopes);
                     if !provided.insert(field_name) {
@@ -4300,7 +5369,17 @@ impl<'a> Checker<'a> {
                         );
                         continue;
                     };
-                    self.expect_type(&field.ty, &actual, value.span);
+                    infer_generic_types(
+                        &field.ty,
+                        &actual,
+                        &generic_parameters,
+                        &mut substitutions,
+                    );
+                    checked_fields.push((field, value, actual));
+                }
+                for (field, value, actual) in checked_fields {
+                    let expected = substitute_generic_type(&field.ty, &substitutions);
+                    self.expect_type(&expected, &actual, value.span);
                 }
                 for field in &record.fields {
                     if !provided.contains(&field.name) && !matches!(field.ty, Type::Option(_)) {
@@ -4310,22 +5389,80 @@ impl<'a> Checker<'a> {
                         );
                     }
                 }
-                Type::Named(type_name.clone())
+                let applied_args = record
+                    .type_params
+                    .iter()
+                    .map(|parameter| {
+                        substitutions
+                            .get(parameter)
+                            .cloned()
+                            .unwrap_or(Type::Unknown)
+                    })
+                    .collect::<Vec<_>>();
+                if let Some(missing) = record
+                    .type_params
+                    .iter()
+                    .find(|parameter| !substitutions.contains_key(*parameter))
+                {
+                    self.error_with_code(
+                        "E-TYPE-GENERIC-001",
+                        expr.span,
+                        format!(
+                            "cannot infer type parameter `{missing}` for record `{type_name}`; use `{type_name}<...>`"
+                        ),
+                    );
+                }
+                if record.type_params.is_empty() {
+                    Type::Named(type_name.clone())
+                } else {
+                    Type::Applied {
+                        name: type_name.clone(),
+                        args: applied_args,
+                    }
+                }
             }
             ExprKind::Variable(name) => {
-                if let Some((enum_name, variant)) = name.split_once("::") {
-                    if self
+                if let Some((enum_name, variant)) = name.rsplit_once("::") {
+                    if let Some(definition) = self
                         ._program
                         .enums
                         .iter()
                         .find(|definition| definition.name == enum_name)
-                        .is_some_and(|definition| {
-                            definition.variants.iter().any(|item| item == variant)
-                        })
+                        .filter(|definition| definition.variants.iter().any(|item| item == variant))
                     {
-                        Type::Named(enum_name.to_owned())
+                        if definition
+                            .variant_payloads
+                            .iter()
+                            .find(|(name, _)| name == variant)
+                            .is_some_and(|(_, payloads)| !payloads.is_empty())
+                        {
+                            self.error_with_code(
+                                "E-TYPE-ENUM-001",
+                                expr.span,
+                                format!(
+                                    "enum variant `{enum_name}::{variant}` requires payload values"
+                                ),
+                            );
+                            return Type::Unknown;
+                        }
+                        if !definition.type_params.is_empty() {
+                            self.error_with_code(
+                                "E-TYPE-GENERIC-001",
+                                expr.span,
+                                format!(
+                                    "generic enum variant `{name}` requires explicit type arguments; use `{enum_name}::{variant}<...>()`"
+                                ),
+                            );
+                            Type::Unknown
+                        } else {
+                            Type::Named(enum_name.to_owned())
+                        }
                     } else {
-                        self.error(expr.span, format!("unknown enum variant `{name}`"));
+                        self.error_with_code(
+                            "E-TYPE-ENUM-001",
+                            expr.span,
+                            format!("unknown enum variant `{name}`"),
+                        );
                         Type::Unknown
                     }
                 } else {
@@ -4349,6 +5486,11 @@ impl<'a> Checker<'a> {
                 type_args,
                 args,
             } => {
+                if let Some(ty) =
+                    self.check_enum_constructor(name, type_args, args, expr.span, scopes)
+                {
+                    return ty;
+                }
                 if name == "read_console" {
                     if args.len() != 1 {
                         self.error(expr.span, "read_console expects exactly one String prompt");
@@ -4422,6 +5564,83 @@ impl<'a> Checker<'a> {
                             Type::Unknown
                         }
                     }
+                } else if name == "object_set_field" {
+                    if !type_args.is_empty() || args.len() != 3 {
+                        self.error_with_code(
+                            "E-TYPE-CLASS-001",
+                            expr.span,
+                            "class field update expects an object, literal field name, and value",
+                        );
+                        return Type::Unknown;
+                    }
+                    let object_type = self.check_expr(&args[0], scopes);
+                    let field_name = match &args[1].kind {
+                        ExprKind::String(name) => Some(name.as_str()),
+                        _ => {
+                            self.error_with_code(
+                                "E-TYPE-CLASS-001",
+                                args[1].span,
+                                "class field name must be a String literal",
+                            );
+                            None
+                        }
+                    };
+                    let value_type = self.check_expr(&args[2], scopes);
+                    let (type_name, type_arguments) = match &object_type {
+                        Type::Named(type_name) => (Some(type_name.as_str()), &[][..]),
+                        Type::Applied { name, args } => (Some(name.as_str()), args.as_slice()),
+                        _ => (None, &[][..]),
+                    };
+                    if let (Some(type_name), Some(field_name)) = (type_name, field_name) {
+                        match self
+                            ._program
+                            .records
+                            .iter()
+                            .find(|record| record.name == type_name)
+                        {
+                            Some(class) if class.is_class => {
+                                if let Some(field) =
+                                    class.fields.iter().find(|field| field.name == field_name)
+                                {
+                                    let substitutions = class
+                                        .type_params
+                                        .iter()
+                                        .zip(type_arguments)
+                                        .map(|(parameter, argument)| {
+                                            (parameter.clone(), argument.clone())
+                                        })
+                                        .collect::<HashMap<_, _>>();
+                                    let field_type =
+                                        substitute_generic_type(&field.ty, &substitutions);
+                                    let field_type =
+                                        self.normalize_alias(&field_type, args[2].span);
+                                    if !compatible(&field_type, &value_type) {
+                                        self.error_with_code(
+                                            "E-TYPE-CLASS-001",
+                                            args[2].span,
+                                            format!(
+                                                "type mismatch: expected `{field_type}`, found `{value_type}`"
+                                            ),
+                                        );
+                                    }
+                                } else {
+                                    self.error_with_code(
+                                        "E-TYPE-CLASS-001",
+                                        args[1].span,
+                                        format!(
+                                            "unknown field `{field_name}` in class `{type_name}`"
+                                        ),
+                                    );
+                                }
+                            }
+                            _ => self.error_with_code(
+                                "E-TYPE-CLASS-001",
+                                args[0].span,
+                                "field assignment requires a class instance",
+                            ),
+                        }
+                    }
+                    Type::Unit
                 } else if name == "record_with" {
                     if !type_args.is_empty() || args.len() != 3 {
                         self.error(
@@ -4442,17 +5661,39 @@ impl<'a> Checker<'a> {
                         }
                     };
                     let value = self.check_expr(&args[2], scopes);
-                    if let (Type::Named(type_name), Some(field_name)) = (&record_type, field_name) {
+                    let (type_name, type_arguments) = match &record_type {
+                        Type::Named(type_name) => (Some(type_name.as_str()), &[][..]),
+                        Type::Applied { name, args } => (Some(name.as_str()), args.as_slice()),
+                        _ => (None, &[][..]),
+                    };
+                    if let (Some(type_name), Some(field_name)) = (type_name, field_name) {
                         if let Some(record) = self
                             ._program
                             .records
                             .iter()
-                            .find(|record| record.name == *type_name)
+                            .find(|record| record.name == type_name)
                         {
+                            if record.is_class {
+                                self.error_with_code(
+                                    "E-TYPE-CLASS-001",
+                                    args[0].span,
+                                    "record_with cannot copy or update a class reference",
+                                );
+                                return Type::Unknown;
+                            }
                             if let Some(field) =
                                 record.fields.iter().find(|field| field.name == field_name)
                             {
-                                self.expect_type(&field.ty, &value, args[2].span);
+                                let substitutions = record
+                                    .type_params
+                                    .iter()
+                                    .zip(type_arguments)
+                                    .map(|(parameter, argument)| {
+                                        (parameter.clone(), argument.clone())
+                                    })
+                                    .collect::<HashMap<_, _>>();
+                                let field_type = substitute_generic_type(&field.ty, &substitutions);
+                                self.expect_type(&field_type, &value, args[2].span);
                             } else {
                                 self.error(
                                     args[1].span,
@@ -4789,6 +6030,37 @@ impl<'a> Checker<'a> {
                     let timestamp = self.check_expr(&args[0], scopes);
                     self.expect_type(&Type::Timestamp, &timestamp, args[0].span);
                     Type::String
+                } else if name == "format_text" {
+                    if !type_args.is_empty() || args.len() != 1 {
+                        self.error_with_code(
+                            "E-TYPE-FORMAT-001",
+                            expr.span,
+                            "format_text expects one scalar value and no type arguments",
+                        );
+                        return Type::Unknown;
+                    }
+                    let value = self.check_expr(&args[0], scopes);
+                    if !matches!(
+                        value,
+                        Type::Int
+                            | Type::UInt
+                            | Type::Float
+                            | Type::Decimal
+                            | Type::Bool
+                            | Type::Char
+                            | Type::String
+                            | Type::Timestamp
+                            | Type::Date
+                            | Type::Time
+                            | Type::Duration
+                    ) {
+                        self.error_with_code(
+                            "E-TYPE-FORMAT-001",
+                            args[0].span,
+                            format!("format_text does not support `{value}`"),
+                        );
+                    }
+                    Type::String
                 } else if name == "env" {
                     if args.len() != 1 {
                         self.error(expr.span, "env expects exactly one argument");
@@ -4826,7 +6098,14 @@ impl<'a> Checker<'a> {
                         self.error(expr.span, "json_encode expects exactly one value");
                         return Type::Unknown;
                     }
-                    self.check_expr(&args[0], scopes);
+                    let value_type = self.check_expr(&args[0], scopes);
+                    if contains_class_reference_type(&value_type, self._program) {
+                        self.error_with_code(
+                            "E-TYPE-CLASS-001",
+                            args[0].span,
+                            "class references cannot be serialized directly; convert them to a record",
+                        );
+                    }
                     Type::String
                 } else if name == "json_encode_tagged_result" {
                     if !type_args.is_empty() || args.len() != 1 {
@@ -4841,6 +6120,13 @@ impl<'a> Checker<'a> {
                         self.error(
                             args[0].span,
                             "json_encode_tagged_result expects a Result value",
+                        );
+                    }
+                    if contains_class_reference_type(&value, self._program) {
+                        self.error_with_code(
+                            "E-TYPE-CLASS-001",
+                            args[0].span,
+                            "class references cannot be serialized directly; convert them to a record",
                         );
                     }
                     Type::String
@@ -4870,6 +6156,43 @@ impl<'a> Checker<'a> {
                         )),
                         Box::new(Type::String),
                     )
+                } else if name == "sql_decode" {
+                    if type_args.len() != 1 || args.len() != 1 {
+                        self.error_with_code(
+                            "E-TYPE-SQL-DECODE",
+                            expr.span,
+                            "sql_decode expects one type argument and one direct SQL expression",
+                        );
+                        for argument in args {
+                            self.check_expr(argument, scopes);
+                        }
+                        return Type::Unknown;
+                    }
+                    self.check_type(&type_args[0], expr.span);
+                    self.check_expr(&args[0], scopes);
+                    if let ExprKind::Sql { query, .. } = &args[0].kind {
+                        if zelyra_database::sql::analyze_table_access(query, &[]).0
+                            != Some("SELECT")
+                        {
+                            self.error_with_code(
+                                "E-TYPE-SQL-DECODE",
+                                args[0].span,
+                                "sql_decode requires a SELECT query",
+                            );
+                        }
+                    }
+                    if !matches!(args[0].kind, ExprKind::Sql { .. }) {
+                        self.error_with_code(
+                            "E-TYPE-SQL-DECODE",
+                            args[0].span,
+                            "sql_decode requires a direct SQL expression",
+                        );
+                    }
+                    if let Err(message) = sql_results::validate_target(&type_args[0], self._program)
+                    {
+                        self.error_with_code("E-TYPE-SQL-DECODE", expr.span, message);
+                    }
+                    type_args[0].clone()
                 } else if name == "json_decode" {
                     if type_args.len() != 1 {
                         self.error(expr.span, "json_decode expects exactly one type argument");
@@ -4882,7 +6205,15 @@ impl<'a> Checker<'a> {
                     }
                     let source = self.check_expr(&args[0], scopes);
                     self.expect_type(&Type::String, &source, args[0].span);
-                    type_args.first().cloned().unwrap_or(Type::Unknown)
+                    let target = type_args.first().cloned().unwrap_or(Type::Unknown);
+                    if contains_class_reference_type(&target, self._program) {
+                        self.error_with_code(
+                            "E-TYPE-CLASS-001",
+                            expr.span,
+                            "json_decode does not support class types because it cannot restore object identity",
+                        );
+                    }
+                    target
                 } else if name == "json_decode_result" {
                     if type_args.len() != 1 {
                         self.error(
@@ -5264,6 +6595,40 @@ impl<'a> Checker<'a> {
                     let path = self.check_expr(&args[0], scopes);
                     self.expect_type(&Type::String, &path, args[0].span);
                     Type::Array(Box::new(Type::String))
+                } else if let Some(variable) = self.lookup(scopes, name).cloned() {
+                    let Type::Function {
+                        params,
+                        return_type,
+                        ..
+                    } = variable.ty
+                    else {
+                        self.error(expr.span, format!("value `{name}` is not callable"));
+                        return Type::Unknown;
+                    };
+                    if !type_args.is_empty() {
+                        self.error_with_code(
+                            "E-TYPE-FUNCTION-001",
+                            expr.span,
+                            "indirect function calls do not accept explicit type arguments",
+                        );
+                    }
+                    if args.len() != params.len() {
+                        self.error(
+                            expr.span,
+                            format!(
+                                "function value `{name}` expects {} argument(s), found {}",
+                                params.len(),
+                                args.len()
+                            ),
+                        );
+                    }
+                    for (index, argument) in args.iter().enumerate() {
+                        let actual = self.check_expr(argument, scopes);
+                        if let Some(expected) = params.get(index) {
+                            self.expect_type(expected, &actual, argument.span);
+                        }
+                    }
+                    *return_type
                 } else if let Some(signature) = self.functions.get(name).cloned() {
                     if args.len() != signature.params.len() {
                         self.error(
@@ -5275,13 +6640,82 @@ impl<'a> Checker<'a> {
                             ),
                         );
                     }
-                    for (index, arg) in args.iter().enumerate() {
-                        let actual = self.check_expr(arg, scopes);
-                        if let Some(expected) = signature.params.get(index) {
-                            self.expect_type(expected, &actual, arg.span);
+                    let actual_types = args
+                        .iter()
+                        .map(|argument| self.check_expr(argument, scopes))
+                        .collect::<Vec<_>>();
+                    if signature.type_params.is_empty() {
+                        if !type_args.is_empty() {
+                            self.error(
+                                expr.span,
+                                format!("function `{name}` does not accept type arguments"),
+                            );
                         }
+                        for (index, actual) in actual_types.iter().enumerate() {
+                            if let Some(expected) = signature.params.get(index) {
+                                self.expect_type(expected, actual, args[index].span);
+                            }
+                        }
+                        signature.return_type
+                    } else {
+                        let parameters = signature
+                            .type_params
+                            .iter()
+                            .cloned()
+                            .collect::<HashSet<_>>();
+                        let mut substitutions = HashMap::new();
+                        if !type_args.is_empty() {
+                            if type_args.len() != signature.type_params.len() {
+                                self.error_with_code(
+                                    "E-TYPE-GENERIC-001",
+                                    expr.span,
+                                    format!(
+                                        "generic function `{name}` expects {} type argument(s), found {}",
+                                        signature.type_params.len(),
+                                        type_args.len()
+                                    ),
+                                );
+                            }
+                            for argument in type_args {
+                                self.check_type(argument, expr.span);
+                            }
+                            for (parameter, argument) in signature.type_params.iter().zip(type_args)
+                            {
+                                substitutions.insert(parameter.clone(), argument.clone());
+                            }
+                        }
+                        for (index, actual) in actual_types.iter().enumerate() {
+                            if let Some(expected) = signature.params.get(index) {
+                                if type_args.is_empty() {
+                                    infer_generic_types(
+                                        expected,
+                                        actual,
+                                        &parameters,
+                                        &mut substitutions,
+                                    );
+                                }
+                            }
+                        }
+                        for parameter in &signature.type_params {
+                            if !substitutions.contains_key(parameter) {
+                                self.error_with_code(
+                                    "E-TYPE-GENERIC-001",
+                                    expr.span,
+                                    format!(
+                                        "cannot infer type parameter `{parameter}` for `{name}`; provide explicit type arguments"
+                                    ),
+                                );
+                                substitutions.insert(parameter.clone(), Type::Unknown);
+                            }
+                        }
+                        for (index, actual) in actual_types.iter().enumerate() {
+                            if let Some(expected) = signature.params.get(index) {
+                                let expected = substitute_generic_type(expected, &substitutions);
+                                self.expect_type(&expected, actual, args[index].span);
+                            }
+                        }
+                        substitute_generic_type(&signature.return_type, &substitutions)
                     }
-                    signature.return_type
                 } else {
                     self.error(expr.span, format!("unknown function `{name}`"));
                     Type::Unknown
@@ -5444,6 +6878,15 @@ impl<'a> Checker<'a> {
                     }
                 }
                 BinaryOp::Equal | BinaryOp::NotEqual => {
+                    if matches!(&left_type, Type::Function { .. })
+                        || matches!(&right_type, Type::Function { .. })
+                    {
+                        self.error_with_code(
+                            "E-TYPE-FUNCTION-001",
+                            span,
+                            "function values cannot be compared",
+                        );
+                    }
                     self.expect_type(&left_type, &right_type, right.span);
                     Type::Bool
                 }
@@ -5502,8 +6945,29 @@ impl<'a> Checker<'a> {
                 _ => None,
             };
         }
-        let Type::Named(initial_name) = ty else {
-            return None;
+        let (initial_name, substitutions) = match ty {
+            Type::Named(name) => (name.as_str(), HashMap::new()),
+            Type::Applied { name, args } => {
+                let record = self
+                    ._program
+                    .records
+                    .iter()
+                    .find(|record| record.name == *name)?;
+                let substitutions = record
+                    .type_params
+                    .iter()
+                    .zip(args)
+                    .map(|(parameter, argument)| (parameter.clone(), argument.clone()))
+                    .collect::<HashMap<_, _>>();
+                let field_type = record
+                    .fields
+                    .iter()
+                    .find(|candidate| candidate.name == field)?
+                    .ty
+                    .clone();
+                return Some(substitute_generic_type(&field_type, &substitutions));
+            }
+            _ => return None,
         };
         if initial_name == "HttpError" {
             return match field {
@@ -5513,7 +6977,7 @@ impl<'a> Checker<'a> {
                 _ => None,
             };
         }
-        let mut name = initial_name.as_str();
+        let mut name = initial_name;
         if name == "HttpResponse" {
             return match field {
                 "status" => Some(Type::Int),
@@ -5533,6 +6997,13 @@ impl<'a> Checker<'a> {
                 .iter()
                 .find(|record| record.name == name)
             {
+                return record
+                    .fields
+                    .iter()
+                    .find(|candidate| candidate.name == field)
+                    .map(|candidate| substitute_generic_type(&candidate.ty, &substitutions));
+            }
+            if let Some(record) = sql_results::definitions(self._program).get(name) {
                 return record
                     .fields
                     .iter()
@@ -5562,14 +7033,243 @@ fn compatible(expected: &Type, actual: &Type) -> bool {
             compatible(expected_ok, actual_ok) && compatible(expected_error, actual_error)
         }
         (Type::Array(expected), Type::Array(actual)) => compatible(expected, actual),
+        (
+            Type::Applied {
+                name: expected_name,
+                args: expected_args,
+            },
+            Type::Applied {
+                name: actual_name,
+                args: actual_args,
+            },
+        ) => {
+            expected_name == actual_name
+                && expected_args.len() == actual_args.len()
+                && expected_args
+                    .iter()
+                    .zip(actual_args)
+                    .all(|(expected, actual)| compatible(expected, actual))
+        }
         (Type::Map(expected_key, expected_value), Type::Map(actual_key, actual_value)) => {
             compatible(expected_key, actual_key) && compatible(expected_value, actual_value)
         }
         (Type::HttpResult(expected), Type::HttpResult(actual)) => compatible(expected, actual),
+        (
+            Type::Function {
+                params: expected_params,
+                return_type: expected_return,
+                capabilities: expected_capabilities,
+            },
+            Type::Function {
+                params: actual_params,
+                return_type: actual_return,
+                capabilities: actual_capabilities,
+            },
+        ) => {
+            expected_params == actual_params
+                && expected_return == actual_return
+                && actual_capabilities
+                    .iter()
+                    .all(|capability| expected_capabilities.contains(capability))
+        }
         (Type::HttpResult(_), Type::Named(actual)) if actual == "HttpResult" => true,
         _ => expected == actual,
     }
 }
+
+fn infer_generic_types(
+    expected: &Type,
+    actual: &Type,
+    parameters: &HashSet<String>,
+    substitutions: &mut HashMap<String, Type>,
+) {
+    if *actual == Type::Unknown {
+        return;
+    }
+    match expected {
+        Type::Named(name) if parameters.contains(name) => {
+            substitutions
+                .entry(name.clone())
+                .or_insert_with(|| actual.clone());
+        }
+        Type::Option(expected) => {
+            if let Type::Option(actual) = actual {
+                infer_generic_types(expected, actual, parameters, substitutions);
+            }
+        }
+        Type::Result(expected_ok, expected_error) => {
+            if let Type::Result(actual_ok, actual_error) = actual {
+                infer_generic_types(expected_ok, actual_ok, parameters, substitutions);
+                infer_generic_types(expected_error, actual_error, parameters, substitutions);
+            }
+        }
+        Type::Array(expected) | Type::Set(expected) => match actual {
+            Type::Array(actual) | Type::Set(actual) => {
+                infer_generic_types(expected, actual, parameters, substitutions);
+            }
+            _ => {}
+        },
+        Type::Tuple(expected) => {
+            if let Type::Tuple(actual) = actual {
+                if expected.len() == actual.len() {
+                    for (expected, actual) in expected.iter().zip(actual) {
+                        infer_generic_types(expected, actual, parameters, substitutions);
+                    }
+                }
+            }
+        }
+        Type::Map(expected_key, expected_value) => {
+            if let Type::Map(actual_key, actual_value) = actual {
+                infer_generic_types(expected_key, actual_key, parameters, substitutions);
+                infer_generic_types(expected_value, actual_value, parameters, substitutions);
+            }
+        }
+        Type::HttpResult(expected) => {
+            if let Type::HttpResult(actual) = actual {
+                infer_generic_types(expected, actual, parameters, substitutions);
+            }
+        }
+        Type::Applied {
+            name: expected_name,
+            args: expected_args,
+        } => {
+            if let Type::Applied {
+                name: actual_name,
+                args: actual_args,
+            } = actual
+            {
+                if expected_name == actual_name && expected_args.len() == actual_args.len() {
+                    for (expected, actual) in expected_args.iter().zip(actual_args) {
+                        infer_generic_types(expected, actual, parameters, substitutions);
+                    }
+                }
+            }
+        }
+        Type::Function {
+            params: expected_params,
+            return_type: expected_return,
+            ..
+        } => {
+            if let Type::Function {
+                params: actual_params,
+                return_type: actual_return,
+                ..
+            } = actual
+            {
+                if expected_params.len() == actual_params.len() {
+                    for (expected, actual) in expected_params.iter().zip(actual_params) {
+                        infer_generic_types(expected, actual, parameters, substitutions);
+                    }
+                    infer_generic_types(expected_return, actual_return, parameters, substitutions);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+fn alias_shape_has_names(ty: &Type, aliases: &HashMap<String, Type>) -> Result<bool, &'static str> {
+    let mut stack = vec![(ty, 0)];
+    let mut nodes = 0;
+    let mut has_alias = false;
+    while let Some((ty, depth)) = stack.pop() {
+        nodes += 1;
+        if nodes > 4096 || depth > 64 {
+            return Err("type alias expansion exceeds 64 levels or 4096 type nodes");
+        }
+        match ty {
+            Type::Named(name) => has_alias |= aliases.contains_key(name),
+            Type::Option(inner)
+            | Type::Array(inner)
+            | Type::Set(inner)
+            | Type::HttpResult(inner) => stack.push((inner, depth + 1)),
+            Type::Result(left, right) | Type::Map(left, right) => {
+                stack.push((left, depth + 1));
+                stack.push((right, depth + 1));
+            }
+            Type::Tuple(items) | Type::Applied { args: items, .. } => {
+                stack.extend(items.iter().map(|item| (item, depth + 1)))
+            }
+            Type::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                stack.extend(params.iter().map(|item| (item, depth + 1)));
+                stack.push((return_type, depth + 1));
+            }
+            _ => {}
+        }
+    }
+    Ok(has_alias)
+}
+
+fn expand_type_aliases(ty: &Type, aliases: &HashMap<String, Type>) -> Result<Type, &'static str> {
+    let mut resolved = ty.clone();
+    for _ in 0..=aliases.len().min(64) {
+        if !alias_shape_has_names(&resolved, aliases)? {
+            return Ok(resolved);
+        }
+        let next = substitute_generic_type(&resolved, aliases);
+        if next == resolved {
+            return Err("cyclic type alias");
+        }
+        resolved = next;
+    }
+    Err("cyclic or excessively deep type alias")
+}
+
+fn substitute_generic_type(ty: &Type, substitutions: &HashMap<String, Type>) -> Type {
+    match ty {
+        Type::Named(name) => substitutions
+            .get(name)
+            .cloned()
+            .unwrap_or_else(|| ty.clone()),
+        Type::Applied { name, args } => Type::Applied {
+            name: name.clone(),
+            args: args
+                .iter()
+                .map(|argument| substitute_generic_type(argument, substitutions))
+                .collect(),
+        },
+        Type::Option(inner) => {
+            Type::Option(Box::new(substitute_generic_type(inner, substitutions)))
+        }
+        Type::Result(ok, error) => Type::Result(
+            Box::new(substitute_generic_type(ok, substitutions)),
+            Box::new(substitute_generic_type(error, substitutions)),
+        ),
+        Type::Array(inner) => Type::Array(Box::new(substitute_generic_type(inner, substitutions))),
+        Type::Tuple(items) => Type::Tuple(
+            items
+                .iter()
+                .map(|item| substitute_generic_type(item, substitutions))
+                .collect(),
+        ),
+        Type::Set(inner) => Type::Set(Box::new(substitute_generic_type(inner, substitutions))),
+        Type::Map(key, value) => Type::Map(
+            Box::new(substitute_generic_type(key, substitutions)),
+            Box::new(substitute_generic_type(value, substitutions)),
+        ),
+        Type::HttpResult(inner) => {
+            Type::HttpResult(Box::new(substitute_generic_type(inner, substitutions)))
+        }
+        Type::Function {
+            params,
+            return_type,
+            capabilities,
+        } => Type::Function {
+            params: params
+                .iter()
+                .map(|parameter| substitute_generic_type(parameter, substitutions))
+                .collect(),
+            return_type: Box::new(substitute_generic_type(return_type, substitutions)),
+            capabilities: capabilities.clone(),
+        },
+        _ => ty.clone(),
+    }
+}
+
 fn is_numeric(ty: &Type) -> bool {
     matches!(ty, Type::Int | Type::UInt | Type::Float | Type::Decimal)
 }
@@ -5584,6 +7284,7 @@ fn is_map_key_type(ty: &Type) -> bool {
 fn validate_type(
     ty: &Type,
     known_types: &std::collections::HashSet<String>,
+    generic_arities: &HashMap<String, usize>,
     errors: &mut Vec<TypeError>,
     span: Span,
 ) {
@@ -5593,20 +7294,61 @@ fn validate_type(
             message: format!("unknown type `{name}`"),
             span,
         }),
-        Type::Option(inner) => validate_type(inner, known_types, errors, span),
-        Type::Result(ok, error) => {
-            validate_type(ok, known_types, errors, span);
-            validate_type(error, known_types, errors, span);
+        Type::Named(name) if generic_arities.get(name).is_some_and(|arity| *arity > 0) => {
+            errors.push(TypeError {
+                code: "E-TYPE-GENERIC-001",
+                message: format!("generic type `{name}` requires type arguments"),
+                span,
+            });
         }
-        Type::Array(inner) | Type::Set(inner) => validate_type(inner, known_types, errors, span),
+        Type::Applied { name, args } => {
+            if !known_types.contains(name) {
+                errors.push(TypeError {
+                    code: "E-TYPE-001",
+                    message: format!("unknown type `{name}`"),
+                    span,
+                });
+            }
+            if let Some(arity) = generic_arities.get(name) {
+                if *arity != args.len() {
+                    errors.push(TypeError {
+                        code: "E-TYPE-GENERIC-001",
+                        message: format!(
+                            "generic type `{name}` expects {arity} type argument(s), found {}",
+                            args.len()
+                        ),
+                        span,
+                    });
+                }
+            } else if known_types.contains(name) {
+                errors.push(TypeError {
+                    code: "E-TYPE-GENERIC-001",
+                    message: format!(
+                        "type `{name}` is not generic and does not accept type arguments"
+                    ),
+                    span,
+                });
+            }
+            for argument in args {
+                validate_type(argument, known_types, generic_arities, errors, span);
+            }
+        }
+        Type::Option(inner) => validate_type(inner, known_types, generic_arities, errors, span),
+        Type::Result(ok, error) => {
+            validate_type(ok, known_types, generic_arities, errors, span);
+            validate_type(error, known_types, generic_arities, errors, span);
+        }
+        Type::Array(inner) | Type::Set(inner) => {
+            validate_type(inner, known_types, generic_arities, errors, span)
+        }
         Type::Tuple(items) => {
             for item in items {
-                validate_type(item, known_types, errors, span);
+                validate_type(item, known_types, generic_arities, errors, span);
             }
         }
         Type::Map(key, value) => {
-            validate_type(key, known_types, errors, span);
-            validate_type(value, known_types, errors, span);
+            validate_type(key, known_types, generic_arities, errors, span);
+            validate_type(value, known_types, generic_arities, errors, span);
             if !matches!(key.as_ref(), Type::Unknown) && !is_map_key_type(key) {
                 errors.push(TypeError {
                     code: "E-TYPE-001",
@@ -5617,7 +7359,26 @@ fn validate_type(
                 });
             }
         }
-        Type::HttpResult(inner) => validate_type(inner, known_types, errors, span),
+        Type::HttpResult(inner) => validate_type(inner, known_types, generic_arities, errors, span),
+        Type::Function {
+            params,
+            return_type,
+            capabilities,
+        } => {
+            for parameter in params {
+                validate_type(parameter, known_types, generic_arities, errors, span);
+            }
+            validate_type(return_type, known_types, generic_arities, errors, span);
+            for capability in capabilities {
+                if !KNOWN_CAPABILITIES.contains(&capability.as_str()) {
+                    errors.push(TypeError {
+                        code: "E-TYPE-FUNCTION-001",
+                        message: format!("unknown capability `{capability}` in function type"),
+                        span,
+                    });
+                }
+            }
+        }
         _ => {}
     }
 }
@@ -5636,6 +7397,12 @@ fn singular_table_type(name: &str) -> Option<String> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct SqlRowsMetadata {
+    pub nulls: Vec<Vec<bool>>,
+    pub column_types: Vec<zelyra_database::QueryColumnType>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum Value {
     Int(i64),
     UInt(u64),
@@ -5646,7 +7413,9 @@ pub enum Value {
     Char(char),
     Enum {
         type_name: String,
+        type_args: Vec<Type>,
         variant: String,
+        payloads: Vec<Value>,
     },
     Timestamp(i64),
     Date(String),
@@ -5657,18 +7426,34 @@ pub enum Value {
     Tuple(Vec<Value>),
     Set(Vec<Value>),
     Map(Vec<(Value, Value)>),
+    Function(Box<FunctionValue>),
     Object {
         type_name: String,
+        type_args: Vec<Type>,
         fields: HashMap<String, Value>,
+    },
+    ClassRef {
+        reference: ClassObjectRef,
+        type_name: String,
+        type_args: Vec<Type>,
     },
     Option(Option<Box<Value>>),
     Result(Result<Box<Value>, Box<Value>>),
     Rows {
         columns: Vec<String>,
         rows: Vec<Vec<String>>,
-        result_type: Type,
+        metadata: Box<SqlRowsMetadata>,
+        result_type: Box<Type>,
     },
     Unit,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct FunctionValue {
+    pub name: String,
+    pub params: Vec<Type>,
+    pub return_type: Type,
+    pub capabilities: Vec<String>,
 }
 
 impl Value {
@@ -5681,7 +7466,25 @@ impl Value {
             Value::Bool(_) => Type::Bool,
             Value::String(_) => Type::String,
             Value::Char(_) => Type::Char,
-            Value::Enum { type_name, .. } => Type::Named(type_name.clone()),
+            Value::Enum {
+                type_name,
+                type_args,
+                ..
+            } => {
+                if type_args.is_empty() {
+                    Type::Named(type_name.clone())
+                } else {
+                    Type::Applied {
+                        name: type_name.clone(),
+                        args: type_args.clone(),
+                    }
+                }
+            }
+            Value::Function(function) => Type::Function {
+                params: function.params.clone(),
+                return_type: Box::new(function.return_type.clone()),
+                capabilities: function.capabilities.clone(),
+            },
             Value::Timestamp(_) => Type::Timestamp,
             Value::Date(_) => Type::Date,
             Value::Time(_) => Type::Time,
@@ -5708,14 +7511,41 @@ impl Value {
                         .unwrap_or(Type::Unknown),
                 ),
             ),
-            Value::Object { type_name, .. } => Type::Named(type_name.clone()),
+            Value::Object {
+                type_name,
+                type_args,
+                ..
+            } => {
+                if type_args.is_empty() {
+                    Type::Named(type_name.clone())
+                } else {
+                    Type::Applied {
+                        name: type_name.clone(),
+                        args: type_args.clone(),
+                    }
+                }
+            }
+            Value::ClassRef {
+                type_name,
+                type_args,
+                ..
+            } => {
+                if type_args.is_empty() {
+                    Type::Named(type_name.clone())
+                } else {
+                    Type::Applied {
+                        name: type_name.clone(),
+                        args: type_args.clone(),
+                    }
+                }
+            }
             Value::Option(Some(value)) => Type::Option(Box::new(value.ty())),
             Value::Option(None) => Type::Option(Box::new(Type::Unknown)),
             Value::Result(Ok(value)) => Type::Result(Box::new(value.ty()), Box::new(Type::Unknown)),
             Value::Result(Err(value)) => {
                 Type::Result(Box::new(Type::Unknown), Box::new(value.ty()))
             }
-            Value::Rows { result_type, .. } => result_type.clone(),
+            Value::Rows { result_type, .. } => result_type.as_ref().clone(),
             Value::Unit => Type::Unit,
         }
     }
@@ -5728,7 +7558,37 @@ impl Value {
             Value::Bool(v) => v.to_string(),
             Value::String(v) => v.clone(),
             Value::Char(v) => v.to_string(),
-            Value::Enum { type_name, variant } => format!("{type_name}::{variant}"),
+            Value::Enum {
+                type_name,
+                type_args,
+                variant,
+                payloads,
+            } => {
+                let type_name = if type_args.is_empty() {
+                    type_name.clone()
+                } else {
+                    format!(
+                        "{type_name}<{}>",
+                        type_args
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                };
+                if payloads.is_empty() {
+                    format!("{type_name}::{variant}")
+                } else {
+                    format!(
+                        "{type_name}::{variant}({})",
+                        payloads
+                            .iter()
+                            .map(Value::output)
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                }
+            }
             Value::Timestamp(v) => v.to_string(),
             Value::Date(v) | Value::Time(v) => v.clone(),
             Value::Duration(v) => format!("{v}ms"),
@@ -5739,6 +7599,26 @@ impl Value {
                     .map(u8::to_string)
                     .collect::<Vec<_>>()
                     .join(", ")
+            ),
+            Value::ClassRef {
+                reference,
+                type_name,
+                type_args,
+            } => format!(
+                "<{}#{}>",
+                if type_args.is_empty() {
+                    type_name.clone()
+                } else {
+                    format!(
+                        "{type_name}<{}>",
+                        type_args
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                },
+                reference.object_id
             ),
             Value::Array(values) => format!(
                 "[{}]",
@@ -5772,9 +7652,25 @@ impl Value {
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
-            Value::Object { type_name, fields } => format!(
-                "{}{{{}}}",
+            Value::Function(function) => format!("<function {}>", function.name),
+            Value::Object {
                 type_name,
+                type_args,
+                fields,
+            } => format!(
+                "{}{{{}}}",
+                if type_args.is_empty() {
+                    type_name.clone()
+                } else {
+                    format!(
+                        "{type_name}<{}>",
+                        type_args
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                },
                 fields
                     .iter()
                     .map(|(name, value)| format!("{name}={}", value.output()))
@@ -6073,15 +7969,20 @@ pub fn execute_function_with_capabilities_and_policies(
             .map(|function| (function.name.clone(), function))
             .collect(),
         output: Vec::new(),
+        next_class_object_id: Arc::new(AtomicU64::new(1)),
+        parallel_worker: false,
         steps: 0,
         step_budget: policy.as_ref().and_then(|policy| policy.step_budget),
         call_depth: 0,
         database_url: database_url.map(str::to_owned),
+        storage_schema: zelyra_database::build_schema(program),
+        storage_checked: false,
         granted_capabilities: grants.cloned(),
         filesystem_policy: policy.and_then(|policy| policy.filesystem.clone()),
         network_policy: policy.and_then(|policy| policy.network.clone()),
         process_policy: policy.and_then(|policy| policy.process.clone()),
         mail_policy: policy.and_then(|policy| policy.mail.clone()),
+        sql_record_definitions: sql_results::definitions(program),
         record_definitions: program
             .records
             .iter()
@@ -6098,6 +7999,7 @@ pub fn execute_function_with_capabilities_and_policies(
             .map(|definition| (definition.name.clone(), definition.clone()))
             .collect(),
         active_capabilities: Vec::new(),
+        active_type_substitutions: Vec::new(),
     };
     interpreter.call(name, args, Span::default())
 }
@@ -6156,15 +8058,20 @@ fn execute_internal(
             .map(|f| (f.name.clone(), f))
             .collect(),
         output: Vec::new(),
+        next_class_object_id: Arc::new(AtomicU64::new(1)),
+        parallel_worker: false,
         steps: 0,
         step_budget: policy.as_ref().and_then(|policy| policy.step_budget),
         call_depth: 0,
         database_url,
+        storage_schema: zelyra_database::build_schema(program),
+        storage_checked: false,
         granted_capabilities,
         filesystem_policy: policy.as_ref().and_then(|policy| policy.filesystem.clone()),
         network_policy: policy.as_ref().and_then(|policy| policy.network.clone()),
         process_policy: policy.as_ref().and_then(|policy| policy.process.clone()),
         mail_policy: policy.as_ref().and_then(|policy| policy.mail.clone()),
+        sql_record_definitions: sql_results::definitions(program),
         record_definitions: program
             .records
             .iter()
@@ -6181,29 +8088,107 @@ fn execute_internal(
             .map(|definition| (definition.name.clone(), definition.clone()))
             .collect(),
         active_capabilities: Vec::new(),
+        active_type_substitutions: Vec::new(),
     };
     interpreter.call("main", Vec::new(), Span::default())?;
     Ok(interpreter.output)
 }
 
-const MAX_FUNCTION_CALL_DEPTH: usize = 32;
+const MAX_FUNCTION_CALL_DEPTH: usize = 24;
 
 struct Interpreter<'program> {
     functions: HashMap<String, &'program Function>,
     output: Vec<String>,
+    next_class_object_id: Arc<AtomicU64>,
+    parallel_worker: bool,
     steps: usize,
     step_budget: Option<usize>,
     call_depth: usize,
     database_url: Option<String>,
+    storage_schema: Result<zelyra_database::Schema, Vec<zelyra_database::SchemaError>>,
+    storage_checked: bool,
     granted_capabilities: Option<HashSet<String>>,
     filesystem_policy: Option<FileSystemPolicy>,
     network_policy: Option<NetworkPolicy>,
     process_policy: Option<ProcessPolicy>,
     mail_policy: Option<MailPolicy>,
     record_definitions: HashMap<String, RecordDef>,
+    sql_record_definitions: HashMap<String, RecordDef>,
     type_aliases: HashMap<String, Type>,
     enum_definitions: HashMap<String, zelyra_ast::EnumDef>,
     active_capabilities: Vec<HashSet<String>>,
+    active_type_substitutions: Vec<HashMap<String, Type>>,
+}
+
+struct RuntimeClassObject {
+    fields: HashMap<String, Value>,
+}
+
+#[derive(Clone)]
+pub struct ClassObjectRef {
+    object_id: u64,
+    object: Arc<Mutex<RuntimeClassObject>>,
+}
+
+impl fmt::Debug for ClassObjectRef {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "ClassObjectRef({})", self.object_id)
+    }
+}
+
+impl PartialEq for ClassObjectRef {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.object, &other.object)
+    }
+}
+
+fn class_reference_would_cycle(value: &Value, target: &ClassObjectRef) -> Result<bool, String> {
+    let mut pending = vec![value.clone()];
+    let mut visited = HashSet::new();
+    while let Some(value) = pending.pop() {
+        match value {
+            Value::ClassRef { reference, .. } => {
+                if Arc::ptr_eq(&reference.object, &target.object) {
+                    return Ok(true);
+                }
+                let address = Arc::as_ptr(&reference.object) as usize;
+                if visited.insert(address) {
+                    let object = reference
+                        .object
+                        .lock()
+                        .map_err(|_| "class object is unavailable".to_owned())?;
+                    pending.extend(object.fields.values().cloned());
+                }
+            }
+            Value::Array(values) | Value::Tuple(values) | Value::Set(values) => {
+                pending.extend(values);
+            }
+            Value::Map(entries) => {
+                pending.extend(entries.into_iter().flat_map(|(key, value)| [key, value]));
+            }
+            Value::Object { fields, .. } => pending.extend(fields.into_values()),
+            Value::Enum { payloads, .. } => pending.extend(payloads),
+            Value::Option(Some(value)) => pending.push(*value),
+            Value::Result(Ok(value)) | Value::Result(Err(value)) => pending.push(*value),
+            Value::Int(_)
+            | Value::UInt(_)
+            | Value::Float(_)
+            | Value::Decimal(_)
+            | Value::Bool(_)
+            | Value::String(_)
+            | Value::Char(_)
+            | Value::Timestamp(_)
+            | Value::Date(_)
+            | Value::Time(_)
+            | Value::Duration(_)
+            | Value::Bytes(_)
+            | Value::Function(_)
+            | Value::Option(None)
+            | Value::Rows { .. }
+            | Value::Unit => {}
+        }
+    }
+    Ok(false)
 }
 
 fn statement_span(statement: &Stmt) -> Span {
@@ -6255,6 +8240,7 @@ fn is_runtime_builtin(name: &str) -> bool {
             | "len"
             | "range"
             | "array_replace_result"
+            | "object_set_field"
             | "record_with"
             | "append"
             | "tuple"
@@ -6278,6 +8264,7 @@ fn is_runtime_builtin(name: &str) -> bool {
             | "duration_ms"
             | "bytes"
             | "format_timestamp"
+            | "format_text"
             | "env"
             | "random_int"
             | "read_console"
@@ -6289,6 +8276,7 @@ fn is_runtime_builtin(name: &str) -> bool {
             | "json_encode_tagged_result"
             | "json_decode"
             | "json_decode_result"
+            | "sql_decode"
             | "json_decode_tagged_result"
             | "csv_decode_result"
             | "csv_encode"
@@ -6323,6 +8311,42 @@ fn is_runtime_builtin(name: &str) -> bool {
 }
 
 impl<'program> Interpreter<'program> {
+    fn runtime_alias_type(&self, ty: &Type, span: Span) -> Result<Type, RuntimeError> {
+        let mut aliases = HashMap::from([
+            ("Id".into(), Type::Int),
+            ("Money".into(), Type::Decimal),
+            ("Email".into(), Type::String),
+            ("Url".into(), Type::String),
+            ("Uuid".into(), Type::String),
+        ]);
+        aliases.retain(|name, _| {
+            !self.record_definitions.contains_key(name) && !self.enum_definitions.contains_key(name)
+        });
+        aliases.extend(self.type_aliases.clone());
+        expand_type_aliases(ty, &aliases).map_err(|message| self.runtime_error(span, message))
+    }
+
+    fn ensure_decimal_storage(&mut self, span: Span) -> Result<(), RuntimeError> {
+        if !self.storage_checked {
+            if let Some(url) = &self.database_url {
+                let schema = self.storage_schema.as_ref().map_err(|errors| {
+                    self.runtime_error(
+                        span,
+                        errors
+                            .first()
+                            .map_or("invalid database schema", |error| error.message.as_str()),
+                    )
+                })?;
+                zelyra_database::validate_decimal_storage(url, schema)
+                    .map_err(|error| self.runtime_error(span, error.to_string()))?;
+                zelyra_database::validate_temporal_storage(url, schema)
+                    .map_err(|error| self.runtime_error(span, error.to_string()))?;
+            }
+            self.storage_checked = true;
+        }
+        Ok(())
+    }
+
     fn consume_step(&mut self, span: Span) -> Result<(), RuntimeError> {
         self.steps = self.steps.saturating_add(1);
         if self.step_budget.is_some_and(|budget| self.steps > budget) {
@@ -6587,6 +8611,7 @@ impl<'program> Interpreter<'program> {
             .collect();
         Ok(Value::Object {
             type_name: "HttpResponse".into(),
+            type_args: Vec::new(),
             fields: HashMap::from([
                 ("status".into(), Value::Int(i64::from(status))),
                 ("headers".into(), Value::Array(headers)),
@@ -6672,6 +8697,7 @@ impl<'program> Interpreter<'program> {
         } else {
             Value::Option(Some(Box::new(Value::Object {
                 type_name: "HttpError".into(),
+                type_args: Vec::new(),
                 fields: HashMap::from([
                     ("status".into(), Value::Int(status)),
                     ("headers".into(), Value::Array(headers.clone())),
@@ -6685,6 +8711,7 @@ impl<'program> Interpreter<'program> {
         };
         Ok(Value::Object {
             type_name: "HttpResult".into(),
+            type_args: Vec::new(),
             fields: HashMap::from([
                 ("status".into(), Value::Int(status)),
                 ("headers".into(), Value::Array(headers)),
@@ -6753,7 +8780,7 @@ impl<'program> Interpreter<'program> {
         error_type: &Type,
         span: Span,
     ) -> Result<Value, String> {
-        let value: serde_json::Value = serde_json::from_str(source)
+        let value: serde_json::Value = zelyra_ast::json::parse(source)
             .map_err(|error| format!("invalid tagged Result JSON: {error}"))?;
         let object = value
             .as_object()
@@ -6797,10 +8824,28 @@ impl<'program> Interpreter<'program> {
             Value::Bool(value) => Ok(serde_json::Value::from(*value)),
             Value::String(value) => Ok(serde_json::Value::String(value.clone())),
             Value::Char(value) => Ok(serde_json::Value::String(value.to_string())),
-            Value::Enum { type_name, variant } => Ok(serde_json::json!({
-                "$enum": type_name,
-                "variant": variant,
-            })),
+            Value::Enum {
+                type_name,
+                variant,
+                payloads,
+                ..
+            } => {
+                let mut encoded = serde_json::json!({
+                    "$enum": type_name,
+                    "variant": variant,
+                });
+                if !payloads.is_empty() {
+                    let encoded_payloads = payloads
+                        .iter()
+                        .map(|payload| self.json_value(payload, span))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    encoded
+                        .as_object_mut()
+                        .expect("enum JSON is an object")
+                        .insert("payload".into(), serde_json::Value::Array(encoded_payloads));
+                }
+                Ok(encoded)
+            }
             Value::Timestamp(value) => Ok(serde_json::Value::from(*value)),
             Value::Date(value) | Value::Time(value) => Ok(serde_json::Value::String(value.clone())),
             Value::Duration(value) => Ok(serde_json::Value::from(*value)),
@@ -6842,6 +8887,13 @@ impl<'program> Interpreter<'program> {
                 })
                 .collect::<Result<serde_json::Map<_, _>, _>>()
                 .map(serde_json::Value::Object),
+            Value::ClassRef { .. } => Err(self.runtime_error(
+                span,
+                "class references cannot be serialized directly; convert them to a record",
+            )),
+            Value::Function(_) => {
+                Err(self.runtime_error(span, "json_encode cannot serialize a function value"))
+            }
             Value::Option(Some(value)) => self.json_value(value, span),
             Value::Option(None) | Value::Unit => Ok(serde_json::Value::Null),
             Value::Result(Ok(value)) => self.json_value(value, span),
@@ -6868,7 +8920,7 @@ impl<'program> Interpreter<'program> {
     }
 
     fn json_decode(&self, source: &str, target: &Type, span: Span) -> Result<Value, RuntimeError> {
-        let value: serde_json::Value = serde_json::from_str(source).map_err(|error| {
+        let value: serde_json::Value = zelyra_ast::json::parse(source).map_err(|error| {
             self.runtime_error(span, format!("json_decode received invalid JSON: {error}"))
         })?;
         self.json_decode_value(&value, target, span)
@@ -6893,35 +8945,46 @@ impl<'program> Interpreter<'program> {
                 return self.json_decode_value(value, alias, span);
             }
             if let Some(definition) = self._enum_definition(name) {
-                let Some(object) = value.as_object() else {
-                    return Err(self.json_type_error("enum object", value, span));
-                };
-                if object.get("$enum").and_then(serde_json::Value::as_str) != Some(name) {
-                    return Err(
-                        self.runtime_error(span, format!("json_decode expected enum `{name}`"))
-                    );
-                }
-                let Some(variant) = object.get("variant").and_then(serde_json::Value::as_str)
-                else {
-                    return Err(
-                        self.runtime_error(span, "json_decode expected enum variant String")
-                    );
-                };
-                if !definition.variants.iter().any(|item| item == variant) {
-                    return Err(
-                        self.runtime_error(span, format!("unknown `{name}` variant `{variant}`"))
-                    );
-                }
-                return Ok(Value::Enum {
-                    type_name: name.clone(),
-                    variant: variant.to_owned(),
-                });
+                return self.json_decode_enum(value, definition, &[], span);
             }
             if let Some(record) = self.record_definitions.get(name) {
-                return self.json_decode_record(value, record, span);
+                if record.is_class {
+                    return Err(self.runtime_error(
+                        span,
+                        "json_decode does not support class types because it cannot restore object identity",
+                    ));
+                }
+                return self.json_decode_record(value, record, &[], span);
             }
-            if matches!(name.as_str(), "Id" | "Email" | "Url" | "Uuid" | "Money") {
+            if name == "Money" {
+                return value.as_str().and_then(sql_results::parse_money).map(Value::Decimal).ok_or_else(|| self.runtime_error(span, "json_decode expected an exact Money string within DECIMAL(19,4) bounds"));
+            }
+            if name == "Id" && value.is_number() {
+                return value.as_i64().map(Value::Int).ok_or_else(|| {
+                    self.runtime_error(
+                        span,
+                        "json_decode expected an Id integer within the signed 64-bit range",
+                    )
+                });
+            }
+            // Preserve the legacy Id string input; materialized SQL Id values
+            // additionally round-trip through their native JSON integer form.
+            if matches!(name.as_str(), "Id" | "Email" | "Url" | "Uuid") {
                 return self.json_decode_string(value, target, span);
+            }
+        }
+        if let Type::Applied { name, args } = target {
+            if let Some(definition) = self._enum_definition(name) {
+                return self.json_decode_enum(value, definition, args, span);
+            }
+            if let Some(record) = self.record_definitions.get(name) {
+                if record.is_class {
+                    return Err(self.runtime_error(
+                        span,
+                        "json_decode does not support class types because it cannot restore object identity",
+                    ));
+                }
+                return self.json_decode_record(value, record, args, span);
             }
         }
         match target {
@@ -6968,6 +9031,7 @@ impl<'program> Interpreter<'program> {
             }
             Type::Timestamp => value
                 .as_i64()
+                .filter(|value| zelyra_ast::temporal::valid_timestamp_millis(*value))
                 .map(Value::Timestamp)
                 .ok_or_else(|| self.json_type_error("Timestamp", value, span)),
             Type::Date => {
@@ -7082,11 +9146,18 @@ impl<'program> Interpreter<'program> {
                 span,
                 format!("json_decode does not support target type `{name}`"),
             )),
-            Type::Result(_, _) | Type::Unknown | Type::Option(_) | Type::HttpResult(_) => Err(self
-                .runtime_error(
-                    span,
-                    format!("json_decode does not support target type `{target}`"),
-                )),
+            Type::Applied { name, .. } => Err(self.runtime_error(
+                span,
+                format!("json_decode does not support target type `{name}`"),
+            )),
+            Type::Result(_, _)
+            | Type::Unknown
+            | Type::Option(_)
+            | Type::HttpResult(_)
+            | Type::Function { .. } => Err(self.runtime_error(
+                span,
+                format!("json_decode does not support target type `{target}`"),
+            )),
         }
     }
 
@@ -7112,8 +9183,26 @@ impl<'program> Interpreter<'program> {
         &self,
         value: &serde_json::Value,
         record: &RecordDef,
+        type_args: &[Type],
         span: Span,
     ) -> Result<Value, RuntimeError> {
+        if record.type_params.len() != type_args.len() {
+            return Err(self.runtime_error(
+                span,
+                format!(
+                    "json_decode expects {} type argument(s) for `{}`, found {}",
+                    record.type_params.len(),
+                    record.name,
+                    type_args.len()
+                ),
+            ));
+        }
+        let substitutions = record
+            .type_params
+            .iter()
+            .zip(type_args)
+            .map(|(parameter, argument)| (parameter.clone(), argument.clone()))
+            .collect::<HashMap<_, _>>();
         let Some(object) = value.as_object() else {
             return Err(self.json_type_error(&format!("{} object", record.name), value, span));
         };
@@ -7147,14 +9236,123 @@ impl<'program> Interpreter<'program> {
                     ),
                 ));
             };
+            let field_type = substitute_generic_type(&field.ty, &substitutions);
             fields.insert(
                 field.name.clone(),
-                self.json_decode_value(value, &field.ty, span)?,
+                self.json_decode_value(value, &field_type, span)?,
             );
         }
         Ok(Value::Object {
             type_name: record.name.clone(),
+            type_args: type_args.to_vec(),
             fields,
+        })
+    }
+
+    fn json_decode_enum(
+        &self,
+        value: &serde_json::Value,
+        definition: &zelyra_ast::EnumDef,
+        type_args: &[Type],
+        span: Span,
+    ) -> Result<Value, RuntimeError> {
+        if definition.type_params.len() != type_args.len() {
+            return Err(self.runtime_error(
+                span,
+                format!(
+                    "json_decode expects {} type argument(s) for `{}`, found {}",
+                    definition.type_params.len(),
+                    definition.name,
+                    type_args.len()
+                ),
+            ));
+        }
+        let Some(object) = value.as_object() else {
+            return Err(self.json_type_error("enum object", value, span));
+        };
+        if object.get("$enum").and_then(serde_json::Value::as_str) != Some(definition.name.as_str())
+        {
+            return Err(self.runtime_error(
+                span,
+                format!("json_decode expected enum `{}`", definition.name),
+            ));
+        }
+        let Some(variant) = object.get("variant").and_then(serde_json::Value::as_str) else {
+            return Err(self.runtime_error(span, "json_decode expected enum variant String"));
+        };
+        if !definition.variants.iter().any(|item| item == variant) {
+            return Err(self.runtime_error(
+                span,
+                format!("unknown `{}` variant `{variant}`", definition.name),
+            ));
+        }
+        let payload_types = definition
+            .variant_payloads
+            .iter()
+            .find(|(candidate, _)| candidate == variant)
+            .map(|(_, types)| types.as_slice())
+            .unwrap_or_default();
+        let payloads = if payload_types.is_empty() {
+            if object.len() != 2 || object.contains_key("payload") {
+                return Err(self.runtime_error(
+                    span,
+                    format!(
+                        "unit enum `{}` variant `{variant}` must not have a payload",
+                        definition.name
+                    ),
+                ));
+            }
+            Vec::new()
+        } else {
+            if object.len() != 3 {
+                return Err(self.runtime_error(
+                    span,
+                    format!(
+                        "enum `{}` variant `{variant}` requires a payload array",
+                        definition.name
+                    ),
+                ));
+            }
+            let Some(values) = object.get("payload").and_then(serde_json::Value::as_array) else {
+                return Err(self.runtime_error(
+                    span,
+                    format!(
+                        "enum `{}` variant `{variant}` requires a payload array",
+                        definition.name
+                    ),
+                ));
+            };
+            if values.len() != payload_types.len() {
+                return Err(self.runtime_error(
+                    span,
+                    format!(
+                        "enum `{}` variant `{variant}` expects {} payload value(s), found {}",
+                        definition.name,
+                        payload_types.len(),
+                        values.len()
+                    ),
+                ));
+            }
+            let substitutions = definition
+                .type_params
+                .iter()
+                .zip(type_args)
+                .map(|(parameter, argument)| (parameter.clone(), argument.clone()))
+                .collect::<HashMap<_, _>>();
+            values
+                .iter()
+                .zip(payload_types)
+                .map(|(value, ty)| {
+                    let ty = substitute_generic_type(ty, &substitutions);
+                    self.json_decode_value(value, &ty, span)
+                })
+                .collect::<Result<Vec<_>, _>>()?
+        };
+        Ok(Value::Enum {
+            type_name: definition.name.clone(),
+            type_args: type_args.to_vec(),
+            variant: variant.to_owned(),
+            payloads,
         })
     }
 
@@ -7306,6 +9504,16 @@ impl<'program> Interpreter<'program> {
     }
 
     fn call(&mut self, name: &str, args: Vec<Value>, span: Span) -> Result<Value, RuntimeError> {
+        self.call_with_type_args(name, &[], args, span)
+    }
+
+    fn call_with_type_args(
+        &mut self,
+        name: &str,
+        type_args: &[Type],
+        args: Vec<Value>,
+        span: Span,
+    ) -> Result<Value, RuntimeError> {
         let function = self
             .functions
             .get(name)
@@ -7320,6 +9528,70 @@ impl<'program> Interpreter<'program> {
                 ),
             ));
         }
+        let resolved_type_args = type_args
+            .iter()
+            .map(|ty| {
+                self.active_type_substitutions
+                    .last()
+                    .map_or_else(|| ty.clone(), |active| substitute_generic_type(ty, active))
+            })
+            .collect::<Vec<_>>();
+        let type_args = resolved_type_args.as_slice();
+        let substitutions = if function.type_params.is_empty() {
+            if !type_args.is_empty() {
+                return Err(self.runtime_error(
+                    span,
+                    format!("function `{name}` does not accept type arguments"),
+                ));
+            }
+            HashMap::new()
+        } else {
+            if !type_args.is_empty() && type_args.len() != function.type_params.len() {
+                return Err(self.runtime_error(
+                    span,
+                    format!(
+                        "generic function `{name}` expects {} type argument(s), found {}",
+                        function.type_params.len(),
+                        type_args.len()
+                    ),
+                ));
+            }
+            let parameters = function.type_params.iter().cloned().collect::<HashSet<_>>();
+            let mut substitutions = function
+                .type_params
+                .iter()
+                .zip(type_args)
+                .map(|(parameter, ty)| (parameter.clone(), ty.clone()))
+                .collect::<HashMap<_, _>>();
+            if type_args.is_empty() {
+                for (parameter, value) in function.params.iter().zip(&args) {
+                    infer_generic_types(
+                        &parameter.ty,
+                        &value.ty(),
+                        &parameters,
+                        &mut substitutions,
+                    );
+                }
+            }
+            if let Some(missing) = function
+                .type_params
+                .iter()
+                .find(|parameter| !substitutions.contains_key(*parameter))
+            {
+                return Err(self.runtime_error(
+                    span,
+                    format!(
+                        "cannot infer type parameter `{missing}` for `{name}`; provide explicit type arguments"
+                    ),
+                ));
+            }
+            substitutions
+        };
+        let expected_return = function
+            .return_type
+            .as_ref()
+            .map(|ty| self.runtime_alias_type(&substitute_generic_type(ty, &substitutions), span))
+            .transpose()?;
         if let Some(grants) = &self.granted_capabilities {
             if let Some(capability) = function
                 .capabilities
@@ -7341,6 +9613,7 @@ impl<'program> Interpreter<'program> {
         self.call_depth += 1;
         self.active_capabilities
             .push(function.capabilities.iter().cloned().collect());
+        self.active_type_substitutions.push(substitutions.clone());
         let result = (|| {
             let mut env = Environment::new();
             for (param, value) in function.params.iter().zip(args) {
@@ -7362,14 +9635,15 @@ impl<'program> Interpreter<'program> {
                 Flow::Return(value) => value,
                 Flow::Continue | Flow::LoopContinue | Flow::Break => Value::Unit,
             };
-            if let Some(expected) = function.return_type.as_ref() {
+            if let Some(expected) = expected_return.as_ref() {
                 if *expected != Type::Unit && !returned {
                     return Err(self.runtime_error(
                         function.body.span,
                         format!("function `{name}` reached its end without returning `{expected}`"),
                     ));
                 }
-                if returned && !compatible(expected, &result.ty()) {
+                if returned && !compatible(expected, &self.runtime_alias_type(&result.ty(), span)?)
+                {
                     return Err(self.runtime_error(
                         function.body.span,
                         format!(
@@ -7394,6 +9668,7 @@ impl<'program> Interpreter<'program> {
             }
             Ok(result)
         })();
+        self.active_type_substitutions.pop();
         self.active_capabilities.pop();
         self.call_depth -= 1;
         result
@@ -7616,6 +9891,7 @@ impl<'program> Interpreter<'program> {
                     unreachable!();
                 };
                 let queries = transaction_queries(self, body, env, *span)?;
+                self.ensure_decimal_storage(*span)?;
                 zelyra_database::execute_queries(&database_url, &queries, true).map_err(
                     |error| {
                         self.runtime_error(*span, format!("database transaction failed: {error}"))
@@ -7623,101 +9899,7 @@ impl<'program> Interpreter<'program> {
                 )?;
                 Ok(Flow::Continue)
             }
-            Stmt::Parallel { body, span } => {
-                let mut branches = Vec::new();
-                let mut names = HashSet::new();
-                for statement in &body.statements {
-                    let Stmt::BindOrAssign { name, value, .. } = statement else {
-                        return Err(self.runtime_error(
-                            *span,
-                            "parallel blocks may contain only `name = await expression` bindings",
-                        ));
-                    };
-                    let ExprKind::Await(inner) = &value.kind else {
-                        return Err(self.runtime_error(
-                            value.span,
-                            "parallel bindings must await their expression",
-                        ));
-                    };
-                    if !names.insert(name.clone()) {
-                        return Err(self.runtime_error(
-                            value.span,
-                            format!("parallel binding `{name}` is declared twice"),
-                        ));
-                    }
-                    branches.push((name.as_str(), inner.as_ref(), value.span));
-                }
-                let mut results = Vec::new();
-                let mut first_error = None;
-                std::thread::scope(|scope| {
-                    let handles = branches
-                        .iter()
-                        .map(|(name, expression, branch_span)| {
-                            let mut child = Interpreter {
-                                functions: self.functions.clone(),
-                                output: Vec::new(),
-                                steps: 0,
-                                step_budget: self.step_budget,
-                                call_depth: 0,
-                                database_url: self.database_url.clone(),
-                                granted_capabilities: self.granted_capabilities.clone(),
-                                filesystem_policy: self.filesystem_policy.clone(),
-                                network_policy: self.network_policy.clone(),
-                                process_policy: self.process_policy.clone(),
-                                mail_policy: self.mail_policy.clone(),
-                                record_definitions: self.record_definitions.clone(),
-                                type_aliases: self.type_aliases.clone(),
-                                enum_definitions: self.enum_definitions.clone(),
-                                active_capabilities: self.active_capabilities.clone(),
-                            };
-                            let mut child_env = env.clone();
-                            scope.spawn(move || {
-                                child
-                                    .eval(expression, &mut child_env)
-                                    .map(|value| ((*name).to_owned(), value, child.output))
-                                    .map_err(|error| (*branch_span, error))
-                            })
-                        })
-                        .collect::<Vec<_>>();
-                    for handle in handles {
-                        match handle.join() {
-                            Ok(Ok(result)) => results.push(result),
-                            Ok(Err((_, error))) => {
-                                if first_error.is_none() {
-                                    first_error = Some(error);
-                                }
-                            }
-                            Err(_) => {
-                                if first_error.is_none() {
-                                    first_error =
-                                        Some(self.runtime_error(*span, "parallel task panicked"));
-                                }
-                            }
-                        }
-                    }
-                });
-                if let Some(error) = first_error {
-                    return Err(error);
-                }
-                for (name, value, output) in results {
-                    self.output.extend(output);
-                    if env.contains(&name) {
-                        env.assign(&name, value).map_err(|reason| {
-                            self.runtime_error(
-                                *span,
-                                if reason == "immutable" {
-                                    format!("cannot assign to immutable variable `{name}`")
-                                } else {
-                                    format!("unknown variable `{name}`")
-                                },
-                            )
-                        })?;
-                    } else {
-                        env.declare(name, value, false);
-                    }
-                }
-                Ok(Flow::Continue)
-            }
+            Stmt::Parallel { body, span } => self.exec_parallel(body, *span, env),
         }
     }
     fn expect_bool(&self, value: Value, span: Span) -> Result<bool, RuntimeError> {
@@ -7871,12 +10053,154 @@ impl<'program> Interpreter<'program> {
         env: &mut Environment,
         span: Span,
     ) -> Result<Value, RuntimeError> {
+        if let Some(Value::Function(function)) = env.get(name) {
+            if !type_args.is_empty() {
+                return Err(self.runtime_error(
+                    span,
+                    "indirect function calls do not accept explicit type arguments",
+                ));
+            }
+            if let Some(caller_capabilities) = self.active_capabilities.last() {
+                let declared = caller_capabilities
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<HashSet<_>>();
+                if let Some(capability) = function
+                    .capabilities
+                    .iter()
+                    .find(|capability| !function_declares_capability(&declared, capability))
+                {
+                    return Err(self.runtime_error(
+                        span,
+                        format!(
+                            "runtime capability denied: current function does not declare `{capability}` required by indirect call through `{name}`"
+                        ),
+                    ));
+                }
+            }
+            let values = args
+                .iter()
+                .map(|argument| self.eval(argument, env))
+                .collect::<Result<Vec<_>, _>>()?;
+            return self.call_with_type_args(&function.name, &[], values, span);
+        }
+        if let Some((enum_name, variant)) = name.rsplit_once("::") {
+            if let Some(definition) = self.enum_definitions.get(enum_name).cloned() {
+                let payload_types = definition
+                    .variant_payloads
+                    .iter()
+                    .find(|(name, _)| name == variant)
+                    .map(|(_, types)| types.clone())
+                    .ok_or_else(|| {
+                        self.runtime_error(
+                            span,
+                            format!("unknown enum variant `{enum_name}::{variant}`"),
+                        )
+                    })?;
+                if definition.type_params.is_empty() && !type_args.is_empty() {
+                    return Err(self.runtime_error(
+                        span,
+                        format!("enum `{enum_name}` does not accept type arguments"),
+                    ));
+                }
+                if payload_types.is_empty() && definition.type_params.is_empty() {
+                    return Err(self.runtime_error(
+                        span,
+                        format!(
+                            "unit enum variant `{enum_name}::{variant}` is written without parentheses"
+                        ),
+                    ));
+                }
+                if args.len() != payload_types.len() {
+                    return Err(self.runtime_error(
+                        span,
+                        format!(
+                            "enum variant `{enum_name}::{variant}` expects {} payload value(s), found {}",
+                            payload_types.len(),
+                            args.len()
+                        ),
+                    ));
+                }
+                let payloads = args
+                    .iter()
+                    .map(|argument| self.eval(argument, env))
+                    .collect::<Result<Vec<_>, _>>()?;
+                if !type_args.is_empty() && type_args.len() != definition.type_params.len() {
+                    return Err(self.runtime_error(
+                        span,
+                        format!(
+                            "enum `{enum_name}` expects {} type argument(s), found {}",
+                            definition.type_params.len(),
+                            type_args.len()
+                        ),
+                    ));
+                }
+                let parameters = definition
+                    .type_params
+                    .iter()
+                    .cloned()
+                    .collect::<HashSet<_>>();
+                let mut substitutions = definition
+                    .type_params
+                    .iter()
+                    .zip(type_args)
+                    .map(|(parameter, argument)| (parameter.clone(), argument.clone()))
+                    .collect::<HashMap<_, _>>();
+                if type_args.is_empty() {
+                    for (expected, payload) in payload_types.iter().zip(&payloads) {
+                        infer_generic_types(
+                            expected,
+                            &payload.ty(),
+                            &parameters,
+                            &mut substitutions,
+                        );
+                    }
+                }
+                let concrete_args = definition
+                    .type_params
+                    .iter()
+                    .map(|parameter| substitutions.get(parameter).cloned())
+                    .collect::<Option<Vec<_>>>()
+                    .ok_or_else(|| {
+                        self.runtime_error(
+                            span,
+                            format!("cannot infer generic arguments for enum `{enum_name}`"),
+                        )
+                    })?;
+                let instantiated_payloads = payload_types
+                    .iter()
+                    .map(|expected| substitute_generic_type(expected, &substitutions))
+                    .collect::<Vec<_>>();
+                for ((argument, payload), expected) in
+                    args.iter().zip(&payloads).zip(&instantiated_payloads)
+                {
+                    if !compatible(
+                        &self.runtime_alias_type(expected, span)?,
+                        &self.runtime_alias_type(&payload.ty(), span)?,
+                    ) {
+                        return Err(self.runtime_error(
+                            argument.span,
+                            format!(
+                                "enum variant `{enum_name}::{variant}` payload expects `{expected}`, found `{}`",
+                                payload.ty()
+                            ),
+                        ));
+                    }
+                }
+                return Ok(Value::Enum {
+                    type_name: enum_name.to_owned(),
+                    type_args: concrete_args,
+                    variant: variant.to_owned(),
+                    payloads,
+                });
+            }
+        }
         if !is_runtime_builtin(name) && self.functions.contains_key(name) {
             let values = args
                 .iter()
                 .map(|arg| self.eval(arg, env))
                 .collect::<Result<Vec<_>, _>>()?;
-            return self.call(name, values, span);
+            return self.call_with_type_args(name, type_args, values, span);
         }
         self.eval_builtin_call(name, type_args, args, env, span)
     }
@@ -7984,6 +10308,87 @@ impl<'program> Interpreter<'program> {
                     .map(Box::new)
                     .map_err(|message| Box::new(Value::String(message))),
             ))
+        } else if name == "object_set_field" {
+            if self.parallel_worker {
+                return Err(self.runtime_error(
+                    span,
+                    "class field mutation is not allowed inside a `parallel` block",
+                ));
+            }
+            if !type_args.is_empty() || args.len() != 3 {
+                return Err(self.runtime_error(
+                    span,
+                    "class field update expects an object, literal field name, and value",
+                ));
+            }
+            let object_value = self.eval(&args[0], env)?;
+            let field_name = self.eval(&args[1], env)?;
+            let value = self.eval(&args[2], env)?;
+            let (reference, type_name, type_args, field_name) = match (object_value, field_name) {
+                (
+                    Value::ClassRef {
+                        reference,
+                        type_name,
+                        type_args,
+                    },
+                    Value::String(field_name),
+                ) => (reference, type_name, type_args, field_name),
+                _ => {
+                    return Err(self.runtime_error(
+                        span,
+                        "field assignment requires a class instance and literal field name",
+                    ))
+                }
+            };
+            let definition = self.record_definitions.get(&type_name).ok_or_else(|| {
+                self.runtime_error(span, format!("unknown class type `{type_name}`"))
+            })?;
+            if !definition.is_class {
+                return Err(self.runtime_error(span, "field assignment requires a class instance"));
+            }
+            let field = definition
+                .fields
+                .iter()
+                .find(|field| field.name == field_name)
+                .ok_or_else(|| {
+                    self.runtime_error(
+                        args[1].span,
+                        format!("unknown field `{field_name}` in class `{type_name}`"),
+                    )
+                })?;
+            let substitutions = definition
+                .type_params
+                .iter()
+                .zip(&type_args)
+                .map(|(parameter, argument)| (parameter.clone(), argument.clone()))
+                .collect::<HashMap<_, _>>();
+            let expected = substitute_generic_type(&field.ty, &substitutions);
+            if !compatible(
+                &self.runtime_alias_type(&expected, span)?,
+                &self.runtime_alias_type(&value.ty(), span)?,
+            ) {
+                return Err(self.runtime_error(
+                    args[2].span,
+                    format!(
+                        "class field `{field_name}` expects `{expected}`, found `{}`",
+                        value.ty()
+                    ),
+                ));
+            }
+            if class_reference_would_cycle(&value, &reference)
+                .map_err(|message| self.runtime_error(span, message))?
+            {
+                return Err(self.runtime_error(
+                    args[2].span,
+                    "class field update would create a reference cycle",
+                ));
+            }
+            let mut object = reference
+                .object
+                .lock()
+                .map_err(|_| self.runtime_error(span, "class object is unavailable"))?;
+            object.fields.insert(field_name, value);
+            Ok(Value::Unit)
         } else if name == "record_with" {
             if !type_args.is_empty() || args.len() != 3 {
                 return Err(self.runtime_error(
@@ -7997,6 +10402,7 @@ impl<'program> Interpreter<'program> {
             let (
                 Value::Object {
                     type_name,
+                    type_args,
                     mut fields,
                 },
                 Value::String(field_name),
@@ -8019,18 +10425,32 @@ impl<'program> Interpreter<'program> {
                         format!("unknown field `{field_name}` in record `{type_name}`"),
                     )
                 })?;
-            if !compatible(&field.ty, &value.ty()) {
+            let substitutions = definition
+                .type_params
+                .iter()
+                .zip(&type_args)
+                .map(|(parameter, argument)| (parameter.clone(), argument.clone()))
+                .collect::<HashMap<_, _>>();
+            let field_type = substitute_generic_type(&field.ty, &substitutions);
+            if !compatible(
+                &self.runtime_alias_type(&field_type, span)?,
+                &self.runtime_alias_type(&value.ty(), span)?,
+            ) {
                 return Err(self.runtime_error(
                     args[2].span,
                     format!(
                         "record field `{field_name}` expects `{}`, found `{}`",
-                        field.ty,
+                        field_type,
                         value.ty()
                     ),
                 ));
             }
             fields.insert(field_name, value);
-            Ok(Value::Object { type_name, fields })
+            Ok(Value::Object {
+                type_name,
+                type_args,
+                fields,
+            })
         } else if name == "range" {
             if !type_args.is_empty() || args.len() != 2 {
                 return Err(self.runtime_error(span, "range expects two Int bounds"));
@@ -8309,11 +10729,47 @@ impl<'program> Interpreter<'program> {
                 );
             }
             match self.eval(&args[0], env)? {
-                Value::Timestamp(timestamp) => Ok(Value::String(format_timestamp_utc(timestamp))),
+                Value::Timestamp(timestamp)
+                    if zelyra_ast::temporal::valid_timestamp_millis(timestamp) =>
+                {
+                    Ok(Value::String(format_timestamp_utc(timestamp)))
+                }
+                Value::Timestamp(_) => {
+                    Err(self.runtime_error(span, "Timestamp is outside years 0001 through 9999"))
+                }
                 value => Err(self.runtime_error(
                     args[0].span,
                     format!("format_timestamp expects a Timestamp, found {}", value.ty()),
                 )),
+            }
+        } else if name == "format_text" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(
+                    span,
+                    "format_text expects one scalar value and no type arguments",
+                ));
+            }
+            let value = self.eval(&args[0], env)?;
+            if matches!(
+                value,
+                Value::Int(_)
+                    | Value::UInt(_)
+                    | Value::Float(_)
+                    | Value::Decimal(_)
+                    | Value::Bool(_)
+                    | Value::Char(_)
+                    | Value::String(_)
+                    | Value::Timestamp(_)
+                    | Value::Date(_)
+                    | Value::Time(_)
+                    | Value::Duration(_)
+            ) {
+                Ok(Value::String(value.output()))
+            } else {
+                Err(self.runtime_error(
+                    args[0].span,
+                    format!("format_text does not support `{}`", value.ty()),
+                ))
             }
         } else if name == "env" {
             if args.len() != 1 {
@@ -8397,6 +10853,8 @@ impl<'program> Interpreter<'program> {
             let value = self.eval(&args[0], env)?;
             self.json_encode_tagged_result(&value, span)
                 .map(Value::String)
+        } else if name == "sql_decode" {
+            self.eval_sql_decode(type_args, args, env, span)
         } else if name == "json_decode" {
             if type_args.len() != 1 || args.len() != 1 {
                 return Err(self.runtime_error(
@@ -9151,6 +11609,29 @@ impl<'program> Interpreter<'program> {
             ExprKind::Bool(v) => Ok(Value::Bool(*v)),
             ExprKind::String(v) => Ok(Value::String(v.clone())),
             ExprKind::Char(v) => Ok(Value::Char(*v)),
+            ExprKind::FunctionValue(name) => {
+                let function = self.functions.get(name).copied().ok_or_else(|| {
+                    self.runtime_error(expr.span, format!("unknown function value `{name}`"))
+                })?;
+                if !function.type_params.is_empty() {
+                    return Err(self.runtime_error(
+                        expr.span,
+                        format!(
+                            "generic function `{name}` cannot be stored as a function value yet"
+                        ),
+                    ));
+                }
+                Ok(Value::Function(Box::new(FunctionValue {
+                    name: name.clone(),
+                    params: function
+                        .params
+                        .iter()
+                        .map(|param| param.ty.clone())
+                        .collect(),
+                    return_type: function.return_type.clone().unwrap_or(Type::Unit),
+                    capabilities: function.capabilities.clone(),
+                })))
+            }
             ExprKind::Array(values) => values
                 .iter()
                 .map(|value| self.eval(value, env))
@@ -9171,31 +11652,49 @@ impl<'program> Interpreter<'program> {
                 }
                 Ok(Value::Map(values))
             }
-            ExprKind::Record { type_name, fields } => {
-                let mut values = HashMap::new();
-                for (field, value) in fields {
-                    values.insert(field.clone(), self.eval(value, env)?);
+            ExprKind::Record {
+                type_name,
+                type_args,
+                fields,
+            } => self.eval_record_value(type_name, type_args, fields, expr.span, env),
+            ExprKind::Variable(name) => {
+                if let Some(value) = env.get(name) {
+                    return Ok(value);
                 }
-                Ok(Value::Object {
-                    type_name: type_name.clone(),
-                    fields: values,
-                })
-            }
-            ExprKind::Variable(name) => env
-                .get(name)
-                .or_else(|| {
-                    if name == "None" {
-                        Some(Value::Option(None))
-                    } else if let Some((type_name, variant)) = name.split_once("::") {
-                        Some(Value::Enum {
+                if name == "None" {
+                    return Ok(Value::Option(None));
+                }
+                if let Some((type_name, variant)) = name.rsplit_once("::") {
+                    if let Some(definition) = self.enum_definitions.get(type_name) {
+                        let payload_types = definition
+                            .variant_payloads
+                            .iter()
+                            .find(|(candidate, _)| candidate == variant)
+                            .map(|(_, types)| types.as_slice())
+                            .ok_or_else(|| {
+                                self.runtime_error(
+                                    expr.span,
+                                    format!("unknown enum variant `{type_name}::{variant}`"),
+                                )
+                            })?;
+                        if !payload_types.is_empty() {
+                            return Err(self.runtime_error(
+                                expr.span,
+                                format!(
+                                    "enum variant `{type_name}::{variant}` requires payload values"
+                                ),
+                            ));
+                        }
+                        return Ok(Value::Enum {
                             type_name: type_name.to_owned(),
+                            type_args: Vec::new(),
                             variant: variant.to_owned(),
-                        })
-                    } else {
-                        None
+                            payloads: Vec::new(),
+                        });
                     }
-                })
-                .ok_or_else(|| self.runtime_error(expr.span, format!("unknown variable `{name}`"))),
+                }
+                Err(self.runtime_error(expr.span, format!("unknown variable `{name}`")))
+            }
             ExprKind::Call {
                 name,
                 type_args,
@@ -9261,9 +11760,23 @@ impl<'program> Interpreter<'program> {
                     Value::Object { fields, .. } => fields.get(field).cloned().ok_or_else(|| {
                         self.runtime_error(expr.span, format!("record field `{field}` is missing"))
                     }),
+                    Value::ClassRef { reference, .. } => {
+                        let object = reference.object.lock().map_err(|_| {
+                            self.runtime_error(expr.span, "class object is unavailable")
+                        })?;
+                        object.fields.get(field).cloned().ok_or_else(|| {
+                            self.runtime_error(
+                                expr.span,
+                                format!("class field `{field}` is missing"),
+                            )
+                        })
+                    }
                     value => Err(self.runtime_error(
                         expr.span,
-                        format!("field access requires a record, found {}", value.ty()),
+                        format!(
+                            "field access requires a record or class, found {}",
+                            value.ty()
+                        ),
                     )),
                 }
             }
@@ -9298,6 +11811,7 @@ impl<'program> Interpreter<'program> {
                     );
                 };
                 let params = query_parameters(query, env, expr.span)?;
+                self.ensure_decimal_storage(expr.span)?;
                 let result = zelyra_database::execute_query(&database_url, query, params).map_err(
                     |error| {
                         self.runtime_error(expr.span, format!("database query failed: {error}"))
@@ -9306,7 +11820,11 @@ impl<'program> Interpreter<'program> {
                 Ok(Value::Rows {
                     columns: result.columns,
                     rows: result.rows,
-                    result_type: result_type.clone(),
+                    metadata: Box::new(SqlRowsMetadata {
+                        nulls: result.nulls,
+                        column_types: result.column_types,
+                    }),
+                    result_type: Box::new(result_type.clone()),
                 })
             }
             ExprKind::Await(inner) => self.eval(inner, env),
@@ -9396,23 +11914,27 @@ impl<'program> Interpreter<'program> {
                 .checked_sub(b)
                 .map(Value::Decimal)
                 .ok_or_else(|| self.runtime_error(span, "Decimal overflow")),
-            (Value::Decimal(a), Multiply, Value::Decimal(b)) => a
-                .checked_mul(b)
-                .and_then(|value| value.checked_div(DECIMAL_SCALE))
-                .map(Value::Decimal)
-                .ok_or_else(|| self.runtime_error(span, "Decimal overflow")),
+            (Value::Decimal(a), Multiply, Value::Decimal(b)) => {
+                decimal_math::scaled_product(a, b, DECIMAL_SCALE)
+                    .map(Value::Decimal)
+                    .ok_or_else(|| self.runtime_error(span, "Decimal overflow"))
+            }
             (Value::Decimal(_), Divide, Value::Decimal(0)) => {
                 Err(self.runtime_error(span, "division by zero"))
             }
-            (Value::Decimal(a), Divide, Value::Decimal(b)) => a
-                .checked_mul(DECIMAL_SCALE)
-                .and_then(|value| value.checked_div(b))
-                .map(Value::Decimal)
-                .ok_or_else(|| self.runtime_error(span, "Decimal overflow")),
+            (Value::Decimal(a), Divide, Value::Decimal(b)) => {
+                decimal_math::scaled_product(a, DECIMAL_SCALE, b)
+                    .map(Value::Decimal)
+                    .ok_or_else(|| self.runtime_error(span, "Decimal overflow"))
+            }
             (Value::Decimal(_), Remainder, Value::Decimal(0)) => {
                 Err(self.runtime_error(span, "division by zero"))
             }
-            (Value::Decimal(a), Remainder, Value::Decimal(b)) => Ok(Value::Decimal(a % b)),
+            (Value::Decimal(a), Remainder, Value::Decimal(b)) => {
+                // i128::MIN % -1 has a representable zero remainder, but the
+                // machine division used for `%` traps before returning it.
+                Ok(Value::Decimal(if b == -1 { 0 } else { a % b }))
+            }
             (Value::String(a), Add, Value::String(b)) => Ok(Value::String(a + &b)),
             (Value::Duration(a), Add, Value::Duration(b)) => a
                 .checked_add(b)
@@ -9425,6 +11947,10 @@ impl<'program> Interpreter<'program> {
             (Value::Array(mut a), Add, Value::Array(b)) => {
                 a.extend(b);
                 Ok(Value::Array(a))
+            }
+            (Value::Function(_), Equal | NotEqual, _)
+            | (_, Equal | NotEqual, Value::Function(_)) => {
+                Err(self.runtime_error(span, "function values cannot be compared"))
             }
             (a, Equal, b) => Ok(Value::Bool(a == b)),
             (a, NotEqual, b) => Ok(Value::Bool(a != b)),
@@ -9481,51 +12007,6 @@ impl<'program> Interpreter<'program> {
 
 const DECIMAL_SCALE: i128 = 1_000_000_000;
 
-fn date_epoch_days(value: &str) -> Option<i64> {
-    if !valid_date(value) {
-        return None;
-    }
-    let (year, month_day) = value.split_once('-')?;
-    let (month, day) = month_day.split_once('-')?;
-    let mut year = year.parse::<i64>().ok()?;
-    let month = month.parse::<i64>().ok()?;
-    let day = day.parse::<i64>().ok()?;
-    year -= i64::from(month <= 2);
-    let era = year.div_euclid(400);
-    let year_of_era = year - era * 400;
-    let shifted_month = month + if month > 2 { -3 } else { 9 };
-    let day_of_year = (153 * shifted_month + 2) / 5 + day - 1;
-    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
-    Some(era * 146_097 + day_of_era - 719_468)
-}
-
-fn epoch_days_date(days: i64) -> Option<String> {
-    let shifted = days.checked_add(719_468)?;
-    let era = shifted.div_euclid(146_097);
-    let day_of_era = shifted - era * 146_097;
-    let year_of_era =
-        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
-    let mut year = year_of_era + era * 400;
-    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
-    let month_prime = (5 * day_of_year + 2) / 153;
-    let day = day_of_year - (153 * month_prime + 2) / 5 + 1;
-    let month = month_prime + if month_prime < 10 { 3 } else { -9 };
-    year += i64::from(month <= 2);
-    if !(1..=9_999).contains(&year) {
-        return None;
-    }
-    Some(format!("{year:04}-{month:02}-{day:02}"))
-}
-
-fn timestamp_bounds_millis() -> Option<(i64, i64)> {
-    let first = date_epoch_days("0001-01-01")?.checked_mul(86_400_000)?;
-    let last = date_epoch_days("9999-12-31")?
-        .checked_add(1)?
-        .checked_mul(86_400_000)?
-        .checked_sub(1)?;
-    Some((first, last))
-}
-
 fn quantize_decimal(value: i128, scale: u32, mode: &str) -> Result<i128, String> {
     if scale > 9 {
         return Err("decimal scale must be between 0 and 9".into());
@@ -9575,32 +12056,7 @@ fn canonical_set(mut values: Vec<Value>) -> Vec<Value> {
 }
 
 fn parse_decimal(value: &str) -> Option<i128> {
-    let (negative, unsigned) = value
-        .strip_prefix('-')
-        .map_or((false, value), |value| (true, value));
-    let (whole, fraction) = unsigned.split_once('.').unwrap_or((unsigned, ""));
-    if whole.is_empty()
-        || !whole.bytes().all(|byte| byte.is_ascii_digit())
-        || fraction.len() > 9
-        || !fraction.bytes().all(|byte| byte.is_ascii_digit())
-    {
-        return None;
-    }
-    let whole = whole.parse::<i128>().ok()?.checked_mul(DECIMAL_SCALE)?;
-    let fraction_value = if fraction.is_empty() {
-        0
-    } else {
-        fraction
-            .parse::<i128>()
-            .ok()?
-            .checked_mul(10_i128.checked_pow((9 - fraction.len()) as u32)?)?
-    };
-    let value = whole.checked_add(fraction_value)?;
-    if negative {
-        value.checked_neg()
-    } else {
-        Some(value)
-    }
+    zelyra_ast::decimal::parse_scaled(value, zelyra_ast::decimal::SCALE_DIGITS)
 }
 
 fn format_decimal(value: i128) -> String {
@@ -9612,85 +12068,6 @@ fn format_decimal(value: i128) -> String {
     }
     let fraction = format!("{fraction:09}").trim_end_matches('0').to_owned();
     format!("{}{whole}.{fraction}", if value < 0 { "-" } else { "" })
-}
-
-fn valid_date(value: &str) -> bool {
-    let Some((year, month_day)) = value.split_once('-') else {
-        return false;
-    };
-    let Some((month, day)) = month_day.split_once('-') else {
-        return false;
-    };
-    if year.len() != 4
-        || month.len() != 2
-        || day.len() != 2
-        || !year.bytes().all(|byte| byte.is_ascii_digit())
-        || !month.bytes().all(|byte| byte.is_ascii_digit())
-        || !day.bytes().all(|byte| byte.is_ascii_digit())
-    {
-        return false;
-    }
-    let (Ok(year), Ok(month), Ok(day)) = (
-        year.parse::<u32>(),
-        month.parse::<u32>(),
-        day.parse::<u32>(),
-    ) else {
-        return false;
-    };
-    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
-    let days = match month {
-        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
-        4 | 6 | 9 | 11 => 30,
-        2 if leap => 29,
-        2 => 28,
-        _ => return false,
-    };
-    year > 0 && (1..=days).contains(&day)
-}
-
-fn valid_time(value: &str) -> bool {
-    let mut parts = value.split(':');
-    let (Some(hour), Some(minute), Some(second), None) =
-        (parts.next(), parts.next(), parts.next(), parts.next())
-    else {
-        return false;
-    };
-    [hour, minute, second]
-        .iter()
-        .all(|part| part.len() == 2 && part.bytes().all(|byte| byte.is_ascii_digit()))
-        && hour.parse::<u32>().is_ok_and(|value| value <= 23)
-        && minute.parse::<u32>().is_ok_and(|value| value <= 59)
-        && second.parse::<u32>().is_ok_and(|value| value <= 59)
-}
-
-fn format_timestamp_utc(timestamp_millis: i64) -> String {
-    let seconds = timestamp_millis.div_euclid(1_000);
-    let millis = timestamp_millis.rem_euclid(1_000);
-    let days = seconds.div_euclid(86_400);
-    let seconds_in_day = seconds.rem_euclid(86_400);
-
-    let shifted_days = days + 719_468;
-    let era = shifted_days.div_euclid(146_097);
-    let day_of_era = shifted_days - era * 146_097;
-    let year_of_era =
-        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
-    let mut year = year_of_era + era * 400;
-    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
-    let month_part = (5 * day_of_year + 2) / 153;
-    let day = day_of_year - (153 * month_part + 2) / 5 + 1;
-    let month = if month_part < 10 {
-        month_part + 3
-    } else {
-        month_part - 9
-    };
-    if month <= 2 {
-        year += 1;
-    }
-
-    let hour = seconds_in_day / 3_600;
-    let minute = (seconds_in_day % 3_600) / 60;
-    let second = seconds_in_day % 60;
-    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}.{millis:03}Z")
 }
 
 fn query_parameters(
@@ -9737,12 +12114,13 @@ fn value_to_query_value(
         Value::Int(value) => Ok(QueryValue::Int(*value)),
         Value::UInt(value) => Ok(QueryValue::UInt(*value)),
         Value::Float(value) => Ok(QueryValue::Float(*value)),
-        Value::Decimal(value) => Ok(QueryValue::String(format_decimal(*value))),
+        Value::Decimal(value) => Ok(QueryValue::Decimal(format_decimal(*value))),
         Value::Bool(value) => Ok(QueryValue::Bool(*value)),
         Value::String(value) => Ok(QueryValue::String(value.clone())),
         Value::Char(value) => Ok(QueryValue::String(value.to_string())),
-        Value::Timestamp(value) => Ok(QueryValue::Int(*value)),
-        Value::Date(value) | Value::Time(value) => Ok(QueryValue::String(value.clone())),
+        Value::Timestamp(value) => Ok(QueryValue::Timestamp(*value)),
+        Value::Date(value) => Ok(QueryValue::Date(value.clone())),
+        Value::Time(value) => Ok(QueryValue::Time(value.clone())),
         Value::Duration(value) => Ok(QueryValue::Int(*value)),
         Value::Option(None) | Value::Unit => Ok(QueryValue::Null),
         Value::Option(Some(value)) => value_to_query_value(value, span),
@@ -9751,7 +12129,9 @@ fn value_to_query_value(
         | Value::Set(_)
         | Value::Map(_)
         | Value::Object { .. }
+        | Value::ClassRef { .. }
         | Value::Enum { .. }
+        | Value::Function(_)
         | Value::Rows { .. }
         | Value::Bytes(_)
         | Value::Result(_) => Err(RuntimeError {
@@ -9933,7 +12313,33 @@ fn match_pattern(value: &Value, pattern: &Pattern) -> Option<Vec<(String, Value)
             Value::Enum {
                 type_name,
                 variant: actual,
-            } if type_name == enum_name && actual == variant => Some(Vec::new()),
+                payloads,
+                ..
+            } if type_name == enum_name && actual == variant && payloads.is_empty() => {
+                Some(Vec::new())
+            }
+            _ => None,
+        },
+        PatternKind::EnumVariantPayload {
+            enum_name,
+            variant,
+            payloads: patterns,
+        } => match value {
+            Value::Enum {
+                type_name,
+                variant: actual,
+                payloads,
+                ..
+            } if type_name == enum_name
+                && actual == variant
+                && payloads.len() == patterns.len() =>
+            {
+                let mut bindings = Vec::new();
+                for (value, pattern) in payloads.iter().zip(patterns) {
+                    bindings.extend(match_pattern(value, pattern)?);
+                }
+                Some(bindings)
+            }
             _ => None,
         },
         PatternKind::Constructor { name, inner } => match (name.as_str(), value) {

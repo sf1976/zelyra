@@ -250,6 +250,12 @@ jobs:
             target/debug/zelyra fmt "$formatted_file" --check
             rm "$formatted_file"
           done
+      - name: Verify Gregorian calendar and UTC reference values
+        run: python3 ./scripts/check_calendar_references.py --compiler target/debug/zelyra
+      - name: Verify typed temporal HTTP round trips
+        env:
+          ZELYRA_BIN: target/debug/zelyra
+        run: python3 ./tests/temporal-api-e2e.py
       - name: Run generated-project MariaDB end-to-end test
         env:
           ZELYRA_GENERATED_E2E_ROOT_PASSWORD: root
@@ -299,6 +305,11 @@ jobs:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
           ZELYRA_BIN: target/debug/zelyra
         run: bash ./tests/password-reset-e2e.sh
+      - name: Run persistent password-reset rate-limit end-to-end test
+        env:
+          DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+          ZELYRA_BIN: target/debug/zelyra
+        run: ./tests/password-reset-rate-limit-e2e.sh
       - name: Run transactional mail outbox end-to-end test
         env:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
@@ -344,6 +355,41 @@ jobs:
           DATABASE_URL: postgres://zelyra_ci:zelyra_ci@127.0.0.1:5432/zelyra_ci
           ZELYRA_BIN: target/debug/zelyra
         run: bash ./tests/postgres-schema-safety-e2e.sh
+      - name: Verify exact decimal forms, filters, APIs, and legacy schemas on MariaDB
+        env:
+          DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+          ZELYRA_BIN: target/debug/zelyra
+        run: python3 ./tests/exact-numbers-e2e.py
+      - name: Verify scoped decision transactions on MariaDB
+        env:
+          DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+          ZELYRA_DB_POOL_MAX_SIZE: '1'
+        run: cargo test --locked -p zelyra-database --lib decision_transactions_commit_rollback_unwind_and_deadline_on_native_backend -- --ignored --nocapture
+      - name: Verify native dates, times, UTC milliseconds, and legacy schemas on MariaDB
+        env:
+          DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+          ZELYRA_BIN: target/debug/zelyra
+        run: |
+          python3 ./tests/temporal-sql-e2e.py
+          python3 ./tests/typed-sql-results-e2e.py
+          python3 ./tests/null-edit-snapshots-e2e.py
+      - name: Verify exact decimal forms, filters, APIs, and legacy schemas on PostgreSQL
+        env:
+          DATABASE_URL: postgres://zelyra_ci:zelyra_ci@127.0.0.1:5432/zelyra_ci
+          ZELYRA_BIN: target/debug/zelyra
+        run: python3 ./tests/exact-numbers-e2e.py
+      - name: Verify scoped decision transactions on PostgreSQL
+        env:
+          DATABASE_URL: postgres://zelyra_ci:zelyra_ci@127.0.0.1:5432/zelyra_ci
+          ZELYRA_DB_POOL_MAX_SIZE: '1'
+        run: cargo test --locked -p zelyra-database --lib decision_transactions_commit_rollback_unwind_and_deadline_on_native_backend -- --ignored --nocapture
+      - name: Verify native dates, times, UTC milliseconds, and legacy schemas on PostgreSQL
+        env:
+          DATABASE_URL: postgres://zelyra_ci:zelyra_ci@127.0.0.1:5432/zelyra_ci
+          ZELYRA_BIN: target/debug/zelyra
+        run: |
+          python3 ./tests/temporal-sql-e2e.py
+          python3 ./tests/typed-sql-results-e2e.py
       - name: Run PostgreSQL parameterized runtime integration test
         env:
           ZELYRA_POSTGRES_RUNTIME_TEST_URL: postgres://zelyra_ci:zelyra_ci@127.0.0.1:5432/zelyra_ci
@@ -542,3 +588,21 @@ jobs:
           ZELYRA_BIN: target/debug/zelyra
           MYSQL_PWD: root
         run: bash ./tests/mysql-schema-e2e.sh
+      - name: Verify exact decimal forms, filters, APIs, and legacy schemas on MySQL
+        env:
+          DATABASE_URL: mysql://root:root@127.0.0.1:3306/zelyra_ci
+          ZELYRA_BIN: target/debug/zelyra
+        run: python3 ./tests/exact-numbers-e2e.py
+      - name: Verify scoped decision transactions on MySQL
+        env:
+          DATABASE_URL: mysql://root:root@127.0.0.1:3306/zelyra_ci
+          ZELYRA_DB_POOL_MAX_SIZE: '1'
+        run: cargo test --locked -p zelyra-database --lib decision_transactions_commit_rollback_unwind_and_deadline_on_native_backend -- --ignored --nocapture
+      - name: Verify native dates, times, UTC milliseconds, and legacy schemas on MySQL
+        env:
+          DATABASE_URL: mysql://root:root@127.0.0.1:3306/zelyra_ci
+          ZELYRA_BIN: target/debug/zelyra
+        run: |
+          python3 ./tests/temporal-sql-e2e.py
+          python3 ./tests/typed-sql-results-e2e.py
+          python3 ./tests/null-edit-snapshots-e2e.py

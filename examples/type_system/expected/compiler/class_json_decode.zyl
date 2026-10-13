@@ -1,0 +1,8 @@
+class Customer {
+    name: String
+}
+
+fn main() {
+    customer: Customer = json_decode<Customer>("{\"name\":\"Ada\"}")
+    print(customer.name)
+}
