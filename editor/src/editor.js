@@ -338,7 +338,7 @@ function setLanguage(next) {
 }
 
 const keywords = new Set((
-  "fn let mut if else match for in while loop break continue return type record " +
+  "fn let mut if else match for in step while loop break continue return type record " +
   "table view component layout slot page api form crud tableview auth database " +
   "sql uses capability requires ensures invariant true false null none some ok err"
 ).split(/\s+/));
@@ -353,7 +353,8 @@ const languageHelp = {
   route: ["Route", "Ordnet eine Adresse und HTTP-Methode einem Handler zu.", "route GET /kunden { ... }", "Doppelte Routen erkennt die Projektprüfung."],
   component: ["Komponente", "Bündelt wiederverwendbare Darstellung und Verhalten.", "component Hinweis { ... }", "Eine Komponente kann in Ansichten wiederverwendet werden."],
   if: ["Bedingung", "Führt einen Block aus, wenn der Ausdruck wahr ist.", "if kunde.aktiv { ... }", "Mit else lässt sich ein Alternativpfad beschreiben."],
-  for: ["Wiederholung", "Verarbeitet jedes Element einer Liste in einem Block.", "for artikel in artikel { ... }", "Der Name nach `for` bezeichnet das aktuelle Element."],
+  for: ["Wiederholung", "Verarbeitet jedes Listenelement oder einen Integer-Bereich in einem Block.", "for i in 1..21 step 2 { ... }", "Das Bereichsende ist exklusiv; die Schrittweite kann positiv oder negativ sein."],
+  step: ["Schrittweite", "Legt den Abstand einer Integer-Bereichsschleife fest.", "for i in 1..21 step 2 { ... }", "Positive Werte zählen aufwärts, negative abwärts. Null ist ungültig."],
   match: ["Fallunterscheidung", "Wählt einen passenden Zweig anhand eines Wertes.", "match status { ... }", "Hilft, alle bekannten Fälle sichtbar abzudecken."],
   record: ["Datensatztyp", "Definiert zusammengehörige typisierte Werte.", "record Adresse {\n  ort: Text\n  plz: Text\n}", "Datensatztypen machen Datenformen im Code sichtbar."],
   type: ["Typ", "Definiert einen eigenen Typnamen oder Typverbund.", "type KundenId = Zahl", "Typen helfen der IDE, Werte und Fehler einzuordnen."],
@@ -380,7 +381,8 @@ const languageHelpEn = {
   route: ["route", "Maps an address and HTTP method to a handler.", "route GET /customers { ... }", "Project checks report duplicate routes."],
   component: ["component", "Groups reusable presentation and behavior.", "component Notice { ... }", "Components can be reused in views."],
   if: ["condition", "Runs a block when its expression is true.", "if customer.active { ... }", "Use else to describe an alternative path."],
-  for: ["iteration", "Processes each item in a list inside a block.", "for item in items { ... }", "The name after `for` refers to the current item."],
+  for: ["iteration", "Processes each list item or integer in a range inside a block.", "for i in 1..21 step 2 { ... }", "Range ends are exclusive; the step may be positive or negative."],
+  step: ["range step", "Sets the distance between values in an integer range loop.", "for i in 1..21 step 2 { ... }", "Positive values count upward, negative values downward. Zero is invalid."],
   match: ["pattern match", "Selects a branch based on a value.", "match status { ... }", "Makes known cases visible in the source."],
   record: ["record type", "Defines a group of related, typed values.", "record Address {\n  city: Text\n  zip: Text\n}", "Record types make data shapes explicit."],
   type: ["type", "Defines a type alias or a named type.", "type CustomerId = Number", "Types help Studio and the compiler identify values and errors."],

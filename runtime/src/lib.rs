@@ -5526,10 +5526,10 @@ impl<'a> Checker<'a> {
                     }
                     Type::Unit
                 } else if name == "range" {
-                    if !type_args.is_empty() || args.len() != 2 {
+                    if !type_args.is_empty() || !(2..=3).contains(&args.len()) {
                         self.error(
                             expr.span,
-                            "range expects two Int bounds and no type arguments",
+                            "range expects two Int bounds, an optional Int step, and no type arguments",
                         );
                         return Type::Unknown;
                     }
@@ -5537,6 +5537,10 @@ impl<'a> Checker<'a> {
                     let end = self.check_expr(&args[1], scopes);
                     self.expect_type(&Type::Int, &start, args[0].span);
                     self.expect_type(&Type::Int, &end, args[1].span);
+                    if let Some(step) = args.get(2) {
+                        let step_type = self.check_expr(step, scopes);
+                        self.expect_type(&Type::Int, &step_type, step.span);
+                    }
                     Type::Array(Box::new(Type::Int))
                 } else if name == "array_replace_result" {
                     if !type_args.is_empty() || args.len() != 3 {
@@ -8120,6 +8124,20 @@ struct Interpreter<'program> {
     active_type_substitutions: Vec<HashMap<String, Type>>,
 }
 
+fn integer_range(start: i64, end: i64, step: i64) -> impl Iterator<Item = i64> {
+    let ascending = step > 0;
+    let first = if (ascending && start < end) || (!ascending && start > end) {
+        Some(start)
+    } else {
+        None
+    };
+    std::iter::successors(first, move |current| {
+        let next = current.checked_add(step)?;
+        let before_end = if ascending { next < end } else { next > end };
+        before_end.then_some(next)
+    })
+}
+
 struct RuntimeClassObject {
     fields: HashMap<String, Value>,
 }
@@ -9802,15 +9820,39 @@ impl<'program> Interpreter<'program> {
                         type_args,
                         args,
                     } if call == "range" => {
-                        if !type_args.is_empty() || args.len() != 2 {
-                            return Err(self.runtime_error(*span, "range expects two Int bounds"));
+                        if !type_args.is_empty() || !(2..=3).contains(&args.len()) {
+                            return Err(self.runtime_error(
+                                *span,
+                                "range expects two Int bounds and an optional Int step",
+                            ));
                         }
                         let start = self.eval(&args[0], env)?;
                         let end = self.eval(&args[1], env)?;
                         let (Value::Int(start), Value::Int(end)) = (start, end) else {
-                            return Err(self.runtime_error(*span, "range expects two Int bounds"));
+                            return Err(self.runtime_error(
+                                *span,
+                                "range expects two Int bounds and an optional Int step",
+                            ));
                         };
-                        Box::new((start..end).map(Value::Int))
+                        let step = match args.get(2) {
+                            Some(expression) => match self.eval(expression, env)? {
+                                Value::Int(step) => step,
+                                _ => {
+                                    return Err(self.runtime_error(
+                                        expression.span,
+                                        "range step must be an Int",
+                                    ));
+                                }
+                            },
+                            None => 1,
+                        };
+                        if step == 0 {
+                            return Err(self.runtime_error(
+                                args.get(2).map_or(*span, |step| step.span),
+                                "range step must not be zero",
+                            ));
+                        }
+                        Box::new(integer_range(start, end, step).map(Value::Int))
                     }
                     _ => {
                         let iterable_value = self.eval(iterable, env)?;
@@ -10452,24 +10494,45 @@ impl<'program> Interpreter<'program> {
                 fields,
             })
         } else if name == "range" {
-            if !type_args.is_empty() || args.len() != 2 {
-                return Err(self.runtime_error(span, "range expects two Int bounds"));
+            if !type_args.is_empty() || !(2..=3).contains(&args.len()) {
+                return Err(self.runtime_error(
+                    span,
+                    "range expects two Int bounds and an optional Int step",
+                ));
             }
             let start = self.eval(&args[0], env)?;
             let end = self.eval(&args[1], env)?;
             let (Value::Int(start), Value::Int(end)) = (start, end) else {
-                return Err(self.runtime_error(span, "range expects two Int bounds"));
+                return Err(self.runtime_error(
+                    span,
+                    "range expects two Int bounds and an optional Int step",
+                ));
             };
-            let count = i128::from(end) - i128::from(start);
-            if count <= 0 {
-                return Ok(Value::Array(Vec::new()));
+            let step = match args.get(2) {
+                Some(expression) => match self.eval(expression, env)? {
+                    Value::Int(step) => step,
+                    _ => {
+                        return Err(self.runtime_error(expression.span, "range step must be an Int"))
+                    }
+                },
+                None => 1,
+            };
+            if step == 0 {
+                return Err(self.runtime_error(
+                    args.get(2).map_or(span, |step| step.span),
+                    "range step must not be zero",
+                ));
             }
-            if count > 1_000_000 {
-                return Err(
-                    self.runtime_error(span, "range array exceeds the 1,000,000 element limit")
-                );
+            let mut values = Vec::new();
+            for value in integer_range(start, end, step) {
+                if values.len() == 1_000_000 {
+                    return Err(
+                        self.runtime_error(span, "range array exceeds the 1,000,000 element limit")
+                    );
+                }
+                values.push(Value::Int(value));
             }
-            Ok(Value::Array((start..end).map(Value::Int).collect()))
+            Ok(Value::Array(values))
         } else if name == "len" {
             if args.len() != 1 {
                 return Err(self.runtime_error(span, "`len` expects exactly one argument"));

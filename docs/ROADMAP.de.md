@@ -56,6 +56,11 @@ den tatsächlich implementierten Stand.
   Programmausgabe ist mit 13 px besser lesbar, ohne die Code-Editor-Schrift zu
   verändern. Browserprüfungen decken eine frische Compose-Datenbank und ein
   externes MariaDB-Projekt ab; MariaDB- und PostgreSQL-Studioabläufe bestehen.
+- [x] **1.0.2 Schrittweiten für Integer-Bereiche:** `for i in 1..21 step 2`
+  mit exklusivem Ende, Standardschrittweite 1, positiven und negativen Werten,
+  leeren Bereichen bei falscher Richtung und geprüfter Schrittweite ungleich 0
+  unterstützen. `range(start, end, step)` liefert dieselbe Folge als begrenztes
+  Array. Parser-, Laufzeit-, Typ- und Grenztests bestehen.
 - [x] **1.0.1 Sprachprüfung des veröffentlichten Artefakts:** 80 Fälle,
   100 Aufgaben-Wiederholungen, 600 Zahlenvergleiche und 1.408 Kalender-/UTC-
   Referenzfälle ohne unerwartete Befunde geprüft; Installation/Update/Rückkehr

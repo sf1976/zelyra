@@ -30,11 +30,16 @@ pub fn run() {
         sum = sum + value
     }
     assert(sum == 0, "integer ranges are exclusive and support continue")
+    mutable stepped_sum = 0
+    for value in 1..21 step 2 {
+        stepped_sum = stepped_sum + value
+    }
+    assert(stepped_sum == 100, "integer range loops support an exclusive end and step")
     values = [3, 4, 5]
     replaced = match array_replace_result(values, 1, 9) {
         Ok(updated) => updated
         Err(reason) => []
     }
     assert(replaced == [3, 9, 5] && values == [3, 4, 5], "array_replace_result preserves the original array")
-    print("PASS calendar arithmetic, Timestamp ordering, Decimal quantization, scalar text formatting, exclusive ranges")
+    print("PASS calendar arithmetic, Timestamp ordering, Decimal quantization, scalar text formatting, exclusive stepped ranges")
 }

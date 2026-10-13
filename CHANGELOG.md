@@ -30,6 +30,14 @@ _Changes for the next release go here._
   Schriftgröße des Code-Editors zu ändern. Echte Browserprüfungen für
   Rechnungsstart, Live-Schema, Datensatzvorschau und frische Docker-Compose-
   Datenbank ergänzen.
+- Add `for i in 1..21 step 2` for exclusive integer ranges. The optional Int
+  step defaults to 1, supports descending ranges with negative values, and
+  rejects zero; `range(start, end, step)` returns the same values as an array. /
+  `for i in 1..21 step 2` für exklusive Integer-Bereiche ergänzen. Die optionale
+  Int-Schrittweite ist standardmäßig 1, unterstützt mit negativen Werten
+  absteigende Bereiche und weist eine Schrittweite von 0 ab;
+  `range(start, end, step)` liefert
+  dieselben Werte als Array.
 
 ## 1.0.1 — 2026-10-13
 

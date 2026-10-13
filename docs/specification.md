@@ -786,3 +786,24 @@ MariaDB/MySQL generated edit forms sign native NULL separately from text and
 check the locked current row before writing. NULL/literal `\N` transitions
 return 409 for stale forms. Omitted nullable fields bind SQL NULL; required and
 readonly checks remain. [Rules and limits](edit-snapshots.en.md).
+
+## Stepped integer ranges in 1.0.2
+
+`for` loops can set an optional integer step for exclusive integer ranges:
+
+~~~zelyra
+for i in 1..21 step 2 {
+    print(i)
+}
+
+for i in 10..0 step -3 {
+    print(i)
+}
+~~~
+
+The default step is `1`. Positive steps count upward and negative steps count
+downward; a direction that cannot reach the exclusive end produces an empty
+range. A zero step is a runtime error, and the step expression must have type
+`Int`. `range(start, end, step)` returns the same values as an array; as with
+the two-argument form, materialized range arrays are limited to one million
+elements. Range loops remain lazy and do not materialize an array.

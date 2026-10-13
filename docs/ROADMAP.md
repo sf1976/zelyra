@@ -51,6 +51,11 @@ principles; the roadmap below tracks what is actually implemented.
   after startup. Program output is more readable at 13 px without changing the
   code editor font. Browser tests cover a fresh Compose database and an external
   MariaDB project; MariaDB and PostgreSQL Studio flows also pass.
+- [x] **1.0.2 stepped integer ranges:** Support `for i in 1..21 step 2` with
+  exclusive ends, a default step of 1, positive and negative steps, empty
+  direction mismatches, and a checked nonzero step. `range(start, end, step)`
+  provides the same sequence as a bounded array. Parser, runtime, type, and
+  boundary tests pass.
 - [x] **1.0.1 published-artifact language review:** 80 cases, 100 task repeats,
   600 numeric comparisons and 1,408 calendar/UTC reference cases passed with
   no unexpected findings; published installation/upgrade/rollback and
