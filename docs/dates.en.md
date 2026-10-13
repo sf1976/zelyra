@@ -108,12 +108,14 @@ parameters, NULLs, pre-1970/post-2038 values, milliseconds, and old-schema error
 It owns a separate temporary database and requires a test account able to
 create/drop that database.
 
-## Remaining SQL result work
+## Typed SQL results and compatibility
 
-SQL results currently remain raw rows with type metadata. Their existing text
-representation is retained: MariaDB/MySQL use driver date/datetime text
-(including date-only text at midnight), PostgreSQL UTC timestamp text uses Z.
-The `\N` NULL sentinel and literal text ambiguity also remain. These rows are
-not yet automatically decoded into typed Date/Time/Timestamp variables for
-arithmetic. Typed result consumption/cardinality is a separate mandatory 0.9.9
-gate. Existing language/HTTP JSON formats are unchanged.
+Raw `sql<T>` output keeps the existing driver text, including MySQL/MariaDB
+midnight date-only text and PostgreSQL UTC timestamps with Z. Its JSON/HTTP
+representation remains string-valued, including the legacy NULL marker `\N`.
+Native NULL is now preserved independently from literal text in result metadata.
+Use [`sql_decode<T>`](sql-results.en.md) to materialize checked scalar/record/
+array/optional results. The decoded Date/Time/Timestamp values support ordinary
+calendar and UTC-duration operations; exact numeric conversion does not use Float.
+See [the executable example](../examples/typed_sql_results.zyl) and
+[three-backend evidence](release-readiness/0.9.9-typed-sql-results.en.md).

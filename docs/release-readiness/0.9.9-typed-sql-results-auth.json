@@ -1,0 +1,13 @@
+{
+  "compiler_sha256": "9799a24266439048cc83c6b12af33dd06ae1e9e8da673a7a1896ae2481744128",
+  "tests": [
+    {
+      "test": "tests/password-reset-e2e.sh",
+      "exit": 0
+    },
+    {
+      "test": "tests/password-reset-rate-limit-e2e.sh",
+      "exit": 0
+    }
+  ]
+}

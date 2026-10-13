@@ -115,13 +115,14 @@ Funktionsparameter, NULL, Werte vor 1970/nach 2038, Millisekunden und alte
 Schemas. Die Probe besitzt eine eigene temporäre Datenbank; der Testzugang
 muss diese Datenbank anlegen und löschen dürfen.
 
-## Verbleibende SQL-Ergebnisarbeit
+## Typisierte SQL-Ergebnisse und Kompatibilität
 
-SQL-Ergebnisse bleiben derzeit Rohzeilen mit Typmetadaten. Ihre bestehende
-Textdarstellung bleibt erhalten: MariaDB/MySQL verwenden Treibertext für
-Datum/Datetime, einschließlich reiner Datumsausgabe bei Mitternacht;
-PostgreSQL-UTC-Zeitstempel verwenden Z. Auch die Mehrdeutigkeit zwischen dem
-NULL-Marker `\N` und wörtlichem Text bleibt offen. Diese Zeilen werden noch
-nicht automatisch zu Date-/Time-/Timestamp-Variablen für Folgeoperationen
-dekodiert. Typisierte Ergebnisverwendung/Kardinalität ist ein eigenes
-verbindliches 0.9.9-Gate. Sprach-/HTTP-JSON-Formate bleiben unverändert.
+Die Rohzeilen von `sql<T>` behalten ihren bisherigen Treibertext: MariaDB/MySQL
+verwenden bei Mitternacht auch reine Datumsausgabe, PostgreSQL UTC-Zeitstempel
+mit Z. JSON-/HTTP-Werte bleiben Strings einschließlich des alten NULL-Markers
+`\N`. Native NULL-Werte werden nun in Metadaten getrennt vom Literaltext erhalten.
+[`sql_decode<T>`](sql-results.de.md) erzeugt geprüfte Skalar-/Record-/Array-/
+Option-Ergebnisse. Die decodierten Date-/Time-/Timestamp-Werte unterstützen
+normale Kalender- und UTC-Daueroperationen; exakte Zahlen verwenden keinen Float.
+Siehe [ausführbares Beispiel](../examples/typed_sql_results.zyl) und
+[Drei-Backend-Nachweise](release-readiness/0.9.9-typed-sql-results.de.md).

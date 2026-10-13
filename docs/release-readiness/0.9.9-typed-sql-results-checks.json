@@ -1,0 +1,30 @@
+{
+  "source_baseline": "3108d098d58e77c2172c0d39579860e2cfdf49fe",
+  "tested_state": "Final SQL-result package working tree; source hashes below map the evidence to the committed files. Documentation edits do not change compiled source.",
+  "compiler_sha256": "b01273cb58a408844a3916168e0b3556fda8ef4a2447a807a9de7561063945e1",
+  "rust": {
+    "passed": 850,
+    "failed": 0,
+    "ignored": 1,
+    "ignored_smtp_clock_checked_in_rehearsal": true
+  },
+  "full_clippy": "passed",
+  "rustfmt": "passed",
+  "handbook_snippets": 324,
+  "readiness_helper_tests": 14,
+  "source_sha256": {
+    "database/src/lib.rs": "5c24c6592ad19de20f1f78469206fc2d43b479d99e14fb1132994ebdbaa6aa05",
+    "runtime/src/lib.rs": "b70f35f2cb259741a9ed3ad9a4a2096d6b70c63d2b5677bf1f1ea78ff7452b8b",
+    "runtime/src/sql_results.rs": "33bc357dd089e0bca14b53bbe6008c66d84e0c20115b7a1602b9e3ede0fb5680",
+    "runtime/src/parallel.rs": "7d2086fb3d7e50664a2690f80ef4197ad4a4d1e438850498135e738f0b2372bb",
+    "runtime/src/tests.rs": "c8bf91d0fe7282a2d36e1a2e982da4ed879034ef2d00835dc02ff8e388221546",
+    "parser/src/lib.rs": "2cb6e43015f5b914456315bbdbe0e1cff2060c28c3c4c92e96575895ad7154a3",
+    "hir/src/lib.rs": "81255c64afb95f6efbcf3adcc1153ca123b55c4e9204b47267ead09b87d94b9b",
+    "cli/src/tests.rs": "271bf0e701246cdebf743a87877055859fc0a95c9d749a66333675865d7cb53e",
+    "tests/typed-sql-results-e2e.py": "6d805ca66860764f85ed13f15a3b797919f1518e0c693b761f4c1700146a5a80",
+    "tests/password-reset-e2e.sh": "a2a4f189af3416c357785c3655320c91a2a09f72388e17238774d021440086d3",
+    "tests/mariadb-protected-e2e.sh": "709cde9d75466ab3883650129092b7ed28861eff9c75eb0d47ae74fc7061403c"
+  },
+  "generated_business_rehearsal": "passed on final artifact; positive protected workflows and bounded unavailable-storage startup refusal",
+  "typed_dto_json_roundtrip": "passed on all three native backends; Id/Money and explicit legacy aliases additionally covered in Rust regressions"
+}

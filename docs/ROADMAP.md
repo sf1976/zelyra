@@ -1050,8 +1050,11 @@ language backlog as one 0.9.4 change.
   delivery jobs and verifies the retained replacement token before continuing.
   Generated-business readiness checks honor mandatory metadata access before
   startup, including controlled, redacted failure when the database is absent.
-- [🗺️] Close typed downstream SQL results/cardinality and distinguish NULL
-  from text; raw rows alone do not demonstrate typed calendar operations.
+- [✅] Explicit `sql_decode<T>(sql<…> { … })` materializes scalar/record/array
+  values with checked cardinality, projection, native type families and NULL
+  flags. Exact numbers and downstream calendar operations pass on three real
+  backends; legacy raw-row HTTP/JSON is retained. See [rules](sql-results.en.md)
+  and [evidence](release-readiness/0.9.9-typed-sql-results.en.md).
 
 - [🗺️] Freeze language, CLI, runtime, databases, IDE, mail, notification, and
   tutorial scope. Complete every accepted 0.9.1–0.9.8 requirement and run the

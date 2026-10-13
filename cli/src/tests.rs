@@ -1035,6 +1035,7 @@ fn formats_audit_rows_as_json_and_csv_without_losing_nulls() {
             "email=anna@example.test;note=\"unknown\"".into(),
             "2026-09-17 12:00:00".into(),
         ]],
+        ..QueryResult::default()
     };
     let json: serde_json::Value = serde_json::from_str(&audit_rows_json(&result)).unwrap();
     assert_eq!(json[0]["actor_user_id"], serde_json::Value::Null);

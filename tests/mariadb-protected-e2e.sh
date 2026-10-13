@@ -217,6 +217,14 @@ PY
     # Declared temporal storage requires read-only metadata validation before
     # listen. An unavailable database must fail startup with a controlled,
     # redacted source diagnostic; it cannot expose a liveness endpoint yet.
+    for _ in $(seq 1 120); do
+        if ! kill -0 "${unready_server_pid}" 2>/dev/null; then break; fi
+        sleep 0.25
+    done
+    if kill -0 "${unready_server_pid}" 2>/dev/null; then
+        echo "error: server did not reject unavailable storage within 30 seconds" >&2
+        exit 1
+    fi
     unready_status=0
     wait "${unready_server_pid}" || unready_status=$?
     [[ "${unready_status}" == "1" ]]

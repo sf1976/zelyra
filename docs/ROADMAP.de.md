@@ -1066,8 +1066,11 @@ IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
   und prüft vor dem Fortsetzen das tatsächlich gespeicherte Ersatztoken.
   Business-Readiness-Prüfungen beachten den nötigen Metadatenzugriff vor dem
   Start samt kontrolliertem, redigiertem Fehler bei unerreichbarer Datenbank.
-- [🗺️] Typisierte SQL-Folgeergebnisse/Kardinalität schließen und NULL von Text
-  unterscheiden; Rohzeilen belegen noch keine typisierten Kalenderoperationen.
+- [✅] Explizites `sql_decode<T>(sql<…> { … })` erzeugt Skalar-/Record-/Array-
+  Werte mit geprüfter Kardinalität, Projektion, nativen Typfamilien und NULL-
+  Masken. Exakte Zahlen und Kalenderfolgeoperationen bestehen auf drei realen
+  Backends; bestehendes Rohzeilen-HTTP-/JSON bleibt erhalten. Siehe
+  [Regeln](sql-results.de.md) und [Nachweise](release-readiness/0.9.9-typed-sql-results.de.md).
 
 - [🗺️] Sprach-, CLI-, Runtime-, Datenbank-, IDE-, Mail-, Benachrichtigungs- und
   Tutorialumfang einfrieren. Alle angenommenen Anforderungen aus 0.9.1–0.9.8

@@ -1,0 +1,26 @@
+[
+  {
+    "engine": "mariadb",
+    "server_version": "11.4.13-MariaDB-ubu2404",
+    "compiler_sha256": "b01273cb58a408844a3916168e0b3556fda8ef4a2447a807a9de7561063945e1",
+    "typed_sql_results": "passed",
+    "legacy_http_json": "unchanged",
+    "controlled_negative_cases": 11
+  },
+  {
+    "engine": "mysql",
+    "server_version": "8.4.11",
+    "compiler_sha256": "b01273cb58a408844a3916168e0b3556fda8ef4a2447a807a9de7561063945e1",
+    "typed_sql_results": "passed",
+    "legacy_http_json": "unchanged",
+    "controlled_negative_cases": 11
+  },
+  {
+    "engine": "postgres",
+    "server_version": "PostgreSQL 16.15 (Debian 16.15-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "compiler_sha256": "b01273cb58a408844a3916168e0b3556fda8ef4a2447a807a9de7561063945e1",
+    "typed_sql_results": "passed",
+    "legacy_http_json": "unchanged",
+    "controlled_negative_cases": 11
+  }
+]

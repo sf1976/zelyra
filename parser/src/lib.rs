@@ -2957,6 +2957,7 @@ impl<'a> Parser<'a> {
                         name.as_str(),
                         "json_decode"
                             | "json_decode_result"
+                            | "sql_decode"
                             | "json_decode_tagged_result"
                             | "http_json"
                             | "http_result"

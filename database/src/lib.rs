@@ -2548,10 +2548,28 @@ pub enum QueryValue {
     String(String),
 }
 
+/// Native result families retained independently of the legacy text view.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QueryColumnType {
+    Null,
+    Text,
+    Integer,
+    Decimal,
+    Float,
+    Bool,
+    Date,
+    Time,
+    Timestamp,
+    Unsupported,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct QueryResult {
     pub columns: Vec<String>,
+    /// Compatibility view: SQL NULL remains `\\N`; never infer nullness from it.
     pub rows: Vec<Vec<String>>,
+    pub nulls: Vec<Vec<bool>>,
+    pub column_types: Vec<QueryColumnType>,
 }
 
 #[derive(Clone, Debug)]
@@ -2577,8 +2595,9 @@ pub fn execute_mariadb_query(
 }
 
 /// Executes one parameterized PostgreSQL query using the process-wide pool.
-/// Boolean, integer, floating-point, and text results are returned as strings
-/// to match the existing MariaDB query API. Other result types are rejected.
+/// Supported native scalar results retain their type family and nullness;
+/// the legacy string view matches the MariaDB query API. Unsupported native
+/// result types are rejected.
 pub fn execute_postgres_query(
     database_url: &str,
     sql: &str,
@@ -2772,14 +2791,36 @@ fn execute_prepared_postgres_query(
             .iter()
             .map(|column| column.name().to_owned())
             .collect();
+        let column_types = statement
+            .columns()
+            .iter()
+            .map(|column| postgres_column_type(column.type_()))
+            .collect();
         let rows = client
             .query(&statement, &params)
             .map_err(postgres_driver_error)?;
-        let rows = rows
+        let cells = rows
             .iter()
-            .map(postgres_row_strings)
+            .map(postgres_row_cells)
             .collect::<Result<Vec<_>, _>>()?;
-        Ok(QueryResult { columns, rows })
+        let nulls = cells
+            .iter()
+            .map(|row| row.iter().map(Option::is_none).collect())
+            .collect();
+        let rows = cells
+            .into_iter()
+            .map(|row| {
+                row.into_iter()
+                    .map(|cell| cell.unwrap_or_else(|| "\\N".into()))
+                    .collect()
+            })
+            .collect();
+        Ok(QueryResult {
+            columns,
+            rows,
+            nulls,
+            column_types,
+        })
     } else {
         client
             .execute(&statement, &params)
@@ -2788,7 +2829,25 @@ fn execute_prepared_postgres_query(
     }
 }
 
-fn postgres_row_strings(row: &r2d2_postgres::postgres::Row) -> Result<Vec<String>, DatabaseError> {
+fn postgres_column_type(ty: &PostgresType) -> QueryColumnType {
+    match *ty {
+        PostgresType::BOOL => QueryColumnType::Bool,
+        PostgresType::INT2 | PostgresType::INT4 | PostgresType::INT8 => QueryColumnType::Integer,
+        PostgresType::FLOAT4 | PostgresType::FLOAT8 => QueryColumnType::Float,
+        PostgresType::NUMERIC => QueryColumnType::Decimal,
+        PostgresType::DATE => QueryColumnType::Date,
+        PostgresType::TIME => QueryColumnType::Time,
+        PostgresType::TIMESTAMPTZ => QueryColumnType::Timestamp,
+        PostgresType::TEXT | PostgresType::VARCHAR | PostgresType::BPCHAR | PostgresType::NAME => {
+            QueryColumnType::Text
+        }
+        _ => QueryColumnType::Unsupported,
+    }
+}
+
+fn postgres_row_cells(
+    row: &r2d2_postgres::postgres::Row,
+) -> Result<Vec<Option<String>>, DatabaseError> {
     row.columns()
         .iter()
         .enumerate()
@@ -2796,7 +2855,7 @@ fn postgres_row_strings(row: &r2d2_postgres::postgres::Row) -> Result<Vec<String
             macro_rules! value {
                 ($type:ty) => {
                     row.try_get::<_, Option<$type>>(index)
-                        .map(|value| value.map(|value| value.to_string()).unwrap_or_else(|| "\\N".into()))
+                        .map(|value| value.map(|value| value.to_string()))
                         .map_err(postgres_driver_error)
                 };
             }
@@ -3231,13 +3290,61 @@ fn execute_prepared_mariadb_query(
         .iter()
         .map(|column| column.name_str().into_owned())
         .collect();
-    let rows = result
-        .map(|row| {
-            row.map(|row| row.unwrap().into_iter().map(mariadb_value_string).collect())
-                .map_err(mariadb_driver_error)
-        })
-        .collect::<Result<Vec<Vec<String>>, _>>()?;
-    Ok(QueryResult { columns, rows })
+    let column_types = result
+        .columns()
+        .as_ref()
+        .iter()
+        .map(mysql_column_type)
+        .collect();
+    let mut rows = Vec::new();
+    let mut nulls = Vec::new();
+    for row in result {
+        let values = row.map_err(mariadb_driver_error)?.unwrap();
+        nulls.push(
+            values
+                .iter()
+                .map(|value| matches!(value, Value::NULL))
+                .collect(),
+        );
+        rows.push(values.into_iter().map(mariadb_value_string).collect());
+    }
+    Ok(QueryResult {
+        columns,
+        rows,
+        nulls,
+        column_types,
+    })
+}
+
+fn mysql_column_type(column: &mysql::Column) -> QueryColumnType {
+    use mysql::consts::ColumnType::*;
+    match column.column_type() {
+        MYSQL_TYPE_NULL => QueryColumnType::Null,
+        MYSQL_TYPE_TINY | MYSQL_TYPE_SHORT | MYSQL_TYPE_LONG | MYSQL_TYPE_LONGLONG
+        | MYSQL_TYPE_INT24 | MYSQL_TYPE_YEAR => QueryColumnType::Integer,
+        MYSQL_TYPE_DECIMAL | MYSQL_TYPE_NEWDECIMAL => QueryColumnType::Decimal,
+        MYSQL_TYPE_FLOAT | MYSQL_TYPE_DOUBLE => QueryColumnType::Float,
+        MYSQL_TYPE_DATE | MYSQL_TYPE_NEWDATE => QueryColumnType::Date,
+        MYSQL_TYPE_TIME | MYSQL_TYPE_TIME2 => QueryColumnType::Time,
+        MYSQL_TYPE_TIMESTAMP
+        | MYSQL_TYPE_TIMESTAMP2
+        | MYSQL_TYPE_DATETIME
+        | MYSQL_TYPE_DATETIME2 => QueryColumnType::Timestamp,
+        MYSQL_TYPE_VARCHAR
+        | MYSQL_TYPE_VAR_STRING
+        | MYSQL_TYPE_STRING
+        | MYSQL_TYPE_TINY_BLOB
+        | MYSQL_TYPE_MEDIUM_BLOB
+        | MYSQL_TYPE_LONG_BLOB
+        | MYSQL_TYPE_BLOB => {
+            if column.character_set() == 63 {
+                QueryColumnType::Unsupported
+            } else {
+                QueryColumnType::Text
+            }
+        }
+        _ => QueryColumnType::Unsupported,
+    }
 }
 
 fn mariadb_value_string(value: Value) -> String {
