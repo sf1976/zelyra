@@ -1151,6 +1151,25 @@ redacted observations and the owner decision against the exact tested commit.
 The study scope must match the final 1.0.0 product; automated CI, internal
 rehearsals, and owner feedback do not substitute for participant testing.
 
+## Future language and ergonomics evolution (post-1.0.0)
+
+To boost developer ergonomics without compromising Zelyra's core tenets (static security
+boundaries, deterministic business arithmetic, digital sovereignty), the following extensions
+are scheduled for post-1.0 development:
+
+- [ ] **Non-capturing lambdas (`|x| expr`):** Syntactic support for compact, anonymous
+  transformation functions without outer environment capture. Incurs zero heap allocation or GC
+  overhead and preserves the deterministic memory model.
+- [ ] **Headless background tasks (`task Name { ... }`):** Dedicated syntax and runtime
+  support for periodic jobs, batch pipelines, and background processing while enforcing the
+  same static tenant and database capability boundaries without HTTP routing constraints.
+- [ ] **Unified native Query AST:** Replacing residual string-interpolated query paths with
+  an internal query syntax tree targeting MariaDB, MySQL, and PostgreSQL in a dialect-neutral,
+  type-checked manner.
+- [ ] **Actionable compiler diagnostics ("Did you mean?"):** Enriching type and schema
+  mismatch diagnostics (`E-SQL`, `E-CRUD`) with exact, source-anchored fix suggestions to
+  streamline developer experience while maintaining strict type enforcement.
+
 ## Real-world acceptance applications
 
 - [~] The machine-management application is available as a MariaDB template

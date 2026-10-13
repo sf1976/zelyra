@@ -1182,6 +1182,25 @@ werden dem exakt getesteten Commit zugeordnet. Der Studienumfang muss zum
 endgültigen 1.0.0-Produkt passen. Automatisierte CI, interne Rehearsals und
 Rückmeldungen des Projektverantwortlichen ersetzen keinen Teilnehmertest.
 
+## Zukünftige Sprach- und Ergonomie-Evolution (nach 1.0.0)
+
+Um die Produktivität und Entwicklerergonomie zu steigern, ohne die Grundsäulen von Zelyra (statische
+Sicherheitsverifikation von Mandanten-/Empfängergrenzen, deterministische Geschäftsarithmetik,
+digitale Souveränität) aufzuweichen, sind folgende Erweiterungen für die post-1.0-Entwicklung geplant:
+
+- [ ] **Capture-lose Lambdas (`|x| expr`):** Syntaktische Unterstützung für kompakte,
+  anonyme Transformationsfunktionen ohne äußere Umgebungserfassung. Erfordert weder Heap-Allokation
+  noch Garbage Collection und bewahrt das deterministische Speichermodell.
+- [ ] **Headless Hintergrund-Tasks (`task Name { ... }`):** Dedizierte Syntax und Laufzeit-
+  Unterstützung für periodische Aufgaben, Datenpipelines und Hintergrundjobs unter Beibehaltung
+  derselben statischen Tenant- und Datenbank-Capability-Grenzen, jedoch ohne HTTP-Web-Zwang.
+- [ ] **Einheitlicher nativer Query-AST:** Ablösung verbliebener String-Quoting-Pfade in
+  der Codeerzeugung durch einen internen Abfrage-Syntaxbaum, der dialektneutral und typgeprüft
+  auf MariaDB, MySQL und PostgreSQL zielt.
+- [ ] **Aktionsfähige Compiler-Diagnosen („Did you mean?“):** Erweiterung von Typ- und
+  Schemamismatch-Diagnosen (`E-SQL`, `E-CRUD`) um präzise, quelltextbezogene Korrekturvorschläge
+  zur Steigerung der Entwicklerergonomie bei unveränderter Typprüfungsstrenge.
+
 ## Akzeptanzanwendungen aus der Praxis
 
 - [~] Die Maschinenverwaltung ist ein MariaDB-Template mit lokalisierten
