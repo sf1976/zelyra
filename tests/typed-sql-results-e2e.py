@@ -91,6 +91,7 @@ try:
         fn main() uses Database(read) {{
             rows = typed()
             assert(len(rows) == 2, "array cardinality")
+            assert(json_decode<Snapshot>(json_encode(rows[0])) == rows[0], "typed DTO JSON roundtrip")
             assert(rows[0].day == date("2000-02-29"), "typed Date")
             assert(rows[0].clock == time("00:00:00"), "typed Time")
             assert(rows[0].stamp == json_decode<Timestamp>("-1"), "pre-1970 millisecond")

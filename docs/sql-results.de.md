@@ -75,6 +75,11 @@ keinen Float-Zwischenwert. Native NULL-Werte werden getrennt vom Literaltext
 `\N` erhalten. PostgreSQLs binäre NUMERIC- und Kalender-/Zeitwerte behalten ihre
 bestehenden exakten Codecs.
 
+JSON-Eingaben für eingebautes Money sind exakte Dezimalstrings mit derselben
+DECIMAL(19,4)-Prüfung. Id-JSON-Decodierung akzeptiert zusätzlich vorzeichenbehaftete
+ganze Zahlen; bisherige Stringeingaben bleiben erhalten. Flache DTOs mit diesen
+Typen bestehen `json_encode`-/`json_decode`-Roundtrips.
+
 Die eingebauten Typen `Id`/`Money` verwenden zur Laufzeit Int/Decimal, eingebaute
 Textdomains String. Funktionsgrenzen erkennen diese Darstellungen. Bestehende
 ausdrückliche Aliase/Record-Definitionen haben weiterhin Vorrang. Neue

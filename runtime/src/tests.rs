@@ -3307,6 +3307,12 @@ fn typed_sql_temporal_values_preserve_midnight_and_milliseconds() {
 
 #[test]
 fn typed_sql_domains_do_not_round_money_or_overflow_ids() {
+    assert_eq!(
+        run(
+            r#"fn price_roundtrip(price: Money) -> Money { return json_decode<Money>(json_encode(price)) } fn id_roundtrip(id: Id) -> Id { return json_decode<Id>(json_encode(id)) } fn main() { price = json_decode<Money>("\"19.99\"") print(json_encode(price_roundtrip(price))) id = json_decode<Id>("9223372036854775807") print(json_encode(id_roundtrip(id))) }"#
+        ),
+        ["\"19.99\"", "9223372036854775807"]
+    );
     use zelyra_database::QueryColumnType::{Decimal, Integer};
     assert_eq!(
         decode_sql_fixture(
@@ -3408,6 +3414,12 @@ fn typed_sql_rejects_ambiguous_columns_and_invalid_metadata() {
 
 #[test]
 fn typed_sql_preserves_explicit_domain_aliases_and_rejects_nested_domain_records() {
+    assert_eq!(
+        run(
+            r#"type Money = String fn echo(price: Money) -> Money { return json_decode<Money>(json_encode(price)) } fn main() { print(echo("legacy text")) print(json_decode<Id>("\"legacy-id\"")) }"#
+        ),
+        ["legacy text", "legacy-id"]
+    );
     use zelyra_database::QueryColumnType::Float;
     assert_eq!(
         decode_sql_fixture(

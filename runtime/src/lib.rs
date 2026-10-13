@@ -8956,7 +8956,20 @@ impl<'program> Interpreter<'program> {
                 }
                 return self.json_decode_record(value, record, &[], span);
             }
-            if matches!(name.as_str(), "Id" | "Email" | "Url" | "Uuid" | "Money") {
+            if name == "Money" {
+                return value.as_str().and_then(sql_results::parse_money).map(Value::Decimal).ok_or_else(|| self.runtime_error(span, "json_decode expected an exact Money string within DECIMAL(19,4) bounds"));
+            }
+            if name == "Id" && value.is_number() {
+                return value.as_i64().map(Value::Int).ok_or_else(|| {
+                    self.runtime_error(
+                        span,
+                        "json_decode expected an Id integer within the signed 64-bit range",
+                    )
+                });
+            }
+            // Preserve the legacy Id string input; materialized SQL Id values
+            // additionally round-trip through their native JSON integer form.
+            if matches!(name.as_str(), "Id" | "Email" | "Url" | "Uuid") {
                 return self.json_decode_string(value, target, span);
             }
         }

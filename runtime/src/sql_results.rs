@@ -413,17 +413,19 @@ fn decode_cell(text: &str, null: bool, ty: &Type) -> Option<Value> {
         Type::Timestamp => sql_timestamp(text).map(Value::Timestamp),
         Type::Duration => integer_text(text)?.parse().ok().map(Value::Duration),
         Type::Named(name) if name == "Id" => integer_text(text)?.parse().ok().map(Value::Int),
-        Type::Named(name) if name == "Money" => {
-            let value = parse_decimal(text)?;
-            // Match the declared DECIMAL(19,4) storage contract without rounding.
-            (value % 100_000 == 0 && value.unsigned_abs() < 1_000_000_000_000_000_000_000_000)
-                .then_some(Value::Decimal(value))
-        }
+        Type::Named(name) if name == "Money" => parse_money(text).map(Value::Decimal),
         Type::Named(name) if matches!(name.as_str(), "Email" | "Url" | "Uuid") => {
             Some(Value::String(text.into()))
         }
         _ => None,
     }
+}
+
+pub(super) fn parse_money(text: &str) -> Option<i128> {
+    let value = parse_decimal(text)?;
+    // Match the declared DECIMAL(19,4) storage contract without rounding.
+    (value % 100_000 == 0 && value.unsigned_abs() < 1_000_000_000_000_000_000_000_000)
+        .then_some(value)
 }
 
 fn sql_timestamp(text: &str) -> Option<i64> {

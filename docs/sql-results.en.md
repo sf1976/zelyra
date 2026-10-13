@@ -70,6 +70,11 @@ truncated, clamped, or converted through Float for exact targets. Native NULL
 is tracked separately from the literal string `\N`. PostgreSQL binary NUMERIC
 and calendar/time values retain their existing exact codecs.
 
+Builtin Money JSON input is an exact decimal string checked against the same
+DECIMAL(19,4) contract. Id JSON decoding additionally accepts signed integer
+values; its legacy string input remains available. Flat DTOs containing these
+types round-trip through `json_encode`/`json_decode`.
+
 Builtin `Id`/`Money` values use Int/Decimal at runtime; builtin text domains use
 String. Function boundaries recognize those representations. Existing explicit
 aliases/record definitions retain precedence. This does not introduce new Id
