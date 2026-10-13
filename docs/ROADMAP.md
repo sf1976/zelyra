@@ -1073,6 +1073,14 @@ language backlog as one 0.9.4 change.
   race), and audit errors roll back atomically. Chained PostgreSQL audit remains
   diagnostically rejected. [Evidence](release-readiness/0.9.9-postgres-form-decisions.en.md).
 
+- [✅] Database matrix, transactions, and relational CRUD on MariaDB 11.4.13,
+  MySQL 8.4.11, and PostgreSQL 16.15: setup/introspection of real foreign keys,
+  migration preflight orphan rejection (`error[E-DB-005]`) with data preservation,
+  hardened MySQL write locks (`innodb_lock_wait_timeout`), tenant-isolated
+  selection lists, tamper protection (422), relational join display, and
+  restrictive deletion with ordered child-then-parent deletion.
+  See [evidence](release-readiness/0.9.9-relational-crud-matrix.en.md).
+
 - [🗺️] Freeze language, CLI, runtime, databases, IDE, mail, notification, and
   tutorial scope. Complete every accepted 0.9.1–0.9.8 requirement and run the
   complete technical gates on an immutable candidate. Prepare exact 1.0.0

@@ -1090,6 +1090,14 @@ IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
   Fehler rollen atomar zurück. Verkettetes PostgreSQL-Audit bleibt diagnostiziert
   verweigert. [Nachweise](release-readiness/0.9.9-postgres-form-decisions.de.md).
 
+- [✅] Datenbankmatrix, Transaktionen und relationales CRUD auf MariaDB 11.4.13,
+  MySQL 8.4.11 und PostgreSQL 16.15: Setup/Inspektion echter Fremdschlüssel,
+  Preflight-Waisenabweisung (`error[E-DB-005]`) mit Datenerhalt, gehärtete
+  MySQL-Schreibsperren (`innodb_lock_wait_timeout`), mandantenisolierte
+  Auswahllisten, Manipulationsschutz (422), relationale Join-Darstellung
+  und restriktiver Löschschutz mit geordnetem Löschzyklus.
+  Siehe [Nachweise](release-readiness/0.9.9-relational-crud-matrix.de.md).
+
 - [🗺️] Sprach-, CLI-, Runtime-, Datenbank-, IDE-, Mail-, Benachrichtigungs- und
   Tutorialumfang einfrieren. Alle angenommenen Anforderungen aus 0.9.1–0.9.8
   umsetzen und die vollständigen technischen Gates an einem unveränderlichen
