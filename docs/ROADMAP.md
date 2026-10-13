@@ -27,6 +27,11 @@ principles; the roadmap below tracks what is actually implemented.
 
 ## Current milestones
 
+- [x] **1.0.1 published-artifact language review:** 80 cases, 100 task repeats,
+  600 numeric comparisons and 1,408 calendar/UTC reference cases passed with
+  no unexpected findings; published installation/upgrade/rollback and
+  MariaDB/PostgreSQL HTTP/SQL checks also passed. See the
+  [verification report](release-readiness/1.0.1-language-review.en.md).
 - [x] **1.0.1 tutorial startup fix:** Require Compose v2 or newer and reject
   Python Compose v1 before startup. Distinguish `ContainerConfig` failures and
   Ubuntu crash-report permissions from Docker socket access. Retain generated

@@ -1,0 +1,2513 @@
+{
+  "version": "zelyra 1.0.1",
+  "compiler_sha256": "0290de2e27ea17606a709a913f7aff80c57bba37e9af63685e7d97c8484b6978",
+  "platform": "Linux-6.12.111+deb13-amd64-x86_64-with-glibc2.41",
+  "limits": {
+    "address_space_mib": 512,
+    "cpu_seconds": 10,
+    "wall_seconds": "per case"
+  },
+  "results": [
+    {
+      "id": "01-rechnung",
+      "title": "Rechnung und Umsatzsteuer",
+      "task": "Eine Werkstatt verkauft drei Teile zu 19,90 Euro und Arbeitszeit für 80,00 Euro. Berechne Netto, 19 % Steuer und Brutto. Runde die Steuer auf volle Cent.",
+      "kind": "task",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 4.32,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 5.11,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "02-versand",
+      "title": "Versandtarif",
+      "task": "Pakete bis 2 kg kosten 4 Euro, bis 5 kg 6 Euro, darüber 9 Euro. Prüfe die Grenzgewichte.",
+      "kind": "task",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 4.38,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 4.35,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "03-lager",
+      "title": "Lagerbestand",
+      "task": "Ein Lager startet mit 20 Teilen. Verbuche Bewegungen -3, +5, -2. Entnahme über den Bestand muss ein Result-Fehler bleiben.",
+      "kind": "task",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 4.64,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 4.41,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "04-wortzaehler",
+      "title": "Wortstatistik",
+      "task": "Zähle die Wörter rot, blau, rot, grün, blau, rot mithilfe einer Map; fehlende Schlüssel müssen None ergeben.",
+      "kind": "task",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.58,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 4.01,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "05-unicode",
+      "title": "Unicode-Text",
+      "task": "Entferne äußere Leerzeichen, zerlege Grüße 🧭 in Unicode-Skalare und ersetze Grüße durch Hallo.",
+      "kind": "task",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.48,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.88,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "06-csv",
+      "title": "CSV-Import mit Geldbeträgen",
+      "task": "Lies drei Semikolon-CSV-Zeilen mit Namen und Eurobeträgen. Ein Name enthält ein Semikolon in Anführungszeichen. Summe: 16,25 Euro.",
+      "kind": "task",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.56,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.82,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "07-json",
+      "title": "JSON-Eingabe prüfen",
+      "task": "Lies einen Kunden aus JSON. Fehlende optionale Telefonnummer wird None; kaputtes JSON darf das Programm bei Result-Verwendung nicht abbrechen.",
+      "kind": "task",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.56,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.79,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "08-schicht",
+      "title": "Schichtplan",
+      "task": "Drei Einsätze dauern 30, 45 und 60 Minuten. Berechne 135 Minuten als Duration und ordne Datum und Uhrzeit.",
+      "kind": "task",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 4.04,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 4.01,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "09-kundenkopie",
+      "title": "Kundendaten als Werte",
+      "task": "Kopiere einen Kundenrecord. Ersetze bei der Kopie den Ort; der ursprüngliche Kunde muss unverändert bleiben.",
+      "kind": "task",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.92,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.46,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "10-teilnehmer",
+      "title": "Teilnehmer deduplizieren",
+      "task": "Aus Ada, Lin, Ada, Sam, Lin sollen drei eindeutige Teilnehmer entstehen. Entferne Sam und ergänze Bea.",
+      "kind": "task",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 4.27,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 4.54,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "11-modul",
+      "title": "Preise in einem Modul",
+      "task": "Lagere eine Rabattfunktion in ein Modul aus. Bei 1.000 Cent und 10 % Rabatt bleiben 900 Cent.",
+      "kind": "task",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.54,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 4.02,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "12-datei",
+      "title": "Bericht speichern",
+      "task": "Speichere ausschließlich im freigegebenen data-Verzeichnis einen UTF-8-Bericht und lies ihn wieder ein.",
+      "kind": "task",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.4,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 4.16,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "13-konsole",
+      "title": "Namen einlesen",
+      "task": "Lies Ada von stdin und begrüße Ada. EOF muss None ergeben.",
+      "kind": "task",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "stdin": "Ada\n",
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.11,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.64,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "14-suchfunktion",
+      "title": "Artikel suchen",
+      "task": "Suche einen Artikel in einer Liste von Records. Eine bekannte ID liefert Some, eine unbekannte ID None.",
+      "kind": "task",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 4.12,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 4.1,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "15-sortierung",
+      "title": "Prioritäten sortieren",
+      "task": "Sortiere 5, 1, 4, 2, 3 aufsteigend. Verwende eine reine Wertlösung mit neuer Ergebnisliste.",
+      "kind": "task",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.32,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.74,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "16-rekursion",
+      "title": "Treppenwege zählen",
+      "task": "Auf einer Treppe darf man einen oder zwei Schritte nehmen. Für 0 bis 10 Stufen: 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89 Möglichkeiten.",
+      "kind": "task",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 4.52,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 4.64,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "17-vertrag",
+      "title": "Kapazität mit Contract",
+      "task": "Berechne freie Plätze bei 12 Gesamtplätzen und 5 Buchungen. Vorbedingung: 0 <= gebucht <= gesamt, Nachbedingung: freie Plätze >= 0.",
+      "kind": "task",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.27,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.41,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "18-kommentare",
+      "title": "Kommentare im Programm",
+      "task": "Verwende # am Anfang und hinter einer Anweisung sowie einen mehrzeiligen ##-Block. Kommentarzeichen in Strings müssen erhalten bleiben.",
+      "kind": "task",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.17,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.22,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "19-byte-tupel",
+      "title": "Paketdaten",
+      "task": "Halte eine Paketkennung und eine Stückzahl im Tuple sowie die Bytes 0, 127, 255. Prüfe die JSON-Roundtrips.",
+      "kind": "task",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.32,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.35,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "20-betragseingaben",
+      "title": "Dezimalbeträge validieren",
+      "task": "Akzeptiere 12.34 Euro als 1.234 Cent. Weise Buchstaben, zu viele Dezimalstellen und Int-Überlauf als Result-Fehler zurück.",
+      "kind": "task",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.32,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.43,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "property-int",
+      "title": "Arithmetik mit Referenzwerten",
+      "task": "150 deterministische Wertepaare, 300 Vergleiche mit unabhängig in Python berechneten Division-/Restwerten.",
+      "kind": "property",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 4.31,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 6.43,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "property-decimal",
+      "title": "Decimal mit Cent-Referenzwerten",
+      "task": "100 deterministische Additionen mit unabhängiger Integer-Cent-Referenz.",
+      "kind": "property",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.85,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 4.16,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "stress-array",
+      "title": "Viele Listenelemente",
+      "task": "Baue eine Liste mit 2.000 Werten auf und summiere 0 bis 1999 zu 1.999.000.",
+      "kind": "stress",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 4.01,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 63.52,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "negative-int-overflow",
+      "title": "Int-Addition am oberen Rand",
+      "task": "Grenzfall: Int-Addition am oberen Rand. Erwartet wird eine kontrollierte Diagnose.",
+      "kind": "negative",
+      "expect": "runtime_error",
+      "timeout": 5,
+      "needle": "overflow",
+      "status": "runtime_rejected",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.79,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 5.32,
+        "stdout": "",
+        "stderr": "error[E-RUNTIME-001]: Int overflow\n\n --> main.zyl:2:7\n"
+      }
+    },
+    {
+      "id": "negative-int-negate",
+      "title": "Negation des kleinsten Int",
+      "task": "Grenzfall: Negation des kleinsten Int. Erwartet wird eine kontrollierte Diagnose.",
+      "kind": "negative",
+      "expect": "runtime_error",
+      "timeout": 5,
+      "needle": "overflow",
+      "status": "runtime_rejected",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.89,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 3.92,
+        "stdout": "",
+        "stderr": "error[E-RUNTIME-001]: Int overflow\n\n --> main.zyl:2:7\n"
+      }
+    },
+    {
+      "id": "negative-int-div-zero",
+      "title": "Integer-Division durch null",
+      "task": "Grenzfall: Integer-Division durch null. Erwartet wird eine kontrollierte Diagnose.",
+      "kind": "negative",
+      "expect": "runtime_error",
+      "timeout": 5,
+      "needle": "zero",
+      "status": "runtime_rejected",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.3,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 3.28,
+        "stdout": "",
+        "stderr": "error[E-RUNTIME-001]: division by zero\n\n --> main.zyl:2:7\n"
+      }
+    },
+    {
+      "id": "negative-uint-underflow",
+      "title": "UInt-Unterlauf",
+      "task": "Grenzfall: UInt-Unterlauf. Erwartet wird eine kontrollierte Diagnose.",
+      "kind": "negative",
+      "expect": "runtime_error",
+      "timeout": 5,
+      "needle": "underflow",
+      "status": "runtime_rejected",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.81,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 3.48,
+        "stdout": "",
+        "stderr": "error[E-RUNTIME-001]: UInt underflow\n\n --> main.zyl:2:7\n"
+      }
+    },
+    {
+      "id": "negative-uint-overflow",
+      "title": "UInt-Überlauf",
+      "task": "Grenzfall: UInt-Überlauf. Erwartet wird eine kontrollierte Diagnose.",
+      "kind": "negative",
+      "expect": "runtime_error",
+      "timeout": 5,
+      "needle": "overflow",
+      "status": "runtime_rejected",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.74,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 3.5,
+        "stdout": "",
+        "stderr": "error[E-RUNTIME-001]: UInt overflow\n\n --> main.zyl:2:7\n"
+      }
+    },
+    {
+      "id": "negative-index-negative",
+      "title": "Negativer Arrayindex",
+      "task": "Grenzfall: Negativer Arrayindex. Erwartet wird eine kontrollierte Diagnose.",
+      "kind": "negative",
+      "expect": "runtime_error",
+      "timeout": 5,
+      "needle": "index",
+      "status": "runtime_rejected",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.18,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 3.69,
+        "stdout": "",
+        "stderr": "error[E-RUNTIME-001]: array index must be Int or UInt, found Int\n\n --> main.zyl:3:7\n"
+      }
+    },
+    {
+      "id": "negative-index-end",
+      "title": "Index hinter dem Array",
+      "task": "Grenzfall: Index hinter dem Array. Erwartet wird eine kontrollierte Diagnose.",
+      "kind": "negative",
+      "expect": "runtime_error",
+      "timeout": 5,
+      "needle": "index",
+      "status": "runtime_rejected",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.1,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 3.59,
+        "stdout": "",
+        "stderr": "error[E-RUNTIME-001]: array index 2 is out of bounds\n\n --> main.zyl:3:7\n"
+      }
+    },
+    {
+      "id": "negative-index-empty",
+      "title": "Index in leerem Array",
+      "task": "Grenzfall: Index in leerem Array. Erwartet wird eine kontrollierte Diagnose.",
+      "kind": "negative",
+      "expect": "runtime_error",
+      "timeout": 5,
+      "needle": "index",
+      "status": "runtime_rejected",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.0,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 3.1,
+        "stdout": "",
+        "stderr": "error[E-RUNTIME-001]: array index 0 is out of bounds\n\n --> main.zyl:3:7\n"
+      }
+    },
+    {
+      "id": "negative-invalid-date",
+      "title": "Ungültiger Schalttag",
+      "task": "Grenzfall: Ungültiger Schalttag. Erwartet wird eine kontrollierte Diagnose.",
+      "kind": "negative",
+      "expect": "runtime_error",
+      "timeout": 5,
+      "needle": "date",
+      "status": "runtime_rejected",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 4.39,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 3.28,
+        "stdout": "",
+        "stderr": "error[E-RUNTIME-001]: date received invalid value `2023-02-29`; expected YYYY-MM-DD\n\n --> main.zyl:2:12\n"
+      }
+    },
+    {
+      "id": "negative-invalid-time",
+      "title": "Ungültige Uhrzeit",
+      "task": "Grenzfall: Ungültige Uhrzeit. Erwartet wird eine kontrollierte Diagnose.",
+      "kind": "negative",
+      "expect": "runtime_error",
+      "timeout": 5,
+      "needle": "time",
+      "status": "runtime_rejected",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.96,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 2.96,
+        "stdout": "",
+        "stderr": "error[E-RUNTIME-001]: time received invalid value `25:00:00`; expected HH:MM:SS\n\n --> main.zyl:2:12\n"
+      }
+    },
+    {
+      "id": "negative-invalid-byte",
+      "title": "Byte außerhalb 0–255",
+      "task": "Grenzfall: Byte außerhalb 0–255. Erwartet wird eine kontrollierte Diagnose.",
+      "kind": "negative",
+      "expect": "runtime_error",
+      "timeout": 5,
+      "needle": "byte",
+      "status": "runtime_rejected",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.53,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 2.88,
+        "stdout": "",
+        "stderr": "error[E-RUNTIME-001]: bytes values must be between 0 and 255\n\n --> main.zyl:2:13\n"
+      }
+    },
+    {
+      "id": "negative-decimal-precision",
+      "title": "Mehr als neun Dezimalstellen",
+      "task": "Grenzfall: Mehr als neun Dezimalstellen. Erwartet wird eine kontrollierte Diagnose.",
+      "kind": "negative",
+      "expect": "runtime_error",
+      "timeout": 5,
+      "needle": "decimal",
+      "status": "runtime_rejected",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.68,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 3.36,
+        "stdout": "",
+        "stderr": "error[E-RUNTIME-001]: decimal expects a base-10 value with at most 9 fractional digits\n\n --> main.zyl:2:15\n"
+      }
+    },
+    {
+      "id": "negative-decimal-zero",
+      "title": "Decimal-Division durch null",
+      "task": "Grenzfall: Decimal-Division durch null. Erwartet wird eine kontrollierte Diagnose.",
+      "kind": "negative",
+      "expect": "runtime_error",
+      "timeout": 5,
+      "needle": "zero",
+      "status": "runtime_rejected",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.14,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 3.3,
+        "stdout": "",
+        "stderr": "error[E-RUNTIME-001]: division by zero\n\n --> main.zyl:2:7\n"
+      }
+    },
+    {
+      "id": "negative-json-invalid",
+      "title": "Ungültiges JSON ohne Result",
+      "task": "Grenzfall: Ungültiges JSON ohne Result. Erwartet wird eine kontrollierte Diagnose.",
+      "kind": "negative",
+      "expect": "runtime_error",
+      "timeout": 5,
+      "needle": "JSON",
+      "status": "runtime_rejected",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.33,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 4.02,
+        "stdout": "",
+        "stderr": "error[E-RUNTIME-001]: json_decode received invalid JSON: expected value at line 1 column 1\n\n --> main.zyl:2:7\n"
+      }
+    },
+    {
+      "id": "negative-json-nan",
+      "title": "JSON mit nicht-endlichem Float",
+      "task": "Grenzfall: JSON mit nicht-endlichem Float. Erwartet wird eine kontrollierte Diagnose.",
+      "kind": "negative",
+      "expect": "runtime_error",
+      "timeout": 5,
+      "needle": "finite",
+      "status": "runtime_rejected",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.25,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 3.9,
+        "stdout": "",
+        "stderr": "error[E-RUNTIME-001]: json_encode cannot serialize non-finite Float\n\n --> main.zyl:2:7\n"
+      }
+    },
+    {
+      "id": "negative-json-map-int",
+      "title": "JSON mit Int-Map-Schlüsseln",
+      "task": "Grenzfall: JSON mit Int-Map-Schlüsseln. Erwartet wird eine kontrollierte Diagnose.",
+      "kind": "negative",
+      "expect": "runtime_error",
+      "timeout": 5,
+      "needle": "Map<String",
+      "status": "runtime_rejected",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.84,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 4.12,
+        "stdout": "",
+        "stderr": "error[E-RUNTIME-001]: json_encode supports only Map<String, Value> objects\n\n --> main.zyl:3:7\n"
+      }
+    },
+    {
+      "id": "negative-wrong-type",
+      "title": "String statt Int",
+      "task": "Grenzfall: String statt Int. Erwartet wird eine kontrollierte Diagnose.",
+      "kind": "negative",
+      "expect": "compile_error",
+      "timeout": 5,
+      "needle": "E-TYPE",
+      "status": "compile_rejected",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 3.27,
+        "stdout": "",
+        "stderr": "error[E-TYPE-001]: type mismatch: expected `Int`, found `String`\n\n --> main.zyl:2:15\n"
+      },
+      "run": null
+    },
+    {
+      "id": "negative-mixed-array",
+      "title": "Gemischte Arraytypen",
+      "task": "Grenzfall: Gemischte Arraytypen. Erwartet wird eine kontrollierte Diagnose.",
+      "kind": "negative",
+      "expect": "compile_error",
+      "timeout": 5,
+      "needle": "E-TYPE",
+      "status": "compile_rejected",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 3.04,
+        "stdout": "",
+        "stderr": "error[E-TYPE-001]: type mismatch: expected `Int`, found `String`\n\n --> main.zyl:2:13\n"
+      },
+      "run": null
+    },
+    {
+      "id": "negative-immutable",
+      "title": "Unveränderliches Binding ändern",
+      "task": "Grenzfall: Unveränderliches Binding ändern. Erwartet wird eine kontrollierte Diagnose.",
+      "kind": "negative",
+      "expect": "compile_error",
+      "timeout": 5,
+      "needle": "immutable",
+      "status": "compile_rejected",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 3.31,
+        "stdout": "",
+        "stderr": "error[E-TYPE-001]: cannot assign to immutable variable `amount`\n\n --> main.zyl:3:1\n"
+      },
+      "run": null
+    },
+    {
+      "id": "negative-no-match-case",
+      "title": "Option ohne None-Zweig",
+      "task": "Grenzfall: Option ohne None-Zweig. Erwartet wird eine kontrollierte Diagnose.",
+      "kind": "negative",
+      "expect": "compile_error",
+      "timeout": 5,
+      "needle": "exhaustive",
+      "status": "compile_rejected",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 4.15,
+        "stdout": "",
+        "stderr": "error[E-TYPE-MATCH-001]: non-exhaustive match; missing: None\n\n --> main.zyl:3:1\n"
+      },
+      "run": null
+    },
+    {
+      "id": "negative-missing-field",
+      "title": "Fehlendes Recordfeld",
+      "task": "Grenzfall: Fehlendes Recordfeld. Erwartet wird eine kontrollierte Diagnose.",
+      "kind": "negative",
+      "expect": "compile_error",
+      "timeout": 5,
+      "needle": "missing",
+      "status": "compile_rejected",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 3.8,
+        "stdout": "",
+        "stderr": "error[E-TYPE-001]: missing field `age` in record `Customer`\n\n --> main.zyl:3:9\n"
+      },
+      "run": null
+    },
+    {
+      "id": "negative-missing-capability",
+      "title": "Dateizugriff ohne Capability",
+      "task": "Grenzfall: Dateizugriff ohne Capability. Erwartet wird eine kontrollierte Diagnose.",
+      "kind": "negative",
+      "expect": "compile_error",
+      "timeout": 5,
+      "needle": "capability",
+      "status": "compile_rejected",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 3.56,
+        "stdout": "",
+        "stderr": "error[E-CAP-001]: function `main` uses file-system read access but does not declare capability `FileSystem`; add `uses FileSystem`\n\n --> main.zyl:2:7\n"
+      },
+      "run": null
+    },
+    {
+      "id": "negative-tuple-index",
+      "title": "Dynamischer Tupleindex",
+      "task": "Grenzfall: Dynamischer Tupleindex. Erwartet wird eine kontrollierte Diagnose.",
+      "kind": "negative",
+      "expect": "compile_error",
+      "timeout": 5,
+      "needle": "integer literal",
+      "status": "compile_rejected",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 3.41,
+        "stdout": "",
+        "stderr": "error[E-TYPE-001]: tuple index must be a non-negative integer literal\n\n --> main.zyl:4:12\n"
+      },
+      "run": null
+    },
+    {
+      "id": "negative-unclosed-comment",
+      "title": "Nicht geschlossener Block",
+      "task": "Grenzfall: Nicht geschlossener Block. Erwartet wird eine kontrollierte Diagnose.",
+      "kind": "negative",
+      "expect": "compile_error",
+      "timeout": 5,
+      "needle": "unterminated",
+      "status": "compile_rejected",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 3.19,
+        "stdout": "",
+        "stderr": "error[E-LEX-001]: unterminated block comment; expected a standalone `##` line\n\n --> main.zyl:1:1\n"
+      },
+      "run": null
+    },
+    {
+      "id": "behavior-short-circuit-and",
+      "title": "&& muss kurzschließen",
+      "task": "Erwartetes Sprachverhalten: && muss kurzschließen.",
+      "kind": "behavior",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.47,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.59,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "behavior-short-circuit-or",
+      "title": "|| muss kurzschließen",
+      "task": "Erwartetes Sprachverhalten: || muss kurzschließen.",
+      "kind": "behavior",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.5,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 4.13,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "behavior-min-int-literal",
+      "title": "Kleinster Int als direktes Literal",
+      "task": "Erwartetes Sprachverhalten: Kleinster Int als direktes Literal.",
+      "kind": "behavior",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 4.09,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 4.24,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "behavior-negative-division-overflow",
+      "title": "Int-Minimum geteilt durch -1",
+      "task": "Erwartetes Sprachverhalten: Int-Minimum geteilt durch -1.",
+      "kind": "behavior",
+      "expect": "runtime_error",
+      "timeout": 5,
+      "needle": "overflow",
+      "status": "runtime_rejected",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.68,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 3.7,
+        "stdout": "",
+        "stderr": "error[E-RUNTIME-001]: Int overflow\n\n --> main.zyl:2:7\n"
+      }
+    },
+    {
+      "id": "behavior-negative-remainder-overflow",
+      "title": "Int-Minimum modulo -1",
+      "task": "Erwartetes Sprachverhalten: Int-Minimum modulo -1.",
+      "kind": "behavior",
+      "expect": "runtime_error",
+      "timeout": 5,
+      "needle": "overflow",
+      "status": "runtime_rejected",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 4.12,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 4.29,
+        "stdout": "",
+        "stderr": "error[E-RUNTIME-001]: Int overflow\n\n --> main.zyl:2:7\n"
+      }
+    },
+    {
+      "id": "gap-enum",
+      "title": "Auftragsstatus als eigener Enum",
+      "task": "Ein Auftrag darf nur Offen, Gebucht oder Erledigt sein; match muss vollständig geprüft werden.",
+      "kind": "gap",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.91,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 4.35,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "gap-generic",
+      "title": "Generische erste Funktion",
+      "task": "Schreibe first_or<T> für Int- und String-Listen ohne zwei Implementierungen.",
+      "kind": "gap",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.83,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.31,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "gap-function-value",
+      "title": "Funktionen als Werte",
+      "task": "Speichere eine Rabattfunktion in einer Variablen und rufe sie darüber auf.",
+      "kind": "gap",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.57,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 5.09,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "gap-range",
+      "title": "Bereichsschleife",
+      "task": "Durchlaufe die Zahlen 0 bis 9 mit einem exklusiven Endwert.",
+      "kind": "gap",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 4.74,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 4.25,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "gap-record-field",
+      "title": "Einzelnes Recordfeld ändern",
+      "task": "Ändere den Ort eines mutable Kunden, ohne alle anderen Felder neu aufzubauen.",
+      "kind": "gap",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 5.36,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 4.24,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "gap-array-update",
+      "title": "Arrayelement aktualisieren",
+      "task": "Ersetze die zweite Priorität durch 9.",
+      "kind": "gap",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.91,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.85,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "gap-date-arithmetic",
+      "title": "Zahlungsfrist berechnen",
+      "task": "Addiere zu 2024-02-28 zwei Tage, einschließlich Schalttag.",
+      "kind": "gap",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.61,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.9,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "gap-timestamp-order",
+      "title": "Zeitstempel sortieren",
+      "task": "Vergleiche zwei Timestamp-Werte chronologisch.",
+      "kind": "gap",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.72,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.59,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "gap-result-json",
+      "title": "Result aus JSON zurücklesen",
+      "task": "Serialisiere und dekodiere Result<Int, String> als gleichen Typ.",
+      "kind": "gap",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 5.03,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 4.62,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "gap-number-string",
+      "title": "Zahl in Text einsetzen",
+      "task": "Bilde einen Satz Anzahl: 7 direkt mit einer regulären Zahlen-zu-Text-Konvertierung.",
+      "kind": "gap",
+      "expect": "success",
+      "timeout": 5,
+      "needle": null,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.77,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 5.0,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "resource-recursion",
+      "title": "Tiefe Rekursion",
+      "task": "Eine Rekursion mit 10.000 Aufrufen soll eine kontrollierte Grenze melden oder erfolgreich enden; ein Signal/Abort ist ein Stabilitätsfehler.",
+      "kind": "resource",
+      "expect": "observe",
+      "timeout": 3,
+      "needle": null,
+      "status": "runtime_rejected",
+      "passed": null,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 4.83,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 5.18,
+        "stdout": "",
+        "stderr": "error[E-RUNTIME-001]: function call depth limit exceeded (maximum 24)\n\n --> main.zyl:1:64\n"
+      }
+    },
+    {
+      "id": "resource-loop",
+      "title": "Endlose Schleife",
+      "task": "Prüfe, ob eine Endlosschleife durch eine sprachseitige Grenze endet. Der externe Test beendet sie nach einer Sekunde.",
+      "kind": "resource",
+      "expect": "observe",
+      "timeout": 1,
+      "needle": null,
+      "status": "runtime_timeout",
+      "passed": null,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.75,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": -9,
+        "timeout": true,
+        "elapsed_ms": 1003.36,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "behavior-missing-return",
+      "title": "Nicht-Unit-Funktion ohne Rückgabe muss statisch scheitern",
+      "task": "Nicht-Unit-Funktion ohne Rückgabe muss statisch scheitern",
+      "kind": "behavior",
+      "expect": "compile_error",
+      "needle": "return",
+      "timeout": 5,
+      "status": "compile_rejected",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 4.81,
+        "stdout": "",
+        "stderr": "error[E-TYPE-RETURN-001]: function `answer` can reach its end without returning `Int`\n\n --> main.zyl:1:20\n"
+      },
+      "run": null
+    },
+    {
+      "id": "behavior-partial-return",
+      "title": "Rückgabe auf nur einem if-Pfad muss statisch scheitern",
+      "task": "Rückgabe auf nur einem if-Pfad muss statisch scheitern",
+      "kind": "behavior",
+      "expect": "compile_error",
+      "needle": "return",
+      "timeout": 5,
+      "status": "compile_rejected",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 3.63,
+        "stdout": "",
+        "stderr": "error[E-TYPE-RETURN-001]: function `answer` can reach its end without returning `Int`\n\n --> main.zyl:1:30\n"
+      },
+      "run": null
+    },
+    {
+      "id": "behavior-break-outside-loop",
+      "title": "break außerhalb einer Schleife muss statisch scheitern",
+      "task": "break außerhalb einer Schleife muss statisch scheitern",
+      "kind": "behavior",
+      "expect": "compile_error",
+      "needle": "break",
+      "timeout": 5,
+      "status": "compile_rejected",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 3.35,
+        "stdout": "",
+        "stderr": "error[E-TYPE-001]: `break` is only valid inside a loop\n\n --> main.zyl:1:13\n"
+      },
+      "run": null
+    },
+    {
+      "id": "behavior-continue-outside-loop",
+      "title": "continue außerhalb einer Schleife muss statisch scheitern",
+      "task": "continue außerhalb einer Schleife muss statisch scheitern",
+      "kind": "behavior",
+      "expect": "compile_error",
+      "needle": "continue",
+      "timeout": 5,
+      "status": "compile_rejected",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 3.47,
+        "stdout": "",
+        "stderr": "error[E-TYPE-001]: `continue` is only valid inside a loop\n\n --> main.zyl:1:13\n"
+      },
+      "run": null
+    },
+    {
+      "id": "behavior-wrong-return",
+      "title": "Falscher deklarierter Rückgabetyp muss statisch scheitern",
+      "task": "Falscher deklarierter Rückgabetyp muss statisch scheitern",
+      "kind": "behavior",
+      "expect": "compile_error",
+      "needle": "E-TYPE",
+      "timeout": 5,
+      "status": "compile_rejected",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 3.28,
+        "stdout": "",
+        "stderr": "error[E-TYPE-001]: type mismatch: expected `Int`, found `String`\n\n --> main.zyl:1:22\n"
+      },
+      "run": null
+    },
+    {
+      "id": "behavior-branches-return",
+      "title": "Vollständige Rückgabepfade müssen funktionieren",
+      "task": "Vollständige Rückgabepfade müssen funktionieren",
+      "kind": "behavior",
+      "expect": "success",
+      "needle": null,
+      "timeout": 5,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 4.07,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.28,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "behavior-nested-control",
+      "title": "break und continue innerhalb einer Schleife müssen funktionieren",
+      "task": "break und continue innerhalb einer Schleife müssen funktionieren",
+      "kind": "behavior",
+      "expect": "success",
+      "needle": null,
+      "timeout": 5,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.48,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.4,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "behavior-match-return",
+      "title": "Vollständiger match mit Return funktioniert",
+      "task": "Vollständiger match mit Return funktioniert",
+      "kind": "behavior",
+      "expect": "success",
+      "needle": null,
+      "timeout": 5,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.61,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.3,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "behavior-decimal-truncation",
+      "title": "Decimal-Präzision bei nicht darstellbaren Ergebnissen beobachten",
+      "task": "Decimal-Präzision bei nicht darstellbaren Ergebnissen beobachten",
+      "kind": "behavior",
+      "expect": "observe",
+      "needle": null,
+      "timeout": 5,
+      "status": "success",
+      "passed": null,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.33,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.15,
+        "stdout": "0\n0.333333333\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "behavior-json-safe-result",
+      "title": "Nicht unterstützter JSON-Zieltyp wird als Err behandelt",
+      "task": "Nicht unterstützter JSON-Zieltyp wird als Err behandelt",
+      "kind": "behavior",
+      "expect": "success",
+      "needle": null,
+      "timeout": 5,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.14,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.99,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "behavior-graphemes",
+      "title": "Unicode-Skalare sind keine sichtbaren Graphemcluster",
+      "task": "Unicode-Skalare sind keine sichtbaren Graphemcluster",
+      "kind": "behavior",
+      "expect": "success",
+      "needle": null,
+      "timeout": 5,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.1,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.86,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "behavior-number-workaround",
+      "title": "Zahl als JSON-Text in einen Satz einsetzen",
+      "task": "Zahl als JSON-Text in einen Satz einsetzen",
+      "kind": "behavior",
+      "expect": "success",
+      "needle": null,
+      "timeout": 5,
+      "status": "success",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.12,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.93,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "negative-contract-precondition",
+      "title": "Verletzte Vorbedingung muss kontrolliert scheitern",
+      "task": "Verletzte Vorbedingung muss kontrolliert scheitern",
+      "kind": "negative",
+      "expect": "runtime_error",
+      "needle": "precondition",
+      "timeout": 5,
+      "status": "runtime_rejected",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 3.16,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 3.39,
+        "stdout": "",
+        "stderr": "error[E-RUNTIME-001]: precondition failed for function `half`\n\n --> main.zyl:1:39\n"
+      }
+    },
+    {
+      "id": "negative-contract-postcondition",
+      "title": "Verletzte Nachbedingung muss kontrolliert scheitern",
+      "task": "Verletzte Nachbedingung muss kontrolliert scheitern",
+      "kind": "negative",
+      "expect": "runtime_error",
+      "needle": "postcondition",
+      "timeout": 5,
+      "status": "runtime_rejected",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 2.8,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 2.89,
+        "stdout": "",
+        "stderr": "error[E-RUNTIME-001]: postcondition failed for function `wrong`\n\n --> main.zyl:1:39\n"
+      }
+    },
+    {
+      "id": "resource-expression",
+      "title": "Lange flache Ausdruckskette muss kontrolliert geprüft werden",
+      "task": "Lange flache Ausdruckskette muss kontrolliert geprüft werden",
+      "kind": "resource",
+      "expect": "observe",
+      "needle": null,
+      "timeout": 3,
+      "status": "success",
+      "passed": null,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 6.61,
+        "stdout": "ok: main.zyl\n",
+        "stderr": ""
+      },
+      "run": {
+        "command": [
+          "run",
+          "main.zyl"
+        ],
+        "returncode": 0,
+        "timeout": false,
+        "elapsed_ms": 6.62,
+        "stdout": "5000\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "resource-parser-nesting",
+      "title": "Tiefe Syntaxverschachtelung muss Diagnose statt Absturz liefern",
+      "task": "Tiefe Syntaxverschachtelung muss Diagnose statt Absturz liefern",
+      "kind": "resource",
+      "expect": "compile_error",
+      "needle": "nesting",
+      "timeout": 5,
+      "status": "compile_rejected",
+      "passed": true,
+      "check": {
+        "command": [
+          "check",
+          "main.zyl"
+        ],
+        "returncode": 1,
+        "timeout": false,
+        "elapsed_ms": 3.01,
+        "stdout": "",
+        "stderr": "error[E-PARSE-001]: maximum parser nesting depth of 32 exceeded\n\n --> main.zyl:1:89\n"
+      },
+      "run": null
+    }
+  ]
+}

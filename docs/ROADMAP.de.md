@@ -29,6 +29,11 @@ den tatsächlich implementierten Stand.
 
 ## Aktuelle Meilensteine
 
+- [x] **1.0.1 Sprachprüfung des veröffentlichten Artefakts:** 80 Fälle,
+  100 Aufgaben-Wiederholungen, 600 Zahlenvergleiche und 1.408 Kalender-/UTC-
+  Referenzfälle ohne unerwartete Befunde geprüft; Installation/Update/Rückkehr
+  und MariaDB-/PostgreSQL-HTTP-/SQL-Prüfungen ebenfalls bestanden. Siehe den
+  [Prüfbericht](release-readiness/1.0.1-language-review.de.md).
 - [x] **1.0.1 Tutorialstart korrigiert:** Compose v2 oder neuer voraussetzen
   und Python Compose v1 vor dem Start abweisen. `ContainerConfig`-Fehler und
   Ubuntu-Crashreport-Rechte von Docker-Socket-Zugriff unterscheiden. Erzeugte
