@@ -29,7 +29,7 @@ den tatsächlich implementierten Stand.
 
 ## Aktuelle Meilensteine
 
-- [ ] **Geplant für 1.0.2 — Compose-Prüfung im Installer:** Die Installer
+- [ ] **Geplant für 1.1.0 — Compose-Prüfung im Installer:** Die Installer
   erkennen Docker Compose v2 oder neuer und unterscheiden es von der veralteten
   Python-Version v1. Docker bleibt für die Kerninstallation optional. Fehlt
   Compose v2, bieten interaktive Linux-Installer auf unterstützten
@@ -38,7 +38,7 @@ den tatsächlich implementierten Stand.
   Zustimmung oder in nicht interaktiven Läufen wird nichts mit erhöhten
   Rechten geändert. Die Hinweise machen klar, dass Docker-Compose-Tutorials
   bis zur Installation nicht startbereit sind.
-- [ ] **Geplant für 1.0.2 — interaktive Konsolenmenüs:** Eine leicht
+- [ ] **Geplant für 1.1.0 — interaktive Konsolenmenüs:** Eine leicht
   deklarierbare Menü-API und `zelyra new --template console-menu` sollen aus
   Titel, Beschreibung und Auswahlpunkten in wenigen Zeilen ein vollständiges
   Terminalmenü erzeugen. Das Menü erhält eine hochwertige Darstellung mit
@@ -48,6 +48,14 @@ den tatsächlich implementierten Stand.
   ANSI-Unterstützung erscheint eine einfache Textauswahl. EOF beendet die
   Auswahl ohne Hängen. Der Starter, ein lauffähiges Beispiel und Tests decken
   Auswahl, EOF, schmale Breiten sowie Farb- und Fallback-Modus ab.
+- [x] **1.0.2 Zuverlässigkeit von Studio und Rechnungstutorial:** Generierte
+  MariaDB-Port-Platzhalter in Studio und gestarteter Anwendung einheitlich
+  auflösen. Beim ersten Start Compose starten, vorübergehende Verbindungsabbrüche
+  wiederholen und dauerhafte Setupfehler sichtbar melden. Datenbankkarte und
+  Datensatzvorschau des Rechnungstutorials funktionieren danach. Die
+  Programmausgabe ist mit 13 px besser lesbar, ohne die Code-Editor-Schrift zu
+  verändern. Browserprüfungen decken eine frische Compose-Datenbank und ein
+  externes MariaDB-Projekt ab; MariaDB- und PostgreSQL-Studioabläufe bestehen.
 - [x] **1.0.1 Sprachprüfung des veröffentlichten Artefakts:** 80 Fälle,
   100 Aufgaben-Wiederholungen, 600 Zahlenvergleiche und 1.408 Kalender-/UTC-
   Referenzfälle ohne unerwartete Befunde geprüft; Installation/Update/Rückkehr

@@ -27,7 +27,7 @@ principles; the roadmap below tracks what is actually implemented.
 
 ## Current milestones
 
-- [ ] **Planned for 1.0.2 — Compose check in the installer:** Installers detect
+- [ ] **Planned for 1.1.0 — Compose check in the installer:** Installers detect
   Docker Compose v2 or newer and distinguish it from obsolete Python Compose
   v1. Docker remains optional for the core installation. When Compose v2 is
   missing, interactive Linux installers offer to install the Compose v2 plugin
@@ -35,7 +35,7 @@ principles; the roadmap below tracks what is actually implemented.
   show suitable installation guidance. No elevated changes happen without
   confirmation or in non-interactive runs. The guidance explains that
   Docker-based tutorials cannot start until Compose is installed.
-- [ ] **Planned for 1.0.2 — interactive console menus:** A simple declarative
+- [ ] **Planned for 1.1.0 — interactive console menus:** A simple declarative
   menu API and `zelyra new --template console-menu` create a complete terminal
   menu from a title, description, and choices in only a few lines. The menu
   provides a polished presentation with a clear selection highlight, keyboard
@@ -44,6 +44,13 @@ principles; the roadmap below tracks what is actually implemented.
   `NO_COLOR`; terminals without ANSI support receive a plain-text menu. EOF
   exits cleanly without hanging. The starter, a runnable example, and tests
   cover selection, EOF, narrow widths, color, and fallback behavior.
+- [x] **1.0.2 Studio and invoice tutorial reliability:** Resolve generated
+  MariaDB port placeholders consistently in Studio and the launched app. On
+  first Run, start Compose, retry transient database startup disconnects, and
+  stop with visible setup errors. The invoice database map and row preview work
+  after startup. Program output is more readable at 13 px without changing the
+  code editor font. Browser tests cover a fresh Compose database and an external
+  MariaDB project; MariaDB and PostgreSQL Studio flows also pass.
 - [x] **1.0.1 published-artifact language review:** 80 cases, 100 task repeats,
   600 numeric comparisons and 1,408 calendar/UTC reference cases passed with
   no unexpected findings; published installation/upgrade/rollback and
