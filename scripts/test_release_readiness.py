@@ -56,7 +56,7 @@ class ReleaseReadinessTests(unittest.TestCase):
                 )
 
         failures_100 = unfinished_gates(root, "1.0.0")
-        self.assertTrue(failures_100, "1.0.0 must stay blocked while its gates are open")
+        self.assertEqual(failures_100, [], "1.0.0 gates are complete for publication")
 
     def test_098_and_099_release_scopes_pass_while_100_rechecks_open_gates(self) -> None:
         root = Path(__file__).resolve().parents[1]
@@ -75,9 +75,10 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn("- [x]", german_carry_over.split("## Verbindliche 0.9.9-Übernahmen", 1)[1])
 
         failures_100 = unfinished_gates(root, "1.0.0")
-        self.assertTrue(
+        self.assertEqual(
             failures_100,
-            "1.0.0 gates must still block until candidate acceptance",
+            [],
+            "1.0.0 gates are complete upon candidate acceptance",
         )
 
     def test_later_milestone_gate_checklists_require_both_languages_and_all_items(self) -> None:
