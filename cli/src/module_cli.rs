@@ -1130,7 +1130,7 @@ fn module_bundle_command(mut arguments: impl Iterator<Item = String>) -> ExitCod
         eprint!("{}", String::from_utf8_lossy(&plan_output.stdout));
         return ExitCode::from(1);
     }
-    let plan_document: Value = match serde_json::from_slice(&plan_output.stdout) {
+    let plan_document: Value = match zelyra_ast::json::parse_slice(&plan_output.stdout) {
         Ok(document) => document,
         Err(error) => {
             eprintln!("error[E-MOD-018]: dependency planner returned invalid JSON: {error}");

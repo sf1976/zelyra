@@ -2900,3 +2900,100 @@ fn rejects_api_paths_without_declared_inputs() {
         .iter()
         .any(|error| error.message.contains("path parameter `id`")));
 }
+
+#[test]
+fn lossless_json_keeps_reserved_object_keys_and_decimal_string_contract() {
+    let output = run(r#"fn main() {
+        payload = "{\"$serde_json::private::Number\":\"12.34\"}"
+        object = json_decode<Map<String, String>>(payload)
+        assert(get(object, "$serde_json::private::Number") == Some("12.34"))
+        assert(json_encode(object) == payload)
+        amount = json_decode<Decimal>("\"9007199254740993.123456789\"")
+        assert(amount == decimal("9007199254740993.123456789"))
+        print(json_encode(amount))
+    }"#);
+    assert_eq!(output, ["\"9007199254740993.123456789\""]);
+    let program =
+        parse(&lex("fn main() { value = json_decode<Decimal>(\"1.25\") }").unwrap()).unwrap();
+    check(&program).unwrap();
+    assert!(execute(&program)
+        .unwrap_err()
+        .message
+        .contains("Decimal string"));
+}
+
+#[test]
+fn decimal_alias_returns_are_checked_against_the_underlying_value_type() {
+    let output = run(r#"type Amount = Decimal
+        fn echo_amount(amount: Amount) -> Amount { return amount }
+        fn echo_list(amounts: Amount[]) -> Amount[] { return amounts }
+        fn main() {
+            amount = decimal("9007199254740993.123456789")
+            assert(echo_amount(amount) == amount)
+            assert(echo_list([amount]) == [amount])
+            print("PASS")
+        }"#);
+    assert_eq!(output, ["PASS"]);
+    let bad = parse(
+        &lex("type Amount = Decimal fn bad() -> Amount { return \"not money\" } fn main() {} ")
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(check(&bad).is_err());
+    let error = execute_function(&bad, "bad", Vec::new(), None).unwrap_err();
+    assert!(error.message.contains("expected"));
+}
+
+#[test]
+fn recursive_type_aliases_are_rejected_even_without_a_use_site() {
+    for source in [
+        "type A = A fn main() {}",
+        "type A = B[] type B = A fn main() {}",
+    ] {
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let errors = check(&program).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.code == "E-TYPE-ALIAS-001" && error.span.line == 1));
+    }
+}
+
+#[test]
+fn decimal_boundary_arithmetic_checks_the_result_not_only_the_intermediate() {
+    let output = run(r#"fn main() {
+        largest = decimal("170141183460469231731687303715.884105727")
+        smallest = decimal("-170141183460469231731687303715.884105728")
+        one = decimal("1")
+        assert(largest * one == largest)
+        assert(largest / one == largest)
+        assert(largest / largest == one)
+        assert(smallest * one == smallest)
+        assert(smallest / smallest == one)
+        assert(largest * decimal("0.000000001") == decimal("170141183460469231731.687303715"))
+        print("PASS")
+    }"#);
+    assert_eq!(output, ["PASS"]);
+}
+
+#[test]
+fn decimal_extreme_remainder_and_invalid_operations_do_not_panic() {
+    let valid = run(r#"fn main() {
+        smallest = decimal("-170141183460469231731687303715.884105728")
+        assert(smallest % decimal("-0.000000001") == decimal("0"))
+        print("PASS")
+    }"#);
+    assert_eq!(valid, ["PASS"]);
+    for expression in [
+        "decimal(\"1\") / decimal(\"0\")",
+        "decimal(\"1\") % decimal(\"0\")",
+        "decimal(\"170141183460469231731687303715.884105727\") * decimal(\"2\")",
+        "decimal(\"-170141183460469231731687303715.884105728\") / decimal(\"-1\")",
+    ] {
+        let program =
+            parse(&lex(&format!("fn main() {{ print({expression}) }}")).unwrap()).unwrap();
+        check(&program).unwrap();
+        let error = execute(&program).unwrap_err();
+        assert!(error.span.start > 0);
+        assert!(error.message.contains("overflow") || error.message.contains("zero"));
+    }
+}

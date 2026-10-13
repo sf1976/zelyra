@@ -219,8 +219,8 @@ zelyra setup --host-port 18080 --db-host-port 3308
 ~~~
 
 - `zelyra setup`: Creates a protected `.env` if missing. Existing `.env` files are never overwritten.
-- `zelyra setup --database`: Starts Compose services (detects `docker compose` or legacy `docker-compose`).
-- `zelyra setup --schema`: Starts services and safely applies the schema from `main.zyl`.
+- `zelyra setup --database`: Starts MariaDB only (detects `docker compose` or legacy `docker-compose`).
+- `zelyra setup --schema`: Starts MariaDB and safely applies `main.zyl` through a separate container run.
 - `zelyra setup --all`: Executes configuration, container startup, and schema migration in one step.
 
 #### Local browser setup (`zelyra setup --web`)
@@ -2789,3 +2789,11 @@ use credentials. The configured host must also be in the network allowlist.
 Messages are limited to 64 KiB of combined text and HTML body. See
 [`docs/mail.en.md`](../../mail.en.md) for setup, the worker example, and the
 local TLS SMTP integration test.
+
+### Startup order for `setup --all` (0.9.9 development)
+
+`--database` starts MariaDB only. `--schema` builds the application image and
+runs `db apply` in a separate container that is removed afterward; it does not
+require an already running web server. `--all` starts the web service only
+after successful schema application and then prints its address. Review-gated
+plans remain blocked; this order bypasses no precision or migration checks.

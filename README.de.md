@@ -19,6 +19,9 @@ und natives SQL bleiben jederzeit möglich.
 
 Das stabile [`v0.9.8`-Release](https://github.com/sf1976/zelyra/releases/tag/v0.9.8) bleibt experimentell und ist nicht für den Produktiveinsatz freigegeben. Der aktuelle Branch `release/0.9.9-pre-release` ergänzt generische Records und Enums, benannte Funktionswerte, explizite skalare Textformatierung sowie optische Verbesserungen im Studio und in der CLI; die technische Prüfung läuft noch. Die unabhängige menschliche Abnahme ist dem konkreten 1.0.0-Kandidaten vorbehalten. Siehe die [Release-Notizen 0.9.8](docs/release-notes/0.9.8.de.md), den [Entwicklungsplan 0.9.9](docs/release-plans/0.9.9.de.md), die [Datenbank-Supportmatrix](docs/database-support.de.md) und den [1.0.0-Releaseplan](docs/release-plans/1.0.0.de.md).
 
+Die exakten Dezimalgrenzen des Entwicklungszweigs sind mit Beispielen und
+Migrationshinweisen in [Decimal und Geldbeträge](docs/decimals.de.md) beschrieben.
+
 ## Was Zelyra 0.9.8 kann
 
 Zelyra verbindet Sprache, Compiler, Datenbank, Webanwendung und Studio in

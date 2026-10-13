@@ -1,5 +1,8 @@
 use std::fmt;
 
+pub mod decimal;
+pub mod json;
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Span {
     pub start: usize,

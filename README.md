@@ -19,6 +19,9 @@ and native SQL available.
 
 The stable [`v0.9.8` release](https://github.com/sf1976/zelyra/releases/tag/v0.9.8) remains experimental and is not approved for production use. The current `release/0.9.9-pre-release` branch adds generic records and enums, named function values, explicit scalar text formatting, and Studio/CLI presentation polish; it is still undergoing technical verification. Independent human acceptance is reserved for the exact 1.0.0 candidate. See the [0.9.8 release notes](docs/release-notes/0.9.8.en.md), [0.9.9 engineering plan](docs/release-plans/0.9.9.en.md), [database support matrix](docs/database-support.en.md), and [1.0.0 release plan](docs/release-plans/1.0.0.en.md).
 
+The development branch's exact numeric boundaries, examples, and migration
+notes are documented in [Decimal and monetary amounts](docs/decimals.en.md).
+
 ## What Zelyra 0.9.8 can do
 
 Zelyra connects its language, compiler, database, web application, and Studio in

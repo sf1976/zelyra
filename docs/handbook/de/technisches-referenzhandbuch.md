@@ -2993,3 +2993,12 @@ verträgt keine Zugangsdaten. Der konfigurierte Host muss auch in der
 Netzwerk-Allowlist stehen. Text- und HTML-Body sind zusammen auf 64 KiB
 begrenzt. Einrichtung, Workerbeispiel und lokaler TLS-SMTP-Test stehen in
 [`docs/mail.de.md`](../../mail.de.md).
+
+### Startreihenfolge bei `setup --all` (0.9.9-Entwicklung)
+
+`--database` startet ausschließlich MariaDB. `--schema` baut das Anwendungsbild
+und führt `db apply` in einem separaten, anschließend entfernten Container aus;
+ein bereits laufender Webserver ist nicht erforderlich. `--all` startet den
+Webdienst erst nach erfolgreicher Schemaanwendung und gibt dann seine Adresse
+aus. Schemapläne mit Freigabepflicht bleiben gesperrt; diese Reihenfolge umgeht
+keine Präzisions- oder Migrationsprüfung.

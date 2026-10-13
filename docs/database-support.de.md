@@ -19,3 +19,15 @@ MariaDB, MySQL und PostgreSQL bleiben Ziele für die erste produktive Version.
 Der geprüfte Umfang unterscheidet sich je Backend. 0.9.9 darf den
 1.0.0-Supportumfang erst einfrieren, wenn jeder zugesagte Ablauf belegt ist.
 Die bloße Annahme einer URL wie `mysql://` ist kein Nachweis für MySQL Server.
+
+## Zusätzlich lokal geprüft: exakte Dezimalgrenzen (0.9.9-Entwicklung)
+
+MariaDB 11.4.13, MySQL 8.4.11 und PostgreSQL 16.15 bestehen getrennte
+Rundläufe für Decimal-/Money-Formulare, SQL-Speicherung, präzise CRUD-Filter,
+HTTP-/generische JSON-Daten, optionale NULL-Werte und das Abweisen alter Skalen.
+Die neuen CI-Schritte führen dieselbe Probe aus.
+Siehe [Paketnachweis](release-readiness/0.9.9-exact-decimals.de.md).
+Einfache PostgreSQL-Formularaktionen sind transaktional; Mandanten-/Empfänger-,
+Edit-Snapshot- und Audit-Entscheidungen sind weiterhin gesonderte technische
+Gates. Der MySQL-Server-Zeittimer betrifft SELECT; harte Schreib-Abbruchgrenzen
+sind damit nicht nachgewiesen. Es gibt keine allgemeine Backend-Freigabe.

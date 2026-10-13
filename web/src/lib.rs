@@ -431,6 +431,9 @@ pub struct TableViewRoute {
 pub enum TableViewFilterKind {
     Text,
     Numeric,
+    Decimal,
+    Integer,
+    Unsigned,
     Bool,
     Other,
 }
@@ -5603,7 +5606,7 @@ fn dispatch_form_with_language(
         if let Err(error) = execute_form_action(
             form,
             action,
-            &values,
+            &validation.values,
             path_params,
             database_url,
             FormExecutionContext {
@@ -6479,7 +6482,7 @@ fn dispatch_crud(
         };
         params.push((format!("filter_{column}"), value));
     }
-    let result = match zelyra_database::execute_mariadb_query(database_url, &query, params) {
+    let result = match zelyra_database::execute_query(database_url, &query, params) {
         Ok(result) => result,
         Err(error) => {
             eprintln!("zelyra web: CRUD query failed: {error}");
@@ -6530,7 +6533,7 @@ fn dispatch_crud(
                 zelyra_database::QueryValue::Int(user_id),
             ));
         }
-        match zelyra_database::execute_mariadb_query(database_url, &count_sql, count_params) {
+        match zelyra_database::execute_query(database_url, &count_sql, count_params) {
             Ok(result) => result
                 .rows
                 .first()
@@ -6807,7 +6810,7 @@ fn dispatch_tableview(
         };
         params.push((format!("filter_{column}"), value));
     }
-    let result = match zelyra_database::execute_mariadb_query(database_url, &query, params) {
+    let result = match zelyra_database::execute_query(database_url, &query, params) {
         Ok(result) => result,
         Err(error) => {
             eprintln!("zelyra web: tableview query failed: {error}");
@@ -6970,9 +6973,17 @@ fn render_tableview(
             html.push_str("<tr>");
             for index in 0..tableview.columns.len() {
                 html.push_str("<td>");
-                html.push_str(&html_escape(display_database_value(
-                    row.get(index).map(String::as_str).unwrap_or(""),
-                )));
+                let value =
+                    display_database_value(row.get(index).map(String::as_str).unwrap_or(""));
+                let value = if tableview.filters.iter().any(|filter| {
+                    filter.name == tableview.columns[index]
+                        && filter.kind == TableViewFilterKind::Decimal
+                }) {
+                    display_exact_decimal_value(value)
+                } else {
+                    value
+                };
+                html.push_str(&html_escape(value));
                 html.push_str("</td>");
             }
             html.push_str("</tr>");
@@ -7165,7 +7176,7 @@ fn dispatch_crud_detail(
             zelyra_database::QueryValue::Int(user_id),
         ));
     }
-    let result = match zelyra_database::execute_mariadb_query(database_url, &query, params) {
+    let result = match zelyra_database::execute_query(database_url, &query, params) {
         Ok(result) => result,
         Err(error) => {
             eprintln!("zelyra web: CRUD detail query failed: {error}");
@@ -7778,7 +7789,10 @@ fn tableview_filter_operator_supported(
                 | FilterOperator::IsNull
                 | FilterOperator::IsNotNull
         ),
-        TableViewFilterKind::Numeric => matches!(
+        TableViewFilterKind::Numeric
+        | TableViewFilterKind::Decimal
+        | TableViewFilterKind::Integer
+        | TableViewFilterKind::Unsigned => matches!(
             operator,
             FilterOperator::Equal
                 | FilterOperator::GreaterThan
@@ -7805,7 +7819,10 @@ fn tableview_filter_operator_options(kind: TableViewFilterKind) -> &'static [Fil
             FilterOperator::IsNull,
             FilterOperator::IsNotNull,
         ],
-        TableViewFilterKind::Numeric => &[
+        TableViewFilterKind::Numeric
+        | TableViewFilterKind::Decimal
+        | TableViewFilterKind::Integer
+        | TableViewFilterKind::Unsigned => &[
             FilterOperator::Equal,
             FilterOperator::GreaterThan,
             FilterOperator::GreaterThanOrEqual,
@@ -7847,18 +7864,51 @@ fn tableview_filter_query_value(
     filter: &TableViewFilter,
     value: &str,
 ) -> Result<zelyra_database::QueryValue, String> {
-    match filter.kind {
-        TableViewFilterKind::Bool => match value {
-            "true" | "1" => Ok(zelyra_database::QueryValue::Bool(true)),
-            "false" | "0" => Ok(zelyra_database::QueryValue::Bool(false)),
-            _ => Err(format!("filter_{} must be true or false", filter.name)),
-        },
+    numeric_filter_query_value(filter.kind, value)
+        .map_err(|error| format!("filter_{} {error}", filter.name))
+}
+
+fn exact_query_value(value: &str) -> Result<QueryValue, String> {
+    zelyra_ast::decimal::parse_scaled(value, 9)
+        .map(|_| QueryValue::Decimal(value.into()))
+        .ok_or_else(|| "must be an exact Decimal with at most 9 fractional digits".into())
+}
+
+fn money_query_value(value: &str) -> Result<QueryValue, String> {
+    zelyra_ast::decimal::parse_money(value)
+        .map(|_| QueryValue::Decimal(value.into()))
+        .ok_or_else(|| {
+            "must be an exact Money amount with at most 15 integer and 4 fractional digits".into()
+        })
+}
+
+fn numeric_filter_query_value(
+    kind: TableViewFilterKind,
+    value: &str,
+) -> Result<QueryValue, String> {
+    match kind {
+        TableViewFilterKind::Integer => value
+            .parse::<i64>()
+            .map(QueryValue::Int)
+            .map_err(|_| "must be an integer".into()),
+        TableViewFilterKind::Unsigned => value
+            .parse::<u64>()
+            .map(QueryValue::UInt)
+            .map_err(|_| "must be an unsigned integer".into()),
+        TableViewFilterKind::Decimal => exact_query_value(value),
         TableViewFilterKind::Numeric => value
             .parse::<f64>()
-            .map(zelyra_database::QueryValue::Float)
-            .map_err(|_| format!("filter_{} must be a number", filter.name)),
+            .ok()
+            .filter(|v| v.is_finite())
+            .map(QueryValue::Float)
+            .ok_or_else(|| "must be a finite number".into()),
+        TableViewFilterKind::Bool => match value {
+            "true" | "1" => Ok(QueryValue::Bool(true)),
+            "false" | "0" => Ok(QueryValue::Bool(false)),
+            _ => Err("must be true or false".into()),
+        },
         TableViewFilterKind::Text | TableViewFilterKind::Other => {
-            Ok(zelyra_database::QueryValue::String(value.into()))
+            Ok(QueryValue::String(value.into()))
         }
     }
 }
@@ -8007,17 +8057,24 @@ fn filter_query_value(
             _ => Err(format!("filter_{} must be true or false", column.name)),
         };
     }
-    if sql_type.contains("INT") {
-        return value
-            .parse::<i64>()
-            .map(zelyra_database::QueryValue::Int)
-            .map_err(|_| format!("filter_{} must be an integer", column.name));
-    }
-    if sql_type.contains("DECIMAL") || sql_type.contains("NUMERIC") || sql_type.contains("DOUBLE") {
-        return value
-            .parse::<f64>()
-            .map(zelyra_database::QueryValue::Float)
-            .map_err(|_| format!("filter_{} must be a number", column.name));
+    let kind = if sql_type.contains("INT") && sql_type.contains("UNSIGNED")
+        || sql_type == "DECIMAL(20,0)"
+        || sql_type == "NUMERIC(20,0)"
+    {
+        Some(TableViewFilterKind::Unsigned)
+    } else if sql_type.contains("INT") {
+        Some(TableViewFilterKind::Integer)
+    } else if sql_type.contains("DECIMAL") || sql_type.contains("NUMERIC") {
+        Some(TableViewFilterKind::Decimal)
+    } else if sql_type.contains("DOUBLE") || sql_type.contains("FLOAT") || sql_type.contains("REAL")
+    {
+        Some(TableViewFilterKind::Numeric)
+    } else {
+        None
+    };
+    if let Some(kind) = kind {
+        return numeric_filter_query_value(kind, value)
+            .map_err(|error| format!("filter_{} {error}", column.name));
     }
     Ok(zelyra_database::QueryValue::String(value.into()))
 }
@@ -8715,7 +8772,7 @@ fn load_relation_options(
             quote_identifier(&target_table),
             quote_identifier(display_column)
         );
-        let result = zelyra_database::execute_mariadb_query(database_url, &query, Vec::new())
+        let result = zelyra_database::execute_query(database_url, &query, Vec::new())
             .map_err(|error| error.to_string())?;
         let field_options = result
             .rows
@@ -8859,6 +8916,21 @@ fn execute_form_action(
     }
     if queries.is_empty() {
         return Err("form action must contain at least one SQL statement".into());
+    }
+    if database_url.starts_with("postgres://") || database_url.starts_with("postgresql://") {
+        // Plain forms need no mid-transaction decision. Tenant, recipient,
+        // optimistic-edit and audit workflows retain their explicit backend gate.
+        if form.tenant_column.is_some()
+            || form.recipient_column.is_some()
+            || form.post_only
+            || expected_snapshot.is_some()
+            || form.audit_table.is_some()
+        {
+            return Err("PostgreSQL form workflows with tenant/recipient guards, edit snapshots, or audit decisions require the decision-making transaction runtime".into());
+        }
+        return zelyra_database::execute_queries(database_url, &queries, true)
+            .map(|_| ())
+            .map_err(|error| error.to_string());
     }
     zelyra_database::with_mariadb_transaction(database_url, |transaction| {
         if form.tenant_column.is_some() && tenant_context.is_none() {
@@ -9077,17 +9149,25 @@ fn form_query_parameters(
 ) -> Result<Vec<(String, zelyra_database::QueryValue)>, String> {
     let mut parameters = Vec::new();
     for field in &form.form.fields {
+        let ty = zelyra_forms::field_value_type(
+            &form.form,
+            form.table.as_ref(),
+            form.schema.as_ref(),
+            field,
+        );
         let Some(value) = values.get(&field.name) else {
+            if matches!(ty, Some(Type::Option(_))) && !field.readonly {
+                parameters.push((field.name.clone(), QueryValue::Null));
+            }
             continue;
         };
-        let ty = field.ty.as_ref().or_else(|| {
-            form.table.as_ref().and_then(|table| {
-                table
-                    .columns
-                    .iter()
-                    .find(|column| column.name == field.name)
-                    .map(|column| &column.ty)
-            })
+        if value.is_empty() && matches!(ty, Some(Type::Option(_))) && !field.readonly {
+            parameters.push((field.name.clone(), QueryValue::Null));
+            continue;
+        }
+        let ty = ty.as_ref().map(|ty| match ty {
+            Type::Option(inner) => inner.as_ref(),
+            other => other,
         });
         let query_value = match ty {
             Some(Type::Int) => value
@@ -9106,14 +9186,12 @@ fn form_query_parameters(
                 .parse::<u64>()
                 .map(zelyra_database::QueryValue::UInt)
                 .map_err(|_| format!("form field `{}` is not an unsigned integer", field.name))?,
-            Some(Type::Float) | Some(Type::Decimal) => value
-                .parse::<f64>()
-                .map(zelyra_database::QueryValue::Float)
-                .map_err(|_| format!("form field `{}` is not a number", field.name))?,
-            Some(Type::Named(name)) if name == "Money" => value
-                .parse::<f64>()
-                .map(zelyra_database::QueryValue::Float)
-                .map_err(|_| format!("form field `{}` is not a number", field.name))?,
+            Some(Type::Float) => numeric_filter_query_value(TableViewFilterKind::Numeric, value)
+                .map_err(|error| format!("form field `{}` {error}", field.name))?,
+            Some(Type::Decimal) => exact_query_value(value)
+                .map_err(|error| format!("form field `{}` {error}", field.name))?,
+            Some(Type::Named(name)) if name == "Money" => money_query_value(value)
+                .map_err(|error| format!("form field `{}` {error}", field.name))?,
             Some(Type::Bool) => {
                 zelyra_database::QueryValue::Bool(matches!(value.as_str(), "true" | "1"))
             }
@@ -9306,7 +9384,7 @@ fn load_route_data(
             let count_query = format!("SELECT COUNT(*) FROM ({count_source}) AS zelyra_page_count");
             let mut count_query_params = query_params.clone();
             count_query_params.extend(count_parameters);
-            let count_result = match zelyra_database::execute_mariadb_query(
+            let count_result = match zelyra_database::execute_query(
                 database_url,
                 &count_query,
                 count_query_params,
@@ -9355,14 +9433,13 @@ fn load_route_data(
             query = wrapped_query;
             query_params.extend(generated_params);
         }
-        let result =
-            match zelyra_database::execute_mariadb_query(database_url, &query, query_params) {
-                Ok(result) => result,
-                Err(error) => {
-                    eprintln!("zelyra web: page data query failed: {error}");
-                    return Err(RouteDataError::Query);
-                }
-            };
+        let result = match zelyra_database::execute_query(database_url, &query, query_params) {
+            Ok(result) => result,
+            Err(error) => {
+                eprintln!("zelyra web: page data query failed: {error}");
+                return Err(RouteDataError::Query);
+            }
+        };
         if data.collection {
             let rows = result
                 .rows
@@ -9614,21 +9691,8 @@ fn page_filter_condition(column: &str, operator: FilterOperator) -> String {
 }
 
 fn page_filter_query_value(filter: &PageFilterSelection) -> Result<QueryValue, String> {
-    match filter.kind {
-        TableViewFilterKind::Bool => match filter.value.as_str() {
-            "true" | "1" => Ok(QueryValue::Bool(true)),
-            "false" | "0" => Ok(QueryValue::Bool(false)),
-            _ => Err(format!("filter_{} must be true or false", filter.name)),
-        },
-        TableViewFilterKind::Numeric => filter
-            .value
-            .parse::<f64>()
-            .map(QueryValue::Float)
-            .map_err(|_| format!("filter_{} must be a number", filter.name)),
-        TableViewFilterKind::Text | TableViewFilterKind::Other => {
-            Ok(QueryValue::String(filter.value.clone()))
-        }
-    }
+    numeric_filter_query_value(filter.kind, &filter.value)
+        .map_err(|error| format!("filter_{} {error}", filter.name))
 }
 
 fn page_query_value(ty: &Type, value: &str) -> Result<QueryValue, String> {
@@ -9645,10 +9709,9 @@ fn page_query_value(ty: &Type, value: &str) -> Result<QueryValue, String> {
             .parse::<u64>()
             .map(QueryValue::UInt)
             .map_err(|_| "query parameter must be an unsigned integer".into()),
-        Type::Float | Type::Decimal => value
-            .parse::<f64>()
-            .map(QueryValue::Float)
-            .map_err(|_| "query parameter must be a number".into()),
+        Type::Float => numeric_filter_query_value(TableViewFilterKind::Numeric, value),
+        Type::Decimal => exact_query_value(value),
+        Type::Named(name) if name == "Money" => money_query_value(value),
         Type::Bool => match value {
             "true" | "1" => Ok(QueryValue::Bool(true)),
             "false" | "0" => Ok(QueryValue::Bool(false)),
@@ -9675,6 +9738,21 @@ fn route_data_row(
             (field.clone(), value)
         })
         .collect()
+}
+
+fn display_exact_decimal_value(value: &str) -> &str {
+    let unsigned = value.strip_prefix('-').unwrap_or(value);
+    let Some((whole, fraction)) = unsigned.split_once('.') else {
+        return value;
+    };
+    if whole.is_empty()
+        || fraction.is_empty()
+        || !whole.bytes().all(|byte| byte.is_ascii_digit())
+        || !fraction.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        return value;
+    }
+    value.trim_end_matches('0').trim_end_matches('.')
 }
 
 fn display_database_value(value: &str) -> &str {

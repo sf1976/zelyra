@@ -2051,7 +2051,7 @@ fn apply_crud_resource(
         json!({"path": path, "content": candidate, "baseHash": base_hash}),
         false,
     )?;
-    let mut response: Value = serde_json::from_str(&saved.2)
+    let mut response: Value = zelyra_ast::json::parse(&saved.2)
         .map_err(|_| (500, "saved editor response could not be encoded".into()))?;
     response["applied"] = Value::Bool(true);
     Ok((200, "application/json; charset=utf-8", response.to_string()))
@@ -2105,7 +2105,7 @@ fn apply_schema_column(
         json!({"path": path, "content": candidate, "baseHash": base_hash}),
         false,
     )?;
-    let mut response: Value = serde_json::from_str(&saved.2)
+    let mut response: Value = zelyra_ast::json::parse(&saved.2)
         .map_err(|_| (500, "saved editor response could not be encoded".into()))?;
     response["applied"] = Value::Bool(true);
     response["requiresDatabasePlan"] = Value::Bool(true);
@@ -2745,7 +2745,7 @@ fn resource_name_from_table(table: &str) -> String {
 }
 
 fn parse_json_body(body: &str) -> Result<Value, (u16, String)> {
-    serde_json::from_str(body).map_err(|_| (400, "request body must be valid JSON".into()))
+    zelyra_ast::json::parse(body).map_err(|_| (400, "request body must be valid JSON".into()))
 }
 
 fn tree_response(state: &EditorState) -> Result<(u16, &'static str, String), (u16, String)> {

@@ -1,0 +1,30 @@
+# Exakte Rechnung ohne Float-Zwischenwerte.
+fn main() {
+    netto: Decimal = decimal("100.00")
+    steuersatz: Decimal = decimal("0.19")
+    steuer: Decimal = netto * steuersatz
+    brutto: Decimal = netto + steuer
+    assert(brutto == decimal("119.00"))
+    match decimal_quantize_result(brutto, 2, "half_up") {
+        Ok(gerundet) => {
+            match decimal_scaled_result(format_text(gerundet), 2) {
+                Ok(cent) => {
+                    match format_scaled_result(cent, 2) {
+                        Ok(text) => {
+                            print(text)
+                        }
+                        Err(fehler) => {
+                            print(fehler)
+                        }
+                    }
+                }
+                Err(fehler) => {
+                    print(fehler)
+                }
+            }
+        }
+        Err(fehler) => {
+            print(fehler)
+        }
+    }
+}

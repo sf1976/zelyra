@@ -233,7 +233,13 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
             .iter()
             .map(|parameter| (parameter.name.clone(), parameter.ty.clone()))
             .collect::<HashMap<_, _>>();
-        check_block(&function.body, schema, &mut environment, &mut errors);
+        check_block(
+            &function.body,
+            schema,
+            &mut environment,
+            &program.types,
+            &mut errors,
+        );
     }
     for form in &program.forms {
         let source_table = form.table.as_ref().and_then(|table_name| {
@@ -254,13 +260,26 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
                             .map(|column| column.ty.clone())
                     })
                 });
-                environment.insert(field.name.clone(), field_type.unwrap_or(Type::Unknown));
+                environment.insert(
+                    field.name.clone(),
+                    form_parameter_type(
+                        &field_type.unwrap_or(Type::Unknown),
+                        &program.types,
+                        &mut HashSet::new(),
+                    ),
+                );
             }
             let block = Block {
                 statements: action.statements.clone(),
                 span: action.span,
             };
-            check_block(&block, schema, &mut environment, &mut errors);
+            check_block(
+                &block,
+                schema,
+                &mut environment,
+                &program.types,
+                &mut errors,
+            );
         }
     }
     for crud in &program.cruds {
@@ -288,7 +307,13 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
                 statements: action.statements.clone(),
                 span: action.span,
             };
-            check_block(&block, schema, &mut environment, &mut errors);
+            check_block(
+                &block,
+                schema,
+                &mut environment,
+                &program.types,
+                &mut errors,
+            );
         }
     }
     for page in &program.pages {
@@ -359,24 +384,28 @@ fn check_block(
     block: &Block,
     schema: &Schema,
     environment: &mut HashMap<String, Type>,
+    aliases: &[zelyra_ast::TypeDef],
     errors: &mut Vec<SqlError>,
 ) {
     for statement in &block.statements {
+        for ty in environment.values_mut() {
+            *ty = super::resolve_type(ty, aliases);
+        }
         match statement {
             Stmt::Let {
                 name, ty, value, ..
             } => {
-                check_expr(value, schema, environment, errors);
+                check_expr(value, schema, environment, aliases, errors);
                 environment.insert(name.clone(), ty.clone().unwrap_or_else(|| expr_type(value)));
             }
             Stmt::BindOrAssign { name, value, .. } => {
-                check_expr(value, schema, environment, errors);
+                check_expr(value, schema, environment, aliases, errors);
                 environment.insert(name.clone(), expr_type(value));
             }
-            Stmt::Expr(expression) => check_expr(expression, schema, environment, errors),
+            Stmt::Expr(expression) => check_expr(expression, schema, environment, aliases, errors),
             Stmt::Return { value, .. } => {
                 if let Some(value) = value {
-                    check_expr(value, schema, environment, errors);
+                    check_expr(value, schema, environment, aliases, errors);
                 }
             }
             Stmt::If {
@@ -385,10 +414,10 @@ fn check_block(
                 else_block,
                 ..
             } => {
-                check_expr(condition, schema, environment, errors);
-                check_block(then_block, schema, environment, errors);
+                check_expr(condition, schema, environment, aliases, errors);
+                check_block(then_block, schema, environment, aliases, errors);
                 if let Some(else_block) = else_block {
-                    check_block(else_block, schema, environment, errors);
+                    check_block(else_block, schema, environment, aliases, errors);
                 }
             }
             Stmt::While {
@@ -397,36 +426,36 @@ fn check_block(
                 body,
                 ..
             } => {
-                check_expr(condition, schema, environment, errors);
+                check_expr(condition, schema, environment, aliases, errors);
                 for invariant in invariants {
-                    check_expr(invariant, schema, environment, errors);
+                    check_expr(invariant, schema, environment, aliases, errors);
                 }
-                check_block(body, schema, environment, errors);
+                check_block(body, schema, environment, aliases, errors);
             }
             Stmt::For { iterable, body, .. } => {
-                check_expr(iterable, schema, environment, errors);
-                check_block(body, schema, environment, errors);
+                check_expr(iterable, schema, environment, aliases, errors);
+                check_block(body, schema, environment, aliases, errors);
             }
             Stmt::Loop {
                 invariants, body, ..
             } => {
                 for invariant in invariants {
-                    check_expr(invariant, schema, environment, errors);
+                    check_expr(invariant, schema, environment, aliases, errors);
                 }
-                check_block(body, schema, environment, errors);
+                check_block(body, schema, environment, aliases, errors);
             }
             Stmt::Break { .. } | Stmt::Continue { .. } => {}
             Stmt::Match { value, arms, .. } => {
-                check_expr(value, schema, environment, errors);
+                check_expr(value, schema, environment, aliases, errors);
                 for arm in arms {
-                    check_block(&arm.body, schema, environment, errors);
+                    check_block(&arm.body, schema, environment, aliases, errors);
                 }
             }
             Stmt::Transaction { body, .. } => {
-                check_block(body, schema, environment, errors);
+                check_block(body, schema, environment, aliases, errors);
             }
             Stmt::Parallel { body, .. } => {
-                check_block(body, schema, environment, errors);
+                check_block(body, schema, environment, aliases, errors);
             }
         }
     }
@@ -436,6 +465,7 @@ fn check_expr(
     expression: &Expr,
     schema: &Schema,
     environment: &HashMap<String, Type>,
+    aliases: &[zelyra_ast::TypeDef],
     errors: &mut Vec<SqlError>,
 ) {
     match &expression.kind {
@@ -443,47 +473,47 @@ fn check_expr(
             result_type, query, ..
         } => errors.extend(check_query(
             query,
-            result_type,
+            &super::resolve_type(result_type, aliases),
             schema,
             environment,
             expression.span,
         )),
         ExprKind::Call { args, .. } => {
             for argument in args {
-                check_expr(argument, schema, environment, errors);
+                check_expr(argument, schema, environment, aliases, errors);
             }
         }
-        ExprKind::Unary { expr, .. } => check_expr(expr, schema, environment, errors),
+        ExprKind::Unary { expr, .. } => check_expr(expr, schema, environment, aliases, errors),
         ExprKind::Binary { left, right, .. } => {
-            check_expr(left, schema, environment, errors);
-            check_expr(right, schema, environment, errors);
+            check_expr(left, schema, environment, aliases, errors);
+            check_expr(right, schema, environment, aliases, errors);
         }
         ExprKind::Array(values) => {
             for value in values {
-                check_expr(value, schema, environment, errors);
+                check_expr(value, schema, environment, aliases, errors);
             }
         }
         ExprKind::Map(entries) => {
             for (key, value) in entries {
-                check_expr(key, schema, environment, errors);
-                check_expr(value, schema, environment, errors);
+                check_expr(key, schema, environment, aliases, errors);
+                check_expr(value, schema, environment, aliases, errors);
             }
         }
         ExprKind::Record { fields, .. } => {
             for (_, value) in fields {
-                check_expr(value, schema, environment, errors);
+                check_expr(value, schema, environment, aliases, errors);
             }
         }
         ExprKind::Index { target, index } => {
-            check_expr(target, schema, environment, errors);
-            check_expr(index, schema, environment, errors);
+            check_expr(target, schema, environment, aliases, errors);
+            check_expr(index, schema, environment, aliases, errors);
         }
-        ExprKind::Field { target, .. } => check_expr(target, schema, environment, errors),
-        ExprKind::Await(inner) => check_expr(inner, schema, environment, errors),
+        ExprKind::Field { target, .. } => check_expr(target, schema, environment, aliases, errors),
+        ExprKind::Await(inner) => check_expr(inner, schema, environment, aliases, errors),
         ExprKind::Match { value, arms } => {
-            check_expr(value, schema, environment, errors);
+            check_expr(value, schema, environment, aliases, errors);
             for arm in arms {
-                check_expr(&arm.value, schema, environment, errors);
+                check_expr(&arm.value, schema, environment, aliases, errors);
             }
         }
         ExprKind::Int(_)
@@ -1121,12 +1151,37 @@ fn sql_type_to_type(sql_type: &str) -> Type {
         Type::Bool
     } else if upper.contains("REAL") || upper.contains("DOUBLE") || upper.contains("FLOAT") {
         Type::Float
+    } else if matches!(upper.as_str(), "DECIMAL(20,0)" | "NUMERIC(20,0)") {
+        Type::UInt
     } else if upper.contains("DECIMAL") || upper.contains("NUMERIC") {
         Type::Decimal
     } else if upper.contains("DATE") || upper.contains("TIME") {
         Type::Timestamp
     } else {
         Type::Int
+    }
+}
+
+fn form_parameter_type(
+    ty: &Type,
+    definitions: &[zelyra_ast::TypeDef],
+    visiting: &mut HashSet<String>,
+) -> Type {
+    match ty {
+        Type::Named(name) if name == "Money" => Type::Decimal,
+        Type::Named(name) if visiting.insert(name.clone()) => {
+            let resolved = definitions
+                .iter()
+                .find(|definition| definition.name == *name)
+                .map(|definition| form_parameter_type(&definition.target, definitions, visiting))
+                .unwrap_or_else(|| ty.clone());
+            visiting.remove(name);
+            resolved
+        }
+        Type::Option(inner) => {
+            Type::Option(Box::new(form_parameter_type(inner, definitions, visiting)))
+        }
+        _ => ty.clone(),
     }
 }
 
@@ -1314,6 +1369,29 @@ mod tests {
         .unwrap())
         .unwrap();
         build_schema(&program).unwrap()
+    }
+
+    #[test]
+    fn decimal_alias_sql_parameters_keep_their_underlying_numeric_type() {
+        let program = parse(&lex(r#"type Amount = Decimal table charges { id: Id primary amount: Decimal required }
+            fn load(amount: Amount) uses Database {
+                rows = sql<Amount[]> { SELECT amount FROM charges WHERE amount = :amount }
+                nested: Amount = amount
+                if true { rows2 = sql<Decimal[]> { SELECT amount FROM charges WHERE amount = :nested } }
+            } fn main() {}"#).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        assert!(check_program(&program, &schema).is_ok());
+    }
+
+    #[test]
+    fn form_money_and_decimal_alias_parameters_match_exact_storage() {
+        let program = parse(&lex(r#"type Amount = Decimal
+            table charges { id: Id primary auto price: Money required precise: Amount required }
+            form Charge -> charges { fields { price precise }
+                action save { sql { UPDATE charges SET price = :price, precise = :precise WHERE price = :price } } }
+            fn main() {}"#).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        assert!(check_program(&program, &schema).is_ok());
     }
 
     #[test]

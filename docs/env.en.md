@@ -545,3 +545,11 @@ commit. The entry must include:
 
 A setting is not fully documented if it appears only in compiler code or a
 template.
+
+## DATABASE_URL: fixed decimal precision in 0.9.9 development
+
+With a configured database and a granted Database capability, `serve` and an
+interpreter's first SQL operation verify declared Decimal/Money/UInt precision
+using read-only metadata. Metadata access is required; a legacy or incompatible
+schema is not silently used or migrated. There is no bypass switch. Existing
+URL precedence and secret rules still apply. See [rules and tests](decimals.en.md).

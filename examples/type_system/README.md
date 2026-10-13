@@ -100,3 +100,8 @@ Records mit fachlichen IDs verwendet.
 
 Das ist eine Abdeckung der vorhandenen Sprachoberfläche, keine Behauptung, dass
 alle Typen oder Konvertierungen bereits implementiert sind.
+
+Weitere exakte Decimal-/Money-Grenzen, SQL-Skalen und Alias-Regeln:
+[Decimal und Geldbeträge](../../docs/decimals.de.md). Die Grenzwertregressionen
+prüfen das skalierte Minimum/Maximum, gültige breite Zwischenwerte und
+kontrollierte Fehler.

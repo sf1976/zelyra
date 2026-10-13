@@ -2034,6 +2034,9 @@ dependencies = [
 [[package]]
 name = "zelyra-ast"
 version = "0.9.9"
+dependencies = [
+ "serde_json",
+]
 
 [[package]]
 name = "zelyra-cli"
@@ -2066,6 +2069,7 @@ dependencies = [
 name = "zelyra-database"
 version = "0.9.9"
 dependencies = [
+ "bytes",
  "mysql",
  "postgres",
  "r2d2",
@@ -2124,6 +2128,7 @@ dependencies = [
 name = "zelyra-runtime"
 version = "0.9.9"
 dependencies = [
+ "num-bigint",
  "rand_core 0.6.4",
  "serde_json",
  "ureq",

@@ -1031,6 +1031,20 @@ language backlog as one 0.9.4 change.
 
 ## Release 0.9.9 — feature freeze and final technical candidate
 
+- [✅] Typed Decimal tableview presentation retains exact digits without added
+  fractional padding; ordinary text and raw data keep their representation.
+
+- [✅] Correct setup dependency after precision hardening: MariaDB first,
+  schema in a separate container run, web service only after success;
+  migration approvals remain enforced.
+
+- [✅] Decimal package: explicit SQL scale, lossless JSON transport, exact
+  forms/filters and PostgreSQL NUMERIC decoding; aliases, numeric boundaries,
+  intermediate overflow and controlled resource errors are tested.
+  See [rules](decimals.en.md) and [package report](release-readiness/0.9.9-exact-decimals.en.md).
+- [🗺️] Next, independently review the entire date path: calendar boundaries,
+  UTC durations, forms, APIs, and actual database storage.
+
 - [🗺️] Freeze language, CLI, runtime, databases, IDE, mail, notification, and
   tutorial scope. Complete every accepted 0.9.1–0.9.8 requirement and run the
   complete technical gates on an immutable candidate. Prepare exact 1.0.0

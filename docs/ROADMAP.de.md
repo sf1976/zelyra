@@ -1047,6 +1047,20 @@ IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
 
 ## Release 0.9.9 — Feature-Freeze und letzter technischer Kandidat
 
+- [✅] Typisierte Decimal-Tabellenansicht zeigt exakte Werte ohne zusätzliche
+  Nullauffüllung; normale Texte und Rohdaten behalten ihre Darstellung.
+
+- [✅] Setup-Abhängigkeit nach Präzisionshärtung korrigieren: MariaDB zuerst,
+  Schema im separaten Containerlauf, Webdienst erst nach Erfolg starten;
+  Migrationsfreigaben bleiben wirksam.
+
+- [✅] Dezimalpaket: feste SQL-Skala, verlustfreier JSON-Transport, exakte
+  Formulare/Filter und PostgreSQL-NUMERIC-Dekodierung; Alias- und Grenzwerte,
+  Zwischenüberlauf und kontrollierte Ressourcenfehler werden geprüft.
+  Siehe [Regeln](decimals.de.md) und [Paketprotokoll](release-readiness/0.9.9-exact-decimals.de.md).
+- [🗺️] Danach unabhängige Prüfung des gesamten Datumspfads: Kalendergrenzen,
+  UTC-Dauern, Formulare, APIs und tatsächliche Datenbankspeicherung.
+
 - [🗺️] Sprach-, CLI-, Runtime-, Datenbank-, IDE-, Mail-, Benachrichtigungs- und
   Tutorialumfang einfrieren. Alle angenommenen Anforderungen aus 0.9.1–0.9.8
   umsetzen und die vollständigen technischen Gates an einem unveränderlichen

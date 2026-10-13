@@ -431,7 +431,7 @@ fn read_mariadb_migration_history(database_url: &str) -> Result<Value, DatabaseE
         ),
     )?;
     let mut history: Value =
-        serde_json::from_str(output.trim()).map_err(|error| DatabaseError {
+        zelyra_ast::json::parse(output.trim()).map_err(|error| DatabaseError {
             message: format!("database server returned invalid migration history JSON: {error}"),
         })?;
     if let Some(entries) = history.as_array_mut() {
@@ -640,7 +640,7 @@ fn read_native_migration_history(
         .lines()
         .find(|line| line.trim_start().starts_with('['))
         .unwrap_or(result.trim());
-    serde_json::from_str(json_line).map_err(|error| DatabaseError {
+    zelyra_ast::json::parse(json_line).map_err(|error| DatabaseError {
         message: format!("database returned invalid migration history JSON: {error}"),
     })
 }

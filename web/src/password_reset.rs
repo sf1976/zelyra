@@ -518,7 +518,8 @@ fn decrypt_delivery_payload(encrypted: &str, key: &[u8; 32]) -> Result<serde_jso
     let plaintext = key
         .open_in_place(nonce, Aad::from(b"zelyra-reset-mail-v1"), &mut ciphertext)
         .map_err(|_| "encrypted payload authentication failed".to_owned())?;
-    serde_json::from_slice(plaintext).map_err(|_| "decrypted payload is malformed".to_owned())
+    zelyra_ast::json::parse_slice(plaintext)
+        .map_err(|_| "decrypted payload is malformed".to_owned())
 }
 
 fn validate_public_base_url(value: &str) -> Result<(), String> {
