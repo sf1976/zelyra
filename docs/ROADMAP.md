@@ -27,6 +27,14 @@ principles; the roadmap below tracks what is actually implemented.
 
 ## Current milestones
 
+- [ ] **Planned for 1.0.2 — Compose check in the installer:** Installers detect
+  Docker Compose v2 or newer and distinguish it from obsolete Python Compose
+  v1. Docker remains optional for the core installation. When Compose v2 is
+  missing, interactive Linux installers offer to install the Compose v2 plugin
+  from supported package sources after explicit confirmation; otherwise they
+  show suitable installation guidance. No elevated changes happen without
+  confirmation or in non-interactive runs. The guidance explains that
+  Docker-based tutorials cannot start until Compose is installed.
 - [x] **1.0.1 published-artifact language review:** 80 cases, 100 task repeats,
   600 numeric comparisons and 1,408 calendar/UTC reference cases passed with
   no unexpected findings; published installation/upgrade/rollback and

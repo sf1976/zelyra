@@ -29,6 +29,15 @@ den tatsächlich implementierten Stand.
 
 ## Aktuelle Meilensteine
 
+- [ ] **Geplant für 1.0.2 — Compose-Prüfung im Installer:** Die Installer
+  erkennen Docker Compose v2 oder neuer und unterscheiden es von der veralteten
+  Python-Version v1. Docker bleibt für die Kerninstallation optional. Fehlt
+  Compose v2, bieten interaktive Linux-Installer auf unterstützten
+  Paketquellen nach ausdrücklicher Zustimmung die Installation des Compose-v2-
+  Plugins an; andernfalls zeigen sie passende Installationshinweise. Ohne
+  Zustimmung oder in nicht interaktiven Läufen wird nichts mit erhöhten
+  Rechten geändert. Die Hinweise machen klar, dass Docker-Compose-Tutorials
+  bis zur Installation nicht startbereit sind.
 - [x] **1.0.1 Sprachprüfung des veröffentlichten Artefakts:** 80 Fälle,
   100 Aufgaben-Wiederholungen, 600 Zahlenvergleiche und 1.408 Kalender-/UTC-
   Referenzfälle ohne unerwartete Befunde geprüft; Installation/Update/Rückkehr
