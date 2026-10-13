@@ -63,8 +63,57 @@ across the full calendar range. See runnable
 `tests/temporal-api-e2e.py` tests real HTTP round trips, Date aliases, optional
 values, year boundaries, and 13 invalid inputs.
 
-This verifies calendar/UTC arithmetic and the listed input/HTTP paths.
-Database storage, PostgreSQL temporal codecs, Timestamp scale, and typed SQL
-result consumption are separate remaining technical 0.9.9 gates. The entire
-date path is considered verified only after these pass. A SQL type annotation
-alone currently does not demonstrate an automatically decoded date variable.
+## Native SQL storage in the development branch
+
+| Zelyra | MariaDB/MySQL | PostgreSQL |
+| --- | --- | --- |
+| Date | DATE, years 1000–9999 | DATE, years 0001–9999 |
+| Time | TIME, whole seconds only | TIME(0), whole seconds only |
+| Timestamp | DATETIME(3), UTC convention, years 1000–9999 | TIMESTAMPTZ(3), years 0001–9999 |
+| Duration | signed BIGINT milliseconds | signed BIGINT milliseconds |
+
+Date/Time/Timestamp parameters use native driver values. PostgreSQL receives
+binary days, microseconds of clock time, or UTC epoch values, with explicit
+validation instead of generic strings or Float. PostgreSQL readers reject
+infinity, sub-millisecond timestamps, fractional clock seconds, and timestamp
+without time zone. MariaDB/MySQL date and timestamp parameters below year 1000
+fail before statement execution; this storage limit does not narrow the
+language calendar.
+
+Native runtime connections start in UTC, including a PostgreSQL database whose
+default timezone differs. PostgreSQL URL startup options are preserved, with
+UTC appended. This defines the application connection convention; it does not
+provide local-zone/DST conversion. DATETIME itself has no timezone marker, so
+external writers must also use UTC.
+
+Before `serve` or the first interpreter SQL operation, a read-only metadata
+check verifies declared DATE, whole-second TIME, and millisecond Timestamp
+storage. A missing column, wrong SQL kind, or incompatible time precision is
+rejected. `serve` reports `E-DB-TEMPORAL` at the declared source column; runtime
+execution reports a source-located runtime error. Metadata access is required.
+No database is silently created or migrated by this check.
+
+Older TIMESTAMP/TIMESTAMPTZ columns and scales need a reviewed migration. Use
+`zelyra db plan`, back up the database, and inspect the generated SQL before
+applying it. Converting an old MariaDB TIMESTAMP to DATETIME requires an
+explicit decision about the old connection timezone and stored instants.
+`Timestamp default now` emits CURRENT_TIMESTAMP(3), matching the column and
+retaining milliseconds. Schema inspection retains time precision so a current schema has no false
+migration drift. The storage change also affects auth/reset Timestamp tables.
+
+See [calendar_storage.zyl](../examples/calendar_storage.zyl) and the
+[SQL package evidence](release-readiness/0.9.9-calendar-sql.en.md).
+`tests/temporal-sql-e2e.py` exercises real storage, forms, filters, native function
+parameters, NULLs, pre-1970/post-2038 values, milliseconds, and old-schema errors.
+It owns a separate temporary database and requires a test account able to
+create/drop that database.
+
+## Remaining SQL result work
+
+SQL results currently remain raw rows with type metadata. Their existing text
+representation is retained: MariaDB/MySQL use driver date/datetime text
+(including date-only text at midnight), PostgreSQL UTC timestamp text uses Z.
+The `\N` NULL sentinel and literal text ambiguity also remain. These rows are
+not yet automatically decoded into typed Date/Time/Timestamp variables for
+arithmetic. Typed result consumption/cardinality is a separate mandatory 0.9.9
+gate. Existing language/HTTP JSON formats are unchanged.

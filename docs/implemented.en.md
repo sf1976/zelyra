@@ -341,5 +341,8 @@ Calendar-day arithmetic and UTC milliseconds are checked against independent
 Python references. Forms/APIs reject invalid calendar/clock values; Timestamp
 is bounded to ISO years 0001–9999. API handlers receive real Date/Time/Timestamp/
 Duration values. JSON output stays unchanged; generated clients match it.
-Further SQL storage/result paths remain gates. See [rules](dates.en.md) and
-[evidence](release-readiness/0.9.9-calendar-http.en.md).
+Native Date/Time/UTC Timestamp parameters and millisecond storage are verified
+on MariaDB, MySQL and PostgreSQL. Incompatible schema types/precision fail
+with a source position before application use. Typed SQL result consumption
+remains a gate. See [rules](dates.en.md), [HTTP evidence](release-readiness/0.9.9-calendar-http.en.md)
+and [SQL evidence](release-readiness/0.9.9-calendar-sql.en.md).

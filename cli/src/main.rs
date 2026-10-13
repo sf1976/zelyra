@@ -6366,7 +6366,9 @@ fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> 
                                 || sql_type.contains("TEXT")
                                 || sql_type.contains("CLOB")
                         }
-                        "timestamp" => sql_type.contains("TIMESTAMP") || sql_type == "DATETIME",
+                        "timestamp" => {
+                            sql_type.contains("TIMESTAMP") || sql_type.starts_with("DATETIME")
+                        }
                         _ => false,
                     };
                     if !type_matches || (!may_be_nullable && column.nullable) {
@@ -6511,14 +6513,14 @@ fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> 
                 .iter()
                 .find(|column| column.name == "delivery_retry_at")
                 .is_some_and(|column| {
-                    column.nullable && column.sql_type.eq_ignore_ascii_case("timestamp")
+                    column.nullable && column.sql_type.eq_ignore_ascii_case("datetime(3)")
                 });
             if !delivery_retry_at_is_compatible {
                 diagnostic(
                     path,
                     "E-AUTH-038",
                     &format!(
-                        "authentication password reset table {} requires nullable delivery_retry_at TIMESTAMP",
+                        "authentication password reset table {} requires nullable delivery_retry_at DATETIME(3)",
                         reset_table_name
                     ),
                     auth.span.line,
@@ -7797,6 +7799,9 @@ fn tableview_type_filter_kind(ty: &Type) -> TableViewFilterKind {
         Type::UInt => TableViewFilterKind::Unsigned,
         Type::Float => TableViewFilterKind::Numeric,
         Type::Decimal => TableViewFilterKind::Decimal,
+        Type::Date => TableViewFilterKind::Date,
+        Type::Time => TableViewFilterKind::Time,
+        Type::Timestamp => TableViewFilterKind::Timestamp,
         Type::Named(name) if name == "Money" => TableViewFilterKind::Decimal,
         Type::Named(name) if name == "Id" => TableViewFilterKind::Integer,
         Type::Bool => TableViewFilterKind::Bool,
@@ -7810,7 +7815,13 @@ fn tableview_type_filter_kind(ty: &Type) -> TableViewFilterKind {
 
 fn tableview_sql_filter_kind(sql_type: &str) -> TableViewFilterKind {
     let sql_type = sql_type.to_ascii_uppercase();
-    if sql_type.contains("BOOL") {
+    if sql_type == "DATE" {
+        TableViewFilterKind::Date
+    } else if sql_type == "TIME" || sql_type.starts_with("TIME(") {
+        TableViewFilterKind::Time
+    } else if sql_type.contains("TIMESTAMP") || sql_type.contains("DATETIME") {
+        TableViewFilterKind::Timestamp
+    } else if sql_type.contains("BOOL") {
         TableViewFilterKind::Bool
     } else if sql_type.contains("CHAR") || sql_type.contains("TEXT") {
         TableViewFilterKind::Text
@@ -8378,6 +8389,15 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             if let Err(error) = zelyra_database::validate_decimal_storage(&url, &schema) {
                 let span = decimal_storage_error_span(&program, &error.to_string());
                 diagnostic_with_span(&path, "E-DB-PRECISION", &error.to_string(), span);
+                return ExitCode::from(1);
+            }
+        }
+    }
+    if database_capability_granted {
+        if let Some(url) = database_url_from_program(&program) {
+            if let Err(error) = zelyra_database::validate_temporal_storage(&url, &schema) {
+                let span = decimal_storage_error_span(&program, &error.to_string());
+                diagnostic_with_span(&path, "E-DB-TEMPORAL", &error.to_string(), span);
                 return ExitCode::from(1);
             }
         }

@@ -553,3 +553,13 @@ interpreter's first SQL operation verify declared Decimal/Money/UInt precision
 using read-only metadata. Metadata access is required; a legacy or incompatible
 schema is not silently used or migrated. There is no bypass switch. Existing
 URL precedence and secret rules still apply. See [rules and tests](decimals.en.md).
+
+## DATABASE_URL: date/time on the 0.9.9 development branch
+
+Native runtime connections use UTC; existing PostgreSQL URL startup options are
+preserved with UTC appended. MariaDB/MySQL DATETIME contains no timezone, so
+external writers must use the same UTC convention. Before `serve` or the first
+interpreter SQL operation, read-only metadata verifies declared Date, Time and
+Timestamp storage. Missing columns, wrong kinds and incompatible time precision
+produce source-located errors; metadata access is required. Migrations retain
+explicit review. There is no new switch. See [date rules](dates.en.md).

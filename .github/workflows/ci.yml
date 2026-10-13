@@ -360,11 +360,21 @@ jobs:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
           ZELYRA_BIN: target/debug/zelyra
         run: python3 ./tests/exact-numbers-e2e.py
+      - name: Verify native dates, times, UTC milliseconds, and legacy schemas on MariaDB
+        env:
+          DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+          ZELYRA_BIN: target/debug/zelyra
+        run: python3 ./tests/temporal-sql-e2e.py
       - name: Verify exact decimal forms, filters, APIs, and legacy schemas on PostgreSQL
         env:
           DATABASE_URL: postgres://zelyra_ci:zelyra_ci@127.0.0.1:5432/zelyra_ci
           ZELYRA_BIN: target/debug/zelyra
         run: python3 ./tests/exact-numbers-e2e.py
+      - name: Verify native dates, times, UTC milliseconds, and legacy schemas on PostgreSQL
+        env:
+          DATABASE_URL: postgres://zelyra_ci:zelyra_ci@127.0.0.1:5432/zelyra_ci
+          ZELYRA_BIN: target/debug/zelyra
+        run: python3 ./tests/temporal-sql-e2e.py
       - name: Run PostgreSQL parameterized runtime integration test
         env:
           ZELYRA_POSTGRES_RUNTIME_TEST_URL: postgres://zelyra_ci:zelyra_ci@127.0.0.1:5432/zelyra_ci
@@ -568,3 +578,8 @@ jobs:
           DATABASE_URL: mysql://root:root@127.0.0.1:3306/zelyra_ci
           ZELYRA_BIN: target/debug/zelyra
         run: python3 ./tests/exact-numbers-e2e.py
+      - name: Verify native dates, times, UTC milliseconds, and legacy schemas on MySQL
+        env:
+          DATABASE_URL: mysql://root:root@127.0.0.1:3306/zelyra_ci
+          ZELYRA_BIN: target/debug/zelyra
+        run: python3 ./tests/temporal-sql-e2e.py

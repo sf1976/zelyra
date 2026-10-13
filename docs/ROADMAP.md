@@ -1042,9 +1042,16 @@ language backlog as one 0.9.4 change.
   forms/filters and PostgreSQL NUMERIC decoding; aliases, numeric boundaries,
   intermediate overflow and controlled resource errors are tested.
   See [rules](decimals.en.md) and [package report](release-readiness/0.9.9-exact-decimals.en.md).
-- [🧪] Date review: calendar/UTC references and typed form/HTTP input pass.
-  Real storage, PostgreSQL temporal codecs, and typed downstream SQL operations
-  still require verification/closure. See [evidence](release-readiness/0.9.9-calendar-http.en.md).
+- [✅] Calendar/UTC arithmetic, typed form/HTTP input and native SQL
+  Date/Time/Timestamp parameters/storage pass on MariaDB, MySQL and PostgreSQL;
+  UTC sessions and exact time precision are enforced. See [rules](dates.en.md)
+  and [SQL evidence](release-readiness/0.9.9-calendar-sql.en.md).
+  The SMTP/reset fixture accounts for guarded suppression of superseded
+  delivery jobs and verifies the retained replacement token before continuing.
+  Generated-business readiness checks honor mandatory metadata access before
+  startup, including controlled, redacted failure when the database is absent.
+- [🗺️] Close typed downstream SQL results/cardinality and distinguish NULL
+  from text; raw rows alone do not demonstrate typed calendar operations.
 
 - [🗺️] Freeze language, CLI, runtime, databases, IDE, mail, notification, and
   tutorial scope. Complete every accepted 0.9.1–0.9.8 requirement and run the

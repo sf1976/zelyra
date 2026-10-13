@@ -67,9 +67,61 @@ Kalenderbereich. Ein ausführbares Beispiel ist
 `tests/temporal-api-e2e.py` prüft reale HTTP-Rundläufe, Date-Aliasse, optionale
 Werte, die Jahresgrenzen und 13 ungültige Eingaben.
 
-Diese Prüfung bestätigt die Kalender-/UTC-Rechnung und die aufgeführten
-Eingabe-/HTTP-Pfade. Datenbank-Speicherung, PostgreSQL-Datumscodecs,
-Timestamp-Skalierung und typisierte SQL-Ergebnisverwendung sind eigene,
-noch offene technische 0.9.9-Gates. Der gesamte Datumspfad wird erst nach
-Schließen dieser Punkte als geprüft bezeichnet. Eine SQL-Typannotation allein
-ist derzeit kein Nachweis einer automatisch dekodierten Datumsvariable.
+## Native SQL-Speicherung im Entwicklungszweig
+
+| Zelyra | MariaDB/MySQL | PostgreSQL |
+| --- | --- | --- |
+| Date | DATE, Jahre 1000–9999 | DATE, Jahre 0001–9999 |
+| Time | TIME, ausschließlich ganze Sekunden | TIME(0), ausschließlich ganze Sekunden |
+| Timestamp | DATETIME(3), UTC-Konvention, Jahre 1000–9999 | TIMESTAMPTZ(3), Jahre 0001–9999 |
+| Duration | vorzeichenbehaftete BIGINT-Millisekunden | vorzeichenbehaftete BIGINT-Millisekunden |
+
+Date-/Time-/Timestamp-Parameter verwenden native Treiberwerte. PostgreSQL erhält
+binäre Tage, Mikrosekunden der Uhrzeit oder UTC-Epochenwerte mit expliziter
+Prüfung. Es werden keine allgemeinen Strings oder Float-Zwischenwerte benutzt.
+PostgreSQL-Leser weisen Unendlichkeit, Zeitstempel unter Millisekundenauflösung,
+Bruchteile bei Uhrzeitsekunden und Timestamp ohne Zeitzone ab. MariaDB-/MySQL-
+Datums- und Zeitstempelparameter vor Jahr 1000 scheitern vor der Anweisung;
+diese Speichergrenze verkleinert den Kalenderbereich der Sprache nicht.
+
+Native Runtime-Verbindungen starten in UTC, auch wenn die PostgreSQL-Datenbank
+eine andere Standardzeitzone hat. Bestehende PostgreSQL-URL-Startoptionen bleiben
+erhalten; UTC wird ergänzt. Das ist die Konvention der Anwendungsverbindung;
+es gibt weiterhin keine lokale Zeitzonen-/Sommerzeitumrechnung. DATETIME besitzt
+selbst keine Zeitzonenmarkierung, daher müssen externe Schreiber ebenfalls UTC
+verwenden.
+
+Vor `serve` oder der ersten Interpreter-SQL-Operation prüft ein schreibfreier
+Metadatenzugriff die deklarierten DATE-, ganzsekündigen TIME- und millisekündigen
+Timestamp-Spalten. Fehlende Spalten, falsche SQL-Typen oder unpassende
+Zeitpräzision werden abgewiesen. `serve` meldet `E-DB-TEMPORAL` an der
+Quellposition der Spalte; bei Programmausführung entsteht ein Runtime-Fehler
+mit Fundstelle. Metadatenrechte sind nötig. Die Prüfung legt keine Datenbank
+still an und führt keine Migration aus.
+
+Ältere TIMESTAMP-/TIMESTAMPTZ-Spalten und Skalen benötigen eine geprüfte
+Migration. Mit `zelyra db plan` beginnen, die Datenbank sichern und das erzeugte
+SQL vor Anwendung prüfen. Bei MariaDB-TIMESTAMP → DATETIME muss die bisherige
+Verbindungszeitzone und Bedeutung der gespeicherten Zeitpunkte ausdrücklich
+berücksichtigt werden. `Timestamp default now` erzeugt CURRENT_TIMESTAMP(3), passend zur Spalte und
+mit Millisekunden. Die Schema-Inspektion erhält die Zeitpräzision; ein
+aktuelles Schema zeigt keine falsche Migrationsabweichung. Die Änderung betrifft
+auch Timestamp-Spalten für Authentifizierung und Passwort-Reset.
+
+Siehe [calendar_storage.zyl](../examples/calendar_storage.zyl) und die
+[SQL-Paketnachweise](release-readiness/0.9.9-calendar-sql.de.md).
+`tests/temporal-sql-e2e.py` prüft reale Speicherung, Formulare, Filter, native
+Funktionsparameter, NULL, Werte vor 1970/nach 2038, Millisekunden und alte
+Schemas. Die Probe besitzt eine eigene temporäre Datenbank; der Testzugang
+muss diese Datenbank anlegen und löschen dürfen.
+
+## Verbleibende SQL-Ergebnisarbeit
+
+SQL-Ergebnisse bleiben derzeit Rohzeilen mit Typmetadaten. Ihre bestehende
+Textdarstellung bleibt erhalten: MariaDB/MySQL verwenden Treibertext für
+Datum/Datetime, einschließlich reiner Datumsausgabe bei Mitternacht;
+PostgreSQL-UTC-Zeitstempel verwenden Z. Auch die Mehrdeutigkeit zwischen dem
+NULL-Marker `\N` und wörtlichem Text bleibt offen. Diese Zeilen werden noch
+nicht automatisch zu Date-/Time-/Timestamp-Variablen für Folgeoperationen
+dekodiert. Typisierte Ergebnisverwendung/Kardinalität ist ein eigenes
+verbindliches 0.9.9-Gate. Sprach-/HTTP-JSON-Formate bleiben unverändert.

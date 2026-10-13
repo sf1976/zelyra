@@ -1058,10 +1058,16 @@ IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
   Formulare/Filter und PostgreSQL-NUMERIC-Dekodierung; Alias- und Grenzwerte,
   Zwischenüberlauf und kontrollierte Ressourcenfehler werden geprüft.
   Siehe [Regeln](decimals.de.md) und [Paketprotokoll](release-readiness/0.9.9-exact-decimals.de.md).
-- [🧪] Datumsprüfung: Kalender-/UTC-Referenzwerte und typisierte Formular-/
-  HTTP-Eingaben bestehen. Reale Speicherung, PostgreSQL-Datumscodecs und
-  typisierte SQL-Folgeoperationen müssen noch geprüft/geschlossen werden.
-  Siehe [Nachweise](release-readiness/0.9.9-calendar-http.de.md).
+- [✅] Kalender-/UTC-Rechnung, typisierte Formular-/HTTP-Eingaben und native
+  SQL-Date-/Time-/Timestamp-Parameter/Speicherung bestehen auf MariaDB, MySQL
+  und PostgreSQL; UTC-Sitzungen und exakte Zeitpräzision werden geprüft.
+  Siehe [Regeln](dates.de.md) und [SQL-Nachweise](release-readiness/0.9.9-calendar-sql.de.md).
+  Die SMTP-/Reset-Fixture berücksichtigt unterdrückte ersetzte Zustelljobs
+  und prüft vor dem Fortsetzen das tatsächlich gespeicherte Ersatztoken.
+  Business-Readiness-Prüfungen beachten den nötigen Metadatenzugriff vor dem
+  Start samt kontrolliertem, redigiertem Fehler bei unerreichbarer Datenbank.
+- [🗺️] Typisierte SQL-Folgeergebnisse/Kardinalität schließen und NULL von Text
+  unterscheiden; Rohzeilen belegen noch keine typisierten Kalenderoperationen.
 
 - [🗺️] Sprach-, CLI-, Runtime-, Datenbank-, IDE-, Mail-, Benachrichtigungs- und
   Tutorialumfang einfrieren. Alle angenommenen Anforderungen aus 0.9.1–0.9.8

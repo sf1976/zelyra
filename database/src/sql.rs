@@ -1155,7 +1155,11 @@ fn sql_type_to_type(sql_type: &str) -> Type {
         Type::UInt
     } else if upper.contains("DECIMAL") || upper.contains("NUMERIC") {
         Type::Decimal
-    } else if upper.contains("DATE") || upper.contains("TIME") {
+    } else if upper == "DATE" {
+        Type::Date
+    } else if upper == "TIME" || upper.starts_with("TIME(") {
+        Type::Time
+    } else if upper.contains("TIMESTAMP") || upper.contains("DATETIME") {
         Type::Timestamp
     } else {
         Type::Int
@@ -1369,6 +1373,31 @@ mod tests {
         .unwrap())
         .unwrap();
         build_schema(&program).unwrap()
+    }
+
+    #[test]
+    fn calendar_date_and_time_sql_parameters_use_their_declared_types() {
+        let program = parse(
+            &lex(
+                r#"table dates { id: Id primary day: Date required clock: Time required }
+            fn load(day: Date, clock: Time) uses Database {
+                rows = sql<Date[]> { SELECT day FROM dates WHERE day = :day AND clock = :clock }
+            } fn main() {}"#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let schema = build_schema(&program).unwrap();
+        assert!(check_program(&program, &schema).is_ok());
+        for wrong_type in ["String", "Int", "Timestamp", "Time"] {
+            let source = format!("table dates {{ id: Id primary day: Date required }} fn load(day: {wrong_type}) uses Database {{ rows = sql<Date[]> {{ SELECT day FROM dates WHERE day = :day }} }} fn main() {{}}");
+            let program = parse(&lex(&source).unwrap()).unwrap();
+            let schema = build_schema(&program).unwrap();
+            assert!(
+                check_program(&program, &schema).is_err(),
+                "accepted {wrong_type} as Date SQL parameter"
+            );
+        }
     }
 
     #[test]

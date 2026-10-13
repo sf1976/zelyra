@@ -374,5 +374,9 @@ Kalender-Tagesrechnung und UTC-Millisekunden sind mit unabhängigen Python-
 Referenzen geprüft. Formulare und APIs weisen ungültige Kalender-/Uhrzeitwerte
 ab; Timestamp ist auf ISO-Jahre 0001–9999 begrenzt. API-Handler erhalten echte
 Date-/Time-/Timestamp-/Duration-Werte. JSON-Ausgaben bleiben unverändert;
-generierte Clients werden daran angepasst. Weitere SQL-Speicher-/Ergebnispfade
-bleiben Gates. Siehe [Regeln](dates.de.md) und [Nachweise](release-readiness/0.9.9-calendar-http.de.md).
+generierte Clients werden daran angepasst. Native Date-/Time-/UTC-Timestamp-
+Parameter und Millisekundenspeicherung sind auf MariaDB, MySQL und PostgreSQL
+geprüft. Falsche Speichertypen/Präzision scheitern vor Anwendung mit Fundstelle.
+Typisierte SQL-Ergebnisverwendung bleibt ein Gate. Siehe [Regeln](dates.de.md),
+[HTTP-Nachweise](release-readiness/0.9.9-calendar-http.de.md) und
+[SQL-Nachweise](release-readiness/0.9.9-calendar-sql.de.md).

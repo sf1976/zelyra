@@ -8270,6 +8270,8 @@ impl<'program> Interpreter<'program> {
                 })?;
                 zelyra_database::validate_decimal_storage(url, schema)
                     .map_err(|error| self.runtime_error(span, error.to_string()))?;
+                zelyra_database::validate_temporal_storage(url, schema)
+                    .map_err(|error| self.runtime_error(span, error.to_string()))?;
             }
             self.storage_checked = true;
         }
@@ -12028,8 +12030,9 @@ fn value_to_query_value(
         Value::Bool(value) => Ok(QueryValue::Bool(*value)),
         Value::String(value) => Ok(QueryValue::String(value.clone())),
         Value::Char(value) => Ok(QueryValue::String(value.to_string())),
-        Value::Timestamp(value) => Ok(QueryValue::Int(*value)),
-        Value::Date(value) | Value::Time(value) => Ok(QueryValue::String(value.clone())),
+        Value::Timestamp(value) => Ok(QueryValue::Timestamp(*value)),
+        Value::Date(value) => Ok(QueryValue::Date(value.clone())),
+        Value::Time(value) => Ok(QueryValue::Time(value.clone())),
         Value::Duration(value) => Ok(QueryValue::Int(*value)),
         Value::Option(None) | Value::Unit => Ok(QueryValue::Null),
         Value::Option(Some(value)) => value_to_query_value(value, span),

@@ -624,3 +624,14 @@ Metadatenzugriff ist erforderlich; ein altes oder inkompatibles Schema wird
 nicht still verwendet oder migriert. Es gibt keinen Abschaltschalter.
 Die bestehenden URL-Prioritäts- und Geheimnisregeln bleiben wirksam.
 Siehe [Regeln und Tests](decimals.de.md).
+
+## DATABASE_URL: Datum/Uhrzeit im 0.9.9-Entwicklungszweig
+
+Native Runtime-Verbindungen verwenden UTC; PostgreSQL-URL-Startoptionen bleiben
+erhalten und werden um UTC ergänzt. MariaDB/MySQL DATETIME enthält keine
+Zeitzone; externe Schreiber müssen dieselbe UTC-Konvention verwenden. Date-,
+Time- und Timestamp-Speicher werden vor `serve` und erster Interpreter-SQL-
+Ausführung schreibfrei gegen die deklarierte Struktur geprüft. Fehlende Spalten,
+falsche Typen und unpassende Zeitpräzision werden mit Fundstelle abgewiesen;
+Metadatenzugriff ist erforderlich. Migrationen bleiben ausdrücklich zu prüfen.
+Es gibt keinen neuen Schalter. Siehe [Datumsregeln](dates.de.md).
