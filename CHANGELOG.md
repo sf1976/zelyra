@@ -19,6 +19,11 @@ releases follow Semantic Versioning independently of the language line.
   Ubuntu-Rechtefehler unter `/var/crash` lösen keinen Docker-Gruppenhinweis mehr
   aus. Projektdateien, Zugangsdaten und Datenbank-Volumes bleiben erhalten.
 
+- Fix Studio Run entry-point selection: use the project tree instead of an
+  undefined `files` variable, restoring console execution and web preview.
+  / Studio-Ausführen korrigieren: Projekteinstieg anhand des Dateibaums statt
+  der undefinierten Variablen `files` wählen; Konsole und Webvorschau starten.
+
 ## 1.0.0 — 2026-10-13
 
 - First major productive release of Zelyra. All deferred human onboarding and

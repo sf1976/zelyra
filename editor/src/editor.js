@@ -2248,9 +2248,9 @@ async function runProject() {
   if (!dialog.open) dialog.showModal();
   announce(t("runStarting"));
   try {
-    const entryPath = files.includes("main.zyl")
+    const entryPath = treeFiles.includes("main.zyl")
       ? "main.zyl"
-      : (activePath && activePath.endsWith(".zyl") ? activePath : (files.find(f => f.endsWith(".zyl")) || "main.zyl"));
+      : (activePath && activePath.endsWith(".zyl") ? activePath : (treeFiles.find(f => f.endsWith(".zyl")) || "main.zyl"));
     const result = await api("run", { method: "POST", body: JSON.stringify({ path: entryPath }) });
     const webLink = $("run-output-web-link");
     if (result.webApp && result.webUrl) {

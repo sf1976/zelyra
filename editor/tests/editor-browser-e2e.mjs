@@ -442,7 +442,11 @@ try {
     body: JSON.stringify({ success: true, exitCode: 0, timedOut: false, durationMs: 1, stdout: "3\n", stderr: "", truncated: false }),
   }));
   await page.locator("#run-button").click();
-  await page.waitForFunction(() => document.querySelector("#run-output-state")?.dataset.kind === "success");
+  try {
+    await page.waitForFunction(() => document.querySelector("#run-output-state")?.dataset.kind === "success");
+  } catch (error) {
+    throw new Error(`${error.message}\nrun state: ${await page.locator("#run-output-state").textContent()}\nstatus: ${await page.locator("#status-message").textContent()}\nbrowser errors: ${JSON.stringify(browserErrors)}`);
+  }
   const consoleOutput = await page.locator("#run-output-content").textContent();
   assert.match(consoleOutput, /3/, "Studio Run must display console output");
   assert.match(consoleOutput, /interactive input|interaktive Eingabe/i, "Studio must explain that stdin is unavailable");

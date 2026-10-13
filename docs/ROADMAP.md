@@ -30,7 +30,8 @@ principles; the roadmap below tracks what is actually implemented.
 - [x] **1.0.1 tutorial startup fix:** Require Compose v2 or newer and reject
   Python Compose v1 before startup. Distinguish `ContainerConfig` failures and
   Ubuntu crash-report permissions from Docker socket access. Retain generated
-  projects and database volumes for retry; see the [tutorial guide](tutorials/invoice.en.md).
+  projects and database volumes for retry. Fix Studio Run entry-point selection
+  to restore console execution and web previews; see the [tutorial guide](tutorials/invoice.en.md).
 - [x] **0.8.0 stably released:** Zelyra Studio includes a local read-only
   database map for MariaDB and PostgreSQL plus guided CRUD source preview,
   compiler checking, and explicit apply. It also includes a bounded MariaDB
