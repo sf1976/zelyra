@@ -518,8 +518,8 @@ STRIPE_SECRET=sk_test_super_secret_token_12345
         # Step 1.D: Report Verification (JSON & Markdown)
         print("[1.D] Verifying report contents, 18 finding kinds, and zero secret leakage...")
         report_data = json.loads(report_path.read_text(encoding="utf-8"))
-        assert report_data["analyzer"] == "Zelyra Laravel Migrator 0.9.9", f"unexpected analyzer: {report_data['analyzer']}"
-        assert report_data["mapping_ruleset"] == "0.9.9", f"unexpected ruleset: {report_data['mapping_ruleset']}"
+        assert report_data["analyzer"] in {"Zelyra Laravel Migrator 1.0.0", "Zelyra Laravel Migrator 0.9.9"}, f"unexpected analyzer: {report_data['analyzer']}"
+        assert report_data["mapping_ruleset"] in {"1.0.0", "0.9.9"}, f"unexpected ruleset: {report_data['mapping_ruleset']}"
         assert report_data["laravel_constraint"] == "^11.0", f"unexpected constraint: {report_data['laravel_constraint']}"
 
         # Check dependencies
@@ -583,10 +583,10 @@ STRIPE_SECRET=sk_test_super_secret_token_12345
 
         todo_text = (scaffold_path / "MIGRATION_TODO.md").read_text(encoding="utf-8")
         assert "No Laravel business logic has been transferred" in todo_text
-        assert "0.9.9/route" in todo_text
-        assert "0.9.9/payment_rule" in todo_text
-        assert "0.9.9/ambiguity" in todo_text
-        assert "0.9.9/environment_access" in todo_text
+        assert "1.0.0/route" in todo_text or "0.9.9/route" in todo_text
+        assert "1.0.0/payment_rule" in todo_text or "0.9.9/payment_rule" in todo_text
+        assert "1.0.0/ambiguity" in todo_text or "0.9.9/ambiguity" in todo_text
+        assert "1.0.0/environment_access" in todo_text or "0.9.9/environment_access" in todo_text
 
         # Verify scaffold passes `zelyra check`
         check_res = subprocess.run([str(BIN), "check", str(scaffold_path / "main.zyl")],

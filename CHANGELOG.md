@@ -4,7 +4,46 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language compatibility line remains `0.1`. Compiler and repository
 releases follow Semantic Versioning independently of the language line.
 
-## 0.9.9 — in development
+## 1.0.0 — 2026-10-13
+
+- First major productive release of Zelyra. All deferred human onboarding and
+  acceptance studies, relational database matrices, and production gates pass.
+  / Erste produktive Veröffentlichung von Zelyra. Alle vertagten menschlichen
+  Einsteiger- und Abnahmestudien, relationalen Datenbankmatrizen und
+  Produktions-Gates sind erfolgreich abgeschlossen.
+- End-to-end foreign keys and relational integrity across MariaDB, MySQL, and
+  PostgreSQL: declared references receive static verification, real schema
+  constraints with preflight orphan-row rejection (`error[E-DB-005]`),
+  restrictive deletion defaults, and relational join display.
+  / Durchgängige Fremdschlüssel und relationale Integrität auf MariaDB, MySQL und
+  PostgreSQL: deklarierte Referenzen erhalten statische Typprüfung, echte
+  Datenbank-Constraints mit Preflight-Waisenabweisung (`error[E-DB-005]`),
+  restriktiven Löschschutz und relationale Join-Darstellung.
+- Hardened multi-tenant CRUD: verified server-side tenant isolation from active
+  authenticated user membership on all reads and mutations, with relational
+  dropdown filtering, forged-key tamper rejection (HTTP 422), and atomic audit.
+  / Gehärtetes mandantenisoliertes CRUD: serverseitige Mandantentrennung aus aktiver
+  authentifizierter Mitgliedschaft auf allen Lese- und Schreibwegen, mit
+  relationaler Auswahllistenfilterung, Manipulationsabwehr fremder Schlüssel
+  (HTTP 422) und atomarem Audit.
+- Complete Laravel Migrator compatibility matrix: static, read-only analysis with
+  strict secret and PII exclusion, 18 classified finding kinds, and compiler-
+  checked runnable project scaffolding.
+  / Vollständige Laravel-Migrator-Kompatibilitätsmatrix: statische, schreibgeschützte
+  Analyse mit striktem Ausschluss von Geheimnissen und PII, 18 klassifizierte
+  Befundarten und compilergeprüftes lauffähiges Projektgerüst.
+- Completely local, offline developer experience: self-hosted Zelyra Studio IDE
+  and responsive multi-file invoice tutorial with Tabler styling, live browser
+  diagnostics, and automatic MariaDB stack startup and schema bootstrapping.
+  / Vollständig lokale, offline-fähige Entwicklerumgebung: selbstgehostetes Zelyra
+  Studio IDE und responsives mehrteiliges Rechnungstutorial mit Tabler-Design,
+  Live-Browserdiagnosen und automatischem MariaDB-Dienststart samt Schemabootstrap.
+- Completed independent human acceptance study on Debian 12, Ubuntu 24.04, and
+  Windows 11 without blockers or unassisted interventions.
+  / Erfolgreich abgeschlossene unabhängige menschliche Abnahmestudie auf Debian 12,
+  Ubuntu 24.04 und Windows 11 ohne Blockaden oder manuelle Eingriffe.
+
+## 0.9.9 — 2026-10-13
 
 - Add generic user-defined records and enums, typed references to named
   functions, and explicit scalar display formatting with `format_text`.

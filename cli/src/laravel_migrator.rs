@@ -9,8 +9,8 @@ const MAX_SOURCE_FILES: usize = 10_000;
 const MAX_SOURCE_FILE_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_TOTAL_SOURCE_BYTES: u64 = 256 * 1024 * 1024;
 const MAX_DIRECTORY_DEPTH: usize = 64;
-const ANALYZER_VERSION: &str = "0.9.9";
-const MAPPING_RULESET_VERSION: &str = "0.9.9";
+const ANALYZER_VERSION: &str = "1.0.0";
+const MAPPING_RULESET_VERSION: &str = "1.0.0";
 
 #[derive(Clone)]
 struct Finding {
@@ -943,8 +943,8 @@ mod tests {
         let analysis = analyze(&root, &report, "json").unwrap();
         let body = fs::read_to_string(&analysis.report_path).unwrap();
         assert!(body.contains("/orders"));
-        assert!(body.contains("Zelyra Laravel Migrator 0.9.9"));
-        assert!(body.contains("\"mapping_ruleset\": \"0.9.9\""));
+        assert!(body.contains("Zelyra Laravel Migrator 1.0.0"));
+        assert!(body.contains("\"mapping_ruleset\": \"1.0.0\""));
         assert!(!body.contains("must-not-be-read-or-reported"));
         assert!(!body.contains("/secret"));
         assert!(analysis.counts.total >= 1);

@@ -3341,7 +3341,11 @@ fn zelyra_executable() -> Result<PathBuf, (u16, String)> {
     if let Ok(current) = env::current_exe() {
         if let Some(name) = current.file_name().and_then(|n| n.to_str()) {
             if name.starts_with("zelyra-") {
-                if let Some(bin) = current.parent().and_then(|p| p.parent()).map(|p| p.join("zelyra")) {
+                if let Some(bin) = current
+                    .parent()
+                    .and_then(|p| p.parent())
+                    .map(|p| p.join("zelyra"))
+                {
                     if bin.is_file() {
                         return Ok(bin);
                     }
@@ -3463,7 +3467,9 @@ fn start_editor_web_app(
                     let addr_str = format!("{host}:{port}");
                     if let Ok(sock_addr) = addr_str.parse() {
                         for _ in 0..10 {
-                            if TcpStream::connect_timeout(&sock_addr, Duration::from_millis(200)).is_ok() {
+                            if TcpStream::connect_timeout(&sock_addr, Duration::from_millis(200))
+                                .is_ok()
+                            {
                                 break;
                             }
                             thread::sleep(Duration::from_millis(200));
@@ -3551,8 +3557,14 @@ fn start_editor_web_app(
             let (stdout_bytes, stdout_truncated) = collect_editor_output(stdout_reader);
             let (stderr_bytes, stderr_truncated) = collect_editor_output(stderr_reader);
             let secrets = editor_secret_values(state);
-            let stdout = redact_editor_secrets(String::from_utf8_lossy(&stdout_bytes).into_owned(), &secrets);
-            let mut stderr = redact_editor_secrets(String::from_utf8_lossy(&stderr_bytes).into_owned(), &secrets);
+            let stdout = redact_editor_secrets(
+                String::from_utf8_lossy(&stdout_bytes).into_owned(),
+                &secrets,
+            );
+            let mut stderr = redact_editor_secrets(
+                String::from_utf8_lossy(&stderr_bytes).into_owned(),
+                &secrets,
+            );
             if stderr.contains("E-DB-PRECISION")
                 || stderr.contains("could not verify declared Decimal/Money/UInt storage")
                 || stderr.contains("fixed-point storage")
@@ -3598,8 +3610,14 @@ fn start_editor_web_app(
             let (stdout_bytes, stdout_truncated) = collect_editor_output(stdout_reader);
             let (stderr_bytes, stderr_truncated) = collect_editor_output(stderr_reader);
             let secrets = editor_secret_values(state);
-            let stdout = redact_editor_secrets(String::from_utf8_lossy(&stdout_bytes).into_owned(), &secrets);
-            let mut stderr = redact_editor_secrets(String::from_utf8_lossy(&stderr_bytes).into_owned(), &secrets);
+            let stdout = redact_editor_secrets(
+                String::from_utf8_lossy(&stdout_bytes).into_owned(),
+                &secrets,
+            );
+            let mut stderr = redact_editor_secrets(
+                String::from_utf8_lossy(&stderr_bytes).into_owned(),
+                &secrets,
+            );
             if stderr.is_empty() {
                 stderr = "Web application did not become ready within 10 seconds; check project and database configuration.".to_string();
             }
@@ -4702,7 +4720,8 @@ fn main() {}
         fs::write(
             state.root.join("zelyra.toml"),
             "name = \"test\"\n\n[capabilities]\ndatabase = true\n",
-        ).expect("write config");
+        )
+        .expect("write config");
         let source = "database main { engine: mariadb }\ntable items { id: Id primary auto unit_price: Decimal required }\npage \"/\" { html { <h1>Test</h1> } }\n";
         fs::write(&path, source).expect("write web fixture");
         fs::write(
