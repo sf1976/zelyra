@@ -463,16 +463,10 @@ fn format_typescript_operation(output: &mut String, api: &zelyra_ast::ApiDef) {
 
 pub(super) fn typescript_type(ty: &Type) -> String {
     match ty {
-        Type::Int | Type::UInt | Type::Float => "number".into(),
+        Type::Int | Type::UInt | Type::Float | Type::Timestamp | Type::Duration => "number".into(),
         Type::Decimal => "string".into(),
         Type::Bool => "boolean".into(),
-        Type::String
-        | Type::Char
-        | Type::Bytes
-        | Type::Timestamp
-        | Type::Date
-        | Type::Time
-        | Type::Duration => "string".into(),
+        Type::String | Type::Char | Type::Bytes | Type::Date | Type::Time => "string".into(),
         Type::Unit => "void".into(),
         Type::Option(inner) => format!("{} | null", typescript_type(inner)),
         Type::Result(ok, _) => typescript_type(ok),
@@ -576,6 +570,10 @@ pub(super) fn openapi_schema(ty: &Type) -> String {
         Type::Float => "{\"type\":\"number\"}".into(),
         Type::Decimal => "{\"type\":\"string\",\"format\":\"decimal\"}".into(),
         Type::Bool => "{\"type\":\"boolean\"}".into(),
+        Type::Date => "{\"type\":\"string\",\"format\":\"date\"}".into(),
+        Type::Time => "{\"type\":\"string\",\"format\":\"time\"}".into(),
+        Type::Timestamp => "{\"type\":\"integer\",\"format\":\"int64\",\"description\":\"UTC Unix milliseconds within years 0001 through 9999\"}".into(),
+        Type::Duration => "{\"type\":\"integer\",\"format\":\"int64\",\"description\":\"Signed duration in milliseconds\"}".into(),
         Type::Array(inner) => format!("{{\"type\":\"array\",\"items\":{}}}", openapi_schema(inner)),
         Type::Map(_, value) => format!(
             "{{\"type\":\"object\",\"additionalProperties\":{}}}",

@@ -334,3 +334,12 @@ bounded exact intermediate; remainder at the signed minimum no longer panics.
 JSON outputs remain decimal strings. See the [full rules](decimals.en.md) and
 [example](../examples/decimal_money.zyl). This does not establish complete
 PostgreSQL CRUD/auth parity or production approval.
+
+## Date/time boundaries on the development branch
+
+Calendar-day arithmetic and UTC milliseconds are checked against independent
+Python references. Forms/APIs reject invalid calendar/clock values; Timestamp
+is bounded to ISO years 0001–9999. API handlers receive real Date/Time/Timestamp/
+Duration values. JSON output stays unchanged; generated clients match it.
+Further SQL storage/result paths remain gates. See [rules](dates.en.md) and
+[evidence](release-readiness/0.9.9-calendar-http.en.md).

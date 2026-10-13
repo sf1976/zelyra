@@ -181,6 +181,16 @@ pub fn field_value_type(
         .and_then(|table| find_column(table, &field.name))
         .map(|column| column.sql_type.as_str());
     let resolved = match sql_type {
+        Some("DATE") => Type::Date,
+        Some("TIME") => Type::Time,
+        Some("TIMESTAMP" | "TIMESTAMPTZ") => Type::Timestamp,
+        Some(value)
+            if value.starts_with("TIMESTAMP(")
+                || value.starts_with("TIMESTAMPTZ(")
+                || value.starts_with("DATETIME") =>
+        {
+            Type::Timestamp
+        }
         Some("DECIMAL(19,4)" | "NUMERIC(19,4)") => Type::Named("Money".into()),
         Some("DECIMAL(20,0)" | "NUMERIC(20,0)") => Type::UInt,
         Some(value) if value.starts_with("DECIMAL(") || value.starts_with("NUMERIC(") => {
@@ -329,6 +339,10 @@ fn type_error(ty: &Type, value: &str) -> Option<&'static str> {
                 "must be an exact Money amount with at most 15 integer and 4 fractional digits",
             )
         }
+        Type::Date => (!zelyra_ast::temporal::valid_date(value)).then_some("must be a valid Date in YYYY-MM-DD format"),
+        Type::Time => (!zelyra_ast::temporal::valid_time(value)).then_some("must be a valid Time in HH:MM:SS format"),
+        Type::Timestamp => zelyra_ast::temporal::parse_timestamp_input(value).is_none().then_some("must be a Timestamp in UTC ISO format or Unix milliseconds within years 0001 through 9999"),
+        Type::Duration => value.parse::<i64>().is_err().then_some("must be an integer duration in milliseconds"),
         Type::Bool => {
             (!matches!(value, "true" | "false" | "1" | "0")).then_some("must be true or false")
         }
@@ -381,6 +395,32 @@ mod tests {
             actions: Vec::new(),
             span: Span::default(),
         }
+    }
+
+    #[test]
+    fn temporal_form_fields_reject_invalid_calendar_and_clock_values() {
+        for value in [
+            "",
+            "0000-01-01",
+            "1900-02-29",
+            "2026-02-30",
+            "2026-13-01",
+            "2026-1-01",
+            "2026-01-00",
+        ] {
+            assert!(
+                type_error(&Type::Date, value).is_some(),
+                "accepted Date: {value}"
+            );
+        }
+        for value in ["24:00:00", "12:60:00", "23:59:60", "1:02:03", "12:00:00Z"] {
+            assert!(
+                type_error(&Type::Time, value).is_some(),
+                "accepted Time: {value}"
+            );
+        }
+        assert!(type_error(&Type::Date, "2000-02-29").is_none());
+        assert!(type_error(&Type::Time, "23:59:59").is_none());
     }
 
     #[test]

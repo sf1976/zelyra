@@ -8970,6 +8970,15 @@ fn api_value_json(
                 .map(RuntimeValue::Decimal)
                 .ok_or_else(|| "invalid exact Decimal JSON value".into())
         }
+        Type::Date => value.as_str().filter(|value| zelyra_ast::temporal::valid_date(value))
+            .map(|value| RuntimeValue::Date(value.into())).ok_or_else(|| "invalid Date JSON value; expected YYYY-MM-DD".into()),
+        Type::Time => value.as_str().filter(|value| zelyra_ast::temporal::valid_time(value))
+            .map(|value| RuntimeValue::Time(value.into())).ok_or_else(|| "invalid Time JSON value; expected HH:MM:SS".into()),
+        Type::Timestamp => value.as_i64().filter(|value| zelyra_ast::temporal::valid_timestamp_millis(*value))
+            .or_else(|| value.as_str().and_then(zelyra_ast::temporal::parse_timestamp_input))
+            .map(RuntimeValue::Timestamp).ok_or_else(|| "invalid Timestamp JSON value; expected UTC ISO text or Unix milliseconds within years 0001 through 9999".into()),
+        Type::Duration => value.as_i64().or_else(|| value.as_str().and_then(|value| value.parse().ok()))
+            .map(RuntimeValue::Duration).ok_or_else(|| "invalid Duration JSON value; expected integer milliseconds".into()),
         Type::Bool => value
             .as_bool()
             .or_else(|| {

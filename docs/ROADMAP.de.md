@@ -1058,8 +1058,10 @@ IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
   Formulare/Filter und PostgreSQL-NUMERIC-Dekodierung; Alias- und Grenzwerte,
   Zwischenüberlauf und kontrollierte Ressourcenfehler werden geprüft.
   Siehe [Regeln](decimals.de.md) und [Paketprotokoll](release-readiness/0.9.9-exact-decimals.de.md).
-- [🗺️] Danach unabhängige Prüfung des gesamten Datumspfads: Kalendergrenzen,
-  UTC-Dauern, Formulare, APIs und tatsächliche Datenbankspeicherung.
+- [🧪] Datumsprüfung: Kalender-/UTC-Referenzwerte und typisierte Formular-/
+  HTTP-Eingaben bestehen. Reale Speicherung, PostgreSQL-Datumscodecs und
+  typisierte SQL-Folgeoperationen müssen noch geprüft/geschlossen werden.
+  Siehe [Nachweise](release-readiness/0.9.9-calendar-http.de.md).
 
 - [🗺️] Sprach-, CLI-, Runtime-, Datenbank-, IDE-, Mail-, Benachrichtigungs- und
   Tutorialumfang einfrieren. Alle angenommenen Anforderungen aus 0.9.1–0.9.8

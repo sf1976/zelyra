@@ -1042,8 +1042,9 @@ language backlog as one 0.9.4 change.
   forms/filters and PostgreSQL NUMERIC decoding; aliases, numeric boundaries,
   intermediate overflow and controlled resource errors are tested.
   See [rules](decimals.en.md) and [package report](release-readiness/0.9.9-exact-decimals.en.md).
-- [🗺️] Next, independently review the entire date path: calendar boundaries,
-  UTC durations, forms, APIs, and actual database storage.
+- [🧪] Date review: calendar/UTC references and typed form/HTTP input pass.
+  Real storage, PostgreSQL temporal codecs, and typed downstream SQL operations
+  still require verification/closure. See [evidence](release-readiness/0.9.9-calendar-http.en.md).
 
 - [🗺️] Freeze language, CLI, runtime, databases, IDE, mail, notification, and
   tutorial scope. Complete every accepted 0.9.1–0.9.8 requirement and run the

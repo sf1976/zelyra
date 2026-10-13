@@ -95,3 +95,7 @@ or conversion is implemented.
 Additional exact Decimal/Money boundaries, SQL scales, and alias rules:
 [Decimal and monetary amounts](../../docs/decimals.en.md). Boundary regressions
 cover scaled minimum/maximum values, valid wide intermediates, and controlled errors.
+
+Current Date/Time/Timestamp/Duration rules and independent evidence:
+[Dates and UTC durations](../../docs/dates.en.md). Timestamp input outside
+ISO years 0001–9999 fails in a controlled way.
