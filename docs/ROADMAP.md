@@ -1046,6 +1046,8 @@ language backlog as one 0.9.4 change.
   Date/Time/Timestamp parameters/storage pass on MariaDB, MySQL and PostgreSQL;
   UTC sessions and exact time precision are enforced. See [rules](dates.en.md)
   and [SQL evidence](release-readiness/0.9.9-calendar-sql.en.md).
+  The SMTP/reset fixture accounts for guarded suppression of superseded
+  delivery jobs and verifies the retained replacement token before continuing.
 - [🗺️] Close typed downstream SQL results/cardinality and distinguish NULL
   from text; raw rows alone do not demonstrate typed calendar operations.
 

@@ -1062,6 +1062,8 @@ IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
   SQL-Date-/Time-/Timestamp-Parameter/Speicherung bestehen auf MariaDB, MySQL
   und PostgreSQL; UTC-Sitzungen und exakte Zeitpräzision werden geprüft.
   Siehe [Regeln](dates.de.md) und [SQL-Nachweise](release-readiness/0.9.9-calendar-sql.de.md).
+  Die SMTP-/Reset-Fixture berücksichtigt unterdrückte ersetzte Zustelljobs
+  und prüft vor dem Fortsetzen das tatsächlich gespeicherte Ersatztoken.
 - [🗺️] Typisierte SQL-Folgeergebnisse/Kardinalität schließen und NULL von Text
   unterscheiden; Rohzeilen belegen noch keine typisierten Kalenderoperationen.
 
