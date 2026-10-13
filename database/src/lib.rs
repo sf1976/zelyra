@@ -20,6 +20,8 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use zelyra_ast::*;
 
+mod decision;
+pub use decision::{with_decision_transaction, DecisionTransaction};
 mod numeric;
 pub mod outbox;
 pub mod sql;
@@ -2776,7 +2778,7 @@ fn postgres_parameter_value(
 }
 
 fn execute_prepared_postgres_query(
-    client: &mut PostgresClient,
+    client: &mut impl postgres::GenericClient,
     sql: &str,
     params: &[Box<dyn PostgresToSql + Sync>],
 ) -> Result<QueryResult, DatabaseError> {
@@ -3086,8 +3088,21 @@ impl MariaDbTransaction<'_> {
     }
 }
 
+struct MariaDbTransactionGuard<'a> {
+    connection: &'a mut ManagedMariaDbConnection,
+    finished: bool,
+}
+impl Drop for MariaDbTransactionGuard<'_> {
+    fn drop(&mut self) {
+        if !self.finished {
+            self.connection.discard = true;
+            let _ = self.connection.connection.query_drop("ROLLBACK");
+        }
+    }
+}
+
 /// Runs a decision-making transaction on one MariaDB connection. Returning
-/// `Ok` commits; returning an error rolls back.
+/// `Ok` commits; error, expired deadline or unwind rolls back/discards it.
 pub fn with_mariadb_transaction<T>(
     database_url: &str,
     operation: impl FnOnce(&mut MariaDbTransaction<'_>) -> Result<T, DatabaseError>,
@@ -3100,24 +3115,31 @@ pub fn with_mariadb_transaction<T>(
         connection.discard = true;
         return Err(mariadb_driver_error(error));
     }
+    let mut guard = MariaDbTransactionGuard {
+        connection: &mut connection,
+        finished: false,
+    };
     let result = {
         let mut transaction = MariaDbTransaction {
-            connection: &mut connection.connection,
+            connection: &mut guard.connection.connection,
         };
         operation(&mut transaction)
     };
     match result {
         Ok(value) => {
-            if let Err(error) = connection.connection.query_drop("COMMIT") {
-                connection.discard = true;
-                Err(mariadb_driver_error(error))
-            } else {
-                Ok(value)
-            }
+            remaining_query_budget()?;
+            guard
+                .connection
+                .connection
+                .query_drop("COMMIT")
+                .map_err(mariadb_driver_error)?;
+            guard.finished = true;
+            Ok(value)
         }
         Err(error) => {
-            let _ = connection.connection.query_drop("ROLLBACK");
-            connection.discard = true;
+            let _ = guard.connection.connection.query_drop("ROLLBACK");
+            guard.connection.discard = true;
+            guard.finished = true;
             Err(error)
         }
     }

@@ -1,0 +1,15 @@
+{
+  "compiler_sha256": "a8320fc4dcdb439df0018209c615ded867b5d21417f938c8293e9e9a2caa9bff",
+  "tests": [
+    {
+      "test": "tests/password-reset-e2e.sh",
+      "exit": 0,
+      "log": "/tmp/zelyra-typed-sql-password-reset-e2e.log"
+    },
+    {
+      "test": "tests/password-reset-rate-limit-e2e.sh",
+      "exit": 0,
+      "log": "/tmp/zelyra-typed-sql-password-reset-rate-limit-e2e.log"
+    }
+  ]
+}

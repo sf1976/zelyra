@@ -31,3 +31,13 @@ Einfache PostgreSQL-Formularaktionen sind transaktional; Mandanten-/Empfänger-,
 Edit-Snapshot- und Audit-Entscheidungen sind weiterhin gesonderte technische
 Gates. Der MySQL-Server-Zeittimer betrifft SELECT; harte Schreib-Abbruchgrenzen
 sind damit nicht nachgewiesen. Es gibt keine allgemeine Backend-Freigabe.
+
+## Native Entscheidungsgrundlage (0.9.9-Entwicklung)
+
+Eine Scoped-Callback-API besteht Commit, bedingte Lese-/Schreibsichtbarkeit,
+Rollback bei Rückgabe-/SQL-/ignorierten Fehlern und Unwind, Deadline-Prüfung vor
+Statements/Commit und Wiederverwendung mit Ein-Verbindungs-Pool auf MariaDB
+11.4.13, MySQL 8.4.11 und PostgreSQL 16.15. PostgreSQL-Statementabbruch ist geprüft.
+Keine Freigabe für geschützte Formular-/Auth-Adapterparität oder harte MySQL-
+Schreibgrenzen. [Regeln](decision-transactions.de.md),
+[Nachweise](release-readiness/0.9.9-decision-transactions.de.md).

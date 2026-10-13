@@ -1078,6 +1078,11 @@ IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
   MariaDB-/MySQL-HTTP- und fehlerhafte Metadatenregressionen bestehen. Siehe
   [Regeln](edit-snapshots.de.md) und [Nachweise](release-readiness/0.9.9-null-edit-snapshots.de.md).
 
+- [🧪] Native Entscheidungstransaktions-Grundlage deckt PostgreSQL/MariaDB/MySQL
+  auf einer Verbindung, Rollback/Unwind, ignorierte SQL-Fehler und Request-/Commit-
+  Deadlines ab. PostgreSQL-Formularadapter und harte MySQL-Schreibgrenzen bleiben.
+  [Regeln](decision-transactions.de.md), [Nachweise](release-readiness/0.9.9-decision-transactions.de.md).
+
 - [🗺️] Sprach-, CLI-, Runtime-, Datenbank-, IDE-, Mail-, Benachrichtigungs- und
   Tutorialumfang einfrieren. Alle angenommenen Anforderungen aus 0.9.1–0.9.8
   umsetzen und die vollständigen technischen Gates an einem unveränderlichen
