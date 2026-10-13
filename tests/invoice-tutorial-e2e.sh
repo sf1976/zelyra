@@ -141,42 +141,9 @@ fi
 if [[ "${ZELYRA_INVOICE_BROWSER_E2E:-0}" == "1" ]]; then
   ZELYRA_INVOICE_E2E_URL="http://${address}" node editor/tests/invoice-tutorial-browser-e2e.mjs
 
-  # Exercise the generated .env placeholder exactly as Studio receives it. The
-  # integration database is already running outside this temporary project.
-  DATABASE_URL="${database_url}" python3 - "${project}/.env" <<'PY'
-import os
-import pathlib
-import urllib.parse
-import sys
-
-path = pathlib.Path(sys.argv[1])
-source = path.read_text(encoding="utf-8").splitlines()
-parsed = urllib.parse.urlsplit(os.environ["DATABASE_URL"])
-host = parsed.hostname or "127.0.0.1"
-if ":" in host and not host.startswith("["):
-    host = f"[{host}]"
-credentials = urllib.parse.quote(parsed.username or "", safe="")
-if parsed.password is not None:
-    credentials += ":" + urllib.parse.quote(parsed.password, safe="")
-credentials += "@"
-port = parsed.port or 3306
-compose_port = port + 1 if port < 65535 else port - 1
-env_url = urllib.parse.urlunsplit((
-    parsed.scheme,
-    f"{credentials}{host}:{port}",
-    parsed.path,
-    parsed.query,
-    parsed.fragment,
-))
-updates = {
-    "ZELYRA_DB_HOST_PORT": str(compose_port),
-    "ZELYRA_DATABASE_MAIN_URL": env_url,
-    "DATABASE_URL": env_url,
-}
-output = [line for line in source if line.split("=", 1)[0].strip() not in updates]
-output.extend(f"{key}={value}" for key, value in updates.items())
-path.write_text("\n".join(output) + "\n", encoding="utf-8")
-PY
+  # Keep the generated local settings in .env, then override the active URL
+  # with an external database. Run must neither start Compose nor apply the
+  # project schema to that ambient connection.
   no_docker_path="${temporary_root}/no-docker-bin"
   mkdir -p "${no_docker_path}"
   for database_client in mariadb mysql; do
@@ -192,7 +159,9 @@ with socket.socket() as sock:
     print(sock.getsockname()[1])
 PY
 )"
-  env -u DATABASE_URL -u ZELYRA_DATABASE_MAIN_URL -u ZELYRA_DB_HOST_PORT \
+  env -u ZELYRA_DB_HOST_PORT \
+    DATABASE_URL="${database_url}" \
+    ZELYRA_DATABASE_MAIN_URL="${database_url}" \
     PATH="${no_docker_path}" \
     "${binary}" editor "${project}" --port "${studio_port}" --no-open \
     >"${temporary_root}/studio.log" 2>&1 &

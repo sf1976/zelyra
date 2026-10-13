@@ -421,6 +421,22 @@ fn project_database_url_expands_the_configured_local_host_port() {
 }
 
 #[test]
+fn empty_database_host_ports_use_the_compose_fallback() {
+    assert_eq!(
+        resolve_database_host_port(Some(String::new()), None),
+        "3306"
+    );
+    assert_eq!(
+        resolve_database_host_port(Some("  ".into()), Some("3308".into())),
+        "3308"
+    );
+    assert_eq!(
+        resolve_database_host_port(Some("3307".into()), Some("3308".into())),
+        "3307"
+    );
+}
+
+#[test]
 fn studio_compose_target_requires_the_generated_local_mariadb_endpoint() {
     assert!(is_project_mariadb_compose_target(
         "mariadb://zelyra:secret@127.0.0.1:3308/invoice",
@@ -442,6 +458,54 @@ fn studio_compose_target_requires_the_generated_local_mariadb_endpoint() {
         "postgres://zelyra:secret@127.0.0.1:3308/invoice",
         "3308",
     ));
+}
+
+#[test]
+fn studio_compose_bootstrap_rejects_ambient_database_overrides() {
+    let project_url = "mariadb://project:secret@127.0.0.1:3308/invoice";
+    assert_eq!(
+        project_compose_database_url(
+            Some("mariadb://external:secret@db.example.test:3308/invoice"),
+            Some(project_url),
+            "3308",
+        ),
+        None
+    );
+    assert_eq!(
+        project_compose_database_url(Some(project_url), Some(project_url), "3308"),
+        Some(project_url)
+    );
+    assert_eq!(
+        project_compose_database_url(
+            Some("mariadb://project:secret@127.0.0.1:3308/another_database"),
+            Some(project_url),
+            "3308",
+        ),
+        None
+    );
+}
+
+#[test]
+fn project_file_database_url_uses_only_project_environment_configuration() {
+    let directory = std::env::temp_dir().join(format!(
+        "zelyra-project-db-url-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&directory).unwrap();
+    fs::write(
+        directory.join(".env"),
+        "ZELYRA_DATABASE_MAIN_URL=mariadb://project:secret@127.0.0.1:3308/invoice\nDATABASE_URL=mariadb://fallback:secret@127.0.0.1:3308/fallback\n",
+    )
+    .unwrap();
+    assert_eq!(
+        database_url_from_project_file(&directory, Some("main")).unwrap(),
+        Some("mariadb://project:secret@127.0.0.1:3308/invoice".into())
+    );
+    fs::remove_dir_all(directory).unwrap();
 }
 
 #[test]

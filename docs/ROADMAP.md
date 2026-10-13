@@ -46,27 +46,37 @@ principles; the roadmap below tracks what is actually implemented.
   cover selection, EOF, narrow widths, color, and fallback behavior.
 - [x] **1.0.2 Studio and invoice tutorial reliability:** Resolve generated
   MariaDB port placeholders consistently in Studio and the launched app. On
-  first Run, start Compose, retry transient database startup disconnects, and
-  stop with visible setup errors. The invoice database map and row preview work
-  after startup. Program output is more readable at 13 px without changing the
-  code editor font. Browser tests cover a fresh Compose database and an external
-  MariaDB project; MariaDB and PostgreSQL Studio flows also pass.
+  first Run, start Compose and apply the schema only when the active URL matches
+  the generated local database URL in `.env`; retry transient startup
+  disconnects and show persistent setup errors. External or overridden URLs do
+  not trigger automatic schema changes. The invoice database map and row preview
+  work after startup. Program output is more readable at 13 px without changing
+  the code editor font. Browser tests cover a fresh Compose database and an
+  external MariaDB project; MariaDB and PostgreSQL Studio flows also pass.
 - [x] **1.0.2 stepped integer ranges:** Support `for i in 1..21 step 2` with
   exclusive ends, a default step of 1, positive and negative steps, empty
   direction mismatches, and a checked nonzero step. `range(start, end, step)`
   provides the same sequence as a bounded array. Parser, runtime, type, and
   boundary tests pass.
-- [ ] **Planned for 1.0.3 — approachable console exercises:** Ship complete,
-  runnable examples for FizzBuzz, palindrome checks, factorial, number
-  guessing, word/character counts, list minimum/maximum, prime checks, reversed
-  word order, Caesar shifts, and bubble sort. Close the gaps these programs
-  expose with a small, consistent standard library for text length/splitting/
-  joining and case conversion, checked numeric input, character processing,
-  and safe indexed array updates. Preserve static types, explicit `Console` and
-  `Random` effects, `Option`/`Result` handling, and value-based arrays. The
-  examples must compile and run in CI with expected-output and edge-case tests;
-  console output should use direct scalar printing or explicit `format_text`,
-  not JSON encoding as a display workaround.
+- [ ] **Planned for 1.0.3 — approachable algorithm exercises:** Ship 15
+  complete, runnable console examples: FizzBuzz, palindrome checks, factorial,
+  number guessing, word/character counts, list minimum/maximum, prime checks,
+  reversed word order, Caesar shifts, bubble sort, quicksort, binary search,
+  balanced-parentheses checking with a stack, iterative dynamic-programming
+  Fibonacci, and run-length encoding. Explain the important lines and analyze
+  expected results, boundary cases, and common mistakes for each exercise.
+  Close the gaps these examples expose with a small, consistent, Zelyra-style
+  API: text length/splitting/joining and case conversion, checked numeric
+  input, character processing, safe indexed updates, efficient typed
+  `concat<T>(left: T[], right: T[])` returning a new array, and safe stack
+  operations whose pop result handles an empty stack explicitly. Support
+  readable `else if` chains without requiring artificial nested blocks.
+  Preserve static types, explicit `Console` and `Random` effects,
+  `Option`/`Result` handling, and value-based arrays. Examples must compile
+  and run in CI with expected-output and edge-case tests; console output should
+  use direct scalar printing or explicit `format_text`, not JSON encoding as a
+  display workaround. Keep the syntax and APIs recognizably Zelyra rather than
+  copying another language's surface syntax.
 - [x] **1.0.1 published-artifact language review:** 80 cases, 100 task repeats,
   600 numeric comparisons and 1,408 calendar/UTC reference cases passed with
   no unexpected findings; published installation/upgrade/rollback and

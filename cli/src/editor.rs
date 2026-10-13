@@ -3412,31 +3412,45 @@ fn start_editor_web_app(
     let database_url = super::database_url_for_project(&state.root, database_name)
         .map_err(|_| (422, "the project environment file could not be read".into()))?;
 
-    // Start the generated MariaDB service only when the active database URL
-    // points at its published loopback port. Projects may keep the generated
-    // Compose file while using an external database.
-    let should_start_compose = if state.root.join("docker-compose.mariadb.yml").is_file() {
-        let project_host_port = super::project_database_host_port(&state.root)
-            .map_err(|_| (422, "the project environment file could not be read".into()))?;
-        database_url.as_deref().is_some_and(|database_url| {
-            super::is_project_mariadb_compose_target(database_url, &project_host_port)
-        })
+    // Bootstrap only the database configured by this project's .env. An
+    // ambient DATABASE_URL may point at an external database and must not
+    // trigger either Compose startup or automatic schema changes there.
+    let has_compose_file = state.root.join("docker-compose.mariadb.yml").is_file();
+    let project_file_database_url = if has_compose_file {
+        super::database_url_from_project_file(&state.root, database_name)
+            .map_err(|_| (422, "the project environment file could not be read".into()))?
     } else {
-        false
+        None
     };
-    if should_start_compose {
+    let project_host_port = if project_file_database_url.is_some() {
+        super::project_database_host_port(&state.root)
+            .map_err(|_| (422, "the project environment file could not be read".into()))?
+    } else {
+        String::new()
+    };
+    let compose_database_url = if has_compose_file {
+        super::project_compose_database_url(
+            database_url.as_deref(),
+            project_file_database_url.as_deref(),
+            &project_host_port,
+        )
+    } else {
+        None
+    };
+    if let Some(compose_database_url) = compose_database_url {
         start_mariadb_compose(&state.root, true).map_err(|error| {
             let secrets = editor_secret_values(state);
             (502, redact_editor_secrets(error, &secrets))
         })?;
-    }
-    // Apply a configured MariaDB schema only after the database service is running. Retrying
-    // transient connection failures avoids starting the app against a half-ready cold database.
-    if should_setup_local_schema && database_url.is_some() {
-        run_local_schema_setup(&state.root).map_err(|error| {
-            let secrets = editor_secret_values(state);
-            (502, redact_editor_secrets(error, &secrets))
-        })?;
+        // Apply a MariaDB schema only to the matched project-local service.
+        // Retrying transient startup disconnects avoids launching the app
+        // against a half-ready cold database.
+        if should_setup_local_schema {
+            run_local_schema_setup(&state.root, compose_database_url).map_err(|error| {
+                let secrets = editor_secret_values(state);
+                (502, redact_editor_secrets(error, &secrets))
+            })?;
+        }
     }
 
     let listener = std::net::TcpListener::bind("127.0.0.1:0")
@@ -4669,7 +4683,7 @@ fn main() {}
     }
 
     #[test]
-    fn run_editor_program_reports_mariadb_setup_errors_before_starting_web_app() {
+    fn run_editor_program_does_not_auto_setup_an_unrelated_database() {
         let state = project();
         let path = state.root.join("main.zyl");
         fs::write(
@@ -4685,15 +4699,20 @@ fn main() {}
         )
         .expect("write invalid env");
 
-        let error = run_editor_program(&state, &json!({"path": "main.zyl"}))
-            .expect_err("an incompatible connection must stop Studio Run");
-        assert_eq!(error.0, 502);
-        assert!(error
-            .1
-            .contains("schema setup stopped on a non-retryable error"));
-        assert!(error
-            .1
-            .contains("MariaDB URL must use mariadb:// or mysql://"));
+        let response = run_editor_program(&state, &json!({"path": "main.zyl"}))
+            .expect("Studio should not apply the MariaDB schema to a PostgreSQL URL");
+        assert_eq!(response.0, 200);
+        let payload: Value = serde_json::from_str(&response.2).expect("decode run result");
+        assert_eq!(payload["success"], false);
+        assert_eq!(payload["webApp"], false);
+        assert!(payload["stderr"]
+            .as_str()
+            .unwrap()
+            .contains("E-DB-PRECISION"));
+        assert!(!payload["stderr"]
+            .as_str()
+            .unwrap()
+            .contains("schema setup stopped"));
         let _ = fs::remove_dir_all(state.root.clone());
     }
 }

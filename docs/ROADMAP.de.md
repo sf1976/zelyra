@@ -50,29 +50,41 @@ den tatsächlich implementierten Stand.
   Auswahl, EOF, schmale Breiten sowie Farb- und Fallback-Modus ab.
 - [x] **1.0.2 Zuverlässigkeit von Studio und Rechnungstutorial:** Generierte
   MariaDB-Port-Platzhalter in Studio und gestarteter Anwendung einheitlich
-  auflösen. Beim ersten Start Compose starten, vorübergehende Verbindungsabbrüche
-  wiederholen und dauerhafte Setupfehler sichtbar melden. Datenbankkarte und
-  Datensatzvorschau des Rechnungstutorials funktionieren danach. Die
-  Programmausgabe ist mit 13 px besser lesbar, ohne die Code-Editor-Schrift zu
-  verändern. Browserprüfungen decken eine frische Compose-Datenbank und ein
-  externes MariaDB-Projekt ab; MariaDB- und PostgreSQL-Studioabläufe bestehen.
+  auflösen. Beim ersten Start Compose starten und das Schema nur einrichten,
+  wenn die aktive Adresse der erzeugten lokalen Datenbank-URL in `.env`
+  entspricht; vorübergehende Verbindungsabbrüche wiederholen und dauerhafte
+  Setupfehler sichtbar melden. Externe oder überschriebene Adressen lösen keine
+  automatischen Schemaänderungen aus. Datenbankkarte und Datensatzvorschau des
+  Rechnungstutorials funktionieren danach. Die Programmausgabe ist mit 13 px
+  besser lesbar, ohne die Code-Editor-Schrift zu verändern. Browserprüfungen
+  decken eine frische Compose-Datenbank und ein externes MariaDB-Projekt ab;
+  MariaDB- und PostgreSQL-Studioabläufe bestehen.
 - [x] **1.0.2 Schrittweiten für Integer-Bereiche:** `for i in 1..21 step 2`
   mit exklusivem Ende, Standardschrittweite 1, positiven und negativen Werten,
   leeren Bereichen bei falscher Richtung und geprüfter Schrittweite ungleich 0
   unterstützen. `range(start, end, step)` liefert dieselbe Folge als begrenztes
   Array. Parser-, Laufzeit-, Typ- und Grenztests bestehen.
-- [ ] **Geplant für 1.0.3 — leicht zugängliche Konsolenübungen:** Vollständige,
-  ausführbare Beispiele für FizzBuzz, Palindromprüfung, Fakultät, Zahlenraten,
-  Wort-/Zeichenzählung, Minimum/Maximum einer Liste, Primzahlprüfung,
-  umgekehrte Wortreihenfolge, Caesar-Verschiebung und Bubble Sort bereitstellen.
-  Die dabei sichtbaren Lücken mit einer kleinen, einheitlichen Standardbibliothek
-  für Textlänge/-teilen/-verbinden und Groß-/Kleinschreibung, geprüfte
-  Zahleneingabe, Zeichenverarbeitung und sichere indizierte Array-Updates
-  schließen. Statische Typen, explizite `Console`-/`Random`-Effekte,
-  `Option`-/`Result`-Behandlung und wertbasierte Arrays bleiben erhalten. Die
-  Beispiele müssen in CI kompilieren und mit erwarteter Ausgabe sowie
-  Grenzfalltests laufen. Konsolenausgaben verwenden direkte skalare Ausgabe oder
-  ausdrückliches `format_text` statt JSON als Anzeige-Umweg.
+- [ ] **Geplant für 1.0.3 — zugängliche Algorithmusübungen:** 15 vollständige,
+  ausführbare Konsolenbeispiele bereitstellen: FizzBuzz, Palindromprüfung,
+  Fakultät, Zahlenraten, Wort-/Zeichenzählung, Minimum/Maximum einer Liste,
+  Primzahlprüfung, umgekehrte Wortreihenfolge, Caesar-Verschiebung, Bubble
+  Sort, Quicksort, binäre Suche, Klammerprüfung mit einem Stack, iterative
+  Fibonacci-Berechnung mit dynamischer Programmierung und
+  Lauflängenkodierung. Zu jeder Übung die wichtigen Zeilen sowie erwartete
+  Ergebnisse, Grenzfälle und typische Fehler erläutern. Die dabei sichtbaren
+  Lücken mit einer kleinen, einheitlichen, Zelyra-artigen API schließen:
+  Textlänge/-teilen/-verbinden und Groß-/Kleinschreibung, geprüfte
+  Zahleneingabe, Zeichenverarbeitung, sichere indizierte Updates, effizientes
+  typisiertes `concat<T>(left: T[], right: T[])`, das ein neues Array liefert,
+  sowie sichere Stack-Operationen, deren `pop` ein leeres Stack-Ergebnis
+  ausdrücklich behandelt. Lesbare `else if`-Ketten ohne künstlich
+  verschachtelte Blöcke unterstützen. Statische Typen, explizite
+  `Console`-/`Random`-Effekte, `Option`-/`Result`-Behandlung und wertbasierte
+  Arrays bleiben erhalten. Beispiele müssen in CI kompilieren und mit
+  erwarteter Ausgabe sowie Grenzfalltests laufen; Konsolenausgaben verwenden
+  direkte skalare Ausgabe oder ausdrückliches `format_text` statt JSON als
+  Anzeige-Umweg. Syntax und APIs sollen erkennbar Zelyra bleiben und keine
+  andere Sprache an der Oberfläche kopieren.
 - [x] **1.0.1 Sprachprüfung des veröffentlichten Artefakts:** 80 Fälle,
   100 Aufgaben-Wiederholungen, 600 Zahlenvergleiche und 1.408 Kalender-/UTC-
   Referenzfälle ohne unerwartete Befunde geprüft; Installation/Update/Rückkehr

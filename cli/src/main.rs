@@ -4338,6 +4338,21 @@ fn database_url_for_project(
     Ok(Some(expand_project_database_url(directory, &url)?))
 }
 
+fn database_url_from_project_file(
+    directory: &std::path::Path,
+    database_name: Option<&str>,
+) -> Result<Option<String>, String> {
+    let env_path = directory.join(".env");
+    if !env_path.is_file() {
+        return Ok(None);
+    }
+    let Some((url, _)) = database_url_from_env_file(&env_path.to_string_lossy(), database_name)?
+    else {
+        return Ok(None);
+    };
+    Ok(Some(expand_project_database_url(directory, &url)?))
+}
+
 fn expand_project_database_url(directory: &std::path::Path, url: &str) -> Result<String, String> {
     let port = project_database_host_port(directory)?;
     Ok(expand_database_host_port(url, &port))
@@ -4345,15 +4360,24 @@ fn expand_project_database_url(directory: &std::path::Path, url: &str) -> Result
 
 fn project_database_host_port(directory: &std::path::Path) -> Result<String, String> {
     let env_path = directory.join(".env");
-    let port = match env::var("ZELYRA_DB_HOST_PORT") {
-        Ok(port) => port,
-        Err(_) if env_path.is_file() => {
-            read_env_value(&env_path.to_string_lossy(), "ZELYRA_DB_HOST_PORT")?
-                .unwrap_or_else(|| DEFAULT_DATABASE_HOST_PORT.to_string())
-        }
-        Err(_) => DEFAULT_DATABASE_HOST_PORT.to_string(),
+    let process_port = env::var("ZELYRA_DB_HOST_PORT").ok();
+    let process_port_is_set = process_port
+        .as_deref()
+        .is_some_and(|port| !port.trim().is_empty());
+    let file_port = if !process_port_is_set && env_path.is_file() {
+        read_env_value(&env_path.to_string_lossy(), "ZELYRA_DB_HOST_PORT")?
+    } else {
+        None
     };
-    Ok(port)
+    Ok(resolve_database_host_port(process_port, file_port))
+}
+
+fn resolve_database_host_port(process_port: Option<String>, file_port: Option<String>) -> String {
+    process_port
+        .filter(|port| !port.trim().is_empty())
+        .or_else(|| file_port.filter(|port| !port.trim().is_empty()))
+        .map(|port| port.trim().to_owned())
+        .unwrap_or_else(|| DEFAULT_DATABASE_HOST_PORT.to_string())
 }
 
 fn is_project_mariadb_compose_target(database_url: &str, project_host_port: &str) -> bool {
@@ -4371,9 +4395,15 @@ fn is_project_mariadb_compose_target(database_url: &str, project_host_port: &str
     url.port().unwrap_or(3306) == project_host_port
 }
 
-fn expand_database_host_port(url: &str, port: &str) -> String {
-    url.replace("${ZELYRA_DB_HOST_PORT:-3306}", port)
-        .replace("${ZELYRA_DB_HOST_PORT}", port)
+fn project_compose_database_url<'a>(
+    active_database_url: Option<&'a str>,
+    project_file_database_url: Option<&'a str>,
+    project_host_port: &str,
+) -> Option<&'a str> {
+    let project_file_database_url = project_file_database_url?;
+    (active_database_url == Some(project_file_database_url)
+        && is_project_mariadb_compose_target(project_file_database_url, project_host_port))
+    .then_some(project_file_database_url)
 }
 
 fn expanded_database_url(directory: &std::path::Path) -> Result<String, String> {
@@ -4390,6 +4420,11 @@ fn expanded_database_url(directory: &std::path::Path) -> Result<String, String> 
         });
     database_url_for_project(directory, database_name.as_deref())?
         .ok_or_else(|| "`.env` does not define the project database URL or DATABASE_URL".to_owned())
+}
+
+fn expand_database_host_port(url: &str, port: &str) -> String {
+    url.replace("${ZELYRA_DB_HOST_PORT:-3306}", port)
+        .replace("${ZELYRA_DB_HOST_PORT}", port)
 }
 
 fn schema_setup_error_is_transient(details: &str) -> bool {
@@ -4445,8 +4480,7 @@ fn project_web_url_with_host_port(
     Ok(format!("http://127.0.0.1:{port}"))
 }
 
-fn run_local_schema_setup(directory: &std::path::Path) -> Result<(), String> {
-    let database_url = expanded_database_url(directory)?;
+fn run_local_schema_setup(directory: &std::path::Path, database_url: &str) -> Result<(), String> {
     let executable = editor::zelyra_executable().map_err(|(_, error)| error)?;
     let database_name = directory
         .join("main.zyl")
@@ -4457,11 +4491,11 @@ fn run_local_schema_setup(directory: &std::path::Path) -> Result<(), String> {
     command
         .current_dir(directory)
         .args(["db", "setup", "main.zyl"])
-        .env("DATABASE_URL", &database_url)
+        .env("DATABASE_URL", database_url)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     if let Some(database_name) = database_name {
-        command.env(database_url_environment_name(&database_name), &database_url);
+        command.env(database_url_environment_name(&database_name), database_url);
     }
     for attempt in 0..30 {
         let output = command
@@ -4588,7 +4622,8 @@ fn setup_action(path: &str, action: &str, options: &SetupOptions) -> Result<Stri
         let schema_result = if directory.join("docker-compose.mariadb.yml").is_file() {
             run_container_schema_setup(&directory)
         } else {
-            run_local_schema_setup(&directory)
+            let database_url = expanded_database_url(&directory)?;
+            run_local_schema_setup(&directory, &database_url)
         };
         schema_result.map_err(|error| {
             let web_url = project_web_url(&directory).unwrap_or_else(|_| "unknown".into());
