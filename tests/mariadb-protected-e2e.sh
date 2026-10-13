@@ -214,23 +214,15 @@ PY
         "${zelyra_bin}" serve "${project_file}" "${unready_address}" \
         >"${temp_dir}/unready-server.log" 2>&1 &
     unready_server_pid=$!
-    unready_base_url="http://${unready_address}"
-    for _ in $(seq 1 30); do
-        if curl --silent --show-error --fail \
-            "${unready_base_url}/__zelyra/health/live" -o /dev/null; then
-            break
-        fi
-        sleep 1
-    done
-    curl --silent --show-error --fail \
-        "${unready_base_url}/__zelyra/health/live" -o /dev/null
-    unavailable_status="$(curl --silent --show-error \
-        --output "${temp_dir}/unready.json" --write-out '%{http_code}' \
-        "${unready_base_url}${readiness_path}")"
-    [[ "${unavailable_status}" != "200" ]]
-    ! grep -Eiq 'unavailable|invalid|127\.0\.0\.1:1|access denied' "${temp_dir}/unready.json"
-    kill "${unready_server_pid}" 2>/dev/null || true
-    wait "${unready_server_pid}" 2>/dev/null || true
+    # Declared temporal storage requires read-only metadata validation before
+    # listen. An unavailable database must fail startup with a controlled,
+    # redacted source diagnostic; it cannot expose a liveness endpoint yet.
+    unready_status=0
+    wait "${unready_server_pid}" || unready_status=$?
+    [[ "${unready_status}" == "1" ]]
+    grep -Fq 'E-DB-TEMPORAL' "${temp_dir}/unready-server.log"
+    grep -Fq ' --> main.zyl:' "${temp_dir}/unready-server.log"
+    ! grep -Eiq 'unavailable:invalid@|127\.0\.0\.1:1/|access denied' "${temp_dir}/unready-server.log"
     unready_server_pid=""
 fi
 

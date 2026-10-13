@@ -1064,6 +1064,8 @@ IDE-Rückstand nicht als eine einzige Änderung in 0.9.4 behandelt wird.
   Siehe [Regeln](dates.de.md) und [SQL-Nachweise](release-readiness/0.9.9-calendar-sql.de.md).
   Die SMTP-/Reset-Fixture berücksichtigt unterdrückte ersetzte Zustelljobs
   und prüft vor dem Fortsetzen das tatsächlich gespeicherte Ersatztoken.
+  Business-Readiness-Prüfungen beachten den nötigen Metadatenzugriff vor dem
+  Start samt kontrolliertem, redigiertem Fehler bei unerreichbarer Datenbank.
 - [✅] Explizites `sql_decode<T>(sql<…> { … })` erzeugt Skalar-/Record-/Array-
   Werte mit geprüfter Kardinalität, Projektion, nativen Typfamilien und NULL-
   Masken. Exakte Zahlen und Kalenderfolgeoperationen bestehen auf drei realen
