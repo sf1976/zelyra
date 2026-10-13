@@ -61,6 +61,18 @@ den tatsächlich implementierten Stand.
   leeren Bereichen bei falscher Richtung und geprüfter Schrittweite ungleich 0
   unterstützen. `range(start, end, step)` liefert dieselbe Folge als begrenztes
   Array. Parser-, Laufzeit-, Typ- und Grenztests bestehen.
+- [ ] **Geplant für 1.0.3 — leicht zugängliche Konsolenübungen:** Vollständige,
+  ausführbare Beispiele für FizzBuzz, Palindromprüfung, Fakultät, Zahlenraten,
+  Wort-/Zeichenzählung, Minimum/Maximum einer Liste, Primzahlprüfung,
+  umgekehrte Wortreihenfolge, Caesar-Verschiebung und Bubble Sort bereitstellen.
+  Die dabei sichtbaren Lücken mit einer kleinen, einheitlichen Standardbibliothek
+  für Textlänge/-teilen/-verbinden und Groß-/Kleinschreibung, geprüfte
+  Zahleneingabe, Zeichenverarbeitung und sichere indizierte Array-Updates
+  schließen. Statische Typen, explizite `Console`-/`Random`-Effekte,
+  `Option`-/`Result`-Behandlung und wertbasierte Arrays bleiben erhalten. Die
+  Beispiele müssen in CI kompilieren und mit erwarteter Ausgabe sowie
+  Grenzfalltests laufen. Konsolenausgaben verwenden direkte skalare Ausgabe oder
+  ausdrückliches `format_text` statt JSON als Anzeige-Umweg.
 - [x] **1.0.1 Sprachprüfung des veröffentlichten Artefakts:** 80 Fälle,
   100 Aufgaben-Wiederholungen, 600 Zahlenvergleiche und 1.408 Kalender-/UTC-
   Referenzfälle ohne unerwartete Befunde geprüft; Installation/Update/Rückkehr

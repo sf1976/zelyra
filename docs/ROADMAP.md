@@ -56,6 +56,17 @@ principles; the roadmap below tracks what is actually implemented.
   direction mismatches, and a checked nonzero step. `range(start, end, step)`
   provides the same sequence as a bounded array. Parser, runtime, type, and
   boundary tests pass.
+- [ ] **Planned for 1.0.3 — approachable console exercises:** Ship complete,
+  runnable examples for FizzBuzz, palindrome checks, factorial, number
+  guessing, word/character counts, list minimum/maximum, prime checks, reversed
+  word order, Caesar shifts, and bubble sort. Close the gaps these programs
+  expose with a small, consistent standard library for text length/splitting/
+  joining and case conversion, checked numeric input, character processing,
+  and safe indexed array updates. Preserve static types, explicit `Console` and
+  `Random` effects, `Option`/`Result` handling, and value-based arrays. The
+  examples must compile and run in CI with expected-output and edge-case tests;
+  console output should use direct scalar printing or explicit `format_text`,
+  not JSON encoding as a display workaround.
 - [x] **1.0.1 published-artifact language review:** 80 cases, 100 task repeats,
   600 numeric comparisons and 1,408 calendar/UTC reference cases passed with
   no unexpected findings; published installation/upgrade/rollback and
