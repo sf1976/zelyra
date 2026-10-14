@@ -214,6 +214,7 @@ const messages = {
     pdfPreview: "PDF-Vorschau", pdfPreviewTitle: "PDF-Vorschau mit echten PDF-Bytes", pdfView: "Deklarierte View", pdfExampleData: "Beispieldaten als JSON-Objekt", pdfRender: "PDF erzeugen", pdfDownload: "PDF herunterladen", pdfNoViews: "Im Projekt ist keine View deklariert.", pdfReady: "PDF erzeugt ({0} Byte).", pdfLoading: "Views werden geladen …", pdfRendering: "PDF wird lokal erzeugt …", pdfInvalidData: "Bitte ein gültiges JSON-Objekt als Beispieldaten eingeben.", pdfError: "PDF-Vorschau fehlgeschlagen: {0}",
     outboxButton: "Outbox", outboxTitle: "Mail-Outbox", outboxCaption: "Metadaten der MariaDB-Outbox ohne Nachrichteninhalt", outboxEvent: "Ereignis", outboxStatus: "Status", outboxRecipient: "Empfänger", outboxAttachment: "Anhang", outboxCreated: "Erstellt", outboxAvailable: "Verfügbar", outboxError: "Fehler", outboxAction: "Aktion", previous: "Zurück", next: "Weiter", outboxLoading: "Outbox wird geladen …", outboxEmpty: "Keine Ereignisse auf dieser Seite.", outboxPage: "{0}–{1} von {2}", outboxRequeue: "Erneut einreihen", outboxRequeueConfirm: "Das erschöpfte Ereignis {0} für einen späteren Worker-Lauf freigeben? Es wird jetzt keine E-Mail versendet.", outboxRequeued: "Ereignis erneut eingereiht. Ein Versand erfolgt erst durch einen ausdrücklich gestarteten Worker.", outboxLoadError: "Outbox konnte nicht geladen werden: {0}", outboxRequeueError: "Erneutes Einreihen fehlgeschlagen: {0}",
     outboxAttempts: "Versuche: {0}", outboxLeaseUntil: "Sperre bis: {0}", outboxDeliveredAt: "Zugestellt: {0}", outboxExhaustedAt: "Erschöpft: {0}", outboxNoDatabase: "Für die Outbox ist keine MariaDB-Verbindung konfiguriert. Trage DATABASE_URL in .env oder der Umgebung ein.",
+    capabilityButton: "Rechte", capabilityTitle: "Capability- und Sicherheitsmatrix", capabilityDeclarations: "Deklarierte Rechte", capabilityUses: "Tatsächlich verwendete Operationen", capabilityPaths: "Dateipfade", capabilityUnused: "Freigaben ohne erkannten Funktionsbedarf", capabilityUnusedCaveat: "Nur analysierte Funktionen; generierte Routen und dynamische Aufrufe können weitere Rechte benötigen.", capabilityLoading: "Compiler und Projektkonfiguration werden analysiert …", capabilityEmpty: "Keine Einträge in der aktuellen Datei.", capabilityGrant: "Freigabe prüfen", capabilityGrantReview: "Änderung an zelyra.toml prüfen", capabilityGrantApply: "Freigabe übernehmen", capabilityGrantPreview: "Nur die angezeigte Konfigurationsänderung wird nach deiner Bestätigung gespeichert.", capabilityGranted: "Freigabe gespeichert. Die Runtime prüft sie beim nächsten Lauf erneut.", capabilityUnrestricted: "Keine Projektkonfiguration: Runtime-Capabilities sind nicht durch zelyra.toml eingeschränkt.", capabilityIncomplete: "Die Quellanalyse ist unvollständig; dieser Befund kann Einträge auslassen.", capabilityError: "Capability-Analyse fehlgeschlagen: {0}", capabilityPathUnknown: "Dynamische Pfade sind statisch nicht entscheidbar.", capabilityNotGranted: "nicht freigegeben", capabilityDynamic: "dynamisch",
     runButton: "Starten", runButtonTitle: "main.zyl ausführen oder Webanwendung starten",
     runOutputTitle: "Programmausgabe", runStarting: "Anwendung wird vorbereitet und gestartet …", runSuccess: "Programm erfolgreich beendet", runFailure: "Programm mit Fehler beendet", runTimeout: "Ausführung nach 15 Sekunden beendet", runOutputTruncated: "Die Ausgabe ist auf 64 KiB je Stream begrenzt.", runNoOutput: "Keine Ausgabe.", runStdout: "AUSGABE", runStderr: "FEHLER", runInputUnavailable: "Studio stellt dem Programm keine interaktive Eingabe bereit.", runWebReady: "Webanwendung läuft lokal:", runWebOpen: "Anwendung im Browser öffnen", runWebStop: "Vorschau beenden", runWebStopped: "Lokale Vorschau wurde beendet.",
     runtimeBudgetButton: "Budget", runtimeBudgetTitle: "Laufzeitbudget und Rekursion", runtimeBudgetEnable: "Schrittbudget für Konsolenprogramme aktivieren", runtimeBudgetRange: "Schrittbudget (Regler: 1.000 bis 1.000.000)", runtimeBudgetNumber: "Maximale Schritte (1 bis 100.000.000)", runtimeBudgetWebHint: "Das Schrittbudget gilt für Konsolenprogramme. Eine Webvorschau verwendet weiterhin ihre eigenen Laufzeitgrenzen.", runtimeRecursionTitle: "Mögliche Rekursion", runtimeRecursionNone: "Keine direkte oder gegenseitige Rekursion im analysierten Funktionsgraphen gefunden.", runtimeRecursionIncomplete: "Der Funktionsgraph ist zu groß; die Rekursionsanalyse ist unvollständig.", runtimeRecursionDirect: "Direkte Rekursion", runtimeRecursionMutual: "Gegenseitige Rekursion", runtimeStackDepth: "Maximale Stacktiefe laut Projekt: {0} ({1})", runtimeStackConfigured: "konfiguriert", runtimeStackDefault: "Standard", runtimeProfileError: "Laufzeitprofil konnte nicht gelesen werden: {0}", runtimeBudgetInvalid: "Bitte eine ganze Schrittzahl von 1 bis 100.000.000 eingeben.", runtimeBudgetExceeded: "Schrittbudget überschritten", runCancel: "Ausführung abbrechen", runCancelRequested: "Abbruch angefordert …", runCancelled: "Ausführung abgebrochen", runtimeProfileInvalid: "Der ungespeicherte Quelltext ist nicht vollständig analysierbar.",
@@ -315,6 +316,7 @@ const messages = {
     pdfPreview: "PDF preview", pdfPreviewTitle: "PDF preview with real PDF bytes", pdfView: "Declared view", pdfExampleData: "Example data as a JSON object", pdfRender: "Render PDF", pdfDownload: "Download PDF", pdfNoViews: "This project declares no view.", pdfReady: "PDF rendered ({0} bytes).", pdfLoading: "Loading views …", pdfRendering: "Rendering PDF locally …", pdfInvalidData: "Enter a valid JSON object for example data.", pdfError: "PDF preview failed: {0}",
     outboxButton: "Outbox", outboxTitle: "Mail outbox", outboxCaption: "MariaDB outbox metadata without message bodies", outboxEvent: "Event", outboxStatus: "Status", outboxRecipient: "Recipient", outboxAttachment: "Attachment", outboxCreated: "Created", outboxAvailable: "Available", outboxError: "Error", outboxAction: "Action", previous: "Previous", next: "Next", outboxLoading: "Loading outbox …", outboxEmpty: "No events on this page.", outboxPage: "{0}–{1} of {2}", outboxRequeue: "Requeue", outboxRequeueConfirm: "Release exhausted event {0} for a later worker run? No email will be sent now.", outboxRequeued: "Event requeued. Delivery requires a separately started worker.", outboxLoadError: "Could not load outbox: {0}", outboxRequeueError: "Requeue failed: {0}",
     outboxAttempts: "Attempts: {0}", outboxLeaseUntil: "Lease until: {0}", outboxDeliveredAt: "Delivered: {0}", outboxExhaustedAt: "Exhausted: {0}", outboxNoDatabase: "No MariaDB connection is configured for the outbox. Set DATABASE_URL in .env or the environment.",
+    capabilityButton: "Permissions", capabilityTitle: "Capability and security matrix", capabilityDeclarations: "Declared capabilities", capabilityUses: "Operations actually used", capabilityPaths: "File paths", capabilityUnused: "Grants without a detected function use", capabilityUnusedCaveat: "Analyzed functions only; generated routes and dynamic calls may require more permissions.", capabilityLoading: "Analyzing compiler and project configuration …", capabilityEmpty: "No entries in the current file.", capabilityGrant: "Review grant", capabilityGrantReview: "Review change to zelyra.toml", capabilityGrantApply: "Apply grant", capabilityGrantPreview: "Only the displayed configuration change will be saved after your confirmation.", capabilityGranted: "Grant saved. The runtime checks it again on the next run.", capabilityUnrestricted: "No project configuration: runtime capabilities are not restricted by zelyra.toml.", capabilityIncomplete: "Source analysis is incomplete; this report may omit entries.", capabilityError: "Capability analysis failed: {0}", capabilityPathUnknown: "Dynamic paths cannot be decided statically.", capabilityNotGranted: "not granted", capabilityDynamic: "dynamic",
     runButton: "Run", runButtonTitle: "Run main.zyl or start the web application",
     runOutputTitle: "Program output", runStarting: "Preparing and starting the application …", runSuccess: "Program finished successfully", runFailure: "Program finished with an error", runTimeout: "Execution stopped after 15 seconds", runOutputTruncated: "Output is limited to 64 KiB per stream.", runNoOutput: "No output.", runStdout: "OUTPUT", runStderr: "ERROR", runInputUnavailable: "Studio does not provide interactive input to the program.", runWebReady: "Web application is running locally:", runWebOpen: "Open application in browser", runWebStop: "Stop preview", runWebStopped: "Local preview stopped.",
     runtimeBudgetButton: "Budget", runtimeBudgetTitle: "Runtime budget and recursion", runtimeBudgetEnable: "Enable a step budget for console programs", runtimeBudgetRange: "Step budget (slider: 1,000 to 1,000,000)", runtimeBudgetNumber: "Maximum steps (1 to 100,000,000)", runtimeBudgetWebHint: "The step budget applies to console programs. Web previews keep their own runtime limits.", runtimeRecursionTitle: "Possible recursion", runtimeRecursionNone: "No direct or mutual recursion found in the analyzed function graph.", runtimeRecursionIncomplete: "The function graph is too large; recursion analysis is incomplete.", runtimeRecursionDirect: "Direct recursion", runtimeRecursionMutual: "Mutual recursion", runtimeStackDepth: "Project maximum stack depth: {0} ({1})", runtimeStackConfigured: "configured", runtimeStackDefault: "default", runtimeProfileError: "Could not read runtime profile: {0}", runtimeBudgetInvalid: "Enter an integer step count from 1 to 100,000,000.", runtimeBudgetExceeded: "Step budget exceeded", runCancel: "Cancel execution", runCancelRequested: "Cancellation requested …", runCancelled: "Execution cancelled", runtimeProfileInvalid: "The unsaved source cannot be fully analyzed.",
@@ -1031,6 +1033,7 @@ const studioTasks = [
   ["projectMap", "projectMapTitle", ["map", "diagram", "module", "route", "relationship"], () => void openProjectMap()],
   ["pdfPreview", "pdfPreviewTitle", ["pdf", "document", "invoice", "print"], () => void openPdfPreview()],
   ["outboxButton", "outboxTitle", ["outbox", "mail", "email", "queue"], openOutbox],
+  ["capabilityButton", "capabilityTitle", ["capability", "permission", "sandbox", "security"], openCapabilityMatrix],
   ["taskDatabase", "taskDatabaseHelp", ["database", "table", "relation", "schema"], () => openDatabaseWorkbench()],
   ["taskHelp", "taskHelpHelp", ["help", "documentation", "f1"], () => toggleAssistant("help")],
   ["taskProperties", "taskPropertiesHelp", ["properties", "file", "settings"], () => toggleAssistant("properties")],
@@ -2960,6 +2963,95 @@ async function renderPdfPreview() {
   }
 }
 
+let capabilityRequest = 0;
+let capabilityGrantPreview = null;
+
+function capabilityItem(list, label, statusName = "") {
+  const item = document.createElement("li");
+  item.textContent = label;
+  if (statusName) item.dataset.status = statusName;
+  list.append(item);
+  return item;
+}
+
+async function openCapabilityMatrix() {
+  const dialog = $("capability-dialog");
+  if (!dialog.open) dialog.showModal();
+  const request = ++capabilityRequest;
+  const status = $("capability-status");
+  status.textContent = t("capabilityLoading");
+  $("capability-preview").hidden = true;
+  capabilityGrantPreview = null;
+  for (const id of ["capability-declared", "capability-needed", "capability-paths", "capability-unused"]) $(id).replaceChildren();
+  try {
+    const path = activePath?.endsWith(".zyl") ? activePath : studioEntryPath();
+    const source = path === activePath ? editor?.state.doc.toString() : undefined;
+    const result = await api("capabilities", { method: "POST", body: JSON.stringify({ path, source, version: liveCheckSequence }) });
+    if (request !== capabilityRequest || !dialog.open) return;
+    status.textContent = !result.success ? t("capabilityIncomplete") : !result.configured ? t("capabilityUnrestricted") : "";
+    const declared = $("capability-declared");
+    for (const entry of result.declared || []) {
+      capabilityItem(declared, `${entry.function} · ${entry.capability} · ${path}:${entry.line}${entry.granted ? "" : ` · ${t("capabilityNotGranted")}`}`, entry.granted ? "" : "missing");
+    }
+    if (!declared.childElementCount) capabilityItem(declared, t("capabilityEmpty"));
+    const needed = $("capability-needed");
+    const missing = new Set();
+    for (const entry of result.needed || []) {
+      capabilityItem(needed, `${entry.function} · ${entry.operation} · ${entry.capability} · ${path}:${entry.line}${entry.granted ? "" : ` · ${t("capabilityNotGranted")}`}`, entry.granted ? "" : "missing");
+      if (!entry.granted) missing.add(entry.capability);
+    }
+    if (!needed.childElementCount) capabilityItem(needed, t("capabilityEmpty"));
+    for (const capability of missing) {
+      const button = document.createElement("button");
+      button.type = "button"; button.className = "toolbar-button";
+      button.textContent = `${t("capabilityGrant")}: ${capability}`;
+      button.addEventListener("click", () => void previewCapabilityGrant(capability));
+      const item = document.createElement("li"); item.append(button); needed.append(item);
+    }
+    const paths = $("capability-paths");
+    for (const entry of result.filePaths || []) {
+      capabilityItem(paths, `${entry.function}:${entry.line} · ${entry.access} · ${entry.path ?? `(${t("capabilityDynamic")})`} · ${entry.status}: ${entry.reason}`, entry.status);
+    }
+    if (!paths.childElementCount) capabilityItem(paths, t("capabilityEmpty"));
+    const unused = $("capability-unused");
+    for (const capability of result.grantsWithoutFunctionUse || []) capabilityItem(unused, capability);
+    if (unused.childElementCount) capabilityItem(unused, t("capabilityUnusedCaveat"));
+    else capabilityItem(unused, t("capabilityEmpty"));
+  } catch (error) {
+    if (request === capabilityRequest && dialog.open) status.textContent = t("capabilityError", error.message);
+  }
+}
+
+async function previewCapabilityGrant(capability) {
+  const status = $("capability-status");
+  try {
+    const preview = await api("capability-grant-preview", { method: "POST", body: JSON.stringify({ capability }) });
+    if (!$("capability-dialog").open) return;
+    capabilityGrantPreview = preview;
+    $("capability-preview-label").textContent = `${capability}: ${t("capabilityGrantPreview")}`;
+    $("capability-preview-code").textContent = preview.after;
+    $("capability-preview").hidden = false;
+    $("capability-grant-apply").focus();
+  } catch (error) { status.textContent = t("capabilityError", error.message); }
+}
+
+async function applyCapabilityGrant() {
+  const preview = capabilityGrantPreview;
+  if (!preview) return;
+  const button = $("capability-grant-apply");
+  button.disabled = true;
+  try {
+    await api("capability-grant-apply", { method: "POST", body: JSON.stringify({
+      capability: preview.capability, baseHash: preview.baseHash, after: preview.after, confirm: true,
+    }) });
+    $("capability-preview").hidden = true;
+    capabilityGrantPreview = null;
+    await openCapabilityMatrix();
+    $("capability-status").textContent = t("capabilityGranted");
+  } catch (error) { $("capability-status").textContent = t("capabilityError", error.message); }
+  finally { button.disabled = false; }
+}
+
 let outboxOffset = 0;
 let outboxRequest = 0;
 async function loadOutbox() {
@@ -3252,6 +3344,10 @@ $("pdf-preview-close").addEventListener("click", () => $("pdf-preview-dialog").c
 $("pdf-preview-dialog").addEventListener("close", clearPdfPreview);
 $("pdf-preview-render").addEventListener("click", renderPdfPreview);
 $("outbox-button").addEventListener("click", openOutbox);
+$("capability-button").addEventListener("click", () => void openCapabilityMatrix());
+$("capability-close").addEventListener("click", () => $("capability-dialog").close());
+$("capability-dialog").addEventListener("close", () => { capabilityRequest++; capabilityGrantPreview = null; });
+$("capability-grant-apply").addEventListener("click", () => void applyCapabilityGrant());
 $("outbox-close").addEventListener("click", () => $("outbox-dialog").close());
 $("outbox-dialog").addEventListener("close", () => { outboxRequest++; });
 $("outbox-refresh").addEventListener("click", () => void loadOutbox());

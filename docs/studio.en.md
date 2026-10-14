@@ -265,6 +265,25 @@ again immediately before writing. If the file changed after preview, the write
 is rejected and a new preview is required. Generated CRUD is source code; it
 does not migrate the database or change records.
 
+## Capability and path matrix (1.1.0 work in progress)
+
+The **Permissions** button analyzes the current `.zyl` file, including
+unsaved changes. The matrix shows `uses` declarations, capability operations
+found by the compiler, and grants from `zelyra.toml`. Grants with no detected
+function use are suggestions only; generated routes may still require them.
+Literal file paths use
+the same canonical root check as the runtime. Dynamic paths remain unknown;
+paths allowed at inspection time are checked again during execution. A
+compiler error marks the report as incomplete.
+
+**Review grant** prepares a missing grant and displays the complete proposed
+`zelyra.toml`. Only **Apply grant** saves it. Studio rechecks the file hash,
+preserves TOML comments, and rejects stale configuration. Without
+`zelyra.toml`, there is no project-wide runtime capability restriction, so
+Studio does not pretend to add a grant. The report covers analyzed function
+calls; dynamic calls and generated web routes are not fully resolved into a
+static permission chain.
+
 ## Scope
 
 Studio is a local IDE foundation, not yet a complete IDE. The database

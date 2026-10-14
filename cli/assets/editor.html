@@ -59,6 +59,7 @@
             <button class="toolbar-button" id="save-button" disabled title="Speichern (Strg+S)" data-i18n-title="save"><span class="button-icon">▣</span><span data-i18n="save">Speichern</span></button>
             <button class="toolbar-button" id="format-button" title="Aktive Zelyra-Datei formatieren" data-i18n="format">Formatieren</button>
             <button class="toolbar-button" id="runtime-budget-button" type="button" title="Laufzeitbudget und Rekursion prüfen" data-i18n-title="runtimeBudgetTitle"><span class="button-icon">◴</span><span data-i18n="runtimeBudgetButton">Budget</span></button>
+            <button class="toolbar-button" id="capability-button" type="button" title="Capabilities und Pfadfreigaben prüfen" data-i18n-title="capabilityTitle"><span class="button-icon">▣</span><span data-i18n="capabilityButton">Rechte</span></button>
             <button class="toolbar-button" id="run-button" title="main.zyl ausführen" data-i18n-title="runButtonTitle" data-i18n="runButton">Starten</button>
             <button class="primary-button" id="check-button" title="Projekt prüfen" data-i18n-title="check"><span>✓</span> <span data-i18n="check">Projekt prüfen</span></button>
           </div>
@@ -182,6 +183,17 @@
     <div id="task-finder-results" class="task-finder-results" role="listbox" aria-label="Aktionen" data-i18n-aria="taskFinderResults"></div>
     <p id="task-finder-empty" class="task-finder-empty" hidden data-i18n="noMatchingTasks">Keine passende Aktion gefunden.</p>
     <footer><kbd>↑</kbd><kbd>↓</kbd><kbd>Enter</kbd><span data-i18n="chooseAction">Aktion auswählen</span><kbd>Esc</kbd><span data-i18n="close">Schließen</span></footer>
+  </dialog>
+  <dialog id="capability-dialog" class="project-map-dialog capability-dialog" aria-labelledby="capability-title">
+    <header class="project-map-header"><div><h2 id="capability-title" data-i18n="capabilityTitle">Capability- und Sicherheitsmatrix</h2></div><button id="capability-close" type="button" aria-label="Schließen" data-i18n-aria="close">×</button></header>
+    <div class="capability-content">
+      <p id="capability-status" role="status"></p>
+      <h3 data-i18n="capabilityDeclarations">Deklariert</h3><ul id="capability-declared"></ul>
+      <h3 data-i18n="capabilityUses">Tatsächlich verwendete Operationen</h3><ul id="capability-needed"></ul>
+      <h3 data-i18n="capabilityPaths">Dateipfade</h3><ul id="capability-paths"></ul>
+      <h3 data-i18n="capabilityUnused">Freigaben ohne erkannten Funktionsbedarf</h3><ul id="capability-unused"></ul>
+      <section id="capability-preview" hidden><h3 data-i18n="capabilityGrantReview">Konfigurationsänderung prüfen</h3><p id="capability-preview-label"></p><pre id="capability-preview-code"></pre><button id="capability-grant-apply" type="button" class="primary-button" data-i18n="capabilityGrantApply">Freigabe übernehmen</button></section>
+    </div>
   </dialog>
   <dialog id="project-search" class="task-finder" aria-labelledby="project-search-title">
     <header><h2 id="project-search-title" data-i18n="projectSearchTitle">Projekt durchsuchen</h2><button id="project-search-close" aria-label="Schließen" data-i18n-aria="close">×</button></header>

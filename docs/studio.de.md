@@ -294,6 +294,28 @@ der Vorschau geändert, wird der Schreibvorgang abgelehnt und die Vorschau muss
 neu erstellt werden. Das erzeugte CRUD ist Quelltext; es migriert keine
 Datenbank und verändert keine Datensätze.
 
+## Capability- und Pfadmatrix (Arbeitsstand 1.1.0)
+
+Die Schaltfläche **Rechte** analysiert die aktuelle `.zyl`-Datei einschließlich
+ungespeicherter Änderungen. Die Matrix zeigt `uses`-Deklarationen, tatsächlich
+erkannte Capability-Operationen und die Freigaben aus `zelyra.toml`.
+Freigaben ohne erkannten Funktionsbedarf sind nur Hinweise; generierte Routen
+können sie dennoch benötigen. Bei
+wörtlichen Dateipfaden verwendet sie dieselbe kanonisierte Root-Prüfung wie
+die Runtime. Ein dynamischer Pfad bleibt als unbekannt markiert; ein zur
+Analysezeit erlaubter Pfad wird zur Laufzeit erneut geprüft. Bei Compilerfehlern
+ist der Befund als unvollständig gekennzeichnet.
+
+Eine fehlende Freigabe lässt sich über **Freigabe prüfen** vorbereiten. Studio
+zeigt die vollständige neue `zelyra.toml` vor dem Speichern. Erst
+**Freigabe übernehmen** schreibt die Änderung. Dabei prüft Studio den
+Datei-Hash erneut, bewahrt vorhandene TOML-Kommentare und lehnt geänderte
+Konfigurationen ab. Ohne `zelyra.toml` hat die Runtime keine projektweite
+Capability-Schranke; Studio erzeugt deshalb keine vorgetäuschte Freigabe.
+Der Bericht umfasst analysierte Funktionsaufrufe; dynamische Aufrufe und
+automatisch generierte Webrouten sind keine vollständig statisch bewerteten
+Rechteketten.
+
 ## Umfang
 
 Studio ist eine lokale IDE-Grundlage und noch keine vollständige IDE.

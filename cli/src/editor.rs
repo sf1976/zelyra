@@ -11,6 +11,8 @@ use zelyra_web::{parse_request, Request};
 #[path = "editor_events.rs"]
 mod editor_events;
 use editor_events::EventHub;
+#[path = "editor_capabilities.rs"]
+mod editor_capabilities;
 #[path = "editor_outbox.rs"]
 mod editor_outbox;
 #[path = "editor_pdf.rs"]
@@ -465,6 +467,15 @@ fn editor_response(
         ("GET", "outbox") => editor_outbox::list(state, request),
         ("POST", "outbox-requeue") => {
             editor_outbox::requeue(state, &parse_json_body(&request.body)?)
+        }
+        ("POST", "capabilities") => {
+            editor_capabilities::inspect(state, &parse_json_body(&request.body)?)
+        }
+        ("POST", "capability-grant-preview") => {
+            editor_capabilities::preview_grant(state, &parse_json_body(&request.body)?)
+        }
+        ("POST", "capability-grant-apply") => {
+            editor_capabilities::apply_grant(state, &parse_json_body(&request.body)?)
         }
         ("GET", "logs") => editor_logs_response(state),
         ("GET", "database-schema") => database_schema_response(state),
@@ -5121,6 +5132,140 @@ fn main() {}
                 .0,
             400
         );
+    }
+
+    #[test]
+    fn capability_matrix_inspects_unsaved_uses_and_runtime_file_roots() {
+        let state = project();
+        fs::create_dir(state.root.join("notes")).unwrap();
+        fs::write(state.root.join("zelyra.toml"),
+            "name = \"editor-test\"\n[capabilities]\nfilesystem = false\nclock = true\nnetwork = true\n[filesystem]\nread_roots = [\".\"]\nwrite_roots = [\"notes\"]\n").unwrap();
+        let source = "fn main() uses FileSystem, Clock { write_text(\"notes/a.txt\", \"ok\") write_text(\"../outside.txt\", \"no\") now() }\n";
+        let response = editor_capabilities::inspect(
+            &state,
+            &json!({"path":"main.zyl","source":source,"version":9}),
+        )
+        .unwrap();
+        let value: Value = serde_json::from_str(&response.2).unwrap();
+        assert_eq!(value["version"], 9);
+        assert!(value["needed"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| entry["capability"] == "FileSystem" && entry["granted"] == false));
+        assert!(value["needed"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| entry["capability"] == "Clock" && entry["granted"] == true));
+        assert!(value["filePaths"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| entry["path"] == "notes/a.txt" && entry["status"] == "allowed"));
+        assert!(value["filePaths"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| entry["path"] == "../outside.txt" && entry["status"] == "denied"));
+        assert_eq!(value["success"], false);
+        assert!(value["grantsWithoutFunctionUse"]
+            .as_array()
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            fs::read_to_string(state.root.join("main.zyl")).unwrap(),
+            "fn main() {}\n"
+        );
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn capability_matrix_reports_unused_grants_only_for_valid_projects() {
+        let state = project();
+        fs::write(
+            state.root.join("zelyra.toml"),
+            "name = \"editor-test\"\n[capabilities]\nnetwork = true\n",
+        )
+        .unwrap();
+        let response = editor_capabilities::inspect(
+            &state,
+            &json!({"path":"main.zyl","source":"fn main() {}\n"}),
+        )
+        .unwrap();
+        let value: Value = serde_json::from_str(&response.2).unwrap();
+        assert_eq!(value["success"], true);
+        assert!(value["grantsWithoutFunctionUse"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| entry == "Network"));
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn capability_grant_requires_review_and_preserves_toml_comments() {
+        let state = project();
+        let config = "name = \"editor-test\"\n# keep this comment\n[capabilities]\nfilesystem = false # reviewed separately\n";
+        fs::write(state.root.join("zelyra.toml"), config).unwrap();
+        let (_, _, body) =
+            editor_capabilities::preview_grant(&state, &json!({"capability":"FileSystem"}))
+                .unwrap();
+        let preview: Value = serde_json::from_str(&body).unwrap();
+        assert!(preview["after"]
+            .as_str()
+            .unwrap()
+            .contains("# keep this comment"));
+        assert!(preview["after"]
+            .as_str()
+            .unwrap()
+            .contains("filesystem = true"));
+        assert_eq!(editor_capabilities::apply_grant(&state, &json!({
+            "capability":"FileSystem","baseHash":preview["baseHash"],"after":preview["after"]
+        })).unwrap_err().0, 400);
+        assert_eq!(editor_capabilities::apply_grant(&state, &json!({
+            "capability":"FileSystem","baseHash":"stale","after":preview["after"],"confirm":true
+        })).unwrap_err().0, 409);
+        assert_eq!(
+            fs::read_to_string(state.root.join("zelyra.toml")).unwrap(),
+            config
+        );
+        editor_capabilities::apply_grant(&state, &json!({
+            "capability":"FileSystem","baseHash":preview["baseHash"],"after":preview["after"],"confirm":true
+        })).unwrap();
+        assert!(fs::read_to_string(state.root.join("zelyra.toml"))
+            .unwrap()
+            .contains("filesystem = true"));
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn capability_write_api_rejects_missing_token_and_foreign_origin() {
+        let state = project();
+        let path = "/__zelyra/editor/api/capability-grant-apply";
+        assert_eq!(
+            editor_response(&request("POST", path, &[]), &state)
+                .unwrap_err()
+                .0,
+            403
+        );
+        assert_eq!(
+            editor_response(
+                &request(
+                    "POST",
+                    path,
+                    &[
+                        ("x-zelyra-editor-token", state.token.as_str()),
+                        ("origin", "http://attacker.test"),
+                    ]
+                ),
+                &state
+            )
+            .unwrap_err()
+            .0,
+            403
+        );
+        fs::remove_dir_all(state.root.clone()).unwrap();
     }
 
     #[test]

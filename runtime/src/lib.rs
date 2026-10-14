@@ -213,6 +213,24 @@ pub struct CapabilityError {
     pub span: Span,
 }
 
+/// A capability required by a concrete expression or resolved function call.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CapabilityUse {
+    pub function: String,
+    pub capability: String,
+    pub operation: String,
+    pub span: Span,
+    /// Literal paths can be checked against the runtime policy; None is dynamic.
+    pub file_paths: Vec<FilePathUse>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FilePathUse {
+    pub path: Option<String>,
+    pub write: bool,
+    pub allow_missing: bool,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct ApiDiagnostic {
     pub message: String,
@@ -3504,6 +3522,24 @@ pub fn check_capabilities_with_grants(
     program: &Program,
     grants: Option<&HashSet<String>>,
 ) -> Result<(), Vec<CapabilityError>> {
+    let (errors, _) = analyze_capabilities(program, grants);
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
+/// Return use sites from the same traversal that enforces capability checks.
+/// Dynamic file paths and indirect calls still require runtime inspection.
+pub fn inspect_capability_uses(program: &Program) -> Vec<CapabilityUse> {
+    analyze_capabilities(program, None).1
+}
+
+fn analyze_capabilities(
+    program: &Program,
+    grants: Option<&HashSet<String>>,
+) -> (Vec<CapabilityError>, Vec<CapabilityUse>) {
     let functions = program
         .functions
         .iter()
@@ -3511,6 +3547,7 @@ pub fn check_capabilities_with_grants(
         .collect::<HashMap<_, _>>();
     let known = KNOWN_CAPABILITIES.iter().copied().collect::<HashSet<_>>();
     let mut errors = Vec::new();
+    let mut uses = Vec::new();
 
     for function in &program.functions {
         let mut declared = HashSet::new();
@@ -3538,7 +3575,14 @@ pub fn check_capabilities_with_grants(
                 });
             }
         }
-        check_capability_block(&function.body, function, &functions, &declared, &mut errors);
+        check_capability_block(
+            &function.body,
+            function,
+            &functions,
+            &declared,
+            &mut errors,
+            &mut uses,
+        );
         let mut function_values = HashMap::new();
         for parameter in &function.params {
             if let Type::Function { capabilities, .. } = &parameter.ty {
@@ -3555,17 +3599,20 @@ pub fn check_capabilities_with_grants(
             &declared,
             &mut function_values,
             &mut errors,
+            &mut uses,
         );
         for contract in function.requires.iter().chain(&function.ensures) {
-            check_capability_expr(contract, function, &functions, &declared, &mut errors);
+            check_capability_expr(
+                contract,
+                function,
+                &functions,
+                &declared,
+                &mut errors,
+                &mut uses,
+            );
         }
     }
-
-    if errors.is_empty() {
-        Ok(())
-    } else {
-        Err(errors)
-    }
+    (errors, uses)
 }
 
 fn function_value_capabilities(
@@ -3609,13 +3656,14 @@ fn check_indirect_capability_block(
     declared: &HashSet<&str>,
     values: &mut HashMap<String, HashSet<String>>,
     errors: &mut Vec<CapabilityError>,
+    uses: &mut Vec<CapabilityUse>,
 ) {
     for statement in &block.statements {
         match statement {
             Stmt::Let {
                 name, ty, value, ..
             } => {
-                check_indirect_capability_expr(value, function, declared, values, errors);
+                check_indirect_capability_expr(value, function, declared, values, errors, uses);
                 let declared_effects = ty.as_ref().and_then(|ty| match ty {
                     Type::Function { capabilities, .. } => {
                         Some(capabilities.iter().cloned().collect())
@@ -3629,7 +3677,7 @@ fn check_indirect_capability_block(
                 }
             }
             Stmt::BindOrAssign { name, value, .. } => {
-                check_indirect_capability_expr(value, function, declared, values, errors);
+                check_indirect_capability_expr(value, function, declared, values, errors, uses);
                 if let Some(capabilities) = function_value_capabilities(value, values, functions) {
                     values.entry(name.clone()).or_default().extend(capabilities);
                 } else {
@@ -3637,7 +3685,7 @@ fn check_indirect_capability_block(
                 }
             }
             Stmt::TupleBindOrAssign { names, value, .. } => {
-                check_indirect_capability_expr(value, function, declared, values, errors);
+                check_indirect_capability_expr(value, function, declared, values, errors, uses);
                 for name in names {
                     values.remove(name);
                 }
@@ -3647,7 +3695,9 @@ fn check_indirect_capability_block(
                 value: Some(expression),
                 ..
             } => {
-                check_indirect_capability_expr(expression, function, declared, values, errors);
+                check_indirect_capability_expr(
+                    expression, function, declared, values, errors, uses,
+                );
             }
             Stmt::If {
                 condition,
@@ -3655,7 +3705,7 @@ fn check_indirect_capability_block(
                 else_block,
                 ..
             } => {
-                check_indirect_capability_expr(condition, function, declared, values, errors);
+                check_indirect_capability_expr(condition, function, declared, values, errors, uses);
                 let before = values.clone();
                 let mut then_values = before.clone();
                 check_indirect_capability_block(
@@ -3665,6 +3715,7 @@ fn check_indirect_capability_block(
                     declared,
                     &mut then_values,
                     errors,
+                    uses,
                 );
                 let mut else_values = before.clone();
                 if let Some(else_block) = else_block {
@@ -3675,6 +3726,7 @@ fn check_indirect_capability_block(
                         declared,
                         &mut else_values,
                         errors,
+                        uses,
                     );
                 }
                 *values = merge_function_value_capabilities(&before, &[then_values, else_values]);
@@ -3685,9 +3737,11 @@ fn check_indirect_capability_block(
                 body,
                 ..
             } => {
-                check_indirect_capability_expr(condition, function, declared, values, errors);
+                check_indirect_capability_expr(condition, function, declared, values, errors, uses);
                 for invariant in invariants {
-                    check_indirect_capability_expr(invariant, function, declared, values, errors);
+                    check_indirect_capability_expr(
+                        invariant, function, declared, values, errors, uses,
+                    );
                 }
                 let before = values.clone();
                 let mut body_values = before.clone();
@@ -3698,11 +3752,12 @@ fn check_indirect_capability_block(
                     declared,
                     &mut body_values,
                     errors,
+                    uses,
                 );
                 *values = merge_function_value_capabilities(&before, &[body_values]);
             }
             Stmt::For { iterable, body, .. } => {
-                check_indirect_capability_expr(iterable, function, declared, values, errors);
+                check_indirect_capability_expr(iterable, function, declared, values, errors, uses);
                 let before = values.clone();
                 let mut body_values = before.clone();
                 check_indirect_capability_block(
@@ -3712,6 +3767,7 @@ fn check_indirect_capability_block(
                     declared,
                     &mut body_values,
                     errors,
+                    uses,
                 );
                 *values = merge_function_value_capabilities(&before, &[body_values]);
             }
@@ -3719,7 +3775,9 @@ fn check_indirect_capability_block(
                 invariants, body, ..
             } => {
                 for invariant in invariants {
-                    check_indirect_capability_expr(invariant, function, declared, values, errors);
+                    check_indirect_capability_expr(
+                        invariant, function, declared, values, errors, uses,
+                    );
                 }
                 let before = values.clone();
                 let mut body_values = before.clone();
@@ -3730,11 +3788,12 @@ fn check_indirect_capability_block(
                     declared,
                     &mut body_values,
                     errors,
+                    uses,
                 );
                 *values = merge_function_value_capabilities(&before, &[body_values]);
             }
             Stmt::Match { value, arms, .. } => {
-                check_indirect_capability_expr(value, function, declared, values, errors);
+                check_indirect_capability_expr(value, function, declared, values, errors, uses);
                 let before = values.clone();
                 let mut branches = Vec::new();
                 for arm in arms {
@@ -3746,6 +3805,7 @@ fn check_indirect_capability_block(
                         declared,
                         &mut branch,
                         errors,
+                        uses,
                     );
                     branches.push(branch);
                 }
@@ -3761,6 +3821,7 @@ fn check_indirect_capability_block(
                     declared,
                     &mut nested,
                     errors,
+                    uses,
                 );
                 *values = merge_function_value_capabilities(&before, &[nested]);
             }
@@ -3793,6 +3854,7 @@ fn check_indirect_capability_expr(
     declared: &HashSet<&str>,
     values: &HashMap<String, HashSet<String>>,
     errors: &mut Vec<CapabilityError>,
+    uses: &mut Vec<CapabilityUse>,
 ) {
     let mut pending = vec![expression];
     while let Some(expression) = pending.pop() {
@@ -3807,6 +3869,7 @@ fn check_indirect_capability_expr(
                             function,
                             declared,
                             errors,
+                            uses,
                         );
                     }
                 }
@@ -3856,6 +3919,7 @@ fn check_capability_block(
     functions: &HashMap<&str, &Function>,
     declared: &HashSet<&str>,
     errors: &mut Vec<CapabilityError>,
+    uses: &mut Vec<CapabilityUse>,
 ) {
     for statement in &block.statements {
         match statement {
@@ -3867,10 +3931,12 @@ fn check_capability_block(
                 value: Some(value), ..
             }
             | Stmt::Match { value, .. } => {
-                check_capability_expr(value, function, functions, declared, errors);
+                check_capability_expr(value, function, functions, declared, errors, uses);
                 if let Stmt::Match { arms, .. } = statement {
                     for arm in arms {
-                        check_capability_block(&arm.body, function, functions, declared, errors);
+                        check_capability_block(
+                            &arm.body, function, functions, declared, errors, uses,
+                        );
                     }
                 }
             }
@@ -3881,10 +3947,10 @@ fn check_capability_block(
                 else_block,
                 ..
             } => {
-                check_capability_expr(condition, function, functions, declared, errors);
-                check_capability_block(then_block, function, functions, declared, errors);
+                check_capability_expr(condition, function, functions, declared, errors, uses);
+                check_capability_block(then_block, function, functions, declared, errors, uses);
                 if let Some(else_block) = else_block {
-                    check_capability_block(else_block, function, functions, declared, errors);
+                    check_capability_block(else_block, function, functions, declared, errors, uses);
                 }
             }
             Stmt::While {
@@ -3893,29 +3959,29 @@ fn check_capability_block(
                 body,
                 ..
             } => {
-                check_capability_expr(condition, function, functions, declared, errors);
+                check_capability_expr(condition, function, functions, declared, errors, uses);
                 for invariant in invariants {
-                    check_capability_expr(invariant, function, functions, declared, errors);
+                    check_capability_expr(invariant, function, functions, declared, errors, uses);
                 }
-                check_capability_block(body, function, functions, declared, errors);
+                check_capability_block(body, function, functions, declared, errors, uses);
             }
             Stmt::For { iterable, body, .. } => {
-                check_capability_expr(iterable, function, functions, declared, errors);
-                check_capability_block(body, function, functions, declared, errors);
+                check_capability_expr(iterable, function, functions, declared, errors, uses);
+                check_capability_block(body, function, functions, declared, errors, uses);
             }
             Stmt::Loop {
                 invariants, body, ..
             } => {
                 for invariant in invariants {
-                    check_capability_expr(invariant, function, functions, declared, errors);
+                    check_capability_expr(invariant, function, functions, declared, errors, uses);
                 }
-                check_capability_block(body, function, functions, declared, errors);
+                check_capability_block(body, function, functions, declared, errors, uses);
             }
             Stmt::Transaction { body, .. } => {
-                check_capability_block(body, function, functions, declared, errors);
+                check_capability_block(body, function, functions, declared, errors, uses);
             }
             Stmt::Parallel { body, .. } => {
-                check_capability_block(body, function, functions, declared, errors);
+                check_capability_block(body, function, functions, declared, errors, uses);
             }
         }
     }
@@ -3927,6 +3993,7 @@ fn check_capability_expr(
     functions: &HashMap<&str, &Function>,
     declared: &HashSet<&str>,
     errors: &mut Vec<CapabilityError>,
+    uses: &mut Vec<CapabilityUse>,
 ) {
     let mut pending = vec![expression];
     while let Some(expression) = pending.pop() {
@@ -3940,6 +4007,7 @@ fn check_capability_expr(
                     function,
                     declared,
                     errors,
+                    uses,
                 );
             }
             ExprKind::Call { name, args, .. } => {
@@ -3951,6 +4019,7 @@ fn check_capability_expr(
                         function,
                         declared,
                         errors,
+                        uses,
                     );
                 } else if name == "now" {
                     require_capability(
@@ -3960,6 +4029,7 @@ fn check_capability_expr(
                         function,
                         declared,
                         errors,
+                        uses,
                     );
                 } else if name == "env" {
                     require_capability(
@@ -3969,6 +4039,7 @@ fn check_capability_expr(
                         function,
                         declared,
                         errors,
+                        uses,
                     );
                 } else if name == "random_int" || name == "uuid_v4" {
                     require_capability(
@@ -3978,6 +4049,7 @@ fn check_capability_expr(
                         function,
                         declared,
                         errors,
+                        uses,
                     );
                 } else if matches!(
                     name.as_str(),
@@ -3990,6 +4062,7 @@ fn check_capability_expr(
                         function,
                         declared,
                         errors,
+                        uses,
                     );
                 } else if name == "mail_queue" {
                     require_capability(
@@ -3999,6 +4072,7 @@ fn check_capability_expr(
                         function,
                         declared,
                         errors,
+                        uses,
                     );
                     require_capability(
                         "Database(write)",
@@ -4007,6 +4081,7 @@ fn check_capability_expr(
                         function,
                         declared,
                         errors,
+                        uses,
                     );
                 } else if name == "mail_deliver" {
                     require_capability(
@@ -4016,6 +4091,7 @@ fn check_capability_expr(
                         function,
                         declared,
                         errors,
+                        uses,
                     );
                 } else if name == "run_process" {
                     require_capability(
@@ -4025,6 +4101,7 @@ fn check_capability_expr(
                         function,
                         declared,
                         errors,
+                        uses,
                     );
                 } else if matches!(
                     name.as_str(),
@@ -4037,6 +4114,7 @@ fn check_capability_expr(
                         function,
                         declared,
                         errors,
+                        uses,
                     );
                 } else if matches!(
                     name.as_str(),
@@ -4055,6 +4133,7 @@ fn check_capability_expr(
                         function,
                         declared,
                         errors,
+                        uses,
                     );
                 } else if name == "delete_file" || name == "delete_file_result" {
                     require_capability(
@@ -4064,6 +4143,7 @@ fn check_capability_expr(
                         function,
                         declared,
                         errors,
+                        uses,
                     );
                 } else if name == "list_dir" {
                     require_capability(
@@ -4073,10 +4153,25 @@ fn check_capability_expr(
                         function,
                         declared,
                         errors,
+                        uses,
                     );
+                }
+                if let Some(usage) = uses.last_mut() {
+                    if usage.span == expression.span && usage.capability == "FileSystem" {
+                        usage.file_paths = file_path_uses(name, args);
+                    }
                 }
                 if let Some(callee) = functions.get(name.as_str()) {
                     for capability in &callee.capabilities {
+                        if KNOWN_CAPABILITIES.contains(&capability.as_str()) {
+                            uses.push(CapabilityUse {
+                                function: function.name.clone(),
+                                capability: capability.clone(),
+                                operation: format!("call to `{name}`"),
+                                span: expression.span,
+                                file_paths: Vec::new(),
+                            });
+                        }
                         if KNOWN_CAPABILITIES.contains(&capability.as_str())
                             && !function_declares_capability(declared, capability)
                         {
@@ -4153,7 +4248,15 @@ fn require_capability(
     function: &Function,
     declared: &HashSet<&str>,
     errors: &mut Vec<CapabilityError>,
+    uses: &mut Vec<CapabilityUse>,
 ) {
+    uses.push(CapabilityUse {
+        function: function.name.clone(),
+        capability: capability.into(),
+        operation: operation.into(),
+        span,
+        file_paths: Vec::new(),
+    });
     if !function_declares_capability(declared, capability) {
         errors.push(CapabilityError {
             message: format!(
@@ -4163,6 +4266,34 @@ fn require_capability(
             span,
         });
     }
+}
+
+fn file_path_uses(name: &str, args: &[Expr]) -> Vec<FilePathUse> {
+    let (modes, allow_missing): (&[bool], bool) = match name {
+        "read_text" | "read_text_result" | "file_size" | "list_dir" => (&[false], false),
+        "file_exists" | "dir_exists" => (&[false], true),
+        "write_text"
+        | "write_text_result"
+        | "write_text_new_result"
+        | "atomic_write_text_result"
+        | "append_text_result" => (&[true], true),
+        "delete_file" | "delete_file_result" => (&[true], false),
+        "copy_file_new_result" => (&[false, true], false),
+        "rename_file_result" => (&[true, true], false),
+        _ => return Vec::new(),
+    };
+    modes
+        .iter()
+        .enumerate()
+        .map(|(index, write)| FilePathUse {
+            path: args.get(index).and_then(|arg| match &arg.kind {
+                ExprKind::String(path) => Some(path.clone()),
+                _ => None,
+            }),
+            write: *write,
+            allow_missing: allow_missing || (index == 1 && modes.len() == 2),
+        })
+        .collect()
 }
 
 fn function_declares_capability(declared: &HashSet<&str>, capability: &str) -> bool {
@@ -9177,6 +9308,69 @@ pub struct FileSystemPolicy {
     pub write_roots: Vec<PathBuf>,
 }
 
+/// Inspect a literal path with the exact canonicalization and root rules used
+/// by file-system builtins. Dynamic paths cannot be certified by this helper.
+pub fn inspect_filesystem_path(
+    policy: Option<&FileSystemPolicy>,
+    path: &str,
+    write: bool,
+    allow_missing: bool,
+) -> Result<PathBuf, String> {
+    let roots = policy.map_or_else(Vec::new, |policy| {
+        if write {
+            policy.write_roots.clone()
+        } else {
+            policy.read_roots.clone()
+        }
+    });
+    resolve_filesystem_path_rule(
+        policy,
+        path,
+        &roots,
+        if write { "write" } else { "read" },
+        allow_missing,
+    )
+}
+
+fn resolve_filesystem_path_rule(
+    policy: Option<&FileSystemPolicy>,
+    path: &str,
+    roots: &[PathBuf],
+    operation: &str,
+    allow_missing: bool,
+) -> Result<PathBuf, String> {
+    let Some(policy) = policy else {
+        return Ok(PathBuf::from(path));
+    };
+    let candidate = if Path::new(path).is_absolute() {
+        PathBuf::from(path)
+    } else {
+        policy.base_dir.join(path)
+    };
+    let resolved = if allow_missing && !candidate.exists() && !candidate.is_symlink() {
+        let Some(file_name) = candidate.file_name() else {
+            return Err(format!("file-system {operation} requires a file path"));
+        };
+        let parent = candidate.parent().unwrap_or(Path::new("."));
+        let parent = std::fs::canonicalize(parent)
+            .map_err(|error| format!("file-system {operation} failed for {path}: {error}"))?;
+        parent.join(file_name)
+    } else {
+        std::fs::canonicalize(&candidate)
+            .map_err(|error| format!("file-system {operation} failed for {path}: {error}"))?
+    };
+    if roots
+        .iter()
+        .any(|root| resolved == *root || resolved.starts_with(root))
+    {
+        Ok(resolved)
+    } else {
+        Err(format!(
+            "file-system {operation} denied for {path}: path is outside the configured roots"
+        ))
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NetworkPolicy {
     pub allowed_hosts: Vec<String>,
@@ -10090,48 +10284,14 @@ impl<'program> Interpreter<'program> {
         span: Span,
         allow_missing: bool,
     ) -> Result<PathBuf, RuntimeError> {
-        let Some(policy) = &self.filesystem_policy else {
-            return Ok(PathBuf::from(path));
-        };
-        let candidate = if Path::new(path).is_absolute() {
-            PathBuf::from(path)
-        } else {
-            policy.base_dir.join(path)
-        };
-        let resolved = if allow_missing && !candidate.exists() && !candidate.is_symlink() {
-            let Some(file_name) = candidate.file_name() else {
-                return Err(self.runtime_error(
-                    span,
-                    format!("file-system {operation} requires a file path"),
-                ));
-            };
-            let parent = candidate.parent().unwrap_or(Path::new("."));
-            let parent = std::fs::canonicalize(parent).map_err(|error| {
-                self.runtime_error(
-                    span,
-                    format!("file-system {operation} failed for {path}: {error}"),
-                )
-            })?;
-            parent.join(file_name)
-        } else {
-            std::fs::canonicalize(&candidate).map_err(|error| {
-                self.runtime_error(
-                    span,
-                    format!("file-system {operation} failed for {path}: {error}"),
-                )
-            })?
-        };
-        if roots
-            .iter()
-            .any(|root| resolved == *root || resolved.starts_with(root))
-        {
-            Ok(resolved)
-        } else {
-            Err(self.runtime_error(
-                span,
-                format!("file-system {operation} denied for {path}: path is outside the configured roots"),
-            ))
-        }
+        resolve_filesystem_path_rule(
+            self.filesystem_policy.as_ref(),
+            path,
+            roots,
+            operation,
+            allow_missing,
+        )
+        .map_err(|message| self.runtime_error(span, message))
     }
 
     fn http_request(

@@ -2971,6 +2971,66 @@ fn rejects_file_system_writes_outside_configured_roots() {
 }
 
 #[test]
+fn capability_use_inventory_uses_the_same_checked_operations() {
+    let source = "fn helper() uses FileSystem { write_text(\"data/note.txt\", \"ok\") } fn main() uses FileSystem, Clock { helper() now() }";
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap();
+    check_capabilities(&program).unwrap();
+    let uses = inspect_capability_uses(&program);
+    assert!(uses.iter().any(|usage| usage.function == "helper"
+        && usage.capability == "FileSystem"
+        && usage.operation == "file-system write access"));
+    let write = uses
+        .iter()
+        .find(|usage| usage.function == "helper" && usage.capability == "FileSystem")
+        .unwrap();
+    assert_eq!(write.file_paths.len(), 1);
+    assert_eq!(write.file_paths[0].path.as_deref(), Some("data/note.txt"));
+    assert!(write.file_paths[0].write);
+    assert!(write.file_paths[0].allow_missing);
+    assert!(uses.iter().any(|usage| usage.function == "main"
+        && usage.capability == "FileSystem"
+        && usage.operation == "call to `helper`"));
+    assert!(uses.iter().any(|usage| usage.function == "main"
+        && usage.capability == "Clock"
+        && usage.operation == "clock access"));
+}
+
+#[test]
+fn file_path_inspection_reuses_runtime_root_rules_for_missing_and_symlink_paths() {
+    let root = std::env::temp_dir().join(format!(
+        "zelyra-path-inspection-{}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let allowed = root.join("allowed");
+    let outside = root.join("outside");
+    std::fs::create_dir_all(&allowed).unwrap();
+    std::fs::create_dir_all(&outside).unwrap();
+    let policy = FileSystemPolicy {
+        base_dir: root.clone(),
+        read_roots: vec![allowed.clone()],
+        write_roots: vec![allowed.clone()],
+    };
+    assert_eq!(
+        inspect_filesystem_path(Some(&policy), "allowed/new.txt", true, true).unwrap(),
+        allowed.join("new.txt")
+    );
+    assert!(inspect_filesystem_path(Some(&policy), "outside/new.txt", true, true).is_err());
+    assert!(inspect_filesystem_path(Some(&policy), "allowed/new.txt", false, false).is_err());
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(&outside, allowed.join("escape")).unwrap();
+        assert!(
+            inspect_filesystem_path(Some(&policy), "allowed/escape/new.txt", true, true).is_err()
+        );
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn enforces_preconditions_and_postconditions() {
     let source = "fn increment(value: Int) -> Int requires { value >= 0 } ensures { result > value } { return value + 1 } fn main() { print(increment(1)) }";
     let program = parse(&lex(source).unwrap()).unwrap();

@@ -172,6 +172,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .runtime-budget-content p { margin: 3px 0; line-height: 1.5; }
 .runtime-budget-content ul { display: grid; gap: 5px; margin: 0; padding-left: 18px; overflow-wrap: anywhere; }
 .runtime-budget-dialog footer { justify-content: flex-end; }
+.capability-dialog { width: min(760px, calc(100vw - 24px)); }
+.capability-content { max-height: min(76vh, 760px); overflow: auto; padding: 14px 18px 20px; font-size: 12px; }
+.capability-content h3 { margin: 18px 0 5px; font-size: 13px; }
+.capability-content ul { margin: 0; padding-left: 22px; }
+.capability-content li { padding: 4px 0; overflow-wrap: anywhere; }
+.capability-content li[data-status="denied"], .capability-content li[data-status="missing"] { color: var(--danger); }
+.capability-content li[data-status="unknown"] { color: var(--warning); }
+.capability-content button { margin-left: 8px; }
+#capability-preview pre { max-height: 260px; overflow: auto; padding: 10px; border: 1px solid var(--border); background: var(--editor-bg); white-space: pre-wrap; overflow-wrap: anywhere; }
 .logs-dialog { width: min(860px, calc(100vw - 30px)); }
 .logs-controls { display: flex; align-items: end; gap: 9px; padding: 0 14px 10px; }
 .logs-controls label { display: grid; gap: 4px; color: var(--muted); font-size: 10px; }
