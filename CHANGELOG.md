@@ -8,6 +8,36 @@ releases follow Semantic Versioning independently of the language line.
 
 _Changes for the next release go here._
 
+## 1.0.3 — 2026-10-14
+
+- Expand the built-in library with checked math, Unicode-aware text helpers,
+  collection and set operations, date arithmetic, conversions, encodings, and
+  host-platform path helpers. Add typed pipelines, flat `else if` branches,
+  tuple destructuring for `for` loops, and overflow-safe `map_increment`. /
+  Eingebaute Funktionen für geprüfte Mathematik, Unicode-Text, Sammlungen,
+  Mengen, Datumsrechnung, Konvertierungen, Encodings und Pfade ergänzen.
+  Typisierte Pipelines, flache `else if`-Zweige, Tupel-Destrukturierung in
+  `for`-Schleifen und der überlaufsichere Helfer `map_increment` kommen hinzu.
+- Select available web and MariaDB ports for new local projects, retry managed
+  Compose port conflicts, and report the selected application URL after
+  fallback. Seed the invoice tutorial with repeatable sample data and verify
+  its CLI and Studio Run workflows. /
+  Für neue lokale Projekte freie Web- und MariaDB-Ports wählen, verwaltete
+  Compose-Portkonflikte erneut versuchen und nach einem Wechsel die richtige
+  Anwendungsadresse ausgeben. Rechnungstutorial mit wiederholbaren
+  Beispieldaten ausstatten sowie CLI- und Studio-Run-Abläufe prüfen.
+- Rewrite and check the bilingual invoice tutorial and standard-library
+  handbook. Bound text padding/repetition output and return checked runtime
+  errors for invalid math and conversion inputs. Limit nested function calls
+  to a depth of 20 so excessive recursion returns a controlled error before
+  exhausting a small runtime stack. /
+  Zweisprachiges Rechnungstutorial und Handbuch zur Standardbibliothek
+  überarbeiten und prüfen. Padding-/Wiederholungsausgaben begrenzen und
+  ungültige Mathematik- und Konvertierungseingaben mit geprüften
+  Laufzeitfehlern melden. Verschachtelte Funktionsaufrufe auf 20 Ebenen
+  begrenzen, damit zu tiefe Rekursion einen kontrollierten Fehler liefert,
+  bevor ein kleiner Laufzeit-Stack erschöpft ist.
+
 ## 1.0.2 — 2026-10-14
 
 - Fix Studio database access for generated projects whose connection URL uses
