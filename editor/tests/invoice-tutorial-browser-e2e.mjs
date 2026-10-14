@@ -29,7 +29,9 @@ async function assertVisualSnapshot(page, name) {
     `${name} screenshot dimensions changed`,
   );
   const diff = new PNG({ width: actual.width, height: actual.height });
-  const changedPixels = pixelmatch(baseline.data, actual.data, diff.data, actual.width, actual.height, { threshold: 0.12 });
+  // Allow small cross-platform font rasterization differences while keeping
+  // the page-wide changed-pixel budget strict for layout and color regressions.
+  const changedPixels = pixelmatch(baseline.data, actual.data, diff.data, actual.width, actual.height, { threshold: 0.2 });
   const allowedPixels = Math.ceil(actual.width * actual.height * 0.002);
   if (changedPixels > allowedPixels) {
     const diffPath = new URL(`./visual-baselines/${name}.actual-diff.png`, import.meta.url);
