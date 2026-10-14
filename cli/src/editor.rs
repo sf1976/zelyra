@@ -30,6 +30,7 @@ const EDITOR_PATH: &str = "/__zelyra/editor";
 const EDITOR_MAX_CONNECTIONS: usize = 16;
 const EDITOR_MAX_EVENT_STREAMS: usize = 4;
 const EDITOR_MAX_FILE_BYTES: usize = 1_048_576;
+const EDITOR_MAX_ANALYSIS_OVERLAYS: usize = 16;
 const EDITOR_MAX_FILES: usize = 2_000;
 const EDITOR_MAX_DEPTH: usize = 8;
 const EDITOR_DATABASE_MAX_TABLES: usize = 500;
@@ -544,6 +545,53 @@ fn editor_response(
     }
 }
 
+fn editor_analysis_overlays(
+    state: &EditorState,
+    request: &Value,
+) -> Result<Vec<language_service::SourceOverlay>, (u16, String)> {
+    let extra = match request.get("overlays") {
+        None => &[][..],
+        Some(Value::Array(items)) => items.as_slice(),
+        Some(_) => return Err((400, "overlays must be an array".into())),
+    };
+    if extra.len() >= EDITOR_MAX_ANALYSIS_OVERLAYS {
+        return Err((413, "too many unsaved source overlays".into()));
+    }
+    let mut overlays = Vec::with_capacity(extra.len() + 1);
+    let mut seen = HashSet::new();
+    let mut total_bytes = 0_usize;
+    for item in extra.iter().chain(std::iter::once(request)) {
+        let Some(source) = item.get("source") else {
+            if std::ptr::eq(item, request) {
+                continue;
+            }
+            return Err((400, "overlay source is required".into()));
+        };
+        let relative = item
+            .get("path")
+            .and_then(Value::as_str)
+            .filter(|path| path.ends_with(".zyl"))
+            .ok_or((400, "choose a Zelyra source file".into()))?;
+        let _ = safe_editor_path(&state.root, relative, false)?;
+        let source = source
+            .as_str()
+            .ok_or((400, "overlay source must be UTF-8 text".into()))?;
+        total_bytes = total_bytes.saturating_add(source.len());
+        if source.len() > EDITOR_MAX_FILE_BYTES || total_bytes > EDITOR_MAX_FILE_BYTES {
+            return Err((413, "source overlays exceed the 1 MiB editor limit".into()));
+        }
+        if !seen.insert(relative) {
+            return Err((400, "duplicate source overlay path".into()));
+        }
+        overlays.push(language_service::SourceOverlay {
+            path: relative.into(),
+            text: source.into(),
+            version: item.get("version").and_then(Value::as_i64).unwrap_or(0),
+        });
+    }
+    Ok(overlays)
+}
+
 fn editor_typed_hole(
     state: &EditorState,
     value: &Value,
@@ -570,14 +618,8 @@ fn editor_typed_hole(
         return Err((422, "project entry file main.zyl is missing".into()));
     }
     let version = value.get("version").and_then(Value::as_i64).unwrap_or(0);
-    let analysis = language_service::analyze(
-        &entry,
-        &[language_service::SourceOverlay {
-            path: relative.into(),
-            text: source.into(),
-            version,
-        }],
-    );
+    let overlays = editor_analysis_overlays(state, value)?;
+    let analysis = language_service::analyze(&entry, &overlays);
     let byte_offset = utf16_to_byte(source, usize::try_from(offset).unwrap_or(usize::MAX));
     let result = language_service::typed_hole_entry(&analysis, relative, byte_offset)
         .unwrap_or_else(|| json!({"found":false,"version":version}));
@@ -606,14 +648,8 @@ fn verify_editor_project(
         return Err((422, "project entry file main.zyl is missing".into()));
     }
     let version = value.get("version").and_then(Value::as_i64).unwrap_or(0);
-    let analysis = language_service::analyze(
-        &entry,
-        &[language_service::SourceOverlay {
-            path: relative.into(),
-            text: source.into(),
-            version,
-        }],
-    );
+    let overlays = editor_analysis_overlays(state, value)?;
+    let analysis = language_service::analyze(&entry, &overlays);
     let results = language_service::verification_entries(&analysis);
     publish_editor_event(
         state,
@@ -665,14 +701,8 @@ fn semantic_editor_query(
     if !entry.is_file() {
         return Err((422, "project entry file main.zyl is missing".into()));
     }
-    let analysis = language_service::analyze(
-        &entry,
-        &[language_service::SourceOverlay {
-            path: relative.into(),
-            text: source.into(),
-            version: value.get("version").and_then(Value::as_i64).unwrap_or(0),
-        }],
-    );
+    let overlays = editor_analysis_overlays(state, value)?;
+    let analysis = language_service::analyze(&entry, &overlays);
     let index = semantic_index::SemanticIndex::from_analysis(&analysis);
     let byte_offset = utf16_to_byte(source, usize::try_from(offset).unwrap_or(usize::MAX));
     let selected = index.at(relative, byte_offset).or_else(|| {
@@ -926,24 +956,7 @@ fn editor_project_map(
         }
     }
     let entry = safe_editor_path(&state.root, "main.zyl", false)?;
-    let overlays = if let Some(source) = request.get("source").and_then(Value::as_str) {
-        let relative = request
-            .get("path")
-            .and_then(Value::as_str)
-            .filter(|path| path.ends_with(".zyl"))
-            .ok_or((400, "choose a Zelyra source file".into()))?;
-        let _path = safe_editor_path(&state.root, relative, false)?;
-        if source.len() > EDITOR_MAX_FILE_BYTES {
-            return Err((413, "source exceeds the 1 MiB editor limit".into()));
-        }
-        vec![language_service::SourceOverlay {
-            path: relative.into(),
-            text: source.into(),
-            version: request.get("version").and_then(Value::as_i64).unwrap_or(0),
-        }]
-    } else {
-        Vec::new()
-    };
+    let overlays = editor_analysis_overlays(state, request)?;
     let loaded = language_service::analyze(&entry, &overlays);
     if loaded.program.is_none() {
         return Err((
@@ -3828,8 +3841,14 @@ fn check_project(
         value,
         json!({"phase":"started"}),
     );
-    if value.get("source").and_then(Value::as_str).is_some() {
-        let (success, diagnostics) = validate_editor_candidate(state, entry, &source)?;
+    if value.get("source").is_some() || value.get("overlays").is_some() {
+        let overlays = editor_analysis_overlays(state, value)?;
+        let project_entry = state.root.join("main.zyl");
+        if !project_entry.is_file() {
+            return Err((422, "project entry file main.zyl is missing".into()));
+        }
+        let analysis = language_service::analyze(&project_entry, &overlays);
+        let (success, diagnostics) = (analysis.success, analysis.diagnostics);
         publish_editor_event(
             state,
             "diagnostics",
@@ -3934,15 +3953,7 @@ fn runtime_profile(
         return Err((413, "source exceeds the 1 MiB editor limit".into()));
     }
     let version = value.get("version").and_then(Value::as_i64).unwrap_or(0);
-    let overlays = source
-        .map(|text| {
-            vec![language_service::SourceOverlay {
-                path: relative.into(),
-                text: text.into(),
-                version,
-            }]
-        })
-        .unwrap_or_default();
+    let overlays = editor_analysis_overlays(state, value)?;
     let analysis = language_service::analyze(&entry, &overlays);
     let index = semantic_index::SemanticIndex::from_analysis(&analysis);
     let (recursion_risks, recursion_incomplete) = index.recursion_risks(&analysis);
@@ -6142,6 +6153,82 @@ fn main() {}
             .unwrap()
             .iter()
             .all(|item| item["path"] != "src/b.zyl"));
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn studio_uses_multiple_unsaved_modules_for_analysis_and_definition() {
+        let state = project();
+        fs::create_dir_all(state.root.join("src")).unwrap();
+        let main = "import \"src/math.zyl\" as math\nfn main() { print(math::answer()) }\n";
+        let saved_math = "pub fn answer() -> Int { return 1 }\n";
+        let unsaved_math = "// new line\npub fn answer() -> Int { return 2 }\n";
+        fs::write(state.root.join("main.zyl"), main).unwrap();
+        fs::write(state.root.join("src/math.zyl"), saved_math).unwrap();
+        let request = json!({
+            "path":"main.zyl","source":main,
+            "overlays":[{"path":"src/math.zyl","source":unsaved_math,"version":7}]
+        });
+        let checked = check_project(&state, &request).unwrap();
+        let checked: Value = serde_json::from_str(&checked.2).unwrap();
+        assert_eq!(checked["success"], true, "{checked}");
+        let definition = semantic_editor_query(
+            &state,
+            &json!({
+                "path":"main.zyl","source":main,
+                "offset":main.find("answer()").unwrap()+1,"action":"definition",
+                "overlays":[{"path":"src/math.zyl","source":unsaved_math,"version":7}]
+            }),
+        )
+        .unwrap();
+        let definition: Value = serde_json::from_str(&definition.2).unwrap();
+        assert_eq!(definition["path"], "src/math.zyl");
+        assert_eq!(
+            definition["start"],
+            byte_to_utf16(unsaved_math, unsaved_math.find("answer").unwrap())
+        );
+        assert_eq!(
+            fs::read_to_string(state.root.join("src/math.zyl")).unwrap(),
+            saved_math
+        );
+        let invalid = check_project(
+            &state,
+            &json!({
+                "path":"main.zyl","source":main,
+                "overlays":[{"path":"src/math.zyl","source":"pub fn answer( {"}]
+            }),
+        )
+        .unwrap();
+        let invalid: Value = serde_json::from_str(&invalid.2).unwrap();
+        assert_eq!(invalid["success"], false);
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn studio_rejects_duplicate_and_unsafe_source_overlays() {
+        let state = project();
+        let source = fs::read_to_string(state.root.join("main.zyl")).unwrap();
+        for overlay in [
+            json!({"path":"main.zyl","source":source}),
+            json!({"path":"../outside.zyl","source":"fn main() {}"}),
+            json!({"path":"missing.zyl","source":"fn main() {}"}),
+        ] {
+            assert!(editor_analysis_overlays(
+                &state,
+                &json!({
+                    "path":"main.zyl","source":source,"overlays":[overlay]
+                })
+            )
+            .is_err());
+        }
+        assert!(editor_analysis_overlays(
+            &state,
+            &json!({
+                "path":"main.zyl","source":source,
+                "overlays":[{"path":"main.zyl","source":"x"}]
+            })
+        )
+        .is_err());
         fs::remove_dir_all(state.root.clone()).unwrap();
     }
 

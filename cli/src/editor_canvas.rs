@@ -22,24 +22,7 @@ fn analysis(
     if !entry.is_file() {
         return Err((422, "project entry file main.zyl is missing".into()));
     }
-    let mut overlays = Vec::new();
-    if let (Some(relative), Some(source)) = (
-        request.get("path").and_then(Value::as_str),
-        request.get("source").and_then(Value::as_str),
-    ) {
-        if !relative.ends_with(".zyl") || source.len() > EDITOR_MAX_FILE_BYTES {
-            return Err((
-                400,
-                "choose a Zelyra source file under the editor limit".into(),
-            ));
-        }
-        let _ = safe_editor_path(&state.root, relative, false)?;
-        overlays.push(language_service::SourceOverlay {
-            path: relative.into(),
-            text: source.into(),
-            version: request.get("version").and_then(Value::as_i64).unwrap_or(0),
-        });
-    }
+    let overlays = editor_analysis_overlays(state, request)?;
     Ok(language_service::analyze(&entry, &overlays))
 }
 

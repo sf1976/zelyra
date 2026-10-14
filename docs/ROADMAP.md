@@ -1331,6 +1331,8 @@ rehearsals, and owner feedback do not substitute for participant testing.
 
 - [🧪] **1.1.0 Studio/LSP foundation (unreleased):** Compiler-backed in-memory
   source overlays now feed Studio checks and a stdio `zelyra lsp` prototype.
+  Studio analyzes up to 16 open unsaved Zelyra files together for diagnostics,
+  navigation, verification, the project map, and static previews.
   The prototype implements versioned diagnostics, document/workspace symbols,
   and declaration completion. Resolved function definition and references now
   work in Studio and LSP; LSP also previews compiler-checked function renames.
@@ -1347,8 +1349,8 @@ rehearsals, and owner feedback do not substitute for participant testing.
   functions; download and an isolated PDF frame passed three browser engines.
   The MariaDB outbox view reads paginated metadata and releases exhausted
   events through the existing requeue operation without immediate delivery.
-  Other symbol kinds, the remaining Studio modules, external file
-  watching, full release gates, and RC artifacts remain
+  Other symbol kinds, recoverable refactoring, full release gates, and
+  artifacts remain
   open; see the [1.1.0 work log](release-plans/1.1.0-studio-deep-native-progress.en.md).
 
 To boost developer ergonomics, flexibility, and architectural modularity without compromising

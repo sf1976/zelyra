@@ -25,15 +25,7 @@ pub(super) fn inspect(state: &EditorState, request: &Value) -> EditorReply {
     }
     let version = request.get("version").and_then(Value::as_i64).unwrap_or(0);
     let entry = entry(state)?;
-    let overlays = source
-        .map(|text| {
-            vec![language_service::SourceOverlay {
-                path: relative.into(),
-                text: text.into(),
-                version,
-            }]
-        })
-        .unwrap_or_default();
+    let overlays = editor_analysis_overlays(state, request)?;
     let analysis = language_service::analyze(&entry, &overlays);
     let grants =
         super::project_capability_grants(&entry.to_string_lossy()).map_err(|error| (422, error))?;

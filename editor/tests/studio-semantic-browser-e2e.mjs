@@ -56,6 +56,7 @@ try {
     if (response.url().endsWith("/api/semantic")) semanticCalls.push({
       status: response.status(), origin: response.request().headers().origin,
       referer: response.request().headers().referer,
+      request: response.request().postDataJSON(), result: await response.json().catch(() => null),
     });
     if (response.url().endsWith("/api/typed-hole")) holeCalls.push({status:response.status(),body:await response.json().catch(() => null)});
   });
@@ -123,6 +124,12 @@ try {
   }, { token, main });
   assert.equal(direct.status, 200);
   assert.equal(direct.body.path, "src/math.zyl");
+  await page.locator('.tree-item.file[title="src/math.zyl"]').click();
+  await page.locator('.cm-content[contenteditable=true]').click();
+  await page.keyboard.press("Control+Home");
+  await page.keyboard.insertText("// unsaved module line\n");
+  await page.waitForFunction(() => document.querySelector(".cm-content")?.textContent?.includes("unsaved module line"));
+  await page.locator('#tabs .tab').filter({ hasText: 'main.zyl' }).click();
   const target = await page.evaluate(() => {
     const walker = document.createTreeWalker(document.querySelector(".cm-content"), NodeFilter.SHOW_TEXT);
     while (walker.nextNode()) {
@@ -141,6 +148,11 @@ try {
   await page.keyboard.press("F12");
   try {
     await page.waitForFunction(() => document.querySelector("#active-file")?.textContent === "src/math.zyl", undefined, { timeout: 10_000 });
+  assert.match(await page.locator(".cm-content").textContent(), /unsaved module line/, "F12 preserves the unsaved target buffer");
+  assert.ok(semanticCalls.some((call) => call.status === 200
+    && call.request.overlays?.some((overlay) => overlay.path === "src/math.zyl"
+      && overlay.source.startsWith("// unsaved module line\n"))
+    && call.result.start > direct.body.start), "F12 resolves the second unsaved module's shifted source position");
   await page.locator(".verify-gutter .verify-marker.proven").waitFor({ timeout: 10_000 });
   await page.locator(".verify-gutter .verify-marker.runtime_check").waitFor({ timeout: 10_000 });
   assert.match(await page.locator(".verify-gutter .verify-marker.proven").getAttribute("aria-label"), /PROVEN V-001/);

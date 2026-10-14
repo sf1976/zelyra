@@ -36,14 +36,14 @@ action finder. **Ctrl+Space** requests completion; available suggestions include
 project declarations and supported local parameters and bindings. F12 opens a
 resolved function definition in the current or an imported file. Shift+F12
 shows references to that function and its declaration. These two actions use
-the compiler's linked AST and accept an unsaved current buffer. Other symbol
-kinds are not yet supported by this semantic index. If another tab has unsaved
-changes, save it first so cross-file positions stay accurate. Project-wide
+the compiler's linked AST and analyze all open, unsaved `.zyl` files together.
+Other symbol kinds are not yet supported by this semantic index. Project-wide
 free-text search remains a separate tool.
 
 Compiler diagnostics update while editing Zelyra project files. For existing
-`.zyl` files the unsaved buffer is checked through an in-memory compiler
-overlay; generated source previews for new files still use a private temporary
+`.zyl` files the current buffer and other changed `.zyl` tabs are checked through
+in-memory compiler overlays (up to 16 files and 1 MiB of source per analysis);
+generated source previews for new files still use a private temporary
 project copy. Neither path writes the unsaved buffer to the project. **Run** is
 an explicit action for `main.zyl`, bounded to 15 seconds and
 64 KiB per output stream. For the marked invoice tutorial, Run starts its
@@ -56,13 +56,12 @@ not receive interactive input.
 The **Project map** shows unambiguous relationships from the compiler project
 model: modules, tables, SQL queries, records, forms, table views, CRUD, pages,
 views, APIs, and functions. It supports multiple consumers of one table and
-the current unsaved source file as an overlay. Nodes lead to their actual
+all open unsaved `.zyl` files as overlays. Nodes lead to their actual
 declaration or SQL token. The editor header shows related nodes for the
 current cursor context and links to their sources. The NULL radar shows only
 static nullability diagnostics from the compiler under `E-SQL-004`; it does
 not inspect a live database. Dynamic relationships or queries unresolved by
-the conservative SQL analyzer remain marked incomplete. Save other unsaved
-tabs before relying on cross-file positions.
+the conservative SQL analyzer remain marked incomplete.
 
 For a parseable project, the contract gutter displays results from Zelyra's
 actual verifier on the current unsaved buffer. `PROVEN` (green, `V-001`) means
@@ -271,8 +270,9 @@ does not migrate the database or change records.
 and data substitution use the same functions as web delivery. Values in
 **Sample data (JSON)** are HTML escaped; arrays of objects can populate
 existing `for` blocks. The current unsaved `.zyl` buffer is compiled through
-an overlay. The preview does not run project queries, handlers, `main()`, or
-JavaScript. Its frame has an empty `sandbox` attribute and restrictive CSP.
+overlays along with other open unsaved `.zyl` files. The preview does not run
+project queries, handlers, `main()`, or JavaScript. Its frame has an empty
+`sandbox` attribute and restrictive CSP.
 Only explicitly supplied sample data are displayed.
 
 The canvas uses the configured stylesheet choice and `zelyra.theme.css`.

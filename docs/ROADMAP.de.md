@@ -1384,7 +1384,10 @@ Rückmeldungen des Projektverantwortlichen ersetzen keinen Teilnehmertest.
 
 - [🧪] **1.1.0-Grundlage für Studio/LSP (unveröffentlicht):** Compilergeprüfte
   In-Memory-Quelltext-Overlays versorgen nun Studio-Prüfungen und einen
-  Stdio-Prototyp von `zelyra lsp`. Dieser liefert versionierte Diagnosen,
+  Stdio-Prototyp von `zelyra lsp`. Studio analysiert bis zu 16 geöffnete
+  ungespeicherte Zelyra-Dateien gemeinsam für Diagnosen, Navigation,
+  Verifikation, Projektkarte und statische Vorschauen.
+  Dieser liefert versionierte Diagnosen,
   Dokument-/Workspace-Symbole und Deklarationsvorschläge. Aufgelöste
   Funktionsdefinitionen und Referenzen funktionieren nun in Studio und LSP;
   das LSP liefert auch compilergeprüfte Funktions-Umbenennungen als Vorschau.
@@ -1403,9 +1406,9 @@ Rückmeldungen des Projektverantwortlichen ersetzen keinen Teilnehmertest.
   ohne Projektfunktionen auszuführen; Download und isolierter PDF-Rahmen sind
   in drei Browser-Engines geprüft. Die MariaDB-Outbox-Ansicht liest paginierte
   Metadaten und gibt erschöpfte Ereignisse über die vorhandene Requeue-
-  Operation ohne unmittelbaren Versand frei. Andere Symbolarten, die übrigen Studio-
-  Werkzeuge, externer Dateiwächter,
-  vollständige Release-Gates und RC-Artefakte bleiben offen; siehe das
+  Operation ohne unmittelbaren Versand frei. Andere Symbolarten,
+  wiederherstellbares Refactoring, vollständige Release-Gates und Artefakte
+  bleiben offen; siehe das
   [1.1.0-Arbeitsprotokoll](release-plans/1.1.0-studio-deep-native-progress.de.md).
 
 Um die Produktivität, Flexibilität und Entwicklerergonomie zu steigern, ohne die Grundsäulen von Zelyra (statische

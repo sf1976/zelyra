@@ -39,15 +39,16 @@ Vervollständigungsvorschläge an, darunter Projekterklärungen sowie unterstüt
 lokale Parameter und Bindungen. F12 öffnet die aufgelöste Funktionsdefinition
 in derselben oder einer importierten Datei. Umschalt+F12 zeigt Referenzen auf
 diese Funktion samt Deklaration. Beide Aktionen verwenden den verlinkten
-Compiler-AST und akzeptieren einen ungespeicherten aktuellen Puffer. Weitere
-Symbolarten unterstützt dieser semantische Index noch nicht. Speichere andere
-geänderte Tabs zuerst, damit dateiübergreifende Positionen stimmen. Die freie
-projektweite Textsuche bleibt ein getrenntes Werkzeug.
+Compiler-AST und berücksichtigen alle geöffneten, ungespeicherten `.zyl`-Dateien
+als gemeinsame Projektanalyse. Weitere Symbolarten unterstützt dieser
+semantische Index noch nicht. Die freie projektweite Textsuche bleibt ein
+getrenntes Werkzeug.
 
 Compilerdiagnosen werden während der Bearbeitung von Zelyra-Projektdateien
 aktualisiert. Bei vorhandenen `.zyl`-Dateien prüft der Compiler den
-ungespeicherten Puffer als In-Memory-Overlay. Vorschauen neu erzeugter Dateien
-verwenden weiterhin eine private temporäre Projektkopie. Beide Wege schreiben
+ungespeicherten Puffer und weitere geänderte `.zyl`-Tabs als In-Memory-Overlays
+(höchstens 16 Dateien und 1 MiB Quelltext pro Analyse). Vorschauen neu erzeugter
+Dateien verwenden weiterhin eine private temporäre Projektkopie. Beide Wege schreiben
 den Puffer nicht in das Projekt. **Starten** führt `main.zyl` ausdrücklich aus,
 höchstens 15 Sekunden und mit
 64 KiB je Ausgabekanal. Beim markierten Rechnungstutorial startet die Aktion
@@ -60,14 +61,13 @@ Programm- und Vorschauausgaben filtern. Erkannte geheime Umgebungs- und lokale
 Die **Projektkarte** zeigt eindeutige Beziehungen aus dem Compiler-
 Projektmodell: Module, Tabellen, SQL-Abfragen, Records, Formulare, Tabellen-
 ansichten, CRUD, Seiten, Views, APIs und Funktionen. Sie unterstützt mehrere
-Verbraucher derselben Tabelle und die aktuelle ungespeicherte Quelldatei als
-Overlay. Knoten führen zur tatsächlichen Deklaration beziehungsweise zum
+Verbraucher derselben Tabelle und alle geöffneten ungespeicherten `.zyl`-Dateien
+als Overlays. Knoten führen zur tatsächlichen Deklaration beziehungsweise zum
 SQL-Token. In der Leiste am Editorkopf erscheinen Beziehungen zum aktuell
 gewählten Knoten und führen ebenfalls zur Quelle. Der NULL-Radar zeigt nur
 statische Nullability-Diagnosen des Compilers mit `E-SQL-004`; er prüft keine
 laufende Datenbank. Dynamische oder vom konservativen SQL-Analysator nicht
-aufgelöste Beziehungen bleiben sichtbar unvollständig. Weitere ungespeicherte
-Tabs müssen vor einer dateiübergreifenden Analyse gespeichert werden.
+aufgelöste Beziehungen bleiben sichtbar unvollständig.
 
 Bei einem parsebaren Projekt zeigt die Contract-Leiste Ergebnisse des echten
 Zelyra-Verifiers für den aktuellen ungespeicherten Puffer. `PROVEN` (grün,
@@ -300,7 +300,7 @@ Datenbank und verändert keine Datensätze.
 Seitenkomposition und die Ersetzung von Datenwerten verwenden dieselben
 Funktionen wie die Webauslieferung. Werte in **Beispieldaten (JSON)** werden
 HTML-escaped; Listen aus JSON-Objekten können bestehende `for`-Blöcke füllen.
-Der aktuelle ungespeicherte `.zyl`-Puffer wird vom Compiler als Overlay
+Alle geöffneten ungespeicherten `.zyl`-Puffer werden vom Compiler als Overlays
 analysiert. Projektabfragen, Handler, `main()` und JavaScript werden in der
 Vorschau nicht ausgeführt. Der Browserrahmen hat ein leeres `sandbox`-Attribut
 und eine einschränkende CSP. Die Vorschau zeigt nur ausdrücklich eingegebene

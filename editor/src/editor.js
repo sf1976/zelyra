@@ -237,7 +237,7 @@ const messages = {
     taskPropertiesHelp: "Informationen und Aktionen zur aktuellen Datei anzeigen", taskSearch: "Text suchen", taskSearchHelp: "Im aktuellen Dokument suchen",
     taskGoToDefinition: "Zur Definition springen", taskGoToDefinitionHelp: "Zur Funktion oder zum Typ am Cursor springen (F12)",
     taskFindReferences: "Bezeichnerverwendungen finden", taskFindReferencesHelp: "Exakte Zelyra-Bezeichner im Projekt finden (Umschalt+F12)",
-    definitionNotFound: "Keine passende Definition im Projekt gefunden.", definitionSaveFirst: "Speichere die Datei vor dem Sprung, damit die Quellposition stimmt.", definitionOpened: "Definition geöffnet: {0}",
+    definitionNotFound: "Keine passende Definition im Projekt gefunden.", definitionSaveFirst: "Speichere die Datei vor dem Sprung, damit die Quellposition stimmt.", definitionOpened: "Definition geöffnet: {0}", analysisOverlayLimit: "Die ungespeicherten Zelyra-Dateien überschreiten die Analysegrenze (15 Dateien oder 1 MiB).",
     projectSearch: "Projekt durchsuchen", projectSearchTitle: "Projekt durchsuchen", projectSearchHelp: "Alle gespeicherten Zelyra-Dateien durchsuchen", projectSearchPlaceholder: "Text in Zelyra-Dateien suchen", projectSearchResults: "Suchergebnisse", projectSearchEmpty: "Keine Treffer gefunden.", projectSearchLoading: "Projekt wird durchsucht …", projectSearchSaveFirst: "Speichere offene Änderungen, bevor du das Projekt durchsuchst.", projectSearchTruncated: "Die Trefferliste ist wegen einer Suchgrenze unvollständig.", projectSearchSubmit: "Suchen",
     referencesTitle: "Bezeichnerverwendungen", referencesPlaceholder: "Zelyra-Bezeichner suchen",
     localParameter: "Parameter", localValue: "Lokaler Wert", loopValue: "Schleifenwert", matchValue: "Musterwert",
@@ -343,7 +343,7 @@ const messages = {
     taskPropertiesHelp: "Show information and actions for the active file", taskSearch: "Find text", taskSearchHelp: "Search in the active document",
     taskGoToDefinition: "Go to definition", taskGoToDefinitionHelp: "Go to the function or type at the cursor (F12)",
     taskFindReferences: "Find identifier occurrences", taskFindReferencesHelp: "Find exact Zelyra identifiers across the project (Shift+F12)",
-    definitionNotFound: "No matching project definition was found.", definitionSaveFirst: "Save this file before jumping so source positions stay accurate.", definitionOpened: "Opened definition: {0}",
+    definitionNotFound: "No matching project definition was found.", definitionSaveFirst: "Save this file before jumping so source positions stay accurate.", definitionOpened: "Opened definition: {0}", analysisOverlayLimit: "Unsaved Zelyra files exceed the analysis limit (15 files or 1 MiB).",
     projectSearch: "Search project", projectSearchTitle: "Search project", projectSearchHelp: "Search all saved Zelyra files", projectSearchPlaceholder: "Search text in Zelyra files", projectSearchResults: "Search results", projectSearchEmpty: "No matches found.", projectSearchLoading: "Searching the project …", projectSearchSaveFirst: "Save open changes before searching the project.", projectSearchTruncated: "The result list is incomplete because a search limit was reached.", projectSearchSubmit: "Search",
     referencesTitle: "Identifier occurrences", referencesPlaceholder: "Find a Zelyra identifier",
     localParameter: "Parameter", localValue: "Local value", loopValue: "Loop value", matchValue: "Match value",
@@ -669,6 +669,18 @@ function announce(message, kind = "") {
 function tabState(path, tab) { return path === activePath && editor ? editor.state : tab?.state; }
 function isDirty(tab, path) { return tab && tabState(path, tab).doc.toString() !== tab.saved; }
 function dirtyCount() { return [...tabs].filter(([path, tab]) => isDirty(tab, path)).length; }
+function analysisRequest(path, source, version = liveCheckSequence) {
+  const overlays = [];
+  let bytes = typeof source === "string" ? new TextEncoder().encode(source).length : 0;
+  for (const [otherPath, tab] of tabs) {
+    if (otherPath === path || !otherPath.endsWith(".zyl") || !isDirty(tab, otherPath)) continue;
+    const text = tabState(otherPath, tab).doc.toString();
+    bytes += new TextEncoder().encode(text).length;
+    overlays.push({ path: otherPath, source: text, version: tab.version || 0 });
+  }
+  if (overlays.length >= 16 || bytes > 1_048_576) throw new Error(t("analysisOverlayLimit"));
+  return { path, source, version, overlays };
+}
 
 function renderTabs() {
   const bar = $("tabs");
@@ -706,8 +718,11 @@ function completionSource(context) {
   const source = context.state.doc.toString();
   if (word?.text === "_" && activePath?.endsWith(".zyl")) {
     const path = activePath;
+    let request;
+    try { request = analysisRequest(path, source); }
+    catch { return null; }
     return api("typed-hole", { method: "POST", body: JSON.stringify({
-      path, source, offset: context.pos,
+      ...request, offset: context.pos,
     }) }).then((result) => {
       if (!result.found || activePath !== path || editor?.state.doc.toString() !== source) return null;
       const { start, end } = result.editorSpan;
@@ -1129,10 +1144,6 @@ function findIdentifierOccurrences() {
     announce(t("definitionNotFound"), "warning");
     return;
   }
-  if ([...tabs].some(([path, tab]) => path !== activePath && isDirty(tab, path))) {
-    announce(t("projectSearchSaveFirst"), "warning");
-    return;
-  }
   const selection = editor.state.selection.main;
   const wordRange = selection.empty ? editor.state.wordAt(selection.head) : selection;
   const name = wordRange ? editor.state.sliceDoc(wordRange.from, wordRange.to).trim() : "";
@@ -1141,12 +1152,13 @@ function findIdentifierOccurrences() {
     return;
   }
   projectSearchMode = "references";
-  semanticReferenceQuery = {
-    path: activePath,
-    source: editor.state.doc.toString(),
-    offset: wordRange.from,
-    action: "references",
-  };
+  try {
+    semanticReferenceQuery = {
+      ...analysisRequest(activePath, editor.state.doc.toString()),
+      offset: wordRange.from,
+      action: "references",
+    };
+  } catch (error) { announce(error.message, "warning"); return; }
   const dialog = $("project-search");
   if (!dialog.open) dialog.showModal();
   $("project-search-title").textContent = t("referencesTitle");
@@ -1210,10 +1222,6 @@ async function performProjectSearch() {
 
 async function goToDefinition() {
   if (!editor || !activePath?.endsWith(".zyl")) return;
-  if ([...tabs].some(([path, tab]) => path !== activePath && isDirty(tab, path))) {
-    announce(t("definitionSaveFirst"), "warning");
-    return;
-  }
   const wordRange = editor.state.wordAt(editor.state.selection.main.head);
   const word = wordRange ? editor.state.sliceDoc(wordRange.from, wordRange.to) : "";
   if (!word) { announce(t("definitionNotFound"), "warning"); return; }
@@ -1221,15 +1229,10 @@ async function goToDefinition() {
     const source = editor.state.doc.toString();
     const requestedPath = activePath;
     const result = await api("semantic", { method: "POST", body: JSON.stringify({
-      path: requestedPath, source, offset: wordRange.from, action: "definition",
+      ...analysisRequest(requestedPath, source), offset: wordRange.from, action: "definition",
     }) });
     if (activePath !== requestedPath || editor.state.doc.toString() !== source) return;
     if (!result.found) { announce(t("definitionNotFound"), "warning"); return; }
-    const targetTab = tabs.get(result.path);
-    if (targetTab && isDirty(targetTab, result.path) && result.path !== requestedPath) {
-      announce(t("definitionSaveFirst"), "warning");
-      return;
-    }
     if (result.path !== activePath) await openFile(result.path);
     if (activePath !== result.path || !editor) return;
     editor.dispatch({ selection: { anchor: result.start, head: result.end }, scrollIntoView: true });
@@ -1264,6 +1267,7 @@ function createView(path, state) {
       if (!tab) return;
       tab.state = update.state;
       if (update.docChanged) {
+        tab.version = (tab.version || 0) + 1;
         verificationResults = [];
         pipelineMapCache = null;
         renderTabs();
@@ -2664,14 +2668,14 @@ function scheduleLiveCheck(path) {
       const source = editor?.state.doc.toString();
       if (typeof source !== "string") return;
       const result = await api("check", { method: "POST", body: JSON.stringify({
-        path, source, version: sequence, clientId: eventClientId,
+        ...analysisRequest(path, source, sequence), clientId: eventClientId,
       }) });
       if (sequence !== liveCheckSequence || activePath !== path || editor?.state.doc.toString() !== source) return;
       renderDiagnostics(result.diagnostics || [], result.success, { silent: true });
       void refreshPipelineContext(path, source, sequence);
       if (!result.success) return;
       const verified = await api("verify", { method: "POST", body: JSON.stringify({
-        path, source, version: sequence, clientId: eventClientId,
+        ...analysisRequest(path, source, sequence), clientId: eventClientId,
       }) });
       if (sequence !== liveCheckSequence || activePath !== path || editor?.state.doc.toString() !== source || verified.version !== sequence) return;
       setVerificationResults(verified.success ? verified.results || [] : []);
@@ -2707,7 +2711,7 @@ async function openRuntimeBudget() {
     const path = studioEntryPath();
     const source = path === activePath ? editor?.state.doc.toString() : undefined;
     const result = await api("runtime-profile", { method: "POST", body: JSON.stringify({
-      path, source, version: liveCheckSequence,
+      ...analysisRequest(path, source),
     }) });
     if (!dialog.open) return;
     $("runtime-stack-depth").textContent = t("runtimeStackDepth", result.maxStackDepth,
@@ -2886,7 +2890,7 @@ function renderPipelineBreadcrumbs() {
 
 async function refreshPipelineContext(path, source, version) {
   try {
-    const map = await api("project-map", { method: "POST", body: JSON.stringify({ path, source, version }) });
+    const map = await api("project-map", { method: "POST", body: JSON.stringify(analysisRequest(path, source, version)) });
     if (activePath !== path || editor?.state.doc.toString() !== source || liveCheckSequence !== version) return;
     pipelineMapCache = { path, map };
     renderPipelineBreadcrumbs();
@@ -2911,8 +2915,7 @@ async function openProjectMap() {
     const path = activePath?.endsWith(".zyl") ? activePath : null;
     const source = path && editor ? editor.state.doc.toString() : null;
     const version = liveCheckSequence;
-    const map = source === null ? await api("project-map")
-      : await api("project-map", { method: "POST", body: JSON.stringify({ path, source, version }) });
+    const map = await api("project-map", { method: "POST", body: JSON.stringify(analysisRequest(path, source, version)) });
     if (!dialog.open || (source !== null && (path !== activePath || editor?.state.doc.toString() !== source))) return;
     renderProjectMap(map);
     const issueLabels = { ...messages[language].projectMapIssues, ...messages[language].projectMapIssuesExtra };
@@ -3148,8 +3151,7 @@ function canvasRequestSource() {
   const path = activePath?.endsWith(".zyl") ? activePath : undefined;
   const themeTab = tabs.get("zelyra.theme.css");
   return {
-    path,
-    source: path ? editor?.state.doc.toString() : undefined,
+    ...analysisRequest(path, path ? editor?.state.doc.toString() : undefined),
     themeSource: themeTab ? tabState("zelyra.theme.css", themeTab).doc.toString() : undefined,
     version: liveCheckSequence,
   };
@@ -3279,7 +3281,7 @@ async function openCapabilityMatrix() {
   try {
     const path = activePath?.endsWith(".zyl") ? activePath : studioEntryPath();
     const source = path === activePath ? editor?.state.doc.toString() : undefined;
-    const result = await api("capabilities", { method: "POST", body: JSON.stringify({ path, source, version: liveCheckSequence }) });
+    const result = await api("capabilities", { method: "POST", body: JSON.stringify(analysisRequest(path, source)) });
     if (request !== capabilityRequest || !dialog.open) return;
     status.textContent = !result.success ? t("capabilityIncomplete") : !result.configured ? t("capabilityUnrestricted") : "";
     const declared = $("capability-declared");
