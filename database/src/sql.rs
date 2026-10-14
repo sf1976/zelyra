@@ -416,6 +416,14 @@ fn check_block(
                 check_expr(value, schema, environment, aliases, errors);
                 environment.insert(name.clone(), expr_type(value));
             }
+            Stmt::TupleBindOrAssign { names, value, .. } => {
+                check_expr(value, schema, environment, aliases, errors);
+                if let Type::Tuple(types) = expr_type(value) {
+                    for (name, ty) in names.iter().zip(types) {
+                        environment.insert(name.clone(), ty);
+                    }
+                }
+            }
             Stmt::Expr(expression) => check_expr(expression, schema, environment, aliases, errors),
             Stmt::Return { value, .. } => {
                 if let Some(value) = value {
@@ -523,6 +531,7 @@ fn check_expr(
             check_expr(index, schema, environment, aliases, errors);
         }
         ExprKind::Field { target, .. } => check_expr(target, schema, environment, aliases, errors),
+        ExprKind::Lambda { body, .. } => check_expr(body, schema, environment, aliases, errors),
         ExprKind::Await(inner) => check_expr(inner, schema, environment, aliases, errors),
         ExprKind::Match { value, arms } => {
             check_expr(value, schema, environment, aliases, errors);
@@ -568,6 +577,11 @@ fn expr_type(expression: &Expr) -> Type {
         ),
         ExprKind::Index { .. } => Type::Unknown,
         ExprKind::Record { type_name, .. } => Type::Named(type_name.clone()),
+        ExprKind::Lambda { params, body } => Type::Function {
+            params: params.iter().map(|param| param.ty.clone()).collect(),
+            return_type: Box::new(expr_type(body)),
+            capabilities: Vec::new(),
+        },
         ExprKind::Field { .. } => Type::Unknown,
         ExprKind::Sql { result_type, .. } => result_type.clone(),
         ExprKind::Variable(_)

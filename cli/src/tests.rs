@@ -3184,6 +3184,39 @@ fn defaults_project_process_policy_to_no_allowed_commands() {
 }
 
 #[test]
+fn project_runtime_policy_reads_and_bounds_max_stack_depth() {
+    let directory = std::env::temp_dir().join(format!(
+        "zelyra-runtime-policy-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&directory).unwrap();
+    let entry = directory.join("main.zyl");
+    fs::write(&entry, "fn main() {}\n").unwrap();
+    fs::write(
+        directory.join("zelyra.toml"),
+        "[project]\nname = \"runtime-policy\"\n\n[runtime]\nmax_stack_depth = 500\n",
+    )
+    .unwrap();
+    let policy = project_runtime_policy(entry.to_str().unwrap())
+        .unwrap()
+        .unwrap();
+    assert_eq!(policy.max_stack_depth, Some(500));
+
+    fs::write(
+        directory.join("zelyra.toml"),
+        "[runtime]\nmax_stack_depth = 501\n",
+    )
+    .unwrap();
+    let error = project_runtime_policy(entry.to_str().unwrap()).unwrap_err();
+    assert!(error.contains("from 1 through 500"));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn generates_project_with_target_release_version() {
     let path = env::temp_dir().join(format!(
         "zelyra-cli-template-{}-{}",

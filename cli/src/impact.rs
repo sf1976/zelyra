@@ -937,7 +937,9 @@ fn add_statement_type_references(
                     sources,
                 );
             }
-            Stmt::BindOrAssign { value, .. } | Stmt::Expr(value) => {
+            Stmt::BindOrAssign { value, .. }
+            | Stmt::TupleBindOrAssign { value, .. }
+            | Stmt::Expr(value) => {
                 add_expression_type_references(
                     references,
                     owner,
@@ -1294,6 +1296,27 @@ fn add_expression_type_references(
                 );
             }
         }
+        ExprKind::Lambda { params, body } => {
+            for parameter in params {
+                add_type_references(
+                    references,
+                    owner.to_owned(),
+                    &parameter.ty,
+                    type_names,
+                    record_names,
+                    parameter.span,
+                    sources,
+                );
+            }
+            add_expression_type_references(
+                references,
+                owner,
+                body,
+                type_names,
+                record_names,
+                sources,
+            );
+        }
         ExprKind::Int(_)
         | ExprKind::UInt(_)
         | ExprKind::Float(_)
@@ -1393,9 +1416,10 @@ fn collect_statement_calls(
     calls: &mut Vec<String>,
 ) {
     match statement {
-        Stmt::Let { value, .. } | Stmt::BindOrAssign { value, .. } | Stmt::Expr(value) => {
-            collect_expression_calls(value, function_names, calls)
-        }
+        Stmt::Let { value, .. }
+        | Stmt::BindOrAssign { value, .. }
+        | Stmt::TupleBindOrAssign { value, .. }
+        | Stmt::Expr(value) => collect_expression_calls(value, function_names, calls),
         Stmt::Return { value, .. } => {
             if let Some(value) = value {
                 collect_expression_calls(value, function_names, calls);
@@ -1527,6 +1551,9 @@ fn collect_expression_calls(
             for arm in arms {
                 collect_expression_calls(&arm.value, function_names, calls);
             }
+        }
+        ExprKind::Lambda { body, .. } => {
+            collect_expression_calls(body, function_names, calls);
         }
         ExprKind::Int(_)
         | ExprKind::UInt(_)
@@ -1722,9 +1749,10 @@ fn collect_statement_sql_inner(
     entries: &mut Vec<Value>,
 ) {
     match statement {
-        Stmt::Let { value, .. } | Stmt::BindOrAssign { value, .. } | Stmt::Expr(value) => {
-            collect_expr_sql(value, owner, kind, table_names, sources, entries)
-        }
+        Stmt::Let { value, .. }
+        | Stmt::BindOrAssign { value, .. }
+        | Stmt::TupleBindOrAssign { value, .. }
+        | Stmt::Expr(value) => collect_expr_sql(value, owner, kind, table_names, sources, entries),
         Stmt::Return { value, .. } => {
             if let Some(value) = value {
                 collect_expr_sql(value, owner, kind, table_names, sources, entries);
@@ -1857,6 +1885,9 @@ fn collect_expr_sql(
             for arm in arms {
                 collect_expr_sql(&arm.value, owner, kind, table_names, sources, entries);
             }
+        }
+        ExprKind::Lambda { body, .. } => {
+            collect_expr_sql(body, owner, kind, table_names, sources, entries);
         }
         ExprKind::Int(_)
         | ExprKind::UInt(_)

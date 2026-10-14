@@ -6,6 +6,40 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+## 1.0.7 — 2026-10-14
+
+- Add typed if expressions, record update syntax, lexical lambdas with typed
+  `map`/`filter`/`find`/`reduce`, guarded and nested record matching, contextual
+  record field names, and first-class tuples/destructuring. / Typisierte
+  If-Ausdrücke, Record-Updates, lexikalische Lambdas mit geprüften
+  `map`/`filter`/`find`/`reduce`, Match-Guards und verschachtelte
+  Record-Muster, kontextuelle Record-Feldnamen sowie Tupel und Destrukturierung
+  ergänzen.
+- Add configurable bounded call depth and `zelyra run --max-steps` to stop
+  runaway execution at the source expression that exceeds its budget. /
+  Begrenzte Rekursionstiefe konfigurierbar machen und `zelyra run
+  --max-steps` ergänzen, das überschrittene Ausführungsbudgets am verursachenden
+  Ausdruck stoppt.
+- Preserve nominal `Id` semantics, require API error payloads to match
+  `Result<T, E>`, require a database runtime for executed transactions, and
+  document the actual generated auth handlers and route conditions. / Nominale
+  `Id`-Semantik erhalten, API-Fehler-Payloads an `Result<T, E>` binden,
+  Datenbanklaufzeit für ausgeführte Transaktionen verlangen sowie echte
+  Auth-Handler und Routenbedingungen dokumentieren.
+- Add headless, local text-PDF rendering for declared views and one checked PDF
+  attachment in the transactional MariaDB mail outbox. The renderer has
+  explicit source/output/row/page limits and does not reproduce CSS, images,
+  charts, or visual layout. / Lokales Headless-Text-PDF-Rendering deklarierter
+  Views und einen geprüften PDF-Anhang in der transaktionalen MariaDB-Mail-
+  Outbox ergänzen. Quelle, Ausgabe, Zeilen und Seiten sind begrenzt; CSS,
+  Bilder, Diagramme und visuelles Layout werden nicht reproduziert.
+- Keep named view slot fallbacks and `parallel { await ... }` scope joining
+  covered by compiler/runtime regression tests; add bilingual reference
+  examples and release checks. / Benannte View-Slot-Fallbacks und das
+  Zusammenführen von `parallel { await ... }` im umschließenden Scope durch
+  Compiler-/Runtime-Regressionstests absichern sowie zweisprachige Beispiele
+  und Release-Prüfungen ergänzen.
+
 ## 1.0.6 — 2026-10-14
 
 - Add Zelyra UI as a compiler-loaded, locally bundled component library with

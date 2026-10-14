@@ -1,0 +1,63 @@
+type OrderId = Id
+type OrderNumber = Int
+
+struct InvoiceState {
+    number: String
+    status: String
+    version: Int
+    type: String
+}
+
+struct Order {
+    status: String
+    total: Int
+}
+
+fn label_for_status(paid: Bool) -> String {
+    return if paid { "Paid" } else { "Open" }
+}
+
+fn mark_paid(old: InvoiceState) -> InvoiceState {
+    return InvoiceState { ..old, status: "paid" }
+}
+
+fn positive_double(numbers: Int[]) -> Int[] {
+    return numbers |> filter(|n| n > 0) |> map(|n| n * 2)
+}
+
+fn coordinates() -> Tuple<Int, String> {
+    return (52, "Berlin")
+}
+
+fn preserve_order_id(id: OrderId) -> OrderId {
+    return id
+}
+
+fn preserve_order_number(number: OrderNumber) -> OrderNumber {
+    return number
+}
+
+fn describe_order(order: Order) -> String {
+    return match order {
+        Order { status: "paid", total } if total > 0 => "Paid order"
+        Order { status: "paid", total } => "Zero-value paid order"
+        _ => "Open order"
+    }
+}
+
+fn main() {
+    original = InvoiceState { number: "R-107", status: "draft", version: 1, type: "sale" }
+    paid = mark_paid(original)
+    values = positive_double([-2, 1, 3])
+    (latitude, city) = coordinates()
+    order = Order { status: "paid", total: 42 }
+
+    print(label_for_status(paid.status == "paid"))
+    print(paid.version)
+    print(paid.type)
+    print(values[0])
+    print(values[1])
+    print(latitude)
+    print(city)
+    print(describe_order(order))
+}

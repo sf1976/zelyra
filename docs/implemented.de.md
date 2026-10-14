@@ -1,14 +1,14 @@
-# In Zelyra 1.0.6 umgesetzt
+# In Zelyra 1.0.7 umgesetzt
 
-**Stand:** stabiles Release 1.0.6 · Sprachkompatibilitätslinie `0.1` · 2026-10-14
-**Reifegrad:** veröffentlichtes stabiles Release; Eignung und Grenzen sind je Ablauf zu prüfen
+**Stand:** Entwicklungszweig 1.0.7 · Sprachkompatibilitätslinie `0.1` · 2026-10-14
+**Reifegrad:** Release-Kandidat; Eignung und Grenzen sind je Ablauf zu prüfen
 
-Diese Übersicht beschreibt den Funktionsumfang des aktuellen Releases nach
+Diese Übersicht beschreibt den aktuellen Entwicklungsstand nach
 Anwendungsbereichen. Sie unterscheidet verfügbare Funktionen von begrenzten
 oder experimentellen Bereichen; sie behauptet weder universelle
 Datenbankportabilität noch Fehlerfreiheit beliebiger Anwendungen.
 
-## Änderungen in 1.0.3–1.0.6
+## Änderungen in 1.0.3–1.0.7
 
 - **1.0.3:** erweiterte Standardbibliothek für Mathematik, Text, Arrays, Sets,
   Maps, Datum, Parsing, Encodings und Pfade; typgeprüfte `|>`-Pipelines und
@@ -27,6 +27,11 @@ Datenbankportabilität noch Fehlerfreiheit beliebiger Anwendungen.
   versionierten Assets, responsivem CRUD, Themes, Studio-Eigenschaften,
   Diagrammen, Browserdruck/PDF und E-Mail-Entwürfen. PDF-Anhänge werden manuell
   hinzugefügt. Siehe [Release-Notizen 1.0.6](release-notes/1.0.6.de.md).
+- **1.0.7:** wertliefernde If-Ausdrücke, Record-Updates, typisierte
+  Lambda-Closures, Match-Guards und Record-Muster, Tupelbindung,
+  konfigurierbare Rekursion und `--max-steps`; geprüfte nominale IDs und
+  `Result`-gebundene API-Fehler; lokale Text-PDF-Erstellung und geprüfte
+  Mail-Outbox-Anhänge. Siehe [Release-Notizen 1.0.7](release-notes/1.0.7.de.md).
 
 Die Release-Notizen dokumentieren historische Änderungen; die
 [Roadmap](ROADMAP.de.md) enthält geplante Arbeit. Die
@@ -35,7 +40,7 @@ Die Release-Notizen dokumentieren historische Änderungen; die
 [Handbuch](handbook/de/handbuch.md) beschreiben die akzeptierte Syntax und ihre
 Grenzen.
 
-## Was Zelyra 1.0.6 bietet
+## Was Zelyra 1.0.7 bietet
 
 ### Sprache und Compiler
 
@@ -79,15 +84,19 @@ Grenzen.
   Gleichheit, JSON und exhaustives Matching. Eigene generische Funktionen,
   Records und Enums erlauben explizite oder abgeleitete Typargumente; allgemeine
   Constraints, generische Aliase und generische Funktionsreferenzen fehlen.
-  Benannte typisierte Funktionswerte sind implementiert; Closures bleiben
-  außerhalb des Umfangs. `record_with` und
+  Benannte typisierte Funktionswerte und lexikalische Lambdas sind enthalten;
+  `map`, `filter`, `find` und `reduce` prüfen Callback-Typen. If-Ausdrücke,
+  Record-Updates (`{ ..old, field: value }`), Match-Guards, Record-Muster und
+  Tupelrückgaben/Destrukturierung sind verfügbar. `Id` bleibt nominal und wird
+  nicht aus einer Ganzzahl erzeugt. `record_with` und
   `array_replace_result` liefern typgeprüfte neue Werte mit Wertsemantik.
   `for i in start..end` iteriert mit exklusivem Ende.
 - ✅ Nicht-Unit-Funktionen müssen auf jedem erreichbaren Pfad einen passenden
   Rückgabewert liefern (`E-TYPE-RETURN-001`); nicht exhaustive Matches melden
   `E-TYPE-MATCH-001`. Die Laufzeit begrenzt verschachtelte
-  Funktionsaufrufe kontrolliert; `zelyra run --max-steps <n>` aktiviert ein
-  optionales Schrittbudget, standardmäßig bleibt es unbegrenzt.
+  Funktionsaufrufe standardmäßig auf 20 Ebenen, konfigurierbar bis 500.
+  `zelyra run --max-steps <n>` begrenzt Interpreter-Auswertungsschritte und
+  meldet die Überschreitung am verursachenden Ausdruck.
 - ✅ Stringwerte lassen sich lexikografisch vergleichen. `format_text(wert)`
   formatiert skalare Werte ausdrücklich und ohne implizite Konvertierung;
   Geldbeträge mit fester Skala verwenden `format_scaled_result`. Sammlungen,
@@ -139,7 +148,10 @@ Siehe die [formale Sprachspezifikation](specification.de.md), die
   werden. Ein fünfsekündiges Transport-Timeout, Nachrichtengrenzen und eine
   Loopback-Testsenke sind geprüft. Die Zustellung erfolgt mindestens einmal;
   genau-einmalige Zustellung, PostgreSQL-Outbox, benannte Vorlagen und
-  Dateianhänge sind im aktuellen Release nicht verfügbar.
+  Seit 1.0.7 darf eine Nachricht genau einen direkt mit `render_pdf` erzeugten
+  Anhang enthalten. PDF und Outbox-Payload sind begrenzt; der Serverrenderer
+  stellt ausschließlich paginierten Text dar, kein CSS, keine Bilder und keine
+  Diagramme. Live-SMTP bleibt explizit konfiguriert.
 - ✅ SQLite bietet geprüfte lokale Schemaabläufe. PostgreSQL unterstützt
   ausgewählte Laufzeit-, Schema- und Sicherheitsprüfungen. MySQL Server 8.4.11
   unterstützt typisierte parametrisierte Abfragen sowie einen isolierten
@@ -335,12 +347,14 @@ vergleichenden Benchmark-Ergebnisse behauptet.
 
 ## Release- und Prüfnachweise
 
-Das aktuelle stabile [Zelyra-1.0.6-Release](https://github.com/sf1976/zelyra/releases/tag/v1.0.6)
-und seine Artefakte stehen bei GitHub. Die [Release-Notizen](release-notes/)
-beschreiben ausgelieferte Änderungen; die geprüften Datenbankabläufe und ihre
-Grenzen stehen in der [Datenbankmatrix](database-support.de.md). Automatisierte
-Prüfungen belegen nur die jeweils geprüften Bereiche und nicht die Korrektheit
-beliebiger Anwendungen.
+Zelyra 1.0.7 ist in diesem Zweig noch nicht veröffentlicht. Die
+[Release-Notizen](release-notes/) beschreiben den vorgesehenen Umfang; der
+Release-Kandidat muss noch die im
+[Arbeitsprotokoll](release-plans/1.0.7-language-runtime-progress.de.md)
+aufgeführten Gates bestehen. Geprüfte Datenbankabläufe und ihre Grenzen stehen
+in der [Datenbankmatrix](database-support.de.md). Automatisierte Prüfungen
+belegen nur die jeweils geprüften Bereiche und nicht die Korrektheit beliebiger
+Anwendungen.
 
 Diese Übersicht wird angepasst, wenn sich ausgelieferte Funktionen oder ihre
 Nachweise ändern. Ein Spezifikations- oder Roadmap-Eintrag allein wird hier

@@ -1,4 +1,4 @@
-# Anwendungs-E-Mail (0.9.5)
+# Anwendungs-E-Mail (seit 0.9.5, PDF-Anhänge in 1.0.7)
 
 Zelyras eigene E-Mail-API reiht Nachrichten über die transaktionale
 MariaDB-Outbox ein. Das Einreihen geschieht in derselben Transaktion wie die
@@ -49,7 +49,7 @@ Vertrauensspeicher; die Hostnamenprüfung bleibt aktiv.
 `transaction` vorkommen darf. Sie erwartet Empfänger, Betreff, Text und
 optional einen HTML-Text. Header-Injection und zu große Nachrichten werden
 vor dem Einfügen abgewiesen. Argumente müssen Werte oder nebenwirkungsfreie
-String-Ausdrücke sein.
+Ausdrücke sein.
 
 ```zelyra
 pub fn deliver_mail(event_id: String, event_type: String, payload_json: String) -> Bool uses Email {
@@ -93,7 +93,47 @@ DATABASE_URL=mariadb://user:password@127.0.0.1:3306/app \
   bash tests/mail-outbox-e2e.sh
 ```
 
-Die 0.9.5-API unterstützt Text- und HTML-Alternativen. Benannte Templates und
-Dateianhänge gehören noch nicht zu dieser ersten API. Die Darstellung bleibt
-im Anwendungscode; nicht vertrauenswürdiges HTML muss vor dem Versand
-escaped werden.
+## Serverseitige PDF-Dateien (1.0.7)
+
+`render_pdf("ViewName", datensatz)` liefert `Bytes`. Der View-Name muss als
+Stringliteral auf einen im selben Programm deklarierten `view` zeigen; die
+Daten sind ein Record oder eine `Map<String, T>`. `{feld}`-Platzhalter werden
+mit HTML-Escaping eingesetzt. View-Collection-Blöcke wie `for line in lines {
+... }` werden für Arrays von Records ausgewertet. Unbekannte Views und falsche
+Datentypen scheitern beim Prüfen beziehungsweise bei der Ausführung.
+
+Der lokale Renderer benötigt weder Browser noch CDN oder Systemprogramm. Er
+erstellt ein paginiertes, durchsuchbares PDF aus dem sichtbaren Text der View.
+HTML-Tags und CSS werden nicht als Layout-Engine interpretiert; Bilder,
+Diagramme, Schriften, Farben und präzise Tabellenlayouts werden nicht in die
+PDF-Geometrie übernommen. Für eine originalgetreue grafische Druckansicht
+bleibt die browserbasierte Druckansicht der Anwendung zuständig. Die
+serverseitige Variante ist für schlichte textbasierte Geschäftsdokumente
+gedacht. Sie begrenzt HTML-Eingabe und expandierte View auf jeweils 2 MiB,
+Collection-Blöcke auf 10.000 Datensatzzeilen und das Dokument auf 200 Seiten.
+Zeichen außerhalb der unterstützten WinAnsi-Schrift werden als `?` ausgegeben.
+
+Für einen Versand ohne HTML-Text nimmt `mail_queue` fünf Argumente an:
+Empfänger, Betreff, Text, PDF-Dateiname und `Bytes`. Mit HTML-Alternative sind
+es sechs Argumente; der HTML-Text steht an vierter Stelle. Je Nachricht ist
+höchstens ein PDF mit maximal 2 MiB erlaubt. Dateinamen dürfen keine Pfade
+enthalten. Die Outbox-Payload ist auf 3 MiB begrenzt. Der Versand bleibt eine
+MariaDB-Transaktion und erfolgt über den vorhandenen, ausdrücklich gestarteten
+Worker:
+
+```zelyra
+transaction {
+    mail_queue(
+        "kunde@example.test",
+        "Rechnung " + invoice.number,
+        "Ihre Rechnung ist beigefügt.",
+        "rechnung-" + invoice.number + ".pdf",
+        render_pdf("InvoicePrint", invoice)
+    )
+}
+```
+
+Das vollständige prüfbare Beispiel steht in
+[`examples/pdf_mail_outbox/main.zyl`](../examples/pdf_mail_outbox/main.zyl). Diese
+API fügt keinen untrusted HTML-Mailtext ein; der optionale HTML-Body muss
+weiterhin vom Anwendungscode sicher erstellt werden.

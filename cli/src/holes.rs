@@ -164,6 +164,9 @@ impl Collector {
                 let expected = scope.types.get(name).cloned();
                 self.expression(value, expected, scope, capabilities, contract_spans);
             }
+            Stmt::TupleBindOrAssign { value, .. } => {
+                self.expression(value, None, scope, capabilities, contract_spans);
+            }
             Stmt::Expr(expression) => {
                 self.expression(expression, None, scope, capabilities, contract_spans)
             }
@@ -396,6 +399,13 @@ impl Collector {
                     );
                 }
             }
+            ExprKind::Lambda { params, body } => {
+                let mut lambda_scope = scope.clone();
+                for parameter in params {
+                    lambda_scope.add(&parameter.name, Some(parameter.ty.clone()));
+                }
+                self.expression(body, None, &lambda_scope, capabilities, contract_spans);
+            }
             ExprKind::Int(_)
             | ExprKind::UInt(_)
             | ExprKind::Float(_)
@@ -431,6 +441,7 @@ fn visible_functions(program: &zelyra_ast::Program) -> Vec<String> {
         "http_json",
         "http_result",
         "mail_queue",
+        "render_pdf",
         "mail_deliver",
         "json_encode",
         "json_decode",
@@ -483,6 +494,11 @@ fn add_pattern_values(scope: &mut Scope, pattern: &Pattern) {
         PatternKind::EnumVariantPayload { payloads, .. } => {
             for payload in payloads {
                 add_pattern_values(scope, payload);
+            }
+        }
+        PatternKind::Record { fields, .. } => {
+            for (_, field_pattern) in fields {
+                add_pattern_values(scope, field_pattern);
             }
         }
     }

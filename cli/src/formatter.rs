@@ -508,6 +508,7 @@ fn token_text<'a>(token: &'a Token, source: &'a str) -> &'a str {
         TokenKind::Arrow => "->",
         TokenKind::FatArrow => "=>",
         TokenKind::PipeForward => "|>",
+        TokenKind::Pipe => "|",
         TokenKind::Plus => "+",
         TokenKind::Minus => "-",
         TokenKind::Star => "*",

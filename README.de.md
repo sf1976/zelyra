@@ -11,15 +11,22 @@ Business-, Datenbank- und Webanwendungen. Schemaabhängiges SQL, Formulare,
 CRUD, Views und Geschäftslogik greifen ineinander; gewöhnlicher Programmcode
 und natives SQL bleiben jederzeit möglich.
 
-> **Aktuelles stabiles Release: 1.0.6 · Sprachkompatibilitätslinie: 0.1**
+> **Entwicklungszweig für 1.0.7 · Sprachkompatibilitätslinie: 0.1**
 >
 > Die Compilerprüfung und der Verifier decken klar abgegrenzte Bereiche ab. Sie beweisen nicht die Korrektheit beliebiger Anwendungen. Prüfe vor dem Einsatz die unterstützten Abläufe und Grenzen in der jeweiligen Dokumentation.
 
-Das aktuelle stabile [Release v1.0.6](https://github.com/sf1976/zelyra/releases/tag/v1.0.6) ergänzt Zelyra UI: ein lokales, compilergeprüftes Komponentensystem für erzeugte CRUD-Seiten, Projektvorlagen, Studio-Eigenschaften und das Rechnungstutorial. Enthalten sind Projektthemes, barrierearme Diagramme, responsive Layouts und Browserdruck mit PDF-Ausgabe. Details stehen in den [Release-Notizen 1.0.6](docs/release-notes/1.0.6.de.md), im [UI-Leitfaden](docs/ui.de.md), in der [Datenbank-Supportmatrix](docs/database-support.de.md) und der [Implementierungsübersicht](docs/implemented.de.md).
+Dieser Entwicklungszweig ergänzt If-Ausdrücke, Record-Updates, typisierte
+Lambdas, Match-Guards, Tupelbindung und begrenzte Ausführung. Außerdem kann
+Zelyra deklarierte Views lokal in Text-PDFs rendern und PDF-Dateien
+transaktional in die MariaDB-Mail-Outbox einreihen. Details stehen in den
+[Release-Notizen 1.0.7](docs/release-notes/1.0.7.de.md), im
+[UI-Leitfaden](docs/ui.de.md), in der
+[Datenbank-Supportmatrix](docs/database-support.de.md) und der
+[Implementierungsübersicht](docs/implemented.de.md).
 
 Die Sprachkompatibilitätslinie bleibt `0.1`; Compiler-Releases ändern sie nicht automatisch. „Korrektheit beweisen“ ist ein Entwicklungsziel: Der Verifier unterscheidet geprüfte, zur Laufzeit geprüfte und nicht bewiesene Bereiche, ist aber kein allgemeiner Theorembeweiser.
 
-## Was Zelyra 1.0.6 bietet
+## Was Zelyra 1.0.7 bietet
 
 Zelyra verbindet Sprache, Compiler, Datenbank, Webanwendung und Studio in
 einem Arbeitsablauf. Der aktuelle Stand umfasst:
@@ -44,6 +51,12 @@ einem Arbeitsablauf. Der aktuelle Stand umfasst:
   Quelltexterklärung;
 - CLI-Werkzeuge für Routen, Setup, Diagnose, Datenbank, Audit, SMTP und statische
   Laravel-Migrationsberichte.
+- If-Ausdrücke, Record-Updates, typisierte Lambdas, geschützte verschachtelte
+  Muster und Tupel; `--max-steps` stoppt unbeschränkte Auswertung mit
+  quellgenauer Diagnose.
+- Lokales Text-PDF-Rendering und geprüfte PDF-Outbox-Anhänge mit Größen- und
+  Zeilenlimits. Das Renderer-PDF übernimmt keine CSS-Layouts, Bilder oder
+  Diagramme; für grafische Ausdrucke bleibt die Browser-Druckansicht verfügbar.
 
 Docker Engine und das Docker-Compose-Plugin v2 oder neuer müssen installiert
 sein; Python Compose v1 wird nicht unterstützt. Zelyra installiert diese
@@ -124,7 +137,7 @@ weitere Einstellungen stehen in der Umgebungsreferenz.
 | Datenbankunterstützung prüfen möchtest | [Datenbank-Supportmatrix](docs/database-support.de.md) · [English](docs/database-support.en.md) |
 | den lokalen Editor oder sichere Regex-Änderungen nutzen möchtest | [Zelyra Studio](docs/web-editor.de.md) · [Textänderungsbefehl](docs/text-edit.de.md) |
 | Zelyra UI verwenden möchtest | [Komponenten-, Formular-, Theme-, Druck-, Diagramm- und E-Mail-Referenz](docs/ui.de.md) · [English](docs/ui.en.md) |
-| aktuelle und geplante Arbeiten prüfen möchtest | [Roadmap](docs/ROADMAP.de.md) · [Release-Notizen 1.0.6](docs/release-notes/1.0.6.de.md) |
+| aktuelle und geplante Arbeiten prüfen möchtest | [Roadmap](docs/ROADMAP.de.md) · [Release-Notizen 1.0.7](docs/release-notes/1.0.7.de.md) |
 | die Entwicklungsrichtung verstehen möchtest | [Manifest](docs/MANIFESTO.de.md) · [KI-native Architektur](docs/architecture/ai-native-development.de.md) · [Entwurf lesbarer Regex-Textbearbeitung](docs/design/readable-regex-text-editing.de.md) |
 | konkrete Release-Änderungen suchst | [Changelog](CHANGELOG.md) · [GitHub-Releases](https://github.com/sf1976/zelyra/releases) |
 

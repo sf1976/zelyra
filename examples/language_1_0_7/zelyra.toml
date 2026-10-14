@@ -1,0 +1,7 @@
+[project]
+name = "language-1-0-7-example"
+version = "0.1.0"
+zelyra = "0.1"
+
+[runtime]
+max_stack_depth = 100

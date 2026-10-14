@@ -64,6 +64,18 @@ release targets. Longer-term ideas remain in the post-1.0 evolution section.
   [Zelyra UI guide](ui.en.md) and the
   [work log](release-plans/1.0.6-zelyra-ui-progress.en.md).
 
+- [~] **1.0.7 language, runtime, and PDF mail:** The development branch adds
+  value-producing if expressions, record updates, typed lambda pipelines,
+  match guards and nested record patterns, tuple assignment, and a bounded,
+  configurable recursion depth. `--max-steps` counts interpreter statements
+  and evaluations under one shared budget, including `parallel` branches.
+  Tests also protect nominal IDs, `Result`-bound API errors, offline
+  transaction checking, view slot fallbacks, auth handlers, and `parallel`
+  joining. `render_pdf("ViewName", record)` creates a local searchable text
+  PDF; the mail outbox can attach a validated PDF. Server PDF output does not
+  render CSS, images, or charts. This version is not released yet; see the
+  [1.0.7 work log](release-plans/1.0.7-language-runtime-progress.en.md).
+
 - [ ] **Planned for 1.1.0 — Compose check in the installer:** Installers detect
   Docker Compose v2 or newer and distinguish it from obsolete Python Compose
   v1. Docker remains optional for the core installation. When Compose v2 is

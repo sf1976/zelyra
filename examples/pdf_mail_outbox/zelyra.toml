@@ -1,0 +1,11 @@
+[project]
+name = "pdf-mail-outbox-example"
+version = "0.1.0"
+zelyra = "0.1"
+
+[capabilities]
+email = true
+database = true
+
+[network]
+allowed_hosts = ["smtp.example.test"]

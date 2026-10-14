@@ -1,5 +1,7 @@
 use crate::{MailPolicy, NetworkPolicy};
-use zelyra_mail::{MailMessage, SmtpClient, SmtpConfig, SmtpSecurity};
+use zelyra_mail::{MailAttachment, MailMessage, SmtpClient, SmtpConfig, SmtpSecurity};
+
+type DecodedAttachment = (String, String, Vec<u8>);
 
 pub(crate) fn deliver_outbox_message(
     event_id: &str,
@@ -14,6 +16,15 @@ pub(crate) fn deliver_outbox_message(
     let subject = field("subject").ok_or("invalid mail outbox payload")?;
     let text_body = field("text").ok_or("invalid mail outbox payload")?;
     let html_body = field("html");
+    let attachment_storage = parse_attachments(&payload)?;
+    let attachments = attachment_storage
+        .iter()
+        .map(|(filename, content_type, bytes)| MailAttachment {
+            filename,
+            content_type,
+            bytes,
+        })
+        .collect::<Vec<_>>();
 
     let mail = mail.ok_or("SMTP configuration is incomplete")?;
     let host = mail
@@ -58,6 +69,69 @@ pub(crate) fn deliver_outbox_message(
             text_body,
             html_body,
             message_id: Some(&message_id),
+            attachments: &attachments,
         })
         .map_err(|_| "SMTP delivery failed")
+}
+
+fn parse_attachments(payload: &serde_json::Value) -> Result<Vec<DecodedAttachment>, &'static str> {
+    let mut decoded = Vec::new();
+    if let Some(attachments) = payload.get("attachments") {
+        let attachments = attachments
+            .as_array()
+            .ok_or("invalid mail outbox payload")?;
+        if attachments.len() > 1 {
+            return Err("invalid mail outbox attachment");
+        }
+        for attachment in attachments {
+            let filename = attachment
+                .get("filename")
+                .and_then(serde_json::Value::as_str)
+                .ok_or("invalid mail outbox payload")?;
+            let content_type = attachment
+                .get("content_type")
+                .and_then(serde_json::Value::as_str)
+                .ok_or("invalid mail outbox payload")?;
+            let content = attachment
+                .get("content")
+                .and_then(serde_json::Value::as_str)
+                .ok_or("invalid mail outbox payload")?;
+            let bytes = super::base64_decode_bytes(content)
+                .map_err(|_| "invalid mail outbox attachment")?;
+            decoded.push((filename.to_owned(), content_type.to_owned(), bytes));
+        }
+    }
+    Ok(decoded)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decodes_bounded_pdf_attachment_payloads() {
+        let payload = serde_json::json!({
+            "attachments": [{
+                "filename": "invoice.pdf",
+                "content_type": "application/pdf",
+                "content": super::super::base64_encode_bytes(b"%PDF-1.4\n%%EOF")
+            }]
+        });
+        let decoded = parse_attachments(&payload).unwrap();
+        assert_eq!(decoded[0].0, "invoice.pdf");
+        assert_eq!(decoded[0].1, "application/pdf");
+        assert_eq!(decoded[0].2, b"%PDF-1.4\n%%EOF");
+
+        let invalid = serde_json::json!({
+            "attachments": [{
+                "filename": "invoice.pdf",
+                "content_type": "application/pdf",
+                "content": "$$$"
+            }]
+        });
+        assert_eq!(
+            parse_attachments(&invalid),
+            Err("invalid mail outbox attachment")
+        );
+    }
 }
