@@ -113,10 +113,15 @@ function onStudioEvent(message) {
   if (message?.schema !== 1 || typeof message.kind !== "string") return;
   if (message.kind === "workspace.changed") {
     void refreshTree();
-    if (message.document?.path === activePath) setVerificationResults([]);
+    const changedPath = message.document?.path || "";
+    if (!changedPath || changedPath === activePath) setVerificationResults([]);
     pipelineMapCache = null;
     renderPipelineBreadcrumbs();
-    if (activePath?.endsWith(".zyl")) scheduleLiveCheck(activePath);
+    if (message.payload?.operation?.startsWith("external-")) {
+      void refreshExternallyChangedTabs(changedPath).then(() => {
+        if (activePath?.endsWith(".zyl")) scheduleLiveCheck(activePath);
+      });
+    } else if (activePath?.endsWith(".zyl")) scheduleLiveCheck(activePath);
     return;
   }
   if (message.kind === "analysis.invalidated") {
@@ -215,6 +220,8 @@ const messages = {
     outboxButton: "Outbox", outboxTitle: "Mail-Outbox", outboxCaption: "Metadaten der MariaDB-Outbox ohne Nachrichteninhalt", outboxEvent: "Ereignis", outboxStatus: "Status", outboxRecipient: "Empfänger", outboxAttachment: "Anhang", outboxCreated: "Erstellt", outboxAvailable: "Verfügbar", outboxError: "Fehler", outboxAction: "Aktion", previous: "Zurück", next: "Weiter", outboxLoading: "Outbox wird geladen …", outboxEmpty: "Keine Ereignisse auf dieser Seite.", outboxPage: "{0}–{1} von {2}", outboxRequeue: "Erneut einreihen", outboxRequeueConfirm: "Das erschöpfte Ereignis {0} für einen späteren Worker-Lauf freigeben? Es wird jetzt keine E-Mail versendet.", outboxRequeued: "Ereignis erneut eingereiht. Ein Versand erfolgt erst durch einen ausdrücklich gestarteten Worker.", outboxLoadError: "Outbox konnte nicht geladen werden: {0}", outboxRequeueError: "Erneutes Einreihen fehlgeschlagen: {0}",
     outboxAttempts: "Versuche: {0}", outboxLeaseUntil: "Sperre bis: {0}", outboxDeliveredAt: "Zugestellt: {0}", outboxExhaustedAt: "Erschöpft: {0}", outboxNoDatabase: "Für die Outbox ist keine MariaDB-Verbindung konfiguriert. Trage DATABASE_URL in .env oder der Umgebung ein.",
     capabilityButton: "Rechte", capabilityTitle: "Capability- und Sicherheitsmatrix", capabilityDeclarations: "Deklarierte Rechte", capabilityUses: "Tatsächlich verwendete Operationen", capabilityPaths: "Dateipfade", capabilityUnused: "Freigaben ohne erkannten Funktionsbedarf", capabilityUnusedCaveat: "Nur analysierte Funktionen; generierte Routen und dynamische Aufrufe können weitere Rechte benötigen.", capabilityLoading: "Compiler und Projektkonfiguration werden analysiert …", capabilityEmpty: "Keine Einträge in der aktuellen Datei.", capabilityGrant: "Freigabe prüfen", capabilityGrantReview: "Änderung an zelyra.toml prüfen", capabilityGrantApply: "Freigabe übernehmen", capabilityGrantPreview: "Nur die angezeigte Konfigurationsänderung wird nach deiner Bestätigung gespeichert.", capabilityGranted: "Freigabe gespeichert. Die Runtime prüft sie beim nächsten Lauf erneut.", capabilityUnrestricted: "Keine Projektkonfiguration: Runtime-Capabilities sind nicht durch zelyra.toml eingeschränkt.", capabilityIncomplete: "Die Quellanalyse ist unvollständig; dieser Befund kann Einträge auslassen.", capabilityError: "Capability-Analyse fehlgeschlagen: {0}", capabilityPathUnknown: "Dynamische Pfade sind statisch nicht entscheidbar.", capabilityNotGranted: "nicht freigegeben", capabilityDynamic: "dynamisch",
+    externalReloaded: "Extern geänderte Datei neu geladen: {0}", externalDirty: "{0} wurde außerhalb von Studio geändert. Ungespeicherte Änderungen bleiben erhalten; vor dem Speichern prüfen.", externalMissing: "{0} wurde außerhalb von Studio entfernt. Der geöffnete Puffer bleibt erhalten.",
+    externalReloadFailed: "{0} konnte nach einer äußeren Änderung nicht neu geladen werden: {1}",
     runButton: "Starten", runButtonTitle: "main.zyl ausführen oder Webanwendung starten",
     runOutputTitle: "Programmausgabe", runStarting: "Anwendung wird vorbereitet und gestartet …", runSuccess: "Programm erfolgreich beendet", runFailure: "Programm mit Fehler beendet", runTimeout: "Ausführung nach 15 Sekunden beendet", runOutputTruncated: "Die Ausgabe ist auf 64 KiB je Stream begrenzt.", runNoOutput: "Keine Ausgabe.", runStdout: "AUSGABE", runStderr: "FEHLER", runInputUnavailable: "Studio stellt dem Programm keine interaktive Eingabe bereit.", runWebReady: "Webanwendung läuft lokal:", runWebOpen: "Anwendung im Browser öffnen", runWebStop: "Vorschau beenden", runWebStopped: "Lokale Vorschau wurde beendet.",
     runtimeBudgetButton: "Budget", runtimeBudgetTitle: "Laufzeitbudget und Rekursion", runtimeBudgetEnable: "Schrittbudget für Konsolenprogramme aktivieren", runtimeBudgetRange: "Schrittbudget (Regler: 1.000 bis 1.000.000)", runtimeBudgetNumber: "Maximale Schritte (1 bis 100.000.000)", runtimeBudgetWebHint: "Das Schrittbudget gilt für Konsolenprogramme. Eine Webvorschau verwendet weiterhin ihre eigenen Laufzeitgrenzen.", runtimeRecursionTitle: "Mögliche Rekursion", runtimeRecursionNone: "Keine direkte oder gegenseitige Rekursion im analysierten Funktionsgraphen gefunden.", runtimeRecursionIncomplete: "Der Funktionsgraph ist zu groß; die Rekursionsanalyse ist unvollständig.", runtimeRecursionDirect: "Direkte Rekursion", runtimeRecursionMutual: "Gegenseitige Rekursion", runtimeStackDepth: "Maximale Stacktiefe laut Projekt: {0} ({1})", runtimeStackConfigured: "konfiguriert", runtimeStackDefault: "Standard", runtimeProfileError: "Laufzeitprofil konnte nicht gelesen werden: {0}", runtimeBudgetInvalid: "Bitte eine ganze Schrittzahl von 1 bis 100.000.000 eingeben.", runtimeBudgetExceeded: "Schrittbudget überschritten", runCancel: "Ausführung abbrechen", runCancelRequested: "Abbruch angefordert …", runCancelled: "Ausführung abgebrochen", runtimeProfileInvalid: "Der ungespeicherte Quelltext ist nicht vollständig analysierbar.",
@@ -317,6 +324,8 @@ const messages = {
     outboxButton: "Outbox", outboxTitle: "Mail outbox", outboxCaption: "MariaDB outbox metadata without message bodies", outboxEvent: "Event", outboxStatus: "Status", outboxRecipient: "Recipient", outboxAttachment: "Attachment", outboxCreated: "Created", outboxAvailable: "Available", outboxError: "Error", outboxAction: "Action", previous: "Previous", next: "Next", outboxLoading: "Loading outbox …", outboxEmpty: "No events on this page.", outboxPage: "{0}–{1} of {2}", outboxRequeue: "Requeue", outboxRequeueConfirm: "Release exhausted event {0} for a later worker run? No email will be sent now.", outboxRequeued: "Event requeued. Delivery requires a separately started worker.", outboxLoadError: "Could not load outbox: {0}", outboxRequeueError: "Requeue failed: {0}",
     outboxAttempts: "Attempts: {0}", outboxLeaseUntil: "Lease until: {0}", outboxDeliveredAt: "Delivered: {0}", outboxExhaustedAt: "Exhausted: {0}", outboxNoDatabase: "No MariaDB connection is configured for the outbox. Set DATABASE_URL in .env or the environment.",
     capabilityButton: "Permissions", capabilityTitle: "Capability and security matrix", capabilityDeclarations: "Declared capabilities", capabilityUses: "Operations actually used", capabilityPaths: "File paths", capabilityUnused: "Grants without a detected function use", capabilityUnusedCaveat: "Analyzed functions only; generated routes and dynamic calls may require more permissions.", capabilityLoading: "Analyzing compiler and project configuration …", capabilityEmpty: "No entries in the current file.", capabilityGrant: "Review grant", capabilityGrantReview: "Review change to zelyra.toml", capabilityGrantApply: "Apply grant", capabilityGrantPreview: "Only the displayed configuration change will be saved after your confirmation.", capabilityGranted: "Grant saved. The runtime checks it again on the next run.", capabilityUnrestricted: "No project configuration: runtime capabilities are not restricted by zelyra.toml.", capabilityIncomplete: "Source analysis is incomplete; this report may omit entries.", capabilityError: "Capability analysis failed: {0}", capabilityPathUnknown: "Dynamic paths cannot be decided statically.", capabilityNotGranted: "not granted", capabilityDynamic: "dynamic",
+    externalReloaded: "Reloaded externally changed file: {0}", externalDirty: "{0} changed outside Studio. Unsaved edits remain; review before saving.", externalMissing: "{0} was removed outside Studio. The open buffer remains.",
+    externalReloadFailed: "Could not reload {0} after an external change: {1}",
     runButton: "Run", runButtonTitle: "Run main.zyl or start the web application",
     runOutputTitle: "Program output", runStarting: "Preparing and starting the application …", runSuccess: "Program finished successfully", runFailure: "Program finished with an error", runTimeout: "Execution stopped after 15 seconds", runOutputTruncated: "Output is limited to 64 KiB per stream.", runNoOutput: "No output.", runStdout: "OUTPUT", runStderr: "ERROR", runInputUnavailable: "Studio does not provide interactive input to the program.", runWebReady: "Web application is running locally:", runWebOpen: "Open application in browser", runWebStop: "Stop preview", runWebStopped: "Local preview stopped.",
     runtimeBudgetButton: "Budget", runtimeBudgetTitle: "Runtime budget and recursion", runtimeBudgetEnable: "Enable a step budget for console programs", runtimeBudgetRange: "Step budget (slider: 1,000 to 1,000,000)", runtimeBudgetNumber: "Maximum steps (1 to 100,000,000)", runtimeBudgetWebHint: "The step budget applies to console programs. Web previews keep their own runtime limits.", runtimeRecursionTitle: "Possible recursion", runtimeRecursionNone: "No direct or mutual recursion found in the analyzed function graph.", runtimeRecursionIncomplete: "The function graph is too large; recursion analysis is incomplete.", runtimeRecursionDirect: "Direct recursion", runtimeRecursionMutual: "Mutual recursion", runtimeStackDepth: "Project maximum stack depth: {0} ({1})", runtimeStackConfigured: "configured", runtimeStackDefault: "default", runtimeProfileError: "Could not read runtime profile: {0}", runtimeBudgetInvalid: "Enter an integer step count from 1 to 100,000,000.", runtimeBudgetExceeded: "Step budget exceeded", runCancel: "Cancel execution", runCancelRequested: "Cancellation requested …", runCancelled: "Execution cancelled", runtimeProfileInvalid: "The unsaved source cannot be fully analyzed.",
@@ -1293,6 +1302,40 @@ async function openFile(path) {
     activate(path);
     announce(t("opened", path));
   } catch (error) { announce(error.message, "error"); }
+}
+
+async function refreshExternallyChangedTabs(changedPath) {
+  const paths = changedPath ? [changedPath] : [...tabs.keys()];
+  for (const path of paths) {
+    const tab = tabs.get(path);
+    if (!tab) continue;
+    if (isDirty(tab, path)) {
+      announce(t("externalDirty", path), "warning");
+      continue;
+    }
+    const expectedHash = tab.hash;
+    let file;
+    try { file = await api(`file?path=${encodeURIComponent(path)}`); }
+    catch (error) {
+      announce(error.message.includes("file not found") ? t("externalMissing", path)
+        : t("externalReloadFailed", path, error.message), "warning");
+      continue;
+    }
+    if (tabs.get(path) !== tab || isDirty(tab, path) || tab.hash !== expectedHash || file.hash === expectedHash) continue;
+    const wasActive = activePath === path;
+    if (wasActive && editor) { editor.destroy(); editor = null; }
+    tab.saved = file.content;
+    tab.hash = file.hash;
+    tab.state = EditorState.create({ doc: file.content });
+    if (wasActive) {
+      editor = createView(path, tab.state);
+      setVerificationResults([]);
+      renderContextHelp(editor.state, path);
+    }
+    symbolCache.delete(path);
+    renderTabs();
+    announce(t("externalReloaded", path));
+  }
 }
 
 function activate(path) {

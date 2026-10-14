@@ -316,6 +316,14 @@ Der Bericht umfasst analysierte Funktionsaufrufe; dynamische Aufrufe und
 automatisch generierte Webrouten sind keine vollständig statisch bewerteten
 Rechteketten.
 
+Studio prüft `.zyl`-, `.css`- und `zelyra.toml`-Dateien im freigegebenen
+Projektbaum alle 1,5 Sekunden auf äußere Änderungen. Der Wächter liest dafür
+Dateimetadaten und folgt keinen Symlinks. Saubere geöffnete Puffer werden neu
+geladen; ungespeicherte Änderungen bleiben erhalten und Studio zeigt einen
+Hinweis. Der Wächter ist auf die bestehende Baumtiefe und Dateizahl des
+Editors begrenzt. Auf Dateisystemen mit grober Zeitauflösung kann eine
+Änderung mit gleicher Länge und gleichem Zeitstempel unerkannt bleiben.
+
 ## Umfang
 
 Studio ist eine lokale IDE-Grundlage und noch keine vollständige IDE.

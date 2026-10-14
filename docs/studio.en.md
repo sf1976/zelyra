@@ -284,6 +284,13 @@ Studio does not pretend to add a grant. The report covers analyzed function
 calls; dynamic calls and generated web routes are not fully resolved into a
 static permission chain.
 
+Studio scans `.zyl`, `.css`, and `zelyra.toml` files in the allowed project
+tree every 1.5 seconds for external changes. The watcher reads metadata only
+and does not follow symlinks. Clean open buffers reload; unsaved edits stay
+in place with a warning. It obeys the editor's existing tree-depth and file
+count limits. On file systems with coarse timestamps, a same-length edit with
+an unchanged timestamp may be missed.
+
 ## Scope
 
 Studio is a local IDE foundation, not yet a complete IDE. The database

@@ -17,6 +17,8 @@ mod editor_capabilities;
 mod editor_outbox;
 #[path = "editor_pdf.rs"]
 mod editor_pdf;
+#[path = "editor_watcher.rs"]
+mod editor_watcher;
 
 const EDITOR_HTML: &str = include_str!("../assets/editor.html");
 const EDITOR_JS: &str = include_str!("../assets/editor.js");
@@ -165,6 +167,7 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         run_cancel: Arc::new(AtomicBool::new(false)),
     });
     let active = Arc::new(AtomicUsize::new(0));
+    editor_watcher::start(Arc::clone(&state));
     println!("Zelyra Studio ist lokal erreichbar: http://{authority}{EDITOR_PATH}/#{token}");
     println!("Projekt: {}", state.root.display());
     if open_browser && has_graphical_session() {
