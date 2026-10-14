@@ -50,6 +50,11 @@ Webvorschau. Der Run-Befehl zeigt die Vorschauadresse an; **Stop preview**
 beendet sie. Dieser Weg benötigt Docker Compose sowie die lokale
 Tutorialkonfiguration in `.env`.
 
+Wenn Studio während `zelyra update` geöffnet war, beende diese Sitzung mit
+`Ctrl+C` und starte Studio danach neu. Ein Update ersetzt die Programmdatei für
+neue Prozesse; ein bereits laufendes Studio lädt den neuen IDE-Code nicht
+automatisch nach. Prüfe bei Bedarf zuerst `zelyra --version`.
+
 Für eine andere Datenbank, die über Prozessvariablen konfiguriert wurde, startet
 Studio nicht eigenständig einen lokalen Datenbankdienst und lädt keine
 Tutorialdaten hinein. So bleiben externe Datenbanken unverändert.
@@ -126,6 +131,15 @@ Compose v1 wird nicht unterstützt. Bei fehlendem Compose-Plugin installiere
 Compose v2 nach der [Docker-Anleitung](https://docs.docker.com/engine/install/)
 und prüfe erneut `docker compose version`. Bestehende `.env`-Dateien und
 Datenbank-Volumes werden beim Wechsel des Ports nicht gelöscht.
+
+`ERROR 1045 (28000): Access denied` weist auf Zugangsdaten hin, die nicht zum
+bereits initialisierten MariaDB-Volume passen. Die Zugangsdaten in `.env`
+werden nur beim ersten Initialisieren eines Volumes angewendet. Neue
+Rechnungstutorials ab Zelyra 1.0.4 erhalten einen eigenen Compose-Namen und
+verwenden dadurch keine alten Tutorial-Volumes wieder. Bei älteren
+Rechnungstutorials startet `zelyra setup --all` nach diesem Fehler eine
+isolierte Datenbank und richtet das Schema dort ein. Das bisherige Volume wird
+nicht gelöscht oder verändert; seine Daten bleiben erhalten.
 
 ## Grenzen des Beispiels
 

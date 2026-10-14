@@ -49,6 +49,11 @@ loads the repeatable sample data, and then starts a local web preview. Run
 shows the preview address; **Stop preview** ends it. This path needs Docker
 Compose and the local tutorial configuration in `.env`.
 
+If Studio was open while `zelyra update` ran, end that session with `Ctrl+C`
+and start Studio again. An update replaces the executable for new processes;
+an already running Studio does not automatically reload the new IDE code. Run
+`zelyra --version` first if you need to confirm the installed version.
+
 For a different database configured through process environment variables,
 Studio does not start a local database service or insert tutorial data. That
 keeps external databases unchanged.
@@ -124,6 +129,14 @@ Compose v1 is unsupported. If the Compose plugin is missing, install Compose
 v2 using the [Docker instructions](https://docs.docker.com/engine/install/)
 and verify `docker compose version` again. Existing `.env` files and database
 volumes are preserved when a port changes.
+
+`ERROR 1045 (28000): Access denied` means the credentials do not match the
+already initialized MariaDB volume. Values in `.env` are applied only when a
+volume is initialized for the first time. New invoice tutorials created with
+Zelyra 1.0.4 or newer get their own Compose project name and therefore do not
+reuse older tutorial volumes. For older invoice tutorials, `zelyra setup --all`
+starts an isolated database after this error and applies the schema there. The
+previous volume is not deleted or changed; its data remains available.
 
 ## Limits of the example
 

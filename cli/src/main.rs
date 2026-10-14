@@ -299,6 +299,41 @@ fn generate_local_secret() -> Result<String, String> {
     Ok(secret)
 }
 
+fn isolate_invoice_tutorial_compose_project(directory: &std::path::Path) -> Result<(), String> {
+    let compose_file = directory.join("docker-compose.mariadb.yml");
+    let contents = fs::read_to_string(&compose_file)
+        .map_err(|error| format!("cannot read `{}`: {error}", compose_file.display()))?;
+    if contents.lines().any(|line| line.starts_with("name:")) {
+        return Ok(());
+    }
+    let identifier = generate_local_secret()?;
+    let project_name = format!("zelyra-invoice-{}", &identifier[..32]);
+    let updated = format!("name: {project_name}\n\n{contents}");
+    fs::write(&compose_file, updated)
+        .map_err(|error| format!("cannot update `{}`: {error}", compose_file.display()))
+}
+
+fn invoice_tutorial_project(directory: &std::path::Path) -> bool {
+    fs::read_to_string(directory.join("zelyra.tutorial"))
+        .is_ok_and(|marker| marker.trim() == "invoice-v1")
+}
+
+fn compose_file_has_project_name(directory: &std::path::Path) -> bool {
+    fs::read_to_string(directory.join("docker-compose.mariadb.yml"))
+        .is_ok_and(|contents| contents.lines().any(|line| line.starts_with("name:")))
+}
+
+fn is_database_auth_rejection(details: &str) -> bool {
+    let details = details.to_ascii_lowercase();
+    details.contains("error 1045") || details.contains("access denied for user")
+}
+
+fn invoice_tutorial_database_recovery_required(directory: &std::path::Path, details: &str) -> bool {
+    invoice_tutorial_project(directory)
+        && !compose_file_has_project_name(directory)
+        && is_database_auth_rejection(details)
+}
+
 fn mariadb_env_template(web_port: u16, host_port: u16, database_host_port: u16) -> String {
     format!(
         r#"# Zelyra local MariaDB configuration.
@@ -4131,8 +4166,7 @@ fn detect_docker_compose() -> Option<DockerComposeCommand> {
         .output()
         .ok()
         .is_some_and(|output| {
-            output.status.success()
-                && supported_compose_version(&String::from_utf8_lossy(&output.stdout))
+            output.status.success() && supported_compose_version(&compose_version_output(&output))
         });
     if plugin {
         return Some(DockerComposeCommand::Plugin);
@@ -4142,15 +4176,32 @@ fn detect_docker_compose() -> Option<DockerComposeCommand> {
         .output()
         .ok()
         .is_some_and(|output| {
-            output.status.success()
-                && supported_compose_version(&String::from_utf8_lossy(&output.stdout))
+            output.status.success() && supported_compose_version(&compose_version_output(&output))
         });
     standalone.then_some(DockerComposeCommand::Standalone)
 }
 
+fn compose_version_output(output: &Output) -> String {
+    format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    )
+}
+
 fn supported_compose_version(version: &str) -> bool {
-    semver::Version::parse(version.trim().trim_start_matches('v'))
-        .is_ok_and(|version| version.major >= 2)
+    version.split_whitespace().rev().any(|token| {
+        let token = token.trim_matches(|character: char| {
+            !character.is_ascii_alphanumeric() && !matches!(character, '.' | '-' | '+')
+        });
+        let token = token.trim_start_matches('v');
+        let normalized = if token.matches('.').count() == 1 {
+            format!("{token}.0")
+        } else {
+            token.to_owned()
+        };
+        semver::Version::parse(&normalized).is_ok_and(|version| version.major >= 2)
+    })
 }
 
 fn docker_compose_install_hint() -> String {
@@ -4863,10 +4914,31 @@ fn setup_action(path: &str, action: &str, options: &SetupOptions) -> Result<Stri
             let database_url = expanded_database_url(&directory)?;
             run_local_schema_setup(&directory, &database_url)
         };
-        schema_result.map_err(|error| {
-            let web_url = project_web_url(&directory).unwrap_or_else(|_| "unknown".into());
-            format!("{error}\napplication URL: {web_url}")
-        })?;
+        match schema_result {
+            Ok(()) => {}
+            Err(error) if invoice_tutorial_database_recovery_required(&directory, &error) => {
+                isolate_invoice_tutorial_compose_project(&directory)?;
+                let restarted = start_mariadb_compose(&directory, true).map_err(|retry_error| {
+                    let web_url = project_web_url(&directory).unwrap_or_else(|_| "unknown".into());
+                    format!(
+                        "the existing invoice tutorial database rejected its credentials; its volume was preserved, but an isolated tutorial database could not be started: {retry_error}\napplication URL: {web_url}"
+                    )
+                })?;
+                messages.push(format!(
+                    "note: the previous invoice tutorial database volume was preserved; an isolated database was started ({restarted})"
+                ));
+                run_container_schema_setup(&directory).map_err(|retry_error| {
+                    let web_url = project_web_url(&directory).unwrap_or_else(|_| "unknown".into());
+                    format!(
+                        "schema setup also failed with a fresh isolated invoice tutorial database: {retry_error}\napplication URL: {web_url}"
+                    )
+                })?;
+            }
+            Err(error) => {
+                let web_url = project_web_url(&directory).unwrap_or_else(|_| "unknown".into());
+                return Err(format!("{error}\napplication URL: {web_url}"));
+            }
+        }
         messages.push("database schema setup completed".into());
         if seed_invoice_tutorial_database(&directory)? {
             messages.push("invoice tutorial sample data loaded (repeatable)".into());

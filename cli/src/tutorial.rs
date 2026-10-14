@@ -69,6 +69,14 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     if result != ExitCode::SUCCESS {
         return result;
     }
+    if let Err(error) =
+        super::isolate_invoice_tutorial_compose_project(std::path::Path::new(&directory))
+    {
+        eprintln!(
+            "error[E-TUTORIAL-004]: could not isolate the invoice tutorial database: {error}"
+        );
+        return ExitCode::FAILURE;
+    }
 
     let main_path = PathBuf::from(&directory).join("main.zyl");
     if let Err(error) = fs::write(&main_path, INVOICE_SOURCE) {

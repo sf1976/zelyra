@@ -3349,18 +3349,58 @@ fn temporal_client_schemas_match_existing_wire_formats() {
 
 #[test]
 fn compose_versions_reject_python_v1_and_accept_current_compose() {
-    for version in [
-        "1.29.2",
-        "v1.29.2",
-        "",
-        "unknown",
-        "Docker Compose version v2.0.0",
-    ] {
+    for version in ["1.29.2", "v1.29.2", "", "unknown"] {
         assert!(!supported_compose_version(version), "{version}");
     }
-    for version in ["2.0.0", "v2.29.1\n", "2.40.0-desktop.1", "v5.6.0"] {
+    for version in [
+        "2.0.0",
+        "v2.29.1\n",
+        "2.40",
+        "Docker Compose version v2.0.0",
+        "2.40.0-desktop.1",
+        "v5.6.0",
+    ] {
         assert!(supported_compose_version(version), "{version}");
     }
+}
+
+#[test]
+fn stale_database_credentials_are_recovered_only_for_legacy_invoice_tutorials() {
+    let directory = std::env::temp_dir().join(format!(
+        "zelyra-invoice-recovery-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&directory).unwrap();
+    fs::write(directory.join("zelyra.tutorial"), "invoice-v1\n").unwrap();
+    fs::write(
+        directory.join("docker-compose.mariadb.yml"),
+        "services:\n  mariadb:\n",
+    )
+    .unwrap();
+    let auth_error = "error[E-DB-002]: ERROR 1045 (28000): Access denied for user";
+
+    assert!(invoice_tutorial_database_recovery_required(
+        &directory, auth_error
+    ));
+    assert!(!invoice_tutorial_database_recovery_required(
+        &directory,
+        "schema mismatch"
+    ));
+
+    fs::write(
+        directory.join("docker-compose.mariadb.yml"),
+        "name: zelyra-invoice-existing\nservices:\n  mariadb:\n",
+    )
+    .unwrap();
+    assert!(!invoice_tutorial_database_recovery_required(
+        &directory, auth_error
+    ));
+
+    fs::remove_dir_all(directory).unwrap();
 }
 
 #[test]
