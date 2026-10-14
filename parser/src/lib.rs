@@ -100,6 +100,10 @@ impl<'a> Parser<'a> {
                 let span = self.advance().span;
                 Ok(("max".into(), span))
             }
+            TokenKind::Unique => {
+                let span = self.advance().span;
+                Ok(("unique".into(), span))
+            }
             TokenKind::Sort => {
                 let span = self.advance().span;
                 Ok(("sort".into(), span))
@@ -2970,8 +2974,8 @@ impl<'a> Parser<'a> {
                     span: token.span.join(end),
                 })
             }
-            TokenKind::Max | TokenKind::Sort => {
-                let name = if matches!(token.kind, TokenKind::Max) { "max".to_string() } else { "sort".to_string() };
+            TokenKind::Max | TokenKind::Sort | TokenKind::Unique => {
+                let name = if matches!(token.kind, TokenKind::Max) { "max".to_string() } else if matches!(token.kind, TokenKind::Sort) { "sort".to_string() } else { "unique".to_string() };
                 if self.at(&TokenKind::LParen) {
                     self.advance();
                     let mut args = Vec::new();

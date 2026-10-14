@@ -3570,3 +3570,77 @@ fn main() {
         ]
     );
 }
+
+#[test]
+fn standard_library_v103_phase2_builtins_work_properly() {
+    let source = r#"
+fn main() {
+    // Math
+    print(sqrt(25.0))
+    print(pow(3.0, 3.0))
+    print(floor(4.7))
+    print(ceil(4.2))
+    print(round(2.71828, 2))
+
+    // Strings
+    match text_index_of("banana", "na") {
+        Some(pos) => {
+            print(pos)
+        }
+        None => {
+            print(-1)
+        }
+    }
+    print(text_repeat("x", 4))
+    print(text_is_empty(""))
+    print(text_capitalize("hello"))
+
+    // Collections
+    print(unique([1, 2, 2, 3, 1]))
+    print(array_sum([5, 10, 15]))
+    print(avg([10, 20]))
+    print(unwrap_or(min_of([9, 3, 7]), 0))
+    print(unwrap_or(max_of([9, 3, 7]), 0))
+    print(chunk([1, 2, 3, 4], 2))
+    print(flatten([[1, 2], [3, 4]]))
+
+    // Sets & Maps
+    s1: Set<Int> = set([1, 2])
+    s2: Set<Int> = set([2, 3])
+    print(set_union(s1, s2))
+    print(set_intersection(s1, s2))
+    print(set_difference(s1, s2))
+
+    mutable m1: Map<String, Int> = Map { "a": 1, "b": 2 }
+    mutable m2: Map<String, Int> = Map { "b": 20, "c": 30 }
+    print(map_remove(m1, "a"))
+    print(map_merge(m1, m2))
+}
+"#;
+    assert_eq!(
+        run(source),
+        [
+            "5",
+            "27",
+            "4",
+            "5",
+            "2.72",
+            "2",
+            "xxxx",
+            "true",
+            "Hello",
+            "[1, 2, 3]",
+            "30",
+            "15",
+            "3",
+            "9",
+            "[[1, 2], [3, 4]]",
+            "[1, 2, 3, 4]",
+            "Set{1, 2, 3}",
+            "Set{2}",
+            "Set{1}",
+            "Map{b=2}",
+            "Map{a=1, b=20, c=30}",
+        ]
+    );
+}
