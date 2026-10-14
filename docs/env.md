@@ -283,7 +283,7 @@ den öffentlichen `Host` erhalten, `X-Forwarded-Proto` überschreiben und den
 direkten Zugriff auf den App-Port verhindern. Die Einstellung erweitert nur
 die Host-Allowlist; sie deaktiviert weder CSRF- noch Origin-Prüfungen.
 
-Jede angenommene HTTP-Verbindung hat im 0.4-Entwicklungszweig eine feste
+Jede angenommene HTTP-Verbindung hat ein festes
 30-Sekunden-Frist für das vollständige Lesen der Anfrage und das Schreiben der
 Antwort. Ein Timeout schließt die Verbindung; es gibt keinen konfigurierbaren
 Retry. Während der Anfrageverarbeitung verwenden MariaDB und die begrenzte
@@ -417,7 +417,7 @@ Danach:
 docker compose --env-file .env -f docker-compose.mariadb.yml up -d --build
 ```
 
-Im unveröffentlichten 0.4-Entwicklungszweig verwendet eine Deklaration
+Im aktuellen Release 1.0.4 verwendet eine Deklaration
 `database <name> { ... }` bevorzugt `ZELYRA_DATABASE_<NAME>_URL`; der Name wird
 für die Variable in Großbuchstaben umgewandelt und Nicht-Buchstaben/Ziffern
 werden zu `_`. Für `database main` lautet der Schlüssel also
@@ -432,13 +432,11 @@ automatisch; Compose injiziert die Werte oder sie werden vor dem Aufruf
 exportiert. `zelyra doctor --env-file <datei>` sucht in dieser Reihenfolge in
 der angegebenen Datei: namensgebundener Schlüssel, dann `DATABASE_URL`.
 Zelyra-Server müssen mit den aktualisierten Prozesswerten neu gestartet
-werden. Die stabile Version 0.3.0 kennt die namensgebundenen Variablen noch
-nicht.
+werden. Die namensgebundenen Variablen sind ab Zelyra 1.0.4 verfügbar.
 
-## MariaDB-Zeitlimits, Connection-Pool und TLS im 0.4-Entwicklungszweig
+## MariaDB-Zeitlimits, Connection-Pool und TLS
 
-Diese Einstellungen sind im unveröffentlichten 0.4-Entwicklungszweig vorhanden;
-das stabile 0.3.0-Binary unterstützt sie nicht. Sie werden ausschließlich aus
+Diese Einstellungen sind im aktuellen Release 1.0.4 verfügbar. Sie werden ausschließlich aus
 der Prozessumgebung gelesen. Zelyra lädt dafür keine `.env`-Datei und kennt
 keinen entsprechenden `zelyra.toml`-Schalter. Ein Docker-Compose-Dienst kann
 die Werte aus der Compose-`.env` übernehmen; bei einem laufenden Server ist ein
@@ -620,7 +618,7 @@ Commit in dieser Datei ergänzt werden. Der Eintrag muss mindestens enthalten:
 Eine Einstellung gilt nicht als vollständig dokumentiert, wenn sie nur im
 Compiler oder in einem Template auftaucht.
 
-## DATABASE_URL: feste Dezimalpräzision im 0.9.9-Entwicklungszweig
+## DATABASE_URL: feste Dezimalpräzision
 
 Mit einer konfigurierten Datenbank und freigegebener Database-Fähigkeit
 prüfen `serve` sowie die erste SQL-Ausführung eines Interpreters deklarierte
@@ -630,7 +628,7 @@ nicht still verwendet oder migriert. Es gibt keinen Abschaltschalter.
 Die bestehenden URL-Prioritäts- und Geheimnisregeln bleiben wirksam.
 Siehe [Regeln und Tests](decimals.de.md).
 
-## DATABASE_URL: Datum/Uhrzeit im 0.9.9-Entwicklungszweig
+## DATABASE_URL: Datum und Uhrzeit
 
 Native Runtime-Verbindungen verwenden UTC; PostgreSQL-URL-Startoptionen bleiben
 erhalten und werden um UTC ergänzt. MariaDB/MySQL DATETIME enthält keine

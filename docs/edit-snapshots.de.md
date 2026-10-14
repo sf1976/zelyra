@@ -1,6 +1,6 @@
 # NULL-bewusste Edit-Snapshots
 
-Stand: unveröffentlichter 0.9.9-Entwicklungsbranch. [English](edit-snapshots.en.md)
+Stand: aktuelles stabiles Release Zelyra 1.0.4. [English](edit-snapshots.en.md)
 
 Erzeugte MariaDB-/MySQL-Editformulare signieren die aus der Datenbank geladenen
 Feldwerte. Vor einem Update sperrt und liest dieselbe Transaktion den aktuellen

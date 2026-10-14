@@ -1,6 +1,6 @@
 # Datum, Uhrzeit und UTC-Dauern
 
-Stand: unveröffentlichter 0.9.9-Entwicklungszweig.
+Stand: aktuelles stabiles Release Zelyra 1.0.4.
 [English](dates.en.md)
 
 ```zelyra
@@ -67,7 +67,7 @@ Kalenderbereich. Ein ausführbares Beispiel ist
 `tests/temporal-api-e2e.py` prüft reale HTTP-Rundläufe, Date-Aliasse, optionale
 Werte, die Jahresgrenzen und 13 ungültige Eingaben.
 
-## Native SQL-Speicherung im Entwicklungszweig
+## Native SQL-Speicherung
 
 | Zelyra | MariaDB/MySQL | PostgreSQL |
 | --- | --- | --- |

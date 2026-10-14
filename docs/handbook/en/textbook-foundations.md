@@ -216,7 +216,7 @@ fn main() {
 ### 1. What will I learn in this chapter?
 - System requirements for the Zelyra development environment on Linux, macOS, and Windows.
 - Platform-specific Docker setup and verification with `docker compose version`.
-- How to install Zelyra from source (`./install.sh` / `install.ps1`) or the stable release archive (`--release v0.3.0`).
+- How to install Zelyra from source (`./install.sh` / `install.ps1`) or the stable release archive (`--release v1.0.4`).
 - Complete compiler version query with `zelyra --version` and environment diagnosis with `zelyra doctor`.
 - The integrated, token-protected web setup assistant (`zelyra setup --web`).
 - Typical permission and port conflicts (such as Docker socket permissions and automatic port selection).
@@ -243,13 +243,13 @@ cd zelyra
 ```
 Or directly as a precompiled release archive without Rust:
 ```bash
-./install.sh --release v0.3.0
+./install.sh --release v1.0.4
 ```
 On Windows (PowerShell):
 ```powershell
 git clone https://github.com/sf1976/zelyra.git
 Set-Location zelyra
-.\install.ps1 -Release v0.3.0
+.\install.ps1 -Release v1.0.4
 ```
 
 **Step 2: Verify version and help**
@@ -257,7 +257,12 @@ Set-Location zelyra
 zelyra --version
 zelyra --help
 ```
-`zelyra --version` outputs the full compiler and package version (for example, `zelyra 0.3.0`). The language compatibility line remains 0.1.
+`zelyra --version` outputs the full compiler and package version (for example, `zelyra 1.0.4`). The language compatibility line remains 0.1.
+
+The invoice tutorial and other Docker projects require Docker Compose v2
+or newer. The legacy Python `docker-compose` v1 is unsupported. On Linux, install
+the Compose plugin and verify it with `docker compose version`. See the
+[Docker installation guide](https://docs.docker.com/engine/install/).
 
 **Step 3: Verify Docker Compose (for MariaDB projects)**
 ```bash
@@ -288,7 +293,7 @@ Zelyra opens a local HTTP server on `127.0.0.1:3030` with a random, single-use s
 ### 6. Key takeaways
 1. The Zelyra CLI bundles compiler, runner, form checker, migrator, web server, and setup assistant in a single tool.
 2. `docker compose version` and `zelyra doctor` verify the health of your environment at any time.
-3. The stable release can be installed without Rust using `--release v0.3.0`.
+3. The stable release can be installed without Rust using `--release v1.0.4`.
 4. `zelyra setup --web` provides an intuitive, browser-based initial setup with a secure one-time token.
 
 ### 7. Exercises
@@ -370,11 +375,10 @@ zelyra new taskmanager-web --mariadb
 cd taskmanager-web
 ```
 
-> **🧪 Unreleased 0.4 development:** newly generated MariaDB projects place the
-> database declaration in `src/database.zyl` and explicitly import that module
-> from `main.zyl`. This separates ownership in the source tree, but does not yet
-> provide multiple named connections; the runtime still uses one project-wide
-> `DATABASE_URL`. The published 0.3.0 templates are unchanged.
+Newly generated MariaDB projects place the database declaration in
+`src/database.zyl` and explicitly import that module from `main.zyl`. This
+separates ownership in the source tree, but does not provide multiple named
+connections; the runtime still uses one project-wide `DATABASE_URL`.
 
 **First-time setup in one command:**
 ```bash
@@ -1809,25 +1813,23 @@ In this chapter, you will learn:
 - How a standard Zelyra project is structured on disk.
 - The central role of the `zelyra.toml` project configuration manifest.
 - How to separate code into logical concerns (schema, business logic, views).
-- How a project is organized and what the CLI currently does with multiple
-  source files.
-- The current development status and roadmap for modules and imports.
+- How `import` connects multiple source files in a project graph.
+- The remaining limits of modules and individual CLI tools.
 
 ### 2. Why is this topic important?
 When starting out, it is tempting to write an entire program in a single file. However, as your task management application expands—incorporating database tables, dozens of business functions, web forms, and validation rules—navigating a monolithic 2,000-line file becomes unmanageable. Professional software engineering demands structuring code so that every team member can locate schemas, business logic, and UI definitions instantly.
 
 ### 3. Understandable explanation without unnecessary jargon
 A project has a clear directory layout. `zelyra.toml` contains project
-metadata and capability grants; `main.zyl` is the source file created by the
-starter template. You can create additional files and folders for your own
-organization. In the published 0.3.0 release, each CLI command processes only
-the source file explicitly passed to it; other `.zyl` files are not discovered
-or combined automatically.
+metadata and capability grants; `main.zyl` is the entry file. Use `import` to
+connect other files to the project graph. Commands such as `check`, `build`,
+`run`, `serve`, `context`, `verify`, `impact`, and database tools can process
+that graph.
 
 ```toml
 [project]
 name = "task_planner"
-version = "0.3.0"
+version = "1.0.4"
 zelyra = "0.1"
 
 [capabilities]
@@ -1836,15 +1838,13 @@ network = false
 console = false
 ```
 
-**Published 0.3.0 status:** `import` and a module system are not implemented.
-`zelyra check main.zyl` checks `main.zyl`; another file such as
-`src/schema.zyl` is checked only if you invoke `zelyra check src/schema.zyl`
-separately. Names and types declared in one file are therefore not
-automatically available in the other. The published release contains no
-module imports. The current development branch has an experimental import slice;
-complete modules and deterministic multi-file projects remain work for 0.4.0.
-
-**🧪 Current unreleased development branch:** an experimental first project-module slice is implemented and tested. Its syntax is:
+**Module support in Zelyra 1.0.4:** multi-file projects use
+`import "src/math.zyl" as math`. The module model is available but still has
+documented limits: each project graph allows at most one database
+configuration; `fmt` and `edit` process only the named file; SQLite tableviews
+and complete source attribution for some diagnostics are not available.
+`zelyra module plan` previews dependencies, but does not create an isolated
+module or deployment package. The supported syntax is:
 
 ~~~zelyra
 import "src/math.zyl" as math
@@ -1912,10 +1912,9 @@ Some template diagnostics still need more complete per-module source
 attribution. `verify` also checks the linked graph, but
 does not yet attribute results to individual module source files. `impact`
 analyzes the linked graph and marks spans with their source file. `fmt` and
-`edit` still process only the explicitly named source file. This branch
-behavior is experimental and is not included in the published 0.3.0 binary.
+`edit` still process only the explicitly named source file. This module support is part of the stable 1.0.4 release; the limits above still apply.
 
-An experimental precursor for future module exports is:
+The experimental dependency preview for future module exports is:
 
 ~~~sh
 zelyra module plan main.zyl src/invoices.zyl
@@ -2020,7 +2019,7 @@ to a dedicated file such as `src/database.zyl` and import that module wherever
 database functionality is used. This is a checked source dependency; it does
 not create multiple runtime connections or MariaDB permissions.
 
-The unreleased 0.4 implementation also checks module-specific table grants.
+Zelyra 1.0.4 also checks module-specific table grants.
 The owner can declare them directly on the table:
 
 ~~~zelyra
@@ -2223,10 +2222,10 @@ fn main() {
 In `zelyra.toml`, you explicitly configure which system resources the project is allowed to request. If your application accesses a database, `database = true` must be enabled under `[capabilities]`.
 
 ### 5. Typical errors and their causes
-- **Error:** Using module imports with the published Zelyra 0.3.0 binary.
-  *Cause:* `import` is not part of that release. The development branch has
-  experimental imports for functions, type aliases, records, and one
-  project-wide database definition; these are not supported 0.3.0 features.
+- **Error:** Using an imported declaration from another module without `pub`.
+  *Cause:* Functions, types, records, views, and components are private by
+  default. Export required declarations explicitly and account for the module
+  model's documented limits.
 - **Error:** Deleting `zelyra.toml` or executing CLI commands from outside the project root directory.
   *Cause:* Commands like `zelyra run` look for `zelyra.toml` in the current working directory to configure capabilities and compilation paths.
 
@@ -2237,7 +2236,7 @@ In `zelyra.toml`, you explicitly configure which system resources the project is
 
 ### 7. Exercises
 - **Level 1 (Easy):** Generate a new project skeleton using `zelyra new task_app` and explore the generated files.
-- **Level 2 (Medium):** Update `zelyra.toml` with a project description and increment the version number to `0.3.1`.
+- **Level 2 (Medium):** Update `zelyra.toml` with a project description and set a suitable project version, for example `1.0.5`.
 - **Level 3 (Challenging):** Write an application structured into three separate functions handling initialization, business processing, and output reporting.
 
 ### 8. Practical project task: Task Management – Project Structure
@@ -2263,16 +2262,14 @@ fn main() {
 
 ### 9. Summary
 - Projects are configured and secured via `zelyra.toml`.
-- The published 0.3.0 CLI checks the source file explicitly named in the command.
-- The unreleased development branch imports functions, type aliases, records,
-  and one project-wide database definition experimentally; it does not yet
-  provide a complete modular application model.
+- Zelyra 1.0.4 processes imported source files as one project graph.
+- The module model has documented limits; an import does not create an independent package.
 - Organizing files into folders helps readers, but does not by itself connect modules.
 
 ### 10. Self-check review questions
 1. Which file contains the metadata and capability definitions of a Zelyra project?
 2. Why is decoupling the data schema from execution logic recommended?
-3. Which commands currently follow experimental function imports in the development branch?
+3. What should you consider when exporting functions and UI resources from a module?
 
 # PART IV – SAFETY AND ERROR HANDLING
 

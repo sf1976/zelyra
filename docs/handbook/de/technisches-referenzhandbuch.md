@@ -69,7 +69,7 @@ oder Cargo installiert werden. Das gewählte Archiv wird über HTTPS geladen und
 per SHA-256 geprüft:
 
 ~~~bash
-./install.sh --release v0.3.0
+./install.sh --release v1.0.4
 ~~~
 
 Unter Windows steht `install.ps1` für PowerShell und `install.cmd` für die
@@ -85,7 +85,7 @@ zelyra --version
 Das Release-Archiv unter Windows:
 
 ~~~powershell
-.\install.ps1 -Release v0.3.0
+.\install.ps1 -Release v1.0.4
 ~~~
 
 Danach:
@@ -365,7 +365,7 @@ fn format_title(input: String) -> String {
 ~~~
 
 Erweiterte Standardbibliothek (Neu in 1.0.3):
-Zelyra 1.0.3 ergänzt Builtin-Funktionen für Mathematik (`abs`, `min`, `max`, `clamp`, `sqrt`, `round`), Strings (`text_split`, `text_replace`, `text_pad_left`), Arrays (`sort`, `unique`, `chunk`, `zip`), Mengen (`set_union`), Maps (`has_key`, `get_or`, `entries`), Datumsarithmetik (`date_add_days`), Hashing und Web-Encodings (`hash_sha256`, `base64_encode`, `url_encode`, `uuid_v4`) sowie Pfade (`path_join`, `file_exists`). Die vollständigen Signaturen und Laufzeitgrenzen stehen in [Anhang D: Standardbibliothek](anhaenge.md#anhang-d-die-standardbibliothek-im-uberblick).
+Zelyra 1.0.3 ergänzt Builtin-Funktionen für Mathematik (`abs`, `min`, `max`, `clamp`, `sqrt`, `round`), Strings (`text_split`, `text_replace`, `text_pad_left`), Arrays (`sort`, `unique`, `chunk`, `zip`), Mengen (`set_union`), Maps (`has_key`, `get_or`, `entries`), Datumsarithmetik (`date_add_days`), Hashing und Web-Encodings (`hash_sha256`, `base64_encode`, `url_encode`, `uuid_v4`) sowie Pfade (`path_join`, `file_exists`). Die vollständigen Signaturen und Laufzeitgrenzen stehen in [Anhang D: Standardbibliothek](anhaenge.md#anhang-d-die-standardbibliothek-im-überblick-zelyra-103).
 
 ## 6. Option, Result und Pattern Matching
 
@@ -611,10 +611,9 @@ Die Verbindung kommt ausschließlich aus der Prozessumgebung:
 export DATABASE_URL='mariadb://zelyra:HIER_LOKALES_PASSWORT_EINTRAGEN@127.0.0.1:3307/adressverwaltung'
 ~~~
 
-🧪 **Nur im unveröffentlichten 0.4-Entwicklungszweig:** Der MariaDB-Client
-erhält ein Verbindungszeitlimit und native Runtime-Abfragen ein
-MariaDB-Statement-Zeitlimit. Beide Werte können über die Prozessumgebung
-angepasst werden:
+Der MariaDB-Client verwendet ein Verbindungszeitlimit und native
+Runtime-Abfragen ein MariaDB-Statement-Zeitlimit. Beide Werte können über die
+Prozessumgebung angepasst werden:
 
 ~~~bash
 export ZELYRA_DB_CONNECT_TIMEOUT_SECS=10
@@ -634,8 +633,7 @@ Der CLI-Aufruf setzt außerdem `--skip-reconnect`: Der MariaDB-Client darf eine
 abgebrochene Verbindung nicht unbemerkt neu herstellen und ein Statement
 automatisch wiederholen. Zelyra implementiert hier keine automatischen Retries
 und keinen Connection-Pool; jede DB-Operation startet weiterhin einen
-MariaDB-Client-Prozess. Der veröffentlichte Stand `0.3.0` unterstützt diese
-Timeout-Optionen noch nicht.
+MariaDB-Client-Prozess.
 
 ⚠️ Zelyra lädt `.env` derzeit **nicht automatisch**. Eine `.env` ist eine
 sichere lokale Ablage, aber die Variablen müssen vor dem CLI-Aufruf in die
@@ -1239,10 +1237,10 @@ Fehlversuche für dieselbe normalisierte E-Mail-Adresse innerhalb von 15
 Minuten lösen eine 60-sekündige HTTP-429-Sperre aus. Ein erfolgreicher Login
 rotiert das vorherige Session-Token dieses Browsers und entwertet es.
 
-### Optionale lokale TOTP-MFA (0.9.0 in Arbeit)
+### Optionale lokale TOTP-MFA (experimentelle Vorschau)
 
-Der aktuelle 0.9.0-Branch ergänzt optionale TOTP-MFA für MariaDB-gestützte
-Authentifizierung. Deklariere beide dedizierten MFA-Tabellen und ergänze die
+Die aktuelle experimentelle Vorschau bietet optionale TOTP-MFA für
+MariaDB-gestützte Authentifizierung. Deklariere beide dedizierten MFA-Tabellen und ergänze die
 persistent gespeicherte Sitzung um das nicht-nullbare boolesche Feld
 `mfa_verified`. Die Faktorzeile eines Kontos verwendet `user_id` als Schlüssel;
 Wiederherstellungscodes haben eine eigene Primärschlüsselspalte `id`:
@@ -1823,7 +1821,7 @@ Records, verschachtelte Records, Arrays, Optionen und Skalarwerte.
 unbekannte Record-Felder und fehlende Pflichtfelder werden als ausdrückliche
 Laufzeitfehler gemeldet.
 
-Der Entwicklungszweig 0.9.3 ergänzt für tabellarische Textdateien
+Für tabellarische Textdateien unterstützt Zelyra
 verschachtelte Arraytypen wie `String[][]` sowie typisierte CSV- und
 Festkomma-APIs:
 
@@ -2189,8 +2187,8 @@ zelyra config main.zyl --format=json
 | `ZELYRA_WEB_PORT` | `3000` | Port des internen Webservers im Container | nein |
 | `ZELYRA_HOST_PORT` | `3000` (oder autom. freier Port) | lokal veröffentlichter Webport | nein |
 | `ZELYRA_DB_HOST_PORT` | `3306` (oder autom. freier Port) | lokal veröffentlichter MariaDB-Port | nein |
-| `ZELYRA_DB_CONNECT_TIMEOUT_SECS` | 0.4-Entwicklungszweig: `10` | MariaDB-Verbindungszeitlimit in Sekunden; gültig `1`–`300` | nein |
-| `ZELYRA_DB_QUERY_TIMEOUT_SECS` | 0.4-Entwicklungszweig: `30` | MariaDB-Runtime-Statement-Limit in Sekunden; gültig `1`–`3600`; kein Pool- oder Ergebnisübertragungs-Limit | nein |
+| `ZELYRA_DB_CONNECT_TIMEOUT_SECS` | `10` | MariaDB-Verbindungszeitlimit in Sekunden; gültig `1`–`300` | nein |
+| `ZELYRA_DB_QUERY_TIMEOUT_SECS` | `30` | MariaDB-Runtime-Statement-Limit in Sekunden; gültig `1`–`3600`; kein Pool- oder Ergebnisübertragungs-Limit | nein |
 | `DATABASE_URL` | projektabhängig | MariaDB-Verbindungs-URI (`mariadb://user:pass@host:port/db`) | ja |
 | `MARIADB_DATABASE` | `zelyra_app` | Compose: Datenbankname | nein |
 | `MARIADB_USER` | `zelyra` | Compose: Anwendungsbenutzer | nein |
@@ -2377,10 +2375,9 @@ vom eigenen Zelyra-Lexer und -Parser gelesen, in eigene AST-/HIR-Strukturen
 
 Die Ähnlichkeit bei `fn`, geschweiften Klammern, `if`, `match` oder statischer
 Typisierung ist eine Designentscheidung, aber kein Abstammungsnachweis. Entschei-
-dend sind Grammatik, Semantik und Programmiermodell. Zelyra ist derzeit noch
-ein experimenteller Prototyp; die Eigenständigkeit wächst mit der Umsetzung des
-eigenen Typsystems, der SQL-Prüfung, der Runtime und der Zelyra-spezifischen
-Konstrukte.
+dend sind Grammatik, Semantik und Programmiermodell. Zelyra 1.0.4 ist ein stabiles Release mit einem eigenen Typ- und Laufzeitmodell.
+Die Statusangaben in diesem Kapitel benennen verfügbare, eingeschränkte und noch
+geplante Sprachmerkmale.
 
 Die Aussagen in diesem Kapitel wurden gegen den aktuellen Quellcode geprüft:
 Lexer und `TokenKind` definieren die Zelyra-Tokens, der Parser erzeugt eigene
@@ -2421,7 +2418,7 @@ ausführbare Spracheigenschaft ausgegeben.
 | Jobs | externe Job-/Queue-Systeme | kein Hintergrundjob-Konstrukt | keine stabile Job-Syntax | ❌ |
 | Audit | externe Logs oder Audit-Crates | Audit-Tabelle, CLI-Auswertung und optionale Hash-Kette | an Auth/CRUD gebunden und noch experimentell | 🧪 |
 | Deployment | Cargo, Container, CI und Infrastruktur frei wählbar | generierte Docker-/Compose-Vorlage vorhanden | Vorlage ist Entwicklungsstart, keine Produktionsplattform | 🧪 |
-| Produktionsreife | Rust ist breit produktiv eingesetzt | Zelyra Compiler 0.3.0 ist experimentell | Reife und Ökosystem sind nicht vergleichbar | 🧪 |
+| Produktionsreife | Rust ist breit produktiv eingesetzt | Zelyra 1.0.4 ist ein stabiles Release mit engerem Ökosystem und begrenzten Nachweisen je Ablauf | Reife und Ökosystem sind nicht vergleichbar | 🧪 |
 | Ökosystem | sehr groß: Crates, Tools, Frameworks | kleines eigenes Repository und wenige Integrationen | Zelyra kann Rust-Crates nicht direkt importieren | 🧪 |
 
 Rust ist also das technische Fundament, nicht die Anwendungssprache hinter
@@ -2466,8 +2463,8 @@ geplante oder derzeit nicht verfügbare Sprachmerkmale.
 | Einrückung | Lesbarkeit, keine Blocksemantik | Lesbarkeit, keine Blocksemantik | Leerzeichen/Tabs werden nicht zu Python-Blöcken | ✅ |
 | Fehlerbehandlung | `Result<T, E>`, `Some`/`None` | `Result<T, E>`, `?`, `panic!` | Zelyra hat keinen Rust-Operator `?` | ✅ |
 | Stringinterpolation | HTML kann `{name}` in `html`-Bodies verwenden | `format!("{name}")` oder `println!("{}", name)` | keine allgemeine Zelyra-Stringinterpolation dokumentieren | 🧪 |
-| Module | `pub fn`, `pub view`, `pub component` und weitere Deklarationen in importierten Dateien (Entwicklungszweig) | `mod name {}`, Dateien und Module | experimentell; Release 0.3.0 hat keine Module; UI-Sichtbarkeit und Namespace-Auflösung bleiben eingeschränkt | 🧪 |
-| Imports | `import "src/math.zyl" as math`, `math::add()` (Entwicklungszweig) | `use crate::module::Item;` | projektlokale Imports; `check`, `build`, `run`, `serve`, `context`, `verify`, `impact` verarbeiten den Graphen | 🧪 |
+| Module | `pub fn`, `pub view`, `pub component` und weitere Deklarationen in importierten Dateien | `mod name {}`, Dateien und Module | unterstützt mit dokumentierten Grenzen; UI-Sichtbarkeit und Namespace-Auflösung bleiben eingeschränkt | 🧪 |
+| Imports | `import "src/math.zyl" as math`, `math::add()` | `use crate::module::Item;` | projektlokale Imports; `check`, `build`, `run`, `serve`, `context`, `verify`, `impact` verarbeiten den Graphen | 🧪 |
 | Generics | `fn identity<T>(...)`, `struct Box<T>`, `enum Maybe<T>` | allgemeine Generics und Traits | eigene Funktionen, Records und Enums unterstützen Inferenz/Typangaben; allgemeine Constraints, generische Aliase und generische Funktionsreferenzen fehlen | 🧪 |
 | Funktionswerte | `callback: Function<(Int) -> Int>`, `&increment` | `fn(Int) -> Int` | benannte, nicht generische Funktionen können gespeichert, übergeben und indirekt aufgerufen werden; Closures fehlen | 🧪 |
 | asynchrone Funktionen | `async fn` nicht vorhanden; `await`/`parallel` nur eingeschränkt | `async fn`, `.await`, Futures | kein stabiles Zelyra-Async-Modell | 🧪 |
@@ -2745,10 +2742,9 @@ Records/Enums, klare Grenzen, reproduzierbares Tooling und formale Prüfungen.
 > technische Fundament des Compilers – nicht die Sprache, die
 > Zelyra-Anwendungsentwickler schreiben.
 
-> **Status:** Zelyra ist derzeit ein experimenteller Sprachprototyp. Einige
-> gezeigte Sprachmerkmale beschreiben das verbindliche Zielbild und sind noch
-> nicht vollständig implementiert. Der Status an jedem Beispiel zeigt, was
-> heute im Code tatsächlich vorhanden und geprüft ist.
+> **Status:** Zelyra 1.0.4 ist ein stabiles Release. Einige Sprachmerkmale
+> sind eingeschränkt oder geplant; die Statusangaben an den Beispielen grenzen
+> den tatsächlich verfügbaren Umfang ab.
 
 Weiterführend: [Einführung](#1-was-zelyra-anders-macht),
 [Sprachgrundlagen](#5-variablen-typen-und-funktionen),
@@ -2789,9 +2785,9 @@ zusammen gedacht sind.
    sollen den Lern- und Entwicklungsweg ohne Apache, PHP oder ein verpflichtendes
    Framework-Bündel ermöglichen.
 
-Der aktuelle Stand ist trotzdem ein experimenteller Prototyp. Die Roadmap und
-die einzelnen Statuszeichen sind deshalb wichtiger als eine allgemeine
-Produktbehauptung.
+Zelyra 1.0.4 ist ein stabiles Release mit einem engeren Funktionsumfang und
+dokumentierten Grenzen. Die Roadmap beschreibt geplante Erweiterungen; aus dem
+Release-Status folgt keine allgemeine Produktionsgarantie.
 
 ## 22. Roadmap aus dem aktuellen Repository
 
@@ -2904,7 +2900,7 @@ zelyra context examples/auth_crud_api.zyl --format=json
 ~~~
 
 Sie meldet deklarierte Funktionen, Tabellen, SQL-Abfragen, CRUD-Ressourcen,
-Formulare, APIs und Source-Spans. Im experimentellen 0.4-Entwicklungsstand
+Formulare, APIs und Source-Spans. Im aktuellen Modulgraphen
 enthält `database` außerdem die Datenbankdeklaration, das besitzende
 Provider-Modul und je datenbanknutzendem Modul dessen direkte oder transitive
 Importbindung. Sichtbar ist nur der Name der Umgebungsvariablen, etwa
@@ -3041,7 +3037,7 @@ Netzwerk-Allowlist stehen. Text- und HTML-Body sind zusammen auf 64 KiB
 begrenzt. Einrichtung, Workerbeispiel und lokaler TLS-SMTP-Test stehen in
 [`docs/mail.de.md`](../../mail.de.md).
 
-### Startreihenfolge bei `setup --all` (0.9.9-Entwicklung)
+### Startreihenfolge bei `setup --all`
 
 `--database` startet ausschließlich MariaDB. `--schema` baut das Anwendungsbild
 und führt `db apply` in einem separaten, anschließend entfernten Container aus;

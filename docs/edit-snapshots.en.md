@@ -1,6 +1,6 @@
 # NULL-aware edit snapshots
 
-Snapshot: unreleased 0.9.9 development branch. [Deutsch](edit-snapshots.de.md)
+Scope: current stable Zelyra 1.0.4 release. [Deutsch](edit-snapshots.de.md)
 
 Generated MariaDB/MySQL edit forms sign the field values loaded from the
 database. Before an update, the same transaction locks and reads the current

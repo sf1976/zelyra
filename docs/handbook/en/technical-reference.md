@@ -57,7 +57,7 @@ Use `--no-rustup` to disable automatic Rust installation; `--no-path` suppresses
 Published releases for Linux x86_64 and Windows x86_64 can be installed without Rust or Cargo. The archive is downloaded over HTTPS and verified with SHA-256:
 
 ~~~bash
-./install.sh --release v0.3.0
+./install.sh --release v1.0.4
 ~~~
 
 On Windows, `install.ps1` is available for PowerShell and `install.cmd` for the Command Prompt:
@@ -72,7 +72,7 @@ zelyra --version
 Release archive installation on Windows:
 
 ~~~powershell
-.\install.ps1 -Release v0.3.0
+.\install.ps1 -Release v1.0.4
 ~~~
 
 Then:
@@ -556,9 +556,8 @@ Supply the connection only through the process environment:
 export DATABASE_URL='mariadb://zelyra:ENTER_A_LOCAL_PASSWORD_HERE@127.0.0.1:3307/address_book'
 ~~~
 
-🧪 **Unreleased 0.4 development branch only:** the MariaDB client receives a
-connection timeout, and native runtime queries receive a MariaDB statement
-timeout. Override them through the process environment:
+The MariaDB client uses a connection timeout, and native runtime queries use
+a MariaDB statement timeout. Override them through the process environment:
 
 ~~~bash
 export ZELYRA_DB_CONNECT_TIMEOUT_SECS=10
@@ -576,8 +575,7 @@ safely rolled back.
 The CLI also sets `--skip-reconnect`: the MariaDB client must not silently
 reconnect after a lost connection and automatically replay a statement. Zelyra
 does not implement automatic retries or a connection pool here; each database
-operation still starts a MariaDB client process. The published `0.3.0` release
-does not yet support these timeout options.
+operation still starts a MariaDB client process.
 
 ⚠️ Zelyra does **not** load `.env` automatically. It is a safe local place to
 store values, but the process must receive the variables before the CLI runs;
@@ -1135,9 +1133,9 @@ same normalized e-mail address within 15 minutes trigger a 60-second HTTP 429
 lockout. A successful login rotates and invalidates the previous browser
 session token.
 
-### Optional local TOTP MFA (0.9.0 work in progress)
+### Optional local TOTP MFA (experimental preview)
 
-The current 0.9.0 branch adds opt-in TOTP for MariaDB-backed authentication.
+The current experimental preview offers opt-in TOTP for MariaDB-backed authentication.
 Declare both dedicated MFA tables and add a non-null `mfa_verified` boolean to
 the persistent session table. The account's factor row is keyed by `user_id`;
 recovery-code rows have their own primary `id`:
@@ -1686,8 +1684,8 @@ records, nested records, arrays, options, and scalar values. `json_encode`
 serializes the same value families. Malformed JSON, type mismatches, unknown
 record fields, and missing required fields are explicit runtime errors.
 
-The 0.9.3 development branch adds nested array types such as `String[][]` and
-typed CSV and fixed-point APIs for delimited text files:
+Zelyra supports nested array types such as `String[][]` and typed CSV and
+fixed-point APIs for delimited text files:
 
 ~~~zelyra
 fn parse_catalog(text: String) -> Result<String[][], String> {
@@ -2038,8 +2036,8 @@ zelyra config main.zyl --format=json
 | `ZELYRA_WEB_PORT` | `3000` | Port of internal web server inside container | no |
 | `ZELYRA_HOST_PORT` | `3000` (or auto-selected free port) | Locally published web port | no |
 | `ZELYRA_DB_HOST_PORT` | `3306` (or auto-selected free port) | Locally published MariaDB port | no |
-| `ZELYRA_DB_CONNECT_TIMEOUT_SECS` | 0.4 development branch: `10` | MariaDB connection timeout in seconds; valid `1`–`300` | no |
-| `ZELYRA_DB_QUERY_TIMEOUT_SECS` | 0.4 development branch: `30` | MariaDB runtime statement limit in seconds; valid `1`–`3600`; not a pool or result-transfer limit | no |
+| `ZELYRA_DB_CONNECT_TIMEOUT_SECS` | `10` | MariaDB connection timeout in seconds; valid `1`–`300` | no |
+| `ZELYRA_DB_QUERY_TIMEOUT_SECS` | `30` | MariaDB runtime statement limit in seconds; valid `1`–`3600`; not a pool or result-transfer limit | no |
 | `DATABASE_URL` | project-dependent | MariaDB connection URI (`mariadb://user:pass@host:port/db`) | yes |
 | `MARIADB_DATABASE` | `zelyra_app` | Compose: database name | no |
 | `MARIADB_USER` | `zelyra` | Compose: application user | no |
@@ -2207,9 +2205,9 @@ AST/HIR structures, type-checked, and then processed by the Zelyra runtime.
 
 Similar spelling in `fn`, braces, `if`, `match`, or static typing is a design
 choice, not proof of identity. Grammar, semantics, and the programming model
-are what matter. Zelyra is still an experimental prototype; its independence
-grows as its own type system, SQL checking, runtime, and language constructs
-are implemented.
+are what matter. Zelyra 1.0.4 is a stable release with its own type and runtime
+model. The status labels in this chapter identify available, limited, and
+planned language features.
 
 The statements in this chapter were checked against the current source:
 the lexer and `TokenKind` define Zelyra tokens, the parser produces its own
@@ -2250,7 +2248,7 @@ feature.
 | Jobs | external job/queue systems | no background-job construct | no stable job syntax | ❌ |
 | Audit | external logging/audit crates | audit table, CLI inspection, and optional hash chain | tied to auth/CRUD and still experimental | 🧪 |
 | Deployment | Cargo, containers, CI, and infrastructure are free choices | generated Docker/Compose template exists | template is a development start, not a production platform | 🧪 |
-| Production maturity | widely used in production | Zelyra compiler 0.3.0 is experimental | maturity and ecosystem are not comparable | 🧪 |
+| Production maturity | widely used in production | Zelyra 1.0.4 is a stable release with a smaller ecosystem and workflow-specific evidence | maturity and ecosystem are not comparable | 🧪 |
 | Ecosystem | very large: crates, tools, frameworks | small repository and few integrations | Zelyra cannot directly import Rust crates | 🧪 |
 
 Rust is the technical foundation, not the application language behind Zelyra. A
@@ -2294,8 +2292,8 @@ and was checked with the installed Rust toolchain or Zelyra CLI. `🧪`, `🗺�
 | Indentation | readability, not block semantics | readability, not block semantics | whitespace is not Python-style structure | ✅ |
 | Error handling | `Result<T, E>`, `Some`/`None` | `Result<T, E>`, `?`, `panic!` | Zelyra has no Rust `?` operator | ✅ |
 | String interpolation | HTML bodies may use `{name}` | `format!("{name}")` or `println!("{}", name)` | no general Zelyra string interpolation | 🧪 |
-| Modules | `pub fn` and other declarations in imported files (development branch) | `mod name {}`, files and modules | experimental; release 0.3.0 has none, and views/components still lack visibility modifiers | 🧪 |
-| Imports | `import "src/math.zyl" as math`, `math::add()` (development branch) | `use crate::module::Item;` | project-local imports; `check`, `build`, `run`, `serve`, `context`, `verify`, and `impact` load the graph | 🧪 |
+| Modules | `pub fn`, `pub view`, `pub component`, and other declarations in imported files | `mod name {}`, files and modules | supported with documented limits; UI visibility and namespace resolution remain constrained | 🧪 |
+| Imports | `import "src/math.zyl" as math`, `math::add()` | `use crate::module::Item;` | project-local imports; `check`, `build`, `run`, `serve`, `context`, `verify`, and `impact` load the graph | 🧪 |
 | Generics | `fn identity<T>(...)`, `struct Box<T>`, `enum Maybe<T>` | general generics and traits | user-defined functions, records, and enums support inference/explicit arguments; general constraints, generic aliases, and generic function references are unavailable | 🧪 |
 | Function values | `callback: Function<(Int) -> Int>`, `&increment` | `fn(Int) -> Int` | named non-generic functions can be stored, passed, and called indirectly; closures are unavailable | 🧪 |
 | Async functions | no `async fn`; `await`/`parallel` are limited | `async fn`, `.await`, futures | no stable Zelyra async model | 🧪 |
@@ -2563,10 +2561,9 @@ tooling, and formal checks.
 > technical foundation of the compiler—not the language Zelyra application
 > developers write.
 
-> **Status:** Zelyra is currently an experimental language prototype. Some
-> language features shown here describe the binding target and are not fully
-> implemented. The status next to each example shows what exists in current
-> source and was checked in this work run.
+> **Status:** Zelyra 1.0.4 is a stable release. Some language features are
+> limited or planned; the status labels beside examples define the available
+> scope.
 
 Further reading: [Introduction](#1-what-makes-zelyra-different), [language
 basics](#5-variables-types-and-functions), [MariaDB](#7-mariadb-and-tables),
@@ -2599,8 +2596,9 @@ it explains how the implemented pieces are intended to fit together.
 7. **A small starting stack:** the built-in server and CLI aim to support local
    learning and development without Apache, PHP, or a mandatory framework set.
 
-The project is nevertheless an experimental prototype. The status marks and
-the roadmap therefore matter more than a broad product claim.
+Zelyra 1.0.4 is a stable release with a narrower feature set and documented
+limits. The roadmap describes planned extensions; stable release status is not
+a general production guarantee.
 
 ## 22. Roadmap from the current repository
 
@@ -2708,8 +2706,7 @@ zelyra context examples/auth_crud_api.zyl --format=json
 ~~~
 
 It reports declared functions, tables, SQL queries, CRUD resources, forms, APIs,
-and source spans. In the experimental 0.4 development branch, `database` also
-reports the database declaration, its owning provider module, and the direct
+and source spans. The module-aware project context reports the database declaration, its owning provider module, and the direct
 or transitive import binding for each database consumer. It exposes only the
 environment-variable name, such as `ZELYRA_DATABASE_MAIN_URL`—never the
 connection value or password. For a named database, the report also identifies
@@ -2833,10 +2830,36 @@ Messages are limited to 64 KiB of combined text and HTML body. See
 [`docs/mail.en.md`](../../mail.en.md) for setup, the worker example, and the
 local TLS SMTP integration test.
 
-### Startup order for `setup --all` (0.9.9 development)
+### Startup order for `setup --all`
 
 `--database` starts MariaDB only. `--schema` builds the application image and
 runs `db apply` in a separate container that is removed afterward; it does not
 require an already running web server. `--all` starts the web service only
 after successful schema application and then prints its address. Review-gated
 plans remain blocked; this order bypasses no precision or migration checks.
+
+## 25. Laravel migration: static analysis and scaffolding
+
+Zelyra includes a static migration assistant for existing Laravel 10.x and
+11.x applications. It reads source files as text; it does not execute PHP or
+Artisan, connect to the application's database, or read its `.env` files.
+Reports and generated projects must be placed outside the Laravel source tree.
+Findings are marked `partial` or `manual` so they are reviewed by a developer.
+
+Create a Markdown report, a JSON report for tools and CI, or an independent
+Zelyra scaffold:
+
+~~~bash
+zelyra migrate laravel ./my-laravel-project --report ./reports/migration.md
+zelyra migrate laravel ./my-laravel-project --report ./reports/migration.json --format json
+zelyra migrate laravel ./my-laravel-project --report ./reports/migration.md --output ./new-zelyra-project
+~~~
+
+The scanner recognizes selected models, schema migrations, relationships,
+routes, controller actions, validation rules, policies, tenant fields, direct
+SQL, transactions, mail/queue use, and package integrations. It is a pattern
+scanner, not a PHP parser, and does not establish behavior or security parity.
+The generated scaffold contains no copied Laravel business logic; review the
+report and implement each application-specific behavior separately. See the
+[Laravel Migrator guide](../../laravel-migrator.en.md) for the scanner's exact
+coverage and limits.

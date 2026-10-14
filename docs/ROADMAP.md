@@ -25,6 +25,11 @@ telemetry, explicit effects, portable data, resource discipline, and honest
 proof claims guide every phase. The [manifesto](MANIFESTO.md) states the
 principles; the roadmap below tracks what is actually implemented.
 
+The current stable release is 1.0.4. **Current milestones** is the source of
+near-term commitments. Older numbered release sections below are retained as
+historical planning and evidence; they do not by themselves define current
+release targets. Longer-term ideas remain in the post-1.0 evolution section.
+
 ## Current milestones
 
 - [ ] **Planned for 1.0.5 — IDE access to structured Zelyra logs:** Provide
@@ -35,6 +40,16 @@ principles; the roadmap below tracks what is actually implemented.
   outside the default install directory. Detect duplicate executables on PATH,
   explain package-manager-owned installs, and remove only the selected Zelyra
   installation after confirmation; project files and data remain untouched.
+- [ ] **Planned for 1.0.5 — improve invoice data entry:** Make `issued_at` a
+  simple date field that does not require a time. Show a localized label and
+  format example in German and English; the hint must match the value the form
+  accepts. Generate a unique invoice number when creating an invoice and retain
+  it on later edits.
+- [ ] **Planned for 1.0.5 — refocus the invoice home and overview:** Clearly
+  distinguish the landing page from `/views/invoicedashboard`. Align the home
+  page with the invoice workflow, and name and design the invoice list as an
+  overview; generic metrics must not displace the work users came to do. Keep
+  German and English labels consistent.
 
 - [ ] **Planned for 1.1.0 — Compose check in the installer:** Installers detect
   Docker Compose v2 or newer and distinguish it from obsolete Python Compose

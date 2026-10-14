@@ -4,13 +4,13 @@
 
 English · [Deutsche Ausgabe](/handbuch)
 
-Welcome to the complete Zelyra Handbook. It includes both the introductory textbook **"Learning Zelyra – Understandable Programming from the Foundations to Your Own Application"** (Parts I to X, Chapters 1 to 42), the **Technical Reference Manual** (Chapters 1 to 23), and comprehensive **Appendices** (A to J).
+Welcome to the complete Zelyra Handbook. It includes both the introductory textbook **"Learning Zelyra – Understandable Programming from the Foundations to Your Own Application"** (Parts I to X, Chapters 1 to 42), the **Technical Reference Manual** (Chapters 1 to 25), and comprehensive **Appendices** (A to J).
 
-> **Project status:** Zelyra 0.9.7 is experimental and not approved for production use. Independent human product acceptance is reserved for 1.0.0. See the [implemented capabilities](../../implemented.en.md) for the current scope and its limits.
+> **Project status:** Zelyra 1.0.4 is the current stable release; the language compatibility line remains `0.1`. See the [implementation inventory](../../implemented.en.md) for supported scope and limits. The [1.0.3 release notes](../../release-notes/1.0.3.en.md) cover the expanded standard library, `|>` pipelines, `else if`, and Studio/tutorial improvements. [Release 1.0.4](../../release-notes/1.0.4.en.md) documents isolated Compose projects and more robust Compose detection.
 
 ## Status marks
 
-- ✅ **Implemented and verified:** present in the current repository and successfully run in this pass.
+- ✅ **Implemented and verified:** available in the current release within the scope supported by the relevant checks.
 - 🧪 **Experimental:** present, but early or constrained.
 - 🗺️ **Planned:** part of the language vision, not yet reliably available.
 - ❌ **Currently unavailable:** not present in the current CLI.
@@ -69,7 +69,7 @@ Welcome to the complete Zelyra Handbook. It includes both the introductory textb
   - [Chapter 39: Deployment and Operations](textbook-applications.md#chapter-39-deployment-and-operations)
 - **[PART X – CAPSTONE PROJECT AND LOOKING AHEAD](textbook-applications.md#part-x-capstone-project-and-looking-ahead)**
   - [Chapter 40: The Grand Capstone Project: Complete Task Management](textbook-applications.md#chapter-40-the-grand-capstone-project-complete-task-management)
-  - [Chapter 41: Current scope and the road to Zelyra 1.0](textbook-applications.md#chapter-41-current-scope-and-the-road-to-zelyra-10)
+  - [Chapter 41: Current scope and roadmap](textbook-applications.md#chapter-41-current-scope-and-roadmap)
   - [Chapter 42: Your Journey as a Zelyra Developer](textbook-applications.md#chapter-42-your-journey-as-a-zelyra-developer)
 
 ### Technical Reference Manual
@@ -99,14 +99,16 @@ Welcome to the complete Zelyra Handbook. It includes both the introductory textb
 - [21. Positioning and current development status](technical-reference.md#21-positioning-and-current-development-status)
 - [22. Roadmap from the current repository](technical-reference.md#22-roadmap-from-the-current-repository)
 - [23. AI-native development](technical-reference.md#23-ai-native-development)
-- [24. Authoritative Sources and Compiler Verification (Source Authority)](appendices.md#24-authoritative-sources-and-compiler-verification-source-authority)
+- [24. Application email](technical-reference.md#24-application-email-095)
+- [25. Laravel migration: static analysis and scaffolding](technical-reference.md#25-laravel-migration-static-analysis-and-scaffolding)
+- [Authoritative Sources and Compiler Verification (Source Authority)](appendices.md#24-authoritative-sources-and-compiler-verification-source-authority)
 
 ### Appendices
 
 - [Appendix A: Quickstart / Cheat Sheet (Syntax Cheat Sheet)](appendices.md#appendix-a-quickstart-cheat-sheet-syntax-cheat-sheet)
 - [Appendix B: Complete Zelyra Diagnostic & Error Code Reference](appendices.md#appendix-b-complete-zelyra-diagnostic-error-code-reference)
 - [Appendix C: Zelyra CLI Command Reference](appendices.md#appendix-c-zelyra-cli-command-reference)
-- [Appendix D: Standard Library Overview](appendices.md#appendix-d-standard-library-overview)
+- [Appendix D: Standard Library Overview](appendices.md#appendix-d-standard-library-overview-zelyra-103)
 - [Appendix E: SQL Cheat Sheet for Zelyra Developers](appendices.md#appendix-e-sql-cheat-sheet-for-zelyra-developers)
 - [Appendix F: HTML and Web Reference in Zelyra](appendices.md#appendix-f-html-and-web-reference-in-zelyra)
 - [Appendix G: Glossary of Technical Terms](appendices.md#appendix-g-glossary-of-technical-terms)

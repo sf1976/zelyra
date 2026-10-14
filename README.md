@@ -11,18 +11,15 @@ for database-backed business and web applications. It brings schema-aware SQL,
 forms, CRUD, views, and application logic together while keeping ordinary code
 and native SQL available.
 
-> **Current stable compiler release: 0.9.8 · language compatibility line: 0.1 · experimental**
+> **Current stable release: 1.0.4 · language compatibility line: 0.1**
 >
-> Zelyra 0.9.8 remains experimental and is not approved for production use. “Prove correctness” is a
-> design goal: the current verifier covers a bounded subset and does not prove
-> arbitrary applications correct.
+> Compiler checks and the verifier cover defined scopes. They do not prove arbitrary applications correct. Review the documented support and limits for each workflow before deployment.
 
-The stable [`v0.9.8` release](https://github.com/sf1976/zelyra/releases/tag/v0.9.8) remains experimental and is not approved for production use. The current `release/0.9.9-pre-release` branch adds generic records and enums, named function values, explicit scalar text formatting, and Studio/CLI presentation polish; it is still undergoing technical verification. Independent human acceptance is reserved for the exact 1.0.0 candidate. See the [0.9.8 release notes](docs/release-notes/0.9.8.en.md), [0.9.9 engineering plan](docs/release-plans/0.9.9.en.md), [database support matrix](docs/database-support.en.md), and [1.0.0 release plan](docs/release-plans/1.0.0.en.md).
+The current stable [v1.0.4 release](https://github.com/sf1976/zelyra/releases/tag/v1.0.4) builds on the language and platform capabilities introduced in 1.0.0. Releases 1.0.1 through 1.0.4 improve Docker Compose detection, the invoice tutorial's Studio startup, the standard library, and recovery from database startup failures. See the [1.0.3](docs/release-notes/1.0.3.en.md) and [1.0.4](docs/release-notes/1.0.4.en.md) release notes, the [database support matrix](docs/database-support.en.md), and the [implementation inventory](docs/implemented.en.md).
 
-The development branch's exact numeric boundaries, examples, and migration
-notes are documented in [Decimal and monetary amounts](docs/decimals.en.md).
+The language compatibility line remains `0.1`; compiler releases do not change it automatically. “Prove correctness” is a design goal: the verifier distinguishes proven, runtime-checked, and unproven scopes, but is not a general-purpose theorem prover.
 
-## What Zelyra 0.9.8 can do
+## What Zelyra 1.0.4 provides
 
 Zelyra connects its language, compiler, database, web application, and Studio in
 one workflow. The current release provides:
@@ -30,18 +27,26 @@ one workflow. The current release provides:
 - statically checked business logic and schema-aware SQL;
 - MariaDB as the primary runtime, plus verified MySQL and PostgreSQL workflows;
 - generated forms, table views, CRUD, relationships, and APIs;
-- Studio with an editor, compiler feedback, database workbench, and project map;
-- a multi-file invoice tutorial with local Tabler CSS, desktop dashboard, and
-  printable net/tax/gross view;
+- the expanded 1.0.3 standard library for math, text, arrays, sets, maps, date
+  arithmetic, parsing, encodings, and paths, plus `|>` pipelines and flat
+  `else if` chains;
+- Studio with an editor, compiler feedback, schema view, database workbench,
+  project map, and guided CRUD source preview;
+- an invoice tutorial that starts MariaDB through Docker Compose and runs from
+  the CLI or Studio; it includes repeatable sample data, selects available
+  ports, and isolates volumes for each tutorial project;
 - CLI tools for routes, setup, diagnostics, databases, audit, SMTP, and static
   Laravel migration reports.
 
-Zelyra remains experimental and is not approved for production. The support
-matrix lists tested database workflows and limits. The
-[implementation inventory](docs/implemented.en.md) describes the 0.9.9
-development branch; the [roadmap](docs/ROADMAP.md) and [changelog](CHANGELOG.md) track
-unfinished and historical work. Independent human acceptance remains reserved
-for 1.0.0.
+Docker Engine and Docker Compose plugin v2 or newer must be installed; Python
+Compose v1 is unsupported. Zelyra does not install these packages. Check with
+`docker compose version`. The [invoice tutorial guide](docs/tutorials/invoice.en.md)
+covers startup, editing in Studio, sample data, and troubleshooting.
+
+The [implementation inventory](docs/implemented.en.md) describes supported
+scope and its limits. The [roadmap](docs/ROADMAP.md) tracks planned work;
+[release notes](docs/release-notes/) and the [changelog](CHANGELOG.md) record
+published changes.
 
 ## Start here
 
@@ -84,7 +89,8 @@ excluded from Git and Docker build contexts; Zelyra sets newly created files to
 owner-only permissions (`0600`) on Unix. On Windows, the file inherits the
 directory's ACL, and existing `.env` files are not re-permissioned. Do not
 commit or share the file. For production, use an appropriate secrets manager
-and deployment-specific credentials; 0.9.8 is not production-approved.
+and deployment-specific credentials. Review the documented workflow,
+security requirements, and limitations before production use.
 
 The generated MariaDB project defaults to German and learn mode. Set
 `ZELYRA_LANGUAGE=de|en` and `ZELYRA_LEVEL=learn|work` in its `.env` to change
@@ -101,7 +107,7 @@ other settings.
 | Configure a project or its environment | [Environment and configuration reference](docs/env.en.md) · [Deutsche Referenz](docs/env.md) |
 | Understand database support | [Database support matrix](docs/database-support.en.md) · [German](docs/database-support.de.md) |
 | Use the local editor or preview a safe regex edit | [Zelyra Studio](docs/web-editor.en.md) · [Text edit command](docs/text-edit.en.md) |
-| Review current and planned work | [Roadmap](docs/ROADMAP.md) · [0.9.9 engineering plan](docs/release-plans/0.9.9.en.md) · [1.0.0 release plan](docs/release-plans/1.0.0.en.md) |
+| Review current and planned work | [Roadmap](docs/ROADMAP.md) · [1.0.3 release notes](docs/release-notes/1.0.3.en.md) · [1.0.4 release notes](docs/release-notes/1.0.4.en.md) |
 | Read the design direction | [Manifesto](docs/MANIFESTO.md) · [AI-native architecture](docs/architecture/ai-native-development.md) · [Readable regex text-edit design](docs/design/readable-regex-text-editing.en.md) |
 | See exact release changes | [Changelog](CHANGELOG.md) · [GitHub releases](https://github.com/sf1976/zelyra/releases) |
 

@@ -27,6 +27,12 @@ Ressourcendisziplin und ehrliche Beweisaussagen leiten jede Phase. Das
 [Manifest](MANIFESTO.de.md) beschreibt die Prinzipien; die Roadmap kennzeichnet
 den tatsächlich implementierten Stand.
 
+Das aktuelle stabile Release ist 1.0.4. **Aktuelle Meilensteine** ist die
+verbindliche Übersicht der nächsten Vorhaben. Ältere, nummerierte Release-
+Abschnitte bleiben als historische Planung und Nachweise erhalten; sie legen
+für sich keine aktuellen Releaseziele fest. Langfristige Ideen stehen im
+Abschnitt zur Weiterentwicklung nach 1.0.0.
+
 ## Aktuelle Meilensteine
 
 - [ ] **Geplant für 1.0.5 — strukturierte Zelyra-Logs in der IDE:** Nützliche
@@ -39,6 +45,18 @@ den tatsächlich implementierten Stand.
   ausführbare Zelyra-Kopien im PATH erkennen, paketverwaltete Installationen
   erklären und nach Bestätigung nur die ausgewählte Zelyra-Installation
   entfernen; Projektdateien und Daten bleiben unberührt.
+- [ ] **Geplant für 1.0.5 — Rechnungstutorial für Rechnungsdaten verbessern:**
+  `issued_at` als einfaches Datumsfeld ohne erforderliche Zeiteingabe erfassen.
+  Beschriftung und Formatbeispiel in Deutsch und Englisch anzeigen; der
+  Hilfetext muss das tatsächlich akzeptierte Datumsformat nennen. Die
+  Rechnungsnummer beim Anlegen automatisch eindeutig vergeben und bei späteren
+  Änderungen beibehalten.
+- [ ] **Geplant für 1.0.5 — Rechnungsübersicht und Startseite überarbeiten:**
+  Den Zweck der Startseite und der Route `/views/invoicedashboard` klar
+  voneinander abgrenzen. Die Startseite auf den Rechnungsablauf ausrichten und
+  die Rechnungsübersicht als solche benennen und gestalten; generische
+  Kennzahlen dürfen die eigentlichen Aufgaben nicht verdrängen. Deutsche und
+  englische Beschriftungen müssen zusammenpassen.
 
 - [ ] **Geplant für 1.1.0 — Compose-Prüfung im Installer:** Die Installer
   erkennen Docker Compose v2 oder neuer und unterscheiden es von der veralteten

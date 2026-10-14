@@ -4,13 +4,13 @@
 
 [English edition](/handbook) · Deutsch
 
-Willkommen beim vollständigen Zelyra-Handbuch. Es umfasst sowohl das didaktische Lehrbuch **»Zelyra lernen – Verständlich programmieren von den Grundlagen bis zur eigenen Anwendung«** (Teil I bis X, Kapitel 1 bis 42) als auch das **technische Referenzhandbuch** (Kapitel 1 bis 23) sowie ausführliche **Anhänge** (A bis J).
+Willkommen beim vollständigen Zelyra-Handbuch. Es umfasst sowohl das didaktische Lehrbuch **»Zelyra lernen – Verständlich programmieren von den Grundlagen bis zur eigenen Anwendung«** (Teil I bis X, Kapitel 1 bis 42) als auch das **technische Referenzhandbuch** (Kapitel 1 bis 25) sowie ausführliche **Anhänge** (A bis J).
 
-> **Projektstatus:** Zelyra 0.9.7 ist experimentell und nicht für den Produktiveinsatz freigegeben. Die unabhängige menschliche Produktabnahme ist für 1.0.0 reserviert. Der aktuelle Funktionsumfang und seine Grenzen stehen in der [Implementierungsübersicht](../../implemented.de.md).
+> **Projektstatus:** Das aktuelle stabile Release ist Zelyra 1.0.4; die Sprachkompatibilitätslinie bleibt `0.1`. Der Funktionsumfang und seine Grenzen stehen in der [Implementierungsübersicht](../../implemented.de.md). Die [Release-Notizen 1.0.3](../../release-notes/1.0.3.de.md) beschreiben die erweiterte Standardbibliothek, `|>`-Pipelines, `else if` und Studio-/Tutorialverbesserungen. [Release 1.0.4](../../release-notes/1.0.4.de.md) dokumentiert die isolierten Compose-Projekte und die robustere Compose-Erkennung.
 
 ## Statuszeichen
 
-- ✅ **Implementiert und geprüft:** im aktuellen Repository vorhanden und in diesem Arbeitslauf erfolgreich ausgeführt.
+- ✅ **Implementiert und geprüft:** im aktuellen Release verfügbar und im Umfang der jeweils genannten Prüfungen belegt.
 - 🧪 **Experimentell:** vorhanden, aber noch jung oder eingeschränkt.
 - 🗺️ **Geplant:** Teil der Sprachvision, noch nicht zuverlässig verfügbar.
 - ❌ **Derzeit nicht verfügbar:** im aktuellen CLI nicht vorhanden.
@@ -69,7 +69,7 @@ Willkommen beim vollständigen Zelyra-Handbuch. Es umfasst sowohl das didaktisch
   - [Kapitel 39: Bereitstellung und Betrieb](lehrbuch-anwendungen.md#kapitel-39-bereitstellung-und-betrieb)
 - **[TEIL X – ABSCHLUSSPROJEKT UND WEITERFÜHRUNG](lehrbuch-anwendungen.md#teil-x-abschlussprojekt-und-weiterfuhrung)**
   - [Kapitel 40: Das große Abschlussprojekt: Vollständige Aufgabenverwaltung](lehrbuch-anwendungen.md#kapitel-40-das-grosse-abschlussprojekt-vollstandige-aufgabenverwaltung)
-  - [Kapitel 41: Aktueller Stand und Weg zu Zelyra 1.0](lehrbuch-anwendungen.md#kapitel-41-aktueller-stand-und-weg-zu-zelyra-10)
+  - [Kapitel 41: Aktueller Stand und Roadmap](lehrbuch-anwendungen.md#kapitel-41-aktueller-stand-und-roadmap)
   - [Kapitel 42: Dein Weg als Zelyra-Entwickler](lehrbuch-anwendungen.md#kapitel-42-dein-weg-als-zelyra-entwickler)
 
 ### Technisches Referenzhandbuch
@@ -101,14 +101,14 @@ Willkommen beim vollständigen Zelyra-Handbuch. Es umfasst sowohl das didaktisch
 - [23. KI-native Entwicklung](technisches-referenzhandbuch.md#23-ki-native-entwicklung)
 - [24. Anwendungs-E-Mail](technisches-referenzhandbuch.md#24-anwendungs-e-mail-095)
 - [25. Laravel-Migration: Statische Analyse und Gerüsterstellung](technisches-referenzhandbuch.md#25-laravel-migration-statische-analyse-und-gerusterstellung)
-- [26. Verbindliche Quellen und Compiler-Prüfung (Source Authority)](anhaenge.md#24-verbindliche-quellen-und-compiler-prufung-source-authority)
+- [Verbindliche Quellen und Compiler-Prüfung (Source Authority)](anhaenge.md#24-verbindliche-quellen-und-compiler-prufung-source-authority)
 
 ### Anhänge
 
 - [Anhang A: Schnelleinstieg / Spickzettel (Syntax-Cheat-Sheet)](anhaenge.md#anhang-a-schnelleinstieg-spickzettel-syntax-cheat-sheet)
 - [Anhang B: Alle Fehlermeldungen von Zelyra auf einen Blick](anhaenge.md#anhang-b-alle-fehlermeldungen-von-zelyra-auf-einen-blick)
 - [Anhang C: Zelyra-CLI-Referenz](anhaenge.md#anhang-c-zelyra-cli-referenz)
-- [Anhang D: Die Standardbibliothek im Überblick](anhaenge.md#anhang-d-die-standardbibliothek-im-uberblick)
+- [Anhang D: Die Standardbibliothek im Überblick](anhaenge.md#anhang-d-die-standardbibliothek-im-überblick-zelyra-103)
 - [Anhang E: SQL-Spickzettel für Zelyra-Entwickler](anhaenge.md#anhang-e-sql-spickzettel-fur-zelyra-entwickler)
 - [Anhang F: HTML- und Web-Referenz in Zelyra](anhaenge.md#anhang-f-html-und-web-referenz-in-zelyra)
 - [Anhang G: Glossar der Fachbegriffe](anhaenge.md#anhang-g-glossar-der-fachbegriffe)

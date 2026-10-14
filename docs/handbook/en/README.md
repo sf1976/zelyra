@@ -4,7 +4,7 @@
 
 English · [Deutsche Ausgabe](../de/README.md)
 
-> 📖 **Looking for the complete 75-chapter textbook & language reference?**  
+> 📖 **Looking for the complete textbook and technical reference?**
 > This is the guided 30-minute introductory tutorial (machine-management app). For the complete textbook and technical reference, see **[handbook.md](handbook.md)** or read it online at **[siedelmann.com/handbook](https://siedelmann.com/handbook)**.
 
 Welcome to Zelyra, the programming language for people who wanted to build a
@@ -19,11 +19,7 @@ program and ending with a database-backed web application.
 Create a new local learning project for customers, items, and invoices with
 [`zelyra --tutorial invoice`](../../tutorials/invoice.en.md).
 
-> **Project status:** Zelyra 0.9.7 is stably published, remains experimental,
-> and is not approved for production use. Independent human acceptance for
-> earlier releases is deferred to 1.0.0. See the
-> [roadmap](../../ROADMAP.md) and
-> [acceptance decision](../../release-readiness/1.0.0-human-acceptance.en.md).
+> **Project status:** Zelyra 1.0.4 is the current stable release; the language compatibility line remains `0.1`. Database tutorials require Compose v2 or newer. See the [roadmap](../../ROADMAP.md), [1.0.3 release notes](../../release-notes/1.0.3.en.md), and [1.0.4 release notes](../../release-notes/1.0.4.en.md).
 
 Zelyra combines static type checking and clear diagnostics with
 compiler-checked database and web declarations. The platform includes
@@ -33,7 +29,7 @@ workbench. The invoice tutorial guides you through customers, items, a
 dashboard, and printable invoices with 19% tax. The
 [implemented capabilities](../../implemented.en.md) describe the limits of
 individual features, databases, and operational workflows. Details for
-[application mail](../mail.en.md) and the
+[application mail](../../mail.en.md) and the
 [invoice tutorial](../../tutorials/invoice.en.md) are documented separately.
 
 The binding product goals for digital sovereignty and evidence-based
@@ -132,10 +128,10 @@ Rust or Cargo. The installer downloads the selected archive over HTTPS and
 verifies its SHA-256 checksum:
 
 ~~~bash
-./install.sh --release v0.9.0
+./install.sh --release v1.0.4
 ~~~
 
-On Windows, use `-Release v0.9.0` with `install.ps1` in PowerShell. macOS
+On Windows, use `-Release v1.0.4` with `install.ps1` in PowerShell. macOS
 currently uses the source installer.
 
 If the shell cannot find Zelyra:
@@ -1899,7 +1895,7 @@ When a source file uses a disabled surface, the compiler reports a stable
 feature diagnostic. Capabilities, type checking, SQL checks, and security
 rules cannot be disabled here. This is an optional convenience layer, not a
 new requirement for simple projects. The complete [environment and
-configuration reference](../env.en.md) lists every supported setting and must
+configuration reference](../../env.en.md) lists every supported setting and must
 be updated before a new setting is committed.
 
 🗺️ Typed connections, encrypted secret stores, an SMTP assistant, and ODBC

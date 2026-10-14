@@ -23,6 +23,12 @@ Browser öffnet. Die Beispieldaten enthalten zwei Kunden, drei Artikel und den
 Rechnungsentwurf `RE-2026-001` mit zwei Positionen. Wiederholte Starts fügen
 diese Datensätze nicht erneut hinzu.
 
+Die Startseite `/` ist derzeit eine Tutorialübersicht mit Kennzahlen und
+Arbeitsschritten. `/views/invoicedashboard` ist die filter- und durchsuchbare
+Rechnungstabelle mit berechneten Netto-, Steuer- und Bruttosummen. Die
+Startseite und Rechnungsübersicht werden für Version 1.0.5 stärker auf den
+Rechnungsablauf ausgerichtet.
+
 Nur die Dateien erzeugen, ohne Docker zu starten:
 
 ~~~sh

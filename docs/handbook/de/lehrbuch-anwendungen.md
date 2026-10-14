@@ -1187,7 +1187,7 @@ page "/dashboard" {
   *Ursache:* Ohne `sessions: auth_sessions` liegen Sitzungen im Prozessspeicher.
   Für dauerhafte Speicherung und administrative Sitzungssperren die Tabelle deklarieren.
 
-#### Sitzungsverwaltung im 0.4-Entwicklungszweig
+#### Sitzungsverwaltung
 
 Angemeldete Nutzer können unter `/account/sessions` ihre eigenen aktiven
 Sitzungen anzeigen und beenden. Seiten mit generierter Navigation verlinken
@@ -1223,8 +1223,7 @@ Das Ereignis belegt die Anfrage, nicht das vorherige Vorhandensein einer Zeile.
 
 Sperrst du die eigene Sitzung, scheitern folgende geschützte Anfragen mit
 401. Melde dich erneut an: Das Konto und die Rolle des letzten Administrators
-bleiben erhalten. Dauerhafte Sitzungen laufen nach einem Tag ab. Im
-Entwicklungszweig sind auch Speichersitzungen auf 24 Stunden begrenzt; sie
+bleiben erhalten. Dauerhafte Sitzungen laufen nach einem Tag ab. Auch Speichersitzungen sind auf 24 Stunden begrenzt; sie
 verschwinden beim Neustart und erscheinen nicht in dieser Verwaltung
 dauerhafter Sitzungen. Der Ablauf wird beim Zugriff geprüft. Eine Sperre
 bricht bereits laufende Anfragen nicht ab. Passwortwiederherstellung und
@@ -2697,82 +2696,61 @@ zelyra serve src/main.zyl 0.0.0.0:8080
 
 <a id="kapitel-41-die-zelyra-roadmap-von-090-bis-10"></a>
 
-## Kapitel 41: Aktueller Stand und Weg zu Zelyra 1.0
+## Kapitel 41: Aktueller Stand und Roadmap
 
 ### 1. Was lerne ich in diesem Kapitel?
-- Welche Fähigkeiten die aktuelle Zelyra-Version bietet und wo ihre Grenzen liegen.
-- Wie die Sprachkompatibilitätslinie 0.1 von den Compiler-Releases getrennt bleibt.
-- Welche technischen Nachweise und menschliche Abnahme für 1.0.0 noch erforderlich sind.
+- Was Zelyra 1.0.4 enthält und wie die Sprachkompatibilitätslinie 0.1 davon getrennt bleibt.
+- Welche Erweiterungen seit 1.0.0 hinzugekommen sind.
+- Wo du geprüfte Funktionen, Grenzen und geplante Arbeiten nachliest.
 
 ### 2. Warum ist das Thema wichtig?
-Eine Programmiersprache ist ein lebendiges Ökosystem. Wer heute Zeit investiert, um Zelyra zu lernen, möchte sicher sein, dass die Sprache eine klare Zukunft hat, professionell weiterentwickelt wird und bestehender Code auch in kommenden Versionen lauffähig bleibt.
+Compiler-Version und Sprachkompatibilitätslinie beschreiben unterschiedliche Dinge. Ein Update auf Zelyra 1.0.4 ändert die in `zelyra.toml` festgelegte Sprachlinie nicht automatisch. Release-Notizen zeigen, was eine Version ergänzt; Implementierungsübersicht, Datenbankmatrix und Roadmap erklären den Umfang und seine Grenzen.
 
-### 3. Verständliche Erklärung: Die Roadmap im Überblick
-Compiler-Releases und Sprachkompatibilitätslinie sind getrennt: ein Update des
-Compilers ändert die `0.1`-Sprachlinie eines Projekts nicht automatisch.
+### 3. Was kam seit Zelyra 1.0.0 hinzu?
+- **1.0.1:** Docker Compose v2 wird erkannt; Python Compose v1 wird mit einem konkreten Update-Hinweis abgewiesen. Der Studio-Ausführen-Knopf startet den Projekteinstieg.
+- **1.0.2:** Das Rechnungstutorial kann in Studio MariaDB starten, auf die Verbindung warten und vor der Vorschau Schema und Beispieldaten einrichten. `for`-Bereiche unterstützen Schrittweiten; `range(start, end, step)` erzeugt dieselbe Folge als Array.
+- **1.0.3:** Die Standardbibliothek ergänzt Mathematik, Textverarbeitung, Arrays, Sets, Maps, Datumsrechnung, Fehlerkontrolle, Konvertierung, Encodings und Pfadfunktionen. Dazu kommen der typgeprüfte Pipeline-Operator `|>`, flache `else if`-Kaskaden, deklarierte Schemaanzeige ohne erreichbare Datenbank, automatische Tutorialeinrichtung, freie lokale Ports, wiederholbare Beispieldaten und ein begrenzter Rekursionstiefenschutz.
+- **1.0.4:** Rechnungstutorials erhalten einen eigenen Compose-Projektnamen. Ältere Tutorials können nach einem Authentifizierungsfehler eine isolierte Datenbank verwenden, ohne das alte Volume zu löschen oder zu verändern. Compose-Versionen wie `2.40` werden erkannt.
 
-Die aktuelle stabile Version verbindet statische Typprüfung und Diagnosen mit
-schemaabhängigem SQL, relationalen Tabellen, Webformularen, CRUD, Authentifizierung
-und APIs. Zelyra Studio bietet einen lokalen Mehrdatei-Editor, Navigation,
-Vervollständigung, Hilfe, Diagnosen, Datenbankansicht und compilergeprüfte
-Quelltextänderungen. Das Rechnungstutorial führt durch Kunden, Artikel,
-Dashboard und druckbare Rechnungen mit 19 % Umsatzsteuer. Mail, Authentifizierung,
-Benachrichtigungen, Migrator und Datenbankunterstützung besitzen jeweils
-dokumentierte Grenzen; Details stehen in der
-[Implementierungsübersicht](../../implemented.de.md).
+Die einzelnen Änderungen stehen in den [Release-Notizen](../../release-notes/). Der vollständige Funktionskatalog der Standardbibliothek steht in [Anhang D](anhaenge.md#anhang-d-die-standardbibliothek-im-überblick-zelyra-103).
 
-Der nächste Entwicklungsabschnitt härtet Installation, Datenbankabläufe,
-Autorisierung, Migration und Studio. Danach friert 0.9.9 den technischen
-Funktionsumfang ein. 0.9.9 ist noch keine menschliche Abnahme: unabhängige
-Einsteiger- und Produktprüfung ist ausschließlich für den exakten 1.0.0-
-Kandidaten vorgesehen. 1.0.0 wird erst nach bestandenen technischen Gates und
-dieser Prüfung als erste produktive Version veröffentlicht.
+### 4. Rechnungstutorial starten und bearbeiten
+`zelyra --tutorial invoice` richtet das lokale Tutorial ein. Dafür werden Docker Engine und Docker Compose v2 oder neuer benötigt; Python Compose v1 wird nicht unterstützt. In Zelyra Studio öffnest du das Projekt mit `zelyra editor ./invoice-tutorial`, wählst `main.zyl` und klickst auf **Run**. Studio startet die lokale MariaDB über Compose, richtet Schema und wiederholbare Beispieldaten ein und startet anschließend die lokale Webvorschau. MariaDB läuft im Container; die Webvorschau ist ein lokaler Zelyra-Prozess.
 
-Die [Roadmap](../../ROADMAP.de.md) und die
-[Sprachkompatibilitätsrichtlinie](../../language-compatibility.de.md) führen
-Umfang und Grenzen detailliert auf. Paketmanager, WebAssembly und LTS-Zusagen
-sind nicht für 1.0.0 versprochen.
+Bearbeite die Quelldateien im Projektbaum: `src/customers.zyl` für Kunden, `src/items.zyl` für Artikel, `src/invoices.zyl` für Rechnungen und Positionen, `src/dashboard.zyl` für die Rechnungsübersicht, `src/shell.zyl` für das gemeinsame Layout und `zelyra.theme.css` für lokale Gestaltung. Neue Geschäftsdatensätze legst du über die Anwendungsformulare an. Die Beispieldaten aus dem Seed sind Startdaten und werden bei erneutem Start nicht dupliziert. Die vollständige Schrittfolge und Fehlerbehebung erklärt das [Rechnungstutorial](../../tutorials/invoice.de.md).
 
-### 4. Kompatibilität und Grenzen
-- Die Linie 0.1 soll gültige Programme innerhalb der dokumentierten Unterstützung erhalten; vor 1.0 bleibt sie experimentell.
-- Compiler-Version und Sprachlinie sind unabhängig. Unterstützte Datenbankpfade, CLI-Verträge und Webverhalten besitzen eigene Grenzen.
-- Zelyra verspricht keine vollständige PostgreSQL-Parität, universelle SQL-Portabilität oder korrekte Verifikation beliebiger Programme.
+### 5. Kompatibilität und Grenzen
+- Die Sprachkompatibilitätslinie bleibt `0.1`; Compiler- und Sprachversion sind getrennt.
+- Docker Compose v2 oder neuer ist Voraussetzung für Compose-basierte Tutorials. Zelyra installiert Docker oder Compose nicht selbst.
+- Die Datenbankmatrix beschreibt geprüfte Abläufe. Daraus folgt keine vollständige Gleichheit aller Datenbanken oder eine Garantie für beliebige Anwendungen.
+- Der Verifier prüft einen begrenzten Teil von Programmen. Er ist kein allgemeiner Beweis, dass eine Anwendung fehlerfrei ist.
 
-### 5. Typische Missverständnisse
-- **Missverständnis:** „Das Studio kann jedes Datenbankschema bearbeiten.“
-  *Richtigstellung:* Die Karte liest Schema-Metadaten. Der CRUD-Assistent
-  erzeugt compilergeprüften Quelltext und ändert weder Schema noch Datensätze.
-- **Missverständnis:** „Die aktuelle Version ist produktionsreif, weil CI grün ist.“
-  *Richtigstellung:* Zelyra bleibt experimentell. CI belegt automatisierte
-  Prüfungen, ersetzt aber nicht die geplante menschliche Abnahme für 1.0.0.
+### 6. Roadmap und geplante Änderungen
+Die [Roadmap](../../ROADMAP.de.md) trennt fertige Arbeit von geplanten Punkten. Für 1.0.5 sind unter anderem abrufbare strukturierte IDE-Logs, `zelyra uninstall`, ein einfaches und lokalisiertes Datumsfeld im Rechnungstutorial, automatisch vergebene Rechnungsnummern und eine passendere Rechnungsstartseite vorgesehen. Roadmap-Einträge sind noch keine Funktionen des aktuellen Releases.
 
-### 6. Merksätze
-1. Die Compiler-Version ändert die experimentelle Sprachlinie 0.1 nicht.
-2. Das Studio liest Schema-Metadaten und prüft erzeugten CRUD-Quelltext, bevor
-   es eine Änderung ausdrücklich übernimmt.
-3. 1.0.0 wird erst nach technischen Nachweisen und menschlicher Abnahme
-   veröffentlicht.
+### 7. Typische Missverständnisse
+- **„Ein stabiles Release bedeutet, dass jede Anwendung produktionsfertig ist.“** Prüfe den konkreten Datenbankpfad, die Sicherheitsanforderungen und die dokumentierten Grenzen deines Einsatzfalls.
+- **„Studio bearbeitet automatisch die Datenbank.“** Beim Rechnungstutorial richtet **Run** die lokale Tutorialdatenbank ein. Andere Studio-Assistenten zeigen Änderungen vorab; Schemaänderungen benötigen einen gesonderten geprüften Ablauf.
+- **„`/views/invoicedashboard` ist die Startseite.“** Diese Route ist die tabellarische Rechnungsübersicht. Die Startseite unter `/` ist derzeit eine separate Tutorialübersicht; ihre Gestaltung ist für 1.0.5 zur Überarbeitung vorgemerkt.
 
-### 7. Übungsaufgaben
-- **Stufe 1 (Leicht):** Lies das offizielle `CHANGELOG.md` im Zelyra-Repository.
-- **Stufe 2 (Mittel):** Vergleiche den aktuellen Funktionsumfang in `docs/implemented.de.md` mit den nächsten Zielen in `docs/ROADMAP.de.md`.
-- **Stufe 3 (Anspruchsvoll):** Wähle eine Tabelle in Studio, untersuche eine Schemaabweichung und prüfe, wie die CRUD-Vorschau Änderungen bis zum ausdrücklichen Anwenden behandelt.
-
-### 8. Praxisaufgabe: Zelyra-Version und Umgebung prüfen
-Überprüfe die installierte Version und den Zustand deines Systems:
+### 8. Praxisaufgabe: Version und Compose prüfen
 ```bash
 zelyra --version
-zelyra doctor
+docker compose version
 ```
+Prüfe danach die Release-Notizen der installierten Version und vergleiche den gewünschten Ablauf mit der Datenbankmatrix.
 
 ### 9. Zusammenfassung
-- Zelyra entwickelt die experimentelle Linie 0.1 schrittweise bis zum geplanten 1.0.0-Release weiter.
-- Roadmap-Einträge sind Ziele und keine Garantie, dass ein Feature bereits verfügbar ist.
+- Zelyra 1.0.4 ist das aktuelle stabile Release; die Sprachkompatibilitätslinie bleibt `0.1`.
+- 1.0.3 erweitert die Standardbibliothek und fügt `|>`-Pipelines sowie flache `else if`-Kaskaden hinzu.
+- Das Rechnungstutorial läuft lokal mit MariaDB in Docker Compose und einer lokalen Webvorschau; Studio kann den gesamten Tutorialstart ausführen.
+- Release-Notizen beschreiben gelieferte Änderungen, die Roadmap beschreibt geplante Arbeit.
 
 ### 10. Kontrollfragen zur Selbstprüfung
-1. Welche Auswirkungen zeigt die CRUD-Vorschau, und welche Änderungen führt Studio ausdrücklich nicht aus?
-2. Was unterscheidet Compiler-Version und Sprachkompatibilitätslinie?
-3. Welche technische Freigabe muss vor der menschlichen Abnahme noch bestehen?
+1. Was unterscheidet Compiler-Version und Sprachkompatibilitätslinie?
+2. Welche Funktionen kamen in 1.0.3 hinzu?
+3. Welche Teile des Rechnungstutorials laufen in Docker, und wie bearbeitest du die Anwendung?
+4. Woran erkennst du den Unterschied zwischen einem veröffentlichten Feature und einem Roadmap-Punkt?
 
 ---
 

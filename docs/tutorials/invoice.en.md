@@ -23,6 +23,11 @@ automatically. The sample data contains two customers, three items, and the
 draft invoice `RE-2026-001` with two line items. Repeated starts do not add
 duplicates.
 
+The `/` route currently shows tutorial metrics and workflow steps.
+`/views/invoicedashboard` is the searchable, filterable invoice table with
+calculated net, tax, and gross totals. The home page and invoice overview are
+planned for a workflow-focused redesign in version 1.0.5.
+
 Generate the project files without starting Docker:
 
 ~~~sh
