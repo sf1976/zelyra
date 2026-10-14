@@ -49,12 +49,20 @@ try {
   const page = await browser.newPage();
   const errors = [];
   const semanticCalls = [];
+  const checkSources = [];
+  const holeCalls = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  page.on("response", (response) => {
+  page.on("response", async (response) => {
     if (response.url().endsWith("/api/semantic")) semanticCalls.push({
       status: response.status(), origin: response.request().headers().origin,
       referer: response.request().headers().referer,
     });
+    if (response.url().endsWith("/api/typed-hole")) holeCalls.push({status:response.status(),body:await response.json().catch(() => null)});
+  });
+  page.on("request", (request) => {
+    if (request.url().endsWith("/api/check")) {
+      try { checkSources.push(request.postDataJSON()?.source); } catch { /* diagnostic only */ }
+    }
   });
   await page.goto(url, { waitUntil: "domcontentloaded" });
   await page.locator('.tree-item.file[title="main.zyl"]').click();
@@ -91,10 +99,56 @@ try {
   await page.locator(".verify-gutter .verify-marker.proven").waitFor({ timeout: 10_000 });
   await page.locator(".verify-gutter .verify-marker.runtime_check").waitFor({ timeout: 10_000 });
   assert.match(await page.locator(".verify-gutter .verify-marker.proven").getAttribute("aria-label"), /PROVEN V-001/);
+  const holeSource = "pub fn answer() -> Int requires { 1 < 2 } { return 42 }\n"
+    + "pub fn pure() -> String { return \"x\" }\n"
+    + "pub fn target(name: String) -> String { message: String = _ return message }\n";
+  const answerPoint = await page.evaluate(() => {
+    const walker = document.createTreeWalker(document.querySelector(".cm-content"), NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const offset = walker.currentNode.textContent.indexOf("answer");
+      if (offset < 0) continue;
+      const range = document.createRange();
+      range.setStart(walker.currentNode, offset + 1);
+      range.setEnd(walker.currentNode, offset + 2);
+      const box = range.getBoundingClientRect();
+      return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    }
+    return null;
+  });
+  assert.ok(answerPoint);
+  await page.mouse.click(answerPoint.x, answerPoint.y);
+  await page.keyboard.press("Control+A");
+  await page.keyboard.type(holeSource, { delay: 10 });
+  await page.waitForFunction(() => document.querySelector(".cm-content")?.textContent?.includes("message: String = _"), undefined, { timeout: 3_000 });
+  await page.locator(".verify-gutter .verify-marker.proven").waitFor({ state: "detached", timeout: 10_000 });
+  await page.locator("#problems-panel:not([hidden])").waitFor({ timeout: 10_000 });
+  await page.waitForFunction(() => document.querySelector("#problems-list")?.textContent?.includes("E-HOLE-001"), undefined, { timeout: 10_000 });
+  const holePoint = await page.evaluate(() => {
+    const walker = document.createTreeWalker(document.querySelector(".cm-content"), NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const offset = walker.currentNode.textContent.indexOf("_");
+      if (offset < 0) continue;
+      const range = document.createRange();
+      range.setStart(walker.currentNode, offset);
+      range.setEnd(walker.currentNode, offset + 1);
+      const box = range.getBoundingClientRect();
+      return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    }
+    return null;
+  });
+  assert.ok(holePoint, "the expression hole is visible in CodeMirror");
+  await page.mouse.click(holePoint.x, holePoint.y);
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("Control+Space");
+  const nameSuggestion = page.locator(".cm-tooltip-autocomplete li").filter({ hasText: /^name/ });
+  await nameSuggestion.waitFor({ timeout: 10_000 });
+  await nameSuggestion.click();
+  await page.waitForFunction(() => document.querySelector(".cm-content")?.textContent?.includes("message: String = name"), undefined, { timeout: 10_000 });
+  await page.keyboard.press("Control+Z");
+  await page.waitForFunction(() => document.querySelector(".cm-content")?.textContent?.includes("message: String = _"), undefined, { timeout: 10_000 });
   await page.locator(".cm-content").click();
   await page.keyboard.press("Control+A");
-  await page.keyboard.type("pub fn answer( {\n");
-  await page.locator(".verify-gutter .verify-marker.proven").waitFor({ state: "detached", timeout: 10_000 });
+  await page.keyboard.insertText("pub fn answer( {\n");
   await page.locator("#problems-panel:not([hidden])").waitFor({ timeout: 10_000 });
   } catch (error) {
     const state = await page.evaluate(() => ({
@@ -102,11 +156,15 @@ try {
       status: document.querySelector("#status-message")?.textContent,
       selected: document.getSelection()?.anchorNode?.textContent,
       offset: document.getSelection()?.anchorOffset,
+      problems: document.querySelector("#problems-list")?.textContent,
+      source: document.querySelector(".cm-content")?.textContent,
+      activeElement: document.activeElement?.outerHTML?.slice(0, 220),
+      autocomplete: document.querySelector(".cm-tooltip-autocomplete")?.textContent,
     }));
-    throw new Error(`${error.message}; state=${JSON.stringify(state)}; calls=${JSON.stringify(semanticCalls)}; browserErrors=${JSON.stringify(errors)}`);
+    throw new Error(`${error.stack}; state=${JSON.stringify(state)}; calls=${JSON.stringify(semanticCalls)}; holeCalls=${JSON.stringify(holeCalls)}; checks=${JSON.stringify(checkSources.slice(-3))}; browserErrors=${JSON.stringify(errors)}`);
   }
   assert.deepEqual(errors, [], `browser errors: ${errors.join(", ")}`);
-  console.log(`Studio semantic browser navigation passed in ${engineName}`);
+  console.log(`Studio semantic navigation, verifier gutter, and typed holes passed in ${engineName}`);
 } finally {
   clearTimeout(startupTimer);
   await browser?.close();

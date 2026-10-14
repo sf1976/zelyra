@@ -66,6 +66,15 @@ read its explanation. Syntax or type errors clear older markers rather than
 showing a stale proof. The gutter follows the current document; background
 checks use document versions to discard late responses.
 
+At an expression hole `_`, **Ctrl+Space** opens a CodeMirror completion menu
+from the compiler's hole context. Suggestions use visible bindings with known
+matching types and zero-argument functions whose declared Capabilities fit the
+current function. Candidates with contracts are labeled for review. Choose a
+suggestion with the keyboard or click; only the `_` span is replaced, and
+ordinary Undo restores it. A `_` wildcard in a match pattern is not a hole.
+Type inference for unannotated local values and general subtyping are not yet
+used for hole suggestions, so the list may omit valid expressions.
+
 ## Start the invoice tutorial in Studio
 
 For a generated invoice tutorial, Studio starts its own isolated MariaDB

@@ -325,6 +325,50 @@ impl Server {
         let Some(program) = analysis.program.as_ref() else {
             return json!([]);
         };
+        if method == "textDocument/completion" {
+            let uri = params
+                .pointer("/textDocument/uri")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            if let Some(relative) = self.safe_relative(uri) {
+                if let (Some(source), Some(position)) = (
+                    analysis
+                        .sources
+                        .iter()
+                        .find(|source| source.path == relative),
+                    params.get("position"),
+                ) {
+                    if let Some(offset) = position_offset(&source.text, position) {
+                        if let Some(hole) =
+                            language_service::typed_hole_entry(&analysis, &relative, offset)
+                        {
+                            let start = utf16_absolute_offset(
+                                &source.text,
+                                hole["editorSpan"]["start"].as_u64().unwrap_or(0) as usize,
+                            );
+                            let end = utf16_absolute_offset(
+                                &source.text,
+                                hole["editorSpan"]["end"].as_u64().unwrap_or(0) as usize,
+                            );
+                            let range = json!({"start":offset_position(&source.text,start),"end":offset_position(&source.text,end)});
+                            return json!(hole["suggestions"].as_array().map(|items| items.iter().map(|item| {
+                                let expression = item["expression"].as_str().unwrap_or("");
+                                let kind = match item["kind"].as_str() {
+                                    Some("function") => 3,
+                                    Some("value") => 6,
+                                    _ => 1,
+                                };
+                                json!({
+                                    "label":expression,"kind":kind,"detail":item["type"],
+                                    "documentation":item["contractReview"].as_bool().unwrap_or(false).then_some("Contracts need review before use."),
+                                    "textEdit":{"range":range,"newText":expression}
+                                })
+                            }).collect::<Vec<_>>()).unwrap_or_default());
+                        }
+                    }
+                }
+            }
+        }
         let mut symbols = Vec::new();
         for function in &program.functions {
             if let Some(source) = analysis.sources.get(function.span.source_id as usize) {
@@ -646,6 +690,20 @@ fn position_offset(source: &str, position: &Value) -> Option<usize> {
     (units == character).then_some(end)
 }
 
+fn utf16_absolute_offset(source: &str, requested: usize) -> usize {
+    let mut units = 0;
+    for (byte_offset, symbol) in source.char_indices() {
+        if units >= requested {
+            return byte_offset;
+        }
+        units += symbol.len_utf16();
+        if units > requested {
+            return byte_offset;
+        }
+    }
+    source.len()
+}
+
 fn read_message<R: BufRead>(input: &mut R) -> io::Result<Option<Value>> {
     let mut length = None;
     let mut header_bytes = 0;
@@ -842,6 +900,38 @@ mod tests {
                 })
             )
             .is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn typed_hole_completion_uses_shared_scope_and_exact_edit_range() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-lsp-hole-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let source = "fn pure() -> String { return \"x\" }\nfn target(name: String, count: Int) -> String { message: String = _ return message }\nfn main() {}\n";
+        fs::write(root.join("main.zyl"), source).unwrap();
+        let uri = Url::from_file_path(root.join("main.zyl"))
+            .unwrap()
+            .to_string();
+        let server = Server {
+            root: root.clone(),
+            documents: HashMap::new(),
+            shutdown: false,
+        };
+        let completion = server.symbol_response("textDocument/completion", &json!({
+            "textDocument":{"uri":uri},"position":offset_position(source,source.find("= _").unwrap()+3)
+        }));
+        let items = completion.as_array().unwrap();
+        let name = items.iter().find(|item| item["label"] == "name").unwrap();
+        assert_eq!(name["textEdit"]["newText"], "name");
+        assert_eq!(
+            name["textEdit"]["range"]["start"],
+            offset_position(source, source.find("= _").unwrap() + 2)
+        );
+        assert!(!items.iter().any(|item| item["label"] == "count"));
         fs::remove_dir_all(root).unwrap();
     }
 }

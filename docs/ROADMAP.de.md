@@ -1389,7 +1389,9 @@ Rückmeldungen des Projektverantwortlichen ersetzen keinen Teilnehmertest.
   Funktionsdefinitionen und Referenzen funktionieren nun in Studio und LSP;
   das LSP liefert auch compilergeprüfte Funktions-Umbenennungen als Vorschau.
   Eine versionierte Contract-Leiste zeigt jetzt echte Verifier-Ergebnisse und
-  verschwindet bei ungültiger Quelle. Andere Symbolarten, die übrigen
+  verschwindet bei ungültiger Quelle. Ein compilerbasiertes Typed-Hole-Menü in
+  Studio und LSP filtert bekannte exakte Typen und deklarierte Capabilities
+  und ersetzt präzise nur die Ausdruckslücke. Andere Symbolarten, die übrigen
   Studio-Werkzeuge, Ereigniskanal,
   vollständige Release-Gates und RC-Artefakte bleiben offen; siehe das
   [1.1.0-Arbeitsprotokoll](release-plans/1.1.0-studio-deep-native-progress.de.md).

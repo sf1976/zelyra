@@ -600,6 +600,28 @@ function completionSource(context) {
   const word = context.matchBefore(/[\w]+/);
   if (!word && !context.explicit) return null;
   const source = context.state.doc.toString();
+  if (word?.text === "_" && activePath?.endsWith(".zyl")) {
+    const path = activePath;
+    return api("typed-hole", { method: "POST", body: JSON.stringify({
+      path, source, offset: context.pos,
+    }) }).then((result) => {
+      if (!result.found || activePath !== path || editor?.state.doc.toString() !== source) return null;
+      const { start, end } = result.editorSpan;
+      return {
+        from: start, to: end,
+        filter: false,
+        options: (result.suggestions || []).map((item) => ({
+          label: item.expression,
+          apply: item.expression,
+          type: item.kind === "function" ? "function" : item.kind === "value" ? "variable" : "text",
+          detail: item.type || result.expectedType || "",
+          info: item.contractReview
+            ? (language === "de" ? "Contracts müssen geprüft werden." : "Contracts need review.")
+            : undefined,
+        })),
+      };
+    }).catch(() => null);
+  }
   const from = word ? word.from : context.pos;
   const basicOptions = [
     ...[...keywords].map((label) => ({ label, type: "keyword" })),
@@ -1134,10 +1156,14 @@ function createView(path, state) {
       if (!tab) return;
       tab.state = update.state;
       if (update.docChanged) {
+        verificationResults = [];
         renderTabs();
         announce(t("unsaved"), "warning");
         queueMicrotask(() => {
-          if (editor === update.view) editor.dispatch(setDiagnostics(editor.state, []));
+          if (editor === update.view) {
+            editor.dispatch(setDiagnostics(editor.state, []));
+            editor.dispatch({ effects: verificationRefresh.of(null) });
+          }
         });
       }
       if (update.selectionSet || update.docChanged) renderContextHelp(update.state, path);
@@ -2479,7 +2505,6 @@ function renderDiagnostics(items, success, options = {}) {
 
 function scheduleLiveCheck(path) {
   if (!path?.endsWith(".zyl")) return;
-  setVerificationResults([]);
   clearTimeout(liveCheckTimer);
   const sequence = ++liveCheckSequence;
   liveCheckTimer = setTimeout(async () => {

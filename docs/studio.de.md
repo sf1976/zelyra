@@ -71,6 +71,16 @@ Begründung eines Markers. Bei Syntax- oder Typfehlern verschwinden ältere
 Marker, statt einen veralteten Beweis anzuzeigen. Die Leiste folgt dem aktuellen
 Dokument; Dokumentversionen verhindern verspätete Ergebnisse.
 
+Bei einer Ausdruckslücke `_` öffnet **Strg+Leertaste** die CodeMirror-
+Vorschläge aus dem Compilerkontext. Sie enthalten sichtbare Bindungen mit
+bekanntem passenden Typ sowie parameterlose Funktionen, deren deklarierte
+Capabilities zum aktuellen Funktionskontext passen. Vorschläge mit Contracts
+sind zur Prüfung gekennzeichnet. Wähle per Tastatur oder Klick; nur die Stelle
+von `_` wird ersetzt und Undo stellt sie wieder her. Ein `_`-Wildcard in einem
+Match-Muster ist keine Ausdruckslücke. Typinferenz für unannotierte lokale
+Werte und allgemeine Subtypisierung werden für diese Vorschläge noch nicht
+genutzt; deshalb können gültige Ausdrücke fehlen.
+
 ## Rechnungstutorial in Studio starten
 
 Bei einem erzeugten Rechnungstutorial startet Studio beim Klick auf

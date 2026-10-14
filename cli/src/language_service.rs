@@ -139,6 +139,112 @@ pub fn verification_entries(analysis: &Analysis) -> Vec<Value> {
     }).collect()
 }
 
+/// Return a single expression hole with conservative, type- and capability-
+/// compatible replacements. Unknown inferred types are not advertised as
+/// safe replacements. `_` in a pattern is never an expression hole.
+pub fn typed_hole_entry(analysis: &Analysis, path: &str, byte_offset: usize) -> Option<Value> {
+    let program = analysis.program.as_ref()?;
+    let holes = collect_typed_holes(program);
+    let hole = holes.into_iter().find(|hole| {
+        analysis
+            .sources
+            .get(hole.span.source_id as usize)
+            .is_some_and(|source| source.path == path)
+            && hole.span.start <= byte_offset
+            && byte_offset <= hole.span.end
+    })?;
+    let source = analysis.sources.get(hole.span.source_id as usize)?;
+    let expected = hole.expected_type.as_ref();
+    let mut suggestions = Vec::new();
+    if let Some(expected) = expected {
+        for (name, ty) in &hole.typed_values {
+            if ty == expected {
+                suggestions.push(json!({
+                    "expression":name,"kind":"value","type":ty.to_string(),
+                    "contractReview":false
+                }));
+            }
+        }
+        for function in &program.functions {
+            if !function.params.is_empty()
+                || function.return_type.as_ref() != Some(expected)
+                || !function
+                    .capabilities
+                    .iter()
+                    .all(|capability| hole.capabilities.contains(capability))
+            {
+                continue;
+            }
+            let Some(owner) = analysis.sources.get(function.span.source_id as usize) else {
+                continue;
+            };
+            let plain = function.name.rsplit("::").next().unwrap_or(&function.name);
+            let expression = if owner.path == path {
+                format!("{plain}()")
+            } else {
+                if !function.is_public {
+                    continue;
+                }
+                let Some(alias) = analysis
+                    .modules
+                    .iter()
+                    .find(|module| module.path == path)
+                    .and_then(|module| {
+                        module
+                            .imports
+                            .iter()
+                            .find(|import| import.path == owner.path)
+                    })
+                    .map(|import| import.alias.as_str())
+                else {
+                    continue;
+                };
+                format!("{alias}::{plain}()")
+            };
+            suggestions.push(json!({
+                "expression":expression,"kind":"function","type":expected.to_string(),
+                "contractReview":!function.requires.is_empty() || !function.ensures.is_empty(),
+                "capabilities":function.capabilities,
+            }));
+        }
+        let literals: &[&str] = match expected {
+            Type::Bool => &["true", "false"],
+            Type::Int => &["0"],
+            Type::Float => &["0.0"],
+            Type::String => &["\"\""],
+            Type::Option(_) => &["None"],
+            _ => &[],
+        };
+        for expression in literals {
+            suggestions.push(json!({
+                "expression":expression,"kind":"literal","type":expected.to_string(),
+                "contractReview":false
+            }));
+        }
+    }
+    suggestions.sort_by(|left, right| {
+        left["expression"]
+            .as_str()
+            .cmp(&right["expression"].as_str())
+    });
+    suggestions.dedup_by(|left, right| left["expression"] == right["expression"]);
+    Some(json!({
+        "found":true,
+        "file":path,
+        "expectedType":expected.map(ToString::to_string),
+        "editorSpan":{"start":utf16_offset(&source.text,hole.span.start),"end":utf16_offset(&source.text,hole.span.end)},
+        "visibleValues":hole.typed_values.iter().map(|(name,ty)| json!({"name":name,"type":ty.to_string()})).collect::<Vec<_>>(),
+        "capabilities":hole.capabilities,
+        "contracts":hole.contract_spans.iter().filter_map(|span| {
+            analysis.sources.get(span.source_id as usize).map(|source| json!({
+                "file":source.path,"span":span_value(&source.text,*span)
+            }))
+        }).collect::<Vec<_>>(),
+        "suggestions":suggestions,
+        "version":analysis.versions.get(path),
+    }))
+}
+
 fn utf16_offset(source: &str, byte_offset: usize) -> usize {
     let mut safe_offset = byte_offset.min(source.len());
     while !source.is_char_boundary(safe_offset) {
@@ -273,6 +379,108 @@ mod tests {
         );
         assert!(!analysis.success);
         assert!(verification_entries(&analysis).is_empty());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn hole_suggestions_respect_scope_exact_type_and_capability() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-hole-hud-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let source = "fn pure() -> String { return \"x\" }\nfn effect() -> String uses Console { return \"y\" }\nfn target(name: String, count: Int) -> String { message: String = _ return message }\nfn main() {}\n";
+        fs::write(root.join("main.zyl"), source).unwrap();
+        let analysis = analyze(
+            &root.join("main.zyl"),
+            &[SourceOverlay {
+                path: "main.zyl".into(),
+                text: source.into(),
+                version: 4,
+            }],
+        );
+        let hole_offset = source.find("= _").unwrap() + 2;
+        let hole = typed_hole_entry(&analysis, "main.zyl", hole_offset).unwrap();
+        assert_eq!(hole["expectedType"], "String");
+        assert_eq!(hole["version"], 4);
+        let suggestions = hole["suggestions"].as_array().unwrap();
+        let expressions = suggestions
+            .iter()
+            .filter_map(|item| item["expression"].as_str())
+            .collect::<Vec<_>>();
+        assert!(expressions.contains(&"name"), "{expressions:?}");
+        assert!(expressions.contains(&"pure()"), "{expressions:?}");
+        assert!(!expressions.contains(&"count"), "{expressions:?}");
+        assert!(!expressions.contains(&"effect()"), "{expressions:?}");
+        assert!(analysis
+            .diagnostics
+            .iter()
+            .any(|item| item["code"] == "E-HOLE-001"));
+        let candidate = source.replacen("= _", "= pure()", 1);
+        let checked = analyze(
+            &root.join("main.zyl"),
+            &[SourceOverlay {
+                path: "main.zyl".into(),
+                text: candidate,
+                version: 5,
+            }],
+        );
+        assert!(checked.success, "{:?}", checked.diagnostics);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn match_wildcards_are_not_expression_holes() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-hole-wildcard-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let source = "fn main() { match true { _ => { } } }\n";
+        fs::write(root.join("main.zyl"), source).unwrap();
+        let analysis = analyze(&root.join("main.zyl"), &[]);
+        assert!(analysis.success, "{:?}", analysis.diagnostics);
+        assert!(typed_hole_entry(&analysis, "main.zyl", source.find('_').unwrap()).is_none());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn imported_hole_suggestion_uses_declared_alias_and_flags_contracts() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-hole-import-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        fs::create_dir_all(root.join("src")).unwrap();
+        let source = "import \"src/text.zyl\" as text\nfn target() -> String { value: String = _ return value }\nfn main() {}\n";
+        fs::write(root.join("main.zyl"), source).unwrap();
+        fs::write(
+            root.join("src/text.zyl"),
+            "pub fn make() -> String requires { 1 < 2 } { return \"hello\" }\n",
+        )
+        .unwrap();
+        let analysis = analyze(&root.join("main.zyl"), &[]);
+        let hole =
+            typed_hole_entry(&analysis, "main.zyl", source.find("= _").unwrap() + 2).unwrap();
+        let suggestion = hole["suggestions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["expression"] == "text::make()")
+            .unwrap();
+        assert_eq!(suggestion["contractReview"], true);
+        let candidate = source.replacen("= _", "= text::make()", 1);
+        let checked = analyze(
+            &root.join("main.zyl"),
+            &[SourceOverlay {
+                path: "main.zyl".into(),
+                text: candidate,
+                version: 2,
+            }],
+        );
+        assert!(checked.success, "{:?}", checked.diagnostics);
         fs::remove_dir_all(root).unwrap();
     }
 }

@@ -416,6 +416,7 @@ fn editor_response(
         ("DELETE", "file") => delete_editor_file(state, parse_json_body(&request.body)?),
         ("POST", "check") => check_project(state, &parse_json_body(&request.body)?),
         ("POST", "verify") => verify_editor_project(state, &parse_json_body(&request.body)?),
+        ("POST", "typed-hole") => editor_typed_hole(state, &parse_json_body(&request.body)?),
         ("POST", "run") => run_editor_program(state, &parse_json_body(&request.body)?),
         ("POST", "stop-web-preview") => stop_editor_web_app(state),
         ("POST", "format") => format_editor_file(state, &parse_json_body(&request.body)?),
@@ -432,6 +433,46 @@ fn editor_response(
         }
         _ => Err((404, "not found".into())),
     }
+}
+
+fn editor_typed_hole(
+    state: &EditorState,
+    value: &Value,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let relative = value
+        .get("path")
+        .and_then(Value::as_str)
+        .filter(|path| path.ends_with(".zyl"))
+        .ok_or((400, "choose a Zelyra source file".into()))?;
+    let _path = safe_editor_path(&state.root, relative, false)?;
+    let source = value
+        .get("source")
+        .and_then(Value::as_str)
+        .ok_or((400, "source is required".into()))?;
+    if source.len() > EDITOR_MAX_FILE_BYTES {
+        return Err((413, "source exceeds the 1 MiB editor limit".into()));
+    }
+    let offset = value
+        .get("offset")
+        .and_then(Value::as_u64)
+        .ok_or((400, "UTF-16 offset is required".into()))?;
+    let entry = state.root.join("main.zyl");
+    if !entry.is_file() {
+        return Err((422, "project entry file main.zyl is missing".into()));
+    }
+    let version = value.get("version").and_then(Value::as_i64).unwrap_or(0);
+    let analysis = language_service::analyze(
+        &entry,
+        &[language_service::SourceOverlay {
+            path: relative.into(),
+            text: source.into(),
+            version,
+        }],
+    );
+    let byte_offset = utf16_to_byte(source, usize::try_from(offset).unwrap_or(usize::MAX));
+    let result = language_service::typed_hole_entry(&analysis, relative, byte_offset)
+        .unwrap_or_else(|| json!({"found":false,"version":version}));
+    Ok((200, "application/json; charset=utf-8", result.to_string()))
 }
 
 fn verify_editor_project(
@@ -5068,6 +5109,36 @@ fn main() {}
         let invalid: Value = serde_json::from_str(&invalid.2).unwrap();
         assert_eq!(invalid["success"], false);
         assert!(invalid["results"].as_array().unwrap().is_empty());
+        assert_eq!(fs::read_to_string(path).unwrap(), original);
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn studio_typed_hole_returns_exact_replace_span_without_writing() {
+        let state = project();
+        let path = state.root.join("main.zyl");
+        let original = "fn main() {}\n";
+        fs::write(&path, original).unwrap();
+        let source = "fn pure() -> String { return \"x\" }\nfn target(name: String) -> String { message: String = _ return message }\nfn main() {}\n";
+        let offset = byte_to_utf16(source, source.find("= _").unwrap() + 3);
+        let response = editor_typed_hole(
+            &state,
+            &json!({
+                "path":"main.zyl","source":source,"offset":offset,"version":3
+            }),
+        )
+        .unwrap();
+        let payload: Value = serde_json::from_str(&response.2).unwrap();
+        assert_eq!(payload["found"], true);
+        assert_eq!(payload["expectedType"], "String");
+        assert_eq!(payload["version"], 3);
+        assert_eq!(payload["editorSpan"]["start"], offset - 1);
+        assert_eq!(payload["editorSpan"]["end"], offset);
+        assert!(payload["suggestions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["expression"] == "name"));
         assert_eq!(fs::read_to_string(path).unwrap(), original);
         fs::remove_dir_all(state.root.clone()).unwrap();
     }

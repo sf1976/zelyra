@@ -1335,7 +1335,9 @@ rehearsals, and owner feedback do not substitute for participant testing.
   and declaration completion. Resolved function definition and references now
   work in Studio and LSP; LSP also previews compiler-checked function renames.
   A versioned gutter now displays real verifier outcomes and clears on invalid
-  source. Other symbol kinds, the remaining Studio modules, event channel, full release
+  source. A compiler-backed typed-hole menu in Studio and LSP filters known
+  exact types and declared Capabilities, with precise replacement spans.
+  Other symbol kinds, the remaining Studio modules, event channel, full release
   gates, and RC artifacts remain
   open; see the [1.1.0 work log](release-plans/1.1.0-studio-deep-native-progress.en.md).
 
