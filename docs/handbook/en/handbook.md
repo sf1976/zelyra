@@ -6,9 +6,9 @@ English · [Deutsche Ausgabe](/handbuch)
 
 Welcome to the complete Zelyra Handbook. It includes both the introductory textbook **"Learning Zelyra – Understandable Programming from the Foundations to Your Own Application"** (Parts I to X, Chapters 1 to 42), the **Technical Reference Manual** (Chapters 1 to 25), and comprehensive **Appendices** (A to J).
 
-> **Project status:** Zelyra 1.0.5 is the current stable release; the language compatibility line remains `0.1`. See the [implementation inventory](../../implemented.en.md) for supported scope and limits. The [1.0.5 release notes](../../release-notes/1.0.5.en.md) cover local Studio logs, uninstall, and the completed invoice tutorial workflow.
+> **Project status:** Zelyra 1.0.6 is the current stable release; the language compatibility line remains `0.1`. See the [implementation inventory](../../implemented.en.md) for supported scope and limits. The [1.0.6 release notes](../../release-notes/1.0.6.en.md) cover Zelyra UI, generated CRUD styling, themes, charts, print, and email drafts.
 
-> **1.0.6 development branch:** Zelyra UI is not part of the stable release yet. The current compiler- and browser-checked component reference is [Zelyra UI](../../ui.en.md); it identifies remaining verification limits.
+> **Zelyra UI:** The [component reference](../../ui.en.md) documents the released components and their tested limits. The invoice PDF uses the browser print dialog; attach the saved file manually to the prefilled email draft.
 
 ## Status marks
 
@@ -76,7 +76,7 @@ Welcome to the complete Zelyra Handbook. It includes both the introductory textb
 
 ### Technical Reference Manual
 
-- [Zelyra UI 1.0.6 development: components, variants, themes, print, and charts](../../ui.en.md)
+- [Zelyra UI 1.0.6: components, variants, themes, print, charts, and email](../../ui.en.md)
 
 - [Zelyra Studio: editor, schema map, and CRUD builder](../../studio.en.md)
 

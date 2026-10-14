@@ -69,7 +69,7 @@ oder Cargo installiert werden. Das gewählte Archiv wird über HTTPS geladen und
 per SHA-256 geprüft:
 
 ~~~bash
-./install.sh --release v1.0.5
+./install.sh --release v1.0.6
 ~~~
 
 Unter Windows steht `install.ps1` für PowerShell und `install.cmd` für die
@@ -85,7 +85,7 @@ zelyra --version
 Das Release-Archiv unter Windows:
 
 ~~~powershell
-.\install.ps1 -Release v1.0.5
+.\install.ps1 -Release v1.0.6
 ~~~
 
 Danach:
@@ -989,12 +989,11 @@ page "/dashboard" {
 
 *Hinweis:* Verschachtelte Komponenten-Slots innerhalb einer Komponentenverwendung benötigen nicht fälschlich ein übergeordnetes Seiten-`view:`-Layout.
 
-**Entwicklungsstand 1.0.6:** Die mitgelieferte Bibliothek wird explizit mit
+**Zelyra UI in 1.0.6:** Die mitgelieferte Bibliothek wird explizit mit
 `import "zelyra/ui" as ui` aktiviert. Sie stellt ein responsives Geschäftslayout,
 geprüfte Komponentenvarianten, Formular- und Tabellenbausteine sowie Druck-,
-Diagramm- und E-Mail-Client-Aktionen bereit. Sie ist im Entwicklungszweig
-implementiert, aber noch nicht Teil des stabilen Releases 1.0.5. Die vollständige
-Eigenschafts-/Slotreferenz und ihre Grenzen stehen in der
+Diagramm- und E-Mail-Client-Aktionen bereit. Sie gehört zum stabilen Release.
+Die vollständige Eigenschafts-/Slotreferenz und ihre Grenzen stehen in der
 [Zelyra-UI-Dokumentation](../../ui.de.md).
 
 ## 11. Formulare
@@ -1120,9 +1119,9 @@ Das System befüllt die benannten Slots `title`, `nav`, `content` und `actions` 
 
 Erzeugte CRUD- und Tableview-Steuerungen verwenden semantische Fieldsets und getrennte Beschriftungen für Operator und Wert jedes Filters. Filterverarbeitung und bewahrte Pagination-URLs verwenden eine deterministische Reihenfolge.
 
-🧪 Zelyra UI wird für 1.0.6 als mitgelieferte, typisierte Komponentenbibliothek
-entwickelt. Sie ist noch nicht im stabilen 1.0.5 enthalten; beliebiges CSS,
-HTML-Attribute und freie Klassen werden weiterhin nicht allgemein compilergeprüft.
+✅ Zelyra UI ist in 1.0.6 eine mitgelieferte, typisierte Komponentenbibliothek.
+Beliebiges CSS, HTML-Attribute und freie Klassen werden weiterhin nicht
+allgemein compilergeprüft.
 
 ### CRUD-Ansichten, Aktionen und Soft Delete
 
@@ -2384,7 +2383,7 @@ vom eigenen Zelyra-Lexer und -Parser gelesen, in eigene AST-/HIR-Strukturen
 
 Die Ähnlichkeit bei `fn`, geschweiften Klammern, `if`, `match` oder statischer
 Typisierung ist eine Designentscheidung, aber kein Abstammungsnachweis. Entschei-
-dend sind Grammatik, Semantik und Programmiermodell. Zelyra 1.0.5 ist ein stabiles Release mit einem eigenen Typ- und Laufzeitmodell.
+dend sind Grammatik, Semantik und Programmiermodell. Zelyra 1.0.6 ist ein stabiles Release mit einem eigenen Typ- und Laufzeitmodell.
 Die Statusangaben in diesem Kapitel benennen verfügbare, eingeschränkte und noch
 geplante Sprachmerkmale.
 
@@ -2416,7 +2415,7 @@ ausführbare Spracheigenschaft ausgegeben.
 | MariaDB-Schema | nicht Aufgabe der Rust-Sprache | Tabellen werden in Zelyra beschrieben | Generator erzeugt sichtbares SQL | 🧪 |
 | Formulare | Framework, Templates und Validierung selbst verbinden | `form`-Konstrukt und Tabellenregeln | Standardpfad ist Teil des Sprachmodells | 🧪 |
 | CRUD | muss programmiert oder über Frameworks erzeugt werden | deklaratives `crud Name -> table` mit gemeinsamem View-Feldprofil | aktuelle Runtime stellt CRUD-Routen bereit | 🧪 |
-| Views | externe Bibliotheken oder Frameworks | `page`/`html`, benannte `view`-Layouts, typisierte `component`-Bausteine und Default-/benannte Slots sind vorhanden; Zelyra UI ist im 1.0.6-Entwicklungszweig | keine allgemeine statische Prüfung beliebiger HTML-Klassen oder CSS | 🧪 |
+| Views | externe Bibliotheken oder Frameworks | `page`/`html`, benannte `view`-Layouts, typisierte `component`-Bausteine und Default-/benannte Slots sind vorhanden; Zelyra UI gehört zum stabilen 1.0.6 | keine allgemeine statische Prüfung beliebiger HTML-Klassen oder CSS | 🧪 |
 | Quellformatierung | `cargo fmt`, `rustfmt` | `zelyra fmt <file.zyl> [--check]` | deterministischer Zelyra-Formatter, schützt SQL und HTML | ✅ |
 | Refactoring/Wirkungsanalyse | `rust-analyzer`, Compiler-APIs | `zelyra impact`, `zelyra edit` | versionierte, atomare JSON-Maschinenschnittstellen | 🧪 |
 | Authentifizierung | externe Web-/Auth-Crates | Auth-Definition, Sessions und Berechtigungsprüfungen im Webmodul | Zelyra bündelt den Standardfall | 🧪 |
@@ -2427,7 +2426,7 @@ ausführbare Spracheigenschaft ausgegeben.
 | Jobs | externe Job-/Queue-Systeme | kein Hintergrundjob-Konstrukt | keine stabile Job-Syntax | ❌ |
 | Audit | externe Logs oder Audit-Crates | Audit-Tabelle, CLI-Auswertung und optionale Hash-Kette | an Auth/CRUD gebunden und noch experimentell | 🧪 |
 | Deployment | Cargo, Container, CI und Infrastruktur frei wählbar | generierte Docker-/Compose-Vorlage vorhanden | Vorlage ist Entwicklungsstart, keine Produktionsplattform | 🧪 |
-| Produktionsreife | Rust ist breit produktiv eingesetzt | Zelyra 1.0.5 ist ein stabiles Release mit engerem Ökosystem und begrenzten Nachweisen je Ablauf | Reife und Ökosystem sind nicht vergleichbar | 🧪 |
+| Produktionsreife | Rust ist breit produktiv eingesetzt | Zelyra 1.0.6 ist ein stabiles Release mit engerem Ökosystem und begrenzten Nachweisen je Ablauf | Reife und Ökosystem sind nicht vergleichbar | 🧪 |
 | Ökosystem | sehr groß: Crates, Tools, Frameworks | kleines eigenes Repository und wenige Integrationen | Zelyra kann Rust-Crates nicht direkt importieren | 🧪 |
 
 Rust ist also das technische Fundament, nicht die Anwendungssprache hinter
@@ -2670,9 +2669,8 @@ page "/customers/{name}" {
 Rust besitzt keine eingebaute HTML- oder Komponenten-Syntax; dort kommen
 Templates und Webframeworks hinzu. Zelyras `page`/`html`-Form sowie benannte
 Views, mehrere Default-/benannte Slots und verschachtelte typisierte Komponenten
-sind implementiert. Die Bibliothek Zelyra UI wird im Entwicklungszweig 1.0.6
-explizit über `import "zelyra/ui" as ui` eingebunden; sie gehört noch nicht zum
-stabilen 1.0.5. Die Zielsyntax `input`/`render` und `??` ist nicht implementiert.
+sind implementiert. Zelyra UI gehört zum stabilen Release 1.0.6. Die Zielsyntax
+`input`/`render` und `??` ist nicht implementiert.
 
 ### Verträge
 
@@ -2752,7 +2750,7 @@ Records/Enums, klare Grenzen, reproduzierbares Tooling und formale Prüfungen.
 > technische Fundament des Compilers – nicht die Sprache, die
 > Zelyra-Anwendungsentwickler schreiben.
 
-> **Status:** Zelyra 1.0.5 ist ein stabiles Release. Einige Sprachmerkmale
+> **Status:** Zelyra 1.0.6 ist ein stabiles Release. Einige Sprachmerkmale
 > sind eingeschränkt oder geplant; die Statusangaben an den Beispielen grenzen
 > den tatsächlich verfügbaren Umfang ab.
 
@@ -2795,7 +2793,7 @@ zusammen gedacht sind.
    sollen den Lern- und Entwicklungsweg ohne Apache, PHP oder ein verpflichtendes
    Framework-Bündel ermöglichen.
 
-Zelyra 1.0.5 ist ein stabiles Release mit einem engeren Funktionsumfang und
+Zelyra 1.0.6 ist ein stabiles Release mit einem engeren Funktionsumfang und
 dokumentierten Grenzen. Die Roadmap beschreibt geplante Erweiterungen; aus dem
 Release-Status folgt keine allgemeine Produktionsgarantie.
 

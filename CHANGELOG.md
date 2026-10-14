@@ -6,7 +6,7 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
-### 1.0.6 development
+## 1.0.6 — 2026-10-14
 
 - Add Zelyra UI as a compiler-loaded, locally bundled component library with
   scoped, layered CSS, progressive JavaScript, project themes, and a checked

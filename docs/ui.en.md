@@ -1,10 +1,10 @@
-# Zelyra UI (1.0.6 development)
+# Zelyra UI (1.0.6)
 
 Zelyra UI is the locally delivered default design system for business
 interfaces. Zelyra's compiler loads and checks its components. CSS and a small
 enhancement script are embedded in the Zelyra binary; an application needs no
-npm, frontend build, or CDN request. This document describes the current branch
-state. Until it is released, 1.0.5 remains the stable release.
+npm, frontend build, or CDN request. This document describes the released 1.0.6
+interface and its tested limits.
 
 ## Getting started
 
@@ -250,12 +250,11 @@ Full Tabler compatibility is not claimed. The built-in stylesheet can be
 replaced by Tabler, but old Tabler classes are not automatically converted to
 Zelyra components.
 
-## Limits and release state
+## Limits
 
-This is the 1.0.6 development state, not a published release. Only the
-components listed above are provided; arbitrary HTML attributes, CSS classes,
-or project CSS are not generally statically checked. PDF currently means
-printing or saving as PDF in the browser; there is no custom PDF renderer or
-automatic attachment delivery. Save the invoice as a PDF in the print dialog,
-then attach it manually to the email draft. Server-side email requires an
-explicitly authorized route, `mail_queue`, and the documented outbox worker.
+Only the components listed above are provided; arbitrary HTML attributes, CSS
+classes, or project CSS are not generally statically checked. PDF currently
+means printing or saving as PDF in the browser; there is no custom PDF renderer
+or automatic attachment delivery. Save the invoice as a PDF in the print
+dialog, then attach it manually to the email draft. Server-side email requires
+an explicitly authorized route, `mail_queue`, and the documented outbox worker.

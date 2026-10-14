@@ -202,6 +202,10 @@ RELEASE_PLAN_CHECKLISTS = {
         ("docs/release-plans/0.9.9.en.md", "## Exit criteria"),
         ("docs/release-plans/0.9.9.de.md", "## Abschlusskriterien"),
     ),
+    "1.0.6": (
+        ("docs/release-plans/1.0.6-zelyra-ui-progress.en.md", "## Release gates"),
+        ("docs/release-plans/1.0.6-zelyra-ui-progress.de.md", "## Release-Gates"),
+    ),
 }
 
 

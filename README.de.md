@@ -11,15 +11,15 @@ Business-, Datenbank- und Webanwendungen. Schemaabhängiges SQL, Formulare,
 CRUD, Views und Geschäftslogik greifen ineinander; gewöhnlicher Programmcode
 und natives SQL bleiben jederzeit möglich.
 
-> **Aktuelles stabiles Release: 1.0.5 · Sprachkompatibilitätslinie: 0.1**
+> **Aktuelles stabiles Release: 1.0.6 · Sprachkompatibilitätslinie: 0.1**
 >
 > Die Compilerprüfung und der Verifier decken klar abgegrenzte Bereiche ab. Sie beweisen nicht die Korrektheit beliebiger Anwendungen. Prüfe vor dem Einsatz die unterstützten Abläufe und Grenzen in der jeweiligen Dokumentation.
 
-Das aktuelle stabile [Release v1.0.5](https://github.com/sf1976/zelyra/releases/tag/v1.0.5) baut auf den Sprach- und Plattformfunktionen von 1.0.0 auf. Neu sind lokale, in Studio abrufbare Logs, der sichere Befehl `zelyra uninstall` und ein überarbeitetes Rechnungstutorial mit reinem Datumsfeld, automatisch vergebener Rechnungsnummer, Ablauf-Startseite und ausführlicher zweisprachiger Quelltexterklärung. Details stehen in den [Release-Notizen 1.0.5](docs/release-notes/1.0.5.de.md), der [Datenbank-Supportmatrix](docs/database-support.de.md) und der [Implementierungsübersicht](docs/implemented.de.md).
+Das aktuelle stabile [Release v1.0.6](https://github.com/sf1976/zelyra/releases/tag/v1.0.6) ergänzt Zelyra UI: ein lokales, compilergeprüftes Komponentensystem für erzeugte CRUD-Seiten, Projektvorlagen, Studio-Eigenschaften und das Rechnungstutorial. Enthalten sind Projektthemes, barrierearme Diagramme, responsive Layouts und Browserdruck mit PDF-Ausgabe. Details stehen in den [Release-Notizen 1.0.6](docs/release-notes/1.0.6.de.md), im [UI-Leitfaden](docs/ui.de.md), in der [Datenbank-Supportmatrix](docs/database-support.de.md) und der [Implementierungsübersicht](docs/implemented.de.md).
 
 Die Sprachkompatibilitätslinie bleibt `0.1`; Compiler-Releases ändern sie nicht automatisch. „Korrektheit beweisen“ ist ein Entwicklungsziel: Der Verifier unterscheidet geprüfte, zur Laufzeit geprüfte und nicht bewiesene Bereiche, ist aber kein allgemeiner Theorembeweiser.
 
-## Was Zelyra 1.0.5 bietet
+## Was Zelyra 1.0.6 bietet
 
 Zelyra verbindet Sprache, Compiler, Datenbank, Webanwendung und Studio in
 einem Arbeitsablauf. Der aktuelle Stand umfasst:
@@ -35,6 +35,9 @@ einem Arbeitsablauf. Der aktuelle Stand umfasst:
 - lokale, um Geheimnisse bereinigte JSONL-Logs für Programmlauf und Vorschau,
   abrufbar in Studio, sowie `zelyra uninstall` für die aktive benutzereigene
   Installation;
+- Zelyra UI mit compilergeprüften Komponenten, Gestaltung der erzeugten CRUD-
+  Seiten, hellen/dunklen Themes, kompakter Dichte, lokaler Asset-Auslieferung,
+  Druckstilen und textuell gleichwertigen Balken-, Linien- und Ringdiagrammen;
 - ein Rechnungstutorial mit wiederholbaren Beispieldaten, freier Portwahl,
   isolierten Compose-Volumes, aufgabenorientierter Startseite, reinem Datumsfeld,
   serverseitiger Rechnungsnummer und vollständiger deutscher und englischer
@@ -120,8 +123,8 @@ weitere Einstellungen stehen in der Umgebungsreferenz.
 | Projekt oder Umgebung konfigurieren möchtest | [Umgebung und Konfiguration](docs/env.md) · [English reference](docs/env.en.md) |
 | Datenbankunterstützung prüfen möchtest | [Datenbank-Supportmatrix](docs/database-support.de.md) · [English](docs/database-support.en.md) |
 | den lokalen Editor oder sichere Regex-Änderungen nutzen möchtest | [Zelyra Studio](docs/web-editor.de.md) · [Textänderungsbefehl](docs/text-edit.de.md) |
-| Zelyra UI im Entwicklungszweig 1.0.6 verwenden möchtest | [Komponenten-, Formular-, Theme-, Druck-, Diagramm- und E-Mail-Referenz](docs/ui.de.md) · [English](docs/ui.en.md) |
-| aktuelle und geplante Arbeiten prüfen möchtest | [Roadmap](docs/ROADMAP.de.md) · [Release-Notizen 1.0.5](docs/release-notes/1.0.5.de.md) |
+| Zelyra UI verwenden möchtest | [Komponenten-, Formular-, Theme-, Druck-, Diagramm- und E-Mail-Referenz](docs/ui.de.md) · [English](docs/ui.en.md) |
+| aktuelle und geplante Arbeiten prüfen möchtest | [Roadmap](docs/ROADMAP.de.md) · [Release-Notizen 1.0.6](docs/release-notes/1.0.6.de.md) |
 | die Entwicklungsrichtung verstehen möchtest | [Manifest](docs/MANIFESTO.de.md) · [KI-native Architektur](docs/architecture/ai-native-development.de.md) · [Entwurf lesbarer Regex-Textbearbeitung](docs/design/readable-regex-text-editing.de.md) |
 | konkrete Release-Änderungen suchst | [Changelog](CHANGELOG.md) · [GitHub-Releases](https://github.com/sf1976/zelyra/releases) |
 

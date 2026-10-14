@@ -2699,12 +2699,12 @@ zelyra serve src/main.zyl 0.0.0.0:8080
 ## Kapitel 41: Aktueller Stand und Roadmap
 
 ### 1. Was lerne ich in diesem Kapitel?
-- Was Zelyra 1.0.5 enthält und wie die Sprachkompatibilitätslinie 0.1 davon getrennt bleibt.
+- Was Zelyra 1.0.6 enthält und wie die Sprachkompatibilitätslinie 0.1 davon getrennt bleibt.
 - Welche Erweiterungen seit 1.0.0 hinzugekommen sind.
 - Wo du geprüfte Funktionen, Grenzen und geplante Arbeiten nachliest.
 
 ### 2. Warum ist das Thema wichtig?
-Compiler-Version und Sprachkompatibilitätslinie beschreiben unterschiedliche Dinge. Ein Update auf Zelyra 1.0.5 ändert die in `zelyra.toml` festgelegte Sprachlinie nicht automatisch. Release-Notizen zeigen, was eine Version ergänzt; Implementierungsübersicht, Datenbankmatrix und Roadmap erklären den Umfang und seine Grenzen.
+Compiler-Version und Sprachkompatibilitätslinie beschreiben unterschiedliche Dinge. Ein Update auf Zelyra 1.0.6 ändert die in `zelyra.toml` festgelegte Sprachlinie nicht automatisch. Release-Notizen zeigen, was eine Version ergänzt; Implementierungsübersicht, Datenbankmatrix und Roadmap erklären den Umfang und seine Grenzen.
 
 ### 3. Was kam seit Zelyra 1.0.0 hinzu?
 - **1.0.1:** Docker Compose v2 wird erkannt; Python Compose v1 wird mit einem konkreten Update-Hinweis abgewiesen. Der Studio-Ausführen-Knopf startet den Projekteinstieg.
@@ -2712,13 +2712,14 @@ Compiler-Version und Sprachkompatibilitätslinie beschreiben unterschiedliche Di
 - **1.0.3:** Die Standardbibliothek ergänzt Mathematik, Textverarbeitung, Arrays, Sets, Maps, Datumsrechnung, Fehlerkontrolle, Konvertierung, Encodings und Pfadfunktionen. Dazu kommen der typgeprüfte Pipeline-Operator `|>`, flache `else if`-Kaskaden, deklarierte Schemaanzeige ohne erreichbare Datenbank, automatische Tutorialeinrichtung, freie lokale Ports, wiederholbare Beispieldaten und ein begrenzter Rekursionstiefenschutz.
 - **1.0.4:** Rechnungstutorials erhalten einen eigenen Compose-Projektnamen. Ältere Tutorials können nach einem Authentifizierungsfehler eine isolierte Datenbank verwenden, ohne das alte Volume zu löschen oder zu verändern. Compose-Versionen wie `2.40` werden erkannt.
 - **1.0.5:** Studio zeigt lokale strukturierte Logs; `zelyra uninstall` entfernt die aktive benutzereigene Programmdatei nach Bestätigung. Das Rechnungstutorial hat eine Ablauf-Startseite, eine Rechnungsübersicht, reine Datumseingabe, automatisch vergebene Rechnungsnummern und ausführliche deutsche und englische Quelltextanleitungen.
+- **1.0.6:** Zelyra UI stellt compilergeprüfte Komponenten und lokal gebündelte Stile für erzeugtes CRUD, Projektvorlagen, Studio-Eigenschaften und Rechnungstutorial bereit. Dazu kommen Themes, responsive Layouts, Diagrammkomponenten, Browserdruck/PDF und vorausgefüllte E-Mail-Entwürfe. PDF-Dateien werden im Mailprogramm manuell angehängt.
 
 Die einzelnen Änderungen stehen in den [Release-Notizen](../../release-notes/). Der vollständige Funktionskatalog der Standardbibliothek steht in [Anhang D](anhaenge.md#anhang-d-die-standardbibliothek-im-überblick-zelyra-103).
 
 ### 4. Rechnungstutorial starten und bearbeiten
 `zelyra --tutorial invoice` richtet das lokale Tutorial ein. Dafür werden Docker Engine und Docker Compose v2 oder neuer benötigt; Python Compose v1 wird nicht unterstützt. In Zelyra Studio öffnest du das Projekt mit `zelyra editor ./invoice-tutorial`, wählst `main.zyl` und klickst auf **Run**. Studio startet die lokale MariaDB über Compose, richtet Schema und wiederholbare Beispieldaten ein und startet anschließend die lokale Webvorschau. MariaDB läuft im Container; die Webvorschau ist ein lokaler Zelyra-Prozess. Unter **Logs** kannst du strukturierte Start- und Vorschauausgaben ansehen.
 
-Bearbeite die Quelldateien im Projektbaum: `src/customers.zyl` für Kunden, `src/items.zyl` für Artikel, `src/invoices.zyl` für Rechnungen und Positionen, `src/dashboard.zyl` für die Rechnungsübersicht, `src/shell.zyl` für das gemeinsame Layout und `zelyra.theme.css` für lokale Gestaltung. Neue Geschäftsdatensätze legst du über die Anwendungsformulare an. `issued_at` nimmt ein Kalenderdatum an; die Rechnungsnummer vergibt der Server beim Speichern. Die Beispieldaten aus dem Seed sind Startdaten und werden bei erneutem Start nicht dupliziert. Die [Tutorial-Anleitung](../../tutorials/invoice.de.md) verweist auf die ausführliche Quelldatei-Erklärung im erzeugten Projekt.
+Bearbeite die Quelldateien im Projektbaum: `src/customers.zyl` für Kunden, `src/items.zyl` für Artikel, `src/invoices.zyl` für Rechnungen und Positionen, `src/dashboard.zyl` für die Rechnungsübersicht, `src/shell.zyl` für das gemeinsame Layout und `zelyra.theme.css` für lokale Gestaltung. Das Tutorial verwendet standardmäßig das eingebaute Zelyra-UI-CSS; die Theme-Datei passt dieses Designsystem an. Tabler oder ein anderes lokales Stylesheet lässt sich über `ZELYRA_UI_STYLESHEET` auswählen. Neue Geschäftsdatensätze legst du über die Anwendungsformulare an. `issued_at` nimmt ein Kalenderdatum an; die Rechnungsnummer vergibt der Server beim Speichern. Die Beispieldaten aus dem Seed sind Startdaten und werden bei erneutem Start nicht dupliziert. Unter `/invoices/RECHNUNGSNUMMER/print` öffnet sich der Browserdruck; dort **Als PDF speichern** wählen. `EmailLink` öffnet einen lokalen Entwurf, an den die PDF manuell angehängt wird. Siehe den [Zelyra-UI-Leitfaden](../../ui.de.md) und die [Rechnungstutorial-Anleitung](../../tutorials/invoice.de.md) mit der ausführlichen Quelldatei-Erklärung im erzeugten Projekt.
 
 ### 5. Kompatibilität und Grenzen
 - Die Sprachkompatibilitätslinie bleibt `0.1`; Compiler- und Sprachversion sind getrennt.
@@ -2742,7 +2743,7 @@ docker compose version
 Prüfe danach die Release-Notizen der installierten Version und vergleiche den gewünschten Ablauf mit der Datenbankmatrix.
 
 ### 9. Zusammenfassung
-- Zelyra 1.0.5 ist das aktuelle stabile Release; die Sprachkompatibilitätslinie bleibt `0.1`.
+- Zelyra 1.0.6 ist das aktuelle stabile Release; die Sprachkompatibilitätslinie bleibt `0.1`.
 - 1.0.3 erweitert die Standardbibliothek und fügt `|>`-Pipelines sowie flache `else if`-Kaskaden hinzu.
 - Das Rechnungstutorial läuft lokal mit MariaDB in Docker Compose und einer lokalen Webvorschau; Studio kann den gesamten Tutorialstart ausführen.
 - Release-Notizen beschreiben gelieferte Änderungen, die Roadmap beschreibt geplante Arbeit.

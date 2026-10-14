@@ -1,10 +1,10 @@
-# Zelyra UI (Entwicklung für 1.0.6)
+# Zelyra UI (1.0.6)
 
 Zelyra UI ist das lokale Standard-Designsystem für Geschäftsoberflächen. Die
 Komponenten werden vom Zelyra-Compiler geladen und geprüft. CSS und das kleine
 Enhancement-Script sind im Zelyra-Binary enthalten; ein Projekt braucht weder
-npm noch einen Frontend-Build oder CDN-Zugriff. Dieses Dokument beschreibt den
-aktuellen Branch-Stand. Bis zur Freigabe bleibt 1.0.5 das stabile Release.
+npm noch einen Frontend-Build oder CDN-Zugriff. Dieses Dokument beschreibt die
+veröffentlichte Schnittstelle von 1.0.6 und ihre geprüften Grenzen.
 
 ## Einstieg
 
@@ -256,14 +256,12 @@ Bearbeitung. Eine vollständige Tabler-Kompatibilität wird nicht zugesichert.
 Die interne Standard-CSS-Auswahl kann Tabler ersetzen, doch alte Tabler-Klassen
 werden nicht automatisch in Zelyra-Komponenten umgewandelt.
 
-## Grenzen und Entwicklung
+## Grenzen
 
-Diese Implementierung ist der Entwicklungsstand von 1.0.6 und noch kein
-veröffentlichtes Release. Unterstützt sind die in den Tabellen genannten
-Komponenten; beliebige HTML-Attribute, CSS-Klassen oder beliebiges Projekt-CSS
-werden nicht allgemein statisch geprüft. PDF bedeutet aktuell Drucken bzw.
-„Als PDF speichern“ im Browser; es gibt keinen eigenen PDF-Renderer oder
-automatischen Versand von Anhängen. Speichere die Rechnung zuerst im
-Druckdialog als PDF und hänge sie im E-Mail-Entwurf manuell an. Serverseitige
-Mail benötigt eine bewusst autorisierte Route, `mail_queue` und den
-dokumentierten Outbox-Worker.
+Unterstützt sind die in den Tabellen genannten Komponenten; beliebige
+HTML-Attribute, CSS-Klassen oder beliebiges Projekt-CSS werden nicht allgemein
+statisch geprüft. PDF bedeutet aktuell Drucken bzw. „Als PDF speichern“ im
+Browser; es gibt keinen eigenen PDF-Renderer oder automatischen Versand von
+Anhängen. Speichere die Rechnung zuerst im Druckdialog als PDF und hänge sie im
+E-Mail-Entwurf manuell an. Serverseitige Mail benötigt eine bewusst
+autorisierte Route, `mail_queue` und den dokumentierten Outbox-Worker.
