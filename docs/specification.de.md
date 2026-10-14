@@ -790,3 +790,26 @@ Erzeugte MariaDB-/MySQL-Editformulare signieren natives NULL getrennt von Text
 und prüfen die gesperrte aktuelle Zeile vor dem Schreiben. NULL-/Literal-`\N`-
 Wechsel liefern für veraltete Formulare HTTP 409. Fehlende nullable Felder binden
 SQL-NULL; Pflicht-/Readonly-Prüfungen bleiben. [Regeln und Grenzen](edit-snapshots.de.md).
+
+## Schrittweite für Integer-Bereiche in 1.0.2
+
+`for`-Schleifen können für exklusive Integer-Bereiche eine optionale
+Schrittweite erhalten:
+
+~~~zelyra
+for i in 1..21 step 2 {
+    print(i)
+}
+
+for i in 10..0 step -3 {
+    print(i)
+}
+~~~
+
+Standardmäßig gilt die Schrittweite `1`. Positive Werte zählen aufwärts,
+negative abwärts; eine Richtung, die das exklusive Ende nicht erreichen kann,
+ergibt einen leeren Bereich. Eine Schrittweite von null ist ein Laufzeitfehler;
+der Ausdruck muss den Typ `Int` haben. `range(start, end, step)` gibt dieselben
+Werte als Array zurück. Materialisierte `range`-Arrays sind wie bei der
+zweistelligen Form auf eine Million Elemente begrenzt; Bereichsschleifen
+materialisieren kein Array.

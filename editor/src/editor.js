@@ -80,7 +80,7 @@ const messages = {
     taskRun: "Programm oder Web-App starten", taskRunHelp: "Konsolenprogramme mit Zelyras Laufzeit ausführen oder Webanwendungen lokal starten; konfigurierte Effekte sind möglich, interaktive Eingabe fehlt",
     projectMap: "Projektkarte", projectMapTitle: "Projektbeziehungen", projectMapOpenSource: "Quelltext öffnen", projectMapLoading: "Compiler-Projektmodell wird geladen …", projectMapUnavailable: "Projektkarte konnte nicht erstellt werden.", projectMapIncomplete: "Die Karte ist unvollständig. Nicht auflösbare oder begrenzte Beziehungen werden nicht geraten.", projectMapIssues: { "view.unresolved": "Ansicht nicht gefunden", "view.ambiguous": "Ansichtsname mehrfach vorhanden", "crud.table_unresolved": "CRUD-Tabelle nicht eindeutig", "api.handler_unresolved": "API-Funktion nicht eindeutig", "import.unresolved": "Importziel nicht gefunden", "edge.target_missing": "Beziehungsziel fehlt", "limit.nodes": "Knotenlimit erreicht", "limit.edges": "Beziehungslimit erreicht" }, projectMapEmpty: "Noch keine unterstützten Beziehungen im Projekt.", projectMapModules: "Module", projectMapData: "Daten und Ansichten", projectMapWeb: "Routen und APIs", projectMapLogic: "Funktionen",
     runButton: "Starten", runButtonTitle: "main.zyl ausführen oder Webanwendung starten",
-    runOutputTitle: "Programmausgabe", runStarting: "main.zyl wird ausgeführt …", runSuccess: "Programm erfolgreich beendet", runFailure: "Programm mit Fehler beendet", runTimeout: "Ausführung nach 15 Sekunden beendet", runOutputTruncated: "Die Ausgabe ist auf 64 KiB je Stream begrenzt.", runNoOutput: "Keine Ausgabe.", runStdout: "AUSGABE", runStderr: "FEHLER", runInputUnavailable: "Studio stellt dem Programm keine interaktive Eingabe bereit.", runWebReady: "Webanwendung läuft lokal:", runWebOpen: "Anwendung im Browser öffnen", runWebStop: "Vorschau beenden", runWebStopped: "Lokale Vorschau wurde beendet.",
+    runOutputTitle: "Programmausgabe", runStarting: "Anwendung wird vorbereitet und gestartet …", runSuccess: "Programm erfolgreich beendet", runFailure: "Programm mit Fehler beendet", runTimeout: "Ausführung nach 15 Sekunden beendet", runOutputTruncated: "Die Ausgabe ist auf 64 KiB je Stream begrenzt.", runNoOutput: "Keine Ausgabe.", runStdout: "AUSGABE", runStderr: "FEHLER", runInputUnavailable: "Studio stellt dem Programm keine interaktive Eingabe bereit.", runWebReady: "Webanwendung läuft lokal:", runWebOpen: "Anwendung im Browser öffnen", runWebStop: "Vorschau beenden", runWebStopped: "Lokale Vorschau wurde beendet.",
     taskHelp: "Kontexthilfe öffnen", taskHelpHelp: "Hilfe zum Begriff am Cursor anzeigen", taskProperties: "Dateieigenschaften öffnen",
     taskPropertiesHelp: "Informationen und Aktionen zur aktuellen Datei anzeigen", taskSearch: "Text suchen", taskSearchHelp: "Im aktuellen Dokument suchen",
     taskGoToDefinition: "Zur Definition springen", taskGoToDefinitionHelp: "Zur Funktion oder zum Typ am Cursor springen (F12)",
@@ -175,7 +175,7 @@ const messages = {
     taskRun: "Run program or web app", taskRunHelp: "Run console programs with Zelyra or start web applications locally; configured effects are possible, and interactive input is unavailable",
     projectMap: "Project map", projectMapTitle: "Project relationships", projectMapOpenSource: "Open source location", projectMapLoading: "Loading the compiler project model …", projectMapUnavailable: "Could not create the project map.", projectMapIncomplete: "The map is incomplete. Unresolved or limited relationships are not guessed.", projectMapIssues: { "view.unresolved": "View not found", "view.ambiguous": "View name is ambiguous", "crud.table_unresolved": "CRUD table is not unique", "api.handler_unresolved": "API function is not unique", "import.unresolved": "Import target not found", "edge.target_missing": "Relationship target is missing", "limit.nodes": "Node limit reached", "limit.edges": "Relationship limit reached" }, projectMapEmpty: "No supported relationships in this project yet.", projectMapModules: "Modules", projectMapData: "Data and views", projectMapWeb: "Routes and APIs", projectMapLogic: "Functions",
     runButton: "Run", runButtonTitle: "Run main.zyl or start the web application",
-    runOutputTitle: "Program output", runStarting: "Running main.zyl …", runSuccess: "Program finished successfully", runFailure: "Program finished with an error", runTimeout: "Execution stopped after 15 seconds", runOutputTruncated: "Output is limited to 64 KiB per stream.", runNoOutput: "No output.", runStdout: "OUTPUT", runStderr: "ERROR", runInputUnavailable: "Studio does not provide interactive input to the program.", runWebReady: "Web application is running locally:", runWebOpen: "Open application in browser", runWebStop: "Stop preview", runWebStopped: "Local preview stopped.",
+    runOutputTitle: "Program output", runStarting: "Preparing and starting the application …", runSuccess: "Program finished successfully", runFailure: "Program finished with an error", runTimeout: "Execution stopped after 15 seconds", runOutputTruncated: "Output is limited to 64 KiB per stream.", runNoOutput: "No output.", runStdout: "OUTPUT", runStderr: "ERROR", runInputUnavailable: "Studio does not provide interactive input to the program.", runWebReady: "Web application is running locally:", runWebOpen: "Open application in browser", runWebStop: "Stop preview", runWebStopped: "Local preview stopped.",
     taskHelp: "Open contextual help", taskHelpHelp: "Show help for the term at the cursor", taskProperties: "Open file properties",
     taskPropertiesHelp: "Show information and actions for the active file", taskSearch: "Find text", taskSearchHelp: "Search in the active document",
     taskGoToDefinition: "Go to definition", taskGoToDefinitionHelp: "Go to the function or type at the cursor (F12)",
@@ -338,7 +338,7 @@ function setLanguage(next) {
 }
 
 const keywords = new Set((
-  "fn let mut if else match for in while loop break continue return type record " +
+  "fn let mut if else match for in step while loop break continue return type record " +
   "table view component layout slot page api form crud tableview auth database " +
   "sql uses capability requires ensures invariant true false null none some ok err"
 ).split(/\s+/));
@@ -353,7 +353,8 @@ const languageHelp = {
   route: ["Route", "Ordnet eine Adresse und HTTP-Methode einem Handler zu.", "route GET /kunden { ... }", "Doppelte Routen erkennt die Projektprüfung."],
   component: ["Komponente", "Bündelt wiederverwendbare Darstellung und Verhalten.", "component Hinweis { ... }", "Eine Komponente kann in Ansichten wiederverwendet werden."],
   if: ["Bedingung", "Führt einen Block aus, wenn der Ausdruck wahr ist.", "if kunde.aktiv { ... }", "Mit else lässt sich ein Alternativpfad beschreiben."],
-  for: ["Wiederholung", "Verarbeitet jedes Element einer Liste in einem Block.", "for artikel in artikel { ... }", "Der Name nach `for` bezeichnet das aktuelle Element."],
+  for: ["Wiederholung", "Verarbeitet jedes Listenelement oder einen Integer-Bereich in einem Block.", "for i in 1..21 step 2 { ... }", "Das Bereichsende ist exklusiv; die Schrittweite kann positiv oder negativ sein."],
+  step: ["Schrittweite", "Legt den Abstand einer Integer-Bereichsschleife fest.", "for i in 1..21 step 2 { ... }", "Positive Werte zählen aufwärts, negative abwärts. Null ist ungültig."],
   match: ["Fallunterscheidung", "Wählt einen passenden Zweig anhand eines Wertes.", "match status { ... }", "Hilft, alle bekannten Fälle sichtbar abzudecken."],
   record: ["Datensatztyp", "Definiert zusammengehörige typisierte Werte.", "record Adresse {\n  ort: Text\n  plz: Text\n}", "Datensatztypen machen Datenformen im Code sichtbar."],
   type: ["Typ", "Definiert einen eigenen Typnamen oder Typverbund.", "type KundenId = Zahl", "Typen helfen der IDE, Werte und Fehler einzuordnen."],
@@ -380,7 +381,8 @@ const languageHelpEn = {
   route: ["route", "Maps an address and HTTP method to a handler.", "route GET /customers { ... }", "Project checks report duplicate routes."],
   component: ["component", "Groups reusable presentation and behavior.", "component Notice { ... }", "Components can be reused in views."],
   if: ["condition", "Runs a block when its expression is true.", "if customer.active { ... }", "Use else to describe an alternative path."],
-  for: ["iteration", "Processes each item in a list inside a block.", "for item in items { ... }", "The name after `for` refers to the current item."],
+  for: ["iteration", "Processes each list item or integer in a range inside a block.", "for i in 1..21 step 2 { ... }", "Range ends are exclusive; the step may be positive or negative."],
+  step: ["range step", "Sets the distance between values in an integer range loop.", "for i in 1..21 step 2 { ... }", "Positive values count upward, negative values downward. Zero is invalid."],
   match: ["pattern match", "Selects a branch based on a value.", "match status { ... }", "Makes known cases visible in the source."],
   record: ["record type", "Defines a group of related, typed values.", "record Address {\n  city: Text\n  zip: Text\n}", "Record types make data shapes explicit."],
   type: ["type", "Defines a type alias or a named type.", "type CustomerId = Number", "Types help Studio and the compiler identify values and errors."],

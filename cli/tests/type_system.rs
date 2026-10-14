@@ -96,7 +96,7 @@ fn type_coverage_program_passes_supported_tests_and_reports_expected_failures() 
         "PASS records, nested fields",
         "PASS Unit type, function return",
         "PASS Option, Result, records",
-        "PASS calendar arithmetic, Timestamp ordering, Decimal quantization, scalar text formatting, exclusive ranges",
+        "PASS calendar arithmetic, Timestamp ordering, Decimal quantization, scalar text formatting, exclusive stepped ranges",
         "PASS unit and payload enums, equality, exhaustive match and JSON round trip",
         "PASS named typed function values, argument checking and indirect calls",
         "PASS classes, shared references, identity equality and checked field updates",

@@ -463,6 +463,10 @@ jobs:
           ZELYRA_REF: ${{ github.head_ref || github.ref_name }}
           ZELYRA_INVOICE_BROWSER_E2E: '1'
         run: bash ./tests/invoice-tutorial-e2e.sh
+      - name: Verify invoice tutorial first-click Studio startup from a cold Docker database
+        env:
+          ZELYRA_BIN: target/debug/zelyra
+        run: bash ./tests/invoice-studio-cold-compose-e2e.sh
   mariadb-compatibility:
     name: MariaDB ${{ matrix.version }} compatibility
     runs-on: ubuntu-latest
@@ -549,7 +553,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       mysql:
-        image: public.ecr.aws/docker/library/mysql:8.4.11
+        image: mirror.gcr.io/library/mysql:8.4.11
         env:
           MYSQL_DATABASE: zelyra_ci
           MYSQL_ROOT_PASSWORD: root
@@ -577,7 +581,7 @@ jobs:
             *) echo "Expected MySQL 8.4.11, got ${server_version}" >&2; exit 1 ;;
           esac
           echo "Testing MySQL ${server_version}"
-          docker image inspect public.ecr.aws/docker/library/mysql:8.4.11 --format '{{json .RepoDigests}}'
+          docker image inspect mirror.gcr.io/library/mysql:8.4.11 --format '{{json .RepoDigests}}'
       - name: Run parameterized Zelyra SQL against MySQL
         env:
           DATABASE_URL: mysql://root:root@127.0.0.1:3306/zelyra_ci

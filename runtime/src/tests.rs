@@ -587,6 +587,62 @@ fn main() {
 }
 
 #[test]
+fn stepped_integer_ranges_support_ascending_descending_and_array_values() {
+    let source = r#"
+fn main() {
+    mutable total = 0
+    for position in 1..21 step 2 {
+        total = total + position
+    }
+    print(total)
+    for position in 10..0 step -3 { print(position) }
+    for position in 1..10 step -1 { print(position) }
+    print(range(1, 10, 3))
+    print(range(5, 0, -2))
+    mutable stride = 4
+    for position in 0..10 step stride { print(position) }
+    for position in 9223372036854775806..9223372036854775807 step 2 { print(position) }
+    for position in -9223372036854775807..-9223372036854775808 step -2 { print(position) }
+}
+"#;
+    assert_eq!(
+        run(source),
+        [
+            "100",
+            "10",
+            "7",
+            "4",
+            "1",
+            "[1, 4, 7]",
+            "[5, 3, 1]",
+            "0",
+            "4",
+            "8",
+            "9223372036854775806",
+            "-9223372036854775807"
+        ]
+    );
+}
+
+#[test]
+fn stepped_integer_ranges_reject_zero_steps_and_non_int_steps() {
+    let zero_step =
+        parse(&lex("fn main() { for position in 1..5 step 0 { print(position) } }").unwrap())
+            .unwrap();
+    check(&zero_step).expect("an Int step has a valid static type");
+    let error = execute(&zero_step).expect_err("a zero step must not create an infinite loop");
+    assert!(error.message.contains("range step must not be zero"));
+
+    let wrong_type =
+        parse(&lex("fn main() { for position in 1..5 step \"two\" { print(position) } }").unwrap())
+            .unwrap();
+    let errors = check(&wrong_type).expect_err("the step must be an Int");
+    assert!(errors
+        .iter()
+        .any(|error| error.message.contains("expected `Int`, found `String`")));
+}
+
+#[test]
 fn value_semantic_array_and_record_updates_leave_originals_unchanged() {
     let source = r#"
 struct Customer { name: String city: String }

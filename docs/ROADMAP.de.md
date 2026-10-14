@@ -29,6 +29,109 @@ den tatsächlich implementierten Stand.
 
 ## Aktuelle Meilensteine
 
+- [ ] **Geplant für 1.1.0 — Compose-Prüfung im Installer:** Die Installer
+  erkennen Docker Compose v2 oder neuer und unterscheiden es von der veralteten
+  Python-Version v1. Docker bleibt für die Kerninstallation optional. Fehlt
+  Compose v2, bieten interaktive Linux-Installer auf unterstützten
+  Paketquellen nach ausdrücklicher Zustimmung die Installation des Compose-v2-
+  Plugins an; andernfalls zeigen sie passende Installationshinweise. Ohne
+  Zustimmung oder in nicht interaktiven Läufen wird nichts mit erhöhten
+  Rechten geändert. Die Hinweise machen klar, dass Docker-Compose-Tutorials
+  bis zur Installation nicht startbereit sind.
+- [ ] **Geplant für 1.1.0 — interaktive Konsolenmenüs:** Eine leicht
+  deklarierbare Menü-API und `zelyra new --template console-menu` sollen aus
+  Titel, Beschreibung und Auswahlpunkten in wenigen Zeilen ein vollständiges
+  Terminalmenü erzeugen. Das Menü erhält eine hochwertige Darstellung mit
+  klarer Auswahlhervorhebung, Tastaturbedienung, einem Layout für schmale
+  Terminals und einem nummerierten Fallback. Farb- und Unicode-Ausgabe
+  berücksichtigen Terminalfähigkeiten, `ZELYRA_COLOR` und `NO_COLOR`; ohne
+  ANSI-Unterstützung erscheint eine einfache Textauswahl. EOF beendet die
+  Auswahl ohne Hängen. Der Starter, ein lauffähiges Beispiel und Tests decken
+  Auswahl, EOF, schmale Breiten sowie Farb- und Fallback-Modus ab.
+- [x] **1.0.2 Zuverlässigkeit von Studio und Rechnungstutorial:** Generierte
+  MariaDB-Port-Platzhalter in Studio und gestarteter Anwendung einheitlich
+  auflösen. Beim ersten Start Compose starten und das Schema nur einrichten,
+  wenn die aktive Adresse der erzeugten lokalen Datenbank-URL in `.env`
+  entspricht; vorübergehende Verbindungsabbrüche wiederholen und dauerhafte
+  Setupfehler sichtbar melden. Externe oder überschriebene Adressen lösen keine
+  automatischen Schemaänderungen aus. Datenbankkarte und Datensatzvorschau des
+  Rechnungstutorials funktionieren danach. Die Programmausgabe ist mit 13 px
+  besser lesbar, ohne die Code-Editor-Schrift zu verändern. Browserprüfungen
+  decken eine frische Compose-Datenbank und ein externes MariaDB-Projekt ab;
+  MariaDB- und PostgreSQL-Studioabläufe bestehen.
+- [x] **1.0.2 Schrittweiten für Integer-Bereiche:** `for i in 1..21 step 2`
+  mit exklusivem Ende, Standardschrittweite 1, positiven und negativen Werten,
+  leeren Bereichen bei falscher Richtung und geprüfter Schrittweite ungleich 0
+  unterstützen. `range(start, end, step)` liefert dieselbe Folge als begrenztes
+  Array. Parser-, Laufzeit-, Typ- und Grenztests bestehen.
+- [ ] **Geplant für 1.0.3 — Zelyra-eigene Sprachkonstrukte:** Verkettete
+  `else if`-Zweige, typisierte `if`-Ausdrücke, Tuple-Destructuring und
+  markiertes `break`/`continue` für verschachtelte Schleifen ergänzen;
+  Schleifenabbrüche mit Rückgabewert benötigen ausdrückliche, typgeprüfte
+  Regeln. Klammerblöcke, statische Typen, ausdrückliche Effekte und geprüfte
+  Fehler bleiben erhalten. Für häufige Parserfehler wie einen fehlenden Block
+  nach `else if` gezielte Vorschläge mit genauer Quellposition und korrigierter
+  Form anzeigen. Schrittweiten einschließlich negativer Werte und rückwärts
+  laufender Bereiche sind bereits in 1.0.2 enthalten. Benutzerdefinierte
+  Operatoren für eigene Typen über ein ausdrückliches, typgeprüftes Protokoll
+  mit fester Rangfolge, eindeutiger Auflösung und Effektregeln unterstützen;
+  eigene Rangfolgen dürfen nicht deklariert werden.
+- [ ] **Geplant für 1.0.3 — native String- und Math-Bibliotheken:** Die bereits
+  teilweise vorhandene String-API (`text_contains`, `text_trim`,
+  `text_replace_result`, `text_split_result`) um Klein-/Großschreibung, Länge,
+  Verbinden, Trimmen, Enthaltensein, Ersetzen, Teilen sowie Präfix-/Suffix-
+  Prüfungen vervollständigen. Bisherige `text_*`-Namen und geprüfte Fehler
+  kompatibel halten. Eine typisierte Zelyra-Pipeline für lesbare
+  Funktionsverkettung ergänzen, zum Beispiel `text |> trim |> to_lower`, mit
+  klarer Typ- und Effektprüfung. Native `abs`, `min`, `max`, `floor`, `ceil`,
+  `round`, `sqrt` und `pow` mit festgelegten Typen, Rundungs-/Genauigkeitsregeln
+  und geprüften Überlauf-/Definitionsbereichsfehlern ergänzen. Lesbare,
+  typgeprüfte String-Interpolation mit Escape-Regel für geschweifte Klammern
+  in einer für Zelyra entworfenen Syntax bereitstellen. Effizientes typisiertes
+  `concat<T>(left, right)` ergänzen.
+- [ ] **Geplant für 1.0.3 — Sammlungen und funktionale Operationen:** Normale
+  Arrays und Maps bleiben wertbasiert. Opt-in veränderliche typisierte Arrays
+  und Stacks mit geprüften O(1)-Indexupdates und effizientem `push`/`pop`
+  ergänzen; `pop` liefert einen ausdrücklichen Leerfall. Veränderliche Arrays
+  müssen geprüfte zusammengesetzte Indexupdates wie `items[i] += 1` erlauben.
+  Typisierte Map-Iteration, `get_or_default` und einen sicheren
+  Zähler-/Updatehelfer ergänzen.
+  Maps, `Map<K, V>` und `Map { ... }`-Literale, `get`, `put`, `keys`, `values`
+  und `contains` sind bereits vorhanden; es fehlen die komfortable Iteration
+  und der Standardwertzugriff, nicht Maps an sich. Typisierte anonyme
+  Funktionen mit ausdrücklichen Capture-/Effektregeln sowie Standard-
+  Kombinatoren `map`, `filter` und `fold` bereitstellen. Komposition über die
+  Zelyra-Pipeline unterstützen und klare Typinferenz/Diagnosen erhalten. Die
+  Rucksack-DP-Tabelle muss direkt aktualisiert werden und O(Gegenstände ×
+  Kapazität) Zeit sowie O(Kapazität) Speicher einhalten, statt pro Zelle das
+  ganze Array zu kopieren.
+- [ ] **Geplant für 1.0.3 — interaktive Studio-Konsole:** Studio-Run erhält
+  ein interaktives Eingabefeld für `read_console`: ausstehende Eingabeaufforderung
+  anzeigen, eine Zeile entgegennehmen und absenden, das laufende Programm
+  fortsetzen sowie explizites EOF/Abbrechen und begrenzte Ausführung
+  unterstützen. Eine Eingabeanforderung darf nicht stillschweigend zu EOF oder
+  einem Timeout werden. CLI-Eingabe muss weiter funktionieren; dasselbe
+  Zahlenratespiel wird in CLI und Studio getestet.
+- [ ] **Geplant für 1.0.3 — idiomatische Algorithmusübungen:** 17 vollständige,
+  ausführbare Konsolenbeispiele bereitstellen: FizzBuzz, Palindromprüfung,
+  Fakultät, Zahlenraten, Wort-/Zeichenzählung, Minimum/Maximum einer Liste,
+  Primzahlprüfung, umgekehrte Wortreihenfolge, Caesar-Verschiebung, Bubble
+  Sort, Quicksort, binäre Suche, Klammerprüfung mit einem Stack, iterative
+  Fibonacci-Berechnung mit dynamischer Programmierung, Lauflängenkodierung,
+  N-Damen-Zählung mit rekursivem Backtracking und 0/1-Rucksack mit dynamischer
+  Programmierung. Beispiele sollen neue Zelyra-Syntax und APIs nutzen, wo dies
+  den Code verständlicher macht, statt Python-/PHP-Behelfslösungen wie JSON
+  zur Anzeige, manuelles Neuerstellen des Stacks oder wiederholtes Kopieren
+  von Arrays beizubehalten. Wichtige Zeilen, Ergebnisse, Grenzfälle, typische
+  Fehler und Zeit-/Speicherbedarf erklären. Für N=4 und N=8 müssen 2 und 92,
+  für den dokumentierten Rucksackfall 8 herauskommen. Eingaben und Größen
+  validieren, Arithmetik prüfen, Aufwand begrenzen und Kompilierung, Ausgabe
+  sowie Grenzfälle in CI testen.
+- [ ] **Geplant für 1.0.3 — Compilerdiagnosen:** Verschachtelte Syntax- und
+  Typfehler mit gezielten Vorschlägen, Quellpositionen und kurzem korrigiertem
+  Zelyra-Beispiel verbessern. Fehlende Blöcke, Interpolationsnamen/-typen,
+  Pipeline-Typkonflikte, Tuple-Arity, Sammlungs-Callbacks und ungültige
+  Zahleneingaben mit positiven und negativen Tests abdecken.
 - [x] **1.0.1 Sprachprüfung des veröffentlichten Artefakts:** 80 Fälle,
   100 Aufgaben-Wiederholungen, 600 Zahlenvergleiche und 1.408 Kalender-/UTC-
   Referenzfälle ohne unerwartete Befunde geprüft; Installation/Update/Rückkehr

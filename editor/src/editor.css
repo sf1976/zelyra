@@ -117,10 +117,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .task-finder-item span { color: var(--muted); font-size: 10px; }
 .task-finder > footer { display: flex; align-items: center; gap: 6px; padding: 9px 14px; border-top: 1px solid var(--border); color: var(--faint); font-size: 9px; }
 .task-finder > footer kbd:not(:first-child) { margin-left: 9px; }
-.run-output-state { margin: 0; padding: 5px 16px 10px; color: var(--muted); font-size: 11px; }
+.run-output-state { margin: 0; padding: 5px 16px 10px; color: var(--muted); font-size: 12px; }
 .run-output-state[data-kind="success"] { color: var(--success); }
 .run-output-state[data-kind="error"] { color: var(--danger); }
-.run-output-content { max-height: min(50vh, 420px); min-height: 80px; margin: 0 14px 12px; padding: 12px; overflow: auto; border: 1px solid var(--border); border-radius: 7px; color: var(--ink); background: var(--editor-bg); font: 11px/1.55 ui-monospace, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.run-output-content { max-height: min(50vh, 420px); min-height: 80px; margin: 0 14px 12px; padding: 12px; overflow: auto; border: 1px solid var(--border); border-radius: 7px; color: var(--ink); background: var(--editor-bg); font: 13px/1.55 ui-monospace, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .project-map-dialog { width: min(1180px, calc(100vw - 30px)); max-height: calc(100vh - 36px); padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 12px; color: var(--ink); background: var(--surface); box-shadow: var(--shadow); }
 .project-map-dialog::backdrop { background: #050914aa; backdrop-filter: blur(3px); }
 .project-map-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px 10px; border-bottom: 1px solid var(--border); }

@@ -1085,16 +1085,9 @@ fn editor_database_schemas(
         .database
         .as_ref()
         .map(|database| database.name.as_str());
-    let environment_file = state.root.join(".env");
-    let from_environment = super::database_url_from_schema(&declared);
-    let from_file = if from_environment.is_none() && environment_file.is_file() {
-        super::database_url_from_env_file(&environment_file.to_string_lossy(), database_name)
-            .map_err(|_| (422, "the project environment file could not be read".into()))?
-            .map(|(url, _)| url)
-    } else {
-        None
-    };
-    let database_url = from_environment.or(from_file).ok_or((
+    let database_url = super::database_url_for_project(&state.root, database_name)
+        .map_err(|_| (422, "the project environment file could not be read".into()))?
+        .ok_or((
         422,
         "database connection is not configured; set DATABASE_URL in the environment or project .env file".into(),
     ))?;
@@ -1200,21 +1193,11 @@ fn database_target_response(
         )
     })?;
     let database = declared.database.as_ref();
-    let database_url = if let Some(url) = super::database_url_from_schema(&declared) {
-        Some(url)
-    } else {
-        let environment_file = state.root.join(".env");
-        if environment_file.is_file() {
-            super::database_url_from_env_file(
-                &environment_file.to_string_lossy(),
-                database.map(|database| database.name.as_str()),
-            )
-            .map_err(|_| (422, "the project environment file could not be read".into()))?
-            .map(|(url, _)| url)
-        } else {
-            None
-        }
-    };
+    let database_url = super::database_url_for_project(
+        &state.root,
+        database.map(|database| database.name.as_str()),
+    )
+    .map_err(|_| (422, "the project environment file could not be read".into()))?;
     let configured = database_url.is_some();
     let engine = database
         .map(|database| database.engine.as_str())
@@ -1266,29 +1249,13 @@ fn create_project_database(
             "Studio database creation currently supports MariaDB and MySQL projects with existing connection configuration".into(),
         ));
     }
-    let database_url = if let Some(url) = super::database_url_from_schema(&declared) {
-        url
-    } else {
-        let environment_file = state.root.join(".env");
-        if !environment_file.is_file() {
-            return Err((
-                422,
-                "configure the MariaDB or MySQL URL in the process environment or project .env file first"
-                    .into(),
-            ));
-        }
-        super::database_url_from_env_file(
-            &environment_file.to_string_lossy(),
-            Some(database.name.as_str()),
-        )
+    let database_url = super::database_url_for_project(&state.root, Some(database.name.as_str()))
         .map_err(|_| (422, "the project environment file could not be read".into()))?
-        .map(|(url, _)| url)
         .ok_or((
             422,
             "configure the MariaDB or MySQL URL in the process environment or project .env file first"
                 .into(),
-        ))?
-    };
+        ))?;
     let root_password = env::var("MARIADB_ROOT_PASSWORD").ok().or_else(|| {
         let environment_file = state.root.join(".env");
         read_env_value(&environment_file.to_string_lossy(), "MARIADB_ROOT_PASSWORD")
@@ -1413,16 +1380,9 @@ fn database_rows_response(
         .database
         .as_ref()
         .map(|database| database.name.as_str());
-    let from_environment = super::database_url_from_schema(&declared);
-    let environment_file = state.root.join(".env");
-    let from_file = if from_environment.is_none() && environment_file.is_file() {
-        super::database_url_from_env_file(&environment_file.to_string_lossy(), database_name)
-            .map_err(|_| (422, "the project environment file could not be read".into()))?
-            .map(|(url, _)| url)
-    } else {
-        None
-    };
-    let database_url = from_environment.or(from_file).ok_or((
+    let database_url = super::database_url_for_project(&state.root, database_name)
+        .map_err(|_| (422, "the project environment file could not be read".into()))?
+        .ok_or((
         422,
         "database connection is not configured; set DATABASE_URL in the environment or project .env file".into(),
     ))?;
@@ -1739,24 +1699,12 @@ fn database_chart_preview(
         .database
         .as_ref()
         .map(|database| database.name.as_str());
-    let database_url = if let Some(url) = super::database_url_from_schema(&declared) {
-        url
-    } else {
-        let environment_file = state.root.join(".env");
-        if !environment_file.is_file() {
-            return Err((
-                422,
-                "database connection is not configured; set DATABASE_URL in the environment or project .env file".into(),
-            ));
-        }
-        super::database_url_from_env_file(&environment_file.to_string_lossy(), database_name)
-            .map_err(|_| (422, "the project environment file could not be read".into()))?
-            .map(|(url, _)| url)
-            .ok_or((
-                422,
-                "database connection is not configured; set DATABASE_URL in the environment or project .env file".into(),
-            ))?
-    };
+    let database_url = super::database_url_for_project(&state.root, database_name)
+        .map_err(|_| (422, "the project environment file could not be read".into()))?
+        .ok_or((
+            422,
+            "database connection is not configured; set DATABASE_URL in the environment or project .env file".into(),
+        ))?;
     let mut params = Vec::new();
     if let Some((_, filter_value)) = &filter {
         params.push((
@@ -3331,7 +3279,7 @@ fn check_project(
     ))
 }
 
-fn zelyra_executable() -> Result<PathBuf, (u16, String)> {
+pub(super) fn zelyra_executable() -> Result<PathBuf, (u16, String)> {
     if let Some(path) = option_env!("CARGO_BIN_EXE_zelyra") {
         let candidate = PathBuf::from(path);
         if candidate.is_file() {
@@ -3456,31 +3404,61 @@ fn start_editor_web_app(
     database_name: Option<&str>,
 ) -> Result<(u16, &'static str, String), (u16, String)> {
     let executable = zelyra_executable()?;
+    let declared_schema =
+        database_cli::load_schema(&state.root.join("main.zyl").to_string_lossy()).ok();
+    let should_setup_local_schema = declared_schema.as_ref().is_some_and(|schema| {
+        schema.database.is_some() && schema.backend() != zelyra_database::Backend::Postgres
+    });
+    let database_url = super::database_url_for_project(&state.root, database_name)
+        .map_err(|_| (422, "the project environment file could not be read".into()))?;
 
-    // If this project defines a MariaDB compose service, make sure the database container is running.
-    if state.root.join("docker-compose.mariadb.yml").is_file() {
-        let _ = start_mariadb_compose(&state.root, true);
-        if let Ok(db_url) = expanded_database_url(&state.root) {
-            if let Ok(parsed) = url::Url::parse(&db_url) {
-                if let Some(host) = parsed.host_str() {
-                    let port = parsed.port().unwrap_or(3306);
-                    let addr_str = format!("{host}:{port}");
-                    if let Ok(sock_addr) = addr_str.parse() {
-                        for _ in 0..10 {
-                            if TcpStream::connect_timeout(&sock_addr, Duration::from_millis(200))
-                                .is_ok()
-                            {
-                                break;
-                            }
-                            thread::sleep(Duration::from_millis(200));
-                        }
-                    }
-                }
-            }
+    // Bootstrap only a URL sourced from this project's .env. An environment
+    // override may point at an external service even when its URL text matches
+    // .env, so it must not trigger Compose startup or automatic schema changes.
+    let has_compose_file = state.root.join("docker-compose.mariadb.yml").is_file();
+    let has_process_database_url_override =
+        super::database_url_from_environment(database_name).is_some();
+    let project_file_database_url = if has_compose_file {
+        super::project_file_database_url_for_compose(
+            &state.root,
+            database_name,
+            has_process_database_url_override,
+        )
+        .map_err(|_| (422, "the project environment file could not be read".into()))?
+    } else {
+        None
+    };
+    let project_host_port = if project_file_database_url.is_some() {
+        super::project_database_host_port(&state.root)
+            .map_err(|_| (422, "the project environment file could not be read".into()))?
+    } else {
+        String::new()
+    };
+    let compose_database_url = if has_compose_file {
+        super::project_compose_database_url(
+            database_url.as_deref(),
+            project_file_database_url.as_deref(),
+            &project_host_port,
+            has_process_database_url_override,
+        )
+    } else {
+        None
+    };
+    if let Some(compose_database_url) = compose_database_url {
+        start_mariadb_compose(&state.root, true).map_err(|error| {
+            let secrets = editor_secret_values(state);
+            (502, redact_editor_secrets(error, &secrets))
+        })?;
+        // Apply a MariaDB schema only to the matched project-local service.
+        // Retrying transient startup disconnects avoids launching the app
+        // against a half-ready cold database.
+        if should_setup_local_schema {
+            run_local_schema_setup(&state.root, compose_database_url).map_err(|error| {
+                let secrets = editor_secret_values(state);
+                (502, redact_editor_secrets(error, &secrets))
+            })?;
         }
     }
-    // Attempt local schema bootstrap if configured, ensuring tables and fixed-point precisions exist.
-    let _ = run_local_schema_setup(&state.root);
 
     let listener = std::net::TcpListener::bind("127.0.0.1:0")
         .map_err(|_| (500, "could not reserve a local preview port".into()))?;
@@ -3523,12 +3501,10 @@ fn start_editor_web_app(
             }
         }
     }
-    if database_url_from_environment(database_name).is_none() {
-        if let Ok(database_url) = expanded_database_url(&state.root) {
-            command.env("DATABASE_URL", &database_url);
-            if let Some(database_name) = database_name {
-                command.env(database_url_environment_name(database_name), &database_url);
-            }
+    if let Some(database_url) = database_url {
+        command.env("DATABASE_URL", &database_url);
+        if let Some(database_name) = database_name {
+            command.env(database_url_environment_name(database_name), &database_url);
         }
     }
     let mut child = command
@@ -4714,7 +4690,7 @@ fn main() {}
     }
 
     #[test]
-    fn run_editor_program_reports_diagnostics_when_web_app_fails_preflight() {
+    fn run_editor_program_does_not_auto_setup_an_unrelated_database() {
         let state = project();
         let path = state.root.join("main.zyl");
         fs::write(
@@ -4726,18 +4702,24 @@ fn main() {}
         fs::write(&path, source).expect("write web fixture");
         fs::write(
             state.root.join(".env"),
-            "DATABASE_URL=mariadb://invalid:invalid@127.0.0.1:1/nonexistent\nZELYRA_DB_CONNECT_TIMEOUT_SECS=1\n",
-        ).expect("write invalid env");
+            "DATABASE_URL=postgres://invalid:invalid@127.0.0.1:5432/nonexistent\n",
+        )
+        .expect("write invalid env");
 
         let response = run_editor_program(&state, &json!({"path": "main.zyl"}))
-            .expect("should return a formatted response instead of throwing 422");
+            .expect("Studio should not apply the MariaDB schema to a PostgreSQL URL");
         assert_eq!(response.0, 200);
-        let payload: Value = serde_json::from_str(&response.2).expect("decode result");
+        let payload: Value = serde_json::from_str(&response.2).expect("decode run result");
         assert_eq!(payload["success"], false);
         assert_eq!(payload["webApp"], false);
-        let stderr = payload["stderr"].as_str().unwrap_or_default();
-        assert!(stderr.contains("E-DB-PRECISION"));
-        assert!(stderr.contains("Hinweis:"));
+        assert!(payload["stderr"]
+            .as_str()
+            .unwrap()
+            .contains("E-DB-PRECISION"));
+        assert!(!payload["stderr"]
+            .as_str()
+            .unwrap()
+            .contains("schema setup stopped"));
         let _ = fs::remove_dir_all(state.root.clone());
     }
 }

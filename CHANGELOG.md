@@ -4,6 +4,41 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language compatibility line remains `0.1`. Compiler and repository
 releases follow Semantic Versioning independently of the language line.
 
+## Unreleased
+
+_Changes for the next release go here._
+
+## 1.0.2 — 2026-10-14
+
+- Fix Studio database access for generated projects whose connection URL uses
+  `${ZELYRA_DB_HOST_PORT:-3306}`. The database map, target display, row preview,
+  charts, database creation, and launched application now resolve the same
+  configured port. / Generierte Projekte mit `${ZELYRA_DB_HOST_PORT:-3306}` in
+  der Verbindungsadresse korrigieren. Datenbankkarte, Zielanzeige,
+  Datensatzvorschau, Diagramme, Datenbankanlage und gestartete Anwendung lösen
+  nun denselben konfigurierten Port auf.
+- Make Studio Run start the local MariaDB service and apply its schema before
+  launching the web application. Retry transient startup disconnects and show
+  non-retryable setup errors instead of silently opening a broken preview. /
+  Studio-Ausführen startet den lokalen MariaDB-Dienst und richtet das Schema
+  vor dem Webstart ein. Vorübergehende Verbindungsabbrüche beim Start werden
+  wiederholt; dauerhafte Setupfehler erscheinen statt einer defekten Vorschau.
+- Increase the Studio program-output text to 13 px and its status text to 12 px
+  without changing the code editor font. Add real browser coverage for invoice
+  Run, live schema display, row preview, and a cold Docker Compose database. /
+  Programmausgabe in Studio auf 13 px und Status auf 12 px vergrößern, ohne die
+  Schriftgröße des Code-Editors zu ändern. Echte Browserprüfungen für
+  Rechnungsstart, Live-Schema, Datensatzvorschau und frische Docker-Compose-
+  Datenbank ergänzen.
+- Add `for i in 1..21 step 2` for exclusive integer ranges. The optional Int
+  step defaults to 1, supports descending ranges with negative values, and
+  rejects zero; `range(start, end, step)` returns the same values as an array. /
+  `for i in 1..21 step 2` für exklusive Integer-Bereiche ergänzen. Die optionale
+  Int-Schrittweite ist standardmäßig 1, unterstützt mit negativen Werten
+  absteigende Bereiche und weist eine Schrittweite von 0 ab;
+  `range(start, end, step)` liefert
+  dieselben Werte als Array.
+
 ## 1.0.1 — 2026-10-13
 
 - Require Docker Compose v2 or newer for tutorial, setup, and doctor; prefer
@@ -237,10 +272,6 @@ releases follow Semantic Versioning independently of the language line.
 - Explain GitHub HTTP 403/429 responses from `update --check` with a recovery
   hint. / GitHub-HTTP-403/429-Antworten von `update --check` mit einem
   verständlichen nächsten Schritt erklären.
-
-## Unreleased
-
-_Changes for the next release go here._
 
 ## 0.9.2 — 2026-10-11
 

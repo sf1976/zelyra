@@ -27,6 +27,98 @@ principles; the roadmap below tracks what is actually implemented.
 
 ## Current milestones
 
+- [ ] **Planned for 1.1.0 — Compose check in the installer:** Installers detect
+  Docker Compose v2 or newer and distinguish it from obsolete Python Compose
+  v1. Docker remains optional for the core installation. When Compose v2 is
+  missing, interactive Linux installers offer to install the Compose v2 plugin
+  from supported package sources after explicit confirmation; otherwise they
+  show suitable installation guidance. No elevated changes happen without
+  confirmation or in non-interactive runs. The guidance explains that
+  Docker-based tutorials cannot start until Compose is installed.
+- [ ] **Planned for 1.1.0 — interactive console menus:** A simple declarative
+  menu API and `zelyra new --template console-menu` create a complete terminal
+  menu from a title, description, and choices in only a few lines. The menu
+  provides a polished presentation with a clear selection highlight, keyboard
+  navigation, a layout for narrow terminals, and a numbered fallback. Color
+  and Unicode output respect terminal capabilities, `ZELYRA_COLOR`, and
+  `NO_COLOR`; terminals without ANSI support receive a plain-text menu. EOF
+  exits cleanly without hanging. The starter, a runnable example, and tests
+  cover selection, EOF, narrow widths, color, and fallback behavior.
+- [x] **1.0.2 Studio and invoice tutorial reliability:** Resolve generated
+  MariaDB port placeholders consistently in Studio and the launched app. On
+  first Run, start Compose and apply the schema only when the active URL matches
+  the generated local database URL in `.env`; retry transient startup
+  disconnects and show persistent setup errors. External or overridden URLs do
+  not trigger automatic schema changes. The invoice database map and row preview
+  work after startup. Program output is more readable at 13 px without changing
+  the code editor font. Browser tests cover a fresh Compose database and an
+  external MariaDB project; MariaDB and PostgreSQL Studio flows also pass.
+- [x] **1.0.2 stepped integer ranges:** Support `for i in 1..21 step 2` with
+  exclusive ends, a default step of 1, positive and negative steps, empty
+  direction mismatches, and a checked nonzero step. `range(start, end, step)`
+  provides the same sequence as a bounded array. Parser, runtime, type, and
+  boundary tests pass.
+- [ ] **Planned for 1.0.3 — Zelyra-style language constructs:** Add chained
+  `else if` branches, typed `if` expressions, tuple destructuring, and labeled
+  `break`/`continue` for nested loops; value-yielding loop exits must have
+  explicit, type-checked rules. Keep the existing brace-based blocks, static
+  types, explicit effects, and checked errors. Add targeted parser suggestions
+  for common mistakes such as a missing block after `else if`, with the exact
+  source span and a useful expected form. Stepped ranges, including negative
+  steps and descending loops, are already in 1.0.2. Add user-defined
+  operators for user-defined types through an explicit, type-checked protocol
+  with fixed precedence, unambiguous resolution, and effect rules; do not
+  allow custom precedence declarations.
+- [ ] **Planned for 1.0.3 — native String and Math library:** Complete the
+  existing partial String API (`text_contains`, `text_trim`,
+  `text_replace_result`, `text_split_result`) with lowercase/uppercase,
+  length, joining, trimming, containment, replacement, splitting, and
+  prefix/suffix checks; preserve compatible `text_*` names and checked errors.
+  Add a typed Zelyra pipeline for readable function composition, for example
+  `text |> trim |> to_lower`, with clear type and effect checking. Add native
+  `abs`, `min`, `max`, `floor`, `ceil`, `round`, `sqrt`, and `pow` with explicit
+  supported types, rounding/precision rules, and checked overflow/domain
+  errors. Add readable, type-checked String interpolation with literal-brace
+  escaping, using syntax designed for Zelyra rather than copying another
+  language's formatting rules. Add efficient typed `concat<T>(left, right)`.
+- [ ] **Planned for 1.0.3 — collections and functional operations:** Keep
+  ordinary arrays and maps value-based. Provide opt-in typed mutable arrays and
+  stacks with checked O(1) indexed updates and efficient `push`/`pop`; `pop`
+  returns an explicit empty case. Mutable arrays must allow checked indexed
+  compound updates such as `items[i] += 1`. Add typed map iteration and
+  `get_or_default`, plus a safe counter/update helper. Maps, `Map<K, V>` and
+  `Map { ... }` literals, `get`, `put`, `keys`, `values`, and `contains` already
+  exist; the gap is ergonomic iteration/default lookup, not the absence of
+  maps. Add typed anonymous functions with explicit capture/effect rules and
+  standard `map`, `filter`, and `fold` combinators. Support composition through
+  the Zelyra pipeline while preserving clear inference and diagnostics. The
+  knapsack DP table must update in place and retain O(item-count × capacity)
+  time and O(capacity) space rather than copying the full array per cell.
+- [ ] **Planned for 1.0.3 — interactive Studio console:** Give Studio Run a
+  real interactive input panel for `read_console`: display the pending prompt,
+  accept and submit a line, resume the running program, and support explicit
+  EOF/cancel and bounded execution. Do not silently turn an input request into
+  EOF or a timeout. Keep CLI console input working, and test the same
+  number-guessing program in both CLI and Studio.
+- [ ] **Planned for 1.0.3 — idiomatic algorithm exercises:** Ship 17 complete,
+  runnable console examples: FizzBuzz, palindrome checks, factorial, number
+  guessing, word/character counts, list minimum/maximum, prime checks,
+  reversed word order, Caesar shifts, bubble sort, quicksort, binary search,
+  balanced-parentheses checking with a stack, iterative dynamic-programming
+  Fibonacci, run-length encoding, N-Queens counting with recursive
+  backtracking, and 0/1 knapsack with dynamic programming. Rewrite them to use
+  the new Zelyra syntax and APIs where they improve clarity, rather than
+  retaining Python/PHP workarounds such as JSON encoding for display, manual
+  stack rebuilding, or repeated array-copy updates. Explain important lines,
+  expected results, boundary cases, common mistakes, and time/space costs.
+  N=4 and N=8 must count as 2 and 92; the documented knapsack fixture must
+  return 8. Validate sizes and inputs, use checked arithmetic, bound work, and
+  test compilation, expected output, and edge cases in CI.
+- [ ] **Planned for 1.0.3 — compiler diagnostics:** Improve nested syntax and
+  type errors with targeted suggestions, source spans, and a short corrected
+  Zelyra example. Include malformed blocks, interpolation names/types,
+  pipeline type mismatches, tuple arity, collection callbacks, and unsupported
+  numeric inputs in positive and negative tests.
 - [x] **1.0.1 published-artifact language review:** 80 cases, 100 task repeats,
   600 numeric comparisons and 1,408 calendar/UTC reference cases passed with
   no unexpected findings; published installation/upgrade/rollback and

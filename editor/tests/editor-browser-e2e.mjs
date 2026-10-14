@@ -447,6 +447,9 @@ try {
   } catch (error) {
     throw new Error(`${error.message}\nrun state: ${await page.locator("#run-output-state").textContent()}\nstatus: ${await page.locator("#status-message").textContent()}\nbrowser errors: ${JSON.stringify(browserErrors)}`);
   }
+  assert.equal(await page.locator("#run-output-state").evaluate((element) => getComputedStyle(element).fontSize), "12px");
+  assert.equal(await page.locator("#run-output-content").evaluate((element) => getComputedStyle(element).fontSize), "13px", "program output text should be comfortably readable without changing editor source text");
+  assert.equal(await page.locator(".cm-editor").evaluate((element) => getComputedStyle(element).fontSize), "14px", "program output sizing must not alter the code editor font");
   const consoleOutput = await page.locator("#run-output-content").textContent();
   assert.match(consoleOutput, /3/, "Studio Run must display console output");
   assert.match(consoleOutput, /interactive input|interaktive Eingabe/i, "Studio must explain that stdin is unavailable");
@@ -459,7 +462,11 @@ try {
   await page.keyboard.press("Control+S");
   await page.locator(".tab-state.dirty").waitFor({ state: "detached" });
   await page.locator("#run-button").click();
-  await page.locator("#run-output-web-link:not([hidden])").waitFor();
+  try {
+    await page.locator("#run-output-web-link:not([hidden])").waitFor();
+  } catch (error) {
+    throw new Error(`${error.message}\nrun state: ${await page.locator("#run-output-state").textContent()}\nrun output: ${await page.locator("#run-output-content").textContent()}\nbrowser errors: ${JSON.stringify(browserErrors)}`);
+  }
   const previewUrl = await page.locator("#run-output-web-url").getAttribute("href");
   assert.match(previewUrl, /^http:\/\/127\.0\.0\.1:\d+$/);
   const previewResponse = await page.request.get(previewUrl);

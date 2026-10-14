@@ -2437,7 +2437,31 @@ impl<'a> Parser<'a> {
             let start = self.advance().span;
             let (name, _) = self.ident("loop variable name")?;
             self.expect(TokenKind::In, "`in` after loop variable")?;
-            let iterable = self.expression()?;
+            let mut iterable = self.expression()?;
+            if self.at_word("step") {
+                let step_keyword = self.advance().span;
+                let is_integer_range = matches!(
+                    &iterable.kind,
+                    ExprKind::Call {
+                        name,
+                        type_args,
+                        args,
+                    } if name == "range" && type_args.is_empty() && args.len() == 2
+                );
+                if !is_integer_range {
+                    return Err(ParseError {
+                        message: "`step` is only supported for integer ranges".into(),
+                        span: step_keyword,
+                    });
+                }
+                let step = self.expression()?;
+                if let ExprKind::Call { args, .. } = &mut iterable.kind {
+                    args.push(step);
+                    iterable.span = iterable
+                        .span
+                        .join(args.last().expect("step was added").span);
+                }
+            }
             let body = self.block()?;
             return Ok(Stmt::For {
                 name,
@@ -4370,6 +4394,32 @@ mod tests {
             program.functions[0].body.statements[0],
             Stmt::For { ref name, .. } if name == "value"
         ));
+    }
+
+    #[test]
+    fn parses_stepped_integer_for_loops_as_three_argument_ranges() {
+        let program =
+            parse(&lex("fn main() { for value in 1..21 step 2 { print(value) } }").unwrap())
+                .unwrap();
+        let Stmt::For { iterable, .. } = &program.functions[0].body.statements[0] else {
+            panic!("expected integer range loop");
+        };
+        let ExprKind::Call { name, args, .. } = &iterable.kind else {
+            panic!("expected range call");
+        };
+        assert_eq!(name, "range");
+        assert_eq!(args.len(), 3);
+        assert!(matches!(args[2].kind, ExprKind::Int(2)));
+    }
+
+    #[test]
+    fn rejects_step_on_non_range_for_loops() {
+        let error =
+            parse(&lex("fn main() { for value in [1, 2] step 2 { print(value) } }").unwrap())
+                .expect_err("step must only follow an integer range");
+        assert!(error
+            .message
+            .contains("`step` is only supported for integer ranges"));
     }
 
     #[test]
