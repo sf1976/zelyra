@@ -1192,7 +1192,7 @@ page "/dashboard" {
   *Cause:* Without `sessions: auth_sessions`, sessions are held in process memory.
   Declare the table for persistence and administrative session revocation.
 
-#### Session administration in the 0.4 development branch
+#### Session administration
 
 Signed-in users can open `/account/sessions` to review and revoke their own
 active sessions. Pages using the generated navigation link to it.
@@ -1224,8 +1224,7 @@ this event records a request, not proof that a row existed.
 
 Revoking your current session makes subsequent protected requests fail with
 401. Sign in again: the operation does not disable the account or remove the
-last administrator's role. Persistent sessions expire after one day. The
-development branch also bounds in-memory sessions to 24 hours; they disappear
+last administrator's role. Persistent sessions expire after one day. In-memory sessions are also bounded to 24 hours; they disappear
 on restart and are not listed by this persistent-session administration page.
 Expiry is checked on access. Revocation does not cancel requests already in
 progress. These controls do not implement password recovery or device tracking.
@@ -2704,80 +2703,61 @@ Navigate to `http://localhost:8080` in your browser—your own live Zelyra appli
 
 <a id="chapter-41-the-zelyra-roadmap-from-090-to-10"></a>
 
-## Chapter 41: Current scope and the road to Zelyra 1.0
+## Chapter 41: Current scope and roadmap
 
 ### 1. What will I learn in this chapter?
-- The capabilities of the current Zelyra release and their limits.
-- How language compatibility line 0.1 remains separate from compiler releases.
-- Which technical evidence and human acceptance are still required for 1.0.0.
+- What Zelyra 1.0.4 includes and how the language compatibility line 0.1 remains separate.
+- Which capabilities have arrived since 1.0.0.
+- Where to find verified features, limits, and planned work.
 
 ### 2. Why is this topic important?
-A programming language is a living ecosystem. When you invest time into mastering Zelyra, you want assurance that the language has a clear strategic roadmap, professional stewardship, and that existing code remains compatible in future releases.
+Compiler versions and the language compatibility line describe different things. Updating to Zelyra 1.0.4 does not automatically change the language line declared in `zelyra.toml`. Release notes describe version changes; the implementation inventory, database matrix, and roadmap explain supported scope and limits.
 
-### 3. Understandable explanation without unnecessary jargon: Roadmap Overview
-Compiler releases and the language compatibility line are separate: updating
-the compiler does not automatically change a project's `0.1` language line.
+### 3. What changed since Zelyra 1.0.0?
+- **1.0.1:** Docker Compose v2 is detected; Python Compose v1 is rejected with a concrete update hint. Studio's Run button starts the project entry point.
+- **1.0.2:** Studio can start MariaDB for the invoice tutorial, wait for its connection, and apply the schema and sample data before preview. `for` ranges accept step sizes; `range(start, end, step)` returns the same sequence as an array.
+- **1.0.3:** The standard library adds math, text, array, set, map, date, error-handling, conversion, encoding, and path functions. It also adds the type-checked `|>` pipeline operator, flat `else if` chains, declared-schema display while the database is offline, automatic tutorial setup, free local port selection, repeatable sample data, and a bounded recursion-depth guard.
+- **1.0.4:** Invoice tutorials receive a dedicated Compose project name. Older tutorials can use an isolated database after an authentication error without deleting or changing the old volume. Compose versions such as `2.40` are recognized.
 
-The current stable version combines static type checking and diagnostics with
-schema-aware SQL, relational tables, web forms, CRUD, authentication, and APIs.
-Zelyra Studio provides a local multi-file editor, navigation, completion, help,
-diagnostics, database inspection, and compiler-checked source changes. The
-invoice tutorial guides users through customers, items, a dashboard, and
-printable invoices with 19% tax. Mail, authentication, notifications, the
-Laravel Migrator, and database support each have documented limits; see the
-[implemented capabilities](../../implemented.en.md) for details.
+See the individual [release notes](../../release-notes/). The complete standard library catalog is in [Appendix D](appendices.md#appendix-d-standard-library-overview-zelyra-103).
 
-The next development stage hardens installation, database workflows,
-authorization, migration, and Studio. Version 0.9.9 then freezes the technical
-feature scope. It is not the human acceptance release: independent onboarding
-and product acceptance are reserved for the exact 1.0.0 candidate. Zelyra 1.0.0
-will be published as the first productive release only after technical gates
-and that study pass.
+### 4. Start and edit the invoice tutorial
+`zelyra --tutorial invoice` prepares the local tutorial. It requires Docker Engine and Docker Compose v2 or newer; Python Compose v1 is unsupported. In Zelyra Studio, open the project with `zelyra editor ./invoice-tutorial`, select `main.zyl`, and click **Run**. Studio starts local MariaDB through Compose, applies the schema and repeatable sample data, then starts the local web preview. MariaDB runs in a container; the web preview is a local Zelyra process.
 
-The [roadmap](../../ROADMAP.md) and
-[language compatibility policy](../../language-compatibility.en.md) record
-the detailed scope and limits. A package manager, WebAssembly, and LTS promises
-are not part of the 1.0.0 commitment.
+Edit source files in the project tree: `src/customers.zyl` for customers, `src/items.zyl` for items, `src/invoices.zyl` for invoices and line items, `src/dashboard.zyl` for the invoice overview, `src/shell.zyl` for the shared layout, and `zelyra.theme.css` for local styling. Add business records through the application forms. Seed data is initial sample content and is not duplicated on repeated startup. The [invoice tutorial guide](../../tutorials/invoice.en.md) covers all steps and troubleshooting.
 
-### 4. Compatibility and limits
-- Line 0.1 aims to preserve valid programs within its documented support; before 1.0 it remains experimental.
-- Compiler version and language line are independent. Database paths, CLI contracts, and web behavior have their own limits.
-- Zelyra does not promise complete PostgreSQL parity, universal SQL portability, or verification of arbitrary programs.
+### 5. Compatibility and limits
+- The language compatibility line remains `0.1`; compiler and language versions are separate.
+- Compose-based tutorials require Docker Compose v2 or newer. Zelyra does not install Docker or Compose.
+- The database matrix describes tested workflows. It does not imply identical support across databases or guarantee arbitrary applications.
+- The verifier checks a bounded part of programs. It is not a general proof that an application is defect-free.
 
-### 5. Typical errors and their causes: Common Misconceptions
-- **Misconception:** "Studio can edit any database schema."
-  *Correction:* The map reads schema metadata. The CRUD builder generates
-  compiler-checked source and does not change the schema or records.
-- **Misconception:** "The current release is production-ready because CI is green."
-  *Correction:* Zelyra remains experimental. CI proves automated checks, but
-  does not replace the planned human acceptance for 1.0.0.
+### 6. Roadmap and planned work
+The [roadmap](../../ROADMAP.md) distinguishes completed work from plans. Planned for 1.0.5 are structured IDE logs, `zelyra uninstall`, a simple localized date field in the invoice tutorial, automatically assigned invoice numbers, and a better-focused invoice landing page. Roadmap items are not features of the current release.
 
-### 6. Key takeaways
-1. The compiler version does not change the experimental language line 0.1.
-2. Studio reads schema metadata and validates generated CRUD source before
-   explicitly applying a change.
-3. 1.0.0 will be published only after technical evidence and human acceptance.
+### 7. Common misconceptions
+- **“A stable release means every application is production-ready.”** Check the database path, security requirements, and documented limits for your use case.
+- **“Studio always changes the database automatically.”** Run initializes the local invoice tutorial database. Other Studio assistants preview changes; schema updates use a separate reviewed workflow.
+- **“`/views/invoicedashboard` is the home page.”** This route is the tabular invoice overview. The `/` route is a separate tutorial landing page; its design is scheduled for review in 1.0.5.
 
-### 7. Exercises (Level 1 Easy, Level 2 Medium, Level 3 Challenging)
-- **Level 1 (Easy):** Read the official `CHANGELOG.md` in the Zelyra GitHub repository.
-- **Level 2 (Medium):** Compare the current capabilities in `docs/implemented.en.md` with the next goals in `docs/ROADMAP.md`.
-- **Level 3 (Challenging):** Select a table in Studio, inspect a schema difference, and review how the CRUD preview treats changes before explicit apply.
-
-### 8. Practical task: Check the Zelyra version and environment
-Verify your installed version and inspect the host environment:
+### 8. Practical task: Check the version and Compose
 ```bash
 zelyra --version
-zelyra doctor
+docker compose version
 ```
+Then read the notes for the installed release and compare your intended workflow with the database matrix.
 
 ### 9. Summary
-- Zelyra is developing experimental language line 0.1 toward the planned 1.0.0 release.
-- Roadmap items are goals, not claims that a feature is already available.
+- Zelyra 1.0.4 is the current stable release; the language compatibility line remains `0.1`.
+- Version 1.0.3 expands the standard library and adds `|>` pipelines and flat `else if` chains.
+- The invoice tutorial runs locally with MariaDB in Docker Compose and a local web preview; Studio can start the full tutorial workflow.
+- Release notes describe shipped changes; the roadmap describes planned work.
 
-### 10. Self-check review questions
-1. Which impacts does the CRUD preview show, and which changes does Studio avoid?
-2. What is the difference between compiler version and language compatibility line?
-3. Which technical gates must pass before human acceptance?
+### 10. Self-check questions
+1. What is the difference between compiler version and language compatibility line?
+2. Which capabilities arrived in 1.0.3?
+3. Which parts of the invoice tutorial run in Docker, and how do you edit the application?
+4. How can you distinguish a published feature from a roadmap item?
 
 ---
 

@@ -8,7 +8,7 @@
 
 Bei Widersprüchen gilt immer folgende verbindliche Reihenfolge:
 
-1. **[Formale Sprachspezifikation](docs/specification.de.md) und Phasendokumente**
+1. **[Formale Sprachspezifikation](../../specification.de.md) und Phasendokumente**
 2. **Compiler-Code:** Lexer-, AST-, Parser-, Namensauflösungs-, Typprüfungs- und semantischer Code in den Crates `lexer`, `parser`, `ast`, `hir`, `cli`, `runtime`, `database`, `web` und `forms`
 3. **Offizielle automatisierte Sprach- und Integrationstests:** Workspace-Tests (`cargo test --workspace`), Machine-Interface-Tests und E2E-Shellskripte in `tests/`
 4. **Die offizielle Standardbibliothek:** (sobald eigenständig strukturiert)
@@ -471,14 +471,11 @@ fn main() {
 
 ## Anhang I: Häufige Fragen und Antworten (FAQ)
 
-**Frage: Warum gibt es in Zelyra 0.3.0 keine `import`-Anweisung?**
-*Antwort:* Das veröffentlichte 0.3.0-Binary enthält keine Modulimporte. Ein
-CLI-Aufruf prüft die ausdrücklich angegebene `.zyl`-Datei. Im aktuellen,
-unveröffentlichten Entwicklungszweig gibt es experimentelle Imports für
-Funktionen, Typen, Records, Tabellen, Views, Komponenten und eine projektweite
-Datenbankkonfiguration. Unter anderem `serve` kann den verknüpften
-Projektgraphen verwenden; ein vollständiges, stabiles Modul- und Paketmodell
-bleibt geplante Arbeit.
+**Frage: Wie importiere ich weitere Quelldateien in Zelyra 1.0.4?**
+*Antwort:* Mit `import "src/math.zyl" as math` bindest du eine Datei in den
+Projektgraphen ein. Öffentliche Funktionen und andere unterstützte Deklarationen
+können dann über den Alias verwendet werden. Die Modulunterstützung hat
+dokumentierte Grenzen; siehe [Kapitel 15](lehrbuch-grundlagen.md#kapitel-15-module-und-code-organisation).
 
 **Frage: Kann ich mit Zelyra auch reine Konsolenprogramme schreiben?**
 *Antwort:* Ja. `print()` gibt Werte aus. `read_console("Prompt: ")` liest eine Zeile und liefert `String?`; dafür braucht die Funktion `uses Console` und das Projekt gegebenenfalls `console = true`.

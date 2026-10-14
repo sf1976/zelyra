@@ -4,7 +4,7 @@
 
 [English edition](../en/README.md) · Deutsch
 
-> 📖 **Suchst du das vollständige 75-Kapitel-Handbuch?**  
+> 📖 **Suchst du das vollständige Lehrbuch und technische Referenzhandbuch?**
 > Dies ist das praxisorientierte 30-Minuten-Tutorial (Maschinenverwaltung). Das vollständige Lehrbuch und Referenzwerk findest du unter **[handbuch.md](handbuch.md)** sowie online mit Volltextsuche auf **[siedelmann.com/handbuch](https://siedelmann.com/handbuch)**.
 
 Willkommen bei Zelyra, der Programmiersprache für Menschen, die eine
@@ -19,11 +19,7 @@ ersten Programm bis zur datenbankgestützten Webanwendung.
 Ein neues lokales Lernprojekt für Kunden, Artikel und Rechnungen erzeugst du
 mit [`zelyra --tutorial invoice`](../../tutorials/invoice.de.md).
 
-> **Projektstatus:** Zelyra 0.9.7 ist stabil veröffentlicht, bleibt aber
-> experimentell und ist nicht für den Produktiveinsatz freigegeben. Die
-> unabhängige menschliche Abnahme früherer Releases ist auf 1.0.0 verschoben.
-> Siehe [Roadmap](../../ROADMAP.de.md) und
-> [Abnahmeentscheidung](../../release-readiness/1.0.0-human-acceptance.de.md).
+> **Projektstatus:** Das aktuelle stabile Release ist Zelyra 1.0.4; die Sprachkompatibilitätslinie bleibt `0.1`. Compose v2 oder neuer wird für Datenbanktutorials benötigt. Siehe [Roadmap](../../ROADMAP.de.md), [Release 1.0.3](../../release-notes/1.0.3.de.md) und [Release 1.0.4](../../release-notes/1.0.4.de.md).
 
 Zelyra verbindet statische Typprüfung und verständliche Diagnosen mit
 compilergeprüften Datenbank- und Webdeklarationen. Zur Plattform gehören
@@ -33,7 +29,7 @@ Datenbankwerkbank. Das Rechnungstutorial führt durch Kunden, Artikel,
 Dashboard und druckbare Rechnungen mit 19 % Umsatzsteuer. Die Grenzen einzelner
 Funktionen, Datenbanken und Betriebsabläufe stehen in der
 [Implementierungsübersicht](../../implemented.de.md); Details zur
-[Anwendungs-E-Mail](../mail.de.md) und zum
+[Anwendungs-E-Mail](../../mail.de.md) und zum
 [Rechnungstutorial](../../tutorials/invoice.de.md) sind separat beschrieben.
 
 Die verbindlichen Produktziele zu digitaler Souveränität und ehrlichen
@@ -159,10 +155,10 @@ oder Cargo installiert werden. Das gewählte Archiv wird über HTTPS geladen und
 per SHA-256 geprüft:
 
 ~~~bash
-./install.sh --release v0.9.0
+./install.sh --release v1.0.4
 ~~~
 
-Unter Windows in PowerShell `-Release v0.9.0` mit `install.ps1` verwenden.
+Unter Windows in PowerShell `-Release v1.0.4` mit `install.ps1` verwenden.
 macOS nutzt derzeit weiterhin den Quellcode-Installer.
 
 Wenn die Shell `zelyra` nicht findet:

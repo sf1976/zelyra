@@ -1,6 +1,6 @@
 # Typed SQL result values
 
-Snapshot: unreleased 0.9.9 development branch. [Deutsch](sql-results.de.md)
+Scope: current stable Zelyra 1.0.4 release. [Deutsch](sql-results.de.md)
 
 `sql<T> { … }` retains its raw-row behavior. Use `sql_decode<T>` explicitly
 when the result must support arithmetic, field access, indexing, or iteration:
@@ -97,4 +97,4 @@ diagnostics. This API does not change migration approval or backend SQL support.
 
 Run [the executable example](../examples/typed_sql_results.zyl) against an owned
 test database after `zelyra db apply`. Real three-backend HTTP/SQL evidence and
-remaining release gates are in [the package report](release-readiness/0.9.9-typed-sql-results.en.md).
+The 0.9.9 verification evidence is in [the package report](release-readiness/0.9.9-typed-sql-results.en.md).

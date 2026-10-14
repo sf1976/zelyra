@@ -1,6 +1,6 @@
 # Dates, clock times, and UTC durations
 
-Snapshot: unreleased 0.9.9 development branch.
+Scope: current stable Zelyra 1.0.4 release.
 [Deutsch](dates.de.md)
 
 ```zelyra
@@ -63,7 +63,7 @@ across the full calendar range. See runnable
 `tests/temporal-api-e2e.py` tests real HTTP round trips, Date aliases, optional
 values, year boundaries, and 13 invalid inputs.
 
-## Native SQL storage in the development branch
+## Native SQL storage
 
 | Zelyra | MariaDB/MySQL | PostgreSQL |
 | --- | --- | --- |

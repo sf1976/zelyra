@@ -215,7 +215,7 @@ fn main() {
 ### 1. Was lerne ich in diesem Kapitel?
 - Die Systemvoraussetzungen für die Zelyra-Entwicklungsumgebung auf Linux, macOS und Windows.
 - Plattformspezifische Docker-Installation und Verifikation mit `docker compose version`.
-- Wie du Zelyra über den Quellcode (`./install.sh` / `install.ps1`) oder das stabile Release-Archiv (`--release v0.3.0`) installierst.
+- Wie du Zelyra über den Quellcode (`./install.sh` / `install.ps1`) oder das stabile Release-Archiv (`--release v1.0.4`) installierst.
 - Vollständige Versionsabfrage mit `zelyra --version` und Systemdiagnose mit `zelyra doctor`.
 - Den integrierten, token-geschützten Web-Setup-Assistenten (`zelyra setup --web`).
 - Typische Berechtigungs- und Port-Konflikte (z. B. Docker-Socket-Rechte, automatische Port-Wahl).
@@ -242,13 +242,13 @@ cd zelyra
 ```
 Oder direkt als vorkompiliertes Release ohne Rust-Toolchain:
 ```bash
-./install.sh --release v0.3.0
+./install.sh --release v1.0.4
 ```
 Unter Windows (PowerShell):
 ```powershell
 git clone https://github.com/sf1976/zelyra.git
 Set-Location zelyra
-.\install.ps1 -Release v0.3.0
+.\install.ps1 -Release v1.0.4
 ```
 
 **Schritt 2: Vollständige Version und Hilfe prüfen**
@@ -256,7 +256,13 @@ Set-Location zelyra
 zelyra --version
 zelyra --help
 ```
-`zelyra --version` gibt den vollständigen Compiler- und Paketversionsstand aus (z. B. `zelyra 0.3.0`). Die Sprachkompatibilitätslinie bleibt 0.1.
+`zelyra --version` gibt den vollständigen Compiler- und Paketversionsstand aus (z. B. `zelyra 1.0.4`). Die Sprachkompatibilitätslinie bleibt 0.1.
+
+Für das Rechnungstutorial und andere Docker-Projekte ist Docker Compose
+v2 oder neuer erforderlich. Die alte Python `docker-compose` v1 wird nicht
+unterstützt. Auf Linux wird das Compose-Plugin benötigt; prüfe es mit
+`docker compose version`. Hinweise zur Installation stehen in der
+[Docker-Dokumentation](https://docs.docker.com/engine/install/).
 
 **Schritt 3: Docker Compose prüfen (für MariaDB-Projekte)**
 ```bash
@@ -287,7 +293,7 @@ Zelyra öffnet einen lokalen HTTP-Server auf `127.0.0.1:3030` mit einem zufälli
 ### 6. Merksätze
 1. Das Zelyra-CLI bündelt Compiler, Runner, Formularprüfer, Migrator, Webserver und Setup-Assistenten in einem einzigen Werkzeug.
 2. Mit `docker compose version` und `zelyra doctor` überprüfst du jederzeit den Zustand deiner Toolchain.
-3. Das stabile Release kann mit `--release v0.3.0` direkt ohne Rust-Compiler installiert werden.
+3. Das stabile Release kann mit `--release v1.0.4` direkt ohne Rust-Compiler installiert werden.
 4. `zelyra setup --web` bietet eine intuitive, browserbasierte Ersteinrichtung mit sicherem Einmal-Token.
 
 ### 7. Übungsaufgaben
@@ -366,12 +372,11 @@ zelyra new taskmanager-web --mariadb
 cd taskmanager-web
 ```
 
-> **🧪 Unveröffentlichter 0.4-Entwicklungsstand:** Neu erzeugte MariaDB-Projekte
-> legen die Datenbankdeklaration in `src/database.zyl` ab und importieren dieses
-> Modul ausdrücklich aus `main.zyl`. Das trennt die Zuständigkeit im Quellbaum,
-> bietet aber noch keine mehreren benannten Verbindungen; die Laufzeit nutzt
-> weiterhin eine projektweite `DATABASE_URL`. Die veröffentlichte Version 0.3.0
-> bleibt davon unverändert.
+Neu erzeugte MariaDB-Projekte legen die Datenbankdeklaration in
+`src/database.zyl` ab und importieren dieses Modul ausdrücklich aus `main.zyl`.
+Das trennt die Zuständigkeit im Quellbaum, bietet aber noch keine mehreren
+benannten Verbindungen; die Laufzeit nutzt weiterhin eine projektweite
+`DATABASE_URL`.
 
 **Ersteinrichtung mit einem einzigen Befehl:**
 ```bash
@@ -1802,25 +1807,23 @@ fn main() {
 - Wie ein typisches Zelyra-Projekt strukturiert ist.
 - Die Rolle der Projektkonfigurationsdatei `zelyra.toml`.
 - Wie Code in logische Bestandteile (Schema, Logik, Ansichten) gegliedert wird.
-- Wie ein Projekt organisiert ist und welche Grenze die CLI bei mehreren
-  Quelldateien derzeit hat.
-- Den aktuellen Entwicklungsstand und die Roadmap von Modulen und Imports.
+- Wie `import` mehrere Quelldateien zu einem Projektgraphen verbindet.
+- Welche Grenzen das Modulmodell und einzelne Werkzeuge noch haben.
 
 ### 2. Warum ist das Thema wichtig?
 Zu Beginn schreibt man gerne alles in eine einzige Datei. Doch wenn deine Aufgabenverwaltung wächst – mit Datenbanktabellen, 20 Funktionen, Webformularen und Validierungen –, verliert man in einer 2000-Zeilen-Datei schnell den Überblick. Gute Softwareentwicklung bedeutet, Code so zu organisieren, dass man Neuerungen sofort an der richtigen Stelle findet.
 
 ### 3. Verständliche Erklärung
 Ein Projekt besitzt eine klare Ablagestruktur. `zelyra.toml` enthält
-Projektangaben und Capability-Freigaben; `main.zyl` ist die vom Starterprojekt
-angelegte Quelldatei. Weitere Dateien oder Unterordner kannst du zur eigenen
-Ordnung anlegen. Im veröffentlichten Release 0.3.0 verarbeitet jeder Befehl
-nur die ausdrücklich angegebene Quelldatei; weitere `.zyl`-Dateien werden
-weder automatisch gefunden noch zusammengeführt.
+Projektangaben und Capability-Freigaben; `main.zyl` ist die Einstiegsdatei.
+Weitere Dateien bindest du mit `import` in den Projektgraphen ein. Befehle wie
+`check`, `build`, `run`, `serve`, `context`, `verify`, `impact` und
+Datenbankwerkzeuge können diesen Graphen verarbeiten.
 
 ```toml
 [project]
 name = "aufgaben_planer"
-version = "0.3.0"
+version = "1.0.4"
 zelyra = "0.1"
 
 [capabilities]
@@ -1829,18 +1832,13 @@ network = false
 console = false
 ```
 
-**Stand des veröffentlichten Releases 0.3.0:** `import` und ein Modulsystem
-sind nicht
-implementiert. `zelyra check main.zyl` prüft `main.zyl`; eine zusätzliche Datei
-wie `src/schema.zyl` wird nur mit einem eigenen Aufruf wie
-`zelyra check src/schema.zyl` geprüft. Namen und Typen aus einer Datei stehen
-der anderen dadurch nicht automatisch zur Verfügung. Das veröffentlichte
-Release enthält keine Modulimporte. Ein experimenteller, begrenzter
-Modul-Importpfad ist im aktuellen Entwicklungszweig vorhanden; vollständige Module und
-deterministische Mehrdateiprojekte bleiben Arbeit für 0.4.0.
-
-**🧪 Aktueller, noch unveröffentlichter Entwicklungszweig:** Ein erster
-Projekt-Modulschnitt ist implementiert und getestet. Die Syntax lautet:
+**Modulunterstützung in Zelyra 1.0.4:** Mehrdateiprojekte verwenden
+`import "src/math.zyl" as math`. Das Modulmodell ist verfügbar, hat aber noch
+dokumentierte Grenzen: Es gibt pro Projektgraphen höchstens eine
+Datenbankkonfiguration; `fmt` und `edit` bearbeiten nur die angegebene Datei;
+SQLite-Tableviews und vollständige Quellenzuordnung einiger Diagnosen fehlen.
+`zelyra module plan` erstellt eine Abhängigkeitsvorschau, aber kein isoliertes
+Modul- oder Deploymentpaket. Die unterstützte Syntax lautet:
 
 ~~~zelyra
 import "src/math.zyl" as math
@@ -1892,8 +1890,8 @@ noch keine Modul-Quellzuordnung in seinen Ergebnissen. `fmt` und `edit`
 bearbeiten weiterhin nur die ausdrücklich angegebene Quelldatei.
 Datenbankbefehle bauen das Schema aus dem verknüpften Projektgraphen auf;
 Quellzuordnung für Schemafehler aus importierten Dateien ist noch nicht in
-allen Fällen vollständig. Dieses Branch-Verhalten ist experimentell und nicht im
-veröffentlichten 0.3.0-Binary enthalten.
+allen Fällen vollständig. Diese Modulunterstützung ist Teil des stabilen Releases 1.0.4; die oben genannten
+Grenzen bleiben bestehen.
 
 Das MariaDB-Dockerprojekt kopiert zusätzlich den konventionellen Ordner
 `src/` in das Laufzeitimage. Mehrdateienprojekte mit importierten
@@ -1902,7 +1900,7 @@ Das ist weder ein Export einzelner Module noch ein unabhängig konfigurierbares
 Datenbankmodul; Zugangsdaten gehören weiterhin ausschließlich in die lokale
 Laufzeitkonfiguration und nicht in Quelldateien.
 
-Ein weiterer experimenteller Vorläufer für spätere Modul-Exporte ist:
+Die experimentelle Vorschau für spätere Modul-Exporte ist:
 
 ~~~sh
 zelyra module plan main.zyl src/invoices.zyl
@@ -2017,8 +2015,7 @@ aus den Modulen, die Datenbankfunktionen verwenden. Das ist eine geprüfte
 Quellcodeabhängigkeit; es erzeugt weder mehrere Laufzeitverbindungen noch
 MariaDB-Berechtigungen.
 
-Die unveröffentlichte 0.4-Implementierung prüft außerdem modulbezogene
-Tabellenfreigaben. Der Eigentümer kann sie direkt in der Tabellendeklaration
+Zelyra 1.0.4 prüft außerdem modulbezogene Tabellenfreigaben. Der Eigentümer kann sie direkt in der Tabellendeklaration
 festlegen:
 
 ~~~zelyra
@@ -2228,10 +2225,11 @@ fn main() {
 In `zelyra.toml` legst du fest, welche Systemzugriffe das Projekt überhaupt anfordern darf. Greift dein Code auf die Datenbank zu, muss `database = true` aktiviert sein.
 
 ### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Modulimporte mit dem veröffentlichten Zelyra-0.3.0-Binary verwenden.
-  *Ursache:* `import` gehört nicht zu diesem Release. Der Entwicklungszweig
-  unterstützt experimentell mehrere Deklarationstypen, aber noch kein
-  vollständiges, stabiles Modul- und Paketmodell.
+- **Fehler:** Eine importierte Datei ohne `pub`-Export aus einem anderen Modul
+  verwenden.
+  *Ursache:* Funktionen, Typen, Records, Views und Komponenten sind standardmäßig
+  privat. Exportiere benötigte Deklarationen ausdrücklich und beachte die
+  Grenzen des Modulmodells.
 - **Fehler:** `zelyra.toml` löschen oder im falschen Verzeichnis ausführen.
   *Ursache:* `zelyra run` sucht im aktuellen Verzeichnis nach der Konfiguration.
 
@@ -2242,7 +2240,7 @@ In `zelyra.toml` legst du fest, welche Systemzugriffe das Projekt überhaupt anf
 
 ### 7. Übungsaufgaben
 - **Stufe 1 (Leicht):** Erstelle mit `zelyra new aufgaben_app` eine neue Projektstruktur und untersuche die erzeugten Dateien.
-- **Stufe 2 (Mittel):** Konfiguriere in `zelyra.toml` eine Beschreibung und die Versionsnummer `0.3.1`.
+- **Stufe 2 (Mittel):** Konfiguriere in `zelyra.toml` eine Beschreibung und eine passende Projektversion, zum Beispiel `1.0.5`.
 - **Stufe 3 (Anspruchsvoll):** Schreibe ein Programm mit drei separaten Funktionen für Initialisierung, Verarbeitung und Ausgabe.
 
 ### 8. Praxisaufgabe: Projektstruktur für die Aufgabenverwaltung
@@ -2267,13 +2265,14 @@ fn main() {
 
 ### 9. Zusammenfassung
 - `zelyra.toml` steuert Metadaten und Capability-Sicherheitsfreigaben des Projekts.
-- Release 0.3.0 prüft die ausdrücklich angegebene Quelldatei; der Entwicklungszweig ergänzt experimentelle Funktionsmodule.
+- Zelyra 1.0.4 verarbeitet importierte Quelldateien als gemeinsamen Projektgraphen.
+- Das Modulmodell hat dokumentierte Grenzen; ein Import erzeugt kein unabhängiges Paket.
 - Eine modulare Denkweise erleichtert Erweiterungen und Teamarbeit.
 
 ### 10. Kontrollfragen zur Selbstprüfung
 1. Welche Datei enthält die Metadaten eines Zelyra-Projekts?
 2. Warum ist die Trennung von Datenmodell und Ausführungslogik sinnvoll?
-3. Welche Befehle folgen derzeit den experimentellen Modul-Imports im Entwicklungszweig?
+3. Was ist beim Export von Funktionen und UI-Ressourcen aus einem Modul zu beachten?
 
 # TEIL IV – SICHERHEIT UND FEHLERBEHANDLUNG
 

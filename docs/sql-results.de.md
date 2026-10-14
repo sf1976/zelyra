@@ -1,6 +1,6 @@
 # Typisierte SQL-Ergebniswerte
 
-Stand: unveröffentlichter 0.9.9-Entwicklungsbranch. [English](sql-results.en.md)
+Stand: aktuelles stabiles Release Zelyra 1.0.4. [English](sql-results.en.md)
 
 `sql<T> { … }` behält sein Rohzeilenverhalten. `sql_decode<T>` wandelt Ergebnisse
 explizit in Werte für Berechnungen, Feldzugriff, Indexierung und Iteration um:

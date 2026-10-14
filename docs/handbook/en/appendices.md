@@ -8,7 +8,7 @@
 
 When sources disagree, report the disagreement explicitly and use this authoritative order:
 
-1. **[Formal Language Specification](specification.md) and phase documents**
+1. **[Formal Language Specification](../../specification.md) and phase documents**
 2. **Compiler implementation code:** Lexer, AST, parser, name resolution, type checking, and semantic compiler code across `lexer`, `parser`, `ast`, `hir`, `cli`, `runtime`, `database`, `web`, and `forms`
 3. **Official automated language and integration tests:** Workspace tests (`cargo test --workspace`), machine-interface tests, and E2E scripts in `tests/`
 4. **Official standard library:** (once formally introduced)
@@ -486,13 +486,11 @@ fn main() {
 
 ## Appendix I: Frequently Asked Questions (FAQ)
 
-**Question: Why is there no `import` statement in Zelyra 0.3.0?**
-*Answer:* The published 0.3.0 binary has no module imports. A CLI invocation
-checks only the explicitly named `.zyl` source file. The current unreleased
-development branch has experimental imports for functions, types, records,
-tables, views, components, and project-wide database configuration. Commands
-including `serve` can use the linked project graph, but complete stable modules
-and package exports remain planned work.
+**Question: How do I import other source files in Zelyra 1.0.4?**
+*Answer:* Use `import "src/math.zyl" as math` to add a file to the project
+graph. Public functions and other supported declarations can then be referenced
+through the alias. Module support has documented limits; see
+[Chapter 15](textbook-foundations.md#chapter-15-modules-and-code-organization).
 
 **Question: Can I build command-line applications with Zelyra?**
 *Answer:* Yes. `print()` emits values. `read_console("Prompt: ")` reads a line and returns `String?`; the function needs `uses Console` and the project may also need `console = true`.

@@ -264,7 +264,7 @@ the public `Host`, overwrite `X-Forwarded-Proto`, and prevent direct access to
 the app port. This setting only extends the host allowlist; it does not disable
 CSRF or origin checks.
 
-In the 0.4 development branch, each accepted HTTP connection has a fixed
+Each accepted HTTP connection has a fixed
 30-second deadline for reading the complete request and writing the response.
 A timeout closes the connection; there is no configurable retry. During
 request dispatch, MariaDB and the bounded PostgreSQL SQL runtime use the
@@ -390,7 +390,7 @@ Then run:
 docker compose --env-file .env -f docker-compose.mariadb.yml up -d --build
 ```
 
-In the unreleased 0.4 development branch, a declaration
+In the current 1.0.4 release, a declaration
 `database <name> { ... }` prefers `ZELYRA_DATABASE_<NAME>_URL`; the name is
 uppercased and non-alphanumeric characters become `_`. For `database main`,
 the key is `ZELYRA_DATABASE_MAIN_URL`. If that key is not set, `DATABASE_URL`
@@ -402,12 +402,11 @@ from the process environment. The CLI does not generally auto-load `.env` for
 this purpose; Compose injects them, or they must be exported before invocation.
 `zelyra doctor --env-file <file>` checks that file in this order: the named key,
 then `DATABASE_URL`. Restart Zelyra servers after changing their process
-environment. The stable 0.3.0 release does not yet recognize named variables.
+environment. Named variables are available starting with Zelyra 1.0.4.
 
-## MariaDB timeouts, connection pool, and TLS in the 0.4 development branch
+## MariaDB timeouts, connection pool, and TLS
 
-These settings exist in the unreleased 0.4 development branch; the stable
-0.3.0 binary does not support them. They are read only from the process
+These settings are available in the current 1.0.4 release. They are read only from the process
 environment. Zelyra does not load a `.env` file for these settings and has no
 matching `zelyra.toml` option. A Docker Compose service can receive them from
 Compose's `.env`; a running server must be restarted to inherit changed process
@@ -551,7 +550,7 @@ commit. The entry must include:
 A setting is not fully documented if it appears only in compiler code or a
 template.
 
-## DATABASE_URL: fixed decimal precision in 0.9.9 development
+## DATABASE_URL: fixed decimal precision
 
 With a configured database and a granted Database capability, `serve` and an
 interpreter's first SQL operation verify declared Decimal/Money/UInt precision
@@ -559,7 +558,7 @@ using read-only metadata. Metadata access is required; a legacy or incompatible
 schema is not silently used or migrated. There is no bypass switch. Existing
 URL precedence and secret rules still apply. See [rules and tests](decimals.en.md).
 
-## DATABASE_URL: date/time on the 0.9.9 development branch
+## DATABASE_URL: date and time
 
 Native runtime connections use UTC; existing PostgreSQL URL startup options are
 preserved with UTC appended. MariaDB/MySQL DATETIME contains no timezone, so

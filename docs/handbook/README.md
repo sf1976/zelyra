@@ -27,6 +27,8 @@ For the binding order of language sources and the required validation workflow,
 see the [source authority guide](../source-authority.md) and the
 [deutsche Quellenlandkarte](../source-authority.de.md).
 
-> Zelyra is experimental and has not been approved for production use. Keep
-> backups, inspect generated SQL, and never test a destructive schema plan on
-> a database containing data you cannot afford to lose.
+> Zelyra 1.0.4 is the current stable release. Supported workflows and limits
+> are documented in the [implementation inventory](../implemented.en.md) and
+> [database support matrix](../database-support.en.md). Keep backups, inspect
+> generated SQL, and never test a destructive schema plan on data you cannot
+> afford to lose.

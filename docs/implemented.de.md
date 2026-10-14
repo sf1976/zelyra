@@ -1,19 +1,34 @@
-# In Zelyra 0.9.9 umgesetzt
+# In Zelyra 1.0.4 umgesetzt
 
-**Stand:** Entwicklungszweig 0.9.9 · Sprachkompatibilitätslinie `0.1` · 2026-10-12
-**Reifegrad:** Vorabentwicklung; nicht für den Produktiveinsatz freigegeben
+**Stand:** stabiles Release 1.0.4 · Sprachkompatibilitätslinie `0.1` · 2026-10-14
+**Reifegrad:** veröffentlichtes stabiles Release; Eignung und Grenzen sind je Ablauf zu prüfen
 
-Dies ist eine Entwicklungsübersicht, kein veröffentlichtes 0.9.9-Release. Die
-offenen technischen Gates stehen im [Releaseplan 0.9.9](release-plans/0.9.9.de.md).
-Die menschliche Abnahme bleibt dem konkreten 1.0.0-Kandidaten vorbehalten.
+Diese Übersicht beschreibt den Funktionsumfang des aktuellen Releases nach
+Anwendungsbereichen. Sie unterscheidet verfügbare Funktionen von begrenzten
+oder experimentellen Bereichen; sie behauptet weder universelle
+Datenbankportabilität noch Fehlerfreiheit beliebiger Anwendungen.
 
-Diese Übersicht beschreibt, was die aktuelle Zelyra-Version kann. Sie führt die
-Funktionen nach Anwendungsbereichen statt nach einzelnen Versionsnummern auf.
-Ältere und neue Releases stehen im [Changelog](../CHANGELOG.md); offene Arbeit
-steht in der [Roadmap](ROADMAP.de.md). Eine unabhängige menschliche Abnahme ist
-für 1.0.0 vorgesehen.
+## Änderungen in 1.0.3 und 1.0.4
 
-## Was der Entwicklungszweig 0.9.9 bietet
+- **1.0.3:** erweiterte Standardbibliothek für Mathematik, Text, Arrays, Sets,
+  Maps, Datum, Parsing, Encodings und Pfade; typgeprüfte `|>`-Pipelines und
+  flache `else if`-Kaskaden; robustere Studio-Schemaanzeige; automatische
+  Tutorialinitialisierung, Portauswahl, wiederholbare Beispieldaten und
+  begrenzte Rekursion. Siehe [Release-Notizen 1.0.3](release-notes/1.0.3.de.md).
+- **1.0.4:** isolierte Compose-Projektnamen für Rechnungstutorials, geschützter
+  Ausweichpfad bei alten MariaDB-Volumes und Erkennung kurzer Compose-Versionen
+  wie `2.40`. Siehe [Release-Notizen 1.0.4](release-notes/1.0.4.de.md).
+
+Die Release-Notizen dokumentieren historische Änderungen; die
+[Roadmap](ROADMAP.de.md) enthält geplante Arbeit. Die
+[Sprachspezifikation](specification.de.md),
+[Quellenlandkarte](source-authority.de.md) und das
+[Handbuch](handbook/de/handbuch.md) beschreiben die akzeptierte Syntax und ihre
+Grenzen.
+
+## Was Zelyra 1.0.4 bietet
+
+### Sprache und Compiler
 
 - **Sprache und Compiler:** eine statisch geprüfte Sprache mit Funktionen,
   generischen Records, Enums und Klassen, benannten Funktionswerten, typisierten
@@ -21,52 +36,7 @@ für 1.0.0 vorgesehen.
   Effekten und compilergeprüften SQL-/Webdeklarationen. Explizite skalare
   Textformatierung, Kalender-Tagesrechnung, Decimal-Rundung und kontrollierte
   Rekursion sind enthalten.
-  Die genaue Typabdeckung und ihre Grenzen stehen im Abschnitt
-  [Sprache und Compiler](#sprache-und-compiler).
-- **Datenbanken:** schemaabhängige Abfragen, relationale Fremdschlüssel,
-  Datenbankinspektion und geprüfte Setup-/Migrationspläne. MariaDB ist die
-  primäre Laufzeitreferenz. MySQL 8.4.11 hat neben parametrisierten Abfragen
-  nun einen isolierten Schemaablauf; PostgreSQL wird für die in der
-  [Supportmatrix](database-support.de.md) ausgewiesenen Abläufe geprüft.
-- **Geschäftsanwendungen:** Seiten, wiederverwendbare Views, Formulare,
-  Tabellenansichten, Suche, Filter, Sortierung, Pagination, CRUD und typisierte
-  APIs mit OpenAPI-Ausgabe.
-- **Zelyra Studio:** lokaler Webeditor mit gespeicherter heller und dunkler
-  Darstellung, Compilerdiagnosen, Formatierung, Navigation, Vervollständigung,
-  Aufgabenhilfe, Datenbankwerkbank und Projektkarte. Ein kurzer Markenstart
-  überbrückt das Laden; die CLI verwendet auf Wunsch Terminalfarben. Die Karte
-  zeigt bekannte Beziehungen und begründet offene oder
-  begrenzte Zuordnungen, statt sie zu erraten.
-- **Rechnungstutorial:** eine mehrteilige Anwendung für Kunden, Artikel und
-  Rechnungen mit Kennzahlen aus gespeicherten Daten. Tabler Core 1.6.1 wird
-  lokal als CSS-Grundlage geladen. Dashboard, CRUD-Wege und druckbare Netto-,
-  19%-Steuer- und Bruttoansicht sind für Desktop, schmale Bildschirme und Druck
-  ausgelegt. Summen enthalten Entwürfe und sind keine gebuchte Umsatzstatistik.
-- **Betrieb und Sicherheit:** CLI für Projektstart und Setup, Routenübersicht,
-  Formatierung, Diagnose, Datenbank- und Schemawerkzeuge, Audit und
-  Releaseprüfung. Authentifizierung, Rollen, tenant-gefiltertes CRUD, optionale
-  lokale MFA und SMTP-Mail über eine transaktionale MariaDB-Outbox sind im
-  jeweiligen dokumentierten Umfang verfügbar.
-- **Migration:** ein statischer Laravel-Bericht und ein ausdrücklich
-  angefordertes separates Zelyra-Grundgerüst mit Fundstellen und offenen
-  Zuordnungen. Es wird keine Geschäfts- oder Sicherheitsparität behauptet.
 
-Die Oberfläche und Tools sind lokal nutzbar. Verbindliche Cloud-Dienste,
-Telemetrie und externe KI-Anbieter sind nicht erforderlich. Zelyra bleibt
-experimentell: CI und automatisierte Prüfungen ersetzen keine menschliche
-Produkt- oder Sicherheitsabnahme.
-
-## Statuszeichen
-
-- ✅ **Umgesetzt und geprüft:** im angegebenen Umfang verfügbar und durch Tests
-  oder dokumentierte Release-/CI-Prüfungen belegt.
-- 🧪 **Teilweise oder experimentell umgesetzt:** der funktionierende Teilumfang
-  wird ausdrücklich beschrieben; daraus folgt keine breitere Unterstützung.
-
-Kein Punkt bedeutet allgemeine Produktionsreife, universelle Portabilität oder
-den Beweis, dass beliebige Anwendungen korrekt sind.
-
-## Sprache und Compiler
 
 - ✅ Lexer, Parser, Syntaxbaum, Namens- und Typprüfung, Funktionen, Ausdrücke,
   Bedingungen, Schleifen und unveränderliche Bindings als Standard;
@@ -160,7 +130,7 @@ Siehe die [formale Sprachspezifikation](specification.de.md), die
   werden. Ein fünfsekündiges Transport-Timeout, Nachrichtengrenzen und eine
   Loopback-Testsenke sind geprüft. Die Zustellung erfolgt mindestens einmal;
   genau-einmalige Zustellung, PostgreSQL-Outbox, benannte Vorlagen und
-  Dateianhänge sind in 0.9.9 nicht zugesagt.
+  Dateianhänge sind im aktuellen Release nicht verfügbar.
 - ✅ SQLite bietet geprüfte lokale Schemaabläufe. PostgreSQL unterstützt
   ausgewählte Laufzeit-, Schema- und Sicherheitsprüfungen. MySQL Server 8.4.11
   unterstützt typisierte parametrisierte Abfragen sowie einen isolierten
@@ -290,8 +260,7 @@ der [Setup-Anleitung](setup-web.de.md) und den
   HttpOnly-Sessions. Direkte und rollenbasierte Berechtigungen, geschützte
   Aktionen, CSRF-geschützte Browserverwaltung und Schutz der letzten
   Administratorzuordnung sind implementiert.
-- 🧪 Passwortwiederherstellung verwendet in der 0.9.9-Entwicklung ein
-  transaktional gespeichertes, instanzübergreifendes Reset-Limit. Die Tabelle
+- 🧪 Passwortwiederherstellung verwendet ein transaktional gespeichertes, instanzübergreifendes Reset-Limit. Die Tabelle
   speichert einen HMAC-Fingerabdruck statt einer IP-Adresse; Datenbankfehler
   sperren den Vorgang. Unabhängige Sicherheitsprüfung und vollständige
   Release-E2E bleiben offen.
@@ -343,19 +312,20 @@ Diese Werkzeuge rufen keinen KI-Anbieter auf. Siehe die
 [Benchmark-Spezifikation](benchmarks/ai-authoring.de.md); hier werden keine
 vergleichenden Benchmark-Ergebnisse behauptet.
 
-## Test- und Release-Nachweise
+## Release- und Prüfnachweise
 
-Das stabile [Zelyra-0.9.7-Release](https://github.com/sf1976/zelyra/releases/tag/v0.9.7)
-enthält Linux- und Windows-x86_64-Artefakte, Prüfsummen und SPDX-SBOMs. Die
-laufenden Prüfungen und ihre Grenzen stehen in der
-[Datenbankmatrix](database-support.de.md). Die menschliche Produktabnahme ist
-für 1.0.0 reserviert und wird durch automatisierte Nachweise nicht ersetzt.
+Das aktuelle stabile [Zelyra-1.0.4-Release](https://github.com/sf1976/zelyra/releases/tag/v1.0.4)
+und seine Artefakte stehen bei GitHub. Die [Release-Notizen](release-notes/)
+beschreiben ausgelieferte Änderungen; die geprüften Datenbankabläufe und ihre
+Grenzen stehen in der [Datenbankmatrix](database-support.de.md). Automatisierte
+Prüfungen belegen nur die jeweils geprüften Bereiche und nicht die Korrektheit
+beliebiger Anwendungen.
 
 Diese Übersicht wird angepasst, wenn sich ausgelieferte Funktionen oder ihre
 Nachweise ändern. Ein Spezifikations- oder Roadmap-Eintrag allein wird hier
 nicht als Implementierung ausgegeben.
 
-## Exakte Dezimalgrenzen in 0.9.9
+## Aktuelle Dezimalgrenzen
 
 `betrag: Decimal = decimal("119.00")` deklariert einen exakten Festkommawert.
 Formulare, HTTP und SQL verwenden geprüfte Dezimaltexte. MariaDB/MySQL speichern
@@ -368,7 +338,7 @@ JSON-Ausgaben bleiben Dezimalstrings. Siehe [vollständige Regeln](decimals.de.m
 und [Beispiel](../examples/decimal_money.zyl). Das belegt keine volle
 PostgreSQL-CRUD-/Auth-Parität oder Produktivfreigabe.
 
-## Datums-/Zeitgrenzen im Entwicklungszweig
+## Datums-/Zeitgrenzen
 
 Kalender-Tagesrechnung und UTC-Millisekunden sind mit unabhängigen Python-
 Referenzen geprüft. Formulare und APIs weisen ungültige Kalender-/Uhrzeitwerte
@@ -383,7 +353,7 @@ bleibt unverändert. Siehe [Regeln](dates.de.md),
 [HTTP-Nachweise](release-readiness/0.9.9-calendar-http.de.md) und
 [SQL-Nachweise](release-readiness/0.9.9-calendar-sql.de.md).
 
-## NULL-bewusster Edit-Schutz im Entwicklungsbranch
+## NULL-bewusster Edit-Schutz
 
 Natives NULL und Literaltext `\N` bleiben in signierten Edit-Snapshots und
 Formulareingaben verschieden. Veraltete MariaDB-/MySQL-Updates scheitern mit

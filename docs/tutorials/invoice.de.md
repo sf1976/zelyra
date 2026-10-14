@@ -23,6 +23,12 @@ Browser öffnet. Die Beispieldaten enthalten zwei Kunden, drei Artikel und den
 Rechnungsentwurf `RE-2026-001` mit zwei Positionen. Wiederholte Starts fügen
 diese Datensätze nicht erneut hinzu.
 
+Die Startseite `/` ist derzeit eine Tutorialübersicht mit Kennzahlen und
+Arbeitsschritten. `/views/invoicedashboard` ist die filter- und durchsuchbare
+Rechnungstabelle mit berechneten Netto-, Steuer- und Bruttosummen. Die
+Startseite und Rechnungsübersicht werden für Version 1.0.5 stärker auf den
+Rechnungsablauf ausgerichtet.
+
 Nur die Dateien erzeugen, ohne Docker zu starten:
 
 ~~~sh
@@ -77,6 +83,21 @@ zelyra setup . --all
 ohne Dateien zu ändern. `routes` zeigt Seiten, APIs und erzeugte CRUD-Routen.
 `db map` stellt deklarierte Tabellen und ihren Modulbesitz dar. Die Setup-Modi
 starten MariaDB, richten das Schema ein oder erledigen den vollständigen Ablauf.
+
+### Woher kommt `/invoices/new`?
+
+In `main.zyl` und `src/shell.zyl` verweisen Schaltflächen auf `/invoices/new`.
+Eine Zeile `page "/invoices/new"` gibt es im Tutorial nicht. Die Route wird
+aus der CRUD-Deklaration `crud Invoice -> invoices` in `src/invoices.zyl`
+erzeugt. `crud` aktiviert automatisch erzeugte Ansichten und Aktionen für die
+Ressource `invoices`. Dazu gehören `GET /invoices` für die Liste,
+`GET /invoices/new` für das Formular zum Anlegen und `POST /invoices/new` zum
+Speichern. Der Name hinter `->` bestimmt den URL-Basispfad.
+
+Die Druckansicht ist dagegen ausdrücklich in derselben Datei deklariert:
+`page "/invoices/{invoice_number}/print"`. Mit `zelyra routes main.zyl`
+kannst du beide Arten von Routen und ihre Herkunft in der Befehlsausgabe
+nachvollziehen.
 
 Vor einer späteren Schemaänderung kannst du den Plan ansehen und dann den
 angezeigten Plan gezielt anwenden:
