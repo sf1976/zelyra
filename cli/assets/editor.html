@@ -29,6 +29,7 @@
         <button class="toolbar-button" id="project-search-button" title="Projekt durchsuchen (Strg+Umschalt+F)" data-i18n-title="projectSearch">⌕ <span data-i18n="projectSearch">Projekt</span></button>
         <button class="toolbar-button" id="project-map-button" title="Projektbeziehungen anzeigen" data-i18n-title="projectMap">◇ <span data-i18n="projectMap">Projektkarte</span></button>
         <button class="toolbar-button" id="pdf-preview-button" type="button" title="PDF-Vorschau mit Beispieldaten" data-i18n-title="pdfPreview">▣ <span data-i18n="pdfPreview">PDF</span></button>
+        <button class="toolbar-button" id="outbox-button" type="button" title="Mail-Outbox ansehen" data-i18n-title="outboxTitle">✉ <span data-i18n="outboxButton">Outbox</span></button>
         <button class="toolbar-button" id="task-finder-button" title="Aktion suchen (Strg+Umschalt+P)" data-i18n-title="taskFinder">⌘ <span data-i18n="taskFinder">Aktionen</span></button>
         <button class="toolbar-button" id="database-button" title="Datenbankübersicht öffnen" data-i18n-title="database">▤ <span data-i18n="database">Datenbank</span></button>
         <button class="toolbar-button" id="logs-button" title="Lokale Programmlogs öffnen" data-i18n-title="logs">≋ <span data-i18n="logs">Logs</span></button>
@@ -241,6 +242,12 @@
     </div>
     <p id="pdf-preview-status" role="status" class="project-map-status"></p>
     <iframe id="pdf-preview-frame" title="PDF-Vorschau" sandbox="allow-downloads" hidden></iframe>
+  </dialog>
+  <dialog id="outbox-dialog" class="project-map-dialog outbox-dialog" aria-labelledby="outbox-title">
+    <header class="project-map-header"><div><span class="database-eyebrow" data-i18n="outboxButton">OUTBOX</span><h2 id="outbox-title" data-i18n="outboxTitle">Mail-Outbox</h2></div><button id="outbox-close" type="button" aria-label="Schließen" data-i18n-aria="close">×</button></header>
+    <div class="outbox-controls"><button id="outbox-refresh" type="button" class="toolbar-button" data-i18n="refresh">Aktualisieren</button><span id="outbox-page-label"></span><button id="outbox-previous" type="button" class="toolbar-button" data-i18n="previous">Zurück</button><button id="outbox-next" type="button" class="toolbar-button" data-i18n="next">Weiter</button></div>
+    <p id="outbox-status" class="project-map-status" role="status"></p>
+    <div class="outbox-table-scroll"><table><caption data-i18n="outboxCaption">Metadaten der MariaDB-Outbox ohne Nachrichteninhalt</caption><thead><tr><th scope="col" data-i18n="outboxEvent">Ereignis</th><th scope="col" data-i18n="outboxStatus">Status</th><th scope="col" data-i18n="outboxRecipient">Empfänger</th><th scope="col" data-i18n="outboxAttachment">Anhang</th><th scope="col" data-i18n="outboxCreated">Erstellt</th><th scope="col" data-i18n="outboxAvailable">Verfügbar</th><th scope="col" data-i18n="outboxError">Fehler</th><th scope="col" data-i18n="outboxAction">Aktion</th></tr></thead><tbody id="outbox-rows"></tbody></table></div>
   </dialog>
 </body>
 </html>

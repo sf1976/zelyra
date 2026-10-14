@@ -138,6 +138,22 @@ PDF bytes. Invalid data, unknown views, and compiler errors are reported.
 This is separate from the existing presentation print view, which still uses
 the browser print dialog.
 
+### Inspect the MariaDB outbox
+
+**Outbox** reads the existing transactional MariaDB outbox when opened and
+when you choose **Refresh**. It shows 25 events per page with status,
+attempts, recipient, timestamps, a redacted error code, and the name of the
+one currently supported PDF attachment. Message bodies and attachment bytes
+are not sent to the browser. The local Studio token also protects this read
+API. Without a configured MariaDB connection, the view shows a configuration
+hint; `zelyra outbox setup main.zyl` explicitly creates the table.
+
+Only `exhausted` events offer **Requeue**. After your confirmation, Studio
+calls the existing domain requeue operation. It releases the event for a later
+worker run and sends no message. Studio neither starts nor automatically
+configures a worker. Count and rows are read in two database queries; a
+concurrent worker can change the count between those queries.
+
 ## Start the invoice tutorial in Studio
 
 For a generated invoice tutorial, Studio starts its own isolated MariaDB

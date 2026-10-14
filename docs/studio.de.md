@@ -151,6 +151,24 @@ generierten PDF-Bytes. Ungültige Daten, unbekannte Views und Compilerfehler
 werden als Fehler angezeigt. Diese Funktion ist getrennt von der vorhandenen
 Präsentations-Druckansicht, die weiterhin den Browser-Druckdialog verwendet.
 
+### MariaDB-Outbox prüfen
+
+**Outbox** liest die vorhandene transaktionale MariaDB-Outbox erst beim Öffnen
+und auf **Aktualisieren**. Die Ansicht zeigt 25 Ereignisse je Seite mit Status,
+Versuchen, Empfänger, Zeitpunkten, redigiertem Fehlercode und dem Namen des
+einen derzeit unterstützten PDF-Anhangs. Nachrichtentext und Anhangsbytes
+werden nicht an den Browser übertragen. Der lokale Studio-Token schützt auch
+die lesende API. Ohne konfigurierte MariaDB-Verbindung zeigt die Ansicht einen
+Konfigurationshinweis; `zelyra outbox setup main.zyl` legt die Tabelle
+ausdrücklich an.
+
+Nur bei `exhausted` erscheint **Erneut einreihen**. Nach deiner Bestätigung
+ruft Studio die bestehende fachliche Requeue-Operation auf. Sie setzt das
+Ereignis für einen späteren Worker-Lauf zurück und versendet keine Nachricht.
+Ein Worker wird in Studio weder gestartet noch automatisch konfiguriert.
+Zähler und Zeilen werden in zwei Datenbankabfragen gelesen; bei gleichzeitigen
+Worker-Aktionen kann sich die Trefferzahl zwischen den Abfragen ändern.
+
 ## Rechnungstutorial in Studio starten
 
 Bei einem erzeugten Rechnungstutorial startet Studio beim Klick auf

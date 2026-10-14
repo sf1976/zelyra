@@ -11,6 +11,8 @@ use zelyra_web::{parse_request, Request};
 #[path = "editor_events.rs"]
 mod editor_events;
 use editor_events::EventHub;
+#[path = "editor_outbox.rs"]
+mod editor_outbox;
 #[path = "editor_pdf.rs"]
 mod editor_pdf;
 
@@ -460,6 +462,10 @@ fn editor_response(
         ("POST", "project-map") => editor_project_map(state, &parse_json_body(&request.body)?),
         ("GET", "pdf-views") => editor_pdf::views(state),
         ("POST", "pdf-render") => editor_pdf::render(state, &parse_json_body(&request.body)?),
+        ("GET", "outbox") => editor_outbox::list(state, request),
+        ("POST", "outbox-requeue") => {
+            editor_outbox::requeue(state, &parse_json_body(&request.body)?)
+        }
         ("GET", "logs") => editor_logs_response(state),
         ("GET", "database-schema") => database_schema_response(state),
         ("GET", "database-target") => database_target_response(state),
@@ -5093,6 +5099,98 @@ fn main() {}
             ],
         );
         assert_eq!(editor_response(&render, &state).unwrap_err().0, 403);
+    }
+
+    #[test]
+    fn outbox_api_requires_session_origin_and_explicit_confirmation() {
+        let state = project();
+        let list = request("GET", "/__zelyra/editor/api/outbox", &[]);
+        assert_eq!(editor_response(&list, &state).unwrap_err().0, 403);
+        let requeue = request(
+            "POST",
+            "/__zelyra/editor/api/outbox-requeue",
+            &[
+                ("x-zelyra-editor-token", state.token.as_str()),
+                ("origin", "http://example.test"),
+            ],
+        );
+        assert_eq!(editor_response(&requeue, &state).unwrap_err().0, 403);
+        assert_eq!(
+            editor_outbox::requeue(&state, &json!({"eventId":"evt-1"}))
+                .unwrap_err()
+                .0,
+            400
+        );
+    }
+
+    #[test]
+    fn studio_outbox_reads_mariadb_metadata_and_requeues_without_sending() {
+        let Ok(database_url) = env::var("ZELYRA_DB_TIMEOUT_TEST_URL") else {
+            eprintln!("skipping Studio outbox integration: test database URL is not configured");
+            return;
+        };
+        let state = project();
+        fs::write(
+            state.root.join("main.zyl"),
+            "database main { engine: mariadb } fn main() {}\n",
+        )
+        .unwrap();
+        fs::write(
+            state.root.join(".env"),
+            format!("DATABASE_URL={database_url}\n"),
+        )
+        .unwrap();
+        zelyra_database::outbox::ensure_mariadb_outbox(&database_url).unwrap();
+        let id = format!(
+            "studio-outbox-{}-{}",
+            std::process::id(),
+            NEXT_DIRECTORY.fetch_add(1, Ordering::Relaxed)
+        );
+        let event = zelyra_database::outbox::OutboxEvent::new(
+            &id,
+            "zelyra.mail.send",
+            &json!({"to":"client@example.test","subject":"test","text":"not delivered","attachments":[{"filename":"invoice.pdf","content_type":"application/pdf","content":"JVBERi0xLjQ="}]}),
+        )
+        .unwrap();
+        zelyra_database::with_mariadb_transaction(&database_url, |transaction| {
+            zelyra_database::outbox::enqueue_mariadb_event(transaction, &event)
+        })
+        .unwrap();
+        let request = request("GET", "/__zelyra/editor/api/outbox?offset=0", &[]);
+        let (_, _, body) = editor_outbox::list(&state, &request).unwrap();
+        let page: Value = serde_json::from_str(&body).unwrap();
+        let item = page["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["id"] == id)
+            .unwrap();
+        assert_eq!(item["recipient"], "client@example.test");
+        assert_eq!(item["attachmentName"], "invoice.pdf");
+        assert!(body.contains("client@example.test"));
+        assert!(!body.contains("not delivered"));
+        zelyra_database::execute_mariadb_query(
+            &database_url,
+            "UPDATE `_zelyra_outbox` SET `exhausted_at` = UTC_TIMESTAMP(6), `attempts` = 8 WHERE `event_id` = :id",
+            vec![("id".into(), zelyra_database::QueryValue::String(id.clone()))],
+        )
+        .unwrap();
+        let (_, _, body) =
+            editor_outbox::requeue(&state, &json!({"eventId":id,"confirm":true})).unwrap();
+        assert_eq!(serde_json::from_str::<Value>(&body).unwrap()["sent"], false);
+        let row = zelyra_database::execute_mariadb_query(
+            &database_url,
+            "SELECT `delivered_at` IS NULL, `attempts` FROM `_zelyra_outbox` WHERE `event_id` = :id",
+            vec![("id".into(), zelyra_database::QueryValue::String(id.clone()))],
+        )
+        .unwrap();
+        assert_eq!(row.rows[0], ["1", "0"]);
+        zelyra_database::execute_mariadb_query(
+            &database_url,
+            "DELETE FROM `_zelyra_outbox` WHERE `event_id` = :id",
+            vec![("id".into(), zelyra_database::QueryValue::String(id))],
+        )
+        .unwrap();
     }
 
     fn request(method: &str, path: &str, headers: &[(&str, &str)]) -> Request {

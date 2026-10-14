@@ -212,6 +212,8 @@ const messages = {
     projectMap: "Projektkarte", projectMapTitle: "Projektbeziehungen", projectMapOpenSource: "Quelltext öffnen", projectMapLoading: "Compiler-Projektmodell wird geladen …", projectMapUnavailable: "Projektkarte konnte nicht erstellt werden.", projectMapIncomplete: "Die Karte ist unvollständig. Nicht auflösbare oder begrenzte Beziehungen werden nicht geraten.", projectMapIssues: { "view.unresolved": "Ansicht nicht gefunden", "view.ambiguous": "Ansichtsname mehrfach vorhanden", "crud.table_unresolved": "CRUD-Tabelle nicht eindeutig", "api.handler_unresolved": "API-Funktion nicht eindeutig", "import.unresolved": "Importziel nicht gefunden", "edge.target_missing": "Beziehungsziel fehlt", "limit.nodes": "Knotenlimit erreicht", "limit.edges": "Beziehungslimit erreicht" }, projectMapEmpty: "Noch keine unterstützten Beziehungen im Projekt.", projectMapModules: "Module", projectMapData: "Daten und Ansichten", projectMapWeb: "Routen und APIs", projectMapLogic: "Funktionen",
     pipelineBreadcrumbs: "Semantische Projektbeziehungen", projectMapNullability: "NULL-Radar (Compiler E-SQL-004)", projectMapIssuesExtra: { "form.table_unresolved": "Formular-Tabelle nicht eindeutig", "struct.unresolved": "Ergebnistyp nicht gefunden", "struct.ambiguous": "Ergebnistyp mehrfach vorhanden", "sql.access_unresolved": "SQL-Tabellenbezug nicht eindeutig" },
     pdfPreview: "PDF-Vorschau", pdfPreviewTitle: "PDF-Vorschau mit echten PDF-Bytes", pdfView: "Deklarierte View", pdfExampleData: "Beispieldaten als JSON-Objekt", pdfRender: "PDF erzeugen", pdfDownload: "PDF herunterladen", pdfNoViews: "Im Projekt ist keine View deklariert.", pdfReady: "PDF erzeugt ({0} Byte).", pdfLoading: "Views werden geladen …", pdfRendering: "PDF wird lokal erzeugt …", pdfInvalidData: "Bitte ein gültiges JSON-Objekt als Beispieldaten eingeben.", pdfError: "PDF-Vorschau fehlgeschlagen: {0}",
+    outboxButton: "Outbox", outboxTitle: "Mail-Outbox", outboxCaption: "Metadaten der MariaDB-Outbox ohne Nachrichteninhalt", outboxEvent: "Ereignis", outboxStatus: "Status", outboxRecipient: "Empfänger", outboxAttachment: "Anhang", outboxCreated: "Erstellt", outboxAvailable: "Verfügbar", outboxError: "Fehler", outboxAction: "Aktion", previous: "Zurück", next: "Weiter", outboxLoading: "Outbox wird geladen …", outboxEmpty: "Keine Ereignisse auf dieser Seite.", outboxPage: "{0}–{1} von {2}", outboxRequeue: "Erneut einreihen", outboxRequeueConfirm: "Das erschöpfte Ereignis {0} für einen späteren Worker-Lauf freigeben? Es wird jetzt keine E-Mail versendet.", outboxRequeued: "Ereignis erneut eingereiht. Ein Versand erfolgt erst durch einen ausdrücklich gestarteten Worker.", outboxLoadError: "Outbox konnte nicht geladen werden: {0}", outboxRequeueError: "Erneutes Einreihen fehlgeschlagen: {0}",
+    outboxAttempts: "Versuche: {0}", outboxLeaseUntil: "Sperre bis: {0}", outboxDeliveredAt: "Zugestellt: {0}", outboxExhaustedAt: "Erschöpft: {0}", outboxNoDatabase: "Für die Outbox ist keine MariaDB-Verbindung konfiguriert. Trage DATABASE_URL in .env oder der Umgebung ein.",
     runButton: "Starten", runButtonTitle: "main.zyl ausführen oder Webanwendung starten",
     runOutputTitle: "Programmausgabe", runStarting: "Anwendung wird vorbereitet und gestartet …", runSuccess: "Programm erfolgreich beendet", runFailure: "Programm mit Fehler beendet", runTimeout: "Ausführung nach 15 Sekunden beendet", runOutputTruncated: "Die Ausgabe ist auf 64 KiB je Stream begrenzt.", runNoOutput: "Keine Ausgabe.", runStdout: "AUSGABE", runStderr: "FEHLER", runInputUnavailable: "Studio stellt dem Programm keine interaktive Eingabe bereit.", runWebReady: "Webanwendung läuft lokal:", runWebOpen: "Anwendung im Browser öffnen", runWebStop: "Vorschau beenden", runWebStopped: "Lokale Vorschau wurde beendet.",
     runtimeBudgetButton: "Budget", runtimeBudgetTitle: "Laufzeitbudget und Rekursion", runtimeBudgetEnable: "Schrittbudget für Konsolenprogramme aktivieren", runtimeBudgetRange: "Schrittbudget (Regler: 1.000 bis 1.000.000)", runtimeBudgetNumber: "Maximale Schritte (1 bis 100.000.000)", runtimeBudgetWebHint: "Das Schrittbudget gilt für Konsolenprogramme. Eine Webvorschau verwendet weiterhin ihre eigenen Laufzeitgrenzen.", runtimeRecursionTitle: "Mögliche Rekursion", runtimeRecursionNone: "Keine direkte oder gegenseitige Rekursion im analysierten Funktionsgraphen gefunden.", runtimeRecursionIncomplete: "Der Funktionsgraph ist zu groß; die Rekursionsanalyse ist unvollständig.", runtimeRecursionDirect: "Direkte Rekursion", runtimeRecursionMutual: "Gegenseitige Rekursion", runtimeStackDepth: "Maximale Stacktiefe laut Projekt: {0} ({1})", runtimeStackConfigured: "konfiguriert", runtimeStackDefault: "Standard", runtimeProfileError: "Laufzeitprofil konnte nicht gelesen werden: {0}", runtimeBudgetInvalid: "Bitte eine ganze Schrittzahl von 1 bis 100.000.000 eingeben.", runtimeBudgetExceeded: "Schrittbudget überschritten", runCancel: "Ausführung abbrechen", runCancelRequested: "Abbruch angefordert …", runCancelled: "Ausführung abgebrochen", runtimeProfileInvalid: "Der ungespeicherte Quelltext ist nicht vollständig analysierbar.",
@@ -311,6 +313,8 @@ const messages = {
     projectMap: "Project map", projectMapTitle: "Project relationships", projectMapOpenSource: "Open source location", projectMapLoading: "Loading the compiler project model …", projectMapUnavailable: "Could not create the project map.", projectMapIncomplete: "The map is incomplete. Unresolved or limited relationships are not guessed.", projectMapIssues: { "view.unresolved": "View not found", "view.ambiguous": "View name is ambiguous", "crud.table_unresolved": "CRUD table is not unique", "api.handler_unresolved": "API function is not unique", "import.unresolved": "Import target not found", "edge.target_missing": "Relationship target is missing", "limit.nodes": "Node limit reached", "limit.edges": "Relationship limit reached" }, projectMapEmpty: "No supported relationships in this project yet.", projectMapModules: "Modules", projectMapData: "Data and views", projectMapWeb: "Routes and APIs", projectMapLogic: "Functions",
     pipelineBreadcrumbs: "Semantic project relationships", projectMapNullability: "NULL radar (compiler E-SQL-004)", projectMapIssuesExtra: { "form.table_unresolved": "Form table is not unique", "struct.unresolved": "Result type not found", "struct.ambiguous": "Result type is ambiguous", "sql.access_unresolved": "SQL table access is unresolved" },
     pdfPreview: "PDF preview", pdfPreviewTitle: "PDF preview with real PDF bytes", pdfView: "Declared view", pdfExampleData: "Example data as a JSON object", pdfRender: "Render PDF", pdfDownload: "Download PDF", pdfNoViews: "This project declares no view.", pdfReady: "PDF rendered ({0} bytes).", pdfLoading: "Loading views …", pdfRendering: "Rendering PDF locally …", pdfInvalidData: "Enter a valid JSON object for example data.", pdfError: "PDF preview failed: {0}",
+    outboxButton: "Outbox", outboxTitle: "Mail outbox", outboxCaption: "MariaDB outbox metadata without message bodies", outboxEvent: "Event", outboxStatus: "Status", outboxRecipient: "Recipient", outboxAttachment: "Attachment", outboxCreated: "Created", outboxAvailable: "Available", outboxError: "Error", outboxAction: "Action", previous: "Previous", next: "Next", outboxLoading: "Loading outbox …", outboxEmpty: "No events on this page.", outboxPage: "{0}–{1} of {2}", outboxRequeue: "Requeue", outboxRequeueConfirm: "Release exhausted event {0} for a later worker run? No email will be sent now.", outboxRequeued: "Event requeued. Delivery requires a separately started worker.", outboxLoadError: "Could not load outbox: {0}", outboxRequeueError: "Requeue failed: {0}",
+    outboxAttempts: "Attempts: {0}", outboxLeaseUntil: "Lease until: {0}", outboxDeliveredAt: "Delivered: {0}", outboxExhaustedAt: "Exhausted: {0}", outboxNoDatabase: "No MariaDB connection is configured for the outbox. Set DATABASE_URL in .env or the environment.",
     runButton: "Run", runButtonTitle: "Run main.zyl or start the web application",
     runOutputTitle: "Program output", runStarting: "Preparing and starting the application …", runSuccess: "Program finished successfully", runFailure: "Program finished with an error", runTimeout: "Execution stopped after 15 seconds", runOutputTruncated: "Output is limited to 64 KiB per stream.", runNoOutput: "No output.", runStdout: "OUTPUT", runStderr: "ERROR", runInputUnavailable: "Studio does not provide interactive input to the program.", runWebReady: "Web application is running locally:", runWebOpen: "Open application in browser", runWebStop: "Stop preview", runWebStopped: "Local preview stopped.",
     runtimeBudgetButton: "Budget", runtimeBudgetTitle: "Runtime budget and recursion", runtimeBudgetEnable: "Enable a step budget for console programs", runtimeBudgetRange: "Step budget (slider: 1,000 to 1,000,000)", runtimeBudgetNumber: "Maximum steps (1 to 100,000,000)", runtimeBudgetWebHint: "The step budget applies to console programs. Web previews keep their own runtime limits.", runtimeRecursionTitle: "Possible recursion", runtimeRecursionNone: "No direct or mutual recursion found in the analyzed function graph.", runtimeRecursionIncomplete: "The function graph is too large; recursion analysis is incomplete.", runtimeRecursionDirect: "Direct recursion", runtimeRecursionMutual: "Mutual recursion", runtimeStackDepth: "Project maximum stack depth: {0} ({1})", runtimeStackConfigured: "configured", runtimeStackDefault: "default", runtimeProfileError: "Could not read runtime profile: {0}", runtimeBudgetInvalid: "Enter an integer step count from 1 to 100,000,000.", runtimeBudgetExceeded: "Step budget exceeded", runCancel: "Cancel execution", runCancelRequested: "Cancellation requested …", runCancelled: "Execution cancelled", runtimeProfileInvalid: "The unsaved source cannot be fully analyzed.",
@@ -1026,6 +1030,7 @@ const studioTasks = [
   ["taskRun", "taskRunHelp", ["run", "execute", "start program"], () => void runProject()],
   ["projectMap", "projectMapTitle", ["map", "diagram", "module", "route", "relationship"], () => void openProjectMap()],
   ["pdfPreview", "pdfPreviewTitle", ["pdf", "document", "invoice", "print"], () => void openPdfPreview()],
+  ["outboxButton", "outboxTitle", ["outbox", "mail", "email", "queue"], openOutbox],
   ["taskDatabase", "taskDatabaseHelp", ["database", "table", "relation", "schema"], () => openDatabaseWorkbench()],
   ["taskHelp", "taskHelpHelp", ["help", "documentation", "f1"], () => toggleAssistant("help")],
   ["taskProperties", "taskPropertiesHelp", ["properties", "file", "settings"], () => toggleAssistant("properties")],
@@ -2955,6 +2960,87 @@ async function renderPdfPreview() {
   }
 }
 
+let outboxOffset = 0;
+let outboxRequest = 0;
+async function loadOutbox() {
+  const request = ++outboxRequest;
+  const status = $("outbox-status");
+  const rows = $("outbox-rows");
+  status.textContent = t("outboxLoading");
+  rows.replaceChildren();
+  $("outbox-previous").disabled = true;
+  $("outbox-next").disabled = true;
+  try {
+    const result = await api(`outbox?offset=${outboxOffset}`);
+    if (request !== outboxRequest || !$("outbox-dialog").open) return;
+    if (!result.configured) {
+      status.textContent = t("outboxNoDatabase");
+      $("outbox-page-label").textContent = "";
+      return;
+    }
+    for (const event of result.events || []) {
+      const row = document.createElement("tr");
+      const cell = (value) => { const td = document.createElement("td"); td.textContent = value || "–"; row.append(td); return td; };
+      const eventCell = cell(event.id);
+      const kind = document.createElement("small"); kind.textContent = event.type;
+      eventCell.append(document.createElement("br"), kind);
+      const statusCell = cell(event.status);
+      const details = [t("outboxAttempts", event.attempts)];
+      if (event.leaseUntil) details.push(t("outboxLeaseUntil", event.leaseUntil));
+      if (event.deliveredAt) details.push(t("outboxDeliveredAt", event.deliveredAt));
+      if (event.exhaustedAt) details.push(t("outboxExhaustedAt", event.exhaustedAt));
+      const detail = document.createElement("small"); detail.textContent = details.join(" · ");
+      statusCell.append(document.createElement("br"), detail);
+      cell(event.recipient);
+      cell(event.attachmentName);
+      cell(event.createdAt);
+      cell(event.availableAt);
+      cell(event.lastError);
+      const action = cell("");
+      if (event.status === "exhausted") {
+        action.textContent = "";
+        const button = document.createElement("button");
+        button.type = "button"; button.className = "toolbar-button";
+        button.textContent = t("outboxRequeue");
+        button.addEventListener("click", () => void requeueOutboxEvent(event.id));
+        action.append(button);
+      }
+      rows.append(row);
+    }
+    status.textContent = result.events?.length ? "" : t("outboxEmpty");
+    const shownEnd = outboxOffset + (result.events?.length || 0);
+    $("outbox-page-label").textContent = result.total
+      ? t("outboxPage", outboxOffset + 1, shownEnd, result.total)
+      : t("outboxPage", 0, 0, 0);
+    $("outbox-previous").disabled = outboxOffset === 0;
+    $("outbox-next").disabled = shownEnd >= result.total || !result.events?.length;
+  } catch (error) {
+    if (request === outboxRequest && $("outbox-dialog").open) status.textContent = t("outboxLoadError", error.message);
+  }
+}
+
+function openOutbox() {
+  const dialog = $("outbox-dialog");
+  if (!dialog.open) dialog.showModal();
+  outboxOffset = 0;
+  void loadOutbox();
+}
+
+async function requeueOutboxEvent(eventId) {
+  if (!window.confirm(t("outboxRequeueConfirm", eventId))) return;
+  try {
+    const result = await api("outbox-requeue", { method: "POST", body: JSON.stringify({
+      eventId, confirm: true,
+    }) });
+    if (!result.requeued || result.sent !== false) throw new Error("Unexpected outbox response");
+    if (!$("outbox-dialog").open) return;
+    await loadOutbox();
+    $("outbox-status").textContent = t("outboxRequeued");
+  } catch (error) {
+    if ($("outbox-dialog").open) $("outbox-status").textContent = t("outboxRequeueError", error.message);
+  }
+}
+
 function renderProjectMap(map) {
   const svg = $("project-map-graph");
   const ns = "http://www.w3.org/2000/svg";
@@ -3165,6 +3251,12 @@ $("pdf-preview-button").addEventListener("click", openPdfPreview);
 $("pdf-preview-close").addEventListener("click", () => $("pdf-preview-dialog").close());
 $("pdf-preview-dialog").addEventListener("close", clearPdfPreview);
 $("pdf-preview-render").addEventListener("click", renderPdfPreview);
+$("outbox-button").addEventListener("click", openOutbox);
+$("outbox-close").addEventListener("click", () => $("outbox-dialog").close());
+$("outbox-dialog").addEventListener("close", () => { outboxRequest++; });
+$("outbox-refresh").addEventListener("click", () => void loadOutbox());
+$("outbox-previous").addEventListener("click", () => { outboxOffset = Math.max(0, outboxOffset - 25); void loadOutbox(); });
+$("outbox-next").addEventListener("click", () => { outboxOffset += 25; void loadOutbox(); });
 $("project-search-input").addEventListener("keydown", (event) => {
   if (event.key === "Enter") { event.preventDefault(); void performProjectSearch(); }
 });

@@ -1401,7 +1401,9 @@ Rückmeldungen des Projektverantwortlichen ersetzen keinen Teilnehmertest.
   rendert deklarierte Views mit
   Beispieldaten über denselben serverseitigen PDF-Renderer wie `render_pdf`,
   ohne Projektfunktionen auszuführen; Download und isolierter PDF-Rahmen sind
-  in drei Browser-Engines geprüft. Andere Symbolarten, die übrigen Studio-
+  in drei Browser-Engines geprüft. Die MariaDB-Outbox-Ansicht liest paginierte
+  Metadaten und gibt erschöpfte Ereignisse über die vorhandene Requeue-
+  Operation ohne unmittelbaren Versand frei. Andere Symbolarten, die übrigen Studio-
   Werkzeuge, externer Dateiwächter,
   vollständige Release-Gates und RC-Artefakte bleiben offen; siehe das
   [1.1.0-Arbeitsprotokoll](release-plans/1.1.0-studio-deep-native-progress.de.md).
