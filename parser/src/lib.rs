@@ -2410,7 +2410,17 @@ impl<'a> Parser<'a> {
             self.skip_newlines();
             let else_block = if self.at(&TokenKind::Else) {
                 self.advance();
-                Some(self.block()?)
+                self.skip_newlines();
+                if self.at(&TokenKind::If) {
+                    let if_stmt = self.statement()?;
+                    let span = if_stmt.span();
+                    Some(Block {
+                        statements: vec![if_stmt],
+                        span,
+                    })
+                } else {
+                    Some(self.block()?)
+                }
             } else {
                 None
             };
