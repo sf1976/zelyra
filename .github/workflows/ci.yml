@@ -471,6 +471,14 @@ jobs:
         env:
           ZELYRA_BIN: target/debug/zelyra
         run: bash ./tests/invoice-studio-cold-compose-e2e.sh
+      - name: Preserve invoice visual regression screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zelyra-invoice-visual-regression
+          path: editor/tests/visual-baselines/*.actual*.png
+          if-no-files-found: ignore
+          retention-days: 7
   mariadb-compatibility:
     name: MariaDB ${{ matrix.version }} compatibility
     runs-on: ubuntu-latest
