@@ -454,7 +454,8 @@ fn editor_response(
                 values.get("name").map(String::as_str).unwrap_or(""),
             )
         }
-        ("GET", "project-map") => editor_project_map(state),
+        ("GET", "project-map") => editor_project_map(state, &json!({})),
+        ("POST", "project-map") => editor_project_map(state, &parse_json_body(&request.body)?),
         ("GET", "logs") => editor_logs_response(state),
         ("GET", "database-schema") => database_schema_response(state),
         ("GET", "database-target") => database_target_response(state),
@@ -873,7 +874,10 @@ fn editor_symbols(
     ))
 }
 
-fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String), (u16, String)> {
+fn editor_project_map(
+    state: &EditorState,
+    request: &Value,
+) -> Result<(u16, &'static str, String), (u16, String)> {
     let mut project_files = Vec::new();
     collect_editor_files(&state.root, &state.root, 0, &mut project_files)?;
     if project_files.len() >= EDITOR_MAX_FILES {
@@ -894,12 +898,31 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
         }
     }
     let entry = safe_editor_path(&state.root, "main.zyl", false)?;
-    let loaded = project::load(&entry.to_string_lossy()).map_err(|_| {
-        (
+    let overlays = if let Some(source) = request.get("source").and_then(Value::as_str) {
+        let relative = request
+            .get("path")
+            .and_then(Value::as_str)
+            .filter(|path| path.ends_with(".zyl"))
+            .ok_or((400, "choose a Zelyra source file".into()))?;
+        let _path = safe_editor_path(&state.root, relative, false)?;
+        if source.len() > EDITOR_MAX_FILE_BYTES {
+            return Err((413, "source exceeds the 1 MiB editor limit".into()));
+        }
+        vec![language_service::SourceOverlay {
+            path: relative.into(),
+            text: source.into(),
+            version: request.get("version").and_then(Value::as_i64).unwrap_or(0),
+        }]
+    } else {
+        Vec::new()
+    };
+    let loaded = language_service::analyze(&entry, &overlays);
+    if loaded.program.is_none() {
+        return Err((
             422,
             "project map is unavailable until imported source files parse".into(),
-        )
-    })?;
+        ));
+    }
     let mut nodes = BTreeMap::<String, Value>::new();
     let mut edges = BTreeSet::<(String, String, String)>::new();
     let mut issues = BTreeSet::<String>::new();
@@ -929,6 +952,18 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
     }
 
     let mut tables_by_name = BTreeMap::<String, Vec<String>>::new();
+    let known_tables = loaded
+        .program
+        .as_ref()
+        .unwrap()
+        .tables
+        .iter()
+        .map(|table| table.name.clone())
+        .collect::<Vec<_>>();
+    let mut records_by_name = BTreeMap::<String, Vec<(String, String, bool)>>::new();
+    let mut forms = Vec::<(String, String)>::new();
+    let mut sql_queries = Vec::<(String, String)>::new();
+    let mut typed_results = Vec::<(String, String, String, bool)>::new();
     let mut cruds = Vec::<(String, String)>::new();
     let mut api_handlers = Vec::<(String, String)>::new();
     let mut functions_by_name = BTreeMap::<String, Vec<String>>::new();
@@ -965,6 +1000,37 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
                     .push(id.clone());
                 edges.insert((module_id.clone(), id, "declares".into()));
             }
+            for record in &program.records {
+                let id = format!("struct:{}:{}", source.path, record.name);
+                node_sink.insert(
+                    &id,
+                    if record.is_class { "class" } else { "struct" },
+                    &record.name,
+                    &source.path,
+                    &source.text,
+                    record.span,
+                );
+                records_by_name
+                    .entry(record.name.clone())
+                    .or_default()
+                    .push((id.clone(), source.path.clone(), record.is_public));
+                edges.insert((module_id.clone(), id, "declares".into()));
+            }
+            for form in &program.forms {
+                let id = format!("form:{}:{}", source.path, form.name);
+                node_sink.insert(
+                    &id,
+                    "form",
+                    &form.name,
+                    &source.path,
+                    &source.text,
+                    form.span,
+                );
+                edges.insert((module_id.clone(), id.clone(), "declares".into()));
+                if let Some(table) = &form.table {
+                    forms.push((id, table.clone()));
+                }
+            }
             for view in &program.views {
                 let id = format!("view:{}:{}", source.path, view.name);
                 node_sink.insert(
@@ -993,6 +1059,31 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
                     tableview.span,
                 );
                 edges.insert((module_id.clone(), id.clone(), "declares".into()));
+                let sql_id = format!("sql:tableview:{}:{}", source.path, tableview.name);
+                let sql_span = tokens
+                    .iter()
+                    .find(|token| {
+                        matches!(token.kind, TokenKind::Sql)
+                            && token.span.start >= tableview.span.start
+                            && token.span.end <= tableview.span.end
+                    })
+                    .map(|token| token.span)
+                    .unwrap_or(tableview.span);
+                node_sink.insert(
+                    &sql_id,
+                    "sql",
+                    &format!("{} query", tableview.name),
+                    &source.path,
+                    &source.text,
+                    sql_span,
+                );
+                edges.insert((module_id.clone(), sql_id.clone(), "declares".into()));
+                edges.insert((sql_id.clone(), id.clone(), "feeds".into()));
+                sql_queries.push((sql_id.clone(), tableview.source.clone()));
+                if let Some(record_name) = project_map_record_name(&tableview.result_type) {
+                    typed_results.push((id.clone(), record_name.into(), source.path.clone(), true));
+                    typed_results.push((sql_id, record_name.into(), source.path.clone(), true));
+                }
                 if let Some(layout) = &tableview.layout {
                     tableview_layouts.push((id, layout.clone(), source.path.clone()));
                 }
@@ -1024,6 +1115,28 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
                     page.span,
                 );
                 edges.insert((module_id.clone(), id.clone(), "declares".into()));
+                for data in &page.data {
+                    let sql_id = format!("sql:page:{}:{}:{}", source.path, page.path, data.name);
+                    node_sink.insert(
+                        &sql_id,
+                        "sql",
+                        &format!("{} data", data.name),
+                        &source.path,
+                        &source.text,
+                        data.span,
+                    );
+                    edges.insert((module_id.clone(), sql_id.clone(), "declares".into()));
+                    edges.insert((sql_id.clone(), id.clone(), "feeds".into()));
+                    sql_queries.push((sql_id.clone(), data.query.clone()));
+                    if let Some(record_name) = project_map_record_name(&data.result_type) {
+                        typed_results.push((
+                            sql_id,
+                            record_name.into(),
+                            source.path.clone(),
+                            false,
+                        ));
+                    }
+                }
                 if let Some(view) = &page.view {
                     page_views.push((id, view.clone(), source.path.clone()));
                 }
@@ -1039,6 +1152,14 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
                     api.span,
                 );
                 edges.insert((module_id.clone(), id.clone(), "declares".into()));
+                if let Some(record_name) = project_map_record_name(&api.output) {
+                    typed_results.push((
+                        id.clone(),
+                        record_name.into(),
+                        source.path.clone(),
+                        false,
+                    ));
+                }
                 if let Some(handler) = &api.handler {
                     api_handlers.push((id, handler.clone()));
                 }
@@ -1059,6 +1180,90 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
                     .or_default()
                     .push(id);
             }
+        }
+    }
+
+    for (form, table) in forms {
+        match tables_by_name.get(&table) {
+            Some(targets) if targets.len() == 1 => {
+                edges.insert((form, targets[0].clone(), "writes table".into()));
+            }
+            _ => {
+                issues.insert("form.table_unresolved".into());
+            }
+        }
+    }
+    for (sql_id, query) in sql_queries {
+        let (operation, accesses) =
+            zelyra_database::sql::analyze_table_access(&query, &known_tables);
+        if operation.is_none() || accesses.is_empty() {
+            issues.insert("sql.access_unresolved".into());
+        }
+        for access in accesses {
+            match tables_by_name.get(&access.table) {
+                Some(targets) if targets.len() == 1 => {
+                    edges.insert((
+                        targets[0].clone(),
+                        sql_id.clone(),
+                        access.mode.as_str().into(),
+                    ));
+                }
+                _ => {
+                    issues.insert("sql.access_unresolved".into());
+                }
+            }
+        }
+    }
+    for (consumer, record_name, source_path, required_record) in typed_results {
+        let (name, owner_path) = if let Some((alias, name)) = record_name.split_once("::") {
+            let owner = loaded
+                .modules
+                .iter()
+                .find(|module| module.path == source_path)
+                .and_then(|module| module.imports.iter().find(|import| import.alias == alias))
+                .map(|import| import.path.as_str());
+            (name, owner)
+        } else {
+            (record_name.as_str(), None)
+        };
+        let imported_paths = loaded
+            .modules
+            .iter()
+            .find(|module| module.path == source_path)
+            .map(|module| {
+                module
+                    .imports
+                    .iter()
+                    .map(|import| import.path.as_str())
+                    .collect::<BTreeSet<_>>()
+            })
+            .unwrap_or_default();
+        let candidates = records_by_name
+            .get(name)
+            .into_iter()
+            .flatten()
+            .filter(|(_, path, public)| {
+                owner_path.map_or_else(
+                    || path == &source_path || (*public && imported_paths.contains(path.as_str())),
+                    |owner| path == owner && *public,
+                )
+            })
+            .collect::<Vec<_>>();
+        match candidates.as_slice() {
+            [(record, _, _)] => {
+                if consumer.starts_with("sql:") {
+                    edges.insert((consumer, record.clone(), "returns".into()));
+                } else {
+                    edges.insert((record.clone(), consumer, "typed as".into()));
+                }
+            }
+            [_, ..] => {
+                issues.insert("struct.ambiguous".into());
+            }
+            [] if required_record => {
+                issues.insert("struct.unresolved".into());
+            }
+            [] => {}
         }
     }
 
@@ -1134,6 +1339,17 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
         edges = edges.into_iter().take(1_000).collect();
     }
     let incomplete = !issues.is_empty();
+    let nullability_radar = loaded
+        .diagnostics
+        .iter()
+        .filter(|item| {
+            item["code"] == "E-SQL-004"
+                && item["message"]
+                    .as_str()
+                    .is_some_and(|message| message.contains("may be NULL but is not optional"))
+        })
+        .cloned()
+        .collect::<Vec<_>>();
     Ok((
         200,
         "application/json; charset=utf-8",
@@ -1142,9 +1358,24 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
             "edges": edges.into_iter().map(|(from, to, label)| json!({"from": from, "to": to, "label": label})).collect::<Vec<_>>(),
             "incomplete": incomplete,
             "issues": issues,
+            "nullabilityRadar": nullability_radar,
+            "version":request.get("version"),
+            "projectSource":"local files",
         })
         .to_string(),
     ))
+}
+
+fn project_map_record_name(ty: &zelyra_ast::Type) -> Option<&str> {
+    use zelyra_ast::Type;
+    match ty {
+        Type::Named(name) | Type::Applied { name, .. } => Some(name),
+        Type::Array(inner)
+        | Type::Option(inner)
+        | Type::HttpResult(inner)
+        | Type::Result(inner, _) => project_map_record_name(inner),
+        _ => None,
+    }
 }
 
 struct ProjectMapNodeSink<'a> {
@@ -4640,7 +4871,7 @@ fn main() {}
 
         let entry = state.root.join("main.zyl");
         project::load(&entry.to_string_lossy()).expect("test project should load");
-        let (_, _, body) = editor_project_map(&state).expect("build project map");
+        let (_, _, body) = editor_project_map(&state, &json!({})).expect("build project map");
         let map: Value = serde_json::from_str(&body).expect("parse project map JSON");
         assert_eq!(map["incomplete"], false);
         assert_eq!(map["issues"], json!([]));
@@ -4670,7 +4901,8 @@ fn main() {}
 "#,
         )
         .expect("write unresolved-view fixture");
-        let (_, _, body) = editor_project_map(&state).expect("build incomplete project map");
+        let (_, _, body) =
+            editor_project_map(&state, &json!({})).expect("build incomplete project map");
         let incomplete: Value = serde_json::from_str(&body).expect("parse project map JSON");
         assert_eq!(incomplete["incomplete"], true);
         assert!(incomplete["issues"]
@@ -4678,6 +4910,94 @@ fn main() {}
             .expect("issues")
             .contains(&json!("view.unresolved")));
         let _ = fs::remove_dir_all(state.root.clone());
+    }
+
+    #[test]
+    fn project_map_links_sql_tables_and_structs_and_reports_compiler_nullability() {
+        let state = project();
+        let source = "database main { engine: mariadb }\ntable items { id: Id primary auto name: String? }\nstruct ItemRow { id: Id name: String? }\ntableview Items { source sql<ItemRow[]> { SELECT id, name FROM items } columns { id name } }\ntableview ItemsAgain { source sql<ItemRow[]> { SELECT id, name FROM items } columns { id name } }\n";
+        fs::write(state.root.join("main.zyl"), source).unwrap();
+        let changed = source.replace("name: String? }\ntableview", "name: String }\ntableview");
+        let (_, _, body) = editor_project_map(
+            &state,
+            &json!({
+                "path":"main.zyl","source":changed,"version":9
+            }),
+        )
+        .unwrap();
+        let map: Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(map["version"], 9);
+        let edges = map["edges"].as_array().unwrap();
+        assert!(
+            edges
+                .iter()
+                .any(|edge| edge["from"] == "table:main.zyl:items"
+                    && edge["to"] == "sql:tableview:main.zyl:Items"),
+            "{edges:?}"
+        );
+        assert!(
+            edges
+                .iter()
+                .any(|edge| edge["from"] == "table:main.zyl:items"
+                    && edge["to"] == "sql:tableview:main.zyl:ItemsAgain"),
+            "{edges:?}"
+        );
+        assert!(
+            edges
+                .iter()
+                .any(|edge| edge["from"] == "struct:main.zyl:ItemRow"
+                    && edge["to"] == "tableview:main.zyl:Items"),
+            "{edges:?}"
+        );
+        assert!(map["nullabilityRadar"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|warning| warning["code"] == "E-SQL-004"));
+        assert_eq!(
+            fs::read_to_string(state.root.join("main.zyl")).unwrap(),
+            source
+        );
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn project_map_tracks_cross_file_table_consumers_in_unsaved_module() {
+        let state = project();
+        fs::create_dir_all(state.root.join("src")).unwrap();
+        fs::write(
+            state.root.join("main.zyl"),
+            "import \"src/report.zyl\" as report\nfn main() {}\n",
+        )
+        .unwrap();
+        fs::write(state.root.join("src/data.zyl"),
+            "database main { engine: mariadb }\ntable items { id: Id primary auto name: String required }\n").unwrap();
+        let saved = "import \"src/data.zyl\" as data\nstruct ItemRow { id: Id name: String }\ntableview Items { source sql<ItemRow[]> { SELECT id, name FROM items } columns { id name } }\n";
+        fs::write(state.root.join("src/report.zyl"), saved).unwrap();
+        let unsaved = format!("{saved}tableview ItemsAgain {{ source sql<ItemRow[]> {{ SELECT id, name FROM items }} columns {{ id name }} }}\n");
+        let (_, _, body) = editor_project_map(
+            &state,
+            &json!({
+                "path":"src/report.zyl","source":unsaved,"version":3
+            }),
+        )
+        .unwrap();
+        let map: Value = serde_json::from_str(&body).unwrap();
+        let edges = map["edges"].as_array().unwrap();
+        for view in ["Items", "ItemsAgain"] {
+            assert!(
+                edges
+                    .iter()
+                    .any(|edge| edge["from"] == "table:src/data.zyl:items"
+                        && edge["to"] == format!("sql:tableview:src/report.zyl:{view}")),
+                "{edges:?}"
+            );
+        }
+        assert_eq!(
+            fs::read_to_string(state.root.join("src/report.zyl")).unwrap(),
+            saved
+        );
+        fs::remove_dir_all(state.root.clone()).unwrap();
     }
 
     fn project() -> EditorState {

@@ -57,10 +57,17 @@ Datenbank. Unter **Logs** kannst du strukturierte Start-/Setup-Ereignisse sowie
 Programm- und Vorschauausgaben filtern. Erkannte geheime Umgebungs- und lokale
 `.env`-Werte werden redigiert. Das Programm erhält keine interaktive Eingabe.
 
-Die **Projektkarte** zeigt nur eindeutige Beziehungen aus dem Compiler-
-Projektmodell und verknüpft Knoten mit gespeicherten Quellpositionen. Dynamische
-und nicht aufgelöste Beziehungen bleiben sichtbar unvollständig, statt
-hergeleitet zu werden.
+Die **Projektkarte** zeigt eindeutige Beziehungen aus dem Compiler-
+Projektmodell: Module, Tabellen, SQL-Abfragen, Records, Formulare, Tabellen-
+ansichten, CRUD, Seiten, Views, APIs und Funktionen. Sie unterstützt mehrere
+Verbraucher derselben Tabelle und die aktuelle ungespeicherte Quelldatei als
+Overlay. Knoten führen zur tatsächlichen Deklaration beziehungsweise zum
+SQL-Token. In der Leiste am Editorkopf erscheinen Beziehungen zum aktuell
+gewählten Knoten und führen ebenfalls zur Quelle. Der NULL-Radar zeigt nur
+statische Nullability-Diagnosen des Compilers mit `E-SQL-004`; er prüft keine
+laufende Datenbank. Dynamische oder vom konservativen SQL-Analysator nicht
+aufgelöste Beziehungen bleiben sichtbar unvollständig. Weitere ungespeicherte
+Tabs müssen vor einer dateiübergreifenden Analyse gespeichert werden.
 
 Bei einem parsebaren Projekt zeigt die Contract-Leiste Ergebnisse des echten
 Zelyra-Verifiers für den aktuellen ungespeicherten Puffer. `PROVEN` (grün,

@@ -53,9 +53,16 @@ to search recent structured Run/setup events and program or preview output.
 Recognized environment and local `.env` values are redacted. The program does
 not receive interactive input.
 
-The **Project map** shows only unambiguous relationships from the compiler
-project model and links nodes to saved source locations. Dynamic and
-unresolved relationships remain marked incomplete instead of being inferred.
+The **Project map** shows unambiguous relationships from the compiler project
+model: modules, tables, SQL queries, records, forms, table views, CRUD, pages,
+views, APIs, and functions. It supports multiple consumers of one table and
+the current unsaved source file as an overlay. Nodes lead to their actual
+declaration or SQL token. The editor header shows related nodes for the
+current cursor context and links to their sources. The NULL radar shows only
+static nullability diagnostics from the compiler under `E-SQL-004`; it does
+not inspect a live database. Dynamic relationships or queries unresolved by
+the conservative SQL analyzer remain marked incomplete. Save other unsaved
+tabs before relying on cross-file positions.
 
 For a parseable project, the contract gutter displays results from Zelyra's
 actual verifier on the current unsaved buffer. `PROVEN` (green, `V-001`) means

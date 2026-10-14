@@ -1340,7 +1340,9 @@ rehearsals, and owner feedback do not substitute for participant testing.
   authenticated local SSE stream reports versioned diagnostics, verifier, and
   workspace events. Studio can apply a real CLI step budget and cancel console
   runs; a call graph marks possible recursion and reads the configured stack
-  depth. Other symbol kinds, the remaining Studio modules, external file
+  depth. The project map now links tables, SQL, records, forms, table views,
+  and APIs across modules and shows static compiler NULL diagnostics. Other
+  symbol kinds, the remaining Studio modules, external file
   watching, full release gates, and RC artifacts remain
   open; see the [1.1.0 work log](release-plans/1.1.0-studio-deep-native-progress.en.md).
 

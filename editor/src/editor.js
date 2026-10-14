@@ -103,6 +103,7 @@ const verificationGutter = gutter({
 });
 let liveCheckTimer = null;
 let liveCheckSequence = 0;
+let pipelineMapCache = null;
 const eventClientId = crypto.randomUUID();
 let eventController = null;
 let eventReconnectTimer = null;
@@ -113,6 +114,9 @@ function onStudioEvent(message) {
   if (message.kind === "workspace.changed") {
     void refreshTree();
     if (message.document?.path === activePath) setVerificationResults([]);
+    pipelineMapCache = null;
+    renderPipelineBreadcrumbs();
+    if (activePath?.endsWith(".zyl")) scheduleLiveCheck(activePath);
     return;
   }
   if (message.kind === "analysis.invalidated") {
@@ -206,6 +210,7 @@ const messages = {
     taskCheckHelp: "Compilerdiagnosen für das Projekt anzeigen", taskDatabase: "Datenbank öffnen", taskDatabaseHelp: "Tabellen und Beziehungen ansehen",
     taskRun: "Programm oder Web-App starten", taskRunHelp: "Konsolenprogramme mit Zelyras Laufzeit ausführen oder Webanwendungen lokal starten; konfigurierte Effekte sind möglich, interaktive Eingabe fehlt",
     projectMap: "Projektkarte", projectMapTitle: "Projektbeziehungen", projectMapOpenSource: "Quelltext öffnen", projectMapLoading: "Compiler-Projektmodell wird geladen …", projectMapUnavailable: "Projektkarte konnte nicht erstellt werden.", projectMapIncomplete: "Die Karte ist unvollständig. Nicht auflösbare oder begrenzte Beziehungen werden nicht geraten.", projectMapIssues: { "view.unresolved": "Ansicht nicht gefunden", "view.ambiguous": "Ansichtsname mehrfach vorhanden", "crud.table_unresolved": "CRUD-Tabelle nicht eindeutig", "api.handler_unresolved": "API-Funktion nicht eindeutig", "import.unresolved": "Importziel nicht gefunden", "edge.target_missing": "Beziehungsziel fehlt", "limit.nodes": "Knotenlimit erreicht", "limit.edges": "Beziehungslimit erreicht" }, projectMapEmpty: "Noch keine unterstützten Beziehungen im Projekt.", projectMapModules: "Module", projectMapData: "Daten und Ansichten", projectMapWeb: "Routen und APIs", projectMapLogic: "Funktionen",
+    pipelineBreadcrumbs: "Semantische Projektbeziehungen", projectMapNullability: "NULL-Radar (Compiler E-SQL-004)", projectMapIssuesExtra: { "form.table_unresolved": "Formular-Tabelle nicht eindeutig", "struct.unresolved": "Ergebnistyp nicht gefunden", "struct.ambiguous": "Ergebnistyp mehrfach vorhanden", "sql.access_unresolved": "SQL-Tabellenbezug nicht eindeutig" },
     runButton: "Starten", runButtonTitle: "main.zyl ausführen oder Webanwendung starten",
     runOutputTitle: "Programmausgabe", runStarting: "Anwendung wird vorbereitet und gestartet …", runSuccess: "Programm erfolgreich beendet", runFailure: "Programm mit Fehler beendet", runTimeout: "Ausführung nach 15 Sekunden beendet", runOutputTruncated: "Die Ausgabe ist auf 64 KiB je Stream begrenzt.", runNoOutput: "Keine Ausgabe.", runStdout: "AUSGABE", runStderr: "FEHLER", runInputUnavailable: "Studio stellt dem Programm keine interaktive Eingabe bereit.", runWebReady: "Webanwendung läuft lokal:", runWebOpen: "Anwendung im Browser öffnen", runWebStop: "Vorschau beenden", runWebStopped: "Lokale Vorschau wurde beendet.",
     runtimeBudgetButton: "Budget", runtimeBudgetTitle: "Laufzeitbudget und Rekursion", runtimeBudgetEnable: "Schrittbudget für Konsolenprogramme aktivieren", runtimeBudgetRange: "Schrittbudget (Regler: 1.000 bis 1.000.000)", runtimeBudgetNumber: "Maximale Schritte (1 bis 100.000.000)", runtimeBudgetWebHint: "Das Schrittbudget gilt für Konsolenprogramme. Eine Webvorschau verwendet weiterhin ihre eigenen Laufzeitgrenzen.", runtimeRecursionTitle: "Mögliche Rekursion", runtimeRecursionNone: "Keine direkte oder gegenseitige Rekursion im analysierten Funktionsgraphen gefunden.", runtimeRecursionIncomplete: "Der Funktionsgraph ist zu groß; die Rekursionsanalyse ist unvollständig.", runtimeRecursionDirect: "Direkte Rekursion", runtimeRecursionMutual: "Gegenseitige Rekursion", runtimeStackDepth: "Maximale Stacktiefe laut Projekt: {0} ({1})", runtimeStackConfigured: "konfiguriert", runtimeStackDefault: "Standard", runtimeProfileError: "Laufzeitprofil konnte nicht gelesen werden: {0}", runtimeBudgetInvalid: "Bitte eine ganze Schrittzahl von 1 bis 100.000.000 eingeben.", runtimeBudgetExceeded: "Schrittbudget überschritten", runCancel: "Ausführung abbrechen", runCancelRequested: "Abbruch angefordert …", runCancelled: "Ausführung abgebrochen", runtimeProfileInvalid: "Der ungespeicherte Quelltext ist nicht vollständig analysierbar.",
@@ -303,6 +308,7 @@ const messages = {
     taskCheckHelp: "Show compiler diagnostics for the project", taskDatabase: "Open database", taskDatabaseHelp: "Inspect tables and relationships",
     taskRun: "Run program or web app", taskRunHelp: "Run console programs with Zelyra or start web applications locally; configured effects are possible, and interactive input is unavailable",
     projectMap: "Project map", projectMapTitle: "Project relationships", projectMapOpenSource: "Open source location", projectMapLoading: "Loading the compiler project model …", projectMapUnavailable: "Could not create the project map.", projectMapIncomplete: "The map is incomplete. Unresolved or limited relationships are not guessed.", projectMapIssues: { "view.unresolved": "View not found", "view.ambiguous": "View name is ambiguous", "crud.table_unresolved": "CRUD table is not unique", "api.handler_unresolved": "API function is not unique", "import.unresolved": "Import target not found", "edge.target_missing": "Relationship target is missing", "limit.nodes": "Node limit reached", "limit.edges": "Relationship limit reached" }, projectMapEmpty: "No supported relationships in this project yet.", projectMapModules: "Modules", projectMapData: "Data and views", projectMapWeb: "Routes and APIs", projectMapLogic: "Functions",
+    pipelineBreadcrumbs: "Semantic project relationships", projectMapNullability: "NULL radar (compiler E-SQL-004)", projectMapIssuesExtra: { "form.table_unresolved": "Form table is not unique", "struct.unresolved": "Result type not found", "struct.ambiguous": "Result type is ambiguous", "sql.access_unresolved": "SQL table access is unresolved" },
     runButton: "Run", runButtonTitle: "Run main.zyl or start the web application",
     runOutputTitle: "Program output", runStarting: "Preparing and starting the application …", runSuccess: "Program finished successfully", runFailure: "Program finished with an error", runTimeout: "Execution stopped after 15 seconds", runOutputTruncated: "Output is limited to 64 KiB per stream.", runNoOutput: "No output.", runStdout: "OUTPUT", runStderr: "ERROR", runInputUnavailable: "Studio does not provide interactive input to the program.", runWebReady: "Web application is running locally:", runWebOpen: "Open application in browser", runWebStop: "Stop preview", runWebStopped: "Local preview stopped.",
     runtimeBudgetButton: "Budget", runtimeBudgetTitle: "Runtime budget and recursion", runtimeBudgetEnable: "Enable a step budget for console programs", runtimeBudgetRange: "Step budget (slider: 1,000 to 1,000,000)", runtimeBudgetNumber: "Maximum steps (1 to 100,000,000)", runtimeBudgetWebHint: "The step budget applies to console programs. Web previews keep their own runtime limits.", runtimeRecursionTitle: "Possible recursion", runtimeRecursionNone: "No direct or mutual recursion found in the analyzed function graph.", runtimeRecursionIncomplete: "The function graph is too large; recursion analysis is incomplete.", runtimeRecursionDirect: "Direct recursion", runtimeRecursionMutual: "Mutual recursion", runtimeStackDepth: "Project maximum stack depth: {0} ({1})", runtimeStackConfigured: "configured", runtimeStackDefault: "default", runtimeProfileError: "Could not read runtime profile: {0}", runtimeBudgetInvalid: "Enter an integer step count from 1 to 100,000,000.", runtimeBudgetExceeded: "Step budget exceeded", runCancel: "Cancel execution", runCancelRequested: "Cancellation requested …", runCancelled: "Execution cancelled", runtimeProfileInvalid: "The unsaved source cannot be fully analyzed.",
@@ -1229,6 +1235,7 @@ function createView(path, state) {
       tab.state = update.state;
       if (update.docChanged) {
         verificationResults = [];
+        pipelineMapCache = null;
         renderTabs();
         announce(t("unsaved"), "warning");
         queueMicrotask(() => {
@@ -1238,7 +1245,10 @@ function createView(path, state) {
           }
         });
       }
-      if (update.selectionSet || update.docChanged) renderContextHelp(update.state, path);
+      if (update.selectionSet || update.docChanged) {
+        renderContextHelp(update.state, path);
+        renderPipelineBreadcrumbs();
+      }
       if ((update.selectionSet || update.docChanged) && !$("assistant-properties-view").hidden) {
         renderUiPropertyInspector(update.state, path);
       }
@@ -1278,6 +1288,8 @@ function activate(path) {
   if (!tabs.has(path)) return;
   if (editor) { tabs.get(activePath).state = editor.state; editor.destroy(); }
   activePath = path;
+  pipelineMapCache = null;
+  renderPipelineBreadcrumbs();
   verificationResults = [];
   const tab = tabs.get(path);
   editor = createView(path, tab.state);
@@ -1296,6 +1308,8 @@ function closeTab(path) {
   tabs.delete(path);
   if (activePath === path) {
     activePath = null;
+    pipelineMapCache = null;
+    renderPipelineBreadcrumbs();
     const next = tabs.keys().next().value;
     if (next) activate(next);
     else { $("active-file").textContent = t("noDocument"); $("empty-state").hidden = false; }
@@ -2589,6 +2603,7 @@ function scheduleLiveCheck(path) {
       }) });
       if (sequence !== liveCheckSequence || activePath !== path || editor?.state.doc.toString() !== source) return;
       renderDiagnostics(result.diagnostics || [], result.success, { silent: true });
+      void refreshPipelineContext(path, source, sequence);
       if (!result.success) return;
       const verified = await api("verify", { method: "POST", body: JSON.stringify({
         path, source, version: sequence, clientId: eventClientId,
@@ -2755,6 +2770,69 @@ async function openEditorLogs() {
   }
 }
 
+function renderPipelineBreadcrumbs() {
+  const target = $("pipeline-breadcrumbs");
+  target.replaceChildren();
+  if (!editor || !pipelineMapCache || pipelineMapCache.path !== activePath) return;
+  const map = pipelineMapCache.map;
+  const cursor = editor.state.selection.main.head;
+  const local = (map.nodes || []).filter((node) => node.path === activePath && node.kind !== "module"
+    && typeof node.position === "number" && node.position <= cursor);
+  local.sort((left, right) => right.position - left.position);
+  const selected = local[0];
+  if (!selected) return;
+  const nodes = new Map((map.nodes || []).map((node) => [node.id, node]));
+  const shown = [selected];
+  const visited = new Set([selected.id]);
+  let frontier = [selected.id];
+  for (let depth = 0; depth < 2 && shown.length < 8; depth += 1) {
+    const next = [];
+    for (const id of frontier) {
+      for (const edge of map.edges || []) {
+        if (edge.label === "declares" || (edge.from !== id && edge.to !== id)) continue;
+        const neighborId = edge.from === id ? edge.to : edge.from;
+        const neighbor = nodes.get(neighborId);
+        if (!neighbor || neighbor.kind === "module" || visited.has(neighborId)) continue;
+        visited.add(neighborId);
+        shown.push(neighbor);
+        next.push(neighborId);
+        if (shown.length >= 8) break;
+      }
+      if (shown.length >= 8) break;
+    }
+    frontier = next;
+  }
+  for (const node of shown) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = node.id === selected.id ? "current" : "";
+    button.textContent = `${node.kind}: ${node.label}`;
+    button.title = `${node.path}:${node.line || 1}`;
+    button.addEventListener("click", () => {
+      void openFile(node.path).then(() => {
+        if (activePath !== node.path || !editor) return;
+        editor.dispatch({ selection: { anchor: Math.min(node.position || 0, editor.state.doc.length) }, scrollIntoView: true });
+        editor.focus();
+      });
+    });
+    target.append(button);
+  }
+}
+
+async function refreshPipelineContext(path, source, version) {
+  try {
+    const map = await api("project-map", { method: "POST", body: JSON.stringify({ path, source, version }) });
+    if (activePath !== path || editor?.state.doc.toString() !== source || liveCheckSequence !== version) return;
+    pipelineMapCache = { path, map };
+    renderPipelineBreadcrumbs();
+  } catch {
+    if (activePath === path && liveCheckSequence === version) {
+      pipelineMapCache = null;
+      renderPipelineBreadcrumbs();
+    }
+  }
+}
+
 async function openProjectMap() {
   const dialog = $("project-map-dialog");
   const status = $("project-map-status");
@@ -2762,13 +2840,39 @@ async function openProjectMap() {
   if (!dialog.open) dialog.showModal();
   status.textContent = t("projectMapLoading");
   graph.replaceChildren();
+  $("project-map-nullability").hidden = true;
+  $("project-map-nullability-list").replaceChildren();
   try {
-    const map = await api("project-map");
+    const path = activePath?.endsWith(".zyl") ? activePath : null;
+    const source = path && editor ? editor.state.doc.toString() : null;
+    const version = liveCheckSequence;
+    const map = source === null ? await api("project-map")
+      : await api("project-map", { method: "POST", body: JSON.stringify({ path, source, version }) });
+    if (!dialog.open || (source !== null && (path !== activePath || editor?.state.doc.toString() !== source))) return;
     renderProjectMap(map);
-    const issueLabels = messages[language].projectMapIssues;
+    const issueLabels = { ...messages[language].projectMapIssues, ...messages[language].projectMapIssuesExtra };
     const issues = (map.issues || []).map((code) => issueLabels[code] || code);
     status.textContent = map.incomplete ? `${t("projectMapIncomplete")} ${issues.join(" · ")}` : "";
     if (!map.nodes?.length) status.textContent = t("projectMapEmpty");
+    const radar = $("project-map-nullability");
+    const list = $("project-map-nullability-list");
+    list.replaceChildren();
+    for (const warning of map.nullabilityRadar || []) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = `${warning.code} · ${warning.file}:${warning.span?.start?.line || 1} · ${warning.message}`;
+      button.addEventListener("click", () => {
+        void openFile(warning.file).then(() => {
+          if (activePath !== warning.file || !editor) return;
+          const offset = warning.editorSpan?.start ?? 0;
+          editor.dispatch({ selection: { anchor: Math.min(offset, editor.state.doc.length) }, scrollIntoView: true });
+          editor.focus();
+          dialog.close();
+        });
+      });
+      list.append(button);
+    }
+    radar.hidden = !list.childElementCount;
   } catch (error) {
     status.textContent = error.message || t("projectMapUnavailable");
   }
@@ -2780,7 +2884,7 @@ function renderProjectMap(map) {
   const columns = ["module", "data", "web", "logic"];
   const columnKinds = {
     module: new Set(["module"]),
-    data: new Set(["table", "tableview", "crud", "view"]),
+    data: new Set(["table", "sql", "struct", "class", "form", "tableview", "crud", "view"]),
     web: new Set(["api", "page"]),
     logic: new Set(["function"]),
   };

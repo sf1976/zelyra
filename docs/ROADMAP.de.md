@@ -1395,7 +1395,9 @@ Rückmeldungen des Projektverantwortlichen ersetzen keinen Teilnehmertest.
   Kanal meldet versionierte Diagnosen, Verifier- und Workspace-Ereignisse.
   Studio kann ein echtes CLI-Schrittbudget setzen und Konsolenläufe abbrechen;
   ein Aufrufgraph markiert mögliche Rekursion und liest die konfigurierte
-  Stacktiefe.
+  Stacktiefe. Die Projektkarte verbindet nun Tabellen, SQL, Records,
+  Formulare, Tabellenansichten und APIs über Modulgrenzen und zeigt statische
+  NULL-Diagnosen des Compilers.
   Andere Symbolarten, die übrigen Studio-Werkzeuge, externer Dateiwächter,
   vollständige Release-Gates und RC-Artefakte bleiben offen; siehe das
   [1.1.0-Arbeitsprotokoll](release-plans/1.1.0-studio-deep-native-progress.de.md).

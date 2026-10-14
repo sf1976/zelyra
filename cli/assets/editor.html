@@ -48,7 +48,7 @@
       </aside>
       <main class="main-column">
         <div class="toolbar">
-          <div class="breadcrumbs"><span class="breadcrumb-home">⌂</span><span id="active-file">Kein Dokument geöffnet</span></div>
+          <div class="breadcrumbs"><span class="breadcrumb-home">⌂</span><span id="active-file">Kein Dokument geöffnet</span><nav id="pipeline-breadcrumbs" class="pipeline-breadcrumbs" aria-label="Semantische Projektbeziehungen" data-i18n-aria="pipelineBreadcrumbs"></nav></div>
           <div class="toolbar-actions">
           <button class="toolbar-button" id="save-all-button" disabled title="Alle Dateien speichern" data-i18n="saveAll">Alle speichern</button>
             <button class="toolbar-button" id="rename-file-button" disabled title="Datei umbenennen" data-i18n="renameFile">Umbenennen</button>
@@ -226,6 +226,7 @@
   <dialog id="project-map-dialog" class="project-map-dialog" aria-labelledby="project-map-title">
     <header class="project-map-header"><div><span class="database-eyebrow" data-i18n="projectMap">PROJEKTKARTE</span><h2 id="project-map-title" data-i18n="projectMapTitle">Projektbeziehungen</h2></div><button id="project-map-close" aria-label="Schließen" data-i18n-aria="close">×</button></header>
     <p id="project-map-status" class="project-map-status" role="status"></p>
+    <section id="project-map-nullability" class="project-map-nullability" hidden><h3 data-i18n="projectMapNullability">NULL-Radar</h3><div id="project-map-nullability-list"></div></section>
     <div class="project-map-legend"><span data-i18n="projectMapModules">Module</span><span data-i18n="projectMapData">Daten und Ansichten</span><span data-i18n="projectMapWeb">Routen und APIs</span><span data-i18n="projectMapLogic">Funktionen</span></div>
     <div class="project-map-scroller"><svg id="project-map-graph" class="project-map-graph" role="group" aria-label="Interaktive Projektbeziehungen" data-i18n-aria="projectMapTitle"></svg></div>
   </dialog>
