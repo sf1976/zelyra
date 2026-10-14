@@ -30,6 +30,11 @@ principles; the roadmap below tracks what is actually implemented.
 - [ ] **Planned for 1.0.5 — IDE access to structured Zelyra logs:** Provide
   useful local logs for project setup and application execution, accessible
   from Studio with clear filtering and safe handling of credentials.
+- [ ] **Planned for 1.0.5 — installation-aware uninstall:** Add
+  `zelyra uninstall` for the active installation, including user-owned binaries
+  outside the default install directory. Detect duplicate executables on PATH,
+  explain package-manager-owned installs, and remove only the selected Zelyra
+  installation after confirmation; project files and data remain untouched.
 
 - [ ] **Planned for 1.1.0 — Compose check in the installer:** Installers detect
   Docker Compose v2 or newer and distinguish it from obsolete Python Compose

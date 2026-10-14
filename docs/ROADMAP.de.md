@@ -33,6 +33,12 @@ den tatsächlich implementierten Stand.
   lokale Protokolle für Projektstart und Anwendungsausführung bereitstellen,
   die in Studio mit klaren Filtern abrufbar sind und Zugangsdaten sicher
   behandeln.
+- [ ] **Geplant für 1.0.5 — installationsbewusste Deinstallation:**
+  `zelyra uninstall` für die aktive Installation ergänzen, auch für
+  benutzereigene Binärdateien außerhalb des Standardordners. Weitere
+  ausführbare Zelyra-Kopien im PATH erkennen, paketverwaltete Installationen
+  erklären und nach Bestätigung nur die ausgewählte Zelyra-Installation
+  entfernen; Projektdateien und Daten bleiben unberührt.
 
 - [ ] **Geplant für 1.1.0 — Compose-Prüfung im Installer:** Die Installer
   erkennen Docker Compose v2 oder neuer und unterscheiden es von der veralteten
