@@ -57,6 +57,16 @@ Abschnitt zur Weiterentwicklung nach 1.0.0.
   die Rechnungsübersicht als solche benennen und gestalten; generische
   Kennzahlen dürfen die eigentlichen Aufgaben nicht verdrängen. Deutsche und
   englische Beschriftungen müssen zusammenpassen.
+- [ ] **Geplant für 1.0.5 — Invoice-Tutorial vollständig erklären:** Jeden
+  Befehl einschließlich aller Optionen sowie jede einzelne Zeile der
+  Tutorial-Quelldateien verständlich erläutern, einschließlich ihrer Wirkung
+  und ihres Zusammenspiels. Explizite, mit `page` deklarierte Routen klar von
+  automatisch erzeugten CRUD-Routen unterscheiden. Am Beispiel
+  `/invoices/new` nachvollziehbar zeigen, dass `crud Invoice -> invoices` in
+  `src/invoices.zyl` die Route aus dem Ressourcennamen `invoices` ableitet,
+  obwohl dafür keine eigene `page`-Deklaration existiert. Den Befehl
+  `zelyra routes main.zyl` als Möglichkeit zeigen, deklarierte und erzeugte
+  Routen zu prüfen.
 
 - [ ] **Geplant für 1.1.0 — Compose-Prüfung im Installer:** Die Installer
   erkennen Docker Compose v2 oder neuer und unterscheiden es von der veralteten

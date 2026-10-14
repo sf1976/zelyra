@@ -82,6 +82,19 @@ changes without editing files. `routes` lists pages, APIs, and generated CRUD
 routes. `db map` shows declared tables and their module ownership. The setup
 modes start MariaDB, apply the schema, or run the complete workflow.
 
+### Where does `/invoices/new` come from?
+
+Buttons in `main.zyl` and `src/shell.zyl` link to `/invoices/new`, but the
+tutorial has no `page "/invoices/new"` declaration. The route is generated
+from `crud Invoice -> invoices` in `src/invoices.zyl`. `crud` enables generated
+views and actions for the `invoices` resource. These include `GET /invoices`
+for the list and `GET /invoices/new` for the create form. `POST /invoices/new`
+saves the form. The name after `->` supplies the URL base path.
+
+By contrast, the print view is explicitly declared in that file as
+`page "/invoices/{invoice_number}/print"`. Run `zelyra routes main.zyl` to
+inspect both route types and their source in the command output.
+
 Before a later schema change, inspect its plan and then apply the reviewed
 plan id:
 

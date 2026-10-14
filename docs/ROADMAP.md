@@ -50,6 +50,15 @@ release targets. Longer-term ideas remain in the post-1.0 evolution section.
   page with the invoice workflow, and name and design the invoice list as an
   overview; generic metrics must not displace the work users came to do. Keep
   German and English labels consistent.
+- [ ] **Planned for 1.0.5 — explain the invoice tutorial end to end:** Explain
+  every command with all its options, and every single line in the tutorial
+  source files in plain language, including its effect and how it fits with the
+  other files. Distinguish routes explicitly declared with `page` from
+  generated CRUD routes. Trace `/invoices/new` to
+  `crud Invoice -> invoices` in `src/invoices.zyl`, showing how the resource
+  name `invoices` generates that route even though no `page` declaration names
+  it. Show `zelyra routes main.zyl` as the way to inspect declared and generated
+  routes.
 
 - [ ] **Planned for 1.1.0 — Compose check in the installer:** Installers detect
   Docker Compose v2 or newer and distinguish it from obsolete Python Compose
