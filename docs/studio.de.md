@@ -62,6 +62,15 @@ Projektmodell und verknüpft Knoten mit gespeicherten Quellpositionen. Dynamisch
 und nicht aufgelöste Beziehungen bleiben sichtbar unvollständig, statt
 hergeleitet zu werden.
 
+Bei einem parsebaren Projekt zeigt die Contract-Leiste Ergebnisse des echten
+Zelyra-Verifiers für den aktuellen ungespeicherten Puffer. `PROVEN` (grün,
+`V-001`) bedeutet bewiesen; `RUNTIME_CHECK` (gelb, `V-002`) erfordert eine
+Laufzeitprüfung; `FAILED` (rot, `V-004`) ist widerlegt; `UNPROVEN` (neutral,
+`V-003`) liefert keinen Beweis. Mit Klick, Eingabe oder Leertaste liest du die
+Begründung eines Markers. Bei Syntax- oder Typfehlern verschwinden ältere
+Marker, statt einen veralteten Beweis anzuzeigen. Die Leiste folgt dem aktuellen
+Dokument; Dokumentversionen verhindern verspätete Ergebnisse.
+
 ## Rechnungstutorial in Studio starten
 
 Bei einem erzeugten Rechnungstutorial startet Studio beim Klick auf

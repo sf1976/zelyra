@@ -84,6 +84,13 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .editor-stage { position: relative; display: flex; flex: 1; min-height: 0; background: var(--editor-bg); }
 .editor-stage[hidden] { display: none; }
 .editor-root { flex: 1; width: 100%; height: 100%; min-width: 0; }
+.cm-gutter.verify-gutter { min-width: 22px; border-left: 1px solid var(--border); }
+.verify-marker { display: inline-grid; place-items: center; width: 20px; min-height: 20px; font-size: 13px; font-weight: 700; cursor: pointer; }
+.verify-marker.proven { color: var(--success); }
+.verify-marker.runtime_check { color: var(--warning); }
+.verify-marker.unproven { color: var(--muted); }
+.verify-marker.failed { color: var(--danger); }
+.verify-marker:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
 .studio-assistant { width: 270px; flex: 0 0 270px; overflow: auto; border-left: 1px solid var(--border); background: var(--surface); }
 .studio-assistant[hidden] { display: none; }
 .assistant-tabs { display: flex; height: 38px; border-bottom: 1px solid var(--border); }

@@ -1388,7 +1388,9 @@ Rückmeldungen des Projektverantwortlichen ersetzen keinen Teilnehmertest.
   Dokument-/Workspace-Symbole und Deklarationsvorschläge. Aufgelöste
   Funktionsdefinitionen und Referenzen funktionieren nun in Studio und LSP;
   das LSP liefert auch compilergeprüfte Funktions-Umbenennungen als Vorschau.
-  Andere Symbolarten, die acht Studio-Werkzeuge, Ereigniskanal,
+  Eine versionierte Contract-Leiste zeigt jetzt echte Verifier-Ergebnisse und
+  verschwindet bei ungültiger Quelle. Andere Symbolarten, die übrigen
+  Studio-Werkzeuge, Ereigniskanal,
   vollständige Release-Gates und RC-Artefakte bleiben offen; siehe das
   [1.1.0-Arbeitsprotokoll](release-plans/1.1.0-studio-deep-native-progress.de.md).
 

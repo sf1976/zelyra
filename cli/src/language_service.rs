@@ -111,6 +111,34 @@ pub fn analyze(entry: &Path, overlays: &[SourceOverlay]) -> Analysis {
     }
 }
 
+pub fn verification_entries(analysis: &Analysis) -> Vec<Value> {
+    if !analysis.success {
+        return Vec::new();
+    }
+    let Some(program) = analysis.program.as_ref() else {
+        return Vec::new();
+    };
+    verify_program(program).into_iter().filter_map(|result| {
+        let source = analysis.sources.get(result.span.source_id as usize)?;
+        let counterexample = result.counterexample.map(|values| {
+            values.into_iter().map(|(name, value)| (name, json!(value))).collect::<Map<String, Value>>()
+        });
+        Some(json!({
+            "file":source.path,
+            "function":result.function,
+            "kind":result.kind.to_string(),
+            "index":result.index,
+            "status":result.status.to_string(),
+            "code":result.status.code(),
+            "message":result.message,
+            "counterexample":counterexample,
+            "span":span_value(&source.text, result.span),
+            "editorSpan": {"start":utf16_offset(&source.text,result.span.start),"end":utf16_offset(&source.text,result.span.end)},
+            "version":analysis.versions.get(&source.path),
+        }))
+    }).collect()
+}
+
 fn utf16_offset(source: &str, byte_offset: usize) -> usize {
     let mut safe_offset = byte_offset.min(source.len());
     while !source.is_char_boundary(safe_offset) {
@@ -169,5 +197,82 @@ mod tests {
         assert_eq!(utf16_offset("a😀b", 1), 1);
         assert_eq!(utf16_offset("a😀b", 3), 1);
         assert_eq!(utf16_offset("a😀b", 5), 3);
+    }
+
+    #[test]
+    fn verifier_entries_keep_proof_statuses_and_imported_source_positions() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-verify-overlay-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(
+            root.join("main.zyl"),
+            "import \"src/contracts.zyl\" as contracts\nfn main() {}\n",
+        )
+        .unwrap();
+        fs::write(root.join("src/contracts.zyl"), "pub fn check() {}\n").unwrap();
+        let source = "pub fn proven() requires { 1 < 2 } { }\npub fn dynamic(value: Int) requires { value >= 0 } { }\npub fn failed() ensures { 1 > 2 } { }\n";
+        let analysis = analyze(
+            &root.join("main.zyl"),
+            &[SourceOverlay {
+                path: "src/contracts.zyl".into(),
+                text: source.into(),
+                version: 9,
+            }],
+        );
+        assert!(analysis.success, "{:?}", analysis.diagnostics);
+        let entries = verification_entries(&analysis);
+        assert!(entries
+            .iter()
+            .any(|item| item["status"] == "PROVEN" && item["code"] == "V-001"));
+        assert!(entries
+            .iter()
+            .any(|item| item["status"] == "RUNTIME_CHECK" && item["code"] == "V-002"));
+        assert!(entries
+            .iter()
+            .any(|item| item["status"] == "FAILED" && item["code"] == "V-004"));
+        assert!(entries.iter().any(|item| item["file"] == "main.zyl"
+            && item["status"] == "UNPROVEN"
+            && item["code"] == "V-003"));
+        assert!(entries
+            .iter()
+            .filter(|item| item["file"] == "src/contracts.zyl")
+            .all(|item| item["version"] == 9));
+        assert_eq!(
+            entries
+                .iter()
+                .find(|item| item["status"] == "PROVEN")
+                .unwrap()["span"]["start"]["line"],
+            1
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("src/contracts.zyl")).unwrap(),
+            "pub fn check() {}\n"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn syntax_errors_never_become_proven_verifier_results() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-verify-error-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("main.zyl"), "fn main() {}\n").unwrap();
+        let analysis = analyze(
+            &root.join("main.zyl"),
+            &[SourceOverlay {
+                path: "main.zyl".into(),
+                text: "fn main( {\n".into(),
+                version: 2,
+            }],
+        );
+        assert!(!analysis.success);
+        assert!(verification_entries(&analysis).is_empty());
+        fs::remove_dir_all(root).unwrap();
     }
 }

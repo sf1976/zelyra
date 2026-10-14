@@ -57,6 +57,15 @@ The **Project map** shows only unambiguous relationships from the compiler
 project model and links nodes to saved source locations. Dynamic and
 unresolved relationships remain marked incomplete instead of being inferred.
 
+For a parseable project, the contract gutter displays results from Zelyra's
+actual verifier on the current unsaved buffer. `PROVEN` (green, `V-001`) means
+the obligation was proved; `RUNTIME_CHECK` (amber, `V-002`) needs a runtime
+check; `FAILED` (red, `V-004`) is contradicted; `UNPROVEN` (neutral, `V-003`)
+does not establish a proof. Activate a marker with click, Enter, or Space to
+read its explanation. Syntax or type errors clear older markers rather than
+showing a stale proof. The gutter follows the current document; background
+checks use document versions to discard late responses.
+
 ## Start the invoice tutorial in Studio
 
 For a generated invoice tutorial, Studio starts its own isolated MariaDB

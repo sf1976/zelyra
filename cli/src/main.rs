@@ -5912,7 +5912,8 @@ fn singular_type_name(table: &str) -> Option<String> {
 }
 
 fn format_verification_result(path: &str, source: &str, result: &VerificationResult) -> String {
-    let (end_line, end_column) = source_position(source, result.span.end);
+    let (source_path, source_text) = verification_source(path, source, result.span);
+    let (end_line, end_column) = source_position(&source_text, result.span.end);
     let header = format!(
         "{} [{}]: {}.{}[{}] ({}:{}:{}-{}:{})\n  = {}",
         result.status,
@@ -5920,14 +5921,14 @@ fn format_verification_result(path: &str, source: &str, result: &VerificationRes
         result.function,
         result.kind,
         result.index,
-        path,
+        source_path,
         result.span.line,
         result.span.column,
         end_line,
         end_column,
         result.message
     );
-    match format_source_excerpt(source, result.span) {
+    match format_source_excerpt(&source_text, result.span) {
         Some(excerpt) => {
             let counterexample = result
                 .counterexample
@@ -5950,7 +5951,8 @@ fn format_verification_json(path: &str, source: &str, results: &[VerificationRes
     let entries = results
         .iter()
         .map(|result| {
-            let (end_line, end_column) = source_position(source, result.span.end);
+            let (source_path, source_text) = verification_source(path, source, result.span);
+            let (end_line, end_column) = source_position(&source_text, result.span.end);
             let counterexample = result
                 .counterexample
                 .as_ref()
@@ -5965,7 +5967,7 @@ fn format_verification_json(path: &str, source: &str, results: &[VerificationRes
                 result.kind,
                 result.index,
                 counterexample,
-                json_escape(path),
+                json_escape(&source_path),
                 result.span.line,
                 result.span.column,
                 end_line,
@@ -5974,6 +5976,19 @@ fn format_verification_json(path: &str, source: &str, results: &[VerificationRes
         })
         .collect::<Vec<_>>();
     format!("[{}]", entries.join(","))
+}
+
+fn verification_source(path: &str, source: &str, span: zelyra_ast::Span) -> (String, String) {
+    if span.source_id == 0 {
+        return (path.into(), source.into());
+    }
+    PROJECT_SOURCES.with(|sources| {
+        sources
+            .borrow()
+            .get(span.source_id as usize)
+            .map(|source| (source.path.clone(), source.text.clone()))
+            .unwrap_or_else(|| (path.into(), source.into()))
+    })
 }
 
 fn format_counterexample(values: &[(String, i64)]) -> String {

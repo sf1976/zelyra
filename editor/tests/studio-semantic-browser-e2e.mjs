@@ -19,7 +19,7 @@ let startupTimer;
 try {
   await mkdir(join(project, "src"));
   await writeFile(join(project, "main.zyl"), main);
-  await writeFile(join(project, "src/math.zyl"), "pub fn answer() -> Int { return 42 }\n");
+  await writeFile(join(project, "src/math.zyl"), "pub fn answer() -> Int requires { 1 < 2 } { return 42 }\npub fn dynamic(value: Int) requires { value >= 0 } {}\n");
   const port = await new Promise((resolvePort, reject) => {
     const socket = createServer();
     socket.once("error", reject);
@@ -88,6 +88,14 @@ try {
   await page.keyboard.press("F12");
   try {
     await page.waitForFunction(() => document.querySelector("#active-file")?.textContent === "src/math.zyl", undefined, { timeout: 10_000 });
+  await page.locator(".verify-gutter .verify-marker.proven").waitFor({ timeout: 10_000 });
+  await page.locator(".verify-gutter .verify-marker.runtime_check").waitFor({ timeout: 10_000 });
+  assert.match(await page.locator(".verify-gutter .verify-marker.proven").getAttribute("aria-label"), /PROVEN V-001/);
+  await page.locator(".cm-content").click();
+  await page.keyboard.press("Control+A");
+  await page.keyboard.type("pub fn answer( {\n");
+  await page.locator(".verify-gutter .verify-marker.proven").waitFor({ state: "detached", timeout: 10_000 });
+  await page.locator("#problems-panel:not([hidden])").waitFor({ timeout: 10_000 });
   } catch (error) {
     const state = await page.evaluate(() => ({
       active: document.querySelector("#active-file")?.textContent,

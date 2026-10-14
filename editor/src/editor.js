@@ -23,6 +23,8 @@ import {
   crosshairCursor,
   drawSelection,
   EditorView,
+  GutterMarker,
+  gutter,
   highlightActiveLine,
   highlightActiveLineGutter,
   keymap,
@@ -51,6 +53,54 @@ let activePath = null;
 let editorLogRecords = [];
 let editor = null;
 let diagnostics = [];
+let verificationResults = [];
+const verificationRefresh = StateEffect.define();
+
+class VerificationMarker extends GutterMarker {
+  constructor(status, explanation) {
+    super();
+    this.status = status;
+    this.explanation = explanation;
+  }
+  toDOM() {
+    const marker = document.createElement("span");
+    marker.className = `verify-marker ${this.status.toLowerCase()}`;
+    marker.textContent = this.status === "PROVEN" ? "◆" : this.status === "FAILED" ? "✖" : "●";
+    marker.title = this.explanation;
+    marker.setAttribute("role", "button");
+    marker.setAttribute("tabindex", "0");
+    marker.setAttribute("aria-label", this.explanation);
+    marker.addEventListener("click", () => announce(this.explanation, this.status === "FAILED" ? "error" : ""));
+    marker.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        announce(this.explanation, this.status === "FAILED" ? "error" : "");
+      }
+    });
+    return marker;
+  }
+}
+
+function setVerificationResults(results) {
+  verificationResults = results;
+  if (editor) editor.dispatch({ effects: verificationRefresh.of(null) });
+}
+
+const verificationGutter = gutter({
+  class: "verify-gutter",
+  lineMarker(view, line) {
+    const number = view.state.doc.lineAt(line.from).number;
+    const entries = verificationResults.filter((item) => item.file === activePath && item.span?.start?.line === number);
+    if (!entries.length) return null;
+    const priority = { FAILED: 0, RUNTIME_CHECK: 1, UNPROVEN: 2, PROVEN: 3 };
+    entries.sort((left, right) => priority[left.status] - priority[right.status]);
+    const explanation = entries.map((item) => `${item.status} ${item.code}: ${item.message}`).join("\n");
+    return new VerificationMarker(entries[0].status, explanation);
+  },
+  lineMarkerChange(update) {
+    return update.transactions.some((transaction) => transaction.effects.some((effect) => effect.is(verificationRefresh)));
+  },
+});
 let liveCheckTimer = null;
 let liveCheckSequence = 0;
 const symbolCache = new Map();
@@ -1060,7 +1110,7 @@ async function goToDefinition() {
 
 function createView(path, state) {
   const extensions = [
-    lineNumbers(), highlightActiveLineGutter(), foldGutter(), undoRedoHistory(), drawSelection(),
+    lineNumbers(), highlightActiveLineGutter(), foldGutter(), verificationGutter, undoRedoHistory(), drawSelection(),
     rectangularSelection(), crosshairCursor(), highlightActiveLine(), bracketMatching(),
     indentOnInput(), highlightSelectionMatches(), zelyraLanguage,
     syntaxHighlighting(defaultHighlightStyle, { fallback: true }), zelyraHighlight,
@@ -1130,6 +1180,7 @@ function activate(path) {
   if (!tabs.has(path)) return;
   if (editor) { tabs.get(activePath).state = editor.state; editor.destroy(); }
   activePath = path;
+  verificationResults = [];
   const tab = tabs.get(path);
   editor = createView(path, tab.state);
   $("active-file").textContent = path;
@@ -1137,6 +1188,7 @@ function activate(path) {
   $("empty-state").hidden = true;
   renderTabs();
   editor.focus();
+  scheduleLiveCheck(path);
 }
 
 function closeTab(path) {
@@ -2427,6 +2479,7 @@ function renderDiagnostics(items, success, options = {}) {
 
 function scheduleLiveCheck(path) {
   if (!path?.endsWith(".zyl")) return;
+  setVerificationResults([]);
   clearTimeout(liveCheckTimer);
   const sequence = ++liveCheckSequence;
   liveCheckTimer = setTimeout(async () => {
@@ -2437,6 +2490,10 @@ function scheduleLiveCheck(path) {
       const result = await api("check", { method: "POST", body: JSON.stringify({ path, source }) });
       if (sequence !== liveCheckSequence || activePath !== path || editor?.state.doc.toString() !== source) return;
       renderDiagnostics(result.diagnostics || [], result.success, { silent: true });
+      if (!result.success) return;
+      const verified = await api("verify", { method: "POST", body: JSON.stringify({ path, source, version: sequence }) });
+      if (sequence !== liveCheckSequence || activePath !== path || editor?.state.doc.toString() !== source || verified.version !== sequence) return;
+      setVerificationResults(verified.success ? verified.results || [] : []);
     } catch {
       // Live checks are advisory; explicit project checks report request failures.
     }

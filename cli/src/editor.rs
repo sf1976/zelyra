@@ -415,6 +415,7 @@ fn editor_response(
         ("POST", "file-rename") => rename_editor_file(state, parse_json_body(&request.body)?),
         ("DELETE", "file") => delete_editor_file(state, parse_json_body(&request.body)?),
         ("POST", "check") => check_project(state, &parse_json_body(&request.body)?),
+        ("POST", "verify") => verify_editor_project(state, &parse_json_body(&request.body)?),
         ("POST", "run") => run_editor_program(state, &parse_json_body(&request.body)?),
         ("POST", "stop-web-preview") => stop_editor_web_app(state),
         ("POST", "format") => format_editor_file(state, &parse_json_body(&request.body)?),
@@ -431,6 +432,48 @@ fn editor_response(
         }
         _ => Err((404, "not found".into())),
     }
+}
+
+fn verify_editor_project(
+    state: &EditorState,
+    value: &Value,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let relative = value
+        .get("path")
+        .and_then(Value::as_str)
+        .filter(|path| path.ends_with(".zyl"))
+        .ok_or((400, "choose a Zelyra source file".into()))?;
+    let _path = safe_editor_path(&state.root, relative, false)?;
+    let source = value
+        .get("source")
+        .and_then(Value::as_str)
+        .ok_or((400, "source is required".into()))?;
+    if source.len() > EDITOR_MAX_FILE_BYTES {
+        return Err((413, "source exceeds the 1 MiB editor limit".into()));
+    }
+    let entry = state.root.join("main.zyl");
+    if !entry.is_file() {
+        return Err((422, "project entry file main.zyl is missing".into()));
+    }
+    let version = value.get("version").and_then(Value::as_i64).unwrap_or(0);
+    let analysis = language_service::analyze(
+        &entry,
+        &[language_service::SourceOverlay {
+            path: relative.into(),
+            text: source.into(),
+            version,
+        }],
+    );
+    let results = language_service::verification_entries(&analysis);
+    Ok((
+        200,
+        "application/json; charset=utf-8",
+        json!({
+            "success":analysis.success,"version":version,"diagnostics":analysis.diagnostics,
+            "results":results
+        })
+        .to_string(),
+    ))
 }
 
 fn semantic_editor_query(
@@ -4991,6 +5034,41 @@ fn main() {}
             .unwrap()
             .iter()
             .all(|item| item["path"] != "src/b.zyl"));
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn studio_verify_reports_real_statuses_for_unsaved_contracts() {
+        let state = project();
+        let path = state.root.join("main.zyl");
+        let original = "fn main() {}\n";
+        fs::write(&path, original).unwrap();
+        let source = "fn proven() requires { 1 < 2 } { }\nfn dynamic(value: Int) requires { value >= 0 } { }\nfn failed() ensures { 1 > 2 } { }\nfn main() {}\n";
+        let response = verify_editor_project(
+            &state,
+            &json!({
+                "path":"main.zyl","source":source,"version":12
+            }),
+        )
+        .unwrap();
+        let payload: Value = serde_json::from_str(&response.2).unwrap();
+        assert_eq!(payload["success"], true);
+        assert_eq!(payload["version"], 12);
+        let results = payload["results"].as_array().unwrap();
+        assert!(results.iter().any(|item| item["status"] == "PROVEN"));
+        assert!(results.iter().any(|item| item["status"] == "RUNTIME_CHECK"));
+        assert!(results.iter().any(|item| item["status"] == "FAILED"));
+        let invalid = verify_editor_project(
+            &state,
+            &json!({
+                "path":"main.zyl","source":"fn main( {\n","version":13
+            }),
+        )
+        .unwrap();
+        let invalid: Value = serde_json::from_str(&invalid.2).unwrap();
+        assert_eq!(invalid["success"], false);
+        assert!(invalid["results"].as_array().unwrap().is_empty());
+        assert_eq!(fs::read_to_string(path).unwrap(), original);
         fs::remove_dir_all(state.root.clone()).unwrap();
     }
 
