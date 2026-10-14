@@ -1,4 +1,5 @@
 use rand_core::{OsRng, RngCore};
+use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::io::{self, BufRead, Read, Write};
@@ -11,7 +12,6 @@ use zelyra_ast::temporal::{
     date_epoch_days, epoch_days_date, format_timestamp_utc, timestamp_bounds_millis, valid_date,
     valid_time,
 };
-use sha2::{Digest, Sha256};
 use zelyra_ast::*;
 
 const BASE64_CHARS: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -125,7 +125,6 @@ fn generate_uuid_v4() -> Result<String, String> {
         bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]
     ))
 }
-
 
 mod csv;
 mod decimal_math;
@@ -5837,10 +5836,18 @@ impl<'a> Checker<'a> {
                     let argument = self.check_expr(&args[0], scopes);
                     if !matches!(
                         argument,
-                        Type::Array(_) | Type::Tuple(_) | Type::Set(_) | Type::Map(_, _) | Type::String | Type::Bytes
+                        Type::Array(_)
+                            | Type::Tuple(_)
+                            | Type::Set(_)
+                            | Type::Map(_, _)
+                            | Type::String
+                            | Type::Bytes
                     ) && argument != Type::Unknown
                     {
-                        self.error(args[0].span, "`len` expects an array, Tuple, Set, Map, String or Bytes");
+                        self.error(
+                            args[0].span,
+                            "`len` expects an array, Tuple, Set, Map, String or Bytes",
+                        );
                     }
                     Type::Int
                 } else if name == "append" {
@@ -5988,7 +5995,10 @@ impl<'a> Checker<'a> {
                     } else if ty == Type::Unknown {
                         Type::Unknown
                     } else {
-                        self.error(args[0].span, format!("abs expects Int, Float, or Decimal, found {ty}"));
+                        self.error(
+                            args[0].span,
+                            format!("abs expects Int, Float, or Decimal, found {ty}"),
+                        );
                         Type::Unknown
                     }
                 } else if name == "min" || name == "max" {
@@ -6044,7 +6054,10 @@ impl<'a> Checker<'a> {
                         Type::Array(inner) => Type::Array(inner),
                         Type::Unknown => Type::Unknown,
                         other => {
-                            self.error(args[0].span, format!("{name} expects an array, found {other}"));
+                            self.error(
+                                args[0].span,
+                                format!("{name} expects an array, found {other}"),
+                            );
                             Type::Unknown
                         }
                     }
@@ -6062,7 +6075,10 @@ impl<'a> Checker<'a> {
                         Type::Array(inner) => Type::Array(inner),
                         Type::Unknown => Type::Unknown,
                         other => {
-                            self.error(args[0].span, format!("slice expects an array, found {other}"));
+                            self.error(
+                                args[0].span,
+                                format!("slice expects an array, found {other}"),
+                            );
                             Type::Unknown
                         }
                     }
@@ -6077,7 +6093,10 @@ impl<'a> Checker<'a> {
                     a_ty
                 } else if name == "join" {
                     if args.len() != 2 {
-                        self.error(expr.span, "join expects an array of Strings and a delimiter");
+                        self.error(
+                            expr.span,
+                            "join expects an array of Strings and a delimiter",
+                        );
                         return Type::Unknown;
                     }
                     let arr_ty = self.check_expr(&args[0], scopes);
@@ -6123,9 +6142,12 @@ impl<'a> Checker<'a> {
                     self.expect_type(&Type::String, &text, args[0].span);
                     self.expect_type(&Type::String, &sep, args[1].span);
                     Type::Array(Box::new(Type::String))
-} else if name == "text_replace" {
+                } else if name == "text_replace" {
                     if args.len() != 3 {
-                        self.error(expr.span, "text_replace expects text, search, and replacement");
+                        self.error(
+                            expr.span,
+                            "text_replace expects text, search, and replacement",
+                        );
                         return Type::Unknown;
                     }
                     let text = self.check_expr(&args[0], scopes);
@@ -6137,7 +6159,10 @@ impl<'a> Checker<'a> {
                     Type::String
                 } else if name == "text_pad_left" || name == "text_pad_right" {
                     if args.len() != 3 {
-                        self.error(expr.span, format!("{name} expects text, target length, and pad char"));
+                        self.error(
+                            expr.span,
+                            format!("{name} expects text, target length, and pad char"),
+                        );
                         return Type::Unknown;
                     }
                     let text = self.check_expr(&args[0], scopes);
@@ -6149,7 +6174,10 @@ impl<'a> Checker<'a> {
                     Type::String
                 } else if name == "get_or" {
                     if args.len() != 3 {
-                        self.error(expr.span, "get_or expects a Map, key, and default fallback value");
+                        self.error(
+                            expr.span,
+                            "get_or expects a Map, key, and default fallback value",
+                        );
                         return Type::Unknown;
                     }
                     let map_ty = self.check_expr(&args[0], scopes);
@@ -6163,7 +6191,10 @@ impl<'a> Checker<'a> {
                         }
                         Type::Unknown => fallback_ty,
                         other => {
-                            self.error(args[0].span, format!("get_or expects a Map, found {other}"));
+                            self.error(
+                                args[0].span,
+                                format!("get_or expects a Map, found {other}"),
+                            );
                             fallback_ty
                         }
                     }
@@ -6181,7 +6212,10 @@ impl<'a> Checker<'a> {
                         }
                         Type::Unknown => Type::Bool,
                         other => {
-                            self.error(args[0].span, format!("has_key expects a Map, found {other}"));
+                            self.error(
+                                args[0].span,
+                                format!("has_key expects a Map, found {other}"),
+                            );
                             Type::Bool
                         }
                     }
@@ -6205,7 +6239,10 @@ impl<'a> Checker<'a> {
                     Type::Float
                 } else if name == "round" {
                     if args.len() != 2 {
-                        self.error(expr.span, "round expects number (Float) and decimal places (Int)");
+                        self.error(
+                            expr.span,
+                            "round expects number (Float) and decimal places (Int)",
+                        );
                         return Type::Unknown;
                     }
                     let num = self.check_expr(&args[0], scopes);
@@ -6259,7 +6296,10 @@ impl<'a> Checker<'a> {
                         Type::Array(inner) => Type::Array(inner),
                         Type::Unknown => Type::Unknown,
                         other => {
-                            self.error(args[0].span, format!("unique expects an array, found {other}"));
+                            self.error(
+                                args[0].span,
+                                format!("unique expects an array, found {other}"),
+                            );
                             Type::Unknown
                         }
                     }
@@ -6270,10 +6310,19 @@ impl<'a> Checker<'a> {
                     }
                     let ty = self.check_expr(&args[0], scopes);
                     match ty {
-                        Type::Array(inner) if matches!(*inner, Type::Int | Type::Float | Type::Decimal) => *inner,
+                        Type::Array(inner)
+                            if matches!(*inner, Type::Int | Type::Float | Type::Decimal) =>
+                        {
+                            *inner
+                        }
                         Type::Unknown => Type::Unknown,
                         other => {
-                            self.error(args[0].span, format!("sum expects array of Int, Float, or Decimal, found {other}"));
+                            self.error(
+                                args[0].span,
+                                format!(
+                                    "sum expects array of Int, Float, or Decimal, found {other}"
+                                ),
+                            );
                             Type::Unknown
                         }
                     }
@@ -6284,11 +6333,16 @@ impl<'a> Checker<'a> {
                     }
                     let ty = self.check_expr(&args[0], scopes);
                     match ty {
-                        Type::Array(inner) if matches!(*inner, Type::Int | Type::Float) => Type::Float,
+                        Type::Array(inner) if matches!(*inner, Type::Int | Type::Float) => {
+                            Type::Float
+                        }
                         Type::Array(inner) if matches!(*inner, Type::Decimal) => Type::Decimal,
                         Type::Unknown => Type::Unknown,
                         other => {
-                            self.error(args[0].span, format!("avg expects array of numbers, found {other}"));
+                            self.error(
+                                args[0].span,
+                                format!("avg expects array of numbers, found {other}"),
+                            );
                             Type::Unknown
                         }
                     }
@@ -6302,7 +6356,10 @@ impl<'a> Checker<'a> {
                         Type::Array(inner) => Type::Option(inner),
                         Type::Unknown => Type::Unknown,
                         other => {
-                            self.error(args[0].span, format!("{name} expects an array, found {other}"));
+                            self.error(
+                                args[0].span,
+                                format!("{name} expects an array, found {other}"),
+                            );
                             Type::Unknown
                         }
                     }
@@ -6318,7 +6375,10 @@ impl<'a> Checker<'a> {
                         Type::Array(inner) => Type::Array(Box::new(Type::Array(inner))),
                         Type::Unknown => Type::Unknown,
                         other => {
-                            self.error(args[0].span, format!("chunk expects an array, found {other}"));
+                            self.error(
+                                args[0].span,
+                                format!("chunk expects an array, found {other}"),
+                            );
                             Type::Unknown
                         }
                     }
@@ -6329,20 +6389,28 @@ impl<'a> Checker<'a> {
                     }
                     let arr_ty = self.check_expr(&args[0], scopes);
                     match arr_ty {
-                        Type::Array(inner) => match *inner {
-                            Type::Array(element) => Type::Array(element),
-                            other => {
-                                self.error(args[0].span, format!("flatten expects array of arrays, found array of {other}"));
-                                Type::Unknown
+                        Type::Array(inner) => {
+                            match *inner {
+                                Type::Array(element) => Type::Array(element),
+                                other => {
+                                    self.error(args[0].span, format!("flatten expects array of arrays, found array of {other}"));
+                                    Type::Unknown
+                                }
                             }
-                        },
+                        }
                         Type::Unknown => Type::Unknown,
                         other => {
-                            self.error(args[0].span, format!("flatten expects an array, found {other}"));
+                            self.error(
+                                args[0].span,
+                                format!("flatten expects an array, found {other}"),
+                            );
                             Type::Unknown
                         }
                     }
-                } else if name == "set_union" || name == "set_intersection" || name == "set_difference" {
+                } else if name == "set_union"
+                    || name == "set_intersection"
+                    || name == "set_difference"
+                {
                     if args.len() != 2 {
                         self.error(expr.span, format!("{name} expects two Sets"));
                         return Type::Unknown;
@@ -6372,7 +6440,10 @@ impl<'a> Checker<'a> {
                         }
                         Type::Unknown => Type::Unknown,
                         other => {
-                            self.error(args[0].span, format!("map_remove expects a Map, found {other}"));
+                            self.error(
+                                args[0].span,
+                                format!("map_remove expects a Map, found {other}"),
+                            );
                             Type::Unknown
                         }
                     }
@@ -6387,7 +6458,10 @@ impl<'a> Checker<'a> {
                     a_ty
                 } else if name == "unwrap_or" {
                     if args.len() != 2 {
-                        self.error(expr.span, "unwrap_or expects an Option and fallback default");
+                        self.error(
+                            expr.span,
+                            "unwrap_or expects an Option and fallback default",
+                        );
                         return Type::Unknown;
                     }
                     let opt_ty = self.check_expr(&args[0], scopes);
@@ -6399,7 +6473,10 @@ impl<'a> Checker<'a> {
                         }
                         Type::Unknown => fallback_ty,
                         other => {
-                            self.error(args[0].span, format!("unwrap_or expects Option, found {other}"));
+                            self.error(
+                                args[0].span,
+                                format!("unwrap_or expects Option, found {other}"),
+                            );
                             fallback_ty
                         }
                     }
@@ -6616,7 +6693,10 @@ impl<'a> Checker<'a> {
                     Type::Bool
                 } else if name == "text_substring" {
                     if args.len() != 3 {
-                        self.error(expr.span, "text_substring expects String, start Int, and length Int");
+                        self.error(
+                            expr.span,
+                            "text_substring expects String, start Int, and length Int",
+                        );
                         return Type::Unknown;
                     }
                     let s = self.check_expr(&args[0], scopes);
@@ -6665,7 +6745,10 @@ impl<'a> Checker<'a> {
                         Type::Map(k, v) => Type::Array(Box::new(Type::Tuple(vec![*k, *v]))),
                         Type::Unknown => Type::Array(Box::new(Type::Unknown)),
                         other => {
-                            self.error(args[0].span, format!("entries expects a Map, found {other}"));
+                            self.error(
+                                args[0].span,
+                                format!("entries expects a Map, found {other}"),
+                            );
                             Type::Unknown
                         }
                     }
@@ -6677,7 +6760,9 @@ impl<'a> Checker<'a> {
                     let a = self.check_expr(&args[0], scopes);
                     let b = self.check_expr(&args[1], scopes);
                     match (a, b) {
-                        (Type::Array(ta), Type::Array(tb)) => Type::Array(Box::new(Type::Tuple(vec![*ta, *tb]))),
+                        (Type::Array(ta), Type::Array(tb)) => {
+                            Type::Array(Box::new(Type::Tuple(vec![*ta, *tb])))
+                        }
                         _ => Type::Array(Box::new(Type::Unknown)),
                     }
                 } else if name == "dedup" {
@@ -6690,7 +6775,10 @@ impl<'a> Checker<'a> {
                         Type::Array(inner) => Type::Array(inner),
                         Type::Unknown => Type::Unknown,
                         other => {
-                            self.error(args[0].span, format!("dedup expects an Array, found {other}"));
+                            self.error(
+                                args[0].span,
+                                format!("dedup expects an Array, found {other}"),
+                            );
                             Type::Unknown
                         }
                     }
@@ -6704,7 +6792,10 @@ impl<'a> Checker<'a> {
                     self.expect_type(&Type::String, &a, args[0].span);
                     self.expect_type(&Type::String, &b, args[1].span);
                     Type::String
-                } else if matches!(name.as_str(), "path_filename" | "path_extension" | "path_dir") {
+                } else if matches!(
+                    name.as_str(),
+                    "path_filename" | "path_extension" | "path_dir"
+                ) {
                     if args.len() != 1 {
                         self.error(expr.span, format!("{name} expects one String path"));
                         return Type::Unknown;
@@ -11456,7 +11547,10 @@ impl<'program> Interpreter<'program> {
                 Value::Int(val) => Ok(Value::Int(val.abs())),
                 Value::Float(val) => Ok(Value::Float(val.abs())),
                 Value::Decimal(val) => Ok(Value::Decimal(val.abs())),
-                other => Err(self.runtime_error(args[0].span, format!("abs expects numeric value, found {}", other.ty()))),
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("abs expects numeric value, found {}", other.ty()),
+                )),
             }
         } else if name == "min" {
             if args.len() != 2 {
@@ -11469,7 +11563,11 @@ impl<'program> Interpreter<'program> {
                 (Value::Float(va), Value::Float(vb)) => Ok(Value::Float(va.min(*vb))),
                 (Value::Decimal(va), Value::Decimal(vb)) => Ok(Value::Decimal(*va.min(vb))),
                 (Value::String(va), Value::String(vb)) => {
-                    if va <= vb { Ok(a) } else { Ok(b) }
+                    if va <= vb {
+                        Ok(a)
+                    } else {
+                        Ok(b)
+                    }
                 }
                 _ => Ok(a),
             }
@@ -11484,7 +11582,11 @@ impl<'program> Interpreter<'program> {
                 (Value::Float(va), Value::Float(vb)) => Ok(Value::Float(va.max(*vb))),
                 (Value::Decimal(va), Value::Decimal(vb)) => Ok(Value::Decimal(*va.max(vb))),
                 (Value::String(va), Value::String(vb)) => {
-                    if va >= vb { Ok(a) } else { Ok(b) }
+                    if va >= vb {
+                        Ok(a)
+                    } else {
+                        Ok(b)
+                    }
                 }
                 _ => Ok(a),
             }
@@ -11496,9 +11598,15 @@ impl<'program> Interpreter<'program> {
             let min_val = self.eval(&args[1], env)?;
             let max_val = self.eval(&args[2], env)?;
             match (&val, &min_val, &max_val) {
-                (Value::Int(v), Value::Int(mn), Value::Int(mx)) => Ok(Value::Int(*v.max(mn).min(mx))),
-                (Value::Float(v), Value::Float(mn), Value::Float(mx)) => Ok(Value::Float(v.max(*mn).min(*mx))),
-                (Value::Decimal(v), Value::Decimal(mn), Value::Decimal(mx)) => Ok(Value::Decimal(*v.max(mn).min(mx))),
+                (Value::Int(v), Value::Int(mn), Value::Int(mx)) => {
+                    Ok(Value::Int(*v.max(mn).min(mx)))
+                }
+                (Value::Float(v), Value::Float(mn), Value::Float(mx)) => {
+                    Ok(Value::Float(v.max(*mn).min(*mx)))
+                }
+                (Value::Decimal(v), Value::Decimal(mn), Value::Decimal(mx)) => {
+                    Ok(Value::Decimal(*v.max(mn).min(mx)))
+                }
                 _ => Ok(val),
             }
         } else if name == "to_string" {
@@ -11512,12 +11620,12 @@ impl<'program> Interpreter<'program> {
                 return Err(self.runtime_error(span, "parse_int expects exactly one String"));
             }
             match self.eval(&args[0], env)? {
-                Value::String(text) => {
-                    match text.trim().parse::<i64>() {
-                        Ok(parsed) => Ok(Value::Result(Ok(Box::new(Value::Int(parsed))))),
-                        Err(_) => Ok(Value::Result(Err(Box::new(Value::String(format!("invalid integer: {text}")))))),
-                    }
-                }
+                Value::String(text) => match text.trim().parse::<i64>() {
+                    Ok(parsed) => Ok(Value::Result(Ok(Box::new(Value::Int(parsed))))),
+                    Err(_) => Ok(Value::Result(Err(Box::new(Value::String(format!(
+                        "invalid integer: {text}"
+                    )))))),
+                },
                 _ => Err(self.runtime_error(args[0].span, "parse_int expects a String")),
             }
         } else if name == "parse_float" {
@@ -11525,12 +11633,12 @@ impl<'program> Interpreter<'program> {
                 return Err(self.runtime_error(span, "parse_float expects exactly one String"));
             }
             match self.eval(&args[0], env)? {
-                Value::String(text) => {
-                    match text.trim().parse::<f64>() {
-                        Ok(parsed) => Ok(Value::Result(Ok(Box::new(Value::Float(parsed))))),
-                        Err(_) => Ok(Value::Result(Err(Box::new(Value::String(format!("invalid float: {text}")))))),
-                    }
-                }
+                Value::String(text) => match text.trim().parse::<f64>() {
+                    Ok(parsed) => Ok(Value::Result(Ok(Box::new(Value::Float(parsed))))),
+                    Err(_) => Ok(Value::Result(Err(Box::new(Value::String(format!(
+                        "invalid float: {text}"
+                    )))))),
+                },
                 _ => Err(self.runtime_error(args[0].span, "parse_float expects a String")),
             }
         } else if name == "sort" {
@@ -11539,19 +11647,22 @@ impl<'program> Interpreter<'program> {
             }
             match self.eval(&args[0], env)? {
                 Value::Array(mut items) => {
-                    items.sort_by(|a, b| {
-                        match (a, b) {
-                            (Value::Int(x), Value::Int(y)) => x.cmp(y),
-                            (Value::UInt(x), Value::UInt(y)) => x.cmp(y),
-                            (Value::Float(x), Value::Float(y)) => x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal),
-                            (Value::Decimal(x), Value::Decimal(y)) => x.cmp(y),
-                            (Value::String(x), Value::String(y)) => x.cmp(y),
-                            _ => std::cmp::Ordering::Equal,
+                    items.sort_by(|a, b| match (a, b) {
+                        (Value::Int(x), Value::Int(y)) => x.cmp(y),
+                        (Value::UInt(x), Value::UInt(y)) => x.cmp(y),
+                        (Value::Float(x), Value::Float(y)) => {
+                            x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal)
                         }
+                        (Value::Decimal(x), Value::Decimal(y)) => x.cmp(y),
+                        (Value::String(x), Value::String(y)) => x.cmp(y),
+                        _ => std::cmp::Ordering::Equal,
                     });
                     Ok(Value::Array(items))
                 }
-                other => Err(self.runtime_error(args[0].span, format!("sort expects array, found {}", other.ty()))),
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("sort expects array, found {}", other.ty()),
+                )),
             }
         } else if name == "sort_desc" {
             if args.len() != 1 {
@@ -11559,19 +11670,22 @@ impl<'program> Interpreter<'program> {
             }
             match self.eval(&args[0], env)? {
                 Value::Array(mut items) => {
-                    items.sort_by(|a, b| {
-                        match (a, b) {
-                            (Value::Int(x), Value::Int(y)) => y.cmp(x),
-                            (Value::UInt(x), Value::UInt(y)) => y.cmp(x),
-                            (Value::Float(x), Value::Float(y)) => y.partial_cmp(x).unwrap_or(std::cmp::Ordering::Equal),
-                            (Value::Decimal(x), Value::Decimal(y)) => y.cmp(x),
-                            (Value::String(x), Value::String(y)) => y.cmp(x),
-                            _ => std::cmp::Ordering::Equal,
+                    items.sort_by(|a, b| match (a, b) {
+                        (Value::Int(x), Value::Int(y)) => y.cmp(x),
+                        (Value::UInt(x), Value::UInt(y)) => y.cmp(x),
+                        (Value::Float(x), Value::Float(y)) => {
+                            y.partial_cmp(x).unwrap_or(std::cmp::Ordering::Equal)
                         }
+                        (Value::Decimal(x), Value::Decimal(y)) => y.cmp(x),
+                        (Value::String(x), Value::String(y)) => y.cmp(x),
+                        _ => std::cmp::Ordering::Equal,
                     });
                     Ok(Value::Array(items))
                 }
-                other => Err(self.runtime_error(args[0].span, format!("sort_desc expects array, found {}", other.ty()))),
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("sort_desc expects array, found {}", other.ty()),
+                )),
             }
         } else if name == "reverse" {
             if args.len() != 1 {
@@ -11582,11 +11696,16 @@ impl<'program> Interpreter<'program> {
                     items.reverse();
                     Ok(Value::Array(items))
                 }
-                other => Err(self.runtime_error(args[0].span, format!("reverse expects array, found {}", other.ty()))),
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("reverse expects array, found {}", other.ty()),
+                )),
             }
         } else if name == "slice" {
             if args.len() != 3 {
-                return Err(self.runtime_error(span, "slice expects array, start index, and length"));
+                return Err(
+                    self.runtime_error(span, "slice expects array, start index, and length")
+                );
             }
             let arr = self.eval(&args[0], env)?;
             let start = self.eval(&args[1], env)?;
@@ -11604,7 +11723,9 @@ impl<'program> Interpreter<'program> {
                     let end_usize = (start_usize + len_usize).min(items.len());
                     Ok(Value::Array(items[start_usize..end_usize].to_vec()))
                 }
-                _ => Err(self.runtime_error(span, "slice expects array, Int start, and Int length")),
+                _ => {
+                    Err(self.runtime_error(span, "slice expects array, Int start, and Int length"))
+                }
             }
         } else if name == "concat" {
             if args.len() != 2 {
@@ -11656,7 +11777,9 @@ impl<'program> Interpreter<'program> {
                 return Err(self.runtime_error(span, "text_starts_with expects text and prefix"));
             }
             match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
-                (Value::String(text), Value::String(prefix)) => Ok(Value::Bool(text.starts_with(&prefix))),
+                (Value::String(text), Value::String(prefix)) => {
+                    Ok(Value::Bool(text.starts_with(&prefix)))
+                }
                 _ => Err(self.runtime_error(span, "text_starts_with expects two Strings")),
             }
         } else if name == "text_ends_with" {
@@ -11664,7 +11787,9 @@ impl<'program> Interpreter<'program> {
                 return Err(self.runtime_error(span, "text_ends_with expects text and suffix"));
             }
             match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
-                (Value::String(text), Value::String(suffix)) => Ok(Value::Bool(text.ends_with(&suffix))),
+                (Value::String(text), Value::String(suffix)) => {
+                    Ok(Value::Bool(text.ends_with(&suffix)))
+                }
                 _ => Err(self.runtime_error(span, "text_ends_with expects two Strings")),
             }
         } else if name == "text_split" || name == "split" {
@@ -11673,16 +11798,25 @@ impl<'program> Interpreter<'program> {
             }
             match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
                 (Value::String(text), Value::String(sep)) => {
-                    let parts = text.split(&sep).map(|s| Value::String(s.to_string())).collect();
+                    let parts = text
+                        .split(&sep)
+                        .map(|s| Value::String(s.to_string()))
+                        .collect();
                     Ok(Value::Array(parts))
                 }
                 _ => Err(self.runtime_error(span, format!("{name} expects two Strings"))),
             }
         } else if name == "text_replace" {
             if args.len() != 3 {
-                return Err(self.runtime_error(span, "text_replace expects text, search, and replacement"));
+                return Err(
+                    self.runtime_error(span, "text_replace expects text, search, and replacement")
+                );
             }
-            match (self.eval(&args[0], env)?, self.eval(&args[1], env)?, self.eval(&args[2], env)?) {
+            match (
+                self.eval(&args[0], env)?,
+                self.eval(&args[1], env)?,
+                self.eval(&args[2], env)?,
+            ) {
                 (Value::String(text), Value::String(search), Value::String(replacement)) => {
                     Ok(Value::String(text.replace(&search, &replacement)))
                 }
@@ -11690,9 +11824,16 @@ impl<'program> Interpreter<'program> {
             }
         } else if name == "text_pad_left" {
             if args.len() != 3 {
-                return Err(self.runtime_error(span, "text_pad_left expects text, target length, and pad char"));
+                return Err(self.runtime_error(
+                    span,
+                    "text_pad_left expects text, target length, and pad char",
+                ));
             }
-            match (self.eval(&args[0], env)?, self.eval(&args[1], env)?, self.eval(&args[2], env)?) {
+            match (
+                self.eval(&args[0], env)?,
+                self.eval(&args[1], env)?,
+                self.eval(&args[2], env)?,
+            ) {
                 (Value::String(text), Value::Int(target_len), Value::String(pad)) => {
                     let pad_str = if pad.is_empty() { " " } else { &pad };
                     if text.len() >= target_len as usize {
@@ -11708,9 +11849,16 @@ impl<'program> Interpreter<'program> {
             }
         } else if name == "text_pad_right" {
             if args.len() != 3 {
-                return Err(self.runtime_error(span, "text_pad_right expects text, target length, and pad char"));
+                return Err(self.runtime_error(
+                    span,
+                    "text_pad_right expects text, target length, and pad char",
+                ));
             }
-            match (self.eval(&args[0], env)?, self.eval(&args[1], env)?, self.eval(&args[2], env)?) {
+            match (
+                self.eval(&args[0], env)?,
+                self.eval(&args[1], env)?,
+                self.eval(&args[2], env)?,
+            ) {
                 (Value::String(text), Value::Int(target_len), Value::String(pad)) => {
                     let pad_str = if pad.is_empty() { " " } else { &pad };
                     if text.len() >= target_len as usize {
@@ -11722,11 +11870,15 @@ impl<'program> Interpreter<'program> {
                         Ok(Value::String(format!("{text}{final_pad}")))
                     }
                 }
-                _ => Err(self.runtime_error(span, "text_pad_right expects String, Int, and String")),
+                _ => {
+                    Err(self.runtime_error(span, "text_pad_right expects String, Int, and String"))
+                }
             }
         } else if name == "get_or" {
             if args.len() != 3 {
-                return Err(self.runtime_error(span, "get_or expects a Map, key, and fallback default"));
+                return Err(
+                    self.runtime_error(span, "get_or expects a Map, key, and fallback default")
+                );
             }
             let map_val = self.eval(&args[0], env)?;
             let key_val = self.eval(&args[1], env)?;
@@ -11766,7 +11918,10 @@ impl<'program> Interpreter<'program> {
                     }
                     Ok(Value::Float(f.sqrt()))
                 }
-                other => Err(self.runtime_error(args[0].span, format!("sqrt expects Float, found {}", other.ty()))),
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("sqrt expects Float, found {}", other.ty()),
+                )),
             }
         } else if name == "pow" {
             if args.len() != 2 {
@@ -11782,7 +11937,10 @@ impl<'program> Interpreter<'program> {
             }
             match self.eval(&args[0], env)? {
                 Value::Float(f) => Ok(Value::Float(f.floor())),
-                other => Err(self.runtime_error(args[0].span, format!("floor expects Float, found {}", other.ty()))),
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("floor expects Float, found {}", other.ty()),
+                )),
             }
         } else if name == "ceil" {
             if args.len() != 1 {
@@ -11790,7 +11948,10 @@ impl<'program> Interpreter<'program> {
             }
             match self.eval(&args[0], env)? {
                 Value::Float(f) => Ok(Value::Float(f.ceil())),
-                other => Err(self.runtime_error(args[0].span, format!("ceil expects Float, found {}", other.ty()))),
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("ceil expects Float, found {}", other.ty()),
+                )),
             }
         } else if name == "round" {
             if args.len() != 2 {
@@ -11808,12 +11969,10 @@ impl<'program> Interpreter<'program> {
                 return Err(self.runtime_error(span, "text_index_of expects text and substring"));
             }
             match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
-                (Value::String(text), Value::String(sub)) => {
-                    match text.find(&sub) {
-                        Some(pos) => Ok(Value::Option(Some(Box::new(Value::Int(pos as i64))))),
-                        None => Ok(Value::Option(None)),
-                    }
-                }
+                (Value::String(text), Value::String(sub)) => match text.find(&sub) {
+                    Some(pos) => Ok(Value::Option(Some(Box::new(Value::Int(pos as i64))))),
+                    None => Ok(Value::Option(None)),
+                },
                 _ => Err(self.runtime_error(span, "text_index_of expects two Strings")),
             }
         } else if name == "text_repeat" {
@@ -11823,7 +11982,9 @@ impl<'program> Interpreter<'program> {
             match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
                 (Value::String(text), Value::Int(count)) => {
                     if count < 0 {
-                        return Err(self.runtime_error(span, "text_repeat count must be non-negative"));
+                        return Err(
+                            self.runtime_error(span, "text_repeat count must be non-negative")
+                        );
                     }
                     Ok(Value::String(text.repeat(count as usize)))
                 }
@@ -11835,7 +11996,10 @@ impl<'program> Interpreter<'program> {
             }
             match self.eval(&args[0], env)? {
                 Value::String(text) => Ok(Value::Bool(text.is_empty())),
-                other => Err(self.runtime_error(args[0].span, format!("text_is_empty expects String, found {}", other.ty()))),
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("text_is_empty expects String, found {}", other.ty()),
+                )),
             }
         } else if name == "text_capitalize" {
             if args.len() != 1 {
@@ -11850,7 +12014,10 @@ impl<'program> Interpreter<'program> {
                     };
                     Ok(Value::String(res))
                 }
-                other => Err(self.runtime_error(args[0].span, format!("text_capitalize expects String, found {}", other.ty()))),
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("text_capitalize expects String, found {}", other.ty()),
+                )),
             }
         } else if name == "unique" {
             if args.len() != 1 {
@@ -11866,7 +12033,10 @@ impl<'program> Interpreter<'program> {
                     }
                     Ok(Value::Array(out))
                 }
-                other => Err(self.runtime_error(args[0].span, format!("unique expects array, found {}", other.ty()))),
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("unique expects array, found {}", other.ty()),
+                )),
             }
         } else if name == "array_sum" {
             if args.len() != 1 {
@@ -11881,28 +12051,44 @@ impl<'program> Interpreter<'program> {
                         Value::Int(_) => {
                             let mut s: i64 = 0;
                             for it in items {
-                                if let Value::Int(n) = it { s = s.checked_add(n).ok_or_else(|| self.runtime_error(span, "sum integer overflow"))?; }
+                                if let Value::Int(n) = it {
+                                    s = s.checked_add(n).ok_or_else(|| {
+                                        self.runtime_error(span, "sum integer overflow")
+                                    })?;
+                                }
                             }
                             Ok(Value::Int(s))
                         }
                         Value::Float(_) => {
                             let mut s: f64 = 0.0;
                             for it in items {
-                                if let Value::Float(n) = it { s += n; }
+                                if let Value::Float(n) = it {
+                                    s += n;
+                                }
                             }
                             Ok(Value::Float(s))
                         }
                         Value::Decimal(_) => {
                             let mut s: i128 = 0;
                             for it in items {
-                                if let Value::Decimal(n) = it { s = s.checked_add(n).ok_or_else(|| self.runtime_error(span, "sum decimal overflow"))?; }
+                                if let Value::Decimal(n) = it {
+                                    s = s.checked_add(n).ok_or_else(|| {
+                                        self.runtime_error(span, "sum decimal overflow")
+                                    })?;
+                                }
                             }
                             Ok(Value::Decimal(s))
                         }
-                        other => Err(self.runtime_error(span, format!("sum expects numbers, found {}", other.ty()))),
+                        other => Err(self.runtime_error(
+                            span,
+                            format!("sum expects numbers, found {}", other.ty()),
+                        )),
                     }
                 }
-                other => Err(self.runtime_error(args[0].span, format!("sum expects array, found {}", other.ty()))),
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("sum expects array, found {}", other.ty()),
+                )),
             }
         } else if name == "avg" {
             if args.len() != 1 {
@@ -11918,14 +12104,18 @@ impl<'program> Interpreter<'program> {
                         Value::Int(_) => {
                             let mut s: f64 = 0.0;
                             for it in items {
-                                if let Value::Int(n) = it { s += n as f64; }
+                                if let Value::Int(n) = it {
+                                    s += n as f64;
+                                }
                             }
                             Ok(Value::Float(s / count))
                         }
                         Value::Float(_) => {
                             let mut s: f64 = 0.0;
                             for it in items {
-                                if let Value::Float(n) = it { s += n; }
+                                if let Value::Float(n) = it {
+                                    s += n;
+                                }
                             }
                             Ok(Value::Float(s / count))
                         }
@@ -11933,14 +12123,22 @@ impl<'program> Interpreter<'program> {
                             let mut s: i128 = 0;
                             let n_items = items.len() as i128;
                             for it in items {
-                                if let Value::Decimal(n) = it { s += n; }
+                                if let Value::Decimal(n) = it {
+                                    s += n;
+                                }
                             }
                             Ok(Value::Decimal(s / n_items))
                         }
-                        other => Err(self.runtime_error(span, format!("avg expects numbers, found {}", other.ty()))),
+                        other => Err(self.runtime_error(
+                            span,
+                            format!("avg expects numbers, found {}", other.ty()),
+                        )),
                     }
                 }
-                other => Err(self.runtime_error(args[0].span, format!("avg expects array, found {}", other.ty()))),
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("avg expects array, found {}", other.ty()),
+                )),
             }
         } else if name == "min_of" {
             if args.len() != 1 {
@@ -11964,7 +12162,10 @@ impl<'program> Interpreter<'program> {
                         Ok(Value::Option(Some(Box::new(m))))
                     }
                 }
-                other => Err(self.runtime_error(args[0].span, format!("min_of expects array, found {}", other.ty()))),
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("min_of expects array, found {}", other.ty()),
+                )),
             }
         } else if name == "max_of" {
             if args.len() != 1 {
@@ -11988,7 +12189,10 @@ impl<'program> Interpreter<'program> {
                         Ok(Value::Option(Some(Box::new(m))))
                     }
                 }
-                other => Err(self.runtime_error(args[0].span, format!("max_of expects array, found {}", other.ty()))),
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("max_of expects array, found {}", other.ty()),
+                )),
             }
         } else if name == "chunk" {
             if args.len() != 2 {
@@ -11997,10 +12201,13 @@ impl<'program> Interpreter<'program> {
             match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
                 (Value::Array(items), Value::Int(size)) => {
                     if size <= 0 {
-                        return Err(self.runtime_error(span, "chunk size must be greater than zero"));
+                        return Err(
+                            self.runtime_error(span, "chunk size must be greater than zero")
+                        );
                     }
                     let sz = size as usize;
-                    let chunks: Vec<Value> = items.chunks(sz).map(|c| Value::Array(c.to_vec())).collect();
+                    let chunks: Vec<Value> =
+                        items.chunks(sz).map(|c| Value::Array(c.to_vec())).collect();
                     Ok(Value::Array(chunks))
                 }
                 _ => Err(self.runtime_error(span, "chunk expects array and Int size")),
@@ -12015,12 +12222,23 @@ impl<'program> Interpreter<'program> {
                     for item in items {
                         match item {
                             Value::Array(sub) => out.extend(sub),
-                            other => return Err(self.runtime_error(span, format!("flatten expects array of arrays, found element of type {}", other.ty()))),
+                            other => {
+                                return Err(self.runtime_error(
+                                    span,
+                                    format!(
+                                        "flatten expects array of arrays, found element of type {}",
+                                        other.ty()
+                                    ),
+                                ))
+                            }
                         }
                     }
                     Ok(Value::Array(out))
                 }
-                other => Err(self.runtime_error(args[0].span, format!("flatten expects array, found {}", other.ty()))),
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("flatten expects array, found {}", other.ty()),
+                )),
             }
         } else if name == "set_union" {
             if args.len() != 2 {
@@ -12029,7 +12247,9 @@ impl<'program> Interpreter<'program> {
             match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
                 (Value::Set(mut a), Value::Set(b)) => {
                     for item in b {
-                        if !a.contains(&item) { a.push(item); }
+                        if !a.contains(&item) {
+                            a.push(item);
+                        }
                     }
                     Ok(Value::Set(a))
                 }
@@ -12043,7 +12263,9 @@ impl<'program> Interpreter<'program> {
                 (Value::Set(a), Value::Set(b)) => {
                     let mut out = Vec::new();
                     for item in a {
-                        if b.contains(&item) { out.push(item); }
+                        if b.contains(&item) {
+                            out.push(item);
+                        }
                     }
                     Ok(Value::Set(out))
                 }
@@ -12057,7 +12279,9 @@ impl<'program> Interpreter<'program> {
                 (Value::Set(a), Value::Set(b)) => {
                     let mut out = Vec::new();
                     for item in a {
-                        if !b.contains(&item) { out.push(item); }
+                        if !b.contains(&item) {
+                            out.push(item);
+                        }
                     }
                     Ok(Value::Set(out))
                 }
@@ -12069,7 +12293,8 @@ impl<'program> Interpreter<'program> {
             }
             match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
                 (Value::Map(entries), key) => {
-                    let filtered: Vec<(Value, Value)> = entries.into_iter().filter(|(k, _)| k != &key).collect();
+                    let filtered: Vec<(Value, Value)> =
+                        entries.into_iter().filter(|(k, _)| k != &key).collect();
                     Ok(Value::Map(filtered))
                 }
                 _ => Err(self.runtime_error(span, "map_remove expects a Map")),
@@ -12084,7 +12309,12 @@ impl<'program> Interpreter<'program> {
                         .and_then(|start| start.checked_add(days))
                         .and_then(epoch_days_date)
                         .map(Value::Date)
-                        .ok_or_else(|| self.runtime_error(span, "date arithmetic is outside years 0001 through 9999"))?;
+                        .ok_or_else(|| {
+                            self.runtime_error(
+                                span,
+                                "date arithmetic is outside years 0001 through 9999",
+                            )
+                        })?;
                     Ok(res)
                 }
                 _ => Err(self.runtime_error(span, "date_add_days expects Date and Int")),
@@ -12096,7 +12326,10 @@ impl<'program> Interpreter<'program> {
             match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
                 (Value::Date(start), Value::Date(end)) => {
                     let diff = date_epoch_days(&end)
-                        .and_then(|end_days| date_epoch_days(&start).and_then(|start_days| start_days.checked_sub(end_days)))
+                        .and_then(|end_days| {
+                            date_epoch_days(&start)
+                                .and_then(|start_days| start_days.checked_sub(end_days))
+                        })
                         .map(Value::Int)
                         .ok_or_else(|| self.runtime_error(span, "date difference overflow"))?;
                     Ok(diff)
@@ -12109,7 +12342,10 @@ impl<'program> Interpreter<'program> {
             }
             match self.eval(&args[0], env)? {
                 Value::Result(res) => Ok(Value::Bool(res.is_ok())),
-                other => Err(self.runtime_error(args[0].span, format!("is_ok expects Result, found {}", other.ty()))),
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("is_ok expects Result, found {}", other.ty()),
+                )),
             }
         } else if name == "is_err" {
             if args.len() != 1 {
@@ -12117,7 +12353,10 @@ impl<'program> Interpreter<'program> {
             }
             match self.eval(&args[0], env)? {
                 Value::Result(res) => Ok(Value::Bool(res.is_err())),
-                other => Err(self.runtime_error(args[0].span, format!("is_err expects Result, found {}", other.ty()))),
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("is_err expects Result, found {}", other.ty()),
+                )),
             }
         } else if name == "is_some" {
             if args.len() != 1 {
@@ -12125,7 +12364,10 @@ impl<'program> Interpreter<'program> {
             }
             match self.eval(&args[0], env)? {
                 Value::Option(opt) => Ok(Value::Bool(opt.is_some())),
-                other => Err(self.runtime_error(args[0].span, format!("is_some expects Option, found {}", other.ty()))),
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("is_some expects Option, found {}", other.ty()),
+                )),
             }
         } else if name == "is_none" {
             if args.len() != 1 {
@@ -12133,7 +12375,10 @@ impl<'program> Interpreter<'program> {
             }
             match self.eval(&args[0], env)? {
                 Value::Option(opt) => Ok(Value::Bool(opt.is_none())),
-                other => Err(self.runtime_error(args[0].span, format!("is_none expects Option, found {}", other.ty()))),
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("is_none expects Option, found {}", other.ty()),
+                )),
             }
         } else if name == "is_before" {
             if args.len() != 2 {
@@ -12141,8 +12386,10 @@ impl<'program> Interpreter<'program> {
             }
             match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
                 (Value::Date(a), Value::Date(b)) => {
-                    let ea = date_epoch_days(&a).ok_or_else(|| self.runtime_error(span, "invalid Date"))?;
-                    let eb = date_epoch_days(&b).ok_or_else(|| self.runtime_error(span, "invalid Date"))?;
+                    let ea = date_epoch_days(&a)
+                        .ok_or_else(|| self.runtime_error(span, "invalid Date"))?;
+                    let eb = date_epoch_days(&b)
+                        .ok_or_else(|| self.runtime_error(span, "invalid Date"))?;
                     Ok(Value::Bool(ea < eb))
                 }
                 _ => Err(self.runtime_error(span, "is_before expects two Dates")),
@@ -12153,8 +12400,10 @@ impl<'program> Interpreter<'program> {
             }
             match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
                 (Value::Date(a), Value::Date(b)) => {
-                    let ea = date_epoch_days(&a).ok_or_else(|| self.runtime_error(span, "invalid Date"))?;
-                    let eb = date_epoch_days(&b).ok_or_else(|| self.runtime_error(span, "invalid Date"))?;
+                    let ea = date_epoch_days(&a)
+                        .ok_or_else(|| self.runtime_error(span, "invalid Date"))?;
+                    let eb = date_epoch_days(&b)
+                        .ok_or_else(|| self.runtime_error(span, "invalid Date"))?;
                     Ok(Value::Bool(ea > eb))
                 }
                 _ => Err(self.runtime_error(span, "is_after expects two Dates")),
@@ -12245,9 +12494,15 @@ impl<'program> Interpreter<'program> {
             }
         } else if name == "text_substring" {
             if args.len() != 3 {
-                return Err(self.runtime_error(span, "text_substring expects String, start, and length"));
+                return Err(
+                    self.runtime_error(span, "text_substring expects String, start, and length")
+                );
             }
-            match (self.eval(&args[0], env)?, self.eval(&args[1], env)?, self.eval(&args[2], env)?) {
+            match (
+                self.eval(&args[0], env)?,
+                self.eval(&args[1], env)?,
+                self.eval(&args[2], env)?,
+            ) {
                 (Value::String(s), Value::Int(start), Value::Int(length)) => {
                     let chars: Vec<char> = s.chars().collect();
                     let start = (start.max(0) as usize).min(chars.len());
@@ -12267,9 +12522,12 @@ impl<'program> Interpreter<'program> {
                 Value::Bool(b) => Ok(Value::Int(if b { 1 } else { 0 })),
                 Value::String(s) => match s.trim().parse::<i64>() {
                     Ok(i) => Ok(Value::Int(i)),
-                    Err(_) => Err(self.runtime_error(span, format!("to_int cannot convert `{s}` to Int"))),
+                    Err(_) => {
+                        Err(self.runtime_error(span, format!("to_int cannot convert `{s}` to Int")))
+                    }
                 },
-                other => Err(self.runtime_error(span, format!("to_int cannot convert {} to Int", other.ty()))),
+                other => Err(self
+                    .runtime_error(span, format!("to_int cannot convert {} to Int", other.ty()))),
             }
         } else if name == "to_float" {
             if args.len() != 1 {
@@ -12281,9 +12539,15 @@ impl<'program> Interpreter<'program> {
                 Value::UInt(u) => Ok(Value::Float(u as f64)),
                 Value::String(s) => match s.trim().parse::<f64>() {
                     Ok(f) => Ok(Value::Float(f)),
-                    Err(_) => Err(self.runtime_error(span, format!("to_float cannot convert `{s}` to Float"))),
+                    Err(_) => {
+                        Err(self
+                            .runtime_error(span, format!("to_float cannot convert `{s}` to Float")))
+                    }
                 },
-                other => Err(self.runtime_error(span, format!("to_float cannot convert {} to Float", other.ty()))),
+                other => Err(self.runtime_error(
+                    span,
+                    format!("to_float cannot convert {} to Float", other.ty()),
+                )),
             }
         } else if name == "parse_bool" {
             if args.len() != 1 {
@@ -12293,7 +12557,9 @@ impl<'program> Interpreter<'program> {
                 Value::String(s) => match s.trim().to_ascii_lowercase().as_str() {
                     "true" | "1" => Ok(Value::Result(Ok(Box::new(Value::Bool(true))))),
                     "false" | "0" => Ok(Value::Result(Ok(Box::new(Value::Bool(false))))),
-                    _ => Ok(Value::Result(Err(Box::new(Value::String(format!("invalid boolean string: {s}")))))),
+                    _ => Ok(Value::Result(Err(Box::new(Value::String(format!(
+                        "invalid boolean string: {s}"
+                    )))))),
                 },
                 _ => Err(self.runtime_error(span, "parse_bool expects a String")),
             }
@@ -12309,7 +12575,10 @@ impl<'program> Interpreter<'program> {
             }
             match self.eval(&args[0], env)? {
                 Value::Map(entries) => {
-                    let pairs = entries.into_iter().map(|(k, v)| Value::Tuple(vec![k, v])).collect();
+                    let pairs = entries
+                        .into_iter()
+                        .map(|(k, v)| Value::Tuple(vec![k, v]))
+                        .collect();
                     Ok(Value::Array(pairs))
                 }
                 _ => Err(self.runtime_error(span, "entries expects a Map")),
@@ -12320,7 +12589,11 @@ impl<'program> Interpreter<'program> {
             }
             match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
                 (Value::Array(a1), Value::Array(a2)) => {
-                    let pairs = a1.into_iter().zip(a2).map(|(x, y)| Value::Tuple(vec![x, y])).collect();
+                    let pairs = a1
+                        .into_iter()
+                        .zip(a2)
+                        .map(|(x, y)| Value::Tuple(vec![x, y]))
+                        .collect();
                     Ok(Value::Array(pairs))
                 }
                 _ => Err(self.runtime_error(span, "zip expects two Arrays")),
@@ -12359,7 +12632,12 @@ impl<'program> Interpreter<'program> {
             match self.eval(&args[0], env)? {
                 Value::String(s) => {
                     let p = Path::new(&s);
-                    Ok(Value::String(p.file_name().and_then(|f| f.to_str()).unwrap_or("").to_string()))
+                    Ok(Value::String(
+                        p.file_name()
+                            .and_then(|f| f.to_str())
+                            .unwrap_or("")
+                            .to_string(),
+                    ))
                 }
                 _ => Err(self.runtime_error(span, "path_filename expects a String")),
             }
@@ -12370,7 +12648,12 @@ impl<'program> Interpreter<'program> {
             match self.eval(&args[0], env)? {
                 Value::String(s) => {
                     let p = Path::new(&s);
-                    Ok(Value::String(p.extension().and_then(|ext| ext.to_str()).unwrap_or("").to_string()))
+                    Ok(Value::String(
+                        p.extension()
+                            .and_then(|ext| ext.to_str())
+                            .unwrap_or("")
+                            .to_string(),
+                    ))
                 }
                 _ => Err(self.runtime_error(span, "path_extension expects a String")),
             }
@@ -12381,7 +12664,12 @@ impl<'program> Interpreter<'program> {
             match self.eval(&args[0], env)? {
                 Value::String(s) => {
                     let p = Path::new(&s);
-                    Ok(Value::String(p.parent().and_then(|parent| parent.to_str()).unwrap_or("").to_string()))
+                    Ok(Value::String(
+                        p.parent()
+                            .and_then(|parent| parent.to_str())
+                            .unwrap_or("")
+                            .to_string(),
+                    ))
                 }
                 _ => Err(self.runtime_error(span, "path_dir expects a String")),
             }
@@ -12392,7 +12680,10 @@ impl<'program> Interpreter<'program> {
             self.require_runtime_capability("FileSystem", "file-system read access", span)?;
             match self.eval(&args[0], env)? {
                 Value::String(path) => {
-                    let roots = self.filesystem_policy.as_ref().map_or_else(Vec::new, |p| p.read_roots.clone());
+                    let roots = self
+                        .filesystem_policy
+                        .as_ref()
+                        .map_or_else(Vec::new, |p| p.read_roots.clone());
                     match self.resolve_filesystem_path(&path, &roots, "read", span, true) {
                         Ok(resolved) => Ok(Value::Bool(resolved.is_file())),
                         Err(_) => Ok(Value::Bool(false)),
@@ -12407,7 +12698,10 @@ impl<'program> Interpreter<'program> {
             self.require_runtime_capability("FileSystem", "file-system read access", span)?;
             match self.eval(&args[0], env)? {
                 Value::String(path) => {
-                    let roots = self.filesystem_policy.as_ref().map_or_else(Vec::new, |p| p.read_roots.clone());
+                    let roots = self
+                        .filesystem_policy
+                        .as_ref()
+                        .map_or_else(Vec::new, |p| p.read_roots.clone());
                     match self.resolve_filesystem_path(&path, &roots, "read", span, true) {
                         Ok(resolved) => Ok(Value::Bool(resolved.is_dir())),
                         Err(_) => Ok(Value::Bool(false)),
@@ -12422,8 +12716,12 @@ impl<'program> Interpreter<'program> {
             self.require_runtime_capability("FileSystem", "file-system read access", span)?;
             match self.eval(&args[0], env)? {
                 Value::String(path) => {
-                    let roots = self.filesystem_policy.as_ref().map_or_else(Vec::new, |p| p.read_roots.clone());
-                    let resolved = self.resolve_filesystem_path(&path, &roots, "read", span, false)?;
+                    let roots = self
+                        .filesystem_policy
+                        .as_ref()
+                        .map_or_else(Vec::new, |p| p.read_roots.clone());
+                    let resolved =
+                        self.resolve_filesystem_path(&path, &roots, "read", span, false)?;
                     match std::fs::metadata(&resolved) {
                         Ok(meta) => Ok(Value::Result(Ok(Box::new(Value::Int(meta.len() as i64))))),
                         Err(e) => Ok(Value::Result(Err(Box::new(Value::String(e.to_string()))))),

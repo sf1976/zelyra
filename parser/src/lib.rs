@@ -2975,7 +2975,13 @@ impl<'a> Parser<'a> {
                 })
             }
             TokenKind::Max | TokenKind::Sort | TokenKind::Unique => {
-                let name = if matches!(token.kind, TokenKind::Max) { "max".to_string() } else if matches!(token.kind, TokenKind::Sort) { "sort".to_string() } else { "unique".to_string() };
+                let name = if matches!(token.kind, TokenKind::Max) {
+                    "max".to_string()
+                } else if matches!(token.kind, TokenKind::Sort) {
+                    "sort".to_string()
+                } else {
+                    "unique".to_string()
+                };
                 if self.at(&TokenKind::LParen) {
                     self.advance();
                     let mut args = Vec::new();
