@@ -10001,12 +10001,19 @@ impl<'program> Interpreter<'program> {
     }
 
     fn consume_step(&mut self, span: Span) -> Result<(), RuntimeError> {
-        let steps = self
-            .steps
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |steps| {
-                Some(steps.saturating_add(1))
-            })
-            .map_or(usize::MAX, |previous| previous.saturating_add(1));
+        let mut previous = self.steps.load(Ordering::Relaxed);
+        let steps = loop {
+            let next = previous.saturating_add(1);
+            match self.steps.compare_exchange_weak(
+                previous,
+                next,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => break next,
+                Err(actual) => previous = actual,
+            }
+        };
         if self.step_budget.is_some_and(|budget| steps > budget) {
             return Err(self.runtime_error(
                 span,
