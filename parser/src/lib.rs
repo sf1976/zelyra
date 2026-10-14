@@ -2976,6 +2976,43 @@ impl<'a> Parser<'a> {
     fn primary(&mut self) -> Result<Expr, ParseError> {
         let token = self.advance().clone();
         match token.kind {
+            TokenKind::If => {
+                let condition = self.expression()?;
+                let then_value = self.expression_block_value("after `if` condition")?;
+                self.expect(TokenKind::Else, "`else` after an `if` expression")?;
+                let else_value = if self.at(&TokenKind::LBrace) {
+                    self.expression_block_value("after `else`")?
+                } else if self.at(&TokenKind::If) {
+                    self.primary()?
+                } else {
+                    return self.error("expected an expression block after `else`");
+                };
+                let span = token.span.join(else_value.span);
+                Ok(Expr {
+                    kind: ExprKind::Match {
+                        value: Box::new(condition),
+                        arms: vec![
+                            MatchExprArm {
+                                pattern: Pattern {
+                                    kind: PatternKind::Bool(true),
+                                    span: token.span,
+                                },
+                                value: then_value,
+                                span: token.span,
+                            },
+                            MatchExprArm {
+                                pattern: Pattern {
+                                    kind: PatternKind::Bool(false),
+                                    span: token.span,
+                                },
+                                value: else_value,
+                                span,
+                            },
+                        ],
+                    },
+                    span,
+                })
+            }
             TokenKind::Int(value) => Ok(Expr {
                 kind: ExprKind::Int(value),
                 span: token.span,
@@ -3211,6 +3248,21 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Parses the deliberately expression-only body of an `if` expression.
+    /// Statement `if` blocks retain their existing multi-statement grammar.
+    fn expression_block_value(&mut self, context: &str) -> Result<Expr, ParseError> {
+        self.expect(TokenKind::LBrace, &format!("`{{` {context}"))?;
+        self.skip_newlines();
+        let value = self.expression()?;
+        self.skip_newlines();
+        if self.at(&TokenKind::Semicolon) {
+            self.advance();
+            self.skip_newlines();
+        }
+        self.expect(TokenKind::RBrace, "`}` after if-expression value")?;
+        Ok(value)
+    }
+
     fn record_literal(
         &mut self,
         type_name: String,
@@ -3419,6 +3471,25 @@ mod tests {
         };
         assert_eq!(inner_name, "text_trim");
         assert!(matches!(inner_args[0].kind, ExprKind::String(ref text) if text == "  HI "));
+    }
+
+    #[test]
+    fn parses_if_expressions_as_exhaustive_boolean_matches() {
+        let program = parse(
+            &lex("fn main() { result = if ready { 1 } else if retry { 2 } else { 3 } }").unwrap(),
+        )
+        .unwrap();
+        let Stmt::BindOrAssign { value, .. } = &program.functions[0].body.statements[0] else {
+            panic!("expected a binding");
+        };
+        let ExprKind::Match { value, arms } = &value.kind else {
+            panic!("if expression should lower to a boolean match");
+        };
+        assert!(matches!(value.kind, ExprKind::Variable(ref name) if name == "ready"));
+        assert_eq!(arms.len(), 2);
+        assert!(matches!(arms[0].pattern.kind, PatternKind::Bool(true)));
+        assert!(matches!(arms[1].pattern.kind, PatternKind::Bool(false)));
+        assert!(matches!(arms[1].value.kind, ExprKind::Match { .. }));
     }
 
     #[test]

@@ -45,6 +45,14 @@ fn recursion_is_bounded_and_reports_the_call_site_without_crashing() {
 }
 
 #[test]
+fn if_expressions_return_the_selected_branch_value() {
+    let source = "fn choose(ready: Bool) -> Int { return if ready { 7 } else { 2 } } fn main() { print(choose(true)); print(choose(false)) }";
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap();
+    assert_eq!(execute(&program).unwrap(), ["7", "2"]);
+}
+
+#[test]
 fn classes_share_identity_and_mutate_checked_fields() {
     let source = r#"
 class Counter { value: Int }
