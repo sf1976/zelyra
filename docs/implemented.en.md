@@ -1,7 +1,7 @@
 # Implemented in Zelyra 1.0.7
 
-**Snapshot:** 1.0.7 development branch · language compatibility line `0.1` · 2026-10-14
-**Maturity:** release candidate; evaluate suitability and limits for each workflow
+**Snapshot:** published release `v1.0.7` · language compatibility line `0.1` · 2026-10-14
+**Maturity:** published; evaluate suitability and documented limits for each workflow
 
 This inventory describes the current development state by area of use. It distinguishes
 available features from bounded or experimental areas; it does not claim
@@ -315,13 +315,15 @@ benchmark result is claimed here.
 
 ## Release and verification evidence
 
-Zelyra 1.0.7 has not been published from this branch yet. The
-[release notes](release-notes/) describe its intended scope; the candidate
-must pass the gates listed in the
-[work log](release-plans/1.0.7-language-runtime-progress.en.md). Tested
-database workflows and their limits are in the [database support matrix](database-support.en.md).
-Automated checks establish only the areas they exercise; they do not prove
-arbitrary applications correct.
+Zelyra 1.0.7 was published on 2026-10-14 as the
+[`v1.0.7` GitHub release](https://github.com/sf1976/zelyra/releases/tag/v1.0.7).
+The merge CI, tag CI with database, Docker, browser, and invoice tutorial
+checks, Linux/Windows builds and artifact attestations, and the published Linux
+package smoke test passed. See the
+[work log](release-plans/1.0.7-language-runtime-progress.en.md) for evidence.
+Tested database workflows and their limits are in the
+[database support matrix](database-support.en.md). Automated checks establish
+only the areas they exercise; they do not prove arbitrary applications correct.
 
 This page is updated when a delivered capability or its evidence changes. It
 does not turn a specification or roadmap entry into an implementation claim.

@@ -11,11 +11,11 @@ Business-, Datenbank- und Webanwendungen. Schemaabhängiges SQL, Formulare,
 CRUD, Views und Geschäftslogik greifen ineinander; gewöhnlicher Programmcode
 und natives SQL bleiben jederzeit möglich.
 
-> **Entwicklungszweig für 1.0.7 · Sprachkompatibilitätslinie: 0.1**
+> **Veröffentlichte Version 1.0.7 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.0.7)
 >
 > Die Compilerprüfung und der Verifier decken klar abgegrenzte Bereiche ab. Sie beweisen nicht die Korrektheit beliebiger Anwendungen. Prüfe vor dem Einsatz die unterstützten Abläufe und Grenzen in der jeweiligen Dokumentation.
 
-Dieser Entwicklungszweig ergänzt If-Ausdrücke, Record-Updates, typisierte
+Zelyra 1.0.7 ergänzt If-Ausdrücke, Record-Updates, typisierte
 Lambdas, Match-Guards, Tupelbindung und begrenzte Ausführung. Außerdem kann
 Zelyra deklarierte Views lokal in Text-PDFs rendern und PDF-Dateien
 transaktional in die MariaDB-Mail-Outbox einreihen. Details stehen in den
@@ -29,7 +29,7 @@ Die Sprachkompatibilitätslinie bleibt `0.1`; Compiler-Releases ändern sie nich
 ## Was Zelyra 1.0.7 bietet
 
 Zelyra verbindet Sprache, Compiler, Datenbank, Webanwendung und Studio in
-einem Arbeitsablauf. Der aktuelle Stand umfasst:
+einem Arbeitsablauf. Das Release 1.0.7 umfasst:
 
 - statisch geprüfte Geschäftslogik und schemaabhängiges SQL;
 - MariaDB als primäre Laufzeit sowie geprüfte MySQL- und PostgreSQL-Abläufe;

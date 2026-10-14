@@ -72,7 +72,7 @@ Abschnitt zur Weiterentwicklung nach 1.0.0.
   [Zelyra-UI-Handbuch](ui.de.md) und das
   [Aufgabenprotokoll](release-plans/1.0.6-zelyra-ui-progress.de.md).
 
-- [~] **1.0.7 Sprache, Laufzeit und PDF-Mail:** Der Entwicklungszweig ergänzt
+- [x] **1.0.7 Sprache, Laufzeit und PDF-Mail — veröffentlicht:** Ergänzt
   wertliefernde If-Ausdrücke, Record-Updates, typisierte Lambda-Pipelines,
   Match-Guards und verschachtelte Record-Muster, Tupelzuweisung sowie eine
   begrenzte konfigurierbare Rekursionstiefe. `--max-steps` zählt
@@ -82,8 +82,8 @@ Abschnitt zur Weiterentwicklung nach 1.0.0.
   View-Slot-Fallbacks, Auth-Handler und `parallel`-Join wird abgesichert.
   `render_pdf("ViewName", record)` erzeugt lokal ein durchsuchbares Text-PDF;
   die Mail-Outbox kann ein geprüftes PDF anhängen. CSS, Bilder und Diagramme
-  werden vom Server-PDF nicht gerendert. Diese Version ist noch nicht
-  freigegeben; siehe
+  werden vom Server-PDF nicht gerendert. Veröffentlicht als
+  [`v1.0.7`](https://github.com/sf1976/zelyra/releases/tag/v1.0.7); siehe das
   [Arbeitsprotokoll 1.0.7](release-plans/1.0.7-language-runtime-progress.de.md).
 
 - [ ] **Geplant für 1.1.0 — Compose-Prüfung im Installer:** Die Installer

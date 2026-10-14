@@ -1,7 +1,7 @@
 # In Zelyra 1.0.7 umgesetzt
 
-**Stand:** Entwicklungszweig 1.0.7 · Sprachkompatibilitätslinie `0.1` · 2026-10-14
-**Reifegrad:** Release-Kandidat; Eignung und Grenzen sind je Ablauf zu prüfen
+**Stand:** veröffentlichtes Release `v1.0.7` · Sprachkompatibilitätslinie `0.1` · 2026-10-14
+**Reifegrad:** veröffentlicht; Eignung und dokumentierte Grenzen sind je Ablauf zu prüfen
 
 Diese Übersicht beschreibt den aktuellen Entwicklungsstand nach
 Anwendungsbereichen. Sie unterscheidet verfügbare Funktionen von begrenzten
@@ -347,13 +347,16 @@ vergleichenden Benchmark-Ergebnisse behauptet.
 
 ## Release- und Prüfnachweise
 
-Zelyra 1.0.7 ist in diesem Zweig noch nicht veröffentlicht. Die
-[Release-Notizen](release-notes/) beschreiben den vorgesehenen Umfang; der
-Release-Kandidat muss noch die im
-[Arbeitsprotokoll](release-plans/1.0.7-language-runtime-progress.de.md)
-aufgeführten Gates bestehen. Geprüfte Datenbankabläufe und ihre Grenzen stehen
-in der [Datenbankmatrix](database-support.de.md). Automatisierte Prüfungen
-belegen nur die jeweils geprüften Bereiche und nicht die Korrektheit beliebiger
+Zelyra 1.0.7 wurde am 14.10.2026 als
+[`v1.0.7` auf GitHub](https://github.com/sf1976/zelyra/releases/tag/v1.0.7)
+veröffentlicht. Der Merge-CI-Lauf, die Tag-CI mit Datenbank-, Docker-,
+Browser- und Rechnungstutorialprüfungen, Linux-/Windows-Builds und
+Artefaktattestierungen sowie der Smoke-Test des veröffentlichten Linux-Pakets
+bestanden. Einzelheiten stehen im
+[Arbeitsprotokoll](release-plans/1.0.7-language-runtime-progress.de.md).
+Geprüfte Datenbankabläufe und ihre Grenzen stehen in der
+[Datenbankmatrix](database-support.de.md). Automatisierte Prüfungen belegen
+nur die jeweils geprüften Bereiche und nicht die Korrektheit beliebiger
 Anwendungen.
 
 Diese Übersicht wird angepasst, wenn sich ausgelieferte Funktionen oder ihre
