@@ -3500,3 +3500,73 @@ fn typed_sql_preserves_explicit_domain_aliases_and_rejects_nested_domain_records
         assert!(check(&program).is_err());
     }
 }
+
+#[test]
+fn standard_library_v103_builtins_work_properly() {
+    let source = r#"
+fn main() {
+    // Math
+    print(abs(-42))
+    print(min(10, 20))
+    print(max(10, 20))
+    print(clamp(15, 0, 10))
+
+    // Strings
+    print(text_to_lower("ZELYRA"))
+    print(text_to_upper("sicher"))
+    print(text_starts_with("test.zyl", "test"))
+    print(text_ends_with("test.zyl", ".zyl"))
+    print(text_replace("Hallo Welt", "Welt", "Zelyra"))
+    print(text_pad_left("42", 5, "0"))
+    print(text_pad_right("Tab", 6, "."))
+    print(join(text_split("a,b,c", ","), "-"))
+
+    // Collections
+    nums = [5, 1, 4, 2, 8]
+    print(sort(nums))
+    print(sort_desc(nums))
+    print(reverse(nums))
+    print(slice(nums, 1, 3))
+    print(concat([1, 2], [3, 4]))
+
+    // Maps & Options
+    mutable m: Map<String, Int> = Map { "key": 100 }
+    print(has_key(m, "key"))
+    print(has_key(m, "missing"))
+    print(get_or(m, "key", 0))
+    print(get_or(m, "missing", 404))
+    print(unwrap_or(Some(99), 0))
+    print(unwrap_or(None, 123))
+    print(to_string(42))
+}
+"#;
+    assert_eq!(
+        run(source),
+        [
+            "42",
+            "10",
+            "20",
+            "10",
+            "zelyra",
+            "SICHER",
+            "true",
+            "true",
+            "Hallo Zelyra",
+            "00042",
+            "Tab...",
+            "a-b-c",
+            "[1, 2, 4, 5, 8]",
+            "[8, 5, 4, 2, 1]",
+            "[8, 2, 4, 1, 5]",
+            "[1, 4, 2]",
+            "[1, 2, 3, 4]",
+            "true",
+            "false",
+            "100",
+            "404",
+            "99",
+            "123",
+            "42",
+        ]
+    );
+}

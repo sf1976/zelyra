@@ -96,6 +96,14 @@ impl<'a> Parser<'a> {
     }
     fn ident(&mut self, label: &str) -> Result<(String, Span), ParseError> {
         match &self.current().kind {
+            TokenKind::Max => {
+                let span = self.advance().span;
+                Ok(("max".into(), span))
+            }
+            TokenKind::Sort => {
+                let span = self.advance().span;
+                Ok(("sort".into(), span))
+            }
             TokenKind::Ident(name) => {
                 let span = self.advance().span;
                 Ok((name.clone(), span))
@@ -2951,6 +2959,39 @@ impl<'a> Parser<'a> {
                     kind: ExprKind::FunctionValue(name),
                     span: token.span.join(end),
                 })
+            }
+            TokenKind::Max | TokenKind::Sort => {
+                let name = if matches!(token.kind, TokenKind::Max) { "max".to_string() } else { "sort".to_string() };
+                if self.at(&TokenKind::LParen) {
+                    self.advance();
+                    let mut args = Vec::new();
+                    self.skip_newlines();
+                    if !self.at(&TokenKind::RParen) {
+                        loop {
+                            args.push(self.expression()?);
+                            self.skip_newlines();
+                            if !self.at(&TokenKind::Comma) {
+                                break;
+                            }
+                            self.advance();
+                            self.skip_newlines();
+                        }
+                    }
+                    let end = self.expect(TokenKind::RParen, "`)`")?;
+                    Ok(Expr {
+                        kind: ExprKind::Call {
+                            name,
+                            type_args: Vec::new(),
+                            args,
+                        },
+                        span: token.span.join(end),
+                    })
+                } else {
+                    Ok(Expr {
+                        kind: ExprKind::Variable(name),
+                        span: token.span,
+                    })
+                }
             }
             TokenKind::Ident(name) => {
                 let mut name = name;
