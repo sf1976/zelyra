@@ -103,6 +103,76 @@ const verificationGutter = gutter({
 });
 let liveCheckTimer = null;
 let liveCheckSequence = 0;
+const eventClientId = crypto.randomUUID();
+let eventController = null;
+let eventReconnectTimer = null;
+let eventReconnectDelay = 1500;
+
+function onStudioEvent(message) {
+  if (message?.schema !== 1 || typeof message.kind !== "string") return;
+  if (message.kind === "workspace.changed") {
+    void refreshTree();
+    if (message.document?.path === activePath) setVerificationResults([]);
+    return;
+  }
+  if (message.kind === "analysis.invalidated") {
+    if (message.document?.path === activePath) setVerificationResults([]);
+    return;
+  }
+  if (message.kind === "preview.changed") {
+    if (message.payload?.running) announce(t("runWebReady"), "success");
+    return;
+  }
+  const document = message.document;
+  if (document?.clientId !== eventClientId || document.path !== activePath
+      || document.version !== liveCheckSequence || !editor) return;
+  if (message.kind === "diagnostics") {
+    renderDiagnostics(message.payload?.diagnostics || [], Boolean(message.payload?.success), { silent: true });
+  } else if (message.kind === "verification") {
+    setVerificationResults(message.payload?.success ? message.payload.results || [] : []);
+  }
+}
+
+async function connectStudioEvents() {
+  if (!token || eventController) return;
+  eventController = new AbortController();
+  const current = eventController;
+  try {
+    const response = await fetch("/__zelyra/editor/api/events", {
+      headers: { "X-Zelyra-Editor-Token": token },
+      cache: "no-store", credentials: "omit", redirect: "error", signal: current.signal,
+    });
+    if (!response.ok || !response.body) throw new Error(`Studio events: HTTP ${response.status}`);
+    eventReconnectDelay = 1500;
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true }).replaceAll("\r\n", "\n");
+      if (buffer.length > 300_000) throw new Error("Studio event exceeds the client limit");
+      let end;
+      while ((end = buffer.indexOf("\n\n")) >= 0) {
+        const frame = buffer.slice(0, end);
+        buffer = buffer.slice(end + 2);
+        const data = frame.split("\n").filter((line) => line.startsWith("data: "))
+          .map((line) => line.slice(6)).join("\n");
+        if (data) {
+          try { onStudioEvent(JSON.parse(data)); } catch { /* malformed advisory event */ }
+        }
+      }
+    }
+  } catch {
+    // The request APIs remain usable while the advisory stream reconnects.
+  } finally {
+    if (eventController === current) eventController = null;
+    if (!current.signal.aborted) {
+      eventReconnectTimer = setTimeout(connectStudioEvents, eventReconnectDelay);
+      eventReconnectDelay = Math.min(eventReconnectDelay * 2, 10_000);
+    }
+  }
+}
 const symbolCache = new Map();
 const symbolRequests = new Map();
 let treeFiles = [];
@@ -2512,11 +2582,15 @@ function scheduleLiveCheck(path) {
     try {
       const source = editor?.state.doc.toString();
       if (typeof source !== "string") return;
-      const result = await api("check", { method: "POST", body: JSON.stringify({ path, source }) });
+      const result = await api("check", { method: "POST", body: JSON.stringify({
+        path, source, version: sequence, clientId: eventClientId,
+      }) });
       if (sequence !== liveCheckSequence || activePath !== path || editor?.state.doc.toString() !== source) return;
       renderDiagnostics(result.diagnostics || [], result.success, { silent: true });
       if (!result.success) return;
-      const verified = await api("verify", { method: "POST", body: JSON.stringify({ path, source, version: sequence }) });
+      const verified = await api("verify", { method: "POST", body: JSON.stringify({
+        path, source, version: sequence, clientId: eventClientId,
+      }) });
       if (sequence !== liveCheckSequence || activePath !== path || editor?.state.doc.toString() !== source || verified.version !== sequence) return;
       setVerificationResults(verified.success ? verified.results || [] : []);
     } catch {
@@ -2901,6 +2975,8 @@ $("problems-toggle").addEventListener("click", () => { $("problems-panel").hidde
 $("problems-close").addEventListener("click", () => { $("problems-panel").hidden = true; });
 $("open-search").addEventListener("click", findInDocument);
 window.addEventListener("beforeunload", (event) => {
+  eventController?.abort();
+  clearTimeout(eventReconnectTimer);
   if (dirtyCount()) { event.preventDefault(); event.returnValue = ""; }
 });
 window.addEventListener("keydown", (event) => {
@@ -2945,3 +3021,4 @@ refreshTree().then(() => {
   const first = treeFiles.includes("main.zyl") ? "main.zyl" : treeFiles.find((file) => file.endsWith(".zyl"));
   if (first) void openFile(first);
 });
+void connectStudioEvents();

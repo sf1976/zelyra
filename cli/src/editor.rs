@@ -8,12 +8,17 @@ use std::thread;
 use std::time::Duration;
 use zelyra_web::{parse_request, Request};
 
+#[path = "editor_events.rs"]
+mod editor_events;
+use editor_events::EventHub;
+
 const EDITOR_HTML: &str = include_str!("../assets/editor.html");
 const EDITOR_JS: &str = include_str!("../assets/editor.js");
 const EDITOR_CSS: &str = include_str!("../assets/editor.css");
 const EDITOR_THEME_JS: &str = include_str!("../assets/theme.js");
 const EDITOR_PATH: &str = "/__zelyra/editor";
 const EDITOR_MAX_CONNECTIONS: usize = 16;
+const EDITOR_MAX_EVENT_STREAMS: usize = 4;
 const EDITOR_MAX_FILE_BYTES: usize = 1_048_576;
 const EDITOR_MAX_FILES: usize = 2_000;
 const EDITOR_MAX_DEPTH: usize = 8;
@@ -34,9 +39,13 @@ impl Drop for EditorConnection {
 }
 
 fn acquire_editor_connection(active: &AtomicUsize) -> bool {
+    acquire_editor_connection_limit(active, EDITOR_MAX_CONNECTIONS)
+}
+
+fn acquire_editor_connection_limit(active: &AtomicUsize, limit: usize) -> bool {
     let mut count = active.load(Ordering::Acquire);
     loop {
-        if count >= EDITOR_MAX_CONNECTIONS {
+        if count >= limit {
             return false;
         }
         match active.compare_exchange_weak(count, count + 1, Ordering::AcqRel, Ordering::Acquire) {
@@ -52,6 +61,8 @@ struct EditorState {
     token: String,
     authority: String,
     web_process: Arc<std::sync::Mutex<Option<std::process::Child>>>,
+    events: Arc<EventHub>,
+    active_event_streams: Arc<AtomicUsize>,
 }
 
 impl Drop for EditorState {
@@ -140,6 +151,8 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         token: token.clone(),
         authority: authority.clone(),
         web_process: Arc::new(std::sync::Mutex::new(None)),
+        events: Arc::new(EventHub::default()),
+        active_event_streams: Arc::new(AtomicUsize::new(0)),
     });
     let active = Arc::new(AtomicUsize::new(0));
     println!("Zelyra Studio ist lokal erreichbar: http://{authority}{EDITOR_PATH}/#{token}");
@@ -282,6 +295,9 @@ fn handle_editor_connection(
             r#"{"error":"not found"}"#,
         );
     }
+    if request.path == format!("{EDITOR_PATH}/api/events") {
+        return editor_event_stream(stream, &request, state);
+    }
     let (status, content_type, body) = match editor_response(&request, state) {
         Ok(response) => response,
         Err((status, message)) => (
@@ -291,6 +307,64 @@ fn handle_editor_connection(
         ),
     };
     write_editor_response(&mut stream, status, content_type, &body)
+}
+
+fn editor_event_stream(
+    mut stream: TcpStream,
+    request: &Request,
+    state: &EditorState,
+) -> io::Result<()> {
+    let rejection = authorize_editor_event_request(request, state)
+        .err()
+        .or_else(|| {
+            (!acquire_editor_connection_limit(
+                &state.active_event_streams,
+                EDITOR_MAX_EVENT_STREAMS,
+            ))
+            .then_some((429, "too many active event streams"))
+        });
+    if let Some((status, message)) = rejection {
+        return write_editor_response(
+            &mut stream,
+            status,
+            "application/json; charset=utf-8",
+            &json!({"error":message}).to_string(),
+        );
+    }
+    let _slot = EditorConnection(Arc::clone(&state.active_event_streams));
+    let (subscriber_id, receiver) = state.events.subscribe();
+    let result = editor_events::stream(stream, receiver);
+    state.events.unsubscribe(subscriber_id);
+    result
+}
+
+fn authorize_editor_event_request(
+    request: &Request,
+    state: &EditorState,
+) -> Result<(), (u16, &'static str)> {
+    if request.method != "GET" {
+        return Err((405, "event streams require GET"));
+    }
+    if request
+        .headers
+        .get("x-zelyra-editor-token")
+        .map(String::as_str)
+        != Some(state.token.as_str())
+    {
+        return Err((403, "invalid editor session"));
+    }
+    if request
+        .headers
+        .get("origin")
+        .is_some_and(|origin| origin != &format!("http://{}", state.authority))
+        || request
+            .headers
+            .get("sec-fetch-site")
+            .is_some_and(|site| site != "same-origin")
+    {
+        return Err((403, "event stream must come from the editor origin"));
+    }
+    Ok(())
 }
 
 fn editor_response(
@@ -506,6 +580,13 @@ fn verify_editor_project(
         }],
     );
     let results = language_service::verification_entries(&analysis);
+    publish_editor_event(
+        state,
+        "verification",
+        relative,
+        value,
+        json!({"success":analysis.success,"diagnostics":analysis.diagnostics,"results":results}),
+    );
     Ok((
         200,
         "application/json; charset=utf-8",
@@ -3318,6 +3399,9 @@ fn write_existing_file(
             .map_err(|_| (500, "could not atomically replace file".into()))?;
     }
     let hash = content_hash(content.as_bytes());
+    state
+        .events
+        .changed(relative, if create { "create" } else { "save" });
     Ok((
         200,
         "application/json; charset=utf-8",
@@ -3395,6 +3479,8 @@ fn rename_editor_file(
         let _ = fs::remove_file(&target);
         return Err((500, "could not finish file rename".into()));
     }
+    state.events.changed(relative, "rename");
+    state.events.changed(new_relative, "create");
     Ok((
         200,
         "application/json; charset=utf-8",
@@ -3419,11 +3505,36 @@ fn delete_editor_file(
     }
     let path = editor_file_hash(state, relative, "baseHash", &value)?;
     fs::remove_file(&path).map_err(|_| (500, "could not delete file".into()))?;
+    state.events.changed(relative, "delete");
     Ok((
         200,
         "application/json; charset=utf-8",
         json!({"path": relative, "deleted": true}).to_string(),
     ))
+}
+
+fn publish_editor_event(
+    state: &EditorState,
+    kind: &str,
+    path: &str,
+    request: &Value,
+    payload: Value,
+) {
+    let version = request.get("version").and_then(Value::as_i64);
+    let client_id = request
+        .get("clientId")
+        .and_then(Value::as_str)
+        .filter(|id| {
+            id.len() <= 64
+                && id
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+        });
+    state.events.publish(json!({
+        "schema":1,"kind":kind,
+        "document":{"path":path,"version":version,"clientId":client_id},
+        "workspaceRevision":state.events.revision(),"payload":payload
+    }));
 }
 
 fn check_project(
@@ -3445,8 +3556,22 @@ fn check_project(
         .unwrap_or_else(|| {
             fs::read_to_string(&path).map_err(|_| (415, "entry file is not UTF-8 text".into()))
         })?;
+    publish_editor_event(
+        state,
+        "analysis.progress",
+        entry,
+        value,
+        json!({"phase":"started"}),
+    );
     if value.get("source").and_then(Value::as_str).is_some() {
         let (success, diagnostics) = validate_editor_candidate(state, entry, &source)?;
+        publish_editor_event(
+            state,
+            "diagnostics",
+            entry,
+            value,
+            json!({"success":success,"diagnostics":diagnostics}),
+        );
         return Ok((
             200,
             "application/json; charset=utf-8",
@@ -3485,6 +3610,13 @@ fn check_project(
             item
         })
         .collect::<Vec<_>>();
+    publish_editor_event(
+        state,
+        "diagnostics",
+        entry,
+        value,
+        json!({"success":success,"diagnostics":diagnostics}),
+    );
     Ok((
         200,
         "application/json; charset=utf-8",
@@ -3819,6 +3951,12 @@ fn start_editor_web_app(
         }
         if TcpStream::connect_timeout(&address, Duration::from_millis(100)).is_ok() {
             *current = Some(child);
+            state.events.publish(json!({
+                "schema":1,"kind":"preview.changed",
+                "document":{"path":relative,"version":null},
+                "workspaceRevision":state.events.revision(),
+                "payload":{"running":true,"url":preview_url}
+            }));
             return Ok((
                 200,
                 "application/json; charset=utf-8",
@@ -3896,6 +4034,14 @@ fn stop_editor_web_app(state: &EditorState) -> Result<(u16, &'static str, String
     } else {
         false
     };
+    if stopped {
+        state.events.publish(json!({
+            "schema":1,"kind":"preview.changed",
+            "document":{"path":"main.zyl","version":null},
+            "workspaceRevision":state.events.revision(),
+            "payload":{"running":false}
+        }));
+    }
     Ok((
         200,
         "application/json; charset=utf-8",
@@ -4288,6 +4434,63 @@ mod tests {
     }
 
     #[test]
+    fn event_stream_requires_session_and_rejects_foreign_origin() {
+        let state = project();
+        let path = "/__zelyra/editor/api/events";
+        assert_eq!(
+            authorize_editor_event_request(&request("GET", path, &[]), &state),
+            Err((403, "invalid editor session"))
+        );
+        assert_eq!(
+            authorize_editor_event_request(
+                &request(
+                    "GET",
+                    path,
+                    &[
+                        ("x-zelyra-editor-token", "local-session-token"),
+                        ("origin", "https://attacker.invalid"),
+                    ]
+                ),
+                &state
+            ),
+            Err((403, "event stream must come from the editor origin"))
+        );
+        assert_eq!(
+            authorize_editor_event_request(
+                &request(
+                    "GET",
+                    path,
+                    &[
+                        ("x-zelyra-editor-token", "local-session-token"),
+                        ("sec-fetch-site", "cross-site"),
+                    ]
+                ),
+                &state
+            ),
+            Err((403, "event stream must come from the editor origin"))
+        );
+        assert!(authorize_editor_event_request(
+            &request(
+                "GET",
+                path,
+                &[
+                    ("x-zelyra-editor-token", "local-session-token"),
+                    ("origin", "http://127.0.0.1:4177"),
+                    ("sec-fetch-site", "same-origin"),
+                ]
+            ),
+            &state
+        )
+        .is_ok());
+        let active = AtomicUsize::new(EDITOR_MAX_EVENT_STREAMS);
+        assert!(!acquire_editor_connection_limit(
+            &active,
+            EDITOR_MAX_EVENT_STREAMS
+        ));
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
     fn project_map_resolves_views_across_modules_and_lists_table_views() {
         let state = project();
         fs::create_dir_all(state.root.join("src")).expect("create module directory");
@@ -4395,6 +4598,8 @@ fn main() {}
             token: "local-session-token".into(),
             authority: "127.0.0.1:4177".into(),
             web_process: Arc::new(std::sync::Mutex::new(None)),
+            events: Arc::new(EventHub::default()),
+            active_event_streams: Arc::new(AtomicUsize::new(0)),
         }
     }
 

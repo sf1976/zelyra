@@ -64,7 +64,52 @@ try {
       try { checkSources.push(request.postDataJSON()?.source); } catch { /* diagnostic only */ }
     }
   });
+  const eventHandshake = page.waitForResponse((response) => response.url().endsWith("/api/events"), { timeout: 10_000 });
   await page.goto(url, { waitUntil: "domcontentloaded" });
+  assert.equal((await eventHandshake).status(), 200, "Studio opens its authenticated event stream");
+  const eventsUrl = `${new URL(url).origin}/__zelyra/editor/api/events`;
+  const deniedStream = await fetch(eventsUrl);
+  assert.equal(deniedStream.status, 403, "event stream rejects missing session token");
+  const eventAbort = new AbortController();
+  try {
+    const stream = await fetch(eventsUrl, {
+      headers: { "X-Zelyra-Editor-Token": token, Origin: new URL(url).origin },
+      signal: eventAbort.signal,
+    });
+    assert.equal(stream.status, 200);
+    const checked = await fetch(`${new URL(url).origin}/__zelyra/editor/api/check`, {
+      method: "POST",
+      headers: { "X-Zelyra-Editor-Token": token, "Content-Type": "application/json", Origin: new URL(url).origin },
+      body: JSON.stringify({ path: "main.zyl", source: main, version: 987, clientId: "test-client" }),
+    });
+    assert.equal(checked.status, 200);
+    const reader = stream.body.getReader();
+    let eventText = "";
+    let diagnosticEvent = null;
+    const deadline = Date.now() + 5_000;
+    while (!diagnosticEvent && Date.now() < deadline) {
+      const { value, done } = await Promise.race([
+        reader.read(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("diagnostic SSE event timed out")), 5_000)),
+      ]);
+      if (done) break;
+      eventText += new TextDecoder().decode(value);
+      const frames = eventText.split("\n\n");
+      eventText = frames.pop();
+      for (const frame of frames) {
+        const data = frame.split("\n").find((line) => line.startsWith("data: "));
+        if (!data) continue;
+        const event = JSON.parse(data.slice(6));
+        if (event.kind === "diagnostics") diagnosticEvent = event;
+      }
+    }
+    assert.equal(diagnosticEvent?.schema, 1);
+    assert.equal(diagnosticEvent?.document.path, "main.zyl");
+    assert.equal(diagnosticEvent?.document.version, 987);
+    assert.equal(diagnosticEvent?.document.clientId, "test-client");
+  } finally {
+    eventAbort.abort();
+  }
   await page.locator('.tree-item.file[title="main.zyl"]').click();
   await page.locator(".cm-content[contenteditable=true]").waitFor();
   const direct = await page.evaluate(async ({ token, main }) => {

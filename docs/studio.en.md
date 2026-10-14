@@ -75,6 +75,24 @@ ordinary Undo restores it. A `_` wildcard in a match pattern is not a hole.
 Type inference for unannotated local values and general subtyping are not yet
 used for hole suggestions, so the list may omit valid expressions.
 
+### Local event stream
+
+Studio opens `GET /__zelyra/editor/api/events` as an SSE stream through
+`fetch`, putting its session token in the `X-Zelyra-Editor-Token` header rather
+than the stream URL. The server checks the local Host, token, and any supplied
+browser Origin/Fetch metadata. Mutating APIs still require the header and the
+exact editor origin. Studio reconnects with a bounded backoff; individual
+analysis requests remain usable without the stream.
+
+Each data event is a JSON object containing `schema: 1`, `kind`, `document`
+(`path`, `version`, and `clientId` for browser analyses), `workspaceRevision`,
+and `payload`. Kinds are `analysis.progress`, `diagnostics`, `verification`,
+`workspace.changed`, `analysis.invalidated`, and `preview.changed`. Studio
+accepts analysis results only for the current client and document version.
+The server permits four streams, each with a queue of 32 messages, and drops
+slow receivers. Studio requests and Studio file actions currently produce
+events; there is no active watcher for filesystem changes made by other tools.
+
 ## Start the invoice tutorial in Studio
 
 For a generated invoice tutorial, Studio starts its own isolated MariaDB

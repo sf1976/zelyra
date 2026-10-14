@@ -81,6 +81,26 @@ Match-Muster ist keine Ausdruckslücke. Typinferenz für unannotierte lokale
 Werte und allgemeine Subtypisierung werden für diese Vorschläge noch nicht
 genutzt; deshalb können gültige Ausdrücke fehlen.
 
+### Lokaler Ereigniskanal
+
+Studio öffnet `GET /__zelyra/editor/api/events` als SSE-Stream mit `fetch` und
+dem Sitzungstoken im `X-Zelyra-Editor-Token`-Header. Der Token steht nicht in
+der Stream-URL. Der Server prüft lokalen Host, Token und vorhandene Browser-
+Origin-/Fetch-Metadaten. Schreibende APIs bleiben an den Token-Header und den
+exakt passenden Origin gebunden. Bei Verbindungsabbruch verbindet sich Studio
+mit begrenzter Wartezeit erneut; einzelne Analyseanfragen funktionieren auch
+ohne Stream.
+
+Jedes Datenereignis ist ein JSON-Objekt mit `schema: 1`, `kind`, `document`
+(`path`, `version`, bei Browseranalysen `clientId`), `workspaceRevision` und
+`payload`. Der Kanal sendet `analysis.progress`, `diagnostics`,
+`verification`, `workspace.changed`, `analysis.invalidated` und
+`preview.changed`. Studio übernimmt Analyseergebnisse nur für die aktuelle
+Client- und Dokumentversion. Der Server begrenzt auf vier Streams mit je 32
+ausstehenden Nachrichten und trennt langsame Empfänger. Derzeit erzeugen
+Studio-Anfragen und Studio-Dateiaktionen die Ereignisse; Änderungen durch
+andere Programme auf der Festplatte werden noch nicht aktiv beobachtet.
+
 ## Rechnungstutorial in Studio starten
 
 Bei einem erzeugten Rechnungstutorial startet Studio beim Klick auf
