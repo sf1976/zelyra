@@ -17,7 +17,7 @@ use zelyra_ast::*;
 const BASE64_CHARS: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 fn base64_encode_bytes(bytes: &[u8]) -> String {
-    let mut out = String::with_capacity((bytes.len() + 2) / 3 * 4);
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
     for chunk in bytes.chunks(3) {
         let b0 = chunk[0];
         let b1 = if chunk.len() > 1 { chunk[1] } else { 0 };
@@ -6122,16 +6122,6 @@ impl<'a> Checker<'a> {
                     self.expect_type(&Type::String, &text, args[0].span);
                     self.expect_type(&Type::String, &pat, args[1].span);
                     Type::Bool
-                } else if name == "text_split" || name == "split" {
-                    if args.len() != 2 {
-                        self.error(expr.span, format!("{name} expects text and delimiter"));
-                        return Type::Unknown;
-                    }
-                    let text = self.check_expr(&args[0], scopes);
-                    let sep = self.check_expr(&args[1], scopes);
-                    self.expect_type(&Type::String, &text, args[0].span);
-                    self.expect_type(&Type::String, &sep, args[1].span);
-                    Type::Array(Box::new(Type::String))
                 } else if name == "text_split" || name == "split" {
                     if args.len() != 2 {
                         self.error(expr.span, format!("{name} expects text and delimiter"));
@@ -12568,7 +12558,7 @@ impl<'program> Interpreter<'program> {
                 return Err(self.runtime_error(span, "panic expects one String message"));
             }
             let msg = self.eval(&args[0], env)?;
-            return Err(self.runtime_error(span, format!("panic: {}", msg.output())));
+            Err(self.runtime_error(span, format!("panic: {}", msg.output())))
         } else if name == "entries" {
             if args.len() != 1 {
                 return Err(self.runtime_error(span, "entries expects a Map"));
