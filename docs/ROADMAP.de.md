@@ -27,7 +27,7 @@ Ressourcendisziplin und ehrliche Beweisaussagen leiten jede Phase. Das
 [Manifest](MANIFESTO.de.md) beschreibt die Prinzipien; die Roadmap kennzeichnet
 den tatsächlich implementierten Stand.
 
-Das aktuelle stabile Release ist 1.0.5. **Aktuelle Meilensteine** ist die
+Das aktuelle stabile Release ist 1.0.6. **Aktuelle Meilensteine** ist die
 verbindliche Übersicht der nächsten Vorhaben. Ältere, nummerierte Release-
 Abschnitte bleiben als historische Planung und Nachweise erhalten; sie legen
 für sich keine aktuellen Releaseziele fest. Langfristige Ideen stehen im
@@ -57,6 +57,20 @@ Abschnitt zur Weiterentwicklung nach 1.0.0.
   englischen Anleitungen erklären Setup-Befehle, Optionen, Quelldateien und
   wichtige Zeilen. Sie verfolgen die generierte Route `/invoices/new` bis zu
   `crud Invoice -> invoices` und erläutern `zelyra routes main.zyl`.
+
+- [x] **1.0.6 Zelyra UI:** Ein
+  lokal gebündeltes, versioniertes UI-Framework mit compilergeprüften
+  Komponenten, semantischen Darstellungsvarianten, Themes und progressiver
+  Interaktion ist integriert. Standard-CRUD, Studio-Layouts, das Rechnungstutorial
+  und die MariaDB-Starter verwenden Zelyra UI; Tabler wird nur bei ausdrücklicher
+  CSS-Auswahl geladen. Balken-, Linien- und Ringdiagramme sowie eine
+  druckoptimierte Rechnung mit Browser-PDF-Ausgabe sind vorhanden. Die
+  E-Mail-Komponente öffnet einen lokalen Entwurf; eine gespeicherte PDF wird
+  dort manuell angehängt. Automatischer PDF-Anhangversand und ein serverseitiger
+  PDF-Renderer sind nicht enthalten. Keine vollständige Tabler-
+  Klassenkompatibilität. Siehe
+  [Zelyra-UI-Handbuch](ui.de.md) und das
+  [Aufgabenprotokoll](release-plans/1.0.6-zelyra-ui-progress.de.md).
 
 - [ ] **Geplant für 1.1.0 — Compose-Prüfung im Installer:** Die Installer
   erkennen Docker Compose v2 oder neuer und unterscheiden es von der veralteten

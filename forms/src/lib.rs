@@ -405,6 +405,7 @@ mod tests {
             required,
             max,
             widget: None,
+            appearance: None,
             readonly: false,
             span: Span::default(),
         }
@@ -551,6 +552,7 @@ mod tests {
                 required: false,
                 max: None,
                 widget: None,
+                appearance: None,
                 readonly: false,
                 span: Span::default(),
             }],

@@ -52,7 +52,9 @@ Projektfilter und Textsuche abrufbar.
 
 Die Startseite `/` führt zu den Schritten Kunde, Artikel und Rechnung. Die
 filterbare Tabelle heißt **Rechnungsübersicht** und bleibt unter
-`/views/invoicedashboard` erreichbar. `GET /invoices/new` wird aus
+`/views/invoicedashboard` erreichbar. `layout: InvoiceTutorialShell` bindet
+auch diese automatisch gerenderte Ansicht in denselben Kopf-, Navigations-,
+Inhalts- und Fußbereich ein wie die übrigen Tutorial-Seiten. `GET /invoices/new` wird aus
 `crud Invoice -> invoices` in `src/invoices.zyl` generiert; es gibt dafür keine
 separate `page`-Zeile. `zelyra routes main.zyl` zeigt deklarierte und erzeugte
 Routen samt Quelldatei.
@@ -62,6 +64,32 @@ lokalisierte Formatangabe lautet `JJJJ-MM-TT` beziehungsweise `YYYY-MM-DD`.
 Die Rechnungsnummer wird serverseitig aus der neu erzeugten ID gebildet und
 bleibt bei späteren Änderungen unverändert. `TUTORIAL.de.md` und
 `TUTORIAL.en.md` erklären jeden Quellabschnitt und die Befehlsoptionen.
+
+## Zelyra UI, Druck, Diagramme und E-Mail
+
+Das Projekt importiert `zelyra/ui` und verwendet dieselbe `AppShell`-View für
+Tutorialseiten und erzeugte CRUD-Ansichten. Öffne `/ui/components`, um die
+compilergeprüften Varianten `default`, `success`, `warning` und `danger`, native
+Formularfelder, die responsive Datentabelle, Balken-/Linien-/Ringdiagramme,
+Tabs, Dialog, Druck und E-Mail-Entwurf zu sehen. `appearance` ist nur die
+Darstellung; tatsächliche Feldfehler setzt die Servervalidierung.
+
+Auf `/invoices/{invoice_number}/print` öffnet **Drucken** den Browserdialog.
+Dort kannst du **Als PDF speichern** auswählen. Zelyra erzeugt derzeit keine
+eigene PDF-Datei; Kopfzeile, Navigation und Druckaktionen werden im Druckmodus
+ausgeblendet. Die `EmailLink`-Aktion öffnet einen vorausgefüllten Entwurf im
+lokalen Mailprogramm. Hänge die gespeicherte PDF-Datei dort manuell an. Der
+Link versendet die Nachricht nicht selbst. Serverseitiger Versand benötigt
+eine ausdrücklich autorisierte Route mit `mail_queue` und Outbox-Worker; die
+Outbox unterstützt derzeit keine Dateianhänge.
+
+Die eingebauten CSS-/JavaScript-Dateien werden lokal und versioniert aus dem
+Zelyra-Binary ausgeliefert. Die optionale Projektdatei `zelyra.theme.css`
+überschreibt zuletzt Variablen und Tutorialdetails. Mit
+`ZELYRA_UI_STYLESHEET=tabler` oder einem sicheren relativen `.css`-Pfad kann das
+integrierte Stylesheet ersetzt werden; `ZELYRA_UI_STYLESHEET=zelyra` stellt es
+wieder her. Einzelheiten und Theme-Tokens stehen in der
+[Zelyra-UI-Referenz](../ui.de.md) und [Umgebungsreferenz](../env.md).
 
 ## Fehlerbehebung
 

@@ -23,6 +23,7 @@ const EDITOR_DATABASE_MAX_TOTAL_COLUMNS: usize = 10_000;
 const EDITOR_DATABASE_MAX_FOREIGN_KEYS: usize = 5_000;
 const EDITOR_DATABASE_PREVIEW_MAX_COLUMNS: usize = 40;
 const EDITOR_TIMEOUT: Duration = Duration::from_secs(30);
+const EDITOR_WEB_APP_STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
 
 struct EditorConnection(Arc<AtomicUsize>);
 
@@ -665,6 +666,7 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
     let mut views_by_name = BTreeMap::<String, Vec<(String, String, bool)>>::new();
     let mut page_views = Vec::<(String, String, String)>::new();
     let mut crud_layouts = Vec::<(String, String, String)>::new();
+    let mut tableview_layouts = Vec::<(String, String, String)>::new();
     {
         let mut node_sink = ProjectMapNodeSink {
             nodes: &mut nodes,
@@ -722,6 +724,9 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
                     tableview.span,
                 );
                 edges.insert((module_id.clone(), id.clone(), "declares".into()));
+                if let Some(layout) = &tableview.layout {
+                    tableview_layouts.push((id, layout.clone(), source.path.clone()));
+                }
             }
             for crud in &program.cruds {
                 let id = format!("crud:{}:{}", source.path, crud.name);
@@ -798,7 +803,11 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
             }
         }
     }
-    for (page, view, source_path) in page_views.into_iter().chain(crud_layouts) {
+    for (page, view, source_path) in page_views
+        .into_iter()
+        .chain(crud_layouts)
+        .chain(tableview_layouts)
+    {
         let imported_paths = loaded
             .modules
             .iter()
@@ -3572,7 +3581,7 @@ fn start_editor_web_app(
     let started = std::time::Instant::now();
 
     let preview_url = format!("http://{address}");
-    let ready_by = std::time::Instant::now() + Duration::from_secs(10);
+    let ready_by = std::time::Instant::now() + EDITOR_WEB_APP_STARTUP_TIMEOUT;
     loop {
         if let Some(status) = child
             .try_wait()
@@ -3643,13 +3652,16 @@ fn start_editor_web_app(
                 &secrets,
             );
             if stderr.is_empty() {
-                stderr = "Web application did not become ready within 10 seconds; check project and database configuration.".to_string();
+                stderr = format!(
+                    "Web application did not become ready within {} seconds; check project and database configuration.",
+                    EDITOR_WEB_APP_STARTUP_TIMEOUT.as_secs()
+                );
             }
             if stderr.contains("E-DB-PRECISION")
                 || stderr.contains("could not verify declared Decimal/Money/UInt storage")
                 || stderr.contains("fixed-point storage")
                 || stderr.to_ascii_lowercase().contains("connection refused")
-                || stderr.contains("within 10 seconds")
+                || stderr.contains("Web application did not become ready within ")
             {
                 stderr.push_str("\n\nHinweis: Die MariaDB-Datenbank ist nicht erreichbar oder das Datenbankschema wurde noch nicht eingerichtet.\nFühre im Projektverzeichnis `zelyra setup . --all` oder `zelyra db apply main.zyl` aus, oder starte den MariaDB-Dienst.");
             }
@@ -4876,6 +4888,9 @@ fn main() {}
 
     #[test]
     fn run_editor_program_does_not_auto_setup_an_unrelated_database() {
+        let _environment = crate::TEST_ENVIRONMENT_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let state = project();
         let path = state.root.join("main.zyl");
         fs::write(
@@ -4897,10 +4912,11 @@ fn main() {}
         let payload: Value = serde_json::from_str(&response.2).expect("decode run result");
         assert_eq!(payload["success"], false);
         assert_eq!(payload["webApp"], false);
-        assert!(payload["stderr"]
-            .as_str()
-            .unwrap()
-            .contains("E-DB-PRECISION"));
+        let stderr = payload["stderr"].as_str().unwrap();
+        assert!(
+            stderr.contains("E-DB-PRECISION"),
+            "unexpected Studio run diagnostic: {stderr}"
+        );
         assert!(!payload["stderr"]
             .as_str()
             .unwrap()

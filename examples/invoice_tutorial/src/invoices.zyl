@@ -2,6 +2,7 @@ import "src/database.zyl" as storage
 import "src/customers.zyl" as customers
 import "src/items.zyl" as items
 import "src/shell.zyl" as shell
+import "zelyra/ui" as ui
 
 pub struct Invoice {
     id: Id
@@ -71,6 +72,7 @@ struct InvoicePrintSummary {
     id: Id
     invoice_number: String
     customer_name: String
+    customer_email: String
     issued_at: Date
     status: String?
     net_total: Decimal
@@ -93,6 +95,7 @@ page "/invoices/{invoice_number}/print" {
             invoices.id,
             invoices.invoice_number,
             customers.name AS customer_name,
+            COALESCE(customers.email, '') AS customer_email,
             invoices.issued_at,
             invoices.status,
             ROUND(COALESCE(SUM(invoice_lines.quantity * invoice_lines.unit_price), 0), 2) AS net_total,
@@ -102,14 +105,14 @@ page "/invoices/{invoice_number}/print" {
         JOIN customers ON customers.id = invoices.customer_id
         LEFT JOIN invoice_lines ON invoice_lines.invoice_id = invoices.id
         WHERE invoices.invoice_number = :invoice_number
-        GROUP BY invoices.id, invoices.invoice_number, customers.name, invoices.issued_at, invoices.status
+        GROUP BY invoices.id, invoices.invoice_number, customers.name, customers.email, invoices.issued_at, invoices.status
     }
     load lines = sql<InvoicePrintLine[]> {
         SELECT
             items.name,
             items.sku,
             invoice_lines.quantity,
-            invoice_lines.unit_price,
+            ROUND(invoice_lines.unit_price, 2) AS unit_price,
             ROUND(invoice_lines.quantity * invoice_lines.unit_price, 2) AS line_net
         FROM invoice_lines
         JOIN items ON items.id = invoice_lines.item_id
@@ -118,8 +121,11 @@ page "/invoices/{invoice_number}/print" {
         ORDER BY invoice_lines.id
     }
     html {
-        <main class="invoice">
-            <p class="no-print"><button onclick="window.print()">Rechnung drucken oder als PDF speichern</button></p>
+        <article class="invoice invoice-print-document">
+            <div class="invoice-print-actions z-no-print">
+                <PrintAction label="Rechnung drucken oder als PDF speichern" translation_key="invoice.print.print" />
+                <EmailLink recipient="{invoice.customer_email}" subject="{invoice.invoice_number}" body="{invoice.invoice_number}" label="E-Mail-Entwurf öffnen" translation_key="invoice.print.email" />
+            </div>
             <h1>Rechnung {invoice.invoice_number}</h1>
             <p>Kunde: {invoice.customer_name}</p>
             <p>Ausgestellt am: {invoice.issued_at}</p>
@@ -137,6 +143,6 @@ page "/invoices/{invoice_number}/print" {
                 <p><span>Rechnungsbetrag brutto</span><strong>{invoice.gross_total} €</strong></p>
             </section>
             <p>Die Beispielrechnung verwendet den allgemeinen Umsatzsteuersatz von 19%.</p>
-        </main>
+        </article>
     }
 }

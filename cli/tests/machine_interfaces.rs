@@ -924,7 +924,8 @@ fn invoice_tutorial_creates_a_checkable_project_without_overwriting() {
         String::from_utf8_lossy(&tutorial.stdout)
     );
     let shell = fs::read_to_string(directory.join("src/shell.zyl")).unwrap();
-    assert!(shell.contains("<html class=\"zelyra-app\""));
+    assert!(shell.contains("<html data-z-ui"));
+    assert!(shell.contains("<AppShell"));
 
     let overwrite = run(&["--tutorial", "invoice", directory.to_str().unwrap()]);
     assert!(!overwrite.status.success());
@@ -1229,8 +1230,8 @@ fn serve_loads_project_theme_and_locale_catalogs() {
     assert!(page.starts_with("HTTP/1.1 200 OK"));
     assert!(page.contains("Custom project title"));
     assert!(page.contains("Welcome to our workshop"));
-    let built_in = page.find("data-zelyra-theme=\"default\"").unwrap();
-    let project = page.find("href=\"/__zelyra/theme.css\"").unwrap();
+    let built_in = page.find("data-z-ui-stylesheet").unwrap();
+    let project = page.find("data-zelyra-theme=\"project\"").unwrap();
     assert!(built_in < project);
     assert!(stylesheet.starts_with("HTTP/1.1 200 OK"));
     assert!(stylesheet.contains("Content-Type: text/css; charset=utf-8\r\n"));
@@ -2144,9 +2145,11 @@ fn default_mariadb_web_starter_is_catalog_localized_and_checkable() {
     );
     assert_generated_database_module(&directory);
     let source = fs::read_to_string(directory.join("main.zyl")).unwrap();
-    assert!(source.contains("class=\"zelyra-app\""));
+    assert!(source.contains("<html data-z-ui data-zelyra-language>"));
+    assert!(source.contains("<AppShell id=\"starter\""));
+    assert!(source.contains("<Card title=\"@i18n:starter.home_title\">"));
     assert!(source.contains("data-zelyra-language"));
-    assert!(source.contains("data-zelyra-i18n=\"starter.workspace_title\""));
+    assert!(source.contains("title=\"@i18n:starter.workspace_title\""));
     assert!(!source.contains("A clear start for your next application."));
 
     let checked = run(&["check", directory.join("main.zyl").to_str().unwrap()]);
@@ -2188,6 +2191,8 @@ fn new_mariadb_crud_template_is_self_contained() {
     assert!(source.contains("table departments"));
     assert!(source.contains("form MachineCreate -> machines"));
     assert!(source.contains("crud Machine -> machines"));
+    assert!(source.contains("import \"zelyra/ui\" as ui"));
+    assert!(source.contains("<AppShell id=\"machines\""));
     assert!(config.contains("engine = \"mariadb\""));
     assert!(directory.join("docker-compose.mariadb.yml").is_file());
     fs::remove_dir_all(directory).unwrap();
@@ -2223,6 +2228,8 @@ fn new_mariadb_auth_template_is_self_contained() {
     assert!(source.contains("table auth_sessions"));
     assert!(source.contains("requires auth"));
     assert!(source.contains("permits \"admin.view\""));
+    assert!(source.contains("import \"zelyra/ui\" as ui"));
+    assert!(source.contains("<AppShell id=\"admin\""));
     assert!(config.contains("engine = \"mariadb\""));
     assert!(directory.join(".env.example").is_file());
     fs::remove_dir_all(directory).unwrap();

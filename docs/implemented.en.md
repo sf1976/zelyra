@@ -1,13 +1,13 @@
-# Implemented in Zelyra 1.0.5
+# Implemented in Zelyra 1.0.6
 
-**Snapshot:** stable release 1.0.5 · language compatibility line `0.1` · 2026-10-14
+**Snapshot:** stable release 1.0.6 · language compatibility line `0.1` · 2026-10-14
 **Maturity:** published stable release; evaluate suitability and limits for each workflow
 
 This inventory describes current capabilities by area of use. It distinguishes
 available features from bounded or experimental areas; it does not claim
 universal database portability or that arbitrary applications are defect-free.
 
-## Changes in 1.0.3–1.0.5
+## Changes in 1.0.3–1.0.6
 
 - **1.0.3:** expanded standard library for math, text, arrays, sets, maps, dates,
   parsing, encodings, and paths; type-checked `|>` pipelines and flat `else if`
@@ -21,13 +21,17 @@ universal database portability or that arbitrary applications are defect-free.
   date-only invoice forms, server-assigned invoice numbers, a workflow-focused
   tutorial home, a named invoice overview, and bilingual command/source
   walkthroughs. See the [1.0.5 release notes](release-notes/1.0.5.en.md).
+- **1.0.6:** Zelyra UI with 55 compiler-checked components, local versioned
+  assets, responsive generated CRUD, themes, Studio property metadata, charts,
+  print-to-PDF, and email drafts. PDF attachments remain a manual step. See
+  the [1.0.6 release notes](release-notes/1.0.6.en.md).
 
 Release notes document shipped changes; the [roadmap](ROADMAP.md) records
 planned work. The [language specification](specification.md),
 [source-authority guide](source-authority.md), and
 [handbook](handbook/en/handbook.md) describe accepted syntax and its limits.
 
-## What Zelyra 1.0.5 provides
+## What Zelyra 1.0.6 provides
 
 ### Language and Compiler
 
@@ -299,7 +303,7 @@ benchmark result is claimed here.
 
 ## Release and verification evidence
 
-The current stable [Zelyra 1.0.5 release](https://github.com/sf1976/zelyra/releases/tag/v1.0.5)
+The current stable [Zelyra 1.0.6 release](https://github.com/sf1976/zelyra/releases/tag/v1.0.6)
 and its artifacts are published on GitHub. The [release notes](release-notes/)
 describe shipped changes; tested database workflows and their limits are in
 the [database support matrix](database-support.en.md). Automated checks

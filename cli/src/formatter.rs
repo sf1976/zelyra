@@ -489,6 +489,7 @@ fn token_text<'a>(token: &'a Token, source: &'a str) -> &'a str {
         TokenKind::Placeholder => "placeholder",
         TokenKind::Max => "max",
         TokenKind::Widget => "widget",
+        TokenKind::Appearance => "appearance",
         TokenKind::Readonly => "readonly",
         TokenKind::Fields => "fields",
         TokenKind::Success => "success",

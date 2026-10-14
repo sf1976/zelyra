@@ -1,6 +1,6 @@
-# In Zelyra 1.0.5 umgesetzt
+# In Zelyra 1.0.6 umgesetzt
 
-**Stand:** stabiles Release 1.0.5 · Sprachkompatibilitätslinie `0.1` · 2026-10-14
+**Stand:** stabiles Release 1.0.6 · Sprachkompatibilitätslinie `0.1` · 2026-10-14
 **Reifegrad:** veröffentlichtes stabiles Release; Eignung und Grenzen sind je Ablauf zu prüfen
 
 Diese Übersicht beschreibt den Funktionsumfang des aktuellen Releases nach
@@ -8,7 +8,7 @@ Anwendungsbereichen. Sie unterscheidet verfügbare Funktionen von begrenzten
 oder experimentellen Bereichen; sie behauptet weder universelle
 Datenbankportabilität noch Fehlerfreiheit beliebiger Anwendungen.
 
-## Änderungen in 1.0.3–1.0.5
+## Änderungen in 1.0.3–1.0.6
 
 - **1.0.3:** erweiterte Standardbibliothek für Mathematik, Text, Arrays, Sets,
   Maps, Datum, Parsing, Encodings und Pfade; typgeprüfte `|>`-Pipelines und
@@ -23,6 +23,10 @@ Datenbankportabilität noch Fehlerfreiheit beliebiger Anwendungen.
   aufgabenorientierte Tutorial-Startseite, eine benannte Rechnungsübersicht und
   zweisprachige Befehls-/Quelltext-Erklärungen. Siehe
   [Release-Notizen 1.0.5](release-notes/1.0.5.de.md).
+- **1.0.6:** Zelyra UI mit 55 compilergeprüften Komponenten, lokalen
+  versionierten Assets, responsivem CRUD, Themes, Studio-Eigenschaften,
+  Diagrammen, Browserdruck/PDF und E-Mail-Entwürfen. PDF-Anhänge werden manuell
+  hinzugefügt. Siehe [Release-Notizen 1.0.6](release-notes/1.0.6.de.md).
 
 Die Release-Notizen dokumentieren historische Änderungen; die
 [Roadmap](ROADMAP.de.md) enthält geplante Arbeit. Die
@@ -31,7 +35,7 @@ Die Release-Notizen dokumentieren historische Änderungen; die
 [Handbuch](handbook/de/handbuch.md) beschreiben die akzeptierte Syntax und ihre
 Grenzen.
 
-## Was Zelyra 1.0.5 bietet
+## Was Zelyra 1.0.6 bietet
 
 ### Sprache und Compiler
 
@@ -331,7 +335,7 @@ vergleichenden Benchmark-Ergebnisse behauptet.
 
 ## Release- und Prüfnachweise
 
-Das aktuelle stabile [Zelyra-1.0.5-Release](https://github.com/sf1976/zelyra/releases/tag/v1.0.5)
+Das aktuelle stabile [Zelyra-1.0.6-Release](https://github.com/sf1976/zelyra/releases/tag/v1.0.6)
 und seine Artefakte stehen bei GitHub. Die [Release-Notizen](release-notes/)
 beschreiben ausgelieferte Änderungen; die geprüften Datenbankabläufe und ihre
 Grenzen stehen in der [Datenbankmatrix](database-support.de.md). Automatisierte

@@ -2706,12 +2706,12 @@ Navigate to `http://localhost:8080` in your browser—your own live Zelyra appli
 ## Chapter 41: Current scope and roadmap
 
 ### 1. What will I learn in this chapter?
-- What Zelyra 1.0.5 includes and how the language compatibility line 0.1 remains separate.
+- What Zelyra 1.0.6 includes and how the language compatibility line 0.1 remains separate.
 - Which capabilities have arrived since 1.0.0.
 - Where to find verified features, limits, and planned work.
 
 ### 2. Why is this topic important?
-Compiler versions and the language compatibility line describe different things. Updating to Zelyra 1.0.5 does not automatically change the language line declared in `zelyra.toml`. Release notes describe version changes; the implementation inventory, database matrix, and roadmap explain supported scope and limits.
+Compiler versions and the language compatibility line describe different things. Updating to Zelyra 1.0.6 does not automatically change the language line declared in `zelyra.toml`. Release notes describe version changes; the implementation inventory, database matrix, and roadmap explain supported scope and limits.
 
 ### 3. What changed since Zelyra 1.0.0?
 - **1.0.1:** Docker Compose v2 is detected; Python Compose v1 is rejected with a concrete update hint. Studio's Run button starts the project entry point.
@@ -2719,13 +2719,14 @@ Compiler versions and the language compatibility line describe different things.
 - **1.0.3:** The standard library adds math, text, array, set, map, date, error-handling, conversion, encoding, and path functions. It also adds the type-checked `|>` pipeline operator, flat `else if` chains, declared-schema display while the database is offline, automatic tutorial setup, free local port selection, repeatable sample data, and a bounded recursion-depth guard.
 - **1.0.4:** Invoice tutorials receive a dedicated Compose project name. Older tutorials can use an isolated database after an authentication error without deleting or changing the old volume. Compose versions such as `2.40` are recognized.
 - **1.0.5:** Studio shows local structured logs; `zelyra uninstall` removes the active user-owned program after confirmation. The invoice tutorial has a workflow home, an invoice overview, date-only input, automatic invoice numbers, and expanded English and German source guides.
+- **1.0.6:** Zelyra UI supplies compiler-checked components and locally bundled styles for generated CRUD, starter projects, Studio properties, and the invoice tutorial. It adds themes, responsive layouts, chart components, browser print/PDF, and prefilled email drafts. PDF files are attached manually in the mail client.
 
 See the individual [release notes](../../release-notes/). The complete standard library catalog is in [Appendix D](appendices.md#appendix-d-standard-library-overview-zelyra-103).
 
 ### 4. Start and edit the invoice tutorial
 `zelyra --tutorial invoice` prepares the local tutorial. It requires Docker Engine and Docker Compose v2 or newer; Python Compose v1 is unsupported. In Zelyra Studio, open the project with `zelyra editor ./invoice-tutorial`, select `main.zyl`, and click **Run**. Studio starts local MariaDB through Compose, applies the schema and repeatable sample data, then starts the local web preview. MariaDB runs in a container; the web preview is a local Zelyra process. Open **Logs** in Studio to review structured run and preview output.
 
-Edit source files in the project tree: `src/customers.zyl` for customers, `src/items.zyl` for items, `src/invoices.zyl` for invoices and line items, `src/dashboard.zyl` for the invoice overview, `src/shell.zyl` for the shared layout, and `zelyra.theme.css` for local styling. Add business records through the application forms. The `issued_at` field accepts a calendar date; the server assigns the invoice number when the invoice is saved. Seed data is initial sample content and is not duplicated on repeated startup. The [invoice tutorial guide](../../tutorials/invoice.en.md) links to the generated project's detailed source walkthrough.
+Edit source files in the project tree: `src/customers.zyl` for customers, `src/items.zyl` for items, `src/invoices.zyl` for invoices and line items, `src/dashboard.zyl` for the invoice overview, `src/shell.zyl` for the shared layout, and `zelyra.theme.css` for local styling. The tutorial uses Zelyra UI's own built-in CSS by default; its theme file customizes that design system. Tabler or another project-local stylesheet can be selected through `ZELYRA_UI_STYLESHEET`. Add business records through the application forms. The `issued_at` field accepts a calendar date; the server assigns the invoice number when the invoice is saved. Seed data is initial sample content and is not duplicated on repeated startup. Print `/invoices/NUMBER/print` and choose **Save as PDF** in the browser. `EmailLink` opens a local draft; attach the saved PDF there manually. See the [Zelyra UI guide](../../ui.en.md) and [invoice tutorial guide](../../tutorials/invoice.en.md), which links to the generated project's detailed source walkthrough.
 
 ### 5. Compatibility and limits
 - The language compatibility line remains `0.1`; compiler and language versions are separate.
@@ -2749,7 +2750,7 @@ docker compose version
 Then read the notes for the installed release and compare your intended workflow with the database matrix.
 
 ### 9. Summary
-- Zelyra 1.0.5 is the current stable release; the language compatibility line remains `0.1`.
+- Zelyra 1.0.6 is the current stable release; the language compatibility line remains `0.1`.
 - Version 1.0.3 expands the standard library and adds `|>` pipelines and flat `else if` chains.
 - The invoice tutorial runs locally with MariaDB in Docker Compose and a local web preview; Studio can start the full tutorial workflow.
 - Release notes describe shipped changes; the roadmap describes planned work.

@@ -1,0 +1,75 @@
+@layer theme {
+  :where(html[data-z-ui][data-z-theme="light"]) { color-scheme: light; }
+  :where(html[data-z-ui][data-z-theme="dark"]) {
+    color-scheme: dark;
+    --z-color-primary: #a8bfff;
+    --z-color-on-primary: #172646;
+    --z-color-primary-hover: #c4d2ff;
+    --z-color-primary-soft: #27354d;
+    --z-color-success: #8dd6ad;
+    --z-color-on-success: #173725;
+    --z-color-success-soft: #20382b;
+    --z-color-warning: #f0ca75;
+    --z-color-on-warning: #33270f;
+    --z-color-warning-soft: #3c321d;
+    --z-color-danger: #ffafb2;
+    --z-color-on-danger: #411a20;
+    --z-color-danger-soft: #3e262b;
+    --z-color-info: #9bd7f2;
+    --z-color-on-info: #17313c;
+    --z-color-info-soft: #233740;
+    --z-color-canvas: #141a22;
+    --z-color-surface: #1b232d;
+    --z-color-surface-raised: #222c38;
+    --z-color-text: #edf2f8;
+    --z-color-text-muted: #b7c2d0;
+    --z-color-border: #3a4655;
+    --z-color-focus: #a8bfff;
+    --z-color-link: #b4c8ff;
+    --z-shadow-sm: 0 1px 3px rgb(0 0 0 / 25%);
+    --z-shadow-md: 0 12px 32px rgb(0 0 0 / 40%);
+  }
+  @media (prefers-color-scheme: dark) {
+    :where(html[data-z-ui][data-z-theme="system"], html[data-z-ui]:not([data-z-theme])) {
+      color-scheme: dark;
+      --z-color-primary: #a8bfff;
+      --z-color-on-primary: #172646;
+      --z-color-primary-hover: #c4d2ff;
+      --z-color-primary-soft: #27354d;
+      --z-color-success: #8dd6ad;
+      --z-color-on-success: #173725;
+      --z-color-success-soft: #20382b;
+      --z-color-warning: #f0ca75;
+      --z-color-on-warning: #33270f;
+      --z-color-warning-soft: #3c321d;
+      --z-color-danger: #ffafb2;
+      --z-color-on-danger: #411a20;
+      --z-color-danger-soft: #3e262b;
+      --z-color-info: #9bd7f2;
+      --z-color-on-info: #17313c;
+      --z-color-info-soft: #233740;
+      --z-color-canvas: #141a22;
+      --z-color-surface: #1b232d;
+      --z-color-surface-raised: #222c38;
+      --z-color-text: #edf2f8;
+      --z-color-text-muted: #b7c2d0;
+      --z-color-border: #3a4655;
+      --z-color-focus: #a8bfff;
+      --z-color-link: #b4c8ff;
+      --z-shadow-sm: 0 1px 3px rgb(0 0 0 / 25%);
+      --z-shadow-md: 0 12px 32px rgb(0 0 0 / 40%);
+    }
+  }
+  :where(html[data-z-ui][data-z-density="compact"]) {
+    --z-control-height: 2.25rem;
+    --z-space-4: .75rem;
+    --z-space-5: 1rem;
+    --z-space-6: 1.25rem;
+  }
+  @media (prefers-color-scheme: light) {
+    :where(html[data-z-ui][data-z-theme="system"], html[data-z-ui]:not([data-z-theme])) { color-scheme: light; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :where(html[data-z-ui]) { --z-motion-fast: 0ms; --z-motion-normal: 0ms; scroll-behavior: auto; }
+  }
+}

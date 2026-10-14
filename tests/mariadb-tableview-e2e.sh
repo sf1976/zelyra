@@ -168,8 +168,41 @@ if [[ "${ZELYRA_TABLEVIEW_E2E_EXPECT_CUSTOM_APP:-0}" == "1" ]]; then
 fi
 
 echo "[5/7] checking struct projection, aggregates, and escaping"
-grep -Fq "<th>Orders</th>" "${temp_dir}/health.html"
-grep -Fq "<th>Turnover</th>" "${temp_dir}/health.html"
+python3 - "${temp_dir}/health.html" <<'PY'
+from html.parser import HTMLParser
+import sys
+
+
+class TableHeaders(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.headers = []
+        self.current_scope = None
+        self.current_text = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "th":
+            self.current_scope = dict(attrs).get("scope")
+            self.current_text = []
+
+    def handle_data(self, data):
+        if self.current_scope is not None:
+            self.current_text.append(data)
+
+    def handle_endtag(self, tag):
+        if tag == "th" and self.current_scope is not None:
+            self.headers.append(("".join(self.current_text).strip(), self.current_scope))
+            self.current_scope = None
+            self.current_text = []
+
+
+with open(sys.argv[1], encoding="utf-8") as html_file:
+    parser = TableHeaders()
+    parser.feed(html_file.read())
+
+assert ("Orders", "col") in parser.headers, parser.headers
+assert ("Turnover", "col") in parser.headers, parser.headers
+PY
 grep -Fq "${alpha_name}" "${temp_dir}/health.html"
 grep -Fq "${escaped_beta_name}" "${temp_dir}/health.html"
 ! grep -Fq "${beta_name}" "${temp_dir}/health.html"

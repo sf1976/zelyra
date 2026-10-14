@@ -66,9 +66,24 @@ pub(super) fn render_form_with_language(
         .map(|title| localize_user_text(language, title))
         .or(generated_title)
     {
-        html.push_str("<h1>");
+        html.push_str("<h1 class=\"z-page-header__title\">");
         html.push_str(&html_escape_preserving_locale_references(&title));
         html.push_str("</h1>");
+    }
+    if !errors.is_empty() {
+        html.push_str("<div class=\"z-error-summary\" role=\"alert\" tabindex=\"-1\"><h2>");
+        html.push_str(&html_escape(&tr(language, "validation.summary")));
+        html.push_str("</h2><ul>");
+        for error in errors {
+            html.push_str("<li><a href=\"#");
+            html.push_str(&html_escape(&error.field));
+            html.push_str("\">");
+            html.push_str(&html_escape_preserving_locale_references(
+                &localized_validation_message(language, &error.message),
+            ));
+            html.push_str("</a></li>");
+        }
+        html.push_str("</ul></div>");
     }
     let cards = route.form_view.mode == CrudFormViewMode::Cards;
     if cards {
@@ -100,20 +115,34 @@ pub(super) fn render_form_with_language(
             .collect::<Vec<_>>();
         let required = is_required(route, field);
         let max = field_max(route, field);
-        html.push_str("<div class=\"zelyra-field\">");
+        let field_input_type = input_type(route, field);
+        let is_checkbox =
+            !relation_options.contains_key(&field.name) && field_input_type == "checkbox";
+        html.push_str(if is_checkbox {
+            "<div class=\"z-field zelyra-field z-field--checkbox\">"
+        } else {
+            "<div class=\"z-field zelyra-field\">"
+        });
         html.push_str("<label for=\"");
         html.push_str(&html_escape(&field.name));
-        html.push_str("\">");
+        html.push_str("\" class=\"z-field__label\">");
         html.push_str(&html_escape_preserving_locale_references(&label));
         html.push_str("</label>");
         if let Some(options) = relation_options.get(&field.name) {
-            html.push_str("<select id=\"");
+            html.push_str("<select class=\"");
+            html.push_str(&form_field_appearance_classes(field, "z-select"));
+            html.push_str("\" id=\"");
             html.push_str(&html_escape(&field.name));
             html.push_str("\" name=\"");
             html.push_str(&html_escape(&field.name));
             html.push('"');
             if required {
                 html.push_str(" required");
+            }
+            if !field_errors.is_empty() {
+                html.push_str(" aria-invalid=\"true\" aria-describedby=\"");
+                html.push_str(&format!("{}-error", html_escape(&field.name)));
+                html.push('"');
             }
             html.push('>');
             if !required {
@@ -135,8 +164,17 @@ pub(super) fn render_form_with_language(
             }
             html.push_str("</select>");
         } else {
-            let input_type = input_type(route, field);
-            html.push_str("<input id=\"");
+            let input_type = field_input_type;
+            html.push_str("<input class=\"");
+            html.push_str(&form_field_appearance_classes(
+                field,
+                if input_type == "checkbox" {
+                    "z-check"
+                } else {
+                    "z-input"
+                },
+            ));
+            html.push_str("\" id=\"");
             html.push_str(&html_escape(&field.name));
             html.push_str("\" name=\"");
             html.push_str(&html_escape(&field.name));
@@ -189,6 +227,18 @@ pub(super) fn render_form_with_language(
             if field.readonly {
                 html.push_str(" readonly");
             }
+            if !field_errors.is_empty() {
+                html.push_str(" aria-invalid=\"true\" aria-describedby=\"");
+                html.push_str(&format!("{}-error", html_escape(&field.name)));
+                if input_type == "date" {
+                    html.push(' ');
+                    html.push_str(&format!("{}-hint", html_escape(&field.name)));
+                }
+                html.push('"');
+            } else if input_type == "date" {
+                html.push_str(" aria-describedby=\"");
+                html.push_str(&format!("{}-hint\"", html_escape(&field.name)));
+            }
             html.push('>');
             if input_type == "date" {
                 let hint = if language == UiLanguage::German {
@@ -196,13 +246,20 @@ pub(super) fn render_form_with_language(
                 } else {
                     "Format: YYYY-MM-DD"
                 };
-                html.push_str("<small class=\"zelyra-field-hint\">");
+                html.push_str("<small class=\"z-field__hint zelyra-field-hint\" id=\"");
+                html.push_str(&format!("{}-hint\">", html_escape(&field.name)));
                 html.push_str(hint);
                 html.push_str("</small>");
             }
         }
-        for error in field_errors {
-            html.push_str("<p class=\"zelyra-error\">");
+        for (error_index, error) in field_errors.into_iter().enumerate() {
+            html.push_str("<p class=\"z-field__error zelyra-error\" id=\"");
+            html.push_str(&format!("{}-error", html_escape(&field.name)));
+            if error_index > 0 {
+                html.push('-');
+                html.push_str(&error_index.to_string());
+            }
+            html.push_str("\">");
             html.push_str(&html_escape_preserving_locale_references(
                 &localized_validation_message(language, &error.message),
             ));
@@ -210,7 +267,7 @@ pub(super) fn render_form_with_language(
         }
         html.push_str("</div>");
     }
-    html.push_str("<button type=\"submit\">");
+    html.push_str("<button class=\"z-button z-button--primary\" type=\"submit\">");
     let default_submit = form_kind
         .map(|(_, submit_key)| tr(language, submit_key))
         .unwrap_or(tr(language, "form.submit"));
@@ -226,6 +283,17 @@ pub(super) fn render_form_with_language(
         html.push_str("</section>");
     }
     html
+}
+
+fn form_field_appearance_classes(field: &zelyra_ast::FormField, control: &str) -> String {
+    let mut classes = control.to_owned();
+    match field.appearance.as_deref() {
+        Some("success") => classes.push_str(&format!(" {control}--success")),
+        Some("warning") => classes.push_str(&format!(" {control}--warning")),
+        Some("danger") => classes.push_str(&format!(" {control}--danger")),
+        _ => classes.push_str(&format!(" {control}--default")),
+    }
+    classes
 }
 
 pub(super) fn localized_validation_message(language: UiLanguage, message: &str) -> String {

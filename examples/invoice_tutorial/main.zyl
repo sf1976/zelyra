@@ -1,4 +1,5 @@
 # This file gathers the business modules and defines the landing page.
+import "zelyra/ui" as ui
 import "src/database.zyl" as storage
 import "src/shell.zyl" as shell
 import "src/customers.zyl" as customers
@@ -9,7 +10,7 @@ import "src/dashboard.zyl" as dashboard
 page "/" {
     view: InvoiceTutorialShell
     html {
-        <main class="invoice-home">
+        <section class="invoice-home">
             <section class="invoice-home-hero-grid">
                 <div class="invoice-home-hero">
                     <div class="invoice-home-kicker">
@@ -20,8 +21,8 @@ page "/" {
                     <h1 data-zelyra-i18n="invoice.home.title">From the first customer to the finished invoice.</h1>
                     <p class="invoice-home-intro" data-zelyra-i18n="invoice.home.intro">A complete invoice workflow, ready to explore with realistic sample data.</p>
                     <div class="invoice-home-actions">
-                        <a class="btn btn-primary" href="/invoices/new" data-zelyra-i18n="invoice.home.new_invoice">Create invoice</a>
-                        <a class="btn btn-outline-secondary" href="/views/invoicedashboard" data-zelyra-i18n="invoice.home.overview">Open invoice overview</a>
+                        <Button label="Create invoice" href="/invoices/new" appearance="success" translation_key="invoice.home.new_invoice" />
+                        <Button label="Open invoice overview" href="/views/invoicedashboard" translation_key="invoice.home.overview" />
                     </div>
                     <div class="invoice-home-proof">
                         <span class="invoice-home-check">✓</span>
@@ -110,8 +111,8 @@ page "/" {
                     </div>
                     <a class="invoice-section-link" href="/views/invoicedashboard" data-zelyra-i18n="invoice.home.all_invoices">See all invoices →</a>
                 </div>
-                <div class="row row-cards invoice-workflow-cards">
-                    <article class="col-md-4">
+                <Grid columns="three">
+                    <article>
                         <div class="invoice-workflow-card">
                             <span class="invoice-step-number">01</span>
                             <span class="invoice-step-icon">◎</span>
@@ -120,7 +121,7 @@ page "/" {
                             <a href="/customers/new" data-zelyra-i18n="invoice.home.customer_link">Add customer →</a>
                         </div>
                     </article>
-                    <article class="col-md-4">
+                    <article>
                         <div class="invoice-workflow-card">
                             <span class="invoice-step-number">02</span>
                             <span class="invoice-step-icon">◇</span>
@@ -129,7 +130,7 @@ page "/" {
                             <a href="/items/new" data-zelyra-i18n="invoice.home.item_link">Add item →</a>
                         </div>
                     </article>
-                    <article class="col-md-4">
+                    <article>
                         <div class="invoice-workflow-card invoice-workflow-card-primary">
                             <span class="invoice-step-number">03</span>
                             <span class="invoice-step-icon">↗</span>
@@ -138,8 +139,134 @@ page "/" {
                             <a href="/invoices/new" data-zelyra-i18n="invoice.home.invoice_link">Create your invoice →</a>
                         </div>
                     </article>
-                </div>
+                </Grid>
             </section>
-        </main>
+        </section>
+    }
+}
+
+page "/ui/components" {
+    view: InvoiceTutorialShell
+    html {
+        <section class="invoice-ui-gallery">
+            <PageHeader title="Zelyra UI – Komponenten" description="Geschäftsoberflächen mit geprüften Bausteinen, konsistenten Zuständen und lokal ausgelieferten Assets." />
+            <Alert title="Darstellung und Validierung sind getrennt" appearance="warning">
+                Die gewählte Erscheinung ändert keine Serverprüfung. aria-invalid kommt aus dem tatsächlichen Validierungszustand.
+            </Alert>
+            <Grid columns="two">
+                <Card title="Semantische Varianten">
+                    <Stack>
+                        <Inline>
+                            <Badge text="Standard" appearance="default" />
+                            <Badge text="Erfolgreich" appearance="success" />
+                            <Badge text="Prüfen" appearance="warning" />
+                            <Badge text="Fehler" appearance="danger" />
+                        </Inline>
+                        <Button label="Bericht öffnen" href="/views/invoicedashboard" appearance="success" />
+                        <Button label="Aktion ohne Formularübermittlung" appearance="default" />
+                    </Stack>
+                </Card>
+                <Card title="Formularzustände">
+                    <TextField id="ui-reference" name="reference" label="Referenz" appearance="success" required="true">
+                        <slot name="hint">Die Gestaltung success markiert keinen Validierungserfolg.</slot>
+                    </TextField>
+                    <EmailField id="ui-email" name="email" label="E-Mail" appearance="danger" invalid="true">
+                        <slot name="error">Diese Meldung wird vom Server geliefert.</slot>
+                    </EmailField>
+                    <form method="get" action="/ui/components">
+                        <TextField id="ui-filter" name="filter" label="Beispielfilter" placeholder="z. B. offene Rechnungen" />
+                        <FormActions><SubmitButton label="GET-Formular absenden" appearance="success" /></FormActions>
+                    </form>
+                </Card>
+            </Grid>
+            <Card title="Weitere native Formularfelder">
+                <Fieldset legend="Auftrag erfassen">
+                    <Grid columns="two">
+                        <DateField id="ui-date" name="issued_at" label="Rechnungsdatum" required="true">
+                            <slot name="hint">Der Browser zeigt den lokalen Datumsauswahldialog.</slot>
+                        </DateField>
+                        <NumberField id="ui-quantity" name="quantity" label="Menge" value="1" min="1" step="1" required="true" />
+                        <SelectField id="ui-status" name="status" label="Status">
+                            <option value="draft">Entwurf</option>
+                            <option value="open">Offen</option>
+                            <option value="paid">Bezahlt</option>
+                        </SelectField>
+                        <Textarea id="ui-note" name="note" label="Notiz" rows="3" />
+                    </Grid>
+                    <RadioGroup legend="Versandart">
+                        <RadioField id="ui-delivery-email" name="delivery" value="email" label="E-Mail" checked="true" />
+                        <RadioField id="ui-delivery-post" name="delivery" value="post" label="Post" />
+                    </RadioGroup>
+                    <Inline>
+                        <CheckboxField id="ui-copy" name="copy" value="yes" label="Kopie ablegen" checked="true" />
+                        <SwitchField id="ui-reminder" name="reminder" label="Zahlungserinnerung aktivieren" appearance="warning" />
+                    </Inline>
+                    <RadioGroup legend="Ausgabeformat">
+                        <RadioField id="ui-format-pdf" name="format" value="pdf" label="PDF-Ansicht" checked="true" appearance="success" />
+                        <RadioField id="ui-format-paper" name="format" value="paper" label="Papierdruck" appearance="default" />
+                    </RadioGroup>
+                </Fieldset>
+            </Card>
+            <Card title="Responsive Datentabelle">
+                <DataTable caption="Beispielhafte Rechnungen">
+                    <slot name="head"><tr><th scope="col">Nummer</th><th scope="col">Kunde</th><th scope="col">Status</th><th scope="col">Aktion</th></tr></slot>
+                    <slot name="body"><tr><th scope="row">RE-2026-001</th><td>Beispiel GmbH</td><td><Badge text="Offen" appearance="warning" /></td><td><Link href="/views/invoicedashboard" label="Ansehen" /></td></tr></slot>
+                </DataTable>
+            </Card>
+            <Grid columns="two">
+                <BarChart title="Umsatz nach Monat" description="Beispielwerte; zugängliche Balken und Zahlenwerte.">
+                    <ChartBar label="Januar" value="74" max="100" />
+                    <ChartBar label="Februar" value="52" max="100" />
+                    <ChartBar label="März" value="91" max="100" />
+                </BarChart>
+                <DonutChart id="invoice-paid-share" title="Bezahlte Rechnungen" description="Anteil an allen Beispielrechnungen" percentage="68">
+                    <slot name="data"><p>68 Prozent bezahlt · 32 Prozent offen</p></slot>
+                </DonutChart>
+            </Grid>
+            <Grid columns="two">
+                <LineChart id="invoice-monthly-line" title="Rechnungsvolumen" description="Monatliche Beispielwerte; die Tabelle ist die Textalternative." points="5,45 35,28 65,34 95,10">
+                    <slot name="data"><table><caption>Rechnungsvolumen nach Monat</caption><thead><tr><th scope="col">Monat</th><th scope="col">Rechnungen</th></tr></thead><tbody><tr><th scope="row">Januar</th><td>8</td></tr><tr><th scope="row">Februar</th><td>14</td></tr><tr><th scope="row">März</th><td>12</td></tr><tr><th scope="row">April</th><td>24</td></tr></tbody></table></slot>
+                </LineChart>
+                <Card title="Fortschritt und Navigation">
+                    <Progress label="Monatsziel erreicht" value="68" max="100" />
+                    <Breadcrumbs label="Beispielpfad"><li><a href="/">Start</a></li><li><a href="/invoices">Rechnungen</a></li><li aria-current="page">Auswertung</li></Breadcrumbs>
+                    <Pagination label="Beispielseiten"><a class="z-button" href="/invoices?page=1">1</a><a class="z-button" href="/invoices?page=2">2</a></Pagination>
+                </Card>
+            </Grid>
+            <Grid columns="two">
+                <Card title="Zustände, Gruppen und Details">
+                    <EmptyState id="ui-no-overdue" title="Keine überfälligen Rechnungen" description="Alle offenen Rechnungen liegen innerhalb ihrer Zahlungsfrist.">
+                        <slot name="actions"><Button label="Rechnungen ansehen" href="/invoices" /></slot>
+                    </EmptyState>
+                    <LoadingState label="Bericht wird vorbereitet …" />
+                    <ErrorState title="Bericht nicht verfügbar" message="Die gespeicherten Rechnungsdaten bleiben erhalten.">
+                        <slot name="actions"><Button label="Erneut versuchen" href="/views/invoicedashboard" /></slot>
+                    </ErrorState>
+                    <ToastRegion><Toast message="Änderungen wurden lokal vorgemerkt." appearance="success" /></ToastRegion>
+                    <ButtonGroup><Button label="Primäraktion" appearance="success" /><Button label="Abbrechen" href="/ui/components" /></ButtonGroup>
+                    <Disclosure summary="Weitere Hinweise"><p>Native Details-Elemente bleiben ohne JavaScript bedienbar.</p></Disclosure>
+                    <Dropdown label="Weitere Ansichten"><Link href="/customers" label="Kunden" /><Link href="/items" label="Artikel" /></Dropdown>
+                </Card>
+                <Card title="Tastaturbedienbare Tabs und Dialog">
+                    <Tabs id="ui-reference-tabs" first_label="Zusammenfassung" second_label="Hinweise">
+                        <slot name="first"><p>Die Pfeiltasten wechseln zwischen Tabs.</p></slot>
+                        <slot name="second"><p>Ohne JavaScript funktionieren die Sprunglinks und beide Inhalte bleiben sichtbar.</p></slot>
+                    </Tabs>
+                    <Dialog id="ui-example-dialog" title="Aktion prüfen" open_label="Dialog öffnen" close_label="Schließen">
+                        <p>Escape schließt den nativen Dialog und gibt den Fokus an die öffnende Schaltfläche zurück.</p>
+                    </Dialog>
+                </Card>
+            </Grid>
+            <Grid columns="two">
+                <Disclosure summary="Mehr über Druck und PDF">
+                    <p>Die Druckansicht verwendet den Browserdialog. Dort kann „Als PDF speichern“ gewählt werden. Zelyra erzeugt hier keine eigene PDF-Datei.</p>
+                </Disclosure>
+                <Card title="Weiterleiten per E-Mail">
+                    <p>Diese Aktion öffnet den lokalen E-Mail-Client. Serverseitige Nachrichten werden ausdrücklich über mail_queue und den Outbox-Worker zugestellt.</p>
+                    <EmailLink recipient="rechnung@example.test" subject="RE 2026&001" body="Rechnung RE 2026&001" label="E-Mail-Entwurf öffnen" />
+                </Card>
+            </Grid>
+            <div class="z-no-print"><PrintAction label="Komponentenübersicht drucken" /></div>
+        </section>
     }
 }

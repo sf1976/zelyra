@@ -282,84 +282,80 @@ proxies should also set their own deadlines and connection limits.
 |---|---|---|---|---|
 | `ZELYRA_SCHEMA_SAFETY_MARIADB_URL` | unset; SQLite test only | Process environment only; it is not loaded from a project `.env`. An explicit value enables the additional MariaDB test path. | May contain a username and password; use only a local test database, never print or commit it. | `bash tests/schema-safety-e2e.sh`; GitHub Actions sets a local `zelyra_ci` test URL. The test accepts only `localhost`/loopback and a `zelyra_ci` or `zelyra_test` base database; it creates and drops a separate database. |
 
-## Project-local theme (not a `.env` variable)
+## Integrated UI stylesheet
+
+`ZELYRA_UI_STYLESHEET` selects the locally served stylesheet for Zelyra UI.
+The default is `zelyra`; `tabler` selects the locally bundled Tabler Core CSS;
+a project-relative path such as `assets/tabler.css` is also accepted. Paths
+must end in `.css`, contain UTF-8 text, and must not use symlinks, `.`/`..`
+segments, or files larger than 512 KiB.
+
+| Variable | Default | Precedence | Security classification and effect | Affected commands and checks |
+|---|---|---|---|---|
+| `ZELYRA_UI_STYLESHEET` | `zelyra` | Process environment → project `.env` → `zelyra` | Not a secret; selects the public CSS file (`zelyra`, `tabler`, or a safe relative `.css` path). | `zelyra serve`, generated MariaDB Compose projects; CLI and Web checks for selection, path safety, MIME type, and caching. |
+
+The selection **replaces** the integrated Zelyra UI stylesheet; the two CSS
+frameworks are not loaded together. `tabler` uses the locally bundled MIT-
+licensed Tabler Core CSS. It does not load Tabler JavaScript or make CDN
+requests. A project `zelyra.theme.css` remains separate and is included after
+the selected stylesheet. Custom CSS can make external requests with `@import`
+or `url(...)`; review those references yourself.
+
+Reserved asset routes are `/__zelyra/ui/1.0.6/zelyra-ui.css`,
+`/__zelyra/ui/1.0.6/zelyra-ui.js`, and `/__zelyra/ui/project.css`. Built-in,
+versioned assets are embedded in the Zelyra binary, work offline, and receive
+long-lived caching. Selected project CSS is served with `no-cache`. Zelyra
+includes UI assets only on pages with Zelyra UI markup.
+
+## Project-local theme
 
 `zelyra new` and `zelyra init` create an optional `zelyra.theme.css`.
-`zelyra serve` loads this UTF-8 CSS file from the same directory as the given
-`.zyl` file and applies it after the built-in design. If the file is absent,
-the default design is unchanged. There is no theme-selection variable or
-additional configuration precedence.
+`zelyra serve` loads this regular UTF-8 file from the project directory and
+includes it after the selected stylesheet. Symbolic links and files larger
+than 128 KiB are rejected. The theme changes presentation, not data access,
+CSRF checks, authentication, or authorization.
 
-A project can opt into the bundled Tabler Core 1.6.1 stylesheet by putting
-this marker on its own line in `zelyra.theme.css`:
-
-```css
-/* zelyra:tabler */
-```
-
-Zelyra serves that MIT-licensed stylesheet locally before project CSS; it does
-not use a CDN or load Tabler JavaScript. The 128 KiB limit applies to the
-authored project file, while the built-in stylesheet remains part of the Zelyra
-CLI distribution. This marker changes presentation only.
-
-The file can override these public CSS properties:
+When creating a project color scheme, update related tokens together:
 
 ```css
-:root {
-    --zelyra-color-accent: #7557f6;
-    --zelyra-color-accent-strong: #665ce9;
-    --zelyra-color-accent-text: #634ce0;
-    --zelyra-color-accent-soft: #f8f6ff;
-    --zelyra-color-ink: #172033;
-    --zelyra-color-muted: #738097;
-    --zelyra-color-border: #e8edf4;
-    --zelyra-color-canvas: #f5f7fb;
-    --zelyra-color-surface: #ffffff;
-    --zelyra-color-surface-subtle: #f9faff;
-    --zelyra-color-sidebar-start: #171c32;
-    --zelyra-color-sidebar-middle: #202743;
-    --zelyra-color-sidebar-end: #263958;
-    --zelyra-color-sidebar-foreground: #f6f7ff;
-    --zelyra-color-sidebar-muted: #bac4d8;
-    --zelyra-color-hero-start: #262f52;
-    --zelyra-color-hero-middle: #3e4381;
-    --zelyra-color-hero-end: #6258bb;
-    --zelyra-color-success-background: #effbf7;
-    --zelyra-color-success-border: #bcebdd;
-    --zelyra-color-success-ink: #17654f;
-    --zelyra-color-danger-background: #fff5f5;
-    --zelyra-color-danger-border: #f2c8cc;
-    --zelyra-color-danger-ink: #8b303c;
-    --zelyra-color-focus: #8f7aff;
-    --zelyra-font-body: Inter, system-ui, sans-serif;
-    --zelyra-radius-card: 16px;
-    --zelyra-radius-control: 10px;
-    --zelyra-content-max-width: 1180px;
+:where(html[data-z-ui]) {
+    --z-color-primary: #3157a4;
+    --z-color-on-primary: #ffffff;
+    --z-color-primary-hover: #274889;
+    --z-color-primary-soft: #eaf0fb;
+    --z-color-success: #16734c;
+    --z-color-on-success: #ffffff;
+    --z-color-success-soft: #e9f6ef;
+    --z-color-warning: #795000;
+    --z-color-on-warning: #ffffff;
+    --z-color-warning-soft: #fff4d8;
+    --z-color-danger: #a12e39;
+    --z-color-on-danger: #ffffff;
+    --z-color-danger-soft: #fff0f0;
+    --z-color-canvas: #f4f6fa;
+    --z-color-surface: #ffffff;
+    --z-color-surface-raised: #ffffff;
+    --z-color-text: #182230;
+    --z-color-text-muted: #526174;
+    --z-color-border: #d8e0e9;
+    --z-color-focus: #275fc5;
+    --z-color-link: #244f9a;
+    --z-content-width: 76rem;
+    --z-radius-md: .65rem;
+    --z-radius-lg: 1rem;
 }
 ```
 
-All tokens are optional; unset values keep their built-in defaults. The CSS
-file is a public browser asset, not a secret store. Never put passwords,
-tokens, or confidential comments in it. CSS can trigger browser requests, for
-example through `@import` or `url(...)`; use external references deliberately.
-Zelyra accepts only regular, non-symlink files up to 128 KiB with UTF-8
-content. The file is served unchanged at `/__zelyra/theme.css`; that route is
-reserved while a theme file exists. Access is GET-only and includes
-`X-Content-Type-Options: nosniff` and `Cache-Control: no-cache`.
+Change the primary color and `--z-color-on-primary` together, and verify text
+contrast. Dark themes use their own `--z-color-on-*` pairs. The
+[Zelyra UI handbook](ui.en.md) covers density, content width, and component
+adjustments. The theme file is public browser content, not a secret store; do
+not put credentials or tokens in it.
 
-The boundary between theme CSS and Zelyra views is deliberate: CSS tokens
-change visual properties only, such as colors, typography, spacing, and
-radii. Structure, content, CRUD fields, slots, navigation, forms, CSRF fields,
-and permissions are controlled by declarative Zelyra views and generated
-components. A theme therefore cannot replace data access or security checks.
-The generated `zelyra.theme.css` includes every available token as a
-commented, safe starting point.
-
-Affected: `zelyra serve`, `new`/`init`, and the generated Docker build. The
-Dockerfile template explicitly copies the theme file into the image. CLI tests
-cover absent and valid files, size limit, UTF-8, symlink rejection, generated
-scaffold file, and reserved route; web tests cover inclusion, MIME type, cache
-policy, and request method. No environment variable was added.
+The former `/* zelyra:tabler */` marker no longer selects a stylesheet. Set
+`ZELYRA_UI_STYLESHEET=tabler` to use the supplied Tabler CSS. The `.env` value
+is passed to generated Compose web services; restart a running application to
+apply changes.
 
 `ZELYRA_REF` in the generated Dockerfile is a Docker `ARG` containing a
 published tag, branch, or commit, not a `.env` variable loaded by Zelyra. The

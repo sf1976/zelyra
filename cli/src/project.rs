@@ -63,9 +63,36 @@ struct Loader {
     modules: HashMap<PathBuf, Module>,
     order: Vec<PathBuf>,
     visiting: Vec<PathBuf>,
+    source_overrides: HashMap<PathBuf, String>,
+}
+
+fn builtin_ui_module_path() -> PathBuf {
+    PathBuf::from("<zelyra-ui-stdlib-v1>")
+}
+
+fn is_builtin_ui_module(path: &Path) -> bool {
+    path == builtin_ui_module_path()
 }
 
 pub fn load(entry: &str) -> Result<LoadedProject, ProjectError> {
+    load_with_overrides(entry, HashMap::new())
+}
+
+pub fn load_with_entry_source(entry: &str, source: &str) -> Result<LoadedProject, ProjectError> {
+    let canonical_entry = fs::canonicalize(entry).map_err(|error| ProjectError {
+        code: "E-IO-001",
+        message: format!("cannot read `{entry}`: {error}"),
+        path: entry.to_owned(),
+        span: Span::default(),
+        sources: Box::default(),
+    })?;
+    load_with_overrides(entry, HashMap::from([(canonical_entry, source.to_owned())]))
+}
+
+fn load_with_overrides(
+    entry: &str,
+    source_overrides: HashMap<PathBuf, String>,
+) -> Result<LoadedProject, ProjectError> {
     let entry_path = PathBuf::from(entry);
     let root = entry_path
         .parent()
@@ -101,6 +128,7 @@ pub fn load(entry: &str) -> Result<LoadedProject, ProjectError> {
         modules: HashMap::new(),
         order: Vec::new(),
         visiting: Vec::new(),
+        source_overrides,
     };
     loader.visit(canonical_entry.clone(), None)?;
     let module_paths = loader
@@ -305,21 +333,26 @@ impl Loader {
         path: PathBuf,
         import_site: Option<(String, Span)>,
     ) -> Result<(), ProjectError> {
-        let canonical = fs::canonicalize(&path).map_err(|error| {
-            let (display_path, span) = import_site
-                .clone()
-                .unwrap_or_else(|| (path.to_string_lossy().into_owned(), Span::default()));
-            self.error(
-                "E-MOD-002",
-                format!(
-                    "cannot resolve imported source `{}`: {error}",
-                    path.display()
-                ),
-                display_path,
-                span,
-            )
-        })?;
-        if !canonical.starts_with(&self.root) {
+        let builtin_ui = is_builtin_ui_module(&path);
+        let canonical = if builtin_ui {
+            path.clone()
+        } else {
+            fs::canonicalize(&path).map_err(|error| {
+                let (display_path, span) = import_site
+                    .clone()
+                    .unwrap_or_else(|| (path.to_string_lossy().into_owned(), Span::default()));
+                self.error(
+                    "E-MOD-002",
+                    format!(
+                        "cannot resolve imported source `{}`: {error}",
+                        path.display()
+                    ),
+                    display_path,
+                    span,
+                )
+            })?
+        };
+        if !builtin_ui && !canonical.starts_with(&self.root) {
             let (display_path, span) = import_site
                 .unwrap_or_else(|| (canonical.to_string_lossy().into_owned(), Span::default()));
             return Err(self.error(
@@ -351,20 +384,26 @@ impl Loader {
             return Ok(());
         }
 
-        let text = fs::read_to_string(&canonical).map_err(|error| {
-            let (display_path, span) = import_site
-                .clone()
-                .unwrap_or_else(|| (self.relative(&canonical), Span::default()));
-            self.error(
-                "E-MOD-002",
-                format!(
-                    "cannot read module `{}`: {error}",
-                    self.relative(&canonical)
-                ),
-                display_path,
-                span,
-            )
-        })?;
+        let text = if builtin_ui {
+            include_str!("../assets/stdlib/ui.zyl").to_owned()
+        } else if let Some(source) = self.source_overrides.get(&canonical) {
+            source.clone()
+        } else {
+            fs::read_to_string(&canonical).map_err(|error| {
+                let (display_path, span) = import_site
+                    .clone()
+                    .unwrap_or_else(|| (self.relative(&canonical), Span::default()));
+                self.error(
+                    "E-MOD-002",
+                    format!(
+                        "cannot read module `{}`: {error}",
+                        self.relative(&canonical)
+                    ),
+                    display_path,
+                    span,
+                )
+            })?
+        };
         let source_id = u32::try_from(self.sources.len()).map_err(|_| {
             self.error(
                 "E-MOD-010",
@@ -373,8 +412,14 @@ impl Loader {
                 Span::default(),
             )
         })?;
-        let relative_path = self.relative(&canonical);
-        let display_path = if self.sources.is_empty() {
+        let relative_path = if builtin_ui {
+            "zelyra/ui.zyl".to_owned()
+        } else {
+            self.relative(&canonical)
+        };
+        let display_path = if builtin_ui {
+            relative_path.clone()
+        } else if self.sources.is_empty() {
             import_site
                 .as_ref()
                 .map_or_else(|| relative_path.clone(), |(path, _)| path.clone())
@@ -420,17 +465,19 @@ impl Loader {
         for import in &program.imports {
             let target = self.import_target(import, &display_path)?;
             self.visit(target.clone(), Some((display_path.clone(), import.span)))?;
-            resolved_imports.insert(
-                import.alias.clone(),
-                fs::canonicalize(target).map_err(|error| {
+            let resolved = if is_builtin_ui_module(&target) {
+                target
+            } else {
+                fs::canonicalize(&target).map_err(|error| {
                     self.error(
                         "E-MOD-002",
                         format!("cannot resolve imported module: {error}"),
                         display_path.clone(),
                         import.span,
                     )
-                })?,
-            );
+                })?
+            };
+            resolved_imports.insert(import.alias.clone(), resolved);
         }
         self.visiting.pop();
         // Import statements are compiler metadata; the linked program contains
@@ -450,6 +497,9 @@ impl Loader {
     }
 
     fn import_target(&self, import: &ImportDef, importer: &str) -> Result<PathBuf, ProjectError> {
+        if import.path == "zelyra/ui" {
+            return Ok(builtin_ui_module_path());
+        }
         let relative = Path::new(&import.path);
         let valid_components = relative
             .components()
@@ -472,6 +522,9 @@ impl Loader {
     }
 
     fn relative(&self, path: &Path) -> String {
+        if is_builtin_ui_module(path) {
+            return "zelyra/ui.zyl".into();
+        }
         path.strip_prefix(&self.root)
             .unwrap_or(path)
             .to_string_lossy()

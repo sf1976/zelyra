@@ -308,7 +308,7 @@ try {
     { table: "customers", offset: "25" },
   ]);
   await page.locator("#database-record-previous").click();
-  await page.getByRole("cell", { name: "1" }).waitFor();
+  await page.getByRole("cell", { name: "1", exact: true }).waitFor();
   await page.locator("#schema-column-operation").selectOption("edit");
 
   await page.locator("#chart-name").fill("Umsatz nach Kunde");
@@ -436,6 +436,20 @@ try {
   await page.locator("#assistant-properties-tab").click();
   await page.getByRole("heading", { name: "main.zyl" }).waitFor();
   await page.locator("#assistant-help-tab").click();
+  const codeEditor = page.locator(".cm-content[contenteditable=true]");
+  await codeEditor.fill('import "zelyra/ui" as ui\npage "/" {\n    html {\n        <Button label="Continue" />\n    }\n}\n');
+  const componentLine = page.locator(".cm-line", { hasText: "<Button label" });
+  await componentLine.waitFor();
+  await componentLine.click();
+  await page.keyboard.press("Home");
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
+  await page.locator("#assistant-properties-tab").click();
+  await page.getByRole("heading", { name: "<Button>" }).waitFor();
+  await page.locator("#assistant-ui-appearance").selectOption("danger");
+  await page.locator("#assistant-ui-appearance-apply").click();
+  await page.waitForFunction(() => document.querySelector(".cm-content")?.textContent.includes('appearance="danger"'));
+  await page.getByText(/ohne href|without href/i).waitFor();
   await page.route("**/__zelyra/editor/api/run", (route) => route.fulfill({
     status: 200,
     contentType: "application/json",

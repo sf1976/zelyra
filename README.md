@@ -11,15 +11,15 @@ for database-backed business and web applications. It brings schema-aware SQL,
 forms, CRUD, views, and application logic together while keeping ordinary code
 and native SQL available.
 
-> **Current stable release: 1.0.5 · language compatibility line: 0.1**
+> **Current stable release: 1.0.6 · language compatibility line: 0.1**
 >
 > Compiler checks and the verifier cover defined scopes. They do not prove arbitrary applications correct. Review the documented support and limits for each workflow before deployment.
 
-The current stable [v1.0.5 release](https://github.com/sf1976/zelyra/releases/tag/v1.0.5) builds on the language and platform capabilities introduced in 1.0.0. This release adds Studio-accessible local logs, a safe `zelyra uninstall` command, and a reworked invoice tutorial with date-only input, automatic invoice numbers, a workflow home page, and a detailed bilingual source guide. See the [1.0.5 release notes](docs/release-notes/1.0.5.en.md), the [database support matrix](docs/database-support.en.md), and the [implementation inventory](docs/implemented.en.md).
+The current stable [v1.0.6 release](https://github.com/sf1976/zelyra/releases/tag/v1.0.6) adds Zelyra UI: a local, compiler-checked component system used by generated CRUD, starter projects, Studio properties, and the invoice tutorial. It includes project themes, accessible charts, responsive layouts, and browser print/PDF output. See the [1.0.6 release notes](docs/release-notes/1.0.6.en.md), [UI guide](docs/ui.en.md), [database support matrix](docs/database-support.en.md), and [implementation inventory](docs/implemented.en.md).
 
 The language compatibility line remains `0.1`; compiler releases do not change it automatically. “Prove correctness” is a design goal: the verifier distinguishes proven, runtime-checked, and unproven scopes, but is not a general-purpose theorem prover.
 
-## What Zelyra 1.0.5 provides
+## What Zelyra 1.0.6 provides
 
 Zelyra connects its language, compiler, database, web application, and Studio in
 one workflow. The current release provides:
@@ -34,6 +34,9 @@ one workflow. The current release provides:
   project map, and guided CRUD source preview;
 - Studio-accessible, redacted local JSONL run and preview logs, plus
   `zelyra uninstall` for the active user-owned installation;
+- Zelyra UI with compiler-checked components, generated CRUD styling,
+  light/dark themes, compact density, local asset delivery, print styles, and
+  text-equivalent bar, line, and donut charts;
 - an invoice tutorial with repeatable sample data, available-port selection,
   isolated Compose volumes, a task-focused home page, date-only invoice input,
   server-assigned invoice numbers, and complete English and German guides;
@@ -113,7 +116,8 @@ other settings.
 | Configure a project or its environment | [Environment and configuration reference](docs/env.en.md) · [Deutsche Referenz](docs/env.md) |
 | Understand database support | [Database support matrix](docs/database-support.en.md) · [German](docs/database-support.de.md) |
 | Use the local editor or preview a safe regex edit | [Zelyra Studio](docs/web-editor.en.md) · [Text edit command](docs/text-edit.en.md) |
-| Review current and planned work | [Roadmap](docs/ROADMAP.md) · [1.0.5 release notes](docs/release-notes/1.0.5.en.md) |
+| Use Zelyra UI | [Components, forms, themes, print, charts, and email reference](docs/ui.en.md) · [Deutsch](docs/ui.de.md) |
+| Review current and planned work | [Roadmap](docs/ROADMAP.md) · [1.0.6 release notes](docs/release-notes/1.0.6.en.md) |
 | Read the design direction | [Manifesto](docs/MANIFESTO.md) · [AI-native architecture](docs/architecture/ai-native-development.md) · [Readable regex text-edit design](docs/design/readable-regex-text-editing.en.md) |
 | See exact release changes | [Changelog](CHANGELOG.md) · [GitHub releases](https://github.com/sf1976/zelyra/releases) |
 

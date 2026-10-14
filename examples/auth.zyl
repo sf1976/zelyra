@@ -1,3 +1,5 @@
+import "zelyra/ui" as ui
+
 auth users {
     table: users
     sessions: auth_sessions
@@ -25,12 +27,43 @@ table user_permissions {
     permission: String(100) required
 }
 
+view AdminShell {
+    html {
+        <!doctype html>
+        <html data-z-ui data-zelyra-language>
+            <head>
+                <meta charset="utf-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <title data-zelyra-i18n="auth.admin_title"></title>
+            </head>
+            <body>
+                <AppShell id="admin" navigation_label="Navigation">
+                    <slot name="header"><strong>Zelyra</strong></slot>
+                    <slot name="navigation">
+                        <a href="/admin" data-zelyra-i18n="auth.admin_title"></a>
+                    </slot>
+                    <slot name="footer"><span>Zelyra</span></slot>
+                    <slot />
+                </AppShell>
+            </body>
+        </html>
+    }
+}
+
 page "/admin" {
     requires auth
     permits "admin.view"
+    view: AdminShell
 
     html {
-        <h1 data-zelyra-i18n="auth.page_title"></h1>
-        <p data-zelyra-i18n="auth.page_description"></p>
+        <Container>
+            <PageHeader
+                title="@i18n:auth.page_title"
+                description="@i18n:auth.page_description"
+            />
+            <Card title="@i18n:auth.admin_title">
+                <p data-zelyra-i18n="auth.page_description"></p>
+            </Card>
+        </Container>
     }
 }

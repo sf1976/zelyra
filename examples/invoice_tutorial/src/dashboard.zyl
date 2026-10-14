@@ -15,6 +15,7 @@ struct InvoiceDashboardRow {
 }
 
 tableview InvoiceDashboard {
+    layout: InvoiceTutorialShell
     source sql<InvoiceDashboardRow[]> {
         SELECT
             invoices.id,

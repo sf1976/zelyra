@@ -97,6 +97,17 @@ impl<'a> Parser<'a> {
     }
     fn ident(&mut self, label: &str) -> Result<(String, Span), ParseError> {
         match &self.current().kind {
+            // These contextual words are useful as finite UI enum variants
+            // (for example `enum UiAppearance { default success warning }`)
+            // while remaining keywords everywhere else in the grammar.
+            TokenKind::Default => {
+                let span = self.advance().span;
+                Ok(("default".into(), span))
+            }
+            TokenKind::Success => {
+                let span = self.advance().span;
+                Ok(("success".into(), span))
+            }
             TokenKind::Max => {
                 let span = self.advance().span;
                 Ok(("max".into(), span))
@@ -108,6 +119,30 @@ impl<'a> Parser<'a> {
             TokenKind::Sort => {
                 let span = self.advance().span;
                 Ok(("sort".into(), span))
+            }
+            TokenKind::Columns => {
+                let span = self.advance().span;
+                Ok(("columns".into(), span))
+            }
+            TokenKind::Appearance => {
+                let span = self.advance().span;
+                Ok(("appearance".into(), span))
+            }
+            TokenKind::Placeholder => {
+                let span = self.advance().span;
+                Ok(("placeholder".into(), span))
+            }
+            TokenKind::Readonly => {
+                let span = self.advance().span;
+                Ok(("readonly".into(), span))
+            }
+            TokenKind::Required => {
+                let span = self.advance().span;
+                Ok(("required".into(), span))
+            }
+            TokenKind::Action => {
+                let span = self.advance().span;
+                Ok(("action".into(), span))
             }
             TokenKind::Ident(name) => {
                 let span = self.advance().span;
@@ -1321,6 +1356,7 @@ impl<'a> Parser<'a> {
         let start = self.expect(TokenKind::TableView, "`tableview`")?;
         let (name, _) = self.ident("tableview name")?;
         self.expect(TokenKind::LBrace, "`{` after tableview name")?;
+        let mut layout = None;
         let mut result_type = None;
         let mut source = None;
         let mut columns = Vec::new();
@@ -1332,7 +1368,11 @@ impl<'a> Parser<'a> {
         let mut permissions = Vec::new();
         self.skip_newlines();
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
-            if self.at(&TokenKind::Source) {
+            if self.at(&TokenKind::Layout) {
+                self.advance();
+                self.expect(TokenKind::Colon, "colon after tableview layout")?;
+                layout = Some(self.ident("tableview layout view name")?.0);
+            } else if self.at(&TokenKind::Source) {
                 self.advance();
                 let sql_start = self.expect(TokenKind::Sql, "`sql` after `source`")?;
                 let expression = self.sql_expression(sql_start)?;
@@ -1389,7 +1429,7 @@ impl<'a> Parser<'a> {
                 permissions.push(self.string_value("permission")?);
             } else {
                 return self.error(
-                    "expected source, columns, filter, searchable, sortable, paginated, requires auth, or permits in tableview definition",
+                    "expected layout, source, columns, filter, searchable, sortable, paginated, requires auth, or permits in tableview definition",
                 );
             }
             self.skip_newlines();
@@ -1406,6 +1446,7 @@ impl<'a> Parser<'a> {
         }
         Ok(TableViewDef {
             name,
+            layout,
             result_type,
             source,
             columns,
@@ -1502,6 +1543,7 @@ impl<'a> Parser<'a> {
                         required: false,
                         max: None,
                         widget: None,
+                        appearance: None,
                         readonly: false,
                         span: field_span,
                     });
@@ -1546,6 +1588,7 @@ impl<'a> Parser<'a> {
             required: false,
             max: None,
             widget: None,
+            appearance: None,
             readonly: false,
             span: start,
         };
@@ -1575,6 +1618,11 @@ impl<'a> Parser<'a> {
                     self.advance();
                     self.expect(TokenKind::Colon, "`:` after widget")?;
                     field.widget = Some(self.form_value("widget")?);
+                }
+                TokenKind::Appearance => {
+                    self.advance();
+                    self.expect(TokenKind::Colon, "`:` after appearance")?;
+                    field.appearance = Some(self.form_value("appearance")?);
                 }
                 TokenKind::Readonly => {
                     field.readonly = true;
@@ -3853,6 +3901,7 @@ mod tests {
         let source = r#"
             table customers { id: Id primary auto name: String(100) }
             tableview Customers {
+                layout: BusinessShell
                 source sql<Customer[]> {
                     SELECT id, name FROM customers
                 }
@@ -3867,6 +3916,7 @@ mod tests {
         assert_eq!(program.tableviews.len(), 1);
         let tableview = &program.tableviews[0];
         assert_eq!(tableview.name, "Customers");
+        assert_eq!(tableview.layout.as_deref(), Some("BusinessShell"));
         assert_eq!(
             tableview.result_type,
             Type::Array(Box::new(Type::Named("Customer".into())))

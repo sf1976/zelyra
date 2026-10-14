@@ -125,8 +125,8 @@ jobs:
           cache-dependency-path: editor/package-lock.json
       - name: Install locked browser verification dependencies
         run: npm ci --prefix editor
-      - name: Install headless Chromium
-        run: npx --prefix editor playwright install --with-deps chromium
+      - name: Install headless Chromium, Firefox, and WebKit
+        run: npx --prefix editor playwright install --with-deps chromium firefox webkit
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -471,6 +471,14 @@ jobs:
         env:
           ZELYRA_BIN: target/debug/zelyra
         run: bash ./tests/invoice-studio-cold-compose-e2e.sh
+      - name: Preserve invoice visual regression screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zelyra-invoice-visual-regression
+          path: editor/tests/visual-baselines/*.actual*.png
+          if-no-files-found: ignore
+          retention-days: 7
   mariadb-compatibility:
     name: MariaDB ${{ matrix.version }} compatibility
     runs-on: ubuntu-latest

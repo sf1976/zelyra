@@ -640,6 +640,9 @@ fn feature_settings_accept_known_manifest_values() {
 
 #[test]
 fn project_environment_settings_use_process_then_dotenv_then_fallback() {
+    let _environment = TEST_ENVIRONMENT_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let directory = std::env::temp_dir().join(format!(
         "zelyra-ui-settings-{}-{}",
         std::process::id(),
@@ -683,6 +686,9 @@ fn project_environment_settings_use_process_then_dotenv_then_fallback() {
 
 #[test]
 fn allowed_hosts_use_process_then_project_env_then_loopback_fallback() {
+    let _environment = TEST_ENVIRONMENT_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let directory = std::env::temp_dir().join(format!(
         "zelyra-allowed-hosts-{}-{}",
         std::process::id(),
@@ -763,10 +769,11 @@ fn project_theme_css_is_optional_utf8_and_size_limited() {
     fs::write(&theme_path, tabler_theme).unwrap();
     let resolved_theme = project_theme_css(source_path.to_str().unwrap())
         .unwrap()
-        .expect("Tabler theme should be enabled");
-    assert!(resolved_theme.contains("Tabler v1.6.1"));
+        .expect("project override should be loaded");
+    assert!(!resolved_theme.contains("Tabler v1.6.1"));
+    assert!(!resolved_theme.contains("zelyra:tabler"));
     assert!(resolved_theme.contains("body { color: #223; }"));
-    assert!(resolved_theme.len() > PROJECT_THEME_CSS_MAX_BYTES as usize);
+    assert!(resolved_theme.len() < PROJECT_THEME_CSS_MAX_BYTES as usize);
 
     fs::write(
         &theme_path,
@@ -787,6 +794,133 @@ fn project_theme_css_is_optional_utf8_and_size_limited() {
     assert!(project_theme_css(source_path.to_str().unwrap())
         .unwrap_err()
         .contains("regular project file"));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn ui_stylesheet_selection_supports_default_tabler_and_safe_project_files() {
+    let _environment = TEST_ENVIRONMENT_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let directory = env::temp_dir().join(format!(
+        "zelyra-ui-stylesheet-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(directory.join("assets")).unwrap();
+    let source_path = directory.join("main.zyl");
+    fs::write(&source_path, "fn main() {}\n").unwrap();
+    fs::write(
+        directory.join("assets/custom.css"),
+        "body { color: #123; }\n",
+    )
+    .unwrap();
+    let previous = env::var_os("ZELYRA_UI_STYLESHEET");
+    env::remove_var("ZELYRA_UI_STYLESHEET");
+
+    assert_eq!(
+        project_ui_stylesheet_css(source_path.to_str().unwrap()).unwrap(),
+        None
+    );
+    fs::write(directory.join(".env"), "ZELYRA_UI_STYLESHEET=tabler\n").unwrap();
+    let tabler = project_ui_stylesheet_css(source_path.to_str().unwrap())
+        .unwrap()
+        .expect("Tabler should be bundled");
+    assert!(tabler.contains("Tabler v1.6.1"));
+    fs::write(
+        directory.join(".env"),
+        "ZELYRA_UI_STYLESHEET=assets/custom.css\n",
+    )
+    .unwrap();
+    assert_eq!(
+        project_ui_stylesheet_css(source_path.to_str().unwrap()).unwrap(),
+        Some("body { color: #123; }\n".into())
+    );
+
+    env::set_var("ZELYRA_UI_STYLESHEET", "zelyra");
+    assert_eq!(
+        project_ui_stylesheet_css(source_path.to_str().unwrap()).unwrap(),
+        None
+    );
+    if let Some(previous) = previous {
+        env::set_var("ZELYRA_UI_STYLESHEET", previous);
+    } else {
+        env::remove_var("ZELYRA_UI_STYLESHEET");
+    }
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn project_ui_stylesheet_rejects_traversal_bad_extensions_invalid_utf8_and_large_files() {
+    let directory = env::temp_dir().join(format!(
+        "zelyra-ui-stylesheet-invalid-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&directory).unwrap();
+    let source_path = directory.join("main.zyl");
+    fs::write(&source_path, "fn main() {}\n").unwrap();
+    assert!(
+        load_project_stylesheet(source_path.to_str().unwrap(), "../outside.css")
+            .unwrap_err()
+            .contains("`..`")
+    );
+    assert!(
+        load_project_stylesheet(source_path.to_str().unwrap(), "https://example.test/a.css")
+            .unwrap_err()
+            .contains("project-relative")
+    );
+    assert!(
+        load_project_stylesheet(source_path.to_str().unwrap(), "style.scss")
+            .unwrap_err()
+            .contains("end in `.css`")
+    );
+    fs::write(directory.join("bad.css"), [0xff, 0xfe]).unwrap();
+    assert!(
+        load_project_stylesheet(source_path.to_str().unwrap(), "bad.css")
+            .unwrap_err()
+            .contains("UTF-8")
+    );
+    fs::write(
+        directory.join("large.css"),
+        vec![b'x'; PROJECT_UI_CSS_MAX_BYTES as usize + 1],
+    )
+    .unwrap();
+    assert!(
+        load_project_stylesheet(source_path.to_str().unwrap(), "large.css")
+            .unwrap_err()
+            .contains("512 KiB")
+    );
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn project_ui_stylesheet_rejects_symlinks_in_every_path_segment() {
+    use std::os::unix::fs::symlink;
+
+    let directory = env::temp_dir().join(format!(
+        "zelyra-ui-stylesheet-link-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&directory).unwrap();
+    let source_path = directory.join("main.zyl");
+    fs::write(&source_path, "fn main() {}\n").unwrap();
+    fs::write(directory.join("outside.css"), "private").unwrap();
+    symlink(directory.join("outside.css"), directory.join("style.css")).unwrap();
+    let error = load_project_stylesheet(source_path.to_str().unwrap(), "style.css").unwrap_err();
+    assert!(error.contains("symbolic links"));
+    assert!(!error.contains("private"));
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -1305,6 +1439,118 @@ fn composes_default_component_slots_and_nested_components() {
 }
 
 #[test]
+fn imports_zelyra_ui_and_renders_checked_semantic_appearances() {
+    let directory = std::env::temp_dir().join(format!(
+        "zelyra-ui-component-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&directory).unwrap();
+    let entry = directory.join("main.zyl");
+    fs::write(
+        &entry,
+        r#"
+            import "zelyra/ui" as ui
+            page "/ui" {
+                html {
+                    <PageHeader title="Invoices" description="Open work" />
+                    <Grid columns="two">
+                        <Card title="Ready"><Badge text="Paid" appearance="success" /></Card>
+                        <Card title="Attention"><Badge text="Late" appearance="warning" /></Card>
+                    </Grid>
+                    <Button label="Open report" href="/reports" appearance="danger" />
+                    <Button label="Local action" />
+                    <SubmitButton label="Save" />
+                    <Button label="&lt;script&gt;alert(1)&lt;/script&gt;" href="/reports?next=&lt;script&gt;" />
+                    <TextField id="reference" name="reference" label="Reference" invalid="true" required="false" />
+                }
+            }
+            form Search {
+                field number: String { appearance: warning }
+            }
+        "#,
+    )
+    .unwrap();
+
+    let loaded = project::load(entry.to_str().unwrap()).unwrap();
+    assert!(loaded
+        .program
+        .components
+        .iter()
+        .any(|component| component.name == "PageHeader"));
+    assert!(validate_components("main.zyl", &loaded.program));
+    let html = compose_page_view(&loaded.program, &loaded.program.pages[0]);
+    assert!(html.contains("class=\"z-badge z-badge--success\""));
+    assert!(html.contains("class=\"z-badge z-badge--warning\""));
+    assert!(html.contains("class=\"z-button z-button--danger\" href=\"/reports\""));
+    assert!(html.contains(">Open report</a>"));
+    assert!(html.contains("class=\"z-button z-button--default\" type=\"button\""));
+    assert!(html.contains(">Local action</button>"));
+    assert!(html.contains("class=\"z-button z-button--default\" type=\"submit\""));
+    assert!(html.contains(">Save</button>"));
+    assert!(html.contains("&amp;lt;script&amp;gt;alert(1)&amp;lt;/script&amp;gt;"));
+    assert!(!html.contains("<script>alert(1)</script>"));
+    assert!(html.contains("class=\"z-input z-input--default\" id=\"reference\""));
+    assert!(html.contains("aria-invalid=\"true\""));
+    assert!(!html.contains(
+        "id=\"reference\" name=\"reference\" type=\"text\" value=\"\" placeholder=\"\" required"
+    ));
+    assert!(validate_form_ui_appearances("main.zyl", &loaded.program));
+
+    fs::write(
+        &entry,
+        r#"import "zelyra/ui" as ui
+           page "/bad" { html { <Badge text="No" appearance="neon" /> } }
+           form Search { field number: String { appearance: "primary" } }"#,
+    )
+    .unwrap();
+    let invalid = project::load(entry.to_str().unwrap()).unwrap();
+    assert!(!validate_components("main.zyl", &invalid.program));
+    assert!(!validate_form_ui_appearances("main.zyl", &invalid.program));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn invoice_tutorial_component_gallery_renders_its_charts_and_accessible_tables() {
+    let entry = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("examples/invoice_tutorial/main.zyl");
+    let loaded = project::load(entry.to_str().unwrap()).unwrap();
+    let page = loaded
+        .program
+        .pages
+        .iter()
+        .find(|page| page.path == "/ui/components")
+        .expect("component gallery page");
+    assert!(validate_views(
+        "examples/invoice_tutorial/main.zyl",
+        &loaded.program
+    ));
+    let html = compose_page_view(&loaded.program, page);
+
+    assert!(html.contains("<figure class=\"z-chart z-chart--bar\">"));
+    assert!(html.contains("<figure class=\"z-chart z-chart--line\">"));
+    assert!(html.contains("<figure class=\"z-chart z-chart--donut\">"));
+    assert!(html.contains("<caption>Rechnungsvolumen nach Monat</caption>"));
+    assert!(html.contains("<dialog class=\"z-dialog\""));
+}
+
+#[test]
+fn recursive_component_expansion_is_rejected_with_a_stable_diagnostic() {
+    let source = r#"
+        component First { html { <section><Second /></section> } }
+        component Second { html { <section><First /></section> } }
+        page "/" { html { <First /> } }
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    assert!(!validate_components("recursive-components.zyl", &program));
+}
+
+#[test]
 fn validates_route_values_used_by_typed_view_components() {
     let source = r#"
         component Greeting {
@@ -1430,6 +1676,48 @@ fn rejects_unknown_view_values() {
 }
 
 #[test]
+fn url_encode_component_interpolation_is_typed_and_handles_static_and_dynamic_values() {
+    let source = r#"
+        component EmailLink {
+            props { recipient: String subject: String body: String }
+            html { <a href="mailto:{url_encode:recipient}?subject={url_encode:subject}&amp;body={url_encode:body}">Email</a> }
+        }
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    assert!(validate_components("email.zyl", &program));
+
+    let dynamic = render_view_component(
+        &program.components[0],
+        "recipient=\"{invoice.customer_email}\" subject=\"{invoice.invoice_number}\" body=\"{invoice.invoice_number}\"",
+        None,
+    );
+    assert!(dynamic.contains(
+        "mailto:{url_encode:invoice.customer_email}?subject={url_encode:invoice.invoice_number}&amp;body={url_encode:invoice.invoice_number}"
+    ));
+
+    let static_value = render_view_component(
+        &program.components[0],
+        "recipient=\"rechnung@example.test\" subject=\"RE 2026&001\" body=\"Rechnung RE 2026&001\"",
+        None,
+    );
+    assert!(static_value.contains(
+        "mailto:rechnung%40example.test?subject=RE%202026%26001&amp;body=Rechnung%20RE%202026%26001"
+    ));
+}
+
+#[test]
+fn rejects_url_encode_component_interpolation_on_non_text_values() {
+    let source = r#"
+        component InvalidEmailLink {
+            props { recipient: Int }
+            html { <a href="mailto:{url_encode:recipient}">Email</a> }
+        }
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    assert!(!validate_components("email.zyl", &program));
+}
+
+#[test]
 fn rejects_route_values_with_an_incompatible_component_property_type() {
     let source = r#"
         component Counter {
@@ -1482,6 +1770,42 @@ fn composes_named_component_slots() {
     assert!(html.contains("<header><h1>Dashboard</h1></header>"));
     assert!(html.contains("<main>"));
     assert!(html.contains("<p>Content</p>"));
+    assert!(!html.contains("<slot"));
+}
+
+#[test]
+fn nested_component_slots_remain_owned_by_their_component_inside_views() {
+    let source = r#"
+        component Frame {
+            html {
+                <div><header><slot name="toolbar" /></header><main><slot /></main></div>
+            }
+        }
+        component Card {
+            html { <article><header><slot name="header" /></header><section><slot /></section></article> }
+        }
+        view Shell {
+            html {
+                <Frame>
+                    <slot name="toolbar"><span>Default toolbar</span></slot>
+                    <slot />
+                </Frame>
+            }
+        }
+        page "/nested" {
+            view: Shell
+            html {
+                <Card><slot name="header"><strong>Page heading</strong></slot><p>Page body</p></Card>
+            }
+        }
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    assert!(validate_views("nested.zyl", &program));
+    assert!(validate_components("nested.zyl", &program));
+    let html = compose_page_view(&program, &program.pages[0]);
+    assert!(html.contains("<header><span>Default toolbar</span></header>"));
+    assert!(html.contains("<header><strong>Page heading</strong></header>"));
+    assert!(html.contains("<section><p>Page body</p></section>"));
     assert!(!html.contains("<slot"));
 }
 
@@ -1756,6 +2080,41 @@ fn rejects_unknown_crud_layout_view() {
     "#;
     let program = parse(&lex(source).unwrap()).unwrap();
     assert!(!validate_views("views.zyl", &program));
+}
+
+#[test]
+fn composes_tableview_layout_around_generated_table_content() {
+    let source = r#"
+        view Shell {
+            html { <html><body><header>Invoices</header><main><slot /></main></body></html> }
+        }
+        tableview InvoiceDashboard {
+            layout: Shell
+            source sql<Invoice[]> { SELECT id, invoice_number FROM invoices }
+            columns { id invoice_number }
+        }
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+
+    assert!(validate_views("dashboard.zyl", &program));
+    let layout = tableview_layout_html(&program, &program.tableviews[0]).unwrap();
+    assert!(layout.contains("<header>Invoices</header>"));
+    assert!(layout.contains(CRUD_LAYOUT_CONTENT_MARKER));
+    assert!(!layout.contains("<slot"));
+}
+
+#[test]
+fn rejects_unknown_tableview_layout_view() {
+    let source = r#"
+        tableview InvoiceDashboard {
+            layout: MissingShell
+            source sql<Invoice[]> { SELECT id, invoice_number FROM invoices }
+            columns { id invoice_number }
+        }
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+
+    assert!(!validate_views("dashboard.zyl", &program));
 }
 
 #[test]
@@ -2860,42 +3219,28 @@ fn generates_project_with_target_release_version() {
     assert!(!dockerfile.contains("git clone --depth 1 --branch"));
     assert!(project_config.contains(&format!("version = \"{}\"", env!("CARGO_PKG_VERSION"))));
     assert!(project_config.contains("console = false"));
-    assert!(dockerfile.contains("COPY main.zyl zelyra.toml zelyra.theme.css ./"));
-    assert!(dockerfile.contains("COPY src ./src"));
+    assert!(dockerfile.contains("COPY . ./"));
+    let compose = fs::read_to_string(path.join("docker-compose.mariadb.yml")).unwrap();
+    assert!(compose.contains("ZELYRA_UI_STYLESHEET: ${ZELYRA_UI_STYLESHEET:-zelyra}"));
     assert!(path.join("src/.keep").is_file());
-    assert!(dockerfile.contains("COPY locales ./locales"));
     assert!(path.join("locales/de.json").is_file());
     assert!(path.join("locales/en.json").is_file());
     for token in [
-        "--zelyra-color-accent",
-        "--zelyra-color-accent-strong",
-        "--zelyra-color-accent-text",
-        "--zelyra-color-accent-soft",
-        "--zelyra-color-ink",
-        "--zelyra-color-muted",
-        "--zelyra-color-border",
-        "--zelyra-color-canvas",
-        "--zelyra-color-surface",
-        "--zelyra-color-surface-subtle",
-        "--zelyra-color-sidebar-start",
-        "--zelyra-color-sidebar-middle",
-        "--zelyra-color-sidebar-end",
-        "--zelyra-color-sidebar-foreground",
-        "--zelyra-color-sidebar-muted",
-        "--zelyra-color-hero-start",
-        "--zelyra-color-hero-middle",
-        "--zelyra-color-hero-end",
-        "--zelyra-color-success-background",
-        "--zelyra-color-success-border",
-        "--zelyra-color-success-ink",
-        "--zelyra-color-danger-background",
-        "--zelyra-color-danger-border",
-        "--zelyra-color-danger-ink",
-        "--zelyra-color-focus",
-        "--zelyra-font-body",
-        "--zelyra-radius-card",
-        "--zelyra-radius-control",
-        "--zelyra-content-max-width",
+        "--z-color-primary",
+        "--z-color-on-primary",
+        "--z-color-primary-hover",
+        "--z-color-primary-soft",
+        "--z-color-success",
+        "--z-color-warning",
+        "--z-color-danger",
+        "--z-color-canvas",
+        "--z-color-surface",
+        "--z-color-text",
+        "--z-color-text-muted",
+        "--z-color-border",
+        "--z-color-focus",
+        "--z-content-width",
+        "--z-radius-md",
     ] {
         assert!(
             project_theme.contains(token),

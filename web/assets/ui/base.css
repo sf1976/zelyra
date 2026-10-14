@@ -1,0 +1,105 @@
+@layer base {
+  :where(html[data-z-ui]) {
+    color-scheme: light;
+    --z-color-primary: #3157a4;
+    --z-color-on-primary: #ffffff;
+    --z-color-primary-hover: #274889;
+    --z-color-primary-soft: #eaf0fb;
+    --z-color-success: #16734c;
+    --z-color-on-success: #ffffff;
+    --z-color-success-soft: #e9f6ef;
+    --z-color-warning: #795000;
+    --z-color-on-warning: #ffffff;
+    --z-color-warning-soft: #fff4d8;
+    --z-color-danger: #a12e39;
+    --z-color-on-danger: #ffffff;
+    --z-color-danger-soft: #fff0f0;
+    --z-color-info: #175e83;
+    --z-color-on-info: #ffffff;
+    --z-color-info-soft: #eaf5fa;
+    --z-color-canvas: #f4f6fa;
+    --z-color-surface: #ffffff;
+    --z-color-surface-raised: #ffffff;
+    --z-color-text: #182230;
+    --z-color-text-muted: #526174;
+    --z-color-border: #d8e0e9;
+    --z-color-focus: #275fc5;
+    --z-color-link: #244f9a;
+    --z-font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+    --z-font-mono: ui-monospace, "Cascadia Code", "Segoe UI Mono", monospace;
+    --z-font-size: 1rem;
+    --z-line-height: 1.5;
+    --z-space-1: .25rem;
+    --z-space-2: .5rem;
+    --z-space-3: .75rem;
+    --z-space-4: 1rem;
+    --z-space-5: 1.25rem;
+    --z-space-6: 1.5rem;
+    --z-space-8: 2rem;
+    --z-radius-sm: .35rem;
+    --z-radius-md: .65rem;
+    --z-radius-lg: 1rem;
+    --z-radius-pill: 999px;
+    --z-shadow-sm: 0 1px 3px rgb(20 34 54 / 8%);
+    --z-shadow-md: 0 12px 32px rgb(20 34 54 / 12%);
+    --z-control-height: 2.75rem;
+    --z-content-width: 76rem;
+    --z-layer-sticky: 10;
+    --z-layer-dropdown: 20;
+    --z-layer-dialog: 100;
+    --z-layer-toast: 120;
+    --z-motion-fast: 140ms;
+    --z-motion-normal: 220ms;
+    font-family: var(--z-font-sans);
+    font-size: var(--z-font-size);
+    line-height: var(--z-line-height);
+    color: var(--z-color-text);
+    background: var(--z-color-canvas);
+  }
+
+  :where(html[data-z-ui] body) {
+    min-width: 0;
+    font-family: var(--z-font-sans);
+    font-size: var(--z-font-size);
+    line-height: var(--z-line-height);
+    color: var(--z-color-text);
+    background: var(--z-color-canvas);
+  }
+
+  :where(html[data-z-ui] a) {
+    color: var(--z-color-link);
+    text-decoration-thickness: .08em;
+    text-underline-offset: .16em;
+  }
+
+  :where(html[data-z-ui] button,
+    html[data-z-ui] input,
+    html[data-z-ui] select,
+    html[data-z-ui] textarea) {
+    font: inherit;
+  }
+
+  :where(html[data-z-ui] button,
+    html[data-z-ui] a,
+    html[data-z-ui] input,
+    html[data-z-ui] select,
+    html[data-z-ui] textarea,
+    html[data-z-ui] summary,
+    html[data-z-ui] [tabindex]):focus-visible {
+    outline: 3px solid var(--z-color-focus);
+    outline-offset: 3px;
+  }
+
+  :where(html[data-z-ui] h1, html[data-z-ui] h2, html[data-z-ui] h3, html[data-z-ui] h4) {
+    color: var(--z-color-text);
+    line-height: 1.25;
+    hyphens: auto;
+    overflow-wrap: anywhere;
+  }
+
+  :where(html[data-z-ui] h1) { font-size: clamp(1.5rem, 7vw, 2rem); }
+
+  :where(html[data-z-ui] p) { max-width: 75ch; }
+  :where(html[data-z-ui] [hidden]) { display: none; }
+  :where(html[data-z-ui] ::selection) { color: var(--z-color-text); background: var(--z-color-primary-soft); }
+}
