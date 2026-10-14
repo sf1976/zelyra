@@ -162,6 +162,60 @@ assert_file_contains() {
     fi
 }
 
+assert_customer_relationship_selector() {
+    local file="$1"
+    local customer_id="$2"
+    if ! python3 - "${file}" "${customer_id}" <<'PY'
+from html.parser import HTMLParser
+import sys
+
+expected_customer_id = sys.argv[2]
+
+class RelationshipSelectorParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.current = None
+        self.matches = []
+
+    def handle_starttag(self, tag, attributes):
+        attrs = dict(attributes)
+        if tag == "select":
+            self.current = attrs
+            self.current["has_customer_option"] = False
+        elif tag == "option" and self.current is not None:
+            if attrs.get("value") == expected_customer_id:
+                self.current["has_customer_option"] = True
+
+    def handle_endtag(self, tag):
+        if tag == "select" and self.current is not None:
+            if self.current.get("id") == "customer" and self.current.get("name") == "customer":
+                self.matches.append(self.current)
+            self.current = None
+
+parser = RelationshipSelectorParser()
+with open(sys.argv[1], encoding="utf-8") as rendered_form:
+    parser.feed(rendered_form.read())
+
+if not any(
+    "required" in selector
+    and "z-select" in selector.get("class", "").split()
+    and selector["has_customer_option"]
+    for selector in parser.matches
+):
+    print(
+        "error: required Zelyra UI customer selector with the new customer option "
+        f"was missing from {sys.argv[1]}",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+PY
+    then
+        echo "rendered headings:" >&2
+        grep -o '<h1[^>]*>[^<]*</h1>' "${file}" | head -n 5 >&2 || true
+        return 1
+    fi
+}
+
 echo "[3/5] running the complete first-run setup"
 if [[ -n "${zelyra_ref}" ]]; then
     echo "building the test runtime from the requested Zelyra ref without cached compiler layers"
@@ -623,11 +677,7 @@ assert_bundle_crud "${host_port}" customers name "${customer_name}" "${customer_
 customer_id="${last_crud_record_id}"
 curl --silent --show-error --fail --cookie "${admin_cookie}" "http://${address}/orders/new" \
     -o "${project_root}/order-form.html"
-assert_file_contains "${project_root}/order-form.html" \
-    '<select id="customer" name="customer" required>' \
-    "customer relationship selector on the order form"
-assert_file_contains "${project_root}/order-form.html" "value=\"${customer_id}\"" \
-    "newly created customer option on the order form"
+assert_customer_relationship_selector "${project_root}/order-form.html" "${customer_id}"
 order_csrf="$(extract_csrf_token "${project_root}/order-form.html")"
 order_number="E2E-MODULE-ORDER-$$"
 status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
