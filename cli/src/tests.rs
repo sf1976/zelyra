@@ -3056,11 +3056,20 @@ fn schema_setup_retries_only_transient_database_startup_errors() {
     assert!(schema_setup_error_is_transient(
         "Database connection timed out while MariaDB was starting"
     ));
+    assert!(schema_setup_error_is_transient(
+        "error[E-DB-005]: MySqlError { ERROR 1045 (28000): Access denied for user 'zelyra'@'172.20.0.1' (using password: YES) }"
+    ));
+    assert!(schema_setup_error_is_transient(
+        "error[E-DB-005]: MySqlError { ERROR 1049 (42000): Unknown database 'invoice_dev' }"
+    ));
+    assert!(schema_setup_error_is_transient(
+        "Access denied for user zelyra"
+    ));
     assert!(!schema_setup_error_is_transient(
         "error[E-DB-004]: schema changes requiring review were refused"
     ));
     assert!(!schema_setup_error_is_transient(
-        "Access denied for user zelyra"
+        "error[E-DB-005]: cannot require `users.email` because existing rows contain NULL values"
     ));
 }
 

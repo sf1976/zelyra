@@ -4447,6 +4447,9 @@ fn expand_database_host_port(url: &str, port: &str) -> String {
 
 fn schema_setup_error_is_transient(details: &str) -> bool {
     let details = details.to_ascii_lowercase();
+    if details.contains("error[e-db-004]") {
+        return false;
+    }
     [
         "connection refused",
         "connectionrefused",
@@ -4464,6 +4467,14 @@ fn schema_setup_error_is_transient(details: &str) -> bool {
         "timed out",
         "timeout while connecting",
         "server has gone away",
+        "access denied",
+        "error 1045",
+        "unknown database",
+        "error 1049",
+        "host is not allowed to connect",
+        "error 1130",
+        "server is starting up",
+        "wsrep has not yet prepared node",
     ]
     .iter()
     .any(|marker| details.contains(marker))
