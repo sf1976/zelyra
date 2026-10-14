@@ -403,8 +403,13 @@ ZELYRA_DB_HOST_PORT=3308
 `zelyra new`, `zelyra init` und `zelyra setup` wählen freie veröffentlichte
 Host-Ports, wenn sie eine neue `.env` erzeugen und ein Standardport belegt ist.
 `setup` akzeptiert `--host-port` und `--db-host-port` für verbindliche Werte.
-Eine vorhandene `.env` wird nie verändert; bei einem laufenden Projekt muss
-sie ausdrücklich von Hand angepasst werden.
+Meldet Docker Compose beim Start trotz Vorprüfung einen belegten Datenbank-
+oder Webport, wählt `zelyra setup` innerhalb der bestehenden lokalen `.env`
+begrenzt einen freien Folgeport, aktualisiert bei MariaDB auch passende lokale
+Datenbank-URLs und wiederholt den Start. Andere `.env`-Werte und Datenbank-
+Volumes bleiben erhalten. Ein prozessweit gesetztes `ZELYRA_HOST_PORT` oder
+`ZELYRA_DB_HOST_PORT` hat Vorrang; Zelyra ändert diese explizite Vorgabe nicht
+und meldet, dass sie angepasst oder entfernt werden muss.
 
 Danach:
 

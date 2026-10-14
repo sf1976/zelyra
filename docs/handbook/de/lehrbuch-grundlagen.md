@@ -712,6 +712,9 @@ Programme bestehen nicht nur aus festen Werten, sondern berechnen Ergebnisse, tr
 - `||` (ODER): Wahr, wenn **mindestens eine** Seite wahr ist.
 - `!` (NICHT): Kehrt einen Wahrheitswert um (`!true == false`).
 
+**Pipeline-Operator (Neu in 1.0.3):**
+- `|>` (Forward-Pipeline): Reicht das Ergebnis des linken Ausdrucks als erstes Argument an den nächsten Funktionsaufruf weiter. Das verwandelt geschachtelte Aufrufe `f(g(x))` in eine von links nach rechts lesbare Datenkette: `x |> g() |> f()`.
+
 ### 4. Kleine, aufeinander aufbauende Beispiele
 
 ```zelyra
@@ -730,6 +733,10 @@ fn main() {
     hat_puffer = puffer > 0
     ist_kritisch = gesamtzeit > 120 && !hat_puffer
     print(ist_kritisch)
+
+    // Pipeline-Verarbeitung mit |>
+    sauberer_text = "  zelyra 1.0.3  " |> text_trim() |> text_to_upper()
+    print(sauberer_text)
 }
 ```
 
@@ -979,19 +986,24 @@ fn main() {
 ```
 
 **Mehrstufige Entscheidung (`else if`):**
+In Zelyra 1.0.3 kannst du alternative Bedingungen direkt mit `else if` aneinanderhängen, ohne Blöcke künstlich tief verschachteln zu müssen:
+
 ```zelyra
-fn bewerte_prioritaet(stufe: Int) -> String {
-    match stufe {
-        1 => { return "SEHR DRINGEND" }
-        2 => { return "NORMAL" }
-        3 => { return "NIEDRIG" }
-        _ => { return "UNBEKANNT" }
+fn bewerte_prioritaet(punkte: Int) -> String {
+    if punkte >= 90 {
+        return "SEHR DRINGEND"
+    } else if punkte >= 70 {
+        return "NORMAL"
+    } else if punkte >= 40 {
+        return "NIEDRIG"
+    } else {
+        return "UNBEKANNT"
     }
 }
 
 fn main() {
-    print(bewerte_prioritaet(1))
-    print(bewerte_prioritaet(2))
+    print(bewerte_prioritaet(95))
+    print(bewerte_prioritaet(50))
 }
 ```
 
@@ -1552,7 +1564,7 @@ fn main() {
 }
 ```
 
-**Beispiel 4: Prüfen der Existenz in einer Map**
+**Beispiel 4: Prüfen der Existenz und Standardwerte in einer Map**
 ```zelyra
 fn main() {
     einstellungen: Map<String, Bool> = Map {
@@ -1560,9 +1572,42 @@ fn main() {
         "benachrichtigungen": false
     }
     
-    if contains(einstellungen, "dunkelmodus") {
-        print("Dunkelmodus-Einstellung ist konfiguriert.")
+    // has_key prüft direkt auf Vorhandensein
+    if has_key(einstellungen, "dunkelmodus") {
+        print("Dunkelmodus ist vorhanden.")
     }
+
+    // get_or liefert einen Fallback, falls der Schlüssel fehlt
+    auto_save = get_or(einstellungen, "auto_save", true)
+    print(auto_save)
+}
+```
+
+**Beispiel 5: Iterieren über Maps mit entries() (Neu in 1.0.3)**
+Mit `entries(map)` erhältst du ein Array aus `(Schlüssel, Wert)`-Paaren, die sich direkt in Schleifen durchlaufen lassen:
+```zelyra
+fn main() {
+    preise: Map<String, Int> = Map {
+        "Kaffee": 3
+        "Tee": 2
+    }
+    for (artikel, preis) in entries(preise) {
+        print(artikel + ": " + to_string(preis) + " Euro")
+    }
+}
+```
+
+**Beispiel 6: Erweiterte Array-Operationen (Sortieren, Eindeutigkeit, Chunks)**
+```zelyra
+fn main() {
+    werte: Int[] = [5, 2, 8, 2, 1, 9]
+    sortiert = sort(werte)
+    ohne_duplikate = unique(sortiert)
+    print(ohne_duplikate)
+
+    // Summe und Durchschnitt
+    summe = array_sum(werte)
+    print("Summe: " + to_string(summe))
 }
 ```
 
@@ -2865,7 +2910,34 @@ fn main() uses FileSystem {
 }
 ```
 
-**Beispiel 4: JSON- und Datei-Fehler verständlich behandeln**
+**Beispiel 4: Pfadverarbeitung und Dateiüberprüfung (Neu in 1.0.3)**
+```zelyra
+fn datei_inspektion(ordner: String, dateiname: String) uses FileSystem {
+    // Pfade plattformunabhaengig verbinden (benoetigt keine Capability)
+    voller_pfad = path_join(ordner, dateiname)
+    print("Ziel: " + voller_pfad)
+    print("Dateiname: " + path_filename(voller_pfad))
+    print("Endung: " + path_extension(voller_pfad))
+
+    // Existenz und Groesse pruefen (benoetigt uses FileSystem)
+    if file_exists(voller_pfad) {
+        match file_size(voller_pfad) {
+            Ok(bytes) => {
+                print("Dateigroesse: " + to_string(bytes) + " Bytes")
+            }
+            Err(e) => {
+                print("Fehler beim Lesen der Groesse: " + e)
+            }
+        }
+    }
+}
+
+fn main() uses FileSystem {
+    datei_inspektion(".", "zelyra.toml")
+}
+```
+
+**Beispiel 5: JSON- und Datei-Fehler verständlich behandeln**
 
 `read_text` und `json_decode` melden Fehler direkt als Laufzeitfehler. Wenn eine
 Anwendung auf fehlende oder beschädigte Dateien reagieren soll, verwende
@@ -3023,6 +3095,49 @@ fn main() {
     ids: Int[] = [101, 102, 103]
     json_text = exportiere_ids_als_json(ids)
     print("JSON-Ausgabe: " + json_text)
+}
+```
+
+**Beispiel 4: Kalenderrechnung und Datumsvergleiche (Neu in 1.0.3)**
+```zelyra
+fn fristen_berechnen() {
+    start = 2026-10-01
+    frist = date_add_days(start, 14)
+    heute = 2026-10-14
+
+    verbleibend = date_diff_days(heute, frist)
+    print("Verbleibende Tage: " + to_string(verbleibend))
+
+    if is_after(heute, frist) {
+        print("Frist ueberschritten!")
+    } else {
+        print("Frist eingehalten.")
+    }
+}
+
+fn main() {
+    fristen_berechnen()
+}
+```
+
+**Beispiel 5: Kryptografie, Web-Encodings und UUIDs (Neu in 1.0.3)**
+```zelyra
+fn sicherheits_workflow() uses Random {
+    id = uuid_v4()
+    print("Transaktions-UUID: " + id)
+
+    hash = hash_sha256("geheim123")
+    print("SHA-256: " + hash)
+
+    base64 = base64_encode("Zelyra Daten")
+    print("Base64: " + base64)
+
+    url_param = url_encode("Kunde & Partner GmbH")
+    print("URL-Parameter: " + url_param)
+}
+
+fn main() uses Random {
+    sicherheits_workflow()
 }
 ```
 

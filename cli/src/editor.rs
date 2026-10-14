@@ -1254,13 +1254,16 @@ fn create_project_database(
             "Studio database creation currently supports MariaDB and MySQL projects with existing connection configuration".into(),
         ));
     }
-    let database_url = super::database_url_for_project(&state.root, Some(database.name.as_str()))
-        .map_err(|_| (422, "the project environment file could not be read".into()))?
-        .ok_or((
-            422,
-            "configure the MariaDB or MySQL URL in the process environment or project .env file first"
-                .into(),
-        ))?;
+    let mut database_url = super::database_url_for_project(
+        &state.root,
+        Some(database.name.as_str()),
+    )
+    .map_err(|_| (422, "the project environment file could not be read".into()))?
+    .ok_or((
+        422,
+        "configure the MariaDB or MySQL URL in the process environment or project .env file first"
+            .into(),
+    ))?;
     let has_compose_file = state.root.join("docker-compose.mariadb.yml").is_file();
     let has_process_database_url_override =
         super::database_url_from_environment(Some(database.name.as_str())).is_some();
@@ -1291,7 +1294,20 @@ fn create_project_database(
         None
     };
     if compose_database_url.is_some() {
-        let _ = start_mariadb_compose(&state.root, true);
+        start_mariadb_compose(&state.root, true).map_err(|error| {
+            let secrets = editor_secret_values(state);
+            (502, redact_editor_secrets(error, &secrets))
+        })?;
+        database_url = super::database_url_for_project(
+            &state.root,
+            Some(database.name.as_str()),
+        )
+        .map_err(|_| (422, "the project environment file could not be read".into()))?
+        .ok_or((
+            422,
+            "configure the MariaDB or MySQL URL in the process environment or project .env file first"
+                .into(),
+        ))?;
     }
     let root_password = env::var("MARIADB_ROOT_PASSWORD").ok().or_else(|| {
         let environment_file = state.root.join(".env");
@@ -1329,7 +1345,6 @@ fn create_project_database(
             ));
         }
     }
-    let _ = run_local_schema_setup(&state.root, &database_url);
     let target_database = database.database.clone().or_else(|| {
         url::Url::parse(&database_url)
             .ok()
@@ -3497,20 +3512,46 @@ fn start_editor_web_app(
     } else {
         None
     };
-    if let Some(compose_database_url) = compose_database_url {
+    if compose_database_url.is_some() {
         start_mariadb_compose(&state.root, true).map_err(|error| {
             let secrets = editor_secret_values(state);
             (502, redact_editor_secrets(error, &secrets))
         })?;
+        let project_database_url = super::database_url_for_project(&state.root, database_name)
+            .map_err(|_| (422, "the project environment file could not be read".into()))?;
+        let project_file_database_url = super::project_file_database_url_for_compose(
+            &state.root,
+            database_name,
+            has_process_database_url_override,
+        )
+        .map_err(|_| (422, "the project environment file could not be read".into()))?;
+        let project_host_port = if project_file_database_url.is_some() {
+            super::project_database_host_port(&state.root)
+                .map_err(|_| (422, "the project environment file could not be read".into()))?
+        } else {
+            String::new()
+        };
+        let compose_database_url = super::project_compose_database_url(
+            project_database_url.as_deref(),
+            project_file_database_url.as_deref(),
+            &project_host_port,
+            has_process_database_url_override,
+        );
         // Apply a MariaDB schema only to the matched project-local service.
         // Retrying transient startup disconnects avoids launching the app
         // against a half-ready cold database.
         if should_setup_local_schema {
-            run_local_schema_setup(&state.root, compose_database_url).map_err(|error| {
-                let secrets = editor_secret_values(state);
-                (502, redact_editor_secrets(error, &secrets))
-            })?;
+            if let Some(compose_database_url) = compose_database_url {
+                run_local_schema_setup(&state.root, compose_database_url).map_err(|error| {
+                    let secrets = editor_secret_values(state);
+                    (502, redact_editor_secrets(error, &secrets))
+                })?;
+            }
         }
+        super::seed_invoice_tutorial_database(&state.root).map_err(|error| {
+            let secrets = editor_secret_values(state);
+            (502, redact_editor_secrets(error, &secrets))
+        })?;
     }
 
     let listener = std::net::TcpListener::bind("127.0.0.1:0")

@@ -174,41 +174,149 @@ page "/items" {
 
 ---
 
-## Anhang D: Die Standardbibliothek im Überblick
+## Anhang D: Die Standardbibliothek im Überblick (Zelyra 1.0.3)
 
-### Grundfunktionen (ohne Capabilities)
-- `print(wert)`: Gibt einen beliebigen Wert auf der Standardausgabe aus.
-- `len(array)`: Liefert die Anzahl der Elemente in einem Array als `Int`.
-- `append(array, element)`: Erzeugt ein neues Array mit angehängtem Wert.
-- `contains(array, element)` -> `Bool`: Prüft, ob ein Wert im Array enthalten ist.
-- `first(array)` -> `Option<T>`: Liefert das erste Element oder `None`.
-- `last(array)` -> `Option<T>`: Liefert das letzte Element oder `None`.
-- `get(map, key)` -> `Option<V>`: Schlägt einen Schlüssel in einer `Map<K, V>` nach.
-- `put(map, key, value)` -> `Map<K, V>`: Fügt ein Schlüssel-Wert-Paar hinzu oder aktualisiert es funktional.
-- `keys(map)` -> `K[]`: Liefert alle Schlüssel einer Map als Array.
-- `values(map)` -> `V[]`: Liefert alle Werte einer Map als Array.
-- `Some(wert)` / `None`: Konstruktoren für den Typ `Option<T>`.
-- `Ok(wert)` / `Err(fehler)`: Konstruktoren für den Typ `Result<T, E>`.
-- `json_encode(wert)` -> `String`: Wandelt Daten in JSON um.
-- `json_decode<T>(text)` -> `T`: Parst typisiertes JSON; ungültige Daten werden als Laufzeitfehler gemeldet.
+Zelyra 1.0.3 erweitert die Standardbibliothek um über 55 eingebaute Funktionen für Mathematik, Textverarbeitung, Sammlungsoperationen, Mengen, Maps, Datumsrechnung, Fehlerkontrolle, Web-Sicherheit, Encodings und das Dateisystem. Sämtliche zustandslosen Funktionen sind ohne Capabilities direkt aufrufbar und unterstützen den Pipeline-Operator `|>`. Funktionen, die auf externe Systemressourcen zugreifen (z. B. Zufall, Dateisystem, Uhrzeit), erfordern wie gewohnt die entsprechende Capability.
 
-### Funktionen mit Capabilities
+### 1. Mathematik & Numerik (ohne Capabilities)
+- `abs(x: Int | Float | Decimal) -> Int | Float | Decimal`: Liefert den absoluten Betrag einer Zahl.
+- `min(a, b) -> a | b`: Liefert das Minimum zweier Zahlen oder Zeichenketten.
+- `max(a, b) -> a | b`: Liefert das Maximum zweier Zahlen oder Zeichenketten.
+- `clamp(val, min_val, max_val)`: Begrenzt `val` auf das geschlossene Intervall `[min_val, max_val]`.
+- `sqrt(x: Float) -> Float`: Berechnet die Quadratwurzel einer nicht-negativen Fließkommazahl.
+- `pow(base: Float, exp: Float) -> Float`: Berechnet die Potenz `base ^ exp`.
+- `floor(x: Float) -> Float`: Rundet auf die nächstkleinere ganze Zahl ab.
+- `ceil(x: Float) -> Float`: Rundet auf die nächstgrößere ganze Zahl auf.
+- `round(x: Float, decimals: Int) -> Float`: Rundet kaufmännisch auf die angegebene Anzahl an Nachkommastellen.
+
+### 2. Strings & Textverarbeitung
+- `len(text: String) -> Int`: Liefert die Anzahl der Unicode-Codepoints im String.
+- `text_to_lower(text: String) -> String`: Konvertiert den gesamten Text in Kleinbuchstaben.
+- `text_to_upper(text: String) -> String`: Konvertiert den gesamten Text in Großbuchstaben.
+- `text_starts_with(text: String, prefix: String) -> Bool`: Prüft, ob der Text mit `prefix` beginnt.
+- `text_ends_with(text: String, suffix: String) -> Bool`: Prüft, ob der Text mit `suffix` endet.
+- `text_replace(text: String, search: String, replacement: String) -> String`: Ersetzt alle Vorkommen von `search` durch `replacement`.
+- `text_split(text: String, delimiter: String) -> String[]` (Alias: `split`): Zerlegt den Text am Trennzeichen in ein Array.
+- `text_pad_left(text: String, target_len: Int, pad_char: String) -> String`: Füllt den Text links bis zur Ziellänge auf.
+- `text_pad_right(text: String, target_len: Int, pad_char: String) -> String`: Füllt den Text rechts bis zur Ziellänge auf.
+- `text_index_of(text: String, sub: String) -> Option<Int>`: Liefert die nullbasierte Position des ersten Vorkommens oder `None`.
+- `text_repeat(text: String, count: Int) -> String`: Wiederholt den Text `count`-mal.
+- `text_is_empty(text: String) -> Bool`: Prüft, ob der Text exakt die Länge 0 hat.
+- `text_is_blank(text: String) -> Bool`: Prüft, ob der Text nach Entfernung von Whitespace leer ist.
+- `text_capitalize(text: String) -> String`: Wandelt das erste Zeichen in einen Großbuchstaben um.
+- `text_substring(text: String, start: Int, length: Int) -> String`: Schneidet einen Teilstring ab Position `start` mit Maximallänge `length` aus.
+- `text_trim(text: String) -> String`: Entfernt führende und nachgestellte Whitespaces.
+- `text_trim_start(text: String) -> String`: Entfernt führende Whitespaces.
+- `text_trim_end(text: String) -> String`: Entfernt nachgestellte Whitespaces.
+- `text_contains(text: String, sub: String) -> Bool`: Prüft, ob `sub` im Text enthalten ist.
+- `text_chars(text: String) -> String[]`: Zerlegt den Text in einzelne Zeichen als Array.
+
+### 3. Arrays & Sammlungen
+- `len(array: T[]) -> Int`: Liefert die Anzahl der Elemente im Array.
+- `append(array: T[], element: T) -> T[]`: Liefert ein neues Array mit angehängtem Element.
+- `concat(a: T[], b: T[]) -> T[]`: Verbindet zwei Arrays desselben Typs.
+- `contains(array: T[], element: T) -> Bool`: Prüft, ob das Element im Array vorhanden ist.
+- `first(array: T[]) -> Option<T>`: Liefert das erste Element oder `None` bei leerem Array.
+- `last(array: T[]) -> Option<T>`: Liefert das letzte Element oder `None` bei leerem Array.
+- `sort(array: T[]) -> T[]`: Sortiert die Elemente aufsteigend.
+- `sort_desc(array: T[]) -> T[]`: Sortiert die Elemente absteigend.
+- `reverse(array: T[]) -> T[]`: Kehrt die Reihenfolge der Elemente um.
+- `slice(array: T[], start: Int, length: Int) -> T[]`: Extrahiert einen Teilbereich des Arrays.
+- `join(array: T[], delimiter: String) -> String`: Verbindet alle Elemente als String mit dem Trennzeichen.
+- `unique(array: T[]) -> T[]` (Alias: `dedup`): Liefert ein neues Array ohne Duplikate unter Beibehaltung der ersten Vorkommen.
+- `array_sum(array: T[]) -> T`: Berechnet die Summe aller numerischen Elemente (`Int`, `Float`, `Decimal`).
+- `avg(array: T[]) -> Float | Decimal`: Berechnet den arithmetischen Mittelwert aller Elemente.
+- `min_of(array: T[]) -> Option<T>`: Liefert den kleinsten Wert im Array oder `None` bei leerem Array.
+- `max_of(array: T[]) -> Option<T>`: Liefert den größten Wert im Array oder `None` bei leerem Array.
+- `chunk(array: T[], size: Int) -> T[][]`: Teilt das Array in gleich große Teil-Arrays auf.
+- `flatten(array: T[][]) -> T[]`: Ebnet ein verschachteltes zweidimensionales Array in ein flaches Array ein.
+- `zip(a: T[], b: U[]) -> Tuple<T, U>[]`: Kombiniert Arrays elementweise bis zur Länge des kürzeren Arrays.
+
+### 4. Mengen (Sets)
+- `set_union(a: Set<T>, b: Set<T>) -> Set<T>`: Berechnet die Vereinigungsmenge `A ∪ B`.
+- `set_intersection(a: Set<T>, b: Set<T>) -> Set<T>`: Berechnet die Schnittmenge `A ∩ B`.
+- `set_difference(a: Set<T>, b: Set<T>) -> Set<T>`: Berechnet die Differenzmenge `A \ B`.
+
+### 5. Maps & Wörterbücher
+- `get(map: Map<K, V>, key: K) -> Option<V>`: Schlägt den Schlüssel nach und liefert `Some(V)` oder `None`.
+- `get_or(map: Map<K, V>, key: K, default: V) -> V`: Liefert den Wert zum Schlüssel oder den Standardwert `default`.
+- `has_key(map: Map<K, V>, key: K) -> Bool`: Prüft, ob der Schlüssel in der Map existiert.
+- `put(map: Map<K, V>, key: K, value: V) -> Map<K, V>`: Fügt ein Paar hinzu oder aktualisiert es funktional.
+- `map_remove(map: Map<K, V>, key: K) -> Map<K, V>`: Liefert eine neue Map ohne den angegebenen Schlüssel.
+- `map_merge(a: Map<K, V>, b: Map<K, V>) -> Map<K, V>`: Verschmilzt zwei Maps; bei Kollisionen überschreiben Werte aus `b`.
+- `keys(map: Map<K, V>) -> K[]`: Liefert alle Schlüssel der Map als Array.
+- `values(map: Map<K, V>) -> V[]`: Liefert alle Werte der Map als Array.
+- `entries(map: Map<K, V>) -> Tuple<K, V>[]`: Liefert Schlüssel-Wert-Paare als Tupel-Array. Eine `for`-Schleife kann derzeit jedes Tupel als einzelne Variable entgegennehmen; Tupel-Destrukturierung ist noch nicht verfügbar.
+
+### 6. Datums- & Kalenderberechnung
+- `date_add_days(d: Date, days: Int) -> Date`: Addiert oder subtrahiert Kalendertage von einem `Date` (`YYYY-MM-DD`).
+- `date_diff_days(start: Date, end: Date) -> Int`: Berechnet `start - end` in Kalendertagen. Für verbleibende Tage daher `date_diff_days(frist, heute)` aufrufen.
+- `is_before(a: Date, b: Date) -> Bool`: Prüft, ob Datum `a` chronologisch vor `b` liegt.
+- `is_after(a: Date, b: Date) -> Bool`: Prüft, ob Datum `a` chronologisch nach `b` liegt.
+
+### 7. Ablauf-, Option- und Result-Kontrolle
+- `is_ok(res: Result<T, E>) -> Bool`: Prüft, ob das Resultat ein Erfolg `Ok(...)` ist.
+- `is_err(res: Result<T, E>) -> Bool`: Prüft, ob das Resultat ein Fehler `Err(...)` ist.
+- `is_some(opt: Option<T>) -> Bool`: Prüft, ob die Option einen Wert `Some(...)` enthält.
+- `is_none(opt: Option<T>) -> Bool`: Prüft, ob die Option `None` ist.
+- `unwrap_or(opt: Option<T>, default: T) -> T`: Entpackt den Wert oder liefert den Fallback `default`.
+- `panic(msg: String) -> Never`: Bricht die Programmausführung mit einer kontrollierten Laufzeitfehlermeldung ab.
+- `else if`: Flache Verzweigungskaskaden ohne erzwungene tiefe Blockschachtelung.
+- `|>` (Pipeline-Operator): Übergibt den linken Ausdruck als erstes Argument an den rechten Funktionsaufruf: `daten |> sort() |> join(", ")`.
+
+### 8. Typkonvertierung & Parsing
+- `to_string(value: Any) -> String`: Wandelt jeden beliebigen Zelyra-Wert in seine String-Darstellung um.
+- `to_int(value: Int | UInt | Float | Bool | String) -> Int`: Konvertiert Werte deterministisch in einen 64-Bit-Ganzzahlwert.
+- `to_float(value: Float | Int | UInt | String) -> Float`: Konvertiert Werte deterministisch in eine Fließkommazahl.
+- `parse_int(text: String) -> Result<Int, String>`: Parst einen String sicher als `Int` oder liefert `Err(String)`.
+- `parse_float(text: String) -> Result<Float, String>`: Parst einen String sicher als `Float` oder liefert `Err(String)`.
+- `parse_bool(text: String) -> Result<Bool, String>`: Parst `"true"`, `"false"`, `"1"`, `"0"` in einen `Bool` oder liefert `Err(String)`.
+
+### 9. Sicherheit, Hashing & Web-Encodings
+- `hash_sha256(text: String) -> String`: Berechnet den hexadezimalen SHA-256-Hash des Strings.
+- `base64_encode(text: String) -> String`: Kodiert den UTF-8-String in Base64.
+- `base64_decode(encoded: String) -> Result<String, String>`: Dekodiert einen Base64-String sicher.
+- `url_encode(text: String) -> String`: Prozent-kodiert Sonderzeichen für URL-Parameter nach RFC 3986.
+- `url_decode(encoded: String) -> Result<String, String>`: Dekodiert prozent-kodierte URL-Strings sicher.
+- `uuid_v4() -> String` (`uses Random`): Erzeugt eine kryptografisch sichere Version-4-UUID nach RFC 4122.
+
+### 10. Pfade & Dateisystem
+- `path_join(a: String, b: String) -> String`: Verbindet zwei Pfadsegmente plattformunabhängig (ohne Capability).
+- `path_filename(path: String) -> String`: Extrahiert den Dateinamen aus einem Pfad (ohne Capability).
+- `path_extension(path: String) -> String`: Extrahiert die Dateiendung ohne führenden Punkt (ohne Capability).
+- `path_dir(path: String) -> String`: Extrahiert das Elternverzeichnis eines Pfades (ohne Capability).
+- `file_exists(path: String) -> Bool` (`uses FileSystem`): Prüft innerhalb der erlaubten Lesepfade, ob eine Datei existiert.
+- `dir_exists(path: String) -> Bool` (`uses FileSystem`): Prüft innerhalb der erlaubten Lesepfade, ob ein Verzeichnis existiert.
+- `file_size(path: String) -> Result<Int, String>` (`uses FileSystem`): Liefert die Dateigröße in Bytes.
+
+### 11. Capability-geschützte System-APIs
 - `uses Console`:
-  - `read_console(prompt: String)` -> `String?`: Zeigt den Prompt an und liest eine Zeile; `None` bedeutet EOF.
+  - `read_console(prompt: String) -> String?`: Gibt den Prompt auf `stdout` aus und liest eine Zeile von `stdin`; `None` signalisiert EOF.
 - `uses Clock`:
-  - `now()` -> `Timestamp`: Aktueller Systemzeitstempel.
+  - `now() -> Timestamp`: Liefert den aktuellen Systemzeitstempel in Millisekunden seit der Unix-Epoche.
 - `uses Random`:
-  - `random_int(min: Int, max: Int)` -> `Int`: Zufallszahl im Intervall.
+  - `random_int(min: Int, max: Int) -> Int`: Erzeugt eine ganzzahlige Pseudozufallszahl im geschlossenen Bereich `[min, max]`.
+  - `uuid_v4() -> String`: Erzeugt eine kryptografisch sichere Version-4-UUID.
 - `uses Environment`:
-  - `env(name: String)` -> `Option<String>`: Liest eine Umgebungsvariable.
+  - `env(name: String) -> Option<String>`: Liest den Wert einer Systemumgebungsvariablen aus.
 - `uses FileSystem`:
-  - `read_text(pfad: String)` -> `String`: Liest Dateiinhalt als Text.
-  - `write_text(pfad: String, inhalt: String)`: Schreibt Inhalt in Datei.
-  - `delete_file(pfad: String)`: Löscht eine Datei.
-  - `list_dir(ordner: String)` -> `String[]`: Listet Dateinamen auf.
+  - `read_text(path: String) -> String`: Liest den gesamten Inhalt einer UTF-8-Textdatei.
+  - `write_text(path: String, content: String)`: Schreibt Text in eine Datei und überschreibt vorhandenen Inhalt innerhalb der freigegebenen Schreibpfade.
+  - `delete_file(path: String)`: Löscht eine Datei innerhalb der Projektfreigaben.
+  - `list_dir(dir: String) -> String[]`: Listet die Dateinamen eines Verzeichnisses auf.
+  - `file_exists(path: String) -> Bool`: Prüft die Existenz einer Datei.
+  - `dir_exists(path: String) -> Bool`: Prüft die Existenz eines Ordners.
+  - `file_size(path: String) -> Result<Int, String>`: Liest die Größe einer Datei in Bytes.
+- `uses Network`:
+  - `http_get(url: String) -> String`: Führt einen synchronen HTTP-GET-Request gegen erlaubte Hosts aus.
+  - `http_request(req: HttpRequest) -> HttpResponse`: Führt eine HTTP-Anfrage mit konfigurierter Methode, Headern und Body aus.
+  - `http_json<Req, Res>(method: String, url: String, headers: String[], body: Request?) -> Res`: Sendet eine HTTP-Anfrage und dekodiert eine erfolgreiche JSON-Antwort.
+  - `http_result<Req, Res>(method: String, url: String, headers: String[], body: Request?) -> HttpResult<Res>`: Liefert typisierte HTTP-Ergebnisse einschließlich Statuscode und Headern.
+- `uses Process`:
+  - `run_process(command: String, args: String[]) -> ProcessResult`: Startet einen explizit freigegebenen Prozess ohne Shell.
 - `uses Database`:
-  - `sql<T[]> { SELECT ... }`: Führt typisierte SQL-Abfragen aus.
-  - `transaction { ... }`: Fasst Abfragen transaktional zusammen.
+  - `sql<T[]> { SELECT ... }`: Führt typisierte relationale Abfragen mit parametrisierten Platzhaltern aus.
+  - `transaction { ... }`: Fasst mehrere Schreib- und Leseabfragen in einer atomaren Datenbanktransaktion zusammen.
 
 ---
 

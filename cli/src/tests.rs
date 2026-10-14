@@ -421,6 +421,55 @@ fn project_database_url_expands_the_configured_local_host_port() {
 }
 
 #[test]
+fn compose_port_conflicts_identify_database_or_application_ports() {
+    assert_eq!(
+        compose_conflict_port(
+            "Error: listen tcp4 127.0.0.1:3307: bind: address already in use",
+            3307,
+            3000,
+        ),
+        Some(("ZELYRA_DB_HOST_PORT", 3307))
+    );
+    assert_eq!(
+        compose_conflict_port(
+            "Ports are not available: exposing TCP 127.0.0.1:3000: port is already allocated",
+            3307,
+            3000,
+        ),
+        Some(("ZELYRA_HOST_PORT", 3000))
+    );
+    assert_eq!(compose_conflict_port("image pull failed", 3307, 3000), None);
+}
+
+#[test]
+fn database_port_fallback_keeps_local_urls_in_sync_and_preserves_external_urls() {
+    let contents = "ZELYRA_DB_HOST_PORT=3307\nZELYRA_DATABASE_MAIN_URL=mariadb://user:secret@127.0.0.1:3307/invoice\nDATABASE_URL=mariadb://user:secret@127.0.0.1:3307/invoice\nOTHER_DATABASE_URL=mariadb://user:secret@db.example.test:3307/other\n";
+    let (updated, found) = update_database_urls_for_host_port(contents, 3307, 43127);
+    assert!(found);
+    assert!(updated.contains("127.0.0.1:43127/invoice"));
+    assert!(updated.contains("db.example.test:3307/other"));
+    let (dynamic, found) = update_database_urls_for_host_port(
+        "ZELYRA_DATABASE_MAIN_URL=mariadb://user:secret@127.0.0.1:${ZELYRA_DB_HOST_PORT:-3306}/invoice\n",
+        3306,
+        43127,
+    );
+    assert!(found);
+    assert!(dynamic.contains("${ZELYRA_DB_HOST_PORT:-3306}"));
+}
+
+#[test]
+fn compose_web_port_fallback_activates_the_selected_project_setting() {
+    let updated = replace_template_env_assignment(
+        "# ZELYRA_HOST_PORT=3000\nZELYRA_DB_HOST_PORT=3306\n",
+        "ZELYRA_HOST_PORT",
+        43127,
+        true,
+    );
+    assert!(updated.contains("ZELYRA_HOST_PORT=43127"));
+    assert!(!updated.contains("# ZELYRA_HOST_PORT=3000"));
+}
+
+#[test]
 fn empty_database_host_ports_use_the_compose_fallback() {
     assert_eq!(
         resolve_database_host_port(Some(String::new()), Some("3308".into())),

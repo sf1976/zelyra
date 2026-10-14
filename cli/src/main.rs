@@ -4277,6 +4277,189 @@ fn compose_start_failure_message(command: DockerComposeCommand, details: &str) -
     }
 }
 
+const COMPOSE_PORT_RETRIES: usize = 8;
+
+fn compose_conflict_port(
+    details: &str,
+    database_port: u16,
+    web_port: u16,
+) -> Option<(&'static str, u16)> {
+    let lowered = details.to_ascii_lowercase();
+    if !(lowered.contains("address already in use")
+        || lowered.contains("port is already allocated")
+        || lowered.contains("failed to bind"))
+    {
+        return None;
+    }
+    let ports = details
+        .split(|character: char| !character.is_ascii_digit())
+        .filter_map(|part| part.parse::<u16>().ok())
+        .collect::<BTreeSet<_>>();
+    if ports.contains(&database_port) {
+        Some(("ZELYRA_DB_HOST_PORT", database_port))
+    } else if ports.contains(&web_port) {
+        Some(("ZELYRA_HOST_PORT", web_port))
+    } else {
+        None
+    }
+}
+
+fn update_database_urls_for_host_port(
+    contents: &str,
+    old_port: u16,
+    new_port: u16,
+) -> (String, bool) {
+    let mut found_matching_url = false;
+    let updated = contents
+        .lines()
+        .map(|line| {
+            let trimmed = line.trim();
+            let assignment = trimmed.strip_prefix("export ").unwrap_or(trimmed);
+            let Some((key, raw_value)) = assignment.split_once('=') else {
+                return line.to_owned();
+            };
+            let key = key.trim();
+            if key != "DATABASE_URL"
+                && !(key.starts_with("ZELYRA_DATABASE_") && key.ends_with("_URL"))
+            {
+                return line.to_owned();
+            }
+            let raw_value = raw_value.trim();
+            let quote = raw_value
+                .chars()
+                .next()
+                .filter(|quote| matches!(quote, '\'' | '"'));
+            let value = quote.map_or(raw_value, |quote| {
+                raw_value
+                    .strip_prefix(quote)
+                    .and_then(|value| value.strip_suffix(quote))
+                    .unwrap_or(raw_value)
+            });
+            if value.contains("${ZELYRA_DB_HOST_PORT") {
+                found_matching_url = true;
+                return line.to_owned();
+            }
+            let Ok(mut url) = url::Url::parse(value) else {
+                return line.to_owned();
+            };
+            if !matches!(url.scheme(), "mariadb" | "mysql")
+                || !matches!(url.host_str(), Some("localhost" | "127.0.0.1"))
+                || url.port().unwrap_or(3306) != old_port
+            {
+                return line.to_owned();
+            }
+            if url.set_port(Some(new_port)).is_err() {
+                return line.to_owned();
+            }
+            found_matching_url = true;
+            let prefix_len = line.len() - line.trim_start().len();
+            let prefix = &line[..prefix_len];
+            let export = if assignment.starts_with("export ") {
+                "export "
+            } else {
+                ""
+            };
+            let rendered_value =
+                quote.map_or_else(|| url.to_string(), |quote| format!("{quote}{}{quote}", url));
+            format!("{prefix}{export}{}{rendered_value}", key.trim())
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n";
+    (updated, found_matching_url)
+}
+
+fn update_local_compose_port(
+    directory: &std::path::Path,
+    key: &str,
+    old_port: u16,
+    new_port: u16,
+) -> Result<(), String> {
+    if env::var_os(key).is_some() {
+        return Err(format!(
+            "the configured {key} environment variable overrides .env; change or unset it before retrying the automatic port selection"
+        ));
+    }
+    let env_path = directory.join(".env");
+    let contents = fs::read_to_string(&env_path)
+        .map_err(|error| format!("could not read `{}`: {error}", env_path.display()))?;
+    let contents = if key == "ZELYRA_DB_HOST_PORT" {
+        let (updated, url_updated) =
+            update_database_urls_for_host_port(&contents, old_port, new_port);
+        if !url_updated {
+            return Err(
+                "cannot safely change the MariaDB port because the project .env has no local database URL that matches it; update the URL and port together".into(),
+            );
+        }
+        updated
+    } else {
+        contents
+    };
+    let updated = replace_template_env_assignment(&contents, key, new_port, true);
+    fs::write(&env_path, updated)
+        .map_err(|error| format!("could not update `{}`: {error}", env_path.display()))?;
+    protect_env_file(&env_path)
+}
+
+fn compose_up_with_port_fallback(
+    directory: &std::path::Path,
+    command: DockerComposeCommand,
+    args: &[&str],
+) -> Result<(), String> {
+    for attempt in 0..=COMPOSE_PORT_RETRIES {
+        let child = compose_command(directory, command)
+            .args(args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|error| format!("could not start {}: {error}", command.label()))?;
+        let output = wait_with_live_output(child)?;
+        if output.status.success() {
+            return Ok(());
+        }
+        let details = format!(
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let database_port = project_database_host_port(directory)?
+            .parse::<u16>()
+            .map_err(|_| "the configured MariaDB host port is invalid".to_owned())?;
+        let web_url = project_web_url(directory)?;
+        let web_port = url::Url::parse(&web_url)
+            .ok()
+            .and_then(|url| url.port())
+            .unwrap_or(DEFAULT_WEB_PORT);
+        let Some((key, current_port)) = compose_conflict_port(&details, database_port, web_port)
+        else {
+            return Err(compose_start_failure_message(command, &details));
+        };
+        if attempt == COMPOSE_PORT_RETRIES {
+            return Err(format!(
+                "Docker Compose still reported a port conflict after {COMPOSE_PORT_RETRIES} automatic retries; last attempted {key} value was {current_port}. Choose another port and retry."
+            ));
+        }
+        if env::var_os(key).is_some() {
+            return Err(format!(
+                "Docker Compose reported that {key} port {current_port} is occupied, but the process environment overrides the project .env. Change or unset {key} and retry."
+            ));
+        }
+        let reserved = if key == "ZELYRA_DB_HOST_PORT" {
+            vec![web_port]
+        } else {
+            vec![database_port]
+        };
+        let next = find_free_port(current_port.saturating_add(1), &reserved).ok_or_else(|| {
+            format!("could not find a free port after {current_port}; choose a port explicitly")
+        })?;
+        update_local_compose_port(directory, key, current_port, next)?;
+        eprintln!(
+            "Docker Compose could not bind {key} port {current_port}; retrying with free port {next}."
+        );
+    }
+    unreachable!("the bounded Compose retry loop returns on success or its final attempt")
+}
+
 fn start_mariadb_compose(
     directory: &std::path::Path,
     database_only: bool,
@@ -4294,31 +4477,16 @@ fn start_mariadb_compose(
     } else {
         vec!["up", "-d", "--build", "web"]
     };
-    let child = compose_command(directory, command)
-        .args(args)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|error| format!("could not start {}: {error}", command.label()))?;
-    let output = wait_with_live_output(child)?;
-    if output.status.success() {
-        Ok(format!(
-            "{} were started with {}",
-            if database_only {
-                "MariaDB services"
-            } else {
-                "MariaDB and the application"
-            },
-            command.label()
-        ))
-    } else {
-        let details = format!(
-            "{}\n{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-        Err(compose_start_failure_message(command, &details))
-    }
+    compose_up_with_port_fallback(directory, command, &args)?;
+    Ok(format!(
+        "{} were started with {}",
+        if database_only {
+            "MariaDB services"
+        } else {
+            "MariaDB and the application"
+        },
+        command.label()
+    ))
 }
 
 fn database_url_for_project(
@@ -4438,6 +4606,47 @@ fn expanded_database_url(directory: &std::path::Path) -> Result<String, String> 
         });
     database_url_for_project(directory, database_name.as_deref())?
         .ok_or_else(|| "`.env` does not define the project database URL or DATABASE_URL".to_owned())
+}
+
+fn seed_invoice_tutorial_database(directory: &std::path::Path) -> Result<bool, String> {
+    let marker = directory.join("zelyra.tutorial");
+    if !marker.is_file()
+        || fs::read_to_string(&marker)
+            .map_err(|error| format!("could not read `{}`: {error}", marker.display()))?
+            .trim()
+            != "invoice-v1"
+    {
+        return Ok(false);
+    }
+    let entry = directory.join("main.zyl");
+    let schema = database_cli::load_schema(&entry.to_string_lossy())
+        .map_err(|_| "the invoice tutorial database declaration is invalid".to_owned())?;
+    let database_name = schema
+        .database
+        .as_ref()
+        .map(|database| database.name.as_str());
+    if database_url_from_environment(database_name).is_some()
+        || !directory.join("docker-compose.mariadb.yml").is_file()
+    {
+        return Ok(false);
+    }
+    let project_url = database_url_from_project_file(directory, database_name)?;
+    let project_port = project_database_host_port(directory)?;
+    let Some(database_url) = project_compose_database_url(
+        project_url.as_deref(),
+        project_url.as_deref(),
+        &project_port,
+        false,
+    ) else {
+        return Ok(false);
+    };
+    let seed_path = directory.join("invoice-tutorial.seed.sql");
+    let seed_sql = fs::read_to_string(&seed_path)
+        .map_err(|error| format!("could not read `{}`: {error}", seed_path.display()))?;
+    query_mariadb(database_url, &seed_sql).map_err(|_| {
+        "the invoice tutorial sample data could not be loaded; verify the local MariaDB connection and schema".to_owned()
+    })?;
+    Ok(true)
 }
 
 fn expand_database_host_port(url: &str, port: &str) -> String {
@@ -4659,6 +4868,9 @@ fn setup_action(path: &str, action: &str, options: &SetupOptions) -> Result<Stri
             format!("{error}\napplication URL: {web_url}")
         })?;
         messages.push("database schema setup completed".into());
+        if seed_invoice_tutorial_database(&directory)? {
+            messages.push("invoice tutorial sample data loaded (repeatable)".into());
+        }
     }
     if action == "all" {
         let web_url = project_web_url(&directory)?;

@@ -898,6 +898,13 @@ fn invoice_tutorial_creates_a_checkable_project_without_overwriting() {
     }
     assert!(directory.join("src/database.zyl").is_file());
     assert!(directory.join("src/shell.zyl").is_file());
+    assert_eq!(
+        fs::read_to_string(directory.join("zelyra.tutorial")).unwrap(),
+        "invoice-v1\n"
+    );
+    let seed = fs::read_to_string(directory.join("invoice-tutorial.seed.sql")).unwrap();
+    assert!(seed.contains("RE-2026-001"));
+    assert!(seed.contains("WHERE NOT EXISTS"));
     let local_env = fs::read_to_string(directory.join(".env")).unwrap();
     assert!(local_env.contains("ZELYRA_DATABASE_MAIN_URL=mariadb://zelyra:"));
     assert!(local_env.contains("DATABASE_URL=mariadb://zelyra:"));

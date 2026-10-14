@@ -340,6 +340,33 @@ type OrderId = Id
 Eine `OrderId` ist dadurch nicht automatisch eine `MachineId`, auch wenn beide
 intern ähnlich aussehen. Fachlich falsch bleibt fachlich falsch.
 
+Bedingungen mit flachen `else if`-Kaskaden (Neu in 1.0.3):
+
+~~~zelyra
+fn evaluate_capacity(cap: Int) -> String {
+    if cap > 100 {
+        return "HIGH"
+    } else if cap > 50 {
+        return "MEDIUM"
+    } else {
+        return "LOW"
+    }
+}
+~~~
+
+Pipeline-Operator `|>` (Neu in 1.0.3):
+
+Zelyra unterstützt den Forward-Pipeline-Operator `|>`. Ausdrücke fließen von links nach rechts durch Transformationsketten:
+
+~~~zelyra
+fn format_title(input: String) -> String {
+    return input |> text_trim() |> text_to_upper()
+}
+~~~
+
+Umfangreiche Standardbibliothek (Neu in 1.0.3):
+Zelyra 1.0.3 liefert über 55 neue Builtin-Funktionen für Mathematik (`abs`, `min`, `max`, `clamp`, `sqrt`, `round`), String-Operationen (`text_split`, `text_replace`, `text_pad_left`), Array-Kombinatoren (`sort`, `unique`, `chunk`, `zip`), Mengen (`set_union`), Maps (`has_key`, `get_or`, `entries`), Datumsarithmetik (`date_add_days`), Krypto & Web-Encodings (`hash_sha256`, `base64_encode`, `url_encode`, `uuid_v4`) und Pfade (`path_join`, `file_exists`). Die vollständige Signaturliste steht in [Anhang D: Standardbibliothek](anhaenge.md#anhang-d-die-standardbibliothek-im-uberblick).
+
 ## 6. Option, Result und Pattern Matching
 
 Normale Typen sind nicht `null`. Ein möglicher fehlender Wert wird markiert:
@@ -381,6 +408,13 @@ fn load_number(found: Bool) -> Result<Int, String> {
     return Err("nicht gefunden")
 }
 ~~~
+
+Option- und Result-Hilfsfunktionen (Neu in 1.0.3):
+
+Ergebnisse und Optionen lassen sich ohne zwingendes `match` auf ihren Zustand prüfen oder sicher entpacken:
+- `is_ok(result)` / `is_err(result)`: Liefert `true`, wenn die Operation erfolgreich bzw. fehlgeschlagen ist.
+- `is_some(option)` / `is_none(option)`: Prüft auf Anwesenheit eines Wertes.
+- `unwrap_or(option, default)`: Entpackt `Some(value)` oder gibt den Standardwert `default` zurück.
 
 ## 7. MariaDB und Tabellen
 

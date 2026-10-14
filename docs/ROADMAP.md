@@ -121,6 +121,15 @@ principles; the roadmap below tracks what is actually implemented.
   Zelyra example. Include malformed blocks, interpolation names/types,
   pipeline type mismatches, tuple arity, collection callbacks, and unsupported
   numeric inputs in positive and negative tests.
+- [x] **1.0.3 invoice tutorial startup through CLI and Studio:** On Compose
+  port conflicts, automatically select a free next port for MariaDB or the web
+  application, update the local `.env` and matching MariaDB URLs, and retry a
+  bounded number of times. The invoice tutorial now has repeatable local sample
+  data. Studio Run starts the matching local database service, applies the
+  schema, loads the seed only for the marked local tutorial project, and then
+  starts the preview. CLI and Studio were run against Docker Compose 5.6.0 /
+  Engine 29.8.2; both HTTP dashboards and the stored sample records were
+  checked.
 - [x] **1.0.1 published-artifact language review:** 80 cases, 100 task repeats,
   600 numeric comparisons and 1,408 calendar/UTC reference cases passed with
   no unexpected findings; published installation/upgrade/rollback and

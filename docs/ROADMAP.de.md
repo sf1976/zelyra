@@ -134,6 +134,15 @@ den tatsächlich implementierten Stand.
   Zelyra-Beispiel verbessern. Fehlende Blöcke, Interpolationsnamen/-typen,
   Pipeline-Typkonflikte, Tuple-Arity, Sammlungs-Callbacks und ungültige
   Zahleneingaben mit positiven und negativen Tests abdecken.
+- [x] **1.0.3 Rechnungstutorialstart über CLI und Studio:** Bei Compose-
+  Portkonflikten automatisch freie Folgeports für MariaDB oder die
+  Webanwendung wählen, die lokale `.env` und passende MariaDB-URLs aktualisieren
+  und den Start begrenzt wiederholen. Das Rechnungstutorial erhält
+  wiederholbare lokale Beispieldaten. Studio Run startet den passenden lokalen
+  Datenbankdienst, richtet das Schema ein, lädt den Seed nur im markierten
+  lokalen Tutorialprojekt und startet danach die Vorschau. CLI und Studio
+  liefen gegen Docker Compose 5.6.0 / Engine 29.8.2; HTTP-Dashboard und
+  gespeicherte Beispieldatensätze wurden geprüft.
 - [x] **1.0.1 Sprachprüfung des veröffentlichten Artefakts:** 80 Fälle,
   100 Aufgaben-Wiederholungen, 600 Zahlenvergleiche und 1.408 Kalender-/UTC-
   Referenzfälle ohne unerwartete Befunde geprüft; Installation/Update/Rückkehr
