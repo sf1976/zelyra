@@ -66,6 +66,7 @@ impl<'a> Formatter<'a> {
                 TokenKind::Question => self.punctuation("?"),
                 TokenKind::Arrow
                 | TokenKind::FatArrow
+                | TokenKind::PipeForward
                 | TokenKind::Plus
                 | TokenKind::Minus
                 | TokenKind::Star
@@ -375,6 +376,7 @@ fn is_compact_token(kind: &TokenKind) -> bool {
             | TokenKind::Question
             | TokenKind::Arrow
             | TokenKind::FatArrow
+            | TokenKind::PipeForward
             | TokenKind::Plus
             | TokenKind::Minus
             | TokenKind::Star
@@ -504,6 +506,7 @@ fn token_text<'a>(token: &'a Token, source: &'a str) -> &'a str {
         TokenKind::False => "false",
         TokenKind::Arrow => "->",
         TokenKind::FatArrow => "=>",
+        TokenKind::PipeForward => "|>",
         TokenKind::Plus => "+",
         TokenKind::Minus => "-",
         TokenKind::Star => "*",
@@ -556,6 +559,17 @@ mod tests {
         assert_eq!(
             formatted,
             "fn main() {\n    mutable total = 1 + 2\n    print(total)\n}\n"
+        );
+        assert_eq!(format(&formatted), formatted);
+    }
+
+    #[test]
+    fn formats_pipeline_operators_with_spaces_and_is_idempotent() {
+        let formatted = format("fn main(){value=\" text \"|>trim|>to_lower}");
+
+        assert!(
+            formatted.contains("\" text \" |> trim |> to_lower"),
+            "{formatted:?}"
         );
         assert_eq!(format(&formatted), formatted);
     }
