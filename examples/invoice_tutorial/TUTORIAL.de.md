@@ -117,26 +117,28 @@ geändert werden. Die Beispieldaten behalten `RE-2026-001`.
 
 ## Quelltext nach Dateien und Zeilen
 
-### `main.zyl` — Projektkarte und Startseite
+### `main.zyl` — Programmeinstieg und Startseite
 
-- Zeile 1 benennt die Aufgabe dieser Einstiegsdatei.
-- Zeilen 2–7 importieren Datenbank, Layout, Kunden, Artikel, Rechnungen und
-  Rechnungsübersicht. Die Aliasnamen machen die Module im Projektgraphen
-  erreichbar; die fachlichen Deklarationen bleiben in `src/`.
-- Zeilen 9–11 deklarieren `GET /` und wählen `InvoiceTutorialShell` als
-  gemeinsamen Rahmen.
-- Zeile 12 beginnt den Seiteninhalt. Zeilen 13–21 bilden den hervorgehobenen
-  Startbereich. `data-zelyra-i18n` bindet Überschrift, Beschreibung und Links
-  an die zweisprachigen Einträge in `locales/de.json` und `locales/en.json`.
-- Zeilen 23–33 bilden die Kundenkarte. Die Klasse `col-md-4` sorgt für drei gleich breite Karten
-  auf mittleren und großen Bildschirmen. Zeilen 27–30 zeigen Kennzeichnung,
-  Überschrift, Erklärung und Link zu `/customers/new`.
-- Zeilen 34–43 bilden dieselbe Struktur für Artikel und führen zu
-  `/items/new`.
-- Zeilen 44–53 bilden die Rechnungskarte und führen zu `/invoices/new`.
-- Zeilen 54–57 schließen Kartenabschnitt, Hauptinhalt, HTML-Ausgabe und
-  Seitendeklaration. Die öffnenden und schließenden Tags gehören paarweise
-  zusammen.
+- Zeile 1 erklärt, dass diese Datei die Fachmodule verbindet und die Startseite enthält.
+- Zeilen 2–7 importieren Datenbank, Layout, Kunden, Artikel, Rechnungen und Übersicht. Die Namen nach `as` sind lokale Aliasnamen; dadurch bleiben die Deklarationen in ihren eigenen Dateien.
+- Zeilen 9–11 deklarieren `GET /`, wählen `InvoiceTutorialShell` und beginnen die HTML-Ausgabe. Die Route `/` ist hier ausdrücklich festgelegt.
+- Zeile 12 öffnet den Hauptbereich. Zeilen 13–14 beginnen das zweispaltige Hero- und Beispielrechnungs-Layout.
+- Zeilen 15–19 bilden Kennzeichnung, Z-Marke und lokale Statusplakette. Die Beschriftungen mit `data-zelyra-i18n` werden aus den Sprachdateien ersetzt.
+- Zeile 20 setzt die übersetzte Hauptüberschrift; Zeile 21 den Einführungstext.
+- Zeilen 22–25 bilden Aktionsbereich und Links: `/invoices/new` startet die Rechnungserstellung, `/views/invoicedashboard` öffnet die Übersicht.
+- Zeilen 26–30 zeigen den lokalen Datenhinweis und schließen den Hero-Bereich.
+- Zeilen 32–39 beginnen die Beispielrechnung: Ihre sichtbare Kennung `RE-2026-001` entspricht dem Seed; die Beschriftungen und der Entwurfsstatus sind übersetzt.
+- Zeilen 40–45 trennen den Kopf von den fest eingetragenen Empfängerdaten. Die `.test`-Adresse ist ein Beispieldatensatz.
+- Zeilen 46–55 zeigen Ausstellungsdatum und Umsatzsteuersatz in zwei Spalten. Datum und Beschriftungen sind für Deutsch und Englisch lokalisiert.
+- Zeilen 56–71 stellen die zwei Beispielpositionen mit Menge, Einzelpreis und Zeilensumme dar.
+- Zeilen 72–76 zeigen Nettosumme, 19-prozentige Umsatzsteuer und Bruttobetrag. Die Werte entsprechen den Seed-Positionen (298,00 € netto, 56,62 € Steuer, 354,62 € brutto).
+- Zeilen 77–79 verlinken zur tatsächlichen Druckansicht der Beispielrechnung und schließen den oberen Rasterbereich.
+- Zeilen 81–103 zeigen drei Funktionshinweise zu Datumseingabe, automatischer Nummer und Druckansicht; `<article>` gruppiert jeden Hinweis, `<strong>` setzt den Titel und `<p>` den erklärenden Satz.
+- Zeilen 105–112 setzen Überschrift, Untertitel und Link der nächsten Sektion.
+- Zeilen 113–122 bilden Schritt 1: die Klasse `col-md-4` reserviert ein Drittel der Zeile auf breiten Bildschirmen; der Link öffnet `/customers/new`.
+- Zeilen 123–131 bilden Schritt 2 und führen zu `/items/new`.
+- Zeilen 132–140 bilden Schritt 3, heben die Rechnungskarte optisch hervor und führen zu `/invoices/new`.
+- Zeilen 141–145 schließen Kartenraster, Ablaufsektion, Hauptbereich, HTML-Ausgabe und Seitendeklaration. Zusammen mit den Öffnungen weiter oben zeigen diese Zeilen die Blockstruktur.
 
 ### `src/database.zyl` — gemeinsame Verbindung
 
@@ -262,67 +264,84 @@ geändert werden. Die Beispieldaten behalten `RE-2026-001`.
   verwendet gespeicherte Schlüssel und die `NOT EXISTS`-Bedingung, daher
   erzeugt ein weiterer Start keine Kopien.
 
-### `zelyra.theme.css` — lokales Layout
+### `zelyra.theme.css` — lokale Gestaltung
 
-- Zeile 1 aktiviert die lokal mitgelieferte Tabler-Grundgestaltung.
-- Zeile 2 hält fest, dass keine CDN-Anfrage nötig ist.
-- Zeilen 3–12 setzen helle Darstellung, Primärfarbe, Hintergrund, Text,
-  Kartenradius und Schatten.
-- Zeilen 14–21 formatieren Seitenhintergrund, Standardabstände und gut lesbare
-  Systemschrift.
-- Zeilen 23–28 entfernen das IDE-Raster aus der eigenständigen Web-App.
-- Zeilen 30–38 setzen den äußeren Seitenbereich zurück, damit Tabler das Layout
-  steuern kann.
-- Zeilen 40–50 gestalten Seitenrahmen, Kopfzeile, Marke und Navigation.
-- Zeile 51 setzt den Innenabstand des Inhaltsbereichs.
-- Zeilen 52–55 gestalten den Startseitenkopf samt Überschrift, Beschreibung und
-  Aktionslinks.
-- Zeilen 56–59 gestalten Ablaufkarten, Überschriften, Beschreibungen und Links.
-- Zeile 60 formatiert den Fußbereich.
-- Zeilen 61–65 vereinheitlichen Abstände, Formulare, Tabellen und Fokus.
-- Zeilen 66–68 gestalten die Netto-/Steuersummen auf der Druckansicht.
-- Zeilen 70–83 passen Navigation und Inhalt für schmalere Bildschirme an.
-- Zeilen 84–88 blenden beim Drucken Navigation und Fußbereich aus und nehmen
-  unnötige Innenabstände sowie Schatten weg.
+- Zeilen 1–2 aktivieren die lokal bereitgestellte Tabler-Basis und dokumentieren, dass keine CDN-Anfrage erforderlich ist.
+- Zeilen 3–12 setzen helle Farben, Primärfarbe, Seitenfarben, Kartenradius und Standardschatten.
+- Zeilen 14–21 formatieren den Seitenkörper, Mindesthöhe, Rand, Hintergrund und Systemschrift.
+- Zeilen 23–28 überschreiben das IDE-Raster für die eigenständige Anwendung und lassen sie die volle Breite einnehmen.
+- Zeilen 30–38 entfernen Begrenzung, Rahmen, Hintergrund und Schatten des äußeren Tabler-Hauptbereichs.
+- Zeilen 40–51 gestalten Seitenrahmen, klebende Navigation, Marke, Navigationslinks, Schaltfläche und Inhaltsabstände.
+- Zeilen 52–68 bauen den Startseiten-Hero auf: Rasteraufteilung, Farbverlauf, dekorative Form, Kennzeichnung, große Überschrift, Beschreibung, Schaltflächen und Datenhinweis.
+- Zeilen 69–92 gestalten die Beispielrechnung: Papierkarte, Status, Empfänger, Datum, Zahlungsziel, Positionen, Summen und Linkzustände.
+- Zeilen 93–103 formatieren die drei Funktionshinweise sowie die Überschrift der Ablaufsektion.
+- Zeilen 104–114 gestalten den Übersichtslink, dreispaltigen Ablauf, Hoverzustand, Nummern, Symbole, Schritttexte und Fußbereich.
+- Zeilen 115–123 vereinheitlichen Abstände in generierten Seiten sowie Formulare, Labels, Tabellen, Fokusmarkierung und Drucksummen.
+- Zeilen 124–132 passen Navigation, Hero und Beispielrechnung bis 991 px an: Die zwei Spalten werden untereinander angeordnet.
+- Zeilen 133–151 verkleinern Navigation und Hero bis 575 px, machen Aktionen und Funktionshinweise einspaltig und halten die Karten lesbar.
+- Zeilen 152–159 definieren den Druckmodus: Navigation und Aktionen verschwinden; wichtige Inhalte bleiben ohne unnötige Schatten und Abstände druckbar.
 
-### `locales/de.json` und `locales/en.json` — übersetzte Beschriftungen
+### `locales/de.json` und `locales/en.json` — lokalisierte Beschriftungen
 
-Beide JSON-Dateien haben denselben Aufbau mit 30 Zeilen. Jeder Schlüssel ist
-in beiden Dateien gleich und steht in derselben Zeile; nur der angezeigte
-deutsche oder englische Wert unterscheidet sich. Die Schlüssel verbinden die
-Übersetzungen mit `data-zelyra-i18n` und den lokalisierten CRUD-Feldern. Die
-Werte ändern weder Routen noch Datenbankverhalten.
+Beide Dateien enthalten dieselben Schlüssel in derselben Reihenfolge. Die Zeilenerklärung gilt für beide: `de.json` ordnet jeden stabilen Schlüssel dem deutschen und `en.json` dem englischen Anzeigetext zu. `main.zyl`, das Layout und generierte Formulare verweisen auf diese Schlüssel; die Werte verändern weder Routen noch Datenbankzugriff.
 
-- Zeile 1 öffnet das JSON-Objekt. Zeile 30 schließt es.
-- Zeile 2 (`invoice.number.label`) beschriftet die Rechnungsnummer.
-- Zeile 3 (`invoice.number.auto_hint`) erklärt, dass der Server sie beim
-  Speichern vergibt.
+- Zeile 1 öffnet das JSON-Objekt; Zeile 61 schließt es.
+- Zeile 2 (`invoice.number.label`) beschriftet das Eingabefeld der Rechnungsnummer.
+- Zeile 3 (`invoice.number.auto_hint`) erklärt die automatische Vergabe beim Speichern.
 - Zeile 4 (`invoice.issued_at.label`) beschriftet das Ausstellungsdatum.
-- Zeile 5 (`invoice.overview.title`) benennt die Rechnungsübersicht.
-- Zeile 6 (`invoice.nav.document_title`) setzt den Titel im Browserfenster.
-- Zeile 7 (`invoice.nav.subtitle`) setzt den Untertitel der Navigation.
+- Zeile 5 (`invoice.overview.title`) setzt den Titel der Rechnungsübersicht.
+- Zeile 6 (`invoice.nav.document_title`) setzt den Titel im Browser-Tab.
+- Zeile 7 (`invoice.nav.subtitle`) setzt den Untertitel neben der Marke.
 - Zeile 8 (`invoice.nav.home`) beschriftet den Startseitenlink.
 - Zeile 9 (`invoice.nav.customers`) beschriftet den Kundenlink.
 - Zeile 10 (`invoice.nav.items`) beschriftet den Artikellink.
-- Zeile 11 (`invoice.nav.invoices`) beschriftet den Link zur Rechnungsübersicht.
-- Zeile 12 (`invoice.nav.lines`) beschriftet den Link zu den Positionen.
-- Zeile 13 (`invoice.nav.new_invoice`) beschriftet die Schaltfläche für eine
-  neue Rechnung.
-- Zeile 14 (`invoice.nav.footer`) liefert den Fußbereichstext.
-- Zeile 15 (`invoice.home.eyebrow`) liefert die kleine Einleitung über der
-  Startseitenüberschrift.
+- Zeile 11 (`invoice.nav.invoices`) beschriftet den Übersichtslink.
+- Zeile 12 (`invoice.nav.lines`) beschriftet den Rechnungspositionslink.
+- Zeile 13 (`invoice.nav.new_invoice`) beschriftet die Schaltfläche für neue Rechnungen.
+- Zeile 14 (`invoice.nav.footer`) liefert den Hinweis im Fußbereich.
+- Zeile 15 (`invoice.home.eyebrow`) liefert die kleine Kennzeichnung über der Überschrift.
 - Zeile 16 (`invoice.home.title`) liefert die Hauptüberschrift der Startseite.
-- Zeile 17 (`invoice.home.intro`) erklärt den Ablauf in einem Satz.
-- Zeile 18 (`invoice.home.new_invoice`) beschriftet die Aktion zum Erstellen.
-- Zeile 19 (`invoice.home.overview`) beschriftet die Aktion zur Übersicht.
-- Zeile 20 (`invoice.home.workflow`) benennt den Ablaufbereich.
-- Zeile 21 (`invoice.home.customer_title`) benennt die Kundenkarte.
+- Zeile 17 (`invoice.home.intro`) erklärt den Beispielablauf.
+- Zeile 18 (`invoice.home.new_invoice`) beschriftet die primäre Aktion.
+- Zeile 19 (`invoice.home.overview`) beschriftet den Link zur Rechnungsübersicht.
+- Zeile 20 (`invoice.home.workflow`) liefert den Namen des Rechnungsablaufs.
+- Zeile 21 (`invoice.home.customer_title`) benennt Schritt und Karte für Kunden.
 - Zeile 22 (`invoice.home.customer_text`) erklärt den Kundenschritt.
-- Zeile 23 (`invoice.home.customer_link`) beschriftet den Link zum Formular.
-- Zeile 24 (`invoice.home.item_title`) benennt die Artikelkarte.
+- Zeile 23 (`invoice.home.customer_link`) beschriftet den Link zum Kundenformular.
+- Zeile 24 (`invoice.home.item_title`) benennt Schritt und Karte für Artikel.
 - Zeile 25 (`invoice.home.item_text`) erklärt den Artikelschritt.
-- Zeile 26 (`invoice.home.item_link`) beschriftet den Link zum Formular.
-- Zeile 27 (`invoice.home.invoice_title`) benennt die Rechnungskarte.
-- Zeile 28 (`invoice.home.invoice_text`) erklärt Rechnungserstellung und
-  automatische Nummernvergabe.
-- Zeile 29 (`invoice.home.invoice_link`) beschriftet den Link zum Formular.
+- Zeile 26 (`invoice.home.item_link`) beschriftet den Link zum Artikelformular.
+- Zeile 27 (`invoice.home.invoice_title`) benennt Schritt und Karte für Rechnungen.
+- Zeile 28 (`invoice.home.invoice_text`) erklärt Auswahl des Kunden und Nummernvergabe.
+- Zeile 29 (`invoice.home.invoice_link`) beschriftet den Link zum Rechnungsformular.
+- Zeile 30 (`invoice.home.local_badge`) kennzeichnet die lokale, startbereite Beispielanwendung.
+- Zeile 31 (`invoice.home.proof`) erklärt, dass die Daten lokal im Projekt bleiben.
+- Zeile 32 (`invoice.home.sample_label`) kennzeichnet die Rechnung als Beispiel.
+- Zeile 33 (`invoice.home.sample_status`) zeigt den Entwurfsstatus der Beispielrechnung.
+- Zeile 34 (`invoice.home.billed_to`) kennzeichnet den Rechnungsempfänger.
+- Zeile 35 (`invoice.home.issue_date`) kennzeichnet das Ausstellungsdatum.
+- Zeile 36 (`invoice.home.tax_rate`) kennzeichnet den Umsatzsteuersatz.
+- Zeile 37 (`invoice.home.tax_rate_value`) zeigt den in der Druckansicht verwendeten Steuersatz.
+- Zeile 38 (`invoice.home.sample_date`) zeigt das lokalisierte Beispieldatum.
+- Zeile 39 (`invoice.home.sample_item_1`) benennt den ersten Beispielartikel.
+- Zeile 40 (`invoice.home.sample_item_1_detail`) zeigt Menge und Nettopreis je Einheit des ersten Artikels.
+- Zeile 41 (`invoice.home.sample_amount_1`) zeigt die Nettosumme des ersten Artikels.
+- Zeile 42 (`invoice.home.sample_item_2`) benennt den zweiten Beispielartikel.
+- Zeile 43 (`invoice.home.sample_item_2_detail`) zeigt Menge und Nettopreis je Einheit des zweiten Artikels.
+- Zeile 44 (`invoice.home.sample_amount_2`) zeigt die Nettosumme des zweiten Artikels.
+- Zeile 45 (`invoice.home.net_total`) beschriftet die Nettosumme.
+- Zeile 46 (`invoice.home.sample_net`) zeigt den Nettobetrag der Beispielrechnung.
+- Zeile 47 (`invoice.home.tax_total`) beschriftet Umsatzsteuer und Steuersatz.
+- Zeile 48 (`invoice.home.sample_tax`) zeigt den Steuerbetrag der Beispielrechnung.
+- Zeile 49 (`invoice.home.gross_total`) beschriftet den fälligen Bruttobetrag.
+- Zeile 50 (`invoice.home.sample_gross`) zeigt den Bruttobetrag der Beispielrechnung.
+- Zeile 51 (`invoice.home.open_sample`) beschriftet den Link zur Druckansicht.
+- Zeile 52 (`invoice.home.feature_date_title`) benennt den Datums-Hinweis.
+- Zeile 53 (`invoice.home.feature_date_text`) erklärt die reine Datumseingabe ohne Uhrzeit.
+- Zeile 54 (`invoice.home.feature_number_title`) benennt die automatische Nummernvergabe.
+- Zeile 55 (`invoice.home.feature_number_text`) erklärt, wann die Nummer entsteht.
+- Zeile 56 (`invoice.home.feature_print_title`) benennt die Druckfunktion.
+- Zeile 57 (`invoice.home.feature_print_text`) erklärt die berechneten Summen.
+- Zeile 58 (`invoice.home.workflow_kicker`) kennzeichnet die Ablaufsektion als drei Schritte.
+- Zeile 59 (`invoice.home.workflow_title`) setzt deren Hauptüberschrift.
+- Zeile 60 (`invoice.home.all_invoices`) beschriftet den Link zu allen Rechnungen.

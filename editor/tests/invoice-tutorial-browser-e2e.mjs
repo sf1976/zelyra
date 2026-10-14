@@ -19,12 +19,14 @@ try {
   assert.match(css, /Tabler v1\.6\.1/);
   assert.match(css, /\.invoice-home-hero/);
   assert.match(css, /max-width: 991px/);
-  assert.match(await page.locator("h1").innerText(), /Was möchtest du erledigen\?|What would you like to do\?/);
-  assert.equal(await page.locator(".invoice-home .row-cards .card").count(), 3);
+  assert.match(await page.locator("h1").innerText(), /Vom ersten Kunden bis zur fertigen Rechnung\.|From the first customer to the finished invoice\./);
+  assert.equal(await page.locator(".invoice-home .invoice-workflow-card").count(), 3);
+  assert.equal(await page.locator(".invoice-preview-number").innerText(), "RE-2026-001");
+  assert.match(await page.locator(".invoice-preview").innerText(), /354,62 €|€354\.62/);
   const desktop = await page.evaluate(() => ({
     viewport: window.innerWidth,
     document: document.documentElement.scrollWidth,
-    cardLefts: [...document.querySelectorAll(".invoice-home .row-cards > article")].map((node) => Math.round(node.getBoundingClientRect().left)),
+    cardLefts: [...document.querySelectorAll(".invoice-home .invoice-workflow-cards > article")].map((node) => Math.round(node.getBoundingClientRect().left)),
     invoiceButton: document.querySelector('a[href="/invoices/new"]') !== null,
   }));
   if (process.env.ZELYRA_INVOICE_SCREENSHOT) {
@@ -53,7 +55,7 @@ try {
   const mobile = await page.evaluate(() => ({
     viewport: window.innerWidth,
     document: document.documentElement.scrollWidth,
-    cardLefts: [...document.querySelectorAll(".invoice-home .row-cards > article")].map((node) => Math.round(node.getBoundingClientRect().left)),
+    cardLefts: [...document.querySelectorAll(".invoice-home .invoice-workflow-cards > article")].map((node) => Math.round(node.getBoundingClientRect().left)),
     navCanScroll: document.querySelector(".tutorial-nav").scrollWidth >= document.querySelector(".tutorial-nav").clientWidth,
   }));
   assert.ok(mobile.document <= mobile.viewport, `mobile page overflows: ${JSON.stringify(mobile)}`);

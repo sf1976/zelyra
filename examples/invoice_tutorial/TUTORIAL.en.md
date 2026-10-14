@@ -115,22 +115,26 @@ the number `RE-2026-001`.
 
 ### `main.zyl` — project entry and home page
 
-- Line 1 states the entry file's role.
-- Lines 2–7 import the database, shared layout, customers, items, invoices,
-  and invoice overview. Aliases make these modules available to the project
-  graph while keeping their declarations in `src/`.
-- Lines 9–11 declare `GET /` and choose `InvoiceTutorialShell` as its shared
-  layout.
-- Line 12 begins the page content. Lines 13–21 create the home hero.
-  `data-zelyra-i18n` binds its title, description, and links to the bilingual
-  entries in `locales/en.json` and `locales/de.json`.
-- Lines 23–33 create the customer card. `col-md-4` places three equal cards on medium and
-  larger screens. Lines 27–30 provide its badge, title, description, and link
-  to `/customers/new`.
-- Lines 34–43 repeat the card structure for items and link to `/items/new`.
-- Lines 44–53 create the invoice card and link to `/invoices/new`.
-- Lines 54–57 close the cards section, main element, HTML output, and page
-  declaration. Each opening tag is paired with its closing tag.
+- Line 1 says this file connects the business modules and contains the home page.
+- Lines 2–7 import the database, shared layout, customers, items, invoices, and overview. The names after `as` are local aliases, so each declaration remains in its own file.
+- Lines 9–11 declare `GET /`, select `InvoiceTutorialShell`, and begin HTML output. The `/` route is explicit here.
+- Line 12 opens the main area. Lines 13–14 start the two-column hero and sample-invoice layout.
+- Lines 15–19 create the label, Z mark, and local-status badge. `data-zelyra-i18n` labels are replaced from the locale files.
+- Line 20 sets the translated main heading; line 21 sets the introduction.
+- Lines 22–25 create the action area and links: `/invoices/new` starts invoice creation and `/views/invoicedashboard` opens the overview.
+- Lines 26–30 show the local-data note and close the hero.
+- Lines 32–39 begin the sample invoice. Its visible number `RE-2026-001` matches the seed; its labels and draft status are translated.
+- Lines 40–45 separate the heading from the hard-coded sample recipient. The `.test` email is sample data.
+- Lines 46–55 show issue date and VAT rate in two columns. The date and labels are localized for English and German.
+- Lines 56–71 display the two sample line items with quantities, unit prices, and line totals.
+- Lines 72–76 show net, 19% VAT, and gross totals. They match the seed data (€298.00 net, €56.62 tax, €354.62 gross).
+- Lines 77–79 link to the sample invoice's real print view and close the top grid.
+- Lines 81–103 show three feature notes for date entry, automatic numbering, and printing; each `<article>` groups one note, `<strong>` gives its title, and `<p>` gives its explanation.
+- Lines 105–112 set the next section's heading, caption, and link.
+- Lines 113–122 form step 1. `col-md-4` reserves one third of the row on wide screens; the link opens `/customers/new`.
+- Lines 123–131 form step 2 and link to `/items/new`.
+- Lines 132–140 form step 3, highlight the invoice card, and link to `/invoices/new`.
+- Lines 141–145 close the card grid, workflow section, main area, HTML output, and page declaration. Together with the openings above, these lines show the block structure.
 
 ### `src/database.zyl` — shared connection
 
@@ -248,61 +252,82 @@ the number `RE-2026-001`.
 
 ### `zelyra.theme.css` — local appearance
 
-- Line 1 enables the locally bundled Tabler baseline.
-- Line 2 records that the tutorial does not request a CDN.
-- Lines 3–12 set light appearance, primary color, background, text, card radius,
-  and shadow.
-- Lines 14–21 style the body, remove default margins, and choose a readable
-  system font.
-- Lines 23–28 remove the editor grid from the standalone web application.
-- Lines 30–38 reset the outer page so Tabler controls its layout.
-- Lines 40–50 style the page wrapper, header, brand, and navigation.
-- Line 51 adds space around page content.
-- Lines 52–55 style the home hero, its heading and description, and its action links.
-- Lines 56–59 style the workflow cards, headings, descriptions, and links.
-- Line 60 styles the footer.
-- Lines 61–65 standardize spacing, forms, tables, and focus indicators.
-- Lines 66–68 style the net/tax totals on the print view.
-- Lines 70–83 adapt navigation and content for narrower screens.
-- Lines 84–88 hide navigation and footer when printing and remove unnecessary
-  padding and shadows.
+- Lines 1–2 enable the locally served Tabler baseline and record that no CDN request is needed.
+- Lines 3–12 set the light palette, primary color, page colors, card radius, and default shadow.
+- Lines 14–21 style the body, minimum height, margin, background, and system font.
+- Lines 23–28 override the IDE grid for the standalone application and let it use the full width.
+- Lines 30–38 remove the outer Tabler main area's width limit, border, background, and shadow.
+- Lines 40–51 style the page wrapper, sticky navigation, brand, navigation links, button, and content spacing.
+- Lines 52–68 build the home hero: grid, gradient, decorative ring, badge, large heading, description, buttons, and local-data note.
+- Lines 69–92 style the sample invoice: paper card, status, recipient, date, payment term, line items, totals, and link states.
+- Lines 93–103 format the three feature notes and the workflow section heading.
+- Lines 104–114 style the overview link, three-column workflow, hover state, numbers, icons, step text, and footer.
+- Lines 115–123 standardize spacing in generated pages, forms, labels, tables, focus indication, and print totals.
+- Lines 124–132 adapt navigation, hero, and sample invoice up to 991 px by stacking the two columns.
+- Lines 133–151 shrink navigation and hero up to 575 px, stack actions and feature notes, and keep the cards readable.
+- Lines 152–159 define print mode: navigation and actions disappear; key content remains printable without unnecessary shadows and spacing.
 
-### `locales/en.json` and `locales/de.json` — translated labels
+### `locales/en.json` and `locales/de.json` — localized labels
 
-Both JSON files have the same 30-line structure. Each key is identical at the
-same line in both files; only its displayed English or German value differs.
-The key names connect the translations to the `data-zelyra-i18n` attributes
-and localized CRUD fields. None of these values changes routes or database
-behavior.
+Both files contain the same keys in the same order. The line walkthrough applies to both: `en.json` maps each stable key to English display text and `de.json` maps it to German. `main.zyl`, the shared layout, and generated forms refer to these keys; their values do not change routes or database access.
 
-- Line 1 opens the JSON object. Line 30 closes it.
-- Line 2 (`invoice.number.label`) labels an invoice number.
-- Line 3 (`invoice.number.auto_hint`) says the server assigns that number when
-  saving.
+- Line 1 opens the JSON object; line 61 closes it.
+- Line 2 (`invoice.number.label`) labels the invoice-number field.
+- Line 3 (`invoice.number.auto_hint`) explains automatic assignment when saving.
 - Line 4 (`invoice.issued_at.label`) labels the issue date.
-- Line 5 (`invoice.overview.title`) names the invoice overview.
-- Line 6 (`invoice.nav.document_title`) sets the browser document title.
-- Line 7 (`invoice.nav.subtitle`) sets the navigation subtitle.
+- Line 5 (`invoice.overview.title`) sets the invoice overview title.
+- Line 6 (`invoice.nav.document_title`) sets the browser-tab title.
+- Line 7 (`invoice.nav.subtitle`) sets the subtitle beside the brand.
 - Line 8 (`invoice.nav.home`) labels the home link.
 - Line 9 (`invoice.nav.customers`) labels the customer link.
-- Line 10 (`invoice.nav.items`) labels the item link.
-- Line 11 (`invoice.nav.invoices`) labels the invoice overview link.
-- Line 12 (`invoice.nav.lines`) labels the line-item link.
+- Line 10 (`invoice.nav.items`) labels the items link.
+- Line 11 (`invoice.nav.invoices`) labels the overview link.
+- Line 12 (`invoice.nav.lines`) labels the invoice-line link.
 - Line 13 (`invoice.nav.new_invoice`) labels the new-invoice button.
-- Line 14 (`invoice.nav.footer`) supplies the footer text.
-- Line 15 (`invoice.home.eyebrow`) supplies the small label above the home title.
-- Line 16 (`invoice.home.title`) supplies the main home-page heading.
-- Line 17 (`invoice.home.intro`) explains the workflow in one sentence.
-- Line 18 (`invoice.home.new_invoice`) labels the create-invoice action.
-- Line 19 (`invoice.home.overview`) labels the overview action.
-- Line 20 (`invoice.home.workflow`) names the workflow section.
-- Line 21 (`invoice.home.customer_title`) names the customer card.
+- Line 14 (`invoice.nav.footer`) supplies the footer note.
+- Line 15 (`invoice.home.eyebrow`) supplies the small label above the heading.
+- Line 16 (`invoice.home.title`) supplies the home-page heading.
+- Line 17 (`invoice.home.intro`) explains the sample workflow.
+- Line 18 (`invoice.home.new_invoice`) labels the primary action.
+- Line 19 (`invoice.home.overview`) labels the invoice-overview link.
+- Line 20 (`invoice.home.workflow`) names the invoice workflow.
+- Line 21 (`invoice.home.customer_title`) names the customer step and card.
 - Line 22 (`invoice.home.customer_text`) explains the customer step.
-- Line 23 (`invoice.home.customer_link`) labels its form link.
-- Line 24 (`invoice.home.item_title`) names the item card.
+- Line 23 (`invoice.home.customer_link`) labels the customer-form link.
+- Line 24 (`invoice.home.item_title`) names the item step and card.
 - Line 25 (`invoice.home.item_text`) explains the item step.
-- Line 26 (`invoice.home.item_link`) labels its form link.
-- Line 27 (`invoice.home.invoice_title`) names the invoice card.
-- Line 28 (`invoice.home.invoice_text`) explains invoice creation and automatic
-  numbering.
-- Line 29 (`invoice.home.invoice_link`) labels its form link.
+- Line 26 (`invoice.home.item_link`) labels the item-form link.
+- Line 27 (`invoice.home.invoice_title`) names the invoice step and card.
+- Line 28 (`invoice.home.invoice_text`) explains customer selection and number assignment.
+- Line 29 (`invoice.home.invoice_link`) labels the invoice-form link.
+- Line 30 (`invoice.home.local_badge`) marks the local sample application as ready.
+- Line 31 (`invoice.home.proof`) says that data stays in the local project.
+- Line 32 (`invoice.home.sample_label`) marks the invoice as a sample.
+- Line 33 (`invoice.home.sample_status`) shows the sample invoice draft status.
+- Line 34 (`invoice.home.billed_to`) labels the invoice recipient.
+- Line 35 (`invoice.home.issue_date`) labels the issue date.
+- Line 36 (`invoice.home.tax_rate`) labels the VAT rate.
+- Line 37 (`invoice.home.tax_rate_value`) shows the tax rate used on the print view.
+- Line 38 (`invoice.home.sample_date`) shows the localized sample date.
+- Line 39 (`invoice.home.sample_item_1`) names the first sample item.
+- Line 40 (`invoice.home.sample_item_1_detail`) shows the first item's quantity and net unit price.
+- Line 41 (`invoice.home.sample_amount_1`) shows the first item's net line total.
+- Line 42 (`invoice.home.sample_item_2`) names the second sample item.
+- Line 43 (`invoice.home.sample_item_2_detail`) shows the second item's quantity and net unit price.
+- Line 44 (`invoice.home.sample_amount_2`) shows the second item's net line total.
+- Line 45 (`invoice.home.net_total`) labels the net total.
+- Line 46 (`invoice.home.sample_net`) shows the sample invoice net amount.
+- Line 47 (`invoice.home.tax_total`) labels VAT and the tax rate.
+- Line 48 (`invoice.home.sample_tax`) shows the sample invoice tax amount.
+- Line 49 (`invoice.home.gross_total`) labels the gross amount due.
+- Line 50 (`invoice.home.sample_gross`) shows the sample invoice gross amount.
+- Line 51 (`invoice.home.open_sample`) labels the print-view link.
+- Line 52 (`invoice.home.feature_date_title`) titles the date feature.
+- Line 53 (`invoice.home.feature_date_text`) explains date-only entry without a time.
+- Line 54 (`invoice.home.feature_number_title`) titles automatic numbering.
+- Line 55 (`invoice.home.feature_number_text`) explains when the number is assigned.
+- Line 56 (`invoice.home.feature_print_title`) titles the print feature.
+- Line 57 (`invoice.home.feature_print_text`) explains the calculated totals.
+- Line 58 (`invoice.home.workflow_kicker`) labels the workflow section as three steps.
+- Line 59 (`invoice.home.workflow_title`) sets its main heading.
+- Line 60 (`invoice.home.all_invoices`) labels the link to all invoices.

@@ -62,7 +62,7 @@ try {
   );
 
   await page.goto(appUrl, { waitUntil: "networkidle" });
-  await page.getByRole("heading", { name: /Was möchtest du erledigen\?|What would you like to do\?/ }).waitFor();
+  await page.getByRole("heading", { name: /Vom ersten Kunden bis zur fertigen Rechnung\.|From the first customer to the finished invoice\./ }).waitFor();
   assert.deepEqual(browserErrors, [], "Studio and the invoice application must not emit browser errors");
 
   const stopResponse = await fetch(`${base}/api/stop-web-preview`, {

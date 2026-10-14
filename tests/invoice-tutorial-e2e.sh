@@ -45,6 +45,33 @@ DATABASE_URL="${database_url}" ZELYRA_DATABASE_MAIN_URL="${database_url}" \
 # DECIMAL changes caused by MariaDB's default DECIMAL(10,0) metadata.
 DATABASE_URL="${database_url}" ZELYRA_DATABASE_MAIN_URL="${database_url}" \
   "${binary}" db setup "${project}/main.zyl"
+# The shared integration database is outside the generated project's Compose
+# stack. Load the repeatable sample SQL explicitly so its print route is covered.
+python3 - "${database_url}" "${project}/invoice-tutorial.seed.sql" <<'PY'
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+from urllib.parse import unquote, urlsplit
+
+parts = urlsplit(sys.argv[1])
+client = shutil.which("mariadb") or shutil.which("mysql")
+if client is None:
+    raise SystemExit("the invoice E2E requires the MariaDB or MySQL command-line client")
+if parts.scheme != "mariadb" or not parts.hostname or not parts.username:
+    raise SystemExit("DATABASE_URL must include MariaDB host and user details")
+environment = os.environ.copy()
+environment["MYSQL_PWD"] = unquote(parts.password or "")
+database = unquote(parts.path.lstrip("/"))
+subprocess.run(
+    [client, "--protocol=tcp", "--host", parts.hostname, "--port", str(parts.port or 3306),
+     "--user", unquote(parts.username), "--database", database, "--batch", "--silent"],
+    input=Path(sys.argv[2]).read_bytes(),
+    env=environment,
+    check=True,
+)
+PY
 
 port="$(python3 - <<'PY'
 import socket
@@ -77,7 +104,7 @@ if [[ "${ready}" != "1" ]]; then
   exit 1
 fi
 
-for route in / /customers /items /invoices /invoice_lines /invoices/new /views/invoicedashboard; do
+for route in / /customers /items /invoices /invoice_lines /invoices/new /views/invoicedashboard /invoices/RE-2026-001/print; do
   response="$(curl --silent --show-error --retry 40 --retry-connrefused \
     --retry-delay 0 --write-out '\n%{http_code}' "http://${address}${route}")"
   status="${response##*$'\n'}"
@@ -88,13 +115,26 @@ for route in / /customers /items /invoices /invoice_lines /invoices/new /views/i
     exit 1
   fi
   if [[ "${route}" == "/" && \
-    ! ( ("${body}" == *"Was möchtest du erledigen?"* && "${body}" == *"Rechnungsübersicht öffnen"*) || \
-       ("${body}" == *"What would you like to do?"* && "${body}" == *"Open invoice overview"*) ) ]]; then
+    ! ( ("${body}" == *"Vom ersten Kunden bis zur fertigen Rechnung."* && "${body}" == *"Rechnungsübersicht öffnen"* && "${body}" == *"354,62 €"*) || \
+       ("${body}" == *"From the first customer to the finished invoice."* && "${body}" == *"Open invoice overview"* && "${body}" == *"€354.62"*) ) ]]; then
     echo "invoice tutorial landing page did not render its workflow" >&2
     python3 -c 'import re,sys; s=sys.stdin.read(); s=s[s.find("invoice-home"):]; print(re.sub(r"<[^>]+>", " ", s)[:1200])' <<<"${body}" >&2
     exit 1
   fi
 done
+sample_print_response="$(curl --silent --show-error --write-out '\n%{http_code}' "http://${address}/invoices/RE-2026-001/print")"
+sample_print_status="${sample_print_response##*$'\n'}"
+sample_print="${sample_print_response%$'\n'*}"
+if [[ "${sample_print_status}" != "200" ]]; then
+  echo "the sample invoice print route returned HTTP ${sample_print_status}" >&2
+  cat "${temporary_root}/server.log" >&2
+  exit 1
+fi
+if [[ "${sample_print}" != *"RE-2026-001"* || "${sample_print}" != *"Beispiel GmbH"* || "${sample_print}" != *"354.62"* ]]; then
+  echo "the landing-page sample invoice did not open with its seeded details and totals" >&2
+  cat "${temporary_root}/server.log" >&2
+  exit 1
+fi
 home="$(curl --silent --show-error --fail "http://${address}/")"
 if [[ "${home}" != *'href="/__zelyra/theme.css"'* ]]; then
   echo "invoice tutorial did not link its project theme stylesheet" >&2
