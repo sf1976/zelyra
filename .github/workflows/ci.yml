@@ -125,8 +125,8 @@ jobs:
           cache-dependency-path: editor/package-lock.json
       - name: Install locked browser verification dependencies
         run: npm ci --prefix editor
-      - name: Install headless Chromium
-        run: npx --prefix editor playwright install --with-deps chromium
+      - name: Install headless Chromium, Firefox, and WebKit
+        run: npx --prefix editor playwright install --with-deps chromium firefox webkit
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
