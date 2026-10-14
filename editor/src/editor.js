@@ -1070,7 +1070,9 @@ async function loadDatabaseSchema() {
   try {
     databaseMap = await api("database-schema");
     databaseTables = flattenDatabaseMap(databaseMap);
-    state.textContent = `${t("schemaLoaded")} · ${databaseMap.backend || ""}`;
+    state.textContent = databaseMap.live_connected === false
+      ? `${t("schemaLoaded")} (deklariert) · ${databaseMap.backend || ""}`
+      : `${t("schemaLoaded")} · ${databaseMap.backend || ""}`;
     state.dataset.kind = "success";
     renderDatabaseTables();
     renderDatabaseGraph();
