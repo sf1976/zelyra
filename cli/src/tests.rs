@@ -640,6 +640,9 @@ fn feature_settings_accept_known_manifest_values() {
 
 #[test]
 fn project_environment_settings_use_process_then_dotenv_then_fallback() {
+    let _environment = TEST_ENVIRONMENT_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let directory = std::env::temp_dir().join(format!(
         "zelyra-ui-settings-{}-{}",
         std::process::id(),
@@ -683,6 +686,9 @@ fn project_environment_settings_use_process_then_dotenv_then_fallback() {
 
 #[test]
 fn allowed_hosts_use_process_then_project_env_then_loopback_fallback() {
+    let _environment = TEST_ENVIRONMENT_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let directory = std::env::temp_dir().join(format!(
         "zelyra-allowed-hosts-{}-{}",
         std::process::id(),
@@ -793,6 +799,9 @@ fn project_theme_css_is_optional_utf8_and_size_limited() {
 
 #[test]
 fn ui_stylesheet_selection_supports_default_tabler_and_safe_project_files() {
+    let _environment = TEST_ENVIRONMENT_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let directory = env::temp_dir().join(format!(
         "zelyra-ui-stylesheet-{}-{}",
         std::process::id(),

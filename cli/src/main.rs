@@ -42,6 +42,9 @@ use zelyra_web::{
     UiLevel, WebApp, PROJECT_THEME_CSS_PATH,
 };
 
+#[cfg(test)]
+static TEST_ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
+
 mod account_cli;
 mod auth_reset_limits;
 mod command_dispatch;

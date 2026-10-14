@@ -4884,6 +4884,9 @@ fn main() {}
 
     #[test]
     fn run_editor_program_does_not_auto_setup_an_unrelated_database() {
+        let _environment = crate::TEST_ENVIRONMENT_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let state = project();
         let path = state.root.join("main.zyl");
         fs::write(
@@ -4905,10 +4908,11 @@ fn main() {}
         let payload: Value = serde_json::from_str(&response.2).expect("decode run result");
         assert_eq!(payload["success"], false);
         assert_eq!(payload["webApp"], false);
-        assert!(payload["stderr"]
-            .as_str()
-            .unwrap()
-            .contains("E-DB-PRECISION"));
+        let stderr = payload["stderr"].as_str().unwrap();
+        assert!(
+            stderr.contains("E-DB-PRECISION"),
+            "unexpected Studio run diagnostic: {stderr}"
+        );
         assert!(!payload["stderr"]
             .as_str()
             .unwrap()
