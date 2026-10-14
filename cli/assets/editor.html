@@ -28,6 +28,7 @@
         <button class="toolbar-button" id="open-search" title="Suchen (Strg+F)" data-i18n-title="search">⌕ <span data-i18n="search">Suchen</span></button>
         <button class="toolbar-button" id="project-search-button" title="Projekt durchsuchen (Strg+Umschalt+F)" data-i18n-title="projectSearch">⌕ <span data-i18n="projectSearch">Projekt</span></button>
         <button class="toolbar-button" id="project-map-button" title="Projektbeziehungen anzeigen" data-i18n-title="projectMap">◇ <span data-i18n="projectMap">Projektkarte</span></button>
+        <button class="toolbar-button" id="pdf-preview-button" type="button" title="PDF-Vorschau mit Beispieldaten" data-i18n-title="pdfPreview">▣ <span data-i18n="pdfPreview">PDF</span></button>
         <button class="toolbar-button" id="task-finder-button" title="Aktion suchen (Strg+Umschalt+P)" data-i18n-title="taskFinder">⌘ <span data-i18n="taskFinder">Aktionen</span></button>
         <button class="toolbar-button" id="database-button" title="Datenbankübersicht öffnen" data-i18n-title="database">▤ <span data-i18n="database">Datenbank</span></button>
         <button class="toolbar-button" id="logs-button" title="Lokale Programmlogs öffnen" data-i18n-title="logs">≋ <span data-i18n="logs">Logs</span></button>
@@ -229,6 +230,17 @@
     <section id="project-map-nullability" class="project-map-nullability" hidden><h3 data-i18n="projectMapNullability">NULL-Radar</h3><div id="project-map-nullability-list"></div></section>
     <div class="project-map-legend"><span data-i18n="projectMapModules">Module</span><span data-i18n="projectMapData">Daten und Ansichten</span><span data-i18n="projectMapWeb">Routen und APIs</span><span data-i18n="projectMapLogic">Funktionen</span></div>
     <div class="project-map-scroller"><svg id="project-map-graph" class="project-map-graph" role="group" aria-label="Interaktive Projektbeziehungen" data-i18n-aria="projectMapTitle"></svg></div>
+  </dialog>
+  <dialog id="pdf-preview-dialog" class="project-map-dialog pdf-preview-dialog" aria-labelledby="pdf-preview-title">
+    <header class="project-map-header"><div><span class="database-eyebrow" data-i18n="pdfPreview">PDF</span><h2 id="pdf-preview-title" data-i18n="pdfPreviewTitle">PDF-Vorschau</h2></div><button id="pdf-preview-close" type="button" aria-label="Schließen" data-i18n-aria="close">×</button></header>
+    <div class="pdf-preview-controls">
+      <label><span data-i18n="pdfView">Deklarierte View</span><select id="pdf-preview-view"></select></label>
+      <label><span data-i18n="pdfExampleData">Beispieldaten als JSON-Objekt</span><textarea id="pdf-preview-data" spellcheck="false">{}</textarea></label>
+      <button id="pdf-preview-render" type="button" class="primary-button" data-i18n="pdfRender">PDF erzeugen</button>
+      <a id="pdf-preview-download" class="toolbar-button" download="zelyra-preview.pdf" hidden data-i18n="pdfDownload">PDF herunterladen</a>
+    </div>
+    <p id="pdf-preview-status" role="status" class="project-map-status"></p>
+    <iframe id="pdf-preview-frame" title="PDF-Vorschau" sandbox="allow-downloads" hidden></iframe>
   </dialog>
 </body>
 </html>

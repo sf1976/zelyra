@@ -131,6 +131,26 @@ keine exakte Rekursionstiefe belegen; Studio zeigt keine erfundene Tiefe oder
 Schrittzahl an. Die angezeigte Laufzeit in Millisekunden stammt aus dem
 tatsächlichen Programmlauf.
 
+### Serverseitige PDF-Vorschau
+
+Über **PDF-Vorschau** wählst du eine deklarierte `view` und gibst Beispieldaten
+als JSON-Objekt ein, etwa `{"number":"R-104"}` für eine View mit
+`{number}`. Erst **PDF erzeugen** startet die Vorschau. Studio prüft das
+Projekt einschließlich des aktuellen ungespeicherten `.zyl`-Puffers und nutzt
+denselben lokalen Renderer wie `render_pdf("ViewName", record)`. Das Ergebnis
+wird als echte PDF-Datei im isolierten Browserrahmen gezeigt und kann
+heruntergeladen werden. Studio führt dafür keine Projektfunktion aus und
+fragt keine Datenbank ab. Die eingegebenen Beispieldaten verlassen den lokalen
+Studio-Server nicht und werden nicht in die Projektdatei geschrieben.
+
+Der Renderer erzeugt derzeit ein durchsuchbares Text-PDF aus sichtbarem
+View-Inhalt; CSS, Bilder und Diagramme werden darin nicht als grafisches Layout
+wiedergegeben. Der Browser kann den eingebetteten PDF-Rahmen je nach
+PDF-Unterstützung anders darstellen; der Download enthält dieselben
+generierten PDF-Bytes. Ungültige Daten, unbekannte Views und Compilerfehler
+werden als Fehler angezeigt. Diese Funktion ist getrennt von der vorhandenen
+Präsentations-Druckansicht, die weiterhin den Browser-Druckdialog verwendet.
+
 ## Rechnungstutorial in Studio starten
 
 Bei einem erzeugten Rechnungstutorial startet Studio beim Klick auf

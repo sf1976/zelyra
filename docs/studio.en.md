@@ -120,6 +120,24 @@ analysis incomplete. The call graph cannot prove an exact maximum depth;
 Studio does not invent one or a measured step count. The duration in
 milliseconds comes from the actual program run.
 
+### Server-side PDF preview
+
+Open **PDF preview**, choose a declared `view`, and enter example data as a
+JSON object, such as `{"number":"R-104"}` for a view containing `{number}`.
+Only **Render PDF** starts rendering. Studio checks the project, including the
+current unsaved `.zyl` buffer, and uses the same local renderer as
+`render_pdf("ViewName", record)`. It shows the actual PDF file in an isolated
+browser frame and offers a download. Studio does not execute project
+functions or query a database for this preview. Example data stays on the
+local Studio server and is not written to project files.
+
+The current renderer creates a searchable text PDF from visible view content;
+it does not reproduce CSS, images, or charts as graphical layout. Embedded PDF
+display depends on browser support; the download contains the same generated
+PDF bytes. Invalid data, unknown views, and compiler errors are reported.
+This is separate from the existing presentation print view, which still uses
+the browser print dialog.
+
 ## Start the invoice tutorial in Studio
 
 For a generated invoice tutorial, Studio starts its own isolated MariaDB

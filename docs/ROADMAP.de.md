@@ -1397,8 +1397,12 @@ Rückmeldungen des Projektverantwortlichen ersetzen keinen Teilnehmertest.
   ein Aufrufgraph markiert mögliche Rekursion und liest die konfigurierte
   Stacktiefe. Die Projektkarte verbindet nun Tabellen, SQL, Records,
   Formulare, Tabellenansichten und APIs über Modulgrenzen und zeigt statische
-  NULL-Diagnosen des Compilers.
-  Andere Symbolarten, die übrigen Studio-Werkzeuge, externer Dateiwächter,
+  NULL-Diagnosen des Compilers. Eine ausdrücklich ausgelöste PDF-Vorschau
+  rendert deklarierte Views mit
+  Beispieldaten über denselben serverseitigen PDF-Renderer wie `render_pdf`,
+  ohne Projektfunktionen auszuführen; Download und isolierter PDF-Rahmen sind
+  in drei Browser-Engines geprüft. Andere Symbolarten, die übrigen Studio-
+  Werkzeuge, externer Dateiwächter,
   vollständige Release-Gates und RC-Artefakte bleiben offen; siehe das
   [1.1.0-Arbeitsprotokoll](release-plans/1.1.0-studio-deep-native-progress.de.md).
 

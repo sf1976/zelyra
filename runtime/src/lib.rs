@@ -183,6 +183,14 @@ mod parallel;
 mod pdf;
 mod pdf_template;
 use pdf_template::interpolate_pdf_data;
+
+/// Render a declared view with supplied record data without executing project code.
+/// The same template and PDF pipeline is used by the `render_pdf` builtin.
+pub fn render_pdf_view(view: &ViewDef, data: &Value) -> Result<Vec<u8>, &'static str> {
+    let html = view.html.replace("<slot />", "").replace("<slot/>", "");
+    let html = interpolate_pdf_data(&html, data)?;
+    pdf::render_html_to_pdf(&html)
+}
 mod records;
 mod sql_results;
 
@@ -12179,18 +12187,15 @@ impl<'program> Interpreter<'program> {
                     ));
                 }
             };
-            let mut html = self
+            let view = self
                 .view_definitions
                 .get(&view_name)
-                .map(|view| view.html.clone())
+                .cloned()
                 .ok_or_else(|| {
                     self.runtime_error(args[0].span, format!("unknown PDF view `{view_name}`"))
                 })?;
             let data = self.eval(&args[1], env)?;
-            html = html.replace("<slot />", "").replace("<slot/>", "");
-            html = interpolate_pdf_data(&html, &data)
-                .map_err(|message| self.runtime_error(span, message))?;
-            pdf::render_html_to_pdf(&html)
+            render_pdf_view(&view, &data)
                 .map(Value::Bytes)
                 .map_err(|error| self.runtime_error(span, error))
         } else if name == "read_console" {

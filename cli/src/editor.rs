@@ -11,6 +11,8 @@ use zelyra_web::{parse_request, Request};
 #[path = "editor_events.rs"]
 mod editor_events;
 use editor_events::EventHub;
+#[path = "editor_pdf.rs"]
+mod editor_pdf;
 
 const EDITOR_HTML: &str = include_str!("../assets/editor.html");
 const EDITOR_JS: &str = include_str!("../assets/editor.js");
@@ -456,6 +458,8 @@ fn editor_response(
         }
         ("GET", "project-map") => editor_project_map(state, &json!({})),
         ("POST", "project-map") => editor_project_map(state, &parse_json_body(&request.body)?),
+        ("GET", "pdf-views") => editor_pdf::views(state),
+        ("POST", "pdf-render") => editor_pdf::render(state, &parse_json_body(&request.body)?),
         ("GET", "logs") => editor_logs_response(state),
         ("GET", "database-schema") => database_schema_response(state),
         ("GET", "database-target") => database_target_response(state),
@@ -4739,7 +4743,7 @@ fn write_editor_response(
         422 => "Unprocessable Content",
         _ => "Internal Server Error",
     };
-    let csp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'";
+    let csp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' blob:; img-src 'self' data:; font-src 'self'; frame-src blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'";
     write!(stream, "HTTP/1.1 {status} {reason}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\nCross-Origin-Resource-Policy: same-origin\r\nX-Frame-Options: DENY\r\nContent-Security-Policy: {csp}\r\n\r\n", body.len())?;
     stream.write_all(body.as_bytes())?;
     stream.flush()
@@ -5020,6 +5024,75 @@ fn main() {}
             active_runs: Arc::new(AtomicUsize::new(0)),
             run_cancel: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    #[test]
+    fn pdf_preview_renders_real_bytes_from_unsaved_view_without_running_main() {
+        let state = project();
+        let disk =
+            "view InvoicePrint { html { <h1>Disk {number}</h1> } } fn main() { assert(false) }";
+        let overlay =
+            "view InvoicePrint { html { <h1>Overlay {number}</h1> } } fn main() { assert(false) }";
+        fs::write(state.root.join("main.zyl"), disk).unwrap();
+        let request = json!({"view":"InvoicePrint","record":{"number":"R-104"},"path":"main.zyl","source":overlay});
+        let (_, _, body) = editor_pdf::render(&state, &request).unwrap();
+        let response: Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(response["mimeType"], "application/pdf");
+        assert!(response["bytes"].as_u64().unwrap() > 500);
+        assert!(response["base64"].as_str().unwrap().starts_with("JVBERi0"));
+        assert_eq!(
+            fs::read_to_string(state.root.join("main.zyl")).unwrap(),
+            disk
+        );
+        let (_, _, disk_body) = editor_pdf::render(
+            &state,
+            &json!({"view":"InvoicePrint","record":{"number":"R-104"}}),
+        )
+        .unwrap();
+        assert_ne!(body, disk_body);
+    }
+
+    #[test]
+    fn pdf_preview_rejects_invalid_data_unknown_views_and_escaping_paths() {
+        let state = project();
+        fs::write(
+            state.root.join("main.zyl"),
+            "view Receipt { html { <h1>Receipt</h1> } }",
+        )
+        .unwrap();
+        assert_eq!(
+            editor_pdf::render(&state, &json!({"view":"Receipt","record":[]}))
+                .unwrap_err()
+                .0,
+            400
+        );
+        assert_eq!(
+            editor_pdf::render(&state, &json!({"view":"Other","record":{}}))
+                .unwrap_err()
+                .0,
+            404
+        );
+        assert!(editor_pdf::render(
+            &state,
+            &json!({"view":"Receipt","record":{},"path":"../outside.zyl","source":""})
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn pdf_preview_api_requires_session_and_same_origin() {
+        let state = project();
+        let list = request("GET", "/__zelyra/editor/api/pdf-views", &[]);
+        assert_eq!(editor_response(&list, &state).unwrap_err().0, 403);
+        let render = request(
+            "POST",
+            "/__zelyra/editor/api/pdf-render",
+            &[
+                ("x-zelyra-editor-token", state.token.as_str()),
+                ("origin", "http://example.test"),
+            ],
+        );
+        assert_eq!(editor_response(&render, &state).unwrap_err().0, 403);
     }
 
     fn request(method: &str, path: &str, headers: &[(&str, &str)]) -> Request {

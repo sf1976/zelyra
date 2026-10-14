@@ -1341,8 +1341,11 @@ rehearsals, and owner feedback do not substitute for participant testing.
   workspace events. Studio can apply a real CLI step budget and cancel console
   runs; a call graph marks possible recursion and reads the configured stack
   depth. The project map now links tables, SQL, records, forms, table views,
-  and APIs across modules and shows static compiler NULL diagnostics. Other
-  symbol kinds, the remaining Studio modules, external file
+  and APIs across modules and shows static compiler NULL diagnostics. Studio
+  now explicitly renders declared views with example data through the
+  same server-side PDF renderer as `render_pdf`, without executing project
+  functions; download and an isolated PDF frame passed three browser engines.
+  Other symbol kinds, the remaining Studio modules, external file
   watching, full release gates, and RC artifacts remain
   open; see the [1.1.0 work log](release-plans/1.1.0-studio-deep-native-progress.en.md).
 

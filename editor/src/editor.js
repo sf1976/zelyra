@@ -211,6 +211,7 @@ const messages = {
     taskRun: "Programm oder Web-App starten", taskRunHelp: "Konsolenprogramme mit Zelyras Laufzeit ausführen oder Webanwendungen lokal starten; konfigurierte Effekte sind möglich, interaktive Eingabe fehlt",
     projectMap: "Projektkarte", projectMapTitle: "Projektbeziehungen", projectMapOpenSource: "Quelltext öffnen", projectMapLoading: "Compiler-Projektmodell wird geladen …", projectMapUnavailable: "Projektkarte konnte nicht erstellt werden.", projectMapIncomplete: "Die Karte ist unvollständig. Nicht auflösbare oder begrenzte Beziehungen werden nicht geraten.", projectMapIssues: { "view.unresolved": "Ansicht nicht gefunden", "view.ambiguous": "Ansichtsname mehrfach vorhanden", "crud.table_unresolved": "CRUD-Tabelle nicht eindeutig", "api.handler_unresolved": "API-Funktion nicht eindeutig", "import.unresolved": "Importziel nicht gefunden", "edge.target_missing": "Beziehungsziel fehlt", "limit.nodes": "Knotenlimit erreicht", "limit.edges": "Beziehungslimit erreicht" }, projectMapEmpty: "Noch keine unterstützten Beziehungen im Projekt.", projectMapModules: "Module", projectMapData: "Daten und Ansichten", projectMapWeb: "Routen und APIs", projectMapLogic: "Funktionen",
     pipelineBreadcrumbs: "Semantische Projektbeziehungen", projectMapNullability: "NULL-Radar (Compiler E-SQL-004)", projectMapIssuesExtra: { "form.table_unresolved": "Formular-Tabelle nicht eindeutig", "struct.unresolved": "Ergebnistyp nicht gefunden", "struct.ambiguous": "Ergebnistyp mehrfach vorhanden", "sql.access_unresolved": "SQL-Tabellenbezug nicht eindeutig" },
+    pdfPreview: "PDF-Vorschau", pdfPreviewTitle: "PDF-Vorschau mit echten PDF-Bytes", pdfView: "Deklarierte View", pdfExampleData: "Beispieldaten als JSON-Objekt", pdfRender: "PDF erzeugen", pdfDownload: "PDF herunterladen", pdfNoViews: "Im Projekt ist keine View deklariert.", pdfReady: "PDF erzeugt ({0} Byte).", pdfLoading: "Views werden geladen …", pdfRendering: "PDF wird lokal erzeugt …", pdfInvalidData: "Bitte ein gültiges JSON-Objekt als Beispieldaten eingeben.", pdfError: "PDF-Vorschau fehlgeschlagen: {0}",
     runButton: "Starten", runButtonTitle: "main.zyl ausführen oder Webanwendung starten",
     runOutputTitle: "Programmausgabe", runStarting: "Anwendung wird vorbereitet und gestartet …", runSuccess: "Programm erfolgreich beendet", runFailure: "Programm mit Fehler beendet", runTimeout: "Ausführung nach 15 Sekunden beendet", runOutputTruncated: "Die Ausgabe ist auf 64 KiB je Stream begrenzt.", runNoOutput: "Keine Ausgabe.", runStdout: "AUSGABE", runStderr: "FEHLER", runInputUnavailable: "Studio stellt dem Programm keine interaktive Eingabe bereit.", runWebReady: "Webanwendung läuft lokal:", runWebOpen: "Anwendung im Browser öffnen", runWebStop: "Vorschau beenden", runWebStopped: "Lokale Vorschau wurde beendet.",
     runtimeBudgetButton: "Budget", runtimeBudgetTitle: "Laufzeitbudget und Rekursion", runtimeBudgetEnable: "Schrittbudget für Konsolenprogramme aktivieren", runtimeBudgetRange: "Schrittbudget (Regler: 1.000 bis 1.000.000)", runtimeBudgetNumber: "Maximale Schritte (1 bis 100.000.000)", runtimeBudgetWebHint: "Das Schrittbudget gilt für Konsolenprogramme. Eine Webvorschau verwendet weiterhin ihre eigenen Laufzeitgrenzen.", runtimeRecursionTitle: "Mögliche Rekursion", runtimeRecursionNone: "Keine direkte oder gegenseitige Rekursion im analysierten Funktionsgraphen gefunden.", runtimeRecursionIncomplete: "Der Funktionsgraph ist zu groß; die Rekursionsanalyse ist unvollständig.", runtimeRecursionDirect: "Direkte Rekursion", runtimeRecursionMutual: "Gegenseitige Rekursion", runtimeStackDepth: "Maximale Stacktiefe laut Projekt: {0} ({1})", runtimeStackConfigured: "konfiguriert", runtimeStackDefault: "Standard", runtimeProfileError: "Laufzeitprofil konnte nicht gelesen werden: {0}", runtimeBudgetInvalid: "Bitte eine ganze Schrittzahl von 1 bis 100.000.000 eingeben.", runtimeBudgetExceeded: "Schrittbudget überschritten", runCancel: "Ausführung abbrechen", runCancelRequested: "Abbruch angefordert …", runCancelled: "Ausführung abgebrochen", runtimeProfileInvalid: "Der ungespeicherte Quelltext ist nicht vollständig analysierbar.",
@@ -309,6 +310,7 @@ const messages = {
     taskRun: "Run program or web app", taskRunHelp: "Run console programs with Zelyra or start web applications locally; configured effects are possible, and interactive input is unavailable",
     projectMap: "Project map", projectMapTitle: "Project relationships", projectMapOpenSource: "Open source location", projectMapLoading: "Loading the compiler project model …", projectMapUnavailable: "Could not create the project map.", projectMapIncomplete: "The map is incomplete. Unresolved or limited relationships are not guessed.", projectMapIssues: { "view.unresolved": "View not found", "view.ambiguous": "View name is ambiguous", "crud.table_unresolved": "CRUD table is not unique", "api.handler_unresolved": "API function is not unique", "import.unresolved": "Import target not found", "edge.target_missing": "Relationship target is missing", "limit.nodes": "Node limit reached", "limit.edges": "Relationship limit reached" }, projectMapEmpty: "No supported relationships in this project yet.", projectMapModules: "Modules", projectMapData: "Data and views", projectMapWeb: "Routes and APIs", projectMapLogic: "Functions",
     pipelineBreadcrumbs: "Semantic project relationships", projectMapNullability: "NULL radar (compiler E-SQL-004)", projectMapIssuesExtra: { "form.table_unresolved": "Form table is not unique", "struct.unresolved": "Result type not found", "struct.ambiguous": "Result type is ambiguous", "sql.access_unresolved": "SQL table access is unresolved" },
+    pdfPreview: "PDF preview", pdfPreviewTitle: "PDF preview with real PDF bytes", pdfView: "Declared view", pdfExampleData: "Example data as a JSON object", pdfRender: "Render PDF", pdfDownload: "Download PDF", pdfNoViews: "This project declares no view.", pdfReady: "PDF rendered ({0} bytes).", pdfLoading: "Loading views …", pdfRendering: "Rendering PDF locally …", pdfInvalidData: "Enter a valid JSON object for example data.", pdfError: "PDF preview failed: {0}",
     runButton: "Run", runButtonTitle: "Run main.zyl or start the web application",
     runOutputTitle: "Program output", runStarting: "Preparing and starting the application …", runSuccess: "Program finished successfully", runFailure: "Program finished with an error", runTimeout: "Execution stopped after 15 seconds", runOutputTruncated: "Output is limited to 64 KiB per stream.", runNoOutput: "No output.", runStdout: "OUTPUT", runStderr: "ERROR", runInputUnavailable: "Studio does not provide interactive input to the program.", runWebReady: "Web application is running locally:", runWebOpen: "Open application in browser", runWebStop: "Stop preview", runWebStopped: "Local preview stopped.",
     runtimeBudgetButton: "Budget", runtimeBudgetTitle: "Runtime budget and recursion", runtimeBudgetEnable: "Enable a step budget for console programs", runtimeBudgetRange: "Step budget (slider: 1,000 to 1,000,000)", runtimeBudgetNumber: "Maximum steps (1 to 100,000,000)", runtimeBudgetWebHint: "The step budget applies to console programs. Web previews keep their own runtime limits.", runtimeRecursionTitle: "Possible recursion", runtimeRecursionNone: "No direct or mutual recursion found in the analyzed function graph.", runtimeRecursionIncomplete: "The function graph is too large; recursion analysis is incomplete.", runtimeRecursionDirect: "Direct recursion", runtimeRecursionMutual: "Mutual recursion", runtimeStackDepth: "Project maximum stack depth: {0} ({1})", runtimeStackConfigured: "configured", runtimeStackDefault: "default", runtimeProfileError: "Could not read runtime profile: {0}", runtimeBudgetInvalid: "Enter an integer step count from 1 to 100,000,000.", runtimeBudgetExceeded: "Step budget exceeded", runCancel: "Cancel execution", runCancelRequested: "Cancellation requested …", runCancelled: "Execution cancelled", runtimeProfileInvalid: "The unsaved source cannot be fully analyzed.",
@@ -1023,6 +1025,7 @@ const studioTasks = [
   ["taskCheck", "taskCheckHelp", ["check", "compiler", "error", "diagnostic"], () => void checkProject()],
   ["taskRun", "taskRunHelp", ["run", "execute", "start program"], () => void runProject()],
   ["projectMap", "projectMapTitle", ["map", "diagram", "module", "route", "relationship"], () => void openProjectMap()],
+  ["pdfPreview", "pdfPreviewTitle", ["pdf", "document", "invoice", "print"], () => void openPdfPreview()],
   ["taskDatabase", "taskDatabaseHelp", ["database", "table", "relation", "schema"], () => openDatabaseWorkbench()],
   ["taskHelp", "taskHelpHelp", ["help", "documentation", "f1"], () => toggleAssistant("help")],
   ["taskProperties", "taskPropertiesHelp", ["properties", "file", "settings"], () => toggleAssistant("properties")],
@@ -2878,6 +2881,80 @@ async function openProjectMap() {
   }
 }
 
+let pdfPreviewUrl = null;
+function clearPdfPreview() {
+  $("pdf-preview-frame").hidden = true;
+  $("pdf-preview-frame").removeAttribute("src");
+  $("pdf-preview-download").hidden = true;
+  $("pdf-preview-download").removeAttribute("href");
+  if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
+  pdfPreviewUrl = null;
+}
+
+async function openPdfPreview() {
+  const dialog = $("pdf-preview-dialog");
+  const select = $("pdf-preview-view");
+  const status = $("pdf-preview-status");
+  if (!dialog.open) dialog.showModal();
+  status.textContent = t("pdfLoading");
+  clearPdfPreview();
+  select.replaceChildren();
+  try {
+    const response = await api("pdf-views");
+    if (!dialog.open) return;
+    for (const name of response.views || []) {
+      const option = document.createElement("option");
+      option.value = name;
+      option.textContent = name;
+      select.append(option);
+    }
+    status.textContent = select.options.length ? "" : t("pdfNoViews");
+    $("pdf-preview-render").disabled = !select.options.length;
+    if (select.options.length) select.focus();
+  } catch (error) {
+    status.textContent = t("pdfError", error.message);
+    $("pdf-preview-render").disabled = true;
+  }
+}
+
+async function renderPdfPreview() {
+  const status = $("pdf-preview-status");
+  let record;
+  try {
+    record = JSON.parse($("pdf-preview-data").value);
+    if (!record || Array.isArray(record) || typeof record !== "object") throw new Error();
+  } catch {
+    status.textContent = t("pdfInvalidData");
+    return;
+  }
+  const view = $("pdf-preview-view").value;
+  const path = activePath?.endsWith(".zyl") ? activePath : null;
+  const source = path && editor ? editor.state.doc.toString() : null;
+  clearPdfPreview();
+  status.textContent = t("pdfRendering");
+  $("pdf-preview-render").disabled = true;
+  try {
+    const result = await api("pdf-render", { method: "POST", body: JSON.stringify({
+      view, record, ...(path && source !== null ? { path, source } : {}),
+    }) });
+    if (!$("pdf-preview-dialog").open || (source !== null && (path !== activePath || editor?.state.doc.toString() !== source))) return;
+    const decoded = atob(result.base64);
+    const bytes = new Uint8Array(decoded.length);
+    for (let index = 0; index < decoded.length; index++) bytes[index] = decoded.charCodeAt(index);
+    if (result.mimeType !== "application/pdf" || decoded.slice(0, 5) !== "%PDF-") throw new Error("Invalid PDF response");
+    pdfPreviewUrl = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+    $("pdf-preview-frame").src = pdfPreviewUrl;
+    $("pdf-preview-frame").hidden = false;
+    $("pdf-preview-download").href = pdfPreviewUrl;
+    $("pdf-preview-download").hidden = false;
+    status.textContent = t("pdfReady", result.bytes);
+  } catch (error) {
+    status.textContent = t("pdfError", error.message);
+  } finally {
+    $("pdf-preview-render").disabled = false;
+  }
+}
+
 function renderProjectMap(map) {
   const svg = $("project-map-graph");
   const ns = "http://www.w3.org/2000/svg";
@@ -3084,6 +3161,10 @@ $("run-output-close").addEventListener("click", () => $("run-output").close());
 $("logs-close").addEventListener("click", () => $("logs-dialog").close());
 $("project-map-button").addEventListener("click", openProjectMap);
 $("project-map-close").addEventListener("click", () => $("project-map-dialog").close());
+$("pdf-preview-button").addEventListener("click", openPdfPreview);
+$("pdf-preview-close").addEventListener("click", () => $("pdf-preview-dialog").close());
+$("pdf-preview-dialog").addEventListener("close", clearPdfPreview);
+$("pdf-preview-render").addEventListener("click", renderPdfPreview);
 $("project-search-input").addEventListener("keydown", (event) => {
   if (event.key === "Enter") { event.preventDefault(); void performProjectSearch(); }
 });
