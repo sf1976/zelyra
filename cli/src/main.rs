@@ -4873,11 +4873,12 @@ fn setup_action(path: &str, action: &str, options: &SetupOptions) -> Result<Stri
         }
     }
     if action == "all" {
+        let started = start_mariadb_compose(&directory, false).map_err(|error| {
+            let web_url = project_web_url(&directory).unwrap_or_else(|_| "unknown".into());
+            format!("{error}\napplication URL after startup: {web_url}")
+        })?;
         let web_url = project_web_url(&directory)?;
-        messages.push(
-            start_mariadb_compose(&directory, false)
-                .map_err(|error| format!("{error}\napplication URL after startup: {web_url}"))?,
-        );
+        messages.push(started);
         messages.push(format!("open: {web_url}"));
     }
     Ok(messages.join("\n"))
