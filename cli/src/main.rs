@@ -88,45 +88,81 @@ const MARIADB_MINIMAL_TEMPLATE: &str = include_str!("../../examples/mariadb_star
 const MARIADB_AUTH_TEMPLATE: &str = include_str!("../../examples/auth.zyl");
 const MARIADB_BUSINESS_TEMPLATE: &str = include_str!("../../examples/auth_crud_api.zyl");
 const TABLER_CORE_CSS: &str = include_str!("../../assets/vendor/tabler/tabler.min.css");
+const TABLER_UI_COMPATIBILITY_CSS: &str = r#"
+:where(html[data-z-ui] .badge, html[data-z-ui] .badge *,
+  html[data-z-ui] .bg-blue-lt, html[data-z-ui] .bg-green-lt,
+  html[data-z-ui] .bg-orange-lt, html[data-z-ui] .bg-primary-lt,
+  html[data-z-ui] .bg-secondary-lt, html[data-z-ui] .bg-success-lt,
+  html[data-z-ui] .bg-warning-lt, html[data-z-ui] .bg-danger-lt,
+  html[data-z-ui] .bg-azure-lt) { color: #000 !important; }
+:where(html[data-z-ui] .badge.bg-blue:not(.bg-blue-lt),
+  html[data-z-ui] .badge.bg-green:not(.bg-green-lt),
+  html[data-z-ui] .badge.bg-primary:not(.bg-primary-lt),
+  html[data-z-ui] .badge.bg-secondary:not(.bg-secondary-lt),
+  html[data-z-ui] .badge.bg-success:not(.bg-success-lt),
+  html[data-z-ui] .badge.bg-danger:not(.bg-danger-lt)) { color: #fff !important; }
+/* Tabler warning and orange backgrounds keep their contrasting dark text. */
+"#;
 const MARIADB_DATABASE_DECLARATION: &str = "database main {\n    engine: mariadb\n}\n\n";
 const MARIADB_DATABASE_MODULE: &str = "database main {\n    engine: mariadb\n}\n";
 const PROJECT_THEME_TEMPLATE: &str = r#"/*
-Optional project-local overrides for the built-in Zelyra web design.
-Uncomment a token below and change its value. This file is sent to browsers;
-never put passwords, API keys, or private data here.
+Optional overrides for the selected local stylesheet. This public file is sent
+to browsers; never put passwords, API keys, or private data here.
 
+For a complete replacement choose ZELYRA_UI_STYLESHEET in .env instead.
 Token reference: https://github.com/sf1976/zelyra/blob/main/docs/env.md
 */
-:root {
-    /* --zelyra-color-accent: #7557f6; */
-    /* --zelyra-color-accent-strong: #665ce9; */
-    /* --zelyra-color-accent-text: #634ce0; */
-    /* --zelyra-color-accent-soft: #f8f6ff; */
-    /* --zelyra-color-ink: #172033; */
-    /* --zelyra-color-muted: #738097; */
-    /* --zelyra-color-border: #e8edf4; */
-    /* --zelyra-color-canvas: #f5f7fb; */
-    /* --zelyra-color-surface: #ffffff; */
-    /* --zelyra-color-surface-subtle: #f9faff; */
-    /* --zelyra-color-sidebar-start: #171c32; */
-    /* --zelyra-color-sidebar-middle: #202743; */
-    /* --zelyra-color-sidebar-end: #263958; */
-    /* --zelyra-color-sidebar-foreground: #f6f7ff; */
-    /* --zelyra-color-sidebar-muted: #bac4d8; */
-    /* --zelyra-color-hero-start: #262f52; */
-    /* --zelyra-color-hero-middle: #3e4381; */
-    /* --zelyra-color-hero-end: #6258bb; */
-    /* --zelyra-color-success-background: #effbf7; */
-    /* --zelyra-color-success-border: #bcebdd; */
-    /* --zelyra-color-success-ink: #17654f; */
-    /* --zelyra-color-danger-background: #fff5f5; */
-    /* --zelyra-color-danger-border: #f2c8cc; */
-    /* --zelyra-color-danger-ink: #8b303c; */
-    /* --zelyra-color-focus: #8f7aff; */
-    /* --zelyra-font-body: Inter, system-ui, sans-serif; */
-    /* --zelyra-radius-card: 16px; */
-    /* --zelyra-radius-control: 10px; */
-    /* --zelyra-content-max-width: 1180px; */
+:where(html[data-z-ui]) {
+    /* Pair foreground and background tokens when changing a color. */
+    /* --z-color-primary: #3157a4; */
+    /* --z-color-on-primary: #ffffff; */
+    /* --z-color-primary-hover: #274889; */
+    /* --z-color-primary-soft: #eaf0fb; */
+    /* --z-color-success: #16734c; */
+    /* --z-color-on-success: #ffffff; */
+    /* --z-color-success-soft: #e9f6ef; */
+    /* --z-color-warning: #795000; */
+    /* --z-color-on-warning: #ffffff; */
+    /* --z-color-warning-soft: #fff4d8; */
+    /* --z-color-danger: #a12e39; */
+    /* --z-color-on-danger: #ffffff; */
+    /* --z-color-danger-soft: #fff0f0; */
+    /* --z-color-info: #175e83; */
+    /* --z-color-on-info: #ffffff; */
+    /* --z-color-info-soft: #eaf5fa; */
+    /* --z-color-canvas: #f4f6fa; */
+    /* --z-color-surface: #ffffff; */
+    /* --z-color-surface-raised: #ffffff; */
+    /* --z-color-text: #182230; */
+    /* --z-color-text-muted: #526174; */
+    /* --z-color-border: #d8e0e9; */
+    /* --z-color-focus: #275fc5; */
+    /* --z-color-link: #244f9a; */
+    /* --z-font-sans: system-ui, -apple-system, "Segoe UI", sans-serif; */
+    /* --z-font-mono: ui-monospace, "Cascadia Code", monospace; */
+    /* --z-font-size: 1rem; */
+    /* --z-line-height: 1.5; */
+    /* --z-space-1: .25rem; */
+    /* --z-space-2: .5rem; */
+    /* --z-space-3: .75rem; */
+    /* --z-space-4: 1rem; */
+    /* --z-space-5: 1.25rem; */
+    /* --z-space-6: 1.5rem; */
+    /* --z-space-8: 2rem; */
+    /* --z-radius-sm: .35rem; */
+    /* --z-content-width: 76rem; */
+    /* --z-radius-pill: 999px; */
+    /* --z-shadow-sm: 0 1px 3px rgb(20 34 54 / 8%); */
+    /* --z-shadow-md: 0 12px 32px rgb(20 34 54 / 12%); */
+    /* --z-control-height: 2.75rem; */
+    /* --z-radius-md: .65rem; */
+    /* --z-radius-lg: 1rem; */
+    /* --z-layer-sticky: 10; */
+    /* --z-layer-dropdown: 20; */
+    /* --z-layer-dialog: 100; */
+    /* --z-layer-toast: 120; */
+    /* --z-motion-fast: 140ms; */
+    /* --z-motion-normal: 220ms; */
 }
 "#;
 
@@ -182,6 +218,7 @@ const DEFAULT_DATABASE_HOST_PORT: u16 = 3306;
 const DEFAULT_SETUP_WEB_PORT: u16 = 3030;
 const PROJECT_THEME_CSS_FILE: &str = "zelyra.theme.css";
 const PROJECT_THEME_CSS_MAX_BYTES: u64 = 128 * 1024;
+const PROJECT_UI_CSS_MAX_BYTES: u64 = 512 * 1024;
 const PROJECT_LOCALE_DIRECTORY: &str = "locales";
 const PROJECT_LOCALE_MAX_BYTES: u64 = 256 * 1024;
 
@@ -352,6 +389,7 @@ ZELYRA_DB_HOST_PORT={database_host_port}
 ZELYRA_LANGUAGE=de
 ZELYRA_LEVEL=learn
 ZELYRA_ALLOWED_HOSTS=localhost,127.0.0.1,[::1]
+ZELYRA_UI_STYLESHEET=zelyra
 ZELYRA_DB_CONNECT_TIMEOUT_SECS=10
 ZELYRA_DB_QUERY_TIMEOUT_SECS=30
 ZELYRA_DB_POOL_MAX_SIZE=8
@@ -750,9 +788,7 @@ console = false
     let preserve_existing_main =
         options.allow_current_directory && directory.join("main.zyl").is_file();
     let main_source = if options.with_mariadb {
-        let source = main_template
-            .strip_prefix(MARIADB_DATABASE_DECLARATION)
-            .unwrap_or(main_template);
+        let source = main_template.replacen(MARIADB_DATABASE_DECLARATION, "", 1);
         format!("import \"src/database.zyl\" as storage\n\n{source}")
     } else {
         main_template.to_owned()
@@ -826,6 +862,7 @@ console = false
       ZELYRA_LANGUAGE: __ZELYRA_LANGUAGE__
       ZELYRA_LEVEL: __ZELYRA_LEVEL__
       ZELYRA_ALLOWED_HOSTS: "__ZELYRA_ALLOWED_HOSTS__"
+      ZELYRA_UI_STYLESHEET: ${ZELYRA_UI_STYLESHEET:-zelyra}
       ZELYRA_DB_CONNECT_TIMEOUT_SECS: ${ZELYRA_DB_CONNECT_TIMEOUT_SECS:-10}
       ZELYRA_DB_QUERY_TIMEOUT_SECS: ${ZELYRA_DB_QUERY_TIMEOUT_SECS:-30}
       ZELYRA_DB_POOL_MAX_SIZE: ${ZELYRA_DB_POOL_MAX_SIZE:-8}
@@ -891,9 +928,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates mariadb-client \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /out/bin/zelyra /usr/local/bin/zelyra
-COPY main.zyl zelyra.toml zelyra.theme.css ./
-COPY src ./src
-COPY locales ./locales
+COPY . ./
 EXPOSE __WEB_PORT__
 CMD ["zelyra", "serve", "main.zyl", "0.0.0.0:__WEB_PORT__"]
 "#
@@ -1160,9 +1195,19 @@ fn parse_source(path: &str, source: &str) -> Result<zelyra_ast::Program, ()> {
 }
 
 fn load_project(path: &str) -> Result<project::LoadedProject, ()> {
+    load_project_with(project::load(path))
+}
+
+fn load_project_with_entry_source(path: &str, source: &str) -> Result<project::LoadedProject, ()> {
+    load_project_with(project::load_with_entry_source(path, source))
+}
+
+fn load_project_with(
+    loaded: Result<project::LoadedProject, project::ProjectError>,
+) -> Result<project::LoadedProject, ()> {
     PROJECT_SOURCES.with(|sources| sources.borrow_mut().clear());
     PROJECT_MODULES.with(|modules| modules.borrow_mut().clear());
-    let loaded = match project::load(path) {
+    let loaded = match loaded {
         Ok(loaded) => loaded,
         Err(error) => {
             PROJECT_SOURCES.with(|sources| *sources.borrow_mut() = error.sources.to_vec());
@@ -1177,6 +1222,18 @@ fn load_project(path: &str) -> Result<project::LoadedProject, ()> {
 
 fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
     let loaded = load_project(path)?;
+    validate_loaded_project(path, loaded)
+}
+
+fn validate_candidate(path: &str, source: &str) -> Result<zelyra_ast::Program, ()> {
+    let loaded = load_project_with_entry_source(path, source)?;
+    validate_loaded_project(path, loaded)
+}
+
+fn validate_loaded_project(
+    path: &str,
+    loaded: project::LoadedProject,
+) -> Result<zelyra_ast::Program, ()> {
     let table_dependencies_valid = validate_module_table_dependencies(path, &loaded);
     let database_dependencies_valid = validate_module_database_dependencies(path, &loaded);
     if !table_dependencies_valid || !database_dependencies_valid {
@@ -1550,6 +1607,9 @@ fn validate_program(
     if !validate_components(path, &program) {
         return Err(());
     }
+    if !validate_form_ui_appearances(path, &program) {
+        return Err(());
+    }
     let schema = match build_schema(&program) {
         Ok(schema) => schema,
         Err(errors) => {
@@ -1654,7 +1714,7 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
             );
             valid = false;
         }
-        let slots = match slot_invocations(&view.html) {
+        let slots = match view_template_slot_invocations(&view.html) {
             Ok(slots) => slots,
             Err(message) => {
                 diagnostic_with_span(
@@ -1797,6 +1857,23 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
                 slot.span.column,
             );
             valid = false;
+        }
+    }
+    for tableview in &program.tableviews {
+        if let Some(layout) = &tableview.layout {
+            if !program.views.iter().any(|view| view.name == *layout) {
+                diagnostic(
+                    path,
+                    "E-VIEW-030",
+                    &format!(
+                        "tableview `{}` refers to unknown view layout `{layout}`",
+                        tableview.name
+                    ),
+                    tableview.span.line,
+                    tableview.span.column,
+                );
+                valid = false;
+            }
         }
     }
     valid
@@ -2621,50 +2698,44 @@ fn edit_command(arguments: impl Iterator<Item = String>) -> ExitCode {
         match lex(&source) {
             Ok(tokens) => match parse(&tokens) {
                 Ok(program) => {
-                    if validate_program(&entry, &source, program.clone()).is_ok() {
+                    if validate_candidate(&entry, &source).is_ok() {
                         match edit::preview(&program, &source, &tokens, &request) {
                             Ok(result) => {
                                 let candidate_source = result.source.clone();
                                 let _ = finish_json_diagnostics();
                                 begin_json_diagnostics(&entry, &candidate_source);
-                                if let Ok(proposed_program) =
-                                    parse_source(&entry, &candidate_source)
-                                {
-                                    if validate_program(&entry, &candidate_source, proposed_program)
-                                        .is_ok()
-                                    {
-                                        let applied = if apply_requested {
-                                            match edit::apply_atomically(&entry, &result.source) {
-                                                Ok(()) => true,
-                                                Err(error) => {
-                                                    diagnostic(&entry, "E-EDIT-003", &error, 1, 1);
-                                                    false
-                                                }
+                                if validate_candidate(&entry, &candidate_source).is_ok() {
+                                    let applied = if apply_requested {
+                                        match edit::apply_atomically(&entry, &result.source) {
+                                            Ok(()) => true,
+                                            Err(error) => {
+                                                diagnostic(&entry, "E-EDIT-003", &error, 1, 1);
+                                                false
                                             }
-                                        } else {
-                                            false
-                                        };
-                                        success = !apply_requested || applied;
-                                        let affected_effects = edit::affected_function_effects(
-                                            &program,
-                                            &result.operations,
-                                            &result.changes,
-                                        );
-                                        preview = json!({
-                                            "available": true,
-                                            "apply_requested": apply_requested,
-                                            "applied": applied,
-                                            "entry": entry_display.clone(),
-                                            "affected_files": [entry_display.clone()],
-                                            "affected_effects": affected_effects,
-                                            "source_fingerprint": current_fingerprint,
-                                            "operations": result.operations,
-                                            "changes": result.changes,
-                                            "changed_tokens": result.changed_tokens,
-                                            "before_bytes": source.len(),
-                                            "after_bytes": result.source.len()
-                                        });
-                                    }
+                                        }
+                                    } else {
+                                        false
+                                    };
+                                    success = !apply_requested || applied;
+                                    let affected_effects = edit::affected_function_effects(
+                                        &program,
+                                        &result.operations,
+                                        &result.changes,
+                                    );
+                                    preview = json!({
+                                        "available": true,
+                                        "apply_requested": apply_requested,
+                                        "applied": applied,
+                                        "entry": entry_display.clone(),
+                                        "affected_files": [entry_display.clone()],
+                                        "affected_effects": affected_effects,
+                                        "source_fingerprint": current_fingerprint,
+                                        "operations": result.operations,
+                                        "changes": result.changes,
+                                        "changed_tokens": result.changed_tokens,
+                                        "before_bytes": source.len(),
+                                        "after_bytes": result.source.len()
+                                    });
                                 }
                             }
                             Err(error) => diagnostic(&entry, "E-EDIT-001", &error, 1, 1),
@@ -3048,15 +3119,21 @@ fn declared_component_slots(
 }
 
 fn split_component_body(body: &str) -> Result<(String, HashMap<String, String>), String> {
-    let slots = slot_invocations(body)?;
+    let slots = component_body_slot_invocations(body)?;
     let mut named = HashMap::new();
     let mut default_body = body.to_owned();
     for slot in slots.into_iter().rev() {
+        let Some(name) = slot.name else {
+            // An unnamed `<slot />` in a component's body is a structural
+            // placeholder when that component is used as a view layout. The
+            // view composer fills it with the page body before expansion.
+            if slot.body.is_none() {
+                continue;
+            }
+            return Err("component content slots require a `name` attribute".into());
+        };
         let Some(slot_body) = slot.body else {
             return Err("component content slots must use opening and closing tags".into());
-        };
-        let Some(name) = slot.name else {
-            return Err("component content slots require a `name` attribute".into());
         };
         if named.insert(name, slot_body).is_some() {
             return Err("the same named slot is provided more than once".into());
@@ -3066,10 +3143,25 @@ fn split_component_body(body: &str) -> Result<(String, HashMap<String, String>),
     Ok((default_body, named))
 }
 
+fn component_body_slot_invocations(body: &str) -> Result<Vec<SlotInvocation>, String> {
+    let component_ranges = component_invocations(body)?
+        .into_iter()
+        .map(|component| component.start..component.end)
+        .collect::<Vec<_>>();
+    Ok(slot_invocations(body)?
+        .into_iter()
+        .filter(|slot| {
+            !component_ranges
+                .iter()
+                .any(|range| range.start <= slot.start && slot.end <= range.end)
+        })
+        .collect())
+}
+
 fn declared_view_slots(view: &zelyra_ast::ViewDef) -> Result<(bool, HashSet<String>), String> {
     let mut has_default = false;
     let mut named = HashSet::new();
-    for slot in slot_invocations(&view.html)? {
+    for slot in view_template_slot_invocations(&view.html)? {
         if let Some(name) = slot.name {
             if !named.insert(name) {
                 return Err("view declares the same named slot more than once".into());
@@ -3084,7 +3176,7 @@ fn declared_view_slots(view: &zelyra_ast::ViewDef) -> Result<(bool, HashSet<Stri
 }
 
 fn split_view_content(body: &str) -> Result<(String, HashMap<String, String>), String> {
-    let slots = slot_invocations(body)?;
+    let slots = page_layout_slot_invocations(body)?;
     let mut named = HashMap::new();
     let mut default_body = body.to_owned();
     for slot in slots.into_iter().rev() {
@@ -3113,6 +3205,25 @@ fn page_layout_slot_invocations(html: &str) -> Result<Vec<SlotInvocation>, Strin
             !component_ranges
                 .iter()
                 .any(|range| range.start <= slot.start && slot.end <= range.end)
+        })
+        .collect())
+}
+
+// Named slots inside a component invocation belong to that component. A view
+// may place its one default content slot inside its layout component so the
+// page body is inserted before component expansion.
+fn view_template_slot_invocations(html: &str) -> Result<Vec<SlotInvocation>, String> {
+    let component_ranges = component_invocations(html)?
+        .into_iter()
+        .map(|component| component.start..component.end)
+        .collect::<Vec<_>>();
+    Ok(slot_invocations(html)?
+        .into_iter()
+        .filter(|slot| {
+            slot.name.is_none()
+                || !component_ranges
+                    .iter()
+                    .any(|range| range.start <= slot.start && slot.end <= range.end)
         })
         .collect())
 }
@@ -3148,12 +3259,36 @@ fn validate_crud_layout_slots(
     Ok(())
 }
 
-fn component_prop_accepts(prop: &zelyra_ast::ComponentProp, value: &str) -> bool {
+const UI_SEMANTIC_APPEARANCES: &[&str] = &["default", "success", "warning", "danger"];
+
+fn component_prop_enum<'a>(
+    program: &'a zelyra_ast::Program,
+    ty: &Type,
+) -> Option<&'a zelyra_ast::EnumDef> {
+    let ty = match ty {
+        Type::Option(inner) => inner.as_ref(),
+        other => other,
+    };
+    let Type::Named(name) = ty else {
+        return None;
+    };
+    program
+        .enums
+        .iter()
+        .find(|definition| &definition.name == name)
+}
+
+fn component_prop_accepts(
+    program: &zelyra_ast::Program,
+    prop: &zelyra_ast::ComponentProp,
+    value: &str,
+) -> bool {
     if value.starts_with('{') && value.ends_with('}') {
         return value.len() > 2;
     }
     match &prop.ty {
         Type::Option(inner) => component_prop_accepts(
+            program,
             &zelyra_ast::ComponentProp {
                 name: prop.name.clone(),
                 ty: (**inner).clone(),
@@ -3166,8 +3301,40 @@ fn component_prop_accepts(prop: &zelyra_ast::ComponentProp, value: &str) -> bool
         Type::Float => value.parse::<f64>().is_ok_and(|value| value.is_finite()),
         Type::Decimal => zelyra_ast::decimal::parse_scaled(value, 9).is_some(),
         Type::Bool => matches!(value, "true" | "false"),
+        Type::Named(_) => component_prop_enum(program, &prop.ty).is_none_or(|definition| {
+            definition.variants.iter().any(|variant| variant == value)
+                && definition
+                    .variant_payloads
+                    .iter()
+                    .find(|(variant, _)| variant == value)
+                    .is_none_or(|(_, payload)| payload.is_empty())
+        }),
         _ => true,
     }
+}
+
+fn validate_form_ui_appearances(path: &str, program: &zelyra_ast::Program) -> bool {
+    let mut valid = true;
+    for form in &program.forms {
+        for field in &form.fields {
+            if let Some(appearance) = field.appearance.as_deref() {
+                if !UI_SEMANTIC_APPEARANCES.contains(&appearance) {
+                    diagnostic_with_span(
+                        path,
+                        "E-FORM-005",
+                        &format!(
+                            "field `{}` appearance must be one of: {}",
+                            field.name,
+                            UI_SEMANTIC_APPEARANCES.join(", ")
+                        ),
+                        field.span,
+                    );
+                    valid = false;
+                }
+            }
+        }
+    }
+    valid
 }
 
 fn template_expressions(html: &str) -> Result<Vec<String>, String> {
@@ -3200,7 +3367,11 @@ fn is_template_identifier(expression: &str) -> bool {
 }
 
 fn is_template_expression(expression: &str) -> bool {
-    expression.split('.').all(is_template_identifier)
+    expression
+        .strip_prefix("url_encode:")
+        .unwrap_or(expression)
+        .split('.')
+        .all(is_template_identifier)
 }
 
 struct TemplateForBlock {
@@ -3433,17 +3604,44 @@ fn validate_template_interpolations(
                 column,
             );
             valid = false;
-        } else if let Err(message) = resolve_template_type(&expression, bindings, program) {
-            let code = if expression.contains('.') {
-                "E-VIEW-016"
-            } else {
-                "E-VIEW-015"
-            };
-            diagnostic(path, code, &message, line, column);
-            valid = false;
+            continue;
+        }
+        let url_encoded = expression.starts_with("url_encode:");
+        let type_expression = expression
+            .strip_prefix("url_encode:")
+            .unwrap_or(&expression);
+        match resolve_template_type(type_expression, bindings, program) {
+            Err(message) => {
+                let code = if type_expression.contains('.') {
+                    "E-VIEW-016"
+                } else {
+                    "E-VIEW-015"
+                };
+                diagnostic(path, code, &message, line, column);
+                valid = false;
+            }
+            Ok(ty) if url_encoded && !template_value_is_text(&ty) => {
+                diagnostic(
+                    path,
+                    "E-VIEW-034",
+                    &format!("url_encode requires a text value, found `{ty}`"),
+                    line,
+                    column,
+                );
+                valid = false;
+            }
+            Ok(_) => {}
         }
     }
     valid
+}
+
+fn template_value_is_text(ty: &Type) -> bool {
+    match ty {
+        Type::String => true,
+        Type::Named(name) => matches!(name.as_str(), "Email" | "Url"),
+        _ => false,
+    }
 }
 
 fn validate_component_template(
@@ -3568,7 +3766,33 @@ fn validate_component_template(
                 .map(str::trim)
                 .and_then(|expression| resolve_template_type(expression, bindings, program).ok())
                 .filter(|actual| !template_type_compatible(&prop.ty, actual));
-            if dynamic_type_error.is_some() || !component_prop_accepts(prop, value) {
+            let enum_variants = component_prop_enum(program, &prop.ty);
+            let invalid_enum_variant = !value.starts_with('{')
+                && enum_variants.is_some_and(|definition| {
+                    !definition.variants.iter().any(|variant| variant == value)
+                        || definition
+                            .variant_payloads
+                            .iter()
+                            .find(|(variant, _)| variant == value)
+                            .is_some_and(|(_, payload)| !payload.is_empty())
+                });
+            if invalid_enum_variant {
+                let variants = enum_variants
+                    .map(|definition| definition.variants.join(", "))
+                    .unwrap_or_default();
+                diagnostic(
+                    path,
+                    "E-VIEW-017",
+                    &format!(
+                        "component property `{}` must be one of: {variants}",
+                        prop.name
+                    ),
+                    line,
+                    column,
+                );
+                valid = false;
+            } else if dynamic_type_error.is_some() || !component_prop_accepts(program, prop, value)
+            {
                 diagnostic(
                     path,
                     "E-VIEW-010",
@@ -3708,7 +3932,108 @@ fn validate_components(path: &str, program: &zelyra_ast::Program) -> bool {
             }
         }
     }
+    for tableview in &program.tableviews {
+        if let Some(layout_name) = &tableview.layout {
+            if let Some(layout) = program.views.iter().find(|view| view.name == *layout_name) {
+                valid &= validate_component_template(
+                    path,
+                    program,
+                    &layout.html,
+                    layout.span.line,
+                    layout.span.column,
+                    &HashMap::new(),
+                );
+            }
+        }
+    }
+    if let Some(cycle) = component_dependency_cycle(program) {
+        let component = cycle.first().and_then(|name| {
+            program
+                .components
+                .iter()
+                .find(|component| component.name == *name)
+        });
+        if let Some(component) = component {
+            diagnostic_with_span(
+                path,
+                "E-VIEW-019",
+                &format!(
+                    "recursive component expansion is not supported: {}",
+                    cycle.join(" -> ")
+                ),
+                component.span,
+            );
+        }
+        valid = false;
+    }
     valid
+}
+
+fn component_dependency_cycle(program: &zelyra_ast::Program) -> Option<Vec<String>> {
+    fn visit(
+        name: &str,
+        graph: &HashMap<String, Vec<String>>,
+        active: &mut Vec<String>,
+        complete: &mut HashSet<String>,
+    ) -> Option<Vec<String>> {
+        if let Some(cycle_start) = active.iter().position(|entry| entry == name) {
+            let mut cycle = active[cycle_start..].to_vec();
+            cycle.push(name.to_owned());
+            return Some(cycle);
+        }
+        if complete.contains(name) {
+            return None;
+        }
+        active.push(name.to_owned());
+        if let Some(children) = graph.get(name) {
+            for child in children {
+                if let Some(cycle) = visit(child, graph, active, complete) {
+                    return Some(cycle);
+                }
+            }
+        }
+        active.pop();
+        complete.insert(name.to_owned());
+        None
+    }
+
+    let component_names = program
+        .components
+        .iter()
+        .map(|component| component.name.clone())
+        .collect::<HashSet<_>>();
+    let mut graph = HashMap::new();
+    for component in &program.components {
+        let mut references = Vec::new();
+        let mut pending = vec![component.html.clone()];
+        while let Some(template) = pending.pop() {
+            let Ok(invocations) = component_invocations(&template) else {
+                continue;
+            };
+            for invocation in invocations {
+                if component_names.contains(&invocation.name) {
+                    references.push(invocation.name);
+                }
+                if let Some(body) = invocation.body {
+                    pending.push(body);
+                }
+            }
+        }
+        references.sort();
+        references.dedup();
+        graph.insert(component.name.clone(), references);
+    }
+
+    let mut names = component_names.into_iter().collect::<Vec<_>>();
+    names.sort();
+    let mut active = Vec::new();
+    let mut complete = HashSet::new();
+    for name in names {
+        if let Some(cycle) = visit(&name, &graph, &mut active, &mut complete) {
+            return Some(cycle);
+        }
+    }
+    None
 }
 
 fn page_template_bindings(
@@ -3892,6 +4217,96 @@ fn project_ui_settings(path: &str) -> Result<(UiLanguage, UiLevel), String> {
     Ok((language, level))
 }
 
+fn project_ui_stylesheet_css(path: &str) -> Result<Option<String>, String> {
+    let configured = project_ui_setting(path, "ZELYRA_UI_STYLESHEET", "zelyra")?;
+    match configured.trim() {
+        "zelyra" => Ok(None),
+        "tabler" => Ok(Some(format!(
+            "{TABLER_CORE_CSS}\n{TABLER_UI_COMPATIBILITY_CSS}"
+        ))),
+        relative_path => load_project_stylesheet(path, relative_path).map(Some),
+    }
+}
+
+fn load_project_stylesheet(project_path: &str, relative_path: &str) -> Result<String, String> {
+    use std::path::Component;
+
+    if relative_path.is_empty()
+        || relative_path.contains(['\\', ':', '\0'])
+        || relative_path.starts_with(['/', '~'])
+        || relative_path.contains("//")
+    {
+        return Err(
+            "ZELYRA_UI_STYLESHEET must be `zelyra`, `tabler`, or a project-relative `.css` file"
+                .into(),
+        );
+    }
+    let requested = std::path::Path::new(relative_path);
+    if requested
+        .extension()
+        .is_none_or(|extension| extension != "css")
+    {
+        return Err("a replacement ZELYRA_UI_STYLESHEET path must end in `.css`".into());
+    }
+    let mut components = Vec::new();
+    for component in requested.components() {
+        match component {
+            Component::Normal(value) => components.push(value),
+            _ => {
+                return Err(
+                    "ZELYRA_UI_STYLESHEET cannot contain absolute paths or `.`/`..` path segments"
+                        .into(),
+                )
+            }
+        }
+    }
+    if components.is_empty() {
+        return Err("ZELYRA_UI_STYLESHEET must name a project-relative CSS file".into());
+    }
+
+    let source_path = std::path::Path::new(project_path);
+    let project_directory = source_path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| std::path::Path::new("."));
+    let mut resolved = project_directory.to_path_buf();
+    for (index, component) in components.iter().enumerate() {
+        resolved.push(component);
+        let metadata = fs::symlink_metadata(&resolved)
+            .map_err(|_| format!("cannot inspect replacement stylesheet `{relative_path}`"))?;
+        if metadata.file_type().is_symlink() {
+            return Err(format!(
+                "replacement stylesheet `{relative_path}` cannot use symbolic links"
+            ));
+        }
+        let is_last = index + 1 == components.len();
+        if (!is_last && !metadata.is_dir()) || (is_last && !metadata.is_file()) {
+            return Err(format!(
+                "replacement stylesheet `{relative_path}` must resolve to a regular project file"
+            ));
+        }
+        if is_last && metadata.len() > PROJECT_UI_CSS_MAX_BYTES {
+            return Err(format!(
+                "replacement stylesheet `{relative_path}` exceeds the 512 KiB limit"
+            ));
+        }
+    }
+
+    let mut bytes = Vec::new();
+    fs::File::open(&resolved)
+        .map_err(|_| format!("cannot read replacement stylesheet `{relative_path}`"))?
+        .take(PROJECT_UI_CSS_MAX_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| format!("cannot read replacement stylesheet `{relative_path}`"))?;
+    if bytes.len() as u64 > PROJECT_UI_CSS_MAX_BYTES {
+        return Err(format!(
+            "replacement stylesheet `{relative_path}` exceeds the 512 KiB limit"
+        ));
+    }
+    String::from_utf8(bytes)
+        .map_err(|_| format!("replacement stylesheet `{relative_path}` must contain UTF-8 text"))
+}
+
 fn project_allowed_hosts(path: &str) -> Result<Vec<String>, String> {
     let configured = project_ui_setting(path, "ZELYRA_ALLOWED_HOSTS", "localhost,127.0.0.1,[::1]")?;
     let hosts = configured
@@ -3943,14 +4358,7 @@ fn project_theme_css(path: &str) -> Result<Option<String>, String> {
     }
     let css = String::from_utf8(bytes)
         .map_err(|_| format!("`{PROJECT_THEME_CSS_FILE}` must contain UTF-8 text"))?;
-    if css.lines().any(|line| line.trim() == "/* zelyra:tabler */") {
-        Ok(Some(format!(
-            "{TABLER_CORE_CSS}\n{}",
-            css.replace("/* zelyra:tabler */", "")
-        )))
-    } else {
-        Ok(Some(css))
-    }
+    Ok(Some(css.replace("/* zelyra:tabler */", "")))
 }
 
 fn project_ui_catalogs(path: &str) -> Result<ProjectUiCatalogs, String> {
@@ -4022,6 +4430,29 @@ fn project_uses_reserved_theme_route(program: &zelyra_ast::Program) -> bool {
                 zelyra_web::route_pattern_matches_path(path, PROJECT_THEME_CSS_PATH)
             })
         })
+}
+
+fn project_uses_reserved_ui_asset_route(program: &zelyra_ast::Program) -> Option<&'static str> {
+    let reserved_paths = [
+        zelyra_web::ZELYRA_UI_CSS_PATH,
+        zelyra_web::ZELYRA_UI_JS_PATH,
+        zelyra_web::PROJECT_UI_CSS_PATH,
+    ];
+    reserved_paths.into_iter().find(|reserved_path| {
+        program
+            .pages
+            .iter()
+            .any(|page| zelyra_web::route_pattern_matches_path(&page.path, reserved_path))
+            || program
+                .apis
+                .iter()
+                .any(|api| zelyra_web::route_pattern_matches_path(&api.path, reserved_path))
+            || program.auth.iter().any(|auth| {
+                auth.admin_path
+                    .as_deref()
+                    .is_some_and(|path| zelyra_web::route_pattern_matches_path(path, reserved_path))
+            })
+    })
 }
 
 fn project_uses_reserved_health_route(program: &zelyra_ast::Program) -> bool {
@@ -8378,6 +8809,13 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             return ExitCode::from(1);
         }
     };
+    let ui_stylesheet_css = match project_ui_stylesheet_css(&path) {
+        Ok(stylesheet) => stylesheet,
+        Err(error) => {
+            diagnostic(&path, "E-UI-001", &error, 1, 1);
+            return ExitCode::from(1);
+        }
+    };
     let ui_catalogs = match project_ui_catalogs(&path) {
         Ok(catalogs) => catalogs,
         Err(error) => {
@@ -8389,6 +8827,16 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         Ok(project) => project.program,
         Err(()) => return ExitCode::from(1),
     };
+    if let Some(reserved_path) = project_uses_reserved_ui_asset_route(&program) {
+        diagnostic(
+            &path,
+            "E-UI-002",
+            &format!("route `{reserved_path}` is reserved for local Zelyra UI assets"),
+            1,
+            1,
+        );
+        return ExitCode::from(1);
+    }
     if theme_css.is_some() && project_uses_reserved_theme_route(&program) {
         diagnostic(
             &path,
@@ -8800,6 +9248,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         .map(|tableview| TableViewRoute {
             path: format!("/views/{}", tableview.name.to_ascii_lowercase()),
             title: zelyra_web::localized_identifier(ui_language, &tableview.name),
+            layout_html: tableview_layout_html(&program, tableview),
             source: tableview.source.clone(),
             columns: tableview.columns.clone(),
             filters: tableview
@@ -8851,6 +9300,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     eprintln!("Zelyra server listening on http://{address}");
     let app = WebApp::with_database_url(routes, form_routes, database_url_from_program(&program))
         .with_ui_settings(ui_language, ui_level)
+        .with_ui_stylesheet_css(ui_stylesheet_css)
         .with_project_theme_css(theme_css)
         .with_project_ui_catalogs(ui_catalogs)
         .with_database_capability(database_capability_granted)
@@ -8948,6 +9398,7 @@ fn generated_crud_form(
                 required: false,
                 max: None,
                 widget: None,
+                appearance: None,
                 readonly: generated_invoice_number,
                 span: column.span,
             }
@@ -9852,7 +10303,7 @@ fn compose_view_parts(
         .iter()
         .find(|view| view.name == view_name)
         .expect("page and CRUD views are validated before route generation");
-    let slots = slot_invocations(&view.html).expect("view slots are validated");
+    let slots = view_template_slot_invocations(&view.html).expect("view slots are validated");
     let mut composed = view.html.clone();
     for slot in slots.into_iter().rev() {
         let replacement = slot
@@ -9887,6 +10338,15 @@ fn crud_layout_html(program: &zelyra_ast::Program, crud: &zelyra_ast::CrudDef) -
             .map(|slot| (slot.name.clone(), slot.html.clone()))
             .collect::<HashMap<_, _>>();
         compose_view_parts(program, layout, CRUD_LAYOUT_CONTENT_MARKER, &supplied_slots)
+    })
+}
+
+fn tableview_layout_html(
+    program: &zelyra_ast::Program,
+    tableview: &zelyra_ast::TableViewDef,
+) -> Option<String> {
+    tableview.layout.as_deref().map(|layout| {
+        compose_view_parts(program, layout, CRUD_LAYOUT_CONTENT_MARKER, &HashMap::new())
     })
 }
 
@@ -9932,20 +10392,22 @@ fn render_view_component(
         .transpose()
         .expect("view component slots are validated")
         .unwrap_or_default();
-    let mut template = component.html.clone();
+    let mut template = select_component_branches(&component.html, &attributes);
     let slots = slot_invocations(&template).expect("view component slots are validated");
     for (index, slot) in slots.into_iter().enumerate().rev() {
         let replacement = format!("\u{0}ZELYRA_SLOT_{index}\u{0}");
         template.replace_range(slot.start..slot.end, &replacement);
     }
     let mut rendered = component.props.iter().fold(template, |html, prop| {
-        let value = attributes.get(&prop.name).map_or("", String::as_str);
-        let replacement = if value.starts_with('{') && value.ends_with('}') {
-            value.to_owned()
-        } else {
-            html_escape(value)
-        };
-        html.replace(&format!("{{{}}}", prop.name), &replacement)
+        match attributes.get(&prop.name) {
+            Some(value) => render_component_property(html, prop, value),
+            // Optional semantic appearance has a concrete, documented default
+            // so the base component class and its default styling remain.
+            None if prop.name == "appearance" => render_component_property(html, prop, "default"),
+            // A Grid without a column count defaults to one responsive column.
+            None if prop.name == "columns" => render_component_property(html, prop, "one"),
+            None => remove_component_property(html, &prop.name),
+        }
     });
     let slots = slot_invocations(&component.html).expect("view component slots are validated");
     for (index, slot) in slots.into_iter().enumerate() {
@@ -9966,8 +10428,170 @@ fn render_view_component(
     rendered
 }
 
-fn expand_view_components(program: &zelyra_ast::Program, mut html: String) -> String {
+fn select_component_branches(template: &str, attributes: &HashMap<String, String>) -> String {
+    let mut rendered = template.to_owned();
     for _ in 0..16 {
+        let Some(start) = rendered.find("<z-if prop=\"") else {
+            break;
+        };
+        let Some(prop_start_relative) = rendered[start..].find("<z-if prop=\"") else {
+            break;
+        };
+        let prop_start = start + prop_start_relative + "<z-if prop=\"".len();
+        let Some(prop_end_relative) = rendered[prop_start..].find('\"') else {
+            break;
+        };
+        let prop_end = prop_start + prop_end_relative;
+        let property = &rendered[prop_start..prop_end];
+        let Some(open_end_relative) = rendered[prop_end..].find('>') else {
+            break;
+        };
+        let body_start = prop_end + open_end_relative + 1;
+        let Some(if_end) = rendered[body_start..].find("</z-if>") else {
+            break;
+        };
+        let if_end = body_start + if_end;
+        let after_if = if_end + "</z-if>".len();
+        let whitespace_end = rendered[after_if..]
+            .find(|character: char| !character.is_whitespace())
+            .map_or(rendered.len(), |relative| after_if + relative);
+        let (else_body, replace_end) = if rendered[whitespace_end..].starts_with("<z-else>") {
+            let else_body_start = whitespace_end + "<z-else>".len();
+            if let Some(relative_end) = rendered[else_body_start..].find("</z-else>") {
+                let else_end = else_body_start + relative_end;
+                (
+                    Some(rendered[else_body_start..else_end].to_owned()),
+                    else_end + "</z-else>".len(),
+                )
+            } else {
+                (None, after_if)
+            }
+        } else {
+            (None, after_if)
+        };
+        let has_value = attributes
+            .get(property)
+            .is_some_and(|value| !value.is_empty());
+        let replacement = if has_value {
+            rendered[body_start..if_end].to_owned()
+        } else {
+            else_body.unwrap_or_default()
+        };
+        rendered.replace_range(start..replace_end, &replacement);
+    }
+    rendered
+}
+
+fn component_property_is_bool(prop: &zelyra_ast::ComponentProp) -> bool {
+    match &prop.ty {
+        Type::Bool => true,
+        Type::Option(inner) => matches!(inner.as_ref(), Type::Bool),
+        _ => false,
+    }
+}
+
+fn render_component_property(
+    mut template: String,
+    prop: &zelyra_ast::ComponentProp,
+    value: &str,
+) -> String {
+    let placeholder = format!("{{{}}}", prop.name);
+    let url_encoded_placeholder = format!("{{url_encode:{}}}", prop.name);
+    if template.contains(&url_encoded_placeholder) {
+        let encoded_value = if value.starts_with('{') && value.ends_with('}') {
+            format!(
+                "{{url_encode:{}}}",
+                value.trim_start_matches('{').trim_end_matches('}')
+            )
+        } else {
+            html_escape(&encode_url_component(value))
+        };
+        template = template.replace(&url_encoded_placeholder, &encoded_value);
+    }
+    if component_property_is_bool(prop)
+        && matches!(
+            prop.name.as_str(),
+            "required"
+                | "disabled"
+                | "readonly"
+                | "checked"
+                | "selected"
+                | "multiple"
+                | "autofocus"
+                | "hidden"
+                | "open"
+        )
+    {
+        let attribute = format!("{}=\"{}\"", prop.name, placeholder);
+        if value == "false" {
+            template = template.replace(&format!(" {attribute}"), "");
+            template = template.replace(&attribute, "");
+            return template.replace(&placeholder, "");
+        }
+        if value == "true" {
+            template = template.replace(&attribute, &format!("{}=\"true\"", prop.name));
+            return template.replace(&placeholder, "true");
+        }
+        if value.starts_with('{') && value.ends_with('}') {
+            template = template.replace(
+                &attribute,
+                &format!("data-z-ui-{}=\"{}\"", prop.name, value),
+            );
+            return template.replace(&placeholder, value);
+        }
+    }
+    if value.starts_with('{') && value.ends_with('}') {
+        template.replace(&placeholder, value)
+    } else {
+        template.replace(&placeholder, &html_escape(value))
+    }
+}
+
+fn encode_url_component(value: &str) -> String {
+    let mut encoded = String::new();
+    for byte in value.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {
+            encoded.push(byte as char);
+        } else {
+            encoded.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    encoded
+}
+
+fn remove_component_property(mut template: String, property: &str) -> String {
+    let placeholder = format!("{{{property}}}");
+    let mut search_from = 0;
+    while let Some(relative) = template[search_from..].find(&placeholder) {
+        let start = search_from + relative;
+        let tag_start = template[..start].rfind('<');
+        let tag_end = template[start..].find('>').map(|offset| start + offset);
+        if let (Some(tag_start), Some(tag_end)) = (tag_start, tag_end) {
+            if start < tag_end {
+                let before = &template[tag_start..start];
+                if before.ends_with("=\"")
+                    && template[start + placeholder.len()..].starts_with('\"')
+                {
+                    let attribute_name_start = before[..before.len() - 2]
+                        .rfind(char::is_whitespace)
+                        .map_or(0, |index| index + 1);
+                    let remove_start = tag_start + attribute_name_start;
+                    let remove_end = start + placeholder.len() + 1;
+                    template.replace_range(remove_start..remove_end, "");
+                    search_from = remove_start;
+                    continue;
+                }
+            }
+        }
+        template.replace_range(start..start + placeholder.len(), "");
+        search_from = start;
+    }
+    template
+}
+
+fn expand_view_components(program: &zelyra_ast::Program, mut html: String) -> String {
+    let expansion_limit = html.len().saturating_mul(4).max(256);
+    for _ in 0..expansion_limit {
         let Ok(invocations) = component_invocations(&html) else {
             break;
         };

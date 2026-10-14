@@ -1,3 +1,5 @@
+import "zelyra/ui" as ui
+
 database main {
     engine: mariadb
 }
@@ -61,42 +63,27 @@ form MachineCreate -> machines {
 view ZelyraShell {
     html {
         <!doctype html>
-        <html data-zelyra-language>
+        <html data-z-ui data-zelyra-language>
             <head>
                 <meta charset="utf-8" />
                 <meta name="viewport" content="width=device-width, initial-scale=1" />
                 <title data-zelyra-i18n="app.document_title"></title>
             </head>
             <body>
-                <div class="zelyra-app">
-                    <aside class="zelyra-sidebar">
-                        <a class="zelyra-brand" aria-label="Zelyra" href="/machines">
-                            <span class="zelyra-mark" aria-hidden="true">Z</span>
-                            <span class="zelyra-brand-copy"><span class="zelyra-brand-name">Zelyra</span><span class="zelyra-brand-descriptor" data-zelyra-i18n="app.brand_descriptor"></span></span>
-                        </a>
-                        <p class="zelyra-sidebar-caption" data-zelyra-i18n="app.sidebar_caption"></p>
-                        <nav class="zelyra-nav">
-                            <a href="/machines"><span class="zelyra-nav-icon" aria-hidden="true">01</span><span class="zelyra-nav-label" data-zelyra-i18n="app.nav_machines"></span></a>
-                            <a href="/departments"><span class="zelyra-nav-icon" aria-hidden="true">02</span><span class="zelyra-nav-label" data-zelyra-i18n="app.nav_departments"></span></a>
-                        </nav>
-                        <div class="zelyra-sidebar-footer"><span class="zelyra-status-dot" aria-hidden="true"></span><span data-zelyra-i18n="app.connection_status"></span></div>
-                    </aside>
-                    <div class="zelyra-workspace">
-                        <header class="zelyra-topbar">
-                            <div class="zelyra-breadcrumb"><span data-zelyra-i18n="app.sidebar_caption"></span><span aria-hidden="true">/</span><strong>Zelyra</strong></div>
-                            <span class="zelyra-environment"><span class="zelyra-status-dot" aria-hidden="true"></span><span data-zelyra-i18n="app.environment_label"></span></span>
-                        </header>
-                        <section class="zelyra-hero">
-                            <div class="zelyra-hero-copy">
-                                <p class="zelyra-hero-eyebrow" data-zelyra-i18n="app.workspace_label"></p>
-                                <h1 data-zelyra-i18n="app.workspace_title"></h1>
-                                <p class="zelyra-hero-description" data-zelyra-i18n="app.workspace_description"></p>
-                            </div>
-                            <span class="zelyra-hero-orbit" aria-hidden="true"></span>
-                        </section>
-                        <div class="zelyra-page-content"><slot /></div>
-                    </div>
-                </div>
+                <AppShell id="machines" navigation_label="Navigation">
+                    <slot name="header">
+                        <strong>Zelyra</strong>
+                        <span data-zelyra-i18n="app.brand_descriptor"></span>
+                    </slot>
+                    <slot name="navigation">
+                        <a href="/machines" data-zelyra-i18n="app.nav_machines"></a>
+                        <a href="/departments" data-zelyra-i18n="app.nav_departments"></a>
+                    </slot>
+                    <slot name="footer">
+                        <span data-zelyra-i18n="app.connection_status"></span>
+                    </slot>
+                    <slot />
+                </AppShell>
             </body>
         </html>
     }
@@ -105,14 +92,25 @@ view ZelyraShell {
 page "/" {
     view: ZelyraShell
     html {
-        <section class="zelyra-home-card">
-            <h2 data-zelyra-i18n="app.home_title"></h2>
-            <p data-zelyra-i18n="app.home_description"></p>
-            <div class="zelyra-home-actions">
-                <a class="zelyra-home-link" href="/machines" data-zelyra-i18n="app.home_machines"></a>
-                <a class="zelyra-home-link secondary" href="/departments" data-zelyra-i18n="app.home_departments"></a>
-            </div>
-        </section>
+        <Container>
+            <PageHeader
+                title="@i18n:app.workspace_title"
+                description="@i18n:app.workspace_description"
+            />
+            <Grid columns="two">
+                <Card title="@i18n:app.home_title">
+                    <p data-zelyra-i18n="app.home_description"></p>
+                    <Inline>
+                        <Button label="@i18n:app.home_machines" href="/machines" appearance="success" />
+                        <Button label="@i18n:app.home_departments" href="/departments" />
+                    </Inline>
+                </Card>
+                <Card title="@i18n:app.workspace_label">
+                    <p data-zelyra-i18n="app.connection_status"></p>
+                    <p data-zelyra-i18n="app.environment_label"></p>
+                </Card>
+            </Grid>
+        </Container>
     }
 }
 

@@ -8,6 +8,8 @@ Willkommen beim vollständigen Zelyra-Handbuch. Es umfasst sowohl das didaktisch
 
 > **Projektstatus:** Das aktuelle stabile Release ist Zelyra 1.0.5; die Sprachkompatibilitätslinie bleibt `0.1`. Der Funktionsumfang und seine Grenzen stehen in der [Implementierungsübersicht](../../implemented.de.md). Die [Release-Notizen 1.0.5](../../release-notes/1.0.5.de.md) beschreiben lokale Studio-Logs, Deinstallation und den abgeschlossenen Rechnungsablauf.
 
+> **Entwicklungszweig 1.0.6:** Zelyra UI ist noch nicht Teil des stabilen Releases. Die aktuelle, compiler- und browsergeprüfte Komponentenreferenz steht unter [Zelyra UI](../../ui.de.md); offene Prüfgrenzen sind dort ausdrücklich benannt.
+
 ## Statuszeichen
 
 - ✅ **Implementiert und geprüft:** im aktuellen Release verfügbar und im Umfang der jeweils genannten Prüfungen belegt.
@@ -73,6 +75,8 @@ Willkommen beim vollständigen Zelyra-Handbuch. Es umfasst sowohl das didaktisch
   - [Kapitel 42: Dein Weg als Zelyra-Entwickler](lehrbuch-anwendungen.md#kapitel-42-dein-weg-als-zelyra-entwickler)
 
 ### Technisches Referenzhandbuch
+
+- [Zelyra UI 1.0.6 (Entwicklungsstand): Komponenten, Varianten, Themes, Druck und Diagramme](../../ui.de.md)
 
 - [Zelyra Studio: Editor, Schema-Karte und CRUD-Assistent](../../studio.de.md)
 

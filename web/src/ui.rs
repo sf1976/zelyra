@@ -25,8 +25,32 @@ pub(super) fn apply_generated_layout(
     if response.location.is_some() || !response.content_type.starts_with("text/html") {
         return response;
     }
-    response.body = layout_html.replace(CRUD_LAYOUT_CONTENT_MARKER, &response.body);
+    let content = generated_layout_fragment(&response.body);
+    response.body = layout_html.replace(CRUD_LAYOUT_CONTENT_MARKER, &content);
     response
+}
+
+fn generated_layout_fragment(content: &str) -> String {
+    let content = content.trim_start();
+    let Some(open_end) = content
+        .strip_prefix("<main")
+        .and_then(|rest| rest.find('>').map(|index| index + "<main".len() + 1))
+    else {
+        return content.to_owned();
+    };
+    let Some(close_start) = content.rfind("</main>").filter(|index| *index >= open_end) else {
+        return content.to_owned();
+    };
+    let attributes = &content["<main".len()..open_end - 1];
+    let generated_class = if attributes.contains("class=") {
+        ""
+    } else {
+        " class=\"z-generated-page\""
+    };
+    format!(
+        "<div{generated_class}{attributes}>{}</div>",
+        &content[open_end..close_start]
+    )
 }
 
 pub(super) fn render_default_application_shell(
@@ -77,15 +101,17 @@ pub(super) fn render_default_application_shell(
         format!("<main>{content}</main>")
     };
     format!(
-        "<!doctype html><html data-zelyra-language><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>{page_title}</title></head><body><a class=\"zelyra-skip-link\" href=\"#zelyra-content\">{}</a><div class=\"zelyra-app\"><aside class=\"zelyra-sidebar\"><a class=\"zelyra-brand\" aria-label=\"Zelyra\" href=\"{}\"><span class=\"zelyra-mark\" aria-hidden=\"true\">Z</span><span class=\"zelyra-brand-copy\"><span class=\"zelyra-brand-name\">Zelyra</span><span class=\"zelyra-brand-descriptor\">{}</span></span></a><p class=\"zelyra-sidebar-caption\">{}</p><nav class=\"zelyra-nav\" aria-label=\"{}\">{navigation}</nav><div class=\"zelyra-sidebar-footer\"><span class=\"zelyra-status-dot\" aria-hidden=\"true\"></span><span>{}</span></div></aside><div class=\"zelyra-workspace\"><header class=\"zelyra-topbar\"><div class=\"zelyra-breadcrumb\"><span>{}</span><span aria-hidden=\"true\">/</span><strong>{current_label}</strong></div><span class=\"zelyra-environment\">{}</span></header><div class=\"zelyra-page-content\" id=\"zelyra-content\">{main_content}</div></div></div></body></html>",
+        "<!doctype html><html data-z-ui data-zelyra-language><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>{page_title}</title></head><body><a class=\"zelyra-skip-link\" href=\"#zelyra-content\">{}</a><div class=\"z-app-shell zelyra-app\"><header class=\"z-app-shell__header zelyra-topbar\"><div class=\"zelyra-breadcrumb\"><span>{}</span><span aria-hidden=\"true\">/</span><strong>{current_label}</strong></div><span class=\"zelyra-environment\">{}</span><div class=\"z-toolbar zelyra-ui-toolbar\"><button class=\"z-button z-mobile-nav__toggle\" type=\"button\" data-z-mobile-nav-toggle aria-controls=\"zelyra-default-navigation\" aria-expanded=\"false\" hidden>{}</button><button class=\"z-button\" type=\"button\" data-z-theme-toggle hidden>Theme</button><button class=\"z-button\" type=\"button\" data-z-density-toggle hidden>Density</button></div></header><aside class=\"z-app-shell__sidebar zelyra-sidebar\"><a class=\"zelyra-brand\" aria-label=\"Zelyra\" href=\"{}\"><span class=\"zelyra-mark\" aria-hidden=\"true\">Z</span><span class=\"zelyra-brand-copy\"><span class=\"zelyra-brand-name\">Zelyra</span><span class=\"zelyra-brand-descriptor\">{}</span></span></a><p class=\"zelyra-sidebar-caption\">{}</p><nav class=\"z-app-shell__navigation zelyra-nav\" id=\"zelyra-default-navigation\" aria-label=\"{}\">{navigation}</nav><div class=\"zelyra-sidebar-footer\"><span class=\"zelyra-status-dot\" aria-hidden=\"true\"></span><span>{}</span></div></aside><section class=\"z-app-shell__main zelyra-generated-main\" id=\"zelyra-content\"><div class=\"zelyra-page-content\">{main_content}</div></section><footer class=\"z-app-shell__footer zelyra-footer\"><span>{}</span><span>Zelyra</span></footer></div></body></html>",
         tr(language, "shell.skip_to_content"),
+        tr(language, "shell.workspace_label"),
+        tr(language, "shell.environment_label"),
+        tr(language, "shell.navigation_label"),
         html_escape(home_path),
         tr(language, "shell.brand_descriptor"),
         tr(language, "shell.navigation_caption"),
         tr(language, "shell.navigation_label"),
         tr(language, "shell.powered_by"),
-        tr(language, "shell.workspace_label"),
-        tr(language, "shell.environment_label"),
+        tr(language, "shell.powered_by"),
     )
 }
 
@@ -329,35 +355,65 @@ pub(super) fn localize_user_text(_language: UiLanguage, source: &str) -> String 
     )
 }
 
-pub(super) fn inject_design_system(source: &str, has_project_theme: bool) -> String {
-    if !source.contains("class=\"zelyra-app\"") {
+pub(super) fn inject_design_system(
+    source: &str,
+    has_replacement_stylesheet: bool,
+    has_project_theme: bool,
+) -> String {
+    let has_ui_markup = source.contains("class=\"zelyra-app\"")
+        || source.contains("class=\"z-")
+        || source.contains("class='z-")
+        || source.contains("data-z-ui");
+    if !has_ui_markup {
         return source.to_owned();
     }
-    let default_theme_missing = !source.contains("data-zelyra-theme=\"default\"");
+    let mut marked_source = source.to_owned();
+    if !marked_source.contains("data-z-ui") {
+        if let Some(html_start) = marked_source.find("<html") {
+            if let Some(tag_end_relative) = marked_source[html_start..].find('>') {
+                let tag_end = html_start + tag_end_relative;
+                marked_source.insert_str(tag_end, " data-z-ui");
+            }
+        }
+    }
+    let selected_stylesheet_missing = if has_replacement_stylesheet {
+        !marked_source.contains(&format!("href=\"{PROJECT_UI_CSS_PATH}\""))
+    } else {
+        !marked_source.contains(&format!("href=\"{ZELYRA_UI_CSS_PATH}\""))
+    };
+    let javascript_missing = !marked_source.contains(&format!("src=\"{ZELYRA_UI_JS_PATH}\""));
     let project_theme_missing =
-        has_project_theme && !source.contains(&format!("href=\"{PROJECT_THEME_CSS_PATH}\""));
-    if !default_theme_missing && !project_theme_missing {
-        return source.to_owned();
+        has_project_theme && !marked_source.contains(&format!("href=\"{PROJECT_THEME_CSS_PATH}\""));
+    if !selected_stylesheet_missing && !javascript_missing && !project_theme_missing {
+        return marked_source;
     }
-    let mut stylesheets = String::new();
-    if default_theme_missing {
-        stylesheets.push_str(&format!(
-            "<style data-zelyra-theme=\"default\">{ZELYRA_DESIGN_SYSTEM_CSS}</style>"
+    let mut assets = String::new();
+    if selected_stylesheet_missing {
+        let path = if has_replacement_stylesheet {
+            PROJECT_UI_CSS_PATH
+        } else {
+            ZELYRA_UI_CSS_PATH
+        };
+        assets.push_str(&format!(
+            "<link rel=\"stylesheet\" href=\"{path}\" data-z-ui-stylesheet>"
+        ));
+    }
+    if javascript_missing {
+        assets.push_str(&format!(
+            "<script src=\"{ZELYRA_UI_JS_PATH}\" defer data-z-ui-script></script>"
         ));
     }
     if project_theme_missing {
-        stylesheets.push_str(&format!(
-            "<link rel=\"stylesheet\" href=\"{PROJECT_THEME_CSS_PATH}\" data-zelyra-theme=\"project\">"
-        ));
+        assets.push_str(&format!("<link rel=\"stylesheet\" href=\"{PROJECT_THEME_CSS_PATH}\" data-zelyra-theme=\"project\">"));
     }
-    if let Some(head_end) = source.rfind("</head>") {
-        let mut html = String::with_capacity(source.len() + stylesheets.len());
-        html.push_str(&source[..head_end]);
-        html.push_str(&stylesheets);
-        html.push_str(&source[head_end..]);
+    if let Some(head_end) = marked_source.rfind("</head>") {
+        let mut html = String::with_capacity(marked_source.len() + assets.len());
+        html.push_str(&marked_source[..head_end]);
+        html.push_str(&assets);
+        html.push_str(&marked_source[head_end..]);
         html
     } else {
-        format!("{stylesheets}{source}")
+        marked_source
     }
 }
 
@@ -400,6 +456,7 @@ pub(super) fn append_learning_assistant(
 .zelyra-learning-panel pre{overflow:auto;margin:10px 0;padding:13px 15px;border-radius:10px;background:#111b31;color:#e4e9ff;font:13px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace}
 .zelyra-learning-panel code{color:#5140bb;font:600 12px ui-monospace,SFMono-Regular,Consolas,monospace}
 @media(max-width:560px){.zelyra-learning-assistant{right:14px;bottom:14px}.zelyra-learning-panel{right:-2px;max-height:70vh;overflow:auto}}
+@media print{.zelyra-learning-assistant{display:none}}
 </style>"#;
     let widget = format!(
         "{style}<details class=\"zelyra-learning-assistant\"><summary aria-label=\"{button_label}\"><span class=\"zelyra-learning-assistant-icon\" aria-hidden=\"true\">i</span><span>{button_label}</span></summary><section class=\"zelyra-learning-panel\" role=\"region\" aria-label=\"{title}\"><h2>{title}</h2><p>{introduction}</p><h3>{heading}</h3><pre><code>{example}</code></pre><p>{guidance}</p></section></details>"

@@ -665,6 +665,7 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
     let mut views_by_name = BTreeMap::<String, Vec<(String, String, bool)>>::new();
     let mut page_views = Vec::<(String, String, String)>::new();
     let mut crud_layouts = Vec::<(String, String, String)>::new();
+    let mut tableview_layouts = Vec::<(String, String, String)>::new();
     {
         let mut node_sink = ProjectMapNodeSink {
             nodes: &mut nodes,
@@ -722,6 +723,9 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
                     tableview.span,
                 );
                 edges.insert((module_id.clone(), id.clone(), "declares".into()));
+                if let Some(layout) = &tableview.layout {
+                    tableview_layouts.push((id, layout.clone(), source.path.clone()));
+                }
             }
             for crud in &program.cruds {
                 let id = format!("crud:{}:{}", source.path, crud.name);
@@ -798,7 +802,11 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
             }
         }
     }
-    for (page, view, source_path) in page_views.into_iter().chain(crud_layouts) {
+    for (page, view, source_path) in page_views
+        .into_iter()
+        .chain(crud_layouts)
+        .chain(tableview_layouts)
+    {
         let imported_paths = loaded
             .modules
             .iter()

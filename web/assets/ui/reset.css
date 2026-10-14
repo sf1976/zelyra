@@ -1,0 +1,20 @@
+@layer reset, base, layout, components, utilities, theme, overrides;
+
+@layer reset {
+  :where(html[data-z-ui], html[data-z-ui] *, html[data-z-ui] *::before, html[data-z-ui] *::after) {
+    box-sizing: border-box;
+  }
+  :where(html[data-z-ui]) {
+    min-width: 0;
+    text-size-adjust: 100%;
+    -webkit-text-size-adjust: 100%;
+  }
+  :where(html[data-z-ui] body) {
+    min-width: 0;
+    min-height: 100vh;
+    margin: 0;
+  }
+  :where(html[data-z-ui] img, html[data-z-ui] svg, html[data-z-ui] video, html[data-z-ui] canvas) {
+    max-width: 100%;
+  }
+}

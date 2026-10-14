@@ -303,88 +303,85 @@ Verbindungsgrenzen setzen.
 |---|---|---|---|---|
 | `ZELYRA_SCHEMA_SAFETY_MARIADB_URL` | nicht gesetzt; nur SQLite-Test | Nur Prozessumgebung; wird nicht aus Projekt-`.env` geladen. Ein expliziter Wert schaltet den zusätzlichen MariaDB-Testpfad ein. | Kann Benutzername und Passwort enthalten; nur lokale Testdatenbank verwenden, niemals ausgeben oder committen. | `bash tests/schema-safety-e2e.sh`; GitHub Actions setzt eine lokale `zelyra_ci`-Test-URL. Der Test akzeptiert ausschließlich `localhost`/Loopback und eine Basisdatenbank `zelyra_ci` oder `zelyra_test`; er erstellt und entfernt eine isolierte Datenbank. |
 
-## Projektlokales Theme (keine `.env`-Variable)
+## Integriertes UI-Stylesheet
 
-`zelyra new` und `zelyra init` erzeugen eine optionale
-`zelyra.theme.css`. `zelyra serve` lädt diese UTF-8-CSS-Datei aus demselben
-Verzeichnis wie die angegebene `.zyl`-Datei und bindet sie nach dem eingebauten
-Design ein. Fehlt die Datei, bleibt das Standarddesign unverändert. Es gibt
-keine Theme-Auswahlvariable und keine zusätzliche Konfigurationspriorität.
+`ZELYRA_UI_STYLESHEET` wählt das lokal ausgelieferte Stylesheet für Zelyra-
+Oberflächen. Standard ist `zelyra`; `tabler` wählt das lokal gebündelte
+Tabler-Core-CSS; alternativ kann ein projektrelativer Pfad wie
+`assets/tabler.css` angegeben werden. Pfade müssen auf `.css` enden, UTF-8
+enthalten und dürfen keine Symlinks, `.`-/`..`-Segmente oder Dateien über
+512 KiB verwenden.
 
-Ein Projekt kann das mitgelieferte Tabler-Core-Stylesheet 1.6.1 aktivieren,
-indem diese Markierung allein in einer Zeile der `zelyra.theme.css` steht:
+| Variable | Standard | Vorrang | Sicherheitsklasse und Wirkung | Betroffene Befehle und Prüfungen |
+|---|---|---|---|---|
+| `ZELYRA_UI_STYLESHEET` | `zelyra` | Prozessumgebung → Projekt-`.env` → `zelyra` | Kein Secret; wählt die öffentlich ausgelieferte CSS-Datei (`zelyra`, `tabler` oder sicherer relativer `.css`-Pfad). | `zelyra serve`, erzeugte MariaDB-Compose-Projekte; CLI- und Webprüfungen zu Auswahl, Pfadsicherheit, MIME-Typ und Cache. |
+
+Die Auswahl **ersetzt** das integrierte Zelyra-UI-Stylesheet; beide CSS-
+Frameworks werden nicht parallel geladen. `tabler` verwendet die lokal
+gebündelte MIT-lizenzierte Tabler-Core-CSS-Datei. Tabler-JavaScript und CDN-
+Anfragen werden dabei nicht geladen. Bei einem eigenen Stylesheet bleibt
+`zelyra.theme.css` separat und wird danach als Projekt-Override eingebunden.
+Eigenes CSS kann durch `@import` oder `url(...)` externe Anfragen auslösen;
+prüfe solche Referenzen selbst.
+
+Die reservierten Asset-Routen lauten `/__zelyra/ui/1.0.6/zelyra-ui.css`,
+`/__zelyra/ui/1.0.6/zelyra-ui.js` und `/__zelyra/ui/project.css`. Die eingebauten,
+versionierten Assets kommen aus dem Zelyra-Binary, funktionieren offline und
+werden langfristig zwischengespeichert. Ausgewählte Projekt-CSS-Dateien werden
+mit `no-cache` ausgeliefert. Zelyra bindet die UI-Assets nur in Seiten mit
+Zelyra-UI-Markup ein.
+
+## Projektlokales Theme
+
+`zelyra new` und `zelyra init` erzeugen eine optionale `zelyra.theme.css`.
+`zelyra serve` lädt die reguläre UTF-8-Datei aus dem Projektverzeichnis und
+bindet sie nach dem ausgewählten Stylesheet ein. Symbolische Links und Dateien
+über 128 KiB werden abgewiesen. Das Theme verändert die Darstellung, keine
+Datenzugriffe, CSRF-Prüfungen, Authentifizierung oder Berechtigungen.
+
+Die folgenden zusammengehörigen Tokens sollten bei einem eigenen Farbschema
+als Paare angepasst werden:
 
 ```css
-/* zelyra:tabler */
-```
-
-Zelyra liefert das MIT-lizenzierte Stylesheet lokal vor dem Projekt-CSS aus;
-es wird weder ein CDN verwendet noch Tabler-JavaScript geladen. Das Limit von
-128 KiB gilt für die vom Projekt geschriebene Datei; das eingebaute Stylesheet
-ist Bestandteil der Zelyra-CLI-Distribution. Die Markierung ändert nur die
-Darstellung.
-
-Die Datei kann die folgenden öffentlichen CSS-Variablen überschreiben:
-
-```css
-:root {
-    --zelyra-color-accent: #7557f6;
-    --zelyra-color-accent-strong: #665ce9;
-    --zelyra-color-accent-text: #634ce0;
-    --zelyra-color-accent-soft: #f8f6ff;
-    --zelyra-color-ink: #172033;
-    --zelyra-color-muted: #738097;
-    --zelyra-color-border: #e8edf4;
-    --zelyra-color-canvas: #f5f7fb;
-    --zelyra-color-surface: #ffffff;
-    --zelyra-color-surface-subtle: #f9faff;
-    --zelyra-color-sidebar-start: #171c32;
-    --zelyra-color-sidebar-middle: #202743;
-    --zelyra-color-sidebar-end: #263958;
-    --zelyra-color-sidebar-foreground: #f6f7ff;
-    --zelyra-color-sidebar-muted: #bac4d8;
-    --zelyra-color-hero-start: #262f52;
-    --zelyra-color-hero-middle: #3e4381;
-    --zelyra-color-hero-end: #6258bb;
-    --zelyra-color-success-background: #effbf7;
-    --zelyra-color-success-border: #bcebdd;
-    --zelyra-color-success-ink: #17654f;
-    --zelyra-color-danger-background: #fff5f5;
-    --zelyra-color-danger-border: #f2c8cc;
-    --zelyra-color-danger-ink: #8b303c;
-    --zelyra-color-focus: #8f7aff;
-    --zelyra-font-body: Inter, system-ui, sans-serif;
-    --zelyra-radius-card: 16px;
-    --zelyra-radius-control: 10px;
-    --zelyra-content-max-width: 1180px;
+:where(html[data-z-ui]) {
+    --z-color-primary: #3157a4;
+    --z-color-on-primary: #ffffff;
+    --z-color-primary-hover: #274889;
+    --z-color-primary-soft: #eaf0fb;
+    --z-color-success: #16734c;
+    --z-color-on-success: #ffffff;
+    --z-color-success-soft: #e9f6ef;
+    --z-color-warning: #795000;
+    --z-color-on-warning: #ffffff;
+    --z-color-warning-soft: #fff4d8;
+    --z-color-danger: #a12e39;
+    --z-color-on-danger: #ffffff;
+    --z-color-danger-soft: #fff0f0;
+    --z-color-canvas: #f4f6fa;
+    --z-color-surface: #ffffff;
+    --z-color-surface-raised: #ffffff;
+    --z-color-text: #182230;
+    --z-color-text-muted: #526174;
+    --z-color-border: #d8e0e9;
+    --z-color-focus: #275fc5;
+    --z-color-link: #244f9a;
+    --z-content-width: 76rem;
+    --z-radius-md: .65rem;
+    --z-radius-lg: 1rem;
 }
 ```
 
-Alle Tokens sind optional; nicht gesetzte Werte behalten ihren eingebauten
-Standard. Die CSS-Datei ist ein öffentlicher Browser-Asset, kein Secret. Lege
-dort niemals Passwörter, Tokens oder vertrauliche Kommentare ab. CSS kann
-Browseranfragen auslösen, etwa über `@import` oder `url(...)`; verwende solche
-externen Referenzen nur bewusst. Zelyra akzeptiert nur reguläre, nicht
-symbolische Dateien bis 128 KiB mit UTF-8-Inhalt. Die Datei wird unverändert
-unter `/__zelyra/theme.css` ausgeliefert; diese Route ist bei vorhandener
-Theme-Datei reserviert. Der Zugriff ist auf GET beschränkt und erhält
-`X-Content-Type-Options: nosniff` sowie `Cache-Control: no-cache`.
+Passe Primärfarbe und `--z-color-on-primary` gemeinsam an und prüfe die
+Textkontraste. Für dunkle Themes gelten eigene `--z-color-on-*`-Paare. Weitere
+Anleitungen für Dichte, Inhaltsbreite und einzelne Komponenten enthält das
+[Zelyra-UI-Handbuch](ui.de.md). Die Datei ist ein öffentlicher Browser-Asset,
+kein Secret; hinterlege darin keine Zugangsdaten oder Tokens.
 
-Die Grenze zwischen Theme-CSS und Zelyra-Views ist bewusst festgelegt: CSS-
-Tokens ändern ausschließlich visuelle Eigenschaften wie Farben, Typografie,
-Abstände und Rundungen. Layoutstruktur, Inhalte, CRUD-Felder, Slots,
-Navigation, Formulare, CSRF-Felder und Berechtigungen werden über deklarative
-Zelyra-Views beziehungsweise die generierten Komponenten gesteuert. Ein
-Theme kann deshalb keine Datenzugriffe oder Sicherheitsprüfungen ersetzen.
-Die erzeugte `zelyra.theme.css` enthält alle verfügbaren Tokens als
-auskommentierte, sichere Ausgangsbasis.
-
-Betroffen sind `zelyra serve`, `new`/`init` und der generierte Docker-Build.
-Die Dockerfile-Vorlage kopiert die Theme-Datei explizit ins Image. CLI-Tests
-prüfen fehlende und gültige Dateien, Größenlimit, UTF-8, Symlink-Ablehnung,
-generierte Scaffold-Datei und reservierte Route; Webtests prüfen Einbindung,
-MIME-Typ, Cache-Regel und Zugriffsmethode. Es wurde keine neue
-Umgebungsvariable hinzugefügt.
+Die frühere Markierung `/* zelyra:tabler */` aktiviert kein Stylesheet mehr.
+Setze `ZELYRA_UI_STYLESHEET=tabler`, um die mitgelieferte Tabler-CSS-Auswahl zu
+verwenden. Das `.env`-Setting wird an den erzeugten Compose-Webdienst
+weitergereicht; eine laufende Anwendung muss für Änderungen neu gestartet
+werden.
 
 `ZELYRA_REF` im generierten Dockerfile ist ein Docker-`ARG` mit einem
 veröffentlichten Tag, Branch oder Commit, keine von Zelyra geladene

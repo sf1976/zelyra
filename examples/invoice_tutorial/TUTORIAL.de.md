@@ -120,7 +120,7 @@ geändert werden. Die Beispieldaten behalten `RE-2026-001`.
 ### `main.zyl` — Programmeinstieg und Startseite
 
 - Zeile 1 erklärt, dass diese Datei die Fachmodule verbindet und die Startseite enthält.
-- Zeilen 2–7 importieren Datenbank, Layout, Kunden, Artikel, Rechnungen und Übersicht. Die Namen nach `as` sind lokale Aliasnamen; dadurch bleiben die Deklarationen in ihren eigenen Dateien.
+- Zeile 2 importiert die compilergeprüfte Standardbibliothek `zelyra/ui`; die Komponenten werden in HTML über ihren Namen verwendet. Zeilen 3–8 importieren Datenbank, Layout, Kunden, Artikel, Rechnungen und Übersicht. Die Namen nach `as` sind lokale Modul-Aliase.
 - Zeilen 9–11 deklarieren `GET /`, wählen `InvoiceTutorialShell` und beginnen die HTML-Ausgabe. Die Route `/` ist hier ausdrücklich festgelegt.
 - Zeile 12 öffnet den Hauptbereich. Zeilen 13–14 beginnen das zweispaltige Hero- und Beispielrechnungs-Layout.
 - Zeilen 15–19 bilden Kennzeichnung, Z-Marke und lokale Statusplakette. Die Beschriftungen mit `data-zelyra-i18n` werden aus den Sprachdateien ersetzt.
@@ -135,10 +135,16 @@ geändert werden. Die Beispieldaten behalten `RE-2026-001`.
 - Zeilen 77–79 verlinken zur tatsächlichen Druckansicht der Beispielrechnung und schließen den oberen Rasterbereich.
 - Zeilen 81–103 zeigen drei Funktionshinweise zu Datumseingabe, automatischer Nummer und Druckansicht; `<article>` gruppiert jeden Hinweis, `<strong>` setzt den Titel und `<p>` den erklärenden Satz.
 - Zeilen 105–112 setzen Überschrift, Untertitel und Link der nächsten Sektion.
-- Zeilen 113–122 bilden Schritt 1: die Klasse `col-md-4` reserviert ein Drittel der Zeile auf breiten Bildschirmen; der Link öffnet `/customers/new`.
-- Zeilen 123–131 bilden Schritt 2 und führen zu `/items/new`.
-- Zeilen 132–140 bilden Schritt 3, heben die Rechnungskarte optisch hervor und führen zu `/invoices/new`.
-- Zeilen 141–145 schließen Kartenraster, Ablaufsektion, Hauptbereich, HTML-Ausgabe und Seitendeklaration. Zusammen mit den Öffnungen weiter oben zeigen diese Zeilen die Blockstruktur.
+- Zeilen 114–142 bilden mit `Grid columns="three"` die drei Schritte Kunde, Artikel und Rechnung. Die Komponente verwaltet die Spalten responsiv; die Links führen zu `/customers/new`, `/items/new` und `/invoices/new`.
+- Zeilen 143–146 schließen Ablaufsektion, Startseite, HTML-Ausgabe und Route.
+- Zeilen 148–155 deklarieren `/ui/components` als Komponentenübersicht und zeigen eine Warnung, dass Darstellung keine Servervalidierung ersetzt.
+- Zeilen 156–180 demonstrieren die vier compilergeprüften Erscheinungsvarianten, normale und Formularbuttons, Hinweisslot, tatsächlichen Fehlerzustand und ein natives GET-Formular.
+- Zeilen 182–209 zeigen Datums-, Zahlen-, Auswahl-, Text-, Radio-, Checkbox- und Switch-Felder. Erscheinungsvarianten verändern nur die Darstellung; `invalid` bleibt eine eigene Angabe.
+- Zeilen 210–215 zeigen eine beschriftete responsive Tabelle mit Spalten- und Zeilenüberschriften sowie einer echten Detailnavigation.
+- Zeilen 216–229 zeigen serverseitig gerenderte Balken-, Ring- und Liniendiagramme. Die Linie erhält eine lesbare Tabellenalternative.
+- Zeilen 230–259 demonstrieren Fortschritt, Breadcrumbs, Pagination, Leer-/Lade-/Fehlerzustände, Toast, Disclosure, Dropdown, Tastaturtabs und Dialog.
+- Zeilen 260–269 erklären Browserdruck/PDF, den lokalen E-Mail-Entwurf mit vorausgefüllter Rechnungsnummer und die Druckaktion für die Übersicht. Speichere die Rechnung zuerst als PDF und hänge sie im Entwurf manuell an. Die E-Mail-Schaltfläche versendet nicht selbst; Servermail verwendet eine autorisierte Route, `mail_queue` und den Outbox-Worker. Die Outbox kann noch keine Anhänge versenden.
+- Zeilen 270–272 schließen Komponentenübersicht und Route.
 
 ### `src/database.zyl` — gemeinsame Verbindung
 
@@ -177,23 +183,14 @@ geändert werden. Die Beispieldaten behalten `RE-2026-001`.
 
 ### `src/shell.zyl` — gemeinsames Layout
 
-- Zeile 1 beschreibt das Layout.
-- Zeile 2 deklariert eine öffentliche View namens `InvoiceTutorialShell`.
-- Zeilen 3–4 beginnen HTML-Ausgabe und HTML-Dokument.
-- Zeilen 5–10 setzen Sprach-/Dokumentmetadaten, Mobilansicht und Seitentitel.
-- Zeilen 11–18 beginnen den Dokumentkörper und Markenbereich. Das Logo ist
-  reiner Text; der Untertitel wird aus `locales/de.json` oder `locales/en.json`
-  gelesen.
-- Zeilen 19–25 bilden die Navigation zu Startseite, Kunden, Artikeln,
-  Rechnungsübersicht und Positionen. `data-zelyra-i18n` übersetzt die Labels;
-  `href` bleibt jeweils der konkrete URL-Pfad.
-- Zeile 26 fügt den auffälligen Link für eine neue Rechnung hinzu.
-- Zeile 27 schließt den inneren Navigationscontainer; Zeile 28 schließt den
-  Kopfbereich.
-- Zeilen 29–31 bilden den Hauptbereich. `<slot />` ist der Platzhalter, in den
-  Zelyra den Inhalt der Seite oder der generierten CRUD-Ansicht einsetzt.
-- Zeilen 32–34 bilden den lokalisierten Fußbereich.
-- Zeilen 35–39 schließen HTML-Körper, Dokument, HTML-Block und View.
+- Zeile 1 importiert Zelyra UI für dieses Modul; Zeile 3 erläutert die gemeinsame Verwendung.
+- Zeile 4 deklariert `InvoiceTutorialShell` als öffentliche View.
+- Zeilen 6–11 öffnen ein HTML-Dokument mit `data-z-ui`, UTF-8, Mobilviewport und lokalisiertem Titel.
+- Zeilen 13–14 öffnen den Dokumentkörper und `AppShell`. `id` verbindet den Navigationsknopf mit der Navigation; die Beschriftung ist zugleich zugänglich.
+- Zeilen 15–21 füllen den benannten Header-Slot mit Marke und Link zum Rechnungsformular.
+- Zeilen 22–29 füllen den Navigationsslot mit echten Links zu Startseite, Kunden, Artikeln, Rechnungen, Positionen und Komponentenübersicht. `data-zelyra-i18n` übersetzt Beschriftungen; die Routen bleiben gleich.
+- Zeile 30 setzt den Standardinhaltsslot in den Projektbereich; dadurch teilen Handbuchseiten und generierte CRUD-Seiten dasselbe Layout.
+- Zeilen 31–33 setzen den Fußbereich. Zeilen 34–38 schließen AppShell, Body, HTML, View-Block und View.
 
 ### `src/invoices.zyl` — Rechnungen und Druckansicht
 
@@ -236,14 +233,17 @@ geändert werden. Die Beispieldaten behalten `RE-2026-001`.
 - Zeilen 7–15 typisieren die gelesenen Spalten einschließlich berechneter
   Dezimalbeträge.
 - Zeilen 17–18 deklarieren die Tabelle `InvoiceDashboard` und den typisierten
-  SQL-Datenstrom. Aus diesem Namen entsteht `/views/invoicedashboard`.
-- Zeilen 19–30 wählen Rechnungsnummer, Kunde und Status. Die Aggregatfunktionen
+  SQL-Datenstrom. Zeile 18 bindet die Übersicht an `InvoiceTutorialShell`, damit
+  Kopf, Navigation, Inhalt und Fußzeile dem restlichen Tutorial entsprechen.
+  Aus dem Namen entsteht `/views/invoicedashboard`.
+- Zeilen 19–32 wählen Rechnungsnummer, Kunde und Status. Die Aggregatfunktionen
   berechnen Netto, Steuer und Brutto. Rechnungen ohne Positionen bleiben durch
   `LEFT JOIN` sichtbar.
-- Zeile 31 schließt den SQL-Abfrageblock.
-- Zeilen 32–34 bestimmen die angezeigten Spalten.
-- Zeile 35 bietet den Statusfilter, Zeile 36 aktiviert Suche, Zeile 37 die
-  Sortierung und Zeile 38 begrenzt die Ergebnisse auf 20 je Seite.
+- Zeile 33 schließt den SQL-Abfrageblock.
+- Zeilen 34–36 bestimmen die angezeigten Spalten.
+- Zeile 37 bietet den Statusfilter, Zeile 38 aktiviert Suche, Zeile 39 die
+  Sortierung und Zeile 40 begrenzt die Ergebnisse auf 20 je Seite.
+- Zeile 41 schließt die Tabellenansicht.
 - Zeile 39 schließt die TableView.
 
 ### `invoice-tutorial.seed.sql` — Beispieldaten
@@ -266,20 +266,16 @@ geändert werden. Die Beispieldaten behalten `RE-2026-001`.
 
 ### `zelyra.theme.css` — lokale Gestaltung
 
-- Zeilen 1–2 aktivieren die lokal bereitgestellte Tabler-Basis und dokumentieren, dass keine CDN-Anfrage erforderlich ist.
-- Zeilen 3–12 setzen helle Farben, Primärfarbe, Seitenfarben, Kartenradius und Standardschatten.
-- Zeilen 14–21 formatieren den Seitenkörper, Mindesthöhe, Rand, Hintergrund und Systemschrift.
-- Zeilen 23–28 überschreiben das IDE-Raster für die eigenständige Anwendung und lassen sie die volle Breite einnehmen.
-- Zeilen 30–38 entfernen Begrenzung, Rahmen, Hintergrund und Schatten des äußeren Tabler-Hauptbereichs.
-- Zeilen 40–51 gestalten Seitenrahmen, klebende Navigation, Marke, Navigationslinks, Schaltfläche und Inhaltsabstände.
-- Zeilen 52–68 bauen den Startseiten-Hero auf: Rasteraufteilung, Farbverlauf, dekorative Form, Kennzeichnung, große Überschrift, Beschreibung, Schaltflächen und Datenhinweis.
-- Zeilen 69–92 gestalten die Beispielrechnung: Papierkarte, Status, Empfänger, Datum, Zahlungsziel, Positionen, Summen und Linkzustände.
-- Zeilen 93–103 formatieren die drei Funktionshinweise sowie die Überschrift der Ablaufsektion.
-- Zeilen 104–114 gestalten den Übersichtslink, dreispaltigen Ablauf, Hoverzustand, Nummern, Symbole, Schritttexte und Fußbereich.
-- Zeilen 115–123 vereinheitlichen Abstände in generierten Seiten sowie Formulare, Labels, Tabellen, Fokusmarkierung und Drucksummen.
-- Zeilen 124–132 passen Navigation, Hero und Beispielrechnung bis 991 px an: Die zwei Spalten werden untereinander angeordnet.
-- Zeilen 133–151 verkleinern Navigation und Hero bis 575 px, machen Aktionen und Funktionshinweise einspaltig und halten die Karten lesbar.
-- Zeilen 152–159 definieren den Druckmodus: Navigation und Aktionen verschwinden; wichtige Inhalte bleiben ohne unnötige Schatten und Abstände druckbar.
+- Zeile 1 erklärt: Dies ist ein Theme-Override von Zelyra UI und kein zweites CSS-Framework.
+- Zeilen 2–27 passen im begrenzten `html[data-z-ui]`-Bereich die Geschäftsfarben, Kontrastfarben, Flächen, Fokus, Inhaltsbreite und Rundungen an.
+- Zeilen 28–42 gestalten Marke und Abstände für Tutorialkarten, Komponentenübersicht und Druckaktionen.
+- Zeilen 43–60 bauen Startseitenrahmen und Hero mit Geschäftsmarke, Handlungslinks und lokalem Beispiel auf.
+- Zeilen 61–83 gestalten die Beispielrechnung als Papierkarte mit Empfänger, Datum, Positionen, Summen und Link.
+- Zeilen 84–105 gestalten Funktionshinweise und die drei Workflowkarten.
+- Zeilen 106–114 passen Abschnittsabstände, Formular-/Tabellenbereiche und Rechnungssummen an.
+- Zeilen 116–135 ordnen Hero und Karten für Tablet und schmale Mobilansichten um; bei 600 px wird der Ablauf einspaltig.
+- Zeilen 136–191 passen Designvariablen und Beispielkarten an ein explizites dunkles Theme sowie an die dunkle Systempräferenz an.
+- Zeilen 192–209 sind Druckregeln: Kopf/Fuß und `z-no-print`-Aktionen verschwinden; Rechnungstabellen bleiben druckbar und Karten verlieren Schatten.
 
 ### `locales/de.json` und `locales/en.json` — lokalisierte Beschriftungen
 

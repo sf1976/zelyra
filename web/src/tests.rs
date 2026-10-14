@@ -73,7 +73,10 @@ fn applies_crud_layout_only_to_html_responses() {
         Response::html(200, "<main>CRUD content</main>"),
         Some("<body>\u{0}ZELYRA_CRUD_CONTENT\u{0}</body>"),
     );
-    assert_eq!(response.body, "<body><main>CRUD content</main></body>");
+    assert_eq!(
+        response.body,
+        "<body><div class=\"z-generated-page\">CRUD content</div></body>"
+    );
 
     let redirect = apply_generated_layout(
         Response::redirect("/customers"),
@@ -98,6 +101,7 @@ fn form_route() -> FormRoute {
                 required: true,
                 max: Some(20),
                 widget: None,
+                appearance: None,
                 readonly: false,
                 span: zelyra_ast::Span::default(),
             }],
@@ -253,11 +257,17 @@ fn generated_crud_routes_use_the_default_localized_shell_and_crud_guide() {
             parse_request(&format!("GET {path} HTTP/1.1\r\nHost: localhost\r\n\r\n")).unwrap();
         let response = app.dispatch(&request);
         assert!(
-            response.body.contains("class=\"zelyra-app\""),
+            response.body.contains("class=\"z-app-shell zelyra-app\""),
             "default app shell missing for {path}"
         );
         assert!(response.body.contains("lang=\"de\""));
-        assert!(response.body.contains("data-zelyra-theme=\"default\""));
+        assert!(response.body.contains("data-z-ui-stylesheet"));
+        assert!(response
+            .body
+            .contains("class=\"z-app-shell__main zelyra-generated-main\""));
+        assert!(response
+            .body
+            .contains("aria-controls=\"zelyra-default-navigation\""));
         assert!(response
             .body
             .contains("<a href=\"/machines\" aria-label=\"Maschinen\" aria-current=\"page\">"));
@@ -296,6 +306,45 @@ fn default_application_shell_escapes_project_navigation_labels_and_paths() {
 }
 
 #[test]
+fn url_encoded_template_interpolation_escapes_mailto_query_values() {
+    let params = HashMap::new();
+    let data = HashMap::from([
+        ("recipient".into(), "rechnung@example.test".into()),
+        ("subject".into(), "RE 2026&001".into()),
+    ]);
+
+    assert_eq!(
+        render_interpolations(
+            "mailto:{url_encode:recipient}?subject={url_encode:subject}",
+            &params,
+            &data,
+        ),
+        "mailto:rechnung%40example.test?subject=RE%202026%26001"
+    );
+}
+
+#[test]
+fn default_application_shell_uses_the_shared_mobile_navigation_contract() {
+    let context = DefaultUiContext {
+        current_path: "/invoices".into(),
+        current_label: "Invoices".into(),
+        navigation: vec![DefaultNavigationLink {
+            path: "/invoices".into(),
+            label: "Invoices".into(),
+        }],
+    };
+    let html = render_default_application_shell("<h1>Invoices</h1>", &context, UiLanguage::English);
+
+    assert!(html.contains("class=\"z-app-shell__navigation zelyra-nav\""));
+    assert!(html.contains("data-z-mobile-nav-toggle"));
+    assert!(html.contains("aria-controls=\"zelyra-default-navigation\""));
+    assert!(html.contains("aria-expanded=\"false\""));
+    assert!(html.contains("id=\"zelyra-default-navigation\""));
+    assert!(html.contains("<section class=\"z-app-shell__main zelyra-generated-main\""));
+    assert_eq!(html.matches("<main").count(), 1);
+}
+
+#[test]
 fn default_application_shell_does_not_rewrap_complete_html_documents() {
     let context = DefaultUiContext {
         current_path: "/machines".into(),
@@ -322,8 +371,28 @@ fn explicitly_configured_crud_layout_takes_precedence_over_the_default_shell() {
     let response = app.dispatch(&request);
 
     assert!(response.body.starts_with("<div class=\"custom-shell\">"));
-    assert!(!response.body.contains("class=\"zelyra-app\""));
-    assert!(!response.body.contains("data-zelyra-theme=\"default\""));
+    assert!(!response.body.contains("class=\"z-app-shell zelyra-app\""));
+    assert!(!response.body.contains("data-z-ui-stylesheet"));
+}
+
+#[test]
+fn generated_main_content_becomes_a_fragment_inside_a_custom_layout() {
+    let layout = format!("<main class=\"app-shell-main\">{CRUD_LAYOUT_CONTENT_MARKER}</main>");
+    let response = apply_generated_layout(
+        Response::html(
+            200,
+            "<main data-loading-message=\"Loading\"><h1>Invoices</h1><table></table></main>",
+        ),
+        Some(&layout),
+    );
+
+    assert!(response.body.contains(
+        "<main class=\"app-shell-main\"><div class=\"z-generated-page\" data-loading-message=\"Loading\">"
+    ));
+    assert!(response
+        .body
+        .contains("<h1>Invoices</h1><table></table></div></main>"));
+    assert_eq!(response.body.matches("<main").count(), 1);
 }
 
 #[test]
@@ -332,6 +401,7 @@ fn default_shell_covers_standalone_forms_and_tableviews_but_not_custom_pages() {
     let tableview = TableViewRoute {
         path: "/reports".into(),
         title: "Reports".into(),
+        layout_html: None,
         source: "report query".into(),
         columns: Vec::new(),
         filters: Vec::new(),
@@ -350,7 +420,7 @@ fn default_shell_covers_standalone_forms_and_tableviews_but_not_custom_pages() {
         let request =
             parse_request(&format!("GET {path} HTTP/1.1\r\nHost: localhost\r\n\r\n")).unwrap();
         let response = app.dispatch(&request);
-        assert!(response.body.contains("class=\"zelyra-app\""));
+        assert!(response.body.contains("class=\"z-app-shell zelyra-app\""));
         assert!(response.body.contains("href=\"/forms/CustomerCreate\""));
     }
 
@@ -409,7 +479,8 @@ fn generated_login_page_uses_the_localized_default_shell() {
     let request = parse_request("GET /login HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
     let response = app.dispatch(&request);
 
-    assert!(response.body.contains("class=\"zelyra-app\""));
+    assert!(response.body.contains("<html data-z-ui"));
+    assert!(response.body.contains("class=\"z-app-shell zelyra-app\""));
     assert!(response.body.contains("lang=\"de\""));
     assert!(response.body.contains("<title>Anmelden | Zelyra</title>"));
     assert!(response.body.contains("Zum Inhalt springen"));
@@ -449,13 +520,41 @@ fn project_theme_css_is_linked_after_the_default_design_and_served_as_css() {
 
     let default_style = page
         .body
-        .find("data-zelyra-theme=\"default\"")
-        .expect("default design system should be embedded");
+        .find(&format!("href=\"{ZELYRA_UI_CSS_PATH}\""))
+        .expect("default design system should be linked locally");
+    let ui_script = page
+        .body
+        .find(&format!("src=\"{ZELYRA_UI_JS_PATH}\""))
+        .expect("local UI behavior should be linked");
     let project_style = page
         .body
         .find("href=\"/__zelyra/theme.css\"")
         .expect("project theme should be linked");
     assert!(default_style < project_style);
+    assert!(ui_script < project_style);
+    assert!(page.body.contains("<html data-z-ui>"));
+
+    let asset_request = parse_request(&format!(
+        "GET {ZELYRA_UI_CSS_PATH} HTTP/1.1\r\nHost: localhost\r\n\r\n"
+    ))
+    .unwrap();
+    let asset = app.dispatch(&asset_request);
+    assert_eq!(asset.status, 200);
+    assert_eq!(asset.content_type, "text/css; charset=utf-8");
+    assert!(asset
+        .body
+        .contains("@layer reset, base, layout, components, utilities, theme, overrides;"));
+    assert!(asset
+        .to_http()
+        .contains("Cache-Control: public, max-age=31536000, immutable\r\n"));
+
+    let js_request = parse_request(&format!(
+        "GET {ZELYRA_UI_JS_PATH} HTTP/1.1\r\nHost: localhost\r\n\r\n"
+    ))
+    .unwrap();
+    let script = app.dispatch(&js_request);
+    assert_eq!(script.content_type, "text/javascript; charset=utf-8");
+    assert!(script.body.contains("window.ZelyraUI"));
 
     let css_request =
         parse_request("GET /__zelyra/theme.css HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
@@ -476,37 +575,87 @@ fn project_theme_css_is_linked_after_the_default_design_and_served_as_css() {
 }
 
 #[test]
+fn zelyra_ui_assets_do_not_restyle_unmarked_html() {
+    let html = "<!doctype html><html><head></head><body><main class=\"content\">Plain HTML</main></body></html>";
+    assert_eq!(inject_design_system(html, false, false), html);
+
+    let scoped = include_str!("../assets/zelyra-ui.v1.css");
+    assert!(scoped.contains("@layer reset, base, layout, components, utilities, theme, overrides;"));
+    assert!(scoped.contains(":where(html[data-z-ui])"));
+    assert!(!scoped.lines().any(|line| {
+        line.split_once('{')
+            .is_some_and(|(selector, _)| selector.trim() == "body")
+    }));
+}
+
+#[test]
+fn replacement_stylesheet_replaces_the_default_and_keeps_project_overrides_last() {
+    let route = Route {
+        path: "/".into(),
+        html: "<html><head></head><body><main class=\"z-card\">Home</main></body></html>".into(),
+        query: Vec::new(),
+        page_size: None,
+        sort_columns: Vec::new(),
+        search_columns: Vec::new(),
+        filters: Vec::new(),
+        data: Vec::new(),
+        requires_auth: false,
+        permissions: Vec::new(),
+    };
+    let replacement = "/* local replacement */ body { color: #123; }";
+    let app = WebApp::new(vec![route], Vec::new())
+        .with_ui_stylesheet_css(Some(replacement.into()))
+        .with_project_theme_css(Some(":root { --project: yes; }".into()));
+    let request = parse_request("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+    let response = app.dispatch(&request);
+    assert!(response
+        .body
+        .contains(&format!("href=\"{PROJECT_UI_CSS_PATH}\"")));
+    assert!(!response
+        .body
+        .contains(&format!("href=\"{ZELYRA_UI_CSS_PATH}\"")));
+    assert!(
+        response.body.find(PROJECT_UI_CSS_PATH).unwrap()
+            < response.body.find(PROJECT_THEME_CSS_PATH).unwrap()
+    );
+
+    let css_request = parse_request(&format!(
+        "GET {PROJECT_UI_CSS_PATH} HTTP/1.1\r\nHost: localhost\r\n\r\n"
+    ))
+    .unwrap();
+    let css = app.dispatch(&css_request);
+    assert_eq!(css.status, 200);
+    assert_eq!(css.body, replacement);
+    assert!(css.to_http().contains("Cache-Control: no-cache\r\n"));
+    assert_eq!(
+        WebApp::new(Vec::new(), Vec::new())
+            .dispatch(&css_request)
+            .status,
+        404
+    );
+}
+
+#[test]
 fn default_design_system_exposes_the_complete_public_theme_token_set() {
     for token in [
-        "--zelyra-color-accent",
-        "--zelyra-color-accent-strong",
-        "--zelyra-color-accent-text",
-        "--zelyra-color-accent-soft",
-        "--zelyra-color-ink",
-        "--zelyra-color-muted",
-        "--zelyra-color-border",
-        "--zelyra-color-canvas",
-        "--zelyra-color-surface",
-        "--zelyra-color-surface-subtle",
-        "--zelyra-color-sidebar-start",
-        "--zelyra-color-sidebar-middle",
-        "--zelyra-color-sidebar-end",
-        "--zelyra-color-sidebar-foreground",
-        "--zelyra-color-sidebar-muted",
-        "--zelyra-color-hero-start",
-        "--zelyra-color-hero-middle",
-        "--zelyra-color-hero-end",
-        "--zelyra-color-success-background",
-        "--zelyra-color-success-border",
-        "--zelyra-color-success-ink",
-        "--zelyra-color-danger-background",
-        "--zelyra-color-danger-border",
-        "--zelyra-color-danger-ink",
-        "--zelyra-color-focus",
-        "--zelyra-font-body",
-        "--zelyra-radius-card",
-        "--zelyra-radius-control",
-        "--zelyra-content-max-width",
+        "--z-color-primary",
+        "--z-color-on-primary",
+        "--z-color-primary-hover",
+        "--z-color-primary-soft",
+        "--z-color-success",
+        "--z-color-warning",
+        "--z-color-danger",
+        "--z-color-canvas",
+        "--z-color-surface",
+        "--z-color-text",
+        "--z-color-text-muted",
+        "--z-color-border",
+        "--z-color-focus",
+        "--z-font-sans",
+        "--z-font-mono",
+        "--z-content-width",
+        "--z-control-height",
+        "--z-radius-md",
     ] {
         assert!(
             ZELYRA_DESIGN_SYSTEM_CSS.contains(token),
@@ -535,8 +684,8 @@ fn default_design_system_covers_all_generated_state_families_responsively() {
             "default design system misses generated state selector {selector}"
         );
     }
-    assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains("@media(max-width:700px)"));
-    assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains("@media(max-width:560px)"));
+    assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains("@media (max-width: 900px)"));
+    assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains("@media (max-width: 600px)"));
 }
 
 fn relation_form_route() -> FormRoute {
@@ -549,6 +698,7 @@ fn relation_form_route() -> FormRoute {
         required: true,
         max: None,
         widget: None,
+        appearance: None,
         readonly: false,
         span: zelyra_ast::Span::default(),
     });
@@ -621,6 +771,7 @@ fn formats_crud_audit_changes_without_exposing_sensitive_values() {
         required: false,
         max: None,
         widget: None,
+        appearance: None,
         readonly: false,
         span: zelyra_ast::Span::default(),
     });
@@ -672,9 +823,7 @@ fn applies_locale_catalog_theme_and_learning_mode_to_template_views() {
         .body
         .contains("Maschinenverwaltung | Zelyra"));
     assert!(german_response.body.contains("Alle Maschinen im Blick."));
-    assert!(german_response
-        .body
-        .contains("data-zelyra-theme=\"default\""));
+    assert!(german_response.body.contains("data-z-ui-stylesheet"));
     assert!(
         german_response.body.contains("Zelyra-Lernhilfe")
             || german_response.body.contains("Lernhilfe")
@@ -883,8 +1032,8 @@ fn generated_form_titles_buttons_and_field_names_use_selected_language() {
         UiLanguage::German,
     );
     let html = localize_html(&html, UiLanguage::German);
-    assert!(html.contains("<h1>Kunde anlegen</h1>"));
-    assert!(html.contains("<label for=\"name\">Name</label>"));
+    assert!(html.contains("<h1 class=\"z-page-header__title\">Kunde anlegen</h1>"));
+    assert!(html.contains("<label for=\"name\" class=\"z-field__label\">Name</label>"));
     assert!(html.contains(">Anlegen</button>"));
 }
 
@@ -2271,6 +2420,47 @@ fn renders_form_with_csrf_and_field_attributes() {
 }
 
 #[test]
+fn form_appearance_is_separate_from_server_validation_state() {
+    let mut route = form_route();
+    route.form.fields[0].appearance = Some("danger".into());
+    let appearance_only = render_form(&route, &HashMap::new(), &[], None);
+    assert!(appearance_only.contains("class=\"z-input z-input--danger\""));
+    assert!(!appearance_only.contains("aria-invalid=\"true\""));
+
+    let invalid = vec![FieldError {
+        field: "name".into(),
+        message: "value is required".into(),
+    }];
+    let validation_error = render_form(&route, &HashMap::new(), &invalid, None);
+    assert!(validation_error.contains("class=\"z-input z-input--danger\""));
+    assert!(validation_error.contains("aria-invalid=\"true\""));
+
+    let mut checkbox = route.form.fields[0].clone();
+    checkbox.name = "active".into();
+    checkbox.label = Some("Active".into());
+    checkbox.ty = Some(Type::Bool);
+    checkbox.appearance = Some("warning".into());
+    route.form.fields.push(checkbox);
+    let checkbox_html = render_form(&route, &HashMap::new(), &[], None);
+    assert!(checkbox_html.contains("z-field--checkbox"));
+    assert!(checkbox_html.contains("class=\"z-check z-check--warning\""));
+    assert!(!checkbox_html.contains("class=\"z-check z-check--warning\" id=\"active\" name=\"active\" type=\"checkbox\" aria-invalid=\"true\""));
+
+    let mut relation_route = relation_form_route();
+    relation_route.form.fields[1].appearance = Some("success".into());
+    let options = HashMap::from([(
+        "department".into(),
+        vec![SelectOption {
+            value: "7".into(),
+            label: "Sales".into(),
+        }],
+    )]);
+    let select_html =
+        render_form_with_options(&relation_route, &HashMap::new(), &[], None, &options);
+    assert!(select_html.contains("<select class=\"z-select z-select--success\""));
+}
+
+#[test]
 fn renders_relationship_as_escaped_select_options() {
     let route = relation_form_route();
     let options = HashMap::from([(
@@ -2287,7 +2477,13 @@ fn renders_relationship_as_escaped_select_options() {
         None,
         &options,
     );
-    assert!(html.contains("<select id=\"department\" name=\"department\" required>"));
+    let select_start = html.find("<select ").unwrap();
+    let select_end = select_start + html[select_start..].find('>').unwrap();
+    let select_tag = &html[select_start..=select_end];
+    assert!(select_tag.contains("class=\"z-select"));
+    assert!(select_tag.contains("id=\"department\""));
+    assert!(select_tag.contains("name=\"department\""));
+    assert!(select_tag.contains("required"));
     assert!(html.contains("value=\"7\" selected>R&amp;D &lt;East&gt;</option>"));
     assert!(!html.contains("<input id=\"department\""));
 }
@@ -2393,6 +2589,7 @@ fn renders_tableview_with_escaped_values_and_pagination_state() {
     let tableview = TableViewRoute {
         path: "/views/customers".into(),
         title: "Customers".into(),
+        layout_html: None,
         source: "SELECT id, name FROM customers".into(),
         columns: vec!["id".into(), "name".into()],
         filters: Vec::new(),
@@ -2425,6 +2622,10 @@ fn renders_tableview_with_escaped_values_and_pagination_state() {
     assert!(html.contains("value=\"CNC machine\""));
     assert!(html.contains("page=1&amp;sort=name&amp;order=desc&amp;search=CNC%20machine"));
     assert!(html.contains("name=\"sort\""));
+    assert!(html.contains("class=\"z-generated-page\""));
+    assert!(html.contains("class=\"z-table-tools\""));
+    assert!(html.contains("class=\"z-table\""));
+    assert!(html.contains("<caption>Customers</caption>"));
 }
 
 #[test]
@@ -2432,6 +2633,7 @@ fn renders_typed_tableview_filters_and_preserves_state() {
     let tableview = TableViewRoute {
         path: "/views/customers".into(),
         title: "Customers".into(),
+        layout_html: None,
         source: "SELECT id, orders FROM customer_overview".into(),
         columns: vec!["id".into(), "orders".into()],
         filters: vec![TableViewFilter {
@@ -2462,8 +2664,13 @@ fn renders_typed_tableview_filters_and_preserves_state() {
         UiLanguage::English,
     );
     let html = localize_html(&html, UiLanguage::English);
-    assert!(html
-        .contains("<fieldset class=\"zelyra-query-controls\"><legend>Search and filters</legend>"));
+    assert!(html.contains(
+        "<form class=\"z-table-tools\" method=\"get\" action=\"/views/customers\"><fieldset"
+    ));
+    assert!(html.contains(
+        "<fieldset class=\"z-fieldset zelyra-query-controls\"><legend>Search and filters</legend><div class=\"z-query-controls__fields\">"
+    ));
+    assert!(html.contains("<option value=\"id\" selected>ID</option>"));
     assert!(html.contains("name=\"filter_orders__operator\""));
     assert!(html.contains("for=\"filter_orders__operator\">Filter Orders operator</label>"));
     assert!(html.contains("for=\"filter_orders\">Filter Orders value</label>"));

@@ -1,0 +1,698 @@
+# Zelyra UI 1.0 public component module.
+# Import explicitly with: import "zelyra/ui" as ui
+
+pub enum UiAppearance {
+    default
+    success
+    warning
+    danger
+}
+
+pub enum UiGridColumns {
+    one
+    two
+    three
+    four
+}
+
+pub component AppShell {
+    props {
+        id: String
+        navigation_label: String
+    }
+    html {
+        <div class="z-app-shell">
+            <header class="z-app-shell__header">
+                <slot name="header" />
+                <button class="z-mobile-nav__toggle" type="button" data-z-mobile-nav-toggle aria-controls="{id}-navigation" aria-expanded="false" hidden>{navigation_label}</button>
+            </header>
+            <aside class="z-app-shell__sidebar">
+                <nav class="z-app-shell__navigation" id="{id}-navigation" aria-label="{navigation_label}">
+                    <slot name="navigation" />
+                </nav>
+            </aside>
+            <main class="z-app-shell__main" id="{id}-main">
+                <slot />
+            </main>
+            <footer class="z-app-shell__footer">
+                <slot name="footer" />
+            </footer>
+        </div>
+    }
+}
+
+pub component Container {
+    html { <div class="z-container"><slot /></div> }
+}
+
+pub component PageHeader {
+    props {
+        title: String
+        description: String?
+    }
+    html {
+        <header class="z-page-header">
+            <div class="z-page-header__copy">
+                <h1 class="z-page-header__title">{title}</h1>
+                <p class="z-page-header__description">{description}</p>
+            </div>
+            <div class="z-page-header__actions"><slot name="actions" /></div>
+        </header>
+    }
+}
+
+pub component Grid {
+    props { columns: UiGridColumns? }
+    html { <div class="z-grid z-grid--{columns}"><slot /></div> }
+}
+
+pub component Stack {
+    html { <div class="z-stack"><slot /></div> }
+}
+
+pub component Inline {
+    html { <div class="z-inline"><slot /></div> }
+}
+
+pub component Toolbar {
+    html { <div class="z-toolbar" role="toolbar"><slot /></div> }
+}
+
+pub component Divider {
+    html { <hr class="z-divider" /> }
+}
+
+pub component Card {
+    props { title: String? }
+    html {
+        <section class="z-card">
+            <header class="z-card__header"><h2 class="z-card__title">{title}</h2><slot name="header" /></header>
+            <div class="z-card__body"><slot /></div>
+            <footer class="z-card__footer"><slot name="footer" /></footer>
+        </section>
+    }
+}
+
+pub component Badge {
+    props {
+        text: String
+        appearance: UiAppearance?
+    }
+    html { <span class="z-badge z-badge--{appearance}">{text}</span> }
+}
+
+pub component Alert {
+    props {
+        title: String
+        appearance: UiAppearance?
+    }
+    html {
+        <section class="z-alert z-alert--{appearance}" role="status">
+            <h2 class="z-alert__title">{title}</h2>
+            <div><slot /></div>
+        </section>
+    }
+}
+
+pub component EmptyState {
+    props {
+        id: String
+        title: String
+        description: String?
+    }
+    html {
+        <section class="z-empty-state" aria-labelledby="{id}-title">
+            <h2 id="{id}-title">{title}</h2>
+            <p>{description}</p>
+            <div class="z-empty-state__actions"><slot name="actions" /></div>
+        </section>
+    }
+}
+
+pub component LoadingState {
+    props { label: String }
+    html {
+        <section class="z-loading-state" role="status" aria-live="polite">
+            <span class="z-loading-state__indicator" aria-hidden="true"></span>
+            <p>{label}</p>
+        </section>
+    }
+}
+
+pub component ErrorState {
+    props {
+        title: String
+        message: String
+    }
+    html {
+        <section class="z-error-state" role="alert">
+            <h2>{title}</h2>
+            <p>{message}</p>
+            <div class="z-error-state__actions"><slot name="actions" /></div>
+        </section>
+    }
+}
+
+pub component Breadcrumbs {
+    props { label: String? }
+    html {
+        <nav class="z-breadcrumbs" aria-label="{label}">
+            <ol><slot /></ol>
+        </nav>
+    }
+}
+
+pub component DescriptionList {
+    html { <dl class="z-description-list"><slot /></dl> }
+}
+
+pub component Progress {
+    props {
+        label: String
+        value: UInt
+        max: UInt
+    }
+    html {
+        <label class="z-progress-field">
+            <span>{label}</span>
+            <progress class="z-progress" value="{value}" max="{max}">{value}</progress>
+        </label>
+    }
+}
+
+# `Button` deliberately defaults to type=button. A supplied href selects an
+# anchor; use SubmitButton when the intended action submits a form.
+pub component Button {
+    props {
+        label: String
+        href: String?
+        appearance: UiAppearance?
+        translation_key: String?
+    }
+    html {
+        <z-if prop="href"><a class="z-button z-button--{appearance}" href="{href}" data-zelyra-i18n="{translation_key}">{label}</a></z-if>
+        <z-else><button class="z-button z-button--{appearance}" type="button" data-zelyra-i18n="{translation_key}">{label}</button></z-else>
+    }
+}
+
+pub component SubmitButton {
+    props {
+        label: String
+        appearance: UiAppearance?
+        translation_key: String?
+    }
+    html { <button class="z-button z-button--{appearance}" type="submit" data-zelyra-i18n="{translation_key}">{label}</button> }
+}
+
+pub component ButtonGroup {
+    html { <div class="z-button-group" role="group"><slot /></div> }
+}
+
+pub component Link {
+    props {
+        href: String
+        label: String
+    }
+    html { <a class="z-link" href="{href}">{label}</a> }
+}
+
+pub component Pagination {
+    props { label: String? }
+    html { <nav class="z-pagination" aria-label="{label}"><slot /></nav> }
+}
+
+# Tab links remain ordinary fragment links without JavaScript. The local
+# progressive script enhances them to keyboard-operable tabs.
+pub component Tabs {
+    props {
+        id: String
+        first_label: String
+        second_label: String
+    }
+    html {
+        <nav class="z-tabs" data-z-tabs aria-label="Sections">
+            <a class="z-tab" href="#{id}-panel-one" data-z-tab>{first_label}</a>
+            <a class="z-tab" href="#{id}-panel-two" data-z-tab>{second_label}</a>
+        </nav>
+        <section class="z-tabs__panel" id="{id}-panel-one" data-z-tab-panel><slot name="first" /></section>
+        <section class="z-tabs__panel" id="{id}-panel-two" data-z-tab-panel><slot name="second" /></section>
+    }
+}
+
+pub component Dropdown {
+    props { label: String }
+    html {
+        <details class="z-dropdown">
+            <summary>{label}</summary>
+            <div class="z-dropdown__menu"><slot /></div>
+        </details>
+    }
+}
+
+pub component Disclosure {
+    props { summary: String }
+    html { <details class="z-disclosure"><summary>{summary}</summary><div><slot /></div></details> }
+}
+
+pub component MobileNavigation {
+    props {
+        id: String
+        label: String
+    }
+    html {
+        <div class="z-mobile-nav" data-z-mobile-nav>
+            <button class="z-mobile-nav__toggle" type="button" data-z-mobile-nav-toggle aria-controls="{id}" aria-expanded="false" hidden>{label}</button>
+            <nav class="z-mobile-nav__panel" id="{id}" aria-label="{label}"><slot /></nav>
+        </div>
+    }
+}
+
+pub component TextField {
+    props {
+        id: String
+        name: String
+        label: String
+        value: String?
+        placeholder: String?
+        required: Bool?
+        disabled: Bool?
+        readonly: Bool?
+        invalid: Bool?
+        appearance: UiAppearance?
+    }
+    html {
+        <div class="z-field">
+            <label class="z-field__label" for="{id}">{label}</label>
+            <input class="z-input z-input--{appearance}" id="{id}" name="{name}" type="text" value="{value}" placeholder="{placeholder}" required="{required}" disabled="{disabled}" readonly="{readonly}" aria-invalid="{invalid}" aria-describedby="{id}-hint {id}-error" />
+            <small class="z-field__hint" id="{id}-hint"><slot name="hint" /></small>
+            <small class="z-field__error" id="{id}-error"><slot name="error" /></small>
+        </div>
+    }
+}
+
+pub component EmailField {
+    props {
+        id: String
+        name: String
+        label: String
+        value: String?
+        placeholder: String?
+        required: Bool?
+        disabled: Bool?
+        invalid: Bool?
+        appearance: UiAppearance?
+    }
+    html {
+        <div class="z-field">
+            <label class="z-field__label" for="{id}">{label}</label>
+            <input class="z-input z-input--{appearance}" id="{id}" name="{name}" type="email" value="{value}" placeholder="{placeholder}" required="{required}" disabled="{disabled}" aria-invalid="{invalid}" aria-describedby="{id}-hint {id}-error" />
+            <small class="z-field__hint" id="{id}-hint"><slot name="hint" /></small>
+            <small class="z-field__error" id="{id}-error"><slot name="error" /></small>
+        </div>
+    }
+}
+
+pub component PasswordField {
+    props {
+        id: String
+        name: String
+        label: String
+        autocomplete: String?
+        required: Bool?
+        disabled: Bool?
+        invalid: Bool?
+        appearance: UiAppearance?
+    }
+    html {
+        <div class="z-field">
+            <label class="z-field__label" for="{id}">{label}</label>
+            <input class="z-input z-input--{appearance}" id="{id}" name="{name}" type="password" autocomplete="{autocomplete}" required="{required}" disabled="{disabled}" aria-invalid="{invalid}" aria-describedby="{id}-hint {id}-error" />
+            <small class="z-field__hint" id="{id}-hint"><slot name="hint" /></small>
+            <small class="z-field__error" id="{id}-error"><slot name="error" /></small>
+        </div>
+    }
+}
+
+pub component NumberField {
+    props {
+        id: String
+        name: String
+        label: String
+        value: String?
+        min: String?
+        max: String?
+        step: String?
+        required: Bool?
+        disabled: Bool?
+        invalid: Bool?
+        appearance: UiAppearance?
+    }
+    html {
+        <div class="z-field">
+            <label class="z-field__label" for="{id}">{label}</label>
+            <input class="z-input z-input--{appearance}" id="{id}" name="{name}" type="number" value="{value}" min="{min}" max="{max}" step="{step}" required="{required}" disabled="{disabled}" aria-invalid="{invalid}" aria-describedby="{id}-hint {id}-error" />
+            <small class="z-field__hint" id="{id}-hint"><slot name="hint" /></small>
+            <small class="z-field__error" id="{id}-error"><slot name="error" /></small>
+        </div>
+    }
+}
+
+pub component DateField {
+    props {
+        id: String
+        name: String
+        label: String
+        value: Date?
+        required: Bool?
+        disabled: Bool?
+        invalid: Bool?
+        appearance: UiAppearance?
+    }
+    html {
+        <div class="z-field">
+            <label class="z-field__label" for="{id}">{label}</label>
+            <input class="z-input z-input--{appearance}" id="{id}" name="{name}" type="date" value="{value}" required="{required}" disabled="{disabled}" aria-invalid="{invalid}" aria-describedby="{id}-hint {id}-error" />
+            <small class="z-field__hint" id="{id}-hint"><slot name="hint" /></small>
+            <small class="z-field__error" id="{id}-error"><slot name="error" /></small>
+        </div>
+    }
+}
+
+pub component TimeField {
+    props {
+        id: String
+        name: String
+        label: String
+        value: Time?
+        required: Bool?
+        disabled: Bool?
+        invalid: Bool?
+        appearance: UiAppearance?
+    }
+    html {
+        <div class="z-field">
+            <label class="z-field__label" for="{id}">{label}</label>
+            <input class="z-input z-input--{appearance}" id="{id}" name="{name}" type="time" value="{value}" required="{required}" disabled="{disabled}" aria-invalid="{invalid}" aria-describedby="{id}-hint {id}-error" />
+            <small class="z-field__hint" id="{id}-hint"><slot name="hint" /></small>
+            <small class="z-field__error" id="{id}-error"><slot name="error" /></small>
+        </div>
+    }
+}
+
+pub component Textarea {
+    props {
+        id: String
+        name: String
+        label: String
+        value: String?
+        rows: UInt?
+        required: Bool?
+        disabled: Bool?
+        readonly: Bool?
+        invalid: Bool?
+        appearance: UiAppearance?
+    }
+    html {
+        <div class="z-field">
+            <label class="z-field__label" for="{id}">{label}</label>
+        <textarea class="z-textarea z-textarea--{appearance}" id="{id}" name="{name}" rows="{rows}" required="{required}" disabled="{disabled}" readonly="{readonly}" aria-invalid="{invalid}" aria-describedby="{id}-hint {id}-error">{value}</textarea>
+            <small class="z-field__hint" id="{id}-hint"><slot name="hint" /></small>
+            <small class="z-field__error" id="{id}-error"><slot name="error" /></small>
+        </div>
+    }
+}
+
+pub component SelectField {
+    props {
+        id: String
+        name: String
+        label: String
+        required: Bool?
+        disabled: Bool?
+        invalid: Bool?
+        appearance: UiAppearance?
+    }
+    html {
+        <div class="z-field">
+            <label class="z-field__label" for="{id}">{label}</label>
+            <select class="z-select z-select--{appearance}" id="{id}" name="{name}" required="{required}" disabled="{disabled}" aria-invalid="{invalid}" aria-describedby="{id}-hint {id}-error"><slot /></select>
+            <small class="z-field__hint" id="{id}-hint"><slot name="hint" /></small>
+            <small class="z-field__error" id="{id}-error"><slot name="error" /></small>
+        </div>
+    }
+}
+
+pub component CheckboxField {
+    props {
+        id: String
+        name: String
+        label: String
+        value: String?
+        checked: Bool?
+        required: Bool?
+        disabled: Bool?
+        invalid: Bool?
+        appearance: UiAppearance?
+    }
+    html {
+        <div class="z-field">
+            <label class="z-check-field" for="{id}">
+                <input class="z-check z-check--{appearance}" id="{id}" name="{name}" type="checkbox" value="{value}" checked="{checked}" required="{required}" disabled="{disabled}" aria-invalid="{invalid}" />
+                <span>{label}</span>
+            </label>
+            <small class="z-field__hint" id="{id}-hint"><slot name="hint" /></small>
+            <small class="z-field__error" id="{id}-error"><slot name="error" /></small>
+        </div>
+    }
+}
+
+pub component RadioField {
+    props {
+        id: String
+        name: String
+        label: String
+        value: String
+        checked: Bool?
+        disabled: Bool?
+        invalid: Bool?
+        appearance: UiAppearance?
+    }
+    html {
+        <label class="z-check-field" for="{id}">
+            <input class="z-check z-check--{appearance}" id="{id}" name="{name}" type="radio" value="{value}" checked="{checked}" disabled="{disabled}" aria-invalid="{invalid}" />
+            <span>{label}</span>
+        </label>
+    }
+}
+
+pub component SwitchField {
+    props {
+        id: String
+        name: String
+        label: String
+        checked: Bool?
+        disabled: Bool?
+        invalid: Bool?
+        appearance: UiAppearance?
+    }
+    html {
+        <label class="z-switch" for="{id}">
+            <input class="z-switch__input z-switch__input--{appearance}" id="{id}" name="{name}" type="checkbox" role="switch" checked="{checked}" disabled="{disabled}" aria-invalid="{invalid}" />
+            <span class="z-switch__track" aria-hidden="true"></span>
+            <span class="z-switch__label">{label}</span>
+        </label>
+    }
+}
+
+pub component RadioGroup {
+    props { legend: String }
+    html { <fieldset class="z-fieldset z-field-group"><legend>{legend}</legend><slot /></fieldset> }
+}
+
+pub component Fieldset {
+    props { legend: String? }
+    html { <fieldset class="z-fieldset"><legend>{legend}</legend><slot /></fieldset> }
+}
+
+pub component FieldGroup {
+    props { label: String? }
+    html { <section class="z-field-group" aria-label="{label}"><slot /></section> }
+}
+
+pub component FormActions {
+    html { <div class="z-form-actions"><slot /></div> }
+}
+
+pub component ErrorSummary {
+    props { title: String }
+    html { <section class="z-error-summary" role="alert" tabindex="-1"><h2>{title}</h2><ul><slot /></ul></section> }
+}
+
+pub component DataTable {
+    props { caption: String }
+    html {
+        <div class="z-table-scroll" role="region" tabindex="0" aria-label="{caption}">
+            <table class="z-table">
+                <caption>{caption}</caption>
+                <thead><slot name="head" /></thead>
+                <tbody><slot name="body" /></tbody>
+                <tfoot><slot name="foot" /></tfoot>
+            </table>
+        </div>
+    }
+}
+
+pub component DataTableTools {
+    html { <form class="z-table-tools" method="get"><slot /></form> }
+}
+
+pub component Dialog {
+    props {
+        id: String
+        title: String
+        open_label: String
+        close_label: String
+    }
+    html {
+        <button class="z-button" type="button" id="{id}-open" data-z-dialog-open="{id}">{open_label}</button>
+        <dialog class="z-dialog" id="{id}" data-z-dialog aria-labelledby="{id}-title" open>
+            <div class="z-dialog__header"><h2 id="{id}-title">{title}</h2><button class="z-button" type="button" data-z-dialog-close>{close_label}</button></div>
+            <div class="z-dialog__body"><slot /></div>
+        </dialog>
+    }
+}
+
+pub component ConfirmationForm {
+    props {
+        action: String
+        message: String
+        confirm_label: String
+        cancel_href: String
+    }
+    html {
+        <form class="z-confirmation" method="post" action="{action}">
+            <p>{message}</p>
+            <slot name="security" />
+            <div class="z-form-actions">
+                <button class="z-button z-button--danger" type="submit">{confirm_label}</button>
+                <a class="z-button" href="{cancel_href}">Cancel</a>
+            </div>
+        </form>
+    }
+}
+
+pub component ToastRegion {
+    html { <div class="z-toast-region" aria-live="polite" aria-relevant="additions text"><slot /></div> }
+}
+
+pub component Toast {
+    props {
+        message: String
+        appearance: UiAppearance?
+    }
+    html { <div class="z-toast z-toast--{appearance}" role="status">{message}</div> }
+}
+
+pub component BarChart {
+    props {
+        title: String
+        description: String
+    }
+    html {
+        <figure class="z-chart z-chart--bar">
+            <figcaption><h2>{title}</h2><p>{description}</p></figcaption>
+            <ul class="z-chart__bars"><slot /></ul>
+        </figure>
+    }
+}
+
+pub component ChartBar {
+    props {
+        label: String
+        value: UInt
+        max: UInt
+    }
+    html {
+        <li class="z-chart__bar">
+            <label>{label}<progress value="{value}" max="{max}">{value}</progress></label>
+            <output>{value}</output>
+        </li>
+    }
+}
+
+pub component LineChart {
+    props {
+        id: String
+        title: String
+        description: String
+        points: String
+    }
+    html {
+        <figure class="z-chart z-chart--line">
+            <figcaption><h2>{title}</h2><p>{description}</p></figcaption>
+            <svg viewBox="0 0 100 60" role="img" aria-labelledby="{id}-title {id}-description" preserveAspectRatio="none">
+                <title id="{id}-title">{title}</title>
+                <desc id="{id}-description">{description}</desc>
+                <polyline points="{points}" />
+            </svg>
+            <div class="z-chart__table"><slot name="data" /></div>
+        </figure>
+    }
+}
+
+pub component DonutChart {
+    props {
+        id: String
+        title: String
+        description: String
+        percentage: UInt
+    }
+    html {
+        <figure class="z-chart z-chart--donut">
+            <figcaption><h2>{title}</h2><p>{description}</p></figcaption>
+            <svg viewBox="0 0 42 42" role="img" aria-labelledby="{id}-title {id}-description">
+                <title id="{id}-title">{title}</title>
+                <desc id="{id}-description">{description}: {percentage}%</desc>
+                <circle class="z-chart__donut-track" cx="21" cy="21" r="15.9" />
+                <circle class="z-chart__donut-value" cx="21" cy="21" r="15.9" stroke-dasharray="{percentage} 100" />
+                <text class="z-chart__donut-label" x="21" y="22">{percentage}%</text>
+            </svg>
+            <div class="z-chart__table"><slot name="data" /></div>
+        </figure>
+    }
+}
+
+pub component PrintableDocument {
+    props {
+        title: String
+        document_number: String?
+    }
+    html {
+        <article class="z-print-document">
+            <header class="z-print-document__header"><h1>{title}</h1><p>{document_number}</p></header>
+            <div class="z-print-document__body"><slot /></div>
+            <footer class="z-print-document__footer"><slot name="footer" /></footer>
+        </article>
+    }
+}
+
+pub component PrintAction {
+    props {
+        label: String
+        translation_key: String?
+    }
+    html { <button class="z-button z-no-print" type="button" data-z-print data-zelyra-i18n="{translation_key}">{label}</button> }
+}
+
+# The mail link opens a configured mail client. Transactional application mail
+# must use mail_queue and the explicit outbox worker instead.
+pub component EmailLink {
+    props {
+        recipient: String
+        subject: String
+        body: String
+        label: String
+        translation_key: String?
+    }
+    html { <a class="z-button" href="mailto:{url_encode:recipient}?subject={url_encode:subject}&amp;body={url_encode:body}" data-zelyra-i18n="{translation_key}">{label}</a> }
+}

@@ -41,7 +41,13 @@ pub use server::serve_app;
 pub(crate) use server::{spawn_connection, MAX_CONCURRENT_CONNECTIONS};
 use ui::*;
 
-const ZELYRA_DESIGN_SYSTEM_CSS: &str = include_str!("../assets/zelyra.css");
+const ZELYRA_DESIGN_SYSTEM_CSS: &str = include_str!("../assets/zelyra-ui.v1.css");
+const ZELYRA_UI_JAVASCRIPT: &str = include_str!("../assets/zelyra-ui.v1.js");
+pub const ZELYRA_UI_CSS_PATH: &str =
+    concat!("/__zelyra/ui/", env!("CARGO_PKG_VERSION"), "/zelyra-ui.css");
+pub const ZELYRA_UI_JS_PATH: &str =
+    concat!("/__zelyra/ui/", env!("CARGO_PKG_VERSION"), "/zelyra-ui.js");
+pub const PROJECT_UI_CSS_PATH: &str = "/__zelyra/ui/project.css";
 pub const PROJECT_THEME_CSS_PATH: &str = "/__zelyra/theme.css";
 pub const HEALTH_LIVENESS_PATH: &str = "/__zelyra/health/live";
 pub const ACCOUNT_SESSIONS_PATH: &str = "/account/sessions";
@@ -243,6 +249,17 @@ impl Response {
         }
     }
 
+    pub fn javascript(status: u16, body: impl Into<String>) -> Self {
+        Self {
+            status,
+            reason: reason_phrase(status).into(),
+            content_type: "text/javascript; charset=utf-8".into(),
+            body: body.into(),
+            location: None,
+            headers: Vec::new(),
+        }
+    }
+
     pub fn empty(status: u16) -> Self {
         Self {
             status,
@@ -419,6 +436,7 @@ pub struct CrudActionRoute {
 pub struct TableViewRoute {
     pub path: String,
     pub title: String,
+    pub layout_html: Option<String>,
     pub source: String,
     pub columns: Vec<String>,
     pub filters: Vec<TableViewFilter>,
@@ -834,6 +852,7 @@ pub struct WebApp {
     pub cors_policy: Option<CorsPolicy>,
     pub ui_language: UiLanguage,
     pub ui_level: UiLevel,
+    pub ui_stylesheet_css: Option<String>,
     pub project_theme_css: Option<String>,
     allowed_hosts: Vec<String>,
     project_ui_catalogs: ProjectUiCatalogs,
@@ -860,6 +879,7 @@ impl WebApp {
             cors_policy: None,
             ui_language: UiLanguage::default(),
             ui_level: UiLevel::default(),
+            ui_stylesheet_css: None,
             project_theme_css: None,
             allowed_hosts: default_allowed_hosts(),
             project_ui_catalogs: ProjectUiCatalogs::default(),
@@ -890,6 +910,7 @@ impl WebApp {
             cors_policy: None,
             ui_language: UiLanguage::default(),
             ui_level: UiLevel::default(),
+            ui_stylesheet_css: None,
             project_theme_css: None,
             allowed_hosts: default_allowed_hosts(),
             project_ui_catalogs: ProjectUiCatalogs::default(),
@@ -981,6 +1002,14 @@ impl WebApp {
         self
     }
 
+    /// Selects a project-local replacement for the bundled Zelyra UI sheet.
+    /// `None` keeps the built-in stylesheet; replacements are served only from
+    /// the reserved same-origin asset route.
+    pub fn with_ui_stylesheet_css(mut self, css: Option<String>) -> Self {
+        self.ui_stylesheet_css = css;
+        self
+    }
+
     pub fn with_project_ui_catalogs(mut self, catalogs: ProjectUiCatalogs) -> Self {
         self.project_ui_catalogs = catalogs;
         self
@@ -1023,6 +1052,9 @@ impl WebApp {
             .iter()
             .find(|tableview| match_path(&tableview.path, &request.path).is_some())
         {
+            if tableview.layout_html.is_some() {
+                return None;
+            }
             DefaultUiContext {
                 current_path: tableview.path.clone(),
                 current_label: tableview.title.clone(),
@@ -1157,7 +1189,11 @@ impl WebApp {
                     );
                 }
             }
-            response.body = inject_design_system(&response.body, self.project_theme_css.is_some());
+            response.body = inject_design_system(
+                &response.body,
+                self.ui_stylesheet_css.is_some(),
+                self.project_theme_css.is_some(),
+            );
         }
         if self.ui_level == UiLevel::Learn
             && correlated_request.method == "GET"
@@ -1206,6 +1242,38 @@ impl WebApp {
                     Response::css(200, css.clone()).with_header("Cache-Control", "no-cache")
                 }
                 (Some(_), _) => Response::empty(405).with_header("Allow", "GET"),
+                (None, _) => Response::empty(404),
+            };
+        }
+        if request.path == ZELYRA_UI_CSS_PATH {
+            return match request.method.as_str() {
+                "GET" => Response::css(200, ZELYRA_DESIGN_SYSTEM_CSS)
+                    .with_header("Cache-Control", "public, max-age=31536000, immutable"),
+                "HEAD" => Response::empty(200)
+                    .with_header("Content-Type", "text/css; charset=utf-8")
+                    .with_header("Cache-Control", "public, max-age=31536000, immutable"),
+                _ => Response::empty(405).with_header("Allow", "GET, HEAD"),
+            };
+        }
+        if request.path == ZELYRA_UI_JS_PATH {
+            return match request.method.as_str() {
+                "GET" => Response::javascript(200, ZELYRA_UI_JAVASCRIPT)
+                    .with_header("Cache-Control", "public, max-age=31536000, immutable"),
+                "HEAD" => Response::empty(200)
+                    .with_header("Content-Type", "text/javascript; charset=utf-8")
+                    .with_header("Cache-Control", "public, max-age=31536000, immutable"),
+                _ => Response::empty(405).with_header("Allow", "GET, HEAD"),
+            };
+        }
+        if request.path == PROJECT_UI_CSS_PATH {
+            return match (&self.ui_stylesheet_css, request.method.as_str()) {
+                (Some(css), "GET") => {
+                    Response::css(200, css.clone()).with_header("Cache-Control", "no-cache")
+                }
+                (Some(_), "HEAD") => Response::empty(200)
+                    .with_header("Content-Type", "text/css; charset=utf-8")
+                    .with_header("Cache-Control", "no-cache"),
+                (Some(_), _) => Response::empty(405).with_header("Allow", "GET, HEAD"),
                 (None, _) => Response::empty(404),
             };
         }
@@ -1683,12 +1751,13 @@ impl WebApp {
                 ) {
                     return response;
                 }
-                return dispatch_tableview(
+                let response = dispatch_tableview(
                     tableview,
                     request,
                     self.database_url.as_deref(),
                     self.ui_language,
                 );
+                return apply_generated_layout(response, tableview.layout_html.as_deref());
             }
         }
         for route in &self.routes {
@@ -6961,40 +7030,40 @@ fn render_tableview(
         page,
         per_page,
     } = state;
-    let mut html = String::from("<main><h1>");
+    let mut html = String::from("<main class=\"z-generated-page\"><header class=\"z-page-header\"><div class=\"z-page-header__copy\"><h1 class=\"z-page-header__title\">");
     html.push_str(&html_escape(&tableview.title));
-    html.push_str("</h1><form method=\"get\" action=\"");
+    html.push_str("</h1></div></header><form class=\"z-table-tools\" method=\"get\" action=\"");
     html.push_str(&html_escape(&tableview.path));
-    html.push_str("><fieldset class=\"zelyra-query-controls\"><legend>");
+    html.push_str("\"><fieldset class=\"z-fieldset zelyra-query-controls\"><legend>");
     html.push_str(&tr(language, "query.legend"));
-    html.push_str("</legend>");
+    html.push_str("</legend><div class=\"z-query-controls__fields\">");
     if tableview.searchable {
-        html.push_str("<label for=\"search\">");
+        html.push_str("<div class=\"z-field\"><label for=\"search\">");
         html.push_str(&tr(language, "query.search"));
-        html.push_str("</label><input id=\"search\" name=\"search\" value=\"");
+        html.push_str("</label><input class=\"z-input\" id=\"search\" name=\"search\" value=\"");
         html.push_str(&html_escape(search));
-        html.push_str("\">");
+        html.push_str("\"></div>");
     }
     if tableview.sortable {
-        html.push_str("<label for=\"sort\">");
+        html.push_str("<div class=\"z-field\"><label for=\"sort\">");
         html.push_str(&tr(language, "query.sort"));
-        html.push_str("</label><select id=\"sort\" name=\"sort\">");
+        html.push_str("</label><select class=\"z-select\" id=\"sort\" name=\"sort\">");
         for column in &tableview.columns {
             html.push_str("<option value=\"");
-            html.push_str(&html_escape_preserving_locale_references(
-                &localized_identifier_reference(language, column),
-            ));
+            html.push_str(&html_escape(column));
             html.push('"');
             if column == sort {
                 html.push_str(" selected");
             }
             html.push('>');
-            html.push_str(&html_escape(column));
+            html.push_str(&html_escape_preserving_locale_references(
+                &localized_identifier_reference(language, column),
+            ));
             html.push_str("</option>");
         }
-        html.push_str("</select><label for=\"order\">");
+        html.push_str("</select></div><div class=\"z-field\"><label for=\"order\">");
         html.push_str(&tr(language, "query.order"));
-        html.push_str("</label><select id=\"order\" name=\"order\">");
+        html.push_str("</label><select class=\"z-select\" id=\"order\" name=\"order\">");
         for (value, key) in [("asc", "query.ascending"), ("desc", "query.descending")] {
             html.push_str("<option value=\"");
             html.push_str(value);
@@ -7006,11 +7075,11 @@ fn render_tableview(
             html.push_str(&tr(language, key));
             html.push_str("</option>");
         }
-        html.push_str("</select>");
+        html.push_str("</select></div>");
     }
     for filter in &tableview.filters {
         let selected_operator = selected_filter_operator(query_values, &filter.name);
-        html.push_str("<label for=\"filter_");
+        html.push_str("<div class=\"z-field\"><label for=\"filter_");
         html.push_str(&html_escape(&filter.name));
         html.push_str("__operator\">");
         html.push_str(&html_escape_preserving_locale_references(&field_text(
@@ -7022,7 +7091,7 @@ fn render_tableview(
         html.push_str(&html_escape(&filter.name));
         html.push_str("__operator\" name=\"filter_");
         html.push_str(&html_escape(&filter.name));
-        html.push_str("__operator\">");
+        html.push_str("__operator\" class=\"z-select\">");
         for operator in tableview_filter_operator_options(filter.kind) {
             html.push_str("<option value=\"");
             html.push_str(operator.key());
@@ -7034,7 +7103,7 @@ fn render_tableview(
             html.push_str(&operator.label(language));
             html.push_str("</option>");
         }
-        html.push_str("</select><label for=\"filter_");
+        html.push_str("</select></div><div class=\"z-field\"><label for=\"filter_");
         html.push_str(&html_escape(&filter.name));
         html.push_str("\">");
         html.push_str(&html_escape_preserving_locale_references(&field_text(
@@ -7042,7 +7111,7 @@ fn render_tableview(
             "query.filter_value",
             &localized_identifier_reference(language, &filter.name),
         )));
-        html.push_str("</label><input id=\"filter_");
+        html.push_str("</label><input class=\"z-input\" id=\"filter_");
         html.push_str(&html_escape(&filter.name));
         html.push_str("\" name=\"filter_");
         html.push_str(&html_escape(&filter.name));
@@ -7053,19 +7122,21 @@ fn render_tableview(
             &value_name,
             &filter.name,
         )));
-        html.push_str("\">");
+        html.push_str("\"></div>");
     }
-    html.push_str("<button type=\"submit\">");
+    html.push_str("<button class=\"z-button z-button--primary\" type=\"submit\">");
     html.push_str(&tr(language, "query.apply"));
-    html.push_str("</button></fieldset></form>");
+    html.push_str("</button></div></fieldset></form>");
     if rows.is_empty() {
-        html.push_str("<p>");
+        html.push_str("<section class=\"z-empty-state\" role=\"status\"><p>");
         html.push_str(&tr(language, "table.empty"));
-        html.push_str("</p>");
+        html.push_str("</p></section>");
     } else {
-        html.push_str("<table><thead><tr>");
+        html.push_str("<div class=\"z-table-scroll\"><table class=\"z-table\"><caption>");
+        html.push_str(&html_escape(&tableview.title));
+        html.push_str("</caption><thead><tr>");
         for column in &tableview.columns {
-            html.push_str("<th>");
+            html.push_str("<th scope=\"col\">");
             html.push_str(&html_escape_preserving_locale_references(
                 &localized_identifier_reference(language, column),
             ));
@@ -7091,9 +7162,11 @@ fn render_tableview(
             }
             html.push_str("</tr>");
         }
-        html.push_str("</tbody></table>");
+        html.push_str("</tbody></table></div>");
     }
-    html.push_str("<nav class=\"zelyra-pagination\">");
+    html.push_str("<nav class=\"z-pagination zelyra-pagination\" aria-label=\"");
+    html.push_str(&tr(language, "pagination.label"));
+    html.push_str("\">");
     if page > 1 {
         html.push_str("<a href=\"");
         html.push_str(&html_escape(&tableview_page_url(
@@ -10058,7 +10131,36 @@ fn render_template(
     params: &HashMap<String, String>,
     data: &LoadedRouteData,
 ) -> String {
-    render_template_fragment(template, params, &data.values, &data.collections)
+    normalize_ui_boolean_attributes(&render_template_fragment(
+        template,
+        params,
+        &data.values,
+        &data.collections,
+    ))
+}
+
+fn normalize_ui_boolean_attributes(source: &str) -> String {
+    let mut html = source.to_owned();
+    for attribute in [
+        "required",
+        "disabled",
+        "readonly",
+        "checked",
+        "selected",
+        "multiple",
+        "autofocus",
+        "hidden",
+        "open",
+    ] {
+        for truthy in ["true", "1"] {
+            html = html.replace(&format!("data-z-ui-{attribute}=\"{truthy}\""), attribute);
+        }
+        for falsy in ["false", "0"] {
+            html = html.replace(&format!(" data-z-ui-{attribute}=\"{falsy}\""), "");
+            html = html.replace(&format!("data-z-ui-{attribute}=\"{falsy}\""), "");
+        }
+    }
+    html
 }
 
 #[cfg(test)]
@@ -10321,8 +10423,14 @@ fn render_interpolations(
             return rendered;
         };
         let name = &after_open[..close];
-        if let Some(value) = params.get(name).or_else(|| data.get(name)) {
-            rendered.push_str(&html_escape(value));
+        let url_encoded = name.starts_with("url_encode:");
+        let lookup_name = name.strip_prefix("url_encode:").unwrap_or(name);
+        if let Some(value) = params.get(lookup_name).or_else(|| data.get(lookup_name)) {
+            if url_encoded {
+                rendered.push_str(&html_escape(&url_encode(value)));
+            } else {
+                rendered.push_str(&html_escape(value));
+            }
         } else {
             rendered.push('{');
             rendered.push_str(name);

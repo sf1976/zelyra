@@ -64,9 +64,16 @@ if parts.scheme != "mariadb" or not parts.hostname or not parts.username:
 environment = os.environ.copy()
 environment["MYSQL_PWD"] = unquote(parts.password or "")
 database = unquote(parts.path.lstrip("/"))
+command = [client, "--protocol=tcp", "--host", parts.hostname,
+           "--port", str(parts.port or 3306), "--user", unquote(parts.username),
+           "--database", database, "--batch", "--silent"]
 subprocess.run(
-    [client, "--protocol=tcp", "--host", parts.hostname, "--port", str(parts.port or 3306),
-     "--user", unquote(parts.username), "--database", database, "--batch", "--silent"],
+    [*command, "--execute", "SET FOREIGN_KEY_CHECKS=0; TRUNCATE TABLE invoice_lines; TRUNCATE TABLE invoices; TRUNCATE TABLE items; TRUNCATE TABLE customers; SET FOREIGN_KEY_CHECKS=1"],
+    env=environment,
+    check=True,
+)
+subprocess.run(
+    command,
     input=Path(sys.argv[2]).read_bytes(),
     env=environment,
     check=True,
@@ -141,8 +148,8 @@ if [[ "${home}" != *'href="/__zelyra/theme.css"'* ]]; then
   exit 1
 fi
 theme="$(curl --silent --show-error --fail "http://${address}/__zelyra/theme.css")"
-if [[ "${theme}" != *"Tabler v1.6.1"* || "${theme}" != *".invoice-home-hero"* || "${theme}" != *"max-width: 991px"* ]]; then
-  echo "invoice tutorial did not serve its local responsive Tabler theme" >&2
+if [[ "${theme}" != *"--z-color-primary"* || "${theme}" != *".invoice-home-hero"* || "${theme}" != *"max-width: 991px"* ]]; then
+  echo "invoice tutorial did not serve its local responsive Zelyra UI theme" >&2
   exit 1
 fi
 if [[ "${theme}" == *"cdn.tabler.io"* || "${theme}" == *"cdn.jsdelivr.net"* ]]; then
@@ -242,7 +249,14 @@ if [[ "${invoice_edit}" == *'name="invoice_number"'* ]]; then
   exit 1
 fi
 if [[ "${ZELYRA_INVOICE_BROWSER_E2E:-0}" == "1" ]]; then
-  ZELYRA_INVOICE_E2E_URL="http://${address}" node editor/tests/invoice-tutorial-browser-e2e.mjs
+  browser_names="${ZELYRA_INVOICE_BROWSERS:-chromium,firefox,webkit}"
+  IFS=, read -r -a browser_matrix <<<"${browser_names}"
+  for browser_name in "${browser_matrix[@]}"; do
+    echo "running invoice tutorial browser checks in ${browser_name}"
+    ZELYRA_BROWSER="${browser_name}" \
+    ZELYRA_INVOICE_E2E_URL="http://${address}" \
+      node editor/tests/invoice-tutorial-browser-e2e.mjs
+  done
 
   # Keep the generated local settings in .env, then override the active URL
   # with an external database. Run must neither start Compose nor apply the

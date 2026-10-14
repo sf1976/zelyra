@@ -989,6 +989,14 @@ page "/dashboard" {
 
 *Hinweis:* Verschachtelte Komponenten-Slots innerhalb einer Komponentenverwendung benötigen nicht fälschlich ein übergeordnetes Seiten-`view:`-Layout.
 
+**Entwicklungsstand 1.0.6:** Die mitgelieferte Bibliothek wird explizit mit
+`import "zelyra/ui" as ui` aktiviert. Sie stellt ein responsives Geschäftslayout,
+geprüfte Komponentenvarianten, Formular- und Tabellenbausteine sowie Druck-,
+Diagramm- und E-Mail-Client-Aktionen bereit. Sie ist im Entwicklungszweig
+implementiert, aber noch nicht Teil des stabilen Releases 1.0.5. Die vollständige
+Eigenschafts-/Slotreferenz und ihre Grenzen stehen in der
+[Zelyra-UI-Dokumentation](../../ui.de.md).
+
 ## 11. Formulare
 
 ✅ Formulare können Regeln aus Tabellen übernehmen:
@@ -1112,8 +1120,9 @@ Das System befüllt die benannten Slots `title`, `nav`, `content` und `actions` 
 
 Erzeugte CRUD- und Tableview-Steuerungen verwenden semantische Fieldsets und getrennte Beschriftungen für Operator und Wert jedes Filters. Filterverarbeitung und bewahrte Pagination-URLs verwenden eine deterministische Reihenfolge.
 
-🗺️ Vollständig eigene typisierte Komponenten und feingranulare View-Overrides
-sind Teil der weiteren View-Roadmap.
+🧪 Zelyra UI wird für 1.0.6 als mitgelieferte, typisierte Komponentenbibliothek
+entwickelt. Sie ist noch nicht im stabilen 1.0.5 enthalten; beliebiges CSS,
+HTML-Attribute und freie Klassen werden weiterhin nicht allgemein compilergeprüft.
 
 ### CRUD-Ansichten, Aktionen und Soft Delete
 
@@ -2407,14 +2416,14 @@ ausführbare Spracheigenschaft ausgegeben.
 | MariaDB-Schema | nicht Aufgabe der Rust-Sprache | Tabellen werden in Zelyra beschrieben | Generator erzeugt sichtbares SQL | 🧪 |
 | Formulare | Framework, Templates und Validierung selbst verbinden | `form`-Konstrukt und Tabellenregeln | Standardpfad ist Teil des Sprachmodells | 🧪 |
 | CRUD | muss programmiert oder über Frameworks erzeugt werden | deklaratives `crud Name -> table` mit gemeinsamem View-Feldprofil | aktuelle Runtime stellt CRUD-Routen bereit | 🧪 |
-| Views | externe Bibliotheken oder Frameworks | `page`/`html`, benannte `view`-Layouts, typisierte `component`-Bausteine und benannte Slots mit Fallbacks sind vorhanden | kein Rust-Äquivalent; freie Styling-Komponenten fehlen noch | 🧪 |
+| Views | externe Bibliotheken oder Frameworks | `page`/`html`, benannte `view`-Layouts, typisierte `component`-Bausteine und Default-/benannte Slots sind vorhanden; Zelyra UI ist im 1.0.6-Entwicklungszweig | keine allgemeine statische Prüfung beliebiger HTML-Klassen oder CSS | 🧪 |
 | Quellformatierung | `cargo fmt`, `rustfmt` | `zelyra fmt <file.zyl> [--check]` | deterministischer Zelyra-Formatter, schützt SQL und HTML | ✅ |
 | Refactoring/Wirkungsanalyse | `rust-analyzer`, Compiler-APIs | `zelyra impact`, `zelyra edit` | versionierte, atomare JSON-Maschinenschnittstellen | 🧪 |
 | Authentifizierung | externe Web-/Auth-Crates | Auth-Definition, Sessions und Berechtigungsprüfungen im Webmodul | Zelyra bündelt den Standardfall | 🧪 |
 | Berechtigungen | selbst entworfene Typen und Middleware | `requires auth`, `permits` und CRUD-Aktionsrechte | deklarative Regeln werden serverseitig geprüft | 🧪 |
 | Contracts | manuell oder über Bibliotheken | native `requires {}` und `ensures {}` plus `verify` | Contract-Syntax gehört zu Zelyra | ✅ |
 | Capabilities | APIs und Bibliotheken regeln Effekte | `uses Database`, `uses Network` usw. | sichtbare Effektdeklaration ist Sprachbestandteil | ✅ |
-| E-Mails | externe SMTP-/Mail-Crates | kein integriertes E-Mail-Konstrukt | nicht mit `uses Email` vortäuschen | ❌ |
+| E-Mails | externe SMTP-/Mail-Crates | `mail_queue`, explizite `Email`-Capability, transaktionale MariaDB-Outbox und konfigurierbarer SMTP-Worker sind vorhanden | Zustellung mindestens einmalig; Vorlagen/Anhänge und volle PostgreSQL-Parität fehlen | 🧪 |
 | Jobs | externe Job-/Queue-Systeme | kein Hintergrundjob-Konstrukt | keine stabile Job-Syntax | ❌ |
 | Audit | externe Logs oder Audit-Crates | Audit-Tabelle, CLI-Auswertung und optionale Hash-Kette | an Auth/CRUD gebunden und noch experimentell | 🧪 |
 | Deployment | Cargo, Container, CI und Infrastruktur frei wählbar | generierte Docker-/Compose-Vorlage vorhanden | Vorlage ist Entwicklungsstart, keine Produktionsplattform | 🧪 |
@@ -2474,12 +2483,12 @@ geplante oder derzeit nicht verfügbare Sprachmerkmale.
 | SQL-Abfragen | `sql<Customer[]> { SELECT ... }` | String/Makro einer DB-Crate | Zelyra prüft Schema, Parameter und Ergebnis | ✅ |
 | Formulare | `form CustomerCreate -> customers { ... }` | kein natives Formular | Webframework und Validierung nötig | ✅ |
 | CRUD | `crud Customer -> customers` | kein natives CRUD | Zelyra-Runtime stellt Standardrouten bereit | 🧪 |
-| Views | `page`, `view SiteShell` und `component Badge` | kein natives View-Konstrukt | benannte Views/Komponenten sind vorhanden; `input`/`render`/`??` bleiben Zielsyntax | 🧪 |
+| Views | `page`, `view SiteShell` und `component Badge` | kein natives View-Konstrukt | benannte Views, verschachtelte Komponenten und Slots sind vorhanden; `input`/`render`/`??` bleiben Zielsyntax; Zelyra UI gehört zu 1.0.6 | 🧪 |
 | Vorbedingungen | `requires { amount > 0 }` | kein eingebautes Äquivalent | Contract ist Teil der Zelyra-Funktion | ✅ |
 | Nachbedingungen | `ensures { result >= 0 }` | kein eingebautes Äquivalent | Verifier und Runtime kennen Zelyra-Contracts | ✅ |
 | Zugriff auf alte Werte | Noch nicht festgelegt; `old(...)` nicht geparst | ebenfalls kein allgemeiner eingebauter Contractstandard | keine `old`-Syntax vortäuschen | ❌ |
 | Capabilities | `uses Database` | kein identisches Sprachkonstrukt | Effekte werden in Zelyra sichtbar deklariert | ✅ |
-| E-Mails | Noch nicht festgelegt | externe Crate/API | kein `Email`-Capability-Schlüssel | ❌ |
+| E-Mails | SMTP-/Mail-API und Outbox | `mail_queue` mit `uses Email` sowie expliziter SMTP-Worker | begrenzte Outbox; Zustellungs- und Datenbankgrenzen dokumentiert | 🧪 |
 | Hintergrundjobs | Noch nicht festgelegt | externe Queue-/Runtime-Crate | keine Job-Syntax | ❌ |
 | Audit | `auth users { audit: auth_audit_log }` | externe Logging-/Audit-Crate | Zelyra bindet Audit an Auth- und CRUD-Ereignisse | 🧪 |
 | API-Definitionen | `api GET "/customers" { ... }` | Router, Handler und Typen separat | Zelyra bündelt Vertrag und Route | ✅ |
@@ -2660,9 +2669,10 @@ page "/customers/{name}" {
 
 Rust besitzt keine eingebaute HTML- oder Komponenten-Syntax; dort kommen
 Templates und Webframeworks hinzu. Zelyras `page`/`html`-Form sowie benannte
-Views und typisierte Komponenten sind vorhanden. Mehrere Slots, verschachtelte
-Komponenten und die Zielsyntax mit `input`/`render` sind noch nicht stabil;
-`??` ist keine implementierte Zelyra-Operation.
+Views, mehrere Default-/benannte Slots und verschachtelte typisierte Komponenten
+sind implementiert. Die Bibliothek Zelyra UI wird im Entwicklungszweig 1.0.6
+explizit über `import "zelyra/ui" as ui` eingebunden; sie gehört noch nicht zum
+stabilen 1.0.5. Die Zielsyntax `input`/`render` und `??` ist nicht implementiert.
 
 ### Verträge
 

@@ -1,38 +1,37 @@
-# A shared Tabler-style shell keeps every CRUD screen in the same workspace.
+import "zelyra/ui" as ui
+
+# The same Zelyra UI AppShell is used by every tutorial route and generated CRUD view.
 pub view InvoiceTutorialShell {
     html {
         <!doctype html>
-        <html class="zelyra-app" data-zelyra-language>
+        <html data-z-ui data-zelyra-language>
             <head>
                 <meta charset="utf-8" />
                 <meta name="viewport" content="width=device-width, initial-scale=1" />
                 <title data-zelyra-i18n="invoice.nav.document_title">Invoice office · Zelyra</title>
             </head>
             <body>
-                <div class="page-wrapper tutorial-app">
-                    <header class="navbar navbar-expand-md tutorial-navbar">
-                        <div class="container-xl tutorial-navbar-inner">
-                            <a class="navbar-brand" href="/">
-                                <span class="tutorial-brand-mark">Z</span>
-                                <span><strong>Rechnungsbüro</strong><small data-zelyra-i18n="invoice.nav.subtitle">Create invoices with ease</small></span>
-                            </a>
-                            <nav class="navbar-nav tutorial-nav" aria-label="Hauptnavigation">
-                                <a class="nav-link" href="/" data-zelyra-i18n="invoice.nav.home">Home</a>
-                                <a class="nav-link" href="/customers" data-zelyra-i18n="invoice.nav.customers">Customers</a>
-                                <a class="nav-link" href="/items" data-zelyra-i18n="invoice.nav.items">Items</a>
-                                <a class="nav-link" href="/views/invoicedashboard" data-zelyra-i18n="invoice.nav.invoices">Invoice overview</a>
-                                <a class="nav-link" href="/invoice_lines" data-zelyra-i18n="invoice.nav.lines">Line items</a>
-                            </nav>
-                            <a class="btn btn-primary tutorial-new-invoice" href="/invoices/new" data-zelyra-i18n="invoice.nav.new_invoice">+ New invoice</a>
-                        </div>
-                    </header>
-                    <main class="page-body">
-                        <div class="container-xl tutorial-content"><slot /></div>
-                    </main>
-                    <footer class="tutorial-footer">
-                        <div class="container-xl" data-zelyra-i18n="invoice.nav.footer">Local Zelyra example · Business data stays in your project environment</div>
-                    </footer>
-                </div>
+                <AppShell id="invoice-app" navigation_label="Hauptnavigation">
+                    <slot name="header">
+                        <a class="tutorial-brand" href="/">
+                            <span class="tutorial-brand-mark" aria-hidden="true">Z</span>
+                            <span><strong>Rechnungsbüro</strong><small data-zelyra-i18n="invoice.nav.subtitle">Create invoices with ease</small></span>
+                        </a>
+                        <a class="z-button z-button--primary tutorial-new-invoice" href="/invoices/new" data-zelyra-i18n="invoice.nav.new_invoice">+ New invoice</a>
+                    </slot>
+                    <slot name="navigation">
+                        <a href="/" data-zelyra-i18n="invoice.nav.home">Home</a>
+                        <a href="/customers" data-zelyra-i18n="invoice.nav.customers">Customers</a>
+                        <a href="/items" data-zelyra-i18n="invoice.nav.items">Items</a>
+                        <a href="/views/invoicedashboard" data-zelyra-i18n="invoice.nav.invoices">Invoice overview</a>
+                        <a href="/invoice_lines" data-zelyra-i18n="invoice.nav.lines">Line items</a>
+                        <a href="/ui/components">Zelyra UI</a>
+                    </slot>
+                    <div class="tutorial-content"><slot /></div>
+                    <slot name="footer">
+                        <div data-zelyra-i18n="invoice.nav.footer">Local Zelyra example · Business data stays in your project environment</div>
+                    </slot>
+                </AppShell>
             </body>
         </html>
     }

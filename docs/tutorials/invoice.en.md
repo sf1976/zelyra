@@ -50,6 +50,8 @@ program and preview output, with project-scoped access and text filters.
 
 The `/` home page guides the customer, item, and invoice steps. The filterable
 table is named **Invoice overview** and remains at `/views/invoicedashboard`.
+`layout: InvoiceTutorialShell` places this generated view in the same header,
+navigation, content, and footer shell as the rest of the tutorial.
 `GET /invoices/new` is generated from `crud Invoice -> invoices` in
 `src/invoices.zyl`; there is no separate `page` declaration for it.
 `zelyra routes main.zyl` lists declared and generated routes with their source
@@ -60,6 +62,30 @@ localized format hint is `YYYY-MM-DD` or `JJJJ-MM-TT`. The server assigns the
 invoice number from the newly generated record ID and preserves it during later
 edits. `TUTORIAL.en.md` and `TUTORIAL.de.md` explain each source section and
 the command options.
+
+## Zelyra UI, print, charts, and email
+
+The project imports `zelyra/ui` and uses the same `AppShell` view for tutorial
+pages and generated CRUD screens. Open `/ui/components` to see compiler-checked
+`default`, `success`, `warning`, and `danger` appearances, native form fields,
+the responsive data table, bar/line/donut charts, tabs, dialog, print, and an
+email draft. `appearance` controls presentation; server validation sets actual
+field errors.
+
+On `/invoices/{invoice_number}/print`, **Print** opens the browser's print
+dialog. Choose **Save as PDF** there. Zelyra does not currently generate its
+own PDF file; the print stylesheet hides the header, navigation, and print
+actions. `EmailLink` opens a prefilled draft in the local mail client. Attach
+the saved PDF manually. The link does not send the message itself. Server-side
+delivery requires an explicitly authorized route using `mail_queue` and the
+outbox worker; the outbox does not currently support file attachments.
+
+Built-in CSS and JavaScript are served locally from the versioned Zelyra
+binary. The optional project `zelyra.theme.css` is loaded last for token and
+tutorial overrides. Set `ZELYRA_UI_STYLESHEET=tabler` or a safe relative `.css`
+path to replace the integrated stylesheet; use `ZELYRA_UI_STYLESHEET=zelyra`
+to restore it. See the [Zelyra UI reference](../ui.en.md) and
+[environment reference](../env.en.md) for tokens and restrictions.
 
 ## Troubleshooting
 

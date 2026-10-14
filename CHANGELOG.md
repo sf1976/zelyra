@@ -6,7 +6,37 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
-_Changes for the next release go here._
+### 1.0.6 development
+
+- Add Zelyra UI as a compiler-loaded, locally bundled component library with
+  scoped, layered CSS, progressive JavaScript, project themes, and a checked
+  local stylesheet replacement setting. / Zelyra UI als compilerseitig
+  geladene, lokal gebündelte Komponentenbibliothek mit gekapseltem
+  Layer-CSS, progressivem JavaScript, Projektthemes und geprüfter lokaler
+  Stylesheet-Auswahl ergänzen.
+- Add finite `default`, `success`, `warning`, and `danger` appearances for UI
+  components and declarative fields, independently from server validation. /
+  Endliche Varianten für UI-Komponenten und deklarative Formularfelder
+  ergänzen, unabhängig vom tatsächlichen Servervalidierungszustand.
+- Apply shared responsive shell, form, table, and feedback styling to generated
+  CRUD pages; add Studio property metadata and an appearance editor. /
+  Gemeinsame responsive Darstellung für erzeugte CRUD-Seiten sowie
+  Studio-Eigenschaftsinformationen und Variantenwahl ergänzen.
+- Add local print/PDF-browser actions, mail-client links, accessible server-
+  rendered bar/line/donut charts, and an invoice tutorial component gallery. /
+  Lokale Druck-/Browser-PDF-Aktionen, E-Mail-Client-Links, serverseitig
+  gerenderte Balken-/Linien-/Ringdiagramme und eine Rechnungstutorial-
+  Komponentenübersicht ergänzen.
+- Prefill the local invoice email draft with its recipient, subject, and
+  invoice number; save the PDF in the browser and attach it manually. The
+  generic outbox still does not support attachments. / Den lokalen
+  Rechnungsentwurf mit Empfänger, Betreff und Rechnungsnummer vorausfüllen;
+  PDF im Browser speichern und manuell anhängen. Die Outbox unterstützt
+  weiterhin keine Dateianhänge.
+- Rewrite the bilingual UI and invoice references to match the tested source;
+  state explicitly that PDF uses the browser and `EmailLink` opens a draft. /
+  Zweisprachige UI- und Rechnungstutorialdokumentation an den geprüften
+  Quellstand anpassen; Browser-PDF und E-Mail-Entwurf ausdrücklich abgrenzen.
 
 ## 1.0.5 — 2026-10-14
 

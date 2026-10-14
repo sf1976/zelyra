@@ -116,7 +116,7 @@ the number `RE-2026-001`.
 ### `main.zyl` — project entry and home page
 
 - Line 1 says this file connects the business modules and contains the home page.
-- Lines 2–7 import the database, shared layout, customers, items, invoices, and overview. The names after `as` are local aliases, so each declaration remains in its own file.
+- Line 2 imports the compiler-checked `zelyra/ui` standard library; HTML uses its component names directly. Lines 3–8 import the database, shared layout, customers, items, invoices, and overview as local module aliases.
 - Lines 9–11 declare `GET /`, select `InvoiceTutorialShell`, and begin HTML output. The `/` route is explicit here.
 - Line 12 opens the main area. Lines 13–14 start the two-column hero and sample-invoice layout.
 - Lines 15–19 create the label, Z mark, and local-status badge. `data-zelyra-i18n` labels are replaced from the locale files.
@@ -131,10 +131,16 @@ the number `RE-2026-001`.
 - Lines 77–79 link to the sample invoice's real print view and close the top grid.
 - Lines 81–103 show three feature notes for date entry, automatic numbering, and printing; each `<article>` groups one note, `<strong>` gives its title, and `<p>` gives its explanation.
 - Lines 105–112 set the next section's heading, caption, and link.
-- Lines 113–122 form step 1. `col-md-4` reserves one third of the row on wide screens; the link opens `/customers/new`.
-- Lines 123–131 form step 2 and link to `/items/new`.
-- Lines 132–140 form step 3, highlight the invoice card, and link to `/invoices/new`.
-- Lines 141–145 close the card grid, workflow section, main area, HTML output, and page declaration. Together with the openings above, these lines show the block structure.
+- Lines 114–142 use `Grid columns="three"` for the customer, item, and invoice steps. The component handles responsive columns; the links lead to `/customers/new`, `/items/new`, and `/invoices/new`.
+- Lines 143–146 close the workflow section, home page, HTML output, and route.
+- Lines 148–155 declare `/ui/components` as a component gallery and warn that presentation does not replace server validation.
+- Lines 156–180 demonstrate the four compiler-checked appearances, action and submit buttons, a hint slot, a real error state, and a native GET form.
+- Lines 182–209 demonstrate date, number, select, text, radio, checkbox, and switch fields. Appearance is separate from the `invalid` state.
+- Lines 210–215 show a captioned responsive table with column and row headers and a real detail link.
+- Lines 216–229 show server-rendered bar, donut, and line charts. The line chart has a readable table alternative.
+- Lines 230–259 demonstrate progress, breadcrumbs, pagination, empty/loading/error states, toast, disclosure, dropdown, keyboard tabs, and dialog.
+- Lines 260–269 explain browser print/PDF, a local email draft prefilled with the invoice number, and the gallery print action. Save the invoice as a PDF first, then attach it to the draft manually. The email link does not send mail itself; server email uses an authorized route, `mail_queue`, and the outbox worker, which does not yet support attachments.
+- Lines 270–272 close the gallery and route.
 
 ### `src/database.zyl` — shared connection
 
@@ -172,21 +178,14 @@ the number `RE-2026-001`.
 
 ### `src/shell.zyl` — shared layout
 
-- Line 1 describes the layout's purpose.
-- Line 2 declares the public view `InvoiceTutorialShell`.
-- Lines 3–4 begin the HTML output and document.
-- Lines 5–10 provide document language/container, mobile viewport, and title.
-- Lines 11–18 begin the page body and brand. The mark is text; the subtitle is
-  read from `locales/en.json` or `locales/de.json`.
-- Lines 19–25 provide navigation to home, customers, items, invoice overview,
-  and line items. `data-zelyra-i18n` translates labels; each `href` remains a
-  concrete URL.
-- Line 26 adds the prominent create-invoice link.
-- Line 27 closes the navbar's inner container. Line 28 closes the header.
-- Lines 29–31 create the main content area. `<slot />` is where Zelyra places
-  the current page or generated CRUD screen.
-- Lines 32–34 create the localized footer.
-- Lines 35–39 close the HTML body, document, HTML block, and view.
+- Line 1 imports Zelyra UI for this module; line 3 describes its shared use.
+- Line 4 declares the public view `InvoiceTutorialShell`.
+- Lines 6–11 open an HTML document with `data-z-ui`, UTF-8, a mobile viewport, and a localized title.
+- Lines 13–14 open the document body and `AppShell`. Its `id` connects the navigation toggle to the navigation; the label is accessible text.
+- Lines 15–21 fill the named header slot with the brand and invoice action.
+- Lines 22–29 fill navigation with real links to home, customers, items, invoices, line items, and the component gallery. `data-zelyra-i18n` translates labels while routes stay unchanged.
+- Line 30 places the default content slot in the page area so authored and generated CRUD screens share the layout.
+- Lines 31–33 add the footer. Lines 34–38 close AppShell, body, HTML, the view block, and the view.
 
 ### `src/invoices.zyl` — invoices and print view
 
@@ -223,16 +222,18 @@ the number `RE-2026-001`.
 
 - Lines 1–5 import the database, customer, item, invoice, and layout modules.
 - Lines 7–15 type the returned columns and calculated decimal totals.
-- Lines 17–18 declare `InvoiceDashboard` and its typed SQL source. The name
-  generates `/views/invoicedashboard`.
-- Lines 19–30 select invoice number, customer, and status. Aggregate SQL
+- Lines 17–19 declare `InvoiceDashboard`, attach the shared
+  `InvoiceTutorialShell`, and define the typed SQL source. The layout keeps the
+  overview's header, navigation, content, and footer consistent with the rest
+  of the tutorial. The tableview name generates `/views/invoicedashboard`.
+- Lines 20–32 select invoice number, customer, and status. Aggregate SQL
   calculates net, tax, and gross values. `LEFT JOIN` keeps invoices without
   line items in the overview.
-- Line 31 closes the SQL query block.
-- Lines 32–34 select the displayed columns.
-- Line 35 enables filtering by status. Line 36 enables search. Line 37 enables
-  sorting. Line 38 limits each page to 20 rows.
-- Line 39 closes the table view.
+- Line 33 closes the SQL query block.
+- Lines 34–36 select the displayed columns.
+- Line 37 enables filtering by status. Line 38 enables search. Line 39 enables
+  sorting. Line 40 limits each page to 20 rows.
+- Line 41 closes the table view.
 
 ### `invoice-tutorial.seed.sql` — sample data
 
@@ -252,20 +253,16 @@ the number `RE-2026-001`.
 
 ### `zelyra.theme.css` — local appearance
 
-- Lines 1–2 enable the locally served Tabler baseline and record that no CDN request is needed.
-- Lines 3–12 set the light palette, primary color, page colors, card radius, and default shadow.
-- Lines 14–21 style the body, minimum height, margin, background, and system font.
-- Lines 23–28 override the IDE grid for the standalone application and let it use the full width.
-- Lines 30–38 remove the outer Tabler main area's width limit, border, background, and shadow.
-- Lines 40–51 style the page wrapper, sticky navigation, brand, navigation links, button, and content spacing.
-- Lines 52–68 build the home hero: grid, gradient, decorative ring, badge, large heading, description, buttons, and local-data note.
-- Lines 69–92 style the sample invoice: paper card, status, recipient, date, payment term, line items, totals, and link states.
-- Lines 93–103 format the three feature notes and the workflow section heading.
-- Lines 104–114 style the overview link, three-column workflow, hover state, numbers, icons, step text, and footer.
-- Lines 115–123 standardize spacing in generated pages, forms, labels, tables, focus indication, and print totals.
-- Lines 124–132 adapt navigation, hero, and sample invoice up to 991 px by stacking the two columns.
-- Lines 133–151 shrink navigation and hero up to 575 px, stack actions and feature notes, and keep the cards readable.
-- Lines 152–159 define print mode: navigation and actions disappear; key content remains printable without unnecessary shadows and spacing.
+- Line 1 states that this is a Zelyra UI theme override, not a second CSS framework.
+- Lines 2–27 adjust business colors and their contrast pairs, surfaces, focus, content width, and radii within `html[data-z-ui]`.
+- Lines 28–42 style the brand and spacing for tutorial cards, the component gallery, and print actions.
+- Lines 43–60 build the home frame and hero with the business identity, action links, and local example.
+- Lines 61–83 style the sample invoice as a paper card with recipient, date, line items, totals, and link.
+- Lines 84–105 style the feature notes and three workflow cards.
+- Lines 106–114 adjust section spacing, form/table areas, and invoice totals.
+- Lines 116–135 adapt the hero and cards for tablets and narrow screens; below 600 px the workflow becomes one column.
+- Lines 136–191 adapt design tokens and sample cards to explicit dark theme and dark system preference.
+- Lines 192–209 define print rules: header/footer and `z-no-print` actions are hidden; invoice tables remain printable and cards lose shadows.
 
 ### `locales/en.json` and `locales/de.json` — localized labels
 

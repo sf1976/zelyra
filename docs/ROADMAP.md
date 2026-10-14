@@ -52,6 +52,19 @@ release targets. Longer-term ideas remain in the post-1.0 evolution section.
   important lines. They trace generated `/invoices/new` routes to
   `crud Invoice -> invoices` and document `zelyra routes main.zyl`.
 
+- [~] **1.0.6 Zelyra UI (development branch, not released):** Integrated a
+  locally bundled, versioned UI framework with compiler-checked components,
+  semantic presentation variants, themes, and progressive interaction.
+  Generated CRUD, Studio layouts, the invoice tutorial, and MariaDB starters
+  use Zelyra UI; Tabler loads only when explicitly selected as the stylesheet.
+  Bar, line, and donut charts plus a print-ready invoice with browser PDF output
+  are available. The email component opens a local draft; sending an invoice
+  with a PDF attachment through an authorized application route remains open.
+  The existing `mail_queue` outbox supports text and HTML but not attachments.
+  Full Tabler class compatibility is not claimed. See the
+  [Zelyra UI guide](ui.en.md) and the
+  [work log](release-plans/1.0.6-zelyra-ui-progress.en.md).
+
 - [ ] **Planned for 1.1.0 — Compose check in the installer:** Installers detect
   Docker Compose v2 or newer and distinguish it from obsolete Python Compose
   v1. Docker remains optional for the core installation. When Compose v2 is

@@ -1,54 +1,46 @@
-/* zelyra:tabler */
-/* Tabler Core 1.6.1 is served locally by Zelyra; the tutorial makes no CDN requests. */
-:root {
-    color-scheme: light;
-    --tblr-primary: #23654f;
-    --tblr-primary-rgb: 35, 101, 79;
-    --tblr-body-bg: #f4f7f6;
-    --tblr-body-color: #23342d;
-    --tblr-border-color: #dfe8e3;
-    --tblr-card-border-radius: 0.9rem;
-    --tblr-card-box-shadow: 0 0.35rem 1.4rem rgb(25 54 42 / 5%);
+/* Invoice tutorial theme: local overrides of Zelyra UI, not a second CSS framework. */
+:where(html[data-z-ui]) {
+    --z-color-primary: #23654f;
+    --z-color-on-primary: #ffffff;
+    --z-color-primary-hover: #174c3a;
+    --z-color-primary-soft: #eaf4ef;
+    --z-color-success: #23654f;
+    --z-color-on-success: #ffffff;
+    --z-color-success-soft: #e5f3e8;
+    --z-color-warning: #795000;
+    --z-color-on-warning: #ffffff;
+    --z-color-warning-soft: #fff4d8;
+    --z-color-danger: #a12e39;
+    --z-color-on-danger: #ffffff;
+    --z-color-danger-soft: #fbeaec;
+    --z-color-canvas: #f4f7f6;
+    --z-color-surface: #ffffff;
+    --z-color-surface-raised: #f8faf9;
+    --z-color-text: #23342d;
+    --z-color-text-muted: #52665b;
+    --z-color-border: #dfe8e3;
+    --z-color-focus: #1e624a;
+    --z-color-link: #205e46;
+    --z-content-width: 96rem;
+    --z-radius-md: .9rem;
+    --z-radius-lg: 1.2rem;
 }
-
-body {
-    min-height: 100vh;
-    margin: 0;
-    width: 100%;
-    background: #f4f7f6;
-    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    -webkit-font-smoothing: antialiased;
-}
-
-/* The editor layout grid does not belong to the tutorial's web application. */
-html.zelyra-app, body.zelyra-app, .zelyra-app {
-    display: block !important;
-    width: 100% !important;
-    min-height: 100vh;
-}
-
-main.page-body {
-    max-width: none !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    border: 0 !important;
-    border-radius: 0 !important;
-    background: transparent !important;
-    box-shadow: none !important;
-}
-
-.page-wrapper.tutorial-app { width: 100%; min-height: 100vh; }
-.tutorial-navbar { position: sticky; z-index: 20; top: 0; min-height: 4.8rem; background: rgb(255 255 255 / 96%); border-bottom: 1px solid #dfe8e3; box-shadow: 0 0.2rem 1rem rgb(22 52 40 / 5%); backdrop-filter: blur(12px); }
-.tutorial-navbar-inner { display: flex; flex-wrap: wrap; gap: 1rem; }
-.tutorial-navbar .navbar-brand { display: flex; align-items: center; gap: 0.75rem; margin: 0; color: #183b2e; }
-.tutorial-navbar .navbar-brand > span:last-child { display: grid; line-height: 1.2; }
-.tutorial-navbar .navbar-brand small { margin-top: 0.2rem; color: #75877d; font-size: 0.68rem; font-weight: 500; }
-.tutorial-brand-mark { display: grid; width: 2.55rem; height: 2.55rem; place-items: center; color: #fff; background: linear-gradient(145deg, #27765a, #174534); border-radius: 0.8rem; font-size: 1.1rem; font-weight: 800; }
-.tutorial-nav { flex: 1; justify-content: center; gap: 0.3rem; }
-.tutorial-navbar .nav-link { padding: 0.6rem 0.8rem; color: #51665b; border-radius: 0.55rem; font-size: 0.86rem; font-weight: 600; }
-.tutorial-navbar .nav-link:hover, .tutorial-navbar .nav-link:focus-visible { color: #1e624a; background: #eaf4ef; }
-.tutorial-new-invoice { border-radius: 0.65rem; font-weight: 650; }
-.tutorial-content { padding-top: 1.25rem; padding-bottom: 3rem; }
+:where(html[data-z-ui]) .tutorial-brand { display: flex; min-width: 0; align-items: center; gap: .75rem; color: #183b2e; text-decoration: none; }
+:where(html[data-z-ui]) .tutorial-brand > span:last-child { display: grid; line-height: 1.2; }
+:where(html[data-z-ui]) .tutorial-brand small { margin-top: .2rem; color: var(--z-color-text-muted); font-size: .68rem; font-weight: 500; }
+:where(html[data-z-ui]) .tutorial-brand-mark { display: grid; width: 2.55rem; height: 2.55rem; flex: 0 0 auto; place-items: center; color: #fff; background: linear-gradient(145deg, #27765a, #174534); border-radius: .8rem; font-size: 1.1rem; font-weight: 800; }
+:where(html[data-z-ui]) .tutorial-new-invoice { white-space: nowrap; }
+:where(html[data-z-ui]) .tutorial-content { min-width: 0; padding: 1.25rem clamp(.75rem, 2vw, 2rem) 3rem; }
+:where(html[data-z-ui]) .invoice-home-actions .z-button--success { color: #173f30; background: #d5f39a; border-color: #d5f39a; box-shadow: 0 .5rem 1.25rem rgb(7 29 21 / 18%); }
+:where(html[data-z-ui]) .invoice-home-actions .z-button--success:hover { background: #e2f8b6; border-color: #e2f8b6; }
+:where(html[data-z-ui]) .invoice-home-actions .z-button:not(.z-button--success) { color: #f4faf6; background: transparent; border-color: rgb(255 255 255 / 55%); }
+:where(html[data-z-ui]) .invoice-home-actions .z-button:not(.z-button--success):hover { color: #173f30; background: #fff; }
+:where(html[data-z-ui]) .invoice-workflow .z-grid { row-gap: .75rem; }
+:where(html[data-z-ui]) .invoice-ui-gallery { display: grid; gap: 1rem; }
+:where(html[data-z-ui]) .invoice-ui-gallery > .z-grid { align-items: start; }
+:where(html[data-z-ui]) .invoice-ui-gallery .z-card { height: 100%; }
+:where(html[data-z-ui]) .invoice-ui-gallery .z-toast-region { position: static; width: min(100%, 24rem); margin-block: .75rem; }
+:where(html[data-z-ui]) .invoice-print-actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-block: 0 1rem; }
 .invoice-home { max-width: 1440px; margin-inline: auto; padding: 0.75rem 0.25rem 2rem; }
 .invoice-home-hero-grid { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(340px, 0.82fr); gap: 1.25rem; align-items: stretch; }
 .invoice-home-hero { position: relative; display: flex; min-height: 520px; flex-direction: column; justify-content: center; overflow: hidden; padding: clamp(2rem, 5vw, 4.3rem); color: #fff; background: radial-gradient(ellipse at 88% 15%, rgb(143 190 154 / 30%), transparent 34%), linear-gradient(135deg, #143b2e 0%, #1d5844 56%, #27735a 100%); border: 0; border-radius: 1.35rem; box-shadow: 0 1.2rem 3.5rem rgb(20 59 46 / 17%); }
@@ -59,11 +51,11 @@ main.page-body {
 .invoice-home-hero h1 { position: relative; z-index: 1; max-width: 14ch; margin: 1.5rem 0 1rem; color: #fff; font-size: clamp(2.35rem, 4.2vw, 4.35rem); font-weight: 760; letter-spacing: -0.055em; line-height: 1.02; }
 .invoice-home-intro { position: relative; z-index: 1; max-width: 42rem; margin: 0; color: #d4e5dc; font-size: clamp(0.98rem, 1.25vw, 1.14rem); line-height: 1.7; }
 .invoice-home-actions { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: 0.7rem; margin-top: 1.7rem; }
-.invoice-home-actions .btn { min-height: 2.9rem; padding: 0.8rem 1.1rem; border-radius: 0.7rem; font-weight: 750; }
-.invoice-home-actions .btn-primary { color: #173f30; background: #d5f39a; border-color: #d5f39a; box-shadow: 0 0.5rem 1.25rem rgb(7 29 21 / 18%); }
-.invoice-home-actions .btn-primary:hover { background: #e2f8b6; border-color: #e2f8b6; }
-.invoice-home-actions .btn-outline-secondary { color: #f4faf6; border-color: rgb(255 255 255 / 38%); }
-.invoice-home-actions .btn-outline-secondary:hover { color: #173f30; background: #fff; }
+.invoice-home-actions .z-button { min-height: 2.9rem; padding: 0.8rem 1.1rem; border-radius: 0.7rem; font-weight: 750; }
+.invoice-home-actions .z-button--success { color: #173f30; background: #d5f39a; border-color: #d5f39a; box-shadow: 0 0.5rem 1.25rem rgb(7 29 21 / 18%); }
+.invoice-home-actions .z-button--success:hover { background: #e2f8b6; border-color: #e2f8b6; }
+.invoice-home-actions .z-button:not(.z-button--success) { color: #f4faf6; border-color: rgb(255 255 255 / 38%); }
+.invoice-home-actions .z-button:not(.z-button--success):hover { color: #173f30; background: #fff; }
 .invoice-home-proof { position: relative; z-index: 1; display: flex; align-items: center; gap: 0.55rem; margin-top: 2rem; color: #d4e5dc; font-size: 0.78rem; }
 .invoice-home-check { display: grid; width: 1.2rem; height: 1.2rem; place-items: center; color: #204c3a; background: #d5f39a; border-radius: 50%; font-size: 0.7rem; font-weight: 900; }
 .invoice-preview { align-self: center; width: min(100%, 440px); margin: 1.2rem auto; padding: clamp(1.25rem, 3vw, 2rem); background: #fff; border: 1px solid #e1e9e4; border-radius: 1rem; box-shadow: 0 1.3rem 3.2rem rgb(30 56 44 / 11%); transform: rotate(1deg); }
@@ -102,7 +94,7 @@ main.page-body {
 .invoice-section-kicker { color: #638373; font-size: 0.62rem; font-weight: 800; letter-spacing: 0.15em; }
 .invoice-section-heading h2 { margin: 0.4rem 0 0; color: #1f4032; font-size: clamp(1.45rem, 2.6vw, 2rem); font-weight: 740; letter-spacing: -0.04em; }
 .invoice-section-link { color: #347056; font-size: 0.78rem; font-weight: 750; text-decoration: none; white-space: nowrap; }
-.invoice-workflow-cards { row-gap: 0.75rem; }
+.invoice-workflow .z-grid { row-gap: 0.75rem; }
 .invoice-workflow-card { position: relative; height: 100%; min-height: 235px; padding: 1.3rem; background: #fff; border: 1px solid #e3eae5; border-radius: 0.9rem; box-shadow: 0 0.5rem 1.5rem rgb(25 54 42 / 4%); transition: transform 160ms ease, box-shadow 160ms ease; }
 .invoice-workflow-card:hover { transform: translateY(-3px); box-shadow: 0 0.9rem 2rem rgb(25 54 42 / 9%); }
 .invoice-step-number { position: absolute; top: 1.2rem; right: 1.2rem; color: #a2b0a8; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.1em; }
@@ -112,48 +104,119 @@ main.page-body {
 .invoice-workflow-card a { display: inline-flex; margin-top: 0.9rem; color: #28654d; font-size: 0.74rem; font-weight: 750; text-decoration: none; }
 .invoice-workflow-card-primary { background: linear-gradient(145deg, #f5faef, #fff); border-color: #d8e7d9; }
 .tutorial-footer { padding: 1rem 0; color: #78877f; background: #fff; border-top: 1px solid #e2eae5; font-size: 0.72rem; }
-main.page-body > .container-xl > section, main.page-body > .container-xl > article { margin-block: 1rem; }
-main.page-body > .container-xl form { display: grid; gap: 0.85rem; }
-main.page-body > .container-xl label { color: #344a40; font-size: 0.9rem; font-weight: 650; }
-main.page-body > .container-xl table { display: block; max-width: 100%; overflow-x: auto; border-radius: 0.65rem; }
-main.page-body > .container-xl input:focus, main.page-body > .container-xl select:focus, main.page-body > .container-xl textarea:focus { border-color: #438469; box-shadow: 0 0 0 0.2rem rgb(67 132 105 / 17%); }
+.tutorial-content > section, .tutorial-content > article { margin-block: 1rem; }
+.tutorial-content form:not(.z-table-tools) { display: grid; gap: 0.85rem; }
+.tutorial-content form label { color: #344a40; font-size: 0.9rem; font-weight: 650; }
+.tutorial-content table:not(.z-table) { display: block; max-width: 100%; overflow-x: auto; border-radius: 0.65rem; }
+.tutorial-content .z-table-scroll { max-width: 100%; overflow-x: auto; border-radius: 0.65rem; }
+.tutorial-content input:focus, .tutorial-content select:focus, .tutorial-content textarea:focus { border-color: #438469; box-shadow: 0 0 0 0.2rem rgb(67 132 105 / 17%); }
 .invoice-totals { max-width: 26rem; margin: 1.5rem 0 1.5rem auto; padding: 1rem 1.2rem; background: #f2f7f3; border: 1px solid #dfe8e3; border-radius: 0.8rem; }
 .invoice-totals p { display: flex; justify-content: space-between; gap: 1rem; margin: 0; padding: 0.55rem 0; border-bottom: 1px solid #dce6e0; }
 .invoice-totals p:last-child { padding-top: 0.85rem; border-bottom: 0; color: #174437; font-size: 1.08rem; font-weight: 750; }
 
+
 @media (max-width: 991px) {
-    .tutorial-navbar-inner { justify-content: space-between; }
-    .tutorial-nav { order: 3; flex-basis: 100%; justify-content: flex-start; overflow-x: auto; }
-    .tutorial-nav .nav-link { white-space: nowrap; }
-    .tutorial-content { padding-top: 1.35rem; }
-    .invoice-home-hero-grid { grid-template-columns: minmax(0, 1fr); }
-    .invoice-home-hero { min-height: 390px; }
-    .invoice-preview { margin-block: 0.2rem 0.8rem; transform: none; }
+    :where(html[data-z-ui]) .invoice-home-hero-grid { grid-template-columns: minmax(0, 1fr); }
+    :where(html[data-z-ui]) .invoice-home-hero { min-height: 390px; }
+    :where(html[data-z-ui]) .invoice-preview { margin-block: .2rem .8rem; transform: none; }
 }
-@media (max-width: 575px) {
-    .tutorial-navbar-inner { gap: 0.5rem; }
-    .tutorial-brand-mark { width: 2.2rem; height: 2.2rem; }
-    .tutorial-new-invoice { padding: 0.45rem 0.6rem; font-size: 0.75rem; }
-    .tutorial-nav { gap: 0; }
-    .tutorial-nav .nav-link { padding: 0.5rem 0.55rem; font-size: 0.78rem; }
-    .tutorial-content { padding-inline: 0.75rem; }
-    .invoice-home { padding-top: 0.25rem; }
-    .invoice-home-hero { min-height: 0; padding: 1.5rem; border-radius: 1rem; }
-    .invoice-home-kicker { gap: 0.45rem; font-size: 0.55rem; }
-    .invoice-home-local { font-size: 0.48rem; }
-    .invoice-home-hero h1 { margin-top: 1.2rem; font-size: clamp(2.05rem, 11vw, 3rem); }
-    .invoice-home-actions { display: grid; }
-    .invoice-home-actions .btn { justify-content: center; }
-    .invoice-preview { padding: 1.1rem; }
-    .invoice-home-highlights { grid-template-columns: minmax(0, 1fr); margin-bottom: 2.3rem; }
-    .invoice-section-heading { align-items: flex-start; flex-direction: column; }
-    .invoice-workflow-card { min-height: 210px; }
+@media (max-width: 600px) {
+    :where(html[data-z-ui]) .tutorial-new-invoice { padding: .45rem .6rem; font-size: .75rem; }
+    :where(html[data-z-ui]) .tutorial-content { padding-inline: .65rem; }
+    :where(html[data-z-ui]) .invoice-home { padding-top: .25rem; }
+    :where(html[data-z-ui]) .invoice-home-hero { min-height: 0; padding: 1.5rem; border-radius: 1rem; }
+    :where(html[data-z-ui]) .invoice-home-kicker { gap: .45rem; font-size: .55rem; }
+    :where(html[data-z-ui]) .invoice-home-local { font-size: .48rem; }
+    :where(html[data-z-ui]) .invoice-home-hero h1 { margin-top: 1.2rem; font-size: clamp(2.05rem, 11vw, 3rem); }
+    :where(html[data-z-ui]) .invoice-home-actions { display: grid; }
+    :where(html[data-z-ui]) .invoice-home-actions .z-button { justify-content: center; }
+    :where(html[data-z-ui]) .invoice-preview { padding: 1.1rem; }
+    :where(html[data-z-ui]) .invoice-home-highlights { grid-template-columns: minmax(0, 1fr); margin-bottom: 2.3rem; }
+    :where(html[data-z-ui]) .invoice-section-heading { align-items: flex-start; flex-direction: column; }
+    :where(html[data-z-ui]) .invoice-workflow-card { min-height: 210px; }
+}
+:where(html[data-z-ui][data-z-theme="dark"]) {
+    --z-color-primary: #9bd8b8;
+    --z-color-on-primary: #143b2e;
+    --z-color-primary-hover: #b4e8cc;
+    --z-color-primary-soft: #263a31;
+    --z-color-success: #9bd8b8;
+    --z-color-on-success: #143b2e;
+    --z-color-success-soft: #263a31;
+    --z-color-warning: #f0ca75;
+    --z-color-on-warning: #33270f;
+    --z-color-warning-soft: #3c321d;
+    --z-color-danger: #ffafb2;
+    --z-color-on-danger: #411a20;
+    --z-color-danger-soft: #3e262b;
+    --z-color-canvas: #141a22;
+    --z-color-surface: #1b232d;
+    --z-color-surface-raised: #222c38;
+    --z-color-text: #edf2f8;
+    --z-color-text-muted: #b7c2d0;
+    --z-color-border: #3a4655;
+    --z-color-focus: #9bd8b8;
+    --z-color-link: #b4e8cc;
+}
+@media (prefers-color-scheme: dark) {
+    :where(html[data-z-ui][data-z-theme="system"]) {
+        --z-color-primary: #9bd8b8; --z-color-on-primary: #143b2e; --z-color-primary-hover: #b4e8cc; --z-color-primary-soft: #263a31;
+        --z-color-success: #9bd8b8; --z-color-on-success: #143b2e; --z-color-success-soft: #263a31;
+        --z-color-warning: #f0ca75; --z-color-on-warning: #33270f; --z-color-warning-soft: #3c321d;
+        --z-color-danger: #ffafb2; --z-color-on-danger: #411a20; --z-color-danger-soft: #3e262b;
+        --z-color-canvas: #141a22; --z-color-surface: #1b232d; --z-color-surface-raised: #222c38; --z-color-text: #edf2f8; --z-color-text-muted: #b7c2d0; --z-color-border: #3a4655; --z-color-focus: #9bd8b8; --z-color-link: #b4e8cc;
+    }
+}
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-preview,
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-highlight,
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-workflow-card,
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-totals { background: var(--z-color-surface); color: var(--z-color-text); border-color: var(--z-color-border); }
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-preview strong,
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-preview-total,
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-highlight strong,
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-workflow-card h3,
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-totals p:last-child { color: var(--z-color-text); }
+:where(html[data-z-ui][data-z-theme="dark"]) .tutorial-footer { background: var(--z-color-surface); color: var(--z-color-text-muted); border-color: var(--z-color-border); }
+:where(html[data-z-ui][data-z-theme="dark"]) .tutorial-brand { color: var(--z-color-text); }
+@media (prefers-color-scheme: dark) {
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-preview,
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-highlight,
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-workflow-card,
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-totals { background: var(--z-color-surface); color: var(--z-color-text); border-color: var(--z-color-border); }
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-preview strong,
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-preview-total,
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-highlight strong,
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-workflow-card h3,
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-totals p:last-child { color: var(--z-color-text); }
+    :where(html[data-z-ui][data-z-theme="system"]) .tutorial-brand { color: var(--z-color-text); }
+    :where(html[data-z-ui][data-z-theme="system"]) .z-app-shell__footer { background: var(--z-color-surface); color: var(--z-color-text-muted); border-color: var(--z-color-border); }
 }
 @media print {
-    .tutorial-navbar, .tutorial-footer, .no-print { display: none !important; }
-    .tutorial-content { padding: 0; }
-    .invoice-home-hero { color: #23342d; background: #fff; border: 1px solid #dfe8e3; box-shadow: none; }
-    .invoice-home-hero h1, .invoice-home-intro { color: #23342d; }
-    .invoice-preview, .invoice-highlight, .invoice-workflow-card, .invoice-totals { box-shadow: none; }
-    .invoice-home-actions, .invoice-preview-link, .invoice-workflow-card a { display: none; }
+    :where(html[data-z-ui]) .z-app-shell__header,
+    :where(html[data-z-ui]) .z-app-shell__footer,
+    :where(html[data-z-ui]) .z-no-print { display: none; }
+    :where(html[data-z-ui]) .tutorial-content { padding: 0; }
+    :where(html[data-z-ui]) .invoice-home-hero { color: #23342d; background: #fff; border: 1px solid #dfe8e3; box-shadow: none; }
+    :where(html[data-z-ui]) .invoice-home-hero h1,
+    :where(html[data-z-ui]) .invoice-home-intro { color: #23342d; }
+    :where(html[data-z-ui]) .invoice-preview,
+    :where(html[data-z-ui]) .invoice-highlight,
+    :where(html[data-z-ui]) .invoice-workflow-card,
+    :where(html[data-z-ui]) .invoice-totals { box-shadow: none; }
+    :where(html[data-z-ui]) .invoice-home-actions,
+    :where(html[data-z-ui]) .invoice-preview-link,
+    :where(html[data-z-ui]) .invoice-workflow-card a { display: none; }
+    :where(html[data-z-ui]) .invoice { width: auto; max-width: none; padding: 0; }
+    :where(html[data-z-ui]) .invoice table { display: table; overflow: visible; }
+    :where(html[data-z-ui]) .invoice-print-document { max-width: 190mm; margin: 0 auto; }
+    :where(html[data-z-ui]) .invoice-print-document table { table-layout: fixed; font-size: 9pt; }
+    :where(html[data-z-ui]) .invoice-print-document th,
+    :where(html[data-z-ui]) .invoice-print-document td { padding: 5pt 4pt; overflow-wrap: anywhere; }
+    :where(html[data-z-ui]) .invoice-print-document th:nth-child(1) { width: 34%; }
+    :where(html[data-z-ui]) .invoice-print-document th:nth-child(2) { width: 22%; }
+    :where(html[data-z-ui]) .invoice-print-document th:nth-child(3) { width: 9%; }
+    :where(html[data-z-ui]) .invoice-print-document th:nth-child(4) { width: 17%; }
+    :where(html[data-z-ui]) .invoice-print-document th:nth-child(5) { width: 18%; }
+    :where(html[data-z-ui]) .invoice-print-document .amount { text-align: end; font-variant-numeric: tabular-nums; }
+    :where(html[data-z-ui]) .invoice-print-document .invoice-totals { break-inside: avoid; }
 }

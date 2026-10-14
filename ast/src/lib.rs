@@ -240,6 +240,7 @@ pub struct ComponentProp {
 #[derive(Clone, Debug)]
 pub struct TableViewDef {
     pub name: String,
+    pub layout: Option<String>,
     pub result_type: Type,
     pub source: String,
     pub columns: Vec<String>,
@@ -270,6 +271,8 @@ pub struct FormField {
     pub required: bool,
     pub max: Option<u32>,
     pub widget: Option<String>,
+    /// Optional visual variant; it does not alter validation state.
+    pub appearance: Option<String>,
     pub readonly: bool,
     pub span: Span,
 }

@@ -15,6 +15,11 @@ import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { Compartment, EditorState, StateEffect } from "@codemirror/state";
 import { tags } from "@lezer/highlight";
 import {
+  zelyraUiAppearanceValues,
+  zelyraUiComponentMetadata,
+  zelyraUiDefaultAppearance,
+} from "./zelyra-ui-metadata.js";
+import {
   crosshairCursor,
   drawSelection,
   EditorView,
@@ -646,6 +651,195 @@ function renderFileProperties(path) {
     const description = document.createElement("dd"); description.textContent = value;
     details.append(term, description);
   }
+  renderUiPropertyInspector(editor?.state, path);
+}
+
+function matchingBrace(source, opening) {
+  let depth = 0;
+  let quote = "";
+  let escaped = false;
+  for (let index = opening; index < source.length; index += 1) {
+    const character = source[index];
+    if (quote) {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === quote) quote = "";
+      continue;
+    }
+    if (character === '"' || character === "'") quote = character;
+    else if (character === "{") depth += 1;
+    else if (character === "}") {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+  return -1;
+}
+
+function componentAtCursor(state) {
+  if (!state) return null;
+  const source = state.doc.toString();
+  const position = state.selection.main.head;
+  const start = source.lastIndexOf("<", position);
+  if (start < 0 || source.lastIndexOf(">", position) > start) return null;
+  const end = source.indexOf(">", position);
+  if (end < 0) return null;
+  const openingTag = source.slice(start, end + 1);
+  const name = openingTag.match(/^<([A-Z][A-Za-z0-9_]*)\b/)?.[1];
+  if (!name || !zelyraUiComponentMetadata[name]) return null;
+  const attributes = new Map();
+  const expression = /(?:^|\s)([A-Za-z_][A-Za-z0-9_]*)\s*=\s*"([^"]*)"/g;
+  for (const match of openingTag.matchAll(expression)) attributes.set(match[1], match[2]);
+  return { name, start, end: end + 1, openingTag, attributes };
+}
+
+function formFieldAtCursor(state) {
+  if (!state) return null;
+  const source = state.doc.toString();
+  const position = state.selection.main.head;
+  const declaration = /\bfield\s+([A-Za-z_][A-Za-z0-9_]*)(?:\s*:\s*([^{}\n]+?))?\s*\{/g;
+  for (const match of source.matchAll(declaration)) {
+    const opening = match.index + match[0].lastIndexOf("{");
+    const closing = matchingBrace(source, opening);
+    if (closing < 0 || position < match.index || position > closing) continue;
+    const body = source.slice(opening + 1, closing);
+    const get = (name) => {
+      const result = body.match(new RegExp(`\\b${name}\\s*:\\s*("[^"]*"|'[^']*'|[A-Za-z_][A-Za-z0-9_]*)`));
+      return result?.[1]?.replace(/^["']|["']$/g, "") || null;
+    };
+    return {
+      name: match[1], type: match[2]?.trim() || "automatisch aus Ressource",
+      start: match.index, opening, closing, body, appearance: get("appearance"), widget: get("widget"),
+      label: get("label"), hasRequired: /\brequired\b/.test(body),
+      line: state.doc.lineAt(match.index).number,
+    };
+  }
+  return null;
+}
+
+function appendPropertyRow(list, name, type, value) {
+  const term = document.createElement("dt");
+  term.textContent = `${name}: ${type}`;
+  const description = document.createElement("dd");
+  description.textContent = value;
+  list.append(term, description);
+}
+
+function showAppearanceEditor(target, currentValue, kind) {
+  const editorPanel = $("assistant-ui-appearance-editor");
+  const select = $("assistant-ui-appearance");
+  const button = $("assistant-ui-appearance-apply");
+  const label = $("assistant-ui-appearance-label");
+  editorPanel.hidden = false;
+  select.replaceChildren();
+  for (const choice of zelyraUiAppearanceValues) {
+    const option = document.createElement("option");
+    option.value = choice.value;
+    option.textContent = language === "de" ? choice.de : choice.en;
+    select.append(option);
+  }
+  select.value = currentValue || "default";
+  label.textContent = language === "de"
+    ? "Erscheinung explizit überschreiben"
+    : "Override appearance explicitly";
+  button.textContent = language === "de" ? "Übernehmen" : "Apply";
+  button.onclick = () => {
+    const value = select.value;
+    const state = editor?.state;
+    if (!state || !editor || !target) return;
+    if (kind === "component") {
+      const attribute = /(?:^|\s)appearance\s*=\s*"[^"]*"/.exec(target.openingTag);
+      if (attribute) {
+        const quoteStart = target.start + attribute.index + attribute[0].indexOf('"') + 1;
+        const quoteEnd = state.doc.toString().indexOf('"', quoteStart);
+        if (quoteEnd < quoteStart) return;
+        editor.dispatch({ changes: { from: quoteStart, to: quoteEnd, insert: value } });
+      } else {
+        const insertion = target.end - (target.openingTag.trimEnd().endsWith("/>") ? 2 : 1);
+        editor.dispatch({ changes: { from: insertion, insert: ` appearance="${value}"` } });
+      }
+    } else {
+      const source = state.doc.toString();
+      const body = source.slice(target.opening + 1, target.closing);
+      const existing = /\bappearance\s*:\s*("[^"]*"|'[^']*'|[A-Za-z_][A-Za-z0-9_]*)/.exec(body);
+      if (existing) {
+        const valueStart = target.opening + 1 + existing.index + existing[0].lastIndexOf(existing[1]);
+        editor.dispatch({ changes: { from: valueStart, to: valueStart + existing[1].length, insert: value } });
+      } else {
+        const closeLine = state.doc.lineAt(target.closing);
+        const beforeBrace = source.slice(closeLine.from, target.closing);
+        const indent = beforeBrace.match(/^\s*/)?.[0] || "";
+        const insertion = beforeBrace.trim()
+          ? `\n${indent}    appearance: ${value}\n${indent}`
+          : `${indent}    appearance: ${value}\n`;
+        editor.dispatch({ changes: { from: beforeBrace.trim() ? target.closing : closeLine.from, insert: insertion } });
+      }
+    }
+    announce(language === "de" ? `Erscheinung ${value} übernommen.` : `Appearance ${value} applied.`, "success");
+  };
+}
+
+function renderUiPropertyInspector(state, path) {
+  const panel = $("assistant-ui-component-properties");
+  const details = $("assistant-ui-property-details");
+  const heading = $("assistant-ui-component-title");
+  const summary = $("assistant-ui-component-summary");
+  const slots = $("assistant-ui-component-slots");
+  const appearanceEditor = $("assistant-ui-appearance-editor");
+  if (!panel || !state || !path?.endsWith(".zyl")) {
+    if (panel) panel.hidden = true;
+    return;
+  }
+  const component = componentAtCursor(state);
+  const field = component ? null : formFieldAtCursor(state);
+  if (!component && !field) {
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+  details.replaceChildren();
+  slots.replaceChildren();
+  appearanceEditor.hidden = true;
+  if (component) {
+    const metadata = zelyraUiComponentMetadata[component.name];
+    heading.textContent = `<${component.name}>`;
+    summary.textContent = metadata.automatic;
+    for (const prop of metadata.properties) {
+      const value = component.attributes.get(prop.name);
+      const defaultValue = zelyraUiDefaultAppearance(component.name, prop.name) ?? prop.defaultValue;
+      const stateText = value !== undefined
+        ? `${language === "de" ? "explizit" : "explicit"}: ${value}`
+        : `${language === "de" ? "automatisch" : "automatic"}: ${prop.required ? (language === "de" ? "erforderlich" : "required") : defaultValue}`;
+      appendPropertyRow(details, prop.name, prop.type, stateText);
+    }
+    for (const slot of metadata.slots) {
+      const item = document.createElement("li"); item.textContent = slot; slots.append(item);
+    }
+    if (metadata.properties.some((prop) => prop.name === "appearance")) {
+      showAppearanceEditor(component, component.attributes.get("appearance"), "component");
+    }
+  } else {
+    heading.textContent = language === "de" ? `Formularfeld · ${field.name}` : `Form field · ${field.name}`;
+    const typeText = field.widget
+      ? `${field.type} · ${language === "de" ? "Widget" : "widget"}: ${field.widget}`
+      : field.type;
+    summary.textContent = language === "de"
+      ? "Die Anzeigevariante steuert nur das Aussehen. Fehlerzustand und zulässige Eingaben bestimmt die serverseitige Formularprüfung."
+      : "Appearance controls only presentation. Server form validation controls errors and accepted values.";
+    appendPropertyRow(details, "type", "automatisch", typeText);
+    appendPropertyRow(details, "label", "String?", field.label || (language === "de" ? `automatisch aus ${field.name}` : `defaults to ${field.name}`));
+    appendPropertyRow(details, "required", "Bool", field.hasRequired ? (language === "de" ? "explizit gesetzt" : "explicitly set") : (language === "de" ? "nicht im Feld gesetzt; Ressource kann zusätzlich einschränken" : "not set on field; resource may add a constraint"));
+    appendPropertyRow(details, "appearance", "UiAppearance", field.appearance || (language === "de" ? "automatisch: default" : "automatic: default"));
+    appendPropertyRow(details, "invalid", "Bool", language === "de" ? "wird aus dem tatsächlichen Serverfehler gesetzt" : "set from the actual server validation error");
+    for (const itemText of [
+      language === "de" ? "Syntax: appearance: success" : "Syntax: appearance: success",
+      language === "de" ? "Servervalidierung bleibt unabhängig." : "Server validation remains independent.",
+    ]) { const item = document.createElement("li"); item.textContent = itemText; slots.append(item); }
+    showAppearanceEditor(field, field.appearance, "field");
+  }
+  const slotsTitle = $("assistant-ui-slots-title");
+  slotsTitle.textContent = language === "de" ? "Slots / Hinweise" : "Slots / notes";
+  $("assistant-ui-slots-list").hidden = slots.childElementCount === 0;
 }
 
 function showAssistantTab(tab) {
@@ -884,6 +1078,9 @@ function createView(path, state) {
         });
       }
       if (update.selectionSet || update.docChanged) renderContextHelp(update.state, path);
+      if ((update.selectionSet || update.docChanged) && !$("assistant-properties-view").hidden) {
+        renderUiPropertyInspector(update.state, path);
+      }
     }),
     EditorView.lineWrapping,
     editorTheme.of(createZelyraTheme()),

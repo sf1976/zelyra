@@ -58,6 +58,20 @@ Abschnitt zur Weiterentwicklung nach 1.0.0.
   wichtige Zeilen. Sie verfolgen die generierte Route `/invoices/new` bis zu
   `crud Invoice -> invoices` und erläutern `zelyra routes main.zyl`.
 
+- [~] **1.0.6 Zelyra UI (Entwicklungsbranch, nicht veröffentlicht):** Ein
+  lokal gebündeltes, versioniertes UI-Framework mit compilergeprüften
+  Komponenten, semantischen Darstellungsvarianten, Themes und progressiver
+  Interaktion ist integriert. Standard-CRUD, Studio-Layouts, das Rechnungstutorial
+  und die MariaDB-Starter verwenden Zelyra UI; Tabler wird nur bei ausdrücklicher
+  CSS-Auswahl geladen. Balken-, Linien- und Ringdiagramme sowie eine
+  druckoptimierte Rechnung mit Browser-PDF-Ausgabe sind vorhanden. Die
+  E-Mail-Komponente öffnet einen lokalen Entwurf; der Versand einer Rechnung
+  mit PDF-Anhang über eine autorisierte Anwendungsroute ist noch offen. Die
+  vorhandene `mail_queue`-Outbox unterstützt weiterhin Text und HTML, aber keine
+  Anhänge. Keine vollständige Tabler-Klassenkompatibilität. Siehe
+  [Zelyra-UI-Handbuch](ui.de.md) und das
+  [Aufgabenprotokoll](release-plans/1.0.6-zelyra-ui-progress.de.md).
+
 - [ ] **Geplant für 1.1.0 — Compose-Prüfung im Installer:** Die Installer
   erkennen Docker Compose v2 oder neuer und unterscheiden es von der veralteten
   Python-Version v1. Docker bleibt für die Kerninstallation optional. Fehlt
