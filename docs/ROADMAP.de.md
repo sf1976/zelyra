@@ -76,7 +76,8 @@ Abschnitt zur Weiterentwicklung nach 1.0.0.
   wertliefernde If-Ausdrücke, Record-Updates, typisierte Lambda-Pipelines,
   Match-Guards und verschachtelte Record-Muster, Tupelzuweisung sowie eine
   begrenzte konfigurierbare Rekursionstiefe. `--max-steps` zählt
-  Interpreter-Auswertungsschritte. Die bestehende Semantik nominaler IDs,
+  Anweisungen und Auswertungen über ein gemeinsames Budget, auch in
+  `parallel`-Zweigen. Die bestehende Semantik nominaler IDs,
   `Result`-gebundener API-Fehler, Offline-Prüfung von Transaktionen,
   View-Slot-Fallbacks, Auth-Handler und `parallel`-Join wird abgesichert.
   `render_pdf("ViewName", record)` erzeugt lokal ein durchsuchbares Text-PDF;

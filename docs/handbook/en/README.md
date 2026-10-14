@@ -2220,9 +2220,11 @@ api GET "/orders/{id}" {
 
 ### Step budgets, recursion, and database runtime
 
-`--max-steps` enables an optional budget and counts interpreter evaluation
-steps. Exceeding it reports `E-RUNTIME-001` at the source location of the
-expression that crosses the limit:
+`--max-steps` enables an optional total budget and counts interpreter
+statements and expression evaluations across all `parallel` branches. Exceeding
+it reports `E-RUNTIME-001` at the source location of the step that crosses the
+limit. For a parallel budget failure, the location is the `parallel` statement
+so that diagnostics do not depend on thread scheduling:
 
 ```sh
 zelyra run main.zyl --max-steps 30000

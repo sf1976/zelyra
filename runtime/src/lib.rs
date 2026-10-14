@@ -5,7 +5,7 @@ use std::fmt;
 use std::io::{self, BufRead, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use zelyra_ast::temporal::{
@@ -9465,7 +9465,7 @@ fn execute_function_on_runtime_stack(
         output: Vec::new(),
         next_class_object_id: Arc::new(AtomicU64::new(1)),
         parallel_worker: false,
-        steps: 0,
+        steps: Arc::new(AtomicUsize::new(0)),
         step_budget: policy.as_ref().and_then(|policy| policy.step_budget),
         call_depth_limit: policy
             .as_ref()
@@ -9579,7 +9579,7 @@ fn execute_internal_on_runtime_stack(
         output: Vec::new(),
         next_class_object_id: Arc::new(AtomicU64::new(1)),
         parallel_worker: false,
-        steps: 0,
+        steps: Arc::new(AtomicUsize::new(0)),
         step_budget: policy.as_ref().and_then(|policy| policy.step_budget),
         call_depth_limit: policy
             .as_ref()
@@ -9652,7 +9652,7 @@ struct Interpreter<'program> {
     output: Vec<String>,
     next_class_object_id: Arc<AtomicU64>,
     parallel_worker: bool,
-    steps: usize,
+    steps: Arc<AtomicUsize>,
     step_budget: Option<usize>,
     call_depth_limit: usize,
     call_depth: usize,
@@ -10001,8 +10001,13 @@ impl<'program> Interpreter<'program> {
     }
 
     fn consume_step(&mut self, span: Span) -> Result<(), RuntimeError> {
-        self.steps = self.steps.saturating_add(1);
-        if self.step_budget.is_some_and(|budget| self.steps > budget) {
+        let steps = self
+            .steps
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |steps| {
+                Some(steps.saturating_add(1))
+            })
+            .map_or(usize::MAX, |previous| previous.saturating_add(1));
+        if self.step_budget.is_some_and(|budget| steps > budget) {
             return Err(self.runtime_error(
                 span,
                 format!(

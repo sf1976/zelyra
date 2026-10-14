@@ -11,18 +11,23 @@ for database-backed business and web applications. It brings schema-aware SQL,
 forms, CRUD, views, and application logic together while keeping ordinary code
 and native SQL available.
 
-> **Current stable release: 1.0.7 · language compatibility line: 0.1**
+> **Development branch targeting 1.0.7 · language compatibility line: 0.1**
 >
 > Compiler checks and the verifier cover defined scopes. They do not prove arbitrary applications correct. Review the documented support and limits for each workflow before deployment.
 
-The current stable [v1.0.7 release](https://github.com/sf1976/zelyra/releases/tag/v1.0.7) adds if expressions, record updates, typed lambdas, match guards, tuple bindings, and bounded execution. Zelyra can also render declared views into local text PDFs and queue PDF attachments transactionally in the MariaDB mail outbox. See the [1.0.7 release notes](docs/release-notes/1.0.7.en.md), [UI guide](docs/ui.en.md), [database support matrix](docs/database-support.en.md), and [implementation inventory](docs/implemented.en.md).
+This development branch adds if expressions, record updates, typed lambdas,
+match guards, tuple bindings, and bounded execution. Zelyra can also render
+declared views into local text PDFs and queue PDF attachments transactionally
+in the MariaDB mail outbox. See the [1.0.7 release notes](docs/release-notes/1.0.7.en.md),
+[UI guide](docs/ui.en.md), [database support matrix](docs/database-support.en.md),
+and [implementation inventory](docs/implemented.en.md).
 
 The language compatibility line remains `0.1`; compiler releases do not change it automatically. “Prove correctness” is a design goal: the verifier distinguishes proven, runtime-checked, and unproven scopes, but is not a general-purpose theorem prover.
 
 ## What Zelyra 1.0.7 provides
 
 Zelyra connects its language, compiler, database, web application, and Studio in
-one workflow. The current release provides:
+one workflow. This branch prepares the following 1.0.7 capabilities:
 
 - statically checked business logic and schema-aware SQL;
 - MariaDB as the primary runtime, plus verified MySQL and PostgreSQL workflows;

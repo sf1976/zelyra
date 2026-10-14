@@ -1515,6 +1515,21 @@ fn executes_parallel_await_bindings_and_merges_results() {
 }
 
 #[test]
+fn parallel_await_bindings_share_the_global_step_budget() {
+    let source = "fn load_customer() -> String { return \"customer\" } fn load_orders() -> Int { return 3 } fn main() { parallel { customer = await load_customer() orders = await load_orders() } }";
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap();
+    let policy = RuntimePolicy {
+        step_budget: Some(4),
+        ..RuntimePolicy::default()
+    };
+    let error = execute_with_capabilities_and_policies(&program, None, Some(&policy))
+        .expect_err("parallel work must consume the same total step budget");
+    assert!(error.message.contains("execution step budget exceeded"));
+    assert_eq!(error.span.start, source.find("parallel").unwrap());
+}
+
+#[test]
 fn rejects_await_outside_parallel_block() {
     let program =
         parse(&lex("fn load() -> Int { return 1 } fn main() { value = await load() }").unwrap())

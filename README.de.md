@@ -11,11 +11,18 @@ Business-, Datenbank- und Webanwendungen. Schemaabhängiges SQL, Formulare,
 CRUD, Views und Geschäftslogik greifen ineinander; gewöhnlicher Programmcode
 und natives SQL bleiben jederzeit möglich.
 
-> **Aktuelles stabiles Release: 1.0.7 · Sprachkompatibilitätslinie: 0.1**
+> **Entwicklungszweig für 1.0.7 · Sprachkompatibilitätslinie: 0.1**
 >
 > Die Compilerprüfung und der Verifier decken klar abgegrenzte Bereiche ab. Sie beweisen nicht die Korrektheit beliebiger Anwendungen. Prüfe vor dem Einsatz die unterstützten Abläufe und Grenzen in der jeweiligen Dokumentation.
 
-Das aktuelle stabile [Release v1.0.7](https://github.com/sf1976/zelyra/releases/tag/v1.0.7) ergänzt If-Ausdrücke, Record-Updates, typisierte Lambdas, Match-Guards, Tupelbindung und begrenzte Ausführung. Außerdem kann Zelyra deklarierte Views lokal in Text-PDFs rendern und PDF-Dateien transaktional in die MariaDB-Mail-Outbox einreihen. Details stehen in den [Release-Notizen 1.0.7](docs/release-notes/1.0.7.de.md), im [UI-Leitfaden](docs/ui.de.md), in der [Datenbank-Supportmatrix](docs/database-support.de.md) und der [Implementierungsübersicht](docs/implemented.de.md).
+Dieser Entwicklungszweig ergänzt If-Ausdrücke, Record-Updates, typisierte
+Lambdas, Match-Guards, Tupelbindung und begrenzte Ausführung. Außerdem kann
+Zelyra deklarierte Views lokal in Text-PDFs rendern und PDF-Dateien
+transaktional in die MariaDB-Mail-Outbox einreihen. Details stehen in den
+[Release-Notizen 1.0.7](docs/release-notes/1.0.7.de.md), im
+[UI-Leitfaden](docs/ui.de.md), in der
+[Datenbank-Supportmatrix](docs/database-support.de.md) und der
+[Implementierungsübersicht](docs/implemented.de.md).
 
 Die Sprachkompatibilitätslinie bleibt `0.1`; Compiler-Releases ändern sie nicht automatisch. „Korrektheit beweisen“ ist ein Entwicklungsziel: Der Verifier unterscheidet geprüfte, zur Laufzeit geprüfte und nicht bewiesene Bereiche, ist aber kein allgemeiner Theorembeweiser.
 

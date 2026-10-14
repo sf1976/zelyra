@@ -2380,9 +2380,11 @@ api GET "/orders/{id}" {
 
 ### Schrittbudget, Rekursion und Datenbanklaufzeit
 
-`--max-steps` aktiviert ein optionales Budget und zählt Interpreter-
-Auswertungsschritte. Bei Überschreitung erscheint `E-RUNTIME-001` an der
-Quellstelle des auslösenden Ausdrucks:
+`--max-steps` aktiviert ein optionales Gesamtbudget und zählt Interpreter-
+Anweisungen und Ausdrucksauswertungen über alle `parallel`-Zweige hinweg.
+Bei Überschreitung erscheint `E-RUNTIME-001` an der Quellstelle des
+auslösenden Schritts; bei paralleler Auswertung ist das die `parallel`-
+Anweisung, damit die Diagnose unabhängig von der Threadreihenfolge bleibt:
 
 ```sh
 zelyra run main.zyl --max-steps 30000

@@ -67,8 +67,9 @@ release targets. Longer-term ideas remain in the post-1.0 evolution section.
 - [~] **1.0.7 language, runtime, and PDF mail:** The development branch adds
   value-producing if expressions, record updates, typed lambda pipelines,
   match guards and nested record patterns, tuple assignment, and a bounded,
-  configurable recursion depth. `--max-steps` counts interpreter evaluation
-  steps. Tests also protect nominal IDs, `Result`-bound API errors, offline
+  configurable recursion depth. `--max-steps` counts interpreter statements
+  and evaluations under one shared budget, including `parallel` branches.
+  Tests also protect nominal IDs, `Result`-bound API errors, offline
   transaction checking, view slot fallbacks, auth handlers, and `parallel`
   joining. `render_pdf("ViewName", record)` creates a local searchable text
   PDF; the mail outbox can attach a validated PDF. Server PDF output does not

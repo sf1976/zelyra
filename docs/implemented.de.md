@@ -1,9 +1,9 @@
 # In Zelyra 1.0.7 umgesetzt
 
-**Stand:** stabiles Release 1.0.7 · Sprachkompatibilitätslinie `0.1` · 2026-10-14
-**Reifegrad:** veröffentlichtes stabiles Release; Eignung und Grenzen sind je Ablauf zu prüfen
+**Stand:** Entwicklungszweig 1.0.7 · Sprachkompatibilitätslinie `0.1` · 2026-10-14
+**Reifegrad:** Release-Kandidat; Eignung und Grenzen sind je Ablauf zu prüfen
 
-Diese Übersicht beschreibt den Funktionsumfang des aktuellen Releases nach
+Diese Übersicht beschreibt den aktuellen Entwicklungsstand nach
 Anwendungsbereichen. Sie unterscheidet verfügbare Funktionen von begrenzten
 oder experimentellen Bereichen; sie behauptet weder universelle
 Datenbankportabilität noch Fehlerfreiheit beliebiger Anwendungen.
@@ -347,12 +347,14 @@ vergleichenden Benchmark-Ergebnisse behauptet.
 
 ## Release- und Prüfnachweise
 
-Das aktuelle stabile [Zelyra-1.0.7-Release](https://github.com/sf1976/zelyra/releases/tag/v1.0.7)
-und seine Artefakte stehen bei GitHub. Die [Release-Notizen](release-notes/)
-beschreiben ausgelieferte Änderungen; die geprüften Datenbankabläufe und ihre
-Grenzen stehen in der [Datenbankmatrix](database-support.de.md). Automatisierte
-Prüfungen belegen nur die jeweils geprüften Bereiche und nicht die Korrektheit
-beliebiger Anwendungen.
+Zelyra 1.0.7 ist in diesem Zweig noch nicht veröffentlicht. Die
+[Release-Notizen](release-notes/) beschreiben den vorgesehenen Umfang; der
+Release-Kandidat muss noch die im
+[Arbeitsprotokoll](release-plans/1.0.7-language-runtime-progress.de.md)
+aufgeführten Gates bestehen. Geprüfte Datenbankabläufe und ihre Grenzen stehen
+in der [Datenbankmatrix](database-support.de.md). Automatisierte Prüfungen
+belegen nur die jeweils geprüften Bereiche und nicht die Korrektheit beliebiger
+Anwendungen.
 
 Diese Übersicht wird angepasst, wenn sich ausgelieferte Funktionen oder ihre
 Nachweise ändern. Ein Spezifikations- oder Roadmap-Eintrag allein wird hier

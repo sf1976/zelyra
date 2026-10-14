@@ -42,7 +42,7 @@ impl Interpreter<'_> {
                         output: Vec::new(),
                         next_class_object_id: Arc::clone(&self.next_class_object_id),
                         parallel_worker: true,
-                        steps: 0,
+                        steps: Arc::clone(&self.steps),
                         step_budget: self.step_budget,
                         call_depth_limit: self.call_depth_limit,
                         call_depth: 0,
@@ -80,7 +80,15 @@ impl Interpreter<'_> {
                         Ok(Ok(result)) => results.push(result),
                         Ok(Err((_, error))) => {
                             if first_error.is_none() {
-                                first_error = Some(error);
+                                first_error = Some(
+                                    if error.message.starts_with("execution step budget exceeded") {
+                                        // Branch scheduling is concurrent, so report a shared-budget
+                                        // failure at the stable parallel statement span.
+                                        self.runtime_error(span, error.message)
+                                    } else {
+                                        error
+                                    },
+                                );
                             }
                         }
                         Err(_) => {
