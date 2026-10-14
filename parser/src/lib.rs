@@ -2762,6 +2762,15 @@ impl<'a> Parser<'a> {
         let mut left = self.unary()?;
         loop {
             self.skip_newlines();
+            if self.at(&TokenKind::PipeForward) {
+                if min_prec > 0 {
+                    break;
+                }
+                self.advance();
+                let stage = self.unary()?;
+                left = pipeline_call(left, stage)?;
+                continue;
+            }
             if min_prec == 0 && self.at(&TokenKind::DotDot) {
                 self.advance();
                 let right = self.binary(1)?;
@@ -3241,6 +3250,45 @@ impl<'a> Parser<'a> {
     }
 }
 
+fn pipeline_call(input: Expr, stage: Expr) -> Result<Expr, ParseError> {
+    let (name, type_args, mut args) = match stage.kind {
+        ExprKind::Variable(name) | ExprKind::FunctionValue(name) => (
+            pipeline_builtin_alias(&name).to_owned(),
+            Vec::new(),
+            Vec::new(),
+        ),
+        ExprKind::Call {
+            name,
+            type_args,
+            args,
+        } => (pipeline_builtin_alias(&name).to_owned(), type_args, args),
+        _ => {
+            return Err(ParseError {
+                message: "pipeline stage must name a function or a function call".into(),
+                span: stage.span,
+            })
+        }
+    };
+    args.insert(0, input.clone());
+    Ok(Expr {
+        kind: ExprKind::Call {
+            name,
+            type_args,
+            args,
+        },
+        span: input.span.join(stage.span),
+    })
+}
+
+fn pipeline_builtin_alias(name: &str) -> &str {
+    match name {
+        "trim" => "text_trim",
+        "to_lower" => "text_to_lower",
+        "to_upper" => "text_to_upper",
+        _ => name,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3263,6 +3311,48 @@ mod tests {
         );
         assert_eq!(error.span.start, source.find("print(2)").unwrap());
         assert_eq!(error.span.end, error.span.start + "print".len());
+    }
+
+    #[test]
+    fn parses_pipeline_stages_as_left_to_right_function_calls() {
+        let program =
+            parse(&lex("fn main() { result = \"  HI \" |> trim |> to_lower }").unwrap()).unwrap();
+        let Stmt::BindOrAssign { value, .. } = &program.functions[0].body.statements[0] else {
+            panic!("expected pipeline binding");
+        };
+        let ExprKind::Call {
+            name: outer_name,
+            args: outer_args,
+            ..
+        } = &value.kind
+        else {
+            panic!("expected outer pipeline call");
+        };
+        assert_eq!(outer_name, "text_to_lower");
+        let ExprKind::Call {
+            name: inner_name,
+            args: inner_args,
+            ..
+        } = &outer_args[0].kind
+        else {
+            panic!("expected inner pipeline call");
+        };
+        assert_eq!(inner_name, "text_trim");
+        assert!(matches!(inner_args[0].kind, ExprKind::String(ref text) if text == "  HI "));
+    }
+
+    #[test]
+    fn rejects_non_call_pipeline_stages_at_the_stage_span() {
+        let source = "fn main() { value = \"text\" |> (1 + 2) }";
+        let error = parse(&lex(source).unwrap()).unwrap_err();
+
+        assert_eq!(
+            error.message,
+            "pipeline stage must name a function or a function call"
+        );
+        let stage_start = source.find("1 + 2").unwrap();
+        assert_eq!(error.span.start, stage_start);
+        assert_eq!(error.span.end, stage_start + "1 + 2".len());
     }
 
     #[test]

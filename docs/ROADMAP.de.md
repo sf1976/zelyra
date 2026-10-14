@@ -82,10 +82,11 @@ den tatsächlich implementierten Stand.
   `text_replace_result`, `text_split_result`) um Klein-/Großschreibung, Länge,
   Verbinden, Trimmen, Enthaltensein, Ersetzen, Teilen sowie Präfix-/Suffix-
   Prüfungen vervollständigen. Bisherige `text_*`-Namen und geprüfte Fehler
-  kompatibel halten. Eine typisierte Zelyra-Pipeline für lesbare
-  Funktionsverkettung ergänzen, zum Beispiel `text |> trim |> to_lower`, mit
-  klarer Typ- und Effektprüfung. Native `abs`, `min`, `max`, `floor`, `ceil`,
-  `round`, `sqrt` und `pow` mit festgelegten Typen, Rundungs-/Genauigkeitsregeln
+  kompatibel halten. Die typisierte `|>`-Pipeline verkettet jetzt direkte
+  Funktionsnamen und Aufrufe von links nach rechts, auch `text |> trim |>
+  to_lower`; jede Stufe nutzt die normale Typ- und Effektprüfung eines Aufrufs.
+  Native `abs`, `min`, `max`, `floor`, `ceil`, `round`, `sqrt` und `pow` mit
+  festgelegten Typen, Rundungs-/Genauigkeitsregeln
   und geprüften Überlauf-/Definitionsbereichsfehlern ergänzen. Lesbare,
   typgeprüfte String-Interpolation mit Escape-Regel für geschweifte Klammern
   in einer für Zelyra entworfenen Syntax bereitstellen. Effizientes typisiertes

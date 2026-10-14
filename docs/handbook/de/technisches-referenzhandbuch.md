@@ -1840,6 +1840,19 @@ ohne Inhalte dazwischen zu verändern. Das ist hilfreich, um CSV-Eingaben vor
 der Typumwandlung zu normalisieren und nur aus Leerraum bestehende Pflichtfelder
 abzuweisen.
 
+Der Vorwärtspipeline-Operator übergibt den Wert links als erstes Argument an
+den nächsten benannten Funktionsaufruf. Die Stufen laufen von links nach rechts
+und verwenden jeweils die normale Typ- und Effektprüfung eines Aufrufs:
+
+~~~zelyra
+normalisiert = "  ZELYRA  " |> trim |> to_lower
+teile = "eins,zwei" |> text_split(",")
+~~~
+
+`trim`, `to_lower` und `to_upper` sind Pipeline-Aliase für `text_trim`,
+`text_to_lower` und `text_to_upper`. Weitere Argumente folgen dem übergebenen
+Wert, zum Beispiel `text |> text_replace("alt", "neu")`.
+
 `text_chars(text)` liefert die Unicode-Codepoints eines Textes als `String[]`.
 So lassen sich Raster und andere zeichenweise Textformate mit normalen,
 typisierten Zelyra-Arrays verarbeiten. Die Aufteilung erfolgt nach Unicode-

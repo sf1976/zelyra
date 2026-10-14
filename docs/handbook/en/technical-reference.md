@@ -1704,6 +1704,19 @@ and application checks therefore cannot report success after only printing a
 without changing interior content. It is useful for normalizing CSV input
 before conversion and rejecting required fields that contain only whitespace.
 
+The forward pipeline operator passes its left value as the first argument to
+the next named function or call. Stages run from left to right, and each stage
+uses the regular type and effect checks for a function call:
+
+~~~zelyra
+normalized = "  ZELYRA  " |> trim |> to_lower
+parts = "one,two" |> text_split(",")
+~~~
+
+`trim`, `to_lower`, and `to_upper` are pipeline aliases for `text_trim`,
+`text_to_lower`, and `text_to_upper`. Further arguments follow the piped value,
+as in `text |> text_replace("old", "new")`.
+
 `text_chars(text)` returns a text's Unicode code points as `String[]`. This lets
 programs process grids and other character-oriented text formats with ordinary
 typed Zelyra arrays. Splitting uses Unicode code points, not composed grapheme

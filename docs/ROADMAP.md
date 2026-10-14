@@ -75,9 +75,10 @@ principles; the roadmap below tracks what is actually implemented.
   `text_replace_result`, `text_split_result`) with lowercase/uppercase,
   length, joining, trimming, containment, replacement, splitting, and
   prefix/suffix checks; preserve compatible `text_*` names and checked errors.
-  Add a typed Zelyra pipeline for readable function composition, for example
-  `text |> trim |> to_lower`, with clear type and effect checking. Add native
-  `abs`, `min`, `max`, `floor`, `ceil`, `round`, `sqrt`, and `pow` with explicit
+  The typed `|>` pipeline now composes direct function names and calls from
+  left to right, including `text |> trim |> to_lower`; each stage uses ordinary
+  call type and effect checking. Add native `abs`, `min`, `max`, `floor`,
+  `ceil`, `round`, `sqrt`, and `pow` with explicit
   supported types, rounding/precision rules, and checked overflow/domain
   errors. Add readable, type-checked String interpolation with literal-brace
   escaping, using syntax designed for Zelyra rather than copying another

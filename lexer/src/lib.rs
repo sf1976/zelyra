@@ -123,6 +123,7 @@ pub enum TokenKind {
     AndAnd,
     Ampersand,
     OrOr,
+    PipeForward,
     Dot,
     DotDot,
     Colon,
@@ -570,6 +571,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
             ('>', Some('=')) => (TokenKind::GreaterEqual, 2),
             ('&', Some('&')) => (TokenKind::AndAnd, 2),
             ('&', _) => (TokenKind::Ampersand, 1),
+            ('|', Some('>')) => (TokenKind::PipeForward, 2),
             ('|', Some('|')) => (TokenKind::OrOr, 2),
             ('.', Some('.')) => (TokenKind::DotDot, 2),
             (':', Some(':')) => (TokenKind::DoubleColon, 2),
@@ -683,6 +685,14 @@ mod tests {
         let tokens = lex("fn main() { return 1 + 2 >= 3 }").unwrap();
         assert!(tokens.iter().any(|t| t.kind == TokenKind::Fn));
         assert!(tokens.iter().any(|t| t.kind == TokenKind::GreaterEqual));
+    }
+
+    #[test]
+    fn lexes_the_forward_pipeline_operator() {
+        let tokens = lex("value |> trim").unwrap();
+        assert!(tokens
+            .iter()
+            .any(|token| token.kind == TokenKind::PipeForward));
     }
 
     #[test]

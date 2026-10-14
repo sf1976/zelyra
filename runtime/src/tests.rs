@@ -992,6 +992,31 @@ fn text_trim_removes_unicode_whitespace_without_changing_interior_text() {
 }
 
 #[test]
+fn typed_pipelines_check_and_execute_native_and_user_functions() {
+    let source = r#"
+fn normalize(text: String) -> String {
+    return text_to_lower(text)
+}
+
+fn main() {
+    print("  GRÜSSE  " |> trim |> normalize)
+    print("a,b" |> text_split(","))
+}
+"#;
+    assert_eq!(run(source), ["grüsse", "[a, b]"]);
+}
+
+#[test]
+fn typed_pipelines_report_input_type_mismatches() {
+    let program = parse(&lex("fn main() { print(10 |> text_trim) }").unwrap()).unwrap();
+    let errors = check(&program).expect_err("pipeline arguments must satisfy stage signatures");
+
+    assert!(errors
+        .iter()
+        .any(|error| { error.message.contains("expected `String`, found `Int`") }));
+}
+
+#[test]
 fn text_chars_splits_unicode_scalars_into_strings() {
     let output = run("fn main() { chars = text_chars(\"Aä🧭\") print(len(chars)) print(chars[1]) print(chars[2]) }");
     assert_eq!(output, ["3", "ä", "🧭"]);
