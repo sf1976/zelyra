@@ -19,6 +19,7 @@ fuzz_target!(|input: &[u8]| {
         required: false,
         max: Some(4096),
         widget: None,
+        appearance: None,
         readonly: false,
         span: Span::default(),
     };
