@@ -1759,6 +1759,23 @@ fn validates_page_pagination_state_and_wraps_sql_safely() {
 }
 
 #[test]
+fn static_preview_uses_the_normal_escaping_and_collection_renderer() {
+    let values = HashMap::from([("title".into(), "<Invoice>".into())]);
+    let collections = HashMap::from([(
+        "items".into(),
+        vec![HashMap::from([("name".into(), "A & B".into())])],
+    )]);
+    let html = render_static_template_preview(
+        "<h1>{title}</h1><ul>\nfor item in items {<li>{item.name}</li>}\n</ul>",
+        &values,
+        &collections,
+    );
+    assert!(html.contains("&lt;Invoice&gt;"));
+    assert!(html.contains("A &amp; B"));
+    assert!(!html.contains("<Invoice>"));
+}
+
+#[test]
 fn renders_each_loaded_page_collection_row_with_escaping() {
     let params = HashMap::new();
     let data = LoadedRouteData {

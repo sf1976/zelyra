@@ -11,6 +11,8 @@ use zelyra_web::{parse_request, Request};
 #[path = "editor_events.rs"]
 mod editor_events;
 use editor_events::EventHub;
+#[path = "editor_canvas.rs"]
+mod editor_canvas;
 #[path = "editor_capabilities.rs"]
 mod editor_capabilities;
 #[path = "editor_outbox.rs"]
@@ -480,6 +482,8 @@ fn editor_response(
         ("POST", "capability-grant-apply") => {
             editor_capabilities::apply_grant(state, &parse_json_body(&request.body)?)
         }
+        ("POST", "canvas-list") => editor_canvas::list(state, &parse_json_body(&request.body)?),
+        ("POST", "canvas-render") => editor_canvas::render(state, &parse_json_body(&request.body)?),
         ("GET", "logs") => editor_logs_response(state),
         ("GET", "database-schema") => database_schema_response(state),
         ("GET", "database-target") => database_target_response(state),
@@ -5113,6 +5117,126 @@ fn main() {}
             ],
         );
         assert_eq!(editor_response(&render, &state).unwrap_err().0, 403);
+    }
+
+    #[test]
+    fn canvas_uses_compiled_unsaved_page_without_running_project_code() {
+        let state = project();
+        let disk = "page \"/\" { html { <main>Disk</main> } } fn main() { assert(false) }\n";
+        fs::write(state.root.join("main.zyl"), disk).unwrap();
+        fs::write(
+            state.root.join("zelyra.theme.css"),
+            ":where(html[data-z-ui]) { --z-color-primary: #23654f; }\n",
+        )
+        .unwrap();
+        let source =
+            "page \"/\" { html { <main><h1>Unsaved</h1></main> } } fn main() { assert(false) }\n";
+        let (_, _, body) = editor_canvas::render(
+            &state,
+            &json!({
+                "path":"main.zyl","source":source,"version":7,
+                "kind":"page","name":"/","sample":{}
+            }),
+        )
+        .unwrap();
+        let result: Value = serde_json::from_str(&body).unwrap();
+        assert!(result["html"].as_str().unwrap().contains("Unsaved"));
+        assert!(!result["html"].as_str().unwrap().contains("Disk"));
+        assert!(result["stylesheet"]
+            .as_str()
+            .unwrap()
+            .contains("--z-color-primary"));
+        assert!(result["theme"].as_str().unwrap().contains("#23654f"));
+        assert_eq!(result["sampleOnly"], true);
+        assert_eq!(result["scriptsExecuted"], false);
+        assert_eq!(result["source"]["path"], "main.zyl");
+        assert_eq!(
+            fs::read_to_string(state.root.join("main.zyl")).unwrap(),
+            disk
+        );
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn canvas_rejects_unknown_views_and_excessive_sample_rows() {
+        let state = project();
+        fs::write(
+            state.root.join("main.zyl"),
+            "page \"/\" { html { <h1>Hello</h1> } }\n",
+        )
+        .unwrap();
+        assert_eq!(
+            editor_canvas::render(
+                &state,
+                &json!({
+                    "kind":"view","name":"Missing","sample":{}
+                })
+            )
+            .unwrap_err()
+            .0,
+            404
+        );
+        let rows = (0..101)
+            .map(|index| json!({"name":index}))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            editor_canvas::render(
+                &state,
+                &json!({
+                    "kind":"page","name":"/","sample":{"items":rows}
+                })
+            )
+            .unwrap_err()
+            .0,
+            413
+        );
+        assert_eq!(
+            editor_canvas::render(
+                &state,
+                &json!({
+                    "path":"../outside.zyl","source":"","kind":"page","name":"/","sample":{}
+                })
+            )
+            .unwrap_err()
+            .0,
+            400
+        );
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn canvas_lists_views_and_escapes_explicit_sample_values() {
+        let state = project();
+        fs::write(state.root.join("main.zyl"),
+            "view Shell { html { <html><body><main><slot /></main></body></html> } }\npage \"/reports/{id}\" { view: Shell input { term: String } html { <h1>{term}</h1> } }\n").unwrap();
+        let (_, _, list_body) = editor_canvas::list(&state, &json!({})).unwrap();
+        let entries: Value = serde_json::from_str(&list_body).unwrap();
+        assert_eq!(entries["success"], true);
+        assert!(entries["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| entry["kind"] == "page" && entry["name"] == "/reports/{id}"));
+        assert!(entries["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| entry["kind"] == "view" && entry["name"] == "Shell"));
+        let (_, _, body) = editor_canvas::render(
+            &state,
+            &json!({
+                "kind":"page","name":"/reports/{id}","sample":{"term":"<Acme & Co>"}
+            }),
+        )
+        .unwrap();
+        let rendered: Value = serde_json::from_str(&body).unwrap();
+        assert!(rendered["html"]
+            .as_str()
+            .unwrap()
+            .contains("&lt;Acme &amp; Co&gt;"));
+        assert!(rendered["html"].as_str().unwrap().contains("<main>"));
+        assert!(!rendered["html"].as_str().unwrap().contains("<Acme & Co>"));
+        fs::remove_dir_all(state.root.clone()).unwrap();
     }
 
     #[test]

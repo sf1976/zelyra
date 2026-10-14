@@ -106,6 +106,23 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .editor-stage { position: relative; display: flex; flex: 1; min-height: 0; background: var(--editor-bg); }
 .editor-stage[hidden] { display: none; }
 .editor-root { flex: 1; width: 100%; height: 100%; min-width: 0; }
+.editor-stage.canvas-open .editor-root { flex: 1 1 50%; width: auto; }
+.canvas-pane { display: flex; flex: 1 1 50%; flex-direction: column; min-width: 0; border-left: 1px solid var(--border); background: var(--surface); }
+.canvas-pane[hidden] { display: none; }
+.canvas-pane > header { display: flex; align-items: center; justify-content: space-between; min-height: 38px; padding: 6px 12px; border-bottom: 1px solid var(--border); font-size: 12px; }
+.canvas-pane > header button { border: 0; color: var(--muted); background: transparent; font-size: 20px; }
+.canvas-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: end; padding: 8px 10px; }
+.canvas-controls label { display: grid; flex: 1 1 130px; gap: 3px; color: var(--muted); font-size: 10px; }
+.canvas-controls select, .canvas-controls textarea { width: 100%; min-height: 28px; padding: 5px 7px; border: 1px solid var(--border); border-radius: 5px; color: var(--ink); background: var(--editor-bg); font: inherit; }
+.canvas-controls textarea { height: 46px; resize: vertical; font-family: ui-monospace, monospace; }
+.canvas-theme-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: end; padding: 6px 10px; border-top: 1px solid var(--border); }
+.canvas-theme-controls label { display: grid; gap: 3px; color: var(--muted); font-size: 10px; }
+.canvas-theme-controls select { max-width: 180px; min-height: 28px; color: var(--ink); background: var(--editor-bg); }
+.canvas-theme-controls input[type="color"] { width: 44px; height: 28px; padding: 1px; border: 1px solid var(--border); background: var(--editor-bg); }
+#canvas-theme-status { flex: 1 1 100%; color: var(--muted); font-size: 10px; }
+.canvas-status { min-height: 20px; margin: 0; padding: 2px 10px; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.canvas-pane iframe { display: block; flex: 1; width: 100%; min-height: 140px; border: 0; background: #fff; }
+@media (max-width: 900px) { .editor-stage.canvas-open { flex-direction: column; } .editor-stage.canvas-open .editor-root { min-height: 42%; height: 42%; } .canvas-pane { min-height: 43%; border-top: 1px solid var(--border); border-left: 0; } }
 .cm-gutter.verify-gutter { min-width: 22px; border-left: 1px solid var(--border); }
 .verify-marker { display: inline-grid; place-items: center; width: 20px; min-height: 20px; font-size: 13px; font-weight: 700; cursor: pointer; }
 .verify-marker.proven { color: var(--success); }

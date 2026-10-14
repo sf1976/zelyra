@@ -60,6 +60,7 @@
             <button class="toolbar-button" id="format-button" title="Aktive Zelyra-Datei formatieren" data-i18n="format">Formatieren</button>
             <button class="toolbar-button" id="runtime-budget-button" type="button" title="Laufzeitbudget und Rekursion prüfen" data-i18n-title="runtimeBudgetTitle"><span class="button-icon">◴</span><span data-i18n="runtimeBudgetButton">Budget</span></button>
             <button class="toolbar-button" id="capability-button" type="button" title="Capabilities und Pfadfreigaben prüfen" data-i18n-title="capabilityTitle"><span class="button-icon">▣</span><span data-i18n="capabilityButton">Rechte</span></button>
+            <button class="toolbar-button" id="canvas-button" type="button" title="Seite oder View statisch ansehen" data-i18n-title="canvasTitle"><span class="button-icon">◫</span><span data-i18n="canvasButton">Canvas</span></button>
             <button class="toolbar-button" id="run-button" title="main.zyl ausführen" data-i18n-title="runButtonTitle" data-i18n="runButton">Starten</button>
             <button class="primary-button" id="check-button" title="Projekt prüfen" data-i18n-title="check"><span>✓</span> <span data-i18n="check">Projekt prüfen</span></button>
           </div>
@@ -67,6 +68,13 @@
         <div class="tabbar" id="tabs" role="tablist" aria-label="Geöffnete Dateien"></div>
         <section class="editor-stage" id="editor-stage">
           <div id="editor-root" class="editor-root"></div>
+          <aside id="canvas-pane" class="canvas-pane" aria-label="Statische Zelyra-Vorschau" data-i18n-aria="canvasTitle" hidden>
+            <header><strong data-i18n="canvasTitle">Statische Zelyra-Vorschau</strong><button id="canvas-close" type="button" aria-label="Schließen" data-i18n-aria="close">×</button></header>
+            <div class="canvas-controls"><label><span data-i18n="canvasTarget">Seite oder View</span><select id="canvas-target"></select></label><label><span data-i18n="canvasSample">Beispieldaten (JSON)</span><textarea id="canvas-sample" spellcheck="false">{}</textarea></label><button id="canvas-render" class="primary-button" type="button" data-i18n="canvasRender">Vorschau aktualisieren</button><button id="canvas-source" class="toolbar-button" type="button" data-i18n="canvasSource" disabled>Zur Deklaration</button></div>
+            <div class="canvas-theme-controls"><label><span data-i18n="canvasThemeToken">Theme-Farbe</span><select id="canvas-theme-token"></select></label><label><span data-i18n="canvasThemeColor">Farbwert</span><input id="canvas-theme-color" type="color" value="#3157a4"></label><button id="canvas-theme-apply" class="toolbar-button" type="button" data-i18n="canvasThemeApply">Im Quelltext ändern</button><span id="canvas-theme-status" role="status"></span></div>
+            <p id="canvas-status" role="status" class="canvas-status"></p>
+            <iframe id="canvas-frame" title="Statische Seitenvorschau" sandbox="" referrerpolicy="no-referrer" data-i18n-title="canvasFrameTitle"></iframe>
+          </aside>
           <aside class="studio-assistant" id="studio-assistant" aria-label="Hilfe und Eigenschaften" data-i18n-aria="assistant" hidden>
             <div class="assistant-tabs" role="tablist" aria-label="Studio-Seitenleiste" data-i18n-aria="assistantTabs">
               <button id="assistant-help-tab" class="selected" type="button" role="tab" aria-selected="true" aria-controls="assistant-help-view" tabindex="0" data-i18n="helpTab">Hilfe</button>

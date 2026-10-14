@@ -120,8 +120,13 @@ function onStudioEvent(message) {
     if (message.payload?.operation?.startsWith("external-")) {
       void refreshExternallyChangedTabs(changedPath).then(() => {
         if (activePath?.endsWith(".zyl")) scheduleLiveCheck(activePath);
+        scheduleCanvasRefresh();
+        if ((!changedPath || changedPath === "zelyra.theme.css") && !$("canvas-pane").hidden) void loadThemeColors();
       });
-    } else if (activePath?.endsWith(".zyl")) scheduleLiveCheck(activePath);
+    } else {
+      if (activePath?.endsWith(".zyl")) scheduleLiveCheck(activePath);
+      scheduleCanvasRefresh();
+    }
     return;
   }
   if (message.kind === "analysis.invalidated") {
@@ -222,6 +227,8 @@ const messages = {
     capabilityButton: "Rechte", capabilityTitle: "Capability- und Sicherheitsmatrix", capabilityDeclarations: "Deklarierte Rechte", capabilityUses: "Tatsächlich verwendete Operationen", capabilityPaths: "Dateipfade", capabilityUnused: "Freigaben ohne erkannten Funktionsbedarf", capabilityUnusedCaveat: "Nur analysierte Funktionen; generierte Routen und dynamische Aufrufe können weitere Rechte benötigen.", capabilityLoading: "Compiler und Projektkonfiguration werden analysiert …", capabilityEmpty: "Keine Einträge in der aktuellen Datei.", capabilityGrant: "Freigabe prüfen", capabilityGrantReview: "Änderung an zelyra.toml prüfen", capabilityGrantApply: "Freigabe übernehmen", capabilityGrantPreview: "Nur die angezeigte Konfigurationsänderung wird nach deiner Bestätigung gespeichert.", capabilityGranted: "Freigabe gespeichert. Die Runtime prüft sie beim nächsten Lauf erneut.", capabilityUnrestricted: "Keine Projektkonfiguration: Runtime-Capabilities sind nicht durch zelyra.toml eingeschränkt.", capabilityIncomplete: "Die Quellanalyse ist unvollständig; dieser Befund kann Einträge auslassen.", capabilityError: "Capability-Analyse fehlgeschlagen: {0}", capabilityPathUnknown: "Dynamische Pfade sind statisch nicht entscheidbar.", capabilityNotGranted: "nicht freigegeben", capabilityDynamic: "dynamisch",
     externalReloaded: "Extern geänderte Datei neu geladen: {0}", externalDirty: "{0} wurde außerhalb von Studio geändert. Ungespeicherte Änderungen bleiben erhalten; vor dem Speichern prüfen.", externalMissing: "{0} wurde außerhalb von Studio entfernt. Der geöffnete Puffer bleibt erhalten.",
     externalReloadFailed: "{0} konnte nach einer äußeren Änderung nicht neu geladen werden: {1}",
+    canvasButton: "Canvas", canvasTitle: "Statische Zelyra-Vorschau", canvasTarget: "Seite oder View", canvasSample: "Beispieldaten (JSON)", canvasRender: "Vorschau aktualisieren", canvasSource: "Zur Deklaration", canvasFrameTitle: "Statische Seitenvorschau", canvasLoading: "Compiler und Renderer erzeugen die Vorschau …", canvasEmpty: "Im Projekt ist keine Seite oder View deklariert.", canvasError: "Vorschau nicht verfügbar: {0}", canvasSampleError: "Beispieldaten müssen ein JSON-Objekt sein.", canvasReady: "Statisch gerendert. Projektfunktionen und Skripte wurden nicht ausgeführt.", canvasIncomplete: "Die Projektquelle ist nicht vollständig kompilierbar.",
+    canvasThemeToken: "Theme-Farbe", canvasThemeColor: "Farbwert", canvasThemeApply: "Im Quelltext ändern", canvasThemeMissing: "Für Farbbearbeitung zelyra.theme.css im Projekt anlegen.", canvasThemeNoHex: "Keine unterstützte --z-color-*-Farbe mit hexadezimalem Wert gefunden.", canvasThemeChanged: "Theme-Farbe im ungespeicherten Quelltext geändert. Speichern übernimmt sie ins Projekt.", canvasThemeStale: "Theme-Datei wurde verändert. Farbe erneut auswählen.", canvasThemeError: "Theme-Bearbeitung fehlgeschlagen: {0}",
     runButton: "Starten", runButtonTitle: "main.zyl ausführen oder Webanwendung starten",
     runOutputTitle: "Programmausgabe", runStarting: "Anwendung wird vorbereitet und gestartet …", runSuccess: "Programm erfolgreich beendet", runFailure: "Programm mit Fehler beendet", runTimeout: "Ausführung nach 15 Sekunden beendet", runOutputTruncated: "Die Ausgabe ist auf 64 KiB je Stream begrenzt.", runNoOutput: "Keine Ausgabe.", runStdout: "AUSGABE", runStderr: "FEHLER", runInputUnavailable: "Studio stellt dem Programm keine interaktive Eingabe bereit.", runWebReady: "Webanwendung läuft lokal:", runWebOpen: "Anwendung im Browser öffnen", runWebStop: "Vorschau beenden", runWebStopped: "Lokale Vorschau wurde beendet.",
     runtimeBudgetButton: "Budget", runtimeBudgetTitle: "Laufzeitbudget und Rekursion", runtimeBudgetEnable: "Schrittbudget für Konsolenprogramme aktivieren", runtimeBudgetRange: "Schrittbudget (Regler: 1.000 bis 1.000.000)", runtimeBudgetNumber: "Maximale Schritte (1 bis 100.000.000)", runtimeBudgetWebHint: "Das Schrittbudget gilt für Konsolenprogramme. Eine Webvorschau verwendet weiterhin ihre eigenen Laufzeitgrenzen.", runtimeRecursionTitle: "Mögliche Rekursion", runtimeRecursionNone: "Keine direkte oder gegenseitige Rekursion im analysierten Funktionsgraphen gefunden.", runtimeRecursionIncomplete: "Der Funktionsgraph ist zu groß; die Rekursionsanalyse ist unvollständig.", runtimeRecursionDirect: "Direkte Rekursion", runtimeRecursionMutual: "Gegenseitige Rekursion", runtimeStackDepth: "Maximale Stacktiefe laut Projekt: {0} ({1})", runtimeStackConfigured: "konfiguriert", runtimeStackDefault: "Standard", runtimeProfileError: "Laufzeitprofil konnte nicht gelesen werden: {0}", runtimeBudgetInvalid: "Bitte eine ganze Schrittzahl von 1 bis 100.000.000 eingeben.", runtimeBudgetExceeded: "Schrittbudget überschritten", runCancel: "Ausführung abbrechen", runCancelRequested: "Abbruch angefordert …", runCancelled: "Ausführung abgebrochen", runtimeProfileInvalid: "Der ungespeicherte Quelltext ist nicht vollständig analysierbar.",
@@ -326,6 +333,8 @@ const messages = {
     capabilityButton: "Permissions", capabilityTitle: "Capability and security matrix", capabilityDeclarations: "Declared capabilities", capabilityUses: "Operations actually used", capabilityPaths: "File paths", capabilityUnused: "Grants without a detected function use", capabilityUnusedCaveat: "Analyzed functions only; generated routes and dynamic calls may require more permissions.", capabilityLoading: "Analyzing compiler and project configuration …", capabilityEmpty: "No entries in the current file.", capabilityGrant: "Review grant", capabilityGrantReview: "Review change to zelyra.toml", capabilityGrantApply: "Apply grant", capabilityGrantPreview: "Only the displayed configuration change will be saved after your confirmation.", capabilityGranted: "Grant saved. The runtime checks it again on the next run.", capabilityUnrestricted: "No project configuration: runtime capabilities are not restricted by zelyra.toml.", capabilityIncomplete: "Source analysis is incomplete; this report may omit entries.", capabilityError: "Capability analysis failed: {0}", capabilityPathUnknown: "Dynamic paths cannot be decided statically.", capabilityNotGranted: "not granted", capabilityDynamic: "dynamic",
     externalReloaded: "Reloaded externally changed file: {0}", externalDirty: "{0} changed outside Studio. Unsaved edits remain; review before saving.", externalMissing: "{0} was removed outside Studio. The open buffer remains.",
     externalReloadFailed: "Could not reload {0} after an external change: {1}",
+    canvasButton: "Canvas", canvasTitle: "Static Zelyra preview", canvasTarget: "Page or view", canvasSample: "Sample data (JSON)", canvasRender: "Refresh preview", canvasSource: "Go to declaration", canvasFrameTitle: "Static page preview", canvasLoading: "Compiler and renderer are preparing the preview …", canvasEmpty: "This project declares no page or view.", canvasError: "Preview unavailable: {0}", canvasSampleError: "Sample data must be a JSON object.", canvasReady: "Rendered statically. No project functions or scripts were executed.", canvasIncomplete: "The project source does not fully compile.",
+    canvasThemeToken: "Theme color", canvasThemeColor: "Color value", canvasThemeApply: "Edit source", canvasThemeMissing: "Create zelyra.theme.css in the project to edit colors.", canvasThemeNoHex: "No supported --z-color-* declaration with a hex value was found.", canvasThemeChanged: "Theme color changed in the unsaved source. Save to apply it to the project.", canvasThemeStale: "Theme file changed. Select the color again.", canvasThemeError: "Theme edit failed: {0}",
     runButton: "Run", runButtonTitle: "Run main.zyl or start the web application",
     runOutputTitle: "Program output", runStarting: "Preparing and starting the application …", runSuccess: "Program finished successfully", runFailure: "Program finished with an error", runTimeout: "Execution stopped after 15 seconds", runOutputTruncated: "Output is limited to 64 KiB per stream.", runNoOutput: "No output.", runStdout: "OUTPUT", runStderr: "ERROR", runInputUnavailable: "Studio does not provide interactive input to the program.", runWebReady: "Web application is running locally:", runWebOpen: "Open application in browser", runWebStop: "Stop preview", runWebStopped: "Local preview stopped.",
     runtimeBudgetButton: "Budget", runtimeBudgetTitle: "Runtime budget and recursion", runtimeBudgetEnable: "Enable a step budget for console programs", runtimeBudgetRange: "Step budget (slider: 1,000 to 1,000,000)", runtimeBudgetNumber: "Maximum steps (1 to 100,000,000)", runtimeBudgetWebHint: "The step budget applies to console programs. Web previews keep their own runtime limits.", runtimeRecursionTitle: "Possible recursion", runtimeRecursionNone: "No direct or mutual recursion found in the analyzed function graph.", runtimeRecursionIncomplete: "The function graph is too large; recursion analysis is incomplete.", runtimeRecursionDirect: "Direct recursion", runtimeRecursionMutual: "Mutual recursion", runtimeStackDepth: "Project maximum stack depth: {0} ({1})", runtimeStackConfigured: "configured", runtimeStackDefault: "default", runtimeProfileError: "Could not read runtime profile: {0}", runtimeBudgetInvalid: "Enter an integer step count from 1 to 100,000,000.", runtimeBudgetExceeded: "Step budget exceeded", runCancel: "Cancel execution", runCancelRequested: "Cancellation requested …", runCancelled: "Execution cancelled", runtimeProfileInvalid: "The unsaved source cannot be fully analyzed.",
@@ -1043,6 +1052,7 @@ const studioTasks = [
   ["pdfPreview", "pdfPreviewTitle", ["pdf", "document", "invoice", "print"], () => void openPdfPreview()],
   ["outboxButton", "outboxTitle", ["outbox", "mail", "email", "queue"], openOutbox],
   ["capabilityButton", "capabilityTitle", ["capability", "permission", "sandbox", "security"], openCapabilityMatrix],
+  ["canvasButton", "canvasTitle", ["canvas", "preview", "page", "view"], openCanvas],
   ["taskDatabase", "taskDatabaseHelp", ["database", "table", "relation", "schema"], () => openDatabaseWorkbench()],
   ["taskHelp", "taskHelpHelp", ["help", "documentation", "f1"], () => toggleAssistant("help")],
   ["taskProperties", "taskPropertiesHelp", ["properties", "file", "settings"], () => toggleAssistant("properties")],
@@ -1257,6 +1267,7 @@ function createView(path, state) {
         verificationResults = [];
         pipelineMapCache = null;
         renderTabs();
+        scheduleCanvasRefresh();
         announce(t("unsaved"), "warning");
         queueMicrotask(() => {
           if (editor === update.view) {
@@ -3006,6 +3017,245 @@ async function renderPdfPreview() {
   }
 }
 
+let canvasEntries = [];
+let canvasSequence = 0;
+let canvasTimer = null;
+let canvasDeclaration = null;
+let canvasThemeSource = null;
+let canvasColors = [];
+
+function themeColorDeclarations(source) {
+  const declarations = [];
+  const blocks = [];
+  for (let i = 0; i < source.length;) {
+    if (source.startsWith("/*", i)) {
+      const end = source.indexOf("*/", i + 2);
+      i = end < 0 ? source.length : end + 2;
+      continue;
+    }
+    if (source[i] === '"' || source[i] === "'") {
+      const quote = source[i++];
+      while (i < source.length && source[i] !== quote) i += source[i] === "\\" ? 2 : 1;
+      i++;
+      continue;
+    }
+    if (source[i] === "{") { blocks.push(i); i++; continue; }
+    if (source[i] === "}") { blocks.pop(); i++; continue; }
+    if (blocks.length && source.startsWith("--z-color-", i)
+        && !/[\w-]/.test(source[i - 1] || "")) {
+      const name = /^--z-color-[a-z0-9-]+/.exec(source.slice(i))?.[0];
+      if (name) {
+        let from = i + name.length;
+        while (/\s/.test(source[from] || "")) from++;
+        if (source[from] === ":") {
+          from++;
+          while (/\s/.test(source[from] || "")) from++;
+          const color = /^#(?:[0-9a-f]{6}|[0-9a-f]{3})(?![0-9a-f])/i.exec(source.slice(from))?.[0];
+          if (color) {
+            declarations.push({ name, from, to: from + color.length, color,
+              block: blocks[blocks.length - 1], line: source.slice(0, i).split("\n").length });
+            i = from + color.length;
+            continue;
+          }
+        }
+      }
+    }
+    i++;
+  }
+  return declarations;
+}
+
+function normalizedColor(color) {
+  return color.length === 4 ? `#${[...color.slice(1)].map((part) => part + part).join("")}` : color.toLowerCase();
+}
+
+function readableOnColor(background) {
+  const color = normalizedColor(background);
+  const channels = [1, 3, 5].map((index) => parseInt(color.slice(index, index + 2), 16) / 255)
+    .map((part) => part <= 0.04045 ? part / 12.92 : ((part + 0.055) / 1.055) ** 2.4);
+  const luminance = channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+  return luminance >= 0.179 ? "#000000" : "#ffffff";
+}
+
+async function loadThemeColors() {
+  const select = $("canvas-theme-token");
+  const previous = canvasColors[Number(select.value)];
+  const previousKey = previous ? `${previous.name}:${previous.line}` : "";
+  try {
+    const tab = tabs.get("zelyra.theme.css");
+    const source = tab ? tabState("zelyra.theme.css", tab).doc.toString()
+      : (await api("file?path=zelyra.theme.css")).content;
+    if ($("canvas-pane").hidden) return;
+    canvasThemeSource = source;
+    canvasColors = themeColorDeclarations(source);
+    select.replaceChildren();
+    canvasColors.forEach((entry, index) => {
+      const option = document.createElement("option");
+      option.value = String(index);
+      option.textContent = `${entry.name} · ${entry.line}`;
+      select.append(option);
+    });
+    const index = canvasColors.findIndex((entry) => `${entry.name}:${entry.line}` === previousKey);
+    select.value = String(index < 0 ? 0 : index);
+    $("canvas-theme-color").value = normalizedColor(canvasColors[Number(select.value)]?.color || "#3157a4");
+    $("canvas-theme-apply").disabled = !canvasColors.length;
+    $("canvas-theme-status").textContent = canvasColors.length ? "" : t("canvasThemeNoHex");
+  } catch {
+    canvasThemeSource = null;
+    canvasColors = [];
+    select.replaceChildren();
+    $("canvas-theme-apply").disabled = true;
+    $("canvas-theme-status").textContent = t("canvasThemeMissing");
+  }
+}
+
+async function applyThemeColor() {
+  const selected = canvasColors[Number($("canvas-theme-token").value)];
+  if (!selected || !canvasThemeSource) return;
+  try {
+    await openFile("zelyra.theme.css");
+    if (activePath !== "zelyra.theme.css" || !editor) return;
+    const source = editor.state.doc.toString();
+    if (source !== canvasThemeSource) {
+      $("canvas-theme-status").textContent = t("canvasThemeStale");
+      await loadThemeColors();
+      return;
+    }
+    const color = $("canvas-theme-color").value;
+    const changes = [{ from: selected.from, to: selected.to, insert: color }];
+    const group = selected.name.slice("--z-color-".length);
+    if (["primary", "success", "warning", "danger", "info"].includes(group)) {
+      const pairName = `--z-color-on-${group}`;
+      const onColor = readableOnColor(color);
+      const pair = canvasColors.find((entry) => entry.block === selected.block && entry.name === pairName);
+      if (pair) changes.push({ from: pair.from, to: pair.to, insert: onColor });
+      else {
+        const next = /^\s*;/.exec(source.slice(selected.to));
+        if (!next) throw new Error(`${pairName} needs a semicolon after ${selected.name}`);
+        const afterSemicolon = selected.to + next[0].length;
+        changes.push({ from: afterSemicolon, to: afterSemicolon, insert: `\n    ${pairName}: ${onColor};` });
+      }
+    }
+    changes.sort((left, right) => left.from - right.from);
+    editor.dispatch({ changes });
+    await loadThemeColors();
+    $("canvas-theme-status").textContent = t("canvasThemeChanged");
+    scheduleCanvasRefresh();
+  } catch (error) { $("canvas-theme-status").textContent = t("canvasThemeError", error.message); }
+}
+
+function canvasRequestSource() {
+  const path = activePath?.endsWith(".zyl") ? activePath : undefined;
+  const themeTab = tabs.get("zelyra.theme.css");
+  return {
+    path,
+    source: path ? editor?.state.doc.toString() : undefined,
+    themeSource: themeTab ? tabState("zelyra.theme.css", themeTab).doc.toString() : undefined,
+    version: liveCheckSequence,
+  };
+}
+
+function scheduleCanvasRefresh() {
+  if ($("canvas-pane").hidden) return;
+  clearTimeout(canvasTimer);
+  canvasTimer = setTimeout(() => {
+    void loadCanvasEntries();
+    if (activePath === "zelyra.theme.css") void loadThemeColors();
+  }, 700);
+}
+
+async function loadCanvasEntries() {
+  if ($("canvas-pane").hidden) return;
+  const sequence = ++canvasSequence;
+  const target = $("canvas-target");
+  const previous = canvasEntries[Number(target.value)];
+  const previousKey = previous ? `${previous.kind}:${previous.name}` : "";
+  $("canvas-status").textContent = t("canvasLoading");
+  try {
+    const result = await api("canvas-list", { method: "POST", body: JSON.stringify(canvasRequestSource()) });
+    if (sequence !== canvasSequence || $("canvas-pane").hidden) return;
+    canvasEntries = result.entries || [];
+    target.replaceChildren();
+    canvasEntries.forEach((entry, index) => {
+      const option = document.createElement("option");
+      option.value = String(index);
+      option.textContent = `${entry.kind} · ${entry.name}`;
+      target.append(option);
+    });
+    const index = canvasEntries.findIndex((entry) => `${entry.kind}:${entry.name}` === previousKey);
+    target.value = String(index < 0 ? 0 : index);
+    if (!canvasEntries.length) {
+      $("canvas-status").textContent = result.success ? t("canvasEmpty") : t("canvasIncomplete");
+      $("canvas-frame").srcdoc = "";
+      $("canvas-source").disabled = true;
+      return;
+    }
+    await renderCanvas(sequence);
+  } catch (error) {
+    if (sequence === canvasSequence && !$("canvas-pane").hidden) $("canvas-status").textContent = t("canvasError", error.message);
+  }
+}
+
+function canvasDocument(result) {
+  const stylesheet = String(result.stylesheet || "").replace(/<\/style/gi, "<\\/style");
+  const theme = String(result.theme || "").replace(/<\/style/gi, "<\\/style");
+  const csp = "default-src 'none'; script-src 'none'; connect-src 'none'; object-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'; navigate-to 'none'; img-src data:; font-src 'none'; style-src 'unsafe-inline'";
+  return `<!doctype html><html data-z-ui><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><style>${stylesheet}</style><style>${theme}</style></head><body>${result.html}</body></html>`;
+}
+
+async function renderCanvas(sequence = ++canvasSequence) {
+  if ($("canvas-pane").hidden) return;
+  const entry = canvasEntries[Number($("canvas-target").value)];
+  if (!entry) return;
+  let sample;
+  try {
+    sample = JSON.parse($("canvas-sample").value);
+    if (!sample || Array.isArray(sample) || typeof sample !== "object") throw new Error();
+  } catch {
+    $("canvas-status").textContent = t("canvasSampleError");
+    $("canvas-frame").srcdoc = "";
+    return;
+  }
+  $("canvas-status").textContent = t("canvasLoading");
+  $("canvas-source").disabled = true;
+  try {
+    const result = await api("canvas-render", { method: "POST", body: JSON.stringify({
+      ...canvasRequestSource(), kind: entry.kind, name: entry.name, sample,
+    }) });
+    if (sequence !== canvasSequence || $("canvas-pane").hidden) return;
+    $("canvas-frame").srcdoc = canvasDocument(result);
+    canvasDeclaration = result.source;
+    $("canvas-source").disabled = !result.source?.path;
+    $("canvas-status").textContent = t("canvasReady");
+  } catch (error) {
+    if (sequence !== canvasSequence || $("canvas-pane").hidden) return;
+    $("canvas-frame").srcdoc = "";
+    canvasDeclaration = null;
+    $("canvas-status").textContent = t("canvasError", error.message);
+  }
+}
+
+function openCanvas() {
+  if (matchMedia("(max-width: 760px)").matches && !document.body.classList.contains("sidebar-hidden")) {
+    $("sidebar-toggle").click();
+  }
+  $("canvas-pane").hidden = false;
+  $("editor-stage").classList.add("canvas-open");
+  requestAnimationFrame(() => editor?.requestMeasure());
+  void loadCanvasEntries();
+  void loadThemeColors();
+}
+
+async function goToCanvasDeclaration() {
+  const source = canvasDeclaration;
+  if (!source?.path) return;
+  await openFile(source.path);
+  if (!editor || activePath !== source.path) return;
+  const line = Math.max(1, Math.min(editor.state.doc.lines, Number(source.line) || 1));
+  editor.dispatch({ selection: { anchor: editor.state.doc.line(line).from }, scrollIntoView: true });
+  editor.focus();
+}
+
 let capabilityRequest = 0;
 let capabilityGrantPreview = null;
 
@@ -3391,6 +3641,21 @@ $("capability-button").addEventListener("click", () => void openCapabilityMatrix
 $("capability-close").addEventListener("click", () => $("capability-dialog").close());
 $("capability-dialog").addEventListener("close", () => { capabilityRequest++; capabilityGrantPreview = null; });
 $("capability-grant-apply").addEventListener("click", () => void applyCapabilityGrant());
+$("canvas-button").addEventListener("click", openCanvas);
+$("canvas-close").addEventListener("click", () => {
+  $("canvas-pane").hidden = true;
+  $("editor-stage").classList.remove("canvas-open");
+  canvasSequence++;
+  clearTimeout(canvasTimer);
+  requestAnimationFrame(() => editor?.requestMeasure());
+});
+$("canvas-target").addEventListener("change", () => void renderCanvas());
+$("canvas-render").addEventListener("click", () => void renderCanvas());
+$("canvas-source").addEventListener("click", () => void goToCanvasDeclaration());
+$("canvas-theme-token").addEventListener("change", () => {
+  $("canvas-theme-color").value = normalizedColor(canvasColors[Number($("canvas-theme-token").value)]?.color || "#3157a4");
+});
+$("canvas-theme-apply").addEventListener("click", () => void applyThemeColor());
 $("outbox-close").addEventListener("click", () => $("outbox-dialog").close());
 $("outbox-dialog").addEventListener("close", () => { outboxRequest++; });
 $("outbox-refresh").addEventListener("click", () => void loadOutbox());

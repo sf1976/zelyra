@@ -265,6 +265,26 @@ again immediately before writing. If the file changed after preview, the write
 is rejected and a new preview is required. Generated CRUD is source code; it
 does not migrate the database or change records.
 
+## Static canvas preview (1.1.0 work in progress)
+
+**Canvas** shows a declared page or view beside the source. Page composition
+and data substitution use the same functions as web delivery. Values in
+**Sample data (JSON)** are HTML escaped; arrays of objects can populate
+existing `for` blocks. The current unsaved `.zyl` buffer is compiled through
+an overlay. The preview does not run project queries, handlers, `main()`, or
+JavaScript. Its frame has an empty `sandbox` attribute and restrictive CSP.
+Only explicitly supplied sample data are displayed.
+
+The canvas uses the configured stylesheet choice and `zelyra.theme.css`.
+Unsaved theme changes refresh the canvas without reloading Studio. The color
+picker recognizes hexadecimal `--z-color-*` declarations outside CSS
+comments. **Edit source** opens the theme file and makes an undoable editor
+edit. For primary and status backgrounds it chooses black or white for the
+paired `--z-color-on-*` text color based on contrast. Hover and soft colors,
+and other related tokens, still need manual adjustment. The source button
+opens the page or view declaration; nested components do not yet have their
+own source-span navigation in the canvas.
+
 ## Capability and path matrix (1.1.0 work in progress)
 
 The **Permissions** button analyzes the current `.zyl` file, including

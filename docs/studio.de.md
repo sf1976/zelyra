@@ -294,6 +294,29 @@ der Vorschau geändert, wird der Schreibvorgang abgelehnt und die Vorschau muss
 neu erstellt werden. Das erzeugte CRUD ist Quelltext; es migriert keine
 Datenbank und verändert keine Datensätze.
 
+## Statische Canvas-Vorschau (Arbeitsstand 1.1.0)
+
+**Canvas** zeigt eine deklarierte Seite oder View neben dem Quelltext. Die
+Seitenkomposition und die Ersetzung von Datenwerten verwenden dieselben
+Funktionen wie die Webauslieferung. Werte in **Beispieldaten (JSON)** werden
+HTML-escaped; Listen aus JSON-Objekten können bestehende `for`-Blöcke füllen.
+Der aktuelle ungespeicherte `.zyl`-Puffer wird vom Compiler als Overlay
+analysiert. Projektabfragen, Handler, `main()` und JavaScript werden in der
+Vorschau nicht ausgeführt. Der Browserrahmen hat ein leeres `sandbox`-Attribut
+und eine einschränkende CSP. Die Vorschau zeigt nur ausdrücklich eingegebene
+Beispieldaten; fehlende Laufzeitdaten werden nicht erfunden.
+
+Die Canvas verwendet die konfigurierte Stylesheet-Auswahl und
+`zelyra.theme.css`. Ungespeicherte Änderungen dieser Theme-Datei aktualisieren
+den Canvas ohne Reload von Studio. Der Farbwähler erkennt Hex-Werte von
+`--z-color-*`-Deklarationen außerhalb von CSS-Kommentaren. **Im Quelltext
+ändern** öffnet die Theme-Datei und erzeugt einen rückgängig machbaren
+Editor-Edit. Für Primär- und Statushintergründe setzt er die jeweilige
+`--z-color-on-*`-Textfarbe auf Schwarz oder Weiß mit dem höheren Kontrast.
+Hover- und Soft-Farben sowie andere thematisch gekoppelte Variablen bleiben
+manuell zu gestalten. Der Quellknopf springt zur Seiten- oder View-Deklaration;
+einzelne verschachtelte Komponenten haben noch keine Source-Span-Navigation.
+
 ## Capability- und Pfadmatrix (Arbeitsstand 1.1.0)
 
 Die Schaltfläche **Rechte** analysiert die aktuelle `.zyl`-Datei einschließlich
