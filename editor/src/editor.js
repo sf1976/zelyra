@@ -58,6 +58,7 @@ const symbolRequests = new Map();
 let treeFiles = [];
 let activeFilter = "";
 let projectSearchMode = "text";
+let semanticReferenceQuery = null;
 let databaseMap = null;
 let databaseTables = [];
 let selectedDatabaseTable = null;
@@ -500,7 +501,7 @@ async function api(path, options = {}) {
   const headers = new Headers(options.headers || {});
   headers.set("X-Zelyra-Editor-Token", token);
   if (options.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-  const response = await fetch(`/__zelyra/editor/api/${path}`, { ...options, headers, cache: "no-store", credentials: "omit", mode: "same-origin", redirect: "error" });
+  const response = await fetch(`/__zelyra/editor/api/${path}`, { ...options, headers, cache: "no-store", credentials: "omit", redirect: "error" });
   const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
   if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
   return body;
@@ -930,11 +931,13 @@ function findInDocument() {
 
 function openProjectSearch() {
   projectSearchMode = "text";
+  semanticReferenceQuery = null;
   if (dirtyCount()) { announce(t("projectSearchSaveFirst"), "warning"); return; }
   const dialog = $("project-search");
   if (!dialog.open) dialog.showModal();
   $("project-search-title").textContent = t("projectSearchTitle");
   $("project-search-input").placeholder = t("projectSearchPlaceholder");
+  $("project-search-input").readOnly = false;
   $("project-search-input").value = "";
   $("project-search-results").replaceChildren();
   $("project-search-empty").hidden = true;
@@ -946,7 +949,7 @@ function findIdentifierOccurrences() {
     announce(t("definitionNotFound"), "warning");
     return;
   }
-  if (dirtyCount()) {
+  if ([...tabs].some(([path, tab]) => path !== activePath && isDirty(tab, path))) {
     announce(t("projectSearchSaveFirst"), "warning");
     return;
   }
@@ -958,10 +961,17 @@ function findIdentifierOccurrences() {
     return;
   }
   projectSearchMode = "references";
+  semanticReferenceQuery = {
+    path: activePath,
+    source: editor.state.doc.toString(),
+    offset: wordRange.from,
+    action: "references",
+  };
   const dialog = $("project-search");
   if (!dialog.open) dialog.showModal();
   $("project-search-title").textContent = t("referencesTitle");
   $("project-search-input").placeholder = t("referencesPlaceholder");
+  $("project-search-input").readOnly = true;
   $("project-search-input").value = name;
   $("project-search-results").replaceChildren();
   $("project-search-empty").hidden = true;
@@ -969,7 +979,7 @@ function findIdentifierOccurrences() {
 }
 
 async function performProjectSearch() {
-  if (dirtyCount()) { announce(t("projectSearchSaveFirst"), "warning"); $("project-search").close(); return; }
+  if (projectSearchMode !== "references" && dirtyCount()) { announce(t("projectSearchSaveFirst"), "warning"); $("project-search").close(); return; }
   const query = $("project-search-input").value.trim();
   if (!query) return;
   const results = $("project-search-results");
@@ -979,7 +989,7 @@ async function performProjectSearch() {
   empty.hidden = false;
   try {
     const response = projectSearchMode === "references"
-      ? await api(`references?name=${encodeURIComponent(query)}`)
+      ? await api("semantic", { method: "POST", body: JSON.stringify(semanticReferenceQuery) })
       : await api(`search?q=${encodeURIComponent(query)}`);
     const matches = response.matches || [];
     empty.textContent = t("projectSearchEmpty");
@@ -1020,7 +1030,7 @@ async function performProjectSearch() {
 
 async function goToDefinition() {
   if (!editor || !activePath?.endsWith(".zyl")) return;
-  if (isDirty(tabs.get(activePath), activePath)) {
+  if ([...tabs].some(([path, tab]) => path !== activePath && isDirty(tab, path))) {
     announce(t("definitionSaveFirst"), "warning");
     return;
   }
@@ -1028,18 +1038,21 @@ async function goToDefinition() {
   const word = wordRange ? editor.state.sliceDoc(wordRange.from, wordRange.to) : "";
   if (!word) { announce(t("definitionNotFound"), "warning"); return; }
   try {
-    const symbols = await loadProjectSymbols(activePath);
-    const symbol = symbols.find((item) => item.label === word && item.path === activePath && Number.isInteger(item.position))
-      || symbols.find((item) => item.label === word && item.path && Number.isInteger(item.position));
-    if (!symbol) { announce(t("definitionNotFound"), "warning"); return; }
-    const targetTab = tabs.get(symbol.path);
-    if (targetTab && isDirty(targetTab, symbol.path)) {
+    const source = editor.state.doc.toString();
+    const requestedPath = activePath;
+    const result = await api("semantic", { method: "POST", body: JSON.stringify({
+      path: requestedPath, source, offset: wordRange.from, action: "definition",
+    }) });
+    if (activePath !== requestedPath || editor.state.doc.toString() !== source) return;
+    if (!result.found) { announce(t("definitionNotFound"), "warning"); return; }
+    const targetTab = tabs.get(result.path);
+    if (targetTab && isDirty(targetTab, result.path) && result.path !== requestedPath) {
       announce(t("definitionSaveFirst"), "warning");
       return;
     }
-    await openFile(symbol.path);
-    if (activePath !== symbol.path || !editor) return;
-    editor.dispatch({ selection: { anchor: symbol.position, head: symbol.position + word.length }, scrollIntoView: true });
+    if (result.path !== activePath) await openFile(result.path);
+    if (activePath !== result.path || !editor) return;
+    editor.dispatch({ selection: { anchor: result.start, head: result.end }, scrollIntoView: true });
     editor.focus();
     announce(t("definitionOpened", word), "success");
   } catch (error) { announce(error.message, "error"); }

@@ -68,7 +68,11 @@ fn serve<R: BufRead, W: Write>(mut input: R, mut output: W) -> io::Result<()> {
                                     "textDocumentSync": {"openClose": true, "change": 2},
                                     "documentSymbolProvider": true,
                                     "workspaceSymbolProvider": true,
-                                    "completionProvider": {"triggerCharacters": [".", ":"]}
+                                "completionProvider": {"triggerCharacters": [".", ":"]},
+                                "hoverProvider": true,
+                                "definitionProvider": true,
+                                "referencesProvider": true,
+                                "renameProvider": {"prepareProvider": true}
                                 },
                                 "serverInfo": {"name": "zelyra", "version": env!("CARGO_PKG_VERSION")}
                             }
@@ -212,6 +216,26 @@ fn serve<R: BufRead, W: Write>(mut input: R, mut output: W) -> io::Result<()> {
                     )?;
                 }
             }
+            "textDocument/hover"
+            | "textDocument/definition"
+            | "textDocument/references"
+            | "textDocument/prepareRename"
+            | "textDocument/rename" => {
+                if let Some(id) = id {
+                    match server.semantic_response(method, &params) {
+                        Ok(result) => write_message(
+                            &mut output,
+                            &json!({"jsonrpc":"2.0","id":id,"result":result}),
+                        )?,
+                        Err(message) => write_message(
+                            &mut output,
+                            &json!({
+                                "jsonrpc":"2.0","id":id,"error":{"code":-32602,"message":message}
+                            }),
+                        )?,
+                    }
+                }
+            }
             "$/cancelRequest" => {}
             _ => {
                 if let Some(id) = id {
@@ -230,6 +254,18 @@ fn serve<R: BufRead, W: Write>(mut input: R, mut output: W) -> io::Result<()> {
 }
 
 impl Server {
+    fn entry(&self) -> PathBuf {
+        let entry = self.root.join("main.zyl");
+        if entry.is_file() {
+            entry
+        } else {
+            self.documents
+                .values()
+                .min_by(|left, right| left.relative.cmp(&right.relative))
+                .map_or(entry, |document| self.root.join(&document.relative))
+        }
+    }
+
     fn safe_relative(&self, uri: &str) -> Option<String> {
         let path = fs::canonicalize(uri_path(uri)?).ok()?;
         let relative = path.strip_prefix(&self.root).ok()?;
@@ -240,15 +276,7 @@ impl Server {
     }
 
     fn analysis(&self) -> language_service::Analysis {
-        let entry = self.root.join("main.zyl");
-        let entry = if entry.is_file() {
-            entry
-        } else {
-            self.documents
-                .values()
-                .min_by(|left, right| left.relative.cmp(&right.relative))
-                .map_or(entry, |document| self.root.join(&document.relative))
-        };
+        let entry = self.entry();
         let overlays = self
             .documents
             .values()
@@ -367,6 +395,200 @@ impl Server {
             }
         }
     }
+
+    fn semantic_response(&self, method: &str, params: &Value) -> Result<Value, String> {
+        let uri = params
+            .pointer("/textDocument/uri")
+            .and_then(Value::as_str)
+            .ok_or("textDocument.uri is required")?;
+        let relative = self
+            .safe_relative(uri)
+            .ok_or("source is outside the Zelyra workspace")?;
+        let analysis = self.analysis();
+        let Some(source) = analysis
+            .sources
+            .iter()
+            .find(|source| source.path == relative)
+        else {
+            return Ok(Value::Null);
+        };
+        let Some(position) = params.get("position") else {
+            return Err("position is required".into());
+        };
+        let Some(offset) = position_offset(&source.text, position) else {
+            return Err("invalid UTF-16 position".into());
+        };
+        let index = semantic_index::SemanticIndex::from_analysis(&analysis);
+        let Some(occurrence) = index.at(&relative, offset) else {
+            return Ok(Value::Null);
+        };
+        let Some(symbol) = index.symbol(&occurrence.key) else {
+            return Ok(Value::Null);
+        };
+        let declaration = occurrence_location(&self.root, &symbol.declaration, &analysis.sources);
+        match method {
+            "textDocument/hover" => Ok(json!({
+                "contents":{"kind":"plaintext","value":symbol.detail},
+                "range": occurrence_range(occurrence, &source.text),
+            })),
+            "textDocument/definition" => Ok(declaration),
+            "textDocument/references" => {
+                let include_declaration = params
+                    .pointer("/context/includeDeclaration")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                Ok(json!(index
+                    .references(&symbol.key, include_declaration)
+                    .iter()
+                    .map(|reference| occurrence_location(&self.root, reference, &analysis.sources))
+                    .collect::<Vec<_>>()))
+            }
+            "textDocument/prepareRename" => Ok(json!({
+                "range": occurrence_range(occurrence, &source.text),
+                "placeholder": symbol.name,
+            })),
+            "textDocument/rename" => self.rename_function(params, &analysis, &index, symbol),
+            _ => Ok(Value::Null),
+        }
+    }
+
+    fn rename_function(
+        &self,
+        params: &Value,
+        analysis: &language_service::Analysis,
+        index: &semantic_index::SemanticIndex,
+        symbol: &semantic_index::Symbol,
+    ) -> Result<Value, String> {
+        if !analysis.success {
+            return Err("fix project diagnostics before renaming".into());
+        }
+        let replacement = params
+            .get("newName")
+            .and_then(Value::as_str)
+            .ok_or("newName is required")?;
+        let tokens = lex(replacement).map_err(|_| "newName must be a Zelyra identifier")?;
+        if !matches!((tokens.first(), tokens.get(1)),
+            (Some(zelyra_lexer::Token { kind: TokenKind::Ident(name), .. }), Some(zelyra_lexer::Token { kind: TokenKind::Eof, .. })) if name == replacement)
+        {
+            return Err("newName must be a single non-keyword identifier".into());
+        }
+        if replacement == symbol.name
+            || index
+                .symbols
+                .iter()
+                .any(|item| item.path == symbol.path && item.name == replacement)
+        {
+            return Err("rename conflicts with an existing function in the same module".into());
+        }
+        let references = index.references(&symbol.key, true);
+        let mut changed = HashMap::<String, String>::new();
+        let mut edits = HashMap::<String, Vec<Value>>::new();
+        for reference in &references {
+            let source = analysis
+                .sources
+                .iter()
+                .find(|source| source.path == reference.path)
+                .ok_or("reference source is unavailable")?;
+            edits
+                .entry(reference.path.clone())
+                .or_default()
+                .push(json!({
+                    "range":occurrence_range(reference, &source.text),"newText":replacement
+                }));
+            changed
+                .entry(reference.path.clone())
+                .or_insert_with(|| source.text.clone());
+        }
+        // Reject shadowing conservatively. Any pre-existing identifier with the
+        // replacement spelling in a touched file needs human review.
+        for path in changed.keys() {
+            let source = analysis
+                .sources
+                .iter()
+                .find(|source| &source.path == path)
+                .ok_or("changed source is unavailable")?;
+            if lex(&source.text)
+                .map_err(|_| "source is not lexable")?
+                .iter()
+                .any(|token| matches!(&token.kind, TokenKind::Ident(name) if name == replacement))
+            {
+                return Err(
+                    "new name already occurs in a changed file; inspect shadowing before renaming"
+                        .into(),
+                );
+            }
+        }
+        for (path, text) in &mut changed {
+            let mut spans = references
+                .iter()
+                .filter(|reference| &reference.path == path)
+                .map(|reference| (reference.start, reference.end))
+                .collect::<Vec<_>>();
+            spans.sort_by_key(|span| std::cmp::Reverse(span.0));
+            for (start, end) in spans {
+                text.replace_range(start..end, replacement);
+            }
+        }
+        let mut overlays = self
+            .documents
+            .values()
+            .map(|document| language_service::SourceOverlay {
+                path: document.relative.clone(),
+                text: document.text.clone(),
+                version: document.version,
+            })
+            .collect::<Vec<_>>();
+        for (path, text) in &changed {
+            if let Some(document) = overlays.iter_mut().find(|document| document.path == *path) {
+                document.text = text.clone();
+            } else {
+                overlays.push(language_service::SourceOverlay {
+                    path: path.clone(),
+                    text: text.clone(),
+                    version: 0,
+                });
+            }
+        }
+        let checked = language_service::analyze(&self.entry(), &overlays);
+        if !checked.success {
+            return Err(format!(
+                "renamed project does not compile: {}",
+                checked
+                    .diagnostics
+                    .first()
+                    .and_then(|item| item.get("message"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("unknown compiler error")
+            ));
+        }
+        let mut paths = edits.keys().cloned().collect::<Vec<_>>();
+        paths.sort();
+        Ok(json!({"documentChanges":paths.iter().map(|path| {
+            let uri = Url::from_file_path(self.root.join(path)).map_or_else(|_| String::new(), |url| url.to_string());
+            json!({
+                "textDocument":{"uri":uri,"version":self.documents.values().find(|document| &document.relative == path).map(|document| document.version)},
+                "edits":edits.get(path).unwrap_or(&Vec::new())
+            })
+        }).collect::<Vec<_>>()}))
+    }
+}
+
+fn occurrence_range(occurrence: &semantic_index::Occurrence, source: &str) -> Value {
+    json!({"start":offset_position(source, occurrence.start),"end":offset_position(source, occurrence.end)})
+}
+
+fn occurrence_location(
+    root: &Path,
+    occurrence: &semantic_index::Occurrence,
+    sources: &[project::ProjectSource],
+) -> Value {
+    let source = sources.iter().find(|source| source.path == occurrence.path);
+    let uri = Url::from_file_path(root.join(&occurrence.path))
+        .map_or_else(|_| String::new(), |url| url.to_string());
+    json!({
+        "uri":uri,
+        "range":source.map_or(Value::Null, |source| occurrence_range(occurrence, &source.text))
+    })
 }
 
 fn declaration_location(
@@ -551,6 +773,75 @@ mod tests {
             fs::read_to_string(root.join("main.zyl")).unwrap(),
             "fn main() {}\n"
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn function_navigation_and_rename_follow_resolved_imports_only() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-lsp-symbol-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        fs::create_dir_all(root.join("src")).unwrap();
+        let main = "import \"src/a.zyl\" as a\nimport \"src/b.zyl\" as b\nfn main() { print(a::answer()) print(b::answer()) print(\"answer\") }\n";
+        fs::write(root.join("main.zyl"), main).unwrap();
+        fs::write(
+            root.join("src/a.zyl"),
+            "pub fn answer() -> Int { return 1 }\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("src/b.zyl"),
+            "pub fn answer() -> Int { return 2 }\n",
+        )
+        .unwrap();
+        let uri = Url::from_file_path(root.join("main.zyl"))
+            .unwrap()
+            .to_string();
+        let server = Server {
+            root: root.clone(),
+            documents: HashMap::new(),
+            shutdown: false,
+        };
+        let call = main.find("a::answer()").unwrap() + 3;
+        let params = json!({"textDocument":{"uri":uri},"position":offset_position(main,call)});
+        let definition = server
+            .semantic_response("textDocument/definition", &params)
+            .unwrap();
+        assert!(definition["uri"].as_str().unwrap().ends_with("/src/a.zyl"));
+        let hover = server
+            .semantic_response("textDocument/hover", &params)
+            .unwrap();
+        assert_eq!(hover["contents"]["value"], "fn answer() -> Int");
+        let references = server
+            .semantic_response("textDocument/references", &params)
+            .unwrap();
+        assert_eq!(references.as_array().unwrap().len(), 1);
+        let rename = server.semantic_response("textDocument/rename", &json!({
+            "textDocument":{"uri":uri},"position":offset_position(main,call),"newName":"result"
+        })).unwrap();
+        let changes = rename["documentChanges"].as_array().unwrap();
+        assert_eq!(changes.len(), 2);
+        assert_eq!(
+            changes
+                .iter()
+                .map(|change| change["edits"].as_array().unwrap().len())
+                .sum::<usize>(),
+            2
+        );
+        assert!(changes.iter().all(|change| !change["textDocument"]["uri"]
+            .as_str()
+            .unwrap()
+            .ends_with("/src/b.zyl")));
+        assert!(server
+            .semantic_response(
+                "textDocument/rename",
+                &json!({
+                    "textDocument":{"uri":uri},"position":offset_position(main,call),"newName":"b"
+                })
+            )
+            .is_err());
         fs::remove_dir_all(root).unwrap();
     }
 }

@@ -1332,8 +1332,10 @@ rehearsals, and owner feedback do not substitute for participant testing.
 - [🧪] **1.1.0 Studio/LSP foundation (unreleased):** Compiler-backed in-memory
   source overlays now feed Studio checks and a stdio `zelyra lsp` prototype.
   The prototype implements versioned diagnostics, document/workspace symbols,
-  and declaration completion. Semantic navigation/refactoring, the eight
-  Studio modules, event channel, full release gates, and RC artifacts remain
+  and declaration completion. Resolved function definition and references now
+  work in Studio and LSP; LSP also previews compiler-checked function renames.
+  Other symbol kinds, the eight Studio modules, event channel, full release
+  gates, and RC artifacts remain
   open; see the [1.1.0 work log](release-plans/1.1.0-studio-deep-native-progress.en.md).
 
 To boost developer ergonomics, flexibility, and architectural modularity without compromising

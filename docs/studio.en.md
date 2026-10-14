@@ -34,10 +34,12 @@ Press **F1** or choose the help action to see a description, options, and an
 example for a supported language term. **Ctrl+Shift+P** opens the searchable
 action finder. **Ctrl+Space** requests completion; available suggestions include
 project declarations and supported local parameters and bindings. F12 opens a
-saved function or type definition in the current or a directly imported file.
-Shift+F12 finds exact lexical identifier occurrences in saved `.zyl` files.
-These occurrence results are not scope-aware semantic references. Save changed
-files before navigating so source locations stay accurate.
+resolved function definition in the current or an imported file. Shift+F12
+shows references to that function and its declaration. These two actions use
+the compiler's linked AST and accept an unsaved current buffer. Other symbol
+kinds are not yet supported by this semantic index. If another tab has unsaved
+changes, save it first so cross-file positions stay accurate. Project-wide
+free-text search remains a separate tool.
 
 Compiler diagnostics update while editing Zelyra project files. For existing
 `.zyl` files the unsaved buffer is checked through an in-memory compiler

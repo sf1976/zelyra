@@ -398,6 +398,7 @@ fn editor_response(
             )
         }
         ("POST", "locals") => local_editor_symbols(state, &parse_json_body(&request.body)?),
+        ("POST", "semantic") => semantic_editor_query(state, &parse_json_body(&request.body)?),
         ("GET", "file") => {
             let query = request
                 .target
@@ -430,6 +431,103 @@ fn editor_response(
         }
         _ => Err((404, "not found".into())),
     }
+}
+
+fn semantic_editor_query(
+    state: &EditorState,
+    value: &Value,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let relative = value
+        .get("path")
+        .and_then(Value::as_str)
+        .filter(|path| path.ends_with(".zyl"))
+        .ok_or((400, "choose a Zelyra source file".into()))?;
+    let _source_path = safe_editor_path(&state.root, relative, false)?;
+    let source = value
+        .get("source")
+        .and_then(Value::as_str)
+        .ok_or((400, "source is required".into()))?;
+    if source.len() > EDITOR_MAX_FILE_BYTES {
+        return Err((413, "source exceeds the 1 MiB editor limit".into()));
+    }
+    let offset = value
+        .get("offset")
+        .and_then(Value::as_u64)
+        .ok_or((400, "UTF-16 offset is required".into()))?;
+    let action = value
+        .get("action")
+        .and_then(Value::as_str)
+        .ok_or((400, "semantic action is required".into()))?;
+    if !matches!(action, "definition" | "references" | "hover") {
+        return Err((400, "unsupported semantic action".into()));
+    }
+    let entry = state.root.join("main.zyl");
+    if !entry.is_file() {
+        return Err((422, "project entry file main.zyl is missing".into()));
+    }
+    let analysis = language_service::analyze(
+        &entry,
+        &[language_service::SourceOverlay {
+            path: relative.into(),
+            text: source.into(),
+            version: value.get("version").and_then(Value::as_i64).unwrap_or(0),
+        }],
+    );
+    let index = semantic_index::SemanticIndex::from_analysis(&analysis);
+    let byte_offset = utf16_to_byte(source, usize::try_from(offset).unwrap_or(usize::MAX));
+    let selected = index.at(relative, byte_offset).or_else(|| {
+        byte_offset
+            .checked_sub(1)
+            .and_then(|offset| index.at(relative, offset))
+    });
+    let Some(occurrence) = selected else {
+        return Ok((
+            200,
+            "application/json; charset=utf-8",
+            json!({"found":false,"version":value.get("version")}).to_string(),
+        ));
+    };
+    let Some(symbol) = index.symbol(&occurrence.key) else {
+        return Ok((
+            200,
+            "application/json; charset=utf-8",
+            json!({"found":false,"version":value.get("version")}).to_string(),
+        ));
+    };
+    let result = match action {
+        "definition" => {
+            let declaration = &symbol.declaration;
+            let target = analysis
+                .sources
+                .iter()
+                .find(|source| source.path == declaration.path)
+                .ok_or((422, "definition source is unavailable".into()))?;
+            json!({
+                "found":true,"path":declaration.path,
+                "start":byte_to_utf16(&target.text, declaration.start),
+                "end":byte_to_utf16(&target.text, declaration.end),
+                "detail":symbol.detail,"version":value.get("version"),
+            })
+        }
+        "references" => json!({
+            "found":true,"symbol":symbol.name,"version":value.get("version"),
+            "matches":index.references(&symbol.key, true).iter().filter_map(|reference| {
+                let source = analysis.sources.iter().find(|source| source.path == reference.path)?;
+                let prefix = source.text.get(..reference.start)?;
+                let line_start = prefix.rfind('\n').map_or(0, |offset| offset + 1);
+                let line_end = source.text[reference.start..].find('\n').map_or(source.text.len(), |offset| reference.start + offset);
+                Some(json!({
+                    "path":reference.path,
+                    "line":prefix.bytes().filter(|byte| *byte == b'\n').count()+1,
+                    "column":prefix[line_start..].encode_utf16().count()+1,
+                    "snippet":source.text[line_start..line_end].trim(),
+                }))
+            }).collect::<Vec<_>>()
+        }),
+        "hover" => json!({"found":true,"detail":symbol.detail,"version":value.get("version")}),
+        _ => unreachable!(),
+    };
+    Ok((200, "application/json; charset=utf-8", result.to_string()))
 }
 
 fn editor_symbols(
@@ -4851,6 +4949,49 @@ fn main() {}
             original
         );
         let _ = fs::remove_dir_all(state.root.clone());
+    }
+
+    #[test]
+    fn studio_definition_and_references_share_the_resolved_function_index() {
+        let state = project();
+        fs::create_dir_all(state.root.join("src")).unwrap();
+        let main = "import \"src/a.zyl\" as a\nimport \"src/b.zyl\" as b\nfn main() { print(a::answer()) print(b::answer()) }\n";
+        fs::write(state.root.join("main.zyl"), main).unwrap();
+        fs::write(
+            state.root.join("src/a.zyl"),
+            "pub fn answer() -> Int { return 1 }\n",
+        )
+        .unwrap();
+        fs::write(
+            state.root.join("src/b.zyl"),
+            "pub fn answer() -> Int { return 2 }\n",
+        )
+        .unwrap();
+        let offset = byte_to_utf16(main, main.find("a::answer()").unwrap() + 3);
+        let definition = semantic_editor_query(
+            &state,
+            &json!({
+                "path":"main.zyl","source":main,"offset":offset,"action":"definition"
+            }),
+        )
+        .unwrap();
+        let payload: Value = serde_json::from_str(&definition.2).unwrap();
+        assert_eq!(payload["path"], "src/a.zyl");
+        let references = semantic_editor_query(
+            &state,
+            &json!({
+                "path":"main.zyl","source":main,"offset":offset,"action":"references"
+            }),
+        )
+        .unwrap();
+        let payload: Value = serde_json::from_str(&references.2).unwrap();
+        assert_eq!(payload["matches"].as_array().unwrap().len(), 2);
+        assert!(payload["matches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|item| item["path"] != "src/b.zyl"));
+        fs::remove_dir_all(state.root.clone()).unwrap();
     }
 
     #[test]

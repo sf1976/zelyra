@@ -1385,8 +1385,10 @@ Rückmeldungen des Projektverantwortlichen ersetzen keinen Teilnehmertest.
 - [🧪] **1.1.0-Grundlage für Studio/LSP (unveröffentlicht):** Compilergeprüfte
   In-Memory-Quelltext-Overlays versorgen nun Studio-Prüfungen und einen
   Stdio-Prototyp von `zelyra lsp`. Dieser liefert versionierte Diagnosen,
-  Dokument-/Workspace-Symbole und Deklarationsvorschläge. Semantische
-  Navigation/Umbenennung, die acht Studio-Werkzeuge, Ereigniskanal,
+  Dokument-/Workspace-Symbole und Deklarationsvorschläge. Aufgelöste
+  Funktionsdefinitionen und Referenzen funktionieren nun in Studio und LSP;
+  das LSP liefert auch compilergeprüfte Funktions-Umbenennungen als Vorschau.
+  Andere Symbolarten, die acht Studio-Werkzeuge, Ereigniskanal,
   vollständige Release-Gates und RC-Artefakte bleiben offen; siehe das
   [1.1.0-Arbeitsprotokoll](release-plans/1.1.0-studio-deep-native-progress.de.md).
 

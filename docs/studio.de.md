@@ -36,11 +36,13 @@ Mit **F1** oder über die Hilfeaktion öffnest du Beschreibung, Optionen und ein
 Beispiel zum unterstützten Sprachbegriff am Cursor. **Strg+Umschalt+P** öffnet
 den durchsuchbaren Aktionsfinder. **Strg+Leertaste** fordert
 Vervollständigungsvorschläge an, darunter Projekterklärungen sowie unterstützte
-lokale Parameter und Bindungen. F12 öffnet die gespeicherte Funktions- oder
-Typdefinition in derselben oder einer direkt importierten Datei. Umschalt+F12
-findet exakt gleiche lexikalische Bezeichner in gespeicherten `.zyl`-Dateien.
-Diese Treffer sind keine scopebewussten semantischen Referenzen. Speichere
-geänderte Dateien vor der Navigation, damit die Fundstellen stimmen.
+lokale Parameter und Bindungen. F12 öffnet die aufgelöste Funktionsdefinition
+in derselben oder einer importierten Datei. Umschalt+F12 zeigt Referenzen auf
+diese Funktion samt Deklaration. Beide Aktionen verwenden den verlinkten
+Compiler-AST und akzeptieren einen ungespeicherten aktuellen Puffer. Weitere
+Symbolarten unterstützt dieser semantische Index noch nicht. Speichere andere
+geänderte Tabs zuerst, damit dateiübergreifende Positionen stimmen. Die freie
+projektweite Textsuche bleibt ein getrenntes Werkzeug.
 
 Compilerdiagnosen werden während der Bearbeitung von Zelyra-Projektdateien
 aktualisiert. Bei vorhandenen `.zyl`-Dateien prüft der Compiler den

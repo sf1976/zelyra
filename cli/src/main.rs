@@ -63,6 +63,7 @@ mod module_cli;
 mod outbox_cli;
 mod project;
 mod route_cli;
+mod semantic_index;
 mod terminal;
 #[cfg(test)]
 mod tests;
