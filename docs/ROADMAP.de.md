@@ -29,6 +29,11 @@ den tatsächlich implementierten Stand.
 
 ## Aktuelle Meilensteine
 
+- [ ] **Geplant für 1.0.5 — strukturierte Zelyra-Logs in der IDE:** Nützliche
+  lokale Protokolle für Projektstart und Anwendungsausführung bereitstellen,
+  die in Studio mit klaren Filtern abrufbar sind und Zugangsdaten sicher
+  behandeln.
+
 - [ ] **Geplant für 1.1.0 — Compose-Prüfung im Installer:** Die Installer
   erkennen Docker Compose v2 oder neuer und unterscheiden es von der veralteten
   Python-Version v1. Docker bleibt für die Kerninstallation optional. Fehlt
@@ -132,6 +137,15 @@ den tatsächlich implementierten Stand.
   Typfehler mit gezielten Vorschlägen, Quellpositionen und kurzem korrigiertem
   Zelyra-Beispiel verbessern. Pipeline-Typkonflikte, Sammlungs-Callbacks und
   ungültige Zahleneingaben brauchen gezielte positive und negative Tests.
+- [x] **1.0.4 Neustartzuverlässigkeit des Rechnungstutorials:** Jedes neu
+  erzeugte Tutorial erhält einen eigenen stabilen Compose-Projektnamensraum.
+  Ältere markierte Tutorials beheben veraltete Datenbankzugangsdaten durch
+  Start einer isolierten Datenbank; das bisherige Volume bleibt erhalten.
+  Compose-v2-Versionsangaben ohne Patchnummer werden aus beiden Ausgabekanälen
+  erkannt. Compose 5.6.0 / Engine 29.8.2 bestehen sowohl die Migration eines
+  alten Volumes als auch einen frischen Start. Alle sechs Tutorialrouten liefern
+  HTTP 200; Beispieldaten: 2 Kunden, 3 Artikel, 1 Rechnung und 2 Positionen. Bei
+  belegtem Port 3306 wurde für MariaDB auf 3307 ausgewichen.
 - [x] **1.0.3 Rechnungstutorialstart über CLI und Studio:** Bei Compose-
   Portkonflikten automatisch freie Folgeports für MariaDB oder die
   Webanwendung wählen, die lokale `.env` und passende MariaDB-URLs aktualisieren

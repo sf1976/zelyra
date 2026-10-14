@@ -8,6 +8,19 @@ releases follow Semantic Versioning independently of the language line.
 
 _Changes for the next release go here._
 
+## 1.0.4 — 2026-10-14
+
+- Give each new invoice tutorial its own stable Compose project name so a
+  recreated tutorial cannot reuse an older MariaDB volume with different local
+  credentials. For older marked tutorials, recover from authentication failure
+  with an isolated database and preserve the old volume. / Jedes neue
+  Rechnungstutorial erhält einen eigenen stabilen Compose-Projektnamen. Ältere
+  markierte Tutorials starten nach einem Authentifizierungsfehler eine isolierte
+  Datenbank; das bisherige Volume bleibt erhalten.
+- Accept Docker Compose v2 minor-only version strings and parse version output
+  from either output stream. / Compose-v2-Versionsangaben ohne Patchnummer
+  akzeptieren und die Versionsausgabe aus beiden Ausgabekanälen auswerten.
+
 ## 1.0.3 — 2026-10-14
 
 - Expand the built-in library with checked math, Unicode-aware text helpers,

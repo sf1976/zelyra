@@ -27,6 +27,10 @@ principles; the roadmap below tracks what is actually implemented.
 
 ## Current milestones
 
+- [ ] **Planned for 1.0.5 — IDE access to structured Zelyra logs:** Provide
+  useful local logs for project setup and application execution, accessible
+  from Studio with clear filtering and safe handling of credentials.
+
 - [ ] **Planned for 1.1.0 — Compose check in the installer:** Installers detect
   Docker Compose v2 or newer and distinguish it from obsolete Python Compose
   v1. Docker remains optional for the core installation. When Compose v2 is
@@ -118,6 +122,14 @@ principles; the roadmap below tracks what is actually implemented.
   type errors with targeted suggestions, source spans, and a short corrected
   Zelyra example. Pipeline type mismatches, collection callbacks, and invalid
   numeric inputs need targeted positive and negative tests.
+- [x] **1.0.4 invoice tutorial restart reliability:** Give each newly generated
+  tutorial a unique stable Compose project namespace. For older marked invoice
+  tutorials, recover from stale database credentials by starting an isolated
+  database while preserving the previous volume. Accept Compose v2 minor-only
+  version output from either output stream. Compose 5.6.0 / Engine 29.8.2
+  verified both this recovery and a fresh start; all six tutorial routes
+  returned HTTP 200 and sample counts were 2 customers, 3 items, 1 invoice,
+  and 2 lines. The port-fallback path selected DB port 3307 when 3306 was busy.
 - [x] **1.0.3 invoice tutorial startup through CLI and Studio:** On Compose
   port conflicts, automatically select a free next port for MariaDB or the web
   application, update the local `.env` and matching MariaDB URLs, and retry a
