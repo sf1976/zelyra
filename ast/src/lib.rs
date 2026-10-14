@@ -651,6 +651,7 @@ pub enum Stmt {
     },
     For {
         name: String,
+        additional_names: Vec<String>,
         iterable: Expr,
         body: Block,
         span: Span,
@@ -801,4 +802,24 @@ pub enum BinaryOp {
     GreaterEqual,
     And,
     Or,
+}
+
+impl Stmt {
+    pub fn span(&self) -> Span {
+        match self {
+            Stmt::Let { span, .. } => *span,
+            Stmt::BindOrAssign { span, .. } => *span,
+            Stmt::Expr(expr) => expr.span,
+            Stmt::Return { span, .. } => *span,
+            Stmt::If { span, .. } => *span,
+            Stmt::While { span, .. } => *span,
+            Stmt::For { span, .. } => *span,
+            Stmt::Break { span } => *span,
+            Stmt::Continue { span } => *span,
+            Stmt::Transaction { span, .. } => *span,
+            Stmt::Parallel { span, .. } => *span,
+            Stmt::Loop { span, .. } => *span,
+            Stmt::Match { span, .. } => *span,
+        }
+    }
 }

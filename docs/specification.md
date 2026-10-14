@@ -807,3 +807,17 @@ range. A zero step is a runtime error, and the step expression must have type
 `Int`. `range(start, end, step)` returns the same values as an array; as with
 the two-argument form, materialized range arrays are limited to one million
 elements. Range loops remain lazy and do not materialize an array.
+
+`for` can destructure fixed-size tuple elements from arrays or sets. The tuple
+pattern must list exactly the element type's arity, and each binding receives
+the corresponding tuple member's type:
+
+~~~zelyra
+for (key, value) in entries(prices) {
+    print(key + ": " + to_string(value))
+}
+~~~
+
+A single loop variable continues to bind the whole element, including a tuple.
+Tuple patterns reject duplicate names and fail type checking for non-tuple
+elements or a mismatched arity.

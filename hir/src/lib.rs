@@ -94,6 +94,8 @@ pub enum HirStmt {
     For {
         name: String,
         local: LocalId,
+        additional_names: Vec<String>,
+        additional_locals: Vec<LocalId>,
         iterable: HirExpr,
         body: HirBlock,
         span: Span,
@@ -442,6 +444,7 @@ impl<'a> Resolver<'a> {
             },
             Stmt::For {
                 name,
+                additional_names,
                 iterable,
                 body,
                 span,
@@ -449,11 +452,17 @@ impl<'a> Resolver<'a> {
                 let iterable = self.expr(iterable);
                 self.scopes.push(HashMap::new());
                 let local = self.bind(name.clone(), *span);
+                let additional_locals = additional_names
+                    .iter()
+                    .map(|name| self.bind(name.clone(), *span))
+                    .collect();
                 let body = self.block(body);
                 self.scopes.pop();
                 HirStmt::For {
                     name: name.clone(),
                     local,
+                    additional_names: additional_names.clone(),
+                    additional_locals,
                     iterable,
                     body,
                     span: *span,
@@ -695,6 +704,86 @@ impl<'a> Resolver<'a> {
                             | "text_contains"
                             | "text_trim"
                             | "text_chars"
+                            | "abs"
+                            | "min"
+                            | "max"
+                            | "clamp"
+                            | "to_string"
+                            | "parse_int"
+                            | "parse_float"
+                            | "sort"
+                            | "sort_desc"
+                            | "reverse"
+                            | "slice"
+                            | "concat"
+                            | "join"
+                            | "text_to_lower"
+                            | "text_to_upper"
+                            | "text_starts_with"
+                            | "text_ends_with"
+                            | "text_replace"
+                            | "text_split"
+                            | "split"
+                            | "text_pad_left"
+                            | "text_pad_right"
+                            | "get_or"
+                            | "get_or_default"
+                            | "map_increment"
+                            | "has_key"
+                            | "unwrap_or"
+                            | "sqrt"
+                            | "pow"
+                            | "floor"
+                            | "ceil"
+                            | "round"
+                            | "text_index_of"
+                            | "text_repeat"
+                            | "text_is_empty"
+                            | "text_capitalize"
+                            | "unique"
+                            | "array_sum"
+                            | "avg"
+                            | "min_of"
+                            | "max_of"
+                            | "chunk"
+                            | "flatten"
+                            | "set_union"
+                            | "set_intersection"
+                            | "set_difference"
+                            | "map_remove"
+                            | "map_merge"
+                            | "date_add_days"
+                            | "date_diff_days"
+                            | "is_ok"
+                            | "is_err"
+                            | "is_some"
+                            | "is_none"
+                            | "base64_encode"
+                            | "base64_decode"
+                            | "hash_sha256"
+                            | "uuid_v4"
+                            | "url_encode"
+                            | "url_decode"
+                            | "text_trim_start"
+                            | "text_trim_end"
+                            | "text_substring"
+                            | "text_is_blank"
+                            | "zip"
+                            | "entries"
+                            | "dedup"
+                            | "to_int"
+                            | "to_float"
+                            | "parse_bool"
+                            | "is_before"
+                            | "is_after"
+                            | "panic"
+                            | "path_join"
+                            | "path_filename"
+                            | "path_extension"
+                            | "path_dir"
+                            | "file_exists"
+                            | "dir_exists"
+                            | "file_size"
                             | "text_replace_result"
                             | "text_split_result"
                             | "decimal_scaled_result"

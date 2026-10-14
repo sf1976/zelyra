@@ -1,4 +1,5 @@
 use rand_core::{OsRng, RngCore};
+use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::io::{self, BufRead, Read, Write};
@@ -12,6 +13,162 @@ use zelyra_ast::temporal::{
     valid_time,
 };
 use zelyra_ast::*;
+
+const BASE64_CHARS: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+fn base64_encode_bytes(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let b0 = chunk[0];
+        let b1 = if chunk.len() > 1 { chunk[1] } else { 0 };
+        let b2 = if chunk.len() > 2 { chunk[2] } else { 0 };
+        out.push(BASE64_CHARS[(b0 >> 2) as usize] as char);
+        out.push(BASE64_CHARS[(((b0 & 0x03) << 4) | (b1 >> 4)) as usize] as char);
+        if chunk.len() > 1 {
+            out.push(BASE64_CHARS[(((b1 & 0x0f) << 2) | (b2 >> 6)) as usize] as char);
+        } else {
+            out.push('=');
+        }
+        if chunk.len() > 2 {
+            out.push(BASE64_CHARS[(b2 & 0x3f) as usize] as char);
+        } else {
+            out.push('=');
+        }
+    }
+    out
+}
+
+fn base64_decode_str(input: &str) -> Result<String, String> {
+    let input = input.trim_end_matches('=');
+    let mut bytes = Vec::new();
+    let mut buf = 0u32;
+    let mut bits = 0;
+    for c in input.chars() {
+        if c.is_ascii_whitespace() {
+            continue;
+        }
+        let val = match c {
+            'A'..='Z' => c as u32 - 'A' as u32,
+            'a'..='z' => c as u32 - 'a' as u32 + 26,
+            '0'..='9' => c as u32 - '0' as u32 + 52,
+            '+' => 62,
+            '/' => 63,
+            _ => return Err(format!("invalid base64 character: `{c}`")),
+        };
+        buf = (buf << 6) | val;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            bytes.push((buf >> bits) as u8);
+            buf &= (1 << bits) - 1;
+        }
+    }
+    String::from_utf8(bytes).map_err(|e| format!("invalid UTF-8 in base64 payload: {e}"))
+}
+
+fn url_encode_str(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for byte in s.as_bytes() {
+        match byte {
+            b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(*byte as char);
+            }
+            _ => {
+                use std::fmt::Write;
+                let _ = write!(out, "%{:02X}", byte);
+            }
+        }
+    }
+    out
+}
+
+fn url_decode_str(s: &str) -> Result<String, String> {
+    let mut bytes = Vec::new();
+    let chars: Vec<char> = s.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == '%' {
+            if i + 2 >= chars.len() {
+                return Err("incomplete percent encoding".into());
+            }
+            let hex_str: String = chars[i + 1..=i + 2].iter().collect();
+            let b = u8::from_str_radix(&hex_str, 16)
+                .map_err(|_| format!("invalid hex in percent encoding: `%{hex_str}`"))?;
+            bytes.push(b);
+            i += 3;
+        } else if chars[i] == '+' {
+            bytes.push(b' ');
+            i += 1;
+        } else {
+            let mut buf = [0u8; 4];
+            let encoded = chars[i].encode_utf8(&mut buf);
+            bytes.extend_from_slice(encoded.as_bytes());
+            i += 1;
+        }
+    }
+    String::from_utf8(bytes).map_err(|e| format!("invalid UTF-8 in url decoded content: {e}"))
+}
+
+const MAX_TEXT_BUILTIN_OUTPUT_BYTES: usize = 16 * 1024 * 1024;
+
+fn pad_text_to_codepoints(
+    text: &str,
+    target_len: i64,
+    pad: &str,
+    left: bool,
+) -> Result<String, String> {
+    let target_len = usize::try_from(target_len)
+        .map_err(|_| "padding target length must be non-negative".to_owned())?;
+    if target_len > MAX_TEXT_BUILTIN_OUTPUT_BYTES {
+        return Err("padding target length exceeds the 16 MiB text limit".into());
+    }
+    let text_len = text.chars().count();
+    if text_len >= target_len {
+        return Ok(text.to_owned());
+    }
+
+    let pad_chars = if pad.is_empty() {
+        vec![' ']
+    } else {
+        pad.chars().collect::<Vec<_>>()
+    };
+    let needed = target_len - text_len;
+    let fill_bytes = (0..needed).try_fold(0usize, |bytes, index| {
+        bytes.checked_add(pad_chars[index % pad_chars.len()].len_utf8())
+    });
+    let Some(output_bytes) = fill_bytes.and_then(|fill| text.len().checked_add(fill)) else {
+        return Err("padded text size overflow".into());
+    };
+    if output_bytes > MAX_TEXT_BUILTIN_OUTPUT_BYTES {
+        return Err("padded text exceeds the 16 MiB text limit".into());
+    }
+
+    let fill = (0..needed)
+        .map(|index| pad_chars[index % pad_chars.len()])
+        .collect::<String>();
+    Ok(if left {
+        format!("{fill}{text}")
+    } else {
+        format!("{text}{fill}")
+    })
+}
+
+fn generate_uuid_v4() -> Result<String, String> {
+    let mut bytes = [0u8; 16];
+    let mut rng = OsRng;
+    rng.try_fill_bytes(&mut bytes)
+        .map_err(|e| format!("random access failed: {e}"))?;
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    Ok(format!(
+        "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+        bytes[0], bytes[1], bytes[2], bytes[3],
+        bytes[4], bytes[5],
+        bytes[6], bytes[7],
+        bytes[8], bytes[9],
+        bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]
+    ))
+}
 
 mod csv;
 mod decimal_math;
@@ -3776,7 +3933,7 @@ fn check_capability_expr(
                         declared,
                         errors,
                     );
-                } else if name == "random_int" {
+                } else if name == "random_int" || name == "uuid_v4" {
                     require_capability(
                         "Random",
                         "random access",
@@ -3832,7 +3989,10 @@ fn check_capability_expr(
                         declared,
                         errors,
                     );
-                } else if name == "read_text" || name == "read_text_result" {
+                } else if matches!(
+                    name.as_str(),
+                    "read_text" | "read_text_result" | "file_exists" | "dir_exists" | "file_size"
+                ) {
                     require_capability(
                         "FileSystem",
                         "file-system read access",
@@ -4723,6 +4883,7 @@ impl<'a> Checker<'a> {
             }
             Stmt::For {
                 name,
+                additional_names,
                 iterable,
                 body,
                 ..
@@ -4740,14 +4901,49 @@ impl<'a> Checker<'a> {
                         Type::Unknown
                     }
                 };
+                let binding_count = additional_names.len() + 1;
+                let binding_types = if binding_count == 1 {
+                    vec![element_type]
+                } else {
+                    match element_type {
+                        Type::Tuple(items) if items.len() == binding_count => items,
+                        Type::Tuple(items) => {
+                            self.error(
+                                iterable.span,
+                                format!(
+                                    "tuple loop pattern has {binding_count} variables but the value has {} elements",
+                                    items.len()
+                                ),
+                            );
+                            vec![Type::Unknown; binding_count]
+                        }
+                        Type::Unknown => vec![Type::Unknown; binding_count],
+                        other => {
+                            self.error(
+                                iterable.span,
+                                format!("tuple loop pattern expects tuple values, found `{other}`"),
+                            );
+                            vec![Type::Unknown; binding_count]
+                        }
+                    }
+                };
                 scopes.push(HashMap::new());
                 scopes.last_mut().unwrap().insert(
                     name.clone(),
                     Variable {
-                        ty: element_type,
+                        ty: binding_types[0].clone(),
                         mutable: false,
                     },
                 );
+                for (name, ty) in additional_names
+                    .iter()
+                    .zip(binding_types.into_iter().skip(1))
+                {
+                    scopes
+                        .last_mut()
+                        .unwrap()
+                        .insert(name.clone(), Variable { ty, mutable: false });
+                }
                 self.loop_depth += 1;
                 self.check_block(body, scopes, expected);
                 self.loop_depth -= 1;
@@ -5720,10 +5916,18 @@ impl<'a> Checker<'a> {
                     let argument = self.check_expr(&args[0], scopes);
                     if !matches!(
                         argument,
-                        Type::Array(_) | Type::Tuple(_) | Type::Set(_) | Type::Map(_, _)
+                        Type::Array(_)
+                            | Type::Tuple(_)
+                            | Type::Set(_)
+                            | Type::Map(_, _)
+                            | Type::String
+                            | Type::Bytes
                     ) && argument != Type::Unknown
                     {
-                        self.error(args[0].span, "`len` expects an array, Tuple, Set or Map");
+                        self.error(
+                            args[0].span,
+                            "`len` expects an array, Tuple, Set, Map, String or Bytes",
+                        );
                     }
                     Type::Int
                 } else if name == "append" {
@@ -5860,6 +6064,567 @@ impl<'a> Checker<'a> {
                     let text = self.check_expr(&args[0], scopes);
                     self.expect_type(&Type::String, &text, args[0].span);
                     Type::Array(Box::new(Type::String))
+                } else if name == "abs" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "abs expects exactly one numeric argument");
+                        return Type::Unknown;
+                    }
+                    let ty = self.check_expr(&args[0], scopes);
+                    if matches!(ty, Type::Int | Type::Float | Type::Decimal) {
+                        ty
+                    } else if ty == Type::Unknown {
+                        Type::Unknown
+                    } else {
+                        self.error(
+                            args[0].span,
+                            format!("abs expects Int, Float, or Decimal, found {ty}"),
+                        );
+                        Type::Unknown
+                    }
+                } else if name == "min" || name == "max" {
+                    if args.len() != 2 {
+                        self.error(expr.span, format!("{name} expects exactly two arguments"));
+                        return Type::Unknown;
+                    }
+                    let a = self.check_expr(&args[0], scopes);
+                    let b = self.check_expr(&args[1], scopes);
+                    self.expect_type(&a, &b, args[1].span);
+                    if !matches!(
+                        &a,
+                        Type::Int
+                            | Type::UInt
+                            | Type::Float
+                            | Type::Decimal
+                            | Type::String
+                            | Type::Unknown
+                    ) {
+                        self.error(
+                            args[0].span,
+                            format!(
+                                "{name} expects matching numeric or String arguments, found {a}"
+                            ),
+                        );
+                        return Type::Unknown;
+                    }
+                    a
+                } else if name == "clamp" {
+                    if args.len() != 3 {
+                        self.error(expr.span, "clamp expects val, min, and max");
+                        return Type::Unknown;
+                    }
+                    let val = self.check_expr(&args[0], scopes);
+                    let min_val = self.check_expr(&args[1], scopes);
+                    let max_val = self.check_expr(&args[2], scopes);
+                    self.expect_type(&val, &min_val, args[1].span);
+                    self.expect_type(&val, &max_val, args[2].span);
+                    if !matches!(
+                        &val,
+                        Type::Int | Type::UInt | Type::Float | Type::Decimal | Type::Unknown
+                    ) {
+                        self.error(
+                            args[0].span,
+                            format!("clamp expects matching numeric arguments, found {val}"),
+                        );
+                        return Type::Unknown;
+                    }
+                    val
+                } else if name == "to_string" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "to_string expects exactly one argument");
+                        return Type::Unknown;
+                    }
+                    let _ = self.check_expr(&args[0], scopes);
+                    Type::String
+                } else if name == "parse_int" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "parse_int expects exactly one String");
+                        return Type::Unknown;
+                    }
+                    let ty = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::String, &ty, args[0].span);
+                    Type::Result(Box::new(Type::Int), Box::new(Type::String))
+                } else if name == "parse_float" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "parse_float expects exactly one String");
+                        return Type::Unknown;
+                    }
+                    let ty = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::String, &ty, args[0].span);
+                    Type::Result(Box::new(Type::Float), Box::new(Type::String))
+                } else if name == "sort" || name == "sort_desc" || name == "reverse" {
+                    if args.len() != 1 {
+                        self.error(expr.span, format!("{name} expects exactly one array"));
+                        return Type::Unknown;
+                    }
+                    let ty = self.check_expr(&args[0], scopes);
+                    match ty {
+                        Type::Array(inner) => Type::Array(inner),
+                        Type::Unknown => Type::Unknown,
+                        other => {
+                            self.error(
+                                args[0].span,
+                                format!("{name} expects an array, found {other}"),
+                            );
+                            Type::Unknown
+                        }
+                    }
+                } else if name == "slice" {
+                    if args.len() != 3 {
+                        self.error(expr.span, "slice expects array, start index, and length");
+                        return Type::Unknown;
+                    }
+                    let arr_ty = self.check_expr(&args[0], scopes);
+                    let start_ty = self.check_expr(&args[1], scopes);
+                    let len_ty = self.check_expr(&args[2], scopes);
+                    self.expect_type(&Type::Int, &start_ty, args[1].span);
+                    self.expect_type(&Type::Int, &len_ty, args[2].span);
+                    match arr_ty {
+                        Type::Array(inner) => Type::Array(inner),
+                        Type::Unknown => Type::Unknown,
+                        other => {
+                            self.error(
+                                args[0].span,
+                                format!("slice expects an array, found {other}"),
+                            );
+                            Type::Unknown
+                        }
+                    }
+                } else if name == "concat" {
+                    if args.len() != 2 {
+                        self.error(expr.span, "concat expects two arrays of the same type");
+                        return Type::Unknown;
+                    }
+                    let a_ty = self.check_expr(&args[0], scopes);
+                    let b_ty = self.check_expr(&args[1], scopes);
+                    self.expect_type(&a_ty, &b_ty, args[1].span);
+                    a_ty
+                } else if name == "join" {
+                    if args.len() != 2 {
+                        self.error(
+                            expr.span,
+                            "join expects an array of Strings and a delimiter",
+                        );
+                        return Type::Unknown;
+                    }
+                    let arr_ty = self.check_expr(&args[0], scopes);
+                    let sep_ty = self.check_expr(&args[1], scopes);
+                    self.expect_type(&Type::Array(Box::new(Type::String)), &arr_ty, args[0].span);
+                    self.expect_type(&Type::String, &sep_ty, args[1].span);
+                    Type::String
+                } else if name == "text_to_lower" || name == "text_to_upper" {
+                    if args.len() != 1 {
+                        self.error(expr.span, format!("{name} expects exactly one String"));
+                        return Type::Unknown;
+                    }
+                    let ty = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::String, &ty, args[0].span);
+                    Type::String
+                } else if name == "text_starts_with" || name == "text_ends_with" {
+                    if args.len() != 2 {
+                        self.error(expr.span, format!("{name} expects text and pattern"));
+                        return Type::Unknown;
+                    }
+                    let text = self.check_expr(&args[0], scopes);
+                    let pat = self.check_expr(&args[1], scopes);
+                    self.expect_type(&Type::String, &text, args[0].span);
+                    self.expect_type(&Type::String, &pat, args[1].span);
+                    Type::Bool
+                } else if name == "text_split" || name == "split" {
+                    if args.len() != 2 {
+                        self.error(expr.span, format!("{name} expects text and delimiter"));
+                        return Type::Unknown;
+                    }
+                    let text = self.check_expr(&args[0], scopes);
+                    let sep = self.check_expr(&args[1], scopes);
+                    self.expect_type(&Type::String, &text, args[0].span);
+                    self.expect_type(&Type::String, &sep, args[1].span);
+                    Type::Array(Box::new(Type::String))
+                } else if name == "text_replace" {
+                    if args.len() != 3 {
+                        self.error(
+                            expr.span,
+                            "text_replace expects text, search, and replacement",
+                        );
+                        return Type::Unknown;
+                    }
+                    let text = self.check_expr(&args[0], scopes);
+                    let old = self.check_expr(&args[1], scopes);
+                    let new = self.check_expr(&args[2], scopes);
+                    self.expect_type(&Type::String, &text, args[0].span);
+                    self.expect_type(&Type::String, &old, args[1].span);
+                    self.expect_type(&Type::String, &new, args[2].span);
+                    Type::String
+                } else if name == "text_pad_left" || name == "text_pad_right" {
+                    if args.len() != 3 {
+                        self.error(
+                            expr.span,
+                            format!("{name} expects text, target length, and pad char"),
+                        );
+                        return Type::Unknown;
+                    }
+                    let text = self.check_expr(&args[0], scopes);
+                    let target_len = self.check_expr(&args[1], scopes);
+                    let pad_char = self.check_expr(&args[2], scopes);
+                    self.expect_type(&Type::String, &text, args[0].span);
+                    self.expect_type(&Type::Int, &target_len, args[1].span);
+                    self.expect_type(&Type::String, &pad_char, args[2].span);
+                    Type::String
+                } else if name == "get_or" || name == "get_or_default" {
+                    if args.len() != 3 {
+                        self.error(
+                            expr.span,
+                            format!("{name} expects a Map, key, and default fallback value"),
+                        );
+                        return Type::Unknown;
+                    }
+                    let map_ty = self.check_expr(&args[0], scopes);
+                    let key_ty = self.check_expr(&args[1], scopes);
+                    let fallback_ty = self.check_expr(&args[2], scopes);
+                    match map_ty {
+                        Type::Map(k, v) => {
+                            self.expect_type(&k, &key_ty, args[1].span);
+                            self.expect_type(&v, &fallback_ty, args[2].span);
+                            *v
+                        }
+                        Type::Unknown => fallback_ty,
+                        other => {
+                            self.error(
+                                args[0].span,
+                                format!("{name} expects a Map, found {other}"),
+                            );
+                            fallback_ty
+                        }
+                    }
+                } else if name == "map_increment" {
+                    if args.len() != 2 {
+                        self.error(expr.span, "map_increment expects a Map<Int> and key");
+                        return Type::Unknown;
+                    }
+                    let map_ty = self.check_expr(&args[0], scopes);
+                    let key_ty = self.check_expr(&args[1], scopes);
+                    match map_ty {
+                        Type::Map(key, value) => {
+                            self.expect_type(&key, &key_ty, args[1].span);
+                            self.expect_type(&Type::Int, &value, args[0].span);
+                            Type::Result(
+                                Box::new(Type::Map(key, Box::new(Type::Int))),
+                                Box::new(Type::String),
+                            )
+                        }
+                        Type::Unknown => Type::Result(
+                            Box::new(Type::Map(Box::new(Type::Unknown), Box::new(Type::Int))),
+                            Box::new(Type::String),
+                        ),
+                        other => {
+                            self.error(
+                                args[0].span,
+                                format!("map_increment expects a Map, found {other}"),
+                            );
+                            Type::Unknown
+                        }
+                    }
+                } else if name == "has_key" {
+                    if args.len() != 2 {
+                        self.error(expr.span, "has_key expects a Map and key");
+                        return Type::Unknown;
+                    }
+                    let map_ty = self.check_expr(&args[0], scopes);
+                    let key_ty = self.check_expr(&args[1], scopes);
+                    match map_ty {
+                        Type::Map(k, _) => {
+                            self.expect_type(&k, &key_ty, args[1].span);
+                            Type::Bool
+                        }
+                        Type::Unknown => Type::Bool,
+                        other => {
+                            self.error(
+                                args[0].span,
+                                format!("has_key expects a Map, found {other}"),
+                            );
+                            Type::Bool
+                        }
+                    }
+                } else if name == "sqrt" || name == "floor" || name == "ceil" {
+                    if args.len() != 1 {
+                        self.error(expr.span, format!("{name} expects exactly one Float"));
+                        return Type::Unknown;
+                    }
+                    let ty = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::Float, &ty, args[0].span);
+                    Type::Float
+                } else if name == "pow" {
+                    if args.len() != 2 {
+                        self.error(expr.span, "pow expects base (Float) and exponent (Float)");
+                        return Type::Unknown;
+                    }
+                    let base = self.check_expr(&args[0], scopes);
+                    let exp = self.check_expr(&args[1], scopes);
+                    self.expect_type(&Type::Float, &base, args[0].span);
+                    self.expect_type(&Type::Float, &exp, args[1].span);
+                    Type::Float
+                } else if name == "round" {
+                    if args.len() != 2 {
+                        self.error(
+                            expr.span,
+                            "round expects number (Float) and decimal places (Int)",
+                        );
+                        return Type::Unknown;
+                    }
+                    let num = self.check_expr(&args[0], scopes);
+                    let decimals = self.check_expr(&args[1], scopes);
+                    self.expect_type(&Type::Float, &num, args[0].span);
+                    self.expect_type(&Type::Int, &decimals, args[1].span);
+                    Type::Float
+                } else if name == "text_index_of" {
+                    if args.len() != 2 {
+                        self.error(expr.span, "text_index_of expects text and substring");
+                        return Type::Unknown;
+                    }
+                    let text = self.check_expr(&args[0], scopes);
+                    let sub = self.check_expr(&args[1], scopes);
+                    self.expect_type(&Type::String, &text, args[0].span);
+                    self.expect_type(&Type::String, &sub, args[1].span);
+                    Type::Option(Box::new(Type::Int))
+                } else if name == "text_repeat" {
+                    if args.len() != 2 {
+                        self.error(expr.span, "text_repeat expects text and count (Int)");
+                        return Type::Unknown;
+                    }
+                    let text = self.check_expr(&args[0], scopes);
+                    let count = self.check_expr(&args[1], scopes);
+                    self.expect_type(&Type::String, &text, args[0].span);
+                    self.expect_type(&Type::Int, &count, args[1].span);
+                    Type::String
+                } else if name == "text_is_empty" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "text_is_empty expects exactly one String");
+                        return Type::Unknown;
+                    }
+                    let text = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::String, &text, args[0].span);
+                    Type::Bool
+                } else if name == "text_capitalize" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "text_capitalize expects exactly one String");
+                        return Type::Unknown;
+                    }
+                    let text = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::String, &text, args[0].span);
+                    Type::String
+                } else if name == "unique" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "unique expects an array");
+                        return Type::Unknown;
+                    }
+                    let ty = self.check_expr(&args[0], scopes);
+                    match ty {
+                        Type::Array(inner) => Type::Array(inner),
+                        Type::Unknown => Type::Unknown,
+                        other => {
+                            self.error(
+                                args[0].span,
+                                format!("unique expects an array, found {other}"),
+                            );
+                            Type::Unknown
+                        }
+                    }
+                } else if name == "array_sum" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "sum expects an array of numbers");
+                        return Type::Unknown;
+                    }
+                    let ty = self.check_expr(&args[0], scopes);
+                    match ty {
+                        Type::Array(inner)
+                            if matches!(*inner, Type::Int | Type::Float | Type::Decimal) =>
+                        {
+                            *inner
+                        }
+                        Type::Unknown => Type::Unknown,
+                        other => {
+                            self.error(
+                                args[0].span,
+                                format!(
+                                    "sum expects array of Int, Float, or Decimal, found {other}"
+                                ),
+                            );
+                            Type::Unknown
+                        }
+                    }
+                } else if name == "avg" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "avg expects an array of numbers");
+                        return Type::Unknown;
+                    }
+                    let ty = self.check_expr(&args[0], scopes);
+                    match ty {
+                        Type::Array(inner) if matches!(*inner, Type::Int | Type::Float) => {
+                            Type::Float
+                        }
+                        Type::Array(inner) if matches!(*inner, Type::Decimal) => Type::Decimal,
+                        Type::Unknown => Type::Unknown,
+                        other => {
+                            self.error(
+                                args[0].span,
+                                format!("avg expects array of numbers, found {other}"),
+                            );
+                            Type::Unknown
+                        }
+                    }
+                } else if name == "min_of" || name == "max_of" {
+                    if args.len() != 1 {
+                        self.error(expr.span, format!("{name} expects an array"));
+                        return Type::Unknown;
+                    }
+                    let ty = self.check_expr(&args[0], scopes);
+                    match ty {
+                        Type::Array(inner)
+                            if matches!(
+                                *inner,
+                                Type::Int | Type::UInt | Type::Float | Type::Decimal | Type::String
+                            ) =>
+                        {
+                            Type::Option(inner)
+                        }
+                        Type::Array(inner) if inner.as_ref() == &Type::Unknown => {
+                            Type::Option(inner)
+                        }
+                        Type::Array(inner) => {
+                            self.error(
+                                args[0].span,
+                                format!(
+                                    "{name} expects an array of numbers or String, found {}",
+                                    inner
+                                ),
+                            );
+                            Type::Option(inner)
+                        }
+                        Type::Unknown => Type::Unknown,
+                        other => {
+                            self.error(
+                                args[0].span,
+                                format!("{name} expects an array, found {other}"),
+                            );
+                            Type::Unknown
+                        }
+                    }
+                } else if name == "chunk" {
+                    if args.len() != 2 {
+                        self.error(expr.span, "chunk expects an array and chunk size (Int)");
+                        return Type::Unknown;
+                    }
+                    let arr_ty = self.check_expr(&args[0], scopes);
+                    let size_ty = self.check_expr(&args[1], scopes);
+                    self.expect_type(&Type::Int, &size_ty, args[1].span);
+                    match arr_ty {
+                        Type::Array(inner) => Type::Array(Box::new(Type::Array(inner))),
+                        Type::Unknown => Type::Unknown,
+                        other => {
+                            self.error(
+                                args[0].span,
+                                format!("chunk expects an array, found {other}"),
+                            );
+                            Type::Unknown
+                        }
+                    }
+                } else if name == "flatten" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "flatten expects a nested array");
+                        return Type::Unknown;
+                    }
+                    let arr_ty = self.check_expr(&args[0], scopes);
+                    match arr_ty {
+                        Type::Array(inner) => {
+                            match *inner {
+                                Type::Array(element) => Type::Array(element),
+                                other => {
+                                    self.error(args[0].span, format!("flatten expects array of arrays, found array of {other}"));
+                                    Type::Unknown
+                                }
+                            }
+                        }
+                        Type::Unknown => Type::Unknown,
+                        other => {
+                            self.error(
+                                args[0].span,
+                                format!("flatten expects an array, found {other}"),
+                            );
+                            Type::Unknown
+                        }
+                    }
+                } else if name == "set_union"
+                    || name == "set_intersection"
+                    || name == "set_difference"
+                {
+                    if args.len() != 2 {
+                        self.error(expr.span, format!("{name} expects two Sets"));
+                        return Type::Unknown;
+                    }
+                    let a_ty = self.check_expr(&args[0], scopes);
+                    let b_ty = self.check_expr(&args[1], scopes);
+                    self.expect_type(&a_ty, &b_ty, args[1].span);
+                    match a_ty {
+                        Type::Set(inner) => Type::Set(inner),
+                        Type::Unknown => Type::Unknown,
+                        other => {
+                            self.error(args[0].span, format!("{name} expects Sets, found {other}"));
+                            Type::Unknown
+                        }
+                    }
+                } else if name == "map_remove" {
+                    if args.len() != 2 {
+                        self.error(expr.span, "map_remove expects a Map and key");
+                        return Type::Unknown;
+                    }
+                    let map_ty = self.check_expr(&args[0], scopes);
+                    let key_ty = self.check_expr(&args[1], scopes);
+                    match map_ty {
+                        Type::Map(k, v) => {
+                            self.expect_type(&k, &key_ty, args[1].span);
+                            Type::Map(k, v)
+                        }
+                        Type::Unknown => Type::Unknown,
+                        other => {
+                            self.error(
+                                args[0].span,
+                                format!("map_remove expects a Map, found {other}"),
+                            );
+                            Type::Unknown
+                        }
+                    }
+                } else if name == "map_merge" {
+                    if args.len() != 2 {
+                        self.error(expr.span, "map_merge expects two Maps of the same type");
+                        return Type::Unknown;
+                    }
+                    let a_ty = self.check_expr(&args[0], scopes);
+                    let b_ty = self.check_expr(&args[1], scopes);
+                    self.expect_type(&a_ty, &b_ty, args[1].span);
+                    a_ty
+                } else if name == "unwrap_or" {
+                    if args.len() != 2 {
+                        self.error(
+                            expr.span,
+                            "unwrap_or expects an Option and fallback default",
+                        );
+                        return Type::Unknown;
+                    }
+                    let opt_ty = self.check_expr(&args[0], scopes);
+                    let fallback_ty = self.check_expr(&args[1], scopes);
+                    match opt_ty {
+                        Type::Option(inner) => {
+                            self.expect_type(&inner, &fallback_ty, args[1].span);
+                            *inner
+                        }
+                        Type::Unknown => fallback_ty,
+                        other => {
+                            self.error(
+                                args[0].span,
+                                format!("unwrap_or expects Option, found {other}"),
+                            );
+                            fallback_ty
+                        }
+                    }
                 } else if name == "text_replace_result" {
                     if args.len() != 3 {
                         self.error(
@@ -5983,6 +6748,222 @@ impl<'a> Checker<'a> {
                         self.error(expr.span, "now expects no arguments");
                     }
                     Type::Timestamp
+                } else if name == "date_add_days" {
+                    if args.len() != 2 {
+                        self.error(expr.span, "date_add_days expects Date and Int days");
+                        return Type::Unknown;
+                    }
+                    let d = self.check_expr(&args[0], scopes);
+                    let days = self.check_expr(&args[1], scopes);
+                    self.expect_type(&Type::Date, &d, args[0].span);
+                    self.expect_type(&Type::Int, &days, args[1].span);
+                    Type::Date
+                } else if name == "date_diff_days" {
+                    if args.len() != 2 {
+                        self.error(expr.span, "date_diff_days expects two Dates");
+                        return Type::Unknown;
+                    }
+                    let a = self.check_expr(&args[0], scopes);
+                    let b = self.check_expr(&args[1], scopes);
+                    self.expect_type(&Type::Date, &a, args[0].span);
+                    self.expect_type(&Type::Date, &b, args[1].span);
+                    Type::Int
+                } else if name == "is_ok" || name == "is_err" {
+                    if args.len() != 1 {
+                        self.error(expr.span, format!("{name} expects one Result"));
+                        return Type::Unknown;
+                    }
+                    let ty = self.check_expr(&args[0], scopes);
+                    if !matches!(ty, Type::Result(_, _)) && ty != Type::Unknown {
+                        self.error(args[0].span, format!("{name} expects Result, found {ty}"));
+                    }
+                    Type::Bool
+                } else if name == "is_some" || name == "is_none" {
+                    if args.len() != 1 {
+                        self.error(expr.span, format!("{name} expects one Option"));
+                        return Type::Unknown;
+                    }
+                    let ty = self.check_expr(&args[0], scopes);
+                    if !matches!(ty, Type::Option(_)) && ty != Type::Unknown {
+                        self.error(args[0].span, format!("{name} expects Option, found {ty}"));
+                    }
+                    Type::Bool
+                } else if name == "is_before" || name == "is_after" {
+                    if args.len() != 2 {
+                        self.error(expr.span, format!("{name} expects two Dates"));
+                        return Type::Unknown;
+                    }
+                    let a = self.check_expr(&args[0], scopes);
+                    let b = self.check_expr(&args[1], scopes);
+                    self.expect_type(&Type::Date, &a, args[0].span);
+                    self.expect_type(&Type::Date, &b, args[1].span);
+                    Type::Bool
+                } else if name == "base64_encode" || name == "hash_sha256" || name == "url_encode" {
+                    if args.len() != 1 {
+                        self.error(expr.span, format!("{name} expects one String"));
+                        return Type::Unknown;
+                    }
+                    let s = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::String, &s, args[0].span);
+                    Type::String
+                } else if name == "base64_decode" || name == "url_decode" {
+                    if args.len() != 1 {
+                        self.error(expr.span, format!("{name} expects one String"));
+                        return Type::Unknown;
+                    }
+                    let s = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::String, &s, args[0].span);
+                    Type::Result(Box::new(Type::String), Box::new(Type::String))
+                } else if name == "uuid_v4" {
+                    if !args.is_empty() {
+                        self.error(expr.span, "uuid_v4 expects no arguments");
+                        return Type::Unknown;
+                    }
+                    Type::String
+                } else if name == "text_trim_start" || name == "text_trim_end" {
+                    if args.len() != 1 {
+                        self.error(expr.span, format!("{name} expects one String"));
+                        return Type::Unknown;
+                    }
+                    let s = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::String, &s, args[0].span);
+                    Type::String
+                } else if name == "text_is_blank" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "text_is_blank expects one String");
+                        return Type::Unknown;
+                    }
+                    let s = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::String, &s, args[0].span);
+                    Type::Bool
+                } else if name == "text_substring" {
+                    if args.len() != 3 {
+                        self.error(
+                            expr.span,
+                            "text_substring expects String, start Int, and length Int",
+                        );
+                        return Type::Unknown;
+                    }
+                    let s = self.check_expr(&args[0], scopes);
+                    let start = self.check_expr(&args[1], scopes);
+                    let len = self.check_expr(&args[2], scopes);
+                    self.expect_type(&Type::String, &s, args[0].span);
+                    self.expect_type(&Type::Int, &start, args[1].span);
+                    self.expect_type(&Type::Int, &len, args[2].span);
+                    Type::String
+                } else if name == "to_int" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "to_int expects one argument");
+                        return Type::Unknown;
+                    }
+                    let _ = self.check_expr(&args[0], scopes);
+                    Type::Int
+                } else if name == "to_float" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "to_float expects one argument");
+                        return Type::Unknown;
+                    }
+                    let _ = self.check_expr(&args[0], scopes);
+                    Type::Float
+                } else if name == "parse_bool" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "parse_bool expects one String");
+                        return Type::Unknown;
+                    }
+                    let s = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::String, &s, args[0].span);
+                    Type::Result(Box::new(Type::Bool), Box::new(Type::String))
+                } else if name == "panic" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "panic expects one String message");
+                        return Type::Unknown;
+                    }
+                    let _ = self.check_expr(&args[0], scopes);
+                    Type::Unknown
+                } else if name == "entries" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "entries expects a Map");
+                        return Type::Unknown;
+                    }
+                    let ty = self.check_expr(&args[0], scopes);
+                    match ty {
+                        Type::Map(k, v) => Type::Array(Box::new(Type::Tuple(vec![*k, *v]))),
+                        Type::Unknown => Type::Array(Box::new(Type::Unknown)),
+                        other => {
+                            self.error(
+                                args[0].span,
+                                format!("entries expects a Map, found {other}"),
+                            );
+                            Type::Unknown
+                        }
+                    }
+                } else if name == "zip" {
+                    if args.len() != 2 {
+                        self.error(expr.span, "zip expects two Arrays");
+                        return Type::Unknown;
+                    }
+                    let a = self.check_expr(&args[0], scopes);
+                    let b = self.check_expr(&args[1], scopes);
+                    match (a, b) {
+                        (Type::Array(ta), Type::Array(tb)) => {
+                            Type::Array(Box::new(Type::Tuple(vec![*ta, *tb])))
+                        }
+                        _ => Type::Array(Box::new(Type::Unknown)),
+                    }
+                } else if name == "dedup" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "dedup expects an Array");
+                        return Type::Unknown;
+                    }
+                    let ty = self.check_expr(&args[0], scopes);
+                    match ty {
+                        Type::Array(inner) => Type::Array(inner),
+                        Type::Unknown => Type::Unknown,
+                        other => {
+                            self.error(
+                                args[0].span,
+                                format!("dedup expects an Array, found {other}"),
+                            );
+                            Type::Unknown
+                        }
+                    }
+                } else if name == "path_join" {
+                    if args.len() != 2 {
+                        self.error(expr.span, "path_join expects two String path segments");
+                        return Type::Unknown;
+                    }
+                    let a = self.check_expr(&args[0], scopes);
+                    let b = self.check_expr(&args[1], scopes);
+                    self.expect_type(&Type::String, &a, args[0].span);
+                    self.expect_type(&Type::String, &b, args[1].span);
+                    Type::String
+                } else if matches!(
+                    name.as_str(),
+                    "path_filename" | "path_extension" | "path_dir"
+                ) {
+                    if args.len() != 1 {
+                        self.error(expr.span, format!("{name} expects one String path"));
+                        return Type::Unknown;
+                    }
+                    let s = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::String, &s, args[0].span);
+                    Type::String
+                } else if name == "file_exists" || name == "dir_exists" {
+                    if args.len() != 1 {
+                        self.error(expr.span, format!("{name} expects one String path"));
+                        return Type::Unknown;
+                    }
+                    let s = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::String, &s, args[0].span);
+                    Type::Bool
+                } else if name == "file_size" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "file_size expects one String path");
+                        return Type::Unknown;
+                    }
+                    let s = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::String, &s, args[0].span);
+                    Type::Result(Box::new(Type::Int), Box::new(Type::String))
                 } else if name == "date" {
                     if args.len() != 1 {
                         self.error(expr.span, "date expects one ISO date string (YYYY-MM-DD)");
@@ -8098,7 +9079,7 @@ fn execute_internal(
     Ok(interpreter.output)
 }
 
-const MAX_FUNCTION_CALL_DEPTH: usize = 24;
+const MAX_FUNCTION_CALL_DEPTH: usize = 20;
 
 struct Interpreter<'program> {
     functions: HashMap<String, &'program Function>,
@@ -8301,6 +9282,86 @@ fn is_runtime_builtin(name: &str) -> bool {
             | "text_contains"
             | "text_trim"
             | "text_chars"
+            | "abs"
+            | "min"
+            | "max"
+            | "clamp"
+            | "to_string"
+            | "parse_int"
+            | "parse_float"
+            | "sort"
+            | "sort_desc"
+            | "reverse"
+            | "slice"
+            | "concat"
+            | "join"
+            | "text_to_lower"
+            | "text_to_upper"
+            | "text_starts_with"
+            | "text_ends_with"
+            | "text_replace"
+            | "text_split"
+            | "split"
+            | "text_pad_left"
+            | "text_pad_right"
+            | "get_or"
+            | "get_or_default"
+            | "map_increment"
+            | "has_key"
+            | "unwrap_or"
+            | "sqrt"
+            | "pow"
+            | "floor"
+            | "ceil"
+            | "round"
+            | "text_index_of"
+            | "text_repeat"
+            | "text_is_empty"
+            | "text_capitalize"
+            | "unique"
+            | "array_sum"
+            | "avg"
+            | "min_of"
+            | "max_of"
+            | "chunk"
+            | "flatten"
+            | "set_union"
+            | "set_intersection"
+            | "set_difference"
+            | "map_remove"
+            | "map_merge"
+            | "date_add_days"
+            | "date_diff_days"
+            | "is_ok"
+            | "is_err"
+            | "is_some"
+            | "is_none"
+            | "is_before"
+            | "is_after"
+            | "base64_encode"
+            | "base64_decode"
+            | "hash_sha256"
+            | "uuid_v4"
+            | "url_encode"
+            | "url_decode"
+            | "text_trim_start"
+            | "text_trim_end"
+            | "text_substring"
+            | "text_is_blank"
+            | "zip"
+            | "entries"
+            | "dedup"
+            | "to_int"
+            | "to_float"
+            | "parse_bool"
+            | "panic"
+            | "path_join"
+            | "path_filename"
+            | "path_extension"
+            | "path_dir"
+            | "file_exists"
+            | "dir_exists"
+            | "file_size"
             | "text_replace_result"
             | "text_split_result"
             | "decimal_scaled_result"
@@ -9810,6 +10871,7 @@ impl<'program> Interpreter<'program> {
             }
             Stmt::For {
                 name,
+                additional_names,
                 iterable,
                 body,
                 span,
@@ -9875,7 +10937,41 @@ impl<'program> Interpreter<'program> {
                 for value in values {
                     self.consume_step(*span)?;
                     env.push();
-                    env.declare(name.clone(), value, false);
+                    if additional_names.is_empty() {
+                        env.declare(name.clone(), value, false);
+                    } else {
+                        let Value::Tuple(values) = value else {
+                            env.pop();
+                            return Err(self.runtime_error(
+                                *span,
+                                "tuple loop pattern received a non-tuple value",
+                            ));
+                        };
+                        if values.len() != additional_names.len() + 1 {
+                            env.pop();
+                            return Err(self.runtime_error(
+                                *span,
+                                format!(
+                                    "tuple loop pattern expects {} values, found {}",
+                                    additional_names.len() + 1,
+                                    values.len()
+                                ),
+                            ));
+                        }
+                        let mut values = values.into_iter();
+                        env.declare(
+                            name.clone(),
+                            values.next().expect("tuple arity checked"),
+                            false,
+                        );
+                        for name in additional_names {
+                            env.declare(
+                                name.clone(),
+                                values.next().expect("tuple arity checked"),
+                                false,
+                            );
+                        }
+                    }
                     let flow = self.exec_block(body, env)?;
                     env.pop();
                     match flow {
@@ -10542,10 +11638,12 @@ impl<'program> Interpreter<'program> {
                     Ok(Value::Int(values.len() as i64))
                 }
                 Value::Map(entries) => Ok(Value::Int(entries.len() as i64)),
+                Value::String(s) => Ok(Value::Int(s.chars().count() as i64)),
+                Value::Bytes(b) => Ok(Value::Int(b.len() as i64)),
                 value => Err(self.runtime_error(
                     span,
                     format!(
-                        "`len` expects an array, Tuple, Set or Map, found {}",
+                        "`len` expects an array, Tuple, Set, Map, String or Bytes, found {}",
                         value.ty()
                     ),
                 )),
@@ -10622,6 +11720,1428 @@ impl<'program> Interpreter<'program> {
                         .collect(),
                 )),
                 _ => Err(self.runtime_error(args[0].span, "text_chars expects a String")),
+            }
+        } else if name == "abs" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "abs expects exactly one numeric argument"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::Int(val) => val
+                    .checked_abs()
+                    .map(Value::Int)
+                    .ok_or_else(|| self.runtime_error(args[0].span, "Int overflow in abs")),
+                Value::Float(val) if val.is_finite() => Ok(Value::Float(val.abs())),
+                Value::Float(_) => {
+                    Err(self.runtime_error(args[0].span, "abs requires a finite Float"))
+                }
+                Value::Decimal(val) => val
+                    .checked_abs()
+                    .map(Value::Decimal)
+                    .ok_or_else(|| self.runtime_error(args[0].span, "Decimal overflow in abs")),
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("abs expects numeric value, found {}", other.ty()),
+                )),
+            }
+        } else if name == "min" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(span, "min expects exactly two arguments"));
+            }
+            let a = self.eval(&args[0], env)?;
+            let b = self.eval(&args[1], env)?;
+            match (&a, &b) {
+                (Value::Int(va), Value::Int(vb)) => Ok(Value::Int(*va.min(vb))),
+                (Value::UInt(va), Value::UInt(vb)) => Ok(Value::UInt(*va.min(vb))),
+                (Value::Float(va), Value::Float(vb)) if va.is_finite() && vb.is_finite() => {
+                    Ok(Value::Float(va.min(*vb)))
+                }
+                (Value::Float(_), Value::Float(_)) => {
+                    Err(self.runtime_error(span, "min requires finite Float arguments"))
+                }
+                (Value::Decimal(va), Value::Decimal(vb)) => Ok(Value::Decimal(*va.min(vb))),
+                (Value::String(va), Value::String(vb)) => {
+                    if va <= vb {
+                        Ok(a)
+                    } else {
+                        Ok(b)
+                    }
+                }
+                _ => {
+                    Err(self
+                        .runtime_error(span, "min expects matching numeric or String arguments"))
+                }
+            }
+        } else if name == "max" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(span, "max expects exactly two arguments"));
+            }
+            let a = self.eval(&args[0], env)?;
+            let b = self.eval(&args[1], env)?;
+            match (&a, &b) {
+                (Value::Int(va), Value::Int(vb)) => Ok(Value::Int(*va.max(vb))),
+                (Value::UInt(va), Value::UInt(vb)) => Ok(Value::UInt(*va.max(vb))),
+                (Value::Float(va), Value::Float(vb)) if va.is_finite() && vb.is_finite() => {
+                    Ok(Value::Float(va.max(*vb)))
+                }
+                (Value::Float(_), Value::Float(_)) => {
+                    Err(self.runtime_error(span, "max requires finite Float arguments"))
+                }
+                (Value::Decimal(va), Value::Decimal(vb)) => Ok(Value::Decimal(*va.max(vb))),
+                (Value::String(va), Value::String(vb)) => {
+                    if va >= vb {
+                        Ok(a)
+                    } else {
+                        Ok(b)
+                    }
+                }
+                _ => {
+                    Err(self
+                        .runtime_error(span, "max expects matching numeric or String arguments"))
+                }
+            }
+        } else if name == "clamp" {
+            if args.len() != 3 {
+                return Err(self.runtime_error(span, "clamp expects val, min, and max"));
+            }
+            let val = self.eval(&args[0], env)?;
+            let min_val = self.eval(&args[1], env)?;
+            let max_val = self.eval(&args[2], env)?;
+            match (&val, &min_val, &max_val) {
+                (Value::Int(v), Value::Int(mn), Value::Int(mx)) => {
+                    if mn > mx {
+                        return Err(
+                            self.runtime_error(span, "clamp minimum must not exceed maximum")
+                        );
+                    }
+                    Ok(Value::Int(*v.max(mn).min(mx)))
+                }
+                (Value::UInt(v), Value::UInt(mn), Value::UInt(mx)) => {
+                    if mn > mx {
+                        return Err(
+                            self.runtime_error(span, "clamp minimum must not exceed maximum")
+                        );
+                    }
+                    Ok(Value::UInt(*v.max(mn).min(mx)))
+                }
+                (Value::Float(v), Value::Float(mn), Value::Float(mx))
+                    if v.is_finite() && mn.is_finite() && mx.is_finite() =>
+                {
+                    if mn > mx {
+                        return Err(
+                            self.runtime_error(span, "clamp minimum must not exceed maximum")
+                        );
+                    }
+                    Ok(Value::Float(v.max(*mn).min(*mx)))
+                }
+                (Value::Float(_), Value::Float(_), Value::Float(_)) => {
+                    Err(self.runtime_error(span, "clamp requires finite Float arguments"))
+                }
+                (Value::Decimal(v), Value::Decimal(mn), Value::Decimal(mx)) => {
+                    if mn > mx {
+                        return Err(
+                            self.runtime_error(span, "clamp minimum must not exceed maximum")
+                        );
+                    }
+                    Ok(Value::Decimal(*v.max(mn).min(mx)))
+                }
+                _ => Err(self.runtime_error(span, "clamp expects matching numeric arguments")),
+            }
+        } else if name == "to_string" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "to_string expects exactly one argument"));
+            }
+            let val = self.eval(&args[0], env)?;
+            Ok(Value::String(val.output()))
+        } else if name == "parse_int" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "parse_int expects exactly one String"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::String(text) => match text.trim().parse::<i64>() {
+                    Ok(parsed) => Ok(Value::Result(Ok(Box::new(Value::Int(parsed))))),
+                    Err(_) => Ok(Value::Result(Err(Box::new(Value::String(format!(
+                        "invalid integer: {text}"
+                    )))))),
+                },
+                _ => Err(self.runtime_error(args[0].span, "parse_int expects a String")),
+            }
+        } else if name == "parse_float" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "parse_float expects exactly one String"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::String(text) => match text.trim().parse::<f64>() {
+                    Ok(parsed) if parsed.is_finite() => {
+                        Ok(Value::Result(Ok(Box::new(Value::Float(parsed)))))
+                    }
+                    Err(_) => Ok(Value::Result(Err(Box::new(Value::String(format!(
+                        "invalid float: {text}"
+                    )))))),
+                    Ok(_) => Ok(Value::Result(Err(Box::new(Value::String(format!(
+                        "invalid float: {text}"
+                    )))))),
+                },
+                _ => Err(self.runtime_error(args[0].span, "parse_float expects a String")),
+            }
+        } else if name == "sort" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "sort expects exactly one array"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::Array(mut items) => {
+                    items.sort_by(|a, b| match (a, b) {
+                        (Value::Int(x), Value::Int(y)) => x.cmp(y),
+                        (Value::UInt(x), Value::UInt(y)) => x.cmp(y),
+                        (Value::Float(x), Value::Float(y)) => {
+                            x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal)
+                        }
+                        (Value::Decimal(x), Value::Decimal(y)) => x.cmp(y),
+                        (Value::String(x), Value::String(y)) => x.cmp(y),
+                        _ => std::cmp::Ordering::Equal,
+                    });
+                    Ok(Value::Array(items))
+                }
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("sort expects array, found {}", other.ty()),
+                )),
+            }
+        } else if name == "sort_desc" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "sort_desc expects exactly one array"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::Array(mut items) => {
+                    items.sort_by(|a, b| match (a, b) {
+                        (Value::Int(x), Value::Int(y)) => y.cmp(x),
+                        (Value::UInt(x), Value::UInt(y)) => y.cmp(x),
+                        (Value::Float(x), Value::Float(y)) => {
+                            y.partial_cmp(x).unwrap_or(std::cmp::Ordering::Equal)
+                        }
+                        (Value::Decimal(x), Value::Decimal(y)) => y.cmp(x),
+                        (Value::String(x), Value::String(y)) => y.cmp(x),
+                        _ => std::cmp::Ordering::Equal,
+                    });
+                    Ok(Value::Array(items))
+                }
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("sort_desc expects array, found {}", other.ty()),
+                )),
+            }
+        } else if name == "reverse" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "reverse expects exactly one array"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::Array(mut items) => {
+                    items.reverse();
+                    Ok(Value::Array(items))
+                }
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("reverse expects array, found {}", other.ty()),
+                )),
+            }
+        } else if name == "slice" {
+            if args.len() != 3 {
+                return Err(
+                    self.runtime_error(span, "slice expects array, start index, and length")
+                );
+            }
+            let arr = self.eval(&args[0], env)?;
+            let start = self.eval(&args[1], env)?;
+            let len_val = self.eval(&args[2], env)?;
+            match (arr, start, len_val) {
+                (Value::Array(items), Value::Int(start_idx), Value::Int(length)) => {
+                    if start_idx < 0 || length < 0 {
+                        return Err(self.runtime_error(span, "slice indices must be non-negative"));
+                    }
+                    let start_usize = start_idx as usize;
+                    let len_usize = length as usize;
+                    if start_usize > items.len() {
+                        return Ok(Value::Array(Vec::new()));
+                    }
+                    let end_usize = (start_usize + len_usize).min(items.len());
+                    Ok(Value::Array(items[start_usize..end_usize].to_vec()))
+                }
+                _ => {
+                    Err(self.runtime_error(span, "slice expects array, Int start, and Int length"))
+                }
+            }
+        } else if name == "concat" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(span, "concat expects two arrays"));
+            }
+            let a = self.eval(&args[0], env)?;
+            let b = self.eval(&args[1], env)?;
+            match (a, b) {
+                (Value::Array(mut a_items), Value::Array(b_items)) => {
+                    a_items.extend(b_items);
+                    Ok(Value::Array(a_items))
+                }
+                _ => Err(self.runtime_error(span, "concat expects two arrays")),
+            }
+        } else if name == "join" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(span, "join expects array of Strings and delimiter"));
+            }
+            let arr = self.eval(&args[0], env)?;
+            let sep = self.eval(&args[1], env)?;
+            match (arr, sep) {
+                (Value::Array(items), Value::String(delimiter)) => {
+                    let mut pieces = Vec::new();
+                    for item in items {
+                        pieces.push(item.output());
+                    }
+                    Ok(Value::String(pieces.join(&delimiter)))
+                }
+                _ => Err(self.runtime_error(span, "join expects array and String delimiter")),
+            }
+        } else if name == "text_to_lower" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "text_to_lower expects exactly one String"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::String(text) => Ok(Value::String(text.to_lowercase())),
+                _ => Err(self.runtime_error(args[0].span, "text_to_lower expects a String")),
+            }
+        } else if name == "text_to_upper" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "text_to_upper expects exactly one String"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::String(text) => Ok(Value::String(text.to_uppercase())),
+                _ => Err(self.runtime_error(args[0].span, "text_to_upper expects a String")),
+            }
+        } else if name == "text_starts_with" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(span, "text_starts_with expects text and prefix"));
+            }
+            match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
+                (Value::String(text), Value::String(prefix)) => {
+                    Ok(Value::Bool(text.starts_with(&prefix)))
+                }
+                _ => Err(self.runtime_error(span, "text_starts_with expects two Strings")),
+            }
+        } else if name == "text_ends_with" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(span, "text_ends_with expects text and suffix"));
+            }
+            match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
+                (Value::String(text), Value::String(suffix)) => {
+                    Ok(Value::Bool(text.ends_with(&suffix)))
+                }
+                _ => Err(self.runtime_error(span, "text_ends_with expects two Strings")),
+            }
+        } else if name == "text_split" || name == "split" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(span, format!("{name} expects text and delimiter")));
+            }
+            match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
+                (Value::String(text), Value::String(sep)) => {
+                    let parts = text
+                        .split(&sep)
+                        .map(|s| Value::String(s.to_string()))
+                        .collect();
+                    Ok(Value::Array(parts))
+                }
+                _ => Err(self.runtime_error(span, format!("{name} expects two Strings"))),
+            }
+        } else if name == "text_replace" {
+            if args.len() != 3 {
+                return Err(
+                    self.runtime_error(span, "text_replace expects text, search, and replacement")
+                );
+            }
+            match (
+                self.eval(&args[0], env)?,
+                self.eval(&args[1], env)?,
+                self.eval(&args[2], env)?,
+            ) {
+                (Value::String(text), Value::String(search), Value::String(replacement)) => {
+                    Ok(Value::String(text.replace(&search, &replacement)))
+                }
+                _ => Err(self.runtime_error(span, "text_replace expects three Strings")),
+            }
+        } else if name == "text_pad_left" {
+            if args.len() != 3 {
+                return Err(self.runtime_error(
+                    span,
+                    "text_pad_left expects text, target length, and pad char",
+                ));
+            }
+            match (
+                self.eval(&args[0], env)?,
+                self.eval(&args[1], env)?,
+                self.eval(&args[2], env)?,
+            ) {
+                (Value::String(text), Value::Int(target_len), Value::String(pad)) => {
+                    pad_text_to_codepoints(&text, target_len, &pad, true)
+                        .map(Value::String)
+                        .map_err(|message| self.runtime_error(args[1].span, message))
+                }
+                _ => Err(self.runtime_error(span, "text_pad_left expects String, Int, and String")),
+            }
+        } else if name == "text_pad_right" {
+            if args.len() != 3 {
+                return Err(self.runtime_error(
+                    span,
+                    "text_pad_right expects text, target length, and pad char",
+                ));
+            }
+            match (
+                self.eval(&args[0], env)?,
+                self.eval(&args[1], env)?,
+                self.eval(&args[2], env)?,
+            ) {
+                (Value::String(text), Value::Int(target_len), Value::String(pad)) => {
+                    pad_text_to_codepoints(&text, target_len, &pad, false)
+                        .map(Value::String)
+                        .map_err(|message| self.runtime_error(args[1].span, message))
+                }
+                _ => {
+                    Err(self.runtime_error(span, "text_pad_right expects String, Int, and String"))
+                }
+            }
+        } else if name == "get_or" || name == "get_or_default" {
+            if args.len() != 3 {
+                return Err(self.runtime_error(
+                    span,
+                    format!("{name} expects a Map, key, and fallback default"),
+                ));
+            }
+            let map_val = self.eval(&args[0], env)?;
+            let key_val = self.eval(&args[1], env)?;
+            let default_val = self.eval(&args[2], env)?;
+            match map_val {
+                Value::Map(entries) => {
+                    for (k, v) in entries {
+                        if k == key_val {
+                            return Ok(v);
+                        }
+                    }
+                    Ok(default_val)
+                }
+                _ => Err(self.runtime_error(args[0].span, format!("{name} expects a Map"))),
+            }
+        } else if name == "map_increment" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(span, "map_increment expects a Map<Int> and key"));
+            }
+            let map = self.eval(&args[0], env)?;
+            let key = self.eval(&args[1], env)?;
+            let Value::Map(mut entries) = map else {
+                return Err(self.runtime_error(args[0].span, "map_increment expects a Map"));
+            };
+            let current = entries.iter().position(|(existing, _)| existing == &key);
+            let next = match current {
+                Some(index) => match &entries[index].1 {
+                    Value::Int(value) => match value.checked_add(1) {
+                        Some(next) => next,
+                        None => {
+                            return Ok(Value::Result(Err(Box::new(Value::String(
+                                "map counter overflow".into(),
+                            )))));
+                        }
+                    },
+                    other => {
+                        return Err(self.runtime_error(
+                            args[0].span,
+                            format!("map_increment expects Int values, found {}", other.ty()),
+                        ));
+                    }
+                },
+                None => 1,
+            };
+            if let Some(index) = current {
+                entries[index].1 = Value::Int(next);
+            } else {
+                entries.push((key, Value::Int(next)));
+            }
+            Ok(Value::Result(Ok(Box::new(Value::Map(entries)))))
+        } else if name == "has_key" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(span, "has_key expects a Map and key"));
+            }
+            let map_val = self.eval(&args[0], env)?;
+            let key_val = self.eval(&args[1], env)?;
+            match map_val {
+                Value::Map(entries) => {
+                    let exists = entries.iter().any(|(k, _)| k == &key_val);
+                    Ok(Value::Bool(exists))
+                }
+                _ => Err(self.runtime_error(args[0].span, "has_key expects a Map")),
+            }
+        } else if name == "sqrt" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "sqrt expects one Float"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::Float(f) => {
+                    if !f.is_finite() || f < 0.0 {
+                        return Err(
+                            self.runtime_error(span, "sqrt requires a finite non-negative Float")
+                        );
+                    }
+                    Ok(Value::Float(f.sqrt()))
+                }
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("sqrt expects Float, found {}", other.ty()),
+                )),
+            }
+        } else if name == "pow" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(span, "pow expects base and exponent"));
+            }
+            match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
+                (Value::Float(b), Value::Float(e)) => {
+                    let result = b.powf(e);
+                    if !b.is_finite() || !e.is_finite() || !result.is_finite() {
+                        return Err(self.runtime_error(
+                            span,
+                            "pow is undefined or outside the finite Float range",
+                        ));
+                    }
+                    Ok(Value::Float(result))
+                }
+                _ => Err(self.runtime_error(span, "pow expects Float arguments")),
+            }
+        } else if name == "floor" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "floor expects one Float"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::Float(f) if f.is_finite() => Ok(Value::Float(f.floor())),
+                Value::Float(_) => Err(self.runtime_error(span, "floor requires a finite Float")),
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("floor expects Float, found {}", other.ty()),
+                )),
+            }
+        } else if name == "ceil" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "ceil expects one Float"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::Float(f) if f.is_finite() => Ok(Value::Float(f.ceil())),
+                Value::Float(_) => Err(self.runtime_error(span, "ceil requires a finite Float")),
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("ceil expects Float, found {}", other.ty()),
+                )),
+            }
+        } else if name == "round" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(span, "round expects number and decimal places"));
+            }
+            match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
+                (Value::Float(f), Value::Int(d)) => {
+                    if !f.is_finite() {
+                        return Err(
+                            self.runtime_error(args[0].span, "round requires a finite Float")
+                        );
+                    }
+                    if !(-15..=15).contains(&d) {
+                        return Err(self.runtime_error(
+                            args[1].span,
+                            "round decimal places must be between -15 and 15",
+                        ));
+                    }
+                    let factor = (10.0_f64).powi(d as i32);
+                    let rounded = (f * factor).round() / factor;
+                    if !rounded.is_finite() {
+                        return Err(self.runtime_error(
+                            span,
+                            "round result is outside the finite Float range",
+                        ));
+                    }
+                    Ok(Value::Float(rounded))
+                }
+                _ => Err(self.runtime_error(span, "round expects Float and Int")),
+            }
+        } else if name == "text_index_of" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(span, "text_index_of expects text and substring"));
+            }
+            match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
+                (Value::String(text), Value::String(sub)) => match text.find(&sub) {
+                    Some(byte_pos) => {
+                        let char_pos = text[..byte_pos].chars().count();
+                        Ok(Value::Option(Some(Box::new(Value::Int(char_pos as i64)))))
+                    }
+                    None => Ok(Value::Option(None)),
+                },
+                _ => Err(self.runtime_error(span, "text_index_of expects two Strings")),
+            }
+        } else if name == "text_repeat" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(span, "text_repeat expects text and count"));
+            }
+            match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
+                (Value::String(text), Value::Int(count)) => {
+                    if count < 0 {
+                        return Err(
+                            self.runtime_error(span, "text_repeat count must be non-negative")
+                        );
+                    }
+                    let output_bytes = text.len().checked_mul(count as usize);
+                    if output_bytes.is_none_or(|bytes| bytes > MAX_TEXT_BUILTIN_OUTPUT_BYTES) {
+                        return Err(self.runtime_error(
+                            span,
+                            "text_repeat output exceeds the 16 MiB text limit",
+                        ));
+                    }
+                    Ok(Value::String(text.repeat(count as usize)))
+                }
+                _ => Err(self.runtime_error(span, "text_repeat expects String and Int")),
+            }
+        } else if name == "text_is_empty" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "text_is_empty expects one String"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::String(text) => Ok(Value::Bool(text.is_empty())),
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("text_is_empty expects String, found {}", other.ty()),
+                )),
+            }
+        } else if name == "text_capitalize" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "text_capitalize expects one String"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::String(text) => {
+                    let mut c = text.chars();
+                    let res = match c.next() {
+                        None => String::new(),
+                        Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+                    };
+                    Ok(Value::String(res))
+                }
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("text_capitalize expects String, found {}", other.ty()),
+                )),
+            }
+        } else if name == "unique" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "unique expects one array"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::Array(items) => {
+                    let mut out: Vec<Value> = Vec::new();
+                    for item in items {
+                        if !out.iter().any(|existing| existing == &item) {
+                            out.push(item);
+                        }
+                    }
+                    Ok(Value::Array(out))
+                }
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("unique expects array, found {}", other.ty()),
+                )),
+            }
+        } else if name == "array_sum" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "sum expects one array"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::Array(items) => {
+                    if items.is_empty() {
+                        return Ok(Value::Int(0));
+                    }
+                    match &items[0] {
+                        Value::Int(_) => {
+                            let mut s: i64 = 0;
+                            for it in items {
+                                if let Value::Int(n) = it {
+                                    s = s.checked_add(n).ok_or_else(|| {
+                                        self.runtime_error(span, "sum integer overflow")
+                                    })?;
+                                }
+                            }
+                            Ok(Value::Int(s))
+                        }
+                        Value::Float(_) => {
+                            let mut s: f64 = 0.0;
+                            for it in items {
+                                if let Value::Float(n) = it {
+                                    if !n.is_finite() {
+                                        return Err(self.runtime_error(
+                                            span,
+                                            "array_sum requires finite Float elements",
+                                        ));
+                                    }
+                                    s += n;
+                                    if !s.is_finite() {
+                                        return Err(
+                                            self.runtime_error(span, "array_sum Float overflow")
+                                        );
+                                    }
+                                }
+                            }
+                            Ok(Value::Float(s))
+                        }
+                        Value::Decimal(_) => {
+                            let mut s: i128 = 0;
+                            for it in items {
+                                if let Value::Decimal(n) = it {
+                                    s = s.checked_add(n).ok_or_else(|| {
+                                        self.runtime_error(span, "sum decimal overflow")
+                                    })?;
+                                }
+                            }
+                            Ok(Value::Decimal(s))
+                        }
+                        other => Err(self.runtime_error(
+                            span,
+                            format!("sum expects numbers, found {}", other.ty()),
+                        )),
+                    }
+                }
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("sum expects array, found {}", other.ty()),
+                )),
+            }
+        } else if name == "avg" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "avg expects one array"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::Array(items) => {
+                    if items.is_empty() {
+                        return Err(self.runtime_error(span, "avg of empty array is undefined"));
+                    }
+                    let count = items.len() as f64;
+                    match &items[0] {
+                        Value::Int(_) => {
+                            let mut s: f64 = 0.0;
+                            for it in items {
+                                if let Value::Int(n) = it {
+                                    s += n as f64;
+                                }
+                            }
+                            Ok(Value::Float(s / count))
+                        }
+                        Value::Float(_) => {
+                            let mut s: f64 = 0.0;
+                            for it in items {
+                                if let Value::Float(n) = it {
+                                    if !n.is_finite() {
+                                        return Err(self.runtime_error(
+                                            span,
+                                            "avg requires finite Float elements",
+                                        ));
+                                    }
+                                    s += n;
+                                    if !s.is_finite() {
+                                        return Err(self.runtime_error(span, "avg Float overflow"));
+                                    }
+                                }
+                            }
+                            Ok(Value::Float(s / count))
+                        }
+                        Value::Decimal(_) => {
+                            let mut s: i128 = 0;
+                            let n_items = items.len() as i128;
+                            for it in items {
+                                if let Value::Decimal(n) = it {
+                                    s = s.checked_add(n).ok_or_else(|| {
+                                        self.runtime_error(span, "avg decimal overflow")
+                                    })?;
+                                }
+                            }
+                            Ok(Value::Decimal(s / n_items))
+                        }
+                        other => Err(self.runtime_error(
+                            span,
+                            format!("avg expects numbers, found {}", other.ty()),
+                        )),
+                    }
+                }
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("avg expects array, found {}", other.ty()),
+                )),
+            }
+        } else if name == "min_of" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "min_of expects one array"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::Array(items) => {
+                    if items.is_empty() {
+                        Ok(Value::Option(None))
+                    } else {
+                        if items
+                            .iter()
+                            .any(|item| matches!(item, Value::Float(value) if !value.is_finite()))
+                        {
+                            return Err(
+                                self.runtime_error(span, "min_of requires finite Float elements")
+                            );
+                        }
+                        let mut m = items[0].clone();
+                        for item in &items[1..] {
+                            match (&m, item) {
+                                (Value::Int(a), Value::Int(b)) if b < a => m = item.clone(),
+                                (Value::UInt(a), Value::UInt(b)) if b < a => m = item.clone(),
+                                (Value::Float(a), Value::Float(b))
+                                    if a.is_finite() && b.is_finite() && b < a =>
+                                {
+                                    m = item.clone()
+                                }
+                                (Value::Float(a), Value::Float(b))
+                                    if !a.is_finite() || !b.is_finite() =>
+                                {
+                                    return Err(self.runtime_error(
+                                        span,
+                                        "min_of requires finite Float elements",
+                                    ));
+                                }
+                                (Value::Decimal(a), Value::Decimal(b)) if b < a => m = item.clone(),
+                                (Value::String(a), Value::String(b)) if b < a => m = item.clone(),
+                                _ => {}
+                            }
+                        }
+                        Ok(Value::Option(Some(Box::new(m))))
+                    }
+                }
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("min_of expects array, found {}", other.ty()),
+                )),
+            }
+        } else if name == "max_of" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "max_of expects one array"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::Array(items) => {
+                    if items.is_empty() {
+                        Ok(Value::Option(None))
+                    } else {
+                        if items
+                            .iter()
+                            .any(|item| matches!(item, Value::Float(value) if !value.is_finite()))
+                        {
+                            return Err(
+                                self.runtime_error(span, "max_of requires finite Float elements")
+                            );
+                        }
+                        let mut m = items[0].clone();
+                        for item in &items[1..] {
+                            match (&m, item) {
+                                (Value::Int(a), Value::Int(b)) if b > a => m = item.clone(),
+                                (Value::UInt(a), Value::UInt(b)) if b > a => m = item.clone(),
+                                (Value::Float(a), Value::Float(b))
+                                    if a.is_finite() && b.is_finite() && b > a =>
+                                {
+                                    m = item.clone()
+                                }
+                                (Value::Float(a), Value::Float(b))
+                                    if !a.is_finite() || !b.is_finite() =>
+                                {
+                                    return Err(self.runtime_error(
+                                        span,
+                                        "max_of requires finite Float elements",
+                                    ));
+                                }
+                                (Value::Decimal(a), Value::Decimal(b)) if b > a => m = item.clone(),
+                                (Value::String(a), Value::String(b)) if b > a => m = item.clone(),
+                                _ => {}
+                            }
+                        }
+                        Ok(Value::Option(Some(Box::new(m))))
+                    }
+                }
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("max_of expects array, found {}", other.ty()),
+                )),
+            }
+        } else if name == "chunk" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(span, "chunk expects array and size"));
+            }
+            match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
+                (Value::Array(items), Value::Int(size)) => {
+                    if size <= 0 {
+                        return Err(
+                            self.runtime_error(span, "chunk size must be greater than zero")
+                        );
+                    }
+                    let sz = size as usize;
+                    let chunks: Vec<Value> =
+                        items.chunks(sz).map(|c| Value::Array(c.to_vec())).collect();
+                    Ok(Value::Array(chunks))
+                }
+                _ => Err(self.runtime_error(span, "chunk expects array and Int size")),
+            }
+        } else if name == "flatten" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "flatten expects one array"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::Array(items) => {
+                    let mut out = Vec::new();
+                    for item in items {
+                        match item {
+                            Value::Array(sub) => out.extend(sub),
+                            other => {
+                                return Err(self.runtime_error(
+                                    span,
+                                    format!(
+                                        "flatten expects array of arrays, found element of type {}",
+                                        other.ty()
+                                    ),
+                                ))
+                            }
+                        }
+                    }
+                    Ok(Value::Array(out))
+                }
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("flatten expects array, found {}", other.ty()),
+                )),
+            }
+        } else if name == "set_union" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(span, "set_union expects two Sets"));
+            }
+            match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
+                (Value::Set(mut a), Value::Set(b)) => {
+                    for item in b {
+                        if !a.contains(&item) {
+                            a.push(item);
+                        }
+                    }
+                    Ok(Value::Set(a))
+                }
+                _ => Err(self.runtime_error(span, "set_union expects two Sets")),
+            }
+        } else if name == "set_intersection" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(span, "set_intersection expects two Sets"));
+            }
+            match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
+                (Value::Set(a), Value::Set(b)) => {
+                    let mut out = Vec::new();
+                    for item in a {
+                        if b.contains(&item) {
+                            out.push(item);
+                        }
+                    }
+                    Ok(Value::Set(out))
+                }
+                _ => Err(self.runtime_error(span, "set_intersection expects two Sets")),
+            }
+        } else if name == "set_difference" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(span, "set_difference expects two Sets"));
+            }
+            match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
+                (Value::Set(a), Value::Set(b)) => {
+                    let mut out = Vec::new();
+                    for item in a {
+                        if !b.contains(&item) {
+                            out.push(item);
+                        }
+                    }
+                    Ok(Value::Set(out))
+                }
+                _ => Err(self.runtime_error(span, "set_difference expects two Sets")),
+            }
+        } else if name == "map_remove" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(span, "map_remove expects Map and key"));
+            }
+            match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
+                (Value::Map(entries), key) => {
+                    let filtered: Vec<(Value, Value)> =
+                        entries.into_iter().filter(|(k, _)| k != &key).collect();
+                    Ok(Value::Map(filtered))
+                }
+                _ => Err(self.runtime_error(span, "map_remove expects a Map")),
+            }
+        } else if name == "date_add_days" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(span, "date_add_days expects Date and Int days"));
+            }
+            match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
+                (Value::Date(date), Value::Int(days)) => {
+                    let res = date_epoch_days(&date)
+                        .and_then(|start| start.checked_add(days))
+                        .and_then(epoch_days_date)
+                        .map(Value::Date)
+                        .ok_or_else(|| {
+                            self.runtime_error(
+                                span,
+                                "date arithmetic is outside years 0001 through 9999",
+                            )
+                        })?;
+                    Ok(res)
+                }
+                _ => Err(self.runtime_error(span, "date_add_days expects Date and Int")),
+            }
+        } else if name == "date_diff_days" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(span, "date_diff_days expects two Dates"));
+            }
+            match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
+                (Value::Date(start), Value::Date(end)) => {
+                    let diff = date_epoch_days(&end)
+                        .and_then(|end_days| {
+                            date_epoch_days(&start)
+                                .and_then(|start_days| start_days.checked_sub(end_days))
+                        })
+                        .map(Value::Int)
+                        .ok_or_else(|| self.runtime_error(span, "date difference overflow"))?;
+                    Ok(diff)
+                }
+                _ => Err(self.runtime_error(span, "date_diff_days expects two Dates")),
+            }
+        } else if name == "is_ok" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "is_ok expects one Result"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::Result(res) => Ok(Value::Bool(res.is_ok())),
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("is_ok expects Result, found {}", other.ty()),
+                )),
+            }
+        } else if name == "is_err" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "is_err expects one Result"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::Result(res) => Ok(Value::Bool(res.is_err())),
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("is_err expects Result, found {}", other.ty()),
+                )),
+            }
+        } else if name == "is_some" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "is_some expects one Option"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::Option(opt) => Ok(Value::Bool(opt.is_some())),
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("is_some expects Option, found {}", other.ty()),
+                )),
+            }
+        } else if name == "is_none" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "is_none expects one Option"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::Option(opt) => Ok(Value::Bool(opt.is_none())),
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("is_none expects Option, found {}", other.ty()),
+                )),
+            }
+        } else if name == "is_before" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(span, "is_before expects two Dates"));
+            }
+            match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
+                (Value::Date(a), Value::Date(b)) => {
+                    let ea = date_epoch_days(&a)
+                        .ok_or_else(|| self.runtime_error(span, "invalid Date"))?;
+                    let eb = date_epoch_days(&b)
+                        .ok_or_else(|| self.runtime_error(span, "invalid Date"))?;
+                    Ok(Value::Bool(ea < eb))
+                }
+                _ => Err(self.runtime_error(span, "is_before expects two Dates")),
+            }
+        } else if name == "is_after" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(span, "is_after expects two Dates"));
+            }
+            match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
+                (Value::Date(a), Value::Date(b)) => {
+                    let ea = date_epoch_days(&a)
+                        .ok_or_else(|| self.runtime_error(span, "invalid Date"))?;
+                    let eb = date_epoch_days(&b)
+                        .ok_or_else(|| self.runtime_error(span, "invalid Date"))?;
+                    Ok(Value::Bool(ea > eb))
+                }
+                _ => Err(self.runtime_error(span, "is_after expects two Dates")),
+            }
+        } else if name == "hash_sha256" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "hash_sha256 expects one String"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::String(s) => {
+                    let mut hasher = Sha256::new();
+                    hasher.update(s.as_bytes());
+                    let result = hasher.finalize();
+                    Ok(Value::String(format!("{:x}", result)))
+                }
+                _ => Err(self.runtime_error(span, "hash_sha256 expects a String")),
+            }
+        } else if name == "base64_encode" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "base64_encode expects one String"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::String(s) => Ok(Value::String(base64_encode_bytes(s.as_bytes()))),
+                _ => Err(self.runtime_error(span, "base64_encode expects a String")),
+            }
+        } else if name == "base64_decode" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "base64_decode expects one String"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::String(s) => match base64_decode_str(&s) {
+                    Ok(decoded) => Ok(Value::Result(Ok(Box::new(Value::String(decoded))))),
+                    Err(e) => Ok(Value::Result(Err(Box::new(Value::String(e))))),
+                },
+                _ => Err(self.runtime_error(span, "base64_decode expects a String")),
+            }
+        } else if name == "url_encode" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "url_encode expects one String"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::String(s) => Ok(Value::String(url_encode_str(&s))),
+                _ => Err(self.runtime_error(span, "url_encode expects a String")),
+            }
+        } else if name == "url_decode" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "url_decode expects one String"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::String(s) => match url_decode_str(&s) {
+                    Ok(decoded) => Ok(Value::Result(Ok(Box::new(Value::String(decoded))))),
+                    Err(e) => Ok(Value::Result(Err(Box::new(Value::String(e))))),
+                },
+                _ => Err(self.runtime_error(span, "url_decode expects a String")),
+            }
+        } else if name == "uuid_v4" {
+            if !args.is_empty() {
+                return Err(self.runtime_error(span, "uuid_v4 expects no arguments"));
+            }
+            self.require_runtime_capability("Random", "random access", span)?;
+            match generate_uuid_v4() {
+                Ok(uuid) => Ok(Value::String(uuid)),
+                Err(e) => Err(self.runtime_error(span, e)),
+            }
+        } else if name == "text_trim_start" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "text_trim_start expects one String"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::String(s) => Ok(Value::String(s.trim_start().to_string())),
+                _ => Err(self.runtime_error(span, "text_trim_start expects a String")),
+            }
+        } else if name == "text_trim_end" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "text_trim_end expects one String"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::String(s) => Ok(Value::String(s.trim_end().to_string())),
+                _ => Err(self.runtime_error(span, "text_trim_end expects a String")),
+            }
+        } else if name == "text_is_blank" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "text_is_blank expects one String"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::String(s) => Ok(Value::Bool(s.trim().is_empty())),
+                _ => Err(self.runtime_error(span, "text_is_blank expects a String")),
+            }
+        } else if name == "text_substring" {
+            if args.len() != 3 {
+                return Err(
+                    self.runtime_error(span, "text_substring expects String, start, and length")
+                );
+            }
+            match (
+                self.eval(&args[0], env)?,
+                self.eval(&args[1], env)?,
+                self.eval(&args[2], env)?,
+            ) {
+                (Value::String(s), Value::Int(start), Value::Int(length)) => {
+                    let chars: Vec<char> = s.chars().collect();
+                    let start = (start.max(0) as usize).min(chars.len());
+                    let length = (length.max(0) as usize).min(chars.len() - start);
+                    Ok(Value::String(chars[start..start + length].iter().collect()))
+                }
+                _ => Err(self.runtime_error(span, "text_substring expects String, Int, and Int")),
+            }
+        } else if name == "to_int" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "to_int expects one argument"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::Int(i) => Ok(Value::Int(i)),
+                Value::UInt(u) => i64::try_from(u).map(Value::Int).map_err(|_| {
+                    self.runtime_error(span, format!("to_int cannot convert `{u}` to Int"))
+                }),
+                Value::Float(f)
+                    if f.is_finite() && f >= i64::MIN as f64 && f < -(i64::MIN as f64) =>
+                {
+                    Ok(Value::Int(f as i64))
+                }
+                Value::Float(_) => Err(self
+                    .runtime_error(span, "to_int Float must be finite and within the Int range")),
+                Value::Bool(b) => Ok(Value::Int(if b { 1 } else { 0 })),
+                Value::String(s) => match s.trim().parse::<i64>() {
+                    Ok(i) => Ok(Value::Int(i)),
+                    Err(_) => {
+                        Err(self.runtime_error(span, format!("to_int cannot convert `{s}` to Int")))
+                    }
+                },
+                other => Err(self
+                    .runtime_error(span, format!("to_int cannot convert {} to Int", other.ty()))),
+            }
+        } else if name == "to_float" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "to_float expects one argument"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::Float(f) if f.is_finite() => Ok(Value::Float(f)),
+                Value::Float(_) => {
+                    Err(self.runtime_error(span, "to_float requires a finite value"))
+                }
+                Value::Int(i) => Ok(Value::Float(i as f64)),
+                Value::UInt(u) => Ok(Value::Float(u as f64)),
+                Value::String(s) => match s.trim().parse::<f64>() {
+                    Ok(f) if f.is_finite() => Ok(Value::Float(f)),
+                    Err(_) => {
+                        Err(self
+                            .runtime_error(span, format!("to_float cannot convert `{s}` to Float")))
+                    }
+                    Ok(_) => Err(self.runtime_error(
+                        span,
+                        format!("to_float cannot convert `{s}` to a finite Float"),
+                    )),
+                },
+                other => Err(self.runtime_error(
+                    span,
+                    format!("to_float cannot convert {} to Float", other.ty()),
+                )),
+            }
+        } else if name == "parse_bool" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "parse_bool expects one String"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::String(s) => match s.trim().to_ascii_lowercase().as_str() {
+                    "true" | "1" => Ok(Value::Result(Ok(Box::new(Value::Bool(true))))),
+                    "false" | "0" => Ok(Value::Result(Ok(Box::new(Value::Bool(false))))),
+                    _ => Ok(Value::Result(Err(Box::new(Value::String(format!(
+                        "invalid boolean string: {s}"
+                    )))))),
+                },
+                _ => Err(self.runtime_error(span, "parse_bool expects a String")),
+            }
+        } else if name == "panic" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "panic expects one String message"));
+            }
+            let msg = self.eval(&args[0], env)?;
+            Err(self.runtime_error(span, format!("panic: {}", msg.output())))
+        } else if name == "entries" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "entries expects a Map"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::Map(entries) => {
+                    let pairs = entries
+                        .into_iter()
+                        .map(|(k, v)| Value::Tuple(vec![k, v]))
+                        .collect();
+                    Ok(Value::Array(pairs))
+                }
+                _ => Err(self.runtime_error(span, "entries expects a Map")),
+            }
+        } else if name == "zip" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(span, "zip expects two Arrays"));
+            }
+            match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
+                (Value::Array(a1), Value::Array(a2)) => {
+                    let pairs = a1
+                        .into_iter()
+                        .zip(a2)
+                        .map(|(x, y)| Value::Tuple(vec![x, y]))
+                        .collect();
+                    Ok(Value::Array(pairs))
+                }
+                _ => Err(self.runtime_error(span, "zip expects two Arrays")),
+            }
+        } else if name == "dedup" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "dedup expects an Array"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::Array(items) => {
+                    let mut unique_items = Vec::new();
+                    for item in items {
+                        if !unique_items.contains(&item) {
+                            unique_items.push(item);
+                        }
+                    }
+                    Ok(Value::Array(unique_items))
+                }
+                _ => Err(self.runtime_error(span, "dedup expects an Array")),
+            }
+        } else if name == "path_join" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(span, "path_join expects two String arguments"));
+            }
+            match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
+                (Value::String(a), Value::String(b)) => {
+                    let p = Path::new(&a).join(Path::new(&b));
+                    Ok(Value::String(p.to_string_lossy().to_string()))
+                }
+                _ => Err(self.runtime_error(span, "path_join expects two Strings")),
+            }
+        } else if name == "path_filename" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "path_filename expects one String"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::String(s) => {
+                    let p = Path::new(&s);
+                    Ok(Value::String(
+                        p.file_name()
+                            .and_then(|f| f.to_str())
+                            .unwrap_or("")
+                            .to_string(),
+                    ))
+                }
+                _ => Err(self.runtime_error(span, "path_filename expects a String")),
+            }
+        } else if name == "path_extension" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "path_extension expects one String"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::String(s) => {
+                    let p = Path::new(&s);
+                    Ok(Value::String(
+                        p.extension()
+                            .and_then(|ext| ext.to_str())
+                            .unwrap_or("")
+                            .to_string(),
+                    ))
+                }
+                _ => Err(self.runtime_error(span, "path_extension expects a String")),
+            }
+        } else if name == "path_dir" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "path_dir expects one String"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::String(s) => {
+                    let p = Path::new(&s);
+                    Ok(Value::String(
+                        p.parent()
+                            .and_then(|parent| parent.to_str())
+                            .unwrap_or("")
+                            .to_string(),
+                    ))
+                }
+                _ => Err(self.runtime_error(span, "path_dir expects a String")),
+            }
+        } else if name == "file_exists" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "file_exists expects one String"));
+            }
+            self.require_runtime_capability("FileSystem", "file-system read access", span)?;
+            match self.eval(&args[0], env)? {
+                Value::String(path) => {
+                    let roots = self
+                        .filesystem_policy
+                        .as_ref()
+                        .map_or_else(Vec::new, |p| p.read_roots.clone());
+                    match self.resolve_filesystem_path(&path, &roots, "read", span, true) {
+                        Ok(resolved) => Ok(Value::Bool(resolved.is_file())),
+                        Err(_) => Ok(Value::Bool(false)),
+                    }
+                }
+                _ => Err(self.runtime_error(span, "file_exists expects a String")),
+            }
+        } else if name == "dir_exists" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "dir_exists expects one String"));
+            }
+            self.require_runtime_capability("FileSystem", "file-system read access", span)?;
+            match self.eval(&args[0], env)? {
+                Value::String(path) => {
+                    let roots = self
+                        .filesystem_policy
+                        .as_ref()
+                        .map_or_else(Vec::new, |p| p.read_roots.clone());
+                    match self.resolve_filesystem_path(&path, &roots, "read", span, true) {
+                        Ok(resolved) => Ok(Value::Bool(resolved.is_dir())),
+                        Err(_) => Ok(Value::Bool(false)),
+                    }
+                }
+                _ => Err(self.runtime_error(span, "dir_exists expects a String")),
+            }
+        } else if name == "file_size" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "file_size expects one String"));
+            }
+            self.require_runtime_capability("FileSystem", "file-system read access", span)?;
+            match self.eval(&args[0], env)? {
+                Value::String(path) => {
+                    let roots = self
+                        .filesystem_policy
+                        .as_ref()
+                        .map_or_else(Vec::new, |p| p.read_roots.clone());
+                    let resolved =
+                        self.resolve_filesystem_path(&path, &roots, "read", span, false)?;
+                    match std::fs::metadata(&resolved) {
+                        Ok(meta) => Ok(Value::Result(Ok(Box::new(Value::Int(meta.len() as i64))))),
+                        Err(e) => Ok(Value::Result(Err(Box::new(Value::String(e.to_string()))))),
+                    }
+                }
+                _ => Err(self.runtime_error(span, "file_size expects a String")),
+            }
+        } else if name == "map_merge" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(span, "map_merge expects two Maps"));
+            }
+            match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
+                (Value::Map(mut a), Value::Map(b)) => {
+                    for (bk, bv) in b {
+                        if let Some(pos) = a.iter().position(|(k, _)| k == &bk) {
+                            a[pos] = (bk, bv);
+                        } else {
+                            a.push((bk, bv));
+                        }
+                    }
+                    Ok(Value::Map(a))
+                }
+                _ => Err(self.runtime_error(span, "map_merge expects two Maps")),
+            }
+        } else if name == "unwrap_or" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(span, "unwrap_or expects Option and default"));
+            }
+            let opt_val = self.eval(&args[0], env)?;
+            let default_val = self.eval(&args[1], env)?;
+            match opt_val {
+                Value::Option(Some(inner)) => Ok(*inner),
+                Value::Option(None) => Ok(default_val),
+                _ => Err(self.runtime_error(args[0].span, "unwrap_or expects an Option")),
             }
         } else if name == "text_replace_result" {
             if args.len() != 3 {

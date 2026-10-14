@@ -174,41 +174,162 @@ page "/items" {
 
 ---
 
-## Appendix D: Standard Library Overview
+## Appendix D: Standard Library Overview (Zelyra 1.0.3)
 
-### Pure Core Functions (Zero Capabilities Required)
-- `print(value)`: Prints any value to standard output.
-- `len(array)`: Returns the number of elements in an array as an `Int`.
-- `append(array, element)`: Produces a new array with the appended value.
-- `contains(array, element)` -> `Bool`: Checks whether an item is present in an array.
-- `first(array)` -> `Option<T>`: Returns the first item wrapped in `Some`, or `None`.
-- `last(array)` -> `Option<T>`: Returns the final item wrapped in `Some`, or `None`.
-- `get(map, key)` -> `Option<V>`: Looks up a key within a `Map<K, V>`.
-- `put(map, key, value)` -> `Map<K, V>`: Inserts or updates a key-value pair functionally.
-- `keys(map)` -> `K[]`: Returns all keys of a map as an array.
-- `values(map)` -> `V[]`: Returns all values of a map as an array.
-- `Some(value)` / `None`: Value constructors for the `Option<T>` type.
-- `Ok(value)` / `Err(error)`: Value constructors for the `Result<T, E>` type.
-- `json_encode(value)` -> `String`: Serializes typed data into a JSON string.
-- `json_decode<T>(text)` -> `T`: Parses typed JSON; invalid data are reported as runtime errors.
+Zelyra 1.0.3 adds built-in functions for mathematics, text, collections, sets,
+maps, date arithmetic, conversions, encodings, paths, and file access. Function
+calls can be used as typed `|>` pipeline stages. Operations that access host
+resources still require their declared capability.
 
-### Capability-Guarded Functions
-- `uses Console`:
-  - `read_console(prompt: String)` -> `String?`: Displays the prompt and reads one line; `None` represents EOF.
-- `uses Clock`:
-  - `now()` -> `Timestamp`: Returns current system timestamp.
-- `uses Random`:
-  - `random_int(min: Int, max: Int)` -> `Int`: Generates an integer in the given range.
-- `uses Environment`:
-  - `env(name: String)` -> `Option<String>`: Reads a host environment variable.
-- `uses FileSystem`:
-  - `read_text(path: String)` -> `String`: Reads file contents as text.
-  - `write_text(path: String, content: String)`: Writes text content to file.
-  - `delete_file(path: String)`: Deletes a target file.
-  - `list_dir(dir: String)` -> `String[]`: Lists directory filenames.
-- `uses Database`:
-  - `sql<T[]> { SELECT ... }`: Executes type-checked SQL queries returning entity records.
-  - `transaction { ... }`: Wraps multiple SQL operations inside an atomic transaction.
+### 1. Mathematics and numerics
+
+- `abs(x: Int | Float | Decimal)`: Returns the absolute value. The minimum
+  `Int` or `Decimal` and non-finite `Float` values produce runtime errors.
+- `min(a, b)` and `max(a, b)`: Select the smaller or larger of two values with
+  the same type: `Int`, `UInt`, `Float`, `Decimal`, or `String`. Non-finite
+  `Float` values produce runtime errors.
+- `clamp(value, minimum, maximum)`: Bounds a numeric value of type `Int`,
+  `UInt`, `Float`, or `Decimal` to the inclusive interval. Non-finite floats or
+  a minimum greater than the maximum produce runtime errors.
+- `sqrt(x: Float)`: Computes the square root of a finite, non-negative float.
+- `pow(base: Float, exponent: Float)`: Computes `base ^ exponent`; undefined or
+  non-finite results produce runtime errors.
+- `floor(x: Float)` and `ceil(x: Float)`: Round a finite float down or up.
+- `round(x: Float, decimals: Int)`: Rounds halfway cases away from zero.
+  `decimals` must be between `-15` and `15`; a non-finite result is an error.
+
+### 2. Strings and text
+
+- `len(text: String) -> Int`: Counts Unicode code points. For arrays, `len`
+  returns the number of elements.
+- `text_to_lower(text)` and `text_to_upper(text)`: Convert the whole string to
+  lowercase or uppercase.
+- `text_starts_with(text, prefix)` and `text_ends_with(text, suffix)`: Test a
+  prefix or suffix.
+- `text_replace(text, search, replacement)`: Replaces all matches.
+- `text_split(text, delimiter)` and alias `split`: Split a string into a
+  `String[]`.
+- `text_pad_left(text, target_length, pad)` and
+  `text_pad_right(text, target_length, pad)`: Pad to a Unicode code-point
+  length, cycling through the pad string's code points. An empty pad string
+  uses spaces. Negative lengths and output over 16 MiB are runtime errors.
+- `text_index_of(text, search) -> Option<Int>`: Returns the zero-based Unicode
+  code-point index of the first match, or `None`.
+- `text_repeat(text, count)`: Repeats the text; negative counts and output over
+  16 MiB are runtime errors.
+- `text_is_empty(text)` and `text_is_blank(text)`: Check for an empty string or
+  a string containing only whitespace.
+- `text_capitalize(text)`: Uppercases the first Unicode character.
+- `text_substring(text, start, length)`: Extracts a substring using Unicode
+  code-point indexes. Negative indexes and lengths are treated as zero.
+- `text_trim`, `text_trim_start`, and `text_trim_end`: Remove surrounding,
+  leading, or trailing whitespace.
+- `text_contains(text, search)` and `text_chars(text)`: Test containment or
+  split text into one-code-point strings.
+
+### 3. Arrays and collections
+
+- `append(array, value) -> T[]` and `concat(left, right) -> T[]`: Return arrays
+  with the value appended or both arrays joined.
+- `contains(array, value) -> Bool`, `first(array) -> Option<T>`, and
+  `last(array) -> Option<T>`: Search or retrieve an end element.
+- `sort`, `sort_desc`, and `reverse`: Return sorted or reversed arrays.
+- `slice(array, start, length)`: Extracts a bounded portion of an array.
+- `join(array, delimiter) -> String`: Joins rendered elements with a delimiter.
+- `unique(array)` and alias `dedup`: Keep the first occurrence of each value.
+- `array_sum(array)`: Adds `Int`, `Float`, or `Decimal` elements. Integer and
+  decimal overflow and non-finite float values produce runtime errors; an empty
+  array returns `0`.
+- `avg(array)`: Averages `Int` and `Float` arrays to `Float`, and `Decimal`
+  arrays to `Decimal`. Decimal division truncates at the fixed Decimal scale.
+  Empty arrays and overflow produce runtime errors.
+- `min_of(array) -> Option<T>` and `max_of(array) -> Option<T>`: Select the
+  smallest or largest number or string; an empty array returns `None`, and
+  non-finite floats produce runtime errors.
+- `chunk(array, size)`: Splits an array into chunks no larger than `size`;
+  `size` must be greater than zero.
+- `flatten(array)`: Flattens one level of nested arrays.
+- `zip(left, right) -> Tuple<T, U>[]`: Pairs corresponding elements through the
+  shorter input array.
+
+### 4. Sets and maps
+
+- `set_union`, `set_intersection`, and `set_difference`: Return set union,
+  intersection, or difference.
+- `get(map, key) -> Option<V>` and `get_or(map, key, default) -> V` (alias
+  `get_or_default`): Look up a value, with or without a fallback.
+- `has_key(map, key) -> Bool`: Checks whether a map contains a key.
+- `put(map, key, value) -> Map<K, V>`: Functionally inserts or updates a pair.
+- `map_remove(map, key)` and `map_merge(left, right)`: Return an updated map;
+  values in the right map replace matching keys from the left.
+- `map_increment(map: Map<K, Int>, key: K) -> Result<Map<K, Int>, String>`:
+  Increments a typed counter or inserts it with value `1`. The input map stays
+  unchanged; integer overflow is returned as `Err`.
+- `keys(map) -> K[]` and `values(map) -> V[]`: Return the keys or values.
+- `entries(map) -> Tuple<K, V>[]`: Returns key-value pairs that can be type
+  checked and destructured in a loop: `for (key, value) in entries(map)`.
+
+### 5. Dates, options, results, and conversions
+
+- `date_add_days(date, days) -> Date`: Adds or subtracts calendar days; results
+  must remain in years 0001 through 9999.
+- `date_diff_days(start, end) -> Int`: Returns `start - end` in calendar days.
+  For remaining time until a deadline, use `date_diff_days(deadline, today)`.
+- `is_before(a, b)` and `is_after(a, b)`: Compare two dates chronologically.
+- `is_ok`, `is_err`, `is_some`, and `is_none`: Test `Result` and `Option` values.
+- `unwrap_or(option, fallback)`: Returns the contained value or fallback.
+- `panic(message)`: Stops execution with a runtime error.
+- `to_string(value)`: Returns the Zelyra display form of a value.
+- `to_int(value) -> Int`: Converts `Int`, `UInt`, finite `Float`, `Bool`, or a
+  numeric string. Floats truncate toward zero. Out-of-range values and invalid
+  strings produce runtime errors.
+- `to_float(value) -> Float`: Converts `Float`, `Int`, `UInt`, or a numeric
+  string to a finite float; invalid or non-finite values produce runtime errors.
+- `parse_int(text) -> Result<Int, String>`,
+  `parse_float(text) -> Result<Float, String>`, and
+  `parse_bool(text) -> Result<Bool, String>`: Parse strings without throwing;
+  invalid values return `Err`. `parse_bool` accepts `true`, `false`, `1`, and
+  `0`, case-insensitively for words.
+
+### 6. Hashing, encodings, and paths
+
+- `hash_sha256(text) -> String`: Returns the lowercase hexadecimal SHA-256 hash
+  of the UTF-8 bytes.
+- `base64_encode(text)` and `base64_decode(text)`: Encode UTF-8 text, or return
+  `Result<String, String>` when decoding.
+- `url_encode(text)`: Percent-encodes bytes except RFC 3986 unreserved bytes.
+- `url_decode(text) -> Result<String, String>`: Decodes percent escapes; `+` is
+  treated as a space.
+- `uuid_v4() -> String` (`uses Random`): Creates a cryptographically secure
+  version 4 UUID.
+- `path_join`, `path_filename`, `path_extension`, and `path_dir`: Perform path
+  operations using the host operating system's path conventions, without
+  filesystem access or a capability.
+
+### 7. Capability-guarded system APIs
+
+- `uses Console`: `read_console(prompt: String) -> String?` prints a prompt to
+  standard output and reads one line; `None` indicates EOF.
+- `uses Clock`: `now() -> Timestamp` returns the current timestamp in
+  milliseconds since the Unix epoch.
+- `uses Random`: `random_int(min: Int, max: Int) -> Int` chooses from the
+  inclusive range; `uuid_v4()` creates a version 4 UUID.
+- `uses Environment`: `env(name: String) -> Option<String>` reads a host
+  environment variable.
+- `uses FileSystem`: `read_text`, `write_text`, `delete_file`, `list_dir`,
+  `file_exists`, `dir_exists`, and `file_size` operate within the configured
+  filesystem permissions. `write_text` replaces existing file contents inside
+  allowed write paths; `file_size` returns `Result<Int, String>`.
+- `uses Network`: `http_get(url: String) -> String` performs an allowed GET
+  request. `http_request(method: String, url: String, headers: String[],
+  body: String?) -> HttpResponse` sends a request with an optional text body.
+  `http_json<Req, Res>(method, url, headers, body: Req?) -> Res` decodes a
+  successful JSON response. `http_result<Req, Res>(method, url, headers,
+  body: Req?) -> HttpResult<Res>` also returns status and headers.
+- `uses Process`: `run_process(command: String, args: String[]) ->
+  ProcessResult` starts an explicitly permitted process without a shell.
+- `uses Database`: `sql<T[]> { SELECT ... }` executes typed queries with bound
+  parameters; `transaction { ... }` groups database operations atomically.
 
 ---
 

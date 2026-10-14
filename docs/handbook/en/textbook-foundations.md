@@ -720,6 +720,10 @@ Software does not merely store static values; it computes results, compares fact
 - `||` (OR): Evaluates to `true` if **at least one** side is `true`.
 - `!` (NOT): Inverts a truth value (`!true == false`).
 
+**Pipeline operator (new in 1.0.3):** `|>` passes the left expression as the
+first argument to the next function call. It can make a chain easier to read:
+`value |> trim() |> to_lower()`.
+
 ### 4. Small, progressive examples
 
 ```zelyra
@@ -738,6 +742,9 @@ fn main() {
     has_buffer = buffer_time > 0
     is_critical = total_time > 120 && !has_buffer
     print(is_critical)
+
+    cleaned_text = "  zelyra 1.0.3  " |> text_trim() |> text_to_upper()
+    print(cleaned_text)
 }
 ```
 
@@ -1000,6 +1007,26 @@ fn evaluate_priority(level: Int) -> String {
 fn main() {
     print(evaluate_priority(1))
     print(evaluate_priority(2))
+}
+```
+
+**Flat `else if` cascade (new in 1.0.3):**
+```zelyra
+fn evaluate_priority(score: Int) -> String {
+    if score >= 90 {
+        return "VERY URGENT"
+    } else if score >= 70 {
+        return "NORMAL"
+    } else if score >= 40 {
+        return "LOW"
+    } else {
+        return "UNKNOWN"
+    }
+}
+
+fn main() {
+    print(evaluate_priority(95))
+    print(evaluate_priority(50))
 }
 ```
 
@@ -1571,8 +1598,21 @@ fn main() {
         "notifications": false
     }
     
-    if contains(settings, "dark_mode") {
-        print("Dark mode setting is explicitly configured.")
+    if has_key(settings, "dark_mode") {
+        print("Dark mode setting is configured.")
+    }
+}
+```
+
+**Example 5: Map fallbacks and entries (new in 1.0.3)**
+`get_or` returns a fallback for a missing key. `entries` returns an array of
+key-value tuples that a `for` loop can destructure into typed variables.
+```zelyra
+fn main() {
+    prices: Map<String, Int> = Map { "Coffee": 3 "Tea": 2 }
+    print(get_or(prices, "Cake", 0))
+    for (item, price) in entries(prices) {
+        print(item + ": " + to_string(price) + " Euro")
     }
 }
 ```
@@ -2873,7 +2913,29 @@ fn main() uses FileSystem {
 }
 ```
 
-**Example 4: Handling JSON and file errors**
+**Example 4: Path helpers and file metadata (new in 1.0.3)**
+Pure path operations do not access the filesystem. File queries require the
+`FileSystem` capability and stay within the project's allowed paths.
+```zelyra
+fn inspect_file(folder: String, filename: String) uses FileSystem {
+    path = path_join(folder, filename)
+    print("Path: " + path)
+    print("Filename: " + path_filename(path))
+    print("Extension: " + path_extension(path))
+    if file_exists(path) {
+        match file_size(path) {
+            Ok(bytes) => { print("Size: " + to_string(bytes) + " bytes") }
+            Err(message) => { print("Could not read size: " + message) }
+        }
+    }
+}
+
+fn main() uses FileSystem {
+    inspect_file(".", "zelyra.toml")
+}
+```
+
+**Example 5: Handling JSON and file errors**
 
 `read_text` and `json_decode` report failures as runtime errors. Use
 `read_text_result`, `write_text_result`, and `json_decode_result<T>` when an
@@ -3031,6 +3093,42 @@ fn main() {
     ids: Int[] = [101, 102, 103]
     json_text = export_ids_as_json(ids)
     print("JSON output: " + json_text)
+}
+```
+
+**Example 4: Calendar arithmetic and date comparisons (new in 1.0.3)**
+`date_diff_days(first, second)` returns `first - second` in calendar days.
+```zelyra
+fn calculate_deadline() {
+    deadline = date_add_days(date("2026-10-01"), 14)
+    today = date("2026-10-14")
+    remaining = date_diff_days(deadline, today)
+    print("Days remaining: " + to_string(remaining))
+    if is_after(today, deadline) {
+        print("Deadline passed")
+    } else {
+        print("Deadline not passed")
+    }
+}
+
+fn main() {
+    calculate_deadline()
+}
+```
+
+**Example 5: Hashing and web encodings (new in 1.0.3)**
+Only UUID generation requires `Random`; hashing and encodings are local
+operations.
+```zelyra
+fn security_helpers() uses Random {
+    print(uuid_v4())
+    print(hash_sha256("sample"))
+    print(base64_encode("Zelyra data"))
+    print(url_encode("Customer & Partner Ltd"))
+}
+
+fn main() uses Random {
+    security_helpers()
 }
 ```
 

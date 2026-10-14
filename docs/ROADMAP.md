@@ -58,38 +58,36 @@ principles; the roadmap below tracks what is actually implemented.
   direction mismatches, and a checked nonzero step. `range(start, end, step)`
   provides the same sequence as a bounded array. Parser, runtime, type, and
   boundary tests pass.
-- [ ] **Planned for 1.0.3 — Zelyra-style language constructs:** Add chained
-  `else if` branches, typed `if` expressions, tuple destructuring, and labeled
-  `break`/`continue` for nested loops; value-yielding loop exits must have
-  explicit, type-checked rules. Keep the existing brace-based blocks, static
-  types, explicit effects, and checked errors. Add targeted parser suggestions
-  for common mistakes such as a missing block after `else if`, with the exact
-  source span and a useful expected form. Stepped ranges, including negative
-  steps and descending loops, are already in 1.0.2. Add user-defined
-  operators for user-defined types through an explicit, type-checked protocol
-  with fixed precedence, unambiguous resolution, and effect rules; do not
-  allow custom precedence declarations.
-- [ ] **Planned for 1.0.3 — native String and Math library:** Complete the
-  existing partial String API (`text_contains`, `text_trim`,
-  `text_replace_result`, `text_split_result`) with lowercase/uppercase,
-  length, joining, trimming, containment, replacement, splitting, and
-  prefix/suffix checks; preserve compatible `text_*` names and checked errors.
-  Add a typed Zelyra pipeline for readable function composition, for example
-  `text |> trim |> to_lower`, with clear type and effect checking. Add native
-  `abs`, `min`, `max`, `floor`, `ceil`, `round`, `sqrt`, and `pow` with explicit
-  supported types, rounding/precision rules, and checked overflow/domain
-  errors. Add readable, type-checked String interpolation with literal-brace
-  escaping, using syntax designed for Zelyra rather than copying another
-  language's formatting rules. Add efficient typed `concat<T>(left, right)`.
-- [ ] **Planned for 1.0.3 — collections and functional operations:** Keep
+- [~] **Partially implemented in 1.0.3 — Zelyra-style language constructs:**
+  Chained `else if` branches, typed `|>` pipelines, and type-checked tuple
+  destructuring in `for` loops are implemented. Remaining work includes typed
+  `if` expressions, labeled `break`/`continue` for nested loops, and explicit,
+  type-checked rules for value-yielding loop exits. Keep brace-based blocks,
+  static types, explicit effects, and checked errors. The parser suggests the
+  expected block form and exact source span when an `else if` block is missing;
+  add suggestions for other common mistakes. Stepped ranges, including negative
+  steps and descending loops, are already in 1.0.2. User-defined operators
+  still need an explicit, type-checked protocol with fixed precedence,
+  unambiguous resolution, and effect rules; custom precedence declarations are
+  not allowed.
+- [~] **Partially implemented in 1.0.3 — native String and Math library:**
+  Built-in String functions cover lowercase/uppercase, Unicode length, joining,
+  trimming, containment, replacement, splitting, padding, and prefix/suffix
+  checks; existing `text_*` names and Result variants remain available. `|>`
+  composes direct function names and calls from left to right, type-checking
+  each stage like an ordinary call. Native math functions now have specified
+  types, rounding rules, and runtime errors for overflow or invalid domains.
+  `concat<T>` is implemented. Readable, type-checked String interpolation with
+  escaped literal braces remains open.
+- [~] **Partially implemented in 1.0.3 — collections and functional operations:** Keep
   ordinary arrays and maps value-based. Provide opt-in typed mutable arrays and
   stacks with checked O(1) indexed updates and efficient `push`/`pop`; `pop`
   returns an explicit empty case. Mutable arrays must allow checked indexed
-  compound updates such as `items[i] += 1`. Add typed map iteration and
-  `get_or_default`, plus a safe counter/update helper. Maps, `Map<K, V>` and
-  `Map { ... }` literals, `get`, `put`, `keys`, `values`, and `contains` already
-  exist; the gap is ergonomic iteration/default lookup, not the absence of
-  maps. Add typed anonymous functions with explicit capture/effect rules and
+  compound updates such as `items[i] += 1`. Typed map iteration through
+  `entries`, tuple destructuring, `get_or_default`, and `map_increment` with a
+  checked overflow case are implemented. Maps, `Map<K, V>` and `Map { ... }` literals,
+  `get`, `put`, `keys`, `values`, and `contains` already exist. Add typed
+  anonymous functions with explicit capture/effect rules and
   standard `map`, `filter`, and `fold` combinators. Support composition through
   the Zelyra pipeline while preserving clear inference and diagnostics. The
   knapsack DP table must update in place and retain O(item-count × capacity)
@@ -114,11 +112,21 @@ principles; the roadmap below tracks what is actually implemented.
   N=4 and N=8 must count as 2 and 92; the documented knapsack fixture must
   return 8. Validate sizes and inputs, use checked arithmetic, bound work, and
   test compilation, expected output, and edge cases in CI.
-- [ ] **Planned for 1.0.3 — compiler diagnostics:** Improve nested syntax and
+- [~] **Partially implemented in 1.0.3 — compiler diagnostics:** The parser
+  suggests a corrected block form and source position for a missing `else if`
+  block. Remaining work includes nested syntax and
   type errors with targeted suggestions, source spans, and a short corrected
-  Zelyra example. Include malformed blocks, interpolation names/types,
-  pipeline type mismatches, tuple arity, collection callbacks, and unsupported
-  numeric inputs in positive and negative tests.
+  Zelyra example. Pipeline type mismatches, collection callbacks, and invalid
+  numeric inputs need targeted positive and negative tests.
+- [x] **1.0.3 invoice tutorial startup through CLI and Studio:** On Compose
+  port conflicts, automatically select a free next port for MariaDB or the web
+  application, update the local `.env` and matching MariaDB URLs, and retry a
+  bounded number of times. The invoice tutorial now has repeatable local sample
+  data. Studio Run starts the matching local database service, applies the
+  schema, loads the seed only for the marked local tutorial project, and then
+  starts the preview. CLI and Studio were run against Docker Compose 5.6.0 /
+  Engine 29.8.2; both HTTP dashboards and the stored sample records were
+  checked.
 - [x] **1.0.1 published-artifact language review:** 80 cases, 100 task repeats,
   600 numeric comparisons and 1,408 calendar/UTC reference cases passed with
   no unexpected findings; published installation/upgrade/rollback and
@@ -216,9 +224,9 @@ principles; the roadmap below tracks what is actually implemented.
 - [x] Language core: lexer, parser, AST, functions, expressions, control flow,
   immutable-by-default bindings, arrays, deterministic typed maps, records,
   Option, Result, and exhaustive pattern matching as statements and expressions.
-  `Int`/`UInt` overflow and division by zero return controlled runtime errors;
-  `Unit` is usable in type signatures. `examples/type_system` records tested
-  coverage and unsupported areas.
+  `Int`/`UInt` overflow, division by zero, and more than 20 nested function
+  calls return controlled runtime errors. `Unit` is usable in type signatures.
+  `examples/type_system` records tested coverage and unsupported areas.
 - [x] Static checking, nominal domain types, capabilities, contracts, runtime
   checks, and an initial verifier.
 - [x] MariaDB-first schema definitions, inspection, DDL planning, schema

@@ -813,3 +813,18 @@ der Ausdruck muss den Typ `Int` haben. `range(start, end, step)` gibt dieselben
 Werte als Array zurück. Materialisierte `range`-Arrays sind wie bei der
 zweistelligen Form auf eine Million Elemente begrenzt; Bereichsschleifen
 materialisieren kein Array.
+
+`for`-Schleifen können Elemente mit fester Tupelgröße aus Arrays oder Sets
+zerlegen. Das Tupelmuster muss genau so viele Variablen nennen, wie der
+Elementtyp Bestandteile hat; jede Variable erhält den statischen Typ des
+entsprechenden Tupelwerts:
+
+~~~zelyra
+for (schluessel, wert) in entries(preise) {
+    print(schluessel + ": " + to_string(wert))
+}
+~~~
+
+Eine einzelne Schleifenvariable bindet weiterhin das ganze Element, auch wenn
+es ein Tupel ist. Tupelmuster weisen doppelte Namen und nicht passende
+Tupelgrößen mit einem Typfehler zurück.

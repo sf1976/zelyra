@@ -1023,14 +1023,20 @@ fn collect_visible_bindings(block: &zelyra_ast::Block, offset: usize, output: &m
                 collect_visible_bindings(body, offset, output);
             }
             zelyra_ast::Stmt::For {
-                name, body, span, ..
+                name,
+                additional_names,
+                body,
+                span,
+                ..
             } if span.start < offset && body.span.start <= offset && offset <= body.span.end => {
-                output.push(json!({
-                    "label": name,
-                    "kind": "variable",
-                    "detail": "loop value",
-                    "valueType": Value::Null,
-                }));
+                for name in std::iter::once(name).chain(additional_names) {
+                    output.push(json!({
+                        "label": name,
+                        "kind": "variable",
+                        "detail": "loop value",
+                        "valueType": Value::Null,
+                    }));
+                }
                 collect_visible_bindings(body, offset, output);
             }
             zelyra_ast::Stmt::Match { arms, span, .. } if span.start < offset => {

@@ -340,6 +340,33 @@ type OrderId = Id
 Eine `OrderId` ist dadurch nicht automatisch eine `MachineId`, auch wenn beide
 intern ähnlich aussehen. Fachlich falsch bleibt fachlich falsch.
 
+Bedingungen mit flachen `else if`-Kaskaden (Neu in 1.0.3):
+
+~~~zelyra
+fn evaluate_capacity(cap: Int) -> String {
+    if cap > 100 {
+        return "HIGH"
+    } else if cap > 50 {
+        return "MEDIUM"
+    } else {
+        return "LOW"
+    }
+}
+~~~
+
+Pipeline-Operator `|>` (Neu in 1.0.3):
+
+Zelyra unterstützt den Forward-Pipeline-Operator `|>`. Ausdrücke fließen von links nach rechts durch Transformationsketten:
+
+~~~zelyra
+fn format_title(input: String) -> String {
+    return input |> text_trim() |> text_to_upper()
+}
+~~~
+
+Erweiterte Standardbibliothek (Neu in 1.0.3):
+Zelyra 1.0.3 ergänzt Builtin-Funktionen für Mathematik (`abs`, `min`, `max`, `clamp`, `sqrt`, `round`), Strings (`text_split`, `text_replace`, `text_pad_left`), Arrays (`sort`, `unique`, `chunk`, `zip`), Mengen (`set_union`), Maps (`has_key`, `get_or`, `entries`), Datumsarithmetik (`date_add_days`), Hashing und Web-Encodings (`hash_sha256`, `base64_encode`, `url_encode`, `uuid_v4`) sowie Pfade (`path_join`, `file_exists`). Die vollständigen Signaturen und Laufzeitgrenzen stehen in [Anhang D: Standardbibliothek](anhaenge.md#anhang-d-die-standardbibliothek-im-uberblick).
+
 ## 6. Option, Result und Pattern Matching
 
 Normale Typen sind nicht `null`. Ein möglicher fehlender Wert wird markiert:
@@ -381,6 +408,13 @@ fn load_number(found: Bool) -> Result<Int, String> {
     return Err("nicht gefunden")
 }
 ~~~
+
+Option- und Result-Hilfsfunktionen (Neu in 1.0.3):
+
+Ergebnisse und Optionen lassen sich ohne zwingendes `match` auf ihren Zustand prüfen oder sicher entpacken:
+- `is_ok(result)` / `is_err(result)`: Liefert `true`, wenn die Operation erfolgreich bzw. fehlgeschlagen ist.
+- `is_some(option)` / `is_none(option)`: Prüft auf Anwesenheit eines Wertes.
+- `unwrap_or(option, default)`: Entpackt `Some(value)` oder gibt den Standardwert `default` zurück.
 
 ## 7. MariaDB und Tabellen
 
@@ -1840,6 +1874,19 @@ ohne Inhalte dazwischen zu verändern. Das ist hilfreich, um CSV-Eingaben vor
 der Typumwandlung zu normalisieren und nur aus Leerraum bestehende Pflichtfelder
 abzuweisen.
 
+Der Vorwärtspipeline-Operator übergibt den Wert links als erstes Argument an
+den nächsten benannten Funktionsaufruf. Die Stufen laufen von links nach rechts
+und verwenden jeweils die normale Typ- und Effektprüfung eines Aufrufs:
+
+~~~zelyra
+normalisiert = "  ZELYRA  " |> trim |> to_lower
+teile = "eins,zwei" |> text_split(",")
+~~~
+
+`trim`, `to_lower` und `to_upper` sind Pipeline-Aliase für `text_trim`,
+`text_to_lower` und `text_to_upper`. Weitere Argumente folgen dem übergebenen
+Wert, zum Beispiel `text |> text_replace("alt", "neu")`.
+
 `text_chars(text)` liefert die Unicode-Codepoints eines Textes als `String[]`.
 So lassen sich Raster und andere zeichenweise Textformate mit normalen,
 typisierten Zelyra-Arrays verarbeiten. Die Aufteilung erfolgt nach Unicode-
@@ -3002,3 +3049,49 @@ ein bereits laufender Webserver ist nicht erforderlich. `--all` startet den
 Webdienst erst nach erfolgreicher Schemaanwendung und gibt dann seine Adresse
 aus. Schemapläne mit Freigabepflicht bleiben gesperrt; diese Reihenfolge umgeht
 keine Präzisions- oder Migrationsprüfung.
+
+## 25. Laravel-Migration: Statische Analyse und Gerüsterstellung
+
+Zelyra enthält ein integriertes Migrationswerkzeug für bestehende Laravel-Anwendungen (Laravel 10.x und 11.x). Es analysiert den PHP-Quelltext rein statisch, deckt Geschäfts-, Daten- und Sicherheitsstrukturen auf und unterstützt den schrittweisen Übergang zu einer typgeprüften Zelyra-Anwendung.
+
+### Grundprinzipien und Schutzmechanismen
+
+1. **Reine Leseoperation (Immutabilität):** Das bestehende Laravel-Projekt, seine PHP-Dateien und Konfigurationen werden niemals verändert oder überschrieben.
+2. **Keine PHP- oder Datenbankausführung:** Zelyra führt weder PHP noch `artisan` aus, öffnet keine Datenbankverbindung und liest keine sensiblen `.env`-Dateien aus.
+3. **Pfadisolierung:** Berichte und generierte Zelyra-Projekte müssen zwingend außerhalb des Quellordners liegen. Pfadsprünge (`..`) in übergeordnete Verzeichnisse sind gesperrt.
+4. **Ehrliche Befunde:** Kein Analyseergebnis wird blind als „vollständig migriert“ deklariert; alle Ergebnisse werden als `partial` oder `manual` ausgewiesen, um menschliche Prüfung sicherzustellen.
+
+### CLI-Befehle
+
+Analysebericht als Markdown erstellen:
+~~~bash
+zelyra migrate laravel ./mein-laravel-projekt --report ./berichte/migration.md
+~~~
+
+Maschinenlesbarer JSON-Bericht für Werkzeuge und CI:
+~~~bash
+zelyra migrate laravel ./mein-laravel-projekt --report ./berichte/migration.json --format json
+~~~
+
+Analysebericht erstellen und eigenständiges Zelyra-Gerüst erzeugen:
+~~~bash
+zelyra migrate laravel ./mein-laravel-projekt --report ./berichte/migration.md --output ./neues-zelyra-projekt
+~~~
+
+### Erkennungsumfang
+
+Der statische Scanner prüft bis zu 10.000 PHP-Dateien (max. 2 MiB pro Datei) und erfasst:
+- **Datenmodelle & Migrationen:** Eloquent-Modelle, `Schema::create`, Tabellenspalten, Fremdschlüsselbeziehungen (`belongsTo`, `hasMany`, `hasOne`), `Decimal`/Währungsfelder und Zeitstempel.
+- **Routen & Web-Einstiegspunkte:** `Route::get`, `Route::post`, `Route::resource` und Controller-Aktionen.
+- **Formulare & Validierung:** Validierungsregeln (`$request->validate(...)`), Form-Requests und Pflichtfelder.
+- **Sicherheit & Berechtigungen:** Policies, Gates, Authentifizierungsprüfungen (`authorize`), CSRF-Marker und Rollen.
+- **Mandantentrennung (Multi-Tenancy):** Spalten wie `tenant_id` und `account_id` sowie Mandantenscopes.
+- **Kritische Geschäftsstellen:** Direkte SQL-Aufrufe (`DB::raw`, `whereRaw`), Transaktionen (`DB::transaction`), E-Mail-Events, Queues (`ShouldQueue`) und externe Paketabhängigkeiten (Spatie, Stripe, Livewire, Inertia).
+
+### Das generierte Zelyra-Projekt (`--output`)
+
+Mit `--output <ziel>` erzeugt der Migrator ein sofort mit `zelyra check` prüfbares, lauffähiges Zelyra-Projekt:
+- `zelyra.toml`: Projektkonfiguration mit Standard-Capabilities.
+- `main.zyl`: Generierte Datenbanktabellen, typisierte Schemadaten und relationale CRUD-Routen.
+- `MIGRATION_REPORT.md`: Vollständiger Bericht der erkannten Strukturen.
+- `MIGRATION_TODO.md`: Konkrete Checkliste der verbleibenden manuellen Prüfschritte.

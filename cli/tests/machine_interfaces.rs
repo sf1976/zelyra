@@ -898,6 +898,13 @@ fn invoice_tutorial_creates_a_checkable_project_without_overwriting() {
     }
     assert!(directory.join("src/database.zyl").is_file());
     assert!(directory.join("src/shell.zyl").is_file());
+    assert_eq!(
+        fs::read_to_string(directory.join("zelyra.tutorial")).unwrap(),
+        "invoice-v1\n"
+    );
+    let seed = fs::read_to_string(directory.join("invoice-tutorial.seed.sql")).unwrap();
+    assert!(seed.contains("RE-2026-001"));
+    assert!(seed.contains("WHERE NOT EXISTS"));
     let local_env = fs::read_to_string(directory.join(".env")).unwrap();
     assert!(local_env.contains("ZELYRA_DATABASE_MAIN_URL=mariadb://zelyra:"));
     assert!(local_env.contains("DATABASE_URL=mariadb://zelyra:"));
@@ -1533,28 +1540,39 @@ fn generated_api_metadata_and_rate_limit_reach_http_clients() {
         for index in 1..=3 {
             let mut result = None;
             for _ in 0..50 {
-                if let Ok(mut stream) =
-                    TcpStream::connect_timeout(&socket_address, Duration::from_millis(100))
-                {
-                    stream
-                        .set_read_timeout(Some(Duration::from_secs(2)))
-                        .map_err(|error| error.to_string())?;
+                let attempt = (|| {
+                    let mut stream =
+                        TcpStream::connect_timeout(&socket_address, Duration::from_millis(100))?;
+                    stream.set_read_timeout(Some(Duration::from_secs(2)))?;
                     stream
                         .write_all(
                             format!(
                                 "GET /health HTTP/1.1\r\nHost: localhost\r\nX-Request-ID: test-{index}\r\n\r\n"
                             )
                             .as_bytes(),
-                        )
-                        .map_err(|error| error.to_string())?;
+                        )?;
                     let mut response = String::new();
-                    stream
-                        .read_to_string(&mut response)
-                        .map_err(|error| error.to_string())?;
-                    if !response.is_empty() {
+                    stream.read_to_string(&mut response)?;
+                    Ok::<_, std::io::Error>(response)
+                })();
+                match attempt {
+                    Ok(response) if !response.is_empty() => {
                         result = Some(response);
                         break;
                     }
+                    Ok(_) => {}
+                    Err(error)
+                        if matches!(
+                            error.kind(),
+                            std::io::ErrorKind::ConnectionRefused
+                                | std::io::ErrorKind::ConnectionReset
+                                | std::io::ErrorKind::ConnectionAborted
+                                | std::io::ErrorKind::TimedOut
+                                | std::io::ErrorKind::WouldBlock
+                                | std::io::ErrorKind::UnexpectedEof
+                                | std::io::ErrorKind::BrokenPipe
+                        ) => {}
+                    Err(error) => return Err(error.to_string()),
                 }
                 std::thread::sleep(Duration::from_millis(40));
             }

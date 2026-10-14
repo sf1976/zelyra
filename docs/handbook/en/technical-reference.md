@@ -298,6 +298,36 @@ type OrderId = Id
 An `OrderId` is not a `MachineId`, even when both look similar underneath.
 Business mistakes do not become correct by sharing a storage type.
 
+Flat `else if` cascades (new in 1.0.3):
+
+~~~zelyra
+fn evaluate_capacity(cap: Int) -> String {
+    if cap > 100 {
+        return "HIGH"
+    } else if cap > 50 {
+        return "MEDIUM"
+    } else {
+        return "LOW"
+    }
+}
+~~~
+
+The typed pipeline operator `|>` (new in 1.0.3) passes the left expression as
+the first argument to the next function call:
+
+~~~zelyra
+fn format_title(input: String) -> String {
+    return input |> text_trim() |> text_to_upper()
+}
+~~~
+
+The expanded built-in library includes math, String, array, set, map, date,
+conversion, encoding, and path functions. See [Appendix D: Standard Library](appendices.md#appendix-d-standard-library-overview-zelyra-103)
+for signatures, capabilities, checked limits, and examples.
+
+`is_ok`, `is_err`, `is_some`, `is_none`, and `unwrap_or` provide small helpers
+for inspecting or safely unwrapping `Result` and `Option` values.
+
 ## 6. Option, Result, and pattern matching
 
 Ordinary types are never null. Absence is explicit:
@@ -1703,6 +1733,19 @@ and application checks therefore cannot report success after only printing a
 `text_trim(text)` removes Unicode whitespace at the beginning and end of text
 without changing interior content. It is useful for normalizing CSV input
 before conversion and rejecting required fields that contain only whitespace.
+
+The forward pipeline operator passes its left value as the first argument to
+the next named function or call. Stages run from left to right, and each stage
+uses the regular type and effect checks for a function call:
+
+~~~zelyra
+normalized = "  ZELYRA  " |> trim |> to_lower
+parts = "one,two" |> text_split(",")
+~~~
+
+`trim`, `to_lower`, and `to_upper` are pipeline aliases for `text_trim`,
+`text_to_lower`, and `text_to_upper`. Further arguments follow the piped value,
+as in `text |> text_replace("old", "new")`.
 
 `text_chars(text)` returns a text's Unicode code points as `String[]`. This lets
 programs process grids and other character-oriented text formats with ordinary

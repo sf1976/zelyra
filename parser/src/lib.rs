@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fmt;
 use zelyra_ast::*;
 use zelyra_lexer::{Token, TokenKind};
@@ -96,6 +97,18 @@ impl<'a> Parser<'a> {
     }
     fn ident(&mut self, label: &str) -> Result<(String, Span), ParseError> {
         match &self.current().kind {
+            TokenKind::Max => {
+                let span = self.advance().span;
+                Ok(("max".into(), span))
+            }
+            TokenKind::Unique => {
+                let span = self.advance().span;
+                Ok(("unique".into(), span))
+            }
+            TokenKind::Sort => {
+                let span = self.advance().span;
+                Ok(("sort".into(), span))
+            }
             TokenKind::Ident(name) => {
                 let span = self.advance().span;
                 Ok((name.clone(), span))
@@ -2396,23 +2409,7 @@ impl<'a> Parser<'a> {
             return Ok(Stmt::Return { value, span });
         }
         if self.at(&TokenKind::If) {
-            let start = self.advance().span;
-            let condition = self.expression()?;
-            let then_block = self.block()?;
-            self.skip_newlines();
-            let else_block = if self.at(&TokenKind::Else) {
-                self.advance();
-                Some(self.block()?)
-            } else {
-                None
-            };
-            let end = else_block.as_ref().map_or(then_block.span, |b| b.span);
-            return Ok(Stmt::If {
-                condition,
-                then_block,
-                else_block,
-                span: start.join(end),
-            });
+            return self.if_statement(false);
         }
         if self.at(&TokenKind::While) {
             let start = self.advance().span;
@@ -2435,7 +2432,37 @@ impl<'a> Parser<'a> {
         }
         if self.at(&TokenKind::For) {
             let start = self.advance().span;
-            let (name, _) = self.ident("loop variable name")?;
+            let (name, additional_names) = if self.at(&TokenKind::LParen) {
+                self.advance();
+                let mut names = Vec::new();
+                let mut seen = HashSet::new();
+                loop {
+                    let (name, name_span) = self.ident("loop variable name")?;
+                    if !seen.insert(name.clone()) {
+                        return Err(ParseError {
+                            message: format!("duplicate loop variable `{name}` in tuple pattern"),
+                            span: name_span,
+                        });
+                    }
+                    names.push(name);
+                    if !self.at(&TokenKind::Comma) {
+                        break;
+                    }
+                    self.advance();
+                }
+                self.expect(TokenKind::RParen, "`)` after tuple loop variables")?;
+                if names.len() < 2 {
+                    return Err(ParseError {
+                        message: "tuple loop patterns need at least two variables".into(),
+                        span: start,
+                    });
+                }
+                let first = names.remove(0);
+                (first, names)
+            } else {
+                let (name, _) = self.ident("loop variable name")?;
+                (name, Vec::new())
+            };
             self.expect(TokenKind::In, "`in` after loop variable")?;
             let mut iterable = self.expression()?;
             if self.at_word("step") {
@@ -2465,6 +2492,7 @@ impl<'a> Parser<'a> {
             let body = self.block()?;
             return Ok(Stmt::For {
                 name,
+                additional_names,
                 iterable,
                 body: body.clone(),
                 span: start.join(body.span),
@@ -2620,6 +2648,43 @@ impl<'a> Parser<'a> {
         }
         Ok(Stmt::Expr(expression))
     }
+
+    fn if_statement(&mut self, is_else_if: bool) -> Result<Stmt, ParseError> {
+        let start = self.advance().span;
+        let condition = self.expression()?;
+        let then_block = self.block().map_err(|mut error| {
+            if is_else_if && error.message.starts_with("expected `{`") {
+                error.message =
+                    "expected a block after `else if`; use `else if condition { ... }`".into();
+            }
+            error
+        })?;
+        self.skip_newlines();
+        let else_block = if self.at(&TokenKind::Else) {
+            self.advance();
+            self.skip_newlines();
+            if self.at(&TokenKind::If) {
+                let if_stmt = self.if_statement(true)?;
+                let span = if_stmt.span();
+                Some(Block {
+                    statements: vec![if_stmt],
+                    span,
+                })
+            } else {
+                Some(self.block()?)
+            }
+        } else {
+            None
+        };
+        let end = else_block.as_ref().map_or(then_block.span, |b| b.span);
+        Ok(Stmt::If {
+            condition,
+            then_block,
+            else_block,
+            span: start.join(end),
+        })
+    }
+
     fn pattern(&mut self) -> Result<Pattern, ParseError> {
         self.with_nesting(Self::pattern_inner)
     }
@@ -2729,6 +2794,15 @@ impl<'a> Parser<'a> {
         let mut left = self.unary()?;
         loop {
             self.skip_newlines();
+            if self.at(&TokenKind::PipeForward) {
+                if min_prec > 0 {
+                    break;
+                }
+                self.advance();
+                let stage = self.unary()?;
+                left = pipeline_call(left, stage)?;
+                continue;
+            }
             if min_prec == 0 && self.at(&TokenKind::DotDot) {
                 self.advance();
                 let right = self.binary(1)?;
@@ -2952,6 +3026,45 @@ impl<'a> Parser<'a> {
                     span: token.span.join(end),
                 })
             }
+            TokenKind::Max | TokenKind::Sort | TokenKind::Unique => {
+                let name = if matches!(token.kind, TokenKind::Max) {
+                    "max".to_string()
+                } else if matches!(token.kind, TokenKind::Sort) {
+                    "sort".to_string()
+                } else {
+                    "unique".to_string()
+                };
+                if self.at(&TokenKind::LParen) {
+                    self.advance();
+                    let mut args = Vec::new();
+                    self.skip_newlines();
+                    if !self.at(&TokenKind::RParen) {
+                        loop {
+                            args.push(self.expression()?);
+                            self.skip_newlines();
+                            if !self.at(&TokenKind::Comma) {
+                                break;
+                            }
+                            self.advance();
+                            self.skip_newlines();
+                        }
+                    }
+                    let end = self.expect(TokenKind::RParen, "`)`")?;
+                    Ok(Expr {
+                        kind: ExprKind::Call {
+                            name,
+                            type_args: Vec::new(),
+                            args,
+                        },
+                        span: token.span.join(end),
+                    })
+                } else {
+                    Ok(Expr {
+                        kind: ExprKind::Variable(name),
+                        span: token.span,
+                    })
+                }
+            }
             TokenKind::Ident(name) => {
                 let mut name = name;
                 while self.at(&TokenKind::DoubleColon) {
@@ -3169,6 +3282,45 @@ impl<'a> Parser<'a> {
     }
 }
 
+fn pipeline_call(input: Expr, stage: Expr) -> Result<Expr, ParseError> {
+    let (name, type_args, mut args) = match stage.kind {
+        ExprKind::Variable(name) | ExprKind::FunctionValue(name) => (
+            pipeline_builtin_alias(&name).to_owned(),
+            Vec::new(),
+            Vec::new(),
+        ),
+        ExprKind::Call {
+            name,
+            type_args,
+            args,
+        } => (pipeline_builtin_alias(&name).to_owned(), type_args, args),
+        _ => {
+            return Err(ParseError {
+                message: "pipeline stage must name a function or a function call".into(),
+                span: stage.span,
+            })
+        }
+    };
+    args.insert(0, input.clone());
+    Ok(Expr {
+        kind: ExprKind::Call {
+            name,
+            type_args,
+            args,
+        },
+        span: input.span.join(stage.span),
+    })
+}
+
+fn pipeline_builtin_alias(name: &str) -> &str {
+    match name {
+        "trim" => "text_trim",
+        "to_lower" => "text_to_lower",
+        "to_upper" => "text_to_upper",
+        _ => name,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3178,6 +3330,61 @@ mod tests {
         let program = parse(&lex("fn main() { print(1 + 2 * 3) }").unwrap()).unwrap();
         assert_eq!(program.functions.len(), 1);
         assert_eq!(program.functions[0].name, "main");
+    }
+
+    #[test]
+    fn suggests_block_syntax_for_else_if_without_a_block() {
+        let source = "fn main() { if ready { print(1) } else if retry print(2) }";
+        let error = parse(&lex(source).unwrap()).unwrap_err();
+
+        assert_eq!(
+            error.message,
+            "expected a block after `else if`; use `else if condition { ... }`"
+        );
+        assert_eq!(error.span.start, source.find("print(2)").unwrap());
+        assert_eq!(error.span.end, error.span.start + "print".len());
+    }
+
+    #[test]
+    fn parses_pipeline_stages_as_left_to_right_function_calls() {
+        let program =
+            parse(&lex("fn main() { result = \"  HI \" |> trim |> to_lower }").unwrap()).unwrap();
+        let Stmt::BindOrAssign { value, .. } = &program.functions[0].body.statements[0] else {
+            panic!("expected pipeline binding");
+        };
+        let ExprKind::Call {
+            name: outer_name,
+            args: outer_args,
+            ..
+        } = &value.kind
+        else {
+            panic!("expected outer pipeline call");
+        };
+        assert_eq!(outer_name, "text_to_lower");
+        let ExprKind::Call {
+            name: inner_name,
+            args: inner_args,
+            ..
+        } = &outer_args[0].kind
+        else {
+            panic!("expected inner pipeline call");
+        };
+        assert_eq!(inner_name, "text_trim");
+        assert!(matches!(inner_args[0].kind, ExprKind::String(ref text) if text == "  HI "));
+    }
+
+    #[test]
+    fn rejects_non_call_pipeline_stages_at_the_stage_span() {
+        let source = "fn main() { value = \"text\" |> (1 + 2) }";
+        let error = parse(&lex(source).unwrap()).unwrap_err();
+
+        assert_eq!(
+            error.message,
+            "pipeline stage must name a function or a function call"
+        );
+        let stage_start = source.find("1 + 2").unwrap();
+        assert_eq!(error.span.start, stage_start);
+        assert_eq!(error.span.end, stage_start + "1 + 2".len());
     }
 
     #[test]
@@ -4394,6 +4601,30 @@ mod tests {
             program.functions[0].body.statements[0],
             Stmt::For { ref name, .. } if name == "value"
         ));
+    }
+
+    #[test]
+    fn parses_tuple_destructuring_for_loops() {
+        let program = parse(
+            &lex("fn main() { for (key, value) in entries(Map { \"a\": 1 }) { print(key) } }")
+                .unwrap(),
+        )
+        .unwrap();
+        let Stmt::For {
+            name,
+            additional_names,
+            ..
+        } = &program.functions[0].body.statements[0]
+        else {
+            panic!("expected a for loop");
+        };
+        assert_eq!(name, "key");
+        assert_eq!(additional_names, &["value"]);
+
+        let duplicate =
+            parse(&lex("fn main() { for (item, item) in zip([1], [2]) { print(item) } }").unwrap())
+                .unwrap_err();
+        assert!(duplicate.message.contains("duplicate loop variable"));
     }
 
     #[test]

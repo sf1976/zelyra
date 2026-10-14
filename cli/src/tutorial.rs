@@ -2,6 +2,7 @@ use super::*;
 
 const INVOICE_SOURCE: &str = include_str!("../../examples/invoice_tutorial/main.zyl");
 const INVOICE_THEME: &str = include_str!("../../examples/invoice_tutorial.theme.css");
+const INVOICE_SEED_SQL: &str = include_str!("../../examples/invoice_tutorial/seed.sql");
 const INVOICE_MODULES: &[(&str, &str)] = &[
     (
         "src/database.zyl",
@@ -101,6 +102,22 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         eprintln!(
             "error[E-TUTORIAL-004]: could not write tutorial theme `{}`: {error}",
             theme_path.display()
+        );
+        return ExitCode::FAILURE;
+    }
+    let seed_path = PathBuf::from(&directory).join("invoice-tutorial.seed.sql");
+    if let Err(error) = fs::write(&seed_path, INVOICE_SEED_SQL) {
+        eprintln!(
+            "error[E-TUTORIAL-004]: could not write tutorial sample data `{}`: {error}",
+            seed_path.display()
+        );
+        return ExitCode::FAILURE;
+    }
+    let marker_path = PathBuf::from(&directory).join("zelyra.tutorial");
+    if let Err(error) = fs::write(&marker_path, "invoice-v1\n") {
+        eprintln!(
+            "error[E-TUTORIAL-004]: could not mark the invoice tutorial project `{}`: {error}",
+            marker_path.display()
         );
         return ExitCode::FAILURE;
     }

@@ -64,41 +64,40 @@ den tatsächlich implementierten Stand.
   leeren Bereichen bei falscher Richtung und geprüfter Schrittweite ungleich 0
   unterstützen. `range(start, end, step)` liefert dieselbe Folge als begrenztes
   Array. Parser-, Laufzeit-, Typ- und Grenztests bestehen.
-- [ ] **Geplant für 1.0.3 — Zelyra-eigene Sprachkonstrukte:** Verkettete
-  `else if`-Zweige, typisierte `if`-Ausdrücke, Tuple-Destructuring und
-  markiertes `break`/`continue` für verschachtelte Schleifen ergänzen;
-  Schleifenabbrüche mit Rückgabewert benötigen ausdrückliche, typgeprüfte
-  Regeln. Klammerblöcke, statische Typen, ausdrückliche Effekte und geprüfte
-  Fehler bleiben erhalten. Für häufige Parserfehler wie einen fehlenden Block
-  nach `else if` gezielte Vorschläge mit genauer Quellposition und korrigierter
-  Form anzeigen. Schrittweiten einschließlich negativer Werte und rückwärts
-  laufender Bereiche sind bereits in 1.0.2 enthalten. Benutzerdefinierte
-  Operatoren für eigene Typen über ein ausdrückliches, typgeprüftes Protokoll
-  mit fester Rangfolge, eindeutiger Auflösung und Effektregeln unterstützen;
-  eigene Rangfolgen dürfen nicht deklariert werden.
-- [ ] **Geplant für 1.0.3 — native String- und Math-Bibliotheken:** Die bereits
-  teilweise vorhandene String-API (`text_contains`, `text_trim`,
-  `text_replace_result`, `text_split_result`) um Klein-/Großschreibung, Länge,
-  Verbinden, Trimmen, Enthaltensein, Ersetzen, Teilen sowie Präfix-/Suffix-
-  Prüfungen vervollständigen. Bisherige `text_*`-Namen und geprüfte Fehler
-  kompatibel halten. Eine typisierte Zelyra-Pipeline für lesbare
-  Funktionsverkettung ergänzen, zum Beispiel `text |> trim |> to_lower`, mit
-  klarer Typ- und Effektprüfung. Native `abs`, `min`, `max`, `floor`, `ceil`,
-  `round`, `sqrt` und `pow` mit festgelegten Typen, Rundungs-/Genauigkeitsregeln
-  und geprüften Überlauf-/Definitionsbereichsfehlern ergänzen. Lesbare,
-  typgeprüfte String-Interpolation mit Escape-Regel für geschweifte Klammern
-  in einer für Zelyra entworfenen Syntax bereitstellen. Effizientes typisiertes
-  `concat<T>(left, right)` ergänzen.
-- [ ] **Geplant für 1.0.3 — Sammlungen und funktionale Operationen:** Normale
+- [~] **Teilweise in 1.0.3 — Zelyra-eigene Sprachkonstrukte:** Verkettete
+  `else if`-Zweige, typisierte `|>`-Pipelines und typgeprüfte
+  Tuple-Destrukturierung in `for`-Schleifen sind umgesetzt. Offen sind
+  typisierte `if`-Ausdrücke, markiertes `break`/`continue` für verschachtelte
+  Schleifen und ausdrückliche, typgeprüfte Regeln für Schleifenabbrüche mit
+  Rückgabewert. Klammerblöcke, statische Typen, ausdrückliche Effekte und
+  geprüfte Fehler bleiben erhalten. Bei einem fehlenden Block nach `else if`
+  zeigt der Parser die erwartete Blockform samt genauer Quellposition an;
+  weitere häufige Fehler brauchen ebenfalls gezielte Vorschläge. Schrittweiten
+  einschließlich negativer Werte und rückwärts laufender Bereiche sind bereits
+  in 1.0.2 enthalten. Benutzerdefinierte Operatoren für eigene Typen brauchen
+  weiterhin ein ausdrückliches, typgeprüftes Protokoll mit fester Rangfolge,
+  eindeutiger Auflösung und Effektregeln; eigene Rangfolgen dürfen nicht
+  deklariert werden.
+- [~] **Teilweise in 1.0.3 — native String- und Math-Bibliotheken:** Die
+  eingebauten String-Funktionen decken Klein-/Großschreibung, Unicode-Länge,
+  Verbinden, Trimmen, Enthaltensein, Ersetzen, Teilen, Padding sowie Präfix- und
+  Suffix-Prüfungen ab; die bisherigen `text_*`-Namen und Result-Varianten
+  bleiben erhalten. `|>` verkettet direkte Funktionsnamen und Aufrufe von links
+  nach rechts und prüft jede Stufe wie einen gewöhnlichen Aufruf. Native
+  Mathematikfunktionen haben jetzt festgelegte Typen, Rundungsregeln und
+  Laufzeitfehler für Überläufe oder ungültige Bereiche. `concat<T>` ist
+  vorhanden. Offen ist lesbare, typgeprüfte String-Interpolation mit
+  Escape-Regel für geschweifte Klammern.
+- [~] **Teilweise in 1.0.3 — Sammlungen und funktionale Operationen:** Normale
   Arrays und Maps bleiben wertbasiert. Opt-in veränderliche typisierte Arrays
   und Stacks mit geprüften O(1)-Indexupdates und effizientem `push`/`pop`
   ergänzen; `pop` liefert einen ausdrücklichen Leerfall. Veränderliche Arrays
   müssen geprüfte zusammengesetzte Indexupdates wie `items[i] += 1` erlauben.
-  Typisierte Map-Iteration, `get_or_default` und einen sicheren
-  Zähler-/Updatehelfer ergänzen.
+  Typisierte Map-Iteration über `entries`, Tuple-Destrukturierung,
+  `get_or_default` und `map_increment` mit geprüftem Überlauffall sind
+  vorhanden.
   Maps, `Map<K, V>` und `Map { ... }`-Literale, `get`, `put`, `keys`, `values`
-  und `contains` sind bereits vorhanden; es fehlen die komfortable Iteration
-  und der Standardwertzugriff, nicht Maps an sich. Typisierte anonyme
+  und `contains` sind bereits vorhanden. Typisierte anonyme
   Funktionen mit ausdrücklichen Capture-/Effektregeln sowie Standard-
   Kombinatoren `map`, `filter` und `fold` bereitstellen. Komposition über die
   Zelyra-Pipeline unterstützen und klare Typinferenz/Diagnosen erhalten. Die
@@ -127,11 +126,21 @@ den tatsächlich implementierten Stand.
   für den dokumentierten Rucksackfall 8 herauskommen. Eingaben und Größen
   validieren, Arithmetik prüfen, Aufwand begrenzen und Kompilierung, Ausgabe
   sowie Grenzfälle in CI testen.
-- [ ] **Geplant für 1.0.3 — Compilerdiagnosen:** Verschachtelte Syntax- und
+- [~] **Teilweise in 1.0.3 — Compilerdiagnosen:** Der Parser schlägt für einen
+  fehlenden Block nach `else if` bereits eine korrigierte Blockform mit
+  Quellposition vor. Offen sind verschachtelte Syntax- und
   Typfehler mit gezielten Vorschlägen, Quellpositionen und kurzem korrigiertem
-  Zelyra-Beispiel verbessern. Fehlende Blöcke, Interpolationsnamen/-typen,
-  Pipeline-Typkonflikte, Tuple-Arity, Sammlungs-Callbacks und ungültige
-  Zahleneingaben mit positiven und negativen Tests abdecken.
+  Zelyra-Beispiel verbessern. Pipeline-Typkonflikte, Sammlungs-Callbacks und
+  ungültige Zahleneingaben brauchen gezielte positive und negative Tests.
+- [x] **1.0.3 Rechnungstutorialstart über CLI und Studio:** Bei Compose-
+  Portkonflikten automatisch freie Folgeports für MariaDB oder die
+  Webanwendung wählen, die lokale `.env` und passende MariaDB-URLs aktualisieren
+  und den Start begrenzt wiederholen. Das Rechnungstutorial erhält
+  wiederholbare lokale Beispieldaten. Studio Run startet den passenden lokalen
+  Datenbankdienst, richtet das Schema ein, lädt den Seed nur im markierten
+  lokalen Tutorialprojekt und startet danach die Vorschau. CLI und Studio
+  liefen gegen Docker Compose 5.6.0 / Engine 29.8.2; HTTP-Dashboard und
+  gespeicherte Beispieldatensätze wurden geprüft.
 - [x] **1.0.1 Sprachprüfung des veröffentlichten Artefakts:** 80 Fälle,
   100 Aufgaben-Wiederholungen, 600 Zahlenvergleiche und 1.408 Kalender-/UTC-
   Referenzfälle ohne unerwartete Befunde geprüft; Installation/Update/Rückkehr
@@ -248,8 +257,9 @@ den tatsächlich implementierten Stand.
 - [x] Sprachkern mit Lexer, Parser, AST, Funktionen, Ausdrücken, Kontrollfluss,
   unveränderlichen Bindings als Standard, Arrays, deterministischen typisierten
   Maps, Records, Option, Result und exhaustivem Pattern Matching als Anweisung
-  und Ausdruck. `Int`/`UInt`-Überläufe und Division durch null liefern
-  kontrollierte Runtimefehler; `Unit` ist in Typsignaturen nutzbar.
+  und Ausdruck. `Int`/`UInt`-Überläufe, Division durch null und mehr als 20
+  verschachtelte Funktionsaufrufe liefern kontrollierte Runtimefehler; `Unit`
+  ist in Typsignaturen nutzbar.
   `examples/type_system` hält die geprüfte Typabdeckung und nicht unterstützte
   Bereiche fest.
 - [x] Statische Prüfung, nominale Fachdaten-Typen, Capabilities, Contracts,

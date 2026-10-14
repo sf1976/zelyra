@@ -99,7 +99,9 @@ Willkommen beim vollständigen Zelyra-Handbuch. Es umfasst sowohl das didaktisch
 - [21. Positionierung und aktueller Entwicklungsstand](technisches-referenzhandbuch.md#21-positionierung-und-aktueller-entwicklungsstand)
 - [22. Roadmap aus dem aktuellen Repository](technisches-referenzhandbuch.md#22-roadmap-aus-dem-aktuellen-repository)
 - [23. KI-native Entwicklung](technisches-referenzhandbuch.md#23-ki-native-entwicklung)
-- [24. Verbindliche Quellen und Compiler-Prüfung (Source Authority)](anhaenge.md#24-verbindliche-quellen-und-compiler-prufung-source-authority)
+- [24. Anwendungs-E-Mail](technisches-referenzhandbuch.md#24-anwendungs-e-mail-095)
+- [25. Laravel-Migration: Statische Analyse und Gerüsterstellung](technisches-referenzhandbuch.md#25-laravel-migration-statische-analyse-und-gerusterstellung)
+- [26. Verbindliche Quellen und Compiler-Prüfung (Source Authority)](anhaenge.md#24-verbindliche-quellen-und-compiler-prufung-source-authority)
 
 ### Anhänge
 

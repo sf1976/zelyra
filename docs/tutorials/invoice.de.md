@@ -1,101 +1,136 @@
 # Rechnungstutorial
 
-`zelyra --tutorial invoice` erstellt ein neues Projekt und richtet es sofort
-ein: Zelyra schreibt die Anwendung, das lokale `.env`, Docker-Compose-Dateien
-und das professionelle Theme, startet MariaDB und die Webanwendung und spielt
-das Datenbankschema ein. Es ist weder ein manuelles Setzen von
-`DATABASE_URL` noch ein separates `db setup` oder `serve` erforderlich.
+Dieses Tutorial führt durch eine mehrteilige Rechnungsanwendung: Kundinnen und
+Kunden, Artikel, Rechnungen, Positionen, ein Live-Dashboard und eine druckbare
+Ansicht. Die erzeugten Dateien bleiben lokal und lassen sich sowohl über die
+Kommandozeile als auch mit Zelyra Studio starten.
 
-Voraussetzung ist eine laufende Docker-Installation mit Docker Compose. Zelyra
-installiert Docker nicht selbst. Fehlt Compose oder kann der Container nicht
-starten, bleiben die Projektdateien erhalten; nach Behebung des Docker-Problems
-startet `cd invoice-tutorial && zelyra setup --all` Datenbank, Anwendung und
-Schema gemeinsam. Bei einem anderen Zielordner verwende den entsprechenden
-Pfad, zum Beispiel `zelyra --tutorial invoice ./meine-rechnungen`.
-Für reine Projektgenerierung ohne Docker-Start kannst du `--no-start`
-anhängen. Auch dann erzeugt Zelyra bereits eine geschützte lokale `.env` mit
-`ZELYRA_DATABASE_MAIN_URL` und dem kompatiblen `DATABASE_URL`-Fallback; die
-Zugangsdaten werden nicht in der Ausgabe gezeigt. Die Datenbank und Anwendung
-starten erst mit `zelyra setup --all`. Die Ausgabe nennt den Startbefehl und
-die vorgesehene Browseradresse. Auch `zelyra new ... --mariadb`
-zeigt schon beim Anlegen die Adresse an, die nach dem Start erreichbar ist.
-Wenn der Schema-Schritt nach dem Start fehlschlägt, bleibt die Adresse in der
-Fehlermeldung sichtbar.
+## Voraussetzungen und erster Start
 
-Die fertige Anwendung läuft auf der in der Befehlsausgabe genannten lokalen
-Adresse (standardmäßig `http://127.0.0.1:3000`). Sie enthält fünf verbundene
-Bereiche:
+Installiere Docker und Docker Compose v2 oder neuer. Prüfe die Installation mit
+`docker compose version`. Zelyra installiert Docker nicht selbst.
 
-1. **Kunden** — Kundendatensätze unter `/customers` anlegen und suchen.
-2. **Artikel** — wiederverwendbare Produkte, Preise und Aktivstatus unter
-   `/items` pflegen.
-3. **Dashboard** — unter `/` starten. Dort zeigen echte Daten Kundenanzahl,
-   Rechnungsanzahl sowie gespeicherte Netto- und Bruttowerte inklusive Steuer.
-   Die Werte enthalten auch Entwürfe und sind daher keine gebuchte Umsatzstatistik.
-   Der geführte
-   Vier-Schritte-Ablauf verlinkt Formulare und Rechnungsübersicht direkt.
-4. **Rechnungen** — Entwurf erstellen, Kunden auswählen, Rechnungsnummer und
-   Status unter `/invoices` verwalten.
-5. **Rechnungspositionen** — unter `/invoice_lines` Rechnung und Artikel
-   auswählen und Menge sowie Netto-Stückpreis eintragen. Aus den Positionen
-   berechnet die Rechnungsansicht Nettobetrag, 19% Umsatzsteuer und Brutto.
+Erzeuge, initialisiere und starte das Tutorial mit:
 
-Docker Compose v2 oder neuer ist erforderlich (`docker compose version`). Das
-alte Python-Programm `docker-compose` 1.29.2 wird nicht verwendet: Auf aktuellen
-Docker-Engines scheitert es mit `KeyError: 'ContainerConfig'`. Installiere das
-Compose-Plugin nach der [offiziellen Anleitung](https://docs.docker.com/compose/install/linux/),
-prüfe `docker compose version` und starte im vorhandenen Tutorialordner
-`zelyra setup --all`. Die vorhandene `.env` und Datenbank-Volumes bleiben
-erhalten; zum Beheben dieses Fehlers ist kein Löschen von Daten erforderlich.
-Ein Berechtigungsfehler unter `/var/crash` betrifft den Ubuntu-Crashreport und
-ist kein Nachweis für fehlenden Zugriff auf den Docker-Socket.
+~~~sh
+zelyra --tutorial invoice
+~~~
 
-## Projektaufbau: eine Aufgabe pro Datei
+Der Befehl erstellt `invoice-tutorial`, legt eine geschützte `.env` an, startet
+MariaDB, richtet Datenbankschema und Beispieldaten ein, startet die Anwendung
+und gibt ihre Adresse aus. Öffne die ausgegebene Adresse, falls sich kein
+Browser öffnet. Die Beispieldaten enthalten zwei Kunden, drei Artikel und den
+Rechnungsentwurf `RE-2026-001` mit zwei Positionen. Wiederholte Starts fügen
+diese Datensätze nicht erneut hinzu.
 
-Das Tutorial ist ein echtes Mehrdateienprojekt. `main.zyl` ist der Einstieg und
-bindet die Module mit `import` ein. Die fachlichen Bereiche liegen getrennt:
+Nur die Dateien erzeugen, ohne Docker zu starten:
+
+~~~sh
+zelyra --tutorial invoice ./meine-rechnungen --no-start
+cd ./meine-rechnungen
+zelyra setup . --all
+~~~
+
+`--no-start` erzeugt trotzdem `.env`, Compose-Datei, Schema, Seed-SQL und
+Anwendung. `zelyra setup . --all` führt später den vollständigen lokalen Start
+aus. Die Zugangsdaten stehen nur in der lokalen, von Git ignorierten `.env`.
+
+## Start aus Zelyra Studio
+
+Öffne das Projekt in Studio:
+
+~~~sh
+zelyra editor ./invoice-tutorial
+~~~
+
+Wähle im Projektbaum `main.zyl` und klicke auf **Run**. Studio startet die
+lokale MariaDB, wartet auf die Verbindung, richtet das deklarierte Schema ein,
+lädt die wiederholbaren Beispieldaten und startet anschließend eine lokale
+Webvorschau. Der Run-Befehl zeigt die Vorschauadresse an; **Stop preview**
+beendet sie. Dieser Weg benötigt Docker Compose sowie die lokale
+Tutorialkonfiguration in `.env`.
+
+Für eine andere Datenbank, die über Prozessvariablen konfiguriert wurde, startet
+Studio nicht eigenständig einen lokalen Datenbankdienst und lädt keine
+Tutorialdaten hinein. So bleiben externe Datenbanken unverändert.
+
+## Befehle zum Erkunden
+
+Führe die Befehle im Tutorialverzeichnis aus:
+
+~~~sh
+zelyra check main.zyl
+zelyra fmt main.zyl --check
+zelyra routes main.zyl
+zelyra db map main.zyl
+zelyra setup . --database
+zelyra setup . --schema
+zelyra setup . --all
+~~~
+
+`check` prüft das importierte Projekt. `fmt --check` meldet Formatabweichungen,
+ohne Dateien zu ändern. `routes` zeigt Seiten, APIs und erzeugte CRUD-Routen.
+`db map` stellt deklarierte Tabellen und ihren Modulbesitz dar. Die Setup-Modi
+starten MariaDB, richten das Schema ein oder erledigen den vollständigen Ablauf.
+
+Vor einer späteren Schemaänderung kannst du den Plan ansehen und dann den
+angezeigten Plan gezielt anwenden:
+
+~~~sh
+zelyra db plan main.zyl --format=json
+zelyra db apply main.zyl --plan-id sha256:<plan-id>
+~~~
+
+Bei riskanten Änderungen verlangt Zelyra eine gesonderte Freigabe mit
+`--allow-risky`; prüfe den Plan vor dem Anwenden.
+
+## Projektdateien und Arbeitsablauf
 
 ~~~text
 invoice-tutorial/
-├── main.zyl                 Einstieg und Startseite
-├── zelyra.toml              Projekt- und Laufzeitkonfiguration
-├── zelyra.theme.css         Design-Anpassungen
+├── main.zyl                      Einstieg und Dashboard
+├── zelyra.toml                   Projektkonfiguration
+├── zelyra.theme.css              lokale Designanpassungen
+├── invoice-tutorial.seed.sql     wiederholbare Beispieldaten
+├── zelyra.tutorial               Tutorialkennung für den Seed-Schritt
 └── src/
-    ├── database.zyl         gemeinsame MariaDB-Deklaration
-    ├── shell.zyl            wiederverwendbares Seitenlayout
-    ├── customers.zyl        Kundenmodell, Tabelle und CRUD-Seiten
-    ├── items.zyl            Artikelmodell, Tabelle und CRUD-Seiten
-    ├── invoices.zyl         Rechnungen, Positionen und Druckansicht
-    └── dashboard.zyl        Summenabfrage und Rechnungsübersicht
+    ├── database.zyl              MariaDB-Deklaration
+    ├── shell.zyl                 gemeinsames Layout
+    ├── customers.zyl              Kunden und CRUD-Seiten
+    ├── items.zyl                  Artikel und CRUD-Seiten
+    ├── invoices.zyl               Rechnungen, Positionen, Druckansicht
+    └── dashboard.zyl              Rechnungsübersicht
 ~~~
 
-So kann ein Einsteiger einzelne Teile lesen oder ändern, während Compiler und
-Runtime das gesamte importierte Projekt gemeinsam prüfen. `zelyra check
-main.zyl` und `zelyra routes main.zyl` starten im Projektordner am Einstieg;
-Studio zeigt dieselben Quelldateien im Projektbaum.
+Im Dashboard siehst du Kunden- und Rechnungszahl sowie Netto-, Steuer- und
+Bruttosumme. Beginne unter `/customers` mit einem Kunden und unter `/items` mit
+einem Artikel. Lege dann unter `/invoices` einen Entwurf an und ergänze unter
+`/invoice_lines` seine Positionen. Die Beispieldatensätze machen Dashboard,
+Suche und Druckansicht sofort sichtbar.
 
-Das Desktop-Dashboard nutzt vier Kennzahlenkarten, einen geführten Ablauf und
-eine Übersicht der Beziehungen zwischen Kunden, Rechnungen und Positionen.
-Navigation und CRUD-Ansichten passen sich Tablet und schmalen Displays an;
-Tabellen bleiben dort horizontal bedienbar. Tabler Core 1.6.1 wird zusammen mit
-Zelyra ausgeliefert und lokal eingebunden. Die Anwendung lädt weder ein CDN noch
-Tabler-JavaScript nach. Die Druckansicht blendet Navigation und Bedienelemente
-aus. Mit `zelyra editor invoice-tutorial` öffnest du Studio, um Quelltext und
-Datenbankdeklarationen anzusehen und zu bearbeiten.
+`zelyra --help` und `zelyra db --help` zeigen die Befehle und Optionen. Studio
+zeigt die importierten Quelldateien im Projektbaum; Compiler und Formatter
+prüfen jeweils das gesamte Projekt, wenn du den Einstieg `main.zyl` verwendest.
 
-## Rechnung ansehen und als PDF speichern
+## Ports und Fehlerbehebung
 
-Öffne `/invoices/RECHNUNGSNUMMER/print` mit der Rechnungsnummer. Die Seite fasst
-alle Positionen zusammen und zeigt Netto, 19% Umsatzsteuer sowie Brutto. Über
-**Rechnung drucken oder als PDF speichern** öffnet sich der Druckdialog des
-Browsers. Wähle dort **Als PDF speichern**. Die Druckansicht blendet Navigation
-und Druckschaltfläche aus.
+Beim Erzeugen einer neuen lokalen Konfiguration wählt Zelyra freie Ports für
+MariaDB und die Webanwendung. Meldet Docker Compose beim Start trotzdem einen
+Portkonflikt, wählt Zelyra bei einer verwalteten `.env` automatisch einen
+anderen freien Port, aktualisiert die zugehörige lokale Datenbank-URL und
+wiederholt den Start. Die neue Anwendungsadresse wird ausgegeben. Prozessweite
+Variablen wie `ZELYRA_DB_HOST_PORT` haben Vorrang; wenn sie den belegten Port
+fest vorgeben, ändere oder entferne diese Variable und wiederhole den Befehl.
 
-Das Beispiel nimmt für alle Positionen den allgemeinen deutschen Steuersatz
-von 19% an und speichert Artikelpreise als Nettopreise. Andere Steuersätze,
-Steuerbefreiungen und Sonderfälle müssen in einer echten Anwendung korrekt
-abgebildet werden. Die Vorlage ist ein Lernbeispiel und enthält keine
-vollständige Prüfung aller gesetzlichen Rechnungsangaben, keine
-GoBD-/Buchhaltungsfunktionen, keinen E-Mail-Versand und keine native
-PDF-Erzeugung innerhalb von Zelyra. Vor produktivem Einsatz müssen die
-geltenden Anforderungen ergänzt und geprüft werden.
+Compose v1 wird nicht unterstützt. Bei fehlendem Compose-Plugin installiere
+Compose v2 nach der [Docker-Anleitung](https://docs.docker.com/engine/install/)
+und prüfe erneut `docker compose version`. Bestehende `.env`-Dateien und
+Datenbank-Volumes werden beim Wechsel des Ports nicht gelöscht.
+
+## Grenzen des Beispiels
+
+Die Vorlage berechnet für alle Positionen pauschal 19 % Umsatzsteuer. Sie ist
+ein Lernbeispiel, keine vollständige Rechnungs- oder Buchhaltungssoftware.
+Steuerfälle, Pflichtangaben, GoBD-Anforderungen, E-Mail-Versand und native
+PDF-Erzeugung sind nicht vollständig umgesetzt. Vor einem produktiven Einsatz
+müssen diese Anforderungen geprüft und ergänzt werden.

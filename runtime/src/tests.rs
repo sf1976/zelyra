@@ -992,6 +992,31 @@ fn text_trim_removes_unicode_whitespace_without_changing_interior_text() {
 }
 
 #[test]
+fn typed_pipelines_check_and_execute_native_and_user_functions() {
+    let source = r#"
+fn normalize(text: String) -> String {
+    return text_to_lower(text)
+}
+
+fn main() {
+    print("  GRÜSSE  " |> trim |> normalize)
+    print("a,b" |> text_split(","))
+}
+"#;
+    assert_eq!(run(source), ["grüsse", "[a, b]"]);
+}
+
+#[test]
+fn typed_pipelines_report_input_type_mismatches() {
+    let program = parse(&lex("fn main() { print(10 |> text_trim) }").unwrap()).unwrap();
+    let errors = check(&program).expect_err("pipeline arguments must satisfy stage signatures");
+
+    assert!(errors
+        .iter()
+        .any(|error| { error.message.contains("expected `String`, found `Int`") }));
+}
+
+#[test]
 fn text_chars_splits_unicode_scalars_into_strings() {
     let output = run("fn main() { chars = text_chars(\"Aä🧭\") print(len(chars)) print(chars[1]) print(chars[2]) }");
     assert_eq!(output, ["3", "ä", "🧭"]);
@@ -3499,4 +3524,441 @@ fn typed_sql_preserves_explicit_domain_aliases_and_rejects_nested_domain_records
         let program = parse(&lex(&source).unwrap()).unwrap();
         assert!(check(&program).is_err());
     }
+}
+
+#[test]
+fn standard_library_v103_builtins_work_properly() {
+    let source = r#"
+fn main() {
+    // Math
+    print(abs(-42))
+    print(min(10, 20))
+    print(max(10, 20))
+    print(clamp(15, 0, 10))
+
+    // Strings
+    print(text_to_lower("ZELYRA"))
+    print(text_to_upper("sicher"))
+    print(text_starts_with("test.zyl", "test"))
+    print(text_ends_with("test.zyl", ".zyl"))
+    print(text_replace("Hallo Welt", "Welt", "Zelyra"))
+    print(text_pad_left("42", 5, "0"))
+    print(text_pad_right("Tab", 6, "."))
+    print(join(text_split("a,b,c", ","), "-"))
+
+    // Collections
+    nums = [5, 1, 4, 2, 8]
+    print(sort(nums))
+    print(sort_desc(nums))
+    print(reverse(nums))
+    print(slice(nums, 1, 3))
+    print(concat([1, 2], [3, 4]))
+
+    // Maps & Options
+    mutable m: Map<String, Int> = Map { "key": 100 }
+    print(has_key(m, "key"))
+    print(has_key(m, "missing"))
+    print(get_or(m, "key", 0))
+    print(get_or(m, "missing", 404))
+    print(get_or_default(m, "missing", 405))
+    print(unwrap_or(Some(99), 0))
+    print(unwrap_or(None, 123))
+    print(to_string(42))
+}
+"#;
+    assert_eq!(
+        run(source),
+        [
+            "42",
+            "10",
+            "20",
+            "10",
+            "zelyra",
+            "SICHER",
+            "true",
+            "true",
+            "Hallo Zelyra",
+            "00042",
+            "Tab...",
+            "a-b-c",
+            "[1, 2, 4, 5, 8]",
+            "[8, 5, 4, 2, 1]",
+            "[8, 2, 4, 1, 5]",
+            "[1, 4, 2]",
+            "[1, 2, 3, 4]",
+            "true",
+            "false",
+            "100",
+            "404",
+            "405",
+            "99",
+            "123",
+            "42",
+        ]
+    );
+}
+
+#[test]
+fn standard_library_v103_phase2_builtins_work_properly() {
+    let source = r#"
+fn main() {
+    // Math
+    print(sqrt(25.0))
+    print(pow(3.0, 3.0))
+    print(floor(4.7))
+    print(ceil(4.2))
+    print(round(2.71828, 2))
+
+    // Strings
+    match text_index_of("banana", "na") {
+        Some(pos) => {
+            print(pos)
+        }
+        None => {
+            print(-1)
+        }
+    }
+    print(unwrap_or(text_index_of("éx", "x"), -1))
+    print(text_repeat("x", 4))
+    print(text_is_empty(""))
+    print(text_capitalize("hello"))
+
+    // Collections
+    print(unique([1, 2, 2, 3, 1]))
+    print(array_sum([5, 10, 15]))
+    print(avg([10, 20]))
+    print(unwrap_or(min_of([9, 3, 7]), 0))
+    print(unwrap_or(max_of([9, 3, 7]), 0))
+    print(chunk([1, 2, 3, 4], 2))
+    print(flatten([[1, 2], [3, 4]]))
+
+    // Sets & Maps
+    s1: Set<Int> = set([1, 2])
+    s2: Set<Int> = set([2, 3])
+    print(set_union(s1, s2))
+    print(set_intersection(s1, s2))
+    print(set_difference(s1, s2))
+
+    mutable m1: Map<String, Int> = Map { "a": 1, "b": 2 }
+    mutable m2: Map<String, Int> = Map { "b": 20, "c": 30 }
+    print(map_remove(m1, "a"))
+    print(map_merge(m1, m2))
+}
+
+"#;
+    assert_eq!(
+        run(source),
+        [
+            "5",
+            "27",
+            "4",
+            "5",
+            "2.72",
+            "2",
+            "1",
+            "xxxx",
+            "true",
+            "Hello",
+            "[1, 2, 3]",
+            "30",
+            "15",
+            "3",
+            "9",
+            "[[1, 2], [3, 4]]",
+            "[1, 2, 3, 4]",
+            "Set{1, 2, 3}",
+            "Set{2}",
+            "Set{1}",
+            "Map{b=2}",
+            "Map{a=1, b=20, c=30}",
+        ]
+    );
+}
+
+#[test]
+fn standard_library_math_errors_are_checked_and_types_are_restricted() {
+    for (source, expected) in [
+        (
+            "fn main() { value = abs(json_decode<Int>(\"-9223372036854775808\")) }",
+            "Int overflow in abs",
+        ),
+        (
+            r#"fn main() { value = abs(json_decode<Decimal>("\"-170141183460469231731687303715.884105728\"")) }"#,
+            "Decimal overflow in abs",
+        ),
+        (
+            "fn main() { value = sqrt(-1.0) }",
+            "sqrt requires a finite non-negative Float",
+        ),
+        (
+            "fn main() { value = pow(-2.0, 0.5) }",
+            "pow is undefined or outside the finite Float range",
+        ),
+        (
+            "fn main() { value = pow(2.0, 1024.0) }",
+            "pow is undefined or outside the finite Float range",
+        ),
+        (
+            "fn main() { value = round(1.25, 16) }",
+            "round decimal places must be between -15 and 15",
+        ),
+        (
+            "fn main() { value = round(pow(2.0, 1023.0), 15) }",
+            "round result is outside the finite Float range",
+        ),
+        (
+            "fn main() { value = clamp(4, 10, 2) }",
+            "clamp minimum must not exceed maximum",
+        ),
+        (
+            "fn main() { value = to_int(json_decode<UInt>(\"18446744073709551615\")) }",
+            "to_int cannot convert",
+        ),
+        (
+            "fn main() { value = to_int(pow(2.0, 63.0)) }",
+            "to_int Float must be finite and within the Int range",
+        ),
+        (
+            "fn main() { value = to_float(\"inf\") }",
+            "to_float cannot convert",
+        ),
+        (
+            "fn main() { value = text_pad_left(\"x\", -1, \"0\") }",
+            "padding target length must be non-negative",
+        ),
+        (
+            "fn main() { value = text_repeat(\"xx\", 8388609) }",
+            "text_repeat output exceeds the 16 MiB text limit",
+        ),
+        (
+            "fn main() { value = array_sum([pow(2.0, 1023.0), pow(2.0, 1023.0)]) }",
+            "array_sum Float overflow",
+        ),
+        (
+            "fn main() { value = avg([json_decode<Decimal>(\"\\\"170141183460469231731687303715.884105727\\\"\"), json_decode<Decimal>(\"\\\"0.000000001\\\"\")]) }",
+            "avg decimal overflow",
+        ),
+    ] {
+        let program = parse(&lex(source).unwrap()).unwrap();
+        check(&program).unwrap();
+        let error =
+            execute(&program).expect_err("invalid math input must be a checked runtime error");
+        assert!(error.message.contains(expected), "{}", error.message);
+    }
+
+    for source in [
+        "fn main() { value = min(true, false) }",
+        "fn main() { value = max(true, false) }",
+        "fn main() { value = clamp(true, false, true) }",
+        "fn main() { value = min_of([true, false]) }",
+    ] {
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(check(&program).is_err(), "unexpectedly accepted {source}");
+    }
+
+    assert_eq!(
+        run("fn main() { print(round(1.25, 1)) print(round(-1.25, 1)) print(round(125.0, -1)) print(min(json_decode<UInt>(\"3\"), json_decode<UInt>(\"2\"))) print(clamp(json_decode<UInt>(\"7\"), json_decode<UInt>(\"2\"), json_decode<UInt>(\"5\"))) print(unwrap_or(min_of([json_decode<UInt>(\"3\"), json_decode<UInt>(\"2\")]), json_decode<UInt>(\"0\"))) print(is_err(parse_float(\"NaN\"))) print(text_pad_left(\"é\", 3, \"🙂\")) }")
+            .as_slice(),
+        ["1.3", "-1.3", "130", "2", "5", "2", "true", "🙂🙂é"]
+    );
+}
+
+#[test]
+fn for_loops_destructure_typed_tuples() {
+    let source = r#"
+fn main() {
+    prices: Map<String, Int> = Map { "Coffee": 3 "Tea": 2 }
+    for (name, price) in entries(prices) {
+        print(name + ":" + to_string(price))
+    }
+    for (left, right) in zip([1, 2], [3, 4]) {
+        print(to_string(left + right))
+    }
+}
+"#;
+    assert_eq!(run(source), ["Coffee:3", "Tea:2", "4", "6"]);
+
+    for (source, expected) in [
+        (
+            "fn main() { for (key, value) in [1, 2] { print(key) } }",
+            "tuple loop pattern expects tuple values",
+        ),
+        (
+            "fn main() { values = Map { \"a\": 1 } for (key, value, extra) in entries(values) { print(key) } }",
+            "tuple loop pattern has 3 variables but the value has 2 elements",
+        ),
+    ] {
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let errors = check(&program).expect_err("invalid tuple pattern should fail type checking");
+        assert!(errors.iter().any(|error| error.message.contains(expected)));
+    }
+}
+
+#[test]
+fn map_increment_counts_safely_without_mutating_the_input_map() {
+    let source = r#"
+fn main() {
+    counts: Map<String, Int> = Map {}
+    match map_increment(counts, "pear") {
+        Ok(first) => {
+            match map_increment(first, "pear") {
+                Ok(second) => { print(get_or_default(second, "pear", 0)) }
+                Err(message) => { print(message) }
+            }
+        }
+        Err(message) => { print(message) }
+    }
+    print(get_or_default(counts, "pear", 0))
+
+    maximum: Map<String, Int> = Map { "overflow": 9223372036854775807 }
+    match map_increment(maximum, "overflow") {
+        Ok(_) => { print("unexpected success") }
+        Err(message) => { print(message) }
+    }
+}
+"#;
+    assert_eq!(run(source), ["2", "0", "map counter overflow"]);
+
+    for source in [
+        "fn main() { values: Map<String, Bool> = Map { \"enabled\": true } result = map_increment(values, \"enabled\") }",
+        "fn main() { values: Map<String, Int> = Map {} result = map_increment(values, 1) }",
+    ] {
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(check(&program).is_err(), "unexpectedly accepted {source}");
+    }
+}
+
+#[test]
+fn standard_library_v103_phase3_builtins_work_properly() {
+    let source = r#"
+fn main() {
+    // Dates
+    d1 = date("2026-10-14")
+    d2 = date_add_days(d1, 30)
+    print(d2)
+    print(date_diff_days(d2, d1))
+
+    // Result & Option Flow
+    print(is_ok(parse_int("42")))
+    print(is_err(parse_int("42")))
+    print(is_ok(parse_int("bad")))
+    print(is_err(parse_int("bad")))
+
+    print(is_some(Some(123)))
+    print(is_none(Some(123)))
+    print(is_some(None))
+    print(is_none(None))
+}
+"#;
+    assert_eq!(
+        run(source),
+        [
+            "2026-11-13",
+            "30",
+            "true",
+            "false",
+            "false",
+            "true",
+            "true",
+            "false",
+            "false",
+            "true",
+        ]
+    );
+}
+
+#[test]
+fn standard_library_v103_phase4_builtins_work_properly() {
+    let source = r#"
+fn main() uses Random, FileSystem {
+    // Hashes & Encodings
+    sha = hash_sha256("hello")
+    print(sha)
+
+    b64 = base64_encode("hello world")
+    print(b64)
+    print(unwrap_or(match base64_decode(b64) { Ok(val) => Some(val), Err(_) => None }, "err"))
+
+    ue = url_encode("hello world & foo=bar")
+    print(ue)
+    print(unwrap_or(match url_decode(ue) { Ok(val) => Some(val), Err(_) => None }, "err"))
+
+    u = uuid_v4()
+    print(len(u))
+
+    // Text helpers
+    print(text_trim_start("   abc  "))
+    print(text_trim_end("   abc  "))
+    print(text_is_blank("    "))
+    print(text_is_blank("  a  "))
+    print(text_substring("Zelyra", 2, 3))
+
+    // Conversions
+    print(to_int(3.85))
+    print(to_float(42) + 0.5)
+    print(is_ok(parse_bool("true")))
+    print(is_ok(parse_bool("0")))
+    print(is_err(parse_bool("not_a_bool")))
+
+    // Date comparisons
+    d1 = date("2026-01-01")
+    d2 = date("2026-12-31")
+    print(is_before(d1, d2))
+    print(is_after(d1, d2))
+
+    // Collections: entries, zip, dedup
+    m = Map{"a": 1, "b": 2}
+    ent = entries(m)
+    print(len(ent))
+    print(ent[0][0])
+
+    z = zip([1, 2], ["x", "y"])
+    print(len(z))
+    print(z[0][0])
+    print(z[0][1])
+
+    d = dedup([1, 2, 1, 3, 2])
+    print(d)
+
+    // Path helpers
+    joined = path_join("usr/local", "bin")
+    print(joined)
+    print(path_filename("var/log/app.log"))
+    print(path_extension("var/log/app.log"))
+    print(path_dir("var/log/app.log"))
+}
+"#;
+    assert_eq!(
+        run(source),
+        [
+            "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+            "aGVsbG8gd29ybGQ=",
+            "hello world",
+            "hello%20world%20%26%20foo%3Dbar",
+            "hello world & foo=bar",
+            "36",
+            "abc  ",
+            "   abc",
+            "true",
+            "false",
+            "lyr",
+            "3",
+            "42.5",
+            "true",
+            "true",
+            "true",
+            "true",
+            "false",
+            "2",
+            "a",
+            "2",
+            "1",
+            "x",
+            "[1, 2, 3]",
+            "usr/local/bin",
+            "app.log",
+            "log",
+            "var/log",
+        ]
+    );
 }

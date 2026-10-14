@@ -13,6 +13,7 @@ zelyra-ast.workspace = true
 zelyra-database.workspace = true
 zelyra-mail.workspace = true
 zeroize.workspace = true
+sha2.workspace = true
 
 [dev-dependencies]
 zelyra-lexer.workspace = true
