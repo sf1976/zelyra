@@ -2494,6 +2494,21 @@ fn validate_editor_candidate(
     target: &str,
     candidate: &str,
 ) -> Result<(bool, Vec<Value>), (u16, String)> {
+    if safe_editor_path(&state.root, target, false).is_ok() {
+        let entry = state.root.join("main.zyl");
+        if !entry.is_file() {
+            return Err((422, "project entry file main.zyl is missing".into()));
+        }
+        let analysis = language_service::analyze(
+            &entry,
+            &[language_service::SourceOverlay {
+                path: target.to_owned(),
+                text: candidate.to_owned(),
+                version: 0,
+            }],
+        );
+        return Ok((analysis.success, analysis.diagnostics));
+    }
     let cleanup = create_editor_preview_directory()?;
     let temporary_root = cleanup.0.clone();
     let mut file_count = 0;

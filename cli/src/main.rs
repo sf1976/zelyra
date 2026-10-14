@@ -56,7 +56,9 @@ mod formatter;
 mod help;
 mod holes;
 mod impact;
+mod language_service;
 mod laravel_migrator;
+mod lsp;
 mod module_cli;
 mod outbox_cli;
 mod project;
@@ -175,6 +177,7 @@ fn usage() {
     );
     eprintln!("  zelyra --tutorial invoice [directory] [--no-start] creates the guided invoice app, starts it, and opens the browser");
     eprintln!("  zelyra editor [directory] [--port <port>] [--no-open] starts local Studio and opens the default browser");
+    eprintln!("  zelyra lsp starts the local JSON-RPC language server over stdio");
     eprintln!("  zelyra migrate laravel <project> [--report <path>] [--output <target>] analyzes or creates a separate, checkable scaffold");
     eprintln!("  zelyra text edit <plan.zedit> [--apply --plan-id sha256:<id>] previews or applies checked text edits");
     eprintln!("  impact focus: use `--symbol <kind:name>` to inspect one known node");

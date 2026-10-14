@@ -1382,6 +1382,14 @@ Rückmeldungen des Projektverantwortlichen ersetzen keinen Teilnehmertest.
 
 ## Zukünftige Sprach-, Datenbank- und Ergonomie-Evolution (nach 1.0.0)
 
+- [🧪] **1.1.0-Grundlage für Studio/LSP (unveröffentlicht):** Compilergeprüfte
+  In-Memory-Quelltext-Overlays versorgen nun Studio-Prüfungen und einen
+  Stdio-Prototyp von `zelyra lsp`. Dieser liefert versionierte Diagnosen,
+  Dokument-/Workspace-Symbole und Deklarationsvorschläge. Semantische
+  Navigation/Umbenennung, die acht Studio-Werkzeuge, Ereigniskanal,
+  vollständige Release-Gates und RC-Artefakte bleiben offen; siehe das
+  [1.1.0-Arbeitsprotokoll](release-plans/1.1.0-studio-deep-native-progress.de.md).
+
 Um die Produktivität, Flexibilität und Entwicklerergonomie zu steigern, ohne die Grundsäulen von Zelyra (statische
 Sicherheitsverifikation von Mandanten-/Empfängergrenzen, deterministische Geschäftsarithmetik,
 digitale Souveränität) aufzuweichen, sind folgende Erweiterungen für die post-1.0-Entwicklung fest eingeplant:

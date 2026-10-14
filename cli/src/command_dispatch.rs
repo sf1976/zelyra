@@ -57,6 +57,13 @@ pub(super) fn run() -> ExitCode {
     if command == "editor" {
         return editor::command(args);
     }
+    if command == "lsp" {
+        if args.next().is_some() {
+            usage();
+            return ExitCode::from(2);
+        }
+        return lsp::command();
+    }
     if command == "migrate" {
         return laravel_migrator::command(args);
     }

@@ -89,6 +89,82 @@ pub fn load_with_entry_source(entry: &str, source: &str) -> Result<LoadedProject
     load_with_overrides(entry, HashMap::from([(canonical_entry, source.to_owned())]))
 }
 
+/// Load a project with unsaved source buffers. Paths are relative to the entry
+/// directory; every override must name an existing regular `.zyl` file inside
+/// that directory. The loader never writes the buffers to disk.
+pub fn load_with_source_overlays(
+    entry: &str,
+    overlays: &[(String, String)],
+) -> Result<LoadedProject, ProjectError> {
+    let root = Path::new(entry)
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let root = fs::canonicalize(root).map_err(|error| {
+        project_error(
+            "E-IO-001",
+            format!("cannot resolve project root: {error}"),
+            entry,
+            Span::default(),
+        )
+    })?;
+    if overlays.len() > 2_000 {
+        return Err(project_error(
+            "E-MOD-004",
+            "too many source overlays",
+            entry,
+            Span::default(),
+        ));
+    }
+    let mut overrides = HashMap::new();
+    let mut total_bytes = 0usize;
+    for (relative, source) in overlays {
+        total_bytes = total_bytes.saturating_add(source.len());
+        let path = Path::new(relative);
+        if path.extension().and_then(|extension| extension.to_str()) != Some("zyl")
+            || path.is_absolute()
+            || path
+                .components()
+                .any(|part| !matches!(part, Component::Normal(_)))
+            || source.len() > 1_048_576
+            || total_bytes > 16 * 1_048_576
+        {
+            return Err(project_error(
+                "E-MOD-004",
+                "source overlays must be project-relative .zyl files of at most 1 MiB each and 16 MiB total",
+                relative,
+                Span::default(),
+            ));
+        }
+        let candidate = root.join(path);
+        let canonical = fs::canonicalize(&candidate).map_err(|error| {
+            project_error(
+                "E-IO-001",
+                format!("cannot resolve source overlay `{relative}`: {error}"),
+                relative,
+                Span::default(),
+            )
+        })?;
+        if !canonical.starts_with(&root) || !canonical.is_file() {
+            return Err(project_error(
+                "E-MOD-004",
+                "source overlay resolves outside the project or is not a regular file",
+                relative,
+                Span::default(),
+            ));
+        }
+        if overrides.insert(canonical, source.clone()).is_some() {
+            return Err(project_error(
+                "E-MOD-004",
+                "duplicate source overlay",
+                relative,
+                Span::default(),
+            ));
+        }
+    }
+    load_with_overrides(entry, overrides)
+}
+
 fn load_with_overrides(
     entry: &str,
     source_overrides: HashMap<PathBuf, String>,
@@ -2349,6 +2425,49 @@ mod tests {
 
     fn cleanup(directory: &Path) {
         fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn unsaved_import_overlay_is_linked_without_changing_the_file() {
+        let directory = project(&[
+            (
+                "main.zyl",
+                "import \"src/math.zyl\" as math\nfn main() { print(math::answer()) }\n",
+            ),
+            ("src/math.zyl", "pub fn answer() -> Int { return 1 }\n"),
+        ]);
+        let entry = directory.join("main.zyl");
+        let overlays = vec![(
+            "src/math.zyl".into(),
+            "pub fn answer() -> Int { return 42 }\n".into(),
+        )];
+        let loaded = load_with_source_overlays(entry.to_str().unwrap(), &overlays).unwrap();
+        assert_eq!(execute(&loaded.program).unwrap(), ["42"]);
+        assert_eq!(loaded.sources[1].text, overlays[0].1);
+        assert_eq!(
+            fs::read_to_string(directory.join("src/math.zyl")).unwrap(),
+            "pub fn answer() -> Int { return 1 }\n"
+        );
+        cleanup(&directory);
+    }
+
+    #[test]
+    fn source_overlays_reject_parent_paths_and_files_outside_the_project() {
+        let directory = project(&[("main.zyl", "fn main() {}\n")]);
+        let entry = directory.join("main.zyl");
+        let traversal = load_with_source_overlays(
+            entry.to_str().unwrap(),
+            &[("../outside.zyl".into(), "fn main() {}".into())],
+        )
+        .unwrap_err();
+        assert_eq!(traversal.code, "E-MOD-004");
+        let missing = load_with_source_overlays(
+            entry.to_str().unwrap(),
+            &[("missing.zyl".into(), "fn main() {}".into())],
+        )
+        .unwrap_err();
+        assert_eq!(missing.code, "E-IO-001");
+        cleanup(&directory);
     }
 
     #[test]

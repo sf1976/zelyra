@@ -39,9 +39,11 @@ Shift+F12 finds exact lexical identifier occurrences in saved `.zyl` files.
 These occurrence results are not scope-aware semantic references. Save changed
 files before navigating so source locations stay accurate.
 
-Compiler diagnostics update while editing saved Zelyra project files; they are
-checked against a private temporary project copy and do not write the unsaved
-buffer. **Run** is an explicit action for `main.zyl`, bounded to 15 seconds and
+Compiler diagnostics update while editing Zelyra project files. For existing
+`.zyl` files the unsaved buffer is checked through an in-memory compiler
+overlay; generated source previews for new files still use a private temporary
+project copy. Neither path writes the unsaved buffer to the project. **Run** is
+an explicit action for `main.zyl`, bounded to 15 seconds and
 64 KiB per output stream. For the marked invoice tutorial, Run starts its
 isolated Compose database, applies the schema and sample data, and then starts
 the web preview. Other web projects need a reachable database. Open **Logs**

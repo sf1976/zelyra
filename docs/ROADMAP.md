@@ -1329,6 +1329,13 @@ rehearsals, and owner feedback do not substitute for participant testing.
 
 ## Future language, database, and ergonomics evolution (post-1.0.0)
 
+- [🧪] **1.1.0 Studio/LSP foundation (unreleased):** Compiler-backed in-memory
+  source overlays now feed Studio checks and a stdio `zelyra lsp` prototype.
+  The prototype implements versioned diagnostics, document/workspace symbols,
+  and declaration completion. Semantic navigation/refactoring, the eight
+  Studio modules, event channel, full release gates, and RC artifacts remain
+  open; see the [1.1.0 work log](release-plans/1.1.0-studio-deep-native-progress.en.md).
+
 To boost developer ergonomics, flexibility, and architectural modularity without compromising
 Zelyra's core tenets (static security boundaries, deterministic business arithmetic, digital
 sovereignty), the following extensions are explicitly scheduled for post-1.0 development:

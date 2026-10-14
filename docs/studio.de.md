@@ -42,10 +42,12 @@ findet exakt gleiche lexikalische Bezeichner in gespeicherten `.zyl`-Dateien.
 Diese Treffer sind keine scopebewussten semantischen Referenzen. Speichere
 geänderte Dateien vor der Navigation, damit die Fundstellen stimmen.
 
-Compilerdiagnosen werden während der Bearbeitung gespeicherter Zelyra-
-Projektdateien aktualisiert. Die Prüfung arbeitet auf einer privaten
-temporären Projektkopie und schreibt nicht in den ungespeicherten Editorpuffer.
-**Starten** führt `main.zyl` ausdrücklich aus, höchstens 15 Sekunden und mit
+Compilerdiagnosen werden während der Bearbeitung von Zelyra-Projektdateien
+aktualisiert. Bei vorhandenen `.zyl`-Dateien prüft der Compiler den
+ungespeicherten Puffer als In-Memory-Overlay. Vorschauen neu erzeugter Dateien
+verwenden weiterhin eine private temporäre Projektkopie. Beide Wege schreiben
+den Puffer nicht in das Projekt. **Starten** führt `main.zyl` ausdrücklich aus,
+höchstens 15 Sekunden und mit
 64 KiB je Ausgabekanal. Beim markierten Rechnungstutorial startet die Aktion
 die isolierte Compose-Datenbank, richtet Schema und Beispieldaten ein und
 öffnet danach die Webvorschau. Andere Webprojekte benötigen eine erreichbare
