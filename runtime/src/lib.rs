@@ -6409,6 +6409,46 @@ impl<'a> Checker<'a> {
                         self.error(expr.span, "now expects no arguments");
                     }
                     Type::Timestamp
+                } else if name == "date_add_days" {
+                    if args.len() != 2 {
+                        self.error(expr.span, "date_add_days expects Date and Int days");
+                        return Type::Unknown;
+                    }
+                    let d = self.check_expr(&args[0], scopes);
+                    let days = self.check_expr(&args[1], scopes);
+                    self.expect_type(&Type::Date, &d, args[0].span);
+                    self.expect_type(&Type::Int, &days, args[1].span);
+                    Type::Date
+                } else if name == "date_diff_days" {
+                    if args.len() != 2 {
+                        self.error(expr.span, "date_diff_days expects two Dates");
+                        return Type::Unknown;
+                    }
+                    let a = self.check_expr(&args[0], scopes);
+                    let b = self.check_expr(&args[1], scopes);
+                    self.expect_type(&Type::Date, &a, args[0].span);
+                    self.expect_type(&Type::Date, &b, args[1].span);
+                    Type::Int
+                } else if name == "is_ok" || name == "is_err" {
+                    if args.len() != 1 {
+                        self.error(expr.span, format!("{name} expects one Result"));
+                        return Type::Unknown;
+                    }
+                    let ty = self.check_expr(&args[0], scopes);
+                    if !matches!(ty, Type::Result(_, _)) && ty != Type::Unknown {
+                        self.error(args[0].span, format!("{name} expects Result, found {ty}"));
+                    }
+                    Type::Bool
+                } else if name == "is_some" || name == "is_none" {
+                    if args.len() != 1 {
+                        self.error(expr.span, format!("{name} expects one Option"));
+                        return Type::Unknown;
+                    }
+                    let ty = self.check_expr(&args[0], scopes);
+                    if !matches!(ty, Type::Option(_)) && ty != Type::Unknown {
+                        self.error(args[0].span, format!("{name} expects Option, found {ty}"));
+                    }
+                    Type::Bool
                 } else if name == "date" {
                     if args.len() != 1 {
                         self.error(expr.span, "date expects one ISO date string (YYYY-MM-DD)");
@@ -8773,6 +8813,12 @@ fn is_runtime_builtin(name: &str) -> bool {
             | "set_difference"
             | "map_remove"
             | "map_merge"
+            | "date_add_days"
+            | "date_diff_days"
+            | "is_ok"
+            | "is_err"
+            | "is_some"
+            | "is_none"
             | "text_replace_result"
             | "text_split_result"
             | "decimal_scaled_result"
@@ -11720,6 +11766,67 @@ impl<'program> Interpreter<'program> {
                     Ok(Value::Map(filtered))
                 }
                 _ => Err(self.runtime_error(span, "map_remove expects a Map")),
+            }
+        } else if name == "date_add_days" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(span, "date_add_days expects Date and Int days"));
+            }
+            match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
+                (Value::Date(date), Value::Int(days)) => {
+                    let res = date_epoch_days(&date)
+                        .and_then(|start| start.checked_add(days))
+                        .and_then(epoch_days_date)
+                        .map(Value::Date)
+                        .ok_or_else(|| self.runtime_error(span, "date arithmetic is outside years 0001 through 9999"))?;
+                    Ok(res)
+                }
+                _ => Err(self.runtime_error(span, "date_add_days expects Date and Int")),
+            }
+        } else if name == "date_diff_days" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(span, "date_diff_days expects two Dates"));
+            }
+            match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
+                (Value::Date(start), Value::Date(end)) => {
+                    let diff = date_epoch_days(&end)
+                        .and_then(|end_days| date_epoch_days(&start).and_then(|start_days| start_days.checked_sub(end_days)))
+                        .map(Value::Int)
+                        .ok_or_else(|| self.runtime_error(span, "date difference overflow"))?;
+                    Ok(diff)
+                }
+                _ => Err(self.runtime_error(span, "date_diff_days expects two Dates")),
+            }
+        } else if name == "is_ok" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "is_ok expects one Result"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::Result(res) => Ok(Value::Bool(res.is_ok())),
+                other => Err(self.runtime_error(args[0].span, format!("is_ok expects Result, found {}", other.ty()))),
+            }
+        } else if name == "is_err" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "is_err expects one Result"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::Result(res) => Ok(Value::Bool(res.is_err())),
+                other => Err(self.runtime_error(args[0].span, format!("is_err expects Result, found {}", other.ty()))),
+            }
+        } else if name == "is_some" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "is_some expects one Option"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::Option(opt) => Ok(Value::Bool(opt.is_some())),
+                other => Err(self.runtime_error(args[0].span, format!("is_some expects Option, found {}", other.ty()))),
+            }
+        } else if name == "is_none" {
+            if args.len() != 1 {
+                return Err(self.runtime_error(span, "is_none expects one Option"));
+            }
+            match self.eval(&args[0], env)? {
+                Value::Option(opt) => Ok(Value::Bool(opt.is_none())),
+                other => Err(self.runtime_error(args[0].span, format!("is_none expects Option, found {}", other.ty()))),
             }
         } else if name == "map_merge" {
             if args.len() != 2 {

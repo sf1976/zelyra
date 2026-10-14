@@ -3644,3 +3644,42 @@ fn main() {
         ]
     );
 }
+
+#[test]
+fn standard_library_v103_phase3_builtins_work_properly() {
+    let source = r#"
+fn main() {
+    // Dates
+    d1 = date("2026-10-14")
+    d2 = date_add_days(d1, 30)
+    print(d2)
+    print(date_diff_days(d2, d1))
+
+    // Result & Option Flow
+    print(is_ok(parse_int("42")))
+    print(is_err(parse_int("42")))
+    print(is_ok(parse_int("bad")))
+    print(is_err(parse_int("bad")))
+
+    print(is_some(Some(123)))
+    print(is_none(Some(123)))
+    print(is_some(None))
+    print(is_none(None))
+}
+"#;
+    assert_eq!(
+        run(source),
+        [
+            "2026-11-13",
+            "30",
+            "true",
+            "false",
+            "false",
+            "true",
+            "true",
+            "false",
+            "false",
+            "true",
+        ]
+    );
+}
