@@ -308,7 +308,7 @@ try {
     { table: "customers", offset: "25" },
   ]);
   await page.locator("#database-record-previous").click();
-  await page.getByRole("cell", { name: "1" }).waitFor();
+  await page.getByRole("cell", { name: "1", exact: true }).waitFor();
   await page.locator("#schema-column-operation").selectOption("edit");
 
   await page.locator("#chart-name").fill("Umsatz nach Kunde");
