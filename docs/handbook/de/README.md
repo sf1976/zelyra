@@ -19,7 +19,7 @@ ersten Programm bis zur datenbankgestützten Webanwendung.
 Ein neues lokales Lernprojekt für Kunden, Artikel und Rechnungen erzeugst du
 mit [`zelyra --tutorial invoice`](../../tutorials/invoice.de.md).
 
-> **Projektstatus:** Das aktuelle stabile Release ist Zelyra 1.0.6; die Sprachkompatibilitätslinie bleibt `0.1`. Compose v2 oder neuer wird für Datenbanktutorials benötigt. Siehe [Roadmap](../../ROADMAP.de.md) und [Release-Notizen 1.0.6](../../release-notes/1.0.6.de.md).
+> **Projektstatus:** Das aktuelle stabile Release ist Zelyra 1.0.7; die Sprachkompatibilitätslinie bleibt `0.1`. Compose v2 oder neuer wird für Datenbanktutorials benötigt. Siehe [Roadmap](../../ROADMAP.de.md) und [Release-Notizen 1.0.7](../../release-notes/1.0.7.de.md).
 
 Zelyra verbindet statische Typprüfung und verständliche Diagnosen mit
 compilergeprüften Datenbank- und Webdeklarationen. Zur Plattform gehören
@@ -69,6 +69,7 @@ Die verbindliche Reihenfolge der Sprachquellen und der Prüfablauf stehen in der
 18. [Testen und Mitentwickeln](#18-testen-und-mitentwickeln)
 19. [Was als Nächstes kommt](#19-was-als-nächstes-kommt)
 20. [KI-native Entwicklung mit Zelyra](#20-ki-native-entwicklung-mit-zelyra)
+21. [Sprache, Laufzeit und PDF-Mail in 1.0.7](#21-sprache-laufzeit-und-pdf-mail-in-107)
 
 ## 1. Was Zelyra anders macht
 
@@ -157,10 +158,10 @@ oder Cargo installiert werden. Das gewählte Archiv wird über HTTPS geladen und
 per SHA-256 geprüft:
 
 ~~~bash
-./install.sh --release v1.0.6
+./install.sh --release v1.0.7
 ~~~
 
-Unter Windows in PowerShell `-Release v1.0.6` mit `install.ps1` verwenden.
+Unter Windows in PowerShell `-Release v1.0.7` mit `install.ps1` verwenden.
 macOS nutzt derzeit weiterhin den Quellcode-Installer.
 
 Eine benutzereigene Installation entfernst du mit `zelyra uninstall`. Mit
@@ -1471,6 +1472,21 @@ Sessions des betroffenen Benutzers. Die letzte Zuweisung der konfigurierten
 Administrationsrolle und der letzte aktive Administrator sind geschützt.
 Benutzerlöschung und Self-Service-Kontoverwaltung folgen später.
 
+Die Routing-Übersicht `zelyra routes app.zyl` zeigt die erzeugten
+HTTP-Methoden einzeln. Ein `auth`-Block aktiviert `GET` und `POST` für
+`/login`, `POST /logout` sowie `GET` und `POST` für `/account/sessions`.
+Mit `reset_tokens` kommen `GET` und `POST` auf `/forgot-password` und
+`/reset-password` hinzu. Sind außerdem `admin_path`, `admin_permission` und
+`admin_role` vollständig konfiguriert, zeigt die Übersicht `GET` und `POST`
+für den Admin-Pfad. Damit sind bei aktivierter Reset- und Admin-Funktion elf
+Methoden-/Pfad-Routen vorhanden; ohne die optionalen Tabellen und Optionen
+werden die betreffenden Handler nicht als verfügbar ausgewiesen.
+
+CRUD-Berechtigungen werden an Listen-, Formular- und POST-Aktionen
+serverseitig geprüft. `permits create`, `permits edit` und `permits delete`
+blenden nicht nur Aktionen aus, sondern schützen auch die jeweiligen
+generierten Handler. UI-Sichtbarkeit ersetzt keine Autorisierungsprüfung.
+
 Die optionale Tabelle `auth_audit_log` protokolliert Login-, Logout-,
 Passwort-, Benutzer-, Rollen- und Berechtigungsereignisse mit Akteur, Ereignis,
 Ziel, Details und Zeitstempel. CLI-Rollenänderungen haben keinen
@@ -2268,9 +2284,177 @@ erfundenen Vergleich.
 
 ---
 
+## 21. Sprache, Laufzeit und PDF-Mail in 1.0.7
+
+Dieses Kapitel dokumentiert Funktionen aus Zelyra 1.0.7.
+Die Version enthält typisierte If-Ausdrücke, Record-Updates, Lambdas,
+Match-Guards, Tupel, begrenzte Ausführung und lokale Text-PDF-Anhänge. Die
+PDF-Ausgabe reproduziert keine grafischen Stylesheets; Einzelheiten und
+Grenzen stehen in den [Release-Notizen 1.0.7](../../release-notes/1.0.7.de.md).
+Das vollständige Sprachbeispiel lässt sich mit
+`zelyra check examples/language_1_0_7/main.zyl` prüfen und mit `zelyra run`
+ausführen.
+
+### Wertliefernde Ausdrücke und Record-Updates
+
+Ein `if`-Ausdruck liefert in beiden Zweigen denselben geprüften Typ. Ein
+Record-Update kopiert den bisherigen Record-Wert und ersetzt nur die genannten
+Felder:
+
+```zelyra
+fn invoice_label(paid: Bool) -> String {
+    return if paid { "Bezahlt" } else { "Offen" }
+}
+
+struct InvoiceState { number: String status: String }
+fn mark_paid(old: InvoiceState) -> InvoiceState {
+    return InvoiceState { ..old, status: "paid" }
+}
+```
+
+### Typisierte Lambdas, Pattern und Tupel
+
+Lambdas sind lexikalische Closures. Der Compiler prüft die Callback-Typen von
+`map`, `filter`, `find` und `reduce`; die Pipeline bleibt synchron:
+
+```zelyra
+fn positive_double(numbers: Int[]) -> Int[] {
+    return numbers |> filter(|n| n > 0) |> map(|n| n * 2)
+}
+```
+
+`match` unterstützt Record-Muster und boolesche Wächter. Eine bewachte
+Variante beweist allein keine Vollständigkeit:
+
+```zelyra
+struct Order { status: String total: Int }
+fn print_total(order: Order) {
+    match order {
+        Order { status: "paid", total } if total > 0 => { print(total) }
+        Order { status: "paid", total } => { print(total) }
+        _ => { print(0) }
+    }
+}
+```
+
+Tupel können Funktionsrückgaben sein und außerhalb von Schleifen gebunden
+werden:
+
+```zelyra
+fn coordinates() -> Tuple<Int, String> { return (52, "Berlin") }
+fn main() {
+    (latitude, city) = coordinates()
+    print(city)
+}
+```
+
+Record-Felder mit kontextuell reservierten Wörtern wie `version` und `type`
+sind zulässig. `status` war bereits ein normaler Bezeichner.
+
+### Nominale IDs und API-Fehlerverträge
+
+`Id` ist für relationale Identität und Pfadparameter nominal. Ein gewöhnliches
+Ganzzahl-Literal ist kein `OrderId`; ein fachlicher Integer-Alias verwendet
+`Int`:
+
+```zelyra
+type OrderId = Id
+type OrderNumber = Int
+fn reuse_id(id: OrderId) -> OrderId { return id }
+fn use_business_number(number: OrderNumber) -> OrderNumber { return number }
+```
+
+Ein API-Fehler mit Payload verlangt einen `Result`-Rückgabetyp, dessen
+Fehlerseite genau zum Payload passt. Andernfalls meldet der API-Checker
+`E-API-001`:
+
+```zelyra
+struct Order { id: Id }
+struct OrderError { message: String }
+api GET "/orders/{id}" {
+    input { id: Id }
+    output Result<Order, OrderError>
+    errors { 404 NotFound: OrderError }
+}
+```
+
+### Schrittbudget, Rekursion und Datenbanklaufzeit
+
+`--max-steps` aktiviert ein optionales Budget und zählt Interpreter-
+Auswertungsschritte. Bei Überschreitung erscheint `E-RUNTIME-001` an der
+Quellstelle des auslösenden Ausdrucks:
+
+```sh
+zelyra run main.zyl --max-steps 30000
+```
+
+Die Rekursion bleibt begrenzt. `[runtime] max_stack_depth` kann in
+`zelyra.toml` auf einen Wert von 1 bis 500 gesetzt werden; ein höherer Wert
+reserviert mehr Stack-Speicher. Ein `transaction { ... }`-Block kann offline
+geprüft werden, seine Ausführung benötigt aber eine gestartete MariaDB- oder
+MySQL-Laufzeit.
+
+```toml
+[runtime]
+max_stack_depth = 100
+```
+
+### Auth-Handler, Routen und Berechtigungen
+
+`zelyra routes main.zyl` zeigt erzeugte Methoden und Pfade. Ein Auth-Block
+stellt `GET`/`POST /login`, `POST /logout` und `GET`/`POST
+/account/sessions` bereit. `reset_tokens` ergänzt `GET`/`POST` für
+`/forgot-password` und `/reset-password`. Ein vollständig konfigurierter
+Admin-Pfad ergänzt seine `GET`- und `POST`-Handler; MFA-Tabellen ergänzen
+`/login/mfa` und `/account/security`. Mit Reset und Admin sind elf
+Methoden-/Pfad-Routen aktiv. Tabellen und Konfigurationswerte entscheiden,
+welche optionalen Handler verfügbar sind.
+
+CRUD-Autorisierung bleibt serverseitig. `permits create`, `permits edit` und
+`permits delete` schützen erzeugte Handler zusätzlich zur UI-Sichtbarkeit.
+
+### View-Slots und paralleles `await`
+
+Wenn ein Aufrufer einen benannten Slot auslässt, rendert Zelyra den
+Fallback-Inhalt aus der View. Ein gelieferter Slot ersetzt diesen Inhalt.
+
+Ein `parallel`-Block startet nur `await`-Bindings, wartet beim Verlassen auf
+alle gestarteten Ausdrücke und stellt danach ihre geprüften Werte im äußeren
+Scope bereit:
+
+```zelyra
+fn load_customer() -> String { return "Anna" }
+fn count_orders() -> Int { return 3 }
+fn main() {
+    parallel {
+        customer = await load_customer()
+        order_count = await count_orders()
+    }
+    print(customer)
+    print(order_count)
+}
+```
+
+### Serverseitiges PDF und E-Mail-Anhang
+
+`render_pdf("InvoicePrint", invoice)` rendert eine deklarierte View in `Bytes`.
+Platzhalter wie `{number}` werden HTML-escaped; ein `for item in items`-Block
+wertet ein Record-Array aus. `mail_queue` akzeptiert optional einen
+Dateinamen und diese PDF-Bytes, sodass der Anhang gemeinsam mit den
+Geschäftsdaten transaktional in die MariaDB-Outbox gelangt. Siehe
+[E-Mail und PDF](../../mail.de.md) und das
+[kompilierbare Beispiel](../../examples/pdf_mail_outbox/main.zyl).
+
+Der integrierte Renderer erstellt ein paginiertes, durchsuchbares Text-PDF,
+aber keine CSS-Layoutkopie. Die HTML-Vorlage und expandierte View sind auf je
+2 MiB und Collection-Blöcke auf 10.000 Datensatzzeilen begrenzt. Bilder,
+Farben, Typografie, SVG-Diagramme und pixelgenaue Tabellen werden nicht
+gerendert. Für grafisch originalgetreue Dokumente ist weiterhin die
+browserbasierte Druckansicht vorgesehen.
+
 ## Wie geht es weiter?
 
-Du hast die 20 Kern-Kapitel des Zelyra-Praxistutorials durchlaufen!
+Du hast die 21 Kern-Kapitel des Zelyra-Praxistutorials durchlaufen!
 
 Für alle weiteren Sprachkonstrukte, vollständige Typgarantien, Compiler-Interna und die vollständige Standardbibliothek:
 - **[Vollständiges Zelyra-Handbuch (75 Kapitel)](handbuch.md)**

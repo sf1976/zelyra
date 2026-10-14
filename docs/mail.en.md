@@ -1,4 +1,4 @@
-# Application email (0.9.5)
+# Application email (since 0.9.5, PDF attachments in 1.0.7)
 
 Zelyra's first-party email API queues messages through the transactional
 MariaDB outbox. Enqueueing happens in the same transaction as the business
@@ -47,7 +47,7 @@ verification remains enabled.
 `mail_queue` is a statement that may appear only directly inside a database
 `transaction`. It accepts recipient, subject, text body, and optional HTML
 body. Header injection and oversized messages are rejected before insertion.
-Its arguments must be values or side-effect-free string expressions.
+Its arguments must be values or side-effect-free expressions.
 
 ```zelyra
 pub fn deliver_mail(event_id: String, event_type: String, payload_json: String) -> Bool uses Email {
@@ -89,6 +89,45 @@ DATABASE_URL=mariadb://user:password@127.0.0.1:3306/app \
   bash tests/mail-outbox-e2e.sh
 ```
 
-This 0.9.5 API supports text and HTML alternatives. Named templates and file
-attachments are not part of this initial API; keep presentation in application
-code and do not place untrusted HTML into a message body without escaping it.
+## Server-side PDF files (1.0.7)
+
+`render_pdf("ViewName", record)` returns `Bytes`. The view name must be a
+string literal naming a `view` declared in the same program; data must be a
+record or `Map<String, T>`. `{field}` placeholders are inserted with HTML
+escaping. View collection blocks such as `for line in lines { ... }` are
+evaluated for arrays of records. Unknown views and invalid data types fail
+during checking or execution.
+
+The local renderer needs no browser, CDN, or system executable. It creates a
+paginated, searchable PDF from the visible text in the view. HTML tags and CSS
+are not interpreted as a layout engine: images, charts, fonts, colors, and
+precise table geometry are not reproduced in the PDF. Use the browser print
+view when a graphical, layout-faithful printout is required. The server-side
+renderer is intended for simple text-based business documents. It limits view
+HTML and expanded output to 2 MiB each, collection blocks to 10,000 record
+rows, and output to 200 pages; characters outside its supported WinAnsi font
+are written as `?`.
+
+For mail without an HTML body, `mail_queue` takes five arguments: recipient,
+subject, text, PDF filename, and `Bytes`. With an HTML alternative it takes six
+arguments; the HTML body is fourth. Each message can contain at most one PDF of
+up to 2 MiB. Filenames cannot include paths. The outbox payload limit is 3 MiB.
+Queueing remains part of a MariaDB transaction and delivery uses the existing
+explicitly started worker:
+
+```zelyra
+transaction {
+    mail_queue(
+        "customer@example.test",
+        "Invoice " + invoice.number,
+        "Your invoice is attached.",
+        "invoice-" + invoice.number + ".pdf",
+        render_pdf("InvoicePrint", invoice)
+    )
+}
+```
+
+The complete checkable example is
+[`examples/pdf_mail_outbox/main.zyl`](../examples/pdf_mail_outbox/main.zyl). This API
+does not insert an untrusted HTML mail body; application code must still
+construct the optional HTML body safely.

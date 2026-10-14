@@ -215,7 +215,7 @@ fn main() {
 ### 1. Was lerne ich in diesem Kapitel?
 - Die Systemvoraussetzungen für die Zelyra-Entwicklungsumgebung auf Linux, macOS und Windows.
 - Plattformspezifische Docker-Installation und Verifikation mit `docker compose version`.
-- Wie du Zelyra über den Quellcode (`./install.sh` / `install.ps1`) oder das stabile Release-Archiv (`--release v1.0.6`) installierst.
+- Wie du Zelyra über den Quellcode (`./install.sh` / `install.ps1`) oder das stabile Release-Archiv (`--release v1.0.7`) installierst.
 - Vollständige Versionsabfrage mit `zelyra --version` und Systemdiagnose mit `zelyra doctor`.
 - Den integrierten, token-geschützten Web-Setup-Assistenten (`zelyra setup --web`).
 - Typische Berechtigungs- und Port-Konflikte (z. B. Docker-Socket-Rechte, automatische Port-Wahl).
@@ -242,13 +242,13 @@ cd zelyra
 ```
 Oder direkt als vorkompiliertes Release ohne Rust-Toolchain:
 ```bash
-./install.sh --release v1.0.6
+./install.sh --release v1.0.7
 ```
 Unter Windows (PowerShell):
 ```powershell
 git clone https://github.com/sf1976/zelyra.git
 Set-Location zelyra
-.\install.ps1 -Release v1.0.6
+.\install.ps1 -Release v1.0.7
 ```
 
 **Schritt 2: Vollständige Version und Hilfe prüfen**
@@ -298,7 +298,7 @@ Zelyra öffnet einen lokalen HTTP-Server auf `127.0.0.1:3030` mit einem zufälli
 ### 6. Merksätze
 1. Das Zelyra-CLI bündelt Compiler, Runner, Formularprüfer, Migrator, Webserver und Setup-Assistenten in einem einzigen Werkzeug.
 2. Mit `docker compose version` und `zelyra doctor` überprüfst du jederzeit den Zustand deiner Toolchain.
-3. Das stabile Release kann mit `--release v1.0.6` direkt ohne Rust-Compiler installiert werden.
+3. Das stabile Release kann mit `--release v1.0.7` direkt ohne Rust-Compiler installiert werden.
 4. `zelyra setup --web` bietet eine intuitive, browserbasierte Ersteinrichtung mit sicherem Einmal-Token.
 
 ### 7. Übungsaufgaben

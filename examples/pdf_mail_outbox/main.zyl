@@ -1,0 +1,63 @@
+struct InvoiceLine {
+    description: String
+    quantity: Int
+    total: String
+}
+
+struct Invoice {
+    number: String
+    customer: String
+    issued_at: Date
+    lines: InvoiceLine[]
+    total: String
+}
+
+view InvoicePrint {
+    html {
+        <html>
+        <body>
+            <header>
+                <h1>Rechnung {number}</h1>
+                <p>Kunde: {customer}</p>
+                <p>Ausgestellt am: {issued_at}</p>
+            </header>
+            <table>
+                <thead><tr><th>Artikel</th><th>Menge</th><th>Betrag</th></tr></thead>
+                <tbody>
+                    for line in lines {
+                        <tr><td>{line.description}</td><td>{line.quantity}</td><td>{line.total}</td></tr>
+                    }
+                </tbody>
+            </table>
+            <p>Gesamt: {total}</p>
+            <slot />
+        </body>
+        </html>
+    }
+}
+
+fn send_invoice(recipient: String, invoice: Invoice) uses Email, Database(write) {
+    transaction {
+        mail_queue(
+            recipient,
+            "Rechnung " + invoice.number,
+            "Ihre Rechnung " + invoice.number + " ist beigefügt.",
+            "invoice-" + invoice.number + ".pdf",
+            render_pdf("InvoicePrint", invoice)
+        )
+    }
+}
+
+fn main() uses Email, Database(write) {
+    invoice = Invoice {
+        number: "2026-001",
+        customer: "Muster GmbH",
+        issued_at: date("2026-10-14"),
+        lines: [
+            InvoiceLine { description: "Beratung", quantity: 2, total: "250,00 EUR" },
+            InvoiceLine { description: "Hosting", quantity: 1, total: "25,00 EUR" }
+        ],
+        total: "275,00 EUR"
+    }
+    send_invoice("kunde@example.test", invoice)
+}

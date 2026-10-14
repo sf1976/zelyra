@@ -120,6 +120,24 @@ class ReleaseReadinessTests(unittest.TestCase):
             failures = unfinished_gates(root, "1.0.6")
             self.assertTrue(any("missing or unreadable" in item for item in failures))
 
+    def test_107_requires_bilingual_release_gates_and_blocks_an_open_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for relative_path, heading in RELEASE_PLAN_CHECKLISTS["1.0.7"]:
+                path = root / relative_path
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(f"{heading}\n\n- [x] Verified gate\n", encoding="utf-8")
+            self.assertEqual(unfinished_gates(root, "1.0.7"), [])
+
+            english_path = root / RELEASE_PLAN_CHECKLISTS["1.0.7"][0][0]
+            english_path.write_text("## Release gates\n\n- [ ] Pending gate\n", encoding="utf-8")
+            failures = unfinished_gates(root, "1.0.7")
+            self.assertTrue(any("release gate is incomplete" in item for item in failures))
+
+            (root / RELEASE_PLAN_CHECKLISTS["1.0.7"][1][0]).unlink()
+            failures = unfinished_gates(root, "1.0.7")
+            self.assertTrue(any("missing or unreadable" in item for item in failures))
+
     def test_current_030_plan_requires_a_documented_onboarding_deferral(self) -> None:
         root = Path(__file__).resolve().parents[1]
         failures = unfinished_gates(root, "0.3.0")

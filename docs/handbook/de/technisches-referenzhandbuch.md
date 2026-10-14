@@ -69,7 +69,7 @@ oder Cargo installiert werden. Das gewählte Archiv wird über HTTPS geladen und
 per SHA-256 geprüft:
 
 ~~~bash
-./install.sh --release v1.0.6
+./install.sh --release v1.0.7
 ~~~
 
 Unter Windows steht `install.ps1` für PowerShell und `install.cmd` für die
@@ -85,7 +85,7 @@ zelyra --version
 Das Release-Archiv unter Windows:
 
 ~~~powershell
-.\install.ps1 -Release v1.0.6
+.\install.ps1 -Release v1.0.7
 ~~~
 
 Danach:
@@ -2383,7 +2383,7 @@ vom eigenen Zelyra-Lexer und -Parser gelesen, in eigene AST-/HIR-Strukturen
 
 Die Ähnlichkeit bei `fn`, geschweiften Klammern, `if`, `match` oder statischer
 Typisierung ist eine Designentscheidung, aber kein Abstammungsnachweis. Entschei-
-dend sind Grammatik, Semantik und Programmiermodell. Zelyra 1.0.6 ist ein stabiles Release mit einem eigenen Typ- und Laufzeitmodell.
+dend sind Grammatik, Semantik und Programmiermodell. Zelyra 1.0.7 ist ein stabiles Release mit einem eigenen Typ- und Laufzeitmodell.
 Die Statusangaben in diesem Kapitel benennen verfügbare, eingeschränkte und noch
 geplante Sprachmerkmale.
 
@@ -2422,11 +2422,11 @@ ausführbare Spracheigenschaft ausgegeben.
 | Berechtigungen | selbst entworfene Typen und Middleware | `requires auth`, `permits` und CRUD-Aktionsrechte | deklarative Regeln werden serverseitig geprüft | 🧪 |
 | Contracts | manuell oder über Bibliotheken | native `requires {}` und `ensures {}` plus `verify` | Contract-Syntax gehört zu Zelyra | ✅ |
 | Capabilities | APIs und Bibliotheken regeln Effekte | `uses Database`, `uses Network` usw. | sichtbare Effektdeklaration ist Sprachbestandteil | ✅ |
-| E-Mails | externe SMTP-/Mail-Crates | `mail_queue`, explizite `Email`-Capability, transaktionale MariaDB-Outbox und konfigurierbarer SMTP-Worker sind vorhanden | Zustellung mindestens einmalig; Vorlagen/Anhänge und volle PostgreSQL-Parität fehlen | 🧪 |
+| E-Mails | externe SMTP-/Mail-Crates | `mail_queue`, explizite `Email`-Capability, transaktionale MariaDB-Outbox und konfigurierbarer SMTP-Worker sind vorhanden; Zelyra 1.0.7 ergänzt einen geprüften PDF-Anhang | Zustellung mindestens einmalig; grafisches PDF-Rendering und volle PostgreSQL-Parität fehlen | 🧪 |
 | Jobs | externe Job-/Queue-Systeme | kein Hintergrundjob-Konstrukt | keine stabile Job-Syntax | ❌ |
 | Audit | externe Logs oder Audit-Crates | Audit-Tabelle, CLI-Auswertung und optionale Hash-Kette | an Auth/CRUD gebunden und noch experimentell | 🧪 |
 | Deployment | Cargo, Container, CI und Infrastruktur frei wählbar | generierte Docker-/Compose-Vorlage vorhanden | Vorlage ist Entwicklungsstart, keine Produktionsplattform | 🧪 |
-| Produktionsreife | Rust ist breit produktiv eingesetzt | Zelyra 1.0.6 ist ein stabiles Release mit engerem Ökosystem und begrenzten Nachweisen je Ablauf | Reife und Ökosystem sind nicht vergleichbar | 🧪 |
+| Produktionsreife | Rust ist breit produktiv eingesetzt | Zelyra 1.0.7 ist ein stabiles Release mit engerem Ökosystem und begrenzten Nachweisen je Ablauf | Reife und Ökosystem sind nicht vergleichbar | 🧪 |
 | Ökosystem | sehr groß: Crates, Tools, Frameworks | kleines eigenes Repository und wenige Integrationen | Zelyra kann Rust-Crates nicht direkt importieren | 🧪 |
 
 Rust ist also das technische Fundament, nicht die Anwendungssprache hinter
@@ -2458,9 +2458,10 @@ geplante oder derzeit nicht verfügbare Sprachmerkmale.
 | fehlender Wert | `None` | `None` | gleiche Bezeichnung in verschiedenem Enum-Modell | ✅ |
 | Listen/Arrays | `Int[]`, `[1, 2, 3]` | `Vec<i64>`, `vec![1, 2, 3]` | Zelyra bietet keine Rust-Makrosyntax | ✅ |
 | benannte Datentypen | `type CustomerId = Id`, `struct Customer<T> { ... }`, `enum Event<T> { ... }` | `type CustomerId = u64`, `struct Customer<T> { ... }` | Zelyra-Records und Rust-Structs sind nicht austauschbar; Typargumente werden statisch geprüft | ✅ |
-| Bedingungen | `if ok { ... }` | `if ok { ... }` | Blocksemantik und Ausdrucksregeln unterscheiden sich | ✅ |
+| Bedingungen | `if ok { ... }` | `if ok { ... } else { ... }` | If-Ausdrücke liefern einen geprüften Wert; Anweisungsblöcke behalten ihre Kontrollflusssemantik | ✅ |
 | `else` | `else { ... }` | `else { ... }` | ähnliche Kontrollflussform | ✅ |
-| `match` | `match value { Some(x) => ... None => ... }` | `match value { Some(x) => ..., None => ... }` | Zelyra verlangt ebenfalls vollständige Fälle | ✅ |
+| `match` | `match value { Some(x) => ... None => ... }` | `match value { Some(x) => ..., None => ... }` | Zelyra verlangt vollständige Fälle; Record-Muster und Guards werden geprüft, Guards beweisen allein keine Vollständigkeit | ✅ |
+| Record-Update | `Customer { ..old, active: true }` | Rust Struct-Update-Ausdruck | Zelyra kopiert Records mit Wertsemantik und prüft die aktualisierten Felder | ✅ |
 | Schleifen | `for item in items`, `while`, `loop` | `for item in items`, `while`, `loop` | Zelyra unterstützt keine Rust-Iteratortraits | ✅ |
 | Funktionsaufrufe | `add(1, 2)` | `add(1, 2)` | gleiche Oberfläche, andere Auflösung | ✅ |
 | Ausgabe | `print(value)` | `println!("{}", value);` | Rust verwendet ein Makro mit `!` | ✅ |
@@ -2474,7 +2475,7 @@ geplante oder derzeit nicht verfügbare Sprachmerkmale.
 | Module | `pub fn`, `pub view`, `pub component` und weitere Deklarationen in importierten Dateien | `mod name {}`, Dateien und Module | unterstützt mit dokumentierten Grenzen; UI-Sichtbarkeit und Namespace-Auflösung bleiben eingeschränkt | 🧪 |
 | Imports | `import "src/math.zyl" as math`, `math::add()` | `use crate::module::Item;` | projektlokale Imports; `check`, `build`, `run`, `serve`, `context`, `verify`, `impact` verarbeiten den Graphen | 🧪 |
 | Generics | `fn identity<T>(...)`, `struct Box<T>`, `enum Maybe<T>` | allgemeine Generics und Traits | eigene Funktionen, Records und Enums unterstützen Inferenz/Typangaben; allgemeine Constraints, generische Aliase und generische Funktionsreferenzen fehlen | 🧪 |
-| Funktionswerte | `callback: Function<(Int) -> Int>`, `&increment` | `fn(Int) -> Int` | benannte, nicht generische Funktionen können gespeichert, übergeben und indirekt aufgerufen werden; Closures fehlen | 🧪 |
+| Funktionswerte | `callback: Function<(Int) -> Int>`, `&increment` | `fn(Int) -> Int` | Zelyra 1.0.7 ergänzt typisierte lexikalische Lambdas und Closures für `map`, `filter`, `find` und `reduce`; generische Funktionsreferenzen bleiben eingeschränkt | 🧪 |
 | asynchrone Funktionen | `async fn` nicht vorhanden; `await`/`parallel` nur eingeschränkt | `async fn`, `.await`, Futures | kein stabiles Zelyra-Async-Modell | 🧪 |
 | Tabellen | `table customers { ... }` | kein Sprachkonstrukt | Zelyra verbindet Tabelle und Schema | ✅ |
 | Datenbanktypen | `Id`, `String(100)`, `Email`, `Bool` | Rust-Typen und externe Mapping-Crates | Zelyra erzeugt SQL-Typen aus der Tabelle | ✅ |
@@ -2487,7 +2488,7 @@ geplante oder derzeit nicht verfügbare Sprachmerkmale.
 | Nachbedingungen | `ensures { result >= 0 }` | kein eingebautes Äquivalent | Verifier und Runtime kennen Zelyra-Contracts | ✅ |
 | Zugriff auf alte Werte | Noch nicht festgelegt; `old(...)` nicht geparst | ebenfalls kein allgemeiner eingebauter Contractstandard | keine `old`-Syntax vortäuschen | ❌ |
 | Capabilities | `uses Database` | kein identisches Sprachkonstrukt | Effekte werden in Zelyra sichtbar deklariert | ✅ |
-| E-Mails | SMTP-/Mail-API und Outbox | `mail_queue` mit `uses Email` sowie expliziter SMTP-Worker | begrenzte Outbox; Zustellungs- und Datenbankgrenzen dokumentiert | 🧪 |
+| E-Mails | SMTP-/Mail-API und Outbox | `mail_queue` mit `uses Email` sowie expliziter SMTP-Worker; Zelyra 1.0.7 kann ein lokal gerendertes PDF anhängen | begrenzte Outbox; Zustellungs- und Datenbankgrenzen dokumentiert | 🧪 |
 | Hintergrundjobs | Noch nicht festgelegt | externe Queue-/Runtime-Crate | keine Job-Syntax | ❌ |
 | Audit | `auth users { audit: auth_audit_log }` | externe Logging-/Audit-Crate | Zelyra bindet Audit an Auth- und CRUD-Ereignisse | 🧪 |
 | API-Definitionen | `api GET "/customers" { ... }` | Router, Handler und Typen separat | Zelyra bündelt Vertrag und Route | ✅ |
@@ -2750,7 +2751,7 @@ Records/Enums, klare Grenzen, reproduzierbares Tooling und formale Prüfungen.
 > technische Fundament des Compilers – nicht die Sprache, die
 > Zelyra-Anwendungsentwickler schreiben.
 
-> **Status:** Zelyra 1.0.6 ist ein stabiles Release. Einige Sprachmerkmale
+> **Status:** Zelyra 1.0.7 ist ein stabiles Release. Einige Sprachmerkmale
 > sind eingeschränkt oder geplant; die Statusangaben an den Beispielen grenzen
 > den tatsächlich verfügbaren Umfang ab.
 
@@ -2793,7 +2794,7 @@ zusammen gedacht sind.
    sollen den Lern- und Entwicklungsweg ohne Apache, PHP oder ein verpflichtendes
    Framework-Bündel ermöglichen.
 
-Zelyra 1.0.6 ist ein stabiles Release mit einem engeren Funktionsumfang und
+Zelyra 1.0.7 ist ein stabiles Release mit einem engeren Funktionsumfang und
 dokumentierten Grenzen. Die Roadmap beschreibt geplante Erweiterungen; aus dem
 Release-Status folgt keine allgemeine Produktionsgarantie.
 
@@ -2806,9 +2807,9 @@ Release-Datum.
 | Bereich | Aktueller Schwerpunkt | Noch offene Ausbaustufen |
 |---|---|---|
 | Einstieg und Distribution | Quellcode- und Release-Installer (Linux/Windows x86_64 per SHA-256), `zelyra new/init` mit Starter-Templates (`minimal`, `mariadb-crud`, `mariadb-auth`, `mariadb-business`), Docker-/DB-Ports, `zelyra setup`, `zelyra doctor`, E2E-Tests | signierte Binaries, interaktiver Verbindungsassistent, Reverse-Proxy-Automatisierung |
-| Sprache und Compiler | Lexer, Parser, AST/HIR, Typprüfung, `Option`, `Result`, payloadtragende und generische Enums/Records, benannte Funktionswerte, projektlokale Importe und kanonisches `zelyra fmt` | umfassendere Tooling-Integration, generische Constraints/Aliase, Closures, deklarative Lücken und vollständige formale Verifikation |
+| Sprache und Compiler | Lexer, Parser, AST/HIR, Typprüfung, `Option`, `Result`, payloadtragende und generische Enums/Records, benannte Funktionswerte, projektlokale Importe und kanonisches `zelyra fmt`; Zelyra 1.0.7 ergänzt If-Ausdrücke, Record-Updates, Lambdas, Match-Guards und Tupelbindung | umfassendere Tooling-Integration, generische Constraints/Aliase, deklarative Lücken und vollständige formale Verifikation |
 | Datenbankplattform | MariaDB, SQLite und PostgreSQL im Schema-CLI; typisiertes SQL | weitere Schemaabdeckung, robustere Produktionsabläufe |
-| Views und Web | Seiten, benannte Views, Komponenten, Default- und benannte Slots mit Fallback-Inhalten, sicherer Output | Themes, View-Vererbung, freie Styling-Komponenten |
+| Views und Web | Seiten, benannte Views, Komponenten, Default- und benannte Slots mit Fallback-Inhalten, Zelyra UI, Projekt-Themes und sicherer Output | View-Vererbung und allgemeine statische Prüfung beliebiger CSS-Klassen |
 | Formulare und CRUD | Validierung, CSRF, Suche, Filter, Pagination, Aktionen, Soft Delete, gemeinsames CRUD-View-Feldprofil (`view.fields`) | permanente Löschung, Aufbewahrung, Archivierung und breitere View-Anpassung |
 | Authentifizierung und Audit | Login, Sessions, Rollen, Berechtigungen, Browser-Admin, Audit und Hash-Kette | Self-Service, noch umfassendere Policy-Verwaltung und Archivstrategien |
 | APIs und Integration | typisierte APIs, OpenAPI, TypeScript-Client und CORS | Versionierung, Rate Limits und OAuth-/Integrationsbausteine |
@@ -2816,10 +2817,12 @@ Release-Datum.
 | KI-native Schnittstellen | `zelyra fmt` (Stufe B ✅), Ausdrucks-Lücken `_` (Stufe C 🧪), `zelyra impact` mit `--symbol` (Stufe D 🧪), `zelyra edit` Umbenennung (Stufe E 🧪) | Lücken in Deklarationen, Schema-/Laufzeit-Impact, komplexere Edit-Operationen, KI-Benchmark |
 | Qualität und Governance | Tests, Dokumentation und reproduzierbare Prüfungen | breitere Akzeptanzanwendungen und Produktionshärtung |
 
-Nicht als verfügbar dokumentieren: E-Mail- und Hintergrundjob-Systeme,
-vollständige Module/Imports, frei definierbare `view`-Komponenten mit mehreren
-Slots oder eine automatische Produktionsmigration. Für jeden dieser Bereiche
-gilt 🗺️, solange der aktuelle CLI-Code die Funktion nicht vollständig trägt.
+Die stabile Version 1.0.7 enthält E-Mail-Outbox und einen Browserdruck-/PDF-
+Ablauf. Sie ergänzt serverseitig erzeugte, rein textbasierte PDFs als
+begrenzte Mail-Anhänge. Nicht verfügbar bleiben
+Hintergrundjobs, vollständige Module/Imports, allgemeine CSS-Prüfung und
+automatische Produktionsmigration. Geplante Funktionen werden nur dann als
+verfügbar bezeichnet, wenn CLI und Runtime sie tatsächlich tragen.
 
 Die sinnvollste Reihenfolge für ein eigenes Lernprojekt bleibt daher:
 
@@ -3042,7 +3045,11 @@ auf Klartext. Eine private CA kann über `ZELYRA_SMTP_CA_CERT` ergänzt werden;
 die Hostnamenprüfung bleibt aktiv. Klartext ist auf Loopback begrenzt und
 verträgt keine Zugangsdaten. Der konfigurierte Host muss auch in der
 Netzwerk-Allowlist stehen. Text- und HTML-Body sind zusammen auf 64 KiB
-begrenzt. Einrichtung, Workerbeispiel und lokaler TLS-SMTP-Test stehen in
+begrenzt. Zelyra 1.0.7 ergänzt `mail_queue` um einen PDF-Anhang,
+der direkt aus `render_pdf("ViewName", record)` stammen muss. Dateigröße und
+Outbox-Payload sind begrenzt; CSS, Bilder und Diagramme werden nicht als PDF-
+Layout gerendert.
+Einrichtung, Workerbeispiel und lokaler TLS-SMTP-Test stehen in
 [`docs/mail.de.md`](../../mail.de.md).
 
 ### Startreihenfolge bei `setup --all`

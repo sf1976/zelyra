@@ -470,6 +470,7 @@ jobs:
       - name: Verify invoice tutorial first-click Studio startup from a cold Docker database
         env:
           ZELYRA_BIN: target/debug/zelyra
+          ZELYRA_REF: ${{ github.head_ref || github.ref_name }}
         run: bash ./tests/invoice-studio-cold-compose-e2e.sh
       - name: Preserve invoice visual regression screenshots
         if: failure()

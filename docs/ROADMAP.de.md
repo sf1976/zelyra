@@ -72,6 +72,19 @@ Abschnitt zur Weiterentwicklung nach 1.0.0.
   [Zelyra-UI-Handbuch](ui.de.md) und das
   [Aufgabenprotokoll](release-plans/1.0.6-zelyra-ui-progress.de.md).
 
+- [~] **1.0.7 Sprache, Laufzeit und PDF-Mail:** Der Entwicklungszweig ergänzt
+  wertliefernde If-Ausdrücke, Record-Updates, typisierte Lambda-Pipelines,
+  Match-Guards und verschachtelte Record-Muster, Tupelzuweisung sowie eine
+  begrenzte konfigurierbare Rekursionstiefe. `--max-steps` zählt
+  Interpreter-Auswertungsschritte. Die bestehende Semantik nominaler IDs,
+  `Result`-gebundener API-Fehler, Offline-Prüfung von Transaktionen,
+  View-Slot-Fallbacks, Auth-Handler und `parallel`-Join wird abgesichert.
+  `render_pdf("ViewName", record)` erzeugt lokal ein durchsuchbares Text-PDF;
+  die Mail-Outbox kann ein geprüftes PDF anhängen. CSS, Bilder und Diagramme
+  werden vom Server-PDF nicht gerendert. Diese Version ist noch nicht
+  freigegeben; siehe
+  [Arbeitsprotokoll 1.0.7](release-plans/1.0.7-language-runtime-progress.de.md).
+
 - [ ] **Geplant für 1.1.0 — Compose-Prüfung im Installer:** Die Installer
   erkennen Docker Compose v2 oder neuer und unterscheiden es von der veralteten
   Python-Version v1. Docker bleibt für die Kerninstallation optional. Fehlt
