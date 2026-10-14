@@ -146,7 +146,7 @@ primary_admin_status="$(request_status "${temp_dir}/primary-admin.html" \
     --cookie "${primary_cookie}" \
     "${base_url}/admin")"
 [[ "${primary_admin_status}" == "200" ]]
-grep -Fq "Admin" "${temp_dir}/primary-admin.html"
+grep -Fq "Access management" "${temp_dir}/primary-admin.html"
 session_count="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM auth_sessions WHERE user_id = ${primary_user_id}")"
 [[ "${session_count}" == "1" ]]
 
