@@ -177,18 +177,16 @@ page "/items" {
 
 ## Anhang D: Die Standardbibliothek im Überblick (Zelyra 1.0.3)
 
-Zelyra 1.0.3 erweitert die Standardbibliothek um über 55 eingebaute Funktionen für Mathematik, Textverarbeitung, Sammlungsoperationen, Mengen, Maps, Datumsrechnung, Fehlerkontrolle, Web-Sicherheit, Encodings und das Dateisystem. Sämtliche zustandslosen Funktionen sind ohne Capabilities direkt aufrufbar und unterstützen den Pipeline-Operator `|>`. Funktionen, die auf externe Systemressourcen zugreifen (z. B. Zufall, Dateisystem, Uhrzeit), erfordern wie gewohnt die entsprechende Capability.
+Zelyra 1.0.3 erweitert die eingebaute Standardbibliothek um Funktionen für Mathematik, Textverarbeitung, Sammlungsoperationen, Mengen, Maps, Datumsrechnung, Fehlerkontrolle, Web-Sicherheit, Encodings und Pfade. Pipeline-Stufen werden typgeprüft. Funktionen, die auf externe Systemressourcen zugreifen (z. B. Zufall, Dateisystem, Uhrzeit), erfordern wie gewohnt die entsprechende Capability.
 
 ### 1. Mathematik & Numerik (ohne Capabilities)
-- `abs(x: Int | Float | Decimal) -> Int | Float | Decimal`: Liefert den absoluten Betrag einer Zahl.
-- `min(a, b) -> a | b`: Liefert das Minimum zweier Zahlen oder Zeichenketten.
-- `max(a, b) -> a | b`: Liefert das Maximum zweier Zahlen oder Zeichenketten.
-- `clamp(val, min_val, max_val)`: Begrenzt `val` auf das geschlossene Intervall `[min_val, max_val]`.
-- `sqrt(x: Float) -> Float`: Berechnet die Quadratwurzel einer nicht-negativen Fließkommazahl.
-- `pow(base: Float, exp: Float) -> Float`: Berechnet die Potenz `base ^ exp`.
-- `floor(x: Float) -> Float`: Rundet auf die nächstkleinere ganze Zahl ab.
-- `ceil(x: Float) -> Float`: Rundet auf die nächstgrößere ganze Zahl auf.
-- `round(x: Float, decimals: Int) -> Float`: Rundet kaufmännisch auf die angegebene Anzahl an Nachkommastellen.
+- `abs(x: Int | Float | Decimal) -> Int | Float | Decimal`: Liefert den Betrag; Überlauf beim kleinsten `Int` oder `Decimal` sowie nicht-endliche `Float`-Werte ergeben einen Laufzeitfehler.
+- `min(a, b)` und `max(a, b)`: Wählen den kleineren oder größeren Wert aus zwei gleich typisierten Zahlen (`Int`, `UInt`, `Float`, `Decimal`) oder Strings. Nicht-endliche `Float`-Werte ergeben einen Laufzeitfehler.
+- `clamp(val, min_val, max_val)`: Begrenzt eine gleich typisierte Zahl (`Int`, `UInt`, `Float`, `Decimal`) auf `[min_val, max_val]`; nicht-endliche `Float`-Werte oder `min_val > max_val` ergeben einen Laufzeitfehler.
+- `sqrt(x: Float) -> Float`: Berechnet die Quadratwurzel einer endlichen, nicht-negativen Fließkommazahl; negative und nicht-endliche Werte ergeben einen Laufzeitfehler.
+- `pow(base: Float, exp: Float) -> Float`: Berechnet `base ^ exp`; undefinierte oder nicht-endliche Ergebnisse ergeben einen Laufzeitfehler.
+- `floor(x: Float) -> Float` und `ceil(x: Float) -> Float`: Runden eine endliche Fließkommazahl ab beziehungsweise auf.
+- `round(x: Float, decimals: Int) -> Float`: Rundet Halbwerte weg von null; `decimals` muss zwischen `-15` und `15` liegen. Ein nicht-endliches Ergebnis ergibt einen Laufzeitfehler.
 
 ### 2. Strings & Textverarbeitung
 - `len(text: String) -> Int`: Liefert die Anzahl der Unicode-Codepoints im String.
@@ -198,10 +196,9 @@ Zelyra 1.0.3 erweitert die Standardbibliothek um über 55 eingebaute Funktionen 
 - `text_ends_with(text: String, suffix: String) -> Bool`: Prüft, ob der Text mit `suffix` endet.
 - `text_replace(text: String, search: String, replacement: String) -> String`: Ersetzt alle Vorkommen von `search` durch `replacement`.
 - `text_split(text: String, delimiter: String) -> String[]` (Alias: `split`): Zerlegt den Text am Trennzeichen in ein Array.
-- `text_pad_left(text: String, target_len: Int, pad_char: String) -> String`: Füllt den Text links bis zur Ziellänge auf.
-- `text_pad_right(text: String, target_len: Int, pad_char: String) -> String`: Füllt den Text rechts bis zur Ziellänge auf.
-- `text_index_of(text: String, sub: String) -> Option<Int>`: Liefert die nullbasierte Position des ersten Vorkommens oder `None`.
-- `text_repeat(text: String, count: Int) -> String`: Wiederholt den Text `count`-mal.
+- `text_pad_left(text: String, target_len: Int, pad: String) -> String` und `text_pad_right(...)`: Füllen auf die Ziellänge in Unicode-Codepoints auf; ein mehrstelliges `pad` wird codepointweise wiederholt. Leere Fülltexte verwenden Leerzeichen. Negative Längen und Ausgaben über 16 MiB ergeben Laufzeitfehler.
+- `text_index_of(text: String, sub: String) -> Option<Int>`: Liefert den nullbasierten Unicode-Codepoint-Index des ersten Vorkommens oder `None`.
+- `text_repeat(text: String, count: Int) -> String`: Wiederholt den Text `count`-mal; negative Wiederholungen oder Ausgaben über 16 MiB ergeben Laufzeitfehler.
 - `text_is_empty(text: String) -> Bool`: Prüft, ob der Text exakt die Länge 0 hat.
 - `text_is_blank(text: String) -> Bool`: Prüft, ob der Text nach Entfernung von Whitespace leer ist.
 - `text_capitalize(text: String) -> String`: Wandelt das erste Zeichen in einen Großbuchstaben um.
@@ -225,11 +222,10 @@ Zelyra 1.0.3 erweitert die Standardbibliothek um über 55 eingebaute Funktionen 
 - `slice(array: T[], start: Int, length: Int) -> T[]`: Extrahiert einen Teilbereich des Arrays.
 - `join(array: T[], delimiter: String) -> String`: Verbindet alle Elemente als String mit dem Trennzeichen.
 - `unique(array: T[]) -> T[]` (Alias: `dedup`): Liefert ein neues Array ohne Duplikate unter Beibehaltung der ersten Vorkommen.
-- `array_sum(array: T[]) -> T`: Berechnet die Summe aller numerischen Elemente (`Int`, `Float`, `Decimal`).
-- `avg(array: T[]) -> Float | Decimal`: Berechnet den arithmetischen Mittelwert aller Elemente.
-- `min_of(array: T[]) -> Option<T>`: Liefert den kleinsten Wert im Array oder `None` bei leerem Array.
-- `max_of(array: T[]) -> Option<T>`: Liefert den größten Wert im Array oder `None` bei leerem Array.
-- `chunk(array: T[], size: Int) -> T[][]`: Teilt das Array in gleich große Teil-Arrays auf.
+- `array_sum(array: T[]) -> T`: Berechnet die Summe von `Int`, `Float` oder `Decimal`; Ganzzahl- und Dezimalüberläufe sowie nicht-endliche Fließkommawerte ergeben einen Laufzeitfehler. Für ein leeres Array ist das Ergebnis `0`.
+- `avg(array: T[]) -> Float | Decimal`: Berechnet den Mittelwert von `Int`- und `Float`-Arrays als `Float`, bei `Decimal`-Arrays als `Decimal`. Der Dezimalmittelwert wird mit der festen Decimal-Skala abgeschnitten; ein leeres Array und Überläufe ergeben einen Laufzeitfehler.
+- `min_of(array: T[]) -> Option<T>` und `max_of(array: T[]) -> Option<T>`: Wählen das Minimum beziehungsweise Maximum aus Zahlen oder Strings; ein leeres Array ergibt `None`, nicht-endliche Float-Werte ergeben einen Laufzeitfehler.
+- `chunk(array: T[], size: Int) -> T[][]`: Teilt das Array in Teil-Arrays der angegebenen Höchstgröße auf; `size` muss größer als null sein.
 - `flatten(array: T[][]) -> T[]`: Ebnet ein verschachteltes zweidimensionales Array in ein flaches Array ein.
 - `zip(a: T[], b: U[]) -> Tuple<T, U>[]`: Kombiniert Arrays elementweise bis zur Länge des kürzeren Arrays.
 
@@ -240,17 +236,18 @@ Zelyra 1.0.3 erweitert die Standardbibliothek um über 55 eingebaute Funktionen 
 
 ### 5. Maps & Wörterbücher
 - `get(map: Map<K, V>, key: K) -> Option<V>`: Schlägt den Schlüssel nach und liefert `Some(V)` oder `None`.
-- `get_or(map: Map<K, V>, key: K, default: V) -> V`: Liefert den Wert zum Schlüssel oder den Standardwert `default`.
+- `get_or(map: Map<K, V>, key: K, default: V) -> V` (Alias: `get_or_default`): Liefert den Wert zum Schlüssel oder den Standardwert `default`.
 - `has_key(map: Map<K, V>, key: K) -> Bool`: Prüft, ob der Schlüssel in der Map existiert.
 - `put(map: Map<K, V>, key: K, value: V) -> Map<K, V>`: Fügt ein Paar hinzu oder aktualisiert es funktional.
 - `map_remove(map: Map<K, V>, key: K) -> Map<K, V>`: Liefert eine neue Map ohne den angegebenen Schlüssel.
 - `map_merge(a: Map<K, V>, b: Map<K, V>) -> Map<K, V>`: Verschmilzt zwei Maps; bei Kollisionen überschreiben Werte aus `b`.
+- `map_increment(map: Map<K, Int>, key: K) -> Result<Map<K, Int>, String>`: Erhöht einen typgeprüften Zähler um eins oder fügt ihn mit Startwert `1` ein. Der Eingabewert bleibt unverändert; ein `Int`-Überlauf wird als `Err` zurückgegeben.
 - `keys(map: Map<K, V>) -> K[]`: Liefert alle Schlüssel der Map als Array.
 - `values(map: Map<K, V>) -> V[]`: Liefert alle Werte der Map als Array.
-- `entries(map: Map<K, V>) -> Tuple<K, V>[]`: Liefert Schlüssel-Wert-Paare als Tupel-Array. Eine `for`-Schleife kann derzeit jedes Tupel als einzelne Variable entgegennehmen; Tupel-Destrukturierung ist noch nicht verfügbar.
+- `entries(map: Map<K, V>) -> Tuple<K, V>[]`: Liefert Schlüssel-Wert-Paare als Tupel-Array, das sich mit `for (schluessel, wert) in entries(map)` typgeprüft zerlegen lässt.
 
 ### 6. Datums- & Kalenderberechnung
-- `date_add_days(d: Date, days: Int) -> Date`: Addiert oder subtrahiert Kalendertage von einem `Date` (`YYYY-MM-DD`).
+- `date_add_days(d: Date, days: Int) -> Date`: Addiert oder subtrahiert Kalendertage von einem `Date` (`YYYY-MM-DD`); Ergebnisse müssen zwischen den Jahren 0001 und 9999 liegen.
 - `date_diff_days(start: Date, end: Date) -> Int`: Berechnet `start - end` in Kalendertagen. Für verbleibende Tage daher `date_diff_days(frist, heute)` aufrufen.
 - `is_before(a: Date, b: Date) -> Bool`: Prüft, ob Datum `a` chronologisch vor `b` liegt.
 - `is_after(a: Date, b: Date) -> Bool`: Prüft, ob Datum `a` chronologisch nach `b` liegt.
@@ -267,22 +264,22 @@ Zelyra 1.0.3 erweitert die Standardbibliothek um über 55 eingebaute Funktionen 
 
 ### 8. Typkonvertierung & Parsing
 - `to_string(value: Any) -> String`: Wandelt jeden beliebigen Zelyra-Wert in seine String-Darstellung um.
-- `to_int(value: Int | UInt | Float | Bool | String) -> Int`: Konvertiert Werte deterministisch in einen 64-Bit-Ganzzahlwert.
-- `to_float(value: Float | Int | UInt | String) -> Float`: Konvertiert Werte deterministisch in eine Fließkommazahl.
+- `to_int(value: Int | UInt | Float | Bool | String) -> Int`: Konvertiert zu `Int`; Fließkommazahlen werden gegen null abgeschnitten. Nicht endliche oder außerhalb des `Int`-Bereichs liegende Zahlen und ungültige Strings ergeben einen Laufzeitfehler.
+- `to_float(value: Float | Int | UInt | String) -> Float`: Konvertiert zu einer endlichen Fließkommazahl; ungültige oder nicht-endliche Werte ergeben einen Laufzeitfehler.
 - `parse_int(text: String) -> Result<Int, String>`: Parst einen String sicher als `Int` oder liefert `Err(String)`.
-- `parse_float(text: String) -> Result<Float, String>`: Parst einen String sicher als `Float` oder liefert `Err(String)`.
-- `parse_bool(text: String) -> Result<Bool, String>`: Parst `"true"`, `"false"`, `"1"`, `"0"` in einen `Bool` oder liefert `Err(String)`.
+- `parse_float(text: String) -> Result<Float, String>`: Parst einen String als endliche `Float`-Zahl oder liefert `Err(String)`.
+- `parse_bool(text: String) -> Result<Bool, String>`: Parst `"true"`, `"false"`, `"1"`, `"0"` in einen `Bool`; Groß-/Kleinschreibung der Wörter ist egal, ungültige Werte liefern `Err(String)`.
 
 ### 9. Sicherheit, Hashing & Web-Encodings
 - `hash_sha256(text: String) -> String`: Berechnet den hexadezimalen SHA-256-Hash des Strings.
 - `base64_encode(text: String) -> String`: Kodiert den UTF-8-String in Base64.
 - `base64_decode(encoded: String) -> Result<String, String>`: Dekodiert einen Base64-String sicher.
 - `url_encode(text: String) -> String`: Prozent-kodiert Sonderzeichen für URL-Parameter nach RFC 3986.
-- `url_decode(encoded: String) -> Result<String, String>`: Dekodiert prozent-kodierte URL-Strings sicher.
+- `url_decode(encoded: String) -> Result<String, String>`: Dekodiert Prozentkodierungen sicher; `+` wird als Leerzeichen behandelt.
 - `uuid_v4() -> String` (`uses Random`): Erzeugt eine kryptografisch sichere Version-4-UUID nach RFC 4122.
 
 ### 10. Pfade & Dateisystem
-- `path_join(a: String, b: String) -> String`: Verbindet zwei Pfadsegmente plattformunabhängig (ohne Capability).
+- `path_join(a: String, b: String) -> String`: Verbindet zwei Pfadsegmente nach den Pfadkonventionen des Hostbetriebssystems (ohne Capability).
 - `path_filename(path: String) -> String`: Extrahiert den Dateinamen aus einem Pfad (ohne Capability).
 - `path_extension(path: String) -> String`: Extrahiert die Dateiendung ohne führenden Punkt (ohne Capability).
 - `path_dir(path: String) -> String`: Extrahiert das Elternverzeichnis eines Pfades (ohne Capability).
@@ -310,9 +307,9 @@ Zelyra 1.0.3 erweitert die Standardbibliothek um über 55 eingebaute Funktionen 
   - `file_size(path: String) -> Result<Int, String>`: Liest die Größe einer Datei in Bytes.
 - `uses Network`:
   - `http_get(url: String) -> String`: Führt einen synchronen HTTP-GET-Request gegen erlaubte Hosts aus.
-  - `http_request(req: HttpRequest) -> HttpResponse`: Führt eine HTTP-Anfrage mit konfigurierter Methode, Headern und Body aus.
-  - `http_json<Req, Res>(method: String, url: String, headers: String[], body: Request?) -> Res`: Sendet eine HTTP-Anfrage und dekodiert eine erfolgreiche JSON-Antwort.
-  - `http_result<Req, Res>(method: String, url: String, headers: String[], body: Request?) -> HttpResult<Res>`: Liefert typisierte HTTP-Ergebnisse einschließlich Statuscode und Headern.
+  - `http_request(method: String, url: String, headers: String[], body: String?) -> HttpResponse`: Führt eine HTTP-Anfrage mit Methode, URL, Headern und optionalem Text-Body aus.
+  - `http_json<Req, Res>(method: String, url: String, headers: String[], body: Req?) -> Res`: Sendet eine HTTP-Anfrage und dekodiert eine erfolgreiche JSON-Antwort.
+  - `http_result<Req, Res>(method: String, url: String, headers: String[], body: Req?) -> HttpResult<Res>`: Liefert typisierte HTTP-Ergebnisse einschließlich Statuscode und Headern.
 - `uses Process`:
   - `run_process(command: String, args: String[]) -> ProcessResult`: Startet einen explizit freigegebenen Prozess ohne Shell.
 - `uses Database`:

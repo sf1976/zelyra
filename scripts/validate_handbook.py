@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""
-Zelyra Handbook Code Snippet Validator
-Validates Zelyra code blocks across the split German and English handbook chapters
+"""Check balanced delimiters in Zelyra snippets in both handbooks.
+
+This is a structural check. It does not parse, type-check, or run examples.
 """
 
 import sys
@@ -41,6 +41,8 @@ def validate_snippet(code, line_offset=0):
                 continue
                 
             if c == '/' and next_c == '/':
+                break
+            if c == '#':
                 break
             if c == '/' and next_c == '*':
                 in_block_comment = True
@@ -83,20 +85,33 @@ def check_file(path):
     start_line = 0
     chapter = "Start"
     
+    fence_character = None
+    fence_length = 0
     for i, line in enumerate(lines):
         line_num = i + 1
         m_chap = re.match(r"^#{1,3}\s+(.+)$", line)
         if m_chap:
             chapter = m_chap.group(1).strip()
             
-        if re.match(r"^```(?:zelyra|zyl)\s*$", line, re.IGNORECASE):
+        opening = re.match(r"^(`{3,}|~{3,})\s*(?:zelyra|zyl)\s*$", line, re.IGNORECASE)
+        if not in_block and opening:
             in_block = True
+            fence_character = opening.group(1)[0]
+            fence_length = len(opening.group(1))
             start_line = line_num
             curr_lines = []
             continue
             
-        if in_block and re.match(r"^```\s*$", line):
+        closing = re.match(r"^(`+|~+)\s*$", line)
+        if (
+            in_block
+            and closing
+            and closing.group(1)[0] == fence_character
+            and len(closing.group(1)) >= fence_length
+        ):
             in_block = False
+            fence_character = None
+            fence_length = 0
             snippets.append({
                 "code": "\n".join(curr_lines),
                 "line": start_line,
@@ -114,6 +129,8 @@ def check_file(path):
         if not ok:
             errors.append(f"Line {snip['line']} ({snip['chapter']}): {err}")
             
+    if in_block:
+        errors.append(f"Line {start_line}: Unclosed Zelyra code fence")
     return len(snippets), errors
 
 def main():
@@ -138,7 +155,7 @@ def main():
     total = 0
     all_errors = []
     print("=" * 60)
-    print(" ZELYRA HANDBOOK CODE SNIPPET VALIDATION")
+    print(" ZELYRA HANDBOOK SNIPPET DELIMITER CHECK")
     print("=" * 60)
     
     for name, paths in files.items():
@@ -160,7 +177,7 @@ def main():
         print(f"FAILED: Found {len(all_errors)} issues across {total} snippets.")
         sys.exit(1)
     else:
-        print(f"SUCCESS: All {total} handbook code examples verified successfully.")
+        print(f"SUCCESS: All {total} snippets have balanced delimiters; this check does not type-check examples.")
         sys.exit(0)
 
 if __name__ == "__main__":

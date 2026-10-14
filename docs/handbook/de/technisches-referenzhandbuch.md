@@ -364,8 +364,8 @@ fn format_title(input: String) -> String {
 }
 ~~~
 
-Umfangreiche Standardbibliothek (Neu in 1.0.3):
-Zelyra 1.0.3 liefert über 55 neue Builtin-Funktionen für Mathematik (`abs`, `min`, `max`, `clamp`, `sqrt`, `round`), String-Operationen (`text_split`, `text_replace`, `text_pad_left`), Array-Kombinatoren (`sort`, `unique`, `chunk`, `zip`), Mengen (`set_union`), Maps (`has_key`, `get_or`, `entries`), Datumsarithmetik (`date_add_days`), Krypto & Web-Encodings (`hash_sha256`, `base64_encode`, `url_encode`, `uuid_v4`) und Pfade (`path_join`, `file_exists`). Die vollständige Signaturliste steht in [Anhang D: Standardbibliothek](anhaenge.md#anhang-d-die-standardbibliothek-im-uberblick).
+Erweiterte Standardbibliothek (Neu in 1.0.3):
+Zelyra 1.0.3 ergänzt Builtin-Funktionen für Mathematik (`abs`, `min`, `max`, `clamp`, `sqrt`, `round`), Strings (`text_split`, `text_replace`, `text_pad_left`), Arrays (`sort`, `unique`, `chunk`, `zip`), Mengen (`set_union`), Maps (`has_key`, `get_or`, `entries`), Datumsarithmetik (`date_add_days`), Hashing und Web-Encodings (`hash_sha256`, `base64_encode`, `url_encode`, `uuid_v4`) sowie Pfade (`path_join`, `file_exists`). Die vollständigen Signaturen und Laufzeitgrenzen stehen in [Anhang D: Standardbibliothek](anhaenge.md#anhang-d-die-standardbibliothek-im-uberblick).
 
 ## 6. Option, Result und Pattern Matching
 

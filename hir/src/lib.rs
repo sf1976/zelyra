@@ -94,6 +94,8 @@ pub enum HirStmt {
     For {
         name: String,
         local: LocalId,
+        additional_names: Vec<String>,
+        additional_locals: Vec<LocalId>,
         iterable: HirExpr,
         body: HirBlock,
         span: Span,
@@ -442,6 +444,7 @@ impl<'a> Resolver<'a> {
             },
             Stmt::For {
                 name,
+                additional_names,
                 iterable,
                 body,
                 span,
@@ -449,11 +452,17 @@ impl<'a> Resolver<'a> {
                 let iterable = self.expr(iterable);
                 self.scopes.push(HashMap::new());
                 let local = self.bind(name.clone(), *span);
+                let additional_locals = additional_names
+                    .iter()
+                    .map(|name| self.bind(name.clone(), *span))
+                    .collect();
                 let body = self.block(body);
                 self.scopes.pop();
                 HirStmt::For {
                     name: name.clone(),
                     local,
+                    additional_names: additional_names.clone(),
+                    additional_locals,
                     iterable,
                     body,
                     span: *span,
@@ -718,6 +727,8 @@ impl<'a> Resolver<'a> {
                             | "text_pad_left"
                             | "text_pad_right"
                             | "get_or"
+                            | "get_or_default"
+                            | "map_increment"
                             | "has_key"
                             | "unwrap_or"
                             | "sqrt"

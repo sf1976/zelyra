@@ -3560,6 +3560,7 @@ fn main() {
     print(has_key(m, "missing"))
     print(get_or(m, "key", 0))
     print(get_or(m, "missing", 404))
+    print(get_or_default(m, "missing", 405))
     print(unwrap_or(Some(99), 0))
     print(unwrap_or(None, 123))
     print(to_string(42))
@@ -3589,6 +3590,7 @@ fn main() {
             "false",
             "100",
             "404",
+            "405",
             "99",
             "123",
             "42",
@@ -3616,6 +3618,7 @@ fn main() {
             print(-1)
         }
     }
+    print(unwrap_or(text_index_of("éx", "x"), -1))
     print(text_repeat("x", 4))
     print(text_is_empty(""))
     print(text_capitalize("hello"))
@@ -3641,6 +3644,7 @@ fn main() {
     print(map_remove(m1, "a"))
     print(map_merge(m1, m2))
 }
+
 "#;
     assert_eq!(
         run(source),
@@ -3651,6 +3655,7 @@ fn main() {
             "5",
             "2.72",
             "2",
+            "1",
             "xxxx",
             "true",
             "Hello",
@@ -3668,6 +3673,159 @@ fn main() {
             "Map{a=1, b=20, c=30}",
         ]
     );
+}
+
+#[test]
+fn standard_library_math_errors_are_checked_and_types_are_restricted() {
+    for (source, expected) in [
+        (
+            "fn main() { value = abs(json_decode<Int>(\"-9223372036854775808\")) }",
+            "Int overflow in abs",
+        ),
+        (
+            r#"fn main() { value = abs(json_decode<Decimal>("\"-170141183460469231731687303715.884105728\"")) }"#,
+            "Decimal overflow in abs",
+        ),
+        (
+            "fn main() { value = sqrt(-1.0) }",
+            "sqrt requires a finite non-negative Float",
+        ),
+        (
+            "fn main() { value = pow(-2.0, 0.5) }",
+            "pow is undefined or outside the finite Float range",
+        ),
+        (
+            "fn main() { value = pow(2.0, 1024.0) }",
+            "pow is undefined or outside the finite Float range",
+        ),
+        (
+            "fn main() { value = round(1.25, 16) }",
+            "round decimal places must be between -15 and 15",
+        ),
+        (
+            "fn main() { value = round(pow(2.0, 1023.0), 15) }",
+            "round result is outside the finite Float range",
+        ),
+        (
+            "fn main() { value = clamp(4, 10, 2) }",
+            "clamp minimum must not exceed maximum",
+        ),
+        (
+            "fn main() { value = to_int(json_decode<UInt>(\"18446744073709551615\")) }",
+            "to_int cannot convert",
+        ),
+        (
+            "fn main() { value = to_int(pow(2.0, 63.0)) }",
+            "to_int Float must be finite and within the Int range",
+        ),
+        (
+            "fn main() { value = to_float(\"inf\") }",
+            "to_float cannot convert",
+        ),
+        (
+            "fn main() { value = text_pad_left(\"x\", -1, \"0\") }",
+            "padding target length must be non-negative",
+        ),
+        (
+            "fn main() { value = text_repeat(\"xx\", 8388609) }",
+            "text_repeat output exceeds the 16 MiB text limit",
+        ),
+        (
+            "fn main() { value = array_sum([pow(2.0, 1023.0), pow(2.0, 1023.0)]) }",
+            "array_sum Float overflow",
+        ),
+        (
+            "fn main() { value = avg([json_decode<Decimal>(\"\\\"170141183460469231731687303715.884105727\\\"\"), json_decode<Decimal>(\"\\\"0.000000001\\\"\")]) }",
+            "avg decimal overflow",
+        ),
+    ] {
+        let program = parse(&lex(source).unwrap()).unwrap();
+        check(&program).unwrap();
+        let error =
+            execute(&program).expect_err("invalid math input must be a checked runtime error");
+        assert!(error.message.contains(expected), "{}", error.message);
+    }
+
+    for source in [
+        "fn main() { value = min(true, false) }",
+        "fn main() { value = max(true, false) }",
+        "fn main() { value = clamp(true, false, true) }",
+        "fn main() { value = min_of([true, false]) }",
+    ] {
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(check(&program).is_err(), "unexpectedly accepted {source}");
+    }
+
+    assert_eq!(
+        run("fn main() { print(round(1.25, 1)) print(round(-1.25, 1)) print(round(125.0, -1)) print(min(json_decode<UInt>(\"3\"), json_decode<UInt>(\"2\"))) print(clamp(json_decode<UInt>(\"7\"), json_decode<UInt>(\"2\"), json_decode<UInt>(\"5\"))) print(unwrap_or(min_of([json_decode<UInt>(\"3\"), json_decode<UInt>(\"2\")]), json_decode<UInt>(\"0\"))) print(is_err(parse_float(\"NaN\"))) print(text_pad_left(\"é\", 3, \"🙂\")) }")
+            .as_slice(),
+        ["1.3", "-1.3", "130", "2", "5", "2", "true", "🙂🙂é"]
+    );
+}
+
+#[test]
+fn for_loops_destructure_typed_tuples() {
+    let source = r#"
+fn main() {
+    prices: Map<String, Int> = Map { "Coffee": 3 "Tea": 2 }
+    for (name, price) in entries(prices) {
+        print(name + ":" + to_string(price))
+    }
+    for (left, right) in zip([1, 2], [3, 4]) {
+        print(to_string(left + right))
+    }
+}
+"#;
+    assert_eq!(run(source), ["Coffee:3", "Tea:2", "4", "6"]);
+
+    for (source, expected) in [
+        (
+            "fn main() { for (key, value) in [1, 2] { print(key) } }",
+            "tuple loop pattern expects tuple values",
+        ),
+        (
+            "fn main() { values = Map { \"a\": 1 } for (key, value, extra) in entries(values) { print(key) } }",
+            "tuple loop pattern has 3 variables but the value has 2 elements",
+        ),
+    ] {
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let errors = check(&program).expect_err("invalid tuple pattern should fail type checking");
+        assert!(errors.iter().any(|error| error.message.contains(expected)));
+    }
+}
+
+#[test]
+fn map_increment_counts_safely_without_mutating_the_input_map() {
+    let source = r#"
+fn main() {
+    counts: Map<String, Int> = Map {}
+    match map_increment(counts, "pear") {
+        Ok(first) => {
+            match map_increment(first, "pear") {
+                Ok(second) => { print(get_or_default(second, "pear", 0)) }
+                Err(message) => { print(message) }
+            }
+        }
+        Err(message) => { print(message) }
+    }
+    print(get_or_default(counts, "pear", 0))
+
+    maximum: Map<String, Int> = Map { "overflow": 9223372036854775807 }
+    match map_increment(maximum, "overflow") {
+        Ok(_) => { print("unexpected success") }
+        Err(message) => { print(message) }
+    }
+}
+"#;
+    assert_eq!(run(source), ["2", "0", "map counter overflow"]);
+
+    for source in [
+        "fn main() { values: Map<String, Bool> = Map { \"enabled\": true } result = map_increment(values, \"enabled\") }",
+        "fn main() { values: Map<String, Int> = Map {} result = map_increment(values, 1) }",
+    ] {
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(check(&program).is_err(), "unexpectedly accepted {source}");
+    }
 }
 
 #[test]

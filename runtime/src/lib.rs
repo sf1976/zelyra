@@ -109,6 +109,50 @@ fn url_decode_str(s: &str) -> Result<String, String> {
     String::from_utf8(bytes).map_err(|e| format!("invalid UTF-8 in url decoded content: {e}"))
 }
 
+const MAX_TEXT_BUILTIN_OUTPUT_BYTES: usize = 16 * 1024 * 1024;
+
+fn pad_text_to_codepoints(
+    text: &str,
+    target_len: i64,
+    pad: &str,
+    left: bool,
+) -> Result<String, String> {
+    let target_len = usize::try_from(target_len)
+        .map_err(|_| "padding target length must be non-negative".to_owned())?;
+    if target_len > MAX_TEXT_BUILTIN_OUTPUT_BYTES {
+        return Err("padding target length exceeds the 16 MiB text limit".into());
+    }
+    let text_len = text.chars().count();
+    if text_len >= target_len {
+        return Ok(text.to_owned());
+    }
+
+    let pad_chars = if pad.is_empty() {
+        vec![' ']
+    } else {
+        pad.chars().collect::<Vec<_>>()
+    };
+    let needed = target_len - text_len;
+    let fill_bytes = (0..needed).try_fold(0usize, |bytes, index| {
+        bytes.checked_add(pad_chars[index % pad_chars.len()].len_utf8())
+    });
+    let Some(output_bytes) = fill_bytes.and_then(|fill| text.len().checked_add(fill)) else {
+        return Err("padded text size overflow".into());
+    };
+    if output_bytes > MAX_TEXT_BUILTIN_OUTPUT_BYTES {
+        return Err("padded text exceeds the 16 MiB text limit".into());
+    }
+
+    let fill = (0..needed)
+        .map(|index| pad_chars[index % pad_chars.len()])
+        .collect::<String>();
+    Ok(if left {
+        format!("{fill}{text}")
+    } else {
+        format!("{text}{fill}")
+    })
+}
+
 fn generate_uuid_v4() -> Result<String, String> {
     let mut bytes = [0u8; 16];
     let mut rng = OsRng;
@@ -4839,6 +4883,7 @@ impl<'a> Checker<'a> {
             }
             Stmt::For {
                 name,
+                additional_names,
                 iterable,
                 body,
                 ..
@@ -4856,14 +4901,49 @@ impl<'a> Checker<'a> {
                         Type::Unknown
                     }
                 };
+                let binding_count = additional_names.len() + 1;
+                let binding_types = if binding_count == 1 {
+                    vec![element_type]
+                } else {
+                    match element_type {
+                        Type::Tuple(items) if items.len() == binding_count => items,
+                        Type::Tuple(items) => {
+                            self.error(
+                                iterable.span,
+                                format!(
+                                    "tuple loop pattern has {binding_count} variables but the value has {} elements",
+                                    items.len()
+                                ),
+                            );
+                            vec![Type::Unknown; binding_count]
+                        }
+                        Type::Unknown => vec![Type::Unknown; binding_count],
+                        other => {
+                            self.error(
+                                iterable.span,
+                                format!("tuple loop pattern expects tuple values, found `{other}`"),
+                            );
+                            vec![Type::Unknown; binding_count]
+                        }
+                    }
+                };
                 scopes.push(HashMap::new());
                 scopes.last_mut().unwrap().insert(
                     name.clone(),
                     Variable {
-                        ty: element_type,
+                        ty: binding_types[0].clone(),
                         mutable: false,
                     },
                 );
+                for (name, ty) in additional_names
+                    .iter()
+                    .zip(binding_types.into_iter().skip(1))
+                {
+                    scopes
+                        .last_mut()
+                        .unwrap()
+                        .insert(name.clone(), Variable { ty, mutable: false });
+                }
                 self.loop_depth += 1;
                 self.check_block(body, scopes, expected);
                 self.loop_depth -= 1;
@@ -6009,6 +6089,23 @@ impl<'a> Checker<'a> {
                     let a = self.check_expr(&args[0], scopes);
                     let b = self.check_expr(&args[1], scopes);
                     self.expect_type(&a, &b, args[1].span);
+                    if !matches!(
+                        &a,
+                        Type::Int
+                            | Type::UInt
+                            | Type::Float
+                            | Type::Decimal
+                            | Type::String
+                            | Type::Unknown
+                    ) {
+                        self.error(
+                            args[0].span,
+                            format!(
+                                "{name} expects matching numeric or String arguments, found {a}"
+                            ),
+                        );
+                        return Type::Unknown;
+                    }
                     a
                 } else if name == "clamp" {
                     if args.len() != 3 {
@@ -6020,6 +6117,16 @@ impl<'a> Checker<'a> {
                     let max_val = self.check_expr(&args[2], scopes);
                     self.expect_type(&val, &min_val, args[1].span);
                     self.expect_type(&val, &max_val, args[2].span);
+                    if !matches!(
+                        &val,
+                        Type::Int | Type::UInt | Type::Float | Type::Decimal | Type::Unknown
+                    ) {
+                        self.error(
+                            args[0].span,
+                            format!("clamp expects matching numeric arguments, found {val}"),
+                        );
+                        return Type::Unknown;
+                    }
                     val
                 } else if name == "to_string" {
                     if args.len() != 1 {
@@ -6162,11 +6269,11 @@ impl<'a> Checker<'a> {
                     self.expect_type(&Type::Int, &target_len, args[1].span);
                     self.expect_type(&Type::String, &pad_char, args[2].span);
                     Type::String
-                } else if name == "get_or" {
+                } else if name == "get_or" || name == "get_or_default" {
                     if args.len() != 3 {
                         self.error(
                             expr.span,
-                            "get_or expects a Map, key, and default fallback value",
+                            format!("{name} expects a Map, key, and default fallback value"),
                         );
                         return Type::Unknown;
                     }
@@ -6183,9 +6290,37 @@ impl<'a> Checker<'a> {
                         other => {
                             self.error(
                                 args[0].span,
-                                format!("get_or expects a Map, found {other}"),
+                                format!("{name} expects a Map, found {other}"),
                             );
                             fallback_ty
+                        }
+                    }
+                } else if name == "map_increment" {
+                    if args.len() != 2 {
+                        self.error(expr.span, "map_increment expects a Map<Int> and key");
+                        return Type::Unknown;
+                    }
+                    let map_ty = self.check_expr(&args[0], scopes);
+                    let key_ty = self.check_expr(&args[1], scopes);
+                    match map_ty {
+                        Type::Map(key, value) => {
+                            self.expect_type(&key, &key_ty, args[1].span);
+                            self.expect_type(&Type::Int, &value, args[0].span);
+                            Type::Result(
+                                Box::new(Type::Map(key, Box::new(Type::Int))),
+                                Box::new(Type::String),
+                            )
+                        }
+                        Type::Unknown => Type::Result(
+                            Box::new(Type::Map(Box::new(Type::Unknown), Box::new(Type::Int))),
+                            Box::new(Type::String),
+                        ),
+                        other => {
+                            self.error(
+                                args[0].span,
+                                format!("map_increment expects a Map, found {other}"),
+                            );
+                            Type::Unknown
                         }
                     }
                 } else if name == "has_key" {
@@ -6343,7 +6478,27 @@ impl<'a> Checker<'a> {
                     }
                     let ty = self.check_expr(&args[0], scopes);
                     match ty {
-                        Type::Array(inner) => Type::Option(inner),
+                        Type::Array(inner)
+                            if matches!(
+                                *inner,
+                                Type::Int | Type::UInt | Type::Float | Type::Decimal | Type::String
+                            ) =>
+                        {
+                            Type::Option(inner)
+                        }
+                        Type::Array(inner) if inner.as_ref() == &Type::Unknown => {
+                            Type::Option(inner)
+                        }
+                        Type::Array(inner) => {
+                            self.error(
+                                args[0].span,
+                                format!(
+                                    "{name} expects an array of numbers or String, found {}",
+                                    inner
+                                ),
+                            );
+                            Type::Option(inner)
+                        }
                         Type::Unknown => Type::Unknown,
                         other => {
                             self.error(
@@ -8924,7 +9079,7 @@ fn execute_internal(
     Ok(interpreter.output)
 }
 
-const MAX_FUNCTION_CALL_DEPTH: usize = 24;
+const MAX_FUNCTION_CALL_DEPTH: usize = 20;
 
 struct Interpreter<'program> {
     functions: HashMap<String, &'program Function>,
@@ -9150,6 +9305,8 @@ fn is_runtime_builtin(name: &str) -> bool {
             | "text_pad_left"
             | "text_pad_right"
             | "get_or"
+            | "get_or_default"
+            | "map_increment"
             | "has_key"
             | "unwrap_or"
             | "sqrt"
@@ -10714,6 +10871,7 @@ impl<'program> Interpreter<'program> {
             }
             Stmt::For {
                 name,
+                additional_names,
                 iterable,
                 body,
                 span,
@@ -10779,7 +10937,41 @@ impl<'program> Interpreter<'program> {
                 for value in values {
                     self.consume_step(*span)?;
                     env.push();
-                    env.declare(name.clone(), value, false);
+                    if additional_names.is_empty() {
+                        env.declare(name.clone(), value, false);
+                    } else {
+                        let Value::Tuple(values) = value else {
+                            env.pop();
+                            return Err(self.runtime_error(
+                                *span,
+                                "tuple loop pattern received a non-tuple value",
+                            ));
+                        };
+                        if values.len() != additional_names.len() + 1 {
+                            env.pop();
+                            return Err(self.runtime_error(
+                                *span,
+                                format!(
+                                    "tuple loop pattern expects {} values, found {}",
+                                    additional_names.len() + 1,
+                                    values.len()
+                                ),
+                            ));
+                        }
+                        let mut values = values.into_iter();
+                        env.declare(
+                            name.clone(),
+                            values.next().expect("tuple arity checked"),
+                            false,
+                        );
+                        for name in additional_names {
+                            env.declare(
+                                name.clone(),
+                                values.next().expect("tuple arity checked"),
+                                false,
+                            );
+                        }
+                    }
                     let flow = self.exec_block(body, env)?;
                     env.pop();
                     match flow {
@@ -11534,9 +11726,18 @@ impl<'program> Interpreter<'program> {
                 return Err(self.runtime_error(span, "abs expects exactly one numeric argument"));
             }
             match self.eval(&args[0], env)? {
-                Value::Int(val) => Ok(Value::Int(val.abs())),
-                Value::Float(val) => Ok(Value::Float(val.abs())),
-                Value::Decimal(val) => Ok(Value::Decimal(val.abs())),
+                Value::Int(val) => val
+                    .checked_abs()
+                    .map(Value::Int)
+                    .ok_or_else(|| self.runtime_error(args[0].span, "Int overflow in abs")),
+                Value::Float(val) if val.is_finite() => Ok(Value::Float(val.abs())),
+                Value::Float(_) => {
+                    Err(self.runtime_error(args[0].span, "abs requires a finite Float"))
+                }
+                Value::Decimal(val) => val
+                    .checked_abs()
+                    .map(Value::Decimal)
+                    .ok_or_else(|| self.runtime_error(args[0].span, "Decimal overflow in abs")),
                 other => Err(self.runtime_error(
                     args[0].span,
                     format!("abs expects numeric value, found {}", other.ty()),
@@ -11550,7 +11751,13 @@ impl<'program> Interpreter<'program> {
             let b = self.eval(&args[1], env)?;
             match (&a, &b) {
                 (Value::Int(va), Value::Int(vb)) => Ok(Value::Int(*va.min(vb))),
-                (Value::Float(va), Value::Float(vb)) => Ok(Value::Float(va.min(*vb))),
+                (Value::UInt(va), Value::UInt(vb)) => Ok(Value::UInt(*va.min(vb))),
+                (Value::Float(va), Value::Float(vb)) if va.is_finite() && vb.is_finite() => {
+                    Ok(Value::Float(va.min(*vb)))
+                }
+                (Value::Float(_), Value::Float(_)) => {
+                    Err(self.runtime_error(span, "min requires finite Float arguments"))
+                }
                 (Value::Decimal(va), Value::Decimal(vb)) => Ok(Value::Decimal(*va.min(vb))),
                 (Value::String(va), Value::String(vb)) => {
                     if va <= vb {
@@ -11559,7 +11766,10 @@ impl<'program> Interpreter<'program> {
                         Ok(b)
                     }
                 }
-                _ => Ok(a),
+                _ => {
+                    Err(self
+                        .runtime_error(span, "min expects matching numeric or String arguments"))
+                }
             }
         } else if name == "max" {
             if args.len() != 2 {
@@ -11569,7 +11779,13 @@ impl<'program> Interpreter<'program> {
             let b = self.eval(&args[1], env)?;
             match (&a, &b) {
                 (Value::Int(va), Value::Int(vb)) => Ok(Value::Int(*va.max(vb))),
-                (Value::Float(va), Value::Float(vb)) => Ok(Value::Float(va.max(*vb))),
+                (Value::UInt(va), Value::UInt(vb)) => Ok(Value::UInt(*va.max(vb))),
+                (Value::Float(va), Value::Float(vb)) if va.is_finite() && vb.is_finite() => {
+                    Ok(Value::Float(va.max(*vb)))
+                }
+                (Value::Float(_), Value::Float(_)) => {
+                    Err(self.runtime_error(span, "max requires finite Float arguments"))
+                }
                 (Value::Decimal(va), Value::Decimal(vb)) => Ok(Value::Decimal(*va.max(vb))),
                 (Value::String(va), Value::String(vb)) => {
                     if va >= vb {
@@ -11578,7 +11794,10 @@ impl<'program> Interpreter<'program> {
                         Ok(b)
                     }
                 }
-                _ => Ok(a),
+                _ => {
+                    Err(self
+                        .runtime_error(span, "max expects matching numeric or String arguments"))
+                }
             }
         } else if name == "clamp" {
             if args.len() != 3 {
@@ -11589,15 +11808,43 @@ impl<'program> Interpreter<'program> {
             let max_val = self.eval(&args[2], env)?;
             match (&val, &min_val, &max_val) {
                 (Value::Int(v), Value::Int(mn), Value::Int(mx)) => {
+                    if mn > mx {
+                        return Err(
+                            self.runtime_error(span, "clamp minimum must not exceed maximum")
+                        );
+                    }
                     Ok(Value::Int(*v.max(mn).min(mx)))
                 }
-                (Value::Float(v), Value::Float(mn), Value::Float(mx)) => {
+                (Value::UInt(v), Value::UInt(mn), Value::UInt(mx)) => {
+                    if mn > mx {
+                        return Err(
+                            self.runtime_error(span, "clamp minimum must not exceed maximum")
+                        );
+                    }
+                    Ok(Value::UInt(*v.max(mn).min(mx)))
+                }
+                (Value::Float(v), Value::Float(mn), Value::Float(mx))
+                    if v.is_finite() && mn.is_finite() && mx.is_finite() =>
+                {
+                    if mn > mx {
+                        return Err(
+                            self.runtime_error(span, "clamp minimum must not exceed maximum")
+                        );
+                    }
                     Ok(Value::Float(v.max(*mn).min(*mx)))
                 }
+                (Value::Float(_), Value::Float(_), Value::Float(_)) => {
+                    Err(self.runtime_error(span, "clamp requires finite Float arguments"))
+                }
                 (Value::Decimal(v), Value::Decimal(mn), Value::Decimal(mx)) => {
+                    if mn > mx {
+                        return Err(
+                            self.runtime_error(span, "clamp minimum must not exceed maximum")
+                        );
+                    }
                     Ok(Value::Decimal(*v.max(mn).min(mx)))
                 }
-                _ => Ok(val),
+                _ => Err(self.runtime_error(span, "clamp expects matching numeric arguments")),
             }
         } else if name == "to_string" {
             if args.len() != 1 {
@@ -11624,8 +11871,13 @@ impl<'program> Interpreter<'program> {
             }
             match self.eval(&args[0], env)? {
                 Value::String(text) => match text.trim().parse::<f64>() {
-                    Ok(parsed) => Ok(Value::Result(Ok(Box::new(Value::Float(parsed))))),
+                    Ok(parsed) if parsed.is_finite() => {
+                        Ok(Value::Result(Ok(Box::new(Value::Float(parsed)))))
+                    }
                     Err(_) => Ok(Value::Result(Err(Box::new(Value::String(format!(
+                        "invalid float: {text}"
+                    )))))),
+                    Ok(_) => Ok(Value::Result(Err(Box::new(Value::String(format!(
                         "invalid float: {text}"
                     )))))),
                 },
@@ -11825,15 +12077,9 @@ impl<'program> Interpreter<'program> {
                 self.eval(&args[2], env)?,
             ) {
                 (Value::String(text), Value::Int(target_len), Value::String(pad)) => {
-                    let pad_str = if pad.is_empty() { " " } else { &pad };
-                    if text.len() >= target_len as usize {
-                        Ok(Value::String(text))
-                    } else {
-                        let needed = (target_len as usize) - text.len();
-                        let repeated = pad_str.repeat(needed);
-                        let final_pad = &repeated[..needed];
-                        Ok(Value::String(format!("{final_pad}{text}")))
-                    }
+                    pad_text_to_codepoints(&text, target_len, &pad, true)
+                        .map(Value::String)
+                        .map_err(|message| self.runtime_error(args[1].span, message))
                 }
                 _ => Err(self.runtime_error(span, "text_pad_left expects String, Int, and String")),
             }
@@ -11850,25 +12096,20 @@ impl<'program> Interpreter<'program> {
                 self.eval(&args[2], env)?,
             ) {
                 (Value::String(text), Value::Int(target_len), Value::String(pad)) => {
-                    let pad_str = if pad.is_empty() { " " } else { &pad };
-                    if text.len() >= target_len as usize {
-                        Ok(Value::String(text))
-                    } else {
-                        let needed = (target_len as usize) - text.len();
-                        let repeated = pad_str.repeat(needed);
-                        let final_pad = &repeated[..needed];
-                        Ok(Value::String(format!("{text}{final_pad}")))
-                    }
+                    pad_text_to_codepoints(&text, target_len, &pad, false)
+                        .map(Value::String)
+                        .map_err(|message| self.runtime_error(args[1].span, message))
                 }
                 _ => {
                     Err(self.runtime_error(span, "text_pad_right expects String, Int, and String"))
                 }
             }
-        } else if name == "get_or" {
+        } else if name == "get_or" || name == "get_or_default" {
             if args.len() != 3 {
-                return Err(
-                    self.runtime_error(span, "get_or expects a Map, key, and fallback default")
-                );
+                return Err(self.runtime_error(
+                    span,
+                    format!("{name} expects a Map, key, and fallback default"),
+                ));
             }
             let map_val = self.eval(&args[0], env)?;
             let key_val = self.eval(&args[1], env)?;
@@ -11882,8 +12123,43 @@ impl<'program> Interpreter<'program> {
                     }
                     Ok(default_val)
                 }
-                _ => Err(self.runtime_error(args[0].span, "get_or expects a Map")),
+                _ => Err(self.runtime_error(args[0].span, format!("{name} expects a Map"))),
             }
+        } else if name == "map_increment" {
+            if args.len() != 2 {
+                return Err(self.runtime_error(span, "map_increment expects a Map<Int> and key"));
+            }
+            let map = self.eval(&args[0], env)?;
+            let key = self.eval(&args[1], env)?;
+            let Value::Map(mut entries) = map else {
+                return Err(self.runtime_error(args[0].span, "map_increment expects a Map"));
+            };
+            let current = entries.iter().position(|(existing, _)| existing == &key);
+            let next = match current {
+                Some(index) => match &entries[index].1 {
+                    Value::Int(value) => match value.checked_add(1) {
+                        Some(next) => next,
+                        None => {
+                            return Ok(Value::Result(Err(Box::new(Value::String(
+                                "map counter overflow".into(),
+                            )))));
+                        }
+                    },
+                    other => {
+                        return Err(self.runtime_error(
+                            args[0].span,
+                            format!("map_increment expects Int values, found {}", other.ty()),
+                        ));
+                    }
+                },
+                None => 1,
+            };
+            if let Some(index) = current {
+                entries[index].1 = Value::Int(next);
+            } else {
+                entries.push((key, Value::Int(next)));
+            }
+            Ok(Value::Result(Ok(Box::new(Value::Map(entries)))))
         } else if name == "has_key" {
             if args.len() != 2 {
                 return Err(self.runtime_error(span, "has_key expects a Map and key"));
@@ -11903,8 +12179,10 @@ impl<'program> Interpreter<'program> {
             }
             match self.eval(&args[0], env)? {
                 Value::Float(f) => {
-                    if f < 0.0 {
-                        return Err(self.runtime_error(span, "sqrt requires non-negative Float"));
+                    if !f.is_finite() || f < 0.0 {
+                        return Err(
+                            self.runtime_error(span, "sqrt requires a finite non-negative Float")
+                        );
                     }
                     Ok(Value::Float(f.sqrt()))
                 }
@@ -11918,7 +12196,16 @@ impl<'program> Interpreter<'program> {
                 return Err(self.runtime_error(span, "pow expects base and exponent"));
             }
             match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
-                (Value::Float(b), Value::Float(e)) => Ok(Value::Float(b.powf(e))),
+                (Value::Float(b), Value::Float(e)) => {
+                    let result = b.powf(e);
+                    if !b.is_finite() || !e.is_finite() || !result.is_finite() {
+                        return Err(self.runtime_error(
+                            span,
+                            "pow is undefined or outside the finite Float range",
+                        ));
+                    }
+                    Ok(Value::Float(result))
+                }
                 _ => Err(self.runtime_error(span, "pow expects Float arguments")),
             }
         } else if name == "floor" {
@@ -11926,7 +12213,8 @@ impl<'program> Interpreter<'program> {
                 return Err(self.runtime_error(span, "floor expects one Float"));
             }
             match self.eval(&args[0], env)? {
-                Value::Float(f) => Ok(Value::Float(f.floor())),
+                Value::Float(f) if f.is_finite() => Ok(Value::Float(f.floor())),
+                Value::Float(_) => Err(self.runtime_error(span, "floor requires a finite Float")),
                 other => Err(self.runtime_error(
                     args[0].span,
                     format!("floor expects Float, found {}", other.ty()),
@@ -11937,7 +12225,8 @@ impl<'program> Interpreter<'program> {
                 return Err(self.runtime_error(span, "ceil expects one Float"));
             }
             match self.eval(&args[0], env)? {
-                Value::Float(f) => Ok(Value::Float(f.ceil())),
+                Value::Float(f) if f.is_finite() => Ok(Value::Float(f.ceil())),
+                Value::Float(_) => Err(self.runtime_error(span, "ceil requires a finite Float")),
                 other => Err(self.runtime_error(
                     args[0].span,
                     format!("ceil expects Float, found {}", other.ty()),
@@ -11949,8 +12238,26 @@ impl<'program> Interpreter<'program> {
             }
             match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
                 (Value::Float(f), Value::Int(d)) => {
+                    if !f.is_finite() {
+                        return Err(
+                            self.runtime_error(args[0].span, "round requires a finite Float")
+                        );
+                    }
+                    if !(-15..=15).contains(&d) {
+                        return Err(self.runtime_error(
+                            args[1].span,
+                            "round decimal places must be between -15 and 15",
+                        ));
+                    }
                     let factor = (10.0_f64).powi(d as i32);
-                    Ok(Value::Float((f * factor).round() / factor))
+                    let rounded = (f * factor).round() / factor;
+                    if !rounded.is_finite() {
+                        return Err(self.runtime_error(
+                            span,
+                            "round result is outside the finite Float range",
+                        ));
+                    }
+                    Ok(Value::Float(rounded))
                 }
                 _ => Err(self.runtime_error(span, "round expects Float and Int")),
             }
@@ -11960,7 +12267,10 @@ impl<'program> Interpreter<'program> {
             }
             match (self.eval(&args[0], env)?, self.eval(&args[1], env)?) {
                 (Value::String(text), Value::String(sub)) => match text.find(&sub) {
-                    Some(pos) => Ok(Value::Option(Some(Box::new(Value::Int(pos as i64))))),
+                    Some(byte_pos) => {
+                        let char_pos = text[..byte_pos].chars().count();
+                        Ok(Value::Option(Some(Box::new(Value::Int(char_pos as i64)))))
+                    }
                     None => Ok(Value::Option(None)),
                 },
                 _ => Err(self.runtime_error(span, "text_index_of expects two Strings")),
@@ -11975,6 +12285,13 @@ impl<'program> Interpreter<'program> {
                         return Err(
                             self.runtime_error(span, "text_repeat count must be non-negative")
                         );
+                    }
+                    let output_bytes = text.len().checked_mul(count as usize);
+                    if output_bytes.is_none_or(|bytes| bytes > MAX_TEXT_BUILTIN_OUTPUT_BYTES) {
+                        return Err(self.runtime_error(
+                            span,
+                            "text_repeat output exceeds the 16 MiB text limit",
+                        ));
                     }
                     Ok(Value::String(text.repeat(count as usize)))
                 }
@@ -12053,7 +12370,18 @@ impl<'program> Interpreter<'program> {
                             let mut s: f64 = 0.0;
                             for it in items {
                                 if let Value::Float(n) = it {
+                                    if !n.is_finite() {
+                                        return Err(self.runtime_error(
+                                            span,
+                                            "array_sum requires finite Float elements",
+                                        ));
+                                    }
                                     s += n;
+                                    if !s.is_finite() {
+                                        return Err(
+                                            self.runtime_error(span, "array_sum Float overflow")
+                                        );
+                                    }
                                 }
                             }
                             Ok(Value::Float(s))
@@ -12104,7 +12432,16 @@ impl<'program> Interpreter<'program> {
                             let mut s: f64 = 0.0;
                             for it in items {
                                 if let Value::Float(n) = it {
+                                    if !n.is_finite() {
+                                        return Err(self.runtime_error(
+                                            span,
+                                            "avg requires finite Float elements",
+                                        ));
+                                    }
                                     s += n;
+                                    if !s.is_finite() {
+                                        return Err(self.runtime_error(span, "avg Float overflow"));
+                                    }
                                 }
                             }
                             Ok(Value::Float(s / count))
@@ -12114,7 +12451,9 @@ impl<'program> Interpreter<'program> {
                             let n_items = items.len() as i128;
                             for it in items {
                                 if let Value::Decimal(n) = it {
-                                    s += n;
+                                    s = s.checked_add(n).ok_or_else(|| {
+                                        self.runtime_error(span, "avg decimal overflow")
+                                    })?;
                                 }
                             }
                             Ok(Value::Decimal(s / n_items))
@@ -12139,11 +12478,32 @@ impl<'program> Interpreter<'program> {
                     if items.is_empty() {
                         Ok(Value::Option(None))
                     } else {
+                        if items
+                            .iter()
+                            .any(|item| matches!(item, Value::Float(value) if !value.is_finite()))
+                        {
+                            return Err(
+                                self.runtime_error(span, "min_of requires finite Float elements")
+                            );
+                        }
                         let mut m = items[0].clone();
                         for item in &items[1..] {
                             match (&m, item) {
                                 (Value::Int(a), Value::Int(b)) if b < a => m = item.clone(),
-                                (Value::Float(a), Value::Float(b)) if b < a => m = item.clone(),
+                                (Value::UInt(a), Value::UInt(b)) if b < a => m = item.clone(),
+                                (Value::Float(a), Value::Float(b))
+                                    if a.is_finite() && b.is_finite() && b < a =>
+                                {
+                                    m = item.clone()
+                                }
+                                (Value::Float(a), Value::Float(b))
+                                    if !a.is_finite() || !b.is_finite() =>
+                                {
+                                    return Err(self.runtime_error(
+                                        span,
+                                        "min_of requires finite Float elements",
+                                    ));
+                                }
                                 (Value::Decimal(a), Value::Decimal(b)) if b < a => m = item.clone(),
                                 (Value::String(a), Value::String(b)) if b < a => m = item.clone(),
                                 _ => {}
@@ -12166,11 +12526,32 @@ impl<'program> Interpreter<'program> {
                     if items.is_empty() {
                         Ok(Value::Option(None))
                     } else {
+                        if items
+                            .iter()
+                            .any(|item| matches!(item, Value::Float(value) if !value.is_finite()))
+                        {
+                            return Err(
+                                self.runtime_error(span, "max_of requires finite Float elements")
+                            );
+                        }
                         let mut m = items[0].clone();
                         for item in &items[1..] {
                             match (&m, item) {
                                 (Value::Int(a), Value::Int(b)) if b > a => m = item.clone(),
-                                (Value::Float(a), Value::Float(b)) if b > a => m = item.clone(),
+                                (Value::UInt(a), Value::UInt(b)) if b > a => m = item.clone(),
+                                (Value::Float(a), Value::Float(b))
+                                    if a.is_finite() && b.is_finite() && b > a =>
+                                {
+                                    m = item.clone()
+                                }
+                                (Value::Float(a), Value::Float(b))
+                                    if !a.is_finite() || !b.is_finite() =>
+                                {
+                                    return Err(self.runtime_error(
+                                        span,
+                                        "max_of requires finite Float elements",
+                                    ));
+                                }
                                 (Value::Decimal(a), Value::Decimal(b)) if b > a => m = item.clone(),
                                 (Value::String(a), Value::String(b)) if b > a => m = item.clone(),
                                 _ => {}
@@ -12507,8 +12888,16 @@ impl<'program> Interpreter<'program> {
             }
             match self.eval(&args[0], env)? {
                 Value::Int(i) => Ok(Value::Int(i)),
-                Value::UInt(u) => Ok(Value::Int(u as i64)),
-                Value::Float(f) => Ok(Value::Int(f as i64)),
+                Value::UInt(u) => i64::try_from(u).map(Value::Int).map_err(|_| {
+                    self.runtime_error(span, format!("to_int cannot convert `{u}` to Int"))
+                }),
+                Value::Float(f)
+                    if f.is_finite() && f >= i64::MIN as f64 && f < -(i64::MIN as f64) =>
+                {
+                    Ok(Value::Int(f as i64))
+                }
+                Value::Float(_) => Err(self
+                    .runtime_error(span, "to_int Float must be finite and within the Int range")),
                 Value::Bool(b) => Ok(Value::Int(if b { 1 } else { 0 })),
                 Value::String(s) => match s.trim().parse::<i64>() {
                     Ok(i) => Ok(Value::Int(i)),
@@ -12524,15 +12913,22 @@ impl<'program> Interpreter<'program> {
                 return Err(self.runtime_error(span, "to_float expects one argument"));
             }
             match self.eval(&args[0], env)? {
-                Value::Float(f) => Ok(Value::Float(f)),
+                Value::Float(f) if f.is_finite() => Ok(Value::Float(f)),
+                Value::Float(_) => {
+                    Err(self.runtime_error(span, "to_float requires a finite value"))
+                }
                 Value::Int(i) => Ok(Value::Float(i as f64)),
                 Value::UInt(u) => Ok(Value::Float(u as f64)),
                 Value::String(s) => match s.trim().parse::<f64>() {
-                    Ok(f) => Ok(Value::Float(f)),
+                    Ok(f) if f.is_finite() => Ok(Value::Float(f)),
                     Err(_) => {
                         Err(self
                             .runtime_error(span, format!("to_float cannot convert `{s}` to Float")))
                     }
+                    Ok(_) => Err(self.runtime_error(
+                        span,
+                        format!("to_float cannot convert `{s}` to a finite Float"),
+                    )),
                 },
                 other => Err(self.runtime_error(
                     span,

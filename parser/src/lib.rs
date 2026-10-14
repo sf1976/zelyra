@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fmt;
 use zelyra_ast::*;
 use zelyra_lexer::{Token, TokenKind};
@@ -2431,7 +2432,37 @@ impl<'a> Parser<'a> {
         }
         if self.at(&TokenKind::For) {
             let start = self.advance().span;
-            let (name, _) = self.ident("loop variable name")?;
+            let (name, additional_names) = if self.at(&TokenKind::LParen) {
+                self.advance();
+                let mut names = Vec::new();
+                let mut seen = HashSet::new();
+                loop {
+                    let (name, name_span) = self.ident("loop variable name")?;
+                    if !seen.insert(name.clone()) {
+                        return Err(ParseError {
+                            message: format!("duplicate loop variable `{name}` in tuple pattern"),
+                            span: name_span,
+                        });
+                    }
+                    names.push(name);
+                    if !self.at(&TokenKind::Comma) {
+                        break;
+                    }
+                    self.advance();
+                }
+                self.expect(TokenKind::RParen, "`)` after tuple loop variables")?;
+                if names.len() < 2 {
+                    return Err(ParseError {
+                        message: "tuple loop patterns need at least two variables".into(),
+                        span: start,
+                    });
+                }
+                let first = names.remove(0);
+                (first, names)
+            } else {
+                let (name, _) = self.ident("loop variable name")?;
+                (name, Vec::new())
+            };
             self.expect(TokenKind::In, "`in` after loop variable")?;
             let mut iterable = self.expression()?;
             if self.at_word("step") {
@@ -2461,6 +2492,7 @@ impl<'a> Parser<'a> {
             let body = self.block()?;
             return Ok(Stmt::For {
                 name,
+                additional_names,
                 iterable,
                 body: body.clone(),
                 span: start.join(body.span),
@@ -4569,6 +4601,30 @@ mod tests {
             program.functions[0].body.statements[0],
             Stmt::For { ref name, .. } if name == "value"
         ));
+    }
+
+    #[test]
+    fn parses_tuple_destructuring_for_loops() {
+        let program = parse(
+            &lex("fn main() { for (key, value) in entries(Map { \"a\": 1 }) { print(key) } }")
+                .unwrap(),
+        )
+        .unwrap();
+        let Stmt::For {
+            name,
+            additional_names,
+            ..
+        } = &program.functions[0].body.statements[0]
+        else {
+            panic!("expected a for loop");
+        };
+        assert_eq!(name, "key");
+        assert_eq!(additional_names, &["value"]);
+
+        let duplicate =
+            parse(&lex("fn main() { for (item, item) in zip([1], [2]) { print(item) } }").unwrap())
+                .unwrap_err();
+        assert!(duplicate.message.contains("duplicate loop variable"));
     }
 
     #[test]

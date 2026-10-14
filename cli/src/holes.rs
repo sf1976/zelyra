@@ -222,6 +222,7 @@ impl Collector {
             }
             Stmt::For {
                 name,
+                additional_names,
                 iterable,
                 body,
                 ..
@@ -229,6 +230,9 @@ impl Collector {
                 self.expression(iterable, None, scope, capabilities, contract_spans);
                 let mut body_scope = scope.clone();
                 body_scope.add(name, None);
+                for name in additional_names {
+                    body_scope.add(name, None);
+                }
                 self.block(body, &body_scope, return_type, capabilities, contract_spans);
             }
             Stmt::Loop {

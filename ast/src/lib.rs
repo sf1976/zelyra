@@ -651,6 +651,7 @@ pub enum Stmt {
     },
     For {
         name: String,
+        additional_names: Vec<String>,
         iterable: Expr,
         body: Block,
         span: Span,

@@ -298,6 +298,36 @@ type OrderId = Id
 An `OrderId` is not a `MachineId`, even when both look similar underneath.
 Business mistakes do not become correct by sharing a storage type.
 
+Flat `else if` cascades (new in 1.0.3):
+
+~~~zelyra
+fn evaluate_capacity(cap: Int) -> String {
+    if cap > 100 {
+        return "HIGH"
+    } else if cap > 50 {
+        return "MEDIUM"
+    } else {
+        return "LOW"
+    }
+}
+~~~
+
+The typed pipeline operator `|>` (new in 1.0.3) passes the left expression as
+the first argument to the next function call:
+
+~~~zelyra
+fn format_title(input: String) -> String {
+    return input |> text_trim() |> text_to_upper()
+}
+~~~
+
+The expanded built-in library includes math, String, array, set, map, date,
+conversion, encoding, and path functions. See [Appendix D: Standard Library](appendices.md#appendix-d-standard-library-overview-zelyra-103)
+for signatures, capabilities, checked limits, and examples.
+
+`is_ok`, `is_err`, `is_some`, `is_none`, and `unwrap_or` provide small helpers
+for inspecting or safely unwrapping `Result` and `Option` values.
+
 ## 6. Option, Result, and pattern matching
 
 Ordinary types are never null. Absence is explicit:

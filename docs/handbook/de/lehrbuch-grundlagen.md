@@ -1584,17 +1584,16 @@ fn main() {
 ```
 
 **Beispiel 5: Map-Einträge mit entries() auslesen (Neu in 1.0.3)**
-`entries(map)` liefert ein Array aus Schlüssel-Wert-Tupeln. Eine Schleife kann
-jedes Tupel als einzelnen Wert verarbeiten; Tupel-Destrukturierung in zwei
-Variablen ist noch nicht verfügbar.
+`entries(map)` liefert ein Array aus Schlüssel-Wert-Tupeln. Eine `for`-Schleife
+kann die Tupel mit passender Typprüfung direkt in einzelne Variablen zerlegen.
 ```zelyra
 fn main() {
     preise: Map<String, Int> = Map {
         "Kaffee": 3
         "Tee": 2
     }
-    for eintrag in entries(preise) {
-        print(to_string(eintrag))
+    for (artikel, preis) in entries(preise) {
+        print(artikel + ": " + to_string(preis) + " Euro")
     }
 }
 ```
@@ -2915,7 +2914,7 @@ fn main() uses FileSystem {
 **Beispiel 4: Pfadverarbeitung und Dateiüberprüfung (Neu in 1.0.3)**
 ```zelyra
 fn datei_inspektion(ordner: String, dateiname: String) uses FileSystem {
-    // Pfade plattformunabhaengig verbinden (benoetigt keine Capability)
+    // Pfade nach den Konventionen des Hostbetriebssystems verbinden (keine Capability)
     voller_pfad = path_join(ordner, dateiname)
     print("Ziel: " + voller_pfad)
     print("Dateiname: " + path_filename(voller_pfad))
