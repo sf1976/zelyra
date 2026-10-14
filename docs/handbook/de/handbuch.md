@@ -6,7 +6,7 @@
 
 Willkommen beim vollständigen Zelyra-Handbuch. Es umfasst sowohl das didaktische Lehrbuch **»Zelyra lernen – Verständlich programmieren von den Grundlagen bis zur eigenen Anwendung«** (Teil I bis X, Kapitel 1 bis 42) als auch das **technische Referenzhandbuch** (Kapitel 1 bis 25) sowie ausführliche **Anhänge** (A bis J).
 
-> **Projektstatus:** Das aktuelle stabile Release ist Zelyra 1.0.4; die Sprachkompatibilitätslinie bleibt `0.1`. Der Funktionsumfang und seine Grenzen stehen in der [Implementierungsübersicht](../../implemented.de.md). Die [Release-Notizen 1.0.3](../../release-notes/1.0.3.de.md) beschreiben die erweiterte Standardbibliothek, `|>`-Pipelines, `else if` und Studio-/Tutorialverbesserungen. [Release 1.0.4](../../release-notes/1.0.4.de.md) dokumentiert die isolierten Compose-Projekte und die robustere Compose-Erkennung.
+> **Projektstatus:** Das aktuelle stabile Release ist Zelyra 1.0.5; die Sprachkompatibilitätslinie bleibt `0.1`. Der Funktionsumfang und seine Grenzen stehen in der [Implementierungsübersicht](../../implemented.de.md). Die [Release-Notizen 1.0.5](../../release-notes/1.0.5.de.md) beschreiben lokale Studio-Logs, Deinstallation und den abgeschlossenen Rechnungsablauf.
 
 ## Statuszeichen
 

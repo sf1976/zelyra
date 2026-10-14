@@ -31,6 +31,11 @@ try {
   const appUrl = await page.locator("#run-output-web-url").getAttribute("href");
   assert.match(appUrl, /^http:\/\/127\.0\.0\.1:\d+$/);
   await page.locator("#run-output-close").click();
+  await page.locator("#logs-button").click();
+  await page.locator("#logs-content").waitFor();
+  await page.waitForFunction(() => /[1-9]\d*/.test(document.querySelector("#logs-status")?.textContent || ""));
+  assert.match(await page.locator("#logs-content").innerText(), /studio\.run.*starting web preview/s);
+  await page.locator("#logs-close").click();
 
   const targetResponse = page.waitForResponse((response) =>
     response.url().endsWith("/api/database-target"),
@@ -57,7 +62,7 @@ try {
   );
 
   await page.goto(appUrl, { waitUntil: "networkidle" });
-  await page.getByRole("heading", { name: /Guten Tag im Rechnungsbüro/ }).waitFor();
+  await page.getByRole("heading", { name: /Vom ersten Kunden bis zur fertigen Rechnung\.|From the first customer to the finished invoice\./ }).waitFor();
   assert.deepEqual(browserErrors, [], "Studio and the invoice application must not emit browser errors");
 
   const stopResponse = await fetch(`${base}/api/stop-web-preview`, {

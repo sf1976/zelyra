@@ -25,40 +25,32 @@ telemetry, explicit effects, portable data, resource discipline, and honest
 proof claims guide every phase. The [manifesto](MANIFESTO.md) states the
 principles; the roadmap below tracks what is actually implemented.
 
-The current stable release is 1.0.4. **Current milestones** is the source of
+The current stable release is 1.0.5. **Current milestones** is the source of
 near-term commitments. Older numbered release sections below are retained as
 historical planning and evidence; they do not by themselves define current
 release targets. Longer-term ideas remain in the post-1.0 evolution section.
 
 ## Current milestones
 
-- [ ] **Planned for 1.0.5 — IDE access to structured Zelyra logs:** Provide
-  useful local logs for project setup and application execution, accessible
-  from Studio with clear filtering and safe handling of credentials.
-- [ ] **Planned for 1.0.5 — installation-aware uninstall:** Add
-  `zelyra uninstall` for the active installation, including user-owned binaries
-  outside the default install directory. Detect duplicate executables on PATH,
-  explain package-manager-owned installs, and remove only the selected Zelyra
-  installation after confirmation; project files and data remain untouched.
-- [ ] **Planned for 1.0.5 — improve invoice data entry:** Make `issued_at` a
-  simple date field that does not require a time. Show a localized label and
-  format example in German and English; the hint must match the value the form
-  accepts. Generate a unique invoice number when creating an invoice and retain
-  it on later edits.
-- [ ] **Planned for 1.0.5 — refocus the invoice home and overview:** Clearly
-  distinguish the landing page from `/views/invoicedashboard`. Align the home
-  page with the invoice workflow, and name and design the invoice list as an
-  overview; generic metrics must not displace the work users came to do. Keep
-  German and English labels consistent.
-- [ ] **Planned for 1.0.5 — explain the invoice tutorial end to end:** Explain
-  every command with all its options, and every single line in the tutorial
-  source files in plain language, including its effect and how it fits with the
-  other files. Distinguish routes explicitly declared with `page` from
-  generated CRUD routes. Trace `/invoices/new` to
-  `crud Invoice -> invoices` in `src/invoices.zyl`, showing how the resource
-  name `invoices` generates that route even though no `page` declaration names
-  it. Show `zelyra routes main.zyl` as the way to inspect declared and generated
-  routes.
+- [x] **1.0.5 Studio logs:** Added the Studio Logs panel and a local JSONL
+  store for Studio run/setup events and application or preview output, with
+  level and text filters, secret redaction, bounded rotation, and owner-only
+  Unix permissions. See the [logs guide](studio-logs.en.md).
+- [x] **1.0.5 installation-aware uninstall:** Added `zelyra uninstall` for the
+  active user-owned executable, including binaries outside the default install
+  directory. It reports duplicate PATH entries, identifies package-manager-
+  owned installs, and requires confirmation before removal; project files and
+  data remain untouched. See the [uninstall guide](uninstall.en.md).
+- [x] **1.0.5 invoice data entry:** `issued_at` is a localized date-only field
+  with a matching German or English format hint. The server assigns a unique
+  invoice number from the inserted record ID and keeps it unchanged on edits.
+- [x] **1.0.5 invoice home and overview:** `/` now guides the customer, item,
+  and invoice workflow; `/views/invoicedashboard` is presented as the invoice
+  overview, with consistent German and English labels.
+- [x] **1.0.5 invoice tutorial walkthrough:** Rewrote the generated English
+  and German guides to explain setup commands, options, source files, and
+  important lines. They trace generated `/invoices/new` routes to
+  `crud Invoice -> invoices` and document `zelyra routes main.zyl`.
 
 - [ ] **Planned for 1.1.0 — Compose check in the installer:** Installers detect
   Docker Compose v2 or newer and distinguish it from obsolete Python Compose

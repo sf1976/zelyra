@@ -33,6 +33,9 @@ pub(super) fn run() -> ExitCode {
         };
         return updater::command(check_only);
     }
+    if command == "uninstall" {
+        return uninstall::command(args);
+    }
     if command == "--tutorial" {
         return tutorial::command(args);
     }

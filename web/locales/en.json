@@ -1,4 +1,7 @@
 {
+  "invoice.number.label": "Invoice number",
+  "invoice.number.auto_hint": "Assigned automatically when the invoice is saved.",
+  "invoice.overview.title": "Invoice overview",
   "learning.button": "Learning guide",
   "learning.machine.title": "Your Zelyra learning guide",
   "learning.machine.intro": "You can extend this application directly in its Zelyra source.",
@@ -285,6 +288,9 @@
   "identifier.machines": "Machines",
   "identifier.customer": "Customer",
   "identifier.customers": "Customers",
+  "identifier.invoicedashboard": "Invoice overview",
+  "identifier.invoice_number": "Invoice number",
+  "identifier.issued_at": "Issued on",
   "identifier.order": "Order",
   "identifier.orders": "Orders",
   "identifier.code": "Code",

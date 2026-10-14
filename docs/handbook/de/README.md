@@ -19,14 +19,16 @@ ersten Programm bis zur datenbankgestützten Webanwendung.
 Ein neues lokales Lernprojekt für Kunden, Artikel und Rechnungen erzeugst du
 mit [`zelyra --tutorial invoice`](../../tutorials/invoice.de.md).
 
-> **Projektstatus:** Das aktuelle stabile Release ist Zelyra 1.0.4; die Sprachkompatibilitätslinie bleibt `0.1`. Compose v2 oder neuer wird für Datenbanktutorials benötigt. Siehe [Roadmap](../../ROADMAP.de.md), [Release 1.0.3](../../release-notes/1.0.3.de.md) und [Release 1.0.4](../../release-notes/1.0.4.de.md).
+> **Projektstatus:** Das aktuelle stabile Release ist Zelyra 1.0.5; die Sprachkompatibilitätslinie bleibt `0.1`. Compose v2 oder neuer wird für Datenbanktutorials benötigt. Siehe [Roadmap](../../ROADMAP.de.md) und [Release-Notizen 1.0.5](../../release-notes/1.0.5.de.md).
 
 Zelyra verbindet statische Typprüfung und verständliche Diagnosen mit
 compilergeprüften Datenbank- und Webdeklarationen. Zur Plattform gehören
 relationale Fremdschlüssel, CRUD, Authentifizierung, Audit, optionale lokale
 MFA, SMTP-Mail über eine transaktionale Outbox und ein lokales Studio mit
-Datenbankwerkbank. Das Rechnungstutorial führt durch Kunden, Artikel,
-Dashboard und druckbare Rechnungen mit 19 % Umsatzsteuer. Die Grenzen einzelner
+Datenbankwerkbank. Das Rechnungstutorial führt durch Kunden, Artikel und
+Rechnungserstellung; `/` ist die Ablauf-Startseite und
+`/views/invoicedashboard` die Rechnungsübersicht. Studio zeigt lokale,
+strukturierte **Logs** von Programmläufen und Vorschauen. Die Grenzen einzelner
 Funktionen, Datenbanken und Betriebsabläufe stehen in der
 [Implementierungsübersicht](../../implemented.de.md); Details zur
 [Anwendungs-E-Mail](../../mail.de.md) und zum
@@ -155,11 +157,16 @@ oder Cargo installiert werden. Das gewählte Archiv wird über HTTPS geladen und
 per SHA-256 geprüft:
 
 ~~~bash
-./install.sh --release v1.0.4
+./install.sh --release v1.0.5
 ~~~
 
-Unter Windows in PowerShell `-Release v1.0.4` mit `install.ps1` verwenden.
+Unter Windows in PowerShell `-Release v1.0.5` mit `install.ps1` verwenden.
 macOS nutzt derzeit weiterhin den Quellcode-Installer.
+
+Eine benutzereigene Installation entfernst du mit `zelyra uninstall`. Mit
+`zelyra uninstall --dry-run` prüfst du vorher die ausgewählte Programmdatei.
+Der [Deinstallationsleitfaden](../../uninstall.de.md) erklärt doppelte
+PATH-Einträge und paketverwaltete Installationen.
 
 Wenn die Shell `zelyra` nicht findet:
 

@@ -1,4 +1,4 @@
-# This is the project entry point. Business areas are kept in src/ modules.
+# This file gathers the business modules and defines the landing page.
 import "src/database.zyl" as storage
 import "src/shell.zyl" as shell
 import "src/customers.zyl" as customers
@@ -6,177 +6,140 @@ import "src/items.zyl" as items
 import "src/invoices.zyl" as invoices
 import "src/dashboard.zyl" as dashboard
 
-struct InvoiceOverview {
-    customer_count: Int
-    invoice_count: Int
-    net_total: Decimal
-    tax_total: Decimal
-    gross_total: Decimal
-}
-
 page "/" {
     view: InvoiceTutorialShell
-    load overview = sql<InvoiceOverview> {
-        SELECT
-            COUNT(DISTINCT customers.id) AS customer_count,
-            COUNT(DISTINCT invoices.id) AS invoice_count,
-            ROUND(COALESCE(SUM(invoice_lines.quantity * invoice_lines.unit_price), 0), 2) AS net_total,
-            ROUND(COALESCE(SUM(invoice_lines.quantity * invoice_lines.unit_price), 0) * 0.19, 2) AS tax_total,
-            ROUND(COALESCE(SUM(invoice_lines.quantity * invoice_lines.unit_price), 0) * 1.19, 2) AS gross_total
-        FROM customers
-        LEFT JOIN invoices ON invoices.customer_id = customers.id
-        LEFT JOIN invoice_lines ON invoice_lines.invoice_id = invoices.id
-    }
     html {
-        <div class="page-header tutorial-page-header">
-            <div>
-                <p class="text-secondary text-uppercase tutorial-eyebrow">
-                    Dein Unternehmen auf einen Blick
-                </p>
-                <h1 class="page-title">Guten Tag im Rechnungsbüro</h1>
-                <p class="text-secondary">
-                    Kunden, Artikel und Rechnungen greifen in einem nachvollziehbaren Ablauf ineinander.
-                </p>
-            </div>
-            <div class="tutorial-header-actions">
-                <a class="btn btn-outline-secondary" href="/views/invoicedashboard">
-                    Rechnungsliste ansehen
-                </a>
-                <a class="btn btn-primary" href="/invoices/new">
-                    Rechnung schreiben
-                </a>
-            </div>
-        </div>
+        <main class="invoice-home">
+            <section class="invoice-home-hero-grid">
+                <div class="invoice-home-hero">
+                    <div class="invoice-home-kicker">
+                        <span class="invoice-home-kicker-mark">Z</span>
+                        <span data-zelyra-i18n="invoice.home.eyebrow">YOUR INVOICE WORKSPACE</span>
+                        <span class="invoice-home-local" data-zelyra-i18n="invoice.home.local_badge">LOCAL & READY</span>
+                    </div>
+                    <h1 data-zelyra-i18n="invoice.home.title">From the first customer to the finished invoice.</h1>
+                    <p class="invoice-home-intro" data-zelyra-i18n="invoice.home.intro">A complete invoice workflow, ready to explore with realistic sample data.</p>
+                    <div class="invoice-home-actions">
+                        <a class="btn btn-primary" href="/invoices/new" data-zelyra-i18n="invoice.home.new_invoice">Create invoice</a>
+                        <a class="btn btn-outline-secondary" href="/views/invoicedashboard" data-zelyra-i18n="invoice.home.overview">Open invoice overview</a>
+                    </div>
+                    <div class="invoice-home-proof">
+                        <span class="invoice-home-check">✓</span>
+                        <span data-zelyra-i18n="invoice.home.proof">Your data stays in this local project.</span>
+                    </div>
+                </div>
 
-        <section class="row row-cards tutorial-metrics" aria-label="Geschäftszahlen">
-            <div class="col-sm-6 col-xl-3">
-                <article class="card tutorial-metric">
-                    <div class="card-body">
-                        <span class="tutorial-metric-icon">K</span>
-                        <p class="text-secondary">Kunden</p>
-                        <strong>{overview.customer_count}</strong>
-                        <a href="/customers">Kunden verwalten →</a>
+                <aside class="invoice-preview">
+                    <div class="invoice-preview-top">
+                        <div>
+                            <span class="invoice-preview-eyebrow" data-zelyra-i18n="invoice.home.sample_label">SAMPLE INVOICE</span>
+                            <strong class="invoice-preview-number">RE-2026-001</strong>
+                        </div>
+                        <span class="invoice-preview-status" data-zelyra-i18n="invoice.home.sample_status">DRAFT</span>
                     </div>
-                </article>
-            </div>
-            <div class="col-sm-6 col-xl-3">
-                <article class="card tutorial-metric">
-                    <div class="card-body">
-                        <span class="tutorial-metric-icon">R</span>
-                        <p class="text-secondary">Rechnungen</p>
-                        <strong>{overview.invoice_count}</strong>
-                        <a href="/invoices">Alle Rechnungen →</a>
+                    <div class="invoice-preview-rule"></div>
+                    <div class="invoice-preview-recipient">
+                        <span data-zelyra-i18n="invoice.home.billed_to">BILLED TO</span>
+                        <strong>Beispiel GmbH</strong>
+                        <small>kontakt@beispiel.test</small>
                     </div>
-                </article>
-            </div>
-            <div class="col-sm-6 col-xl-3">
-                <article class="card tutorial-metric">
-                    <div class="card-body">
-                        <span class="tutorial-metric-icon">N</span>
-                        <p class="text-secondary">Erfasster Nettowert</p>
-                        <strong>{overview.net_total} €</strong>
-                        <small>Summe gespeicherter Positionen, auch aus Entwürfen</small>
+                    <div class="invoice-preview-dates">
+                        <div>
+                            <span data-zelyra-i18n="invoice.home.issue_date">ISSUED ON</span>
+                            <strong data-zelyra-i18n="invoice.home.sample_date">15 January 2026</strong>
+                        </div>
+                        <div>
+                            <span data-zelyra-i18n="invoice.home.tax_rate">VAT RATE</span>
+                            <strong data-zelyra-i18n="invoice.home.tax_rate_value">19%</strong>
+                        </div>
                     </div>
-                </article>
-            </div>
-            <div class="col-sm-6 col-xl-3">
-                <article class="card tutorial-metric tutorial-metric-accent">
-                    <div class="card-body">
-                        <span class="tutorial-metric-icon">€</span>
-                        <p class="text-secondary">Erfasster Bruttowert</p>
-                        <strong>{overview.gross_total} €</strong>
-                        <small>inklusive 19 % Umsatzsteuer · {overview.tax_total} €</small>
+                    <div class="invoice-preview-lines">
+                        <div class="invoice-preview-line">
+                            <div>
+                                <strong data-zelyra-i18n="invoice.home.sample_item_1">Setup &amp; consulting</strong>
+                                <small data-zelyra-i18n="invoice.home.sample_item_1_detail">2 × €125.00 net</small>
+                            </div>
+                            <strong data-zelyra-i18n="invoice.home.sample_amount_1">€250.00</strong>
+                        </div>
+                        <div class="invoice-preview-line">
+                            <div>
+                                <strong data-zelyra-i18n="invoice.home.sample_item_2">Monthly maintenance</strong>
+                                <small data-zelyra-i18n="invoice.home.sample_item_2_detail">1 × €48.00 net</small>
+                            </div>
+                            <strong data-zelyra-i18n="invoice.home.sample_amount_2">€48.00</strong>
+                        </div>
                     </div>
-                </article>
-            </div>
-        </section>
+                    <div class="invoice-preview-total">
+                        <div><span data-zelyra-i18n="invoice.home.net_total">Net total</span><strong data-zelyra-i18n="invoice.home.sample_net">€298.00</strong></div>
+                        <div><span data-zelyra-i18n="invoice.home.tax_total">VAT · 19%</span><strong data-zelyra-i18n="invoice.home.sample_tax">€56.62</strong></div>
+                        <div class="invoice-preview-grand-total"><span data-zelyra-i18n="invoice.home.gross_total">Amount due</span><strong data-zelyra-i18n="invoice.home.sample_gross">€354.62</strong></div>
+                    </div>
+                    <a class="invoice-preview-link" href="/invoices/RE-2026-001/print" data-zelyra-i18n="invoice.home.open_sample">Open printable example →</a>
+                </aside>
+            </section>
 
-        <section class="row tutorial-workspace">
-            <div class="col-xl-8">
-                <article class="card tutorial-card tutorial-flow-card">
-                    <div class="card-header">
-                        <div>
-                            <p class="tutorial-eyebrow">Der einfache Ablauf</p>
-                            <h2 class="card-title">Von Kundendaten zur fertigen Rechnung</h2>
-                        </div>
-                        <span class="badge bg-green-lt">4 Schritte</span>
-                    </div>
-                    <div class="card-body">
-                        <ol class="tutorial-steps">
-                            <li>
-                                <span>1</span>
-                                <div>
-                                    <strong>Kunden erfassen</strong>
-                                    <p>Lege Name und Kontaktdaten an. Der Kunde wird später direkt der Rechnung zugeordnet.</p>
-                                    <a href="/customers/new">Kundenformular öffnen →</a>
-                                </div>
-                            </li>
-                            <li>
-                                <span>2</span>
-                                <div>
-                                    <strong>Artikel vorbereiten</strong>
-                                    <p>Speichere Artikelnummer, Beschreibung und Nettopreis einmal und verwende sie wieder.</p>
-                                    <a href="/items/new">Artikel erfassen →</a>
-                                </div>
-                            </li>
-                            <li>
-                                <span>3</span>
-                                <div>
-                                    <strong>Rechnung schreiben</strong>
-                                    <p>Wähle den Kunden, ergänze Rechnungspositionen und prüfe den Status.</p>
-                                    <a href="/invoices/new">Neue Rechnung anlegen →</a>
-                                </div>
-                            </li>
-                            <li>
-                                <span>4</span>
-                                <div>
-                                    <strong>Als PDF ausgeben</strong>
-                                    <p>Die Druckansicht weist Netto, 19 % Umsatzsteuer und Brutto aus. Im Browser kannst du „Als PDF speichern“ wählen.</p>
-                                    <a href="/views/invoicedashboard">Rechnungen und Summen ansehen →</a>
-                                </div>
-                            </li>
-                        </ol>
+            <section class="invoice-home-highlights">
+                <article class="invoice-highlight">
+                    <span class="invoice-highlight-icon invoice-highlight-calendar">▦</span>
+                    <div>
+                        <strong data-zelyra-i18n="invoice.home.feature_date_title">A real calendar date</strong>
+                        <p data-zelyra-i18n="invoice.home.feature_date_text">Enter a day, without typing a time.</p>
                     </div>
                 </article>
-            </div>
-            <div class="col-xl-4">
-                <article class="card tutorial-card tutorial-side-card">
-                    <div class="card-header">
-                        <div>
-                            <p class="tutorial-eyebrow">Deine Daten</p>
-                            <h2 class="card-title">Alles miteinander verbunden</h2>
-                        </div>
-                    </div>
-                    <div class="card-body">
-                        <div class="tutorial-relation">
-                            <span class="tutorial-relation-icon">01</span>
-                            <div><strong>Kunde</strong><small>hat mehrere Rechnungen</small></div>
-                        </div>
-                        <div class="tutorial-relation-line"></div>
-                        <div class="tutorial-relation">
-                            <span class="tutorial-relation-icon">02</span>
-                            <div><strong>Rechnung</strong><small>gehört zu einem Kunden</small></div>
-                        </div>
-                        <div class="tutorial-relation-line"></div>
-                        <div class="tutorial-relation">
-                            <span class="tutorial-relation-icon">03</span>
-                            <div><strong>Positionen</strong><small>verknüpfen Rechnung und Artikel</small></div>
-                        </div>
-                        <div class="tutorial-help">
-                            <strong>Einsteiger-Tipp</strong>
-                            <p>Beginne links mit einem Kunden. In jedem Formular kannst du gespeicherte Datensätze aus den verknüpften Tabellen auswählen.</p>
-                        </div>
+                <article class="invoice-highlight">
+                    <span class="invoice-highlight-icon invoice-highlight-number">#</span>
+                    <div>
+                        <strong data-zelyra-i18n="invoice.home.feature_number_title">Numbered for you</strong>
+                        <p data-zelyra-i18n="invoice.home.feature_number_text">Each invoice gets its number when saved.</p>
                     </div>
                 </article>
-                <article class="card tutorial-card tutorial-total-card">
-                    <div class="card-body">
-                        <span class="badge bg-blue-lt">Steuerübersicht</span>
-                        <h2>19 % Umsatzsteuer</h2>
-                        <p>Die Summen enthalten auch Entwürfe und sind keine gebuchte Umsatzstatistik. Die Beispielrechnung weist Netto, Steuer und Brutto getrennt aus.</p>
-                        <a href="/invoices">Zur Rechnungsliste →</a>
+                <article class="invoice-highlight">
+                    <span class="invoice-highlight-icon invoice-highlight-print">↗</span>
+                    <div>
+                        <strong data-zelyra-i18n="invoice.home.feature_print_title">Ready to print</strong>
+                        <p data-zelyra-i18n="invoice.home.feature_print_text">Net, tax and total are calculated for you.</p>
                     </div>
                 </article>
-            </div>
-        </section>
+            </section>
+
+            <section class="invoice-workflow">
+                <div class="invoice-section-heading">
+                    <div>
+                        <span class="invoice-section-kicker" data-zelyra-i18n="invoice.home.workflow_kicker">THREE SIMPLE STEPS</span>
+                        <h2 data-zelyra-i18n="invoice.home.workflow_title">Your next invoice starts here.</h2>
+                    </div>
+                    <a class="invoice-section-link" href="/views/invoicedashboard" data-zelyra-i18n="invoice.home.all_invoices">See all invoices →</a>
+                </div>
+                <div class="row row-cards invoice-workflow-cards">
+                    <article class="col-md-4">
+                        <div class="invoice-workflow-card">
+                            <span class="invoice-step-number">01</span>
+                            <span class="invoice-step-icon">◎</span>
+                            <h3 data-zelyra-i18n="invoice.home.customer_title">Add a customer</h3>
+                            <p data-zelyra-i18n="invoice.home.customer_text">Start with the person or company receiving the invoice.</p>
+                            <a href="/customers/new" data-zelyra-i18n="invoice.home.customer_link">Add customer →</a>
+                        </div>
+                    </article>
+                    <article class="col-md-4">
+                        <div class="invoice-workflow-card">
+                            <span class="invoice-step-number">02</span>
+                            <span class="invoice-step-icon">◇</span>
+                            <h3 data-zelyra-i18n="invoice.home.item_title">Prepare an item</h3>
+                            <p data-zelyra-i18n="invoice.home.item_text">Set a description and net price for your invoice line.</p>
+                            <a href="/items/new" data-zelyra-i18n="invoice.home.item_link">Add item →</a>
+                        </div>
+                    </article>
+                    <article class="col-md-4">
+                        <div class="invoice-workflow-card invoice-workflow-card-primary">
+                            <span class="invoice-step-number">03</span>
+                            <span class="invoice-step-icon">↗</span>
+                            <h3 data-zelyra-i18n="invoice.home.invoice_title">Write an invoice</h3>
+                            <p data-zelyra-i18n="invoice.home.invoice_text">Choose a customer. Zelyra assigns the invoice number automatically.</p>
+                            <a href="/invoices/new" data-zelyra-i18n="invoice.home.invoice_link">Create your invoice →</a>
+                        </div>
+                    </article>
+                </div>
+            </section>
+        </main>
     }
 }

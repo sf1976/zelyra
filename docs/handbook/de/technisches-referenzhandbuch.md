@@ -69,7 +69,7 @@ oder Cargo installiert werden. Das gewählte Archiv wird über HTTPS geladen und
 per SHA-256 geprüft:
 
 ~~~bash
-./install.sh --release v1.0.4
+./install.sh --release v1.0.5
 ~~~
 
 Unter Windows steht `install.ps1` für PowerShell und `install.cmd` für die
@@ -85,7 +85,7 @@ zelyra --version
 Das Release-Archiv unter Windows:
 
 ~~~powershell
-.\install.ps1 -Release v1.0.4
+.\install.ps1 -Release v1.0.5
 ~~~
 
 Danach:
@@ -2375,7 +2375,7 @@ vom eigenen Zelyra-Lexer und -Parser gelesen, in eigene AST-/HIR-Strukturen
 
 Die Ähnlichkeit bei `fn`, geschweiften Klammern, `if`, `match` oder statischer
 Typisierung ist eine Designentscheidung, aber kein Abstammungsnachweis. Entschei-
-dend sind Grammatik, Semantik und Programmiermodell. Zelyra 1.0.4 ist ein stabiles Release mit einem eigenen Typ- und Laufzeitmodell.
+dend sind Grammatik, Semantik und Programmiermodell. Zelyra 1.0.5 ist ein stabiles Release mit einem eigenen Typ- und Laufzeitmodell.
 Die Statusangaben in diesem Kapitel benennen verfügbare, eingeschränkte und noch
 geplante Sprachmerkmale.
 
@@ -2418,7 +2418,7 @@ ausführbare Spracheigenschaft ausgegeben.
 | Jobs | externe Job-/Queue-Systeme | kein Hintergrundjob-Konstrukt | keine stabile Job-Syntax | ❌ |
 | Audit | externe Logs oder Audit-Crates | Audit-Tabelle, CLI-Auswertung und optionale Hash-Kette | an Auth/CRUD gebunden und noch experimentell | 🧪 |
 | Deployment | Cargo, Container, CI und Infrastruktur frei wählbar | generierte Docker-/Compose-Vorlage vorhanden | Vorlage ist Entwicklungsstart, keine Produktionsplattform | 🧪 |
-| Produktionsreife | Rust ist breit produktiv eingesetzt | Zelyra 1.0.4 ist ein stabiles Release mit engerem Ökosystem und begrenzten Nachweisen je Ablauf | Reife und Ökosystem sind nicht vergleichbar | 🧪 |
+| Produktionsreife | Rust ist breit produktiv eingesetzt | Zelyra 1.0.5 ist ein stabiles Release mit engerem Ökosystem und begrenzten Nachweisen je Ablauf | Reife und Ökosystem sind nicht vergleichbar | 🧪 |
 | Ökosystem | sehr groß: Crates, Tools, Frameworks | kleines eigenes Repository und wenige Integrationen | Zelyra kann Rust-Crates nicht direkt importieren | 🧪 |
 
 Rust ist also das technische Fundament, nicht die Anwendungssprache hinter
@@ -2742,7 +2742,7 @@ Records/Enums, klare Grenzen, reproduzierbares Tooling und formale Prüfungen.
 > technische Fundament des Compilers – nicht die Sprache, die
 > Zelyra-Anwendungsentwickler schreiben.
 
-> **Status:** Zelyra 1.0.4 ist ein stabiles Release. Einige Sprachmerkmale
+> **Status:** Zelyra 1.0.5 ist ein stabiles Release. Einige Sprachmerkmale
 > sind eingeschränkt oder geplant; die Statusangaben an den Beispielen grenzen
 > den tatsächlich verfügbaren Umfang ab.
 
@@ -2785,7 +2785,7 @@ zusammen gedacht sind.
    sollen den Lern- und Entwicklungsweg ohne Apache, PHP oder ein verpflichtendes
    Framework-Bündel ermöglichen.
 
-Zelyra 1.0.4 ist ein stabiles Release mit einem engeren Funktionsumfang und
+Zelyra 1.0.5 ist ein stabiles Release mit einem engeren Funktionsumfang und
 dokumentierten Grenzen. Die Roadmap beschreibt geplante Erweiterungen; aus dem
 Release-Status folgt keine allgemeine Produktionsgarantie.
 

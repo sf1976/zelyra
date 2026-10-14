@@ -11,15 +11,15 @@ Business-, Datenbank- und Webanwendungen. Schemaabhängiges SQL, Formulare,
 CRUD, Views und Geschäftslogik greifen ineinander; gewöhnlicher Programmcode
 und natives SQL bleiben jederzeit möglich.
 
-> **Aktuelles stabiles Release: 1.0.4 · Sprachkompatibilitätslinie: 0.1**
+> **Aktuelles stabiles Release: 1.0.5 · Sprachkompatibilitätslinie: 0.1**
 >
 > Die Compilerprüfung und der Verifier decken klar abgegrenzte Bereiche ab. Sie beweisen nicht die Korrektheit beliebiger Anwendungen. Prüfe vor dem Einsatz die unterstützten Abläufe und Grenzen in der jeweiligen Dokumentation.
 
-Das aktuelle stabile [Release v1.0.4](https://github.com/sf1976/zelyra/releases/tag/v1.0.4) baut auf den Sprach- und Plattformfunktionen von 1.0.0 auf. Die Releases 1.0.1 bis 1.0.4 verbessern unter anderem Docker-Compose-Erkennung, den Start des Rechnungstutorials in Studio, die Standardbibliothek und die Wiederherstellung nach Datenbankproblemen. Details stehen in den [Release-Notizen 1.0.3](docs/release-notes/1.0.3.de.md) und [1.0.4](docs/release-notes/1.0.4.de.md), der [Datenbank-Supportmatrix](docs/database-support.de.md) und der [Implementierungsübersicht](docs/implemented.de.md).
+Das aktuelle stabile [Release v1.0.5](https://github.com/sf1976/zelyra/releases/tag/v1.0.5) baut auf den Sprach- und Plattformfunktionen von 1.0.0 auf. Neu sind lokale, in Studio abrufbare Logs, der sichere Befehl `zelyra uninstall` und ein überarbeitetes Rechnungstutorial mit reinem Datumsfeld, automatisch vergebener Rechnungsnummer, Ablauf-Startseite und ausführlicher zweisprachiger Quelltexterklärung. Details stehen in den [Release-Notizen 1.0.5](docs/release-notes/1.0.5.de.md), der [Datenbank-Supportmatrix](docs/database-support.de.md) und der [Implementierungsübersicht](docs/implemented.de.md).
 
 Die Sprachkompatibilitätslinie bleibt `0.1`; Compiler-Releases ändern sie nicht automatisch. „Korrektheit beweisen“ ist ein Entwicklungsziel: Der Verifier unterscheidet geprüfte, zur Laufzeit geprüfte und nicht bewiesene Bereiche, ist aber kein allgemeiner Theorembeweiser.
 
-## Was Zelyra 1.0.4 bietet
+## Was Zelyra 1.0.5 bietet
 
 Zelyra verbindet Sprache, Compiler, Datenbank, Webanwendung und Studio in
 einem Arbeitsablauf. Der aktuelle Stand umfasst:
@@ -32,9 +32,13 @@ einem Arbeitsablauf. Der aktuelle Stand umfasst:
   und flache `else if`-Kaskaden;
 - Studio mit Editor, Compilerhinweisen, Schemaübersicht, Datenbankwerkbank,
   Projektkarte und CRUD-Quelltextvorschau;
-- ein Rechnungstutorial, das über Docker Compose MariaDB startet und aus CLI
-  oder Studio ausgeführt werden kann; es enthält wiederholbare Beispieldaten,
-  wählt verfügbare Ports und isoliert Datenbank-Volumes je Tutorialprojekt;
+- lokale, um Geheimnisse bereinigte JSONL-Logs für Programmlauf und Vorschau,
+  abrufbar in Studio, sowie `zelyra uninstall` für die aktive benutzereigene
+  Installation;
+- ein Rechnungstutorial mit wiederholbaren Beispieldaten, freier Portwahl,
+  isolierten Compose-Volumes, aufgabenorientierter Startseite, reinem Datumsfeld,
+  serverseitiger Rechnungsnummer und vollständiger deutscher und englischer
+  Quelltexterklärung;
 - CLI-Werkzeuge für Routen, Setup, Diagnose, Datenbank, Audit, SMTP und statische
   Laravel-Migrationsberichte.
 
@@ -48,6 +52,11 @@ Die [Implementierungsübersicht](docs/implemented.de.md) beschreibt den
 Funktionsumfang und seine Grenzen. Die [Roadmap](docs/ROADMAP.de.md) führt
 geplante Arbeiten; [Release-Notizen](docs/release-notes/) und
 [Changelog](CHANGELOG.md) dokumentieren veröffentlichte Änderungen.
+
+Mit `zelyra uninstall --dry-run` lässt sich anzeigen, welche aktive
+benutzereigene Programmdatei entfernt würde. Der
+[Deinstallationsleitfaden](docs/uninstall.de.md) erklärt paketverwaltete
+Installationen und doppelte PATH-Einträge.
 
 ## Schnellstart
 
@@ -111,7 +120,7 @@ weitere Einstellungen stehen in der Umgebungsreferenz.
 | Projekt oder Umgebung konfigurieren möchtest | [Umgebung und Konfiguration](docs/env.md) · [English reference](docs/env.en.md) |
 | Datenbankunterstützung prüfen möchtest | [Datenbank-Supportmatrix](docs/database-support.de.md) · [English](docs/database-support.en.md) |
 | den lokalen Editor oder sichere Regex-Änderungen nutzen möchtest | [Zelyra Studio](docs/web-editor.de.md) · [Textänderungsbefehl](docs/text-edit.de.md) |
-| aktuelle und geplante Arbeiten prüfen möchtest | [Roadmap](docs/ROADMAP.de.md) · [Release-Notizen 1.0.3](docs/release-notes/1.0.3.de.md) · [Release-Notizen 1.0.4](docs/release-notes/1.0.4.de.md) |
+| aktuelle und geplante Arbeiten prüfen möchtest | [Roadmap](docs/ROADMAP.de.md) · [Release-Notizen 1.0.5](docs/release-notes/1.0.5.de.md) |
 | die Entwicklungsrichtung verstehen möchtest | [Manifest](docs/MANIFESTO.de.md) · [KI-native Architektur](docs/architecture/ai-native-development.de.md) · [Entwurf lesbarer Regex-Textbearbeitung](docs/design/readable-regex-text-editing.de.md) |
 | konkrete Release-Änderungen suchst | [Changelog](CHANGELOG.md) · [GitHub-Releases](https://github.com/sf1976/zelyra/releases) |
 

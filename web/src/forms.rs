@@ -171,7 +171,7 @@ pub(super) fn render_form_with_language(
                 html.push_str(&html_escape(value));
                 html.push('"');
             }
-            if required {
+            if required && !field.readonly {
                 html.push_str(" required");
             }
             if let Some(max) = max {
@@ -190,6 +190,16 @@ pub(super) fn render_form_with_language(
                 html.push_str(" readonly");
             }
             html.push('>');
+            if input_type == "date" {
+                let hint = if language == UiLanguage::German {
+                    "Format: JJJJ-MM-TT"
+                } else {
+                    "Format: YYYY-MM-DD"
+                };
+                html.push_str("<small class=\"zelyra-field-hint\">");
+                html.push_str(hint);
+                html.push_str("</small>");
+            }
         }
         for error in field_errors {
             html.push_str("<p class=\"zelyra-error\">");
@@ -273,6 +283,7 @@ pub(super) fn input_type(route: &FormRoute, field: &zelyra_ast::FormField) -> &'
     });
     match ty {
         Some(Type::Bool) => "checkbox",
+        Some(Type::Date) => "date",
         Some(Type::Int | Type::UInt | Type::Float) => "number",
         Some(Type::Named(name)) if name == "Email" => "email",
         Some(Type::Named(name)) if name == "Url" => "url",

@@ -1,7 +1,7 @@
 # Zelyra Studio: lokaler Webeditor
 
-**Zielversion:** Zelyra 0.8.0 · **Status:** lokales Studio, Datenbankkarte und
-geführte CRUD-Vorschau stabil veröffentlicht; weiterer Ausbau bis 1.0 geplant
+**Version:** Zelyra 1.0.5 · **Status:** lokales Studio mit Datenbankwerkzeugen,
+geführter CRUD-Vorschau, Tutorial-Start und strukturierten Logs
 
 Zelyra Studio ist die integrierte Browseroberfläche zum Bearbeiten eines
 Zelyra-Projekts. Sie läuft als Bestandteil der CLI und bündelt alle benötigten
@@ -25,10 +25,12 @@ zelyra editor ./rechnung --port 4177
 Die CLI öffnet automatisch den Standardbrowser. Falls das auf dem System nicht
 möglich ist, zeigt sie die lokale URL mit dem Sitzungstoken zum manuellen Öffnen
 an. Mit `--no-open` überspringst du den Browserstart, etwa per SSH oder ohne
-grafische Oberfläche. Studio startet keine Datenbank. Mit **Starten** führt es
-Konsolenprogramme aus oder startet eine lokale Webanwendung und zeigt ihre
-Browseradresse mit einem Öffnen-Link an. Die Datenbank einer Webanwendung muss
-bereits erreichbar sein. Ein erneuter Webstart ersetzt die vorherige Vorschau.
+grafische Oberfläche. Mit **Starten** führt Studio Konsolenprogramme aus oder
+startet eine lokale Webanwendung und zeigt ihre Browseradresse mit einem
+Öffnen-Link an. Beim markierten Rechnungstutorial startet **Starten** die
+isolierte Compose-Datenbank, richtet Schema und Beispieldaten ein und öffnet
+danach die Vorschau; andere Projekte brauchen eine bereits erreichbare
+Datenbank. Ein erneuter Webstart ersetzt die vorherige Vorschau.
 **Vorschau beenden** stoppt sie sofort; beim Beenden von Studio wird die aktive
 Vorschau ebenfalls beendet. Beende Studio mit `Ctrl+C`.
 
@@ -43,6 +45,8 @@ Vorschau ebenfalls beendet. Beende Studio mit `Ctrl+C`.
   anderen Programm geändert wurde, lehnt Studio das Überschreiben ab.
 - Projektprüfung mit Compilerdiagnosen und Sprung zur betroffenen Datei.
 - Explizite Formatierung einer geöffneten `.zyl`-Datei mit dem Zelyra-Formatter.
+- Ein **Logs**-Fenster für lokale strukturierte Run- und Vorschauausgaben mit
+  Stufenfilter und Textsuche. Siehe [Studio-Logs](studio-logs.de.md).
 
 Unterstützt werden Textdateien mit den Erweiterungen `.zyl`, `.toml`, `.css`,
 `.json`, `.md`, `.html`, `.sql`, `.txt`, `.yaml` und `.yml`. Einzelne Dateien
@@ -58,8 +62,9 @@ keine CORS-Freigabe. Antwortheader verhindern Caching, MIME-Sniffing und das
 Einbetten des Editors in fremde Frames.
 
 Der Dateizugriff bleibt auf den Projektordner begrenzt. Studio führt keine
-Shell-Befehle aus und öffnet keine Projektvorschau. Es bietet in 0.7.0 noch
-keinen Language Server, Debugger, Versionskontroll-Client oder Multi-User-
+beliebigen Shell-Befehle aus; die ausdrückliche Run-Aktion startet begrenzt ein
+Zelyra-Programm oder eine Webvorschau. Version 1.0.5 bietet noch keinen
+Language Server, Debugger, Versionskontroll-Client oder Multi-User-
 Zusammenarbeit. Projektprüfung und Formatierung verwenden den lokalen
 Zelyra-Compiler.
 

@@ -30,6 +30,7 @@
         <button class="toolbar-button" id="project-map-button" title="Projektbeziehungen anzeigen" data-i18n-title="projectMap">◇ <span data-i18n="projectMap">Projektkarte</span></button>
         <button class="toolbar-button" id="task-finder-button" title="Aktion suchen (Strg+Umschalt+P)" data-i18n-title="taskFinder">⌘ <span data-i18n="taskFinder">Aktionen</span></button>
         <button class="toolbar-button" id="database-button" title="Datenbankübersicht öffnen" data-i18n-title="database">▤ <span data-i18n="database">Datenbank</span></button>
+        <button class="toolbar-button" id="logs-button" title="Lokale Programmlogs öffnen" data-i18n-title="logs">≋ <span data-i18n="logs">Logs</span></button>
         <button class="toolbar-button" id="assistant-toggle" title="Hilfe und Eigenschaften" data-i18n-title="assistant">ⓘ <span data-i18n="assistant">Hilfe</span></button>
         <button class="icon-button language-button" id="language-button" aria-label="Sprache wechseln" title="Sprache wechseln" data-i18n-title="switchLanguage" data-i18n-aria="switchLanguage">DE</button>
         <button class="icon-button font-size-button" id="font-size-button" aria-label="Schriftgröße anpassen" title="Schriftgröße anpassen" data-i18n-title="switchFontSize" data-i18n-aria="switchFontSize">aA</button>
@@ -192,6 +193,17 @@
     <p id="run-output-web-link" class="run-output-state" hidden><a id="run-output-web-url" target="_blank" rel="noopener noreferrer" data-i18n="runWebOpen">Anwendung im Browser öffnen</a> <button id="run-output-web-stop" type="button" data-i18n="runWebStop">Vorschau beenden</button></p>
     <pre id="run-output-content" class="run-output-content"></pre>
     <footer><span>main.zyl</span><kbd>Esc</kbd><span data-i18n="close">Schließen</span></footer>
+  </dialog>
+  <dialog id="logs-dialog" class="task-finder logs-dialog" aria-labelledby="logs-title">
+    <header><h2 id="logs-title" data-i18n="logsTitle">Zelyra Logs</h2><button id="logs-close" aria-label="Schließen" data-i18n-aria="close">×</button></header>
+    <p id="logs-status" class="run-output-state" role="status"></p>
+    <div class="logs-controls">
+      <label><span data-i18n="logsLevel">Stufe</span><select id="logs-level"><option value="all" data-i18n="logsAll">Alle</option><option value="info">Info</option><option value="error">Error</option></select></label>
+      <label><span data-i18n="logsSearch">Suchen</span><input id="logs-search" type="search" autocomplete="off"></label>
+      <button id="logs-refresh" class="toolbar-button" type="button" data-i18n="refresh">Aktualisieren</button>
+    </div>
+    <pre id="logs-content" class="run-output-content logs-content"></pre>
+    <footer><span data-i18n="logsRetention">Lokal gespeichert; begrenzte Rotation</span><kbd>Esc</kbd><span data-i18n="close">Schließen</span></footer>
   </dialog>
   <dialog id="project-map-dialog" class="project-map-dialog" aria-labelledby="project-map-title">
     <header class="project-map-header"><div><span class="database-eyebrow" data-i18n="projectMap">PROJEKTKARTE</span><h2 id="project-map-title" data-i18n="projectMapTitle">Projektbeziehungen</h2></div><button id="project-map-close" aria-label="Schließen" data-i18n-aria="close">×</button></header>

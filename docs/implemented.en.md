@@ -1,13 +1,13 @@
-# Implemented in Zelyra 1.0.4
+# Implemented in Zelyra 1.0.5
 
-**Snapshot:** stable release 1.0.4 · language compatibility line `0.1` · 2026-10-14
+**Snapshot:** stable release 1.0.5 · language compatibility line `0.1` · 2026-10-14
 **Maturity:** published stable release; evaluate suitability and limits for each workflow
 
 This inventory describes current capabilities by area of use. It distinguishes
 available features from bounded or experimental areas; it does not claim
 universal database portability or that arbitrary applications are defect-free.
 
-## Changes in 1.0.3 and 1.0.4
+## Changes in 1.0.3–1.0.5
 
 - **1.0.3:** expanded standard library for math, text, arrays, sets, maps, dates,
   parsing, encodings, and paths; type-checked `|>` pipelines and flat `else if`
@@ -17,13 +17,17 @@ universal database portability or that arbitrary applications are defect-free.
 - **1.0.4:** isolated Compose project names for invoice tutorials, a protected
   fallback for older MariaDB volumes, and detection of short Compose versions
   such as `2.40`. See the [1.0.4 release notes](release-notes/1.0.4.en.md).
+- **1.0.5:** Studio-accessible structured local logs, `zelyra uninstall`,
+  date-only invoice forms, server-assigned invoice numbers, a workflow-focused
+  tutorial home, a named invoice overview, and bilingual command/source
+  walkthroughs. See the [1.0.5 release notes](release-notes/1.0.5.en.md).
 
 Release notes document shipped changes; the [roadmap](ROADMAP.md) records
 planned work. The [language specification](specification.md),
 [source-authority guide](source-authority.md), and
 [handbook](handbook/en/handbook.md) describe accepted syntax and its limits.
 
-## What Zelyra 1.0.4 provides
+## What Zelyra 1.0.5 provides
 
 ### Language and Compiler
 
@@ -195,10 +199,13 @@ For usage details see the [web and database quickstart](getting-started.md),
   independent production approval.
 - The 0.1 language compatibility corpus adds typed API errors and runtime
   cases for the invoice application and `Result`.
-- 🧪 `zelyra --tutorial invoice` now creates the app and starts its local
+- 🧪 `zelyra --tutorial invoice` creates the app and starts its local
   MariaDB/web Compose stack, including its schema. `--no-start` creates only
-  the scaffold. The tutorial guides users through customers, items, a dashboard,
-  and invoice creation. The invoice page totals net line prices,
+  the scaffold. Its home page guides users through customers, items, and invoice
+  creation; `/views/invoicedashboard` is the invoice overview. Invoice dates are
+  date-only and numbers are server-assigned. Generated German and English guides
+  explain source files and commands, including generated routes.
+  The invoice page totals net line prices,
   calculates 19% VAT in this learning example, and shows the gross amount.
   At `/invoices/INVOICE-NUMBER/print`, the browser can save the print-ready
   invoice as a PDF. This is a learning path, not production or deployment
@@ -209,6 +216,8 @@ For usage details see the [web and database quickstart](getting-started.md),
   purpose of key commands. `zelyra editor` is shown as a direct launch in the
   current project folder.
 - Studio is not yet a complete IDE or unrestricted database designer.
+- ✅ Studio provides a local Logs panel for bounded, secret-redacted JSONL run
+  and preview output. See [Studio logs](studio-logs.en.md).
 - ✅ `examples/inventory_orders/` provides a modular console project for stock,
   customers, and orders with JSON persistence, cent-exact discount/VAT
   calculations, cancellation, an action log, and runnable business checks.
@@ -261,6 +270,10 @@ For usage details see the [web and database quickstart](getting-started.md),
   categories; database diagnostics are normalized without credentials.
   `zelyra update` checks release checksums
   before replacing supported Linux/Windows x86_64 binaries.
+- ✅ `zelyra uninstall [--dry-run] [--yes]` identifies the active executable,
+  reports duplicate PATH entries, refuses package-manager-owned installs, and
+  removes only the selected user-owned program after confirmation. Project
+  files, settings, logs, and data remain. See [uninstall](uninstall.en.md).
 - ✅ User-local installation is available from source. Published Linux and
   Windows x86_64 release archives include SHA-256 checksums; repeat builds
   were byte-identical in the pinned release CI toolchains.
@@ -286,7 +299,7 @@ benchmark result is claimed here.
 
 ## Release and verification evidence
 
-The current stable [Zelyra 1.0.4 release](https://github.com/sf1976/zelyra/releases/tag/v1.0.4)
+The current stable [Zelyra 1.0.5 release](https://github.com/sf1976/zelyra/releases/tag/v1.0.5)
 and its artifacts are published on GitHub. The [release notes](release-notes/)
 describe shipped changes; tested database workflows and their limits are in
 the [database support matrix](database-support.en.md). Automated checks

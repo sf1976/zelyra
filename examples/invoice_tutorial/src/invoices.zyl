@@ -7,7 +7,7 @@ pub struct Invoice {
     id: Id
     invoice_number: String
     customer: customers::Customer
-    issued_at: Timestamp
+    issued_at: Date
     status: String
 }
 
@@ -23,7 +23,7 @@ table invoices {
     id: Id primary auto
     invoice_number: String(40) required unique
     customer: customers::Customer required
-    issued_at: Timestamp required default now
+    issued_at: Date required default now
     status: String(20) default "draft"
     access {
         read: ["src/dashboard.zyl", "main.zyl"]
@@ -43,7 +43,7 @@ table invoice_lines {
 
 crud Invoice -> invoices {
     layout: InvoiceTutorialShell
-    title: "Rechnungen"
+    title: "@i18n:invoice.overview.title"
     view {
         fields { invoice_number customer issued_at status }
         list { mode: cards }
@@ -71,7 +71,7 @@ struct InvoicePrintSummary {
     id: Id
     invoice_number: String
     customer_name: String
-    issued_at: Timestamp
+    issued_at: Date
     status: String?
     net_total: Decimal
     tax_amount: Decimal

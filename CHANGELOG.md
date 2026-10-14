@@ -8,6 +8,35 @@ releases follow Semantic Versioning independently of the language line.
 
 _Changes for the next release go here._
 
+## 1.0.5 — 2026-10-14
+
+- Add local structured Zelyra logs for Studio runs, setup events, and web
+  previews. The Studio Logs panel supports level filtering and text search;
+  stored messages redact project secrets, rotate within a fixed size, and use
+  owner-only permissions on Unix. / Strukturierte lokale Zelyra-Logs für
+  Studio-Start, Setup und Webvorschau ergänzen. Das Logs-Fenster in Studio
+  filtert nach Stufe und Text; Geheimnisse werden bereinigt, Dateien begrenzt
+  rotiert und unter Unix nur für den Benutzer lesbar angelegt.
+- Add `zelyra uninstall [--dry-run] [--yes]` to remove the active user-owned
+  executable after confirmation, while identifying duplicate PATH entries and
+  package-manager-owned installs. Project data remains untouched. /
+  `zelyra uninstall [--dry-run] [--yes]` entfernt die aktive benutzereigene
+  Programmdatei nach Bestätigung und erkennt weitere PATH-Kopien sowie
+  paketverwaltete Installationen. Projektdaten bleiben unberührt.
+- Make invoice `issued_at` a localized date-only input and assign unique
+  invoice numbers on the server from the inserted record ID. Redesign the
+  invoice tutorial home page as a workflow and label the list as an invoice
+  overview. / `issued_at` als lokalisiertes reines Datumsfeld anzeigen und
+  Rechnungsnummern serverseitig aus der gespeicherten Datensatz-ID bilden.
+  Die Tutorial-Startseite führt durch den Ablauf; die Liste heißt
+  Rechnungsübersicht.
+- Rewrite the English and German invoice guides with command-option and
+  source-line explanations, including how `crud Invoice -> invoices`
+  generates `/invoices/new`. / Deutsche und englische Rechnungstutorials mit
+  Erläuterungen zu Befehlsoptionen und Quellzeilen neu schreiben,
+  einschließlich der Erzeugung von `/invoices/new` durch
+  `crud Invoice -> invoices`.
+
 ## 1.0.4 — 2026-10-14
 
 - Give each new invoice tutorial its own stable Compose project name so a

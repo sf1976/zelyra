@@ -216,7 +216,7 @@ fn main() {
 ### 1. What will I learn in this chapter?
 - System requirements for the Zelyra development environment on Linux, macOS, and Windows.
 - Platform-specific Docker setup and verification with `docker compose version`.
-- How to install Zelyra from source (`./install.sh` / `install.ps1`) or the stable release archive (`--release v1.0.4`).
+- How to install Zelyra from source (`./install.sh` / `install.ps1`) or the stable release archive (`--release v1.0.5`).
 - Complete compiler version query with `zelyra --version` and environment diagnosis with `zelyra doctor`.
 - The integrated, token-protected web setup assistant (`zelyra setup --web`).
 - Typical permission and port conflicts (such as Docker socket permissions and automatic port selection).
@@ -243,13 +243,13 @@ cd zelyra
 ```
 Or directly as a precompiled release archive without Rust:
 ```bash
-./install.sh --release v1.0.4
+./install.sh --release v1.0.5
 ```
 On Windows (PowerShell):
 ```powershell
 git clone https://github.com/sf1976/zelyra.git
 Set-Location zelyra
-.\install.ps1 -Release v1.0.4
+.\install.ps1 -Release v1.0.5
 ```
 
 **Step 2: Verify version and help**
@@ -257,7 +257,12 @@ Set-Location zelyra
 zelyra --version
 zelyra --help
 ```
-`zelyra --version` outputs the full compiler and package version (for example, `zelyra 1.0.4`). The language compatibility line remains 0.1.
+`zelyra --version` outputs the full compiler and package version (for example, `zelyra 1.0.5`). The language compatibility line remains 0.1.
+
+Remove a user-owned installation with `zelyra uninstall`. Inspect the target
+first with `zelyra uninstall --dry-run`. Package-manager-owned installations
+must be removed through that package manager; see the
+[uninstall guide](../../uninstall.en.md).
 
 The invoice tutorial and other Docker projects require Docker Compose v2
 or newer. The legacy Python `docker-compose` v1 is unsupported. On Linux, install
@@ -293,7 +298,7 @@ Zelyra opens a local HTTP server on `127.0.0.1:3030` with a random, single-use s
 ### 6. Key takeaways
 1. The Zelyra CLI bundles compiler, runner, form checker, migrator, web server, and setup assistant in a single tool.
 2. `docker compose version` and `zelyra doctor` verify the health of your environment at any time.
-3. The stable release can be installed without Rust using `--release v1.0.4`.
+3. The stable release can be installed without Rust using `--release v1.0.5`.
 4. `zelyra setup --web` provides an intuitive, browser-based initial setup with a secure one-time token.
 
 ### 7. Exercises

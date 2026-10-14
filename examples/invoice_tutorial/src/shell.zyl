@@ -2,11 +2,11 @@
 pub view InvoiceTutorialShell {
     html {
         <!doctype html>
-        <html class="zelyra-app">
+        <html class="zelyra-app" data-zelyra-language>
             <head>
                 <meta charset="utf-8" />
                 <meta name="viewport" content="width=device-width, initial-scale=1" />
-                <title>Rechnungsbüro · Zelyra</title>
+                <title data-zelyra-i18n="invoice.nav.document_title">Invoice office · Zelyra</title>
             </head>
             <body>
                 <div class="page-wrapper tutorial-app">
@@ -14,23 +14,23 @@ pub view InvoiceTutorialShell {
                         <div class="container-xl tutorial-navbar-inner">
                             <a class="navbar-brand" href="/">
                                 <span class="tutorial-brand-mark">Z</span>
-                                <span><strong>Rechnungsbüro</strong><small>Geschäftsübersicht</small></span>
+                                <span><strong>Rechnungsbüro</strong><small data-zelyra-i18n="invoice.nav.subtitle">Create invoices with ease</small></span>
                             </a>
                             <nav class="navbar-nav tutorial-nav" aria-label="Hauptnavigation">
-                                <a class="nav-link" href="/">Übersicht</a>
-                                <a class="nav-link" href="/customers">Kunden</a>
-                                <a class="nav-link" href="/items">Artikel</a>
-                                <a class="nav-link" href="/invoices">Rechnungen</a>
-                                <a class="nav-link" href="/invoice_lines">Positionen</a>
+                                <a class="nav-link" href="/" data-zelyra-i18n="invoice.nav.home">Home</a>
+                                <a class="nav-link" href="/customers" data-zelyra-i18n="invoice.nav.customers">Customers</a>
+                                <a class="nav-link" href="/items" data-zelyra-i18n="invoice.nav.items">Items</a>
+                                <a class="nav-link" href="/views/invoicedashboard" data-zelyra-i18n="invoice.nav.invoices">Invoice overview</a>
+                                <a class="nav-link" href="/invoice_lines" data-zelyra-i18n="invoice.nav.lines">Line items</a>
                             </nav>
-                            <a class="btn btn-primary tutorial-new-invoice" href="/invoices/new">+ Rechnung schreiben</a>
+                            <a class="btn btn-primary tutorial-new-invoice" href="/invoices/new" data-zelyra-i18n="invoice.nav.new_invoice">+ New invoice</a>
                         </div>
                     </header>
                     <main class="page-body">
                         <div class="container-xl tutorial-content"><slot /></div>
                     </main>
                     <footer class="tutorial-footer">
-                        <div class="container-xl">Lokales Zelyra-Beispiel · Geschäftsdaten bleiben in deiner Projektumgebung</div>
+                        <div class="container-xl" data-zelyra-i18n="invoice.nav.footer">Local Zelyra example · Business data stays in your project environment</div>
                     </footer>
                 </div>
             </body>

@@ -1,7 +1,7 @@
 # Zelyra Studio: local web editor
 
-**Target version:** Zelyra 0.8.0 · **Status:** local Studio, database map, and
-guided CRUD preview released as stable; continued development is planned to 1.0
+**Version:** Zelyra 1.0.5 · **Status:** local Studio with database tools,
+guided CRUD preview, tutorial Run, and structured Logs
 
 Zelyra Studio is the integrated browser interface for editing a Zelyra
 project. It runs as part of the CLI and bundles its editor assets locally. It
@@ -24,9 +24,11 @@ zelyra editor ./invoices --port 4177
 The CLI opens the default browser automatically. If that is unavailable, it
 prints the local URL containing the session token for manual use. Pass
 `--no-open` to skip browser launch, for example over SSH or without a graphical
-desktop. Studio does not start a database. **Run** executes console programs or
-starts a local web application and shows its browser address with an open link.
-The application's database must already be reachable. Starting a web app again
+desktop. **Run** executes console programs or starts a local web application
+and shows its browser address with an open link. For the marked invoice tutorial,
+Run starts its isolated Compose database, applies the schema and sample data,
+then opens the preview; other projects must already have a reachable database.
+Starting a web app again
 replaces the previous preview. **Stop preview** ends it immediately; closing
 Studio also stops the active preview. Stop Studio with `Ctrl+C`.
 
@@ -43,6 +45,8 @@ Studio also stops the active preview. Stop Studio with `Ctrl+C`.
 - Project checking with compiler diagnostics and navigation to the affected
   file.
 - Explicit formatting of an open `.zyl` file with the Zelyra formatter.
+- A **Logs** panel for local structured Run and web-preview output, with level
+  filtering and text search. See the [Studio logs guide](studio-logs.en.md).
 
 Editable text extensions are `.zyl`, `.toml`, `.css`, `.json`, `.md`, `.html`,
 `.sql`, `.txt`, `.yaml`, and `.yml`. Files are limited to 1 MiB. Hidden paths,
@@ -55,10 +59,11 @@ API request needs the random session token. Write requests also require the
 same browser origin. There is no CORS grant. Response headers prevent caching,
 MIME sniffing, and embedding the editor in another site's frame.
 
-File access stays inside the project directory. Studio does not run shell
-commands or launch a project preview. Version 0.7.0 does not include a language
-server, debugger, source-control client, or multi-user collaboration. Project
-checking and formatting use the local Zelyra compiler.
+File access stays inside the project directory. Studio does not run arbitrary
+shell commands; its explicit Run action executes a bounded Zelyra program or
+web preview. Version 1.0.5 does not include a language server, debugger,
+source-control client, or multi-user collaboration. Project checking and
+formatting use the local Zelyra compiler.
 
 CodeMirror components are MIT-licensed. Build dependencies and versions are
 recorded in `editor/package-lock.json`; browser assets are bundled locally

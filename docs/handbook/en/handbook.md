@@ -6,7 +6,7 @@ English · [Deutsche Ausgabe](/handbuch)
 
 Welcome to the complete Zelyra Handbook. It includes both the introductory textbook **"Learning Zelyra – Understandable Programming from the Foundations to Your Own Application"** (Parts I to X, Chapters 1 to 42), the **Technical Reference Manual** (Chapters 1 to 25), and comprehensive **Appendices** (A to J).
 
-> **Project status:** Zelyra 1.0.4 is the current stable release; the language compatibility line remains `0.1`. See the [implementation inventory](../../implemented.en.md) for supported scope and limits. The [1.0.3 release notes](../../release-notes/1.0.3.en.md) cover the expanded standard library, `|>` pipelines, `else if`, and Studio/tutorial improvements. [Release 1.0.4](../../release-notes/1.0.4.en.md) documents isolated Compose projects and more robust Compose detection.
+> **Project status:** Zelyra 1.0.5 is the current stable release; the language compatibility line remains `0.1`. See the [implementation inventory](../../implemented.en.md) for supported scope and limits. The [1.0.5 release notes](../../release-notes/1.0.5.en.md) cover local Studio logs, uninstall, and the completed invoice tutorial workflow.
 
 ## Status marks
 

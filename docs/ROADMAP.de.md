@@ -27,7 +27,7 @@ Ressourcendisziplin und ehrliche Beweisaussagen leiten jede Phase. Das
 [Manifest](MANIFESTO.de.md) beschreibt die Prinzipien; die Roadmap kennzeichnet
 den tatsächlich implementierten Stand.
 
-Das aktuelle stabile Release ist 1.0.4. **Aktuelle Meilensteine** ist die
+Das aktuelle stabile Release ist 1.0.5. **Aktuelle Meilensteine** ist die
 verbindliche Übersicht der nächsten Vorhaben. Ältere, nummerierte Release-
 Abschnitte bleiben als historische Planung und Nachweise erhalten; sie legen
 für sich keine aktuellen Releaseziele fest. Langfristige Ideen stehen im
@@ -35,38 +35,28 @@ Abschnitt zur Weiterentwicklung nach 1.0.0.
 
 ## Aktuelle Meilensteine
 
-- [ ] **Geplant für 1.0.5 — strukturierte Zelyra-Logs in der IDE:** Nützliche
-  lokale Protokolle für Projektstart und Anwendungsausführung bereitstellen,
-  die in Studio mit klaren Filtern abrufbar sind und Zugangsdaten sicher
-  behandeln.
-- [ ] **Geplant für 1.0.5 — installationsbewusste Deinstallation:**
-  `zelyra uninstall` für die aktive Installation ergänzen, auch für
-  benutzereigene Binärdateien außerhalb des Standardordners. Weitere
-  ausführbare Zelyra-Kopien im PATH erkennen, paketverwaltete Installationen
-  erklären und nach Bestätigung nur die ausgewählte Zelyra-Installation
-  entfernen; Projektdateien und Daten bleiben unberührt.
-- [ ] **Geplant für 1.0.5 — Rechnungstutorial für Rechnungsdaten verbessern:**
-  `issued_at` als einfaches Datumsfeld ohne erforderliche Zeiteingabe erfassen.
-  Beschriftung und Formatbeispiel in Deutsch und Englisch anzeigen; der
-  Hilfetext muss das tatsächlich akzeptierte Datumsformat nennen. Die
-  Rechnungsnummer beim Anlegen automatisch eindeutig vergeben und bei späteren
-  Änderungen beibehalten.
-- [ ] **Geplant für 1.0.5 — Rechnungsübersicht und Startseite überarbeiten:**
-  Den Zweck der Startseite und der Route `/views/invoicedashboard` klar
-  voneinander abgrenzen. Die Startseite auf den Rechnungsablauf ausrichten und
-  die Rechnungsübersicht als solche benennen und gestalten; generische
-  Kennzahlen dürfen die eigentlichen Aufgaben nicht verdrängen. Deutsche und
-  englische Beschriftungen müssen zusammenpassen.
-- [ ] **Geplant für 1.0.5 — Invoice-Tutorial vollständig erklären:** Jeden
-  Befehl einschließlich aller Optionen sowie jede einzelne Zeile der
-  Tutorial-Quelldateien verständlich erläutern, einschließlich ihrer Wirkung
-  und ihres Zusammenspiels. Explizite, mit `page` deklarierte Routen klar von
-  automatisch erzeugten CRUD-Routen unterscheiden. Am Beispiel
-  `/invoices/new` nachvollziehbar zeigen, dass `crud Invoice -> invoices` in
-  `src/invoices.zyl` die Route aus dem Ressourcennamen `invoices` ableitet,
-  obwohl dafür keine eigene `page`-Deklaration existiert. Den Befehl
-  `zelyra routes main.zyl` als Möglichkeit zeigen, deklarierte und erzeugte
-  Routen zu prüfen.
+- [x] **1.0.5 Studio-Logs:** Studio zeigt ein Logs-Fenster und speichert
+  Studio-Start-/Setup-Ereignisse sowie Programm- und Vorschauausgaben als
+  lokale JSONL-Dateien. Es gibt Stufen- und Textfilter, Geheimnisbereinigung,
+  begrenzte Rotation und nur für den Benutzer lesbare Unix-Dateien. Siehe
+  [Logs-Anleitung](studio-logs.de.md).
+- [x] **1.0.5 installationsbewusste Deinstallation:** `zelyra uninstall`
+  entfernt die aktive benutzereigene Programmdatei auch außerhalb des
+  Standardordners. Der Befehl meldet PATH-Kopien, erkennt paketverwaltete
+  Installationen und verlangt Bestätigung; Projektdateien und Daten bleiben
+  erhalten. Siehe [Deinstallationsleitfaden](uninstall.de.md).
+- [x] **1.0.5 Rechnungsdaten:** `issued_at` ist ein lokalisiertes reines
+  Datumsfeld mit passender deutscher oder englischer Formatangabe. Der Server
+  vergibt eine eindeutige Rechnungsnummer aus der gespeicherten Datensatz-ID
+  und verändert sie bei späteren Änderungen nicht.
+- [x] **1.0.5 Rechnungsstart und Übersicht:** `/` führt nun durch Kunden,
+  Artikel und Rechnungen; `/views/invoicedashboard` ist als
+  Rechnungsübersicht gestaltet. Deutsche und englische Beschriftungen passen
+  zusammen.
+- [x] **1.0.5 Tutorial komplett erläutert:** Die erzeugten deutschen und
+  englischen Anleitungen erklären Setup-Befehle, Optionen, Quelldateien und
+  wichtige Zeilen. Sie verfolgen die generierte Route `/invoices/new` bis zu
+  `crud Invoice -> invoices` und erläutern `zelyra routes main.zyl`.
 
 - [ ] **Geplant für 1.1.0 — Compose-Prüfung im Installer:** Die Installer
   erkennen Docker Compose v2 oder neuer und unterscheiden es von der veralteten

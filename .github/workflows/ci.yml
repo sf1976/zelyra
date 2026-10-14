@@ -189,6 +189,10 @@ jobs:
         run: |
           cargo build -p zelyra-cli
           python3 scripts/check_release_metadata.py --binary target/debug/zelyra
+      - name: Exercise installation-aware uninstall
+        env:
+          ZELYRA_BIN: target/debug/zelyra
+        run: bash ./tests/uninstall-e2e.sh
       - name: Exercise Zelyra Studio against MariaDB
         env:
           ZELYRA_STUDIO_E2E_BACKEND: mariadb

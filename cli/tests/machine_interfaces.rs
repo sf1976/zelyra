@@ -924,7 +924,7 @@ fn invoice_tutorial_creates_a_checkable_project_without_overwriting() {
         String::from_utf8_lossy(&tutorial.stdout)
     );
     let shell = fs::read_to_string(directory.join("src/shell.zyl")).unwrap();
-    assert!(shell.contains("<html class=\"zelyra-app\">"));
+    assert!(shell.contains("<html class=\"zelyra-app\""));
 
     let overwrite = run(&["--tutorial", "invoice", directory.to_str().unwrap()]);
     assert!(!overwrite.status.success());
