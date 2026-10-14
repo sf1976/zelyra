@@ -51,6 +51,7 @@ fn help_text(command: &str, arguments: &[String], german: bool) -> Option<&'stat
         ("outbox", "run", _) => "outbox-run",
         ("setup", _, _) if arguments.iter().any(|argument| argument == "--web") => "setup-web",
         ("update", _, _) => "update",
+        ("uninstall", _, _) => "uninstall",
         ("new", _, _) => "new",
         ("init", _, _) => "init",
         ("setup", _, _) => "setup",
@@ -166,6 +167,7 @@ fn common_german_help(key: &str) -> &'static str {
         "text" => "Befehle: zelyra text edit <plan.zedit> [--apply --plan-id sha256:<id>]\n\nErstellt eine sichere Vorschau regulärer Textersetzungen oder wendet eine zuvor geprüfte Vorschau an.\n\nDetails: zelyra text edit --help",
         "text-edit" => "Befehl: zelyra text edit <plan.zedit> [--apply --plan-id sha256:<id>]\n\nLiest einen strukturierten Änderungsplan mit Regex-Regeln. Standardmäßig werden nur Vorschau und Prüfsumme ausgegeben; Dateien bleiben unverändert.\n\nAnwenden:\n  zelyra text edit change.zedit\n  zelyra text edit change.zedit --apply --plan-id sha256:<id-aus-der-vorschau>\n\nJede Regel prüft ihre erwartete Trefferzahl. Der Plan muss innerhalb des Projekts liegen; Symlinks und sich überschneidende Regeln werden abgewiesen.",
         "update" => "Befehl: zelyra update [--check]\n\nPrüft auf ein neueres veröffentlichtes Zelyra-Release oder installiert es.\n  --check  Nur Version prüfen; nichts installieren\n\nBeispiele:\n  zelyra update --check\n  zelyra update",
+        "uninstall" => "Befehl: zelyra uninstall [--yes] [--dry-run]\n\nEntfernt nur die aktuell ausgeführte Zelyra-Binärdatei. Projekte, Einstellungen, Logs und Datenbanken bleiben erhalten. Weitere Zelyra-Kopien im PATH werden angezeigt und nicht entfernt. Paketverwaltete Installationen müssen mit dem jeweiligen Paketmanager entfernt werden.\n\nOptionen:\n  --yes, -y  Entfernung ohne interaktive Rückfrage bestätigen\n  --dry-run  Ziel anzeigen, ohne Dateien zu ändern\n\nBeispiele:\n  zelyra uninstall --dry-run\n  zelyra uninstall",
         "tutorial" | "check" | "routes" | "init" | "new" | "setup" | "setup-web" | "editor" | "migrate-laravel" | "run" | "serve" | "db-plan" | "db-apply" | "db-map" | "db-inspect" | "db-create" | "db-setup" | "db-bootstrap" | "db-history" => unreachable!(),
         _ => "Für diesen Befehl gibt es noch keine ausführliche Hilfe. `zelyra --help` zeigt die Befehlsübersicht.",
     }
@@ -252,6 +254,7 @@ fn english_common_help(key: &str) -> &'static str {
         "text" => "Commands: zelyra text edit <plan.zedit> [--apply --plan-id sha256:<id>]\n\nPreview safe regular-expression text replacements or apply a reviewed preview.\n\nDetails: zelyra text edit --help",
         "text-edit" => "Command: zelyra text edit <plan.zedit> [--apply --plan-id sha256:<id>]\n\nRead a structured change plan with regex rules. By default, print only a preview and plan digest; source files remain unchanged.\n\nApply a reviewed plan:\n  zelyra text edit change.zedit\n  zelyra text edit change.zedit --apply --plan-id sha256:<id-from-preview>\n\nEach rule checks its expected match count. Plans must stay inside the project; symlinks and overlapping rules are rejected.",
         "update" => "Command: zelyra update [--check]\n\nCheck for a newer published Zelyra release or install it.\n  --check  Check the version only; do not install\n\nExamples:\n  zelyra update --check\n  zelyra update",
+        "uninstall" => "Command: zelyra uninstall [--yes] [--dry-run]\n\nRemove only the currently running Zelyra executable. Projects, settings, logs, and databases are kept. Other Zelyra copies on PATH are shown and left untouched. Package-managed installations must be removed with their package manager.\n\nOptions:\n  --yes, -y  Confirm without an interactive prompt\n  --dry-run  Show the target without changing files\n\nExamples:\n  zelyra uninstall --dry-run\n  zelyra uninstall",
         "tutorial" | "check" | "routes" | "fmt" | "init" | "new" | "setup" | "setup-web" | "editor" | "migrate-laravel" | "run" | "serve" | "db-plan" | "db-apply" | "db-map" | "db-inspect" | "db-create" | "db-setup" | "db-bootstrap" | "db-history" => unreachable!(),
         _ => "Detailed help is not available for this command yet. Run `zelyra --help` for the command overview.",
     }

@@ -17,32 +17,35 @@ try {
   assert.equal(cssResponse.status(), 200);
   const css = await cssResponse.text();
   assert.match(css, /Tabler v1\.6\.1/);
-  assert.match(css, /\.tutorial-metric/);
+  assert.match(css, /\.invoice-home-hero/);
   assert.match(css, /max-width: 991px/);
-  assert.match(await page.locator("h1").innerText(), /Guten Tag im Rechnungsbüro/);
-  assert.equal(await page.locator(".tutorial-metric").count(), 4);
+  assert.match(await page.locator("h1").innerText(), /Was möchtest du erledigen\?|What would you like to do\?/);
+  assert.equal(await page.locator(".invoice-home .row-cards .card").count(), 3);
   const desktop = await page.evaluate(() => ({
     viewport: window.innerWidth,
     document: document.documentElement.scrollWidth,
-    stepsColumns: getComputedStyle(document.querySelector(".tutorial-steps")).gridTemplateColumns,
-    dashboardColumns: [...document.querySelectorAll(".tutorial-metric")].map((node) => node.getBoundingClientRect().left),
-    headerTitleLeft: document.querySelector(".tutorial-page-header > div").getBoundingClientRect().left,
-    headerActionsLeft: document.querySelector(".tutorial-header-actions").getBoundingClientRect().left,
-    customerCount: Number(document.querySelector(".tutorial-metric strong").textContent),
+    cardLefts: [...document.querySelectorAll(".invoice-home .row-cards > article")].map((node) => Math.round(node.getBoundingClientRect().left)),
+    invoiceButton: document.querySelector('a[href="/invoices/new"]') !== null,
   }));
   if (process.env.ZELYRA_INVOICE_SCREENSHOT) {
     await page.screenshot({ path: process.env.ZELYRA_INVOICE_SCREENSHOT, fullPage: true });
   }
   assert.ok(desktop.document <= desktop.viewport, `desktop page overflows: ${JSON.stringify(desktop)}`);
-  assert.equal(new Set(desktop.dashboardColumns).size, 4, `desktop metrics should form four columns: ${JSON.stringify(desktop)}`);
-  assert.equal(desktop.stepsColumns.split(" ").length, 2, "desktop workflow should use two columns");
-  assert.ok(desktop.headerTitleLeft < desktop.headerActionsLeft, "desktop page title should align before the actions");
-  assert.ok(desktop.customerCount >= 1, "dashboard should display persisted customer records");
-  for (const route of ["/customers", "/customers/new", "/items", "/items/new", "/invoices", "/invoices/new", "/invoice_lines"]) {
+  assert.equal(new Set(desktop.cardLefts).size, 3, "desktop workflow should show three cards in one row");
+  assert.equal(desktop.invoiceButton, true, "home page should offer invoice creation");
+  for (const route of ["/customers", "/customers/new", "/items", "/items/new", "/invoices", "/invoices/new", "/invoice_lines", "/views/invoicedashboard"]) {
     await page.goto(`${baseUrl}${route}`, { waitUntil: "networkidle" });
     const width = await page.evaluate(() => ({ viewport: innerWidth, document: document.documentElement.scrollWidth }));
     assert.ok(width.document <= width.viewport, `desktop CRUD route ${route} overflows: ${JSON.stringify(width)}`);
   }
+
+  await page.goto(`${baseUrl}/invoices/new`, { waitUntil: "networkidle" });
+  const dateField = page.locator('input[name="issued_at"]');
+  assert.equal(await dateField.getAttribute("type"), "date");
+  assert.match(await page.locator(".zelyra-field-hint").innerText(), /JJJJ-MM-TT|YYYY-MM-DD/);
+  const invoiceNumber = page.locator('input[name="invoice_number"]');
+  assert.equal(await invoiceNumber.getAttribute("readonly"), "");
+  assert.match(await invoiceNumber.getAttribute("placeholder"), /automatisch|automatically/i);
 
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -50,13 +53,13 @@ try {
   const mobile = await page.evaluate(() => ({
     viewport: window.innerWidth,
     document: document.documentElement.scrollWidth,
-    stepsColumns: getComputedStyle(document.querySelector(".tutorial-steps")).gridTemplateColumns,
+    cardLefts: [...document.querySelectorAll(".invoice-home .row-cards > article")].map((node) => Math.round(node.getBoundingClientRect().left)),
     navCanScroll: document.querySelector(".tutorial-nav").scrollWidth >= document.querySelector(".tutorial-nav").clientWidth,
   }));
   assert.ok(mobile.document <= mobile.viewport, `mobile page overflows: ${JSON.stringify(mobile)}`);
-  assert.equal(mobile.stepsColumns.split(" ").length, 1, "mobile workflow should use one column");
+  assert.equal(new Set(mobile.cardLefts).size, 1, "mobile workflow should use one column");
   assert.ok(mobile.navCanScroll, "mobile navigation must remain reachable");
-  for (const route of ["/customers", "/customers/new", "/items", "/items/new", "/invoices", "/invoices/new", "/invoice_lines"]) {
+  for (const route of ["/customers", "/customers/new", "/items", "/items/new", "/invoices", "/invoices/new", "/invoice_lines", "/views/invoicedashboard"]) {
     await page.goto(`${baseUrl}${route}`, { waitUntil: "networkidle" });
     const width = await page.evaluate(() => ({ viewport: innerWidth, document: document.documentElement.scrollWidth }));
     assert.ok(width.document <= width.viewport, `mobile CRUD route ${route} overflows: ${JSON.stringify(width)}`);

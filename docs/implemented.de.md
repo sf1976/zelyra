@@ -1,6 +1,6 @@
-# In Zelyra 1.0.4 umgesetzt
+# In Zelyra 1.0.5 umgesetzt
 
-**Stand:** stabiles Release 1.0.4 · Sprachkompatibilitätslinie `0.1` · 2026-10-14
+**Stand:** stabiles Release 1.0.5 · Sprachkompatibilitätslinie `0.1` · 2026-10-14
 **Reifegrad:** veröffentlichtes stabiles Release; Eignung und Grenzen sind je Ablauf zu prüfen
 
 Diese Übersicht beschreibt den Funktionsumfang des aktuellen Releases nach
@@ -8,7 +8,7 @@ Anwendungsbereichen. Sie unterscheidet verfügbare Funktionen von begrenzten
 oder experimentellen Bereichen; sie behauptet weder universelle
 Datenbankportabilität noch Fehlerfreiheit beliebiger Anwendungen.
 
-## Änderungen in 1.0.3 und 1.0.4
+## Änderungen in 1.0.3–1.0.5
 
 - **1.0.3:** erweiterte Standardbibliothek für Mathematik, Text, Arrays, Sets,
   Maps, Datum, Parsing, Encodings und Pfade; typgeprüfte `|>`-Pipelines und
@@ -18,6 +18,11 @@ Datenbankportabilität noch Fehlerfreiheit beliebiger Anwendungen.
 - **1.0.4:** isolierte Compose-Projektnamen für Rechnungstutorials, geschützter
   Ausweichpfad bei alten MariaDB-Volumes und Erkennung kurzer Compose-Versionen
   wie `2.40`. Siehe [Release-Notizen 1.0.4](release-notes/1.0.4.de.md).
+- **1.0.5:** strukturierte lokale Logs in Studio, `zelyra uninstall`, reine
+  Rechnungsdatumsfelder, serverseitig vergebene Rechnungsnummern, eine
+  aufgabenorientierte Tutorial-Startseite, eine benannte Rechnungsübersicht und
+  zweisprachige Befehls-/Quelltext-Erklärungen. Siehe
+  [Release-Notizen 1.0.5](release-notes/1.0.5.de.md).
 
 Die Release-Notizen dokumentieren historische Änderungen; die
 [Roadmap](ROADMAP.de.md) enthält geplante Arbeit. Die
@@ -26,7 +31,7 @@ Die Release-Notizen dokumentieren historische Änderungen; die
 [Handbuch](handbook/de/handbuch.md) beschreiben die akzeptierte Syntax und ihre
 Grenzen.
 
-## Was Zelyra 1.0.4 bietet
+## Was Zelyra 1.0.5 bietet
 
 ### Sprache und Compiler
 
@@ -216,10 +221,14 @@ der [Setup-Anleitung](setup-web.de.md) und den
   Vorschaupfad ohne unabhängige Produktionsfreigabe.
 - Das Sprachkompatibilitätskorpus 0.1 umfasst in 0.9 zusätzliche typisierte
   API-Fehler sowie Laufzeitfälle der Rechnungsanwendung und von `Result`.
-- 🧪 `zelyra --tutorial invoice` erzeugt jetzt die Anwendung und startet ihre
+- 🧪 `zelyra --tutorial invoice` erzeugt die Anwendung und startet ihre
   lokale MariaDB-/Web-Compose-Umgebung einschließlich Schema. `--no-start`
-  erstellt nur das Projektgerüst. Das Tutorial führt durch Kunden, Artikel,
-  Dashboard und Rechnungserstellung. Die Rechnungsansicht addiert
+  erstellt nur das Projektgerüst. Die Startseite führt durch Kunden, Artikel
+  und Rechnungserstellung; `/views/invoicedashboard` ist die
+  Rechnungsübersicht. Rechnungsdaten sind reine Datumswerte, Nummern vergibt
+  der Server. Die erzeugten deutschen und englischen Anleitungen erklären
+  Quelldateien, Befehle und generierte Routen.
+  Die Rechnungsansicht addiert
   Positionspreise netto, berechnet im Lernbeispiel 19% Umsatzsteuer und zeigt
   den Bruttobetrag. Unter `/invoices/RECHNUNGSNUMMER/print` kann der Browser
   die druckoptimierte Rechnung als PDF speichern. Es ist ein Lernpfad, keine
@@ -230,6 +239,9 @@ der [Setup-Anleitung](setup-web.de.md) und den
   Erklärung ihres Zwecks. `zelyra editor` ist als direkter Start im aktuellen
   Projektordner ausgewiesen.
 - Studio ist noch keine vollständige IDE oder beliebiger Datenbankdesigner.
+- ✅ Studio bietet ein lokales Logs-Fenster für begrenzte, um Geheimnisse
+  bereinigte JSONL-Ausgaben von Programmlauf und Vorschau. Siehe
+  [Studio-Logs](studio-logs.de.md).
 - ✅ `examples/inventory_orders/` enthält ein mehrteiliges Konsolenprojekt für
   Lager, Kunden und Bestellungen mit JSON-Speicherung, Cent-genauer
   Rabatt-/Umsatzsteuerberechnung, Stornierung, Aktionsprotokoll und ausführbaren
@@ -286,6 +298,11 @@ der [Setup-Anleitung](setup-web.de.md) und den
   normalisiert. `zelyra update` prüft
   Release-Prüfsummen vor dem Austausch unterstützter Linux-/Windows-x86_64-
   Binärdateien.
+- ✅ `zelyra uninstall [--dry-run] [--yes]` erkennt die aktive Programmdatei,
+  meldet doppelte PATH-Einträge, weist paketverwaltete Installationen ab und
+  entfernt nur das ausgewählte benutzereigene Programm nach Bestätigung.
+  Projektdateien, Einstellungen, Logs und Daten bleiben erhalten. Siehe
+  [Deinstallation](uninstall.de.md).
 - ✅ Benutzerlokale Installation aus dem Quellcode ist verfügbar.
   Veröffentlichte Linux- und Windows-x86_64-Release-Archive enthalten
   SHA-256-Prüfsummen; wiederholte Builds waren in den festgelegten
@@ -314,7 +331,7 @@ vergleichenden Benchmark-Ergebnisse behauptet.
 
 ## Release- und Prüfnachweise
 
-Das aktuelle stabile [Zelyra-1.0.4-Release](https://github.com/sf1976/zelyra/releases/tag/v1.0.4)
+Das aktuelle stabile [Zelyra-1.0.5-Release](https://github.com/sf1976/zelyra/releases/tag/v1.0.5)
 und seine Artefakte stehen bei GitHub. Die [Release-Notizen](release-notes/)
 beschreiben ausgelieferte Änderungen; die geprüften Datenbankabläufe und ihre
 Grenzen stehen in der [Datenbankmatrix](database-support.de.md). Automatisierte

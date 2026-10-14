@@ -57,7 +57,7 @@ Use `--no-rustup` to disable automatic Rust installation; `--no-path` suppresses
 Published releases for Linux x86_64 and Windows x86_64 can be installed without Rust or Cargo. The archive is downloaded over HTTPS and verified with SHA-256:
 
 ~~~bash
-./install.sh --release v1.0.4
+./install.sh --release v1.0.5
 ~~~
 
 On Windows, `install.ps1` is available for PowerShell and `install.cmd` for the Command Prompt:
@@ -72,7 +72,7 @@ zelyra --version
 Release archive installation on Windows:
 
 ~~~powershell
-.\install.ps1 -Release v1.0.4
+.\install.ps1 -Release v1.0.5
 ~~~
 
 Then:
@@ -2205,7 +2205,7 @@ AST/HIR structures, type-checked, and then processed by the Zelyra runtime.
 
 Similar spelling in `fn`, braces, `if`, `match`, or static typing is a design
 choice, not proof of identity. Grammar, semantics, and the programming model
-are what matter. Zelyra 1.0.4 is a stable release with its own type and runtime
+are what matter. Zelyra 1.0.5 is a stable release with its own type and runtime
 model. The status labels in this chapter identify available, limited, and
 planned language features.
 
@@ -2248,7 +2248,7 @@ feature.
 | Jobs | external job/queue systems | no background-job construct | no stable job syntax | ❌ |
 | Audit | external logging/audit crates | audit table, CLI inspection, and optional hash chain | tied to auth/CRUD and still experimental | 🧪 |
 | Deployment | Cargo, containers, CI, and infrastructure are free choices | generated Docker/Compose template exists | template is a development start, not a production platform | 🧪 |
-| Production maturity | widely used in production | Zelyra 1.0.4 is a stable release with a smaller ecosystem and workflow-specific evidence | maturity and ecosystem are not comparable | 🧪 |
+| Production maturity | widely used in production | Zelyra 1.0.5 is a stable release with a smaller ecosystem and workflow-specific evidence | maturity and ecosystem are not comparable | 🧪 |
 | Ecosystem | very large: crates, tools, frameworks | small repository and few integrations | Zelyra cannot directly import Rust crates | 🧪 |
 
 Rust is the technical foundation, not the application language behind Zelyra. A
@@ -2561,7 +2561,7 @@ tooling, and formal checks.
 > technical foundation of the compiler—not the language Zelyra application
 > developers write.
 
-> **Status:** Zelyra 1.0.4 is a stable release. Some language features are
+> **Status:** Zelyra 1.0.5 is a stable release. Some language features are
 > limited or planned; the status labels beside examples define the available
 > scope.
 
@@ -2596,7 +2596,7 @@ it explains how the implemented pieces are intended to fit together.
 7. **A small starting stack:** the built-in server and CLI aim to support local
    learning and development without Apache, PHP, or a mandatory framework set.
 
-Zelyra 1.0.4 is a stable release with a narrower feature set and documented
+Zelyra 1.0.5 is a stable release with a narrower feature set and documented
 limits. The roadmap describes planned extensions; stable release status is not
 a general production guarantee.
 

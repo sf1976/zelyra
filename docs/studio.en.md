@@ -42,9 +42,12 @@ files before navigating so source locations stay accurate.
 Compiler diagnostics update while editing saved Zelyra project files; they are
 checked against a private temporary project copy and do not write the unsaved
 buffer. **Run** is an explicit action for `main.zyl`, bounded to 15 seconds and
-64 KiB per output stream. For web projects it starts a local web preview; Studio
-does not start the database automatically. Recognized environment and local
-`.env` values are redacted. The program does not receive interactive input.
+64 KiB per output stream. For the marked invoice tutorial, Run starts its
+isolated Compose database, applies the schema and sample data, and then starts
+the web preview. Other web projects need a reachable database. Open **Logs**
+to search recent structured Run/setup events and program or preview output.
+Recognized environment and local `.env` values are redacted. The program does
+not receive interactive input.
 
 The **Project map** shows only unambiguous relationships from the compiler
 project model and links nodes to saved source locations. Dynamic and
@@ -52,21 +55,21 @@ unresolved relationships remain marked incomplete instead of being inferred.
 
 ## Start the invoice tutorial in Studio
 
-The tutorial needs a running MariaDB and an applied schema before customer and
-item lists can load data. After creating it with `--no-start`, run this from the
-project directory:
+For a generated invoice tutorial, Studio starts its own isolated MariaDB
+service and applies the schema when you click **Run**. After creating it with
+`--no-start`, open the project this way:
 
 ```sh
-zelyra setup --all
 zelyra editor .
 ```
 
-`setup --all` starts MariaDB and the web application, applies the schema, and
-shows startup progress and the application address. In Studio, run `main.zyl`
-and open `/customers`. The local preview reads the project connection from its
-protected `.env` file. If a CRUD page cannot load data, check that MariaDB is
-running and the project schema has been applied; the page does not reveal
-connection errors or credentials.
+Select `main.zyl` and click **Run**. Studio starts the database, applies the
+schema and sample data, then opens the workflow home page. **Logs** shows
+structured startup and preview output. Invoice dates accept `YYYY-MM-DD` or
+`JJJJ-MM-TT` according to the selected language, and the server assigns an
+invoice number when saving. The local preview reads the project connection
+from its protected `.env` file. If a CRUD page cannot load data, check **Logs**
+for setup errors; the page does not reveal credentials.
 
 ## Edit source code
 

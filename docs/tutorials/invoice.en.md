@@ -1,34 +1,29 @@
 # Invoice tutorial
 
-This tutorial walks through a multi-file invoice application: customers,
-items, invoices, line items, a live dashboard, and a printable invoice view.
-The generated files remain local and can be started from either the command
-line or Zelyra Studio.
+This multi-file example includes customers, items, invoices, line items, a
+filterable invoice overview, and a printable invoice. The full bilingual
+command and source walkthrough is in the
+[generated project guide](../../examples/invoice_tutorial/TUTORIAL.en.md).
+`zelyra --tutorial invoice` writes both `TUTORIAL.en.md` and
+`TUTORIAL.de.md` into the generated project.
 
-## Requirements and first start
+## Requirements and startup
 
-Install Docker and Docker Compose v2 or newer. Verify the installation with
-`docker compose version`. Zelyra does not install Docker for you.
-
-Generate, initialize, and start the tutorial with:
+Install Docker Engine with the Compose plugin v2 or newer. Check it with
+`docker compose version`. Python Compose v1 is unsupported; Zelyra does not
+install Docker.
 
 ~~~sh
 zelyra --tutorial invoice
 ~~~
 
-The command creates `invoice-tutorial`, writes a protected `.env`, starts
-MariaDB, applies the database schema and sample data, starts the application,
-and prints its address. Open that address if a browser does not open
-automatically. The sample data contains two customers, three items, and the
-draft invoice `RE-2026-001` with two line items. Repeated starts do not add
-duplicates.
+The command creates `invoice-tutorial`, writes local credentials to the
+Git-ignored `.env`, configures MariaDB and the schema, adds sample data, and
+starts the web application. Open the printed URL if a browser does not open.
+The sample data has two customers, three items, one draft invoice, and two line
+items. Repeated starts do not insert duplicates.
 
-The `/` route currently shows tutorial metrics and workflow steps.
-`/views/invoicedashboard` is the searchable, filterable invoice table with
-calculated net, tax, and gross totals. The home page and invoice overview are
-planned for a workflow-focused redesign in version 1.0.5.
-
-Generate the project files without starting Docker:
+Generate files only:
 
 ~~~sh
 zelyra --tutorial invoice ./my-invoices --no-start
@@ -36,130 +31,54 @@ cd ./my-invoices
 zelyra setup . --all
 ~~~
 
-`--no-start` still creates `.env`, the Compose file, schema, seed SQL, and
-application. `zelyra setup . --all` later performs the full local startup.
-Credentials stay in the local `.env`, which Git ignores.
+`--no-start` skips Docker and the web preview but still writes `.env`, Compose,
+schema, seed, and application files. Later, `zelyra setup . --all` performs
+the full local startup. When a managed application or MariaDB port is busy,
+the tutorial selects another free port and prints the new URL.
 
-## Start from Zelyra Studio
-
-Open the project in Studio:
+## Run from Studio and edit
 
 ~~~sh
 zelyra editor ./invoice-tutorial
 ~~~
 
-Select `main.zyl` in the project tree and click **Run**. Studio starts the
-local MariaDB service, waits for the connection, applies the declared schema,
-loads the repeatable sample data, and then starts a local web preview. Run
-shows the preview address; **Stop preview** ends it. This path needs Docker
-Compose and the local tutorial configuration in `.env`.
+Open `main.zyl` in the file tree and click **Run**. Studio starts the matching
+local tutorial database, waits for MariaDB, applies the schema, loads the
+repeatable seed, and then opens the web preview. Use **Stop** to end the
+preview. **Logs** in the Studio header opens local rotating JSONL records for
+program and preview output, with project-scoped access and text filters.
 
-If Studio was open while `zelyra update` ran, end that session with `Ctrl+C`
-and start Studio again. An update replaces the executable for new processes;
-an already running Studio does not automatically reload the new IDE code. Run
-`zelyra --version` first if you need to confirm the installed version.
+The `/` home page guides the customer, item, and invoice steps. The filterable
+table is named **Invoice overview** and remains at `/views/invoicedashboard`.
+`GET /invoices/new` is generated from `crud Invoice -> invoices` in
+`src/invoices.zyl`; there is no separate `page` declaration for it.
+`zelyra routes main.zyl` lists declared and generated routes with their source
+files.
 
-For a different database configured through process environment variables,
-Studio does not start a local database service or insert tutorial data. That
-keeps external databases unchanged.
+**Issued on** uses the `Date` type and accepts a date without a time. Its
+localized format hint is `YYYY-MM-DD` or `JJJJ-MM-TT`. The server assigns the
+invoice number from the newly generated record ID and preserves it during later
+edits. `TUTORIAL.en.md` and `TUTORIAL.de.md` explain each source section and
+the command options.
 
-## Commands to explore the project
+## Troubleshooting
 
-Run these commands from the tutorial directory:
+- **Compose is missing:** Install Docker Compose plugin v2 using the
+  [Docker instructions](https://docs.docker.com/engine/install/) and check
+  again with `docker compose version`.
+- **A port is busy:** For managed `.env` ports, Zelyra tries a free next port
+  and updates the matching database addresses. An explicit process variable
+  such as `ZELYRA_DB_HOST_PORT` takes precedence; remove or change it if it
+  forces a busy port.
+- **`ERROR 1045 (28000): Access denied`:** The credentials do not match the
+  already initialized MariaDB volume. Credentials are applied when a volume is
+  first created. New tutorials get an isolated Compose namespace. For older
+  marked projects, recovery starts a separate database and leaves the old
+  volume untouched.
+- **Studio output looks empty:** Open **Logs** to check whether the process
+  emitted output. For a web app, **Run** shows the local preview URL; open it or
+  click **Open application in browser**.
 
-~~~sh
-zelyra check main.zyl
-zelyra fmt main.zyl --check
-zelyra routes main.zyl
-zelyra db map main.zyl
-zelyra setup . --database
-zelyra setup . --schema
-zelyra setup . --all
-~~~
-
-`check` validates the imported project. `fmt --check` reports formatting
-changes without editing files. `routes` lists pages, APIs, and generated CRUD
-routes. `db map` shows declared tables and their module ownership. The setup
-modes start MariaDB, apply the schema, or run the complete workflow.
-
-### Where does `/invoices/new` come from?
-
-Buttons in `main.zyl` and `src/shell.zyl` link to `/invoices/new`, but the
-tutorial has no `page "/invoices/new"` declaration. The route is generated
-from `crud Invoice -> invoices` in `src/invoices.zyl`. `crud` enables generated
-views and actions for the `invoices` resource. These include `GET /invoices`
-for the list and `GET /invoices/new` for the create form. `POST /invoices/new`
-saves the form. The name after `->` supplies the URL base path.
-
-By contrast, the print view is explicitly declared in that file as
-`page "/invoices/{invoice_number}/print"`. Run `zelyra routes main.zyl` to
-inspect both route types and their source in the command output.
-
-Before a later schema change, inspect its plan and then apply the reviewed
-plan id:
-
-~~~sh
-zelyra db plan main.zyl --format=json
-zelyra db apply main.zyl --plan-id sha256:<plan-id>
-~~~
-
-Risky changes require a separate `--allow-risky` flag. Review the plan before
-applying it.
-
-## Project files and workflow
-
-~~~text
-invoice-tutorial/
-├── main.zyl                      entry point and dashboard
-├── zelyra.toml                   project configuration
-├── zelyra.theme.css              local style overrides
-├── invoice-tutorial.seed.sql     repeatable sample data
-├── zelyra.tutorial               tutorial marker for the seed step
-└── src/
-    ├── database.zyl              MariaDB declaration
-    ├── shell.zyl                 shared layout
-    ├── customers.zyl              customers and CRUD pages
-    ├── items.zyl                  items and CRUD pages
-    ├── invoices.zyl               invoices, lines, print view
-    └── dashboard.zyl              invoice summary
-~~~
-
-The dashboard shows the customer and invoice counts along with net, tax, and
-gross totals. Start with a customer at `/customers` and an item at `/items`.
-Then create a draft at `/invoices` and add its lines at `/invoice_lines`. The
-sample records make the dashboard, search, and print view useful immediately.
-
-`zelyra --help` and `zelyra db --help` list commands and options. Studio shows
-the imported source files in its project tree. Use `main.zyl` as the entry
-point so the compiler and formatter process the whole project.
-
-## Ports and troubleshooting
-
-When creating a new local configuration, Zelyra selects available MariaDB and
-web application ports. If Docker Compose still reports a port conflict,
-Zelyra automatically selects another free port for a managed `.env`, updates
-the matching local database URL, and retries. It prints the resulting
-application address. Process environment variables such as
-`ZELYRA_DB_HOST_PORT` take precedence; if one explicitly fixes the occupied
-port, change or unset it and rerun the command.
-
-Compose v1 is unsupported. If the Compose plugin is missing, install Compose
-v2 using the [Docker instructions](https://docs.docker.com/engine/install/)
-and verify `docker compose version` again. Existing `.env` files and database
-volumes are preserved when a port changes.
-
-`ERROR 1045 (28000): Access denied` means the credentials do not match the
-already initialized MariaDB volume. Values in `.env` are applied only when a
-volume is initialized for the first time. New invoice tutorials created with
-Zelyra 1.0.4 or newer get their own Compose project name and therefore do not
-reuse older tutorial volumes. For older invoice tutorials, `zelyra setup --all`
-starts an isolated database after this error and applies the schema there. The
-previous volume is not deleted or changed; its data remains available.
-
-## Limits of the example
-
-The template assumes a flat 19% VAT rate for every line. It is a learning
-example, not a complete invoicing or accounting system. Tax cases, required
-legal fields, GoBD requirements, email delivery, and native PDF generation are
-not fully implemented. Review and add those requirements before production
-use.
+`.env` contains local secrets and must not be committed or shared. The example
+uses a flat 19% tax rate for every invoice line and is not complete accounting
+or invoicing software.

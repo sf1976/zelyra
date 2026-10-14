@@ -376,6 +376,7 @@ fn editor_response(
             )
         }
         ("GET", "project-map") => editor_project_map(state),
+        ("GET", "logs") => editor_logs_response(state),
         ("GET", "database-schema") => database_schema_response(state),
         ("GET", "database-target") => database_target_response(state),
         ("GET", "database-rows") => database_rows_response(state, request),
@@ -3340,10 +3341,26 @@ fn run_editor_program(
             || !program.tableviews.is_empty()
             || !program.apis.is_empty()
         {
-            return start_editor_web_app(state, relative, database_name.as_deref());
+            append_editor_log(
+                state,
+                "info",
+                "studio.run",
+                &format!("starting web preview from {relative}"),
+            );
+            let result = start_editor_web_app(state, relative, database_name.as_deref());
+            if let Err((_, message)) = &result {
+                append_editor_log(state, "error", "studio.setup", message);
+            }
+            return result;
         }
     }
 
+    append_editor_log(
+        state,
+        "info",
+        "studio.run",
+        &format!("starting program {relative}"),
+    );
     let executable = zelyra_executable()?;
     let mut child = Command::new(executable)
         .arg("run")
@@ -3362,8 +3379,21 @@ fn run_editor_program(
         .stderr
         .take()
         .ok_or((500, "could not capture program errors".into()))?;
-    let stdout_reader = read_editor_output(stdout);
-    let stderr_reader = read_editor_output(stderr);
+    let secrets = editor_secret_values(state);
+    let stdout_reader = read_editor_output(
+        stdout,
+        state.clone(),
+        "program.stdout",
+        "info",
+        secrets.clone(),
+    );
+    let stderr_reader = read_editor_output(
+        stderr,
+        state.clone(),
+        "program.stderr",
+        "error",
+        secrets.clone(),
+    );
     let started = std::time::Instant::now();
     let timeout = Duration::from_secs(15);
     let mut timed_out = false;
@@ -3385,7 +3415,6 @@ fn run_editor_program(
     };
     let (stdout, stdout_truncated) = collect_editor_output(stdout_reader);
     let (stderr, stderr_truncated) = collect_editor_output(stderr_reader);
-    let secrets = editor_secret_values(state);
     let stdout = redact_editor_secrets(String::from_utf8_lossy(&stdout).into_owned(), &secrets);
     let stderr = redact_editor_secrets(String::from_utf8_lossy(&stderr).into_owned(), &secrets);
     Ok((
@@ -3525,8 +3554,21 @@ fn start_editor_web_app(
         .stderr
         .take()
         .ok_or((500, "could not capture web application errors".into()))?;
-    let stdout_reader = read_editor_output(stdout);
-    let stderr_reader = read_editor_output(stderr);
+    let secrets = editor_secret_values(state);
+    let stdout_reader = read_editor_output(
+        stdout,
+        state.clone(),
+        "preview.stdout",
+        "info",
+        secrets.clone(),
+    );
+    let stderr_reader = read_editor_output(
+        stderr,
+        state.clone(),
+        "preview.stderr",
+        "error",
+        secrets.clone(),
+    );
     let started = std::time::Instant::now();
 
     let preview_url = format!("http://{address}");
@@ -3654,12 +3696,17 @@ fn stop_editor_web_app(state: &EditorState) -> Result<(u16, &'static str, String
 
 fn read_editor_output<R: Read + Send + 'static>(
     mut reader: R,
+    state: EditorState,
+    source: &'static str,
+    level: &'static str,
+    secrets: Vec<String>,
 ) -> std::sync::mpsc::Receiver<(Vec<u8>, bool)> {
     let (sender, receiver) = std::sync::mpsc::channel();
     thread::spawn(move || {
         const OUTPUT_LIMIT: usize = 65_536;
         let mut captured = Vec::new();
         let mut buffer = [0_u8; 8192];
+        let mut log_pending = Vec::new();
         let mut truncated = false;
         loop {
             match reader.read(&mut buffer) {
@@ -3669,12 +3716,144 @@ fn read_editor_output<R: Read + Send + 'static>(
                     let retained = count.min(remaining);
                     captured.extend_from_slice(&buffer[..retained]);
                     truncated |= retained < count;
+                    log_pending.extend_from_slice(&buffer[..count]);
+                    while let Some(newline) = log_pending.iter().position(|byte| *byte == b'\n') {
+                        let line = log_pending.drain(..=newline).collect::<Vec<_>>();
+                        log_editor_output(&state, source, level, &line, &secrets);
+                    }
+                    while log_pending.len() > 65_536 {
+                        let line = log_pending.drain(..65_536).collect::<Vec<_>>();
+                        log_editor_output(&state, source, level, &line, &secrets);
+                    }
                 }
             }
+        }
+        if !log_pending.is_empty() {
+            log_editor_output(&state, source, level, &log_pending, &secrets);
         }
         let _ = sender.send((captured, truncated));
     });
     receiver
+}
+
+fn log_editor_output(
+    state: &EditorState,
+    source: &str,
+    level: &str,
+    bytes: &[u8],
+    secrets: &[String],
+) {
+    let message = redact_editor_secrets(String::from_utf8_lossy(bytes).into_owned(), secrets);
+    append_editor_log(state, level, source, message.trim_end_matches(['\r', '\n']));
+}
+
+fn append_editor_log(state: &EditorState, level: &str, source: &str, message: &str) {
+    let Some(path) = editor_log_path(state) else {
+        return;
+    };
+    let Some(parent) = path.parent() else { return };
+    if fs::create_dir_all(parent).is_err() {
+        return;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if fs::set_permissions(parent, fs::Permissions::from_mode(0o700)).is_err() {
+            return;
+        }
+    }
+    const MAX_LOG_BYTES: u64 = 5 * 1024 * 1024;
+    let backup = path.with_extension("jsonl.1");
+    if fs::metadata(&path).is_ok_and(|metadata| metadata.len() > MAX_LOG_BYTES) {
+        let _ = fs::remove_file(&backup);
+        let _ = fs::rename(&path, &backup);
+    }
+    let timestamp_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or_default();
+    let mut record = json!({
+        "timestamp_ms": timestamp_ms,
+        "level": level,
+        "source": source,
+        "message": message,
+    })
+    .to_string();
+    record.push('\n');
+    let mut options = fs::OpenOptions::new();
+    options.create(true).append(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    if let Ok(mut file) = options.open(path) {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = file.set_permissions(fs::Permissions::from_mode(0o600));
+        }
+        let _ = file.write_all(record.as_bytes());
+    }
+}
+
+fn editor_log_path(state: &EditorState) -> Option<PathBuf> {
+    let base = if cfg!(windows) {
+        env::var_os("LOCALAPPDATA")
+            .map(PathBuf::from)?
+            .join("Zelyra")
+            .join("Logs")
+    } else if cfg!(target_os = "macos") {
+        env::var_os("HOME")
+            .map(PathBuf::from)?
+            .join("Library")
+            .join("Logs")
+            .join("Zelyra")
+    } else {
+        env::var_os("XDG_STATE_HOME")
+            .map(PathBuf::from)
+            .or_else(|| {
+                env::var_os("HOME")
+                    .map(PathBuf::from)
+                    .map(|home| home.join(".local").join("state"))
+            })?
+            .join("zelyra")
+            .join("logs")
+    };
+    let digest = Sha256::digest(state.root.to_string_lossy().as_bytes());
+    let digest = format!("{digest:x}");
+    Some(base.join(format!("studio-{}.jsonl", &digest[..16])))
+}
+
+fn editor_logs_response(state: &EditorState) -> Result<(u16, &'static str, String), (u16, String)> {
+    let Some(path) = editor_log_path(state) else {
+        return Ok((
+            200,
+            "application/json; charset=utf-8",
+            json!({"records": []}).to_string(),
+        ));
+    };
+    let contents = match fs::read_to_string(path) {
+        Ok(contents) => contents,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => String::new(),
+        Err(_) => return Err((500, "could not read local Studio logs".into())),
+    };
+    if contents.len() > 6 * 1024 * 1024 {
+        return Err((413, "local Studio log file exceeds the read limit".into()));
+    }
+    let mut lines = contents.lines().collect::<Vec<_>>();
+    if lines.len() > 500 {
+        lines.drain(..lines.len() - 500);
+    }
+    let records = lines
+        .into_iter()
+        .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+        .collect::<Vec<_>>();
+    Ok((
+        200,
+        "application/json; charset=utf-8",
+        json!({"records": records}).to_string(),
+    ))
 }
 
 fn collect_editor_output(receiver: std::sync::mpsc::Receiver<(Vec<u8>, bool)>) -> (Vec<u8>, bool) {
@@ -3703,7 +3882,7 @@ fn editor_secret_values(state: &EditorState) -> Vec<String> {
             let key = key.to_string_lossy();
             is_secret_key(&key).then(|| value.to_string_lossy().into_owned())
         })
-        .filter(|value| value.len() >= 4)
+        .filter(|value| !value.is_empty())
         .collect::<Vec<_>>();
     if let Ok(contents) = fs::read_to_string(state.root.join(".env")) {
         if contents.len() <= 256 * 1024 {
@@ -3713,7 +3892,7 @@ fn editor_secret_values(state: &EditorState) -> Vec<String> {
                     return None;
                 }
                 let value = value.trim().trim_matches(['"', '\'']).to_owned();
-                (value.len() >= 4).then_some(value)
+                (!value.is_empty()).then_some(value)
             }));
         }
     }

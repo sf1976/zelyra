@@ -31,7 +31,7 @@ WHERE NOT EXISTS (
 );
 
 INSERT INTO invoices (invoice_number, customer_id, issued_at, status)
-SELECT 'RE-2026-001', customers.id, '2026-01-15 10:00:00', 'draft'
+SELECT 'RE-2026-001', customers.id, '2026-01-15', 'draft'
 FROM customers
 WHERE customers.email = 'kontakt@beispiel.test'
   AND NOT EXISTS (

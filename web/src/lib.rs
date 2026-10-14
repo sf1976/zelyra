@@ -5632,13 +5632,39 @@ fn dispatch_form_with_language(
                 .or_insert_with(|| "false".into());
         }
     }
+    let generate_invoice_number = is_automatic_invoice_number_form(form);
+    if generate_invoice_number {
+        let nonce = match random_invoice_nonce() {
+            Ok(nonce) => nonce,
+            Err((status, message)) => {
+                return Response::html(
+                    status,
+                    format!(
+                        "<h1>{status} Internal Server Error</h1><p>{}</p>",
+                        html_escape(&message)
+                    ),
+                );
+            }
+        };
+        values.insert("invoice_number".into(), format!("RE-PENDING-{nonce}"));
+    }
     let relation_options = match load_relation_options(&rendered_form, database_url, tenant_context)
     {
         Ok(options) => options,
         Err(error) => return relation_options_error(database_url, error),
     };
+    let mut validation_form = form.form.clone();
+    if generate_invoice_number {
+        if let Some(field) = validation_form
+            .fields
+            .iter_mut()
+            .find(|field| field.name == "invoice_number")
+        {
+            field.readonly = false;
+        }
+    }
     let validation = validate(
-        &form.form,
+        &validation_form,
         form.table.as_ref(),
         form.schema.as_ref(),
         &values,
@@ -5901,6 +5927,25 @@ fn form_value_columns(form: &FormRoute, schema_table: &zelyra_database::Table) -
 
 fn is_edit_form(form: &FormRoute) -> bool {
     form.form.name.ends_with("Edit")
+}
+
+fn is_automatic_invoice_number_form(form: &FormRoute) -> bool {
+    !is_edit_form(form)
+        && form.form.name.ends_with("Create")
+        && form.form.table.as_deref() == Some("invoices")
+        && form
+            .form
+            .fields
+            .iter()
+            .any(|field| field.name == "invoice_number")
+}
+
+fn random_invoice_nonce() -> Result<String, (u16, String)> {
+    let mut bytes = [0_u8; 12];
+    OsRng
+        .try_fill_bytes(&mut bytes)
+        .map_err(|_| (500, "could not generate a unique invoice number".into()))?;
+    Ok(hex_encode(&bytes))
 }
 
 fn attach_form_snapshot(html: &str, snapshot: &str) -> String {
@@ -9238,6 +9283,41 @@ fn execute_form_action(
 
         for query in &queries {
             transaction.execute(query)?;
+        }
+        if is_automatic_invoice_number_form(form) {
+            let identity_query = zelyra_database::Query {
+                sql: if is_postgres {
+                    "SELECT currval(pg_get_serial_sequence('invoices', 'id')) AS id".into()
+                } else {
+                    "SELECT LAST_INSERT_ID() AS id".into()
+                },
+                params: Vec::new(),
+            };
+            let identity = transaction.execute(&identity_query)?;
+            let id = identity.rows.first().and_then(|row| row.first())
+                .and_then(|value| value.parse::<i64>().ok())
+                .ok_or_else(|| zelyra_database::DatabaseError { message: "could not read generated invoice ID".into() })?;
+            let base = format!("RE-{id:06}");
+            let mut sequence = 0_u32;
+            let invoice_number = loop {
+                let candidate = if sequence == 0 { base.clone() } else { format!("{base}-{sequence}") };
+                let existing = transaction.execute(&zelyra_database::Query {
+                    sql: format!("SELECT id FROM {} WHERE {} = :invoice_number AND {} <> :id FOR UPDATE", quote_ident("invoices", is_postgres), quote_ident("invoice_number", is_postgres), quote_ident("id", is_postgres)),
+                    params: vec![
+                        ("invoice_number".into(), zelyra_database::QueryValue::String(candidate.clone())),
+                        ("id".into(), zelyra_database::QueryValue::Int(id)),
+                    ],
+                })?;
+                if existing.rows.is_empty() { break candidate; }
+                sequence = sequence.checked_add(1).ok_or_else(|| zelyra_database::DatabaseError { message: "could not allocate a unique invoice number".into() })?;
+            };
+            transaction.execute(&zelyra_database::Query {
+                sql: format!("UPDATE {} SET {} = :invoice_number WHERE {} = :id", quote_ident("invoices", is_postgres), quote_ident("invoice_number", is_postgres), quote_ident("id", is_postgres)),
+                params: vec![
+                    ("invoice_number".into(), zelyra_database::QueryValue::String(invoice_number)),
+                    ("id".into(), zelyra_database::QueryValue::Int(id)),
+                ],
+            })?;
         }
         if let (Some(audit_table), Some(audit_event)) =
             (form.audit_table.as_deref(), form.audit_event.as_deref())

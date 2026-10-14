@@ -43,6 +43,7 @@ const $ = (id) => document.getElementById(id);
 const status = $("status-message");
 const tabs = new Map();
 let activePath = null;
+let editorLogRecords = [];
 let editor = null;
 let diagnostics = [];
 let liveCheckTimer = null;
@@ -81,6 +82,7 @@ const messages = {
     projectMap: "Projektkarte", projectMapTitle: "Projektbeziehungen", projectMapOpenSource: "Quelltext öffnen", projectMapLoading: "Compiler-Projektmodell wird geladen …", projectMapUnavailable: "Projektkarte konnte nicht erstellt werden.", projectMapIncomplete: "Die Karte ist unvollständig. Nicht auflösbare oder begrenzte Beziehungen werden nicht geraten.", projectMapIssues: { "view.unresolved": "Ansicht nicht gefunden", "view.ambiguous": "Ansichtsname mehrfach vorhanden", "crud.table_unresolved": "CRUD-Tabelle nicht eindeutig", "api.handler_unresolved": "API-Funktion nicht eindeutig", "import.unresolved": "Importziel nicht gefunden", "edge.target_missing": "Beziehungsziel fehlt", "limit.nodes": "Knotenlimit erreicht", "limit.edges": "Beziehungslimit erreicht" }, projectMapEmpty: "Noch keine unterstützten Beziehungen im Projekt.", projectMapModules: "Module", projectMapData: "Daten und Ansichten", projectMapWeb: "Routen und APIs", projectMapLogic: "Funktionen",
     runButton: "Starten", runButtonTitle: "main.zyl ausführen oder Webanwendung starten",
     runOutputTitle: "Programmausgabe", runStarting: "Anwendung wird vorbereitet und gestartet …", runSuccess: "Programm erfolgreich beendet", runFailure: "Programm mit Fehler beendet", runTimeout: "Ausführung nach 15 Sekunden beendet", runOutputTruncated: "Die Ausgabe ist auf 64 KiB je Stream begrenzt.", runNoOutput: "Keine Ausgabe.", runStdout: "AUSGABE", runStderr: "FEHLER", runInputUnavailable: "Studio stellt dem Programm keine interaktive Eingabe bereit.", runWebReady: "Webanwendung läuft lokal:", runWebOpen: "Anwendung im Browser öffnen", runWebStop: "Vorschau beenden", runWebStopped: "Lokale Vorschau wurde beendet.",
+    logs: "Logs", logsTitle: "Zelyra-Logs", logsLoading: "Logs werden geladen …", logsUnavailable: "Logs konnten nicht geladen werden.", logsEmpty: "Noch keine Programmausgabe protokolliert.", logsLevel: "Stufe", logsAll: "Alle", logsSearch: "Text filtern", logsRetention: "Lokal gespeichert; begrenzte Rotation", logsCount: "{0} Einträge angezeigt",
     taskHelp: "Kontexthilfe öffnen", taskHelpHelp: "Hilfe zum Begriff am Cursor anzeigen", taskProperties: "Dateieigenschaften öffnen",
     taskPropertiesHelp: "Informationen und Aktionen zur aktuellen Datei anzeigen", taskSearch: "Text suchen", taskSearchHelp: "Im aktuellen Dokument suchen",
     taskGoToDefinition: "Zur Definition springen", taskGoToDefinitionHelp: "Zur Funktion oder zum Typ am Cursor springen (F12)",
@@ -176,6 +178,7 @@ const messages = {
     projectMap: "Project map", projectMapTitle: "Project relationships", projectMapOpenSource: "Open source location", projectMapLoading: "Loading the compiler project model …", projectMapUnavailable: "Could not create the project map.", projectMapIncomplete: "The map is incomplete. Unresolved or limited relationships are not guessed.", projectMapIssues: { "view.unresolved": "View not found", "view.ambiguous": "View name is ambiguous", "crud.table_unresolved": "CRUD table is not unique", "api.handler_unresolved": "API function is not unique", "import.unresolved": "Import target not found", "edge.target_missing": "Relationship target is missing", "limit.nodes": "Node limit reached", "limit.edges": "Relationship limit reached" }, projectMapEmpty: "No supported relationships in this project yet.", projectMapModules: "Modules", projectMapData: "Data and views", projectMapWeb: "Routes and APIs", projectMapLogic: "Functions",
     runButton: "Run", runButtonTitle: "Run main.zyl or start the web application",
     runOutputTitle: "Program output", runStarting: "Preparing and starting the application …", runSuccess: "Program finished successfully", runFailure: "Program finished with an error", runTimeout: "Execution stopped after 15 seconds", runOutputTruncated: "Output is limited to 64 KiB per stream.", runNoOutput: "No output.", runStdout: "OUTPUT", runStderr: "ERROR", runInputUnavailable: "Studio does not provide interactive input to the program.", runWebReady: "Web application is running locally:", runWebOpen: "Open application in browser", runWebStop: "Stop preview", runWebStopped: "Local preview stopped.",
+    logs: "Logs", logsTitle: "Zelyra logs", logsLoading: "Loading logs …", logsUnavailable: "Could not load logs.", logsEmpty: "No program output has been recorded yet.", logsLevel: "Level", logsAll: "All", logsSearch: "Filter text", logsRetention: "Stored locally; bounded rotation", logsCount: "Showing {0} entries",
     taskHelp: "Open contextual help", taskHelpHelp: "Show help for the term at the cursor", taskProperties: "Open file properties",
     taskPropertiesHelp: "Show information and actions for the active file", taskSearch: "Find text", taskSearchHelp: "Search in the active document",
     taskGoToDefinition: "Go to definition", taskGoToDefinitionHelp: "Go to the function or type at the cursor (F12)",
@@ -2301,6 +2304,36 @@ async function stopWebPreview() {
   }
 }
 
+function renderEditorLogs() {
+  const level = $("logs-level").value;
+  const query = $("logs-search").value.trim().toLocaleLowerCase();
+  const records = editorLogRecords.filter((record) => {
+    if (level !== "all" && record.level !== level) return false;
+    return !query || `${record.source || ""} ${record.message || ""}`.toLocaleLowerCase().includes(query);
+  });
+  const locale = language === "de" ? "de-DE" : "en-US";
+  const lines = records.map((record) => {
+    const timestamp = new Date(Number(record.timestamp_ms)).toLocaleString(locale);
+    return `${timestamp}  ${(record.level || "info").toUpperCase()}  ${record.source || "zelyra"}\n${record.message || ""}`;
+  });
+  $("logs-content").textContent = lines.join("\n\n") || t("logsEmpty");
+  $("logs-status").textContent = t("logsCount", records.length);
+}
+
+async function openEditorLogs() {
+  const dialog = $("logs-dialog");
+  if (!dialog.open) dialog.showModal();
+  $("logs-status").textContent = t("logsLoading");
+  try {
+    const result = await api("logs");
+    editorLogRecords = Array.isArray(result.records) ? result.records : [];
+    renderEditorLogs();
+  } catch {
+    $("logs-status").textContent = t("logsUnavailable");
+    $("logs-content").textContent = t("logsUnavailable");
+  }
+}
+
 async function openProjectMap() {
   const dialog = $("project-map-dialog");
   const status = $("project-map-status");
@@ -2466,6 +2499,10 @@ $("save-all-button").addEventListener("click", saveAll);
 $("check-button").addEventListener("click", checkProject);
 $("run-button").addEventListener("click", runProject);
 $("run-output-web-stop").addEventListener("click", stopWebPreview);
+$("logs-button").addEventListener("click", openEditorLogs);
+$("logs-refresh").addEventListener("click", openEditorLogs);
+$("logs-level").addEventListener("change", renderEditorLogs);
+$("logs-search").addEventListener("input", renderEditorLogs);
 $("format-button").addEventListener("click", formatActive);
 $("database-button").addEventListener("click", openDatabaseWorkbench);
 $("assistant-toggle").addEventListener("click", () => toggleAssistant());
@@ -2493,6 +2530,7 @@ $("task-finder").addEventListener("close", () => $("task-finder-input").setAttri
 $("project-search-button").addEventListener("click", openProjectSearch);
 $("project-search-close").addEventListener("click", () => $("project-search").close());
 $("run-output-close").addEventListener("click", () => $("run-output").close());
+$("logs-close").addEventListener("click", () => $("logs-dialog").close());
 $("project-map-button").addEventListener("click", openProjectMap);
 $("project-map-close").addEventListener("click", () => $("project-map-dialog").close());
 $("project-search-input").addEventListener("keydown", (event) => {

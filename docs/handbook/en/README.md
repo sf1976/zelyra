@@ -19,14 +19,15 @@ program and ending with a database-backed web application.
 Create a new local learning project for customers, items, and invoices with
 [`zelyra --tutorial invoice`](../../tutorials/invoice.en.md).
 
-> **Project status:** Zelyra 1.0.4 is the current stable release; the language compatibility line remains `0.1`. Database tutorials require Compose v2 or newer. See the [roadmap](../../ROADMAP.md), [1.0.3 release notes](../../release-notes/1.0.3.en.md), and [1.0.4 release notes](../../release-notes/1.0.4.en.md).
+> **Project status:** Zelyra 1.0.5 is the current stable release; the language compatibility line remains `0.1`. Database tutorials require Compose v2 or newer. See the [roadmap](../../ROADMAP.md) and [1.0.5 release notes](../../release-notes/1.0.5.en.md).
 
 Zelyra combines static type checking and clear diagnostics with
 compiler-checked database and web declarations. The platform includes
 relational foreign keys, CRUD, authentication, audit, optional local MFA, SMTP
 mail through a transactional outbox, and a local Studio with a database
-workbench. The invoice tutorial guides you through customers, items, a
-dashboard, and printable invoices with 19% tax. The
+workbench. The invoice tutorial guides you through customers, items, and invoice
+creation; `/` is its workflow home and `/views/invoicedashboard` is the invoice
+overview. Studio provides local structured **Logs** for runs and previews. The
 [implemented capabilities](../../implemented.en.md) describe the limits of
 individual features, databases, and operational workflows. Details for
 [application mail](../../mail.en.md) and the
@@ -128,11 +129,16 @@ Rust or Cargo. The installer downloads the selected archive over HTTPS and
 verifies its SHA-256 checksum:
 
 ~~~bash
-./install.sh --release v1.0.4
+./install.sh --release v1.0.5
 ~~~
 
-On Windows, use `-Release v1.0.4` with `install.ps1` in PowerShell. macOS
+On Windows, use `-Release v1.0.5` with `install.ps1` in PowerShell. macOS
 currently uses the source installer.
+
+Remove a user-owned installation with `zelyra uninstall`. Use
+`zelyra uninstall --dry-run` to inspect the selected executable first. See the
+[uninstall guide](../../uninstall.en.md) for duplicate PATH entries and
+package-manager-owned installations.
 
 If the shell cannot find Zelyra:
 

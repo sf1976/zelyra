@@ -1,4 +1,7 @@
 {
+  "invoice.number.label": "Rechnungsnummer",
+  "invoice.number.auto_hint": "Wird beim Speichern automatisch vergeben.",
+  "invoice.overview.title": "Rechnungsübersicht",
   "learning.button": "Lernhilfe",
   "learning.machine.title": "Deine Zelyra-Lernhilfe",
   "learning.machine.intro": "Du kannst diese Anwendung direkt im Zelyra-Quellcode erweitern.",
@@ -285,6 +288,9 @@
   "identifier.machines": "Maschinen",
   "identifier.customer": "Kunde",
   "identifier.customers": "Kunden",
+  "identifier.invoicedashboard": "Rechnungsübersicht",
+  "identifier.invoice_number": "Rechnungsnummer",
+  "identifier.issued_at": "Ausgestellt am",
   "identifier.order": "Auftrag",
   "identifier.orders": "Aufträge",
   "identifier.code": "Kürzel",

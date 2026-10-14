@@ -3,6 +3,10 @@ use super::*;
 const INVOICE_SOURCE: &str = include_str!("../../examples/invoice_tutorial/main.zyl");
 const INVOICE_THEME: &str = include_str!("../../examples/invoice_tutorial.theme.css");
 const INVOICE_SEED_SQL: &str = include_str!("../../examples/invoice_tutorial/seed.sql");
+const INVOICE_LOCALE_DE: &str = include_str!("../../examples/invoice_tutorial/locales/de.json");
+const INVOICE_LOCALE_EN: &str = include_str!("../../examples/invoice_tutorial/locales/en.json");
+const INVOICE_GUIDE_DE: &str = include_str!("../../examples/invoice_tutorial/TUTORIAL.de.md");
+const INVOICE_GUIDE_EN: &str = include_str!("../../examples/invoice_tutorial/TUTORIAL.en.md");
 const INVOICE_MODULES: &[(&str, &str)] = &[
     (
         "src/database.zyl",
@@ -105,6 +109,37 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
             return ExitCode::FAILURE;
         }
     }
+    let locale_directory = PathBuf::from(&directory).join("locales");
+    if let Err(error) = fs::create_dir_all(&locale_directory) {
+        eprintln!(
+            "error[E-TUTORIAL-002]: could not create tutorial locale directory `{}`: {error}",
+            locale_directory.display()
+        );
+        return ExitCode::FAILURE;
+    }
+    for (language, catalog) in [("de", INVOICE_LOCALE_DE), ("en", INVOICE_LOCALE_EN)] {
+        let locale_path = locale_directory.join(format!("{language}.json"));
+        if let Err(error) = fs::write(&locale_path, catalog) {
+            eprintln!(
+                "error[E-TUTORIAL-002]: could not write tutorial translations `{}`: {error}",
+                locale_path.display()
+            );
+            return ExitCode::FAILURE;
+        }
+    }
+    for (name, guide) in [
+        ("TUTORIAL.de.md", INVOICE_GUIDE_DE),
+        ("TUTORIAL.en.md", INVOICE_GUIDE_EN),
+    ] {
+        let guide_path = PathBuf::from(&directory).join(name);
+        if let Err(error) = fs::write(&guide_path, guide) {
+            eprintln!(
+                "error[E-TUTORIAL-002]: could not write tutorial guide `{}`: {error}",
+                guide_path.display()
+            );
+            return ExitCode::FAILURE;
+        }
+    }
     let theme_path = PathBuf::from(&directory).join("zelyra.theme.css");
     if let Err(error) = fs::write(&theme_path, INVOICE_THEME) {
         eprintln!(
@@ -165,13 +200,13 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         println!("  src/customers.zyl  customer table, form, and list");
         println!("  src/items.zyl      item table, form, and list");
         println!("  src/invoices.zyl   invoices, line items, relations, and printable invoice");
-        println!("  src/dashboard.zyl  invoice totals and dashboard");
+        println!("  src/dashboard.zyl  invoice overview and search");
         println!("\nFollow the workflow in the running app:");
         println!("  1. Customers: create and find customers at /customers (`src/customers.zyl`).");
         println!("  2. Items: maintain reusable products and prices at /items (`src/items.zyl`).");
-        println!("  3. Dashboard: view live customer, invoice, net, and gross totals at /; search invoices at /views/invoicedashboard.");
-        println!("  4. Invoice: create a draft at /invoices and select its customer (`src/invoices.zyl`).");
-        println!("  5. Lines: add invoice items at /invoice_lines (`src/invoices.zyl`).");
+        println!("  3. Invoice: create a draft at /invoices/new; its number is assigned automatically (`src/invoices.zyl`).");
+        println!("  4. Lines: add invoice items at /invoice_lines (`src/invoices.zyl`).");
+        println!("  5. Overview: review invoices at /views/invoicedashboard; / is the workflow home page.");
         if no_start {
             println!("\nA protected `.env` with local MariaDB credentials was created. Automatic startup was skipped. To start the database, apply the schema, and launch the app, run:");
             println!("  cd {directory} && zelyra setup --all");
@@ -200,7 +235,9 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
             }
         }
         println!("Open Studio with `zelyra editor {directory}` to inspect the source.");
-        println!("The dashboard shows live totals and guides you through the connected customer → item → invoice workflow. The desktop layout adapts to smaller screens; its Tabler styling is bundled locally, with no CDN request.");
+        println!("Dates use YYYY-MM-DD. Read TUTORIAL.en.md for the source-by-source guide, including how `crud Invoice` generates /invoices/new.");
+        println!("In Studio, open Logs to review recent structured run and preview output.");
+        println!("The workflow home page links customers, items, and invoices. The invoice overview is at /views/invoicedashboard. Styling is bundled locally, with no CDN request.");
         println!("The invoice page calculates net, 19% VAT, and gross totals from its lines. Open /invoices/INVOICE-NUMBER/print and use the browser print dialog to save a PDF.");
         println!("The example assumes the German standard rate; it is not a complete legally compliant invoicing or accounting system.");
     } else {
@@ -218,13 +255,13 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         println!("  src/customers.zyl  Kundentabelle, Formular und Liste");
         println!("  src/items.zyl      Artikeltabelle, Formular und Liste");
         println!("  src/invoices.zyl   Rechnungen, Positionen, Beziehungen und Druckansicht");
-        println!("  src/dashboard.zyl  Rechnungssummen und Dashboard");
+        println!("  src/dashboard.zyl  Rechnungsübersicht und Suche");
         println!("\nGehe den Ablauf in der Anwendung durch:");
         println!("  1. Kunden: unter /customers erfassen und suchen (`src/customers.zyl`).");
         println!("  2. Artikel: Produkte und Preise unter /items pflegen (`src/items.zyl`).");
-        println!("  3. Dashboard: echte Kunden-, Rechnungs-, Netto- und Bruttowerte unter / ansehen; Rechnungen unter /views/invoicedashboard suchen.");
-        println!("  4. Rechnung: unter /invoices einen Entwurf anlegen und Kunden auswählen (`src/invoices.zyl`).");
-        println!("  5. Positionen: unter /invoice_lines Artikel zur Rechnung hinzufügen (`src/invoices.zyl`).");
+        println!("  3. Rechnung: unter /invoices/new einen Entwurf anlegen; die Nummer wird automatisch vergeben (`src/invoices.zyl`).");
+        println!("  4. Positionen: unter /invoice_lines Artikel zur Rechnung hinzufügen (`src/invoices.zyl`).");
+        println!("  5. Übersicht: Rechnungen unter /views/invoicedashboard prüfen; / ist die Ablauf-Startseite.");
         if no_start {
             println!("\nEine geschützte `.env` mit lokalen MariaDB-Zugangsdaten wurde angelegt. Der automatische Start wurde übersprungen. Mit diesem Befehl startest du Datenbank und Anwendung und richtest das Schema ein:");
             println!("  cd {directory} && zelyra setup --all");
@@ -249,7 +286,9 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
             }
         }
         println!("Mit `zelyra editor {directory}` kannst du den Quelltext ansehen.");
-        println!("Das Dashboard zeigt echte Summen und führt dich durch Kunden → Artikel → Rechnung. Das Desktop-Layout passt sich schmalen Displays an; Tabler-CSS wird lokal ausgeliefert, ohne CDN-Aufruf.");
+        println!("Datumsangaben haben das Format JJJJ-MM-TT. TUTORIAL.de.md erklärt jede Datei und Zeile, einschließlich der Route /invoices/new, die durch `crud Invoice` erzeugt wird.");
+        println!("In Studio kannst du über Logs die letzten strukturierten Ausgaben von Start und Vorschau ansehen.");
+        println!("Die Ablauf-Startseite verlinkt Kunden, Artikel und Rechnungen. Die Rechnungsübersicht liegt unter /views/invoicedashboard. Das CSS wird lokal ausgeliefert, ohne CDN-Aufruf.");
         println!("Die Rechnungsseite berechnet Netto, 19% Umsatzsteuer und Brutto aus den Positionen. Öffne /invoices/RECHNUNGSNUMMER/print und speichere über den Druckdialog des Browsers als PDF.");
         println!("Das Beispiel nimmt den allgemeinen deutschen Steuersatz an und ist kein vollständiges gesetzeskonformes Rechnungs- oder Buchhaltungssystem.");
     }
