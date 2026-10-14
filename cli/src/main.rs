@@ -6667,7 +6667,13 @@ fn project_runtime_policy(path: &str) -> Result<Option<RuntimePolicy>, String> {
     let network = project_network_policy(path)?;
     let process = project_process_policy(path)?;
     let mail = project_mail_policy(path)?;
-    if filesystem.is_none() && network.is_none() && process.is_none() && mail.is_none() {
+    let max_stack_depth = project_max_stack_depth(path)?;
+    if filesystem.is_none()
+        && network.is_none()
+        && process.is_none()
+        && mail.is_none()
+        && max_stack_depth.is_none()
+    {
         Ok(None)
     } else {
         Ok(Some(RuntimePolicy {
@@ -6676,8 +6682,53 @@ fn project_runtime_policy(path: &str) -> Result<Option<RuntimePolicy>, String> {
             process,
             mail,
             step_budget: None,
+            max_stack_depth,
         }))
     }
+}
+
+fn project_max_stack_depth(path: &str) -> Result<Option<usize>, String> {
+    let Some(config_path) = project_config_path(path)? else {
+        return Ok(None);
+    };
+    let contents = fs::read_to_string(&config_path)
+        .map_err(|error| format!("cannot read {}: {error}", config_path.display()))?;
+    let mut in_runtime = false;
+    let mut value = None;
+    for (line_index, raw_line) in contents.lines().enumerate() {
+        let line = raw_line.split('#').next().unwrap_or("").trim();
+        if line.is_empty() {
+            continue;
+        }
+        if line.starts_with('[') && line.ends_with(']') {
+            in_runtime = line == "[runtime]";
+            continue;
+        }
+        if !in_runtime {
+            continue;
+        }
+        let Some((raw_key, raw_value)) = line.split_once('=') else {
+            return Err(format!(
+                "invalid runtime setting on line {}",
+                line_index + 1
+            ));
+        };
+        let key = raw_key.trim();
+        if key != "max_stack_depth" {
+            return Err(format!("unknown runtime setting {key}"));
+        }
+        if value.is_some() {
+            return Err("runtime setting max_stack_depth is configured more than once".into());
+        }
+        let depth = raw_value.trim().parse::<usize>().map_err(|_| {
+            "runtime max_stack_depth must be an integer from 1 through 500".to_owned()
+        })?;
+        if !(1..=500).contains(&depth) {
+            return Err("runtime max_stack_depth must be from 1 through 500".into());
+        }
+        value = Some(depth);
+    }
+    Ok(value)
 }
 
 fn project_mail_policy(path: &str) -> Result<Option<MailPolicy>, String> {
@@ -8411,6 +8462,7 @@ fn visit_expression_sql<'a>(
                 visit_expression_sql(&arm.value, visitor);
             }
         }
+        ExprKind::Lambda { body, .. } => visit_expression_sql(body, visitor),
         ExprKind::Int(_)
         | ExprKind::UInt(_)
         | ExprKind::Float(_)
@@ -8431,6 +8483,7 @@ fn visit_block_sql<'a>(
         match statement {
             Stmt::Let { value, .. }
             | Stmt::BindOrAssign { value, .. }
+            | Stmt::TupleBindOrAssign { value, .. }
             | Stmt::Expr(value)
             | Stmt::Return {
                 value: Some(value), ..

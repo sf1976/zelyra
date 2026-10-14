@@ -175,6 +175,22 @@ impl<'a> Parser<'a> {
             _ => self.error(format!("expected {label}")),
         }
     }
+
+    /// Field names are parsed in a context that can safely admit selected
+    /// declaration keywords without treating them as general identifiers.
+    fn field_ident(&mut self, label: &str) -> Result<(String, Span), ParseError> {
+        match &self.current().kind {
+            TokenKind::Type => {
+                let span = self.advance().span;
+                Ok(("type".into(), span))
+            }
+            TokenKind::Version => {
+                let span = self.advance().span;
+                Ok(("version".into(), span))
+            }
+            _ => self.ident(label),
+        }
+    }
     fn program(mut self) -> Result<Program, ParseError> {
         let mut imports = Vec::new();
         let mut databases = Vec::new();
@@ -2003,7 +2019,7 @@ impl<'a> Parser<'a> {
         let mut fields = Vec::new();
         self.skip_newlines();
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
-            let (field_name, span) = self.ident("record field name")?;
+            let (field_name, span) = self.field_ident("record field name")?;
             self.expect(TokenKind::Colon, "`:` after record field name")?;
             let ty = self.type_name()?;
             fields.push(RecordField {
@@ -2444,6 +2460,39 @@ impl<'a> Parser<'a> {
         })
     }
     fn statement(&mut self) -> Result<Stmt, ParseError> {
+        if self.looks_like_tuple_assignment() {
+            let start = self.expect(TokenKind::LParen, "`(` before tuple assignment")?;
+            let mut names = Vec::new();
+            let mut seen = HashSet::new();
+            loop {
+                let (name, span) = self.ident("tuple assignment variable")?;
+                if !seen.insert(name.clone()) {
+                    return Err(ParseError {
+                        message: format!("duplicate variable `{name}` in tuple assignment"),
+                        span,
+                    });
+                }
+                names.push(name);
+                if !self.at(&TokenKind::Comma) {
+                    break;
+                }
+                self.advance();
+                if self.at(&TokenKind::RParen) {
+                    break;
+                }
+            }
+            let close = self.expect(TokenKind::RParen, "`)` after tuple assignment names")?;
+            if names.len() < 2 {
+                return Err(ParseError {
+                    message: "tuple assignment requires at least two variables".into(),
+                    span: start.join(close),
+                });
+            }
+            self.expect(TokenKind::Equal, "`=` after tuple assignment names")?;
+            let value = self.expression()?;
+            let span = start.join(value.span);
+            return Ok(Stmt::TupleBindOrAssign { names, value, span });
+        }
         if self.at(&TokenKind::Return) {
             let span = self.advance().span;
             let value = if self.at(&TokenKind::Newline)
@@ -2580,11 +2629,18 @@ impl<'a> Parser<'a> {
             self.skip_newlines();
             while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
                 let pattern = self.pattern()?;
+                let guard = if self.at(&TokenKind::If) {
+                    self.advance();
+                    Some(self.expression()?)
+                } else {
+                    None
+                };
                 self.expect(TokenKind::FatArrow, "`=>` after match pattern")?;
                 let body = self.block()?;
                 let span = pattern.span.join(body.span);
                 arms.push(MatchArm {
                     pattern,
+                    guard,
                     body,
                     span,
                 });
@@ -2697,6 +2753,35 @@ impl<'a> Parser<'a> {
         Ok(Stmt::Expr(expression))
     }
 
+    fn looks_like_tuple_assignment(&self) -> bool {
+        if !self.at(&TokenKind::LParen) {
+            return false;
+        }
+        let mut position = self.pos + 1;
+        let mut names = 0;
+        loop {
+            if !matches!(
+                self.tokens.get(position).map(|token| &token.kind),
+                Some(TokenKind::Ident(_))
+            ) {
+                return false;
+            }
+            names += 1;
+            position += 1;
+            match self.tokens.get(position).map(|token| &token.kind) {
+                Some(TokenKind::Comma) => position += 1,
+                Some(TokenKind::RParen) => {
+                    return names >= 2
+                        && self
+                            .tokens
+                            .get(position + 1)
+                            .is_some_and(|token| token.kind == TokenKind::Equal);
+                }
+                _ => return false,
+            }
+        }
+    }
+
     fn if_statement(&mut self, is_else_if: bool) -> Result<Stmt, ParseError> {
         let start = self.advance().span;
         let condition = self.expression()?;
@@ -2803,6 +2888,38 @@ impl<'a> Parser<'a> {
                     let end = self.expect(TokenKind::RParen, "`)` after pattern")?;
                     Ok(Pattern {
                         kind: PatternKind::Constructor { name, inner },
+                        span: token.span.join(end),
+                    })
+                } else if self.at(&TokenKind::LBrace) {
+                    self.advance();
+                    let mut fields = Vec::new();
+                    self.skip_newlines();
+                    while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                        let (field, field_span) = self.field_ident("record pattern field")?;
+                        let value = if self.at(&TokenKind::Colon) {
+                            self.advance();
+                            self.pattern()?
+                        } else {
+                            Pattern {
+                                kind: PatternKind::Variable(field.clone()),
+                                span: field_span,
+                            }
+                        };
+                        fields.push((field, value));
+                        self.skip_newlines();
+                        if self.at(&TokenKind::Comma) {
+                            self.advance();
+                            self.skip_newlines();
+                        } else if !self.at(&TokenKind::RBrace) {
+                            return self.error("expected `,` or `}` in record pattern");
+                        }
+                    }
+                    let end = self.expect(TokenKind::RBrace, "`}` after record pattern")?;
+                    Ok(Pattern {
+                        kind: PatternKind::Record {
+                            type_name: name,
+                            fields,
+                        },
                         span: token.span.join(end),
                     })
                 } else {
@@ -2958,7 +3075,7 @@ impl<'a> Parser<'a> {
                 };
             } else if self.at(&TokenKind::Dot) {
                 self.advance();
-                let (field, end) = self.ident("field name after `.`")?;
+                let (field, end) = self.field_ident("field name after `.`")?;
                 let span = expression.span.join(end);
                 expression = Expr {
                     kind: ExprKind::Field {
@@ -2997,6 +3114,7 @@ impl<'a> Parser<'a> {
                                     kind: PatternKind::Bool(true),
                                     span: token.span,
                                 },
+                                guard: None,
                                 value: then_value,
                                 span: token.span,
                             },
@@ -3005,12 +3123,49 @@ impl<'a> Parser<'a> {
                                     kind: PatternKind::Bool(false),
                                     span: token.span,
                                 },
+                                guard: None,
                                 value: else_value,
                                 span,
                             },
                         ],
                     },
                     span,
+                })
+            }
+            TokenKind::Pipe => {
+                let mut params = Vec::new();
+                self.skip_newlines();
+                while !self.at(&TokenKind::Pipe) && !self.at(&TokenKind::Eof) {
+                    let (name, start) = self.ident("lambda parameter")?;
+                    let (ty, end) = if self.at(&TokenKind::Colon) {
+                        self.advance();
+                        let start = self.current().span;
+                        let ty = self.type_name()?;
+                        let end = self.tokens[self.pos - 1].span;
+                        (ty, start.join(end))
+                    } else {
+                        (Type::Unknown, start)
+                    };
+                    params.push(Param {
+                        name,
+                        ty,
+                        span: start.join(end),
+                    });
+                    self.skip_newlines();
+                    if !self.at(&TokenKind::Comma) {
+                        break;
+                    }
+                    self.advance();
+                    self.skip_newlines();
+                }
+                self.expect(TokenKind::Pipe, "`|` after lambda parameters")?;
+                let body = self.expression()?;
+                Ok(Expr {
+                    span: token.span.join(body.span),
+                    kind: ExprKind::Lambda {
+                        params,
+                        body: Box::new(body),
+                    },
                 })
             }
             TokenKind::Int(value) => Ok(Expr {
@@ -3048,11 +3203,18 @@ impl<'a> Parser<'a> {
                 self.skip_newlines();
                 while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
                     let pattern = self.pattern()?;
+                    let guard = if self.at(&TokenKind::If) {
+                        self.advance();
+                        Some(self.expression()?)
+                    } else {
+                        None
+                    };
                     self.expect(TokenKind::FatArrow, "`=>` after match pattern")?;
                     let arm_value = self.expression()?;
                     let span = pattern.span.join(arm_value.span);
                     arms.push(MatchExprArm {
                         pattern,
+                        guard,
                         value: arm_value,
                         span,
                     });
@@ -3111,9 +3273,11 @@ impl<'a> Parser<'a> {
                     span: token.span.join(end),
                 })
             }
-            TokenKind::Max | TokenKind::Sort | TokenKind::Unique => {
+            TokenKind::Max | TokenKind::Sort | TokenKind::Unique | TokenKind::Filter => {
                 let name = if matches!(token.kind, TokenKind::Max) {
                     "max".to_string()
+                } else if matches!(token.kind, TokenKind::Filter) {
+                    "filter".to_string()
                 } else if matches!(token.kind, TokenKind::Sort) {
                     "sort".to_string()
                 } else {
@@ -3240,9 +3404,36 @@ impl<'a> Parser<'a> {
                 }
             }
             TokenKind::LParen => {
-                let expr = self.expression()?;
-                self.expect(TokenKind::RParen, "`)`")?;
-                Ok(expr)
+                let first = self.expression()?;
+                if !self.at(&TokenKind::Comma) {
+                    self.expect(TokenKind::RParen, "`)`")?;
+                    return Ok(first);
+                }
+                let mut args = vec![first];
+                while self.at(&TokenKind::Comma) {
+                    self.advance();
+                    self.skip_newlines();
+                    if self.at(&TokenKind::RParen) {
+                        break;
+                    }
+                    args.push(self.expression()?);
+                    self.skip_newlines();
+                }
+                let end = self.expect(TokenKind::RParen, "`)` after tuple values")?;
+                if args.len() < 2 {
+                    return Err(ParseError {
+                        message: "a tuple requires at least two values".into(),
+                        span: token.span.join(end),
+                    });
+                }
+                Ok(Expr {
+                    kind: ExprKind::Call {
+                        name: "tuple".into(),
+                        type_args: Vec::new(),
+                        args,
+                    },
+                    span: token.span.join(end),
+                })
             }
             found => self.error(format!("expected expression, found {found:?}")),
         }
@@ -3271,11 +3462,30 @@ impl<'a> Parser<'a> {
     ) -> Result<Expr, ParseError> {
         self.expect(TokenKind::LBrace, "`{` after record type")?;
         let mut fields = Vec::new();
+        let mut base = None;
         self.skip_newlines();
+        if self.at(&TokenKind::DotDot) {
+            self.advance();
+            base = Some(self.expression()?);
+            self.skip_newlines();
+            if self.at(&TokenKind::Comma) {
+                self.advance();
+                self.skip_newlines();
+            }
+        }
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
-            let (field, _) = self.ident("record field name")?;
+            if self.at(&TokenKind::DotDot) {
+                return self.error("record update spread must appear once, before explicit fields");
+            }
+            let (field, field_span) = self.field_ident("record field name")?;
             self.expect(TokenKind::Colon, "`:` after record field name")?;
             let value = self.expression()?;
+            if fields.iter().any(|(existing, _)| existing == &field) {
+                return Err(ParseError {
+                    message: format!("record field `{field}` is specified more than once"),
+                    span: field_span,
+                });
+            }
             fields.push((field, value));
             self.skip_newlines();
             if self.at(&TokenKind::Comma) {
@@ -3284,6 +3494,32 @@ impl<'a> Parser<'a> {
             }
         }
         let end = self.expect(TokenKind::RBrace, "`}` after record literal")?;
+        if let Some(base) = base {
+            let expected_type = if type_args.is_empty() {
+                Type::Named(type_name)
+            } else {
+                Type::Applied {
+                    name: type_name,
+                    args: type_args,
+                }
+            };
+            let mut args = vec![base];
+            for (field, value) in fields {
+                args.push(Expr {
+                    kind: ExprKind::String(field),
+                    span: value.span,
+                });
+                args.push(value);
+            }
+            return Ok(Expr {
+                kind: ExprKind::Call {
+                    name: "record_update".into(),
+                    type_args: vec![expected_type],
+                    args,
+                },
+                span: start.join(end),
+            });
+        }
         Ok(Expr {
             kind: ExprKind::Record {
                 type_name,
@@ -3353,7 +3589,10 @@ impl<'a> Parser<'a> {
                 self.tokens.get(position).map(|token| &token.kind),
                 self.tokens.get(position + 1).map(|token| &token.kind)
             ),
-            (Some(TokenKind::Ident(_)), Some(TokenKind::Colon))
+            (
+                Some(TokenKind::Ident(_) | TokenKind::Type | TokenKind::Version),
+                Some(TokenKind::Colon)
+            ) | (Some(TokenKind::DotDot), _)
         )
     }
 
@@ -3490,6 +3729,62 @@ mod tests {
         assert!(matches!(arms[0].pattern.kind, PatternKind::Bool(true)));
         assert!(matches!(arms[1].pattern.kind, PatternKind::Bool(false)));
         assert!(matches!(arms[1].value.kind, ExprKind::Match { .. }));
+    }
+
+    #[test]
+    fn parses_contextual_record_fields_and_record_update_spreads() {
+        let program = parse(
+            &lex(
+                "struct Invoice { version: Int type: String status: Bool } fn main() { original = Invoice { version: 7, type: \"sale\", status: true }; changed = Invoice { ..original, status: false }; print(changed.version) }",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            program.records[0]
+                .fields
+                .iter()
+                .map(|field| field.name.as_str())
+                .collect::<Vec<_>>(),
+            ["version", "type", "status"]
+        );
+        let Stmt::BindOrAssign { value, .. } = &program.functions[0].body.statements[1] else {
+            panic!("expected the record update binding");
+        };
+        let ExprKind::Call {
+            name,
+            type_args,
+            args,
+        } = &value.kind
+        else {
+            panic!("record update syntax should lower to the checked update intrinsic");
+        };
+        assert_eq!(name, "record_update");
+        assert_eq!(type_args, &[Type::Named("Invoice".into())]);
+        assert_eq!(args.len(), 3);
+        assert!(matches!(args[1].kind, ExprKind::String(ref field) if field == "status"));
+    }
+
+    #[test]
+    fn parses_tuple_literals_while_preserving_parenthesized_expressions() {
+        let program = parse(
+            &lex("fn coordinates() -> Tuple<Int, Int> { return (4, 9) } fn main() { point = (1 + 2) }")
+                .unwrap(),
+        )
+        .unwrap();
+        let Stmt::Return {
+            value: Some(tuple), ..
+        } = &program.functions[0].body.statements[0]
+        else {
+            panic!("expected tuple return");
+        };
+        assert!(
+            matches!(tuple.kind, ExprKind::Call { ref name, ref args, .. } if name == "tuple" && args.len() == 2)
+        );
+        let Stmt::BindOrAssign { value, .. } = &program.functions[1].body.statements[0] else {
+            panic!("expected grouped arithmetic value");
+        };
+        assert!(matches!(value.kind, ExprKind::Binary { .. }));
     }
 
     #[test]

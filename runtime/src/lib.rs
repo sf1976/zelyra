@@ -38,7 +38,7 @@ fn base64_encode_bytes(bytes: &[u8]) -> String {
     out
 }
 
-fn base64_decode_str(input: &str) -> Result<String, String> {
+fn base64_decode_bytes(input: &str) -> Result<Vec<u8>, String> {
     let input = input.trim_end_matches('=');
     let mut bytes = Vec::new();
     let mut buf = 0u32;
@@ -63,7 +63,12 @@ fn base64_decode_str(input: &str) -> Result<String, String> {
             buf &= (1 << bits) - 1;
         }
     }
-    String::from_utf8(bytes).map_err(|e| format!("invalid UTF-8 in base64 payload: {e}"))
+    Ok(bytes)
+}
+
+fn base64_decode_str(input: &str) -> Result<String, String> {
+    String::from_utf8(base64_decode_bytes(input)?)
+        .map_err(|error| format!("invalid UTF-8 in base64 payload: {error}"))
 }
 
 fn url_encode_str(s: &str) -> String {
@@ -175,6 +180,9 @@ mod decimal_math;
 mod filesystem;
 mod mail;
 mod parallel;
+mod pdf;
+mod pdf_template;
+use pdf_template::interpolate_pdf_data;
 mod records;
 mod sql_results;
 
@@ -1345,7 +1353,8 @@ fn add_pattern_bindings<'a>(
         | PatternKind::Int(_)
         | PatternKind::Bool(_)
         | PatternKind::String(_)
-        | PatternKind::Char(_) => {}
+        | PatternKind::Char(_)
+        | PatternKind::Record { .. } => {}
     }
 }
 
@@ -1908,6 +1917,11 @@ fn collect_loop_modified_names(block: &Block, names: &mut HashSet<String>) {
             | Stmt::BindOrAssign { name, .. } => {
                 names.insert(name.clone());
             }
+            Stmt::TupleBindOrAssign {
+                names: assigned, ..
+            } => {
+                names.extend(assigned.iter().cloned());
+            }
             Stmt::If {
                 then_block,
                 else_block,
@@ -1975,6 +1989,7 @@ fn collect_loop_invariants<'a>(block: &'a Block, loops: &mut Vec<(usize, &'a [Ex
             }
             Stmt::Let { .. }
             | Stmt::BindOrAssign { .. }
+            | Stmt::TupleBindOrAssign { .. }
             | Stmt::Expr(_)
             | Stmt::Return { .. }
             | Stmt::Break { .. }
@@ -2012,6 +2027,10 @@ fn expression_contains_variable(expression: &Expr, name: &str) -> bool {
                 || arms
                     .iter()
                     .any(|arm| expression_contains_variable(&arm.value, name))
+        }
+        ExprKind::Lambda { params, body } => {
+            !params.iter().any(|param| param.name == name)
+                && expression_contains_variable(body, name)
         }
         ExprKind::Int(..)
         | ExprKind::UInt(..)
@@ -2259,6 +2278,7 @@ fn constraints_for_pattern(
         }
         PatternKind::String(_)
         | PatternKind::Char(_)
+        | PatternKind::Record { .. }
         | PatternKind::EnumVariant { .. }
         | PatternKind::EnumVariantPayload { .. } => None,
         PatternKind::Constructor { name, .. } => {
@@ -3383,6 +3403,7 @@ fn constant_value(expression: &Expr) -> Option<ConstantValue> {
         ExprKind::Array(_)
         | ExprKind::Map(_)
         | ExprKind::Record { .. }
+        | ExprKind::Lambda { .. }
         | ExprKind::Index { .. }
         | ExprKind::Field { .. }
         | ExprKind::Variable(_)
@@ -3607,6 +3628,12 @@ fn check_indirect_capability_block(
                     values.remove(name);
                 }
             }
+            Stmt::TupleBindOrAssign { names, value, .. } => {
+                check_indirect_capability_expr(value, function, declared, values, errors);
+                for name in names {
+                    values.remove(name);
+                }
+            }
             Stmt::Expr(expression)
             | Stmt::Return {
                 value: Some(expression),
@@ -3797,6 +3824,7 @@ fn check_indirect_capability_expr(
                 pending.push(index);
             }
             ExprKind::Field { target, .. } => pending.push(target),
+            ExprKind::Lambda { body, .. } => pending.push(body),
             ExprKind::Match { value, arms } => {
                 pending.push(value);
                 pending.extend(arms.iter().map(|arm| &arm.value));
@@ -3825,6 +3853,7 @@ fn check_capability_block(
         match statement {
             Stmt::Let { value, .. }
             | Stmt::BindOrAssign { value, .. }
+            | Stmt::TupleBindOrAssign { value, .. }
             | Stmt::Expr(value)
             | Stmt::Return {
                 value: Some(value), ..
@@ -4087,6 +4116,7 @@ fn check_capability_expr(
             ExprKind::Field { target, .. } => {
                 pending.push(target);
             }
+            ExprKind::Lambda { body, .. } => pending.push(body),
             ExprKind::Await(inner) => {
                 pending.push(inner);
             }
@@ -4471,9 +4501,11 @@ fn statement_flow(statement: &Stmt, program: &Program) -> u8 {
         }
         Stmt::For { body, .. } => FLOW_FALLTHROUGH | (flow_outcomes(body, program) & FLOW_RETURN),
         Stmt::Transaction { body, .. } => flow_outcomes(body, program),
-        Stmt::Let { .. } | Stmt::BindOrAssign { .. } | Stmt::Expr(_) | Stmt::Parallel { .. } => {
-            FLOW_FALLTHROUGH
-        }
+        Stmt::Let { .. }
+        | Stmt::BindOrAssign { .. }
+        | Stmt::TupleBindOrAssign { .. }
+        | Stmt::Expr(_)
+        | Stmt::Parallel { .. } => FLOW_FALLTHROUGH,
     }
 }
 
@@ -4481,6 +4513,9 @@ fn match_arms_are_exhaustive(arms: &[MatchArm], program: &Program) -> bool {
     let mut covered = HashSet::new();
     let mut enum_covered = HashSet::new();
     for arm in arms {
+        if arm.guard.is_some() {
+            continue;
+        }
         match &arm.pattern.kind {
             PatternKind::Wildcard | PatternKind::Variable(_) => return true,
             PatternKind::Bool(value) => {
@@ -4511,7 +4546,10 @@ fn match_arms_are_exhaustive(arms: &[MatchArm], program: &Program) -> bool {
                     enum_covered.insert(format!("{enum_name}::{variant}"));
                 }
             }
-            PatternKind::Int(_) | PatternKind::String(_) | PatternKind::Char(_) => {}
+            PatternKind::Int(_)
+            | PatternKind::String(_)
+            | PatternKind::Char(_)
+            | PatternKind::Record { .. } => {}
         }
     }
     (covered.contains("true") && covered.contains("false"))
@@ -4840,6 +4878,52 @@ impl<'a> Checker<'a> {
                     );
                 }
             }
+            Stmt::TupleBindOrAssign { names, value, span } => {
+                let actual = self.check_expr(value, scopes);
+                let item_types = match actual {
+                    Type::Tuple(items) if items.len() == names.len() => items,
+                    Type::Tuple(items) => {
+                        self.error_with_code(
+                            "E-TYPE-TUPLE-001",
+                            value.span,
+                            format!(
+                                "tuple assignment has {} variables but the value has {} items",
+                                names.len(),
+                                items.len()
+                            ),
+                        );
+                        vec![Type::Unknown; names.len()]
+                    }
+                    Type::Unknown => vec![Type::Unknown; names.len()],
+                    other => {
+                        self.error_with_code(
+                            "E-TYPE-TUPLE-001",
+                            value.span,
+                            format!("tuple assignment expects a tuple, found `{other}`"),
+                        );
+                        vec![Type::Unknown; names.len()]
+                    }
+                };
+                for (name, item_type) in names.iter().zip(item_types) {
+                    if let Some(existing) = self.lookup(scopes, name).cloned() {
+                        if !existing.mutable {
+                            self.error(
+                                *span,
+                                format!("cannot assign to immutable variable `{name}`"),
+                            );
+                        }
+                        self.expect_type(&existing.ty, &item_type, value.span);
+                    } else {
+                        scopes.last_mut().unwrap().insert(
+                            name.clone(),
+                            Variable {
+                                ty: item_type,
+                                mutable: false,
+                            },
+                        );
+                    }
+                }
+            }
             Stmt::Expr(expr) => {
                 self.check_expr(expr, scopes);
             }
@@ -4980,9 +5064,13 @@ impl<'a> Checker<'a> {
                         &value_type,
                         &mut pattern_scope,
                         &mut covered,
-                        true,
+                        arm.guard.is_none(),
                     );
                     scopes.push(pattern_scope);
+                    if let Some(guard) = &arm.guard {
+                        let guard_type = self.check_expr(guard, scopes);
+                        self.expect_type(&Type::Bool, &guard_type, guard.span);
+                    }
                     self.check_block(&arm.body, scopes, expected);
                     scopes.pop();
                 }
@@ -5327,6 +5415,62 @@ impl<'a> Checker<'a> {
                     format!("enum variant `{enum_name}::{variant}` does not match `{other}`"),
                 ),
             },
+            PatternKind::Record { type_name, fields } => {
+                let (expected_name, type_args) = match expected {
+                    Type::Named(name) => (name.as_str(), &[][..]),
+                    Type::Applied { name, args } => (name.as_str(), args.as_slice()),
+                    Type::Unknown => (type_name.as_str(), &[][..]),
+                    other => {
+                        self.error(
+                            pattern.span,
+                            format!("record pattern {type_name} does not match {other}"),
+                        );
+                        return;
+                    }
+                };
+                if expected_name != type_name {
+                    self.error(
+                        pattern.span,
+                        format!("record pattern {type_name} does not match {expected_name}"),
+                    );
+                    return;
+                }
+                let Some(record) = self
+                    ._program
+                    .records
+                    .iter()
+                    .find(|record| record.name == *type_name)
+                else {
+                    self.error(pattern.span, format!("unknown record type {type_name}"));
+                    return;
+                };
+                let substitutions = record
+                    .type_params
+                    .iter()
+                    .zip(type_args)
+                    .map(|(parameter, argument)| (parameter.clone(), argument.clone()))
+                    .collect::<HashMap<_, _>>();
+                let mut seen = HashSet::new();
+                for (field_name, field_pattern) in fields {
+                    if !seen.insert(field_name) {
+                        self.error(
+                            field_pattern.span,
+                            format!("duplicate field {field_name} in record pattern"),
+                        );
+                        continue;
+                    }
+                    let Some(field) = record.fields.iter().find(|field| field.name == *field_name)
+                    else {
+                        self.error(
+                            field_pattern.span,
+                            format!("record {type_name} has no field {field_name}"),
+                        );
+                        continue;
+                    };
+                    let field_type = substitute_generic_type(&field.ty, &substitutions);
+                    self.check_pattern(field_pattern, &field_type, scope, covered, false);
+                }
+            }
             PatternKind::Int(_) => self.expect_type(&Type::Int, expected, pattern.span),
             PatternKind::Bool(value) => {
                 if top_level {
@@ -5427,6 +5571,150 @@ impl<'a> Checker<'a> {
         let ty = self.check_expr_inner(expr, scopes);
         self.normalize_alias(&ty, expr.span)
     }
+    fn check_callable(
+        &mut self,
+        expression: &Expr,
+        expected_params: &[Type],
+        scopes: &[HashMap<String, Variable>],
+    ) -> Type {
+        if let ExprKind::Lambda { params, body } = &expression.kind {
+            if params.len() != expected_params.len() {
+                self.error(
+                    expression.span,
+                    format!(
+                        "lambda expects {} parameter(s) in this operation, found {}",
+                        expected_params.len(),
+                        params.len()
+                    ),
+                );
+            }
+            let mut parameter_scope = HashMap::new();
+            let mut parameter_types = Vec::new();
+            for (index, parameter) in params.iter().enumerate() {
+                let expected = expected_params.get(index).cloned().unwrap_or(Type::Unknown);
+                let ty = if parameter.ty == Type::Unknown {
+                    expected
+                } else {
+                    self.expect_type(&expected, &parameter.ty, parameter.span);
+                    parameter.ty.clone()
+                };
+                parameter_types.push(ty.clone());
+                parameter_scope.insert(parameter.name.clone(), Variable { ty, mutable: false });
+            }
+            let mut lambda_scopes = scopes.to_vec();
+            lambda_scopes.push(parameter_scope);
+            let return_type = self.check_expr(body, &lambda_scopes);
+            return Type::Function {
+                params: parameter_types,
+                return_type: Box::new(return_type),
+                capabilities: Vec::new(),
+            };
+        }
+        let callable = self.check_expr(expression, scopes);
+        let Type::Function {
+            params,
+            return_type,
+            ..
+        } = callable
+        else {
+            self.error(
+                expression.span,
+                "higher-order operation expects a function or lambda",
+            );
+            return Type::Function {
+                params: expected_params.to_vec(),
+                return_type: Box::new(Type::Unknown),
+                capabilities: Vec::new(),
+            };
+        };
+        if params.len() != expected_params.len() {
+            self.error(
+                expression.span,
+                format!(
+                    "callback expects {} parameter(s), expected {}",
+                    params.len(),
+                    expected_params.len()
+                ),
+            );
+        }
+        for (expected, actual) in expected_params.iter().zip(&params) {
+            self.expect_type(expected, actual, expression.span);
+        }
+        Type::Function {
+            params,
+            return_type,
+            capabilities: Vec::new(),
+        }
+    }
+
+    fn check_higher_order_call(
+        &mut self,
+        name: &str,
+        type_args: &[Type],
+        args: &[Expr],
+        span: Span,
+        scopes: &[HashMap<String, Variable>],
+    ) -> Type {
+        if !type_args.is_empty() {
+            self.error(
+                span,
+                format!("`{name}` does not accept explicit type arguments"),
+            );
+        }
+        let (expected_count, callback_index) = match name {
+            "map" | "filter" | "find" => (2, 1),
+            "reduce" => (3, 2),
+            _ => unreachable!(),
+        };
+        if args.len() != expected_count {
+            self.error(
+                span,
+                format!("`{name}` expects {expected_count} argument(s)"),
+            );
+            return Type::Unknown;
+        }
+        let (items, item_type) = match self.check_expr(&args[0], scopes) {
+            Type::Array(item) => (true, *item),
+            Type::Unknown => (true, Type::Unknown),
+            other => {
+                self.error(
+                    args[0].span,
+                    format!("`{name}` expects an array, found `{other}`"),
+                );
+                (false, Type::Unknown)
+            }
+        };
+        if !items {
+            return Type::Unknown;
+        }
+        let callback_params = if name == "reduce" {
+            let accumulator_type = self.check_expr(&args[1], scopes);
+            vec![accumulator_type.clone(), item_type.clone()]
+        } else {
+            vec![item_type.clone()]
+        };
+        let callback = self.check_callable(&args[callback_index], &callback_params, scopes);
+        let Type::Function { return_type, .. } = callback else {
+            unreachable!()
+        };
+        match name {
+            "map" => Type::Array(return_type),
+            "filter" => {
+                self.expect_type(&Type::Bool, &return_type, args[callback_index].span);
+                Type::Array(Box::new(item_type))
+            }
+            "find" => {
+                self.expect_type(&Type::Bool, &return_type, args[callback_index].span);
+                Type::Option(Box::new(item_type))
+            }
+            "reduce" => {
+                let accumulator_type = self.check_expr(&args[1], scopes);
+                self.expect_type(&accumulator_type, &return_type, args[callback_index].span);
+                accumulator_type
+            }
+            _ => Type::Unknown,
+        }
+    }
     fn check_expr_inner(&mut self, expr: &Expr, scopes: &[HashMap<String, Variable>]) -> Type {
         match &expr.kind {
             ExprKind::Int(_) => Type::Int,
@@ -5458,6 +5746,28 @@ impl<'a> Checker<'a> {
                     params: signature.params,
                     return_type: Box::new(signature.return_type),
                     capabilities: signature.capabilities,
+                }
+            }
+            ExprKind::Lambda { params, body } => {
+                let mut lambda_scopes = scopes.to_vec();
+                let mut parameter_types = Vec::with_capacity(params.len());
+                let mut parameter_scope = HashMap::new();
+                for parameter in params {
+                    parameter_types.push(parameter.ty.clone());
+                    parameter_scope.insert(
+                        parameter.name.clone(),
+                        Variable {
+                            ty: parameter.ty.clone(),
+                            mutable: false,
+                        },
+                    );
+                }
+                lambda_scopes.push(parameter_scope);
+                let return_type = self.check_expr(body, &lambda_scopes);
+                Type::Function {
+                    params: parameter_types,
+                    return_type: Box::new(return_type),
+                    capabilities: Vec::new(),
                 }
             }
             ExprKind::Array(values) => {
@@ -5682,7 +5992,47 @@ impl<'a> Checker<'a> {
                 type_args,
                 args,
             } => {
-                if let Some(ty) =
+                if matches!(name.as_str(), "map" | "filter" | "find" | "reduce") {
+                    return self.check_higher_order_call(name, type_args, args, expr.span, scopes);
+                }
+                if name == "render_pdf" {
+                    if !type_args.is_empty() || args.len() != 2 {
+                        self.error(
+                            expr.span,
+                            "render_pdf expects a named View and one record value",
+                        );
+                        return Type::Unknown;
+                    }
+                    let view_type = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::String, &view_type, args[0].span);
+                    if let ExprKind::String(view_name) = &args[0].kind {
+                        if !self
+                            ._program
+                            .views
+                            .iter()
+                            .any(|view| view.name == *view_name)
+                        {
+                            self.error(args[0].span, format!("unknown PDF view `{view_name}`"));
+                        }
+                    }
+                    match self.check_expr(&args[1], scopes) {
+                        Type::Named(name)
+                            if self
+                                ._program
+                                .records
+                                .iter()
+                                .any(|record| record.name == name) => {}
+                        Type::Map(key, _) if *key == Type::String => {}
+                        Type::Unknown => {}
+                        found => self.error(
+                            args[1].span,
+                            format!(
+                                "render_pdf expects a record or Map<String, T>, found `{found}`"
+                            ),
+                        ),
+                    }
+                    return Type::Bytes;
+                } else if let Some(ty) =
                     self.check_enum_constructor(name, type_args, args, expr.span, scopes)
                 {
                     return ty;
@@ -5841,6 +6191,86 @@ impl<'a> Checker<'a> {
                         }
                     }
                     Type::Unit
+                } else if name == "record_update" {
+                    if type_args.len() != 1 || args.is_empty() || args.len() % 2 == 0 {
+                        self.error(
+                            expr.span,
+                            "record update expects a base record followed by field/value pairs",
+                        );
+                        return Type::Unknown;
+                    }
+                    self.check_type(&type_args[0], expr.span);
+                    let expected_record_type = self.normalize_alias(&type_args[0], expr.span);
+                    let actual_record_type = self.check_expr(&args[0], scopes);
+                    self.expect_type(&expected_record_type, &actual_record_type, args[0].span);
+                    let (record_name, type_arguments) = match &expected_record_type {
+                        Type::Named(name) => (Some(name.as_str()), &[][..]),
+                        Type::Applied { name, args } => (Some(name.as_str()), args.as_slice()),
+                        _ => (None, &[][..]),
+                    };
+                    let Some(record_name) = record_name else {
+                        self.error(
+                            args[0].span,
+                            "record update base must have a declared record type",
+                        );
+                        return Type::Unknown;
+                    };
+                    let Some(record) = self
+                        ._program
+                        .records
+                        .iter()
+                        .find(|record| record.name == record_name)
+                        .cloned()
+                    else {
+                        self.error(
+                            args[0].span,
+                            format!("unknown record type `{record_name}` in record update"),
+                        );
+                        return Type::Unknown;
+                    };
+                    if record.is_class {
+                        self.error_with_code(
+                            "E-TYPE-CLASS-001",
+                            args[0].span,
+                            "record update cannot copy or update a class reference",
+                        );
+                        return Type::Unknown;
+                    }
+                    let substitutions = record
+                        .type_params
+                        .iter()
+                        .zip(type_arguments)
+                        .map(|(parameter, argument)| (parameter.clone(), argument.clone()))
+                        .collect::<HashMap<_, _>>();
+                    for pair in args[1..].chunks(2) {
+                        let field_name = match &pair[0].kind {
+                            ExprKind::String(name) => Some(name.as_str()),
+                            _ => {
+                                self.error(
+                                    pair[0].span,
+                                    "record update field name must be a literal field name",
+                                );
+                                None
+                            }
+                        };
+                        let value_type = self.check_expr(&pair[1], scopes);
+                        if let Some(field_name) = field_name {
+                            if let Some(field) =
+                                record.fields.iter().find(|field| field.name == field_name)
+                            {
+                                let field_type = substitute_generic_type(&field.ty, &substitutions);
+                                self.expect_type(&field_type, &value_type, pair[1].span);
+                            } else {
+                                self.error(
+                                    pair[0].span,
+                                    format!(
+                                        "unknown field `{field_name}` in record `{record_name}`"
+                                    ),
+                                );
+                            }
+                        }
+                    }
+                    expected_record_type
                 } else if name == "record_with" {
                     if !type_args.is_empty() || args.len() != 3 {
                         self.error(
@@ -7435,25 +7865,44 @@ impl<'a> Checker<'a> {
                     self.expect_type(&Type::Option(Box::new(Type::String)), &body, args[3].span);
                     Type::Named("HttpResponse".into())
                 } else if name == "mail_queue" {
+                    if !type_args.is_empty() {
+                        self.error(expr.span, "mail_queue does not accept type arguments");
+                    }
                     if self.transaction_depth == 0 {
                         self.error(expr.span, "mail_queue is only allowed inside a transaction");
                     }
-                    if !(3..=4).contains(&args.len()) {
+                    if !matches!(args.len(), 3..=6) {
                         self.error(
                             expr.span,
-                            "mail_queue expects recipient, subject, text body, and an optional HTML body",
+                            "mail_queue expects recipient, subject, text body, optional HTML body, and optional PDF filename and Bytes",
                         );
                         return Type::Unknown;
                     }
-                    for argument in args {
+                    for (index, argument) in args.iter().enumerate() {
+                        let is_pdf_argument = matches!((args.len(), index), (5, 4) | (6, 5));
+                        if is_pdf_argument
+                            && !matches!(
+                                &argument.kind,
+                                ExprKind::Call { name, .. } if name == "render_pdf"
+                            )
+                        {
+                            self.error(
+                                argument.span,
+                                "mail_queue PDF attachments must be produced directly by render_pdf",
+                            );
+                        }
                         if !is_pure_mail_expression(argument) {
                             self.error(
                                 argument.span,
-                                "mail_queue arguments must be literals, values, fields, or pure string concatenations",
+                                "mail_queue arguments must be values or pure expressions; PDF attachments must use render_pdf",
                             );
                         }
                         let actual = self.check_expr(argument, scopes);
-                        self.expect_type(&Type::String, &actual, argument.span);
+                        let expected = match (args.len(), index) {
+                            (5, 4) | (6, 5) => Type::Bytes,
+                            _ => Type::String,
+                        };
+                        self.expect_type(&expected, &actual, argument.span);
                     }
                     Type::Unit
                 } else if name == "mail_deliver" {
@@ -7808,10 +8257,14 @@ impl<'a> Checker<'a> {
                         &value_type,
                         &mut pattern_scope,
                         &mut covered,
-                        true,
+                        arm.guard.is_none(),
                     );
                     let mut arm_scopes = scopes.to_vec();
                     arm_scopes.push(pattern_scope);
+                    if let Some(guard) = &arm.guard {
+                        let guard_type = self.check_expr(guard, &arm_scopes);
+                        self.expect_type(&Type::Bool, &guard_type, guard.span);
+                    }
                     let arm_type = self.check_expr(&arm.value, &arm_scopes);
                     if result_type == Type::Unknown {
                         result_type = arm_type;
@@ -8433,12 +8886,27 @@ pub enum Value {
     Unit,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct FunctionValue {
     pub name: String,
     pub params: Vec<Type>,
     pub return_type: Type,
     pub capabilities: Vec<String>,
+    pub lambda_params: Vec<String>,
+    pub lambda_body: Option<Box<Expr>>,
+    pub captures: Vec<(String, Value)>,
+}
+
+impl PartialEq for FunctionValue {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+            && self.params == other.params
+            && self.return_type == other.return_type
+            && self.capabilities == other.capabilities
+            && self.lambda_params == other.lambda_params
+            && self.captures == other.captures
+            && self.lambda_body.is_some() == other.lambda_body.is_some()
+    }
 }
 
 impl Value {
@@ -8758,9 +9226,12 @@ pub struct RuntimePolicy {
     pub network: Option<NetworkPolicy>,
     pub process: Option<ProcessPolicy>,
     pub mail: Option<MailPolicy>,
-    /// Optional statement budget for CLI, sandbox, and untrusted-code runs.
+    /// Optional statement and expression evaluation budget for CLI, sandbox,
+    /// and untrusted-code runs.
     /// `None` leaves long-running server handlers unrestricted.
     pub step_budget: Option<usize>,
+    /// Maximum language function-call depth. Project settings are capped at 500.
+    pub max_stack_depth: Option<usize>,
 }
 
 impl fmt::Display for RuntimeError {
@@ -8803,6 +9274,21 @@ impl Environment {
             .iter()
             .rev()
             .any(|scope| scope.contains_key(name))
+    }
+    fn is_mutable(&self, name: &str) -> Option<bool> {
+        self.scopes
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(name).map(|variable| variable.mutable))
+    }
+    fn visible_values(&self) -> Vec<(String, Value)> {
+        let mut values = std::collections::BTreeMap::new();
+        for scope in &self.scopes {
+            for (name, variable) in scope {
+                values.insert(name.clone(), variable.value.clone());
+            }
+        }
+        values.into_iter().collect()
     }
     fn get(&self, name: &str) -> Option<Value> {
         self.scopes
@@ -8877,6 +9363,7 @@ pub fn execute_with_capabilities_and_filesystem_policy(
             process: None,
             mail: None,
             step_budget: None,
+            max_stack_depth: None,
         }),
     )
 }
@@ -8905,6 +9392,7 @@ pub fn execute_with_database_and_capabilities_and_filesystem_policy(
             process: None,
             mail: None,
             step_budget: None,
+            max_stack_depth: None,
         }),
     )
 }
@@ -8947,17 +9435,42 @@ pub fn execute_function_with_capabilities_and_policies(
     grants: Option<&HashSet<String>>,
     policy: Option<&RuntimePolicy>,
 ) -> Result<Value, RuntimeError> {
+    let depth = policy
+        .and_then(|policy| policy.max_stack_depth)
+        .unwrap_or(MAX_FUNCTION_CALL_DEPTH);
+    run_on_runtime_stack(runtime_stack_size(depth), || {
+        execute_function_on_runtime_stack(program, name, args, database_url, grants, policy)
+    })
+}
+
+fn execute_function_on_runtime_stack(
+    program: &Program,
+    name: &str,
+    args: Vec<Value>,
+    database_url: Option<&str>,
+    grants: Option<&HashSet<String>>,
+    policy: Option<&RuntimePolicy>,
+) -> Result<Value, RuntimeError> {
     let mut interpreter = Interpreter {
         functions: program
             .functions
             .iter()
             .map(|function| (function.name.clone(), function))
             .collect(),
+        view_definitions: program
+            .views
+            .iter()
+            .map(|view| (view.name.clone(), view.clone()))
+            .collect(),
         output: Vec::new(),
         next_class_object_id: Arc::new(AtomicU64::new(1)),
         parallel_worker: false,
         steps: 0,
         step_budget: policy.as_ref().and_then(|policy| policy.step_budget),
+        call_depth_limit: policy
+            .as_ref()
+            .and_then(|policy| policy.max_stack_depth)
+            .unwrap_or(MAX_FUNCTION_CALL_DEPTH),
         call_depth: 0,
         database_url: database_url.map(str::to_owned),
         storage_schema: zelyra_database::build_schema(program),
@@ -9026,11 +9539,27 @@ pub fn execute_function_with_capabilities_and_filesystem_policy(
             process: None,
             mail: None,
             step_budget: None,
+            max_stack_depth: None,
         }),
     )
 }
 
 fn execute_internal(
+    program: &Program,
+    database_url: Option<String>,
+    granted_capabilities: Option<HashSet<String>>,
+    policy: Option<RuntimePolicy>,
+) -> Result<Vec<String>, RuntimeError> {
+    let depth = policy
+        .as_ref()
+        .and_then(|policy| policy.max_stack_depth)
+        .unwrap_or(MAX_FUNCTION_CALL_DEPTH);
+    run_on_runtime_stack(runtime_stack_size(depth), || {
+        execute_internal_on_runtime_stack(program, database_url, granted_capabilities, policy)
+    })
+}
+
+fn execute_internal_on_runtime_stack(
     program: &Program,
     database_url: Option<String>,
     granted_capabilities: Option<HashSet<String>>,
@@ -9042,11 +9571,20 @@ fn execute_internal(
             .iter()
             .map(|f| (f.name.clone(), f))
             .collect(),
+        view_definitions: program
+            .views
+            .iter()
+            .map(|view| (view.name.clone(), view.clone()))
+            .collect(),
         output: Vec::new(),
         next_class_object_id: Arc::new(AtomicU64::new(1)),
         parallel_worker: false,
         steps: 0,
         step_budget: policy.as_ref().and_then(|policy| policy.step_budget),
+        call_depth_limit: policy
+            .as_ref()
+            .and_then(|policy| policy.max_stack_depth)
+            .unwrap_or(MAX_FUNCTION_CALL_DEPTH),
         call_depth: 0,
         database_url,
         storage_schema: zelyra_database::build_schema(program),
@@ -9080,14 +9618,43 @@ fn execute_internal(
 }
 
 const MAX_FUNCTION_CALL_DEPTH: usize = 20;
+const MAX_CONFIGURED_FUNCTION_CALL_DEPTH: usize = 500;
+
+fn runtime_stack_size(depth: usize) -> usize {
+    2 * 1024 * 1024 + depth.min(MAX_CONFIGURED_FUNCTION_CALL_DEPTH) * 192 * 1024
+}
+
+fn run_on_runtime_stack<T: Send>(
+    stack_size: usize,
+    action: impl FnOnce() -> Result<T, RuntimeError> + Send,
+) -> Result<T, RuntimeError> {
+    std::thread::scope(|scope| {
+        let handle = std::thread::Builder::new()
+            .name("zelyra-runtime".into())
+            .stack_size(stack_size)
+            .spawn_scoped(scope, action)
+            .map_err(|_| RuntimeError {
+                message: "runtime execution thread could not be started".into(),
+                span: Span::default(),
+            })?;
+        handle.join().unwrap_or_else(|_| {
+            Err(RuntimeError {
+                message: "runtime execution thread panicked".into(),
+                span: Span::default(),
+            })
+        })
+    })
+}
 
 struct Interpreter<'program> {
     functions: HashMap<String, &'program Function>,
+    view_definitions: HashMap<String, ViewDef>,
     output: Vec<String>,
     next_class_object_id: Arc<AtomicU64>,
     parallel_worker: bool,
     steps: usize,
     step_budget: Option<usize>,
+    call_depth_limit: usize,
     call_depth: usize,
     database_url: Option<String>,
     storage_schema: Result<zelyra_database::Schema, Vec<zelyra_database::SchemaError>>,
@@ -9194,6 +9761,7 @@ fn statement_span(statement: &Stmt) -> Span {
     match statement {
         Stmt::Let { span, .. }
         | Stmt::BindOrAssign { span, .. }
+        | Stmt::TupleBindOrAssign { span, .. }
         | Stmt::Return { span, .. }
         | Stmt::If { span, .. }
         | Stmt::While { span, .. }
@@ -9236,11 +9804,17 @@ fn is_runtime_builtin(name: &str) -> bool {
         name,
         "print"
             | "assert"
+            | "render_pdf"
             | "len"
             | "range"
             | "array_replace_result"
             | "object_set_field"
             | "record_with"
+            | "record_update"
+            | "map"
+            | "filter"
+            | "find"
+            | "reduce"
             | "append"
             | "tuple"
             | "set"
@@ -10683,10 +11257,13 @@ impl<'program> Interpreter<'program> {
                 ));
             }
         }
-        if self.call_depth >= MAX_FUNCTION_CALL_DEPTH {
+        if self.call_depth >= self.call_depth_limit {
             return Err(self.runtime_error(
                 span,
-                format!("function call depth limit exceeded (maximum {MAX_FUNCTION_CALL_DEPTH})"),
+                format!(
+                    "function call depth limit exceeded (maximum {})",
+                    self.call_depth_limit
+                ),
             ));
         }
         self.call_depth += 1;
@@ -10816,6 +11393,46 @@ impl<'program> Interpreter<'program> {
                     })?;
                 } else {
                     env.declare(name.clone(), value, false);
+                }
+                Ok(Flow::Continue)
+            }
+            Stmt::TupleBindOrAssign { names, value, span } => {
+                let value = self.eval(value, env)?;
+                let Value::Tuple(values) = value else {
+                    return Err(self.runtime_error(
+                        *span,
+                        format!("tuple assignment expects a tuple, found `{}`", value.ty()),
+                    ));
+                };
+                if values.len() != names.len() {
+                    return Err(self.runtime_error(
+                        *span,
+                        format!(
+                            "tuple assignment has {} variables but the value has {} items",
+                            names.len(),
+                            values.len()
+                        ),
+                    ));
+                }
+                for name in names {
+                    if env.is_mutable(name) == Some(false) {
+                        return Err(self.runtime_error(
+                            *span,
+                            format!("cannot assign to immutable variable `{name}`"),
+                        ));
+                    }
+                }
+                for (name, value) in names.iter().zip(values) {
+                    if env.contains(name) {
+                        env.assign(name, value).map_err(|_| {
+                            self.runtime_error(
+                                *span,
+                                format!("cannot assign to immutable variable `{name}`"),
+                            )
+                        })?;
+                    } else {
+                        env.declare(name.clone(), value, false);
+                    }
                 }
                 Ok(Flow::Continue)
             }
@@ -11011,6 +11628,24 @@ impl<'program> Interpreter<'program> {
                         for (name, value) in bindings {
                             env.declare(name, value, false);
                         }
+                        if let Some(guard) = &arm.guard {
+                            let guard_value = self.eval(guard, env);
+                            let guard_matches = match guard_value {
+                                Ok(value) => self.expect_bool(value, guard.span),
+                                Err(error) => Err(error),
+                            };
+                            let guard_matches = match guard_matches {
+                                Ok(value) => value,
+                                Err(error) => {
+                                    env.pop();
+                                    return Err(error);
+                                }
+                            };
+                            if !guard_matches {
+                                env.pop();
+                                continue;
+                            }
+                        }
                         let flow = self.exec_block(&arm.body, env)?;
                         env.pop();
                         return Ok(flow);
@@ -11134,6 +11769,9 @@ impl<'program> Interpreter<'program> {
         span: Span,
     ) -> Result<Value, RuntimeError> {
         match name {
+            "map" | "filter" | "find" | "reduce" => {
+                self.eval_higher_order_builtin(name, args, env, span)
+            }
             "tuple" => {
                 if args.len() < 2 {
                     return Err(self.runtime_error(span, "tuple expects at least two values"));
@@ -11183,6 +11821,152 @@ impl<'program> Interpreter<'program> {
             _ => Err(self.runtime_error(span, format!("unknown collection builtin `{name}`"))),
         }
     }
+
+    fn eval_higher_order_builtin(
+        &mut self,
+        name: &str,
+        args: &[Expr],
+        env: &mut Environment,
+        span: Span,
+    ) -> Result<Value, RuntimeError> {
+        let expected_count = if name == "reduce" { 3 } else { 2 };
+        if args.len() != expected_count {
+            return Err(
+                self.runtime_error(span, format!("`{name}` expects {expected_count} arguments"))
+            );
+        }
+        let values = self.eval(&args[0], env)?;
+        let Value::Array(values) = values else {
+            return Err(self.runtime_error(
+                args[0].span,
+                format!("`{name}` expects an array, found `{}`", values.ty()),
+            ));
+        };
+        let mut callback_index = 1;
+        let mut accumulator = if name == "reduce" {
+            callback_index = 2;
+            Some(self.eval(&args[1], env)?)
+        } else {
+            None
+        };
+        let callback = self.eval(&args[callback_index], env)?;
+        let Value::Function(callback) = callback else {
+            return Err(self.runtime_error(
+                args[callback_index].span,
+                format!("`{name}` expects a function or lambda callback"),
+            ));
+        };
+        match name {
+            "map" => values
+                .into_iter()
+                .map(|value| self.invoke_callback(&callback, vec![value], span))
+                .collect::<Result<Vec<_>, _>>()
+                .map(Value::Array),
+            "filter" => {
+                let mut selected = Vec::new();
+                for value in values {
+                    let keep = self.invoke_callback(&callback, vec![value.clone()], span)?;
+                    match keep {
+                        Value::Bool(true) => selected.push(value),
+                        Value::Bool(false) => {}
+                        other => {
+                            return Err(self.runtime_error(
+                                span,
+                                format!("filter callback must return Bool, found `{}`", other.ty()),
+                            ));
+                        }
+                    }
+                }
+                Ok(Value::Array(selected))
+            }
+            "find" => {
+                for value in values {
+                    match self.invoke_callback(&callback, vec![value.clone()], span)? {
+                        Value::Bool(true) => return Ok(Value::Option(Some(Box::new(value)))),
+                        Value::Bool(false) => {}
+                        other => {
+                            return Err(self.runtime_error(
+                                span,
+                                format!("find callback must return Bool, found `{}`", other.ty()),
+                            ));
+                        }
+                    }
+                }
+                Ok(Value::Option(None))
+            }
+            "reduce" => {
+                let mut current = accumulator
+                    .take()
+                    .expect("reduce accumulator was evaluated above");
+                for value in values {
+                    current = self.invoke_callback(&callback, vec![current, value], span)?;
+                }
+                Ok(current)
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    fn invoke_callback(
+        &mut self,
+        callback: &FunctionValue,
+        args: Vec<Value>,
+        span: Span,
+    ) -> Result<Value, RuntimeError> {
+        if callback.params.len() != args.len() {
+            return Err(self.runtime_error(
+                span,
+                format!(
+                    "callback expects {} argument(s), found {}",
+                    callback.params.len(),
+                    args.len()
+                ),
+            ));
+        }
+        if let Some(caller_capabilities) = self.active_capabilities.last() {
+            let declared = caller_capabilities
+                .iter()
+                .map(String::as_str)
+                .collect::<HashSet<_>>();
+            if let Some(capability) = callback
+                .capabilities
+                .iter()
+                .find(|capability| !function_declares_capability(&declared, capability))
+            {
+                return Err(self.runtime_error(
+                    span,
+                    format!("runtime capability denied: callback requires `{capability}`"),
+                ));
+            }
+        }
+        if callback.lambda_body.is_none() {
+            return self.call_with_type_args(&callback.name, &[], args, span);
+        }
+        if self.call_depth >= self.call_depth_limit {
+            return Err(self.runtime_error(
+                span,
+                format!(
+                    "function call depth limit exceeded (maximum {})",
+                    self.call_depth_limit
+                ),
+            ));
+        }
+        self.call_depth += 1;
+        let mut lambda_env = Environment::new();
+        for (name, value) in &callback.captures {
+            lambda_env.declare(name.clone(), value.clone(), false);
+        }
+        lambda_env.push();
+        for (name, value) in callback.lambda_params.iter().zip(args) {
+            lambda_env.declare(name.clone(), value, false);
+        }
+        let result = self.eval(
+            callback.lambda_body.as_deref().expect("lambda body exists"),
+            &mut lambda_env,
+        );
+        self.call_depth -= 1;
+        result
+    }
     fn eval_call_expr(
         &mut self,
         name: &str,
@@ -11220,7 +12004,7 @@ impl<'program> Interpreter<'program> {
                 .iter()
                 .map(|argument| self.eval(argument, env))
                 .collect::<Result<Vec<_>, _>>()?;
-            return self.call_with_type_args(&function.name, &[], values, span);
+            return self.invoke_callback(&function, values, span);
         }
         if let Some((enum_name, variant)) = name.rsplit_once("::") {
             if let Some(definition) = self.enum_definitions.get(enum_name).cloned() {
@@ -11353,7 +12137,11 @@ impl<'program> Interpreter<'program> {
     ) -> Result<Value, RuntimeError> {
         if matches!(
             name,
-            "tuple"
+            "map"
+                | "filter"
+                | "find"
+                | "reduce"
+                | "tuple"
                 | "set"
                 | "set_add"
                 | "set_remove"
@@ -11365,7 +12153,35 @@ impl<'program> Interpreter<'program> {
         ) {
             return self.eval_language_value_builtin(name, args, env, span);
         }
-        if name == "read_console" {
+        if name == "render_pdf" {
+            if args.len() != 2 || !type_args.is_empty() {
+                return Err(self
+                    .runtime_error(span, "render_pdf expects a named View and one record value"));
+            }
+            let view_name = match self.eval(&args[0], env)? {
+                Value::String(name) => name,
+                value => {
+                    return Err(self.runtime_error(
+                        args[0].span,
+                        format!("render_pdf expects a View name, found {}", value.ty()),
+                    ));
+                }
+            };
+            let mut html = self
+                .view_definitions
+                .get(&view_name)
+                .map(|view| view.html.clone())
+                .ok_or_else(|| {
+                    self.runtime_error(args[0].span, format!("unknown PDF view `{view_name}`"))
+                })?;
+            let data = self.eval(&args[1], env)?;
+            html = html.replace("<slot />", "").replace("<slot/>", "");
+            html = interpolate_pdf_data(&html, &data)
+                .map_err(|message| self.runtime_error(span, message))?;
+            pdf::render_html_to_pdf(&html)
+                .map(Value::Bytes)
+                .map_err(|error| self.runtime_error(span, error))
+        } else if name == "read_console" {
             if args.len() != 1 {
                 return Err(
                     self.runtime_error(span, "read_console expects exactly one String prompt")
@@ -11527,6 +12343,99 @@ impl<'program> Interpreter<'program> {
                 .map_err(|_| self.runtime_error(span, "class object is unavailable"))?;
             object.fields.insert(field_name, value);
             Ok(Value::Unit)
+        } else if name == "record_update" {
+            if type_args.len() != 1 || args.is_empty() || args.len().is_multiple_of(2) {
+                return Err(self.runtime_error(
+                    span,
+                    "record update expects a base record followed by field/value pairs",
+                ));
+            }
+            let expected = self.runtime_alias_type(&type_args[0], span)?;
+            let base = self.eval(&args[0], env)?;
+            let (type_name, type_arguments, mut fields) = match base {
+                Value::Object {
+                    type_name,
+                    type_args,
+                    fields,
+                } => (type_name, type_args, fields),
+                value => {
+                    return Err(self.runtime_error(
+                        args[0].span,
+                        format!("record update expects a record, found `{}`", value.ty()),
+                    ))
+                }
+            };
+            let actual = if type_arguments.is_empty() {
+                Type::Named(type_name.clone())
+            } else {
+                Type::Applied {
+                    name: type_name.clone(),
+                    args: type_arguments.clone(),
+                }
+            };
+            if !compatible(&expected, &actual) {
+                return Err(self.runtime_error(
+                    args[0].span,
+                    format!("record update expects `{expected}`, found `{actual}`"),
+                ));
+            }
+            let definition = self
+                .record_definitions
+                .get(&type_name)
+                .cloned()
+                .ok_or_else(|| {
+                    self.runtime_error(span, format!("unknown record type `{type_name}`"))
+                })?;
+            if definition.is_class {
+                return Err(self.runtime_error(
+                    args[0].span,
+                    "record update cannot copy or update a class reference",
+                ));
+            }
+            let substitutions = definition
+                .type_params
+                .iter()
+                .zip(&type_arguments)
+                .map(|(parameter, argument)| (parameter.clone(), argument.clone()))
+                .collect::<HashMap<_, _>>();
+            for pair in args[1..].chunks(2) {
+                let Value::String(field_name) = self.eval(&pair[0], env)? else {
+                    return Err(self.runtime_error(
+                        pair[0].span,
+                        "record update field name must be a String literal",
+                    ));
+                };
+                let field = definition
+                    .fields
+                    .iter()
+                    .find(|field| field.name == field_name)
+                    .ok_or_else(|| {
+                        self.runtime_error(
+                            pair[0].span,
+                            format!("unknown field `{field_name}` in record `{type_name}`"),
+                        )
+                    })?;
+                let value = self.eval(&pair[1], env)?;
+                let field_type = substitute_generic_type(&field.ty, &substitutions);
+                if !compatible(
+                    &self.runtime_alias_type(&field_type, pair[1].span)?,
+                    &self.runtime_alias_type(&value.ty(), pair[1].span)?,
+                ) {
+                    return Err(self.runtime_error(
+                        pair[1].span,
+                        format!(
+                            "record field `{field_name}` expects `{field_type}`, found `{}`",
+                            value.ty()
+                        ),
+                    ));
+                }
+                fields.insert(field_name, value);
+            }
+            Ok(Value::Object {
+                type_name,
+                type_args: type_arguments,
+                fields,
+            })
         } else if name == "record_with" {
             if !type_args.is_empty() || args.len() != 3 {
                 return Err(self.runtime_error(
@@ -14185,6 +15094,7 @@ impl<'program> Interpreter<'program> {
         }
     }
     fn eval(&mut self, expr: &Expr, env: &mut Environment) -> Result<Value, RuntimeError> {
+        self.consume_step(expr.span)?;
         match &expr.kind {
             ExprKind::Int(v) => Ok(Value::Int(*v)),
             ExprKind::UInt(v) => Ok(Value::UInt(*v)),
@@ -14213,8 +15123,26 @@ impl<'program> Interpreter<'program> {
                         .collect(),
                     return_type: function.return_type.clone().unwrap_or(Type::Unit),
                     capabilities: function.capabilities.clone(),
+                    lambda_params: Vec::new(),
+                    lambda_body: None,
+                    captures: Vec::new(),
                 })))
             }
+            ExprKind::Lambda { params, body } => Ok(Value::Function(Box::new(FunctionValue {
+                name: "<lambda>".into(),
+                params: params
+                    .iter()
+                    .map(|parameter| parameter.ty.clone())
+                    .collect(),
+                return_type: Type::Unknown,
+                capabilities: Vec::new(),
+                lambda_params: params
+                    .iter()
+                    .map(|parameter| parameter.name.clone())
+                    .collect(),
+                lambda_body: Some(body.clone()),
+                captures: env.visible_values(),
+            }))),
             ExprKind::Array(values) => values
                 .iter()
                 .map(|value| self.eval(value, env))
@@ -14418,6 +15346,24 @@ impl<'program> Interpreter<'program> {
                         env.push();
                         for (name, value) in bindings {
                             env.declare(name, value, false);
+                        }
+                        if let Some(guard) = &arm.guard {
+                            let guard_value = self.eval(guard, env);
+                            let guard_matches = match guard_value {
+                                Ok(value) => self.expect_bool(value, guard.span),
+                                Err(error) => Err(error),
+                            };
+                            let guard_matches = match guard_matches {
+                                Ok(value) => value,
+                                Err(error) => {
+                                    env.pop();
+                                    return Err(error);
+                                }
+                            };
+                            if !guard_matches {
+                                env.pop();
+                                continue;
+                            }
                         }
                         let result = self.eval(&arm.value, env);
                         env.pop();
@@ -14679,6 +15625,19 @@ fn is_pure_mail_expression(expression: &Expr) -> bool {
     match &expression.kind {
         ExprKind::String(_) | ExprKind::Variable(_) => true,
         ExprKind::Field { target, .. } => is_pure_mail_expression(target),
+        ExprKind::Record { fields, .. } => fields
+            .iter()
+            .all(|(_, value)| is_pure_mail_expression(value)),
+        ExprKind::Map(entries) => entries
+            .iter()
+            .all(|(key, value)| is_pure_mail_expression(key) && is_pure_mail_expression(value)),
+        ExprKind::Call { name, args, .. }
+            if name == "render_pdf"
+                && args.len() == 2
+                && matches!(args[0].kind, ExprKind::String(_)) =>
+        {
+            is_pure_mail_expression(&args[1])
+        }
         ExprKind::Binary {
             left,
             op: BinaryOp::Add,
@@ -14754,10 +15713,10 @@ fn transaction_queries(
                         "mail_queue must be a standalone statement inside a transaction",
                     ));
                 }
-                if !(3..=4).contains(&args.len()) {
+                if !matches!(args.len(), 3..=6) {
                     return Err(interpreter.runtime_error(
                         expression.span,
-                        "mail_queue expects recipient, subject, text body, and an optional HTML body",
+                        "mail_queue expects recipient, subject, text body, optional HTML body, and optional PDF filename and Bytes",
                     ));
                 }
                 if args
@@ -14766,7 +15725,7 @@ fn transaction_queries(
                 {
                     return Err(interpreter.runtime_error(
                         expression.span,
-                        "mail_queue arguments must be literals, values, fields, or pure string concatenations",
+                        "mail_queue arguments must be values or pure expressions; PDF attachments must use render_pdf",
                     ));
                 }
                 interpreter.require_runtime_capability(
@@ -14791,38 +15750,97 @@ fn transaction_queries(
                         "mail_queue currently requires MariaDB or MySQL; PostgreSQL outbox support is not available",
                     ));
                 }
-                let mut values = Vec::with_capacity(args.len());
+                let mut evaluated = Vec::with_capacity(args.len());
                 for argument in args {
-                    match interpreter.eval(argument, env)? {
-                        Value::String(value) => values.push(value),
-                        value => {
+                    evaluated.push(interpreter.eval(argument, env)?);
+                }
+                let string_argument = |index: usize| -> Result<String, RuntimeError> {
+                    match evaluated.get(index) {
+                        Some(Value::String(value)) => Ok(value.clone()),
+                        Some(value) => Err(interpreter.runtime_error(
+                            args[index].span,
+                            format!("mail_queue expects String argument, found {}", value.ty()),
+                        )),
+                        None => Err(interpreter.runtime_error(
+                            expression.span,
+                            "mail_queue is missing a required argument",
+                        )),
+                    }
+                };
+                let to = string_argument(0)?;
+                let subject = string_argument(1)?;
+                let text_body = string_argument(2)?;
+                let html = match args.len() {
+                    4 | 6 => Some(string_argument(3)?),
+                    _ => None,
+                };
+                let attachment_start = match args.len() {
+                    5 => Some(3),
+                    6 => Some(4),
+                    _ => None,
+                };
+                let attachment_storage = if let Some(start) = attachment_start {
+                    let filename = string_argument(start)?;
+                    let bytes = match evaluated.get(start + 1) {
+                        Some(Value::Bytes(bytes)) => bytes.clone(),
+                        Some(value) => {
                             return Err(interpreter.runtime_error(
-                                argument.span,
+                                args[start + 1].span,
                                 format!(
-                                    "mail_queue expects String arguments, found {}",
+                                    "mail_queue PDF attachment expects Bytes, found {}",
                                     value.ty()
                                 ),
                             ));
                         }
-                    }
-                }
-                let html = values.get(3).map(String::as_str);
+                        None => {
+                            return Err(interpreter.runtime_error(
+                                expression.span,
+                                "mail_queue is missing PDF attachment bytes",
+                            ));
+                        }
+                    };
+                    Some((filename, bytes))
+                } else {
+                    None
+                };
+                let attachment_refs = attachment_storage
+                    .as_ref()
+                    .map(|(filename, bytes)| {
+                        vec![zelyra_mail::MailAttachment {
+                            filename,
+                            content_type: "application/pdf",
+                            bytes,
+                        }]
+                    })
+                    .unwrap_or_default();
                 let mail_message = zelyra_mail::MailMessage {
-                    to: &values[0],
-                    subject: &values[1],
-                    text_body: &values[2],
-                    html_body: html,
+                    to: &to,
+                    subject: &subject,
+                    text_body: &text_body,
+                    html_body: html.as_deref(),
                     message_id: None,
+                    attachments: &attachment_refs,
                 };
                 zelyra_mail::validate_message(&mail_message).map_err(|_| {
                     interpreter
                         .runtime_error(expression.span, "mail_queue received an invalid message")
                 })?;
+                let attachments_json = attachment_storage
+                    .as_ref()
+                    .map(|(filename, bytes)| {
+                        vec![serde_json::json!({
+                            "filename": filename,
+                            "content_type": "application/pdf",
+                            "content": base64_encode_bytes(bytes),
+                        })]
+                    })
+                    .unwrap_or_default();
                 let payload = serde_json::json!({
-                    "to": &values[0],
-                    "subject": &values[1],
-                    "text": &values[2],
+                    "to": &to,
+                    "subject": &subject,
+                    "text": &text_body,
                     "html": html,
+                    "attachments": attachments_json,
                 })
                 .to_string();
                 if payload.len() > zelyra_database::outbox::MAX_EVENT_PAYLOAD_BYTES {
@@ -14920,6 +15938,23 @@ fn match_pattern(value: &Value, pattern: &Pattern) -> Option<Vec<(String, Value)
                 let mut bindings = Vec::new();
                 for (value, pattern) in payloads.iter().zip(patterns) {
                     bindings.extend(match_pattern(value, pattern)?);
+                }
+                Some(bindings)
+            }
+            _ => None,
+        },
+        PatternKind::Record {
+            type_name,
+            fields: patterns,
+        } => match value {
+            Value::Object {
+                type_name: actual,
+                fields,
+                ..
+            } if actual == type_name => {
+                let mut bindings = Vec::new();
+                for (name, pattern) in patterns {
+                    bindings.extend(match_pattern(fields.get(name)?, pattern)?);
                 }
                 Some(bindings)
             }

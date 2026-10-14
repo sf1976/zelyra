@@ -38,11 +38,13 @@ impl Interpreter<'_> {
                 .map(|(name, expression, branch_span)| {
                     let mut child = Interpreter {
                         functions: self.functions.clone(),
+                        view_definitions: self.view_definitions.clone(),
                         output: Vec::new(),
                         next_class_object_id: Arc::clone(&self.next_class_object_id),
                         parallel_worker: true,
                         steps: 0,
                         step_budget: self.step_budget,
+                        call_depth_limit: self.call_depth_limit,
                         call_depth: 0,
                         database_url: self.database_url.clone(),
                         storage_schema: self.storage_schema.clone(),
@@ -60,25 +62,41 @@ impl Interpreter<'_> {
                         active_type_substitutions: self.active_type_substitutions.clone(),
                     };
                     let mut child_env = env.clone();
-                    scope.spawn(move || {
-                        child
-                            .eval(expression, &mut child_env)
-                            .map(|value| ((*name).to_owned(), value, child.output))
-                            .map_err(|error| (*branch_span, error))
-                    })
+                    let stack_size = runtime_stack_size(child.call_depth_limit);
+                    std::thread::Builder::new()
+                        .name("zelyra-parallel".into())
+                        .stack_size(stack_size)
+                        .spawn_scoped(scope, move || {
+                            child
+                                .eval(expression, &mut child_env)
+                                .map(|value| ((*name).to_owned(), value, child.output))
+                                .map_err(|error| (*branch_span, error))
+                        })
                 })
                 .collect::<Vec<_>>();
             for handle in handles {
-                match handle.join() {
-                    Ok(Ok(result)) => results.push(result),
-                    Ok(Err((_, error))) => {
-                        if first_error.is_none() {
-                            first_error = Some(error);
+                match handle {
+                    Ok(handle) => match handle.join() {
+                        Ok(Ok(result)) => results.push(result),
+                        Ok(Err((_, error))) => {
+                            if first_error.is_none() {
+                                first_error = Some(error);
+                            }
                         }
-                    }
+                        Err(_) => {
+                            if first_error.is_none() {
+                                first_error =
+                                    Some(self.runtime_error(span, "parallel task panicked"));
+                            }
+                        }
+                    },
                     Err(_) => {
                         if first_error.is_none() {
-                            first_error = Some(self.runtime_error(span, "parallel task panicked"));
+                            first_error =
+                                Some(self.runtime_error(
+                                    span,
+                                    "parallel task thread could not be started",
+                                ));
                         }
                     }
                 }

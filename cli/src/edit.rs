@@ -899,7 +899,9 @@ fn collect_function_block(
 ) {
     for statement in &block.statements {
         match statement {
-            zelyra_ast::Stmt::Let { value, .. } | zelyra_ast::Stmt::BindOrAssign { value, .. } => {
+            zelyra_ast::Stmt::Let { value, .. }
+            | zelyra_ast::Stmt::BindOrAssign { value, .. }
+            | zelyra_ast::Stmt::TupleBindOrAssign { value, .. } => {
                 collect_function_expression(value, name, spans);
             }
             zelyra_ast::Stmt::Expr(expression) => {
@@ -1012,6 +1014,9 @@ fn collect_function_expression(
             for arm in arms {
                 collect_function_expression(&arm.value, name, spans);
             }
+        }
+        zelyra_ast::ExprKind::Lambda { body, .. } => {
+            collect_function_expression(body, name, spans);
         }
         zelyra_ast::ExprKind::Int(_)
         | zelyra_ast::ExprKind::UInt(_)

@@ -137,6 +137,7 @@ impl PasswordResetMailer {
                 text_body: &body,
                 html_body: None,
                 message_id: None,
+                attachments: &[],
             })
             .map_err(|error| error.to_string())
         });

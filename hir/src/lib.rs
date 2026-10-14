@@ -74,6 +74,11 @@ pub enum HirStmt {
         value: HirExpr,
         span: Span,
     },
+    TupleBindOrAssign {
+        bindings: Vec<HirTupleBinding>,
+        value: HirExpr,
+        span: Span,
+    },
     Expr(HirExpr),
     Return {
         value: Option<HirExpr>,
@@ -127,8 +132,16 @@ pub enum HirStmt {
 }
 
 #[derive(Clone, Debug)]
+pub struct HirTupleBinding {
+    pub name: String,
+    pub local: LocalId,
+    pub is_new: bool,
+}
+
+#[derive(Clone, Debug)]
 pub struct HirMatchArm {
     pub pattern: HirPattern,
+    pub guard: Option<HirExpr>,
     pub body: HirBlock,
     pub span: Span,
 }
@@ -159,6 +172,10 @@ pub enum HirPatternKind {
         variant: String,
         payloads: Vec<HirPattern>,
     },
+    Record {
+        type_name: String,
+        fields: Vec<(String, HirPattern)>,
+    },
     Int(i64),
     Bool(bool),
     String(String),
@@ -185,6 +202,10 @@ pub enum HirExprKind {
         type_name: String,
         type_args: Vec<Type>,
         fields: Vec<(String, HirExpr)>,
+    },
+    Lambda {
+        params: Vec<HirLambdaParam>,
+        body: Box<HirExpr>,
     },
     Local(LocalId),
     EnumVariant {
@@ -234,8 +255,16 @@ pub enum HirExprKind {
 }
 
 #[derive(Clone, Debug)]
+pub struct HirLambdaParam {
+    pub name: String,
+    pub local: LocalId,
+    pub ty: Type,
+}
+
+#[derive(Clone, Debug)]
 pub struct HirMatchExprArm {
     pub pattern: HirPattern,
+    pub guard: Option<HirExpr>,
     pub value: HirExpr,
     pub span: Span,
 }
@@ -412,6 +441,33 @@ impl<'a> Resolver<'a> {
                     }
                 }
             }
+            Stmt::TupleBindOrAssign { names, value, span } => {
+                let value = self.expr(value);
+                let bindings = names
+                    .iter()
+                    .map(|name| {
+                        if let Some(local) = self.lookup(name) {
+                            HirTupleBinding {
+                                name: name.clone(),
+                                local,
+                                is_new: false,
+                            }
+                        } else {
+                            let local = self.bind(name.clone(), *span);
+                            HirTupleBinding {
+                                name: name.clone(),
+                                local,
+                                is_new: true,
+                            }
+                        }
+                    })
+                    .collect();
+                HirStmt::TupleBindOrAssign {
+                    bindings,
+                    value,
+                    span: *span,
+                }
+            }
             Stmt::Expr(expr) => HirStmt::Expr(self.expr(expr)),
             Stmt::Return { value, span } => HirStmt::Return {
                 value: value.as_ref().map(|value| self.expr(value)),
@@ -489,10 +545,12 @@ impl<'a> Resolver<'a> {
                     .map(|arm| {
                         self.scopes.push(HashMap::new());
                         let pattern = self.pattern(&arm.pattern);
+                        let guard = arm.guard.as_ref().map(|guard| self.expr(guard));
                         let body = self.block(&arm.body);
                         self.scopes.pop();
                         HirMatchArm {
                             pattern,
+                            guard,
                             body,
                             span: arm.span,
                         }
@@ -573,6 +631,13 @@ impl<'a> Resolver<'a> {
                     .map(|payload| self.pattern(payload))
                     .collect(),
             },
+            PatternKind::Record { type_name, fields } => HirPatternKind::Record {
+                type_name: type_name.clone(),
+                fields: fields
+                    .iter()
+                    .map(|(name, pattern)| (name.clone(), self.pattern(pattern)))
+                    .collect(),
+            },
             PatternKind::Int(value) => HirPatternKind::Int(*value),
             PatternKind::Bool(value) => HirPatternKind::Bool(*value),
             PatternKind::String(value) => HirPatternKind::String(value.clone()),
@@ -615,6 +680,20 @@ impl<'a> Resolver<'a> {
                     .map(|(name, value)| (name.clone(), self.expr(value)))
                     .collect(),
             },
+            ExprKind::Lambda { params, body } => {
+                self.scopes.push(HashMap::new());
+                let params = params
+                    .iter()
+                    .map(|param| HirLambdaParam {
+                        name: param.name.clone(),
+                        local: self.bind(param.name.clone(), param.span),
+                        ty: param.ty.clone(),
+                    })
+                    .collect();
+                let body = Box::new(self.expr(body));
+                self.scopes.pop();
+                HirExprKind::Lambda { params, body }
+            }
             ExprKind::FunctionValue(name) => {
                 let function = self.functions.get(name).copied();
                 if function.is_none() {
@@ -665,6 +744,11 @@ impl<'a> Resolver<'a> {
                             | "array_replace_result"
                             | "object_set_field"
                             | "record_with"
+                            | "record_update"
+                            | "map"
+                            | "filter"
+                            | "find"
+                            | "reduce"
                             | "append"
                             | "tuple"
                             | "set"
@@ -796,6 +880,7 @@ impl<'a> Resolver<'a> {
                             | "http_json"
                             | "http_result"
                             | "mail_queue"
+                            | "render_pdf"
                             | "mail_deliver"
                             | "run_process"
                             | "read_text"
@@ -850,10 +935,12 @@ impl<'a> Resolver<'a> {
                     .map(|arm| {
                         self.scopes.push(HashMap::new());
                         let pattern = self.pattern(&arm.pattern);
+                        let guard = arm.guard.as_ref().map(|guard| self.expr(guard));
                         let value = self.expr(&arm.value);
                         self.scopes.pop();
                         HirMatchExprArm {
                             pattern,
+                            guard,
                             value,
                             span: arm.span,
                         }

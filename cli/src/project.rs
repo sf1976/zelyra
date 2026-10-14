@@ -1200,7 +1200,9 @@ impl TypeLinker<'_> {
                     }
                     self.rewrite_expression_types(value)?;
                 }
-                Stmt::BindOrAssign { value, .. } | Stmt::Expr(value) => {
+                Stmt::BindOrAssign { value, .. }
+                | Stmt::TupleBindOrAssign { value, .. }
+                | Stmt::Expr(value) => {
                     self.rewrite_expression_types(value)?;
                 }
                 Stmt::Return {
@@ -1482,6 +1484,12 @@ impl TypeLinker<'_> {
                     self.rewrite_expression_types(value)?;
                 }
             }
+            ExprKind::Lambda { params, body } => {
+                for parameter in params {
+                    self.rewrite_type(&mut parameter.ty, parameter.span)?;
+                }
+                self.rewrite_expression_types(body)?;
+            }
             ExprKind::Index { target, index } => {
                 self.rewrite_expression_types(target)?;
                 self.rewrite_expression_types(index)?;
@@ -1592,7 +1600,9 @@ fn rewrite_block(
 ) -> Result<(), ProjectError> {
     for statement in &mut block.statements {
         match statement {
-            Stmt::Let { value, .. } | Stmt::BindOrAssign { value, .. } => rewrite_expr(
+            Stmt::Let { value, .. }
+            | Stmt::BindOrAssign { value, .. }
+            | Stmt::TupleBindOrAssign { value, .. } => rewrite_expr(
                 value,
                 module_path,
                 module_name,
@@ -2090,6 +2100,18 @@ fn rewrite_expr(
                 )?;
             }
         }
+        ExprKind::Lambda { body, .. } => rewrite_expr(
+            body,
+            module_path,
+            module_name,
+            imports,
+            local_functions,
+            function_sets,
+            module_names,
+            root_functions,
+            display_path,
+            is_root,
+        )?,
         ExprKind::FunctionValue(name) => {
             if name.contains("::") && local_functions.contains_key(name) {
                 return Err(project_error(
@@ -2254,6 +2276,20 @@ fn rewrite_pattern_enum_names(
             if let Some(inner) = inner {
                 rewrite_pattern_enum_names(
                     inner,
+                    module_path,
+                    module_name,
+                    imports,
+                    function_sets,
+                    module_names,
+                    display_path,
+                    is_root,
+                )?;
+            }
+        }
+        PatternKind::Record { fields, .. } => {
+            for (_, field_pattern) in fields {
+                rewrite_pattern_enum_names(
+                    field_pattern,
                     module_path,
                     module_name,
                     imports,

@@ -53,6 +53,280 @@ fn if_expressions_return_the_selected_branch_value() {
 }
 
 #[test]
+fn render_pdf_uses_named_views_record_data_and_escapes_interpolations() {
+    let source = r#"
+struct Invoice { number: String customer: String }
+view InvoicePrint {
+    html { <html><body><h1>Rechnung {number}</h1><p>{customer}</p><slot /></body></html> }
+}
+fn main() {
+    invoice = Invoice { number: "R-104", customer: "<script>alert(1)</script>" }
+    document = render_pdf("InvoicePrint", invoice)
+    print(len(document))
+}
+"#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap_or_else(|errors| panic!("PDF view check failed: {errors:?}"));
+    let output = execute(&program).unwrap();
+    let length = output[0].parse::<usize>().unwrap();
+    assert!(length > 500, "expected a non-empty PDF document");
+}
+
+#[test]
+fn pdf_view_templates_expand_zelyra_collection_blocks() {
+    let row = |description: &str, amount: &str| Value::Object {
+        type_name: "InvoiceLine".into(),
+        type_args: Vec::new(),
+        fields: HashMap::from([
+            ("description".into(), Value::String(description.into())),
+            ("amount".into(), Value::String(amount.into())),
+        ]),
+    };
+    let invoice = Value::Object {
+        type_name: "Invoice".into(),
+        type_args: Vec::new(),
+        fields: HashMap::from([(
+            "lines".into(),
+            Value::Array(vec![row("Consulting", "125.00"), row("Hosting", "25.00")]),
+        )]),
+    };
+    let html = "<table>\nfor line in lines {\n<tr><td>{line.description}</td><td>{line.amount}</td></tr>\n}\n</table>";
+    let rendered = interpolate_pdf_data(html, &invoice).unwrap();
+    assert!(rendered.contains("Consulting"));
+    assert!(rendered.contains("Hosting"));
+    assert!(!rendered.contains("for line in lines"));
+    let pdf = pdf::render_html_to_pdf(&rendered).unwrap();
+    assert!(pdf
+        .windows(b"Consulting".len())
+        .any(|window| window == b"Consulting"));
+    assert!(pdf
+        .windows(b"Hosting".len())
+        .any(|window| window == b"Hosting"));
+}
+
+#[test]
+fn pdf_view_template_expansion_has_deterministic_output_and_row_limits() {
+    let html = "for row in rows {x}\n";
+    let rows = Value::Array(vec![
+        Value::String("row".into());
+        pdf_template::MAX_PDF_TEMPLATE_ROWS + 1
+    ]);
+    let data = Value::Object {
+        type_name: "Report".into(),
+        type_args: Vec::new(),
+        fields: HashMap::from([("rows".into(), rows)]),
+    };
+    assert_eq!(
+        interpolate_pdf_data(html, &data).unwrap_err(),
+        "PDF view exceeds its 10000 row rendering limit"
+    );
+
+    let large_value = Value::Object {
+        type_name: "Report".into(),
+        type_args: Vec::new(),
+        fields: HashMap::from([("label".into(), Value::String("&".repeat(600_000)))]),
+    };
+    assert_eq!(
+        interpolate_pdf_data("{label}", &large_value).unwrap_err(),
+        pdf_template::PDF_TEMPLATE_LIMIT_ERROR
+    );
+}
+
+#[test]
+fn render_pdf_requires_an_existing_view_and_record_data() {
+    let missing_view = parse(
+        &lex("struct Invoice { number: String } fn main() { print(render_pdf(\"Missing\", Invoice { number: \"1\" })) }")
+            .unwrap(),
+    )
+    .unwrap();
+    let diagnostics = check(&missing_view).expect_err("unknown views should fail at compile time");
+    assert!(diagnostics
+        .iter()
+        .any(|error| error.message.contains("unknown PDF view")));
+
+    let invalid_data = parse(
+        &lex("view Receipt { html { <body><slot /></body> } } fn main() { print(render_pdf(\"Receipt\", 42)) }")
+            .unwrap(),
+    )
+    .unwrap();
+    let diagnostics = check(&invalid_data).expect_err("PDF data must be a record or string map");
+    assert!(diagnostics
+        .iter()
+        .any(|error| error.message.contains("record or Map<String, T>")));
+}
+
+#[test]
+fn pdf_bytes_are_accepted_as_pure_transactional_outbox_attachments() {
+    let source = r#"
+struct Invoice { number: String }
+view InvoicePrint { html { <html><body><h1>Invoice {number}</h1><slot /></body></html> } }
+fn main() uses Email, Database(write) {
+    invoice = Invoice { number: "R-105" }
+    transaction {
+        mail_queue("customer@example.test", "Invoice", "Attached", "invoice-R-105.pdf", render_pdf("InvoicePrint", invoice))
+    }
+}
+"#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap_or_else(|errors| panic!("PDF mail outbox check failed: {errors:?}"));
+
+    let arbitrary_bytes = parse(
+        &lex(
+            r#"fn main() uses Email, Database(write) {
+                document = bytes("not a PDF")
+                transaction {
+                    mail_queue("customer@example.test", "Invoice", "Attached", "invoice.pdf", document)
+                }
+            }"#,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let errors = check(&arbitrary_bytes).expect_err("attachments must come from the PDF renderer");
+    assert!(errors
+        .iter()
+        .any(|error| error.message.contains("produced directly by render_pdf")));
+}
+
+#[test]
+fn lambdas_capture_values_and_collection_pipelines_map_filter_find_and_reduce() {
+    let source = r#"
+fn main() {
+    factor = 3
+    values = [1, 2, 3, 4]
+    transformed = values |> filter(|n| n > 1) |> map(|n| n * factor)
+    total = transformed |> reduce(0, |sum, n| sum + n)
+    print(transformed[0])
+    print(transformed[2])
+    print(total)
+    match transformed |> find(|n| n == 9) {
+        Some(value) => { print(value) }
+        None => { print(0) }
+    }
+}
+"#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap_or_else(|errors| panic!("lambda type check failed: {errors:?}"));
+    assert_eq!(execute(&program).unwrap(), ["6", "12", "27", "9"]);
+}
+
+#[test]
+fn higher_order_functions_accept_typed_function_values() {
+    let source = "fn double(value: Int) -> Int { return value * 2 } fn main() { values = [2, 4] |> map(&double) print(values[0]) print(values[1]) }";
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap();
+    assert_eq!(execute(&program).unwrap(), ["4", "8"]);
+}
+
+#[test]
+fn match_guards_and_nested_record_patterns_select_and_bind_fields() {
+    let source = r#"
+struct Order { status: String total: Int }
+fn main() {
+    order = Order { status: "paid", total: 42 }
+    match order {
+        Order { status: "paid", total } if total > 40 => { print(total) }
+        Order { status: "paid", total } => { print(total + 1) }
+        _ => { print(0) }
+    }
+    print(match order {
+        Order { status: "paid", total } if total > 50 => total
+        Order { status: "paid", total } => total
+        _ => 0
+    })
+}
+"#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap_or_else(|errors| panic!("record match type check failed: {errors:?}"));
+    assert_eq!(execute(&program).unwrap(), ["42", "42"]);
+}
+
+#[test]
+fn guarded_match_arm_does_not_prove_exhaustiveness() {
+    let program = parse(
+        &lex("fn main() { value = true match value { true if false => { print(1) } false => { print(0) } } }")
+            .unwrap(),
+    )
+    .unwrap();
+    let errors = check(&program).expect_err("a guarded true pattern can still fall through");
+    assert!(errors.iter().any(|error| {
+        error.code == "E-TYPE-MATCH-001" && error.message.contains("missing: true")
+    }));
+}
+
+#[test]
+fn record_updates_copy_values_and_contextual_field_names_work() {
+    let source = r#"
+struct Invoice {
+    version: Int
+    type: String
+    status: Bool
+}
+fn main() {
+    original = Invoice { version: 7, type: "sale", status: true }
+    changed = Invoice { ..original, status: false }
+    print(original.status)
+    print(changed.version)
+    print(changed.type)
+    print(changed.status)
+}
+"#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap();
+    assert_eq!(execute(&program).unwrap(), ["true", "7", "sale", "false"]);
+}
+
+#[test]
+fn tuples_work_as_function_returns_and_indexable_values() {
+    let source = r#"
+fn coordinates() -> Tuple<Int, String> { return (4, "A-12") }
+fn main() {
+    point = coordinates()
+    print(point[0])
+    print(point[1])
+}
+"#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap();
+    assert_eq!(execute(&program).unwrap(), ["4", "A-12"]);
+}
+
+#[test]
+fn tuple_destructuring_binds_and_updates_variables_once() {
+    let source = r#"
+fn coordinates() -> Tuple<Int, String> { return (4, "A-12") }
+fn main() {
+    (x, caption) = coordinates()
+    mutable current_x: Int = 0
+    mutable current_label: String = ""
+    (current_x, current_label) = coordinates()
+    print(x)
+    print(caption)
+    print(current_x)
+    print(current_label)
+}
+"#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap();
+    assert_eq!(execute(&program).unwrap(), ["4", "A-12", "4", "A-12"]);
+}
+
+#[test]
+fn tuple_destructuring_rejects_immutable_targets_and_arity_mismatches() {
+    let immutable = parse(&lex("fn main() { x = 0 (x, y) = (1, 2) }").unwrap()).unwrap();
+    let immutable_error = check(&immutable).expect_err("an immutable target cannot be reassigned");
+    assert!(immutable_error.iter().any(|error| error
+        .message
+        .contains("cannot assign to immutable variable `x`")));
+
+    let wrong_arity = parse(&lex("fn main() { (x, y) = (1, 2, 3) }").unwrap()).unwrap();
+    let arity_error = check(&wrong_arity).expect_err("tuple assignment arity must match");
+    assert!(arity_error.iter().any(|error| error
+        .message
+        .contains("has 2 variables but the value has 3 items")));
+}
+
+#[test]
 fn classes_share_identity_and_mutate_checked_fields() {
     let source = r#"
 class Counter { value: Int }
@@ -817,7 +1091,19 @@ fn main() {
 }
 
 #[test]
-fn opt_in_statement_budget_stops_empty_infinite_loops_with_source_span() {
+fn opt_in_step_budget_counts_expression_evaluations_and_reports_the_exact_span() {
+    let source = "fn main() { value = 1 + 2 }";
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap();
+    let policy = RuntimePolicy {
+        step_budget: Some(3),
+        ..RuntimePolicy::default()
+    };
+    let error = execute_with_capabilities_and_policies(&program, None, Some(&policy))
+        .expect_err("the expression node budget must stop the fourth evaluation step");
+    assert!(error.message.contains("execution step budget exceeded"));
+    assert_eq!(error.span.start, source.rfind('2').unwrap());
+
     let program = parse(&lex("fn main() { loop { } }").unwrap()).unwrap();
     check(&program).unwrap();
     let policy = RuntimePolicy {
@@ -832,6 +1118,77 @@ fn opt_in_statement_budget_stops_empty_infinite_loops_with_source_span() {
     let finite = parse(&lex("fn main() { for value in 0..3 { print(value) } }").unwrap()).unwrap();
     let output = execute_with_capabilities_and_policies(&finite, None, Some(&policy)).unwrap();
     assert_eq!(output, ["0", "1", "2"]);
+}
+
+#[test]
+fn configured_call_depth_can_raise_the_default_within_the_runtime_policy() {
+    let source = "fn descend(n: Int) -> Int { if n == 0 { return 0 } return descend(n - 1) + 1 } fn main() { print(descend(24)) }";
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap();
+    let policy = RuntimePolicy {
+        max_stack_depth: Some(40),
+        ..RuntimePolicy::default()
+    };
+    assert_eq!(
+        execute_with_capabilities_and_policies(&program, None, Some(&policy)).unwrap(),
+        ["24"]
+    );
+    let error = execute(&program).expect_err("the conservative default remains in force");
+    assert!(error.message.contains("maximum 20"));
+}
+
+#[test]
+fn id_aliases_reject_integer_literals_but_integer_domain_aliases_remain_transparent() {
+    let identity = parse(
+        &lex("type OrderId = Id fn load(id: OrderId) -> OrderId { return id } fn main() { print(load(501)) }")
+            .unwrap(),
+    )
+    .unwrap();
+    let errors = check(&identity).expect_err("an integer literal cannot become a database Id");
+    assert!(errors.iter().any(|error| {
+        error.code == "E-TYPE-001"
+            && error.message.contains("expected `OrderId`")
+            && error.message.contains("found `Int`")
+    }));
+
+    let ordinary = parse(
+        &lex("type OrderNumber = Int fn load(number: OrderNumber) -> OrderNumber { return number } fn main() { print(load(501)) }")
+            .unwrap(),
+    )
+    .unwrap();
+    check(&ordinary).expect("ordinary integer domain aliases accept integer literals");
+}
+
+#[test]
+fn transaction_requires_a_database_runtime_only_when_executed() {
+    let program = parse(&lex("fn main() { transaction { value = 1 } }").unwrap()).unwrap();
+    check(&program).expect("transaction syntax and types can be checked offline");
+    let error = execute(&program).expect_err("executing a transaction needs a database runtime");
+    assert!(error
+        .message
+        .contains("transaction execution requires a database runtime"));
+}
+
+#[test]
+fn api_error_payload_requires_a_result_output() {
+    let missing_result = parse(
+        &lex("struct Problem { message: String } api GET \"/items\" { output String errors { 400 BadRequest: Problem } } fn main() { }")
+            .unwrap(),
+    )
+    .unwrap();
+    let errors = check_apis(&missing_result).expect_err("payload errors require Result output");
+    assert!(errors.iter().any(|error| {
+        error
+            .message
+            .contains("declares a payload but API output is not a Result")
+    }));
+
+    let result_output = parse(
+        &lex("struct Problem { message: String } api GET \"/items\" { output Result<String, Problem> errors { 400 BadRequest: Problem } } fn main() { }")
+            .unwrap(),
+    )
+    .unwrap();
+    check_apis(&result_output).expect("the Result error type must match its declared payload");
 }
 
 #[test]
@@ -1588,6 +1945,7 @@ fn performs_http_get_with_network_policy() {
         process: None,
         mail: None,
         step_budget: None,
+        max_stack_depth: None,
     };
     let body = execute_function_with_capabilities_and_policies(
         &program,
@@ -1619,6 +1977,7 @@ fn rejects_http_get_outside_network_allowlist() {
         process: None,
         mail: None,
         step_budget: None,
+        max_stack_depth: None,
     };
     let error = execute_function_with_capabilities_and_policies(
         &program,
@@ -1677,6 +2036,7 @@ fn sends_typed_http_request_and_returns_structured_response() {
         process: None,
         mail: None,
         step_budget: None,
+        max_stack_depth: None,
     };
     let response = execute_function_with_capabilities_and_policies(
         &program,
@@ -1751,6 +2111,7 @@ fn sends_and_decodes_typed_json_http_request() {
         process: None,
         mail: None,
         step_budget: None,
+        max_stack_depth: None,
     };
     let customer = execute_function_with_capabilities_and_policies(
         &program,
@@ -1811,6 +2172,7 @@ fn returns_structured_http_result_for_http_errors() {
         process: None,
         mail: None,
         step_budget: None,
+        max_stack_depth: None,
     };
     let result = execute_function_with_capabilities_and_policies(
         &program,
@@ -1857,6 +2219,7 @@ fn rejects_http_request_body_for_get() {
         process: None,
         mail: None,
         step_budget: None,
+        max_stack_depth: None,
     };
     let error = execute_function_with_capabilities_and_policies(
         &program,
@@ -2052,6 +2415,7 @@ fn runs_allowlisted_process_without_a_shell() {
         }),
         mail: None,
         step_budget: None,
+        max_stack_depth: None,
     };
     let output = execute_function_with_capabilities_and_policies(
         &program,
@@ -2093,6 +2457,7 @@ fn rejects_processes_outside_allowlist_and_output_limit() {
         }),
         mail: None,
         step_budget: None,
+        max_stack_depth: None,
     };
     let error = execute_function_with_capabilities_and_policies(
         &program,
@@ -2283,7 +2648,7 @@ fn main() { }
     let type_errors = check(&side_effecting_argument).unwrap_err();
     assert!(type_errors.iter().any(|diagnostic| diagnostic
         .message
-        .contains("arguments must be literals, values, fields, or pure string concatenations")));
+        .contains("arguments must be values or pure expressions")));
 }
 
 #[test]

@@ -75,12 +75,7 @@ fn route_entries(program: &zelyra_ast::Program) -> Vec<RouteEntry> {
     for auth in &program.auth {
         const GET_POST: &[&str] = &["GET", "POST"];
         const POST: &[&str] = &["POST"];
-        for (path, methods) in [
-            ("/login", GET_POST),
-            ("/logout", POST),
-            ("/forgot-password", GET_POST),
-            ("/reset-password", GET_POST),
-        ] {
+        for (path, methods) in [("/login", GET_POST), ("/logout", POST)] {
             for method in methods {
                 entries.push(RouteEntry {
                     method: (*method).into(),
@@ -88,6 +83,21 @@ fn route_entries(program: &zelyra_ast::Program) -> Vec<RouteEntry> {
                     kind: "authentication".into(),
                     span: auth.span,
                 });
+            }
+        }
+        if auth.reset_tokens_table.is_some() {
+            for (path, methods) in [
+                ("/forgot-password", GET_POST),
+                ("/reset-password", GET_POST),
+            ] {
+                for method in methods {
+                    entries.push(RouteEntry {
+                        method: (*method).into(),
+                        path: path.into(),
+                        kind: "password reset".into(),
+                        span: auth.span,
+                    });
+                }
             }
         }
         for method in ["GET", "POST"] {
@@ -98,13 +108,32 @@ fn route_entries(program: &zelyra_ast::Program) -> Vec<RouteEntry> {
                 span: auth.span,
             });
         }
-        if let Some(path) = &auth.admin_path {
-            entries.push(RouteEntry {
-                method: "GET".into(),
-                path: path.clone(),
-                kind: "authentication administration".into(),
-                span: auth.span,
-            });
+        if let (Some(path), Some(_), Some(_)) =
+            (&auth.admin_path, &auth.admin_permission, &auth.admin_role)
+        {
+            for method in GET_POST {
+                entries.push(RouteEntry {
+                    method: (*method).into(),
+                    path: path.clone(),
+                    kind: "authentication administration".into(),
+                    span: auth.span,
+                });
+            }
+        }
+        if auth.mfa_table.is_some() && auth.mfa_recovery_table.is_some() {
+            for (path, kind) in [
+                ("/login/mfa", "multi-factor login"),
+                ("/account/security", "multi-factor security"),
+            ] {
+                for method in GET_POST {
+                    entries.push(RouteEntry {
+                        method: (*method).into(),
+                        path: path.into(),
+                        kind: kind.into(),
+                        span: auth.span,
+                    });
+                }
+            }
         }
     }
     entries.sort_by(|left, right| {
@@ -280,6 +309,52 @@ mod tests {
             databases: vec![],
         });
         assert!(entries.is_empty());
+    }
+
+    #[test]
+    fn auth_inventory_lists_enabled_method_handlers_without_inventing_disabled_routes() {
+        let configured = zelyra_parser::parse(
+            &zelyra_lexer::lex(
+                r#"
+                auth users {
+                    table: users
+                    sessions: auth_sessions
+                    reset_tokens: password_resets
+                    admin_path: "/admin/access"
+                    admin_permission: "auth.manage"
+                    admin_role: admin
+                    mfa: user_mfa
+                    mfa_recovery: user_mfa_recovery
+                }
+                fn main() { }
+                "#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let entries = route_entries(&configured);
+        assert_eq!(entries.len(), 15);
+        assert!(entries
+            .iter()
+            .any(|entry| entry.method == "POST" && entry.path == "/admin/access"));
+        assert!(entries
+            .iter()
+            .any(|entry| entry.method == "POST" && entry.path == "/reset-password"));
+        assert!(entries
+            .iter()
+            .any(|entry| entry.method == "POST" && entry.path == "/login/mfa"));
+
+        let basic = zelyra_parser::parse(
+            &zelyra_lexer::lex("auth users { table: users } fn main() { }").unwrap(),
+        )
+        .unwrap();
+        let basic_entries = route_entries(&basic);
+        assert_eq!(basic_entries.len(), 5);
+        assert!(basic_entries.iter().all(|entry| {
+            !entry.path.starts_with("/reset-password")
+                && !entry.path.starts_with("/forgot-password")
+                && !entry.path.starts_with("/admin/")
+        }));
     }
 
     #[test]

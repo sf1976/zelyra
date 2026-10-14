@@ -460,6 +460,41 @@ fn customer_order_acceptance_example_is_valid() {
 }
 
 #[test]
+fn server_pdf_mail_outbox_example_checks_with_project_grants() {
+    let path = example("pdf_mail_outbox/main.zyl");
+    let output = run(&["check", path.to_str().unwrap()]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("ok:"));
+}
+
+#[test]
+fn language_107_reference_example_checks_and_runs() {
+    let path = example("language_1_0_7/main.zyl");
+    let check = run(&["check", path.to_str().unwrap()]);
+    assert!(
+        check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&check.stderr)
+    );
+    let execution = run(&["run", path.to_str().unwrap()]);
+    assert!(
+        execution.status.success(),
+        "{}",
+        String::from_utf8_lossy(&execution.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&execution.stdout)
+            .lines()
+            .collect::<Vec<_>>(),
+        ["Paid", "1", "sale", "2", "6", "52", "Berlin", "Paid order"]
+    );
+}
+
+#[test]
 fn help_lists_the_route_inventory_command_and_syntax() {
     let output = run(&["--help"]);
     assert!(output.status.success());

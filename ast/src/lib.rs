@@ -635,6 +635,11 @@ pub enum Stmt {
         value: Expr,
         span: Span,
     },
+    TupleBindOrAssign {
+        names: Vec<String>,
+        value: Expr,
+        span: Span,
+    },
     Expr(Expr),
     Return {
         value: Option<Expr>,
@@ -688,6 +693,7 @@ pub enum Stmt {
 #[derive(Clone, Debug)]
 pub struct MatchArm {
     pub pattern: Pattern,
+    pub guard: Option<Expr>,
     pub body: Block,
     pub span: Span,
 }
@@ -695,6 +701,7 @@ pub struct MatchArm {
 #[derive(Clone, Debug)]
 pub struct MatchExprArm {
     pub pattern: Pattern,
+    pub guard: Option<Expr>,
     pub value: Expr,
     pub span: Span,
 }
@@ -722,6 +729,10 @@ pub enum PatternKind {
         variant: String,
         payloads: Vec<Pattern>,
     },
+    Record {
+        type_name: String,
+        fields: Vec<(String, Pattern)>,
+    },
     Int(i64),
     Bool(bool),
     String(String),
@@ -748,6 +759,10 @@ pub enum ExprKind {
         type_name: String,
         type_args: Vec<Type>,
         fields: Vec<(String, Expr)>,
+    },
+    Lambda {
+        params: Vec<Param>,
+        body: Box<Expr>,
     },
     FunctionValue(String),
     Variable(String),
@@ -812,6 +827,7 @@ impl Stmt {
         match self {
             Stmt::Let { span, .. } => *span,
             Stmt::BindOrAssign { span, .. } => *span,
+            Stmt::TupleBindOrAssign { span, .. } => *span,
             Stmt::Expr(expr) => expr.span,
             Stmt::Return { span, .. } => *span,
             Stmt::If { span, .. } => *span,

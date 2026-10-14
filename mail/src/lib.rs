@@ -4,7 +4,7 @@
 //! can report failure without leaking SMTP server responses into user output.
 
 use lettre::{
-    message::{header::ContentType, Mailbox, MultiPart, SinglePart},
+    message::{header::ContentType, Attachment, Mailbox, MultiPart, SinglePart},
     transport::smtp::authentication::Credentials,
     transport::smtp::client::{Certificate, Tls, TlsParameters},
     Message, SmtpTransport, Transport,
@@ -12,6 +12,7 @@ use lettre::{
 use std::time::Duration;
 
 pub const MAX_MAIL_BODY_BYTES: usize = 64 * 1024;
+pub const MAX_MAIL_ATTACHMENT_BYTES: usize = 2 * 1024 * 1024;
 pub const SMTP_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -48,6 +49,13 @@ pub struct MailMessage<'a> {
     pub text_body: &'a str,
     pub html_body: Option<&'a str>,
     pub message_id: Option<&'a str>,
+    pub attachments: &'a [MailAttachment<'a>],
+}
+
+pub struct MailAttachment<'a> {
+    pub filename: &'a str,
+    pub content_type: &'a str,
+    pub bytes: &'a [u8],
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -145,40 +153,54 @@ impl SmtpClient {
 
     pub fn send(&self, message: MailMessage<'_>) -> Result<(), MailError> {
         validate_message(&message)?;
-        let to = parse_mailbox(message.to)?;
-        let mut builder = Message::builder()
-            .from(self.from.clone())
-            .to(to)
-            .subject(message.subject);
-        if let Some(id) = message.message_id {
-            builder = builder.message_id(Some(format!("<{id}>")));
-        }
-        let email = if let Some(html) = message.html_body {
-            builder
-                .multipart(
-                    MultiPart::alternative()
-                        .singlepart(
-                            SinglePart::builder()
-                                .header(ContentType::TEXT_PLAIN)
-                                .body(message.text_body.to_owned()),
-                        )
-                        .singlepart(
-                            SinglePart::builder()
-                                .header(ContentType::TEXT_HTML)
-                                .body(html.to_owned()),
-                        ),
-                )
-                .map_err(|_| MailError::Message)?
-        } else {
-            builder
-                .header(ContentType::TEXT_PLAIN)
-                .body(message.text_body.to_owned())
-                .map_err(|_| MailError::Message)?
-        };
+        let email = build_message(&self.from, &message)?;
         self.transport
             .send(&email)
             .map(|_| ())
             .map_err(|_| MailError::Delivery)
+    }
+}
+
+fn build_message(from: &Mailbox, message: &MailMessage<'_>) -> Result<Message, MailError> {
+    let to = parse_mailbox(message.to)?;
+    let mut builder = Message::builder()
+        .from(from.clone())
+        .to(to)
+        .subject(message.subject);
+    if let Some(id) = message.message_id {
+        builder = builder.message_id(Some(format!("<{id}>")));
+    }
+    if !message.attachments.is_empty() {
+        let body = if let Some(html) = message.html_body {
+            MultiPart::alternative()
+                .singlepart(SinglePart::plain(message.text_body.to_owned()))
+                .singlepart(SinglePart::html(html.to_owned()))
+        } else {
+            MultiPart::alternative().singlepart(SinglePart::plain(message.text_body.to_owned()))
+        };
+        let mut multipart = MultiPart::mixed().multipart(body);
+        for attachment in message.attachments {
+            let content_type =
+                ContentType::parse(attachment.content_type).map_err(|_| MailError::Message)?;
+            multipart = multipart.singlepart(
+                Attachment::new(attachment.filename.to_owned())
+                    .body(attachment.bytes.to_vec(), content_type),
+            );
+        }
+        builder.multipart(multipart).map_err(|_| MailError::Message)
+    } else if let Some(html) = message.html_body {
+        builder
+            .multipart(
+                MultiPart::alternative()
+                    .singlepart(SinglePart::plain(message.text_body.to_owned()))
+                    .singlepart(SinglePart::html(html.to_owned())),
+            )
+            .map_err(|_| MailError::Message)
+    } else {
+        builder
+            .header(ContentType::TEXT_PLAIN)
+            .body(message.text_body.to_owned())
+            .map_err(|_| MailError::Message)
     }
 }
 
@@ -204,6 +226,28 @@ pub fn validate_message(message: &MailMessage<'_>) -> Result<(), MailError> {
                     .all(|byte| byte.is_ascii_alphanumeric() || b"-._@".contains(&byte))
         })
     {
+        return Err(MailError::Message);
+    }
+    let mut attachment_bytes = 0usize;
+    for attachment in message.attachments {
+        if attachment.filename.is_empty()
+            || attachment.filename.len() > 255
+            || attachment.filename.contains(['/', '\\', '\r', '\n', '\0'])
+            || attachment.filename == "."
+            || attachment.filename == ".."
+            || attachment.content_type != "application/pdf"
+            || attachment.bytes.is_empty()
+            || attachment.bytes.len() > MAX_MAIL_ATTACHMENT_BYTES
+            || !attachment.bytes.starts_with(b"%PDF-")
+            || !attachment.bytes.windows(5).any(|window| window == b"%%EOF")
+        {
+            return Err(MailError::Message);
+        }
+        attachment_bytes = attachment_bytes
+            .checked_add(attachment.bytes.len())
+            .ok_or(MailError::Message)?;
+    }
+    if attachment_bytes > MAX_MAIL_ATTACHMENT_BYTES {
         return Err(MailError::Message);
     }
     Ok(())
@@ -334,6 +378,7 @@ mod tests {
             text_body: "body",
             html_body: None,
             message_id: None,
+            attachments: &[],
         };
         assert_eq!(validate_message(&bad_header), Err(MailError::Message));
         let too_large = "x".repeat(MAX_MAIL_BODY_BYTES + 1);
@@ -343,6 +388,7 @@ mod tests {
             text_body: &too_large,
             html_body: None,
             message_id: None,
+            attachments: &[],
         };
         assert_eq!(validate_message(&bad_body), Err(MailError::Message));
         let bad_id = MailMessage {
@@ -351,6 +397,7 @@ mod tests {
             text_body: "body",
             html_body: None,
             message_id: Some("bad\r\nid"),
+            attachments: &[],
         };
         assert_eq!(validate_message(&bad_id), Err(MailError::Message));
     }
@@ -363,6 +410,7 @@ mod tests {
             text_body: "Hallo, Grüße!",
             html_body: Some("<p>Hallo, Grüße!</p>"),
             message_id: Some("outbox-01@example.test"),
+            attachments: &[],
         };
         assert_eq!(validate_message(&message), Ok(()));
         assert_eq!(
@@ -373,5 +421,66 @@ mod tests {
             SmtpSecurity::parse("tls_fallback"),
             Err(MailError::Configuration)
         );
+    }
+
+    #[test]
+    fn builds_pdf_attachments_as_bounded_mime_parts() {
+        let bytes = b"%PDF-1.4\nexample\n%%EOF";
+        let attachments = [MailAttachment {
+            filename: "invoice-501.pdf",
+            content_type: "application/pdf",
+            bytes,
+        }];
+        let message = MailMessage {
+            to: "user@example.test",
+            subject: "Invoice 501",
+            text_body: "The invoice is attached.",
+            html_body: Some("<p>The invoice is attached.</p>"),
+            message_id: Some("invoice-501@example.test"),
+            attachments: &attachments,
+        };
+        assert_eq!(validate_message(&message), Ok(()));
+        let from = parse_mailbox("sender@example.test").unwrap();
+        let formatted =
+            String::from_utf8(build_message(&from, &message).unwrap().formatted()).unwrap();
+        assert!(formatted.contains("multipart/mixed"));
+        assert!(formatted.contains("multipart/alternative"));
+        assert!(formatted.contains("filename=\"invoice-501.pdf\""));
+        assert!(formatted.contains("application/pdf"));
+    }
+
+    #[test]
+    fn rejects_unsafe_or_oversized_pdf_attachments() {
+        let traversal = [MailAttachment {
+            filename: "../invoice.pdf",
+            content_type: "application/pdf",
+            bytes: b"%PDF",
+        }];
+        let mut message = MailMessage {
+            to: "user@example.test",
+            subject: "Invoice",
+            text_body: "Attached",
+            html_body: None,
+            message_id: None,
+            attachments: &traversal,
+        };
+        assert_eq!(validate_message(&message), Err(MailError::Message));
+
+        let non_pdf = [MailAttachment {
+            filename: "invoice.pdf",
+            content_type: "application/pdf",
+            bytes: b"not a PDF",
+        }];
+        message.attachments = &non_pdf;
+        assert_eq!(validate_message(&message), Err(MailError::Message));
+
+        let oversized = vec![0; MAX_MAIL_ATTACHMENT_BYTES + 1];
+        let attachment = [MailAttachment {
+            filename: "invoice.pdf",
+            content_type: "application/pdf",
+            bytes: &oversized,
+        }];
+        message.attachments = &attachment;
+        assert_eq!(validate_message(&message), Err(MailError::Message));
     }
 }

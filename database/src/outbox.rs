@@ -10,7 +10,9 @@ use crate::{execute_mariadb_query, DatabaseError, MariaDbTransaction, Query, Que
 use std::collections::HashMap;
 
 /// Maximum encoded JSON payload accepted by the current outbox slice.
-pub const MAX_EVENT_PAYLOAD_BYTES: usize = 64 * 1024;
+/// The larger bound accommodates base64 encoded PDF attachments while keeping
+/// transactional mail events explicitly bounded.
+pub const MAX_EVENT_PAYLOAD_BYTES: usize = 3 * 1024 * 1024;
 /// Hard stop for delivery attempts in the current local outbox slice.
 pub const MAX_DELIVERY_ATTEMPTS: u8 = 8;
 /// Maximum number of metadata rows returned by one inspection query.
@@ -260,7 +262,10 @@ pub fn enqueue_mariadb_event(
         || zelyra_ast::json::parse(&event.payload_json).is_err()
     {
         return Err(DatabaseError {
-            message: "outbox event payload must be valid JSON within the 65536 byte limit".into(),
+            message: format!(
+                "outbox event payload must be valid JSON within the {} byte limit",
+                MAX_EVENT_PAYLOAD_BYTES
+            ),
         });
     }
     transaction.execute(&Query {
@@ -779,7 +784,7 @@ mod tests {
         assert!(OutboxEvent::new("evt-1", "test.payload", &payload)
             .unwrap_err()
             .message
-            .contains("65536 byte limit"));
+            .contains(&format!("{} byte limit", MAX_EVENT_PAYLOAD_BYTES)));
     }
 
     #[test]
