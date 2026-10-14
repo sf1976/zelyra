@@ -93,6 +93,26 @@ The server permits four streams, each with a queue of 32 messages, and drops
 slow receivers. Studio requests and Studio file actions currently produce
 events; there is no active watcher for filesystem changes made by other tools.
 
+### Runtime budget and recursion
+
+Open **Budget** to configure a console run. A switch enables `--max-steps`;
+the slider covers 1,000 to 1,000,000 steps and the numeric field accepts
+integers from 1 to 100,000,000. With the switch off, runs retain their
+existing behavior without a step budget. **Run** passes the chosen value as
+separate CLI arguments to `zelyra run`. The server allows one Studio run at a
+time, and the output dialog can cancel a running console program. The existing
+15-second timeout and output limits still apply. A budget overrun displays
+the actual `E-RUNTIME-001` output. Web previews do not use `--max-steps`.
+
+The view reads `[runtime] max_stack_depth` from `zelyra.toml`, showing the
+runtime default of 20 when absent. The permitted configuration range is 1 to
+500; invalid configuration is reported. A compiler-backed call graph marks
+possible direct and mutual recursion, including the current unsaved buffer.
+If the project has more than 500 functions, Studio marks the recursion
+analysis incomplete. The call graph cannot prove an exact maximum depth;
+Studio does not invent one or a measured step count. The duration in
+milliseconds comes from the actual program run.
+
 ## Start the invoice tutorial in Studio
 
 For a generated invoice tutorial, Studio starts its own isolated MariaDB

@@ -138,6 +138,18 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .run-output-state[data-kind="success"] { color: var(--success); }
 .run-output-state[data-kind="error"] { color: var(--danger); }
 .run-output-content { max-height: min(50vh, 420px); min-height: 80px; margin: 0 14px 12px; padding: 12px; overflow: auto; border: 1px solid var(--border); border-radius: 7px; color: var(--ink); background: var(--editor-bg); font: 13px/1.55 ui-monospace, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.run-cancel { margin: 0 16px 10px; padding: 7px 10px; border: 1px solid var(--danger); border-radius: 6px; color: var(--danger); background: transparent; font-size: 11px; }
+.run-cancel[hidden] { display: none; }
+.runtime-budget-dialog { width: min(480px, calc(100vw - 24px)); }
+.runtime-budget-content { display: grid; gap: 8px; max-height: min(65vh, 570px); overflow: auto; padding: 14px 16px; color: var(--muted); font-size: 11px; }
+.runtime-budget-content label { display: block; color: var(--ink); }
+.runtime-budget-content .runtime-budget-enable { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+.runtime-budget-content input[type="range"] { width: 100%; accent-color: var(--accent-strong); }
+.runtime-budget-content input[type="number"] { width: 100%; min-height: 34px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--editor-bg); }
+.runtime-budget-content h3 { margin: 9px 0 0; color: var(--ink); font-size: 12px; }
+.runtime-budget-content p { margin: 3px 0; line-height: 1.5; }
+.runtime-budget-content ul { display: grid; gap: 5px; margin: 0; padding-left: 18px; overflow-wrap: anywhere; }
+.runtime-budget-dialog footer { justify-content: flex-end; }
 .logs-dialog { width: min(860px, calc(100vw - 30px)); }
 .logs-controls { display: flex; align-items: end; gap: 9px; padding: 0 14px 10px; }
 .logs-controls label { display: grid; gap: 4px; color: var(--muted); font-size: 10px; }

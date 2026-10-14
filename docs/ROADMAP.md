@@ -1338,9 +1338,10 @@ rehearsals, and owner feedback do not substitute for participant testing.
   source. A compiler-backed typed-hole menu in Studio and LSP filters known
   exact types and declared Capabilities, with precise replacement spans. An
   authenticated local SSE stream reports versioned diagnostics, verifier, and
-  workspace events. Other symbol kinds, the remaining Studio modules, external
-  file watching, full release
-  gates, and RC artifacts remain
+  workspace events. Studio can apply a real CLI step budget and cancel console
+  runs; a call graph marks possible recursion and reads the configured stack
+  depth. Other symbol kinds, the remaining Studio modules, external file
+  watching, full release gates, and RC artifacts remain
   open; see the [1.1.0 work log](release-plans/1.1.0-studio-deep-native-progress.en.md).
 
 To boost developer ergonomics, flexibility, and architectural modularity without compromising

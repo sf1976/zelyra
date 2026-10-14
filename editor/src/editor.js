@@ -208,6 +208,7 @@ const messages = {
     projectMap: "Projektkarte", projectMapTitle: "Projektbeziehungen", projectMapOpenSource: "Quelltext öffnen", projectMapLoading: "Compiler-Projektmodell wird geladen …", projectMapUnavailable: "Projektkarte konnte nicht erstellt werden.", projectMapIncomplete: "Die Karte ist unvollständig. Nicht auflösbare oder begrenzte Beziehungen werden nicht geraten.", projectMapIssues: { "view.unresolved": "Ansicht nicht gefunden", "view.ambiguous": "Ansichtsname mehrfach vorhanden", "crud.table_unresolved": "CRUD-Tabelle nicht eindeutig", "api.handler_unresolved": "API-Funktion nicht eindeutig", "import.unresolved": "Importziel nicht gefunden", "edge.target_missing": "Beziehungsziel fehlt", "limit.nodes": "Knotenlimit erreicht", "limit.edges": "Beziehungslimit erreicht" }, projectMapEmpty: "Noch keine unterstützten Beziehungen im Projekt.", projectMapModules: "Module", projectMapData: "Daten und Ansichten", projectMapWeb: "Routen und APIs", projectMapLogic: "Funktionen",
     runButton: "Starten", runButtonTitle: "main.zyl ausführen oder Webanwendung starten",
     runOutputTitle: "Programmausgabe", runStarting: "Anwendung wird vorbereitet und gestartet …", runSuccess: "Programm erfolgreich beendet", runFailure: "Programm mit Fehler beendet", runTimeout: "Ausführung nach 15 Sekunden beendet", runOutputTruncated: "Die Ausgabe ist auf 64 KiB je Stream begrenzt.", runNoOutput: "Keine Ausgabe.", runStdout: "AUSGABE", runStderr: "FEHLER", runInputUnavailable: "Studio stellt dem Programm keine interaktive Eingabe bereit.", runWebReady: "Webanwendung läuft lokal:", runWebOpen: "Anwendung im Browser öffnen", runWebStop: "Vorschau beenden", runWebStopped: "Lokale Vorschau wurde beendet.",
+    runtimeBudgetButton: "Budget", runtimeBudgetTitle: "Laufzeitbudget und Rekursion", runtimeBudgetEnable: "Schrittbudget für Konsolenprogramme aktivieren", runtimeBudgetRange: "Schrittbudget (Regler: 1.000 bis 1.000.000)", runtimeBudgetNumber: "Maximale Schritte (1 bis 100.000.000)", runtimeBudgetWebHint: "Das Schrittbudget gilt für Konsolenprogramme. Eine Webvorschau verwendet weiterhin ihre eigenen Laufzeitgrenzen.", runtimeRecursionTitle: "Mögliche Rekursion", runtimeRecursionNone: "Keine direkte oder gegenseitige Rekursion im analysierten Funktionsgraphen gefunden.", runtimeRecursionIncomplete: "Der Funktionsgraph ist zu groß; die Rekursionsanalyse ist unvollständig.", runtimeRecursionDirect: "Direkte Rekursion", runtimeRecursionMutual: "Gegenseitige Rekursion", runtimeStackDepth: "Maximale Stacktiefe laut Projekt: {0} ({1})", runtimeStackConfigured: "konfiguriert", runtimeStackDefault: "Standard", runtimeProfileError: "Laufzeitprofil konnte nicht gelesen werden: {0}", runtimeBudgetInvalid: "Bitte eine ganze Schrittzahl von 1 bis 100.000.000 eingeben.", runtimeBudgetExceeded: "Schrittbudget überschritten", runCancel: "Ausführung abbrechen", runCancelRequested: "Abbruch angefordert …", runCancelled: "Ausführung abgebrochen", runtimeProfileInvalid: "Der ungespeicherte Quelltext ist nicht vollständig analysierbar.",
     logs: "Logs", logsTitle: "Zelyra-Logs", logsLoading: "Logs werden geladen …", logsUnavailable: "Logs konnten nicht geladen werden.", logsEmpty: "Noch keine Programmausgabe protokolliert.", logsLevel: "Stufe", logsAll: "Alle", logsSearch: "Text filtern", logsRetention: "Lokal gespeichert; begrenzte Rotation", logsCount: "{0} Einträge angezeigt",
     taskHelp: "Kontexthilfe öffnen", taskHelpHelp: "Hilfe zum Begriff am Cursor anzeigen", taskProperties: "Dateieigenschaften öffnen",
     taskPropertiesHelp: "Informationen und Aktionen zur aktuellen Datei anzeigen", taskSearch: "Text suchen", taskSearchHelp: "Im aktuellen Dokument suchen",
@@ -304,6 +305,7 @@ const messages = {
     projectMap: "Project map", projectMapTitle: "Project relationships", projectMapOpenSource: "Open source location", projectMapLoading: "Loading the compiler project model …", projectMapUnavailable: "Could not create the project map.", projectMapIncomplete: "The map is incomplete. Unresolved or limited relationships are not guessed.", projectMapIssues: { "view.unresolved": "View not found", "view.ambiguous": "View name is ambiguous", "crud.table_unresolved": "CRUD table is not unique", "api.handler_unresolved": "API function is not unique", "import.unresolved": "Import target not found", "edge.target_missing": "Relationship target is missing", "limit.nodes": "Node limit reached", "limit.edges": "Relationship limit reached" }, projectMapEmpty: "No supported relationships in this project yet.", projectMapModules: "Modules", projectMapData: "Data and views", projectMapWeb: "Routes and APIs", projectMapLogic: "Functions",
     runButton: "Run", runButtonTitle: "Run main.zyl or start the web application",
     runOutputTitle: "Program output", runStarting: "Preparing and starting the application …", runSuccess: "Program finished successfully", runFailure: "Program finished with an error", runTimeout: "Execution stopped after 15 seconds", runOutputTruncated: "Output is limited to 64 KiB per stream.", runNoOutput: "No output.", runStdout: "OUTPUT", runStderr: "ERROR", runInputUnavailable: "Studio does not provide interactive input to the program.", runWebReady: "Web application is running locally:", runWebOpen: "Open application in browser", runWebStop: "Stop preview", runWebStopped: "Local preview stopped.",
+    runtimeBudgetButton: "Budget", runtimeBudgetTitle: "Runtime budget and recursion", runtimeBudgetEnable: "Enable a step budget for console programs", runtimeBudgetRange: "Step budget (slider: 1,000 to 1,000,000)", runtimeBudgetNumber: "Maximum steps (1 to 100,000,000)", runtimeBudgetWebHint: "The step budget applies to console programs. Web previews keep their own runtime limits.", runtimeRecursionTitle: "Possible recursion", runtimeRecursionNone: "No direct or mutual recursion found in the analyzed function graph.", runtimeRecursionIncomplete: "The function graph is too large; recursion analysis is incomplete.", runtimeRecursionDirect: "Direct recursion", runtimeRecursionMutual: "Mutual recursion", runtimeStackDepth: "Project maximum stack depth: {0} ({1})", runtimeStackConfigured: "configured", runtimeStackDefault: "default", runtimeProfileError: "Could not read runtime profile: {0}", runtimeBudgetInvalid: "Enter an integer step count from 1 to 100,000,000.", runtimeBudgetExceeded: "Step budget exceeded", runCancel: "Cancel execution", runCancelRequested: "Cancellation requested …", runCancelled: "Execution cancelled", runtimeProfileInvalid: "The unsaved source cannot be fully analyzed.",
     logs: "Logs", logsTitle: "Zelyra logs", logsLoading: "Loading logs …", logsUnavailable: "Could not load logs.", logsEmpty: "No program output has been recorded yet.", logsLevel: "Level", logsAll: "All", logsSearch: "Filter text", logsRetention: "Stored locally; bounded rotation", logsCount: "Showing {0} entries",
     taskHelp: "Open contextual help", taskHelpHelp: "Show help for the term at the cursor", taskProperties: "Open file properties",
     taskPropertiesHelp: "Show information and actions for the active file", taskSearch: "Find text", taskSearchHelp: "Search in the active document",
@@ -2608,7 +2610,57 @@ async function checkProject() {
   } catch (error) { announce(error.message, "error"); }
 }
 
+function studioEntryPath() {
+  return treeFiles.includes("main.zyl")
+    ? "main.zyl"
+    : (activePath && activePath.endsWith(".zyl") ? activePath : (treeFiles.find(f => f.endsWith(".zyl")) || "main.zyl"));
+}
+
+async function openRuntimeBudget() {
+  const dialog = $("runtime-budget-dialog");
+  if (!dialog.open) dialog.showModal();
+  const note = $("runtime-profile-note");
+  const risks = $("runtime-recursion-risks");
+  note.textContent = t("checkRunning");
+  risks.replaceChildren();
+  try {
+    const path = studioEntryPath();
+    const source = path === activePath ? editor?.state.doc.toString() : undefined;
+    const result = await api("runtime-profile", { method: "POST", body: JSON.stringify({
+      path, source, version: liveCheckSequence,
+    }) });
+    if (!dialog.open) return;
+    $("runtime-stack-depth").textContent = t("runtimeStackDepth", result.maxStackDepth,
+      t(result.configured ? "runtimeStackConfigured" : "runtimeStackDefault"));
+    note.textContent = result.recursionAnalysisIncomplete ? t("runtimeRecursionIncomplete")
+      : result.success ? "" : t("runtimeProfileInvalid");
+    for (const risk of result.recursionRisks || []) {
+      const item = document.createElement("li");
+      const names = (risk.functions || []).map((fn) => `${fn.name} (${fn.path}:${fn.line})`).join(" → ");
+      item.textContent = `${t(risk.kind === "mutual" ? "runtimeRecursionMutual" : "runtimeRecursionDirect")}: ${names}`;
+      risks.append(item);
+    }
+    if (!risks.childElementCount && !result.recursionAnalysisIncomplete && result.success) {
+      const item = document.createElement("li");
+      item.textContent = t("runtimeRecursionNone");
+      risks.append(item);
+    }
+  } catch (error) {
+    note.textContent = t("runtimeProfileError", error.message);
+  }
+}
+
 async function runProject() {
+  let maxSteps = null;
+  if ($("runtime-budget-enabled").checked) {
+    maxSteps = Number($("runtime-budget-number").value);
+    if (!Number.isSafeInteger(maxSteps) || maxSteps < 1 || maxSteps > 100_000_000) {
+      announce(t("runtimeBudgetInvalid"), "error");
+      if (!$("runtime-budget-dialog").open) $("runtime-budget-dialog").showModal();
+      $("runtime-budget-number").focus();
+      return;
+    }
+  }
   if (!(await saveAll())) return;
   const dialog = $("run-output");
   const state = $("run-output-state");
@@ -2619,12 +2671,12 @@ async function runProject() {
   $("run-output-web-link").hidden = true;
   $("run-output-web-url").removeAttribute("href");
   if (!dialog.open) dialog.showModal();
+  $("run-output-cancel").hidden = false;
+  $("run-output-cancel").disabled = false;
   announce(t("runStarting"));
   try {
-    const entryPath = treeFiles.includes("main.zyl")
-      ? "main.zyl"
-      : (activePath && activePath.endsWith(".zyl") ? activePath : (treeFiles.find(f => f.endsWith(".zyl")) || "main.zyl"));
-    const result = await api("run", { method: "POST", body: JSON.stringify({ path: entryPath }) });
+    const entryPath = studioEntryPath();
+    const result = await api("run", { method: "POST", body: JSON.stringify({ path: entryPath, maxSteps }) });
     const webLink = $("run-output-web-link");
     if (result.webApp && result.webUrl) {
       state.textContent = t("runWebReady");
@@ -2636,7 +2688,8 @@ async function runProject() {
       return;
     }
     webLink.hidden = true;
-    const statusText = result.timedOut ? t("runTimeout") : result.success ? t("runSuccess") : t("runFailure");
+    const statusText = result.cancelled ? t("runCancelled") : result.timedOut ? t("runTimeout")
+      : result.budgetExceeded ? t("runtimeBudgetExceeded") : result.success ? t("runSuccess") : t("runFailure");
     state.textContent = `${statusText}${result.exitCode === null ? "" : ` · exit ${result.exitCode}`} · ${result.durationMs} ms`;
     state.dataset.kind = result.success ? "success" : "error";
     const streams = [
@@ -2652,6 +2705,8 @@ async function runProject() {
     state.dataset.kind = "error";
     output.textContent = error.message;
     announce(error.message, "error");
+  } finally {
+    $("run-output-cancel").hidden = true;
   }
 }
 
@@ -2864,6 +2919,32 @@ $("delete-file-button").addEventListener("click", deleteActiveFile);
 $("save-all-button").addEventListener("click", saveAll);
 $("check-button").addEventListener("click", checkProject);
 $("run-button").addEventListener("click", runProject);
+$("runtime-budget-button").addEventListener("click", () => { void openRuntimeBudget(); });
+$("runtime-budget-close").addEventListener("click", () => $("runtime-budget-dialog").close());
+$("runtime-budget-run").addEventListener("click", () => {
+  $("runtime-budget-dialog").close();
+  void runProject();
+});
+$("runtime-budget-enabled").addEventListener("change", (event) => {
+  $("runtime-budget-range").disabled = !event.target.checked;
+  $("runtime-budget-number").disabled = !event.target.checked;
+});
+$("runtime-budget-range").addEventListener("input", (event) => {
+  $("runtime-budget-number").value = event.target.value;
+});
+$("runtime-budget-number").addEventListener("input", (event) => {
+  const value = Number(event.target.value);
+  if (Number.isFinite(value)) $("runtime-budget-range").value = String(Math.max(1000, Math.min(1_000_000, value)));
+});
+$("run-output-cancel").addEventListener("click", async () => {
+  $("run-output-cancel").disabled = true;
+  try {
+    const response = await api("cancel-run", { method: "POST", body: "{}" });
+    if (response.cancelRequested) $("run-output-state").textContent = t("runCancelRequested");
+  } catch (error) {
+    announce(error.message, "error");
+  }
+});
 $("run-output-web-stop").addEventListener("click", stopWebPreview);
 $("logs-button").addEventListener("click", openEditorLogs);
 $("logs-refresh").addEventListener("click", openEditorLogs);

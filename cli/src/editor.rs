@@ -3,7 +3,7 @@ use std::io::{self, Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::thread;
 use std::time::Duration;
 use zelyra_web::{parse_request, Request};
@@ -63,6 +63,8 @@ struct EditorState {
     web_process: Arc<std::sync::Mutex<Option<std::process::Child>>>,
     events: Arc<EventHub>,
     active_event_streams: Arc<AtomicUsize>,
+    active_runs: Arc<AtomicUsize>,
+    run_cancel: Arc<AtomicBool>,
 }
 
 impl Drop for EditorState {
@@ -153,6 +155,8 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         web_process: Arc::new(std::sync::Mutex::new(None)),
         events: Arc::new(EventHub::default()),
         active_event_streams: Arc::new(AtomicUsize::new(0)),
+        active_runs: Arc::new(AtomicUsize::new(0)),
+        run_cancel: Arc::new(AtomicBool::new(false)),
     });
     let active = Arc::new(AtomicUsize::new(0));
     println!("Zelyra Studio ist lokal erreichbar: http://{authority}{EDITOR_PATH}/#{token}");
@@ -491,7 +495,9 @@ fn editor_response(
         ("POST", "check") => check_project(state, &parse_json_body(&request.body)?),
         ("POST", "verify") => verify_editor_project(state, &parse_json_body(&request.body)?),
         ("POST", "typed-hole") => editor_typed_hole(state, &parse_json_body(&request.body)?),
+        ("POST", "runtime-profile") => runtime_profile(state, &parse_json_body(&request.body)?),
         ("POST", "run") => run_editor_program(state, &parse_json_body(&request.body)?),
+        ("POST", "cancel-run") => cancel_editor_run(state),
         ("POST", "stop-web-preview") => stop_editor_web_app(state),
         ("POST", "format") => format_editor_file(state, &parse_json_body(&request.body)?),
         ("POST", "crud-preview") => preview_crud_resource(state, &parse_json_body(&request.body)?),
@@ -3650,10 +3656,69 @@ pub(super) fn zelyra_executable() -> Result<PathBuf, (u16, String)> {
     Err((500, "could not locate the running Zelyra CLI".into()))
 }
 
+fn runtime_profile(
+    state: &EditorState,
+    value: &Value,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let relative = value
+        .get("path")
+        .and_then(Value::as_str)
+        .filter(|path| path.ends_with(".zyl"))
+        .ok_or((400, "choose a Zelyra source file".into()))?;
+    let _path = safe_editor_path(&state.root, relative, false)?;
+    let entry = state.root.join("main.zyl");
+    if !entry.is_file() {
+        return Err((422, "project entry file main.zyl is missing".into()));
+    }
+    let source = value.get("source").and_then(Value::as_str);
+    if source.is_some_and(|text| text.len() > EDITOR_MAX_FILE_BYTES) {
+        return Err((413, "source exceeds the 1 MiB editor limit".into()));
+    }
+    let version = value.get("version").and_then(Value::as_i64).unwrap_or(0);
+    let overlays = source
+        .map(|text| {
+            vec![language_service::SourceOverlay {
+                path: relative.into(),
+                text: text.into(),
+                version,
+            }]
+        })
+        .unwrap_or_default();
+    let analysis = language_service::analyze(&entry, &overlays);
+    let index = semantic_index::SemanticIndex::from_analysis(&analysis);
+    let (recursion_risks, recursion_incomplete) = index.recursion_risks(&analysis);
+    let configured_depth =
+        super::project_max_stack_depth(&entry.to_string_lossy()).map_err(|error| (422, error))?;
+    Ok((
+        200,
+        "application/json; charset=utf-8",
+        json!({
+            "path":relative,"version":version,"success":analysis.success,
+            "maxStackDepth":configured_depth.unwrap_or(20),
+            "configured":configured_depth.is_some(),
+            "recursionRisks":recursion_risks,"recursionAnalysisIncomplete":recursion_incomplete,
+            "diagnostics":analysis.diagnostics,
+        })
+        .to_string(),
+    ))
+}
+
 fn run_editor_program(
     state: &EditorState,
     value: &Value,
 ) -> Result<(u16, &'static str, String), (u16, String)> {
+    const MAX_STUDIO_STEPS: u64 = 100_000_000;
+    let max_steps = match value.get("maxSteps") {
+        None | Some(Value::Null) => None,
+        Some(raw) => Some(
+            raw.as_u64()
+                .filter(|steps| (1..=MAX_STUDIO_STEPS).contains(steps))
+                .ok_or((
+                    400,
+                    "maxSteps must be an integer from 1 through 100000000".into(),
+                ))?,
+        ),
+    };
     let relative = value
         .get("path")
         .and_then(Value::as_str)
@@ -3667,6 +3732,11 @@ fn run_editor_program(
     {
         return Err((413, "entry file exceeds the 1 MiB editor limit".into()));
     }
+    if !acquire_editor_connection_limit(&state.active_runs, 1) {
+        return Err((429, "another Studio program run is already active".into()));
+    }
+    let _run_slot = EditorConnection(Arc::clone(&state.active_runs));
+    state.run_cancel.store(false, Ordering::Release);
     if let Ok(project) = project::load(&path.to_string_lossy()) {
         let program = project.program;
         let database_name = program
@@ -3700,9 +3770,12 @@ fn run_editor_program(
         &format!("starting program {relative}"),
     );
     let executable = zelyra_executable()?;
-    let mut child = Command::new(executable)
-        .arg("run")
-        .arg(relative)
+    let mut command = Command::new(executable);
+    command.arg("run").arg(relative);
+    if let Some(steps) = max_steps {
+        command.arg("--max-steps").arg(steps.to_string());
+    }
+    let mut child = command
         .current_dir(&state.root)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -3735,12 +3808,20 @@ fn run_editor_program(
     let started = std::time::Instant::now();
     let timeout = Duration::from_secs(15);
     let mut timed_out = false;
+    let mut cancelled = false;
     let status = loop {
         if let Some(status) = child
             .try_wait()
             .map_err(|_| (500, "could not read program status".into()))?
         {
             break status;
+        }
+        if state.run_cancel.load(Ordering::Acquire) {
+            cancelled = true;
+            let _ = child.kill();
+            break child
+                .wait()
+                .map_err(|_| (500, "could not cancel the program".into()))?;
         }
         if started.elapsed() >= timeout {
             timed_out = true;
@@ -3755,6 +3836,7 @@ fn run_editor_program(
     let (stderr, stderr_truncated) = collect_editor_output(stderr_reader);
     let stdout = redact_editor_secrets(String::from_utf8_lossy(&stdout).into_owned(), &secrets);
     let stderr = redact_editor_secrets(String::from_utf8_lossy(&stderr).into_owned(), &secrets);
+    let budget_exceeded = stderr.contains("execution step budget exceeded");
     Ok((
         200,
         "application/json; charset=utf-8",
@@ -3762,12 +3844,27 @@ fn run_editor_program(
             "success": status.success() && !timed_out,
             "exitCode": status.code(),
             "timedOut": timed_out,
+            "cancelled":cancelled,
+            "maxSteps": max_steps,
+            "budgetExceeded": budget_exceeded,
             "durationMs": started.elapsed().as_millis(),
             "stdout": stdout,
             "stderr": stderr,
             "truncated": stdout_truncated || stderr_truncated,
         })
         .to_string(),
+    ))
+}
+
+fn cancel_editor_run(state: &EditorState) -> Result<(u16, &'static str, String), (u16, String)> {
+    let running = state.active_runs.load(Ordering::Acquire) > 0;
+    if running {
+        state.run_cancel.store(true, Ordering::Release);
+    }
+    Ok((
+        200,
+        "application/json; charset=utf-8",
+        json!({"cancelRequested":running}).to_string(),
     ))
 }
 
@@ -4600,6 +4697,8 @@ fn main() {}
             web_process: Arc::new(std::sync::Mutex::new(None)),
             events: Arc::new(EventHub::default()),
             active_event_streams: Arc::new(AtomicUsize::new(0)),
+            active_runs: Arc::new(AtomicUsize::new(0)),
+            run_cancel: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -5345,6 +5444,91 @@ fn main() {}
             .iter()
             .any(|item| item["expression"] == "name"));
         assert_eq!(fs::read_to_string(path).unwrap(), original);
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn runtime_profile_uses_project_stack_setting_and_unsaved_call_graph() {
+        let state = project();
+        let original = "fn main() {}\n";
+        fs::write(
+            state.root.join("zelyra.toml"),
+            "[project]\nname = \"runtime-profile\"\n[runtime]\nmax_stack_depth = 100\n",
+        )
+        .unwrap();
+        let source = "fn direct() -> Int { return direct() }\nfn main() {}\n";
+        let response = runtime_profile(
+            &state,
+            &json!({
+                "path":"main.zyl","source":source,"version":7
+            }),
+        )
+        .unwrap();
+        let payload: Value = serde_json::from_str(&response.2).unwrap();
+        assert_eq!(payload["maxStackDepth"], 100);
+        assert_eq!(payload["configured"], true);
+        assert_eq!(payload["version"], 7);
+        assert_eq!(payload["recursionRisks"][0]["kind"], "direct");
+        assert_eq!(
+            fs::read_to_string(state.root.join("main.zyl")).unwrap(),
+            original
+        );
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn studio_run_passes_step_budget_to_real_runtime() {
+        let state = project();
+        fs::write(state.root.join("main.zyl"), "fn main() { loop { } }\n").unwrap();
+        let result = run_editor_program(&state, &json!({"path":"main.zyl","maxSteps":30})).unwrap();
+        let payload: Value = serde_json::from_str(&result.2).unwrap();
+        assert_eq!(payload["success"], false);
+        assert_eq!(payload["timedOut"], false);
+        assert_eq!(payload["maxSteps"], 30);
+        assert_eq!(payload["budgetExceeded"], true);
+        assert!(payload["stderr"]
+            .as_str()
+            .unwrap()
+            .contains("E-RUNTIME-001"));
+        assert_eq!(
+            run_editor_program(&state, &json!({"path":"main.zyl","maxSteps":0}))
+                .unwrap_err()
+                .0,
+            400
+        );
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn studio_console_run_can_be_cancelled_and_rejects_parallel_runs() {
+        let state = project();
+        fs::write(state.root.join("main.zyl"), "fn main() { loop { } }\n").unwrap();
+        let runner = state.clone();
+        let running =
+            thread::spawn(move || run_editor_program(&runner, &json!({"path":"main.zyl"})));
+        for _ in 0..100 {
+            if state.active_runs.load(Ordering::Acquire) > 0 {
+                break;
+            }
+            thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(state.active_runs.load(Ordering::Acquire), 1);
+        assert_eq!(
+            run_editor_program(&state, &json!({"path":"main.zyl"}))
+                .unwrap_err()
+                .0,
+            429
+        );
+        let cancel = cancel_editor_run(&state).unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&cancel.2).unwrap()["cancelRequested"],
+            true
+        );
+        let result = running.join().unwrap().unwrap();
+        let payload: Value = serde_json::from_str(&result.2).unwrap();
+        assert_eq!(payload["cancelled"], true);
+        assert_eq!(payload["timedOut"], false);
+        assert_eq!(state.active_runs.load(Ordering::Acquire), 0);
         fs::remove_dir_all(state.root.clone()).unwrap();
     }
 

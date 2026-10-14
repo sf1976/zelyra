@@ -101,6 +101,29 @@ ausstehenden Nachrichten und trennt langsame Empfänger. Derzeit erzeugen
 Studio-Anfragen und Studio-Dateiaktionen die Ereignisse; Änderungen durch
 andere Programme auf der Festplatte werden noch nicht aktiv beobachtet.
 
+### Laufzeitbudget und Rekursion
+
+Über **Budget** öffnest du die Einstellungen für einen Konsolenlauf. Ein
+Schalter aktiviert `--max-steps`; der Regler deckt 1.000 bis 1.000.000 Schritte
+ab, das Zahlenfeld erlaubt ganze Werte von 1 bis 100.000.000. Ohne Schalter
+bleibt das bestehende Verhalten ohne Schrittbudget erhalten. **Starten** gibt
+den gewählten Wert als getrennte CLI-Argumente an `zelyra run` weiter. Der
+Server begrenzt parallele Studio-Läufe auf einen; ein Konsolenlauf kann im
+Ausgabefenster abgebrochen werden. Die bisherige Zeitgrenze von 15 Sekunden
+und die Ausgabebegrenzung bleiben zusätzlich wirksam. Eine Budgetüberschreitung
+zeigt die echte `E-RUNTIME-001`-Ausgabe an. Webvorschauen verwenden nicht
+`--max-steps`.
+
+Die Anzeige liest `[runtime] max_stack_depth` aus `zelyra.toml` und zeigt bei
+fehlendem Eintrag den Runtime-Standard 20. Der erlaubte Konfigurationsbereich
+ist 1 bis 500; fehlerhafte Konfiguration wird als Fehler angezeigt. Der
+compilerbasierte Aufrufgraph markiert mögliche direkte und gegenseitige
+Rekursion auch im ungespeicherten aktuellen Puffer. Bei mehr als 500
+Funktionen meldet Studio die Analyse als unvollständig. Aufrufgraphen können
+keine exakte Rekursionstiefe belegen; Studio zeigt keine erfundene Tiefe oder
+Schrittzahl an. Die angezeigte Laufzeit in Millisekunden stammt aus dem
+tatsächlichen Programmlauf.
+
 ## Rechnungstutorial in Studio starten
 
 Bei einem erzeugten Rechnungstutorial startet Studio beim Klick auf

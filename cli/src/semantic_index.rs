@@ -140,6 +140,123 @@ impl SemanticIndex {
             .filter(|item| item.key == key && (include_declaration || !item.declaration))
             .collect()
     }
+
+    /// Detect possible recursion from resolved function references. Function
+    /// values and contract calls also count as possible edges, so this is a
+    /// risk view, not a proof of the maximum runtime stack depth.
+    pub fn recursion_risks(&self, analysis: &language_service::Analysis) -> (Vec<Value>, bool) {
+        let Some(program) = analysis.program.as_ref() else {
+            return (Vec::new(), false);
+        };
+        const MAX_FUNCTIONS: usize = 500;
+        if program.functions.len() > MAX_FUNCTIONS {
+            return (Vec::new(), true);
+        }
+        let names = self
+            .symbols
+            .iter()
+            .map(|symbol| symbol.key.as_str())
+            .collect::<Vec<_>>();
+        let by_name = names
+            .iter()
+            .enumerate()
+            .map(|(index, name)| (*name, index))
+            .collect::<HashMap<_, _>>();
+        let mut edges = vec![Vec::new(); names.len()];
+        for function in &program.functions {
+            let Some(&owner) = by_name.get(function.name.as_str()) else {
+                continue;
+            };
+            let Some(source) = analysis.sources.get(function.span.source_id as usize) else {
+                continue;
+            };
+            for reference in self.occurrences.iter().filter(|item| {
+                !item.declaration
+                    && item.path == source.path
+                    && function.span.start <= item.start
+                    && item.end <= function.span.end
+            }) {
+                if let Some(&target) = by_name.get(reference.key.as_str()) {
+                    edges[owner].push(target);
+                }
+            }
+            edges[owner].sort_unstable();
+            edges[owner].dedup();
+        }
+        let mut reverse = vec![Vec::new(); names.len()];
+        for (owner, targets) in edges.iter().enumerate() {
+            for &target in targets {
+                reverse[target].push(owner);
+            }
+        }
+        let mut visited = vec![false; names.len()];
+        let mut order = Vec::with_capacity(names.len());
+        for start in 0..names.len() {
+            if visited[start] {
+                continue;
+            }
+            visited[start] = true;
+            let mut stack = vec![(start, 0)];
+            while let Some((node, next)) = stack.last_mut() {
+                if *next < edges[*node].len() {
+                    let target = edges[*node][*next];
+                    *next += 1;
+                    if !visited[target] {
+                        visited[target] = true;
+                        stack.push((target, 0));
+                    }
+                } else {
+                    order.push(*node);
+                    stack.pop();
+                }
+            }
+        }
+        let mut grouped = vec![false; names.len()];
+        let mut risks = Vec::new();
+        for &index in order.iter().rev() {
+            if grouped[index] {
+                continue;
+            }
+            grouped[index] = true;
+            let mut pending = vec![index];
+            let mut members = Vec::new();
+            while let Some(member) = pending.pop() {
+                members.push(member);
+                for &caller in &reverse[member] {
+                    if !grouped[caller] {
+                        grouped[caller] = true;
+                        pending.push(caller);
+                    }
+                }
+            }
+            members.sort_unstable();
+            if members.len() == 1 && !edges[index].contains(&index) {
+                continue;
+            }
+            let functions = members
+                .iter()
+                .map(|&member| {
+                    let symbol = &self.symbols[member];
+                    let line = analysis
+                        .sources
+                        .iter()
+                        .find(|source| source.path == symbol.path)
+                        .map(|source| {
+                            source.text[..symbol.declaration.start.min(source.text.len())]
+                                .bytes()
+                                .filter(|byte| *byte == b'\n')
+                                .count()
+                                + 1
+                        })
+                        .unwrap_or(1);
+                    json!({"name":symbol.name,"path":symbol.path,"line":line})
+                })
+                .collect::<Vec<_>>();
+            risks.push(json!({"kind":if members.len()>1 {"mutual"} else {"direct"},
+                "functions":functions}));
+        }
+        (risks, false)
+    }
 }
 
 fn declaration_name_span(tokens: &[Token], declaration: Span, name: &str) -> Option<Span> {
@@ -347,6 +464,31 @@ fn visit_expression(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recursion_graph_distinguishes_direct_and_mutual_cycles() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-recursion-index-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("main.zyl"), "fn direct() -> Int { return direct() }\nfn left() -> Int { return right() }\nfn right() -> Int { return left() }\nfn plain() -> Int { return 1 }\nfn main() { print(plain()) }\n").unwrap();
+        let analysis = language_service::analyze(&root.join("main.zyl"), &[]);
+        assert!(analysis.success, "{:?}", analysis.diagnostics);
+        let (risks, incomplete) =
+            SemanticIndex::from_analysis(&analysis).recursion_risks(&analysis);
+        assert!(!incomplete);
+        assert_eq!(risks.len(), 2, "{risks:?}");
+        assert!(risks
+            .iter()
+            .any(|risk| risk["kind"] == "direct" && risk["functions"][0]["name"] == "direct"));
+        assert!(risks.iter().any(
+            |risk| risk["kind"] == "mutual" && risk["functions"].as_array().unwrap().len() == 2
+        ));
+        assert!(!serde_json::to_string(&risks).unwrap().contains("plain"));
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn qualified_calls_resolve_to_distinct_function_identities() {

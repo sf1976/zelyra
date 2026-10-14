@@ -1393,6 +1393,9 @@ Rückmeldungen des Projektverantwortlichen ersetzen keinen Teilnehmertest.
   Studio und LSP filtert bekannte exakte Typen und deklarierte Capabilities
   und ersetzt präzise nur die Ausdruckslücke. Ein authentisierter lokaler SSE-
   Kanal meldet versionierte Diagnosen, Verifier- und Workspace-Ereignisse.
+  Studio kann ein echtes CLI-Schrittbudget setzen und Konsolenläufe abbrechen;
+  ein Aufrufgraph markiert mögliche Rekursion und liest die konfigurierte
+  Stacktiefe.
   Andere Symbolarten, die übrigen Studio-Werkzeuge, externer Dateiwächter,
   vollständige Release-Gates und RC-Artefakte bleiben offen; siehe das
   [1.1.0-Arbeitsprotokoll](release-plans/1.1.0-studio-deep-native-progress.de.md).
