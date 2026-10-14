@@ -3683,3 +3683,99 @@ fn main() {
         ]
     );
 }
+
+#[test]
+fn standard_library_v103_phase4_builtins_work_properly() {
+    let source = r#"
+fn main() uses Random, FileSystem {
+    // Hashes & Encodings
+    sha = hash_sha256("hello")
+    print(sha)
+
+    b64 = base64_encode("hello world")
+    print(b64)
+    print(unwrap_or(match base64_decode(b64) { Ok(val) => Some(val), Err(_) => None }, "err"))
+
+    ue = url_encode("hello world & foo=bar")
+    print(ue)
+    print(unwrap_or(match url_decode(ue) { Ok(val) => Some(val), Err(_) => None }, "err"))
+
+    u = uuid_v4()
+    print(len(u))
+
+    // Text helpers
+    print(text_trim_start("   abc  "))
+    print(text_trim_end("   abc  "))
+    print(text_is_blank("    "))
+    print(text_is_blank("  a  "))
+    print(text_substring("Zelyra", 2, 3))
+
+    // Conversions
+    print(to_int(3.85))
+    print(to_float(42) + 0.5)
+    print(is_ok(parse_bool("true")))
+    print(is_ok(parse_bool("0")))
+    print(is_err(parse_bool("not_a_bool")))
+
+    // Date comparisons
+    d1 = date("2026-01-01")
+    d2 = date("2026-12-31")
+    print(is_before(d1, d2))
+    print(is_after(d1, d2))
+
+    // Collections: entries, zip, dedup
+    m = Map{"a": 1, "b": 2}
+    ent = entries(m)
+    print(len(ent))
+    print(ent[0][0])
+
+    z = zip([1, 2], ["x", "y"])
+    print(len(z))
+    print(z[0][0])
+    print(z[0][1])
+
+    d = dedup([1, 2, 1, 3, 2])
+    print(d)
+
+    // Path helpers
+    joined = path_join("usr/local", "bin")
+    print(joined)
+    print(path_filename("var/log/app.log"))
+    print(path_extension("var/log/app.log"))
+    print(path_dir("var/log/app.log"))
+}
+"#;
+    assert_eq!(
+        run(source),
+        [
+            "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+            "aGVsbG8gd29ybGQ=",
+            "hello world",
+            "hello%20world%20%26%20foo%3Dbar",
+            "hello world & foo=bar",
+            "36",
+            "abc  ",
+            "   abc",
+            "true",
+            "false",
+            "lyr",
+            "3",
+            "42.5",
+            "true",
+            "true",
+            "true",
+            "true",
+            "false",
+            "2",
+            "a",
+            "2",
+            "1",
+            "x",
+            "[1, 2, 3]",
+            "usr/local/bin",
+            "app.log",
+            "log",
+            "var/log",
+        ]
+    );
+}
