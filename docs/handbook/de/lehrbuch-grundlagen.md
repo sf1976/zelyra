@@ -1583,16 +1583,18 @@ fn main() {
 }
 ```
 
-**Beispiel 5: Iterieren über Maps mit entries() (Neu in 1.0.3)**
-Mit `entries(map)` erhältst du ein Array aus `(Schlüssel, Wert)`-Paaren, die sich direkt in Schleifen durchlaufen lassen:
+**Beispiel 5: Map-Einträge mit entries() auslesen (Neu in 1.0.3)**
+`entries(map)` liefert ein Array aus Schlüssel-Wert-Tupeln. Eine Schleife kann
+jedes Tupel als einzelnen Wert verarbeiten; Tupel-Destrukturierung in zwei
+Variablen ist noch nicht verfügbar.
 ```zelyra
 fn main() {
     preise: Map<String, Int> = Map {
         "Kaffee": 3
         "Tee": 2
     }
-    for (artikel, preis) in entries(preise) {
-        print(artikel + ": " + to_string(preis) + " Euro")
+    for eintrag in entries(preise) {
+        print(to_string(eintrag))
     }
 }
 ```
@@ -3101,11 +3103,11 @@ fn main() {
 **Beispiel 4: Kalenderrechnung und Datumsvergleiche (Neu in 1.0.3)**
 ```zelyra
 fn fristen_berechnen() {
-    start = 2026-10-01
+    start = date("2026-10-01")
     frist = date_add_days(start, 14)
-    heute = 2026-10-14
+    heute = date("2026-10-14")
 
-    verbleibend = date_diff_days(heute, frist)
+    verbleibend = date_diff_days(frist, heute)
     print("Verbleibende Tage: " + to_string(verbleibend))
 
     if is_after(heute, frist) {
