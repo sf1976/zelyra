@@ -62,11 +62,12 @@ principles; the roadmap below tracks what is actually implemented.
   `else if` branches, typed `if` expressions, tuple destructuring, and labeled
   `break`/`continue` for nested loops; value-yielding loop exits must have
   explicit, type-checked rules. Keep the existing brace-based blocks, static
-  types, explicit effects, and checked errors. Add targeted parser suggestions
-  for common mistakes such as a missing block after `else if`, with the exact
-  source span and a useful expected form. Stepped ranges, including negative
-  steps and descending loops, are already in 1.0.2. Add user-defined
-  operators for user-defined types through an explicit, type-checked protocol
+  types, explicit effects, and checked errors. A targeted parser suggestion
+  now gives the expected block form and exact source span when an `else if`
+  block is missing; add suggestions for the other common mistakes. Stepped
+  ranges, including negative steps and descending loops, are already in 1.0.2.
+  Add user-defined operators for user-defined types through an explicit,
+  type-checked protocol
   with fixed precedence, unambiguous resolution, and effect rules; do not
   allow custom precedence declarations.
 - [ ] **Planned for 1.0.3 — native String and Math library:** Complete the

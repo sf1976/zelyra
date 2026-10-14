@@ -69,10 +69,11 @@ den tatsächlich implementierten Stand.
   markiertes `break`/`continue` für verschachtelte Schleifen ergänzen;
   Schleifenabbrüche mit Rückgabewert benötigen ausdrückliche, typgeprüfte
   Regeln. Klammerblöcke, statische Typen, ausdrückliche Effekte und geprüfte
-  Fehler bleiben erhalten. Für häufige Parserfehler wie einen fehlenden Block
-  nach `else if` gezielte Vorschläge mit genauer Quellposition und korrigierter
-  Form anzeigen. Schrittweiten einschließlich negativer Werte und rückwärts
-  laufender Bereiche sind bereits in 1.0.2 enthalten. Benutzerdefinierte
+  Fehler bleiben erhalten. Bei einem fehlenden Block nach `else if` zeigt der
+  Parser bereits die erwartete Blockform samt genauer Quellposition an; weitere
+  häufige Fehler brauchen ebenfalls gezielte Vorschläge. Schrittweiten
+  einschließlich negativer Werte und rückwärts laufender Bereiche sind bereits
+  in 1.0.2 enthalten. Benutzerdefinierte
   Operatoren für eigene Typen über ein ausdrückliches, typgeprüftes Protokoll
   mit fester Rangfolge, eindeutiger Auflösung und Effektregeln unterstützen;
   eigene Rangfolgen dürfen nicht deklariert werden.

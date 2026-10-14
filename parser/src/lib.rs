@@ -2408,33 +2408,7 @@ impl<'a> Parser<'a> {
             return Ok(Stmt::Return { value, span });
         }
         if self.at(&TokenKind::If) {
-            let start = self.advance().span;
-            let condition = self.expression()?;
-            let then_block = self.block()?;
-            self.skip_newlines();
-            let else_block = if self.at(&TokenKind::Else) {
-                self.advance();
-                self.skip_newlines();
-                if self.at(&TokenKind::If) {
-                    let if_stmt = self.statement()?;
-                    let span = if_stmt.span();
-                    Some(Block {
-                        statements: vec![if_stmt],
-                        span,
-                    })
-                } else {
-                    Some(self.block()?)
-                }
-            } else {
-                None
-            };
-            let end = else_block.as_ref().map_or(then_block.span, |b| b.span);
-            return Ok(Stmt::If {
-                condition,
-                then_block,
-                else_block,
-                span: start.join(end),
-            });
+            return self.if_statement(false);
         }
         if self.at(&TokenKind::While) {
             let start = self.advance().span;
@@ -2642,6 +2616,43 @@ impl<'a> Parser<'a> {
         }
         Ok(Stmt::Expr(expression))
     }
+
+    fn if_statement(&mut self, is_else_if: bool) -> Result<Stmt, ParseError> {
+        let start = self.advance().span;
+        let condition = self.expression()?;
+        let then_block = self.block().map_err(|mut error| {
+            if is_else_if && error.message.starts_with("expected `{`") {
+                error.message =
+                    "expected a block after `else if`; use `else if condition { ... }`".into();
+            }
+            error
+        })?;
+        self.skip_newlines();
+        let else_block = if self.at(&TokenKind::Else) {
+            self.advance();
+            self.skip_newlines();
+            if self.at(&TokenKind::If) {
+                let if_stmt = self.if_statement(true)?;
+                let span = if_stmt.span();
+                Some(Block {
+                    statements: vec![if_stmt],
+                    span,
+                })
+            } else {
+                Some(self.block()?)
+            }
+        } else {
+            None
+        };
+        let end = else_block.as_ref().map_or(then_block.span, |b| b.span);
+        Ok(Stmt::If {
+            condition,
+            then_block,
+            else_block,
+            span: start.join(end),
+        })
+    }
+
     fn pattern(&mut self) -> Result<Pattern, ParseError> {
         self.with_nesting(Self::pattern_inner)
     }
@@ -3239,6 +3250,19 @@ mod tests {
         let program = parse(&lex("fn main() { print(1 + 2 * 3) }").unwrap()).unwrap();
         assert_eq!(program.functions.len(), 1);
         assert_eq!(program.functions[0].name, "main");
+    }
+
+    #[test]
+    fn suggests_block_syntax_for_else_if_without_a_block() {
+        let source = "fn main() { if ready { print(1) } else if retry print(2) }";
+        let error = parse(&lex(source).unwrap()).unwrap_err();
+
+        assert_eq!(
+            error.message,
+            "expected a block after `else if`; use `else if condition { ... }`"
+        );
+        assert_eq!(error.span.start, source.find("print(2)").unwrap());
+        assert_eq!(error.span.end, error.span.start + "print".len());
     }
 
     #[test]
