@@ -4027,17 +4027,28 @@ fn rename_editor_file(
         .and_then(|change| change.after.as_deref())
         .map(content_hash)
         .unwrap_or_default();
+    let updated_imports = preview["updatedImports"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let updated_files = files
+        .iter()
+        .filter(|change| {
+            updated_imports
+                .iter()
+                .any(|path| path.as_str() == Some(change.path.as_str()))
+        })
+        .filter_map(|change| {
+            let content = String::from_utf8(change.after.clone()?).ok()?;
+            Some(json!({"path":change.path,"content":content,"hash":content_hash(content.as_bytes())}))
+        })
+        .collect::<Vec<_>>();
     state.events.changed(relative, "rename");
     state.events.changed(new_relative, "create");
-    for importer in preview["updatedImports"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-    {
+    for importer in updated_imports.iter().filter_map(Value::as_str) {
         state.events.changed(importer, "save");
     }
-    Ok((200, "application/json; charset=utf-8", json!({"path":relative,"newPath":new_relative,"hash":hash,"updatedImports":preview["updatedImports"]}).to_string()))
+    Ok((200, "application/json; charset=utf-8", json!({"path":relative,"newPath":new_relative,"hash":hash,"updatedImports":updated_imports,"updatedFiles":updated_files}).to_string()))
 }
 
 fn delete_editor_file(

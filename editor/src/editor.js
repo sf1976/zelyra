@@ -1535,6 +1535,16 @@ async function renameActiveFile() {
     const details = affected.length ? t("renameImports", affected.join("\n")) : t("renameNoImports");
     if (!confirm(t("renameConfirm", path, newPath, details))) return;
     const result = await api("file-rename", { method: "POST", body: JSON.stringify({ ...request, planId: preview.planId }) });
+    for (const file of result.updatedFiles || []) {
+      const importerTab = tabs.get(file.path);
+      if (!importerTab) continue;
+      importerTab.state = importerTab.state.update({
+        changes: { from: 0, to: importerTab.state.doc.length, insert: file.content },
+      }).state;
+      importerTab.saved = file.content;
+      importerTab.hash = file.hash;
+      symbolCache.delete(file.path);
+    }
     if (editor) { tab.state = editor.state; editor.destroy(); editor = null; }
     tabs.delete(path);
     tab.hash = result.hash;

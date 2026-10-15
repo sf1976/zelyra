@@ -103,7 +103,8 @@ try {
   });
   await page.locator('#tabs .tab').filter({ hasText: "math.zyl" }).click();
   await page.locator("#rename-file-button").click();
-  await page.waitForFunction(() => document.querySelector("#status-message")?.textContent?.includes("Datei umbenannt"));
+  await page.waitForFunction(() => document.querySelector("#status-message")?.textContent?.includes("Datei umbenannt") || document.querySelector("#status-message")?.dataset.kind === "error");
+  assert.match(await page.locator("#status-message").textContent(), /Datei umbenannt/, `rename failed: ${await page.locator("#status-message").textContent()}, browser errors: ${errors.join(", ")}`);
   const afterRename = await page.evaluate(async ({ token }) => {
     const read = async (path) => (await fetch(`/__zelyra/editor/api/file?path=${encodeURIComponent(path)}`, {
       headers: { "X-Zelyra-Editor-Token": token },
@@ -116,6 +117,8 @@ try {
   assert.equal(afterRename.oldStatus, 404, "old path is removed");
   assert.match(afterRename.next.content, /fn calculate_answer\(\)/);
   assert.match(afterRename.main.content, /import \"src\/answers.zyl\" as math/);
+  await page.locator('#tabs .tab').filter({ hasText: "main.zyl" }).click();
+  assert.match(await page.locator(".cm-content").textContent(), /import \"src\/answers.zyl\" as math/);
   assert.deepEqual(errors, [], `browser errors: ${errors.join(", ")}`);
   console.log(`Studio semantic rename, journaled save, and import-aware file rename passed in ${engineName}`);
 } finally {
