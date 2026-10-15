@@ -30,6 +30,44 @@ near-term commitments. Older numbered release sections below are retained as
 historical planning and evidence; they do not by themselves define current
 release targets. Longer-term ideas remain in the post-1.0 evolution section.
 
+## Planned architecture milestones (1.2.0 and 1.3.0)
+
+These are proposed future milestones, not implemented or released features. Preserve the existing 1.1.0 commitments. Before implementation, audit the current repository and reconcile any overlapping or already completed features.
+
+### 🗺️ [ ] Zelyra 1.2.0 — backend-independent modules and packages
+
+- [ ] Design a minimal, readable Zelyra-native module/import syntax and namespaces, preserving the existing language philosophy and backwards compatibility.
+- [ ] Introduce package manifests, semantic version constraints, deterministic dependency resolution, lockfiles, local/offline workflows, integrity verification, and reproducible builds.
+- [ ] Support typed public APIs, exports, dependency graphs, cyclic-dependency diagnostics, module-level effect declarations, and capability propagation through imports.
+- [ ] Define a versioned, backend-neutral host-service interface so modules work unchanged with the current AST interpreter, future bytecode VM, and eventual AOT execution.
+- [ ] Support pure Zelyra packages first. Design a safe, explicit extension mechanism for Rust-hosted integrations; do not expose Rust's unstable native ABI as a public plugin contract. Consider versioned host APIs and later a stable C ABI or component model if dynamic loading is justified.
+- [ ] Preserve compile-time SQL checks, contract semantics, explicit effects, sandboxing, and human approval for destructive operations. Modules must not bypass security through native entry points.
+- [ ] Prove extensibility with a reference database-driver adapter and a read-only banking integration design (FinTS/HBCI and EBICS), including explicit authorization, secret isolation, audit, and mock-based tests. Do not claim universal banking support without provider-specific interoperability tests.
+- [ ] Document package publishing/trust policy, dependency and supply-chain security, compatibility rules, CLI/Studio integration, diagnostics, positive and negative tests, and runnable examples.
+- [ ] Release gate: no 1.2.0 completion claim without passing compatibility, capability-denial, dependency, offline/reproducibility, and integration tests.
+
+### 🗺️ [ ] Zelyra 1.3.0 — typed MIR and Rust bytecode VM
+
+- [ ] Audit AST/HIR, interpreter, type checker, SQL validator, contracts, effects, closures, collections, concurrency, and host services before designing the intermediate representation.
+- [ ] Introduce a typed, validated, source-mapped MIR with explicit control flow and effects, shared across execution backends.
+- [ ] Add correctness-preserving MIR optimization passes with tests; never reorder observable effects or remove mandatory runtime checks.
+- [ ] Implement a versioned bytecode format, compiler, verifier, bounded virtual call stack, and VM in Rust. Verify untrusted bytecode and derive runtime permissions from trusted authority, never from bytecode claims alone.
+- [ ] Share runtime semantics and host services between the reference AST interpreter and VM, including SQL, capabilities, contracts, error handling, resource limits, and module APIs.
+- [ ] Keep the AST interpreter selectable until the VM reaches complete supported-language compatibility. Add differential, property-based, fuzz, security, and regression tests.
+- [ ] Add optional backend selection, MIR/bytecode inspection, safe versioned caching, stable machine-readable diagnostics, and Studio integration without breaking existing CLI behavior.
+- [ ] Benchmark CPU-bound and I/O-bound workloads separately; record actual measurements, startup, memory, throughput, and compilation cost. Do not promise speedups without evidence.
+- [ ] Release gate: no default-VM switch or production-readiness claim before feature parity, safety checks, differential tests, documented limitations, and reproducible builds.
+
+### ◻️ [?] Post-1.3.0 — optional native AOT backend
+
+- [ ] Evaluate Cranelift after profiling shows a material need. Reuse typed MIR and the shared runtime, preserve capability and contract guarantees, and avoid an independent divergent language implementation.
+- [ ] Decide on AOT only from benchmark evidence, deployment requirements, and maintenance costs.
+
+### 🗺️ [ ] Language completeness follow-up (schedule by actual implementation status)
+
+- [ ] Audit user-defined payload enums and exhaustive matching, generic structs/records, type-checked string interpolation with literal-brace escaping, and opt-in mutable arrays with checked efficient indexed updates.
+- [ ] Mark each item complete only with syntax/API docs, implementation, positive and negative tests, diagnostics, and a working example; do not duplicate functionality already present.
+
 ## Current milestones
 
 - [x] **1.0.5 Studio logs:** Added the Studio Logs panel and a local JSONL
