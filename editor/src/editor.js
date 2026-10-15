@@ -775,6 +775,7 @@ const semanticHover = hoverTooltip(async (view, pos) => {
         const dom = document.createElement("div");
         dom.className = "cm-tooltip-zelyra-hover";
         dom.setAttribute("role", "tooltip");
+        dom.setAttribute("aria-live", "polite");
         dom.textContent = result.detail;
         return { dom };
       },
