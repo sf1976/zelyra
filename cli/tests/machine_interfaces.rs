@@ -108,6 +108,22 @@ fn run_step_budget_is_opt_in_and_reports_a_controlled_runtime_error() {
 }
 
 #[test]
+fn run_step_budget_keeps_output_written_before_runtime_error() {
+    let source = "fn main() { print(\"visible before failure\") loop { } }";
+    let (directory, path) = temporary_project_source("step-budget-output", source);
+    let output = run(&["run", path.to_str().unwrap(), "--max-steps", "30"]);
+    assert!(!output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        "visible before failure"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("E-RUNTIME-001"));
+    assert!(stderr.contains("step budget exceeded"));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn form_validate_covers_valid_and_invalid_inputs_without_database_access() {
     let source = example("customer_form.zyl");
     let valid = run(&[

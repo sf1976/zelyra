@@ -527,19 +527,22 @@ pub(super) fn run() -> ExitCode {
                     .step_budget = Some(step_budget);
             }
             let result = match database_url_from_program(&program) {
-                Some(database_url) => execute_with_database_and_capabilities_and_policies(
+                Some(database_url) => execute_captured_with_database_and_capabilities_and_policies(
                     &program,
                     &database_url,
                     grants.as_ref(),
                     runtime_policy.as_ref(),
                 ),
-                None => execute_with_capabilities_and_policies(
+                None => execute_captured_with_capabilities_and_policies(
                     &program,
                     grants.as_ref(),
                     runtime_policy.as_ref(),
                 ),
             };
-            result.map_err(|error| {
+            for line in result.output {
+                println!("{line}");
+            }
+            if let Some(error) = result.error {
                 diagnostic(
                     &path,
                     "E-RUNTIME-001",
@@ -547,14 +550,12 @@ pub(super) fn run() -> ExitCode {
                     error.span.line,
                     error.span.column,
                 );
-            })
-        }) {
-            Ok(output) => {
-                for line in output {
-                    println!("{line}");
-                }
-                ExitCode::SUCCESS
+                Err(())
+            } else {
+                Ok(())
             }
+        }) {
+            Ok(()) => ExitCode::SUCCESS,
             Err(()) => ExitCode::from(1),
         },
         _ => {

@@ -259,8 +259,7 @@ kbd { padding: 3px 5px; border: 1px solid var(--border); border-radius: 4px; col
 .status-left, .status-right { display: flex; align-items: center; gap: 14px; min-width: 0; }
 .status-problems { padding: 0; border: 0; background: transparent; color: inherit; font-size: 10px; }
 .status-message { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.status-message[data-kind="error"] { color: #ffe3e7; }
-.status-message[data-kind="warning"] { color: #fff0ca; }
+.status-message[data-kind="error"], .status-message[data-kind="warning"] { color: #fff; }
 .status-message[data-kind="success"] { color: #fff; }
 .status-right span { opacity: 1; white-space: nowrap; }
 .toolbar-button.active { color: var(--accent); background: var(--accent-soft); border-color: var(--border); }

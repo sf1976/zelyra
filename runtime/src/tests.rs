@@ -1121,6 +1121,23 @@ fn opt_in_step_budget_counts_expression_evaluations_and_reports_the_exact_span()
 }
 
 #[test]
+fn captured_execution_preserves_output_before_runtime_failure() {
+    let source = "fn main() { print(\"before failure\") loop { } }";
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap();
+    let policy = RuntimePolicy {
+        step_budget: Some(30),
+        ..RuntimePolicy::default()
+    };
+
+    let outcome = execute_captured_with_capabilities_and_policies(&program, None, Some(&policy));
+
+    assert_eq!(outcome.output, ["before failure"]);
+    let error = outcome.error.expect("the step budget must stop the loop");
+    assert!(error.message.contains("execution step budget exceeded"));
+}
+
+#[test]
 fn configured_call_depth_can_raise_the_default_within_the_runtime_policy() {
     let source = "fn descend(n: Int) -> Int { if n == 0 { return 0 } return descend(n - 1) + 1 } fn main() { print(descend(24)) }";
     let program = parse(&lex(source).unwrap()).unwrap();

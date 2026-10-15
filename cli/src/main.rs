@@ -30,10 +30,11 @@ use zelyra_lexer::{lex, TokenKind};
 use zelyra_parser::parse;
 use zelyra_runtime::{
     check, check_apis, check_capabilities_with_grants,
-    execute_function_with_capabilities_and_policies, execute_with_capabilities_and_policies,
-    execute_with_database_and_capabilities_and_policies, verify as verify_program,
-    FileSystemPolicy, MailPolicy, NetworkPolicy, ProcessPolicy, RuntimePolicy,
-    Value as RuntimeValue, VerificationResult, VerificationStatus, KNOWN_CAPABILITIES,
+    execute_captured_with_capabilities_and_policies,
+    execute_captured_with_database_and_capabilities_and_policies,
+    execute_function_with_capabilities_and_policies, verify as verify_program, FileSystemPolicy,
+    MailPolicy, NetworkPolicy, ProcessPolicy, RuntimePolicy, Value as RuntimeValue,
+    VerificationResult, VerificationStatus, KNOWN_CAPABILITIES,
 };
 use zelyra_web::{
     audit_insert_queries, html_escape, parse_urlencoded, serve_app, ApiRoute, AuthRoute,

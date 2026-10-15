@@ -9523,6 +9523,47 @@ pub fn execute(program: &Program) -> Result<Vec<String>, RuntimeError> {
     execute_internal(program, None, None, None)
 }
 
+/// Output produced before a runtime failure, together with the failure itself.
+///
+/// This is useful for command-line and editor runs, where already printed output
+/// should remain visible even if a later expression fails.
+#[derive(Debug)]
+pub struct ExecutionOutcome {
+    pub output: Vec<String>,
+    pub error: Option<RuntimeError>,
+}
+
+impl ExecutionOutcome {
+    fn into_result(self) -> Result<Vec<String>, RuntimeError> {
+        match self.error {
+            Some(error) => Err(error),
+            None => Ok(self.output),
+        }
+    }
+}
+
+pub fn execute_captured_with_capabilities_and_policies(
+    program: &Program,
+    grants: Option<&HashSet<String>>,
+    policy: Option<&RuntimePolicy>,
+) -> ExecutionOutcome {
+    execute_internal_captured(program, None, grants.cloned(), policy.cloned())
+}
+
+pub fn execute_captured_with_database_and_capabilities_and_policies(
+    program: &Program,
+    database_url: &str,
+    grants: Option<&HashSet<String>>,
+    policy: Option<&RuntimePolicy>,
+) -> ExecutionOutcome {
+    execute_internal_captured(
+        program,
+        Some(database_url.to_owned()),
+        grants.cloned(),
+        policy.cloned(),
+    )
+}
+
 pub fn execute_with_database(
     program: &Program,
     database_url: &str,
@@ -9752,13 +9793,33 @@ fn execute_internal(
     granted_capabilities: Option<HashSet<String>>,
     policy: Option<RuntimePolicy>,
 ) -> Result<Vec<String>, RuntimeError> {
+    execute_internal_captured(program, database_url, granted_capabilities, policy).into_result()
+}
+
+fn execute_internal_captured(
+    program: &Program,
+    database_url: Option<String>,
+    granted_capabilities: Option<HashSet<String>>,
+    policy: Option<RuntimePolicy>,
+) -> ExecutionOutcome {
     let depth = policy
         .as_ref()
         .and_then(|policy| policy.max_stack_depth)
         .unwrap_or(MAX_FUNCTION_CALL_DEPTH);
-    run_on_runtime_stack(runtime_stack_size(depth), || {
-        execute_internal_on_runtime_stack(program, database_url, granted_capabilities, policy)
-    })
+    match run_on_runtime_stack(runtime_stack_size(depth), || {
+        Ok(execute_internal_on_runtime_stack(
+            program,
+            database_url,
+            granted_capabilities,
+            policy,
+        ))
+    }) {
+        Ok(outcome) => outcome,
+        Err(error) => ExecutionOutcome {
+            output: Vec::new(),
+            error: Some(error),
+        },
+    }
 }
 
 fn execute_internal_on_runtime_stack(
@@ -9766,7 +9827,7 @@ fn execute_internal_on_runtime_stack(
     database_url: Option<String>,
     granted_capabilities: Option<HashSet<String>>,
     policy: Option<RuntimePolicy>,
-) -> Result<Vec<String>, RuntimeError> {
+) -> ExecutionOutcome {
     let mut interpreter = Interpreter {
         functions: program
             .functions
@@ -9815,8 +9876,11 @@ fn execute_internal_on_runtime_stack(
         active_capabilities: Vec::new(),
         active_type_substitutions: Vec::new(),
     };
-    interpreter.call("main", Vec::new(), Span::default())?;
-    Ok(interpreter.output)
+    let error = interpreter.call("main", Vec::new(), Span::default()).err();
+    ExecutionOutcome {
+        output: interpreter.output,
+        error,
+    }
 }
 
 const MAX_FUNCTION_CALL_DEPTH: usize = 20;
