@@ -1,5 +1,9 @@
 # Zelyra Studio
 
+For VS Code, Cursor, and Neovim, Zelyra also provides the standalone language
+server `zelyra lsp`. Setup, supported features, and limits are documented in
+the [LSP guide](lsp.en.md).
+
 Zelyra Studio is the local web editor included with the CLI. Start it from a
 project directory:
 

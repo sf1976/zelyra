@@ -1,29 +1,60 @@
-# Zelyra Language Support for VS Code
+# Zelyra language support for VS Code and Cursor
 
-Official Visual Studio Code extension for the **Zelyra** programming language (`.zyl`).
+The extension provides syntax highlighting and starts Zelyra's standalone LSP
+server for diagnostics, completion, hover, go to definition, references,
+rename, and document/workspace symbols. Cursor uses the same VS Code extension
+format and settings.
 
-## Features
+## Requirements
 
-- **Syntax Highlighting**: Keywords, nominal types, invariant contracts, loop clauses, Option/Result patterns, SQL/table declarations, and web routes.
-- **Language Configuration**:
-  - Automatic bracket pairing: `{}`, `()`, `[]`
-  - Auto-closing pairs and surround support
-  - Standard line (`#`) and standalone-delimiter block (`##`) comments; legacy
-    `//` comments remain accepted by the compiler
-  - Symbol folding and outline support
+- Install the Zelyra CLI and make `zelyra` available on `PATH`, or set
+  `zelyra.languageServer.path` to the CLI executable.
+- Install the packaged `zelyra.vsix` from **Extensions: Install
+  from VSIX...**. Users do not need Node.js, npm, or a separate language-server
+  package; the VSIX contains the language client and the server is the CLI.
 
-## Quick Installation
+For a non-default executable path, add this to VS Code or Cursor settings:
 
-### From VSIX:
-1. Download `zelyra.vsix`.
-2. In VS Code, open the Command Palette (`Ctrl+Shift+P` or `Cmd+Shift+P`).
-3. Select **Extensions: Install from VSIX...** and pick `zelyra.vsix`.
-4. Or via terminal:
-   ```bash
-   code --install-extension zelyra.vsix
-   ```
+```json
+{
+  "zelyra.languageServer.path": "/opt/zelyra/bin/zelyra"
+}
+```
 
-## More Information
-- Documentation & Handbook: [siedelmann.com/handbuch](https://siedelmann.com/handbuch)
-- Online Playground: [siedelmann.com/playground](https://siedelmann.com/playground)
-- GitHub Repository: [sf1976/zelyra](https://github.com/sf1976/zelyra)
+The extension launches `zelyra lsp` as a child process over standard input and
+output. Open a folder as the workspace so the server can resolve project files
+and imports. Server logs are available in **View: Output**, channel
+**Zelyra Language Server**. The extension does not run the project.
+
+## Neovim
+
+With `nvim-lspconfig`, configure the standalone server as follows:
+
+```lua
+vim.filetype.add({ extension = { zyl = "zelyra" } })
+
+vim.lsp.config("zelyra", {
+  cmd = { "zelyra", "lsp" },
+  filetypes = { "zelyra" },
+  root_markers = { "zelyra.toml", ".git" },
+})
+vim.lsp.enable("zelyra")
+```
+
+For older Neovim releases that do not provide `vim.lsp.config`, use the
+equivalent `require("lspconfig").zelyra.setup({ ... })` configuration supported
+by the installed `nvim-lspconfig` version. Ensure the CLI is on Neovim's PATH.
+
+## Building the VSIX (maintainers)
+
+The checked-in VSIX is self-contained. To rebuild it, use Node.js/npm only as a
+development tool:
+
+```sh
+npm ci --prefix editors
+npm run package --prefix editors
+```
+
+This creates `editors/zelyra.vsix`. The extension's runtime
+dependencies are packaged inside the VSIX. The Zelyra CLI remains a single
+binary and its Studio assets remain embedded; neither requires npm at runtime.
