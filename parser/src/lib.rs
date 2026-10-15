@@ -2705,6 +2705,28 @@ impl<'a> Parser<'a> {
         if let TokenKind::Ident(name) = &self.current().kind {
             let name = name.clone();
             let start = self.current().span;
+            if self.looks_like_array_index_assignment() {
+                self.advance();
+                self.expect(TokenKind::LBracket, "`[` after mutable array name")?;
+                let index = self.expression()?;
+                self.expect(TokenKind::RBracket, "`]` after mutable array index")?;
+                let operation = if self.at(&TokenKind::Equal) {
+                    self.advance();
+                    ArrayIndexAssignOp::Set
+                } else {
+                    self.expect(TokenKind::PlusEqual, "`+=` after mutable array index")?;
+                    ArrayIndexAssignOp::Add
+                };
+                let value = self.expression()?;
+                let span = start.join(value.span);
+                return Ok(Stmt::ArrayIndexAssign {
+                    name,
+                    index,
+                    value,
+                    operation,
+                    span,
+                });
+            }
             if self
                 .tokens
                 .get(self.pos + 1)
@@ -2794,6 +2816,40 @@ impl<'a> Parser<'a> {
                 _ => return false,
             }
         }
+    }
+
+    fn looks_like_array_index_assignment(&self) -> bool {
+        if !matches!(self.current().kind, TokenKind::Ident(_))
+            || !self
+                .tokens
+                .get(self.pos + 1)
+                .is_some_and(|token| token.kind == TokenKind::LBracket)
+        {
+            return false;
+        }
+        let mut position = self.pos + 1;
+        let mut depth = 0usize;
+        while let Some(token) = self.tokens.get(position) {
+            match token.kind {
+                TokenKind::LBracket => depth += 1,
+                TokenKind::RBracket => {
+                    depth = depth.saturating_sub(1);
+                    if depth == 0 {
+                        return matches!(
+                            self.tokens.get(position + 1).map(|token| &token.kind),
+                            Some(TokenKind::Equal)
+                        ) || matches!(
+                            self.tokens.get(position + 1).map(|token| &token.kind),
+                            Some(TokenKind::PlusEqual)
+                        );
+                    }
+                }
+                TokenKind::Eof | TokenKind::Newline => return false,
+                _ => {}
+            }
+            position += 1;
+        }
+        false
     }
 
     fn if_statement(&mut self, is_else_if: bool) -> Result<Stmt, ParseError> {

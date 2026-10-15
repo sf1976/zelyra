@@ -8508,6 +8508,10 @@ fn visit_block_sql<'a>(
             | Stmt::Return {
                 value: Some(value), ..
             } => visit_expression_sql(value, visitor),
+            Stmt::ArrayIndexAssign { index, value, .. } => {
+                visit_expression_sql(index, visitor);
+                visit_expression_sql(value, visitor);
+            }
             Stmt::Return { value: None, .. } | Stmt::Break { .. } | Stmt::Continue { .. } => {}
             Stmt::If {
                 condition,

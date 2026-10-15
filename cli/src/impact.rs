@@ -949,6 +949,24 @@ fn add_statement_type_references(
                     sources,
                 );
             }
+            Stmt::ArrayIndexAssign { index, value, .. } => {
+                add_expression_type_references(
+                    references,
+                    owner,
+                    index,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+                add_expression_type_references(
+                    references,
+                    owner,
+                    value,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+            }
             Stmt::Return { value, .. } => {
                 if let Some(value) = value {
                     add_expression_type_references(
@@ -1420,6 +1438,10 @@ fn collect_statement_calls(
         | Stmt::BindOrAssign { value, .. }
         | Stmt::TupleBindOrAssign { value, .. }
         | Stmt::Expr(value) => collect_expression_calls(value, function_names, calls),
+        Stmt::ArrayIndexAssign { index, value, .. } => {
+            collect_expression_calls(index, function_names, calls);
+            collect_expression_calls(value, function_names, calls);
+        }
         Stmt::Return { value, .. } => {
             if let Some(value) = value {
                 collect_expression_calls(value, function_names, calls);
@@ -1753,6 +1775,10 @@ fn collect_statement_sql_inner(
         | Stmt::BindOrAssign { value, .. }
         | Stmt::TupleBindOrAssign { value, .. }
         | Stmt::Expr(value) => collect_expr_sql(value, owner, kind, table_names, sources, entries),
+        Stmt::ArrayIndexAssign { index, value, .. } => {
+            collect_expr_sql(index, owner, kind, table_names, sources, entries);
+            collect_expr_sql(value, owner, kind, table_names, sources, entries);
+        }
         Stmt::Return { value, .. } => {
             if let Some(value) = value {
                 collect_expr_sql(value, owner, kind, table_names, sources, entries);

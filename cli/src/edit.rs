@@ -904,6 +904,10 @@ fn collect_function_block(
             | zelyra_ast::Stmt::TupleBindOrAssign { value, .. } => {
                 collect_function_expression(value, name, spans);
             }
+            zelyra_ast::Stmt::ArrayIndexAssign { index, value, .. } => {
+                collect_function_expression(index, name, spans);
+                collect_function_expression(value, name, spans);
+            }
             zelyra_ast::Stmt::Expr(expression) => {
                 collect_function_expression(expression, name, spans);
             }

@@ -1943,6 +1943,9 @@ fn collect_loop_modified_names(block: &Block, names: &mut HashSet<String>) {
             | Stmt::BindOrAssign { name, .. } => {
                 names.insert(name.clone());
             }
+            Stmt::ArrayIndexAssign { name, .. } => {
+                names.insert(name.clone());
+            }
             Stmt::TupleBindOrAssign {
                 names: assigned, ..
             } => {
@@ -2015,6 +2018,7 @@ fn collect_loop_invariants<'a>(block: &'a Block, loops: &mut Vec<(usize, &'a [Ex
             }
             Stmt::Let { .. }
             | Stmt::BindOrAssign { .. }
+            | Stmt::ArrayIndexAssign { .. }
             | Stmt::TupleBindOrAssign { .. }
             | Stmt::Expr(_)
             | Stmt::Return { .. }
@@ -3690,6 +3694,10 @@ fn check_indirect_capability_block(
                     values.remove(name);
                 }
             }
+            Stmt::ArrayIndexAssign { index, value, .. } => {
+                check_indirect_capability_expr(index, function, declared, values, errors, uses);
+                check_indirect_capability_expr(value, function, declared, values, errors, uses);
+            }
             Stmt::Expr(expression)
             | Stmt::Return {
                 value: Some(expression),
@@ -3939,6 +3947,10 @@ fn check_capability_block(
                         );
                     }
                 }
+            }
+            Stmt::ArrayIndexAssign { index, value, .. } => {
+                check_capability_expr(index, function, functions, declared, errors, uses);
+                check_capability_expr(value, function, functions, declared, errors, uses);
             }
             Stmt::Return { value: None, .. } | Stmt::Break { .. } | Stmt::Continue { .. } => {}
             Stmt::If {
@@ -4642,6 +4654,7 @@ fn statement_flow(statement: &Stmt, program: &Program) -> u8 {
         Stmt::Transaction { body, .. } => flow_outcomes(body, program),
         Stmt::Let { .. }
         | Stmt::BindOrAssign { .. }
+        | Stmt::ArrayIndexAssign { .. }
         | Stmt::TupleBindOrAssign { .. }
         | Stmt::Expr(_)
         | Stmt::Parallel { .. } => FLOW_FALLTHROUGH,
@@ -5014,6 +5027,59 @@ impl<'a> Checker<'a> {
                             ty: actual,
                             mutable: false,
                         },
+                    );
+                }
+            }
+            Stmt::ArrayIndexAssign {
+                name,
+                index,
+                value,
+                operation,
+                span,
+            } => {
+                let Some(target) = self.lookup(scopes, name).cloned() else {
+                    self.error(*span, format!("unknown variable `{name}`"));
+                    self.check_expr(index, scopes);
+                    self.check_expr(value, scopes);
+                    return;
+                };
+                if !target.mutable {
+                    self.error(
+                        *span,
+                        format!("indexed updates require a mutable array binding `{name}`"),
+                    );
+                }
+                let element_type = match target.ty {
+                    Type::Array(element) => *element,
+                    other => {
+                        self.error(
+                            *span,
+                            format!("indexed update expects an array, found `{other}`"),
+                        );
+                        self.check_expr(index, scopes);
+                        self.check_expr(value, scopes);
+                        return;
+                    }
+                };
+                let index_type = self.check_expr(index, scopes);
+                self.expect_type(&Type::Int, &index_type, index.span);
+                let value_type = self.check_expr(value, scopes);
+                self.expect_type(&element_type, &value_type, value.span);
+                if *operation == ArrayIndexAssignOp::Add
+                    && !matches!(
+                        element_type,
+                        Type::Int
+                            | Type::UInt
+                            | Type::Float
+                            | Type::Decimal
+                            | Type::String
+                            | Type::Duration
+                    )
+                {
+                    self.error_with_code(
+                        "E-TYPE-ARRAY-001",
+                        *span,
+                        format!("`+=` is not supported for array element type `{element_type}`"),
                     );
                 }
             }
@@ -6516,6 +6582,70 @@ impl<'a> Checker<'a> {
                             self.error(
                                 args[0].span,
                                 format!("`append` expects an array, found `{other}`"),
+                            );
+                            Type::Unknown
+                        }
+                    }
+                } else if name == "push_mut" {
+                    if args.len() != 2 {
+                        self.error(
+                            expr.span,
+                            "`push_mut` expects a mutable array and one value",
+                        );
+                        return Type::Unknown;
+                    }
+                    let array_type = self.check_expr(&args[0], scopes);
+                    let value_type = self.check_expr(&args[1], scopes);
+                    if let ExprKind::Variable(binding) = &args[0].kind {
+                        if self
+                            .lookup(scopes, binding)
+                            .is_none_or(|variable| !variable.mutable)
+                        {
+                            self.error(args[0].span, "`push_mut` requires a mutable array binding");
+                        }
+                    } else {
+                        self.error(
+                            args[0].span,
+                            "`push_mut` requires the name of a mutable array binding",
+                        );
+                    }
+                    match array_type {
+                        Type::Array(inner) => {
+                            self.expect_type(&inner, &value_type, args[1].span);
+                        }
+                        Type::Unknown => {}
+                        other => self.error(
+                            args[0].span,
+                            format!("`push_mut` expects an array, found `{other}`"),
+                        ),
+                    }
+                    Type::Unit
+                } else if name == "pop_mut" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "`pop_mut` expects one mutable array");
+                        return Type::Unknown;
+                    }
+                    let array_type = self.check_expr(&args[0], scopes);
+                    if let ExprKind::Variable(binding) = &args[0].kind {
+                        if self
+                            .lookup(scopes, binding)
+                            .is_none_or(|variable| !variable.mutable)
+                        {
+                            self.error(args[0].span, "`pop_mut` requires a mutable array binding");
+                        }
+                    } else {
+                        self.error(
+                            args[0].span,
+                            "`pop_mut` requires the name of a mutable array binding",
+                        );
+                    }
+                    match array_type {
+                        Type::Array(inner) => Type::Option(inner),
+                        Type::Unknown => Type::Unknown,
+                        other => {
+                            self.error(
+                                args[0].span,
+                                format!("`pop_mut` expects an array, found `{other}`"),
                             );
                             Type::Unknown
                         }
@@ -9510,6 +9640,79 @@ impl Environment {
         }
         Err("missing")
     }
+    fn mutable_array_element(&self, name: &str, index: usize) -> Result<Value, &'static str> {
+        let variable = self
+            .scopes
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(name))
+            .ok_or("unknown array binding")?;
+        if !variable.mutable {
+            return Err("cannot update an immutable array binding");
+        }
+        let Value::Array(values) = &variable.value else {
+            return Err("indexed update target is not an array");
+        };
+        values
+            .get(index)
+            .cloned()
+            .ok_or("mutable array index is out of bounds")
+    }
+    fn assign_mutable_array_element(
+        &mut self,
+        name: &str,
+        index: usize,
+        value: Value,
+    ) -> Result<(), &'static str> {
+        let variable = self
+            .scopes
+            .iter_mut()
+            .rev()
+            .find_map(|scope| scope.get_mut(name))
+            .ok_or("unknown array binding")?;
+        if !variable.mutable {
+            return Err("cannot update an immutable array binding");
+        }
+        let Value::Array(values) = &mut variable.value else {
+            return Err("indexed update target is not an array");
+        };
+        let element = values
+            .get_mut(index)
+            .ok_or("mutable array index is out of bounds")?;
+        *element = value;
+        Ok(())
+    }
+    fn push_mutable_array(&mut self, name: &str, value: Value) -> Result<(), &'static str> {
+        let variable = self
+            .scopes
+            .iter_mut()
+            .rev()
+            .find_map(|scope| scope.get_mut(name))
+            .ok_or("unknown array binding")?;
+        if !variable.mutable {
+            return Err("cannot update an immutable array binding");
+        }
+        let Value::Array(values) = &mut variable.value else {
+            return Err("push_mut target is not an array");
+        };
+        values.push(value);
+        Ok(())
+    }
+    fn pop_mutable_array(&mut self, name: &str) -> Result<Option<Value>, &'static str> {
+        let variable = self
+            .scopes
+            .iter_mut()
+            .rev()
+            .find_map(|scope| scope.get_mut(name))
+            .ok_or("unknown array binding")?;
+        if !variable.mutable {
+            return Err("cannot update an immutable array binding");
+        }
+        let Value::Array(values) = &mut variable.value else {
+            return Err("pop_mut target is not an array");
+        };
+        Ok(values.pop())
+    }
 }
 
 enum Flow {
@@ -10027,6 +10230,7 @@ fn statement_span(statement: &Stmt) -> Span {
     match statement {
         Stmt::Let { span, .. }
         | Stmt::BindOrAssign { span, .. }
+        | Stmt::ArrayIndexAssign { span, .. }
         | Stmt::TupleBindOrAssign { span, .. }
         | Stmt::Return { span, .. }
         | Stmt::If { span, .. }
@@ -10082,6 +10286,8 @@ fn is_runtime_builtin(name: &str) -> bool {
             | "find"
             | "reduce"
             | "append"
+            | "push_mut"
+            | "pop_mut"
             | "tuple"
             | "set"
             | "set_add"
@@ -11640,6 +11846,38 @@ impl<'program> Interpreter<'program> {
                 }
                 Ok(Flow::Continue)
             }
+            Stmt::ArrayIndexAssign {
+                name,
+                index,
+                value,
+                operation,
+                span,
+            } => {
+                let index_value = self.eval(index, env)?;
+                let Value::Int(index_value) = index_value else {
+                    return Err(self.runtime_error(*span, "mutable array index must be Int"));
+                };
+                let index = usize::try_from(index_value).map_err(|_| {
+                    self.runtime_error(index.span, "array index cannot be negative")
+                })?;
+                let current = if *operation == ArrayIndexAssignOp::Add {
+                    Some(
+                        env.mutable_array_element(name, index)
+                            .map_err(|reason| self.runtime_error(*span, reason))?,
+                    )
+                } else {
+                    None
+                };
+                let value = self.eval(value, env)?;
+                let updated = if let Some(current) = current {
+                    self.binary(current, BinaryOp::Add, value, *span)?
+                } else {
+                    value
+                };
+                env.assign_mutable_array_element(name, index, updated)
+                    .map_err(|reason| self.runtime_error(*span, reason))?;
+                Ok(Flow::Continue)
+            }
             Stmt::TupleBindOrAssign { names, value, span } => {
                 let value = self.eval(value, env)?;
                 let Value::Tuple(values) = value else {
@@ -12219,6 +12457,39 @@ impl<'program> Interpreter<'program> {
         env: &mut Environment,
         span: Span,
     ) -> Result<Value, RuntimeError> {
+        if name == "push_mut" {
+            if args.len() != 2 || !type_args.is_empty() {
+                return Err(self.runtime_error(
+                    span,
+                    "`push_mut` expects a mutable array binding and one value",
+                ));
+            }
+            let ExprKind::Variable(binding) = &args[0].kind else {
+                return Err(self.runtime_error(
+                    args[0].span,
+                    "`push_mut` requires the name of a mutable array binding",
+                ));
+            };
+            let value = self.eval(&args[1], env)?;
+            env.push_mutable_array(binding, value)
+                .map_err(|reason| self.runtime_error(args[0].span, reason))?;
+            return Ok(Value::Unit);
+        }
+        if name == "pop_mut" {
+            if args.len() != 1 || !type_args.is_empty() {
+                return Err(self.runtime_error(span, "`pop_mut` expects one mutable array binding"));
+            }
+            let ExprKind::Variable(binding) = &args[0].kind else {
+                return Err(self.runtime_error(
+                    args[0].span,
+                    "`pop_mut` requires the name of a mutable array binding",
+                ));
+            };
+            let value = env
+                .pop_mutable_array(binding)
+                .map_err(|reason| self.runtime_error(args[0].span, reason))?;
+            return Ok(Value::Option(value.map(Box::new)));
+        }
         if let Some(Value::Function(function)) = env.get(name) {
             if !type_args.is_empty() {
                 return Err(self.runtime_error(

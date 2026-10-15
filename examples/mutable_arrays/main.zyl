@@ -1,0 +1,13 @@
+fn main() {
+    mutable totals: Int[] = [4, 7]
+
+    totals[0] += 1
+    totals[1] = 9
+    push_mut(totals, 12)
+    removed = pop_mut(totals)
+
+    print(totals[0])
+    print(totals[1])
+    print(len(totals))
+    print(removed)
+}

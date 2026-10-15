@@ -416,6 +416,10 @@ fn check_block(
                 check_expr(value, schema, environment, aliases, errors);
                 environment.insert(name.clone(), expr_type(value));
             }
+            Stmt::ArrayIndexAssign { index, value, .. } => {
+                check_expr(index, schema, environment, aliases, errors);
+                check_expr(value, schema, environment, aliases, errors);
+            }
             Stmt::TupleBindOrAssign { names, value, .. } => {
                 check_expr(value, schema, environment, aliases, errors);
                 if let Type::Tuple(types) = expr_type(value) {

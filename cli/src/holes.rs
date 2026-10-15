@@ -168,6 +168,10 @@ impl Collector {
             Stmt::TupleBindOrAssign { value, .. } => {
                 self.expression(value, None, scope, capabilities, contract_spans);
             }
+            Stmt::ArrayIndexAssign { index, value, .. } => {
+                self.expression(index, Some(Type::Int), scope, capabilities, contract_spans);
+                self.expression(value, None, scope, capabilities, contract_spans);
+            }
             Stmt::Expr(expression) => {
                 self.expression(expression, None, scope, capabilities, contract_spans)
             }
@@ -456,6 +460,8 @@ fn visible_functions(program: &zelyra_ast::Program) -> Vec<String> {
         "text_trim",
         "text_chars",
         "append",
+        "push_mut",
+        "pop_mut",
         "tuple",
         "set",
         "set_add",

@@ -1357,6 +1357,10 @@ impl TypeLinker<'_> {
                 | Stmt::Expr(value) => {
                     self.rewrite_expression_types(value)?;
                 }
+                Stmt::ArrayIndexAssign { index, value, .. } => {
+                    self.rewrite_expression_types(index)?;
+                    self.rewrite_expression_types(value)?;
+                }
                 Stmt::Return {
                     value: Some(value), ..
                 } => self.rewrite_expression_types(value)?,
@@ -1766,6 +1770,32 @@ fn rewrite_block(
                 display_path,
                 is_root,
             )?,
+            Stmt::ArrayIndexAssign { index, value, .. } => {
+                rewrite_expr(
+                    index,
+                    module_path,
+                    module_name,
+                    imports,
+                    local_functions,
+                    function_sets,
+                    module_names,
+                    root_functions,
+                    display_path,
+                    is_root,
+                )?;
+                rewrite_expr(
+                    value,
+                    module_path,
+                    module_name,
+                    imports,
+                    local_functions,
+                    function_sets,
+                    module_names,
+                    root_functions,
+                    display_path,
+                    is_root,
+                )?;
+            }
             Stmt::Expr(expression) => rewrite_expr(
                 expression,
                 module_path,

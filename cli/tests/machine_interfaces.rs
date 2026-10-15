@@ -511,6 +511,30 @@ fn language_107_reference_example_checks_and_runs() {
 }
 
 #[test]
+fn mutable_array_example_checks_and_runs() {
+    let path = example("mutable_arrays/main.zyl");
+    let check = run(&["check", path.to_str().unwrap()]);
+    assert!(
+        check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&check.stderr)
+    );
+
+    let execution = run(&["run", path.to_str().unwrap()]);
+    assert!(
+        execution.status.success(),
+        "{}",
+        String::from_utf8_lossy(&execution.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&execution.stdout)
+            .lines()
+            .collect::<Vec<_>>(),
+        ["5", "9", "2", "Some(12)"]
+    );
+}
+
+#[test]
 fn help_lists_the_route_inventory_command_and_syntax() {
     let output = run(&["--help"]);
     assert!(output.status.success());

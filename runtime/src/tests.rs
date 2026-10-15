@@ -78,6 +78,80 @@ fn main() {
 }
 
 #[test]
+fn mutable_array_bindings_support_checked_in_place_index_updates() {
+    let source = r#"
+fn main() {
+    mutable values: Int[] = [1, 2, 3]
+    values[1] += 5
+    values[0] = 9
+    print(values[0])
+    print(values[1])
+}
+"#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap();
+    assert_eq!(execute(&program).unwrap(), ["9", "7"]);
+
+    let immutable = "fn main() { values = [1] values[0] += 1 }";
+    let program = parse(&lex(immutable).unwrap()).unwrap();
+    let errors =
+        check(&program).expect_err("index writes must require an explicit mutable binding");
+    assert!(errors
+        .iter()
+        .any(|error| error.message.contains("mutable array binding")));
+
+    let invalid_add = "fn main() { mutable flags: Bool[] = [true] flags[0] += false }";
+    let program = parse(&lex(invalid_add).unwrap()).unwrap();
+    let errors = check(&program).expect_err("compound addition must support only defined types");
+    assert!(errors.iter().any(|error| error.code == "E-TYPE-ARRAY-001"));
+
+    let out_of_bounds = "fn main() { mutable values: Int[] = [1] values[2] = 3 }";
+    let program = parse(&lex(out_of_bounds).unwrap()).unwrap();
+    check(&program).unwrap();
+    let error = execute(&program).expect_err("runtime must reject an out-of-range index");
+    assert!(error.message.contains("out of bounds"));
+}
+
+#[test]
+fn mutable_array_push_and_pop_use_mutable_bindings_and_explicit_options() {
+    let source = r#"
+fn main() {
+    mutable values: Int[] = []
+    push_mut(values, 4)
+    push_mut(values, 8)
+    popped = pop_mut(values)
+    match popped {
+        Some(value) => { print(value) }
+        None => { print(0) }
+    }
+    print(len(values))
+    empty = pop_mut(values)
+    match empty {
+        Some(value) => { print(value) }
+        None => { print(0) }
+    }
+}
+"#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap();
+    assert_eq!(execute(&program).unwrap(), ["8", "1", "4"]);
+
+    let immutable = "fn main() { values = [1] push_mut(values, 2) }";
+    let program = parse(&lex(immutable).unwrap()).unwrap();
+    let errors = check(&program).expect_err("push_mut must require an explicit mutable binding");
+    assert!(errors
+        .iter()
+        .any(|error| error.message.contains("mutable array binding")));
+
+    let mismatch = "fn main() { mutable values: Int[] = [] push_mut(values, \"wrong\") }";
+    let program = parse(&lex(mismatch).unwrap()).unwrap();
+    assert!(
+        check(&program).is_err(),
+        "push_mut must preserve the element type"
+    );
+}
+
+#[test]
 fn render_pdf_uses_named_views_record_data_and_escapes_interpolations() {
     let source = r#"
 struct Invoice { number: String customer: String }

@@ -1017,6 +1017,10 @@ fn collect_visible_bindings(block: &Block, offset: usize, output: &mut Vec<Value
                     }
                 }
             }
+            Stmt::ArrayIndexAssign { index, value, .. } => {
+                collect_visible_expression_bindings(index, offset, output);
+                collect_visible_expression_bindings(value, offset, output);
+            }
             Stmt::Expr(expression) => {
                 collect_visible_expression_bindings(expression, offset, output)
             }
@@ -1331,6 +1335,14 @@ fn index_local_block_types(
                         }
                     }
                 }
+            }
+            Stmt::ArrayIndexAssign {
+                index: index_expression,
+                value,
+                ..
+            } => {
+                index_local_expr_types(index_expression, bindings, program, source, tokens, index);
+                index_local_expr_types(value, bindings, program, source, tokens, index);
             }
             Stmt::Expr(expression)
             | Stmt::Return {
@@ -1837,6 +1849,32 @@ fn visit_local_block(
                     }
                 }
             }
+            Stmt::ArrayIndexAssign {
+                name,
+                index: index_expression,
+                value,
+                span,
+                ..
+            } => {
+                visit_local_expression(index_expression, scopes, source, tokens, index);
+                visit_local_expression(value, scopes, source, tokens, index);
+                if let Some(name_span) = local_identifier_span(tokens, *span, name, None) {
+                    if let Some(key) = scopes
+                        .iter()
+                        .rev()
+                        .find_map(|scope| scope.get(name))
+                        .cloned()
+                    {
+                        index.occurrences.push(Occurrence {
+                            key,
+                            path: source.path.clone(),
+                            start: name_span.start,
+                            end: name_span.end,
+                            declaration: false,
+                        });
+                    }
+                }
+            }
             Stmt::Expr(expression) => {
                 visit_local_expression(expression, scopes, source, tokens, index)
             }
@@ -2240,6 +2278,10 @@ fn visit_block(
             | Stmt::Expr(value) => {
                 visit_expression(value, known, sources, tokens, output);
             }
+            Stmt::ArrayIndexAssign { index, value, .. } => {
+                visit_expression(index, known, sources, tokens, output);
+                visit_expression(value, known, sources, tokens, output);
+            }
             Stmt::Return {
                 value: Some(value), ..
             } => visit_expression(value, known, sources, tokens, output),
@@ -2325,6 +2367,10 @@ fn visit_record_field_block(
                 }
             }
             Stmt::TupleBindOrAssign { value, .. } | Stmt::Expr(value) => {
+                visit_record_field_expr(value, bindings, program, sources, tokens, output);
+            }
+            Stmt::ArrayIndexAssign { index, value, .. } => {
+                visit_record_field_expr(index, bindings, program, sources, tokens, output);
                 visit_record_field_expr(value, bindings, program, sources, tokens, output);
             }
             Stmt::Return {
@@ -2767,6 +2813,10 @@ fn index_pattern_fields_in_block(
             | Stmt::Return {
                 value: Some(value), ..
             } => index_pattern_fields_in_expr(value, program, sources, tokens, output),
+            Stmt::ArrayIndexAssign { index, value, .. } => {
+                index_pattern_fields_in_expr(index, program, sources, tokens, output);
+                index_pattern_fields_in_expr(value, program, sources, tokens, output);
+            }
             Stmt::If {
                 condition,
                 then_block,
@@ -3168,7 +3218,7 @@ mod tests {
             "[project]\nname = \"local-index\"\nversion = \"1.0.0\"\n",
         )
         .unwrap();
-        let source = "fn add(amount: Int) -> Int { result = amount + 1 return result }\nfn bump(initial: Int) -> Int { mutable state: Int = initial state = state + 1 return state }\nfn unwrap(value: Option<Int>) -> Int { match value { Some(item) => { return item } None => { return 0 } } }\nfn transform() -> Int { factor = 3 values = [1, 2] transformed = values |> map(|n| n * factor) return transformed[0] }\nfn main() { print(add(2)) }\n";
+        let source = "fn add(amount: Int) -> Int { result = amount + 1 return result }\nfn bump(initial: Int) -> Int { mutable state: Int = initial state = state + 1 return state }\nfn unwrap(value: Option<Int>) -> Int { match value { Some(item) => { return item } None => { return 0 } } }\nfn transform() -> Int { factor = 3 values = [1, 2] transformed = values |> map(|n| n * factor) return transformed[0] }\nfn adjust() -> Int { mutable counts: Int[] = [0] counts[0] += 1 push_mut(counts, 2) return counts[0] }\nfn main() { print(add(2)) }\n";
         fs::write(root.join("main.zyl"), source).unwrap();
         let entry = root.join("main.zyl");
         let analysis = language_service::analyze(&entry, &[]);
@@ -3226,6 +3276,33 @@ mod tests {
         assert_eq!(mutable.key, mutable_use.key);
         assert_eq!(mutable.key, mutable_read.key);
         assert_eq!(index.references(&mutable.key, false).len(), 3);
+
+        let array_binding = index
+            .at("main.zyl", source.find("counts:").unwrap())
+            .unwrap();
+        let indexed_update = index
+            .at("main.zyl", source.find("counts[0] +=").unwrap())
+            .unwrap();
+        let push_argument = index
+            .at(
+                "main.zyl",
+                source.find("push_mut(counts").unwrap() + "push_mut(".len(),
+            )
+            .unwrap();
+        assert_eq!(array_binding.key, indexed_update.key);
+        assert_eq!(array_binding.key, push_argument.key);
+        let array_change = plan_symbol_rename(
+            &entry,
+            &analysis,
+            &index,
+            index.symbol(&array_binding.key).unwrap(),
+            "buckets",
+            &[],
+        )
+        .unwrap();
+        assert!(array_change[0].after.contains("mutable buckets: Int[]"));
+        assert!(array_change[0].after.contains("buckets[0] += 1"));
+        assert!(array_change[0].after.contains("push_mut(buckets, 2)"));
 
         let pattern = index
             .at(
