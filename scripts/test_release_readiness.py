@@ -41,7 +41,19 @@ class ReleaseReadinessTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         for version, plans in RELEASE_PLAN_CHECKLISTS.items():
             failures = unfinished_gates(root, version)
-            if version in {"0.7.0", "0.8.0", "0.9.0", "0.9.3", "0.9.5", "0.9.6", "0.9.8", "0.9.9", "1.0.6", "1.0.7"}:
+            if version in {
+                "0.7.0",
+                "0.8.0",
+                "0.9.0",
+                "0.9.3",
+                "0.9.5",
+                "0.9.6",
+                "0.9.8",
+                "0.9.9",
+                "1.0.6",
+                "1.0.7",
+                "1.1.0",
+            }:
                 self.assertEqual(
                     failures,
                     [],
@@ -162,7 +174,7 @@ class ReleaseReadinessTests(unittest.TestCase):
             self.assertTrue(any("missing or unreadable" in item for item in failures))
 
         current_failures = unfinished_gates(Path(__file__).resolve().parents[1], "1.1.0")
-        self.assertTrue(current_failures, "1.1.0 must remain blocked while work is open")
+        self.assertEqual(current_failures, [], "1.1.0 gates are complete for publication")
 
     def test_current_030_plan_requires_a_documented_onboarding_deferral(self) -> None:
         root = Path(__file__).resolve().parents[1]
