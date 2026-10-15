@@ -814,8 +814,14 @@ mod tests {
     use super::*;
     use std::env;
     use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::Mutex;
 
     static NEXT_TEST_ID: AtomicU64 = AtomicU64::new(0);
+    // These integration tests share the configured MariaDB outbox. Keeping
+    // their write-and-page/claim sequences serialized prevents one test from
+    // changing the result set while another is asserting offset pagination
+    // or claiming its event.
+    static MARIADB_OUTBOX_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn event_envelope_accepts_stable_ids_names_and_json() {
@@ -889,6 +895,9 @@ mod tests {
             eprintln!("skipping MariaDB outbox inspection test: test URL is not configured");
             return;
         };
+        let _guard = MARIADB_OUTBOX_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let suffix = format!(
             "{}-{}",
             std::process::id(),
@@ -979,6 +988,9 @@ mod tests {
             eprintln!("skipping MariaDB outbox transaction test: test URL is not configured");
             return;
         };
+        let _guard = MARIADB_OUTBOX_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let suffix = format!(
             "{}-{}",
             std::process::id(),
