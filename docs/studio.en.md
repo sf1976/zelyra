@@ -301,7 +301,7 @@ again immediately before writing. If the file changed after preview, the write
 is rejected and a new preview is required. Generated CRUD is source code; it
 does not migrate the database or change records.
 
-## Static canvas preview (1.1.0 work in progress)
+## Static canvas preview
 
 **Canvas** shows a declared page or view beside the source. Page composition
 and data substitution use the same functions as web delivery. Values in
@@ -324,7 +324,7 @@ reachable from it, including nested components. Separate actions open either
 their declaration or an actual `<Component>` use in the source. Both jumps
 target the exact source column.
 
-## Capability and path matrix (1.1.0 work in progress)
+## Capability and path matrix
 
 The **Permissions** button analyzes the current `.zyl` file, including
 unsaved changes. The matrix shows `uses` declarations, capability operations
@@ -352,7 +352,11 @@ an unchanged timestamp may be missed.
 
 ## Scope
 
-Studio is a local IDE foundation, not yet a complete IDE. The database
-workbench supports selected schema and database actions, not unrestricted
-database design. CRUD generation works from existing declared tables and
-validates generated code before writing it.
+Studio is a local, language-specific IDE with the editor, compiler-backed
+language tools, LSP, project map, preview, runtime controls, and database
+workbench described above. Some analysis is intentionally conservative:
+unannotated local type inference is limited, dynamic call chains are not fully
+resolved for capability reports, and rename is offered only for statically
+resolved supported symbols. The database workbench provides selected schema
+and data actions, not unrestricted database design. CRUD generation works from
+existing declared tables and validates generated code before writing it.

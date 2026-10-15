@@ -338,7 +338,7 @@ der Vorschau geändert, wird der Schreibvorgang abgelehnt und die Vorschau muss
 neu erstellt werden. Das erzeugte CRUD ist Quelltext; es migriert keine
 Datenbank und verändert keine Datensätze.
 
-## Statische Canvas-Vorschau (Arbeitsstand 1.1.0)
+## Statische Canvas-Vorschau
 
 **Canvas** zeigt eine deklarierte Seite oder View neben dem Quelltext. Die
 Seitenkomposition und die Ersetzung von Datenwerten verwenden dieselben
@@ -364,7 +364,7 @@ Getrennte Aktionen öffnen entweder ihre Deklaration oder eine tatsächliche
 `<Komponente>`-Verwendung im Quelltext. Beide Sprünge führen zur exakten
 Spaltenposition innerhalb des Quelltextes.
 
-## Capability- und Pfadmatrix (Arbeitsstand 1.1.0)
+## Capability- und Pfadmatrix
 
 Die Schaltfläche **Rechte** analysiert die aktuelle `.zyl`-Datei einschließlich
 ungespeicherter Änderungen. Die Matrix zeigt `uses`-Deklarationen, tatsächlich
@@ -396,7 +396,12 @@ Editors begrenzt. Auf Dateisystemen mit grober Zeitauflösung kann eine
 
 ## Umfang
 
-Studio ist eine lokale IDE-Grundlage und noch keine vollständige IDE.
-Die Datenbankwerkbank unterstützt ausgewählte Schema-/Datenbankaktionen, aber
-keinen beliebigen Datenbankdesigner. Die CRUD-Erzeugung arbeitet mit bereits
+Studio ist eine lokale, sprachspezifische IDE mit Editor, compilerbasierten
+Sprachwerkzeugen, LSP, Projektkarte, Vorschau, Laufzeitsteuerung und
+Datenbankwerkbank wie oben beschrieben. Manche Analysen bleiben bewusst
+konservativ: Die Typinferenz für nicht annotierte lokale Werte ist begrenzt,
+dynamische Aufrufketten werden in Capability-Berichten nicht vollständig
+aufgelöst, und Rename erscheint nur für statisch aufgelöste unterstützte
+Symbole. Die Datenbankwerkbank bietet ausgewählte Schema- und Datenaktionen,
+aber keinen beliebigen Datenbankdesigner. Die CRUD-Erzeugung arbeitet mit
 deklarierten Tabellen und prüft den erzeugten Code vor dem Schreiben.
