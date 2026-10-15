@@ -371,18 +371,135 @@ impl Server {
         }
         let mut symbols = Vec::new();
         for function in &program.functions {
-            if let Some(source) = analysis.sources.get(function.span.source_id as usize) {
-                let plain_name = function.name.rsplit("::").next().unwrap_or(&function.name);
-                let location = declaration_location(&self.root, source, function.span, plain_name);
-                symbols.push((source.path.clone(), plain_name.to_owned(), 12, location));
-            }
+            push_outline_symbol(
+                &mut symbols,
+                &self.root,
+                &analysis.sources,
+                &function.name,
+                function.span,
+                12,
+            );
         }
         for record in &program.records {
-            if let Some(source) = analysis.sources.get(record.span.source_id as usize) {
-                let plain_name = record.name.rsplit("::").next().unwrap_or(&record.name);
-                let location = declaration_location(&self.root, source, record.span, plain_name);
-                symbols.push((source.path.clone(), plain_name.to_owned(), 23, location));
-            }
+            push_outline_symbol(
+                &mut symbols,
+                &self.root,
+                &analysis.sources,
+                &record.name,
+                record.span,
+                23,
+            );
+        }
+        for table in &program.tables {
+            push_outline_symbol(
+                &mut symbols,
+                &self.root,
+                &analysis.sources,
+                &table.name,
+                table.span,
+                23,
+            );
+        }
+        for type_def in &program.types {
+            push_outline_symbol(
+                &mut symbols,
+                &self.root,
+                &analysis.sources,
+                &type_def.name,
+                type_def.span,
+                26,
+            );
+        }
+        for enum_def in &program.enums {
+            push_outline_symbol(
+                &mut symbols,
+                &self.root,
+                &analysis.sources,
+                &enum_def.name,
+                enum_def.span,
+                10,
+            );
+        }
+        for view in &program.views {
+            push_outline_symbol(
+                &mut symbols,
+                &self.root,
+                &analysis.sources,
+                &view.name,
+                view.span,
+                2,
+            );
+        }
+        for component in &program.components {
+            push_outline_symbol(
+                &mut symbols,
+                &self.root,
+                &analysis.sources,
+                &component.name,
+                component.span,
+                5,
+            );
+        }
+        for page in &program.pages {
+            push_outline_symbol(
+                &mut symbols,
+                &self.root,
+                &analysis.sources,
+                &page.path,
+                page.span,
+                2,
+            );
+        }
+        for tableview in &program.tableviews {
+            push_outline_symbol(
+                &mut symbols,
+                &self.root,
+                &analysis.sources,
+                &tableview.name,
+                tableview.span,
+                23,
+            );
+        }
+        for form in &program.forms {
+            push_outline_symbol(
+                &mut symbols,
+                &self.root,
+                &analysis.sources,
+                &form.name,
+                form.span,
+                23,
+            );
+        }
+        for crud in &program.cruds {
+            push_outline_symbol(
+                &mut symbols,
+                &self.root,
+                &analysis.sources,
+                &crud.name,
+                crud.span,
+                23,
+            );
+        }
+        for auth in &program.auth {
+            push_outline_symbol(
+                &mut symbols,
+                &self.root,
+                &analysis.sources,
+                &auth.name,
+                auth.span,
+                23,
+            );
+        }
+        for api in &program.apis {
+            let name = format!("{} {}", api.method, api.path);
+            push_outline_symbol(
+                &mut symbols,
+                &self.root,
+                &analysis.sources,
+                &name,
+                api.span,
+                12,
+            );
         }
         match method {
             "textDocument/completion" => {
@@ -573,6 +690,22 @@ fn declaration_location(
         "uri": uri,
         "range": {"start":offset_position(&source.text,start),"end":offset_position(&source.text,start+name.len())}
     })
+}
+
+fn push_outline_symbol(
+    symbols: &mut Vec<(String, String, u32, Value)>,
+    root: &Path,
+    sources: &[project::ProjectSource],
+    qualified_name: &str,
+    span: zelyra_ast::Span,
+    kind: u32,
+) {
+    let Some(source) = sources.get(span.source_id as usize) else {
+        return;
+    };
+    let name = qualified_name.rsplit("::").next().unwrap_or(qualified_name);
+    let location = declaration_location(root, source, span, name);
+    symbols.push((source.path.clone(), name.to_owned(), kind, location));
 }
 
 fn uri_path(uri: &str) -> Option<PathBuf> {
@@ -821,6 +954,47 @@ mod tests {
                 })
             )
             .is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn lsp_outline_and_workspace_symbols_include_zelyra_resource_kinds() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-lsp-outline-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        fs::write(
+            root.join("main.zyl"),
+            "enum OrderStatus { Draft Paid }\nstruct Customer { id: Id name: String }\ntype Quantity = Int\ntable customers { id: Id primary auto name: String(50) required }\nfn main() {}\n",
+        )
+        .unwrap();
+        let uri = Url::from_file_path(root.join("main.zyl"))
+            .unwrap()
+            .to_string();
+        let server = Server {
+            root: root.clone(),
+            documents: HashMap::new(),
+            shutdown: false,
+        };
+        let outline = server.symbol_response(
+            "textDocument/documentSymbol",
+            &json!({"textDocument":{"uri":uri}}),
+        );
+        let names = outline
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|symbol| symbol.get("name").and_then(Value::as_str))
+            .collect::<HashSet<_>>();
+        assert!(names.contains("OrderStatus"), "outline: {outline:?}");
+        assert!(names.contains("Customer"), "outline: {outline:?}");
+        assert!(names.contains("Quantity"), "outline: {outline:?}");
+        assert!(names.contains("customers"), "outline: {outline:?}");
+        assert!(names.contains("main"), "outline: {outline:?}");
+        let search = server.symbol_response("workspace/symbol", &json!({"query":"OrderStatus"}));
+        assert_eq!(search.as_array().unwrap().len(), 1);
         fs::remove_dir_all(root).unwrap();
     }
 
