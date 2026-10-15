@@ -44,11 +44,15 @@ gemeinsame Projektanalyse. Record-Verweise umfassen Record-Literale, lokale
 Record-Muster, Typaliase, Funktionsparameter und Rückgabetypen, lokale
 Variablentypannotationen sowie Typen von Record-Feldern, Tabellenspalten,
 Komponenteneigenschaften, Formularen, API-Eingaben, Seiteneingaben und
-Tableviews. Feldnamen und Feldzugriffe sind noch nicht indexiert. Die freie
-projektweite Textsuche bleibt ein getrenntes Werkzeug.
+Tableviews. Ein Feld-Rename umfasst Felddeklarationen, Labels in Record-
+Literalen und Feldzugriffe, deren Empfängertyp aus einem Funktionsparameter,
+einer lokalen Typannotation oder einem direkt erstellten Record aufgelöst
+wird. Für nicht aufgelöste oder dynamische Empfänger sowie Record-Felder in
+destrukturierenden Mustern wird kein Rename angeboten. Die freie projektweite
+Textsuche bleibt ein getrenntes Werkzeug.
 
-Mit **F2** lässt sich eine aufgelöste Funktion oder ein indexierter Record-Name
-umbenennen. Studio zeigt vorab alle betroffenen Dateien und prüft die Änderung
+Mit **F2** lassen sich aufgelöste Funktionen, Record-Typen und indexierte
+Record-Felder umbenennen. Studio zeigt vorab alle betroffenen Dateien und prüft die Änderung
 mit dem Compiler. Ein nicht indexierter Feldzugriff, der dadurch ungültig
 würde, führt zur Ablehnung des Plans, bevor Änderungen übernommen werden. Eine
 gültige Übernahme ändert die geöffneten Puffer; jede

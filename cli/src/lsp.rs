@@ -1029,6 +1029,38 @@ mod tests {
             .unwrap()
             .iter()
             .all(|edit| edit["newText"] == "Account"));
+        let field_offset = main.rfind("customer.name").unwrap() + "customer.".len();
+        let field_params = json!({
+            "textDocument":{"uri":uri},
+            "position":offset_position(main, field_offset)
+        });
+        let field_definition = server
+            .semantic_response("textDocument/definition", &field_params)
+            .unwrap();
+        assert!(field_definition["uri"]
+            .as_str()
+            .unwrap()
+            .ends_with("/src/models.zyl"));
+        let field_references = server
+            .semantic_response("textDocument/references", &field_params)
+            .unwrap();
+        assert_eq!(
+            field_references.as_array().unwrap().len(),
+            2,
+            "{field_references:?}"
+        );
+        let field_rename = server
+            .semantic_response(
+                "textDocument/rename",
+                &json!({"textDocument":{"uri":uri},"position":offset_position(main,field_offset),"newName":"full_name"}),
+            )
+            .unwrap();
+        let field_changes = field_rename["documentChanges"].as_array().unwrap();
+        let changed_main = field_changes
+            .iter()
+            .find(|change| change["textDocument"]["uri"] == uri)
+            .unwrap();
+        assert_eq!(changed_main["edits"].as_array().unwrap().len(), 2);
         fs::remove_dir_all(root).unwrap();
     }
 

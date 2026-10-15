@@ -165,6 +165,33 @@ try {
   assert.match(await page.locator(".cm-content").textContent(), /struct Invoice \{ value: Int \}/);
   await page.locator("#save-all-button").click();
   await page.waitForFunction(() => document.querySelector("#status-message")?.textContent?.includes("2 Dateien gemeinsam gespeichert"));
+  await page.locator('#tabs .tab').filter({ hasText: "main.zyl" }).click();
+  const fieldPoint = await page.evaluate(() => {
+    const walker = document.createTreeWalker(document.querySelector(".cm-content"), NodeFilter.SHOW_TEXT);
+    let point = null;
+    while (walker.nextNode()) {
+      if (walker.currentNode.textContent !== "value") continue;
+      const range = document.createRange();
+      range.selectNodeContents(walker.currentNode);
+      const rect = range.getBoundingClientRect();
+      point = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+    }
+    return point;
+  });
+  assert.ok(fieldPoint, "the typed record field access is visible");
+  await page.mouse.click(fieldPoint.x, fieldPoint.y);
+  await page.keyboard.press("F2");
+  await page.locator("#semantic-rename-dialog[open]").waitFor();
+  await page.locator("#semantic-rename-name").fill("amount");
+  await page.locator("#semantic-rename-preview-button").click();
+  await page.waitForFunction(() => document.querySelector("#semantic-rename-status")?.textContent?.includes("2 Dateien"));
+  await page.locator("#semantic-rename-apply-button").click();
+  await page.waitForFunction(() => document.querySelector("#status-message")?.textContent?.includes("2 Dateien geändert"));
+  assert.match(await page.locator(".cm-content").textContent(), /customer: math::Invoice = math::Invoice \{ amount: 42 \} print\(customer.amount\)/);
+  await page.locator('#tabs .tab').filter({ hasText: "math.zyl" }).click();
+  assert.match(await page.locator(".cm-content").textContent(), /struct Invoice \{ amount: Int \}/);
+  await page.locator("#save-all-button").click();
+  await page.waitForFunction(() => document.querySelector("#status-message")?.textContent?.includes("2 Dateien gemeinsam gespeichert"));
   page.on("dialog", async (dialog) => {
     if (dialog.type() === "prompt") await dialog.accept("src/answers.zyl");
     else await dialog.accept();
@@ -211,7 +238,7 @@ try {
     }
   }
   assert.deepEqual(errors, [], `browser errors: ${errors.join(", ")}`);
-  console.log(`Studio semantic rename, journaled save, and import-aware file rename passed in ${engineName}; first usable editor ${firstUsableMs.toFixed(1)} ms; analysis response ${analysisMs?.toFixed(1) ?? "unmeasured"} ms`);
+  console.log(`Studio function, record, and field rename; journaled save; and import-aware file rename passed in ${engineName}; first usable editor ${firstUsableMs.toFixed(1)} ms; analysis response ${analysisMs?.toFixed(1) ?? "unmeasured"} ms`);
 } finally {
   await browser?.close();
   if (processHandle && processHandle.exitCode === null) {

@@ -5,7 +5,7 @@
 use super::*;
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
-use zelyra_ast::{Block, Expr, ExprKind, Pattern, PatternKind, Span, Stmt, Type};
+use zelyra_ast::{Block, Expr, ExprKind, Pattern, PatternKind, Program, Span, Stmt, Type};
 use zelyra_lexer::{Token, TokenKind};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -204,6 +204,29 @@ impl SemanticIndex {
                 declaration,
             });
             known_records.insert(key);
+            for field in &record.fields {
+                let Some(field_span) =
+                    record_reference_span(source_tokens, field.span, &field.name)
+                else {
+                    continue;
+                };
+                let field_key = format!("record-field:{}:{}", record.name, field.name);
+                let declaration = Occurrence {
+                    key: field_key.clone(),
+                    path: source.path.clone(),
+                    start: field_span.start,
+                    end: field_span.end,
+                    declaration: true,
+                };
+                index.occurrences.push(declaration.clone());
+                index.symbols.push(Symbol {
+                    key: field_key,
+                    name: field.name.clone(),
+                    path: source.path.clone(),
+                    detail: format!("field {name}.{}: {}", field.name, field.ty),
+                    declaration,
+                });
+            }
         }
         for function in &program.functions {
             let Some(source) = analysis.sources.get(function.span.source_id as usize) else {
@@ -410,6 +433,19 @@ impl SemanticIndex {
                 &tokens,
                 &mut index.occurrences,
             );
+            let mut bindings = function
+                .params
+                .iter()
+                .map(|parameter| (parameter.name.clone(), parameter.ty.clone()))
+                .collect::<HashMap<_, _>>();
+            visit_record_field_block(
+                &function.body,
+                &mut bindings,
+                program,
+                &analysis.sources,
+                &tokens,
+                &mut index.occurrences,
+            );
         }
         for record in &program.records {
             for field in &record.fields {
@@ -469,6 +505,9 @@ impl SemanticIndex {
         let names = self
             .symbols
             .iter()
+            .filter(|symbol| {
+                !symbol.key.starts_with("record:") && !symbol.key.starts_with("record-field:")
+            })
             .map(|symbol| symbol.key.as_str())
             .collect::<Vec<_>>();
         let by_name = names
@@ -949,6 +988,313 @@ fn visit_block(
     }
 }
 
+fn visit_record_field_block(
+    block: &Block,
+    bindings: &mut HashMap<String, Type>,
+    program: &Program,
+    sources: &[project::ProjectSource],
+    tokens: &HashMap<u32, Vec<Token>>,
+    output: &mut Vec<Occurrence>,
+) {
+    for statement in &block.statements {
+        match statement {
+            Stmt::Let {
+                name, ty, value, ..
+            } => {
+                visit_record_field_expr(value, bindings, program, sources, tokens, output);
+                if let Some(ty) = ty
+                    .clone()
+                    .or_else(|| expression_type(value, bindings, program))
+                {
+                    bindings.insert(name.clone(), ty);
+                }
+            }
+            Stmt::BindOrAssign { name, value, .. } => {
+                visit_record_field_expr(value, bindings, program, sources, tokens, output);
+                if let Some(ty) = expression_type(value, bindings, program) {
+                    bindings.insert(name.clone(), ty);
+                }
+            }
+            Stmt::TupleBindOrAssign { value, .. } | Stmt::Expr(value) => {
+                visit_record_field_expr(value, bindings, program, sources, tokens, output);
+            }
+            Stmt::Return {
+                value: Some(value), ..
+            } => visit_record_field_expr(value, bindings, program, sources, tokens, output),
+            Stmt::If {
+                condition,
+                then_block,
+                else_block,
+                ..
+            } => {
+                visit_record_field_expr(condition, bindings, program, sources, tokens, output);
+                let mut branch = bindings.clone();
+                visit_record_field_block(then_block, &mut branch, program, sources, tokens, output);
+                if let Some(otherwise) = else_block {
+                    let mut branch = bindings.clone();
+                    visit_record_field_block(
+                        otherwise,
+                        &mut branch,
+                        program,
+                        sources,
+                        tokens,
+                        output,
+                    );
+                }
+            }
+            Stmt::While {
+                condition,
+                invariants,
+                body,
+                ..
+            } => {
+                visit_record_field_expr(condition, bindings, program, sources, tokens, output);
+                for invariant in invariants {
+                    visit_record_field_expr(invariant, bindings, program, sources, tokens, output);
+                }
+                let mut nested = bindings.clone();
+                visit_record_field_block(body, &mut nested, program, sources, tokens, output);
+            }
+            Stmt::For {
+                name,
+                iterable,
+                body,
+                ..
+            } => {
+                visit_record_field_expr(iterable, bindings, program, sources, tokens, output);
+                let mut nested = bindings.clone();
+                if let Some(Type::Array(inner) | Type::Set(inner)) =
+                    expression_type(iterable, bindings, program)
+                {
+                    nested.insert(name.clone(), *inner);
+                }
+                visit_record_field_block(body, &mut nested, program, sources, tokens, output);
+            }
+            Stmt::Loop {
+                invariants, body, ..
+            } => {
+                for invariant in invariants {
+                    visit_record_field_expr(invariant, bindings, program, sources, tokens, output);
+                }
+                let mut nested = bindings.clone();
+                visit_record_field_block(body, &mut nested, program, sources, tokens, output);
+            }
+            Stmt::Match { value, arms, .. } => {
+                visit_record_field_expr(value, bindings, program, sources, tokens, output);
+                for arm in arms {
+                    let mut nested = bindings.clone();
+                    if let Some(guard) = &arm.guard {
+                        visit_record_field_expr(
+                            guard,
+                            &mut nested,
+                            program,
+                            sources,
+                            tokens,
+                            output,
+                        );
+                    }
+                    visit_record_field_block(
+                        &arm.body,
+                        &mut nested,
+                        program,
+                        sources,
+                        tokens,
+                        output,
+                    );
+                }
+            }
+            Stmt::Transaction { body, .. } | Stmt::Parallel { body, .. } => {
+                let mut nested = bindings.clone();
+                visit_record_field_block(body, &mut nested, program, sources, tokens, output);
+            }
+            Stmt::Return { value: None, .. } | Stmt::Break { .. } | Stmt::Continue { .. } => {}
+        }
+    }
+}
+
+fn visit_record_field_expr(
+    expression: &Expr,
+    bindings: &mut HashMap<String, Type>,
+    program: &Program,
+    sources: &[project::ProjectSource],
+    tokens: &HashMap<u32, Vec<Token>>,
+    output: &mut Vec<Occurrence>,
+) {
+    macro_rules! visit_child {
+        ($child:expr) => {
+            visit_record_field_expr($child, bindings, program, sources, tokens, output)
+        };
+    }
+    match &expression.kind {
+        ExprKind::Record {
+            type_name, fields, ..
+        } => {
+            let record_type = Type::Named(type_name.clone());
+            if let Some(record) = resolve_record_type(&record_type, program, 0) {
+                for (name, value) in fields {
+                    push_record_field_use(record, name, expression.span, sources, tokens, output);
+                    visit_child!(value);
+                }
+            } else {
+                for (_, value) in fields {
+                    visit_child!(value);
+                }
+            }
+        }
+        ExprKind::Field { target, field } => {
+            if let Some(ty) = expression_type(target, bindings, program) {
+                if let Some(record) = resolve_record_type(&ty, program, 0) {
+                    push_record_field_use(record, field, expression.span, sources, tokens, output);
+                }
+            }
+            visit_child!(target);
+        }
+        ExprKind::Call { args, .. } | ExprKind::Array(args) => {
+            for argument in args {
+                visit_child!(argument);
+            }
+        }
+        ExprKind::Map(entries) => {
+            for (key, value) in entries {
+                visit_child!(key);
+                visit_child!(value);
+            }
+        }
+        ExprKind::Lambda { params, body } => {
+            let mut nested = bindings.clone();
+            nested.extend(
+                params
+                    .iter()
+                    .map(|parameter| (parameter.name.clone(), parameter.ty.clone())),
+            );
+            visit_record_field_expr(body, &mut nested, program, sources, tokens, output);
+        }
+        ExprKind::Await(inner) | ExprKind::Unary { expr: inner, .. } => visit_child!(inner),
+        ExprKind::Index { target, index } => {
+            visit_child!(target);
+            visit_child!(index);
+        }
+        ExprKind::Binary { left, right, .. } => {
+            visit_child!(left);
+            visit_child!(right);
+        }
+        ExprKind::Match { value, arms } => {
+            visit_child!(value);
+            for arm in arms {
+                let mut nested = bindings.clone();
+                if let Some(guard) = &arm.guard {
+                    visit_record_field_expr(guard, &mut nested, program, sources, tokens, output);
+                }
+                visit_record_field_expr(&arm.value, &mut nested, program, sources, tokens, output);
+            }
+        }
+        ExprKind::Int(_)
+        | ExprKind::UInt(_)
+        | ExprKind::Float(_)
+        | ExprKind::Bool(_)
+        | ExprKind::String(_)
+        | ExprKind::Char(_)
+        | ExprKind::Variable(_)
+        | ExprKind::FunctionValue(_)
+        | ExprKind::Sql { .. } => {}
+    }
+}
+
+fn expression_type(
+    expression: &Expr,
+    bindings: &HashMap<String, Type>,
+    program: &Program,
+) -> Option<Type> {
+    match &expression.kind {
+        ExprKind::Variable(name) => bindings.get(name).cloned(),
+        ExprKind::Record { type_name, .. } => Some(Type::Named(type_name.clone())),
+        ExprKind::Index { target, .. } => match expression_type(target, bindings, program)? {
+            Type::Array(inner) | Type::Set(inner) => Some(*inner),
+            _ => None,
+        },
+        ExprKind::Field { target, field } => {
+            let record =
+                resolve_record_type(&expression_type(target, bindings, program)?, program, 0)?;
+            record
+                .fields
+                .iter()
+                .find(|candidate| candidate.name == *field)
+                .map(|candidate| candidate.ty.clone())
+        }
+        _ => None,
+    }
+}
+
+fn resolve_record_type<'a>(
+    ty: &Type,
+    program: &'a Program,
+    depth: usize,
+) -> Option<&'a zelyra_ast::RecordDef> {
+    if depth > 12 {
+        return None;
+    }
+    let name = match ty {
+        Type::Named(name) | Type::Applied { name, .. } => name,
+        _ => return None,
+    };
+    if let Some(record) = program.records.iter().find(|record| record.name == *name) {
+        return Some(record);
+    }
+    let short = name.rsplit("::").next().unwrap_or(name);
+    let mut matches = program
+        .records
+        .iter()
+        .filter(|record| record.name == short || record.name.ends_with(&format!("::{short}")));
+    if let Some(record) = matches.next() {
+        return matches.next().is_none().then_some(record);
+    }
+    let alias = program
+        .types
+        .iter()
+        .find(|alias| alias.name == *name || alias.name == short)?;
+    resolve_record_type(&alias.target, program, depth + 1)
+}
+
+fn push_record_field_use(
+    record: &zelyra_ast::RecordDef,
+    name: &str,
+    span: Span,
+    sources: &[project::ProjectSource],
+    tokens: &HashMap<u32, Vec<Token>>,
+    output: &mut Vec<Occurrence>,
+) {
+    let Some(field) = record.fields.iter().find(|field| field.name == name) else {
+        return;
+    };
+    let Some(source) = sources.get(span.source_id as usize) else {
+        return;
+    };
+    let Some(source_tokens) = tokens.get(&span.source_id) else {
+        return;
+    };
+    let Some(field_span) = last_reference_span(source_tokens, span, name) else {
+        return;
+    };
+    output.push(Occurrence {
+        key: format!("record-field:{}:{}", record.name, field.name),
+        path: source.path.clone(),
+        start: field_span.start,
+        end: field_span.end,
+        declaration: false,
+    });
+}
+
+fn last_reference_span(tokens: &[Token], expression: Span, name: &str) -> Option<Span> {
+    tokens
+        .iter()
+        .filter(|token| token.span.start >= expression.start && token.span.end <= expression.end)
+        .filter_map(|token| match &token.kind {
+            TokenKind::Ident(found) if found == name => Some(token.span),
+            _ => None,
+        })
+        .next_back()
+}
+
 fn visit_expression(
     expression: &Expr,
     known: &HashSet<String>,
@@ -1173,6 +1519,73 @@ mod tests {
         assert!(changes
             .iter()
             .any(|change| change.after.contains("type CustomerAlias = model::Account")));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn record_field_rename_follows_typed_receivers_and_record_literals() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-index-record-field-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        fs::write(
+            root.join("zelyra.toml"),
+            "[project]\nname = \"record-field-rename\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+        let source = "struct Customer { name: String }\nfn main() { customer: Customer = Customer { name: \"Ada\" } print(customer.name) }\n";
+        fs::write(root.join("main.zyl"), source).unwrap();
+        let entry = root.join("main.zyl");
+        let analysis = language_service::analyze(&entry, &[]);
+        assert!(analysis.success, "{:?}", analysis.diagnostics);
+        let index = SemanticIndex::from_analysis(&analysis);
+        let field_declaration = source.find("name: String").unwrap();
+        let occurrence = index.at("main.zyl", field_declaration).unwrap();
+        assert!(occurrence.key.starts_with("record-field:"));
+        let symbol = index.symbol(&occurrence.key).unwrap();
+        assert_eq!(index.references(&symbol.key, true).len(), 3);
+        let changes = plan_symbol_rename(&entry, &analysis, &index, symbol, "full_name", &[])
+            .expect("typed field access and record literal should rename together");
+        assert_eq!(changes.len(), 1);
+        assert!(changes[0]
+            .after
+            .contains("struct Customer { full_name: String }"));
+        assert!(changes[0]
+            .after
+            .contains("Customer { full_name: \"Ada\" } print(customer.full_name)"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn record_field_rename_rejects_unindexed_dynamic_receiver() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-index-dynamic-field-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        fs::write(
+            root.join("zelyra.toml"),
+            "[project]\nname = \"dynamic-field-rename\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+        let source = "struct Customer { name: String }\nfn load_customer() -> Customer { return Customer { name: \"Eve\" } }\nfn main() { customer: Customer = Customer { name: \"Ada\" } print(customer.name) loaded_customer = load_customer() print(loaded_customer.name) }\n";
+        fs::write(root.join("main.zyl"), source).unwrap();
+        let entry = root.join("main.zyl");
+        let analysis = language_service::analyze(&entry, &[]);
+        assert!(analysis.success, "{:?}", analysis.diagnostics);
+        let index = SemanticIndex::from_analysis(&analysis);
+        let occurrence = index
+            .at("main.zyl", source.find("name: String").unwrap())
+            .unwrap();
+        let symbol = index.symbol(&occurrence.key).unwrap();
+        assert!(
+            plan_symbol_rename(&entry, &analysis, &index, symbol, "full_name", &[])
+                .unwrap_err()
+                .contains("renamed project does not compile")
+        );
         fs::remove_dir_all(root).unwrap();
     }
 
