@@ -228,6 +228,96 @@ impl SemanticIndex {
                 });
             }
         }
+        let resources = program
+            .tables
+            .iter()
+            .map(|item| ("table", item.name.as_str(), item.span))
+            .chain(
+                program
+                    .views
+                    .iter()
+                    .map(|item| ("view", item.name.as_str(), item.span)),
+            )
+            .chain(
+                program
+                    .forms
+                    .iter()
+                    .map(|item| ("form", item.name.as_str(), item.span)),
+            )
+            .chain(
+                program
+                    .cruds
+                    .iter()
+                    .map(|item| ("crud", item.name.as_str(), item.span)),
+            )
+            .chain(
+                program
+                    .tableviews
+                    .iter()
+                    .map(|item| ("tableview", item.name.as_str(), item.span)),
+            )
+            .chain(
+                program
+                    .components
+                    .iter()
+                    .map(|item| ("component", item.name.as_str(), item.span)),
+            );
+        for (kind, full_name, declaration_span) in resources {
+            let Some(source) = analysis.sources.get(declaration_span.source_id as usize) else {
+                continue;
+            };
+            let Some(source_tokens) = tokens.get(&declaration_span.source_id) else {
+                continue;
+            };
+            let name = full_name.rsplit("::").next().unwrap_or(full_name);
+            let spans = if kind == "component" {
+                edit::component_rename_spans(source_tokens, name)
+            } else {
+                edit::resource_rename_spans(program, source_tokens, kind, name)
+            };
+            let Some(declaration_span) = source_tokens
+                .iter()
+                .filter(|token| {
+                    token.span.start >= declaration_span.start
+                        && token.span.end <= declaration_span.end
+                })
+                .find_map(|token| match &token.kind {
+                    TokenKind::Ident(found) if found == name => Some(token.span),
+                    _ => None,
+                })
+            else {
+                continue;
+            };
+            let key = format!("resource:{kind}:{}:{full_name}", source.path);
+            for (start, end) in spans {
+                index.occurrences.push(Occurrence {
+                    key: key.clone(),
+                    path: source.path.clone(),
+                    start,
+                    end,
+                    declaration: start == declaration_span.start && end == declaration_span.end,
+                });
+            }
+            let declaration = Occurrence {
+                key: key.clone(),
+                path: source.path.clone(),
+                start: declaration_span.start,
+                end: declaration_span.end,
+                declaration: true,
+            };
+            if !index.occurrences.iter().any(|item| {
+                item.key == key && item.start == declaration.start && item.end == declaration.end
+            }) {
+                index.occurrences.push(declaration.clone());
+            }
+            index.symbols.push(Symbol {
+                key,
+                name: name.into(),
+                path: source.path.clone(),
+                detail: format!("{kind} {name}"),
+                declaration,
+            });
+        }
         for function in &program.functions {
             let Some(source) = analysis.sources.get(function.span.source_id as usize) else {
                 continue;
@@ -506,7 +596,9 @@ impl SemanticIndex {
             .symbols
             .iter()
             .filter(|symbol| {
-                !symbol.key.starts_with("record:") && !symbol.key.starts_with("record-field:")
+                !symbol.key.starts_with("record:")
+                    && !symbol.key.starts_with("record-field:")
+                    && !symbol.key.starts_with("resource:")
             })
             .map(|symbol| symbol.key.as_str())
             .collect::<Vec<_>>();
@@ -1593,6 +1685,72 @@ mod tests {
                 .unwrap_err()
                 .contains("renamed project does not compile")
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn resource_rename_follows_same_module_form_references() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-index-table-rename-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        fs::write(
+            root.join("zelyra.toml"),
+            "[project]\nname = \"table-rename\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+        let source = "table customers { id: Id primary auto name: String(100) required }\nform CustomerCreate -> customers { fields { name } }\nfn main() {}\n";
+        fs::write(root.join("main.zyl"), source).unwrap();
+        let entry = root.join("main.zyl");
+        let analysis = language_service::analyze(&entry, &[]);
+        assert!(analysis.success, "{:?}", analysis.diagnostics);
+        let index = SemanticIndex::from_analysis(&analysis);
+        let occurrence = index
+            .at("main.zyl", source.find("customers {").unwrap())
+            .unwrap();
+        assert!(occurrence.key.starts_with("resource:table:"));
+        let symbol = index.symbol(&occurrence.key).unwrap();
+        assert_eq!(index.references(&symbol.key, true).len(), 2);
+        let changes = plan_symbol_rename(&entry, &analysis, &index, symbol, "clients", &[])
+            .expect("table and form source should be renamed together");
+        assert_eq!(changes.len(), 1);
+        assert!(changes[0].after.contains("table clients {"));
+        assert!(changes[0].after.contains("CustomerCreate -> clients"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn component_rename_follows_html_opening_tags_in_the_same_source() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-index-component-rename-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        fs::write(
+            root.join("zelyra.toml"),
+            "[project]\nname = \"component-rename\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+        let source = "component Banner { html { <aside><slot /></aside> } }\npage \"/\" { html { <Banner /> } }\nfn main() {}\n";
+        fs::write(root.join("main.zyl"), source).unwrap();
+        let entry = root.join("main.zyl");
+        let analysis = language_service::analyze(&entry, &[]);
+        assert!(analysis.success, "{:?}", analysis.diagnostics);
+        let index = SemanticIndex::from_analysis(&analysis);
+        let occurrence = index
+            .at("main.zyl", source.find("Banner").unwrap())
+            .unwrap();
+        assert!(occurrence.key.starts_with("resource:component:"));
+        let symbol = index.symbol(&occurrence.key).unwrap();
+        assert_eq!(index.references(&symbol.key, true).len(), 2);
+        let changes = plan_symbol_rename(&entry, &analysis, &index, symbol, "Panel", &[])
+            .expect("component declaration and HTML use should rename together");
+        assert_eq!(changes.len(), 1);
+        assert!(changes[0].after.contains("component Panel"));
+        assert!(changes[0].after.contains("<Panel />"));
         fs::remove_dir_all(root).unwrap();
     }
 

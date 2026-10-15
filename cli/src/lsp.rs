@@ -1123,6 +1123,53 @@ mod tests {
     }
 
     #[test]
+    fn table_navigation_and_rename_follow_same_module_form_references() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-lsp-table-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let source = "table customers { id: Id primary auto name: String(100) required }\nform CustomerCreate -> customers { fields { name } }\nfn main() {}\n";
+        fs::write(root.join("main.zyl"), source).unwrap();
+        let uri = Url::from_file_path(root.join("main.zyl"))
+            .unwrap()
+            .to_string();
+        let server = Server {
+            root: root.clone(),
+            documents: HashMap::new(),
+            shutdown: false,
+        };
+        let offset = source.find("customers {").unwrap();
+        let params = json!({
+            "textDocument":{"uri":uri},
+            "position":offset_position(source, offset)
+        });
+        let definition = server
+            .semantic_response("textDocument/definition", &params)
+            .unwrap();
+        assert_eq!(definition["uri"], uri);
+        assert_eq!(
+            definition["range"]["start"],
+            offset_position(source, offset)
+        );
+        let references = server
+            .semantic_response("textDocument/references", &params)
+            .unwrap();
+        assert_eq!(references.as_array().unwrap().len(), 1);
+        let rename = server
+            .semantic_response(
+                "textDocument/rename",
+                &json!({"textDocument":{"uri":uri},"position":offset_position(source,offset),"newName":"clients"}),
+            )
+            .unwrap();
+        let edits = rename["documentChanges"][0]["edits"].as_array().unwrap();
+        assert_eq!(edits.len(), 2);
+        assert!(edits.iter().all(|edit| edit["newText"] == "clients"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn typed_hole_completion_uses_shared_scope_and_exact_edit_range() {
         let root = std::env::temp_dir().join(format!(
             "zelyra-lsp-hole-{}-{:?}",

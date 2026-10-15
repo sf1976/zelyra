@@ -60,7 +60,13 @@ Datei kann separat rückgängig gemacht und gespeichert werden. **Alle speichern
 schreibt bis zu 16 Dateien gemeinsam und legt vorher ein privates
 Wiederherstellungsjournal unter `.zelyra/` an.
 Nach einer Unterbrechung stellt Studio nicht abgeschlossene Schreibvorgänge
-beim nächsten Start wieder her. Beim Umbenennen einer `.zyl`-Datei zeigt Studio
+beim nächsten Start wieder her.
+F2 unterstützt außerdem Tabellen, Views, Forms, CRUDs, Tableviews und
+Komponenten, wenn Deklaration und indexierte Verweise in derselben Quelldatei
+stehen. Dateigrenzen überschreitende Resource-Verwendungen gehören noch nicht
+zum Rename-Plan; die Compilerprüfung verwirft Änderungen, die einen Verbraucher
+ungültig zurückließen.
+Beim Umbenennen einer `.zyl`-Datei zeigt Studio
 zuerst alle erkannten Importdateien an, prüft das verschobene Projekt mit dem
 Compiler und übernimmt die Datei- und Importänderungen anschließend gemeinsam
 über das Journal. Vorher werden offene Änderungen gespeichert; veraltete

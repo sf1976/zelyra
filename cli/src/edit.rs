@@ -366,7 +366,7 @@ fn record_rename_spans(tokens: &[Token], name: &str) -> HashSet<(usize, usize)> 
     spans
 }
 
-fn resource_rename_spans(
+pub(crate) fn resource_rename_spans(
     program: &Program,
     tokens: &[Token],
     symbol: &str,
@@ -425,7 +425,7 @@ fn resource_rename_spans(
     spans
 }
 
-fn component_rename_spans(tokens: &[Token], name: &str) -> HashSet<(usize, usize)> {
+pub(crate) fn component_rename_spans(tokens: &[Token], name: &str) -> HashSet<(usize, usize)> {
     let mut spans = HashSet::new();
     if let Some(span) = any_declaration_name_span(tokens, TokenKind::Component, name) {
         spans.insert((span.start, span.end));
