@@ -483,4 +483,34 @@ mod tests {
         assert!(checked.success, "{:?}", checked.diagnostics);
         fs::remove_dir_all(root).unwrap();
     }
+
+    #[test]
+    fn unimported_new_overlay_is_parsed_and_type_checked_without_disk_writes() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-overlay-new-module-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(root.join("main.zyl"), "fn main() {}\n").unwrap();
+        let new_source = "pub fn invalid() -> Int { return \"not an integer\" }\n";
+        let analysis = analyze(
+            &root.join("main.zyl"),
+            &[SourceOverlay {
+                path: "src/new.zyl".into(),
+                text: new_source.into(),
+                version: 7,
+            }],
+        );
+        assert!(!analysis.success);
+        assert!(analysis
+            .sources
+            .iter()
+            .any(|source| source.path == "src/new.zyl" && source.text == new_source));
+        assert!(analysis.diagnostics.iter().any(|diagnostic| {
+            diagnostic["file"] == "src/new.zyl" && diagnostic["code"] == "E-TYPE-001"
+        }));
+        assert!(!root.join("src/new.zyl").exists());
+        fs::remove_dir_all(root).unwrap();
+    }
 }

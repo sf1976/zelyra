@@ -267,11 +267,28 @@ impl Server {
     }
 
     fn safe_relative(&self, uri: &str) -> Option<String> {
-        let path = fs::canonicalize(uri_path(uri)?).ok()?;
-        let relative = path.strip_prefix(&self.root).ok()?;
-        if path.extension().and_then(|value| value.to_str()) != Some("zyl") || !path.is_file() {
+        let requested = uri_path(uri)?;
+        if requested.extension().and_then(|value| value.to_str()) != Some("zyl")
+            || requested
+                .components()
+                .any(|component| matches!(component, std::path::Component::ParentDir))
+        {
             return None;
         }
+        let path = match fs::symlink_metadata(&requested) {
+            Ok(_) => {
+                let canonical = fs::canonicalize(&requested).ok()?;
+                if !canonical.is_file() {
+                    return None;
+                }
+                canonical
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                canonicalize_missing_path(&requested)?
+            }
+            Err(_) => return None,
+        };
+        let relative = path.strip_prefix(&self.root).ok()?;
         Some(relative.to_string_lossy().replace('\\', "/"))
     }
 
@@ -660,6 +677,28 @@ impl Server {
     }
 }
 
+/// Resolve the existing portion of a new document path before accepting it.
+/// This keeps unsaved documents workspace-scoped even through symlinked parents.
+fn canonicalize_missing_path(path: &Path) -> Option<PathBuf> {
+    let mut current = path;
+    let mut missing = Vec::new();
+    loop {
+        match fs::canonicalize(current) {
+            Ok(mut canonical) => {
+                for component in missing.iter().rev() {
+                    canonical.push(component);
+                }
+                return Some(canonical);
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                missing.push(current.file_name()?.to_os_string());
+                current = current.parent()?;
+            }
+            Err(_) => return None,
+        }
+    }
+}
+
 fn occurrence_range(occurrence: &semantic_index::Occurrence, source: &str) -> Value {
     json!({"start":offset_position(source, occurrence.start),"end":offset_position(source, occurrence.end)})
 }
@@ -850,6 +889,44 @@ mod tests {
     }
 
     #[test]
+    fn lsp_accepts_new_workspace_paths_but_rejects_escape_and_symlinks() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-lsp-path-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let outside = root.with_extension("outside");
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        let server = Server {
+            root: fs::canonicalize(&root).unwrap(),
+            documents: HashMap::new(),
+            shutdown: false,
+        };
+        let new_uri = Url::from_file_path(root.join("src/new.zyl"))
+            .unwrap()
+            .to_string();
+        assert_eq!(
+            server.safe_relative(&new_uri).as_deref(),
+            Some("src/new.zyl")
+        );
+        let traversal = Url::from_file_path(root.join("src/../../escaped.zyl"))
+            .unwrap()
+            .to_string();
+        assert_eq!(server.safe_relative(&traversal), None);
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(&outside, root.join("linked")).unwrap();
+            let escaped = Url::from_file_path(root.join("linked/new.zyl"))
+                .unwrap()
+                .to_string();
+            assert_eq!(server.safe_relative(&escaped), None);
+        }
+        fs::remove_dir_all(root).unwrap();
+        fs::remove_dir_all(outside).unwrap();
+    }
+
+    #[test]
     fn unsaved_document_diagnostics_are_versioned_and_stdout_is_only_json_rpc() {
         let root = std::env::temp_dir().join(format!(
             "zelyra-lsp-test-{}-{:?}",
@@ -896,6 +973,48 @@ mod tests {
             fs::read_to_string(root.join("main.zyl")).unwrap(),
             "fn main() {}\n"
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn new_unsaved_lsp_document_gets_compiler_diagnostics_without_disk_write() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-lsp-new-document-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(root.join("main.zyl"), "fn main() {}\n").unwrap();
+        let uri = Url::from_file_path(root.join("src/new.zyl"))
+            .unwrap()
+            .to_string();
+        let root_uri = Url::from_file_path(&root).unwrap().to_string();
+        let mut input = Vec::new();
+        for request in [
+            json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"rootUri":root_uri}}),
+            json!({"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":uri,"version":3,"text":"pub fn invalid() -> Int { return \"wrong\" }\n"}}}),
+            json!({"jsonrpc":"2.0","id":2,"method":"shutdown","params":null}),
+            json!({"jsonrpc":"2.0","method":"exit"}),
+        ] {
+            write_message(&mut input, &request).unwrap();
+        }
+        let mut output = Vec::new();
+        serve(BufReader::new(input.as_slice()), &mut output).unwrap();
+        let mut reader = BufReader::new(output.as_slice());
+        let mut messages = Vec::new();
+        while let Some(message) = read_message(&mut reader).unwrap() {
+            messages.push(message);
+        }
+        assert!(
+            messages.iter().any(|message| {
+                message["method"] == "textDocument/publishDiagnostics"
+                    && message["params"]["uri"] == uri
+                    && message["params"]["version"] == 3
+                    && message["params"]["diagnostics"][0]["code"] == "E-TYPE-001"
+            }),
+            "messages: {messages:?}"
+        );
+        assert!(!root.join("src/new.zyl").exists());
         fs::remove_dir_all(root).unwrap();
     }
 
