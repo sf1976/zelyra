@@ -34,17 +34,21 @@ Press **F1** or choose the help action to see a description, options, and an
 example for a supported language term. **Ctrl+Shift+P** opens the searchable
 action finder. **Ctrl+Space** requests completion; available suggestions include
 project declarations and supported local parameters and bindings. F12 opens a
-resolved function definition in the current or an imported file. Shift+F12
-shows references to that function and its declaration. These two actions use
-the compiler's linked AST and analyze all open, unsaved `.zyl` files together.
-Other symbol kinds are not yet supported by this semantic index. Project-wide
-free-text search remains a separate tool.
+resolved function or record definition in the current or an imported file.
+Shift+F12 shows indexed references. These actions use the compiler's linked AST
+and analyze all open, unsaved `.zyl` files together. Record references include
+record literals, local record patterns, function parameter and return types,
+local binding annotations, and record-field type annotations. Record field
+names and accesses are not yet indexed. Project-wide free-text search remains
+a separate tool.
 
-Press **F2** on a resolved function to rename it. Studio previews every
-affected file and checks the candidate with the compiler. Applying the change
-updates open buffers; each file can be undone and saved separately. **Save
-all** writes up to 16 files together and first creates a private recovery
-journal under `.zelyra/`. On restart, Studio rolls back an interrupted batch.
+Press **F2** on a resolved function or indexed record name to rename it. Studio
+previews every affected file and checks the candidate with the compiler. If an
+unindexed field use would break, the compiler rejects the plan before it can be
+applied. Applying a valid change updates open buffers;
+each file can be undone and saved separately. **Save all** writes up to 16
+files together and first creates a private recovery journal under `.zelyra/`.
+On restart, Studio rolls back an interrupted batch.
 Before renaming a `.zyl` file, Studio previews detected import files, checks
 the moved project with the compiler, and applies the file and import edits
 through the journal. Open changes are saved first and stale previews are

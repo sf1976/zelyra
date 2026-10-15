@@ -36,19 +36,24 @@ Mit **F1** oder über die Hilfeaktion öffnest du Beschreibung, Optionen und ein
 Beispiel zum unterstützten Sprachbegriff am Cursor. **Strg+Umschalt+P** öffnet
 den durchsuchbaren Aktionsfinder. **Strg+Leertaste** fordert
 Vervollständigungsvorschläge an, darunter Projekterklärungen sowie unterstützte
-lokale Parameter und Bindungen. F12 öffnet die aufgelöste Funktionsdefinition
-in derselben oder einer importierten Datei. Umschalt+F12 zeigt Referenzen auf
-diese Funktion samt Deklaration. Beide Aktionen verwenden den verlinkten
-Compiler-AST und berücksichtigen alle geöffneten, ungespeicherten `.zyl`-Dateien
-als gemeinsame Projektanalyse. Weitere Symbolarten unterstützt dieser
-semantische Index noch nicht. Die freie projektweite Textsuche bleibt ein
-getrenntes Werkzeug.
+lokale Parameter und Bindungen. F12 öffnet aufgelöste Funktions- und
+Record-Deklarationen in derselben oder einer importierten Datei. Umschalt+F12
+zeigt indexierte Verweise. Beide Aktionen verwenden den verlinkten Compiler-
+AST und berücksichtigen alle geöffneten, ungespeicherten `.zyl`-Dateien als
+gemeinsame Projektanalyse. Record-Verweise umfassen Record-Literale, lokale
+Record-Muster, Funktionsparameter und Rückgabetypen, lokale
+Variablentypannotationen sowie Typen von Record-Feldern. Feldnamen und
+Feldzugriffe sind noch nicht indexiert. Die freie projektweite Textsuche bleibt
+ein getrenntes Werkzeug.
 
-Mit **F2** lässt sich eine aufgelöste Funktion umbenennen. Studio zeigt vorab
-alle betroffenen Dateien und prüft die Änderung mit dem Compiler. Die Übernahme
-ändert die geöffneten Puffer; jede Datei kann separat rückgängig gemacht und
-gespeichert werden. **Alle speichern** schreibt bis zu 16 Dateien gemeinsam
-und legt vorher ein privates Wiederherstellungsjournal unter `.zelyra/` an.
+Mit **F2** lässt sich eine aufgelöste Funktion oder ein indexierter Record-Name
+umbenennen. Studio zeigt vorab alle betroffenen Dateien und prüft die Änderung
+mit dem Compiler. Ein nicht indexierter Feldzugriff, der dadurch ungültig
+würde, führt zur Ablehnung des Plans, bevor Änderungen übernommen werden. Eine
+gültige Übernahme ändert die geöffneten Puffer; jede
+Datei kann separat rückgängig gemacht und gespeichert werden. **Alle speichern**
+schreibt bis zu 16 Dateien gemeinsam und legt vorher ein privates
+Wiederherstellungsjournal unter `.zelyra/` an.
 Nach einer Unterbrechung stellt Studio nicht abgeschlossene Schreibvorgänge
 beim nächsten Start wieder her. Beim Umbenennen einer `.zyl`-Datei zeigt Studio
 zuerst alle erkannten Importdateien an, prüft das verschobene Projekt mit dem

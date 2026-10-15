@@ -638,7 +638,7 @@ impl Server {
                 version: document.version,
             })
             .collect::<Vec<_>>();
-        let changes = semantic_index::plan_function_rename(
+        let changes = semantic_index::plan_symbol_rename(
             &self.entry(),
             analysis,
             index,
@@ -965,6 +965,60 @@ mod tests {
                 })
             )
             .is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn record_navigation_and_rename_follow_imported_constructors() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-lsp-record-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        fs::create_dir_all(root.join("src")).unwrap();
+        let main = "import \"src/models.zyl\" as model\nfn main() { customer = model::Customer { name: \"Ada\" } print(customer.name) }\n";
+        fs::write(root.join("main.zyl"), main).unwrap();
+        fs::write(
+            root.join("src/models.zyl"),
+            "pub struct Customer { name: String }\n",
+        )
+        .unwrap();
+        let uri = Url::from_file_path(root.join("main.zyl"))
+            .unwrap()
+            .to_string();
+        let server = Server {
+            root: root.clone(),
+            documents: HashMap::new(),
+            shutdown: false,
+        };
+        let constructor = main.find("Customer {").unwrap() + 2;
+        let params = json!({
+            "textDocument":{"uri":uri},
+            "position":offset_position(main, constructor)
+        });
+        let definition = server
+            .semantic_response("textDocument/definition", &params)
+            .unwrap();
+        assert!(definition["uri"]
+            .as_str()
+            .unwrap()
+            .ends_with("/src/models.zyl"));
+        let references = server
+            .semantic_response("textDocument/references", &params)
+            .unwrap();
+        assert_eq!(references.as_array().unwrap().len(), 1);
+        let rename = server
+            .semantic_response(
+                "textDocument/rename",
+                &json!({"textDocument":{"uri":uri},"position":offset_position(main,constructor),"newName":"Account"}),
+            )
+            .unwrap();
+        let changes = rename["documentChanges"].as_array().unwrap();
+        assert_eq!(changes.len(), 2);
+        assert!(changes.iter().any(|change| change["textDocument"]["uri"]
+            .as_str()
+            .unwrap()
+            .ends_with("/src/models.zyl")));
         fs::remove_dir_all(root).unwrap();
     }
 

@@ -1,11 +1,11 @@
-//! Resolved function occurrences from the compiler's linked AST. The linker
-//! qualifies imported names, so identical spellings in different modules have
-//! different identities. Lexing is used only to find exact source token spans.
+//! Resolved function and record occurrences from the compiler's linked AST.
+//! The linker qualifies imported names, so identical spellings in different
+//! modules have different identities. Lexing finds exact source token spans.
 
 use super::*;
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
-use zelyra_ast::{Block, Expr, ExprKind, Span, Stmt};
+use zelyra_ast::{Block, Expr, ExprKind, Pattern, PatternKind, Span, Stmt, Type};
 use zelyra_lexer::{Token, TokenKind};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -47,9 +47,9 @@ pub struct SourceChange {
     pub edits: Vec<SourceEdit>,
 }
 
-/// Compiler-resolved function rename shared by Studio and LSP. Only the exact
-/// linked symbol occurrences are edited; the candidate project is rechecked.
-pub fn plan_function_rename(
+/// Compiler-resolved symbol rename shared by Studio and LSP. Only indexed
+/// source spans are edited; the complete candidate project is rechecked.
+pub fn plan_symbol_rename(
     entry: &Path,
     analysis: &language_service::Analysis,
     index: &SemanticIndex,
@@ -72,7 +72,7 @@ pub fn plan_function_rename(
             .iter()
             .any(|item| item.path == symbol.path && item.name == replacement)
     {
-        return Err("rename conflicts with an existing function in the same module".into());
+        return Err("rename conflicts with an existing symbol in the same module".into());
     }
     let mut edits = BTreeMap::<String, Vec<SourceEdit>>::new();
     for occurrence in index.references(&symbol.key, true) {
@@ -166,6 +166,45 @@ impl SemanticIndex {
             })
             .collect::<HashMap<_, _>>();
         let mut index = Self::default();
+        let mut known_records = HashSet::new();
+        for record in &program.records {
+            let Some(source) = analysis.sources.get(record.span.source_id as usize) else {
+                continue;
+            };
+            let Some(source_tokens) = tokens.get(&record.span.source_id) else {
+                continue;
+            };
+            let name = record.name.rsplit("::").next().unwrap_or(&record.name);
+            let Some(span) = record_declaration_name_span(source_tokens, record.span, name) else {
+                continue;
+            };
+            let key = format!("record:{}", record.name);
+            let declaration = Occurrence {
+                key: key.clone(),
+                path: source.path.clone(),
+                start: span.start,
+                end: span.end,
+                declaration: true,
+            };
+            let fields = record
+                .fields
+                .iter()
+                .map(|field| format!("{}: {}", field.name, field.ty))
+                .collect::<Vec<_>>()
+                .join(", ");
+            index.occurrences.push(declaration.clone());
+            index.symbols.push(Symbol {
+                key: key.clone(),
+                name: name.into(),
+                path: source.path.clone(),
+                detail: format!(
+                    "{} {name} {{ {fields} }}",
+                    if record.is_class { "class" } else { "struct" }
+                ),
+                declaration,
+            });
+            known_records.insert(key);
+        }
         for function in &program.functions {
             let Some(source) = analysis.sources.get(function.span.source_id as usize) else {
                 continue;
@@ -210,9 +249,29 @@ impl SemanticIndex {
         let known = index
             .symbols
             .iter()
-            .map(|symbol| symbol.key.as_str())
+            .map(|symbol| symbol.key.clone())
             .collect::<HashSet<_>>();
         for function in &program.functions {
+            for parameter in &function.params {
+                push_type_references(
+                    &parameter.ty,
+                    parameter.span,
+                    &known,
+                    &analysis.sources,
+                    &tokens,
+                    &mut index.occurrences,
+                );
+            }
+            if let Some(return_type) = &function.return_type {
+                push_type_references(
+                    return_type,
+                    function.span,
+                    &known,
+                    &analysis.sources,
+                    &tokens,
+                    &mut index.occurrences,
+                );
+            }
             for contract in function.requires.iter().chain(&function.ensures) {
                 visit_expression(
                     contract,
@@ -229,6 +288,18 @@ impl SemanticIndex {
                 &tokens,
                 &mut index.occurrences,
             );
+        }
+        for record in &program.records {
+            for field in &record.fields {
+                push_type_references(
+                    &field.ty,
+                    field.span,
+                    &known,
+                    &analysis.sources,
+                    &tokens,
+                    &mut index.occurrences,
+                );
+            }
         }
         index.occurrences.sort_by(|left, right| {
             left.path
@@ -395,6 +466,149 @@ fn declaration_name_span(tokens: &[Token], declaration: Span, name: &str) -> Opt
     None
 }
 
+fn record_declaration_name_span(tokens: &[Token], declaration: Span, name: &str) -> Option<Span> {
+    let mut tokens = tokens
+        .iter()
+        .filter(|token| token.span.start >= declaration.start && token.span.end <= declaration.end);
+    tokens.next()?;
+    tokens.find_map(|token| match &token.kind {
+        TokenKind::Ident(found) if found == name => Some(token.span),
+        _ => None,
+    })
+}
+
+fn record_reference_span(tokens: &[Token], expression: Span, name: &str) -> Option<Span> {
+    tokens
+        .iter()
+        .filter(|token| token.span.start >= expression.start && token.span.end <= expression.end)
+        .find_map(|token| match &token.kind {
+            TokenKind::Ident(found) if found == name => Some(token.span),
+            _ => None,
+        })
+}
+
+fn push_record_reference(
+    type_name: &str,
+    span: Span,
+    known: &HashSet<String>,
+    sources: &[project::ProjectSource],
+    tokens: &HashMap<u32, Vec<Token>>,
+    output: &mut Vec<Occurrence>,
+) {
+    let key = format!("record:{type_name}");
+    if !known.contains(&key) {
+        return;
+    }
+    let Some(source) = sources.get(span.source_id as usize) else {
+        return;
+    };
+    let Some(source_tokens) = tokens.get(&span.source_id) else {
+        return;
+    };
+    let name = type_name.rsplit("::").next().unwrap_or(type_name);
+    let Some(name_span) = record_reference_span(source_tokens, span, name) else {
+        return;
+    };
+    output.push(Occurrence {
+        key,
+        path: source.path.clone(),
+        start: name_span.start,
+        end: name_span.end,
+        declaration: false,
+    });
+}
+
+fn push_type_references(
+    ty: &Type,
+    span: Span,
+    known: &HashSet<String>,
+    sources: &[project::ProjectSource],
+    tokens: &HashMap<u32, Vec<Token>>,
+    output: &mut Vec<Occurrence>,
+) {
+    match ty {
+        Type::Named(type_name) => {
+            let key = format!("record:{type_name}");
+            if !known.contains(&key) {
+                return;
+            }
+            let Some(source) = sources.get(span.source_id as usize) else {
+                return;
+            };
+            let Some(source_tokens) = tokens.get(&span.source_id) else {
+                return;
+            };
+            let plain = type_name.rsplit("::").next().unwrap_or(type_name);
+            let name_span = source_tokens
+                .iter()
+                .filter(|token| token.span.start >= span.start && token.span.end <= span.end)
+                .filter_map(|token| match &token.kind {
+                    TokenKind::Ident(found) if found == plain => Some(token.span),
+                    _ => None,
+                })
+                .next_back();
+            if let Some(name_span) = name_span {
+                output.push(Occurrence {
+                    key,
+                    path: source.path.clone(),
+                    start: name_span.start,
+                    end: name_span.end,
+                    declaration: false,
+                });
+            }
+        }
+        Type::Option(inner) | Type::Array(inner) | Type::Set(inner) | Type::HttpResult(inner) => {
+            push_type_references(inner, span, known, sources, tokens, output)
+        }
+        Type::Result(ok, error) | Type::Map(ok, error) => {
+            push_type_references(ok, span, known, sources, tokens, output);
+            push_type_references(error, span, known, sources, tokens, output);
+        }
+        Type::Tuple(items) => {
+            for item in items {
+                push_type_references(item, span, known, sources, tokens, output);
+            }
+        }
+        Type::Function {
+            params,
+            return_type,
+            ..
+        } => {
+            for parameter in params {
+                push_type_references(parameter, span, known, sources, tokens, output);
+            }
+            push_type_references(return_type, span, known, sources, tokens, output);
+        }
+        Type::Applied { name, args } => {
+            push_type_references(
+                &Type::Named(name.clone()),
+                span,
+                known,
+                sources,
+                tokens,
+                output,
+            );
+            for argument in args {
+                push_type_references(argument, span, known, sources, tokens, output);
+            }
+        }
+        Type::Int
+        | Type::UInt
+        | Type::Float
+        | Type::Decimal
+        | Type::Bool
+        | Type::String
+        | Type::Char
+        | Type::Bytes
+        | Type::Timestamp
+        | Type::Date
+        | Type::Time
+        | Type::Duration
+        | Type::Unit
+        | Type::Unknown => {}
+    }
+}
+
 fn reference_name_span(tokens: &[Token], expression: Span, name: &str, call: bool) -> Option<Span> {
     let mut last_ident = None;
     for token in tokens
@@ -417,7 +631,7 @@ fn push_reference(
     name: &str,
     span: Span,
     call: bool,
-    known: &HashSet<&str>,
+    known: &HashSet<String>,
     sources: &[project::ProjectSource],
     tokens: &HashMap<u32, Vec<Token>>,
     output: &mut Vec<Occurrence>,
@@ -446,15 +660,26 @@ fn push_reference(
 
 fn visit_block(
     block: &Block,
-    known: &HashSet<&str>,
+    known: &HashSet<String>,
     sources: &[project::ProjectSource],
     tokens: &HashMap<u32, Vec<Token>>,
     output: &mut Vec<Occurrence>,
 ) {
     for statement in &block.statements {
         match statement {
-            Stmt::Let { value, .. }
-            | Stmt::BindOrAssign { value, .. }
+            Stmt::Let {
+                ty, value, span, ..
+            } => {
+                if let Some(ty) = ty {
+                    let annotation_span = Span {
+                        end: value.span.start,
+                        ..*span
+                    };
+                    push_type_references(ty, annotation_span, known, sources, tokens, output);
+                }
+                visit_expression(value, known, sources, tokens, output);
+            }
+            Stmt::BindOrAssign { value, .. }
             | Stmt::TupleBindOrAssign { value, .. }
             | Stmt::Expr(value) => {
                 visit_expression(value, known, sources, tokens, output);
@@ -501,6 +726,7 @@ fn visit_block(
             Stmt::Match { value, arms, .. } => {
                 visit_expression(value, known, sources, tokens, output);
                 for arm in arms {
+                    visit_record_pattern(&arm.pattern, known, sources, tokens, output);
                     if let Some(guard) = &arm.guard {
                         visit_expression(guard, known, sources, tokens, output);
                     }
@@ -517,7 +743,7 @@ fn visit_block(
 
 fn visit_expression(
     expression: &Expr,
-    known: &HashSet<&str>,
+    known: &HashSet<String>,
     sources: &[project::ProjectSource],
     tokens: &HashMap<u32, Vec<Token>>,
     output: &mut Vec<Occurrence>,
@@ -543,7 +769,10 @@ fn visit_expression(
                 visit_expression(value, known, sources, tokens, output);
             }
         }
-        ExprKind::Record { fields, .. } => {
+        ExprKind::Record {
+            type_name, fields, ..
+        } => {
+            push_record_reference(type_name, expression.span, known, sources, tokens, output);
             for (_, value) in fields {
                 visit_expression(value, known, sources, tokens, output);
             }
@@ -565,6 +794,7 @@ fn visit_expression(
         ExprKind::Match { value, arms } => {
             visit_expression(value, known, sources, tokens, output);
             for arm in arms {
+                visit_record_pattern(&arm.pattern, known, sources, tokens, output);
                 if let Some(guard) = &arm.guard {
                     visit_expression(guard, known, sources, tokens, output);
                 }
@@ -582,9 +812,150 @@ fn visit_expression(
     }
 }
 
+fn visit_record_pattern(
+    pattern: &Pattern,
+    known: &HashSet<String>,
+    sources: &[project::ProjectSource],
+    tokens: &HashMap<u32, Vec<Token>>,
+    output: &mut Vec<Occurrence>,
+) {
+    match &pattern.kind {
+        PatternKind::Record { type_name, fields } => {
+            push_record_reference(type_name, pattern.span, known, sources, tokens, output);
+            for (_, nested) in fields {
+                visit_record_pattern(nested, known, sources, tokens, output);
+            }
+        }
+        PatternKind::Constructor {
+            inner: Some(inner), ..
+        } => visit_record_pattern(inner, known, sources, tokens, output),
+        PatternKind::EnumVariantPayload { payloads, .. } => {
+            for nested in payloads {
+                visit_record_pattern(nested, known, sources, tokens, output);
+            }
+        }
+        PatternKind::Wildcard
+        | PatternKind::Variable(_)
+        | PatternKind::Constructor { inner: None, .. }
+        | PatternKind::EnumVariant { .. }
+        | PatternKind::Int(_)
+        | PatternKind::Bool(_)
+        | PatternKind::String(_)
+        | PatternKind::Char(_) => {}
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn imported_record_definition_and_literal_share_a_rename_identity() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-index-record-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(
+            root.join("zelyra.toml"),
+            "[project]\nname = \"record-rename\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+        let source = "import \"src/models.zyl\" as model\nfn main() { customer = model::Customer { name: \"Ada\" } print(customer.name) }\n";
+        fs::write(root.join("main.zyl"), source).unwrap();
+        fs::write(
+            root.join("src/models.zyl"),
+            "pub struct Customer { name: String }\n",
+        )
+        .unwrap();
+        let entry = root.join("main.zyl");
+        let analysis = language_service::analyze(&entry, &[]);
+        assert!(analysis.success, "{:?}", analysis.diagnostics);
+        let index = SemanticIndex::from_analysis(&analysis);
+        let literal_offset = source.find("Customer {").unwrap();
+        let occurrence = index.at("main.zyl", literal_offset).unwrap();
+        let symbol = index.symbol(&occurrence.key).unwrap();
+        assert_eq!(symbol.name, "Customer");
+        assert_eq!(symbol.path, "src/models.zyl");
+
+        let changes = plan_symbol_rename(&entry, &analysis, &index, symbol, "Account", &[])
+            .expect("the exact declaration and literal rename should compile");
+        assert_eq!(changes.len(), 2);
+        assert!(changes
+            .iter()
+            .any(|change| change.after.contains("Account {")));
+        assert!(changes
+            .iter()
+            .any(|change| change.after.contains("model::Account {")));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn record_patterns_are_indexed_for_rename_and_navigation() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-index-record-pattern-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        fs::write(
+            root.join("zelyra.toml"),
+            "[project]\nname = \"record-pattern\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+        let source = "struct Customer { name: String }\nfn main() { customer = Customer { name: \"Ada\" } result_value = match customer { Customer { name } => name } print(result_value) }\n";
+        fs::write(root.join("main.zyl"), source).unwrap();
+        let entry = root.join("main.zyl");
+        let analysis = language_service::analyze(&entry, &[]);
+        assert!(analysis.success, "{:?}", analysis.diagnostics);
+        let index = SemanticIndex::from_analysis(&analysis);
+        let pattern_offset = source.find("Customer { name }").unwrap();
+        let occurrence = index.at("main.zyl", pattern_offset).unwrap();
+        let symbol = index.symbol(&occurrence.key).unwrap();
+        let changes = plan_symbol_rename(&entry, &analysis, &index, symbol, "Account", &[])
+            .expect("record declaration, literal, and pattern should rename together");
+        assert!(changes[0].after.contains("Account { name }"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn record_rename_updates_type_annotations_and_constructors() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-index-record-type-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(
+            root.join("zelyra.toml"),
+            "[project]\nname = \"record-type-rename\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+        let source = "import \"src/models.zyl\" as model\nfn main() { customer: model::Customer = model::Customer { name: \"Ada\" } print(customer.name) }\n";
+        fs::write(root.join("main.zyl"), source).unwrap();
+        fs::write(
+            root.join("src/models.zyl"),
+            "pub struct Customer { name: String }\n",
+        )
+        .unwrap();
+        let entry = root.join("main.zyl");
+        let analysis = language_service::analyze(&entry, &[]);
+        assert!(analysis.success, "{:?}", analysis.diagnostics);
+        let index = SemanticIndex::from_analysis(&analysis);
+        let occurrence = index
+            .at("main.zyl", source.find("Customer {").unwrap())
+            .unwrap();
+        let symbol = index.symbol(&occurrence.key).unwrap();
+        assert_eq!(index.references(&symbol.key, false).len(), 2);
+        let changes = plan_symbol_rename(&entry, &analysis, &index, symbol, "Account", &[])
+            .expect("type annotation and record literal should be renamed together");
+        assert_eq!(changes.len(), 2);
+        assert!(changes.iter().any(|change| change
+            .after
+            .contains("customer: model::Account = model::Account {")));
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn recursion_graph_distinguishes_direct_and_mutual_cycles() {

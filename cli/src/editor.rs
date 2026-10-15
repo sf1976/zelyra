@@ -776,7 +776,7 @@ fn semantic_editor_query(
                 .get("newName")
                 .and_then(Value::as_str)
                 .ok_or((400, "newName is required".into()))?;
-            let changes = semantic_index::plan_function_rename(
+            let changes = semantic_index::plan_symbol_rename(
                 &entry,
                 &analysis,
                 &index,

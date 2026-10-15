@@ -33,8 +33,8 @@ async function assertStudioScreenshot(page) {
 }
 
 const project = await mkdtemp(join(tmpdir(), "zelyra-studio-rename-"));
-const main = 'import "src/math.zyl" as math\nfn main() { print(math::answer()) }\n';
-const math = "pub fn answer() -> Int { return 42 }\n";
+const main = 'import "src/math.zyl" as math\nfn main() { print(math::answer()) customer = math::Answer { value: 42 } print(customer.value) }\n';
+const math = "pub fn answer() -> Int { return 42 }\npub struct Answer { value: Int }\n";
 const binary = resolve(process.env.ZELYRA_BIN || "../target/debug/zelyra");
 const engineName = process.env.ZELYRA_BROWSER_ENGINE || "chromium";
 const engine = { chromium, firefox, webkit }[engineName];
@@ -135,6 +135,34 @@ try {
   }, { token });
   assert.match(savedFiles[0].content, /math::calculate_answer\(\)/);
   assert.match(savedFiles[1].content, /fn calculate_answer\(\)/);
+  await page.locator('#tabs .tab').filter({ hasText: "main.zyl" }).click();
+  const recordPoint = await page.evaluate(() => {
+    const walker = document.createTreeWalker(document.querySelector(".cm-content"), NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const offset = walker.currentNode.textContent.indexOf("Answer");
+      if (offset < 0) continue;
+      const range = document.createRange();
+      range.setStart(walker.currentNode, offset + 1);
+      range.setEnd(walker.currentNode, offset + 2);
+      const rect = range.getBoundingClientRect();
+      return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+    }
+    return null;
+  });
+  assert.ok(recordPoint, "the imported record constructor is visible");
+  await page.mouse.click(recordPoint.x, recordPoint.y);
+  await page.keyboard.press("F2");
+  await page.locator("#semantic-rename-dialog[open]").waitFor();
+  await page.locator("#semantic-rename-name").fill("Invoice");
+  await page.locator("#semantic-rename-preview-button").click();
+  await page.waitForFunction(() => document.querySelector("#semantic-rename-status")?.textContent?.includes("2 Dateien"));
+  await page.locator("#semantic-rename-apply-button").click();
+  await page.waitForFunction(() => document.querySelector("#status-message")?.textContent?.includes("2 Dateien geändert"));
+  assert.match(await page.locator(".cm-content").textContent(), /math::Invoice \{ value: 42 \}/);
+  await page.locator('#tabs .tab').filter({ hasText: "math.zyl" }).click();
+  assert.match(await page.locator(".cm-content").textContent(), /struct Invoice \{ value: Int \}/);
+  await page.locator("#save-all-button").click();
+  await page.waitForFunction(() => document.querySelector("#status-message")?.textContent?.includes("2 Dateien gemeinsam gespeichert"));
   page.on("dialog", async (dialog) => {
     if (dialog.type() === "prompt") await dialog.accept("src/answers.zyl");
     else await dialog.accept();
