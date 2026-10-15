@@ -503,77 +503,11 @@ impl Server {
         index: &semantic_index::SemanticIndex,
         symbol: &semantic_index::Symbol,
     ) -> Result<Value, String> {
-        if !analysis.success {
-            return Err("fix project diagnostics before renaming".into());
-        }
         let replacement = params
             .get("newName")
             .and_then(Value::as_str)
             .ok_or("newName is required")?;
-        let tokens = lex(replacement).map_err(|_| "newName must be a Zelyra identifier")?;
-        if !matches!((tokens.first(), tokens.get(1)),
-            (Some(zelyra_lexer::Token { kind: TokenKind::Ident(name), .. }), Some(zelyra_lexer::Token { kind: TokenKind::Eof, .. })) if name == replacement)
-        {
-            return Err("newName must be a single non-keyword identifier".into());
-        }
-        if replacement == symbol.name
-            || index
-                .symbols
-                .iter()
-                .any(|item| item.path == symbol.path && item.name == replacement)
-        {
-            return Err("rename conflicts with an existing function in the same module".into());
-        }
-        let references = index.references(&symbol.key, true);
-        let mut changed = HashMap::<String, String>::new();
-        let mut edits = HashMap::<String, Vec<Value>>::new();
-        for reference in &references {
-            let source = analysis
-                .sources
-                .iter()
-                .find(|source| source.path == reference.path)
-                .ok_or("reference source is unavailable")?;
-            edits
-                .entry(reference.path.clone())
-                .or_default()
-                .push(json!({
-                    "range":occurrence_range(reference, &source.text),"newText":replacement
-                }));
-            changed
-                .entry(reference.path.clone())
-                .or_insert_with(|| source.text.clone());
-        }
-        // Reject shadowing conservatively. Any pre-existing identifier with the
-        // replacement spelling in a touched file needs human review.
-        for path in changed.keys() {
-            let source = analysis
-                .sources
-                .iter()
-                .find(|source| &source.path == path)
-                .ok_or("changed source is unavailable")?;
-            if lex(&source.text)
-                .map_err(|_| "source is not lexable")?
-                .iter()
-                .any(|token| matches!(&token.kind, TokenKind::Ident(name) if name == replacement))
-            {
-                return Err(
-                    "new name already occurs in a changed file; inspect shadowing before renaming"
-                        .into(),
-                );
-            }
-        }
-        for (path, text) in &mut changed {
-            let mut spans = references
-                .iter()
-                .filter(|reference| &reference.path == path)
-                .map(|reference| (reference.start, reference.end))
-                .collect::<Vec<_>>();
-            spans.sort_by_key(|span| std::cmp::Reverse(span.0));
-            for (start, end) in spans {
-                text.replace_range(start..end, replacement);
-            }
-        }
-        let mut overlays = self
+        let overlays = self
             .documents
             .values()
             .map(|document| language_service::SourceOverlay {
@@ -582,36 +516,23 @@ impl Server {
                 version: document.version,
             })
             .collect::<Vec<_>>();
-        for (path, text) in &changed {
-            if let Some(document) = overlays.iter_mut().find(|document| document.path == *path) {
-                document.text = text.clone();
-            } else {
-                overlays.push(language_service::SourceOverlay {
-                    path: path.clone(),
-                    text: text.clone(),
-                    version: 0,
-                });
-            }
-        }
-        let checked = language_service::analyze(&self.entry(), &overlays);
-        if !checked.success {
-            return Err(format!(
-                "renamed project does not compile: {}",
-                checked
-                    .diagnostics
-                    .first()
-                    .and_then(|item| item.get("message"))
-                    .and_then(Value::as_str)
-                    .unwrap_or("unknown compiler error")
-            ));
-        }
-        let mut paths = edits.keys().cloned().collect::<Vec<_>>();
-        paths.sort();
-        Ok(json!({"documentChanges":paths.iter().map(|path| {
-            let uri = Url::from_file_path(self.root.join(path)).map_or_else(|_| String::new(), |url| url.to_string());
+        let changes = semantic_index::plan_function_rename(
+            &self.entry(),
+            analysis,
+            index,
+            symbol,
+            replacement,
+            &overlays,
+        )?;
+        Ok(json!({"documentChanges":changes.iter().map(|change| {
+            let uri = Url::from_file_path(self.root.join(&change.path)).map_or_else(|_| String::new(), |url| url.to_string());
             json!({
-                "textDocument":{"uri":uri,"version":self.documents.values().find(|document| &document.relative == path).map(|document| document.version)},
-                "edits":edits.get(path).unwrap_or(&Vec::new())
+                "textDocument":{"uri":uri,"version":self.documents.values().find(|document| document.relative == change.path).map(|document| document.version)},
+                "edits":change.edits.iter().map(|edit| json!({
+                    "range":{"start":offset_position(&change.before, edit.start),
+                             "end":offset_position(&change.before, edit.end)},
+                    "newText":edit.replacement,
+                })).collect::<Vec<_>>()
             })
         }).collect::<Vec<_>>()}))
     }

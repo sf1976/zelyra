@@ -203,9 +203,6 @@ try {
   await page.waitForFunction(() => document.querySelector(".cm-content")?.textContent?.includes("message: String = name"), undefined, { timeout: 10_000 });
   await page.keyboard.press("Control+Z");
   await page.waitForFunction(() => document.querySelector(".cm-content")?.textContent?.includes("message: String = _"), undefined, { timeout: 10_000 });
-  await page.locator(".cm-content").click();
-  await page.keyboard.press("Control+A");
-  await page.keyboard.insertText("pub fn answer( {\n");
   await page.locator("#problems-panel:not([hidden])").waitFor({ timeout: 10_000 });
   } catch (error) {
     const state = await page.evaluate(() => ({

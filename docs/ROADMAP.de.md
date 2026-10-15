@@ -1387,10 +1387,13 @@ Rückmeldungen des Projektverantwortlichen ersetzen keinen Teilnehmertest.
   Stdio-Prototyp von `zelyra lsp`. Studio analysiert bis zu 16 geöffnete
   ungespeicherte Zelyra-Dateien gemeinsam für Diagnosen, Navigation,
   Verifikation, Projektkarte und statische Vorschauen.
-  Dieser liefert versionierte Diagnosen,
+  Der LSP-Prototyp liefert versionierte Diagnosen,
   Dokument-/Workspace-Symbole und Deklarationsvorschläge. Aufgelöste
   Funktionsdefinitionen und Referenzen funktionieren nun in Studio und LSP;
   das LSP liefert auch compilergeprüfte Funktions-Umbenennungen als Vorschau.
+  Studio zeigt dieselben compilergeprüften Funktions-Umbenennungen und kann sie
+  in geöffneten Puffern übernehmen. Absturzsichere Mehrdatei-Schreibvorgänge
+  und Importanpassungen beim Datei-Rename fehlen noch.
   Eine versionierte Contract-Leiste zeigt jetzt echte Verifier-Ergebnisse und
   verschwindet bei ungültiger Quelle. Ein compilerbasiertes Typed-Hole-Menü in
   Studio und LSP filtert bekannte exakte Typen und deklarierte Capabilities

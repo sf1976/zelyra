@@ -40,6 +40,11 @@ the compiler's linked AST and analyze all open, unsaved `.zyl` files together.
 Other symbol kinds are not yet supported by this semantic index. Project-wide
 free-text search remains a separate tool.
 
+Press **F2** on a resolved function to rename it. Studio previews every
+affected file and checks the candidate with the compiler. Applying the change
+updates open buffers; each file can be undone and saved separately. A crash
+recoverable atomic save across multiple files is not implemented yet.
+
 Compiler diagnostics update while editing Zelyra project files. For existing
 `.zyl` files the current buffer and other changed `.zyl` tabs are checked through
 in-memory compiler overlays (up to 16 files and 1 MiB of source per analysis);

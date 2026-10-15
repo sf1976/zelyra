@@ -694,7 +694,10 @@ fn semantic_editor_query(
         .get("action")
         .and_then(Value::as_str)
         .ok_or((400, "semantic action is required".into()))?;
-    if !matches!(action, "definition" | "references" | "hover") {
+    if !matches!(
+        action,
+        "definition" | "references" | "hover" | "rename-preview"
+    ) {
         return Err((400, "unsupported semantic action".into()));
     }
     let entry = state.root.join("main.zyl");
@@ -754,6 +757,35 @@ fn semantic_editor_query(
                 }))
             }).collect::<Vec<_>>()
         }),
+        "rename-preview" => {
+            let replacement = value
+                .get("newName")
+                .and_then(Value::as_str)
+                .ok_or((400, "newName is required".into()))?;
+            let changes = semantic_index::plan_function_rename(
+                &entry,
+                &analysis,
+                &index,
+                symbol,
+                replacement,
+                &overlays,
+            )
+            .map_err(|error| (422, error))?;
+            json!({
+                "found":true,"symbol":symbol.name,"newName":replacement,
+                "version":value.get("version"),
+                "changes":changes.iter().map(|change| json!({
+                    "path":change.path,
+                    "before":change.before,
+                    "after":change.after,
+                    "edits":change.edits.iter().map(|edit| json!({
+                        "start":byte_to_utf16(&change.before,edit.start),
+                        "end":byte_to_utf16(&change.before,edit.end),
+                        "newText":edit.replacement,
+                    })).collect::<Vec<_>>(),
+                })).collect::<Vec<_>>()
+            })
+        }
         "hover" => json!({"found":true,"detail":symbol.detail,"version":value.get("version")}),
         _ => unreachable!(),
     };
@@ -6190,6 +6222,31 @@ fn main() {}
         assert_eq!(
             fs::read_to_string(state.root.join("src/math.zyl")).unwrap(),
             saved_math
+        );
+        let rename = semantic_editor_query(
+            &state,
+            &json!({
+                "path":"main.zyl","source":main,
+                "offset":main.find("answer()").unwrap()+1,
+                "action":"rename-preview","newName":"compute_answer",
+                "overlays":[{"path":"src/math.zyl","source":unsaved_math,"version":7}]
+            }),
+        )
+        .unwrap();
+        let rename: Value = serde_json::from_str(&rename.2).unwrap();
+        assert_eq!(rename["changes"].as_array().unwrap().len(), 2);
+        assert!(rename["changes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|change| change["path"] == "src/math.zyl"
+                && change["after"]
+                    .as_str()
+                    .unwrap()
+                    .contains("fn compute_answer")));
+        assert_eq!(
+            fs::read_to_string(state.root.join("main.zyl")).unwrap(),
+            main
         );
         let invalid = check_project(
             &state,

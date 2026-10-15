@@ -44,6 +44,12 @@ als gemeinsame Projektanalyse. Weitere Symbolarten unterstützt dieser
 semantische Index noch nicht. Die freie projektweite Textsuche bleibt ein
 getrenntes Werkzeug.
 
+Mit **F2** lässt sich eine aufgelöste Funktion umbenennen. Studio zeigt vorab
+alle betroffenen Dateien und prüft die Änderung mit dem Compiler. Die Übernahme
+ändert die geöffneten Puffer; jede Datei kann separat rückgängig gemacht und
+gespeichert werden. Ein absturzsicheres gemeinsames Speichern mehrerer Dateien
+ist noch nicht implementiert.
+
 Compilerdiagnosen werden während der Bearbeitung von Zelyra-Projektdateien
 aktualisiert. Bei vorhandenen `.zyl`-Dateien prüft der Compiler den
 ungespeicherten Puffer und weitere geänderte `.zyl`-Tabs als In-Memory-Overlays

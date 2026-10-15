@@ -210,6 +210,14 @@
     <p id="project-search-empty" class="task-finder-empty" hidden data-i18n="projectSearchEmpty">Keine Treffer gefunden.</p>
     <footer><kbd>Enter</kbd><span data-i18n="projectSearchSubmit">Suchen</span><kbd>Esc</kbd><span data-i18n="close">Schließen</span></footer>
   </dialog>
+  <dialog id="semantic-rename-dialog" class="task-finder" aria-labelledby="semantic-rename-title">
+    <header><h2 id="semantic-rename-title" data-i18n="semanticRenameTitle">Symbol umbenennen</h2><button id="semantic-rename-close" type="button" aria-label="Schließen" data-i18n-aria="close">×</button></header>
+    <label class="task-finder-search"><span aria-hidden="true">↪</span><input id="semantic-rename-name" type="text" autocomplete="off" spellcheck="false" aria-label="Neuer Funktionsname" data-i18n-aria="semanticRenameName"></label>
+    <p id="semantic-rename-status" role="status" aria-live="polite"></p>
+    <div id="semantic-rename-changes" class="task-finder-results" role="region" aria-label="Änderungsvorschau" data-i18n-aria="semanticRenamePreview"></div>
+    <button id="semantic-rename-preview-button" type="button" data-i18n="semanticRenamePreview">Vorschau prüfen</button>
+    <button id="semantic-rename-apply-button" type="button" data-i18n="semanticRenameApply" disabled>Änderungen in geöffneten Dateien übernehmen</button>
+  </dialog>
   <dialog id="run-output" class="task-finder" aria-labelledby="run-output-title">
     <header><h2 id="run-output-title" data-i18n="runOutputTitle">Programmausgabe</h2><button id="run-output-close" aria-label="Schließen" data-i18n-aria="close">×</button></header>
     <p id="run-output-state" class="run-output-state" role="status"></p>

@@ -3,7 +3,8 @@
 //! different identities. Lexing is used only to find exact source token spans.
 
 use super::*;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
+use std::path::Path;
 use zelyra_ast::{Block, Expr, ExprKind, Span, Stmt};
 use zelyra_lexer::{Token, TokenKind};
 
@@ -29,6 +30,126 @@ pub struct Symbol {
 pub struct SemanticIndex {
     pub symbols: Vec<Symbol>,
     pub occurrences: Vec<Occurrence>,
+}
+
+#[derive(Clone, Debug)]
+pub struct SourceEdit {
+    pub start: usize,
+    pub end: usize,
+    pub replacement: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct SourceChange {
+    pub path: String,
+    pub before: String,
+    pub after: String,
+    pub edits: Vec<SourceEdit>,
+}
+
+/// Compiler-resolved function rename shared by Studio and LSP. Only the exact
+/// linked symbol occurrences are edited; the candidate project is rechecked.
+pub fn plan_function_rename(
+    entry: &Path,
+    analysis: &language_service::Analysis,
+    index: &SemanticIndex,
+    symbol: &Symbol,
+    replacement: &str,
+    base_overlays: &[language_service::SourceOverlay],
+) -> Result<Vec<SourceChange>, String> {
+    if !analysis.success {
+        return Err("fix project diagnostics before renaming".into());
+    }
+    let tokens = lex(replacement).map_err(|_| "newName must be a Zelyra identifier")?;
+    if !matches!((tokens.first(), tokens.get(1)),
+        (Some(zelyra_lexer::Token { kind: TokenKind::Ident(name), .. }), Some(zelyra_lexer::Token { kind: TokenKind::Eof, .. })) if name == replacement)
+    {
+        return Err("newName must be a single non-keyword identifier".into());
+    }
+    if replacement == symbol.name
+        || index
+            .symbols
+            .iter()
+            .any(|item| item.path == symbol.path && item.name == replacement)
+    {
+        return Err("rename conflicts with an existing function in the same module".into());
+    }
+    let mut edits = BTreeMap::<String, Vec<SourceEdit>>::new();
+    for occurrence in index.references(&symbol.key, true) {
+        edits
+            .entry(occurrence.path.clone())
+            .or_default()
+            .push(SourceEdit {
+                start: occurrence.start,
+                end: occurrence.end,
+                replacement: replacement.into(),
+            });
+    }
+    let mut changes = Vec::new();
+    for (path, mut edits) in edits {
+        let source = analysis
+            .sources
+            .iter()
+            .find(|source| source.path == path)
+            .ok_or("reference source is unavailable")?;
+        // This conservative rule protects local shadowing until the semantic
+        // index covers local bindings and all symbol kinds.
+        if lex(&source.text)
+            .map_err(|_| "source is not lexable")?
+            .iter()
+            .any(|token| matches!(&token.kind, TokenKind::Ident(name) if name == replacement))
+        {
+            return Err(
+                "new name already occurs in a changed file; inspect shadowing before renaming"
+                    .into(),
+            );
+        }
+        edits.sort_by_key(|edit| edit.start);
+        if edits.windows(2).any(|pair| pair[0].end > pair[1].start) {
+            return Err("rename occurrences overlap".into());
+        }
+        let mut after = source.text.clone();
+        for edit in edits.iter().rev() {
+            if !after.is_char_boundary(edit.start)
+                || !after.is_char_boundary(edit.end)
+                || after.get(edit.start..edit.end) != Some(symbol.name.as_str())
+            {
+                return Err("rename source span is stale".into());
+            }
+            after.replace_range(edit.start..edit.end, &edit.replacement);
+        }
+        changes.push(SourceChange {
+            path,
+            before: source.text.clone(),
+            after,
+            edits,
+        });
+    }
+    let mut overlays = base_overlays.to_vec();
+    for change in &changes {
+        if let Some(overlay) = overlays.iter_mut().find(|item| item.path == change.path) {
+            overlay.text = change.after.clone();
+        } else {
+            overlays.push(language_service::SourceOverlay {
+                path: change.path.clone(),
+                text: change.after.clone(),
+                version: 0,
+            });
+        }
+    }
+    let checked = language_service::analyze(entry, &overlays);
+    if !checked.success {
+        return Err(format!(
+            "renamed project does not compile: {}",
+            checked
+                .diagnostics
+                .first()
+                .and_then(|item| item.get("message"))
+                .and_then(Value::as_str)
+                .unwrap_or("unknown compiler error")
+        ));
+    }
+    Ok(changes)
 }
 
 impl SemanticIndex {

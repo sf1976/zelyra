@@ -238,6 +238,7 @@ const messages = {
     taskGoToDefinition: "Zur Definition springen", taskGoToDefinitionHelp: "Zur Funktion oder zum Typ am Cursor springen (F12)",
     taskFindReferences: "Bezeichnerverwendungen finden", taskFindReferencesHelp: "Exakte Zelyra-Bezeichner im Projekt finden (Umschalt+F12)",
     definitionNotFound: "Keine passende Definition im Projekt gefunden.", definitionSaveFirst: "Speichere die Datei vor dem Sprung, damit die Quellposition stimmt.", definitionOpened: "Definition geöffnet: {0}", analysisOverlayLimit: "Die ungespeicherten Zelyra-Dateien überschreiten die Analysegrenze (15 Dateien oder 1 MiB).",
+    semanticRenameTitle: "Funktion umbenennen", semanticRenameName: "Neuer Funktionsname", semanticRenamePreview: "Änderungsvorschau", semanticRenameApply: "Änderungen in Puffern übernehmen", semanticRenameReady: "{0} Dateien, {1} Fundstellen geprüft. Vor dem Speichern einzeln rückgängig machbar.", semanticRenameApplied: "{0} Dateien geändert. Prüfe und speichere die Puffer.", semanticRenameStale: "Eine Quelldatei hat sich seit der Vorschau geändert. Bitte erneut prüfen.",
     projectSearch: "Projekt durchsuchen", projectSearchTitle: "Projekt durchsuchen", projectSearchHelp: "Alle gespeicherten Zelyra-Dateien durchsuchen", projectSearchPlaceholder: "Text in Zelyra-Dateien suchen", projectSearchResults: "Suchergebnisse", projectSearchEmpty: "Keine Treffer gefunden.", projectSearchLoading: "Projekt wird durchsucht …", projectSearchSaveFirst: "Speichere offene Änderungen, bevor du das Projekt durchsuchst.", projectSearchTruncated: "Die Trefferliste ist wegen einer Suchgrenze unvollständig.", projectSearchSubmit: "Suchen",
     referencesTitle: "Bezeichnerverwendungen", referencesPlaceholder: "Zelyra-Bezeichner suchen",
     localParameter: "Parameter", localValue: "Lokaler Wert", loopValue: "Schleifenwert", matchValue: "Musterwert",
@@ -344,6 +345,7 @@ const messages = {
     taskGoToDefinition: "Go to definition", taskGoToDefinitionHelp: "Go to the function or type at the cursor (F12)",
     taskFindReferences: "Find identifier occurrences", taskFindReferencesHelp: "Find exact Zelyra identifiers across the project (Shift+F12)",
     definitionNotFound: "No matching project definition was found.", definitionSaveFirst: "Save this file before jumping so source positions stay accurate.", definitionOpened: "Opened definition: {0}", analysisOverlayLimit: "Unsaved Zelyra files exceed the analysis limit (15 files or 1 MiB).",
+    semanticRenameTitle: "Rename function", semanticRenameName: "New function name", semanticRenamePreview: "Change preview", semanticRenameApply: "Apply changes to buffers", semanticRenameReady: "{0} files and {1} occurrences checked. Undo each file before saving.", semanticRenameApplied: "Changed {0} files. Review and save the buffers.", semanticRenameStale: "A source file changed since the preview. Check the rename again.",
     projectSearch: "Search project", projectSearchTitle: "Search project", projectSearchHelp: "Search all saved Zelyra files", projectSearchPlaceholder: "Search text in Zelyra files", projectSearchResults: "Search results", projectSearchEmpty: "No matches found.", projectSearchLoading: "Searching the project …", projectSearchSaveFirst: "Save open changes before searching the project.", projectSearchTruncated: "The result list is incomplete because a search limit was reached.", projectSearchSubmit: "Search",
     referencesTitle: "Identifier occurrences", referencesPlaceholder: "Find a Zelyra identifier",
     localParameter: "Parameter", localValue: "Local value", loopValue: "Loop value", matchValue: "Match value",
@@ -1241,6 +1243,103 @@ async function goToDefinition() {
   } catch (error) { announce(error.message, "error"); }
 }
 
+let semanticRenameContext = null;
+let semanticRenamePlan = null;
+
+function openSemanticRename() {
+  if (!editor || !activePath?.endsWith(".zyl")) return;
+  const selected = editor.state.selection.main;
+  const range = selected.empty ? editor.state.wordAt(selected.head) : selected;
+  if (!range) { announce(t("definitionNotFound"), "warning"); return; }
+  try {
+    semanticRenameContext = {
+      request: { ...analysisRequest(activePath, editor.state.doc.toString()),
+        offset: range.from, action: "rename-preview" },
+      oldName: editor.state.sliceDoc(range.from, range.to),
+    };
+  } catch (error) { announce(error.message, "warning"); return; }
+  semanticRenamePlan = null;
+  $("semantic-rename-name").value = semanticRenameContext.oldName;
+  $("semantic-rename-status").textContent = "";
+  $("semantic-rename-changes").replaceChildren();
+  $("semantic-rename-apply-button").disabled = true;
+  $("semantic-rename-dialog").showModal();
+  $("semantic-rename-name").focus();
+  $("semantic-rename-name").select();
+}
+
+async function previewSemanticRename() {
+  if (!semanticRenameContext) return;
+  const newName = $("semantic-rename-name").value.trim();
+  semanticRenamePlan = null;
+  $("semantic-rename-apply-button").disabled = true;
+  const target = $("semantic-rename-changes");
+  target.replaceChildren();
+  try {
+    const result = await api("semantic", { method: "POST", body: JSON.stringify({
+      ...semanticRenameContext.request, newName,
+    }) });
+    if (!$("semantic-rename-dialog").open || $("semantic-rename-name").value.trim() !== newName) return;
+    if (!result.found) throw new Error(t("definitionNotFound"));
+    semanticRenamePlan = result;
+    let count = 0;
+    for (const change of result.changes || []) {
+      const section = document.createElement("section");
+      const heading = document.createElement("strong");
+      heading.textContent = `${change.path} · ${change.edits.length}`;
+      const before = document.createElement("pre");
+      before.textContent = change.edits.map((edit) => {
+        const line = change.before.slice(0, edit.start).split("\n").length;
+        return `${line}: ${change.before.slice(edit.start, edit.end)} → ${edit.newText}`;
+      }).join("\n");
+      section.append(heading, before);
+      target.append(section);
+      count += change.edits.length;
+    }
+    $("semantic-rename-status").textContent = t("semanticRenameReady", result.changes.length, count);
+    $("semantic-rename-apply-button").disabled = false;
+  } catch (error) { $("semantic-rename-status").textContent = error.message; }
+}
+
+async function applySemanticRename() {
+  const plan = semanticRenamePlan;
+  if (!plan) return;
+  $("semantic-rename-apply-button").disabled = true;
+  const originalPath = activePath;
+  const applied = [];
+  try {
+    for (const change of plan.changes) {
+      await openFile(change.path);
+      const tab = tabs.get(change.path);
+      if (!tab || tabState(change.path, tab).doc.toString() !== change.before) {
+        throw new Error(t("semanticRenameStale"));
+      }
+    }
+    for (const change of plan.changes) {
+      activate(change.path);
+      editor.dispatch({ changes: change.edits.map((edit) => ({
+        from: edit.start, to: edit.end, insert: edit.newText,
+      })) });
+      applied.push(change);
+      if (editor.state.doc.toString() !== change.after) throw new Error(t("semanticRenameStale"));
+    }
+    $("semantic-rename-dialog").close();
+    announce(t("semanticRenameApplied", plan.changes.length), "success");
+    if (originalPath && tabs.has(originalPath)) activate(originalPath);
+    semanticRenamePlan = null;
+  } catch (error) {
+    $("semantic-rename-status").textContent = error.message;
+    for (const change of applied.reverse()) {
+      const tab = tabs.get(change.path);
+      if (tab) {
+        activate(change.path);
+        editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: change.before } });
+      }
+    }
+    if (originalPath && tabs.has(originalPath)) activate(originalPath);
+  }
+}
+
 function createView(path, state) {
   const extensions = [
     lineNumbers(), highlightActiveLineGutter(), foldGutter(), verificationGutter, undoRedoHistory(), drawSelection(),
@@ -1258,6 +1357,7 @@ function createView(path, state) {
       { key: "Mod-s", run: () => { saveActive(); return true; } },
       { key: "Mod-Space", run: startCompletion },
       { key: "F12", run: () => { void goToDefinition(); return true; } },
+      { key: "F2", run: () => { openSemanticRename(); return true; } },
       { key: "Shift-F12", run: () => { void findIdentifierOccurrences(); return true; } },
       { key: "F1", run: () => { toggleAssistant("help"); return true; } },
       ...defaultKeymap, ...historyKeymap, ...searchKeymap, ...foldKeymap,
@@ -3569,6 +3669,16 @@ async function createFile() {
 $("save-button").addEventListener("click", saveActive);
 $("complete-button").addEventListener("click", () => { if (editor) { editor.focus(); startCompletion(editor); } });
 $("rename-file-button").addEventListener("click", renameActiveFile);
+$("semantic-rename-close").addEventListener("click", () => $("semantic-rename-dialog").close());
+$("semantic-rename-name").addEventListener("input", () => {
+  semanticRenamePlan = null;
+  $("semantic-rename-apply-button").disabled = true;
+});
+$("semantic-rename-name").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") { event.preventDefault(); void previewSemanticRename(); }
+});
+$("semantic-rename-preview-button").addEventListener("click", () => { void previewSemanticRename(); });
+$("semantic-rename-apply-button").addEventListener("click", () => { void applySemanticRename(); });
 $("delete-file-button").addEventListener("click", deleteActiveFile);
 $("save-all-button").addEventListener("click", saveAll);
 $("check-button").addEventListener("click", checkProject);
