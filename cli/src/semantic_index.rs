@@ -253,24 +253,42 @@ impl SemanticIndex {
             .collect::<HashSet<_>>();
         for function in &program.functions {
             for parameter in &function.params {
-                push_type_references(
-                    &parameter.ty,
+                if let Some(span) = parameter_type_span(
                     parameter.span,
-                    &known,
-                    &analysis.sources,
-                    &tokens,
-                    &mut index.occurrences,
-                );
+                    function.body.span.start,
+                    tokens
+                        .get(&function.span.source_id)
+                        .map(Vec::as_slice)
+                        .unwrap_or(&[]),
+                ) {
+                    push_type_references(
+                        &parameter.ty,
+                        span,
+                        &known,
+                        &analysis.sources,
+                        &tokens,
+                        &mut index.occurrences,
+                    );
+                }
             }
             if let Some(return_type) = &function.return_type {
-                push_type_references(
-                    return_type,
+                if let Some(span) = function_return_type_span(
                     function.span,
-                    &known,
-                    &analysis.sources,
-                    &tokens,
-                    &mut index.occurrences,
-                );
+                    function.body.span.start,
+                    tokens
+                        .get(&function.span.source_id)
+                        .map(Vec::as_slice)
+                        .unwrap_or(&[]),
+                ) {
+                    push_type_references(
+                        return_type,
+                        span,
+                        &known,
+                        &analysis.sources,
+                        &tokens,
+                        &mut index.occurrences,
+                    );
+                }
             }
             for contract in function.requires.iter().chain(&function.ensures) {
                 visit_expression(
@@ -485,6 +503,70 @@ fn record_reference_span(tokens: &[Token], expression: Span, name: &str) -> Opti
             TokenKind::Ident(found) if found == name => Some(token.span),
             _ => None,
         })
+}
+
+fn parameter_type_span(parameter: Span, body_start: usize, tokens: &[Token]) -> Option<Span> {
+    let colon = tokens.iter().position(|token| {
+        token.span.start >= parameter.end
+            && token.span.start < body_start
+            && token.kind == TokenKind::Colon
+    })?;
+    let mut type_tokens = Vec::new();
+    let mut angle_depth = 0usize;
+    let mut paren_depth = 0usize;
+    let mut bracket_depth = 0usize;
+    for token in tokens.iter().skip(colon + 1) {
+        if token.span.start >= body_start {
+            break;
+        }
+        match &token.kind {
+            TokenKind::Less => angle_depth += 1,
+            TokenKind::Greater => angle_depth = angle_depth.saturating_sub(1),
+            TokenKind::LParen => paren_depth += 1,
+            TokenKind::RParen if paren_depth == 0 && angle_depth == 0 && bracket_depth == 0 => {
+                break
+            }
+            TokenKind::RParen => paren_depth = paren_depth.saturating_sub(1),
+            TokenKind::LBracket => bracket_depth += 1,
+            TokenKind::RBracket => bracket_depth = bracket_depth.saturating_sub(1),
+            TokenKind::Comma if angle_depth == 0 && paren_depth == 0 && bracket_depth == 0 => break,
+            _ => {}
+        }
+        type_tokens.push(token);
+    }
+    let first = type_tokens.first()?.span;
+    let last = type_tokens.last()?.span;
+    Some(Span {
+        start: first.start,
+        end: last.end,
+        line: first.line,
+        column: first.column,
+        source_id: parameter.source_id,
+    })
+}
+
+fn function_return_type_span(function: Span, body_start: usize, tokens: &[Token]) -> Option<Span> {
+    let arrow = tokens.iter().position(|token| {
+        token.span.start >= function.start
+            && token.span.start < body_start
+            && token.kind == TokenKind::Arrow
+    })?;
+    let first = tokens.get(arrow + 1)?.span;
+    let mut last = None;
+    for token in tokens.iter().skip(arrow + 1) {
+        if token.span.end > body_start {
+            break;
+        }
+        last = Some(token.span);
+    }
+    let last = last?;
+    Some(Span {
+        start: first.start,
+        end: last.end,
+        line: first.line,
+        column: first.column,
+        source_id: function.source_id,
+    })
 }
 
 fn push_record_reference(
@@ -932,7 +1014,7 @@ mod tests {
             "[project]\nname = \"record-type-rename\"\nversion = \"1.0.0\"\n",
         )
         .unwrap();
-        let source = "import \"src/models.zyl\" as model\nfn main() { customer: model::Customer = model::Customer { name: \"Ada\" } print(customer.name) }\n";
+        let source = "import \"src/models.zyl\" as model\nfn retain(customer: model::Customer) -> model::Customer { return customer }\nfn main() { customer: model::Customer = model::Customer { name: \"Ada\" } print(customer.name) }\n";
         fs::write(root.join("main.zyl"), source).unwrap();
         fs::write(
             root.join("src/models.zyl"),
@@ -947,13 +1029,16 @@ mod tests {
             .at("main.zyl", source.find("Customer {").unwrap())
             .unwrap();
         let symbol = index.symbol(&occurrence.key).unwrap();
-        assert_eq!(index.references(&symbol.key, false).len(), 2);
+        assert_eq!(index.references(&symbol.key, false).len(), 4);
         let changes = plan_symbol_rename(&entry, &analysis, &index, symbol, "Account", &[])
             .expect("type annotation and record literal should be renamed together");
         assert_eq!(changes.len(), 2);
         assert!(changes.iter().any(|change| change
             .after
             .contains("customer: model::Account = model::Account {")));
+        assert!(changes.iter().any(|change| change
+            .after
+            .contains("fn retain(customer: model::Account) -> model::Account")));
         fs::remove_dir_all(root).unwrap();
     }
 
