@@ -17,6 +17,12 @@ impl Drop for ConnectionSlot {
 
 pub fn serve_app(app: WebApp, address: &str) -> io::Result<()> {
     let listener = TcpListener::bind(address)?;
+    serve_app_listener(app, listener)
+}
+
+/// Serve an application on a listener that the caller has already bound.
+/// This lets commands select and report a fallback port without a bind race.
+pub fn serve_app_listener(app: WebApp, listener: TcpListener) -> io::Result<()> {
     let app = Arc::new(app);
     let active_connections = Arc::new(AtomicUsize::new(0));
     for stream in listener.incoming() {

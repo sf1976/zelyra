@@ -8,7 +8,7 @@ use std::{
     fmt::Write as _,
     fs,
     io::{Read, Write as _},
-    net::TcpListener,
+    net::{SocketAddr, TcpListener, ToSocketAddrs},
     path::PathBuf,
     process::ExitCode,
     process::Stdio,
@@ -37,10 +37,10 @@ use zelyra_runtime::{
     VerificationResult, VerificationStatus, KNOWN_CAPABILITIES,
 };
 use zelyra_web::{
-    audit_insert_queries, html_escape, parse_urlencoded, serve_app, ApiRoute, AuthRoute,
-    CorsPolicy, CrudActionRoute, CrudRoute, CsrfProtection, FormRoute, ProjectUiCatalogs, Response,
-    Route, RouteData, RouteQuery, TableViewFilter, TableViewFilterKind, TableViewRoute, UiLanguage,
-    UiLevel, WebApp, PROJECT_THEME_CSS_PATH,
+    audit_insert_queries, html_escape, parse_urlencoded, serve_app, serve_app_listener, ApiRoute,
+    AuthRoute, CorsPolicy, CrudActionRoute, CrudRoute, CsrfProtection, FormRoute,
+    ProjectUiCatalogs, Response, Route, RouteData, RouteQuery, TableViewFilter,
+    TableViewFilterKind, TableViewRoute, UiLanguage, UiLevel, WebApp, PROJECT_THEME_CSS_PATH,
 };
 
 #[cfg(test)]
@@ -5678,6 +5678,8 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         }
     }
 
+    env_file = doctor_environment_file(&path, env_file);
+
     let mut checks = Vec::new();
     let program = if fs::metadata(&path).is_ok() {
         checks.push(DoctorCheck {
@@ -5776,7 +5778,7 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         match build_schema(program) {
             Ok(schema) => {
                 let backend = schema.backend();
-                match file_database_url.or_else(|| database_url_from_program(program)) {
+                match database_url_from_program(program).or(file_database_url) {
                     Some(url) => match inspect_for_backend(backend, &url) {
                         Ok(current) => checks.push(DoctorCheck {
                             name: "database",
@@ -5825,23 +5827,7 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
 
     checks.push(docker_compose_check());
 
-    match TcpListener::bind(("127.0.0.1", port)) {
-        Ok(listener) => {
-            let actual_port = listener.local_addr().map_or(port, |address| address.port());
-            checks.push(DoctorCheck {
-                name: "web_port",
-                category: "connectivity",
-                status: "pass",
-                message: format!("127.0.0.1:{actual_port} is available"),
-            });
-        }
-        Err(error) => checks.push(DoctorCheck {
-            name: "web_port",
-            category: "connectivity",
-            status: "fail",
-            message: format!("127.0.0.1:{port} is unavailable ({error})"),
-        }),
-    }
+    checks.push(doctor_web_port_check(port));
 
     let failed = checks.iter().any(|check| check.status == "fail");
     if json {
@@ -5867,6 +5853,21 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     } else {
         ExitCode::SUCCESS
     }
+}
+
+fn doctor_environment_file(source_path: &str, requested: Option<String>) -> Option<String> {
+    if requested.is_some() {
+        return requested;
+    }
+    let source_path = std::path::Path::new(source_path);
+    let project_directory = source_path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| std::path::Path::new("."));
+    let default_env_file = project_directory.join(".env");
+    default_env_file
+        .is_file()
+        .then(|| default_env_file.to_string_lossy().into_owned())
 }
 
 fn doc_command(mut args: impl Iterator<Item = String>) -> ExitCode {
@@ -8858,6 +8859,77 @@ fn decimal_storage_error_span(program: &zelyra_ast::Program, message: &str) -> z
         })
 }
 
+fn bind_web_application(address: &str) -> std::io::Result<(TcpListener, SocketAddr, bool)> {
+    match TcpListener::bind(address) {
+        Ok(listener) => {
+            let actual = listener.local_addr()?;
+            Ok((listener, actual, false))
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::AddrInUse => {
+            let candidates = address.to_socket_addrs()?.collect::<Vec<_>>();
+            for candidate in candidates {
+                let fallback = SocketAddr::new(candidate.ip(), 0);
+                match TcpListener::bind(fallback) {
+                    Ok(listener) => {
+                        let actual = listener.local_addr()?;
+                        return Ok((listener, actual, true));
+                    }
+                    Err(fallback_error)
+                        if fallback_error.kind() == std::io::ErrorKind::AddrInUse =>
+                    {
+                        continue;
+                    }
+                    Err(fallback_error) => return Err(fallback_error),
+                }
+            }
+            Err(error)
+        }
+        Err(error) => Err(error),
+    }
+}
+
+fn doctor_web_port_check(port: u16) -> DoctorCheck {
+    match TcpListener::bind(("127.0.0.1", port)) {
+        Ok(listener) => {
+            let actual_port = listener.local_addr().map_or(port, |address| address.port());
+            DoctorCheck {
+                name: "web_port",
+                category: "connectivity",
+                status: "pass",
+                message: format!("127.0.0.1:{actual_port} is available"),
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::AddrInUse => {
+            let fallback_available = TcpListener::bind(("127.0.0.1", 0)).is_ok();
+            if fallback_available {
+                DoctorCheck {
+                    name: "web_port",
+                    category: "connectivity",
+                    status: "warn",
+                    message: format!(
+                        "127.0.0.1:{port} is already in use; `zelyra serve` will select a free local port automatically"
+                    ),
+                }
+            } else {
+                DoctorCheck {
+                    name: "web_port",
+                    category: "connectivity",
+                    status: "fail",
+                    message:
+                        "the configured web port and an automatic fallback port are unavailable"
+                            .into(),
+                }
+            }
+        }
+        Err(error) => DoctorCheck {
+            name: "web_port",
+            category: "connectivity",
+            status: "fail",
+            message: format!("127.0.0.1:{port} is unavailable ({error})"),
+        },
+    }
+}
+
 fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     let Some(path) = args.next() else {
         usage();
@@ -9377,7 +9449,17 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         capability_grants.as_ref(),
         runtime_policy.as_ref(),
     );
-    eprintln!("Zelyra server listening on http://{address}");
+    let (listener, actual_address, used_fallback) = match bind_web_application(&address) {
+        Ok(bound) => bound,
+        Err(error) => {
+            eprintln!("error[E-WEB-002]: cannot start server on {address}: {error}");
+            return ExitCode::from(1);
+        }
+    };
+    if used_fallback {
+        println!("note: {address} is already in use; using free port {actual_address}");
+    }
+    println!("Zelyra server listening on http://{actual_address}");
     let app = WebApp::with_database_url(routes, form_routes, database_url_from_program(&program))
         .with_ui_settings(ui_language, ui_level)
         .with_ui_stylesheet_css(ui_stylesheet_css)
@@ -9419,10 +9501,10 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     } else {
         app
     };
-    match serve_app(app, &address) {
+    match serve_app_listener(app, listener) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("error[E-WEB-002]: cannot start server on {address}: {error}");
+            eprintln!("error[E-WEB-002]: cannot serve on {actual_address}: {error}");
             ExitCode::from(1)
         }
     }

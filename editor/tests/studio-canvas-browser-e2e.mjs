@@ -16,7 +16,8 @@ let processHandle;
 let browser;
 
 try {
-  await writeFile(join(project, "main.zyl"), `component Banner {
+  await writeFile(join(project, "main.zyl"), `database main { engine: mariadb }
+component Banner {
     html { <aside><slot /></aside> }
 }
 view Shell {
@@ -27,8 +28,12 @@ page "/reports/{id}" {
     input { term: String }
     html { <h1>{term}</h1><script>document.body.dataset.executed = "true"</script> }
 }
+page "/live" {
+    html { <h1>Live Zelyra app</h1> }
+}
 fn main() {}
 `);
+  await writeFile(join(project, ".env"), "DATABASE_URL=mariadb://zelyra:zelyra@127.0.0.1:1/zelyra_test\n");
   await writeFile(join(project, "zelyra.theme.css"), `:where(html[data-z-ui]) {
   --z-color-primary: #23654f;
   --z-color-on-primary: #ffffff;
@@ -42,7 +47,10 @@ fn main() {}
       server.close(() => resolvePort(selected));
     });
   });
-  processHandle = spawn(binary, ["editor", project, "--no-open", "--port", String(port)], { stdio: ["ignore", "pipe", "pipe"] });
+  processHandle = spawn(binary, ["editor", project, "--no-open", "--port", String(port)], {
+    env: { ...process.env, DATABASE_URL: "mariadb://zelyra:zelyra@127.0.0.1:1/zelyra_test" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
   const url = await new Promise((resolveUrl, reject) => {
     let output = "";
     processHandle.stdout.on("data", (chunk) => {
@@ -67,6 +75,8 @@ fn main() {}
   await page.locator("#canvas-sample").fill('{"term":"<Acme & Co>"}');
   await page.locator("#canvas-render").click();
   await page.waitForFunction(() => document.querySelector("#canvas-source")?.disabled === false);
+  assert.match(await page.locator("#canvas-status").innerText(), /Statische Canvas-Vorschau.*keine Projektfunktionen oder Skripte.*„Starten“.*„Anwendung im Browser öffnen“/);
+  assert.equal(await page.locator("#canvas-frame").getAttribute("sandbox"), "", "static Canvas must remain isolated");
   const preview = page.frameLocator("#canvas-frame");
   await preview.locator("h1").waitFor();
   assert.equal(await preview.locator("h1").textContent(), "<Acme & Co>");
@@ -82,6 +92,44 @@ fn main() {}
   await page.keyboard.press("Enter");
   await page.waitForFunction(() => document.querySelector(".cm-activeLine")?.textContent?.includes("<Banner>"));
   assert.match(await page.locator(".cm-activeLine").textContent(), /<Banner>/);
+
+  const runResponse = page.waitForResponse((response) =>
+    response.url().endsWith("/api/run") && response.request().method() === "POST",
+  );
+  await page.locator("#run-button").click();
+  assert.equal((await runResponse).status(), 200, "the explicit Run action must start the real local web app");
+  await page.locator("#run-output-web-link").waitFor({ state: "visible" });
+  const appUrl = await page.locator("#run-output-web-url").getAttribute("href");
+  assert.match(appUrl, /^http:\/\/127\.0\.0\.1:\d+$/);
+  const appPage = await browser.newPage();
+  await appPage.goto(`${appUrl}/live`, { waitUntil: "networkidle" });
+  await appPage.getByRole("heading", { name: "Live Zelyra app" }).waitFor();
+  assert.deepEqual(await appPage.locator("#canvas-status").count(), 0, "the live app opens outside the static Canvas iframe");
+  await appPage.close();
+  await page.locator("#run-output-close").click();
+  await page.locator("#logs-button").click();
+  await page.waitForFunction(() => /[1-9]\d*/.test(document.querySelector("#logs-status")?.textContent || ""));
+  await page.waitForFunction(() => document.querySelector("#logs-content")?.textContent.includes("Zelyra server listening"));
+  assert.match(await page.locator("#logs-content").innerText(), /INFO\s+preview\.stdout\nZelyra server listening on http:\/\/127\.0\.0\.1:/);
+  await page.locator("#logs-close").click();
+  const sessionToken = new URL(url).hash.slice(1);
+  const stopStatus = await page.evaluate(async ({ sessionToken }) => {
+    const response = await fetch("/__zelyra/editor/api/stop-web-preview", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Zelyra-Editor-Token": sessionToken,
+      },
+      body: "{}",
+    });
+    return response.status;
+  }, { sessionToken });
+  assert.equal(stopStatus, 200, "the test must stop the spawned preview");
+
+  await page.locator("#outbox-button").click();
+  await page.waitForFunction(() => document.querySelector("#outbox-status")?.textContent.includes("Outbox-Tabelle fehlt"));
+  assert.match(await page.locator("#outbox-status").innerText(), /zelyra outbox setup main\.zyl.*Ohne Outbox-Nutzung/);
+  await page.locator("#outbox-close").click();
 
   const primaryToken = await page.locator("#canvas-theme-token").evaluate((select) =>
     [...select.options].find((option) => option.textContent.includes("--z-color-primary"))?.value,

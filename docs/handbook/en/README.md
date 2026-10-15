@@ -236,7 +236,10 @@ If Linux denies access to the Docker socket after adding your user to the
 Opening another terminal window alone may not refresh group membership.
 After starting Compose, run `zelyra doctor main.zyl --env-file .env --port
 18080` to check source, schema, MariaDB connectivity, Docker Compose, and the
-published port without changing the database.
+published port without changing the database. An occupied port is a warning
+when a free fallback is available; `zelyra serve` prints the port it selected.
+When omitted, `doctor` reads the project `.env` automatically; process
+environment variables take precedence.
 
 For a complete CRUD starter instead of the minimal welcome page:
 

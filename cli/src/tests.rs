@@ -1144,6 +1144,61 @@ fn doctor_rejects_invalid_port() {
 }
 
 #[test]
+fn doctor_uses_project_env_by_default_and_preserves_explicit_env_file() {
+    let directory = env::temp_dir().join(format!(
+        "zelyra-doctor-project-env-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&directory).unwrap();
+    let source = directory.join("main.zyl");
+    let env_file = directory.join(".env");
+    fs::write(&source, "").unwrap();
+    fs::write(
+        &env_file,
+        "DATABASE_URL=mariadb://user:secret@127.0.0.1/db\n",
+    )
+    .unwrap();
+
+    assert_eq!(
+        doctor_environment_file(source.to_str().unwrap(), None),
+        Some(env_file.to_string_lossy().into_owned())
+    );
+    assert_eq!(
+        doctor_environment_file(source.to_str().unwrap(), Some("custom.env".into())),
+        Some("custom.env".into())
+    );
+
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn doctor_warns_when_the_default_port_is_busy_but_a_fallback_is_available() {
+    let occupied = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let port = occupied.local_addr().unwrap().port();
+    let check = doctor_web_port_check(port);
+    assert_eq!(check.status, "warn");
+    assert!(check.message.contains("already in use"));
+    assert!(check
+        .message
+        .contains("select a free local port automatically"));
+}
+
+#[test]
+fn web_server_uses_an_ephemeral_port_when_the_requested_port_is_busy() {
+    let occupied = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let requested = occupied.local_addr().unwrap();
+    let (listener, actual, used_fallback) = bind_web_application(&requested.to_string()).unwrap();
+    assert!(used_fallback);
+    assert_eq!(actual.ip(), requested.ip());
+    assert_ne!(actual.port(), requested.port());
+    assert_eq!(listener.local_addr().unwrap(), actual);
+}
+
+#[test]
 fn outbox_cli_rejects_invalid_inspection_options_before_loading_a_project() {
     let arguments = ["list".to_owned(), "--limit".to_owned(), "0".to_owned()];
     assert_eq!(

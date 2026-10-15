@@ -35,6 +35,8 @@ try {
   await page.locator("#logs-content").waitFor();
   await page.waitForFunction(() => /[1-9]\d*/.test(document.querySelector("#logs-status")?.textContent || ""));
   assert.match(await page.locator("#logs-content").innerText(), /studio\.run.*starting web preview/s);
+  assert.match(await page.locator("#logs-content").innerText(), /INFO\s+preview\.stdout\nZelyra server listening on http:\/\/127\.0\.0\.1:/,
+    "the normal web-server ready message must appear as informational stdout, not as an error");
   await page.locator("#logs-close").click();
 
   const targetResponse = page.waitForResponse((response) =>
