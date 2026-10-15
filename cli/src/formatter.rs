@@ -403,6 +403,7 @@ fn token_text<'a>(token: &'a Token, source: &'a str) -> &'a str {
         | TokenKind::IntMinMagnitude
         | TokenKind::Float(_)
         | TokenKind::String(_)
+        | TokenKind::StringTemplate { .. }
         | TokenKind::Char(_) => source
             .get(token.span.start..token.span.end)
             .unwrap_or_default(),
@@ -573,6 +574,14 @@ mod tests {
             formatted.contains("\" text \" |> trim |> to_lower"),
             "{formatted:?}"
         );
+        assert_eq!(format(&formatted), formatted);
+    }
+
+    #[test]
+    fn formats_interpolated_strings_as_atomic_literals() {
+        let source = r#"fn main(){print("Customer {name} has {count+1} items; {{draft}}")}"#;
+        let formatted = format(source);
+        assert!(formatted.contains(r#""Customer {name} has {count+1} items; {{draft}}""#));
         assert_eq!(format(&formatted), formatted);
     }
 

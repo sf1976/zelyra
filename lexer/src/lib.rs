@@ -105,6 +105,7 @@ pub enum TokenKind {
     IntMinMagnitude,
     Float(f64),
     String(String),
+    StringTemplate { value: String, raw: String },
     Char(char),
     Arrow,
     FatArrow,
@@ -449,6 +450,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
             let quote = c;
             i += 1;
             column += 1;
+            let content_start = i;
             let mut value = String::new();
             let mut closed = false;
             while i < bytes.len() {
@@ -510,7 +512,12 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                 });
             }
             let kind = if quote == '"' {
-                TokenKind::String(value)
+                let raw = source[content_start..i - 1].to_string();
+                if raw.contains('{') && raw.contains('}') {
+                    TokenKind::StringTemplate { value, raw }
+                } else {
+                    TokenKind::String(value)
+                }
             } else {
                 let mut chars = value.chars();
                 let ch = chars.next().ok_or_else(|| LexError {
@@ -763,6 +770,17 @@ mod tests {
         assert_eq!(
             lex(r#""hello\n""#).unwrap()[0].kind,
             TokenKind::String("hello\n".into())
+        );
+    }
+
+    #[test]
+    fn preserves_raw_and_decoded_string_template_contents() {
+        assert_eq!(
+            lex(r#""Hello {user.name}\n""#).unwrap()[0].kind,
+            TokenKind::StringTemplate {
+                value: "Hello {user.name}\n".into(),
+                raw: r"Hello {user.name}\n".into(),
+            }
         );
     }
 

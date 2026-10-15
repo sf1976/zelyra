@@ -53,6 +53,31 @@ fn if_expressions_return_the_selected_branch_value() {
 }
 
 #[test]
+fn string_interpolation_type_checks_expressions_and_supports_literal_braces() {
+    let source = r#"
+struct Customer { name: String id: Int total: Float }
+fn main() {
+    customer = Customer { name: "Ada", id: 501, total: 12.50 }
+    print("Customer {customer.name} (ID: {customer.id}) paid {customer.total} EUR. {{ok}}; state {if customer.id == 501 { \"accepted\" } else { \"unknown\" }}")
+}
+"#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap();
+    assert_eq!(
+        execute(&program).unwrap(),
+        ["Customer Ada (ID: 501) paid 12.5 EUR. {ok}; state accepted"]
+    );
+
+    let invalid = r#"fn main() { print("Hello {missing_name}") }"#;
+    let program = parse(&lex(invalid).unwrap()).unwrap();
+    let errors =
+        check(&program).expect_err("interpolation expressions must resolve and type check");
+    assert!(errors
+        .iter()
+        .any(|error| error.message.contains("unknown variable `missing_name`")));
+}
+
+#[test]
 fn render_pdf_uses_named_views_record_data_and_escapes_interpolations() {
     let source = r#"
 struct Invoice { number: String customer: String }

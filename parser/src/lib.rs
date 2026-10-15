@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::fmt;
 use zelyra_ast::*;
-use zelyra_lexer::{Token, TokenKind};
+use zelyra_lexer::{lex, Token, TokenKind};
 
 const MAX_NESTING_DEPTH: usize = 32;
 
@@ -1166,6 +1166,11 @@ impl<'a> Parser<'a> {
                 self.advance();
                 Ok(value)
             }
+            TokenKind::StringTemplate { value, .. } => {
+                let value = value.clone();
+                self.advance();
+                Ok(value)
+            }
             _ => self.error(format!("expected {label}")),
         }
     }
@@ -1787,6 +1792,10 @@ impl<'a> Parser<'a> {
                 self.advance();
                 Ok(value)
             }
+            TokenKind::StringTemplate { value, .. } => {
+                self.advance();
+                Ok(value)
+            }
             TokenKind::Ident(value) => {
                 self.advance();
                 Ok(value)
@@ -1872,6 +1881,10 @@ impl<'a> Parser<'a> {
         while !self.at(&TokenKind::RBracket) && !self.at(&TokenKind::Eof) {
             let path = match self.current().kind.clone() {
                 TokenKind::String(path) => {
+                    self.advance();
+                    path
+                }
+                TokenKind::StringTemplate { value: path, .. } => {
                     self.advance();
                     path
                 }
@@ -1967,6 +1980,7 @@ impl<'a> Parser<'a> {
             TokenKind::True => Ok(DefaultValue::Bool(true)),
             TokenKind::False => Ok(DefaultValue::Bool(false)),
             TokenKind::String(value) => Ok(DefaultValue::String(value)),
+            TokenKind::StringTemplate { value, .. } => Ok(DefaultValue::String(value)),
             TokenKind::Ident(value) => Ok(DefaultValue::Ident(value)),
             found => self.error(format!("expected default value, found {found:?}")),
         }
@@ -2945,6 +2959,10 @@ impl<'a> Parser<'a> {
                 kind: PatternKind::String(value),
                 span: token.span,
             }),
+            TokenKind::StringTemplate { value, .. } => Ok(Pattern {
+                kind: PatternKind::String(value),
+                span: token.span,
+            }),
             TokenKind::Char(value) => Ok(Pattern {
                 kind: PatternKind::Char(value),
                 span: token.span,
@@ -2955,6 +2973,92 @@ impl<'a> Parser<'a> {
     fn expression(&mut self) -> Result<Expr, ParseError> {
         self.with_nesting(|parser| parser.binary(0))
     }
+
+    fn interpolated_string(&self, value: &str, span: Span) -> Result<Expr, ParseError> {
+        let mut parts = Vec::new();
+        let mut cursor = 0;
+        let mut literal_start = 0;
+        let mut has_interpolation = false;
+
+        while cursor < value.len() {
+            if value[cursor..].starts_with("{{") || value[cursor..].starts_with("}}") {
+                cursor += 2;
+                continue;
+            }
+            if !value[cursor..].starts_with('{') {
+                cursor += value[cursor..].chars().next().unwrap().len_utf8();
+                continue;
+            }
+            let Some(end) = interpolation_end(value, cursor + 1) else {
+                cursor += 1;
+                continue;
+            };
+
+            push_interpolation_text(&mut parts, &value[literal_start..cursor], span);
+            let source = value[cursor + 1..end].trim();
+            if source.is_empty() {
+                return Ok(template_literal(value, span));
+            }
+            let mut tokens = match lex(source) {
+                Ok(tokens) => tokens,
+                Err(_) => return Ok(template_literal(value, span)),
+            };
+            // The source fragment has already been decoded from the enclosing
+            // string literal. Point diagnostics at that literal rather than at
+            // a fabricated offset in the fragment.
+            for token in &mut tokens {
+                token.span = span;
+            }
+            let mut parser = Parser {
+                tokens: &tokens,
+                pos: 0,
+                nesting_depth: self.nesting_depth,
+            };
+            let expression = match parser.expression() {
+                Ok(expression) => expression,
+                Err(_) => return Ok(template_literal(value, span)),
+            };
+            parser.skip_newlines();
+            if !parser.at(&TokenKind::Eof) {
+                return Ok(template_literal(value, span));
+            }
+            parts.push(Expr {
+                kind: ExprKind::Call {
+                    name: "to_string".into(),
+                    type_args: Vec::new(),
+                    args: vec![expression],
+                },
+                span,
+            });
+            has_interpolation = true;
+            cursor = end + 1;
+            literal_start = cursor;
+        }
+        push_interpolation_text(&mut parts, &value[literal_start..], span);
+
+        if !has_interpolation {
+            return Ok(template_literal(value, span));
+        }
+        let mut parts = parts.into_iter();
+        let Some(mut expression) = parts.next() else {
+            return Ok(Expr {
+                kind: ExprKind::String(String::new()),
+                span,
+            });
+        };
+        for part in parts {
+            expression = Expr {
+                kind: ExprKind::Binary {
+                    left: Box::new(expression),
+                    op: BinaryOp::Add,
+                    right: Box::new(part),
+                },
+                span,
+            };
+        }
+        Ok(expression)
+    }
+
     fn binary(&mut self, min_prec: u8) -> Result<Expr, ParseError> {
         let mut left = self.unary()?;
         loop {
@@ -3184,6 +3288,7 @@ impl<'a> Parser<'a> {
                 kind: ExprKind::String(value),
                 span: token.span,
             }),
+            TokenKind::StringTemplate { value, .. } => self.interpolated_string(&value, token.span),
             TokenKind::Char(value) => Ok(Expr {
                 kind: ExprKind::Char(value),
                 span: token.span,
@@ -3618,6 +3723,54 @@ impl<'a> Parser<'a> {
             kind: ExprKind::Sql { result_type, query },
             span: start.join(end),
         })
+    }
+}
+
+fn interpolation_end(value: &str, start: usize) -> Option<usize> {
+    let mut depth = 1usize;
+    let mut quote = None;
+    let mut escaped = false;
+    let mut cursor = start;
+    while cursor < value.len() {
+        let character = value[cursor..].chars().next()?;
+        let width = character.len_utf8();
+        if let Some(delimiter) = quote {
+            if escaped {
+                escaped = false;
+            } else if character == '\\' {
+                escaped = true;
+            } else if character == delimiter {
+                quote = None;
+            }
+        } else if character == '"' || character == '\'' {
+            quote = Some(character);
+        } else if character == '{' {
+            depth += 1;
+        } else if character == '}' {
+            depth -= 1;
+            if depth == 0 {
+                return Some(cursor);
+            }
+        }
+        cursor += width;
+    }
+    None
+}
+
+fn push_interpolation_text(parts: &mut Vec<Expr>, text: &str, span: Span) {
+    if text.is_empty() {
+        return;
+    }
+    parts.push(Expr {
+        kind: ExprKind::String(text.replace("{{", "{").replace("}}", "}")),
+        span,
+    });
+}
+
+fn template_literal(value: &str, span: Span) -> Expr {
+    Expr {
+        kind: ExprKind::String(value.replace("{{", "{").replace("}}", "}")),
+        span,
     }
 }
 
