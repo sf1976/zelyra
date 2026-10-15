@@ -60,6 +60,30 @@ pub fn plan_symbol_rename(
     if !analysis.success {
         return Err("fix project diagnostics before renaming".into());
     }
+    let local_function_span = symbol
+        .key
+        .starts_with("local:")
+        .then(|| {
+            let source_id = analysis
+                .sources
+                .iter()
+                .position(|source| source.path == symbol.path)? as u32;
+            analysis
+                .program
+                .as_ref()?
+                .functions
+                .iter()
+                .find_map(|function| {
+                    (function.span.source_id == source_id
+                        && function.span.start <= symbol.declaration.start
+                        && symbol.declaration.end <= function.span.end)
+                        .then_some(function.span)
+                })
+        })
+        .flatten();
+    if symbol.key.starts_with("local:") && local_function_span.is_none() {
+        return Err("local binding scope could not be resolved".into());
+    }
     let tokens = lex(replacement).map_err(|_| "newName must be a Zelyra identifier")?;
     if !matches!((tokens.first(), tokens.get(1)),
         (Some(zelyra_lexer::Token { kind: TokenKind::Ident(name), .. }), Some(zelyra_lexer::Token { kind: TokenKind::Eof, .. })) if name == replacement)
@@ -67,10 +91,22 @@ pub fn plan_symbol_rename(
         return Err("newName must be a single non-keyword identifier".into());
     }
     if replacement == symbol.name
-        || index
-            .symbols
-            .iter()
-            .any(|item| item.path == symbol.path && item.name == replacement)
+        || index.symbols.iter().any(|item| {
+            if item.path != symbol.path || item.name != replacement {
+                return false;
+            }
+            match (
+                symbol.key.strip_prefix("local:"),
+                item.key.strip_prefix("local:"),
+            ) {
+                (Some(target), Some(candidate)) => {
+                    target.rsplit_once(':').map(|(scope, _)| scope)
+                        == candidate.rsplit_once(':').map(|(scope, _)| scope)
+                }
+                (Some(_), None) | (None, Some(_)) => false,
+                (None, None) => true,
+            }
+        })
     {
         return Err("rename conflicts with an existing symbol in the same module".into());
     }
@@ -94,11 +130,13 @@ pub fn plan_symbol_rename(
             .ok_or("reference source is unavailable")?;
         // Reject any same-spelled identifier until local binding identities
         // are complete across the full language scope model.
-        if lex(&source.text)
-            .map_err(|_| "source is not lexable")?
-            .iter()
-            .any(|token| matches!(&token.kind, TokenKind::Ident(name) if name == replacement))
-        {
+        let tokens = lex(&source.text).map_err(|_| "source is not lexable")?;
+        let name_conflicts = tokens.iter().any(|token| {
+            let in_scope = local_function_span
+                .is_none_or(|scope| token.span.start >= scope.start && token.span.end <= scope.end);
+            in_scope && matches!(&token.kind, TokenKind::Ident(name) if name == replacement)
+        });
+        if name_conflicts {
             return Err(
                 "new name already occurs in a changed file; inspect shadowing before renaming"
                     .into(),
@@ -561,6 +599,7 @@ impl SemanticIndex {
                 &tokens,
                 &mut index.occurrences,
             );
+            index_local_bindings(function, &analysis.sources, &tokens, &mut index);
         }
         for record in &program.records {
             for field in &record.fields {
@@ -624,6 +663,7 @@ impl SemanticIndex {
                 !symbol.key.starts_with("record:")
                     && !symbol.key.starts_with("record-field:")
                     && !symbol.key.starts_with("resource:")
+                    && !symbol.key.starts_with("local:")
             })
             .map(|symbol| symbol.key.as_str())
             .collect::<Vec<_>>();
@@ -880,6 +920,484 @@ fn push_record_reference(
         end: name_span.end,
         declaration: false,
     });
+}
+
+fn index_local_bindings(
+    function: &zelyra_ast::Function,
+    sources: &[project::ProjectSource],
+    tokens: &HashMap<u32, Vec<Token>>,
+    index: &mut SemanticIndex,
+) {
+    let Some(source) = sources.get(function.span.source_id as usize) else {
+        return;
+    };
+    let Some(source_tokens) = tokens.get(&function.span.source_id) else {
+        return;
+    };
+    let identity = LocalIdentity {
+        function: function.name.rsplit("::").next().unwrap_or(&function.name),
+        source,
+        tokens: source_tokens,
+    };
+    let mut scopes = vec![HashMap::<String, String>::new()];
+    for parameter in &function.params {
+        declare_local(
+            &parameter.name,
+            parameter.span,
+            &identity,
+            &mut scopes,
+            index,
+            "parameter",
+        );
+    }
+    for contract in function.requires.iter().chain(&function.ensures) {
+        visit_local_expression(contract, &mut scopes, source, source_tokens, index);
+    }
+    visit_local_block(
+        &function.body,
+        false,
+        function.name.rsplit("::").next().unwrap_or(&function.name),
+        source,
+        source_tokens,
+        &mut scopes,
+        index,
+    );
+}
+
+struct LocalIdentity<'a> {
+    function: &'a str,
+    source: &'a project::ProjectSource,
+    tokens: &'a [Token],
+}
+
+fn local_identifier_span(
+    tokens: &[Token],
+    span: Span,
+    name: &str,
+    before: Option<usize>,
+) -> Option<Span> {
+    tokens
+        .iter()
+        .filter(|token| {
+            token.span.start >= span.start
+                && token.span.end <= span.end
+                && before.is_none_or(|limit| token.span.end <= limit)
+        })
+        .find_map(|token| match &token.kind {
+            TokenKind::Ident(found) if found == name => Some(token.span),
+            _ => None,
+        })
+}
+
+fn declare_local(
+    name: &str,
+    span: Span,
+    identity: &LocalIdentity<'_>,
+    scopes: &mut [HashMap<String, String>],
+    index: &mut SemanticIndex,
+    kind: &str,
+) {
+    let Some(name_span) = local_identifier_span(identity.tokens, span, name, None) else {
+        return;
+    };
+    let key = format!(
+        "local:{}:{}:{}",
+        identity.source.path, identity.function, name_span.start
+    );
+    let occurrence = Occurrence {
+        key: key.clone(),
+        path: identity.source.path.clone(),
+        start: name_span.start,
+        end: name_span.end,
+        declaration: true,
+    };
+    scopes
+        .last_mut()
+        .expect("a function always has a scope")
+        .insert(name.into(), key.clone());
+    if !index.symbols.iter().any(|symbol| symbol.key == key) {
+        index.occurrences.push(occurrence.clone());
+        index.symbols.push(Symbol {
+            key,
+            name: name.into(),
+            path: identity.source.path.clone(),
+            detail: format!("{kind} {name}"),
+            declaration: occurrence,
+        });
+    }
+}
+
+fn use_local(
+    name: &str,
+    span: Span,
+    source: &project::ProjectSource,
+    tokens: &[Token],
+    scopes: &[HashMap<String, String>],
+    index: &mut SemanticIndex,
+) {
+    let Some(key) = scopes.iter().rev().find_map(|scope| scope.get(name)) else {
+        return;
+    };
+    let Some(name_span) = local_identifier_span(tokens, span, name, None) else {
+        return;
+    };
+    index.occurrences.push(Occurrence {
+        key: key.clone(),
+        path: source.path.clone(),
+        start: name_span.start,
+        end: name_span.end,
+        declaration: false,
+    });
+}
+
+fn visit_local_block(
+    block: &Block,
+    create_scope: bool,
+    function: &str,
+    source: &project::ProjectSource,
+    tokens: &[Token],
+    scopes: &mut Vec<HashMap<String, String>>,
+    index: &mut SemanticIndex,
+) {
+    if create_scope {
+        scopes.push(HashMap::new());
+    }
+    for statement in &block.statements {
+        match statement {
+            Stmt::Let {
+                name, value, span, ..
+            } => {
+                visit_local_expression(value, scopes, source, tokens, index);
+                let declaration_span = Span {
+                    end: value.span.start,
+                    ..*span
+                };
+                if let Some(name_span) = local_identifier_span(tokens, declaration_span, name, None)
+                {
+                    declare_local(
+                        name,
+                        name_span,
+                        &LocalIdentity {
+                            function,
+                            source,
+                            tokens,
+                        },
+                        scopes,
+                        index,
+                        "local",
+                    );
+                }
+            }
+            Stmt::BindOrAssign { name, value, span } => {
+                visit_local_expression(value, scopes, source, tokens, index);
+                if let Some(name_span) =
+                    local_identifier_span(tokens, *span, name, Some(value.span.start))
+                {
+                    if let Some(key) = scopes
+                        .iter()
+                        .rev()
+                        .find_map(|scope| scope.get(name))
+                        .cloned()
+                    {
+                        index.occurrences.push(Occurrence {
+                            key,
+                            path: source.path.clone(),
+                            start: name_span.start,
+                            end: name_span.end,
+                            declaration: false,
+                        });
+                    } else {
+                        declare_local(
+                            name,
+                            name_span,
+                            &LocalIdentity {
+                                function,
+                                source,
+                                tokens,
+                            },
+                            scopes,
+                            index,
+                            "local",
+                        );
+                    }
+                }
+            }
+            Stmt::TupleBindOrAssign { names, value, span } => {
+                visit_local_expression(value, scopes, source, tokens, index);
+                let mut cursor = span.start;
+                for name in names {
+                    let name_span = Span {
+                        start: cursor,
+                        end: value.span.start,
+                        ..*span
+                    };
+                    if let Some(name_span) = local_identifier_span(tokens, name_span, name, None) {
+                        cursor = name_span.end;
+                        if let Some(key) = scopes
+                            .iter()
+                            .rev()
+                            .find_map(|scope| scope.get(name))
+                            .cloned()
+                        {
+                            index.occurrences.push(Occurrence {
+                                key,
+                                path: source.path.clone(),
+                                start: name_span.start,
+                                end: name_span.end,
+                                declaration: false,
+                            });
+                        } else {
+                            declare_local(
+                                name,
+                                name_span,
+                                &LocalIdentity {
+                                    function,
+                                    source,
+                                    tokens,
+                                },
+                                scopes,
+                                index,
+                                "local",
+                            );
+                        }
+                    }
+                }
+            }
+            Stmt::Expr(expression) => {
+                visit_local_expression(expression, scopes, source, tokens, index)
+            }
+            Stmt::Return {
+                value: Some(expression),
+                ..
+            } => visit_local_expression(expression, scopes, source, tokens, index),
+            Stmt::Return { value: None, .. } | Stmt::Break { .. } | Stmt::Continue { .. } => {}
+            Stmt::If {
+                condition,
+                then_block,
+                else_block,
+                ..
+            } => {
+                visit_local_expression(condition, scopes, source, tokens, index);
+                visit_local_block(then_block, true, function, source, tokens, scopes, index);
+                if let Some(else_block) = else_block {
+                    visit_local_block(else_block, true, function, source, tokens, scopes, index);
+                }
+            }
+            Stmt::While {
+                condition,
+                invariants,
+                body,
+                ..
+            } => {
+                visit_local_expression(condition, scopes, source, tokens, index);
+                for invariant in invariants {
+                    visit_local_expression(invariant, scopes, source, tokens, index);
+                }
+                visit_local_block(body, true, function, source, tokens, scopes, index);
+            }
+            Stmt::For {
+                name,
+                additional_names,
+                iterable,
+                body,
+                span,
+            } => {
+                visit_local_expression(iterable, scopes, source, tokens, index);
+                scopes.push(HashMap::new());
+                let names = std::iter::once(name).chain(additional_names);
+                let mut cursor = span.start;
+                for name in names {
+                    let declaration_span = Span {
+                        start: cursor,
+                        end: iterable.span.start,
+                        ..*span
+                    };
+                    if let Some(name_span) =
+                        local_identifier_span(tokens, declaration_span, name, None)
+                    {
+                        cursor = name_span.end;
+                        declare_local(
+                            name,
+                            name_span,
+                            &LocalIdentity {
+                                function,
+                                source,
+                                tokens,
+                            },
+                            scopes,
+                            index,
+                            "loop variable",
+                        );
+                    }
+                }
+                visit_local_block(body, false, function, source, tokens, scopes, index);
+                scopes.pop();
+            }
+            Stmt::Loop {
+                invariants, body, ..
+            } => {
+                for invariant in invariants {
+                    visit_local_expression(invariant, scopes, source, tokens, index);
+                }
+                visit_local_block(body, true, function, source, tokens, scopes, index);
+            }
+            Stmt::Match { value, arms, .. } => {
+                visit_local_expression(value, scopes, source, tokens, index);
+                for arm in arms {
+                    scopes.push(HashMap::new());
+                    visit_local_pattern(&arm.pattern, function, source, tokens, scopes, index);
+                    if let Some(guard) = &arm.guard {
+                        visit_local_expression(guard, scopes, source, tokens, index);
+                    }
+                    visit_local_block(&arm.body, false, function, source, tokens, scopes, index);
+                    scopes.pop();
+                }
+            }
+            Stmt::Transaction { body, .. } => {
+                visit_local_block(body, true, function, source, tokens, scopes, index)
+            }
+            Stmt::Parallel { body, .. } => {
+                visit_local_block(body, false, function, source, tokens, scopes, index)
+            }
+        }
+    }
+    if create_scope {
+        scopes.pop();
+    }
+}
+
+fn visit_local_pattern(
+    pattern: &Pattern,
+    function: &str,
+    source: &project::ProjectSource,
+    tokens: &[Token],
+    scopes: &mut Vec<HashMap<String, String>>,
+    index: &mut SemanticIndex,
+) {
+    match &pattern.kind {
+        PatternKind::Variable(name) => {
+            declare_local(
+                name,
+                pattern.span,
+                &LocalIdentity {
+                    function,
+                    source,
+                    tokens,
+                },
+                scopes,
+                index,
+                "pattern binding",
+            );
+        }
+        PatternKind::Constructor {
+            inner: Some(inner), ..
+        } => visit_local_pattern(inner, function, source, tokens, scopes, index),
+        PatternKind::EnumVariantPayload { payloads, .. } => {
+            for nested in payloads {
+                visit_local_pattern(nested, function, source, tokens, scopes, index);
+            }
+        }
+        PatternKind::Record { fields, .. } => {
+            for (_, nested) in fields {
+                visit_local_pattern(nested, function, source, tokens, scopes, index);
+            }
+        }
+        PatternKind::Wildcard
+        | PatternKind::Constructor { inner: None, .. }
+        | PatternKind::EnumVariant { .. }
+        | PatternKind::Int(_)
+        | PatternKind::Bool(_)
+        | PatternKind::String(_)
+        | PatternKind::Char(_) => {}
+    }
+}
+
+fn visit_local_expression(
+    expression: &Expr,
+    scopes: &mut Vec<HashMap<String, String>>,
+    source: &project::ProjectSource,
+    tokens: &[Token],
+    index: &mut SemanticIndex,
+) {
+    match &expression.kind {
+        ExprKind::Variable(name) => use_local(name, expression.span, source, tokens, scopes, index),
+        ExprKind::Lambda { params, body } => {
+            scopes.push(HashMap::new());
+            for parameter in params {
+                declare_local(
+                    parameter.name.as_str(),
+                    parameter.span,
+                    &LocalIdentity {
+                        function: "lambda",
+                        source,
+                        tokens,
+                    },
+                    scopes,
+                    index,
+                    "parameter",
+                );
+            }
+            visit_local_expression(body, scopes, source, tokens, index);
+            scopes.pop();
+        }
+        ExprKind::Array(items) => {
+            for item in items {
+                visit_local_expression(item, scopes, source, tokens, index);
+            }
+        }
+        ExprKind::Map(entries) => {
+            for (key, value) in entries {
+                visit_local_expression(key, scopes, source, tokens, index);
+                visit_local_expression(value, scopes, source, tokens, index);
+            }
+        }
+        ExprKind::Record { fields, .. } => {
+            for (_, value) in fields {
+                visit_local_expression(value, scopes, source, tokens, index);
+            }
+        }
+        ExprKind::Index {
+            target,
+            index: subscript,
+        } => {
+            visit_local_expression(target, scopes, source, tokens, index);
+            visit_local_expression(subscript, scopes, source, tokens, index);
+        }
+        ExprKind::Field { target, .. }
+        | ExprKind::Await(target)
+        | ExprKind::Unary { expr: target, .. } => {
+            visit_local_expression(target, scopes, source, tokens, index);
+        }
+        ExprKind::Call { args, .. } => {
+            for argument in args {
+                visit_local_expression(argument, scopes, source, tokens, index);
+            }
+        }
+        ExprKind::Binary { left, right, .. } => {
+            visit_local_expression(left, scopes, source, tokens, index);
+            visit_local_expression(right, scopes, source, tokens, index);
+        }
+        ExprKind::Match { value, arms } => {
+            visit_local_expression(value, scopes, source, tokens, index);
+            for arm in arms {
+                scopes.push(HashMap::new());
+                visit_local_pattern(&arm.pattern, "match", source, tokens, scopes, index);
+                if let Some(guard) = &arm.guard {
+                    visit_local_expression(guard, scopes, source, tokens, index);
+                }
+                visit_local_expression(&arm.value, scopes, source, tokens, index);
+                scopes.pop();
+            }
+        }
+        ExprKind::Int(_)
+        | ExprKind::UInt(_)
+        | ExprKind::Float(_)
+        | ExprKind::Bool(_)
+        | ExprKind::String(_)
+        | ExprKind::Char(_)
+        | ExprKind::FunctionValue(_)
+        | ExprKind::Sql { .. } => {}
+    }
 }
 
 fn push_type_references(
@@ -1643,6 +2161,112 @@ mod tests {
         assert!(changes
             .iter()
             .any(|change| change.after.contains("type CustomerAlias = model::Account")));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn local_bindings_resolve_and_rename_only_their_lexical_references() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-index-local-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        fs::write(
+            root.join("zelyra.toml"),
+            "[project]\nname = \"local-index\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+        let source = "fn add(amount: Int) -> Int { result = amount + 1 return result }\nfn bump(initial: Int) -> Int { mutable state: Int = initial state = state + 1 return state }\nfn unwrap(value: Option<Int>) -> Int { match value { Some(item) => { return item } None => { return 0 } } }\nfn transform() -> Int { factor = 3 values = [1, 2] transformed = values |> map(|n| n * factor) return transformed[0] }\nfn main() { print(add(2)) }\n";
+        fs::write(root.join("main.zyl"), source).unwrap();
+        let entry = root.join("main.zyl");
+        let analysis = language_service::analyze(&entry, &[]);
+        assert!(analysis.success, "{:?}", analysis.diagnostics);
+        let index = SemanticIndex::from_analysis(&analysis);
+
+        let parameter = index
+            .at("main.zyl", source.find("amount:").unwrap())
+            .unwrap();
+        let parameter_use = index
+            .at("main.zyl", source.find("amount +").unwrap())
+            .unwrap();
+        assert!(parameter.key.starts_with("local:"));
+        assert_eq!(parameter.key, parameter_use.key);
+        let parameter_symbol = index.symbol(&parameter.key).unwrap();
+        assert_eq!(index.references(&parameter.key, false).len(), 1);
+        let parameter_change =
+            plan_symbol_rename(&entry, &analysis, &index, parameter_symbol, "initial", &[])
+                .unwrap();
+        assert!(parameter_change[0].after.contains("initial: Int"));
+        assert!(parameter_change[0].after.contains("initial + 1"));
+
+        let local = index
+            .at("main.zyl", source.find("result =").unwrap())
+            .unwrap();
+        let local_use = index
+            .at("main.zyl", source.rfind("result").unwrap())
+            .unwrap();
+        assert_eq!(local.key, local_use.key);
+        assert_eq!(index.references(&local.key, false).len(), 1);
+        let local_change = plan_symbol_rename(
+            &entry,
+            &analysis,
+            &index,
+            index.symbol(&local.key).unwrap(),
+            "total",
+            &[],
+        )
+        .unwrap();
+        assert!(local_change[0].after.contains("total = amount + 1"));
+        assert!(local_change[0].after.contains("return total"));
+
+        let mutable = index
+            .at("main.zyl", source.find("state: Int").unwrap())
+            .unwrap();
+        let mutable_use = index
+            .at("main.zyl", source.find("state = state").unwrap())
+            .unwrap();
+        let mutable_read = index
+            .at(
+                "main.zyl",
+                source.find("return state").unwrap() + "return ".len(),
+            )
+            .unwrap();
+        assert_eq!(mutable.key, mutable_use.key);
+        assert_eq!(mutable.key, mutable_read.key);
+        assert_eq!(index.references(&mutable.key, false).len(), 3);
+
+        let pattern = index
+            .at(
+                "main.zyl",
+                source.find("Some(item)").unwrap() + "Some(".len(),
+            )
+            .unwrap();
+        let pattern_use = index
+            .at(
+                "main.zyl",
+                source.find("return item").unwrap() + "return ".len(),
+            )
+            .unwrap();
+        assert_eq!(pattern.key, pattern_use.key);
+        assert_eq!(index.references(&pattern.key, false).len(), 1);
+
+        let lambda_parameter = index
+            .at("main.zyl", source.find("|n|").unwrap() + 1)
+            .unwrap();
+        let lambda_use = index
+            .at("main.zyl", source.find("n * factor").unwrap())
+            .unwrap();
+        assert_eq!(lambda_parameter.key, lambda_use.key);
+        assert_eq!(index.references(&lambda_parameter.key, false).len(), 1);
+        let captured_value = index
+            .at("main.zyl", source.find("factor").unwrap())
+            .unwrap();
+        let captured_use = index
+            .at("main.zyl", source.rfind("factor").unwrap())
+            .unwrap();
+        assert_eq!(captured_value.key, captured_use.key);
+        assert_eq!(index.references(&captured_value.key, false).len(), 1);
         fs::remove_dir_all(root).unwrap();
     }
 

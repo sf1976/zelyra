@@ -68,6 +68,9 @@ treated as the current document state. Expensive language requests run in at
 most four background jobs. `$/cancelRequest` replies with `-32800` and discards
 the eventual result. The compiler operation itself is not preempted and keeps
 its bounded job slot until it finishes. If a document changes or closes during
-a request, the stale result is discarded with `-32801`. General local bindings
-are not yet fully resolved semantically. Workspace symbols and refactorings
-remain limited to symbol kinds that the compiler index can resolve safely.
+a request, the stale result is discarded with `-32801`. Function parameters,
+local bindings, assignments, loop and match bindings, and lambda parameters
+are indexed for definition, references, and rename. General completion and full
+type details for local hover results remain limited. Workspace symbols and
+refactorings remain limited to symbol kinds that the compiler index can resolve
+safely.

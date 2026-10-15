@@ -1595,4 +1595,70 @@ mod tests {
         assert!(!items.iter().any(|item| item["label"] == "count"));
         fs::remove_dir_all(root).unwrap();
     }
+
+    #[test]
+    fn local_binding_navigation_and_rename_use_compiler_scopes() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-lsp-local-symbol-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        fs::write(
+            root.join("zelyra.toml"),
+            "[project]\nname = \"lsp-local-symbol\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+        let source = "fn add(amount: Int) -> Int { result = amount + 1 return result }\nfn main() { print(add(2)) }\n";
+        fs::write(root.join("main.zyl"), source).unwrap();
+        let uri = Url::from_file_path(root.join("main.zyl"))
+            .unwrap()
+            .to_string();
+        let server = Server {
+            root: fs::canonicalize(&root).unwrap(),
+            documents: HashMap::new(),
+            shutdown: false,
+        };
+        let use_offset = source.find("amount +").unwrap();
+        let params = json!({
+            "textDocument":{"uri":uri},
+            "position":offset_position(source, use_offset)
+        });
+        let definition = server
+            .semantic_response("textDocument/definition", &params)
+            .unwrap();
+        assert_eq!(
+            definition["range"]["start"],
+            offset_position(source, source.find("amount:").unwrap())
+        );
+        let references = server
+            .semantic_response(
+                "textDocument/references",
+                &json!({
+                    "textDocument":{"uri":uri},
+                    "position":offset_position(source, use_offset),
+                    "context":{"includeDeclaration":true}
+                }),
+            )
+            .unwrap();
+        assert_eq!(references.as_array().unwrap().len(), 2);
+        let rename = server
+            .semantic_response(
+                "textDocument/rename",
+                &json!({
+                    "textDocument":{"uri":uri},
+                    "position":offset_position(source, use_offset),
+                    "newName":"quantity"
+                }),
+            )
+            .unwrap();
+        assert_eq!(
+            rename["documentChanges"][0]["edits"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
 }

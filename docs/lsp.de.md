@@ -72,6 +72,9 @@ behandelt. Teure Sprachabfragen laufen in höchstens vier Hintergrundjobs.
 ihre späteren Ergebnisse. Der Compilerlauf selbst wird dabei nicht vorzeitig
 unterbrochen; er belegt seinen begrenzten Jobplatz bis zum Ende. Ändert oder
 schließt sich ein Dokument während einer Anfrage, wird das veraltete Ergebnis
-mit `-32801` verworfen. Allgemeine lokale Bindings sind noch nicht vollständig
-semantisch aufgelöst. Workspace-Symbole und Refactorings bleiben auf die vom
-Compilerindex sicher auflösbaren Symbolarten begrenzt.
+mit `-32801` verworfen. Funktionsparameter, lokale Bindungen, Zuweisungen,
+Schleifen- und Match-Bindungen sowie Lambda-Parameter sind für Definition,
+Referenzen und Rename indexiert. Allgemeine Completion und vollständige
+Typinformationen für lokale Hover-Ergebnisse sind noch begrenzt. Workspace-
+Symbole und Refactorings bleiben auf die vom Compilerindex sicher
+auflösbaren Symbolarten begrenzt.
