@@ -66,10 +66,10 @@ Wiederherstellungsjournal unter `.zelyra/` an.
 Nach einer Unterbrechung stellt Studio nicht abgeschlossene Schreibvorgänge
 beim nächsten Start wieder her.
 F2 unterstützt außerdem Tabellen, Views, Forms, CRUDs, Tableviews und
-Komponenten, wenn Deklaration und indexierte Verweise in derselben Quelldatei
-stehen. Dateigrenzen überschreitende Resource-Verwendungen gehören noch nicht
-zum Rename-Plan; die Compilerprüfung verwirft Änderungen, die einen Verbraucher
-ungültig zurückließen.
+Komponenten. Bei einem im geladenen Projekt eindeutig auflösbaren
+Ressourcennamen werden erkannte Verwendungen über importierte Dateien hinweg
+mit geändert. Bei mehrdeutigen Ressourcennamen wird kein Rename angeboten. Die
+Vorschau prüft das gesamte geänderte Projekt erneut mit dem Compiler.
 Beim Umbenennen einer `.zyl`-Datei zeigt Studio
 zuerst alle erkannten Importdateien an, prüft das verschobene Projekt mit dem
 Compiler und übernimmt die Datei- und Importänderungen anschließend gemeinsam

@@ -261,7 +261,14 @@ impl SemanticIndex {
                     .components
                     .iter()
                     .map(|item| ("component", item.name.as_str(), item.span)),
-            );
+            )
+            .collect::<Vec<_>>();
+        let mut resource_name_counts = HashMap::<&str, usize>::new();
+        for (_, full_name, _) in &resources {
+            *resource_name_counts
+                .entry(full_name.rsplit("::").next().unwrap_or(full_name))
+                .or_default() += 1;
+        }
         for (kind, full_name, declaration_span) in resources {
             let Some(source) = analysis.sources.get(declaration_span.source_id as usize) else {
                 continue;
@@ -270,11 +277,6 @@ impl SemanticIndex {
                 continue;
             };
             let name = full_name.rsplit("::").next().unwrap_or(full_name);
-            let spans = if kind == "component" {
-                edit::component_rename_spans(source_tokens, name)
-            } else {
-                edit::resource_rename_spans(program, source_tokens, kind, name)
-            };
             let Some(declaration_span) = source_tokens
                 .iter()
                 .filter(|token| {
@@ -289,13 +291,36 @@ impl SemanticIndex {
                 continue;
             };
             let key = format!("resource:{kind}:{}:{full_name}", source.path);
-            for (start, end) in spans {
+            let unique_name = resource_name_counts.get(name).copied().unwrap_or(0) == 1;
+            if !unique_name {
+                continue;
+            }
+            let mut references = Vec::new();
+            for (source_id, candidate_source) in analysis.sources.iter().enumerate() {
+                let Some(candidate_tokens) = tokens.get(&(source_id as u32)) else {
+                    continue;
+                };
+                let candidate_spans = if kind == "component" {
+                    edit::component_rename_spans(candidate_tokens, name)
+                } else {
+                    edit::resource_rename_spans(program, candidate_tokens, kind, name)
+                };
+                references.extend(
+                    candidate_spans
+                        .into_iter()
+                        .map(|(start, end)| (candidate_source.path.clone(), start, end)),
+                );
+            }
+            for (path, start, end) in references {
+                let declaration_occurrence = path == source.path
+                    && start == declaration_span.start
+                    && end == declaration_span.end;
                 index.occurrences.push(Occurrence {
                     key: key.clone(),
-                    path: source.path.clone(),
+                    path,
                     start,
                     end,
-                    declaration: start == declaration_span.start && end == declaration_span.end,
+                    declaration: declaration_occurrence,
                 });
             }
             let declaration = Occurrence {
@@ -1718,6 +1743,47 @@ mod tests {
         assert_eq!(changes.len(), 1);
         assert!(changes[0].after.contains("table clients {"));
         assert!(changes[0].after.contains("CustomerCreate -> clients"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn resource_rename_follows_unique_table_references_across_imported_files() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-index-table-cross-file-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(
+            root.join("zelyra.toml"),
+            "[project]\nname = \"table-cross-file-rename\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+        let main = "import \"src/schema.zyl\" as schema\nform CustomerCreate -> customers { fields { name } }\nfn main() {}\n";
+        let schema = "table customers { id: Id primary auto name: String(100) required access { read_write: [\"main.zyl\"] } }\n";
+        fs::write(root.join("main.zyl"), main).unwrap();
+        fs::write(root.join("src/schema.zyl"), schema).unwrap();
+        let entry = root.join("main.zyl");
+        let analysis = language_service::analyze(&entry, &[]);
+        assert!(analysis.success, "{:?}", analysis.diagnostics);
+        let index = SemanticIndex::from_analysis(&analysis);
+        let occurrence = index
+            .at("src/schema.zyl", schema.find("customers").unwrap())
+            .unwrap();
+        assert!(occurrence.key.starts_with("resource:table:"));
+        let symbol = index.symbol(&occurrence.key).unwrap();
+        let references = index.references(&symbol.key, true);
+        assert_eq!(references.len(), 2);
+        assert!(references.iter().any(|item| item.path == "main.zyl"));
+        let changes = plan_symbol_rename(&entry, &analysis, &index, symbol, "clients", &[])
+            .expect("unique table and form references should rename together");
+        assert_eq!(changes.len(), 2);
+        assert!(changes.iter().any(|change| {
+            change.path == "src/schema.zyl" && change.after.contains("table clients {")
+        }));
+        assert!(changes.iter().any(|change| {
+            change.path == "main.zyl" && change.after.contains("CustomerCreate -> clients")
+        }));
         fs::remove_dir_all(root).unwrap();
     }
 

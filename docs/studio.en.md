@@ -57,10 +57,10 @@ applied. Applying a valid change updates open buffers;
 each file can be undone and saved separately. **Save all** writes up to 16
 files together and first creates a private recovery journal under `.zelyra/`.
 On restart, Studio rolls back an interrupted batch.
-F2 also supports tables, views, forms, CRUDs, tableviews, and components when
-their declaration and indexed references are in the same source file. Cross-file
-resource consumers are not yet included in that rename plan; compiler checking
-rejects a plan that would leave a consumer invalid.
+F2 also supports tables, views, forms, CRUDs, tableviews, and components. When a
+resource name resolves uniquely in the loaded project, indexed uses in imported
+files are updated together. Rename is not offered for ambiguous resource names.
+The preview recompiles the full changed project.
 Before renaming a `.zyl` file, Studio previews detected import files, checks
 the moved project with the compiler, and applies the file and import edits
 through the journal. Open changes are saved first and stale previews are

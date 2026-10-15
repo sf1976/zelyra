@@ -6599,6 +6599,42 @@ fn main() {}
     }
 
     #[test]
+    fn studio_semantic_rename_updates_unique_resource_references_across_files() {
+        let state = project();
+        fs::create_dir_all(state.root.join("src")).unwrap();
+        let main = "import \"src/schema.zyl\" as schema\nform CustomerCreate -> customers { fields { name } }\nfn main() {}\n";
+        let schema = "table customers { id: Id primary auto name: String(100) required access { read_write: [\"main.zyl\"] } }\n";
+        fs::write(state.root.join("main.zyl"), main).unwrap();
+        fs::write(state.root.join("src/schema.zyl"), schema).unwrap();
+        let response = semantic_editor_query(
+            &state,
+            &json!({
+                "path":"main.zyl","source":main,
+                "offset":main.find("customers {").unwrap(),
+                "action":"rename-preview","newName":"clients"
+            }),
+        )
+        .unwrap();
+        let preview: Value = serde_json::from_str(&response.2).unwrap();
+        assert_eq!(preview["changes"].as_array().unwrap().len(), 2);
+        assert!(preview["changes"].as_array().unwrap().iter().any(|change| {
+            change["path"] == "main.zyl"
+                && change["after"]
+                    .as_str()
+                    .unwrap()
+                    .contains("CustomerCreate -> clients")
+        }));
+        assert!(preview["changes"].as_array().unwrap().iter().any(|change| {
+            change["path"] == "src/schema.zyl"
+                && change["after"]
+                    .as_str()
+                    .unwrap()
+                    .contains("table clients {")
+        }));
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
     fn studio_rejects_duplicate_and_unsafe_source_overlays() {
         let state = project();
         let source = fs::read_to_string(state.root.join("main.zyl")).unwrap();

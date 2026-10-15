@@ -1170,6 +1170,64 @@ mod tests {
     }
 
     #[test]
+    fn table_navigation_and_rename_follow_unique_imported_resource_references() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-lsp-table-cross-file-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(
+            root.join("zelyra.toml"),
+            "[project]\nname = \"lsp-table-cross-file\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+        let source = "import \"src/schema.zyl\" as schema\nform CustomerCreate -> customers { fields { name } }\nfn main() {}\n";
+        let schema = "table customers { id: Id primary auto name: String(100) required access { read_write: [\"main.zyl\"] } }\n";
+        fs::write(root.join("main.zyl"), source).unwrap();
+        fs::write(root.join("src/schema.zyl"), schema).unwrap();
+        let uri = Url::from_file_path(root.join("main.zyl"))
+            .unwrap()
+            .to_string();
+        let schema_uri = Url::from_file_path(root.join("src/schema.zyl"))
+            .unwrap()
+            .to_string();
+        let server = Server {
+            root: root.clone(),
+            documents: HashMap::new(),
+            shutdown: false,
+        };
+        let offset = source.find("customers {").unwrap();
+        let params = json!({
+            "textDocument":{"uri":uri},
+            "position":offset_position(source, offset)
+        });
+        let definition = server
+            .semantic_response("textDocument/definition", &params)
+            .unwrap();
+        assert_eq!(definition["uri"], schema_uri);
+        let references = server
+            .semantic_response("textDocument/references", &params)
+            .unwrap();
+        assert_eq!(references.as_array().unwrap().len(), 1);
+        let rename = server
+            .semantic_response(
+                "textDocument/rename",
+                &json!({"textDocument":{"uri":uri},"position":offset_position(source,offset),"newName":"clients"}),
+            )
+            .unwrap();
+        let changes = rename["documentChanges"].as_array().unwrap();
+        assert_eq!(changes.len(), 2);
+        assert!(changes
+            .iter()
+            .any(|change| change["textDocument"]["uri"] == schema_uri));
+        assert!(changes
+            .iter()
+            .any(|change| change["textDocument"]["uri"] == uri));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn typed_hole_completion_uses_shared_scope_and_exact_edit_range() {
         let root = std::env::temp_dir().join(format!(
             "zelyra-lsp-hole-{}-{:?}",
