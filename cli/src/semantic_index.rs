@@ -600,6 +600,7 @@ impl SemanticIndex {
                 &mut index.occurrences,
             );
             index_local_bindings(function, &analysis.sources, &tokens, &mut index);
+            index_local_type_details(function, program, &analysis.sources, &tokens, &mut index);
         }
         index_record_pattern_fields(program, &analysis.sources, &tokens, &mut index.occurrences);
         for record in &program.records {
@@ -1192,6 +1193,400 @@ fn collect_pattern_bindings(pattern: &Pattern, output: &mut Vec<Value>) {
             }
         }
         PatternKind::Wildcard
+        | PatternKind::Constructor { inner: None, .. }
+        | PatternKind::EnumVariant { .. }
+        | PatternKind::Int(_)
+        | PatternKind::Bool(_)
+        | PatternKind::String(_)
+        | PatternKind::Char(_) => {}
+    }
+}
+
+fn index_local_type_details(
+    function: &zelyra_ast::Function,
+    program: &Program,
+    sources: &[project::ProjectSource],
+    tokens: &HashMap<u32, Vec<Token>>,
+    index: &mut SemanticIndex,
+) {
+    let Some(source) = sources.get(function.span.source_id as usize) else {
+        return;
+    };
+    let Some(source_tokens) = tokens.get(&function.span.source_id) else {
+        return;
+    };
+    let mut bindings = HashMap::new();
+    for parameter in &function.params {
+        bindings.insert(parameter.name.clone(), parameter.ty.clone());
+        if let Some(name_span) =
+            local_identifier_span(source_tokens, parameter.span, &parameter.name, None)
+        {
+            set_local_type_detail(
+                index,
+                source,
+                name_span,
+                "parameter",
+                &parameter.name,
+                &parameter.ty,
+            );
+        }
+    }
+    index_local_block_types(
+        &function.body,
+        &mut bindings,
+        program,
+        source,
+        source_tokens,
+        index,
+    );
+}
+
+fn set_local_type_detail(
+    index: &mut SemanticIndex,
+    source: &project::ProjectSource,
+    name_span: Span,
+    kind: &str,
+    name: &str,
+    ty: &Type,
+) {
+    if *ty == Type::Unknown {
+        return;
+    }
+    let Some(occurrence) = index.at(&source.path, name_span.start) else {
+        return;
+    };
+    let key = occurrence.key.clone();
+    if let Some(symbol) = index.symbols.iter_mut().find(|symbol| symbol.key == key) {
+        symbol.detail = format!("{kind} {name}: {ty}");
+    }
+}
+
+fn index_local_block_types(
+    block: &Block,
+    bindings: &mut HashMap<String, Type>,
+    program: &Program,
+    source: &project::ProjectSource,
+    tokens: &[Token],
+    index: &mut SemanticIndex,
+) {
+    for statement in &block.statements {
+        match statement {
+            Stmt::Let {
+                name,
+                ty,
+                value,
+                span,
+                ..
+            } => {
+                index_local_expr_types(value, bindings, program, source, tokens, index);
+                if let Some(inferred) = ty
+                    .clone()
+                    .or_else(|| expression_type(value, bindings, program))
+                {
+                    bindings.insert(name.clone(), inferred.clone());
+                    let declaration_span = Span {
+                        end: value.span.start,
+                        ..*span
+                    };
+                    if let Some(name_span) =
+                        local_identifier_span(tokens, declaration_span, name, None)
+                    {
+                        set_local_type_detail(index, source, name_span, "local", name, &inferred);
+                    }
+                }
+            }
+            Stmt::BindOrAssign { name, value, span } => {
+                index_local_expr_types(value, bindings, program, source, tokens, index);
+                if let Some(inferred) = bindings
+                    .get(name)
+                    .cloned()
+                    .or_else(|| expression_type(value, bindings, program))
+                {
+                    bindings
+                        .entry(name.clone())
+                        .or_insert_with(|| inferred.clone());
+                    if let Some(name_span) =
+                        local_identifier_span(tokens, *span, name, Some(value.span.start))
+                    {
+                        set_local_type_detail(index, source, name_span, "local", name, &inferred);
+                    }
+                }
+            }
+            Stmt::TupleBindOrAssign { names, value, span } => {
+                index_local_expr_types(value, bindings, program, source, tokens, index);
+                if let Some(Type::Tuple(types)) = expression_type(value, bindings, program) {
+                    let mut cursor = span.start;
+                    for (name, ty) in names.iter().zip(types) {
+                        let name_span = Span {
+                            start: cursor,
+                            end: value.span.start,
+                            ..*span
+                        };
+                        if let Some(name_span) =
+                            local_identifier_span(tokens, name_span, name, None)
+                        {
+                            cursor = name_span.end;
+                            bindings.insert(name.clone(), ty.clone());
+                            set_local_type_detail(index, source, name_span, "local", name, &ty);
+                        }
+                    }
+                }
+            }
+            Stmt::Expr(expression)
+            | Stmt::Return {
+                value: Some(expression),
+                ..
+            } => index_local_expr_types(expression, bindings, program, source, tokens, index),
+            Stmt::If {
+                condition,
+                then_block,
+                else_block,
+                ..
+            } => {
+                index_local_expr_types(condition, bindings, program, source, tokens, index);
+                let mut branch = bindings.clone();
+                index_local_block_types(then_block, &mut branch, program, source, tokens, index);
+                if let Some(otherwise) = else_block {
+                    let mut branch = bindings.clone();
+                    index_local_block_types(otherwise, &mut branch, program, source, tokens, index);
+                }
+            }
+            Stmt::While {
+                condition,
+                invariants,
+                body,
+                ..
+            } => {
+                index_local_expr_types(condition, bindings, program, source, tokens, index);
+                for invariant in invariants {
+                    index_local_expr_types(invariant, bindings, program, source, tokens, index);
+                }
+                let mut nested = bindings.clone();
+                index_local_block_types(body, &mut nested, program, source, tokens, index);
+            }
+            Stmt::For {
+                name,
+                additional_names,
+                iterable,
+                body,
+                span,
+            } => {
+                index_local_expr_types(iterable, bindings, program, source, tokens, index);
+                let mut nested = bindings.clone();
+                if let Some(Type::Array(inner) | Type::Set(inner)) =
+                    expression_type(iterable, bindings, program)
+                {
+                    let mut cursor = span.start;
+                    let names = std::iter::once(name)
+                        .chain(additional_names)
+                        .collect::<Vec<_>>();
+                    let item_types = match inner.as_ref() {
+                        Type::Tuple(types) if types.len() == names.len() => types.clone(),
+                        _ => vec![inner.as_ref().clone(); names.len()],
+                    };
+                    for (loop_name, item_type) in names.into_iter().zip(item_types) {
+                        let name_span = Span {
+                            start: cursor,
+                            end: iterable.span.start,
+                            ..*span
+                        };
+                        if let Some(name_span) =
+                            local_identifier_span(tokens, name_span, loop_name, None)
+                        {
+                            cursor = name_span.end;
+                            nested.insert(loop_name.clone(), item_type.clone());
+                            set_local_type_detail(
+                                index,
+                                source,
+                                name_span,
+                                "loop variable",
+                                loop_name,
+                                &item_type,
+                            );
+                        }
+                    }
+                }
+                index_local_block_types(body, &mut nested, program, source, tokens, index);
+            }
+            Stmt::Loop {
+                invariants, body, ..
+            } => {
+                for invariant in invariants {
+                    index_local_expr_types(invariant, bindings, program, source, tokens, index);
+                }
+                let mut nested = bindings.clone();
+                index_local_block_types(body, &mut nested, program, source, tokens, index);
+            }
+            Stmt::Match { value, arms, .. } => {
+                index_local_expr_types(value, bindings, program, source, tokens, index);
+                let scrutinee_type = expression_type(value, bindings, program);
+                for arm in arms {
+                    let mut nested = bindings.clone();
+                    if let Some(ty) = &scrutinee_type {
+                        index_pattern_local_types(
+                            &arm.pattern,
+                            ty,
+                            &mut nested,
+                            program,
+                            source,
+                            index,
+                        );
+                    }
+                    if let Some(guard) = &arm.guard {
+                        index_local_expr_types(guard, &mut nested, program, source, tokens, index);
+                    }
+                    index_local_block_types(&arm.body, &mut nested, program, source, tokens, index);
+                }
+            }
+            Stmt::Transaction { body, .. } | Stmt::Parallel { body, .. } => {
+                let mut nested = bindings.clone();
+                index_local_block_types(body, &mut nested, program, source, tokens, index);
+            }
+            Stmt::Return { value: None, .. } | Stmt::Break { .. } | Stmt::Continue { .. } => {}
+        }
+    }
+}
+
+fn index_local_expr_types(
+    expression: &Expr,
+    bindings: &mut HashMap<String, Type>,
+    program: &Program,
+    source: &project::ProjectSource,
+    tokens: &[Token],
+    index: &mut SemanticIndex,
+) {
+    match &expression.kind {
+        ExprKind::Array(items) => {
+            for item in items {
+                index_local_expr_types(item, bindings, program, source, tokens, index);
+            }
+        }
+        ExprKind::Map(entries) => {
+            for (key, value) in entries {
+                index_local_expr_types(key, bindings, program, source, tokens, index);
+                index_local_expr_types(value, bindings, program, source, tokens, index);
+            }
+        }
+        ExprKind::Record { fields, .. } => {
+            for (_, value) in fields {
+                index_local_expr_types(value, bindings, program, source, tokens, index);
+            }
+        }
+        ExprKind::Lambda { params, body } => {
+            let mut nested = bindings.clone();
+            for parameter in params {
+                nested.insert(parameter.name.clone(), parameter.ty.clone());
+                if let Some(name_span) =
+                    local_identifier_span(tokens, parameter.span, &parameter.name, None)
+                {
+                    set_local_type_detail(
+                        index,
+                        source,
+                        name_span,
+                        "lambda parameter",
+                        &parameter.name,
+                        &parameter.ty,
+                    );
+                }
+            }
+            index_local_expr_types(body, &mut nested, program, source, tokens, index);
+        }
+        ExprKind::Index {
+            target,
+            index: subscript,
+        } => {
+            index_local_expr_types(target, bindings, program, source, tokens, index);
+            index_local_expr_types(subscript, bindings, program, source, tokens, index);
+        }
+        ExprKind::Field { target, .. }
+        | ExprKind::Await(target)
+        | ExprKind::Unary { expr: target, .. } => {
+            index_local_expr_types(target, bindings, program, source, tokens, index)
+        }
+        ExprKind::Call { args, .. } => {
+            for argument in args {
+                index_local_expr_types(argument, bindings, program, source, tokens, index);
+            }
+        }
+        ExprKind::Binary { left, right, .. } => {
+            index_local_expr_types(left, bindings, program, source, tokens, index);
+            index_local_expr_types(right, bindings, program, source, tokens, index);
+        }
+        ExprKind::Match { value, arms } => {
+            index_local_expr_types(value, bindings, program, source, tokens, index);
+            let scrutinee_type = expression_type(value, bindings, program);
+            for arm in arms {
+                let mut nested = bindings.clone();
+                if let Some(ty) = &scrutinee_type {
+                    index_pattern_local_types(
+                        &arm.pattern,
+                        ty,
+                        &mut nested,
+                        program,
+                        source,
+                        index,
+                    );
+                }
+                if let Some(guard) = &arm.guard {
+                    index_local_expr_types(guard, &mut nested, program, source, tokens, index);
+                }
+                index_local_expr_types(&arm.value, &mut nested, program, source, tokens, index);
+            }
+        }
+        ExprKind::Int(_)
+        | ExprKind::UInt(_)
+        | ExprKind::Float(_)
+        | ExprKind::Bool(_)
+        | ExprKind::String(_)
+        | ExprKind::Char(_)
+        | ExprKind::FunctionValue(_)
+        | ExprKind::Variable(_)
+        | ExprKind::Sql { .. } => {}
+    }
+}
+
+fn index_pattern_local_types(
+    pattern: &Pattern,
+    ty: &Type,
+    bindings: &mut HashMap<String, Type>,
+    program: &Program,
+    source: &project::ProjectSource,
+    index: &mut SemanticIndex,
+) {
+    match &pattern.kind {
+        PatternKind::Variable(name) => {
+            bindings.insert(name.clone(), ty.clone());
+            set_local_type_detail(index, source, pattern.span, "pattern binding", name, ty);
+        }
+        PatternKind::Record { fields, .. } => {
+            if let Some(record) = resolve_record_type(ty, program, 0) {
+                for (field_name, nested) in fields {
+                    if let Some(field) =
+                        record.fields.iter().find(|field| field.name == *field_name)
+                    {
+                        index_pattern_local_types(
+                            nested, &field.ty, bindings, program, source, index,
+                        );
+                    }
+                }
+            }
+        }
+        PatternKind::Constructor {
+            name,
+            inner: Some(inner),
+        } => {
+            let inner_type = match (name.as_str(), ty) {
+                ("Some", Type::Option(inner)) => Some(inner.as_ref()),
+                ("Ok", Type::Result(ok, _)) => Some(ok.as_ref()),
+                ("Err", Type::Result(_, error)) => Some(error.as_ref()),
+                _ => None,
+            };
+            if let Some(inner_type) = inner_type {
+                index_pattern_local_types(inner, inner_type, bindings, program, source, index);
+            }
+        }
+        PatternKind::EnumVariantPayload { .. }
+        | PatternKind::Wildcard
         | PatternKind::Constructor { inner: None, .. }
         | PatternKind::EnumVariant { .. }
         | PatternKind::Int(_)
@@ -2120,6 +2515,12 @@ fn expression_type(
     program: &Program,
 ) -> Option<Type> {
     match &expression.kind {
+        ExprKind::Int(_) => Some(Type::Int),
+        ExprKind::UInt(_) => Some(Type::UInt),
+        ExprKind::Float(_) => Some(Type::Float),
+        ExprKind::Bool(_) => Some(Type::Bool),
+        ExprKind::String(_) => Some(Type::String),
+        ExprKind::Char(_) => Some(Type::Char),
         ExprKind::Variable(name) => bindings.get(name).cloned(),
         ExprKind::Record { type_name, .. } => Some(Type::Named(type_name.clone())),
         ExprKind::Call { name, .. } => {
@@ -2135,7 +2536,11 @@ fn expression_type(
                     let first = matches.next()?;
                     matches.next().is_none().then_some(first)
                 })?;
-            function.return_type.clone()
+            function
+                .type_params
+                .is_empty()
+                .then(|| function.return_type.clone())
+                .flatten()
         }
         ExprKind::Index { target, .. } => match expression_type(target, bindings, program)? {
             Type::Array(inner) | Type::Set(inner) => Some(*inner),

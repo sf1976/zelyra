@@ -1638,7 +1638,7 @@ mod tests {
             "[project]\nname = \"lsp-local-symbol\"\nversion = \"1.0.0\"\n",
         )
         .unwrap();
-        let source = "fn add(amount: Int) -> Int { result = amount + 1 return result }\nfn main() { total = add(2) print(total) }\n";
+        let source = "fn add(amount: Int) -> Int { result = amount + 1 return result }\nfn unwrap_result(value: Result<Int, String>) -> String { match value { Ok(number) => { return \"\" } Err(problem) => { return problem } } }\nfn main() { total = add(2) print(total) }\n";
         fs::write(root.join("main.zyl"), source).unwrap();
         let uri = Url::from_file_path(root.join("main.zyl"))
             .unwrap()
@@ -1660,6 +1660,25 @@ mod tests {
             definition["range"]["start"],
             offset_position(source, source.find("amount:").unwrap())
         );
+        let hover = server
+            .semantic_response("textDocument/hover", &params)
+            .unwrap();
+        assert_eq!(hover["contents"]["value"], "parameter amount: Int");
+        for (name, expected) in [
+            ("number", "pattern binding number: Int"),
+            ("problem", "pattern binding problem: String"),
+        ] {
+            let hover = server
+                .semantic_response(
+                    "textDocument/hover",
+                    &json!({
+                        "textDocument":{"uri":uri},
+                        "position":offset_position(source, source.rfind(name).unwrap())
+                    }),
+                )
+                .unwrap();
+            assert_eq!(hover["contents"]["value"], expected);
+        }
         let references = server
             .semantic_response(
                 "textDocument/references",

@@ -69,7 +69,7 @@ try {
   await page.mouse.move(point.x, point.y);
   const tooltip = page.locator(".cm-tooltip-zelyra-hover");
   await tooltip.waitFor();
-  assert.equal(await tooltip.textContent(), "local message");
+  assert.equal(await tooltip.textContent(), "local message: String");
   const origin = new URL(url).origin;
   await page.route(`${origin}/__zelyra/axe-test.js`, (route) => route.fulfill({
     status: 200,
@@ -84,7 +84,7 @@ try {
   await page.mouse.click(point.x, point.y);
   await page.keyboard.press("Alt+Shift+h");
   await tooltip.waitFor();
-  assert.equal(await tooltip.textContent(), "local message");
+  assert.equal(await tooltip.textContent(), "local message: String");
   await page.keyboard.press("Escape");
   await tooltip.waitFor({ state: "detached" });
   console.log(`Compiler-backed Studio hover passed with mouse and keyboard in ${engineName}`);
