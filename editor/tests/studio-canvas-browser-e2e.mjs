@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import axe from "axe-core";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { spawn } from "node:child_process";
@@ -71,8 +72,9 @@ fn main() {}
   assert.equal(await preview.locator("h1").textContent(), "<Acme & Co>");
   assert.equal(await preview.locator("script").count(), 1, "preview keeps project markup visible for inspection");
   assert.equal(await preview.locator("body").getAttribute("data-executed"), null, "preview must not execute project scripts");
-  await page.locator("#canvas-component-target").selectOption({ label: "Banner" });
-  await page.locator("#canvas-component-source").click();
+  await page.locator("#canvas-component-target").focus();
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Enter");
   await page.waitForFunction(() => document.querySelector(".cm-activeLine")?.textContent?.includes("component Banner"));
   assert.match(await page.locator(".cm-activeLine").textContent(), /component Banner/);
 
@@ -95,6 +97,18 @@ fn main() {}
   await page.keyboard.press("Control+z");
   assert.match(await page.locator(".cm-content").textContent(), /--z-color-primary:\s*#23654f/);
   assert.match(await page.locator(".cm-content").textContent(), /--z-color-on-primary:\s*#ffffff/);
+  const sameOrigin = new URL(url).origin;
+  await page.route(`${sameOrigin}/__zelyra/axe-test.js`, (route) => route.fulfill({
+    status: 200, contentType: "text/javascript", body: axe.source,
+  }));
+  await page.addScriptTag({ url: `${sameOrigin}/__zelyra/axe-test.js` });
+  const accessibility = await page.evaluate(async () => axe.run(document, {
+    runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"] },
+  }));
+  const violations = accessibility.violations.map(({ id, impact, nodes }) => ({
+    id, impact, nodes: nodes.map((node) => ({ target: node.target, html: node.html, summary: node.failureSummary })),
+  }));
+  assert.deepEqual(violations, [], "Canvas controls must pass automated WCAG 2.2 A/AA checks");
   assert.deepEqual(errors, [], `browser errors: ${errors.join(", ")}`);
   console.log(`Studio Canvas rendered escaped sample data, blocked project scripts, and applied/undid theme edits in ${engineName}.`);
 } finally {
