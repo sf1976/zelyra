@@ -531,6 +531,9 @@ fn editor_response(
         ("POST", "file-save-batch") => {
             save_editor_files_batch(state, parse_json_body(&request.body)?)
         }
+        ("POST", "file-rename-preview") => {
+            preview_editor_file_rename(state, parse_json_body(&request.body)?)
+        }
         ("POST", "file-rename") => rename_editor_file(state, parse_json_body(&request.body)?),
         ("DELETE", "file") => delete_editor_file(state, parse_json_body(&request.body)?),
         ("POST", "check") => check_project(state, &parse_json_body(&request.body)?),
@@ -3775,10 +3778,13 @@ fn save_editor_files_batch(
         }
         let after = content.as_bytes().to_vec();
         if before != after {
+            let create_mode =
+                editor_transactions::file_mode(&path).map_err(|error| (500, error))?;
             changes.push(editor_transactions::FileChange {
                 path: relative.into(),
-                before,
-                after: after.clone(),
+                before: Some(before),
+                after: Some(after.clone()),
+                create_mode,
             });
         }
         saved.push(json!({"path":relative,"content":content,"hash":content_hash(&after)}));
@@ -3821,10 +3827,10 @@ fn protected_editor_file(relative: &str) -> bool {
     matches!(relative, "main.zyl" | "zelyra.toml")
 }
 
-fn rename_editor_file(
+fn file_rename_plan(
     state: &EditorState,
-    value: Value,
-) -> Result<(u16, &'static str, String), (u16, String)> {
+    value: &Value,
+) -> Result<(Vec<editor_transactions::FileChange>, Value, String), (u16, String)> {
     let relative = value
         .get("path")
         .and_then(Value::as_str)
@@ -3839,41 +3845,199 @@ fn rename_editor_file(
             "the project entry file and project configuration cannot be renamed".into(),
         ));
     }
-    let source = editor_file_hash(state, relative, "baseHash", &value)?;
+    let source = editor_file_hash(state, relative, "baseHash", value)?;
     let target = safe_editor_path(&state.root, new_relative, true)?;
     if source == target {
         return Err((400, "newPath must differ from path".into()));
     }
-    // hard_link creates the destination atomically only when it does not exist,
-    // so a concurrent file cannot be silently overwritten by a rename.
-    fs::hard_link(&source, &target).map_err(|error| {
-        if error.kind() == io::ErrorKind::AlreadyExists {
-            (409, "destination file already exists".into())
-        } else {
-            (500, "could not create renamed file; source and destination must be on the same filesystem".into())
+    if target.exists() {
+        return Err((409, "destination file already exists".into()));
+    }
+    if !source.is_file() {
+        return Err((404, "source file not found".into()));
+    }
+    let source_bytes = fs::read(&source).map_err(|_| (404, "source file not found".into()))?;
+    let source_mode = editor_transactions::file_mode(&source).map_err(|error| (500, error))?;
+    let mut files = vec![
+        editor_transactions::FileChange {
+            path: relative.to_owned(),
+            before: Some(source_bytes.clone()),
+            after: None,
+            create_mode: source_mode,
+        },
+        editor_transactions::FileChange {
+            path: new_relative.to_owned(),
+            before: None,
+            after: Some(source_bytes.clone()),
+            create_mode: source_mode,
+        },
+    ];
+    let mut affected = Vec::new();
+    if relative.ends_with(".zyl") && new_relative.ends_with(".zyl") {
+        let mut paths = Vec::new();
+        collect_editor_files(&state.root, &state.root, 0, &mut paths)?;
+        if paths.len() >= EDITOR_MAX_FILES {
+            return Err((
+                413,
+                "project source inventory reached the rename safety limit".into(),
+            ));
         }
-    })?;
-    let renamed =
-        fs::read(&target).map_err(|_| (500, "renamed file could not be verified".into()))?;
-    if content_hash(&renamed) != value["baseHash"].as_str().unwrap_or_default() {
-        let _ = fs::remove_file(&target);
+        for import_path in paths
+            .into_iter()
+            .filter(|path| path.ends_with(".zyl") && path != relative)
+        {
+            let path = safe_editor_path(&state.root, &import_path, false)?;
+            let bytes =
+                fs::read(&path).map_err(|_| (500, format!("could not read `{import_path}`")))?;
+            let text = std::str::from_utf8(&bytes)
+                .map_err(|_| (415, format!("`{import_path}` is not UTF-8 text")))?;
+            let tokens = lex(text).map_err(|error| {
+                (
+                    422,
+                    format!("cannot safely inspect imports in `{import_path}`: {error:?}"),
+                )
+            })?;
+            let mut edits = Vec::new();
+            let mut index = 0;
+            while index < tokens.len() {
+                if tokens[index].kind != TokenKind::Import {
+                    index += 1;
+                    continue;
+                }
+                let mut next = index + 1;
+                while matches!(
+                    tokens.get(next).map(|token| &token.kind),
+                    Some(TokenKind::Newline | TokenKind::Semicolon)
+                ) {
+                    next += 1;
+                }
+                let Some(token) = tokens.get(next) else { break };
+                if let TokenKind::String(imported) = &token.kind {
+                    if imported == relative {
+                        let replacement = serde_json::to_string(new_relative)
+                            .map_err(|_| (500, "could not encode the new module path".into()))?;
+                        edits.push((token.span.start, token.span.end, replacement));
+                    }
+                }
+                index += 1;
+            }
+            if !edits.is_empty() {
+                let mut updated = text.to_owned();
+                for (start, end, replacement) in edits.iter().rev() {
+                    if *end > updated.len()
+                        || *start > *end
+                        || !updated.is_char_boundary(*start)
+                        || !updated.is_char_boundary(*end)
+                    {
+                        return Err((
+                            422,
+                            format!("invalid import source span in `{import_path}`"),
+                        ));
+                    }
+                    updated.replace_range(*start..*end, replacement);
+                }
+                if updated.len() > EDITOR_MAX_FILE_BYTES {
+                    return Err((
+                        413,
+                        format!("updated imports make `{import_path}` exceed the 1 MiB limit"),
+                    ));
+                }
+                let mode = editor_transactions::file_mode(&path).map_err(|error| (500, error))?;
+                files.push(editor_transactions::FileChange {
+                    path: import_path.clone(),
+                    before: Some(bytes),
+                    after: Some(updated.into_bytes()),
+                    create_mode: mode,
+                });
+                affected.push(import_path);
+            }
+        }
+    }
+    // Validate the complete moved project with the compiler before offering a preview.
+    let cleanup = create_editor_preview_directory()?;
+    let temporary_root = cleanup.0.clone();
+    let mut count = 0;
+    copy_editor_sources(&state.root, &state.root, &temporary_root, 0, &mut count)?;
+    for change in &files {
+        let path = temporary_root.join(&change.path);
+        if let Some(content) = &change.after {
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent)
+                    .map_err(|_| (500, "could not prepare rename validation".into()))?;
+            }
+            fs::write(path, content)
+                .map_err(|_| (500, "could not write rename validation source".into()))?;
+        } else if path.exists() {
+            fs::remove_file(path).map_err(|_| (500, "could not prepare renamed project".into()))?;
+        }
+    }
+    let entry = temporary_root.join("main.zyl");
+    let entry_text = fs::read_to_string(&entry)
+        .map_err(|_| (422, "project entry main.zyl is missing or not UTF-8".into()))?;
+    begin_json_diagnostics(&entry.to_string_lossy(), &entry_text);
+    if validate(&entry.to_string_lossy()).is_err() {
+        let diagnostics = finish_json_diagnostics();
         return Err((
-            409,
-            "file changed during rename; reload it before retrying".into(),
+            422,
+            format!(
+                "compiler rejected the renamed project: {}",
+                diagnostics
+                    .iter()
+                    .filter_map(|item| item.get("message").and_then(Value::as_str))
+                    .take(3)
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            ),
         ));
     }
-    if fs::remove_file(&source).is_err() {
-        let _ = fs::remove_file(&target);
-        return Err((500, "could not finish file rename".into()));
+    let _ = finish_json_diagnostics();
+    let mut material = files.iter().map(|change| json!({"path":change.path,"before":change.before.as_deref().map(content_hash),"after":change.after.as_deref().map(content_hash)})).collect::<Vec<_>>();
+    material.sort_by_key(|item| item["path"].as_str().unwrap_or_default().to_owned());
+    let fingerprint = content_hash(
+        serde_json::to_string(&material)
+            .unwrap_or_default()
+            .as_bytes(),
+    );
+    let preview = json!({"path":relative,"newPath":new_relative,"updatedImports":affected,"importCount":affected.len(),"planId":fingerprint});
+    Ok((files, preview, fingerprint))
+}
+
+fn preview_editor_file_rename(
+    state: &EditorState,
+    value: Value,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let (_, preview, _) = file_rename_plan(state, &value)?;
+    Ok((200, "application/json; charset=utf-8", preview.to_string()))
+}
+
+fn rename_editor_file(
+    state: &EditorState,
+    value: Value,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let (files, preview, fingerprint) = file_rename_plan(state, &value)?;
+    if value.get("planId").and_then(Value::as_str) != Some(fingerprint.as_str()) {
+        return Err((409, "rename preview is stale; create a new preview".into()));
     }
+    editor_transactions::apply(&state.root, &files).map_err(|error| (409, error))?;
+    let relative = preview["path"].as_str().unwrap_or_default();
+    let new_relative = preview["newPath"].as_str().unwrap_or_default();
+    let hash = files
+        .iter()
+        .find(|change| change.path == new_relative)
+        .and_then(|change| change.after.as_deref())
+        .map(content_hash)
+        .unwrap_or_default();
     state.events.changed(relative, "rename");
     state.events.changed(new_relative, "create");
-    Ok((
-        200,
-        "application/json; charset=utf-8",
-        json!({"path": relative, "newPath": new_relative, "hash": content_hash(&renamed)})
-            .to_string(),
-    ))
+    for importer in preview["updatedImports"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+    {
+        state.events.changed(importer, "save");
+    }
+    Ok((200, "application/json; charset=utf-8", json!({"path":relative,"newPath":new_relative,"hash":hash,"updatedImports":preview["updatedImports"]}).to_string()))
 }
 
 fn delete_editor_file(
@@ -6139,7 +6303,16 @@ fn main() {}
     fn editor_rename_is_project_scoped_hash_checked_and_never_overwrites() {
         let state = project();
         fs::create_dir(state.root.join("src")).expect("create source directory");
-        fs::write(state.root.join("src/old.zyl"), "module old\n").expect("write source");
+        fs::write(
+            state.root.join("main.zyl"),
+            "import \"src/old.zyl\" as old\nfn main() {}\n",
+        )
+        .expect("write importer");
+        fs::write(
+            state.root.join("src/old.zyl"),
+            "pub fn answer() -> Int { return 42 }\n",
+        )
+        .expect("write source");
         let source = state.root.join("src/old.zyl");
         let hash = content_hash(&fs::read(&source).expect("read source"));
 
@@ -6163,17 +6336,37 @@ fn main() {}
             "keep me"
         );
 
-        let response = rename_editor_file(
+        let preview = preview_editor_file_rename(
             &state,
             json!({"path":"src/old.zyl", "newPath":"src/new.zyl", "baseHash":hash}),
         )
-        .expect("rename source");
+        .expect("preview compiler-checked rename");
+        let preview: Value = serde_json::from_str(&preview.2).unwrap();
+        assert_eq!(preview["updatedImports"], json!(["main.zyl"]));
+        assert_eq!(
+            fs::read_to_string(state.root.join("main.zyl"))
+                .unwrap()
+                .contains("src/old.zyl"),
+            true
+        );
+        let stale = rename_editor_file(
+            &state,
+            json!({"path":"src/old.zyl", "newPath":"src/new.zyl", "baseHash":hash,"planId":"stale"}),
+        ).expect_err("stale confirmation must be rejected");
+        assert_eq!(stale.0, 409);
+        let response = rename_editor_file(
+            &state,
+            json!({"path":"src/old.zyl", "newPath":"src/new.zyl", "baseHash":hash,"planId":preview["planId"]}),
+        ).expect("apply reviewed rename");
         assert_eq!(response.0, 200);
         assert!(!source.exists());
         assert_eq!(
             fs::read_to_string(state.root.join("src/new.zyl")).unwrap(),
-            "module old\n"
+            "pub fn answer() -> Int { return 42 }\n"
         );
+        assert!(fs::read_to_string(state.root.join("main.zyl"))
+            .unwrap()
+            .contains("src/new.zyl"));
 
         let _ = fs::remove_dir_all(state.root.clone());
     }

@@ -249,7 +249,7 @@ const messages = {
     subtitle: "Lokale Entwicklungsumgebung", local: "LOKAL", files: "DATEIEN", newFile: "Neue Datei",
     refresh: "Aktualisieren", filterFiles: "Dateien filtern", saveAll: "Alle speichern", save: "Speichern",
     renameFile: "Umbenennen", deleteFile: "Löschen", renamePrompt: "Neuer Projektpfad (zum Beispiel src/customer-new.zyl)",
-    renameConfirm: "Datei {0} umbenennen? Importverweise werden nicht angepasst.", deleteConfirm: "Datei {0} endgültig löschen?",
+    renameConfirm: "Datei {0} nach {1} umbenennen? {2}", renameImports: "Importe werden in folgenden Dateien aktualisiert:\n{0}", renameNoImports: "Es sind keine Importverweise betroffen.", deleteConfirm: "Datei {0} endgültig löschen?",
     fileRenamed: "Datei umbenannt: {0}", fileDeleted: "Datei gelöscht: {0}",
     switchLanguage: "Sprache wechseln", switchFontSize: "Schriftgröße anpassen", fontSizeDefaultAction: "Standard-Schriftgröße (100%)", fontSizeDefaultHelp: "Schriftgröße der Elemente und des Editors auf Standard zurücksetzen", fontSizeMediumAction: "Mittlere Schriftgröße (+15%)", fontSizeMediumHelp: "Schriftgröße um 15% vergrößern", fontSizeLargeAction: "Große Schriftgröße (+30%)", fontSizeLargeHelp: "Schriftgröße um 30% vergrößern", themeLightAction: "Helles Farbschema aktivieren", themeDarkAction: "Dunkles Farbschema aktivieren",
     format: "Formatieren", check: "Projekt prüfen", welcome: "Willkommen in Zelyra Studio",
@@ -356,7 +356,7 @@ const messages = {
     subtitle: "Local development environment", local: "LOCAL", files: "FILES", newFile: "New file",
     refresh: "Refresh", filterFiles: "Filter files", saveAll: "Save all", save: "Save",
     renameFile: "Rename", deleteFile: "Delete", renamePrompt: "New project path (for example src/customer-new.zyl)",
-    renameConfirm: "Rename {0}? Import references will not be updated.", deleteConfirm: "Permanently delete {0}?",
+    renameConfirm: "Rename {0} to {1}? {2}", renameImports: "Imports will be updated in these files:\n{0}", renameNoImports: "No import references are affected.", deleteConfirm: "Permanently delete {0}?",
     fileRenamed: "File renamed: {0}", fileDeleted: "File deleted: {0}",
     switchLanguage: "Switch language", switchFontSize: "Adjust font size", fontSizeDefaultAction: "Default font size (100%)", fontSizeDefaultHelp: "Reset font size of UI elements and editor to default", fontSizeMediumAction: "Medium font size (+15%)", fontSizeMediumHelp: "Increase font size by 15%", fontSizeLargeAction: "Large font size (+30%)", fontSizeLargeHelp: "Increase font size by 30%", themeLightAction: "Use light appearance", themeDarkAction: "Use dark appearance",
     format: "Format", check: "Check project", welcome: "Welcome to Zelyra Studio",
@@ -1526,11 +1526,15 @@ async function renameActiveFile() {
   if (!path || path === "main.zyl" || path === "zelyra.toml") return;
   const newPath = prompt(t("renamePrompt"), path);
   if (!newPath || newPath === path) return;
-  if (!confirm(t("renameConfirm", path))) return;
-  if (!(await savePath(path))) return;
+  if (!(await saveAll())) return;
   try {
     const tab = tabs.get(path);
-    const result = await api("file-rename", { method: "POST", body: JSON.stringify({ path, newPath, baseHash: tab.hash }) });
+    const request = { path, newPath, baseHash: tab.hash };
+    const preview = await api("file-rename-preview", { method: "POST", body: JSON.stringify(request) });
+    const affected = preview.updatedImports || [];
+    const details = affected.length ? t("renameImports", affected.join("\n")) : t("renameNoImports");
+    if (!confirm(t("renameConfirm", path, newPath, details))) return;
+    const result = await api("file-rename", { method: "POST", body: JSON.stringify({ ...request, planId: preview.planId }) });
     if (editor) { tab.state = editor.state; editor.destroy(); editor = null; }
     tabs.delete(path);
     tab.hash = result.hash;

@@ -97,8 +97,27 @@ try {
   }, { token });
   assert.match(savedFiles[0].content, /math::calculate_answer\(\)/);
   assert.match(savedFiles[1].content, /fn calculate_answer\(\)/);
+  page.on("dialog", async (dialog) => {
+    if (dialog.type() === "prompt") await dialog.accept("src/answers.zyl");
+    else await dialog.accept();
+  });
+  await page.locator('#tabs .tab').filter({ hasText: "math.zyl" }).click();
+  await page.locator("#rename-file-button").click();
+  await page.waitForFunction(() => document.querySelector("#status-message")?.textContent?.includes("Datei umbenannt"));
+  const afterRename = await page.evaluate(async ({ token }) => {
+    const read = async (path) => (await fetch(`/__zelyra/editor/api/file?path=${encodeURIComponent(path)}`, {
+      headers: { "X-Zelyra-Editor-Token": token },
+    }));
+    const old = await read("src/math.zyl");
+    const next = await read("src/answers.zyl");
+    const main = await read("main.zyl");
+    return { oldStatus: old.status, next: await next.json(), main: await main.json() };
+  }, { token });
+  assert.equal(afterRename.oldStatus, 404, "old path is removed");
+  assert.match(afterRename.next.content, /fn calculate_answer\(\)/);
+  assert.match(afterRename.main.content, /import \"src\/answers.zyl\" as math/);
   assert.deepEqual(errors, [], `browser errors: ${errors.join(", ")}`);
-  console.log(`Studio semantic rename and journaled multi-file save passed in ${engineName}`);
+  console.log(`Studio semantic rename, journaled save, and import-aware file rename passed in ${engineName}`);
 } finally {
   await browser?.close();
   if (processHandle && processHandle.exitCode === null) {

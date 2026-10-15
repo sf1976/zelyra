@@ -50,8 +50,12 @@ alle betroffenen Dateien und prüft die Änderung mit dem Compiler. Die Übernah
 gespeichert werden. **Alle speichern** schreibt bis zu 16 Dateien gemeinsam
 und legt vorher ein privates Wiederherstellungsjournal unter `.zelyra/` an.
 Nach einer Unterbrechung stellt Studio nicht abgeschlossene Schreibvorgänge
-beim nächsten Start wieder her. Datei-Renames mit Importanpassungen sind noch
-nicht unterstützt.
+beim nächsten Start wieder her. Beim Umbenennen einer `.zyl`-Datei zeigt Studio
+zuerst alle erkannten Importdateien an, prüft das verschobene Projekt mit dem
+Compiler und übernimmt die Datei- und Importänderungen anschließend gemeinsam
+über das Journal. Vorher werden offene Änderungen gespeichert; veraltete
+Vorschauen werden abgewiesen. Der Vorgang ist auf 64 Dateien und insgesamt
+8 MiB begrenzt. Andere Dateitypen werden ohne Importänderung umbenannt.
 
 Compilerdiagnosen werden während der Bearbeitung von Zelyra-Projektdateien
 aktualisiert. Bei vorhandenen `.zyl`-Dateien prüft der Compiler den
@@ -204,7 +208,9 @@ Dateien geöffnet. Suche, Vervollständigung, Formatierung, Compilerdiagnosen,
 Rückgängig/Wiederholen und das Speichern mit Versionsprüfung unterstützen den
 Arbeitsablauf. Über **Umbenennen** und **Löschen** kannst du Quelldateien
 bearbeiten. Studio verlangt vorher eine Bestätigung; Importverweise werden beim
-Umbenennen nicht angepasst. `main.zyl` und `zelyra.toml` sind geschützt.
+Beim Umbenennen einer `.zyl`-Datei werden erkannte `import`-Pfade nach einer
+Compilerprüfung gemeinsam mit der Dateiänderung angepasst. `main.zyl` und
+`zelyra.toml` sind geschützt.
 Projektpfade bleiben begrenzt, und Dateiaktionen prüfen den gespeicherten Hash.
 Änderungen, die eine andere Anwendung seit dem Laden vorgenommen hat, werden
 abgelehnt; lade die Datei neu und wiederhole die Aktion.

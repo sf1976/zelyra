@@ -45,7 +45,11 @@ affected file and checks the candidate with the compiler. Applying the change
 updates open buffers; each file can be undone and saved separately. **Save
 all** writes up to 16 files together and first creates a private recovery
 journal under `.zelyra/`. On restart, Studio rolls back an interrupted batch.
-File rename with import updates is not supported yet.
+Before renaming a `.zyl` file, Studio previews detected import files, checks
+the moved project with the compiler, and applies the file and import edits
+through the journal. Open changes are saved first and stale previews are
+rejected. The operation is limited to 64 files and 8 MiB total. Other file
+types are renamed without import edits.
 
 Compiler diagnostics update while editing Zelyra project files. For existing
 `.zyl` files the current buffer and other changed `.zyl` tabs are checked through
@@ -183,8 +187,9 @@ for setup errors; the page does not reveal credentials.
 The file tree lists Zelyra source files in the project. Tabs keep several files
 open. Search, completion, formatting, compiler diagnostics, undo/redo, and
 version-aware saving support the edit cycle. **Rename** and **Delete** provide
-explicitly confirmed source-file operations; rename does not update imports.
-`main.zyl` and `zelyra.toml` are protected. Paths stay inside the project, and
+explicitly confirmed source-file operations. Renaming a `.zyl` file updates
+detected `import` paths after compiler validation and applies them with the
+file move. `main.zyl` and `zelyra.toml` are protected. Paths stay inside the project, and
 file operations compare the saved content hash. If another application changes
 a file after Studio loads it, the operation is rejected; reload before retrying.
 
