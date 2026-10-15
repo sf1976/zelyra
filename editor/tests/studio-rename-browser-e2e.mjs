@@ -33,7 +33,7 @@ async function assertStudioScreenshot(page) {
 }
 
 const project = await mkdtemp(join(tmpdir(), "zelyra-studio-rename-"));
-const main = 'import "src/math.zyl" as math\nfn main() { print(math::answer()) customer = math::Answer { value: 42 } print(customer.value) }\n';
+const main = 'import "src/math.zyl" as math\nfn retain(record: math::Answer) -> math::Answer { return record }\nfn main() { print(math::answer()) customer: math::Answer = math::Answer { value: 42 } print(customer.value) }\n';
 const math = "pub fn answer() -> Int { return 42 }\npub struct Answer { value: Int }\n";
 const binary = resolve(process.env.ZELYRA_BIN || "../target/debug/zelyra");
 const engineName = process.env.ZELYRA_BROWSER_ENGINE || "chromium";
@@ -159,6 +159,8 @@ try {
   await page.locator("#semantic-rename-apply-button").click();
   await page.waitForFunction(() => document.querySelector("#status-message")?.textContent?.includes("2 Dateien geändert"));
   assert.match(await page.locator(".cm-content").textContent(), /math::Invoice \{ value: 42 \}/);
+  assert.match(await page.locator(".cm-content").textContent(), /fn retain\(record: math::Invoice\) -> math::Invoice/);
+  assert.match(await page.locator(".cm-content").textContent(), /customer: math::Invoice = math::Invoice/);
   await page.locator('#tabs .tab').filter({ hasText: "math.zyl" }).click();
   assert.match(await page.locator(".cm-content").textContent(), /struct Invoice \{ value: Int \}/);
   await page.locator("#save-all-button").click();
