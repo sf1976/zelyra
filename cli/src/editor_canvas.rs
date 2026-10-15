@@ -1,7 +1,7 @@
 //! Static Studio canvas using the project compiler's real page composition.
 //! No project function, query, handler, or JavaScript is executed here.
 use super::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use zelyra_ast::Span;
 
 type EditorReply = Result<(u16, &'static str, String), (u16, String)>;
@@ -32,6 +32,45 @@ fn source_position(analysis: &language_service::Analysis, span: Span) -> Value {
         .get(span.source_id as usize)
         .map(|source| source.path.as_str());
     json!({"path":path,"line":span.line,"column":span.column})
+}
+
+fn component_source_links(
+    analysis: &language_service::Analysis,
+    program: &zelyra_ast::Program,
+    roots: &[&str],
+) -> Vec<Value> {
+    let mut pending = roots
+        .iter()
+        .map(|html| (*html).to_owned())
+        .collect::<Vec<_>>();
+    let mut seen = HashSet::new();
+    let mut links = Vec::new();
+    while let Some(html) = pending.pop() {
+        let Ok(invocations) = super::super::component_invocations(&html) else {
+            continue;
+        };
+        for invocation in invocations {
+            let Some(component) = program
+                .components
+                .iter()
+                .find(|component| component.name == invocation.name)
+            else {
+                continue;
+            };
+            if !seen.insert(component.name.as_str()) {
+                continue;
+            }
+            links.push(json!({
+                "name":component.name,
+                "source":source_position(analysis,component.span),
+            }));
+            if seen.len() >= 128 {
+                return links;
+            }
+            pending.push(component.html.clone());
+        }
+    }
+    links
 }
 
 pub(super) fn list(state: &EditorState, request: &Value) -> EditorReply {
@@ -149,13 +188,23 @@ pub(super) fn render(state: &EditorState, request: &Value) -> EditorReply {
         .program
         .as_ref()
         .ok_or((422, "project could not be loaded".into()))?;
-    let (composed, span) = if kind == "page" {
+    let (composed, span, component_roots) = if kind == "page" {
         let page = program
             .pages
             .iter()
             .find(|page| page.path == name)
             .ok_or((404, "page is not declared".into()))?;
-        (super::super::compose_page_view(program, page), page.span)
+        let mut roots = vec![page.html.as_str()];
+        if let Some(view_name) = page.view.as_deref() {
+            if let Some(view) = program.views.iter().find(|view| view.name == view_name) {
+                roots.push(view.html.as_str());
+            }
+        }
+        (
+            super::super::compose_page_view(program, page),
+            page.span,
+            roots,
+        )
     } else {
         let view = program
             .views
@@ -165,6 +214,7 @@ pub(super) fn render(state: &EditorState, request: &Value) -> EditorReply {
         (
             super::super::compose_view_html(program, &view.name, ""),
             view.span,
+            vec![view.html.as_str()],
         )
     };
     let html = zelyra_web::render_static_template_preview(
@@ -193,6 +243,7 @@ pub(super) fn render(state: &EditorState, request: &Value) -> EditorReply {
         json!({
             "kind":kind,"name":name,"html":html,"stylesheet":stylesheet,"theme":theme,
             "source":source_position(&analysis,span),
+            "components":component_source_links(&analysis,program,&component_roots),
             "version":request.get("version").and_then(Value::as_i64).unwrap_or(0),
             "sampleOnly":true,"scriptsExecuted":false,
         })

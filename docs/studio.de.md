@@ -344,8 +344,12 @@ den Canvas ohne Reload von Studio. Der Farbwähler erkennt Hex-Werte von
 Editor-Edit. Für Primär- und Statushintergründe setzt er die jeweilige
 `--z-color-on-*`-Textfarbe auf Schwarz oder Weiß mit dem höheren Kontrast.
 Hover- und Soft-Farben sowie andere thematisch gekoppelte Variablen bleiben
-manuell zu gestalten. Der Quellknopf springt zur Seiten- oder View-Deklaration;
-einzelne verschachtelte Komponenten haben noch keine Source-Span-Navigation.
+manuell zu gestalten. Der Quellknopf springt zur Seiten- oder View-Deklaration.
+Ein Komponentenauswahlfeld listet von dort erreichbare Komponenten
+einschließlich verschachtelter Komponenten und öffnet deren Deklaration an
+der Quellposition.
+Die Vorschau ordnet eine gerenderte Komponenteninstanz noch nicht exakt dem
+Aufruf-Span im Quelltext zu.
 
 ## Capability- und Pfadmatrix (Arbeitsstand 1.1.0)
 

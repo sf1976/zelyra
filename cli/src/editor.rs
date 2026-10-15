@@ -5503,7 +5503,7 @@ fn main() {}
     fn canvas_lists_views_and_escapes_explicit_sample_values() {
         let state = project();
         fs::write(state.root.join("main.zyl"),
-            "view Shell { html { <html><body><main><slot /></main></body></html> } }\npage \"/reports/{id}\" { view: Shell input { term: String } html { <h1>{term}</h1> } }\n").unwrap();
+            "component Banner { html { <aside><slot /></aside> } }\nview Shell { html { <html><body><main><Banner><slot /></Banner></main></body></html> } }\npage \"/reports/{id}\" { view: Shell input { term: String } html { <h1>{term}</h1> } }\n").unwrap();
         let (_, _, list_body) = editor_canvas::list(&state, &json!({})).unwrap();
         let entries: Value = serde_json::from_str(&list_body).unwrap();
         assert_eq!(entries["success"], true);
@@ -5525,6 +5525,8 @@ fn main() {}
         )
         .unwrap();
         let rendered: Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(rendered["components"][0]["name"], "Banner");
+        assert_eq!(rendered["components"][0]["source"]["path"], "main.zyl");
         assert!(rendered["html"]
             .as_str()
             .unwrap()

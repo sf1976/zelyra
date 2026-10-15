@@ -115,6 +115,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .canvas-controls label { display: grid; flex: 1 1 130px; gap: 3px; color: var(--muted); font-size: 10px; }
 .canvas-controls select, .canvas-controls textarea { width: 100%; min-height: 28px; padding: 5px 7px; border: 1px solid var(--border); border-radius: 5px; color: var(--ink); background: var(--editor-bg); font: inherit; }
 .canvas-controls textarea { height: 46px; resize: vertical; font-family: ui-monospace, monospace; }
+.canvas-components { display: flex; flex-wrap: wrap; gap: 6px; align-items: end; padding: 6px 10px; border-top: 1px solid var(--border); }
+.canvas-components label { display: grid; flex: 1 1 130px; gap: 3px; color: var(--muted); font-size: 10px; }
+.canvas-components select { width: 100%; min-height: 28px; padding: 5px 7px; border: 1px solid var(--border); border-radius: 5px; color: var(--ink); background: var(--editor-bg); font: inherit; }
 .canvas-theme-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: end; padding: 6px 10px; border-top: 1px solid var(--border); }
 .canvas-theme-controls label { display: grid; gap: 3px; color: var(--muted); font-size: 10px; }
 .canvas-theme-controls select { max-width: 180px; min-height: 28px; color: var(--ink); background: var(--editor-bg); }

@@ -307,8 +307,10 @@ comments. **Edit source** opens the theme file and makes an undoable editor
 edit. For primary and status backgrounds it chooses black or white for the
 paired `--z-color-on-*` text color based on contrast. Hover and soft colors,
 and other related tokens, still need manual adjustment. The source button
-opens the page or view declaration; nested components do not yet have their
-own source-span navigation in the canvas.
+opens the page or view declaration. A component selector lists components
+reachable from it, including nested components, and opens each declaration at
+its source position. The preview does not yet map a rendered component instance
+back to the exact call-site span.
 
 ## Capability and path matrix (1.1.0 work in progress)
 

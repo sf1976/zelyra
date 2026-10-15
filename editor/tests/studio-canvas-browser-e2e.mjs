@@ -15,8 +15,11 @@ let processHandle;
 let browser;
 
 try {
-  await writeFile(join(project, "main.zyl"), `view Shell {
-    html { <html><body><main><slot /></main></body></html> }
+  await writeFile(join(project, "main.zyl"), `component Banner {
+    html { <aside><slot /></aside> }
+}
+view Shell {
+    html { <html><body><main><Banner><slot /></Banner></main></body></html> }
 }
 page "/reports/{id}" {
     view: Shell
@@ -68,6 +71,10 @@ fn main() {}
   assert.equal(await preview.locator("h1").textContent(), "<Acme & Co>");
   assert.equal(await preview.locator("script").count(), 1, "preview keeps project markup visible for inspection");
   assert.equal(await preview.locator("body").getAttribute("data-executed"), null, "preview must not execute project scripts");
+  await page.locator("#canvas-component-target").selectOption({ label: "Banner" });
+  await page.locator("#canvas-component-source").click();
+  await page.waitForFunction(() => document.querySelector(".cm-activeLine")?.textContent?.includes("component Banner"));
+  assert.match(await page.locator(".cm-activeLine").textContent(), /component Banner/);
 
   const primaryToken = await page.locator("#canvas-theme-token").evaluate((select) =>
     [...select.options].find((option) => option.textContent.includes("--z-color-primary"))?.value,
