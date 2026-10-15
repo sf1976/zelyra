@@ -252,9 +252,11 @@ zelyra doctor examples/machine_management.zyl
 ~~~
 
 `doctor` prüft Quellcode und Schema, meldet die konfigurierte
-Datenbankverbindung ohne Änderungen und testet, ob der Standard-Webport frei
-ist. Eine fehlende `DATABASE_URL` wird als Warnung gemeldet; eine nicht
-erreichbare konfigurierte Datenbank oder ein ungültiges Projekt als Fehler.
+Datenbankverbindung ohne Änderungen und prüft den angeforderten Webport. Ist
+dieser belegt, aber ein Ausweichport verfügbar, erscheint eine Warnung:
+`zelyra serve` verwendet einen freien Port und gibt die Adresse aus. Eine
+fehlende `DATABASE_URL` ist ebenfalls eine Warnung; eine nicht erreichbare
+konfigurierte Datenbank oder ein ungültiges Projekt ist ein Fehler.
 
 Für CI- und IDE-Integrationen kann eine maschinenlesbare Ausgabe angefordert
 werden:
@@ -586,6 +588,10 @@ Diese Adresse im Browser öffnen:
 ~~~text
 http://127.0.0.1:3000/hello/Zelyra
 ~~~
+
+Ist dieser Port bereits belegt, bindet `zelyra serve` automatisch einen freien
+lokalen Port und gibt die tatsächliche Adresse aus. `zelyra doctor` meldet den
+belegten Standardport als Warnung, wenn ein Ausweichport verfügbar ist.
 
 Bei Bedarf einen anderen lokalen Port verwenden:
 

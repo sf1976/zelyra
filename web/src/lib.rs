@@ -36,7 +36,7 @@ use i18n::{
     LOCALE_REFERENCE_END, LOCALE_REFERENCE_PARAMETER, LOCALE_REFERENCE_START,
 };
 pub use password_reset::{PasswordResetMailer, PasswordResetSmtpConfig};
-pub use server::serve_app;
+pub use server::{serve_app, serve_app_listener};
 #[cfg(test)]
 pub(crate) use server::{spawn_connection, MAX_CONCURRENT_CONNECTIONS};
 use ui::*;

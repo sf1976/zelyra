@@ -277,7 +277,9 @@ prüfen. Ein weiteres Terminalfenster aktualisiert die Gruppenmitgliedschaft
 möglicherweise nicht.
 Nach dem Start von Compose mit `zelyra doctor main.zyl --env-file .env
 --port 18080` Quellcode, Schema, MariaDB-Verbindung, Docker Compose und den
-veröffentlichten Port ohne Datenbankänderung prüfen.
+veröffentlichten Port ohne Datenbankänderung prüfen. Ein belegter Port ist
+eine Warnung, wenn ein freier Ausweichport verfügbar ist; `zelyra serve` gibt
+den tatsächlich gewählten Port aus.
 
 Für ein vollständiges CRUD-Starterprojekt statt der minimalen Willkommensseite:
 

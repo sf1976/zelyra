@@ -214,7 +214,9 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
                     .spawn(move || {
                         let _slot = EditorConnection(worker_active);
                         if let Err(error) = handle_editor_connection(stream, peer, &state) {
-                            eprintln!("zelyra editor: request failed: {error}");
+                            if !is_expected_editor_disconnect(&error) {
+                                eprintln!("zelyra editor: request failed: {error}");
+                            }
                         }
                     })
                 {
@@ -226,6 +228,15 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         }
     }
     ExitCode::SUCCESS
+}
+
+fn is_expected_editor_disconnect(error: &std::io::Error) -> bool {
+    matches!(
+        error.kind(),
+        std::io::ErrorKind::BrokenPipe
+            | std::io::ErrorKind::ConnectionReset
+            | std::io::ErrorKind::ConnectionAborted
+    )
 }
 
 pub(super) fn has_graphical_session() -> bool {
@@ -4988,6 +4999,20 @@ mod tests {
         assert_eq!(active.load(Ordering::Acquire), EDITOR_MAX_CONNECTIONS);
         assert!(!acquire_editor_connection(&active));
         assert_eq!(active.load(Ordering::Acquire), EDITOR_MAX_CONNECTIONS);
+    }
+
+    #[test]
+    fn browser_disconnects_are_not_reported_as_studio_request_failures() {
+        for kind in [
+            std::io::ErrorKind::BrokenPipe,
+            std::io::ErrorKind::ConnectionReset,
+            std::io::ErrorKind::ConnectionAborted,
+        ] {
+            assert!(is_expected_editor_disconnect(&std::io::Error::from(kind)));
+        }
+        assert!(!is_expected_editor_disconnect(&std::io::Error::from(
+            std::io::ErrorKind::PermissionDenied
+        )));
     }
 
     #[test]

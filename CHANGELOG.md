@@ -6,6 +6,24 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+## 1.1.1 — 2026-10-15
+
+- Select a free local port when `zelyra serve` finds its requested port busy;
+  have `zelyra doctor` warn instead of fail when this fallback is available.
+  Report normal browser disconnects without noisy Studio errors and classify
+  the successful web-server ready message as informational output. Explain
+  that Canvas is a static preview and point users to the explicit Start and
+  Open application workflow for the running web app. Clarify that Outbox
+  requires reachable MariaDB and an initialized table only when the project
+  uses mail/outbox features. / Normale
+  Bei belegtem Port wählt `zelyra serve` automatisch einen freien lokalen Port;
+  `zelyra doctor` warnt statt abzubrechen, wenn ein solcher Port verfügbar ist.
+  Normale Browserverbindungsabbrüche erzeugen keine irreführenden Studio-Fehler mehr;
+  die Bereitschaftsmeldung des Webservers erscheint als Information. Canvas
+  erklärt jetzt klar, dass es eine statische Vorschau ist, und nennt den Weg
+  zur gestarteten Webanwendung. Die Outbox-Meldung erklärt ihre Voraussetzungen
+  und dass sie für Projekte ohne Outbox-Nutzung ignoriert werden kann.
+
 ## 1.1.0 — 2026-10-15
 
 - Add an offline, single-binary Zelyra Studio with CodeMirror 6, compiler-backed

@@ -203,6 +203,9 @@ werden nicht an den Browser übertragen. Der lokale Studio-Token schützt auch
 die lesende API. Ohne konfigurierte MariaDB-Verbindung zeigt die Ansicht einen
 Konfigurationshinweis; `zelyra outbox setup main.zyl` legt die Tabelle
 ausdrücklich an.
+Ist eine konfigurierte Verbindung nicht erreichbar oder fehlt die Tabelle,
+zeigt Studio einen Hinweis mit demselben Setup-Befehl. Wenn das Projekt keine
+Mail-/Outbox-Funktionen verwendet, kannst du ihn schließen.
 
 Nur bei `exhausted` erscheint **Erneut einreihen**. Nach deiner Bestätigung
 ruft Studio die bestehende fachliche Requeue-Operation auf. Sie setzt das
@@ -349,6 +352,12 @@ analysiert. Projektabfragen, Handler, `main()` und JavaScript werden in der
 Vorschau nicht ausgeführt. Der Browserrahmen hat ein leeres `sandbox`-Attribut
 und eine einschränkende CSP. Die Vorschau zeigt nur ausdrücklich eingegebene
 Beispieldaten; fehlende Laufzeitdaten werden nicht erfunden.
+
+Canvas ist eine statische Prüfvorschau und nicht die laufende Anwendung. Um
+Webrouten und Handler des Projekts auszuführen, wähle oben in Studio **Starten**
+und danach im Ausgabefenster **Anwendung im Browser öffnen**. Die lokale
+Webanwendung öffnet sich in einem eigenen Browser-Tab. Ihre Bereitschaftsmeldung
+erscheint in den Studio-Logs als Information.
 
 Die Canvas verwendet die konfigurierte Stylesheet-Auswahl und
 `zelyra.theme.css`. Ungespeicherte Änderungen dieser Theme-Datei aktualisieren

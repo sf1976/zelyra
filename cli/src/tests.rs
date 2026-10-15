@@ -1144,6 +1144,29 @@ fn doctor_rejects_invalid_port() {
 }
 
 #[test]
+fn doctor_warns_when_the_default_port_is_busy_but_a_fallback_is_available() {
+    let occupied = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let port = occupied.local_addr().unwrap().port();
+    let check = doctor_web_port_check(port);
+    assert_eq!(check.status, "warn");
+    assert!(check.message.contains("already in use"));
+    assert!(check
+        .message
+        .contains("select a free local port automatically"));
+}
+
+#[test]
+fn web_server_uses_an_ephemeral_port_when_the_requested_port_is_busy() {
+    let occupied = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let requested = occupied.local_addr().unwrap();
+    let (listener, actual, used_fallback) = bind_web_application(&requested.to_string()).unwrap();
+    assert!(used_fallback);
+    assert_eq!(actual.ip(), requested.ip());
+    assert_ne!(actual.port(), requested.port());
+    assert_eq!(listener.local_addr().unwrap(), actual);
+}
+
+#[test]
 fn outbox_cli_rejects_invalid_inspection_options_before_loading_a_project() {
     let arguments = ["list".to_owned(), "--limit".to_owned(), "0".to_owned()];
     assert_eq!(

@@ -27,7 +27,7 @@ Ressourcendisziplin und ehrliche Beweisaussagen leiten jede Phase. Das
 [Manifest](MANIFESTO.de.md) beschreibt die Prinzipien; die Roadmap kennzeichnet
 den tatsächlich implementierten Stand.
 
-Das aktuelle stabile Release ist 1.1.0. **Aktuelle Meilensteine** ist die
+Das aktuelle stabile Release ist 1.1.1. **Aktuelle Meilensteine** ist die
 verbindliche Übersicht der nächsten Vorhaben. Ältere, nummerierte Release-
 Abschnitte bleiben als historische Planung und Nachweise erhalten; sie legen
 für sich keine aktuellen Releaseziele fest. Langfristige Ideen stehen im
@@ -150,6 +150,18 @@ Diese Punkte sind geplant, weder bereits umgesetzt noch veröffentlicht. Die bes
   abbrechbar; Rename unterstützt statisch aufgelöste Symbolarten; serverseitige
   PDFs sind textorientiert. Siehe die [Release-Notizen 1.1.0](release-notes/1.1.0.de.md)
   und das [Arbeitsprotokoll](release-plans/1.1.0-studio-deep-native-progress.de.md).
+
+- [x] **1.1.1 Studio und Portkonflikte — veröffentlicht:** Erwartete
+  Browserabbrüche füllen stderr nicht mehr, der erfolgreiche Webserver-Start
+  wird als Information protokolliert und Canvas erklärt die getrennte,
+  ausdrückliche Aktion zum Öffnen der laufenden Anwendung. Bei belegtem
+  angefordertem Port bindet `zelyra serve` einen freien lokalen Port;
+  `zelyra doctor` meldet den Konflikt als Warnung, wenn ein Ausweichport frei
+  ist. Outbox-Hinweise zu Verbindung und Tabelle nennen die optionale
+  Einrichtung und lassen sich bei Nichtnutzung schließen. Mit Chromium,
+  echter lokaler Webanwendung, unerreichbarer MariaDB, Port-Fallback-Tests und
+  dem kalten Compose-Rechnungstutorial geprüft.
+  Siehe [Release-Notizen 1.1.1](release-notes/1.1.1.de.md).
 
 - [ ] **Folgearbeit nach 1.1.0 — Compose-Prüfung im Installer:** Die Installer
   erkennen Docker Compose v2 oder neuer und unterscheiden es von der veralteten

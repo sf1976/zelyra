@@ -182,6 +182,9 @@ one currently supported PDF attachment. Message bodies and attachment bytes
 are not sent to the browser. The local Studio token also protects this read
 API. Without a configured MariaDB connection, the view shows a configuration
 hint; `zelyra outbox setup main.zyl` explicitly creates the table.
+If a configured connection cannot be reached or the table is missing, Studio
+shows a warning with the same setup command. Close it when the project does not
+use mail/outbox features.
 
 Only `exhausted` events offer **Requeue**. After your confirmation, Studio
 calls the existing domain requeue operation. It releases the event for a later
@@ -311,6 +314,12 @@ overlays along with other open unsaved `.zyl` files. The preview does not run
 project queries, handlers, `main()`, or JavaScript. Its frame has an empty
 `sandbox` attribute and restrictive CSP.
 Only explicitly supplied sample data are displayed.
+
+Canvas is an inspection preview, not the running application. To execute the
+project's web routes and handlers, choose **Start** in Studio's top bar, then
+use **Open application in browser** in the run panel. The local web application
+opens in its own browser tab; its server startup message is informational
+output in Studio Logs.
 
 The canvas uses the configured stylesheet choice and `zelyra.theme.css`.
 Unsaved theme changes refresh the canvas without reloading Studio. The color

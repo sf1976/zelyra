@@ -25,7 +25,7 @@ telemetry, explicit effects, portable data, resource discipline, and honest
 proof claims guide every phase. The [manifesto](MANIFESTO.md) states the
 principles; the roadmap below tracks what is actually implemented.
 
-The current stable release is 1.1.0. **Current milestones** is the source of
+The current stable release is 1.1.1. **Current milestones** is the source of
 near-term commitments. Older numbered release sections below are retained as
 historical planning and evidence; they do not by themselves define current
 release targets. Longer-term ideas remain in the post-1.0 evolution section.
@@ -141,6 +141,17 @@ These are proposed future milestones, not implemented or released features. Pres
   server PDF output is text-oriented. See the
   [1.1.0 release notes](release-notes/1.1.0.en.md) and
   [work log](release-plans/1.1.0-studio-deep-native-progress.en.md).
+
+- [x] **1.1.1 Studio and port-conflict handling — released:** Expected browser
+  disconnects no longer clutter Studio stderr, successful web-server startup
+  is informational output, and Canvas explains the separate explicit action
+  needed to open the running application. `zelyra serve` binds a free local
+  port when its requested port is occupied; `zelyra doctor` reports that case
+  as a warning when a fallback is available. Outbox connection/table warnings
+  explain the optional setup and can be dismissed when unused. Verified with
+  Chromium against a running local web app and unreachable MariaDB, fallback
+  port unit tests, and the cold Compose invoice Studio flow. See
+  [1.1.1 release notes](release-notes/1.1.1.en.md).
 
 - [ ] **Follow-up after 1.1.0 — Compose check in the installer:** Installers detect
   Docker Compose v2 or newer and distinguish it from obsolete Python Compose

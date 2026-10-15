@@ -11,12 +11,14 @@ Business-, Datenbank- und Webanwendungen. Schemaabhängiges SQL, Formulare,
 CRUD, Views und Geschäftslogik greifen ineinander; gewöhnlicher Programmcode
 und natives SQL bleiben jederzeit möglich.
 
-> **Release 1.1.0 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.1.0)
+> **Release 1.1.1 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.1.1)
 >
 > Die Compilerprüfung und der Verifier decken klar abgegrenzte Bereiche ab. Sie beweisen nicht die Korrektheit beliebiger Anwendungen. Prüfe vor dem Einsatz die unterstützten Abläufe und Grenzen in der jeweiligen Dokumentation.
 
-Zelyra 1.1.0 ergänzt ein offlinefähiges, eingebettetes Studio mit
-Sprachdiensten und einen eigenständigen LSP sowie typgeprüfte
+Zelyra 1.1.1 enthält die Studio-Korrekturen aus den
+[Release-Notizen 1.1.1](docs/release-notes/1.1.1.de.md). Zelyra 1.1.0 ergänzte
+ein offlinefähiges, eingebettetes Studio mit Sprachdiensten und einen
+eigenständigen LSP sowie typgeprüfte
 Stringinterpolation und ausdrücklich aktivierte In-place-Änderungen lokaler
 Arrays. Die Sprachfunktionen aus 1.0.7 bleiben verfügbar. Details stehen in
 den [Release-Notizen 1.1.0](docs/release-notes/1.1.0.de.md), im
@@ -26,10 +28,11 @@ den [Release-Notizen 1.1.0](docs/release-notes/1.1.0.de.md), im
 
 Die Sprachkompatibilitätslinie bleibt `0.1`; Compiler-Releases ändern sie nicht automatisch. „Korrektheit beweisen“ ist ein Entwicklungsziel: Der Verifier unterscheidet geprüfte, zur Laufzeit geprüfte und nicht bewiesene Bereiche, ist aber kein allgemeiner Theorembeweiser.
 
-## Was Zelyra 1.1.0 bietet
+## Was Zelyra 1.1.1 bietet
 
 Zelyra verbindet Sprache, Compiler, Datenbank, Webanwendung und Studio in
-einem Arbeitsablauf. Das Release 1.1.0 umfasst:
+einem Arbeitsablauf. Release 1.1.1 umfasst die Funktionen aus 1.1.0 und die
+oben genannten Studio-Korrekturen:
 
 - statisch geprüfte Geschäftslogik und schemaabhängiges SQL;
 - MariaDB als primäre Laufzeit sowie geprüfte MySQL- und PostgreSQL-Abläufe;

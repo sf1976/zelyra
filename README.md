@@ -11,11 +11,13 @@ for database-backed business and web applications. It brings schema-aware SQL,
 forms, CRUD, views, and application logic together while keeping ordinary code
 and native SQL available.
 
-> **Release 1.1.0 · language compatibility line: 0.1** · [GitHub release](https://github.com/sf1976/zelyra/releases/tag/v1.1.0)
+> **Release 1.1.1 · language compatibility line: 0.1** · [GitHub release](https://github.com/sf1976/zelyra/releases/tag/v1.1.1)
 >
 > Compiler checks and the verifier cover defined scopes. They do not prove arbitrary applications correct. Review the documented support and limits for each workflow before deployment.
 
-Zelyra 1.1.0 adds offline, embedded Studio language services and a standalone
+Zelyra 1.1.1 includes the Studio fixes described in the
+[1.1.1 release notes](docs/release-notes/1.1.1.en.md). Zelyra 1.1.0 added
+offline, embedded Studio language services and a standalone
 LSP, plus typed string interpolation and opt-in in-place mutation for local
 arrays. The 1.0.7 language features remain available. See the
 [1.1.0 release notes](docs/release-notes/1.1.0.en.md),
@@ -24,10 +26,11 @@ and [implementation inventory](docs/implemented.en.md).
 
 The language compatibility line remains `0.1`; compiler releases do not change it automatically. “Prove correctness” is a design goal: the verifier distinguishes proven, runtime-checked, and unproven scopes, but is not a general-purpose theorem prover.
 
-## What Zelyra 1.1.0 provides
+## What Zelyra 1.1.1 provides
 
 Zelyra connects its language, compiler, database, web application, and Studio in
-one workflow. The 1.1.0 release provides:
+one workflow. The 1.1.1 release includes the 1.1.0 features and the Studio
+reliability fixes listed above:
 
 - statically checked business logic and schema-aware SQL;
 - MariaDB as the primary runtime, plus verified MySQL and PostgreSQL workflows;
