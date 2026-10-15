@@ -6270,12 +6270,9 @@ fn main() {}
         .expect("preview compiler-checked rename");
         let preview: Value = serde_json::from_str(&preview.2).unwrap();
         assert_eq!(preview["updatedImports"], json!(["main.zyl"]));
-        assert_eq!(
-            fs::read_to_string(state.root.join("main.zyl"))
-                .unwrap()
-                .contains("src/old.zyl"),
-            true
-        );
+        assert!(fs::read_to_string(state.root.join("main.zyl"))
+            .unwrap()
+            .contains("src/old.zyl"));
         let stale = rename_editor_file(
             &state,
             json!({"path":"src/old.zyl", "newPath":"src/new.zyl", "baseHash":hash,"planId":"stale"}),
