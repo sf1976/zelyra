@@ -43,11 +43,20 @@ try {
   });
   browser = await engine.launch({ headless: true });
   const page = await browser.newPage();
+  let firstUsableMs = null;
+  let analysisMs = null;
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
+  const navigationStartedAt = performance.now();
   await page.goto(url, { waitUntil: "domcontentloaded" });
   await page.locator('.tree-item.file[title="main.zyl"]').click();
   await page.locator(".cm-content[contenteditable=true]").waitFor();
+  firstUsableMs = performance.now() - navigationStartedAt;
+  const checkResponse = page.waitForResponse((response) => response.url().endsWith("/api/check"));
+  const analysisStartedAt = performance.now();
+  await page.locator("#check-button").click();
+  await checkResponse;
+  analysisMs = performance.now() - analysisStartedAt;
   await page.locator('.tree-item.file[title="src/math.zyl"]').click();
   await page.locator(".cm-content").click();
   await page.keyboard.press("Control+Home");
@@ -141,7 +150,7 @@ try {
     if (themeIndex === 0) await page.locator("#theme-button").click();
   }
   assert.deepEqual(errors, [], `browser errors: ${errors.join(", ")}`);
-  console.log(`Studio semantic rename, journaled save, and import-aware file rename passed in ${engineName}`);
+  console.log(`Studio semantic rename, journaled save, and import-aware file rename passed in ${engineName}; first usable editor ${firstUsableMs.toFixed(1)} ms; analysis response ${analysisMs?.toFixed(1) ?? "unmeasured"} ms`);
 } finally {
   await browser?.close();
   if (processHandle && processHandle.exitCode === null) {
