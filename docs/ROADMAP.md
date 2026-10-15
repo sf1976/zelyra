@@ -30,6 +30,21 @@ near-term commitments. Older numbered release sections below are retained as
 historical planning and evidence; they do not by themselves define current
 release targets. Longer-term ideas remain in the post-1.0 evolution section.
 
+## Planned milestone 1.1.5 — Laravel importer and safe migration
+
+This milestone is **planned**, not implemented or released. Prioritize it before the 1.2.0 module/package system and the 1.3.0 MIR/bytecode VM. Existing production Laravel applications remain unchanged during analysis and migration; no automatic production cutover.
+
+- [ ] **Inventory:** Audit the Laravel importer already in the repository and document supported analysis, import, and diagnostic features. Extend existing work instead of creating a parallel importer.
+- [ ] **Structured analysis:** Inspect Laravel routes, controllers, models, relationships, Form Requests/validation, policies/gates, middleware, Blade views, services, jobs, events, queues, Composer dependencies, and database schemas; explicitly report unresolved dynamic PHP behavior and dependencies.
+- [ ] **Machine-readable migration report:** For each component, include provenance/source spans, dependencies, security and database effects, supported/unsupported constructs, risks, and classification as automatic, assisted, or manual. Do not overstate completeness.
+- [ ] **Controlled Zelyra generation:** Start with bounded CRUD, model, validation, routing, and simple controller cases, generating idiomatic statically checked Zelyra. Never invent business rules silently; preserve Zelyra types, SQL validation, contracts, and capabilities.
+- [ ] **Database and production safety:** Inspect existing databases read-only by default; never automatically modify schemas or migrate data. Present necessary changes as reviewable SQL scripts with preview and explicit approval. Redact secrets and avoid copying live customer data into fixtures.
+- [ ] **Incremental adoption:** Keep Laravel in production while validating Zelyra components in isolation or read-only/shadow mode. Plan explicit cutover, rollback, and permissions; never double-execute writes inadvertently.
+- [ ] **Behavioral comparison:** Where safe, run equivalent fixtures/tests against Laravel and Zelyra and compare HTTP responses, validation, authorization, business rules, and database effects. Log differences; behavioral testing is not a blanket formal equivalence proof.
+- [ ] **Real reference applications:** Use several existing Laravel applications of different complexity with anonymized fixtures for regression tests; measure conversion coverage, manual work, diagnostics, correctness, and runtime costs.
+- [ ] **CLI/Studio workflow and documentation:** Provide analysis, preview, targeted generation, and explicit apply with clear diagnostics, stable machine-readable outputs, and German/English runnable examples.
+- [ ] **1.1.5 release gate:** Require documentation, positive/negative tests, permission and SQL safety, reproducible reference migrations, and a verified rollback; do not claim complete automatic Laravel conversion.
+
 ## Planned architecture milestones (1.2.0 and 1.3.0)
 
 These are proposed future milestones, not implemented or released features. Preserve the existing 1.1.0 commitments. Before implementation, audit the current repository and reconcile any overlapping or already completed features.
