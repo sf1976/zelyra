@@ -28,6 +28,8 @@
         <button class="toolbar-button" id="open-search" title="Suchen (Strg+F)" data-i18n-title="search">⌕ <span data-i18n="search">Suchen</span></button>
         <button class="toolbar-button" id="project-search-button" title="Projekt durchsuchen (Strg+Umschalt+F)" data-i18n-title="projectSearch">⌕ <span data-i18n="projectSearch">Projekt</span></button>
         <button class="toolbar-button" id="project-map-button" title="Projektbeziehungen anzeigen" data-i18n-title="projectMap">◇ <span data-i18n="projectMap">Projektkarte</span></button>
+        <button class="toolbar-button" id="pdf-preview-button" type="button" title="PDF-Vorschau mit Beispieldaten" data-i18n-title="pdfPreview">▣ <span data-i18n="pdfPreview">PDF</span></button>
+        <button class="toolbar-button" id="outbox-button" type="button" title="Mail-Outbox ansehen" data-i18n-title="outboxTitle">✉ <span data-i18n="outboxButton">Outbox</span></button>
         <button class="toolbar-button" id="task-finder-button" title="Aktion suchen (Strg+Umschalt+P)" data-i18n-title="taskFinder">⌘ <span data-i18n="taskFinder">Aktionen</span></button>
         <button class="toolbar-button" id="database-button" title="Datenbankübersicht öffnen" data-i18n-title="database">▤ <span data-i18n="database">Datenbank</span></button>
         <button class="toolbar-button" id="logs-button" title="Lokale Programmlogs öffnen" data-i18n-title="logs">≋ <span data-i18n="logs">Logs</span></button>
@@ -48,7 +50,7 @@
       </aside>
       <main class="main-column">
         <div class="toolbar">
-          <div class="breadcrumbs"><span class="breadcrumb-home">⌂</span><span id="active-file">Kein Dokument geöffnet</span></div>
+          <div class="breadcrumbs"><span class="breadcrumb-home">⌂</span><span id="active-file">Kein Dokument geöffnet</span><nav id="pipeline-breadcrumbs" class="pipeline-breadcrumbs" aria-label="Semantische Projektbeziehungen" data-i18n-aria="pipelineBreadcrumbs"></nav></div>
           <div class="toolbar-actions">
           <button class="toolbar-button" id="save-all-button" disabled title="Alle Dateien speichern" data-i18n="saveAll">Alle speichern</button>
             <button class="toolbar-button" id="rename-file-button" disabled title="Datei umbenennen" data-i18n="renameFile">Umbenennen</button>
@@ -56,13 +58,24 @@
             <button class="toolbar-button" id="complete-button" disabled title="Codevorschläge anzeigen (Ctrl+Space)" data-i18n-title="completeHelp" data-i18n="complete">Vervollständigen</button>
             <button class="toolbar-button" id="save-button" disabled title="Speichern (Strg+S)" data-i18n-title="save"><span class="button-icon">▣</span><span data-i18n="save">Speichern</span></button>
             <button class="toolbar-button" id="format-button" title="Aktive Zelyra-Datei formatieren" data-i18n="format">Formatieren</button>
+            <button class="toolbar-button" id="runtime-budget-button" type="button" title="Laufzeitbudget und Rekursion prüfen" data-i18n-title="runtimeBudgetTitle"><span class="button-icon">◴</span><span data-i18n="runtimeBudgetButton">Budget</span></button>
+            <button class="toolbar-button" id="capability-button" type="button" title="Capabilities und Pfadfreigaben prüfen" data-i18n-title="capabilityTitle"><span class="button-icon">▣</span><span data-i18n="capabilityButton">Rechte</span></button>
+            <button class="toolbar-button" id="canvas-button" type="button" title="Seite oder View statisch ansehen" data-i18n-title="canvasTitle"><span class="button-icon">◫</span><span data-i18n="canvasButton">Canvas</span></button>
             <button class="toolbar-button" id="run-button" title="main.zyl ausführen" data-i18n-title="runButtonTitle" data-i18n="runButton">Starten</button>
             <button class="primary-button" id="check-button" title="Projekt prüfen" data-i18n-title="check"><span>✓</span> <span data-i18n="check">Projekt prüfen</span></button>
           </div>
         </div>
-        <div class="tabbar" id="tabs" role="tablist" aria-label="Geöffnete Dateien"></div>
+        <div class="tabbar" id="tabs" role="group" aria-label="Geöffnete Dateien"></div>
         <section class="editor-stage" id="editor-stage">
           <div id="editor-root" class="editor-root"></div>
+          <aside id="canvas-pane" class="canvas-pane" aria-label="Statische Zelyra-Vorschau" data-i18n-aria="canvasTitle" hidden>
+            <header><strong data-i18n="canvasTitle">Statische Zelyra-Vorschau</strong><button id="canvas-close" type="button" aria-label="Schließen" data-i18n-aria="close">×</button></header>
+            <div class="canvas-controls"><label><span data-i18n="canvasTarget">Seite oder View</span><select id="canvas-target"></select></label><label><span data-i18n="canvasSample">Beispieldaten (JSON)</span><textarea id="canvas-sample" spellcheck="false">{}</textarea></label><button id="canvas-render" class="primary-button" type="button" data-i18n="canvasRender">Vorschau aktualisieren</button><button id="canvas-source" class="toolbar-button" type="button" data-i18n="canvasSource" disabled>Zur Deklaration</button></div>
+            <div id="canvas-components" class="canvas-components" hidden><label for="canvas-component-target" data-i18n="canvasComponents">Erreichbare Komponenten</label><select id="canvas-component-target"></select><button id="canvas-component-source" class="toolbar-button" type="button" data-i18n="canvasComponentSource" disabled>Deklaration öffnen</button><label for="canvas-component-use-target" data-i18n="canvasComponentUses">Verwendung</label><select id="canvas-component-use-target"></select><button id="canvas-component-use-source" class="toolbar-button" type="button" data-i18n="canvasComponentUseSource" disabled>Verwendung öffnen</button></div>
+            <div class="canvas-theme-controls"><label><span data-i18n="canvasThemeToken">Theme-Farbe</span><select id="canvas-theme-token"></select></label><label><span data-i18n="canvasThemeColor">Farbwert</span><input id="canvas-theme-color" type="color" value="#3157a4"></label><button id="canvas-theme-apply" class="toolbar-button" type="button" data-i18n="canvasThemeApply">Im Quelltext ändern</button><span id="canvas-theme-status" role="status"></span></div>
+            <p id="canvas-status" role="status" class="canvas-status"></p>
+            <iframe id="canvas-frame" title="Statische Seitenvorschau" sandbox="" referrerpolicy="no-referrer" data-i18n-title="canvasFrameTitle"></iframe>
+          </aside>
           <aside class="studio-assistant" id="studio-assistant" aria-label="Hilfe und Eigenschaften" data-i18n-aria="assistant" hidden>
             <div class="assistant-tabs" role="tablist" aria-label="Studio-Seitenleiste" data-i18n-aria="assistantTabs">
               <button id="assistant-help-tab" class="selected" type="button" role="tab" aria-selected="true" aria-controls="assistant-help-view" tabindex="0" data-i18n="helpTab">Hilfe</button>
@@ -180,6 +193,17 @@
     <p id="task-finder-empty" class="task-finder-empty" hidden data-i18n="noMatchingTasks">Keine passende Aktion gefunden.</p>
     <footer><kbd>↑</kbd><kbd>↓</kbd><kbd>Enter</kbd><span data-i18n="chooseAction">Aktion auswählen</span><kbd>Esc</kbd><span data-i18n="close">Schließen</span></footer>
   </dialog>
+  <dialog id="capability-dialog" class="project-map-dialog capability-dialog" aria-labelledby="capability-title">
+    <header class="project-map-header"><div><h2 id="capability-title" data-i18n="capabilityTitle">Capability- und Sicherheitsmatrix</h2></div><button id="capability-close" type="button" aria-label="Schließen" data-i18n-aria="close">×</button></header>
+    <div class="capability-content">
+      <p id="capability-status" role="status"></p>
+      <h3 data-i18n="capabilityDeclarations">Deklariert</h3><ul id="capability-declared"></ul>
+      <h3 data-i18n="capabilityUses">Tatsächlich verwendete Operationen</h3><ul id="capability-needed"></ul>
+      <h3 data-i18n="capabilityPaths">Dateipfade</h3><ul id="capability-paths"></ul>
+      <h3 data-i18n="capabilityUnused">Freigaben ohne erkannten Funktionsbedarf</h3><ul id="capability-unused"></ul>
+      <section id="capability-preview" hidden><h3 data-i18n="capabilityGrantReview">Konfigurationsänderung prüfen</h3><p id="capability-preview-label"></p><pre id="capability-preview-code"></pre><button id="capability-grant-apply" type="button" class="primary-button" data-i18n="capabilityGrantApply">Freigabe übernehmen</button></section>
+    </div>
+  </dialog>
   <dialog id="project-search" class="task-finder" aria-labelledby="project-search-title">
     <header><h2 id="project-search-title" data-i18n="projectSearchTitle">Projekt durchsuchen</h2><button id="project-search-close" aria-label="Schließen" data-i18n-aria="close">×</button></header>
     <label class="task-finder-search"><span>⌕</span><input id="project-search-input" type="search" autocomplete="off" placeholder="Text in Zelyra-Dateien suchen" data-i18n-placeholder="projectSearchPlaceholder"></label>
@@ -187,12 +211,37 @@
     <p id="project-search-empty" class="task-finder-empty" hidden data-i18n="projectSearchEmpty">Keine Treffer gefunden.</p>
     <footer><kbd>Enter</kbd><span data-i18n="projectSearchSubmit">Suchen</span><kbd>Esc</kbd><span data-i18n="close">Schließen</span></footer>
   </dialog>
+  <dialog id="semantic-rename-dialog" class="task-finder" aria-labelledby="semantic-rename-title">
+    <header><h2 id="semantic-rename-title" data-i18n="semanticRenameTitle">Symbol umbenennen</h2><button id="semantic-rename-close" type="button" aria-label="Schließen" data-i18n-aria="close">×</button></header>
+    <label class="task-finder-search"><span aria-hidden="true">↪</span><input id="semantic-rename-name" type="text" autocomplete="off" spellcheck="false" aria-label="Neuer Funktionsname" data-i18n-aria="semanticRenameName"></label>
+    <p id="semantic-rename-status" role="status" aria-live="polite"></p>
+    <div id="semantic-rename-changes" class="task-finder-results" role="region" aria-label="Änderungsvorschau" data-i18n-aria="semanticRenamePreview"></div>
+    <button id="semantic-rename-preview-button" type="button" data-i18n="semanticRenamePreview">Vorschau prüfen</button>
+    <button id="semantic-rename-apply-button" type="button" data-i18n="semanticRenameApply" disabled>Änderungen in geöffneten Dateien übernehmen</button>
+  </dialog>
   <dialog id="run-output" class="task-finder" aria-labelledby="run-output-title">
     <header><h2 id="run-output-title" data-i18n="runOutputTitle">Programmausgabe</h2><button id="run-output-close" aria-label="Schließen" data-i18n-aria="close">×</button></header>
     <p id="run-output-state" class="run-output-state" role="status"></p>
+    <button id="run-output-cancel" type="button" class="run-cancel" data-i18n="runCancel" hidden>Ausführung abbrechen</button>
     <p id="run-output-web-link" class="run-output-state" hidden><a id="run-output-web-url" target="_blank" rel="noopener noreferrer" data-i18n="runWebOpen">Anwendung im Browser öffnen</a> <button id="run-output-web-stop" type="button" data-i18n="runWebStop">Vorschau beenden</button></p>
     <pre id="run-output-content" class="run-output-content"></pre>
     <footer><span>main.zyl</span><kbd>Esc</kbd><span data-i18n="close">Schließen</span></footer>
+  </dialog>
+  <dialog id="runtime-budget-dialog" class="task-finder runtime-budget-dialog" aria-labelledby="runtime-budget-title">
+    <header><h2 id="runtime-budget-title" data-i18n="runtimeBudgetTitle">Laufzeitbudget und Rekursion</h2><button id="runtime-budget-close" type="button" aria-label="Schließen" data-i18n-aria="close">×</button></header>
+    <div class="runtime-budget-content">
+      <label class="runtime-budget-enable"><input id="runtime-budget-enabled" type="checkbox"> <span data-i18n="runtimeBudgetEnable">Schrittbudget für Konsolenprogramme aktivieren</span></label>
+      <label for="runtime-budget-range" data-i18n="runtimeBudgetRange">Schrittbudget (Regler: 1.000 bis 1.000.000)</label>
+      <input id="runtime-budget-range" type="range" min="1000" max="1000000" step="1000" value="100000" disabled>
+      <label for="runtime-budget-number" data-i18n="runtimeBudgetNumber">Maximale Schritte (1 bis 100.000.000)</label>
+      <input id="runtime-budget-number" type="number" min="1" max="100000000" step="1" value="100000" disabled>
+      <p data-i18n="runtimeBudgetWebHint">Das Schrittbudget gilt für Konsolenprogramme. Eine Webvorschau verwendet weiterhin ihre eigenen Laufzeitgrenzen.</p>
+      <p id="runtime-stack-depth" role="status"></p>
+      <h3 data-i18n="runtimeRecursionTitle">Mögliche Rekursion</h3>
+      <ul id="runtime-recursion-risks"></ul>
+      <p id="runtime-profile-note" role="status"></p>
+    </div>
+    <footer><button id="runtime-budget-run" type="button" class="primary-button" data-i18n="runButton">Starten</button></footer>
   </dialog>
   <dialog id="logs-dialog" class="task-finder logs-dialog" aria-labelledby="logs-title">
     <header><h2 id="logs-title" data-i18n="logsTitle">Zelyra Logs</h2><button id="logs-close" aria-label="Schließen" data-i18n-aria="close">×</button></header>
@@ -208,8 +257,26 @@
   <dialog id="project-map-dialog" class="project-map-dialog" aria-labelledby="project-map-title">
     <header class="project-map-header"><div><span class="database-eyebrow" data-i18n="projectMap">PROJEKTKARTE</span><h2 id="project-map-title" data-i18n="projectMapTitle">Projektbeziehungen</h2></div><button id="project-map-close" aria-label="Schließen" data-i18n-aria="close">×</button></header>
     <p id="project-map-status" class="project-map-status" role="status"></p>
+    <section id="project-map-nullability" class="project-map-nullability" hidden><h3 data-i18n="projectMapNullability">NULL-Radar</h3><div id="project-map-nullability-list"></div></section>
     <div class="project-map-legend"><span data-i18n="projectMapModules">Module</span><span data-i18n="projectMapData">Daten und Ansichten</span><span data-i18n="projectMapWeb">Routen und APIs</span><span data-i18n="projectMapLogic">Funktionen</span></div>
     <div class="project-map-scroller"><svg id="project-map-graph" class="project-map-graph" role="group" aria-label="Interaktive Projektbeziehungen" data-i18n-aria="projectMapTitle"></svg></div>
+  </dialog>
+  <dialog id="pdf-preview-dialog" class="project-map-dialog pdf-preview-dialog" aria-labelledby="pdf-preview-title">
+    <header class="project-map-header"><div><span class="database-eyebrow" data-i18n="pdfPreview">PDF</span><h2 id="pdf-preview-title" data-i18n="pdfPreviewTitle">PDF-Vorschau</h2></div><button id="pdf-preview-close" type="button" aria-label="Schließen" data-i18n-aria="close">×</button></header>
+    <div class="pdf-preview-controls">
+      <label><span data-i18n="pdfView">Deklarierte View</span><select id="pdf-preview-view"></select></label>
+      <label><span data-i18n="pdfExampleData">Beispieldaten als JSON-Objekt</span><textarea id="pdf-preview-data" spellcheck="false">{}</textarea></label>
+      <button id="pdf-preview-render" type="button" class="primary-button" data-i18n="pdfRender">PDF erzeugen</button>
+      <a id="pdf-preview-download" class="toolbar-button" download="zelyra-preview.pdf" hidden data-i18n="pdfDownload">PDF herunterladen</a>
+    </div>
+    <p id="pdf-preview-status" role="status" class="project-map-status"></p>
+    <iframe id="pdf-preview-frame" title="PDF-Vorschau" sandbox="allow-downloads" hidden></iframe>
+  </dialog>
+  <dialog id="outbox-dialog" class="project-map-dialog outbox-dialog" aria-labelledby="outbox-title">
+    <header class="project-map-header"><div><span class="database-eyebrow" data-i18n="outboxButton">OUTBOX</span><h2 id="outbox-title" data-i18n="outboxTitle">Mail-Outbox</h2></div><button id="outbox-close" type="button" aria-label="Schließen" data-i18n-aria="close">×</button></header>
+    <div class="outbox-controls"><button id="outbox-refresh" type="button" class="toolbar-button" data-i18n="refresh">Aktualisieren</button><span id="outbox-page-label"></span><button id="outbox-previous" type="button" class="toolbar-button" data-i18n="previous">Zurück</button><button id="outbox-next" type="button" class="toolbar-button" data-i18n="next">Weiter</button></div>
+    <p id="outbox-status" class="project-map-status" role="status"></p>
+    <div class="outbox-table-scroll"><table><caption data-i18n="outboxCaption">Metadaten der MariaDB-Outbox ohne Nachrichteninhalt</caption><thead><tr><th scope="col" data-i18n="outboxEvent">Ereignis</th><th scope="col" data-i18n="outboxStatus">Status</th><th scope="col" data-i18n="outboxRecipient">Empfänger</th><th scope="col" data-i18n="outboxAttachment">Anhang</th><th scope="col" data-i18n="outboxCreated">Erstellt</th><th scope="col" data-i18n="outboxAvailable">Verfügbar</th><th scope="col" data-i18n="outboxError">Fehler</th><th scope="col" data-i18n="outboxAction">Aktion</th></tr></thead><tbody id="outbox-rows"></tbody></table></div>
   </dialog>
 </body>
 </html>

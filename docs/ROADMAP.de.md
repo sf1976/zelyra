@@ -27,7 +27,7 @@ Ressourcendisziplin und ehrliche Beweisaussagen leiten jede Phase. Das
 [Manifest](MANIFESTO.de.md) beschreibt die Prinzipien; die Roadmap kennzeichnet
 den tatsächlich implementierten Stand.
 
-Das aktuelle stabile Release ist 1.0.6. **Aktuelle Meilensteine** ist die
+Das aktuelle stabile Release ist 1.1.0. **Aktuelle Meilensteine** ist die
 verbindliche Übersicht der nächsten Vorhaben. Ältere, nummerierte Release-
 Abschnitte bleiben als historische Planung und Nachweise erhalten; sie legen
 für sich keine aktuellen Releaseziele fest. Langfristige Ideen stehen im
@@ -139,7 +139,19 @@ Diese Punkte sind geplant, weder bereits umgesetzt noch veröffentlicht. Die bes
   [`v1.0.7`](https://github.com/sf1976/zelyra/releases/tag/v1.0.7); siehe das
   [Arbeitsprotokoll 1.0.7](release-plans/1.0.7-language-runtime-progress.de.md).
 
-- [ ] **Geplant für 1.1.0 — Compose-Prüfung im Installer:** Die Installer
+- [x] **1.1.0 Studio/LSP — veröffentlicht:** Offlinefähiges Einzeldatei-Studio
+  mit eingebettetem CodeMirror 6, compilerbasierter Analyse, gemeinsamen
+  Overlays, Verifier- und Typed-Hole-Ansicht, Daten-/Nullability-Karte,
+  isolierter statischer Vorschau, Theme- und Capability-Werkzeugen,
+  Budgetausführung, PDF-/Outbox-Ansicht, semantischem Rename und
+  wiederherstellbarem Datei-Rename. `zelyra lsp` nutzt denselben Sprachdienst.
+  Dazu kommen geprüfte Stringinterpolation und ausdrücklich veränderliche
+  lokale Arrays. Grenzen: Analyseaufträge sind begrenzt, aber nicht kooperativ
+  abbrechbar; Rename unterstützt statisch aufgelöste Symbolarten; serverseitige
+  PDFs sind textorientiert. Siehe die [Release-Notizen 1.1.0](release-notes/1.1.0.de.md)
+  und das [Arbeitsprotokoll](release-plans/1.1.0-studio-deep-native-progress.de.md).
+
+- [ ] **Folgearbeit nach 1.1.0 — Compose-Prüfung im Installer:** Die Installer
   erkennen Docker Compose v2 oder neuer und unterscheiden es von der veralteten
   Python-Version v1. Docker bleibt für die Kerninstallation optional. Fehlt
   Compose v2, bieten interaktive Linux-Installer auf unterstützten
@@ -148,7 +160,7 @@ Diese Punkte sind geplant, weder bereits umgesetzt noch veröffentlicht. Die bes
   Zustimmung oder in nicht interaktiven Läufen wird nichts mit erhöhten
   Rechten geändert. Die Hinweise machen klar, dass Docker-Compose-Tutorials
   bis zur Installation nicht startbereit sind.
-- [ ] **Geplant für 1.1.0 — interaktive Konsolenmenüs:** Eine leicht
+- [ ] **Folgearbeit nach 1.1.0 — interaktive Konsolenmenüs:** Eine leicht
   deklarierbare Menü-API und `zelyra new --template console-menu` sollen aus
   Titel, Beschreibung und Auswahlpunkten in wenigen Zeilen ein vollständiges
   Terminalmenü erzeugen. Das Menü erhält eine hochwertige Darstellung mit
@@ -174,74 +186,35 @@ Diese Punkte sind geplant, weder bereits umgesetzt noch veröffentlicht. Die bes
   leeren Bereichen bei falscher Richtung und geprüfter Schrittweite ungleich 0
   unterstützen. `range(start, end, step)` liefert dieselbe Folge als begrenztes
   Array. Parser-, Laufzeit-, Typ- und Grenztests bestehen.
-- [~] **Teilweise in 1.0.3 — Zelyra-eigene Sprachkonstrukte:** Verkettete
-  `else if`-Zweige, typisierte `|>`-Pipelines und typgeprüfte
-  Tuple-Destrukturierung in `for`-Schleifen sind umgesetzt. Offen sind
-  typisierte `if`-Ausdrücke, markiertes `break`/`continue` für verschachtelte
-  Schleifen und ausdrückliche, typgeprüfte Regeln für Schleifenabbrüche mit
-  Rückgabewert. Klammerblöcke, statische Typen, ausdrückliche Effekte und
-  geprüfte Fehler bleiben erhalten. Bei einem fehlenden Block nach `else if`
-  zeigt der Parser die erwartete Blockform samt genauer Quellposition an;
-  weitere häufige Fehler brauchen ebenfalls gezielte Vorschläge. Schrittweiten
-  einschließlich negativer Werte und rückwärts laufender Bereiche sind bereits
-  in 1.0.2 enthalten. Benutzerdefinierte Operatoren für eigene Typen brauchen
-  weiterhin ein ausdrückliches, typgeprüftes Protokoll mit fester Rangfolge,
-  eindeutiger Auflösung und Effektregeln; eigene Rangfolgen dürfen nicht
-  deklariert werden.
-- [~] **Teilweise in 1.0.3 — native String- und Math-Bibliotheken:** Die
-  eingebauten String-Funktionen decken Klein-/Großschreibung, Unicode-Länge,
-  Verbinden, Trimmen, Enthaltensein, Ersetzen, Teilen, Padding sowie Präfix- und
-  Suffix-Prüfungen ab; die bisherigen `text_*`-Namen und Result-Varianten
-  bleiben erhalten. `|>` verkettet direkte Funktionsnamen und Aufrufe von links
-  nach rechts und prüft jede Stufe wie einen gewöhnlichen Aufruf. Native
-  Mathematikfunktionen haben jetzt festgelegte Typen, Rundungsregeln und
-  Laufzeitfehler für Überläufe oder ungültige Bereiche. `concat<T>` ist
-  vorhanden. Offen ist lesbare, typgeprüfte String-Interpolation mit
-  Escape-Regel für geschweifte Klammern.
-- [~] **Teilweise in 1.0.3 — Sammlungen und funktionale Operationen:** Normale
-  Arrays und Maps bleiben wertbasiert. Opt-in veränderliche typisierte Arrays
-  und Stacks mit geprüften O(1)-Indexupdates und effizientem `push`/`pop`
-  ergänzen; `pop` liefert einen ausdrücklichen Leerfall. Veränderliche Arrays
-  müssen geprüfte zusammengesetzte Indexupdates wie `items[i] += 1` erlauben.
-  Typisierte Map-Iteration über `entries`, Tuple-Destrukturierung,
-  `get_or_default` und `map_increment` mit geprüftem Überlauffall sind
-  vorhanden.
-  Maps, `Map<K, V>` und `Map { ... }`-Literale, `get`, `put`, `keys`, `values`
-  und `contains` sind bereits vorhanden. Typisierte anonyme
-  Funktionen mit ausdrücklichen Capture-/Effektregeln sowie Standard-
-  Kombinatoren `map`, `filter` und `fold` bereitstellen. Komposition über die
-  Zelyra-Pipeline unterstützen und klare Typinferenz/Diagnosen erhalten. Die
-  Rucksack-DP-Tabelle muss direkt aktualisiert werden und O(Gegenstände ×
-  Kapazität) Zeit sowie O(Kapazität) Speicher einhalten, statt pro Zelle das
-  ganze Array zu kopieren.
-- [ ] **Geplant für 1.0.3 — interaktive Studio-Konsole:** Studio-Run erhält
-  ein interaktives Eingabefeld für `read_console`: ausstehende Eingabeaufforderung
-  anzeigen, eine Zeile entgegennehmen und absenden, das laufende Programm
-  fortsetzen sowie explizites EOF/Abbrechen und begrenzte Ausführung
-  unterstützen. Eine Eingabeanforderung darf nicht stillschweigend zu EOF oder
-  einem Timeout werden. CLI-Eingabe muss weiter funktionieren; dasselbe
-  Zahlenratespiel wird in CLI und Studio getestet.
-- [ ] **Geplant für 1.0.3 — idiomatische Algorithmusübungen:** 17 vollständige,
-  ausführbare Konsolenbeispiele bereitstellen: FizzBuzz, Palindromprüfung,
-  Fakultät, Zahlenraten, Wort-/Zeichenzählung, Minimum/Maximum einer Liste,
-  Primzahlprüfung, umgekehrte Wortreihenfolge, Caesar-Verschiebung, Bubble
-  Sort, Quicksort, binäre Suche, Klammerprüfung mit einem Stack, iterative
-  Fibonacci-Berechnung mit dynamischer Programmierung, Lauflängenkodierung,
-  N-Damen-Zählung mit rekursivem Backtracking und 0/1-Rucksack mit dynamischer
-  Programmierung. Beispiele sollen neue Zelyra-Syntax und APIs nutzen, wo dies
-  den Code verständlicher macht, statt Python-/PHP-Behelfslösungen wie JSON
-  zur Anzeige, manuelles Neuerstellen des Stacks oder wiederholtes Kopieren
-  von Arrays beizubehalten. Wichtige Zeilen, Ergebnisse, Grenzfälle, typische
-  Fehler und Zeit-/Speicherbedarf erklären. Für N=4 und N=8 müssen 2 und 92,
-  für den dokumentierten Rucksackfall 8 herauskommen. Eingaben und Größen
-  validieren, Arithmetik prüfen, Aufwand begrenzen und Kompilierung, Ausgabe
-  sowie Grenzfälle in CI testen.
-- [~] **Teilweise in 1.0.3 — Compilerdiagnosen:** Der Parser schlägt für einen
-  fehlenden Block nach `else if` bereits eine korrigierte Blockform mit
-  Quellposition vor. Offen sind verschachtelte Syntax- und
-  Typfehler mit gezielten Vorschlägen, Quellpositionen und kurzem korrigiertem
-  Zelyra-Beispiel verbessern. Pipeline-Typkonflikte, Sammlungs-Callbacks und
-  ungültige Zahleneingaben brauchen gezielte positive und negative Tests.
+- [~] **Folgearbeit an der Sprachergonomie:** Typisierte If-Ausdrücke,
+  Record-Updates, lexikalische Lambdas, geschützte Record-Muster,
+  Tupelrückgaben/-destrukturierung und kontextuelle Feldnamen sind in 1.0.7
+  implementiert und getestet. Benutzerdefinierte Operatoren und markierte
+  Schleifensteuerung gehören weiterhin nicht zur unterstützten Grammatik;
+  eigene Operatorrangfolgen sind nicht konfigurierbar.
+- [x] **String- und Math-Bibliothek:** Unicode-Texthelfer, geprüfte Mathematik,
+  Rundungsregeln, Fehlerresultate, typgeprüfte Interpolation mit escaped
+  Literal-Klammern und Pipeline-Komposition sind durch Compiler-/Runtime-Tests
+  abgedeckt. Interpolierte Strings sind Klartext; HTML-Escaping erfolgt weiter
+  an der View-Grenze.
+- [~] **Sammlungen und Algorithmen:** Typisierte Pipelines mit `map`, `filter`,
+  `find`, `reduce`, gefangene lexikalische Lambdas, Tuple-`entries`, geprüftes
+  `map_increment` und opt-in veränderliche Arrays mit Indexupdates sowie
+  `push_mut`/`pop_mut` sind implementiert. Spezielle Stacktypen und eine
+  breitere Übungssammlung bleiben Folgearbeit; funktionale Arrays und Maps
+  behalten ansonsten ihre Wertsemantik.
+- [ ] **Folgearbeit nach 1.1.0 — interaktive Studio-Konsole:** Studio Run soll
+  ein interaktives Eingabefeld für `read_console` mit sichtbarer ausstehender
+  Eingabe, Zeilenübermittlung, Programmfortsetzung sowie explizitem EOF/Abbruch
+  und begrenzter Laufzeit erhalten. CLI-Eingabe bleibt verfügbar; dasselbe
+  Zahlenratespiel wird in CLI und Studio geprüft.
+- [ ] **Folgearbeit nach 1.1.0 — idiomatische Algorithmusübungen:** Ausführbare,
+  erläuterte Konsolenbeispiele für verbreitete Algorithmen, einschließlich
+  Sortierung, Suche, Stacks, Rekursion und dynamischer Programmierung,
+  mit geprüften Eingaben, begrenztem Aufwand, Sollausgaben und Grenztests.
+- [~] **Compilerdiagnosen:** Gezielte Fehler und Quellbereiche gibt es für
+  Syntax, Typen, Callbacks, Pipelines und Laufzeitgrenzen. Breitere
+  Korrekturvorschläge für verschachtelte Fehler bleiben Verbesserungsbedarf.
 - [x] **1.0.4 Neustartzuverlässigkeit des Rechnungstutorials:** Jedes neu
   erzeugte Tutorial erhält einen eigenen stabilen Compose-Projektnamensraum.
   Ältere markierte Tutorials beheben veraltete Datenbankzugangsdaten durch
@@ -1434,6 +1407,14 @@ endgültigen 1.0.0-Produkt passen. Automatisierte CI, interne Rehearsals und
 Rückmeldungen des Projektverantwortlichen ersetzen keinen Teilnehmertest.
 
 ## Zukünftige Sprach-, Datenbank- und Ergonomie-Evolution (nach 1.0.0)
+
+- [x] **1.1.0 Studio und eigenständiger LSP (veröffentlicht):** Die geprüfte
+  Zusammenfassung steht unter **Aktuelle Meilensteine**, in den zweisprachigen
+  [Release-Notizen](release-notes/1.1.0.de.md) und im ausführlichen
+  [Arbeitsprotokoll](release-plans/1.1.0-studio-deep-native-progress.de.md).
+  Das Protokoll hält getestete Grenzen von semantischem Rename,
+  Vorschau-Isolation, Analyseabbruch, Bundlegröße, Browserverhalten und
+  Release-Artefakten fest.
 
 Um die Produktivität, Flexibilität und Entwicklerergonomie zu steigern, ohne die Grundsäulen von Zelyra (statische
 Sicherheitsverifikation von Mandanten-/Empfängergrenzen, deterministische Geschäftsarithmetik,

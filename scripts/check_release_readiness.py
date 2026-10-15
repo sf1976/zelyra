@@ -210,6 +210,10 @@ RELEASE_PLAN_CHECKLISTS = {
         ("docs/release-plans/1.0.7-language-runtime-progress.en.md", "## Release gates"),
         ("docs/release-plans/1.0.7-language-runtime-progress.de.md", "## Release-Gates"),
     ),
+    "1.1.0": (
+        ("docs/release-plans/1.1.0-studio-deep-native-progress.en.md", "## Outstanding acceptance"),
+        ("docs/release-plans/1.1.0-studio-deep-native-progress.de.md", "## Offene Abnahme"),
+    ),
 }
 
 
@@ -244,7 +248,7 @@ def _unfinished_release_plan_checklist(root: Path, relative_path: str, heading: 
 
     failures = []
     for line_number, item in section:
-        match = re.match(r"^- \[([ xX])\] .+", item)
+        match = re.match(r"^- \[([ xX~])\] .+", item)
         if match is None:
             failures.append(f"release gate is not a checklist item ({relative_path}:{line_number})")
         elif match.group(1).casefold() != "x":

@@ -74,6 +74,14 @@ pub enum HirStmt {
         value: HirExpr,
         span: Span,
     },
+    ArrayIndexAssign {
+        name: String,
+        local: LocalId,
+        index: HirExpr,
+        value: HirExpr,
+        operation: ArrayIndexAssignOp,
+        span: Span,
+    },
     TupleBindOrAssign {
         bindings: Vec<HirTupleBinding>,
         value: HirExpr,
@@ -441,6 +449,25 @@ impl<'a> Resolver<'a> {
                     }
                 }
             }
+            Stmt::ArrayIndexAssign {
+                name,
+                index,
+                value,
+                operation,
+                span,
+            } => {
+                let local = self
+                    .lookup(name)
+                    .unwrap_or_else(|| self.bind(name.clone(), *span));
+                HirStmt::ArrayIndexAssign {
+                    name: name.clone(),
+                    local,
+                    index: self.expr(index),
+                    value: self.expr(value),
+                    operation: *operation,
+                    span: *span,
+                }
+            }
             Stmt::TupleBindOrAssign { names, value, span } => {
                 let value = self.expr(value);
                 let bindings = names
@@ -750,6 +777,8 @@ impl<'a> Resolver<'a> {
                             | "find"
                             | "reduce"
                             | "append"
+                            | "push_mut"
+                            | "pop_mut"
                             | "tuple"
                             | "set"
                             | "set_add"

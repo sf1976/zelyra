@@ -2,12 +2,20 @@
   "name": "@zelyra/web-editor",
   "private": true,
   "type": "module",
-  "version": "1.0.6",
+  "version": "1.1.0",
   "description": "Self-hosted browser editor assets for the Zelyra CLI",
   "license": "MIT OR Apache-2.0",
   "scripts": {
     "build": "esbuild src/theme.js --bundle --minify --outfile=../cli/assets/theme.js && esbuild src/editor.js --bundle --minify --outfile=../cli/assets/editor.js && esbuild src/editor.css --bundle --minify --outfile=../cli/assets/editor.css",
-    "test:ui-metadata": "node tests/zelyra-ui-metadata.test.mjs"
+    "test:ui-metadata": "node tests/zelyra-ui-metadata.test.mjs",
+    "test:language": "node tests/zelyra-language.test.mjs",
+    "test:browser-hover": "node tests/studio-hover-browser-e2e.mjs",
+    "test:browser-pdf": "node tests/studio-pdf-browser-e2e.mjs",
+    "test:browser-rename": "node tests/studio-rename-browser-e2e.mjs",
+    "test:browser-canvas": "node tests/studio-canvas-browser-e2e.mjs",
+    "test:browser-capability": "node tests/studio-capability-browser-e2e.mjs",
+    "test:browser-outbox": "node tests/studio-outbox-browser-e2e.mjs",
+    "test:browser-runtime-budget": "node tests/studio-runtime-budget-browser-e2e.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.18.6",

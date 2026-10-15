@@ -6,7 +6,7 @@
 
 Willkommen beim vollständigen Zelyra-Handbuch. Es umfasst sowohl das didaktische Lehrbuch **»Zelyra lernen – Verständlich programmieren von den Grundlagen bis zur eigenen Anwendung«** (Teil I bis X, Kapitel 1 bis 42) als auch das **technische Referenzhandbuch** (Kapitel 1 bis 25) sowie ausführliche **Anhänge** (A bis J).
 
-> **Projektstatus:** Das aktuelle stabile Release ist Zelyra 1.0.7; die Sprachkompatibilitätslinie bleibt `0.1`. Der Funktionsumfang und seine Grenzen stehen in der [Implementierungsübersicht](../../implemented.de.md). Die [Release-Notizen 1.0.7](../../release-notes/1.0.7.de.md) ergänzen Sprachfunktionen, Laufzeitgrenzen und lokale Text-PDF-Anhänge zu Zelyra UI.
+> **Projektstatus:** Das aktuelle stabile Release ist Zelyra 1.1.0; die Sprachkompatibilitätslinie bleibt `0.1`. Der Funktionsumfang und seine Grenzen stehen in der [Implementierungsübersicht](../../implemented.de.md). Die [Release-Notizen 1.1.0](../../release-notes/1.1.0.de.md) beschreiben Studio und Sprachdienste; die [Notizen 1.0.7](../../release-notes/1.0.7.de.md) dokumentieren frühere Sprach- und Laufzeitänderungen.
 
 > **Zelyra UI:** Die [Komponentenreferenz](../../ui.de.md) beschreibt die veröffentlichten Komponenten und ihre geprüften Grenzen. Das Rechnungs-PDF wird im Browserdruckdialog erstellt; die gespeicherte Datei muss manuell an den vorausgefüllten E-Mail-Entwurf angehängt werden.
 
@@ -76,7 +76,7 @@ Willkommen beim vollständigen Zelyra-Handbuch. Es umfasst sowohl das didaktisch
 
 ### Technisches Referenzhandbuch
 
-- [Zelyra UI 1.0.6: Komponenten, Varianten, Themes, Druck, Diagramme und E-Mail](../../ui.de.md)
+- [Zelyra UI (seit 1.0.6, stabil in 1.0.7): Komponenten, Varianten, Themes, Druck, Diagramme und E-Mail](../../ui.de.md)
 
 - [Zelyra Studio: Editor, Schema-Karte und CRUD-Assistent](../../studio.de.md)
 

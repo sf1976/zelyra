@@ -174,12 +174,14 @@ page "/items" {
 
 ---
 
-## Appendix D: Standard Library Overview (Zelyra 1.0.3)
+## Appendix D: Standard Library Overview (Zelyra 1.0.3 to 1.0.7)
 
-Zelyra 1.0.3 adds built-in functions for mathematics, text, collections, sets,
-maps, date arithmetic, conversions, encodings, paths, and file access. Function
-calls can be used as typed `|>` pipeline stages. Operations that access host
-resources still require their declared capability.
+Zelyra's standard library provides built-in functions for mathematics, text,
+collections, sets, maps, date arithmetic, conversions, encodings, paths, and
+file access. Calls can be chained in typed `|>` pipelines, which support lexical
+lambdas since 1.0.7. Operations that access host resources or external services
+(filesystem, clock, random, network, database, email/PDF) require their declared
+capability.
 
 ### 1. Mathematics and numerics
 
@@ -251,6 +253,14 @@ resources still require their declared capability.
 - `flatten(array)`: Flattens one level of nested arrays.
 - `zip(left, right) -> Tuple<T, U>[]`: Pairs corresponding elements through the
   shorter input array.
+- `map(array, transform) -> U[]`: Transforms array elements (supports lexical
+  lambdas like `|x| x * 2` since 1.0.7).
+- `filter(array, predicate) -> T[]`: Filters elements with a predicate or lambda
+  (`|x| x > 0`).
+- `find(array, predicate) -> Option<T>`: Returns the first matching element or
+  `None`.
+- `reduce(array, initial, accumulator) -> U`: Folds an array with an initial
+  value and accumulator function.
 
 ### 4. Sets and maps
 
@@ -330,6 +340,10 @@ resources still require their declared capability.
   ProcessResult` starts an explicitly permitted process without a shell.
 - `uses Database`: `sql<T[]> { SELECT ... }` executes typed queries with bound
   parameters; `transaction { ... }` groups database operations atomically.
+- `uses Email`: `render_pdf(view_name, record_data) -> Bytes` (new in 1.0.7)
+  renders a declared view with record fields into paginated text PDF bytes;
+  `mail_queue(to, subject, text, filename, pdf_bytes)` enqueues transactional
+  PDF email attachments in MariaDB outbox.
 
 ---
 

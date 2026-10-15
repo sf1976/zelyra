@@ -19,7 +19,7 @@ ersten Programm bis zur datenbankgestützten Webanwendung.
 Ein neues lokales Lernprojekt für Kunden, Artikel und Rechnungen erzeugst du
 mit [`zelyra --tutorial invoice`](../../tutorials/invoice.de.md).
 
-> **Projektstatus:** Das aktuelle stabile Release ist Zelyra 1.0.7; die Sprachkompatibilitätslinie bleibt `0.1`. Compose v2 oder neuer wird für Datenbanktutorials benötigt. Siehe [Roadmap](../../ROADMAP.de.md) und [Release-Notizen 1.0.7](../../release-notes/1.0.7.de.md).
+> **Projektstatus:** Das aktuelle stabile Release ist Zelyra 1.1.0; die Sprachkompatibilitätslinie bleibt `0.1`. Compose v2 oder neuer wird für Datenbanktutorials benötigt. Siehe [Roadmap](../../ROADMAP.de.md) und [Release-Notizen 1.1.0](../../release-notes/1.1.0.de.md).
 
 Zelyra verbindet statische Typprüfung und verständliche Diagnosen mit
 compilergeprüften Datenbank- und Webdeklarationen. Zur Plattform gehören
@@ -158,10 +158,10 @@ oder Cargo installiert werden. Das gewählte Archiv wird über HTTPS geladen und
 per SHA-256 geprüft:
 
 ~~~bash
-./install.sh --release v1.0.7
+./install.sh --release v1.1.0
 ~~~
 
-Unter Windows in PowerShell `-Release v1.0.7` mit `install.ps1` verwenden.
+Unter Windows in PowerShell `-Release v1.1.0` mit `install.ps1` verwenden.
 macOS nutzt derzeit weiterhin den Quellcode-Installer.
 
 Eine benutzereigene Installation entfernst du mit `zelyra uninstall`. Mit

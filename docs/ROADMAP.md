@@ -25,7 +25,7 @@ telemetry, explicit effects, portable data, resource discipline, and honest
 proof claims guide every phase. The [manifesto](MANIFESTO.md) states the
 principles; the roadmap below tracks what is actually implemented.
 
-The current stable release is 1.0.6. **Current milestones** is the source of
+The current stable release is 1.1.0. **Current milestones** is the source of
 near-term commitments. Older numbered release sections below are retained as
 historical planning and evidence; they do not by themselves define current
 release targets. Longer-term ideas remain in the post-1.0 evolution section.
@@ -130,7 +130,19 @@ These are proposed future milestones, not implemented or released features. Pres
   [`v1.0.7`](https://github.com/sf1976/zelyra/releases/tag/v1.0.7); see the
   [1.0.7 work log](release-plans/1.0.7-language-runtime-progress.en.md).
 
-- [ ] **Planned for 1.1.0 — Compose check in the installer:** Installers detect
+- [x] **1.1.0 Studio/LSP — released:** Offline single-binary Studio with
+  embedded CodeMirror 6, compiler-backed analysis, shared overlays, verifier
+  and typed-hole views, pipeline/nullability map, isolated static canvas,
+  theme and capability tools, budget execution, PDF/outbox views, semantic
+  rename and recovery-journaled file rename. `zelyra lsp` uses the same
+  semantic service. Adds checked string interpolation and opt-in mutable local
+  arrays. Known boundaries: analysis jobs are bounded but not cooperatively
+  preemptible; rename is limited to supported statically resolved symbols;
+  server PDF output is text-oriented. See the
+  [1.1.0 release notes](release-notes/1.1.0.en.md) and
+  [work log](release-plans/1.1.0-studio-deep-native-progress.en.md).
+
+- [ ] **Follow-up after 1.1.0 — Compose check in the installer:** Installers detect
   Docker Compose v2 or newer and distinguish it from obsolete Python Compose
   v1. Docker remains optional for the core installation. When Compose v2 is
   missing, interactive Linux installers offer to install the Compose v2 plugin
@@ -138,7 +150,7 @@ These are proposed future milestones, not implemented or released features. Pres
   show suitable installation guidance. No elevated changes happen without
   confirmation or in non-interactive runs. The guidance explains that
   Docker-based tutorials cannot start until Compose is installed.
-- [ ] **Planned for 1.1.0 — interactive console menus:** A simple declarative
+- [ ] **Follow-up after 1.1.0 — interactive console menus:** A simple declarative
   menu API and `zelyra new --template console-menu` create a complete terminal
   menu from a title, description, and choices in only a few lines. The menu
   provides a polished presentation with a clear selection highlight, keyboard
@@ -161,66 +173,33 @@ These are proposed future milestones, not implemented or released features. Pres
   direction mismatches, and a checked nonzero step. `range(start, end, step)`
   provides the same sequence as a bounded array. Parser, runtime, type, and
   boundary tests pass.
-- [~] **Partially implemented in 1.0.3 — Zelyra-style language constructs:**
-  Chained `else if` branches, typed `|>` pipelines, and type-checked tuple
-  destructuring in `for` loops are implemented. Remaining work includes typed
-  `if` expressions, labeled `break`/`continue` for nested loops, and explicit,
-  type-checked rules for value-yielding loop exits. Keep brace-based blocks,
-  static types, explicit effects, and checked errors. The parser suggests the
-  expected block form and exact source span when an `else if` block is missing;
-  add suggestions for other common mistakes. Stepped ranges, including negative
-  steps and descending loops, are already in 1.0.2. User-defined operators
-  still need an explicit, type-checked protocol with fixed precedence,
-  unambiguous resolution, and effect rules; custom precedence declarations are
-  not allowed.
-- [~] **Partially implemented in 1.0.3 — native String and Math library:**
-  Built-in String functions cover lowercase/uppercase, Unicode length, joining,
-  trimming, containment, replacement, splitting, padding, and prefix/suffix
-  checks; existing `text_*` names and Result variants remain available. `|>`
-  composes direct function names and calls from left to right, type-checking
-  each stage like an ordinary call. Native math functions now have specified
-  types, rounding rules, and runtime errors for overflow or invalid domains.
-  `concat<T>` is implemented. Readable, type-checked String interpolation with
-  escaped literal braces remains open.
-- [~] **Partially implemented in 1.0.3 — collections and functional operations:** Keep
-  ordinary arrays and maps value-based. Provide opt-in typed mutable arrays and
-  stacks with checked O(1) indexed updates and efficient `push`/`pop`; `pop`
-  returns an explicit empty case. Mutable arrays must allow checked indexed
-  compound updates such as `items[i] += 1`. Typed map iteration through
-  `entries`, tuple destructuring, `get_or_default`, and `map_increment` with a
-  checked overflow case are implemented. Maps, `Map<K, V>` and `Map { ... }` literals,
-  `get`, `put`, `keys`, `values`, and `contains` already exist. Add typed
-  anonymous functions with explicit capture/effect rules and
-  standard `map`, `filter`, and `fold` combinators. Support composition through
-  the Zelyra pipeline while preserving clear inference and diagnostics. The
-  knapsack DP table must update in place and retain O(item-count × capacity)
-  time and O(capacity) space rather than copying the full array per cell.
-- [ ] **Planned for 1.0.3 — interactive Studio console:** Give Studio Run a
-  real interactive input panel for `read_console`: display the pending prompt,
+- [~] **Language ergonomics follow-up:** Typed `if` expressions, record updates,
+  lexical lambdas, guarded record patterns, tuple returns/destructuring, and
+  context-sensitive field names are implemented and tested in 1.0.7. User-
+  defined operators and labeled loop control remain outside the supported
+  grammar; no custom operator precedence is configurable.
+- [x] **String and math library:** Unicode-aware text helpers, checked math,
+  rounding rules, error results, typed interpolation with escaped literal
+  braces, and pipeline composition have compiler/runtime coverage. Interpolated
+  strings are plain text; HTML escaping still occurs at the view boundary.
+- [~] **Collections and algorithms:** Typed `map`, `filter`, `find`, and
+  `reduce` pipelines, captured lexical lambdas, tuple `entries`, checked
+  `map_increment`, and opt-in mutable arrays with indexed updates and
+  `push_mut`/`pop_mut` are implemented. Dedicated stack types and the broader
+  algorithm-exercise suite remain follow-up work; functional arrays and maps
+  otherwise retain value semantics.
+- [ ] **Follow-up after 1.1.0 — interactive Studio console:** Give Studio Run a
+  real interactive input panel for `read_console`; preserve the pending prompt,
   accept and submit a line, resume the running program, and support explicit
-  EOF/cancel and bounded execution. Do not silently turn an input request into
-  EOF or a timeout. Keep CLI console input working, and test the same
-  number-guessing program in both CLI and Studio.
-- [ ] **Planned for 1.0.3 — idiomatic algorithm exercises:** Ship 17 complete,
-  runnable console examples: FizzBuzz, palindrome checks, factorial, number
-  guessing, word/character counts, list minimum/maximum, prime checks,
-  reversed word order, Caesar shifts, bubble sort, quicksort, binary search,
-  balanced-parentheses checking with a stack, iterative dynamic-programming
-  Fibonacci, run-length encoding, N-Queens counting with recursive
-  backtracking, and 0/1 knapsack with dynamic programming. Rewrite them to use
-  the new Zelyra syntax and APIs where they improve clarity, rather than
-  retaining Python/PHP workarounds such as JSON encoding for display, manual
-  stack rebuilding, or repeated array-copy updates. Explain important lines,
-  expected results, boundary cases, common mistakes, and time/space costs.
-  N=4 and N=8 must count as 2 and 92; the documented knapsack fixture must
-  return 8. Validate sizes and inputs, use checked arithmetic, bound work, and
-  test compilation, expected output, and edge cases in CI.
-- [~] **Partially implemented in 1.0.3 — compiler diagnostics:** The parser
-  suggests a corrected block form and source position for a missing `else if`
-  block. Remaining work includes nested syntax and
-  type errors with targeted suggestions, source spans, and a short corrected
-  Zelyra example. Pipeline type mismatches, collection callbacks, and invalid
-  numeric inputs need targeted positive and negative tests.
+  EOF/cancel and bounded execution. Keep CLI console input working and test the
+  same number-guessing program in CLI and Studio.
+- [ ] **Follow-up after 1.1.0 — idiomatic algorithm exercises:** Ship runnable,
+  documented console examples for common algorithms, including sorting,
+  search, stacks, recursion, and dynamic programming, with checked inputs,
+  bounded work, expected outputs, and edge-case tests.
+- [~] **Compiler diagnostics:** Targeted errors and source spans exist for
+  syntax, types, callbacks, pipelines, and runtime limits. Broader recovery
+  suggestions for nested errors remain an improvement area.
 - [x] **1.0.4 invoice tutorial restart reliability:** Give each newly generated
   tutorial a unique stable Compose project namespace. For older marked invoice
   tutorials, recover from stale database credentials by starting an isolated
@@ -1381,6 +1360,13 @@ The study scope must match the final 1.0.0 product; automated CI, internal
 rehearsals, and owner feedback do not substitute for participant testing.
 
 ## Future language, database, and ergonomics evolution (post-1.0.0)
+
+- [x] **1.1.0 Studio and standalone LSP (released):** See the verified
+  implementation summary in **Current milestones**, the bilingual
+  [release notes](release-notes/1.1.0.en.md), and the detailed
+  [work log](release-plans/1.1.0-studio-deep-native-progress.en.md). The
+  work log records tested limits for semantic rename, preview isolation,
+  analysis cancellation, bundle size, browser behavior, and release artifacts.
 
 To boost developer ergonomics, flexibility, and architectural modularity without compromising
 Zelyra's core tenets (static security boundaries, deterministic business arithmetic, digital

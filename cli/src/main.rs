@@ -30,10 +30,11 @@ use zelyra_lexer::{lex, TokenKind};
 use zelyra_parser::parse;
 use zelyra_runtime::{
     check, check_apis, check_capabilities_with_grants,
-    execute_function_with_capabilities_and_policies, execute_with_capabilities_and_policies,
-    execute_with_database_and_capabilities_and_policies, verify as verify_program,
-    FileSystemPolicy, MailPolicy, NetworkPolicy, ProcessPolicy, RuntimePolicy,
-    Value as RuntimeValue, VerificationResult, VerificationStatus, KNOWN_CAPABILITIES,
+    execute_captured_with_capabilities_and_policies,
+    execute_captured_with_database_and_capabilities_and_policies,
+    execute_function_with_capabilities_and_policies, verify as verify_program, FileSystemPolicy,
+    MailPolicy, NetworkPolicy, ProcessPolicy, RuntimePolicy, Value as RuntimeValue,
+    VerificationResult, VerificationStatus, KNOWN_CAPABILITIES,
 };
 use zelyra_web::{
     audit_insert_queries, html_escape, parse_urlencoded, serve_app, ApiRoute, AuthRoute,
@@ -56,11 +57,14 @@ mod formatter;
 mod help;
 mod holes;
 mod impact;
+mod language_service;
 mod laravel_migrator;
+mod lsp;
 mod module_cli;
 mod outbox_cli;
 mod project;
 mod route_cli;
+mod semantic_index;
 mod terminal;
 #[cfg(test)]
 mod tests;
@@ -175,6 +179,7 @@ fn usage() {
     );
     eprintln!("  zelyra --tutorial invoice [directory] [--no-start] creates the guided invoice app, starts it, and opens the browser");
     eprintln!("  zelyra editor [directory] [--port <port>] [--no-open] starts local Studio and opens the default browser");
+    eprintln!("  zelyra lsp starts the local JSON-RPC language server over stdio");
     eprintln!("  zelyra migrate laravel <project> [--report <path>] [--output <target>] analyzes or creates a separate, checkable scaffold");
     eprintln!("  zelyra text edit <plan.zedit> [--apply --plan-id sha256:<id>] previews or applies checked text edits");
     eprintln!("  impact focus: use `--symbol <kind:name>` to inspect one known node");
@@ -5908,7 +5913,8 @@ fn singular_type_name(table: &str) -> Option<String> {
 }
 
 fn format_verification_result(path: &str, source: &str, result: &VerificationResult) -> String {
-    let (end_line, end_column) = source_position(source, result.span.end);
+    let (source_path, source_text) = verification_source(path, source, result.span);
+    let (end_line, end_column) = source_position(&source_text, result.span.end);
     let header = format!(
         "{} [{}]: {}.{}[{}] ({}:{}:{}-{}:{})\n  = {}",
         result.status,
@@ -5916,14 +5922,14 @@ fn format_verification_result(path: &str, source: &str, result: &VerificationRes
         result.function,
         result.kind,
         result.index,
-        path,
+        source_path,
         result.span.line,
         result.span.column,
         end_line,
         end_column,
         result.message
     );
-    match format_source_excerpt(source, result.span) {
+    match format_source_excerpt(&source_text, result.span) {
         Some(excerpt) => {
             let counterexample = result
                 .counterexample
@@ -5946,7 +5952,8 @@ fn format_verification_json(path: &str, source: &str, results: &[VerificationRes
     let entries = results
         .iter()
         .map(|result| {
-            let (end_line, end_column) = source_position(source, result.span.end);
+            let (source_path, source_text) = verification_source(path, source, result.span);
+            let (end_line, end_column) = source_position(&source_text, result.span.end);
             let counterexample = result
                 .counterexample
                 .as_ref()
@@ -5961,7 +5968,7 @@ fn format_verification_json(path: &str, source: &str, results: &[VerificationRes
                 result.kind,
                 result.index,
                 counterexample,
-                json_escape(path),
+                json_escape(&source_path),
                 result.span.line,
                 result.span.column,
                 end_line,
@@ -5970,6 +5977,19 @@ fn format_verification_json(path: &str, source: &str, results: &[VerificationRes
         })
         .collect::<Vec<_>>();
     format!("[{}]", entries.join(","))
+}
+
+fn verification_source(path: &str, source: &str, span: zelyra_ast::Span) -> (String, String) {
+    if span.source_id == 0 {
+        return (path.into(), source.into());
+    }
+    PROJECT_SOURCES.with(|sources| {
+        sources
+            .borrow()
+            .get(span.source_id as usize)
+            .map(|source| (source.path.clone(), source.text.clone()))
+            .unwrap_or_else(|| (path.into(), source.into()))
+    })
 }
 
 fn format_counterexample(values: &[(String, i64)]) -> String {
@@ -8488,6 +8508,10 @@ fn visit_block_sql<'a>(
             | Stmt::Return {
                 value: Some(value), ..
             } => visit_expression_sql(value, visitor),
+            Stmt::ArrayIndexAssign { index, value, .. } => {
+                visit_expression_sql(index, visitor);
+                visit_expression_sql(value, visitor);
+            }
             Stmt::Return { value: None, .. } | Stmt::Break { .. } | Stmt::Continue { .. } => {}
             Stmt::If {
                 condition,

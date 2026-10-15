@@ -175,9 +175,9 @@ page "/items" {
 
 ---
 
-## Anhang D: Die Standardbibliothek im Überblick (Zelyra 1.0.3)
+## Anhang D: Die Standardbibliothek im Überblick (Zelyra 1.0.3 bis 1.0.7)
 
-Zelyra 1.0.3 erweitert die eingebaute Standardbibliothek um Funktionen für Mathematik, Textverarbeitung, Sammlungsoperationen, Mengen, Maps, Datumsrechnung, Fehlerkontrolle, Web-Sicherheit, Encodings und Pfade. Pipeline-Stufen werden typgeprüft. Funktionen, die auf externe Systemressourcen zugreifen (z. B. Zufall, Dateisystem, Uhrzeit), erfordern wie gewohnt die entsprechende Capability.
+Die eingebaute Zelyra-Standardbibliothek umfasst Funktionen für Mathematik, Textverarbeitung, Sammlungsoperationen, Mengen, Maps, Datumsrechnung, Fehlerkontrolle, Web-Sicherheit, Encodings, Pfade sowie PDF-Rendering. Pipeline-Stufen werden typgeprüft und unterstützen seit 1.0.7 lexikalische Lambdas. Funktionen, die auf externe Systemressourcen zugreifen (z. B. Zufall, Dateisystem, Uhrzeit, E-Mail), erfordern wie gewohnt die entsprechende Capability.
 
 ### 1. Mathematik & Numerik (ohne Capabilities)
 - `abs(x: Int | Float | Decimal) -> Int | Float | Decimal`: Liefert den Betrag; Überlauf beim kleinsten `Int` oder `Decimal` sowie nicht-endliche `Float`-Werte ergeben einen Laufzeitfehler.
@@ -228,6 +228,10 @@ Zelyra 1.0.3 erweitert die eingebaute Standardbibliothek um Funktionen für Math
 - `chunk(array: T[], size: Int) -> T[][]`: Teilt das Array in Teil-Arrays der angegebenen Höchstgröße auf; `size` muss größer als null sein.
 - `flatten(array: T[][]) -> T[]`: Ebnet ein verschachteltes zweidimensionales Array in ein flaches Array ein.
 - `zip(a: T[], b: U[]) -> Tuple<T, U>[]`: Kombiniert Arrays elementweise bis zur Länge des kürzeren Arrays.
+- `map(array: T[], transform: Function<(T) -> U>) -> U[]`: Transformiert jedes Element eines Arrays (unterstützt seit 1.0.7 lexikalische Lambdas wie `|x| x * 2`).
+- `filter(array: T[], predicate: Function<(T) -> Bool>) -> T[]`: Filtert Elemente eines Arrays nach einer Prädikatsfunktion oder einem Lambda (`|x| x > 0`).
+- `find(array: T[], predicate: Function<(T) -> Bool>) -> Option<T>`: Findet das erste Element, das die Bedingung erfüllt, oder liefert `None`.
+- `reduce(array: T[], initial: U, accumulator: Function<(U, T) -> U>) -> U`: Faltet das Array mit einem Anfangswert und einer Akkumulatorfunktion zusammen.
 
 ### 4. Mengen (Sets)
 - `set_union(a: Set<T>, b: Set<T>) -> Set<T>`: Berechnet die Vereinigungsmenge `A ∪ B`.
@@ -315,6 +319,9 @@ Zelyra 1.0.3 erweitert die eingebaute Standardbibliothek um Funktionen für Math
 - `uses Database`:
   - `sql<T[]> { SELECT ... }`: Führt typisierte relationale Abfragen mit parametrisierten Platzhaltern aus.
   - `transaction { ... }`: Fasst mehrere Schreib- und Leseabfragen in einer atomaren Datenbanktransaktion zusammen.
+- `uses Email`:
+  - `render_pdf(view_name: String, data: Record) -> Bytes` (neu in 1.0.7): Rendert eine deklarierte View mit Record-Daten lokal in ein paginiertes Text-PDF.
+  - `mail_queue(to, subject, text, filename, pdf_bytes)` (neu in 1.0.7): Reiht innerhalb einer Datenbank-Transaktion eine E-Mail mit transaktionalem PDF-Anhang in die Outbox ein.
 
 ---
 

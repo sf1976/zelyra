@@ -17,6 +17,8 @@ pub const MAX_EVENT_PAYLOAD_BYTES: usize = 3 * 1024 * 1024;
 pub const MAX_DELIVERY_ATTEMPTS: u8 = 8;
 /// Maximum number of metadata rows returned by one inspection query.
 pub const MAX_OUTBOX_INSPECTION_LIMIT: usize = 200;
+/// Offset cap prevents a local inspection request from scanning unbounded pages.
+pub const MAX_OUTBOX_INSPECTION_OFFSET: usize = 1_000_000;
 const MIN_LEASE_SECONDS: u64 = 5;
 const MAX_LEASE_SECONDS: u64 = 3_600;
 const RETRY_BASE_SECONDS: u64 = 5;
@@ -50,6 +52,18 @@ pub struct OutboxEventSummary {
     pub available_at: String,
     pub lease_until: Option<String>,
     pub last_error: Option<String>,
+    pub delivered_at: Option<String>,
+    pub exhausted_at: Option<String>,
+    pub recipient: Option<String>,
+    pub attachment_name: Option<String>,
+}
+
+/// One bounded page of metadata; payload bodies and attachment bytes are excluded.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OutboxInspectionPage {
+    pub total: u64,
+    pub offset: usize,
+    pub events: Vec<OutboxEventSummary>,
 }
 
 /// An application handler error with no caller-provided text. The outbox
@@ -597,6 +611,16 @@ pub fn inspect_mariadb_outbox(
     database_url: &str,
     limit: usize,
 ) -> Result<Vec<OutboxEventSummary>, DatabaseError> {
+    inspect_mariadb_outbox_page(database_url, limit, 0).map(|page| page.events)
+}
+
+/// Read a bounded, ordered metadata page. Count and rows are separate queries,
+/// so a concurrent worker may change the count between them.
+pub fn inspect_mariadb_outbox_page(
+    database_url: &str,
+    limit: usize,
+    offset: usize,
+) -> Result<OutboxInspectionPage, DatabaseError> {
     if !(1..=MAX_OUTBOX_INSPECTION_LIMIT).contains(&limit) {
         return Err(DatabaseError {
             message: format!(
@@ -604,6 +628,24 @@ pub fn inspect_mariadb_outbox(
             ),
         });
     }
+    if offset > MAX_OUTBOX_INSPECTION_OFFSET {
+        return Err(DatabaseError {
+            message: format!("outbox inspection offset exceeds {MAX_OUTBOX_INSPECTION_OFFSET}"),
+        });
+    }
+    let count = execute_mariadb_query(
+        database_url,
+        "SELECT COUNT(*) AS `count` FROM `_zelyra_outbox`",
+        Vec::new(),
+    )?;
+    let total = count
+        .rows
+        .first()
+        .and_then(|row| row.first())
+        .and_then(|cell| cell.parse::<u64>().ok())
+        .ok_or_else(|| DatabaseError {
+            message: "database returned an invalid outbox count".into(),
+        })?;
     let result = execute_mariadb_query(
         database_url,
         "SELECT `event_id`, `event_type`, `attempts`, \
@@ -615,15 +657,27 @@ pub fn inspect_mariadb_outbox(
             DATE_FORMAT(`created_at`, '%Y-%m-%d %H:%i:%s.%f') AS `created_at`, \
             DATE_FORMAT(`available_at`, '%Y-%m-%d %H:%i:%s.%f') AS `available_at`, \
             COALESCE(DATE_FORMAT(`lease_until`, '%Y-%m-%d %H:%i:%s.%f'), '') AS `lease_until`, \
-            COALESCE(`last_error`, '') AS `last_error` \
-         FROM `_zelyra_outbox` ORDER BY `created_at` DESC, `event_id` DESC LIMIT :limit",
-        vec![("limit".into(), QueryValue::UInt(limit as u64))],
+            COALESCE(`last_error`, '') AS `last_error`, \
+            COALESCE(DATE_FORMAT(`delivered_at`, '%Y-%m-%d %H:%i:%s.%f'), '') AS `delivered_at`, \
+            COALESCE(DATE_FORMAT(`exhausted_at`, '%Y-%m-%d %H:%i:%s.%f'), '') AS `exhausted_at`, \
+            CASE WHEN `event_type` = 'zelyra.mail.send' THEN \
+                LEFT(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(`payload`, '$.to')), ''), 254) \
+                ELSE '' END AS `recipient`, \
+            CASE WHEN `event_type` = 'zelyra.mail.send' THEN \
+                LEFT(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(`payload`, '$.attachments[0].filename')), ''), 255) \
+                ELSE '' END AS `attachment_name` \
+         FROM `_zelyra_outbox` ORDER BY `created_at` DESC, `event_id` DESC \
+         LIMIT :limit OFFSET :offset",
+        vec![
+            ("limit".into(), QueryValue::UInt(limit as u64)),
+            ("offset".into(), QueryValue::UInt(offset as u64)),
+        ],
     )?;
-    result
+    let events = result
         .rows
         .into_iter()
         .map(|row| {
-            if row.len() != 8 {
+            if row.len() != 12 {
                 return Err(DatabaseError {
                     message: "database returned an invalid outbox inspection row".into(),
                 });
@@ -646,9 +700,18 @@ pub fn inspect_mariadb_outbox(
                 available_at: row[5].clone(),
                 lease_until: (!row[6].is_empty()).then(|| row[6].clone()),
                 last_error: safe_last_error(&row[7]),
+                delivered_at: (!row[8].is_empty()).then(|| row[8].clone()),
+                exhausted_at: (!row[9].is_empty()).then(|| row[9].clone()),
+                recipient: (!row[10].is_empty()).then(|| row[10].clone()),
+                attachment_name: (!row[11].is_empty()).then(|| row[11].clone()),
             })
         })
-        .collect()
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(OutboxInspectionPage {
+        total,
+        offset,
+        events,
+    })
 }
 
 fn owns_live_lease(
@@ -751,8 +814,14 @@ mod tests {
     use super::*;
     use std::env;
     use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::Mutex;
 
     static NEXT_TEST_ID: AtomicU64 = AtomicU64::new(0);
+    // These integration tests share the configured MariaDB outbox. Keeping
+    // their write-and-page/claim sequences serialized prevents one test from
+    // changing the result set while another is asserting offset pagination
+    // or claiming its event.
+    static MARIADB_OUTBOX_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn event_envelope_accepts_stable_ids_names_and_json() {
@@ -817,6 +886,87 @@ mod tests {
     fn outbox_inspection_limit_is_bounded_before_database_access() {
         assert!(inspect_mariadb_outbox("", 0).is_err());
         assert!(inspect_mariadb_outbox("", MAX_OUTBOX_INSPECTION_LIMIT + 1).is_err());
+        assert!(inspect_mariadb_outbox_page("", 25, MAX_OUTBOX_INSPECTION_OFFSET + 1).is_err());
+    }
+
+    #[test]
+    fn mariadb_inspection_pages_mail_metadata_and_requeues_without_delivery() {
+        let Ok(database_url) = env::var("ZELYRA_DB_TIMEOUT_TEST_URL") else {
+            eprintln!("skipping MariaDB outbox inspection test: test URL is not configured");
+            return;
+        };
+        let _guard = MARIADB_OUTBOX_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let suffix = format!(
+            "{}-{}",
+            std::process::id(),
+            NEXT_TEST_ID.fetch_add(1, Ordering::Relaxed)
+        );
+        let id = format!("outbox-studio-{suffix}");
+        let other_id = format!("outbox-studio-other-{suffix}");
+        ensure_mariadb_outbox(&database_url).unwrap();
+        let event = OutboxEvent::new(
+            &id,
+            "zelyra.mail.send",
+            &serde_json::json!({
+                "to":"customer@example.test",
+                "subject":"Test",
+                "text":"Never send this fixture",
+                "attachments":[{"filename":"invoice.pdf","content_type":"application/pdf","content":"JVBERi0xLjQ="}]
+            }),
+        )
+        .unwrap();
+        let other_event = OutboxEvent::new(
+            &other_id,
+            "orders.created",
+            &serde_json::json!({"order_id":42}),
+        )
+        .unwrap();
+        crate::with_mariadb_transaction(&database_url, |transaction| {
+            enqueue_mariadb_event(transaction, &event)?;
+            enqueue_mariadb_event(transaction, &other_event)
+        })
+        .unwrap();
+        let page = inspect_mariadb_outbox_page(&database_url, 200, 0).unwrap();
+        let inspected = page.events.iter().find(|item| item.id == id).unwrap();
+        assert_eq!(
+            inspected.recipient.as_deref(),
+            Some("customer@example.test")
+        );
+        assert_eq!(inspected.attachment_name.as_deref(), Some("invoice.pdf"));
+        assert_eq!(inspected.status, "pending");
+        assert!(page.total >= 2);
+        let first = inspect_mariadb_outbox_page(&database_url, 1, 0).unwrap();
+        let second = inspect_mariadb_outbox_page(&database_url, 1, 1).unwrap();
+        assert_eq!(first.events.len(), 1);
+        assert_eq!(second.events.len(), 1);
+        assert_ne!(first.events[0].id, second.events[0].id);
+        execute_mariadb_query(
+            &database_url,
+            "UPDATE `_zelyra_outbox` SET `exhausted_at` = UTC_TIMESTAMP(6), `attempts` = 8 WHERE `event_id` = :event_id",
+            vec![("event_id".into(), QueryValue::String(id.clone()))],
+        )
+        .unwrap();
+        assert!(requeue_exhausted_mariadb_event(&database_url, &id).unwrap());
+        let result = execute_mariadb_query(
+            &database_url,
+            "SELECT `delivered_at` IS NULL, `attempts`, `exhausted_at` IS NULL FROM `_zelyra_outbox` WHERE `event_id` = :event_id",
+            vec![("event_id".into(), QueryValue::String(id.clone()))],
+        )
+        .unwrap();
+        assert_eq!(result.rows[0][1], "0");
+        assert_eq!(result.rows[0][0], "1");
+        assert_eq!(result.rows[0][2], "1");
+        execute_mariadb_query(
+            &database_url,
+            "DELETE FROM `_zelyra_outbox` WHERE `event_id` IN (:event_id, :other_id)",
+            vec![
+                ("event_id".into(), QueryValue::String(id)),
+                ("other_id".into(), QueryValue::String(other_id)),
+            ],
+        )
+        .unwrap();
     }
 
     #[test]
@@ -838,6 +988,9 @@ mod tests {
             eprintln!("skipping MariaDB outbox transaction test: test URL is not configured");
             return;
         };
+        let _guard = MARIADB_OUTBOX_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let suffix = format!(
             "{}-{}",
             std::process::id(),

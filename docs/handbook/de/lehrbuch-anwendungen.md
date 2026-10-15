@@ -2699,12 +2699,12 @@ zelyra serve src/main.zyl 0.0.0.0:8080
 ## Kapitel 41: Aktueller Stand und Roadmap
 
 ### 1. Was lerne ich in diesem Kapitel?
-- Was Zelyra 1.0.6 enthält und wie die Sprachkompatibilitätslinie 0.1 davon getrennt bleibt.
+- Was Zelyra 1.0.7 enthält und wie die Sprachkompatibilitätslinie 0.1 davon getrennt bleibt.
 - Welche Erweiterungen seit 1.0.0 hinzugekommen sind.
 - Wo du geprüfte Funktionen, Grenzen und geplante Arbeiten nachliest.
 
 ### 2. Warum ist das Thema wichtig?
-Compiler-Version und Sprachkompatibilitätslinie beschreiben unterschiedliche Dinge. Ein Update auf Zelyra 1.0.6 ändert die in `zelyra.toml` festgelegte Sprachlinie nicht automatisch. Release-Notizen zeigen, was eine Version ergänzt; Implementierungsübersicht, Datenbankmatrix und Roadmap erklären den Umfang und seine Grenzen.
+Compiler-Version und Sprachkompatibilitätslinie beschreiben unterschiedliche Dinge. Ein Update auf Zelyra 1.0.7 ändert die in `zelyra.toml` festgelegte Sprachlinie nicht automatisch. Release-Notizen zeigen, was eine Version ergänzt; Implementierungsübersicht, Datenbankmatrix und Roadmap erklären den Umfang und seine Grenzen.
 
 ### 3. Was kam seit Zelyra 1.0.0 hinzu?
 - **1.0.1:** Docker Compose v2 wird erkannt; Python Compose v1 wird mit einem konkreten Update-Hinweis abgewiesen. Der Studio-Ausführen-Knopf startet den Projekteinstieg.
@@ -2713,6 +2713,7 @@ Compiler-Version und Sprachkompatibilitätslinie beschreiben unterschiedliche Di
 - **1.0.4:** Rechnungstutorials erhalten einen eigenen Compose-Projektnamen. Ältere Tutorials können nach einem Authentifizierungsfehler eine isolierte Datenbank verwenden, ohne das alte Volume zu löschen oder zu verändern. Compose-Versionen wie `2.40` werden erkannt.
 - **1.0.5:** Studio zeigt lokale strukturierte Logs; `zelyra uninstall` entfernt die aktive benutzereigene Programmdatei nach Bestätigung. Das Rechnungstutorial hat eine Ablauf-Startseite, eine Rechnungsübersicht, reine Datumseingabe, automatisch vergebene Rechnungsnummern und ausführliche deutsche und englische Quelltextanleitungen.
 - **1.0.6:** Zelyra UI stellt compilergeprüfte Komponenten und lokal gebündelte Stile für erzeugtes CRUD, Projektvorlagen, Studio-Eigenschaften und Rechnungstutorial bereit. Dazu kommen Themes, responsive Layouts, Diagrammkomponenten, Browserdruck/PDF und vorausgefüllte E-Mail-Entwürfe. PDF-Dateien werden im Mailprogramm manuell angehängt.
+- **1.0.7:** Wertliefernde `if`-Ausdrücke, funktionale Record-Updates (`Customer { ..old, active: true }`), typisierte lexikalische Lambdas für Pipelines (`map`, `filter`, `find`, `reduce`), verschachtelte Record-Muster und boolesche Match-Guards, First-Class-Tupel als Rückgabewerte und Zuweisungsziele sowie kontextuelle Feldnamen (`version`, `type`). Dazu kommen konfigurierbare Schrittbegrenzung mit `--max-steps`, nominale Id-Aliase (`type OrderId = Id`), serverseitiges lokales Text-PDF-Rendering (`render_pdf`) und transaktionale PDF-Mail-Anhänge über die MariaDB-Outbox.
 
 Die einzelnen Änderungen stehen in den [Release-Notizen](../../release-notes/). Der vollständige Funktionskatalog der Standardbibliothek steht in [Anhang D](anhaenge.md#anhang-d-die-standardbibliothek-im-überblick-zelyra-103).
 
@@ -2743,14 +2744,16 @@ docker compose version
 Prüfe danach die Release-Notizen der installierten Version und vergleiche den gewünschten Ablauf mit der Datenbankmatrix.
 
 ### 9. Zusammenfassung
-- Zelyra 1.0.6 ist das aktuelle stabile Release; die Sprachkompatibilitätslinie bleibt `0.1`.
+- Zelyra 1.1.0 ist das aktuelle stabile Release; die Sprachkompatibilitätslinie bleibt `0.1`.
 - 1.0.3 erweitert die Standardbibliothek und fügt `|>`-Pipelines sowie flache `else if`-Kaskaden hinzu.
+- 1.0.6 ergänzt Zelyra UI mit typisierten Komponenten, responsivem Layout, Themes, Charts und Browser-Druckansichten.
+- 1.0.7 bringt If-Ausdrücke, Record-Updates, Lambdas, Match-Guards, Tupel, Schrittbudgets (`--max-steps`) und serverseitiges Text-PDF (`render_pdf`).
 - Das Rechnungstutorial läuft lokal mit MariaDB in Docker Compose und einer lokalen Webvorschau; Studio kann den gesamten Tutorialstart ausführen.
 - Release-Notizen beschreiben gelieferte Änderungen, die Roadmap beschreibt geplante Arbeit.
 
 ### 10. Kontrollfragen zur Selbstprüfung
 1. Was unterscheidet Compiler-Version und Sprachkompatibilitätslinie?
-2. Welche Funktionen kamen in 1.0.3 hinzu?
+2. Welche Funktionen kamen in 1.0.3, 1.0.6 und 1.0.7 hinzu?
 3. Welche Teile des Rechnungstutorials laufen in Docker, und wie bearbeitest du die Anwendung?
 4. Woran erkennst du den Unterschied zwischen einem veröffentlichten Feature und einem Roadmap-Punkt?
 

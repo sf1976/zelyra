@@ -41,7 +41,19 @@ class ReleaseReadinessTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         for version, plans in RELEASE_PLAN_CHECKLISTS.items():
             failures = unfinished_gates(root, version)
-            if version in {"0.7.0", "0.8.0", "0.9.0", "0.9.3", "0.9.5", "0.9.6", "0.9.8", "0.9.9", "1.0.6", "1.0.7"}:
+            if version in {
+                "0.7.0",
+                "0.8.0",
+                "0.9.0",
+                "0.9.3",
+                "0.9.5",
+                "0.9.6",
+                "0.9.8",
+                "0.9.9",
+                "1.0.6",
+                "1.0.7",
+                "1.1.0",
+            }:
                 self.assertEqual(
                     failures,
                     [],
@@ -137,6 +149,32 @@ class ReleaseReadinessTests(unittest.TestCase):
             (root / RELEASE_PLAN_CHECKLISTS["1.0.7"][1][0]).unlink()
             failures = unfinished_gates(root, "1.0.7")
             self.assertTrue(any("missing or unreadable" in item for item in failures))
+
+    def test_110_requires_bilingual_acceptance_and_blocks_unfinished_work(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for relative_path, heading in RELEASE_PLAN_CHECKLISTS["1.1.0"]:
+                path = root / relative_path
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(f"{heading}\n\n- [x] Verified gate\n", encoding="utf-8")
+            self.assertEqual(unfinished_gates(root, "1.1.0"), [])
+
+            english_path = root / RELEASE_PLAN_CHECKLISTS["1.1.0"][0][0]
+            english_path.write_text("## Outstanding acceptance\n\n- [ ] Pending gate\n", encoding="utf-8")
+            failures = unfinished_gates(root, "1.1.0")
+            self.assertTrue(any("release gate is incomplete" in item for item in failures))
+
+            english_path.write_text("## Outstanding acceptance\n\n- [~] Partial gate\n", encoding="utf-8")
+            failures = unfinished_gates(root, "1.1.0")
+            self.assertTrue(any("release gate is incomplete" in item for item in failures))
+            self.assertFalse(any("not a checklist item" in item for item in failures))
+
+            (root / RELEASE_PLAN_CHECKLISTS["1.1.0"][1][0]).unlink()
+            failures = unfinished_gates(root, "1.1.0")
+            self.assertTrue(any("missing or unreadable" in item for item in failures))
+
+        current_failures = unfinished_gates(Path(__file__).resolve().parents[1], "1.1.0")
+        self.assertEqual(current_failures, [], "1.1.0 gates are complete for publication")
 
     def test_current_030_plan_requires_a_documented_onboarding_deferral(self) -> None:
         root = Path(__file__).resolve().parents[1]

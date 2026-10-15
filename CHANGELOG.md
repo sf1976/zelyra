@@ -6,6 +6,47 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+## 1.1.0 — 2026-10-15
+
+- Add an offline, single-binary Zelyra Studio with CodeMirror 6, compiler-backed
+  diagnostics and language services, semantic navigation/refactoring, versioned
+  analysis events, typed-hole assistance, verifier evidence, a project data map,
+  isolated UI preview, theme editing, capability review, runtime budgets, PDF
+  preview, and MariaDB outbox inspection/requeue. / Zelyra Studio als offline
+  nutzbare Einzeldatei mit CodeMirror 6, compilergestützter Diagnostik und
+  Sprachdiensten, semantischer Navigation/Umbenennung, versionierten
+  Analyseereignissen, Typed-Hole-Hilfe, Verifier-Ergebnissen, Projekt-Datenkarte,
+  isolierter UI-Vorschau, Theme-Editor, Capability-Prüfung, Laufzeitbudgets,
+  PDF-Vorschau und MariaDB-Outbox-Anzeige mit erneutem Einreihen ergänzen.
+- Add standalone `zelyra lsp` over JSON-RPC stdio, sharing project overlays and
+  semantic analysis with Studio. / Eigenständiges `zelyra lsp` über JSON-RPC
+  auf Stdio ergänzen; Studio und LSP teilen Projekt-Overlays und semantische
+  Analyse.
+- Improve semantic rename and multi-file file-rename plans with compiler
+  validation, conflict checks, journaled application, and rollback. Unsupported
+  or ambiguous references are rejected rather than edited speculatively. /
+  Semantische Umbenennung und dateiübergreifende Importanpassungen mit
+  Compilerprüfung, Konfliktkontrolle, Änderungsjournal und Rollback ergänzen.
+  Nicht unterstützte oder mehrdeutige Referenzen werden abgewiesen.
+- Add typed string interpolation and opt-in in-place mutation for mutable local
+  arrays. / Typgeprüfte Stringinterpolation und ausdrücklich aktivierte
+  In-place-Änderungen lokaler veränderlicher Arrays ergänzen.
+- Bundle editor assets locally. Node.js and npm are required only to rebuild
+  developer assets; released applications use embedded assets and work offline.
+  / Editor-Assets lokal bündeln. Node.js und npm werden nur zum erneuten
+  Erstellen der Entwickler-Assets benötigt; Release-Anwendungen enthalten die
+  Assets eingebettet und funktionieren offline.
+- Known limits: compiler analysis is bounded but not cooperatively preempted;
+  rename is limited to statically resolved supported symbols; PDF rendering is
+  a text-oriented renderer and does not reproduce CSS, images, or charts. The
+  JavaScript bundle is subject to a 600 KiB hard ceiling, with 400 KiB retained
+  as an optimization goal. Bytecode/AOT remains planned for 1.3.0. /
+  Bekannte Grenzen: Compileranalysen sind begrenzt, aber nicht kooperativ
+  abbrechbar; Umbenennung unterstützt statisch auflösbare Symbolarten;
+  PDF-Rendering ist textorientiert und bildet CSS, Bilder oder Diagramme nicht
+  nach. Für das JavaScript-Bundle gilt eine Obergrenze von 600 KiB; 400 KiB
+  bleiben ein Optimierungsziel. Bytecode/AOT bleibt für 1.3.0 vorgesehen.
+
 ## 1.0.7 — 2026-10-14
 
 - Add typed if expressions, record update syntax, lexical lambdas with typed

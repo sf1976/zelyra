@@ -89,6 +89,83 @@ pub fn load_with_entry_source(entry: &str, source: &str) -> Result<LoadedProject
     load_with_overrides(entry, HashMap::from([(canonical_entry, source.to_owned())]))
 }
 
+/// Load a project with unsaved source buffers. Paths are relative to the entry
+/// directory; overrides may name new `.zyl` files beneath existing workspace
+/// directories. Open, otherwise-unreferenced buffers are linked as workspace
+/// modules so the editor can analyze them. The loader never writes buffers.
+pub fn load_with_source_overlays(
+    entry: &str,
+    overlays: &[(String, String)],
+) -> Result<LoadedProject, ProjectError> {
+    let root = Path::new(entry)
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let root = fs::canonicalize(root).map_err(|error| {
+        project_error(
+            "E-IO-001",
+            format!("cannot resolve project root: {error}"),
+            entry,
+            Span::default(),
+        )
+    })?;
+    if overlays.len() > 2_000 {
+        return Err(project_error(
+            "E-MOD-004",
+            "too many source overlays",
+            entry,
+            Span::default(),
+        ));
+    }
+    let mut overrides = HashMap::new();
+    let mut total_bytes = 0usize;
+    for (relative, source) in overlays {
+        total_bytes = total_bytes.saturating_add(source.len());
+        let path = Path::new(relative);
+        if path.extension().and_then(|extension| extension.to_str()) != Some("zyl")
+            || path.is_absolute()
+            || path
+                .components()
+                .any(|part| !matches!(part, Component::Normal(_)))
+            || source.len() > 1_048_576
+            || total_bytes > 16 * 1_048_576
+        {
+            return Err(project_error(
+                "E-MOD-004",
+                "source overlays must be project-relative .zyl files of at most 1 MiB each and 16 MiB total",
+                relative,
+                Span::default(),
+            ));
+        }
+        let candidate = root.join(path);
+        let canonical = canonicalize_overlay_path(&candidate).map_err(|error| {
+            project_error(
+                "E-IO-001",
+                format!("cannot resolve source overlay `{relative}`: {error}"),
+                relative,
+                Span::default(),
+            )
+        })?;
+        if !canonical.starts_with(&root) {
+            return Err(project_error(
+                "E-MOD-004",
+                "source overlay resolves outside the project or is not a regular file",
+                relative,
+                Span::default(),
+            ));
+        }
+        if overrides.insert(canonical, source.clone()).is_some() {
+            return Err(project_error(
+                "E-MOD-004",
+                "duplicate source overlay",
+                relative,
+                Span::default(),
+            ));
+        }
+    }
+    load_with_overrides(entry, overrides)
+}
+
 fn load_with_overrides(
     entry: &str,
     source_overrides: HashMap<PathBuf, String>,
@@ -105,13 +182,22 @@ fn load_with_overrides(
         span: Span::default(),
         sources: Box::default(),
     })?;
-    let canonical_entry = fs::canonicalize(&entry_path).map_err(|error| ProjectError {
+    let canonical_entry = canonicalize_overlay_path(&entry_path).map_err(|error| ProjectError {
         code: "E-IO-001",
         message: format!("cannot read `{entry}`: {error}"),
         path: entry.to_owned(),
         span: Span::default(),
         sources: Box::default(),
     })?;
+    if !source_overrides.contains_key(&canonical_entry) && !canonical_entry.is_file() {
+        return Err(ProjectError {
+            code: "E-IO-001",
+            message: format!("cannot read `{entry}`: file does not exist"),
+            path: entry.to_owned(),
+            span: Span::default(),
+            sources: Box::default(),
+        });
+    }
     if !canonical_entry.starts_with(&root) {
         return Err(ProjectError {
             code: "E-MOD-004",
@@ -131,6 +217,13 @@ fn load_with_overrides(
         source_overrides,
     };
     loader.visit(canonical_entry.clone(), None)?;
+    let mut open_paths = loader.source_overrides.keys().cloned().collect::<Vec<_>>();
+    open_paths.sort();
+    for path in open_paths {
+        if !loader.modules.contains_key(&path) {
+            loader.visit(path, None)?;
+        }
+    }
     let module_paths = loader
         .modules
         .iter()
@@ -327,6 +420,51 @@ fn module_declarations(program: &Program) -> Vec<String> {
     declarations
 }
 
+fn canonicalize_overlay_path(path: &Path) -> std::io::Result<PathBuf> {
+    match fs::symlink_metadata(path) {
+        Ok(_) => {
+            let canonical = fs::canonicalize(path)?;
+            if !canonical.is_file() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "source path is not a regular file",
+                ));
+            }
+            Ok(canonical)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            canonicalize_missing_path(path)
+        }
+        Err(error) => Err(error),
+    }
+}
+
+fn canonicalize_missing_path(path: &Path) -> std::io::Result<PathBuf> {
+    let mut current = path;
+    let mut missing = Vec::new();
+    loop {
+        match fs::canonicalize(current) {
+            Ok(mut canonical) => {
+                for component in missing.iter().rev() {
+                    canonical.push(component);
+                }
+                return Ok(canonical);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                let Some(name) = current.file_name() else {
+                    return Err(error);
+                };
+                missing.push(name.to_os_string());
+                let Some(parent) = current.parent() else {
+                    return Err(error);
+                };
+                current = parent;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+}
+
 impl Loader {
     fn visit(
         &mut self,
@@ -337,7 +475,7 @@ impl Loader {
         let canonical = if builtin_ui {
             path.clone()
         } else {
-            fs::canonicalize(&path).map_err(|error| {
+            canonicalize_overlay_path(&path).map_err(|error| {
                 let (display_path, span) = import_site
                     .clone()
                     .unwrap_or_else(|| (path.to_string_lossy().into_owned(), Span::default()));
@@ -360,6 +498,20 @@ impl Loader {
                 format!(
                     "module path `{}` resolves outside the project root",
                     path.display()
+                ),
+                display_path,
+                span,
+            ));
+        }
+        if !builtin_ui && !canonical.is_file() && !self.source_overrides.contains_key(&canonical) {
+            let (display_path, span) = import_site
+                .clone()
+                .unwrap_or_else(|| (self.relative(&canonical), Span::default()));
+            return Err(self.error(
+                "E-MOD-002",
+                format!(
+                    "cannot read module `{}`: file does not exist",
+                    self.relative(&canonical)
                 ),
                 display_path,
                 span,
@@ -468,7 +620,7 @@ impl Loader {
             let resolved = if is_builtin_ui_module(&target) {
                 target
             } else {
-                fs::canonicalize(&target).map_err(|error| {
+                canonicalize_overlay_path(&target).map_err(|error| {
                     self.error(
                         "E-MOD-002",
                         format!("cannot resolve imported module: {error}"),
@@ -1205,6 +1357,10 @@ impl TypeLinker<'_> {
                 | Stmt::Expr(value) => {
                     self.rewrite_expression_types(value)?;
                 }
+                Stmt::ArrayIndexAssign { index, value, .. } => {
+                    self.rewrite_expression_types(index)?;
+                    self.rewrite_expression_types(value)?;
+                }
                 Stmt::Return {
                     value: Some(value), ..
                 } => self.rewrite_expression_types(value)?,
@@ -1614,6 +1770,32 @@ fn rewrite_block(
                 display_path,
                 is_root,
             )?,
+            Stmt::ArrayIndexAssign { index, value, .. } => {
+                rewrite_expr(
+                    index,
+                    module_path,
+                    module_name,
+                    imports,
+                    local_functions,
+                    function_sets,
+                    module_names,
+                    root_functions,
+                    display_path,
+                    is_root,
+                )?;
+                rewrite_expr(
+                    value,
+                    module_path,
+                    module_name,
+                    imports,
+                    local_functions,
+                    function_sets,
+                    module_names,
+                    root_functions,
+                    display_path,
+                    is_root,
+                )?;
+            }
             Stmt::Expr(expression) => rewrite_expr(
                 expression,
                 module_path,
@@ -2349,6 +2531,93 @@ mod tests {
 
     fn cleanup(directory: &Path) {
         fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn unsaved_import_overlay_is_linked_without_changing_the_file() {
+        let directory = project(&[
+            (
+                "main.zyl",
+                "import \"src/math.zyl\" as math\nfn main() { print(math::answer()) }\n",
+            ),
+            ("src/math.zyl", "pub fn answer() -> Int { return 1 }\n"),
+        ]);
+        let entry = directory.join("main.zyl");
+        let overlays = vec![(
+            "src/math.zyl".into(),
+            "pub fn answer() -> Int { return 42 }\n".into(),
+        )];
+        let loaded = load_with_source_overlays(entry.to_str().unwrap(), &overlays).unwrap();
+        assert_eq!(execute(&loaded.program).unwrap(), ["42"]);
+        assert_eq!(loaded.sources[1].text, overlays[0].1);
+        assert_eq!(
+            fs::read_to_string(directory.join("src/math.zyl")).unwrap(),
+            "pub fn answer() -> Int { return 1 }\n"
+        );
+        cleanup(&directory);
+    }
+
+    #[test]
+    fn source_overlays_allow_new_modules_but_reject_parent_paths() {
+        let directory = project(&[("main.zyl", "fn main() {}\n")]);
+        let entry = directory.join("main.zyl");
+        let traversal = load_with_source_overlays(
+            entry.to_str().unwrap(),
+            &[("../outside.zyl".into(), "fn main() {}".into())],
+        )
+        .unwrap_err();
+        assert_eq!(traversal.code, "E-MOD-004");
+        let new_source = "pub fn added() -> Int { return 42 }\n";
+        let loaded = load_with_source_overlays(
+            entry.to_str().unwrap(),
+            &[("new_module.zyl".into(), new_source.into())],
+        )
+        .unwrap();
+        assert!(loaded
+            .sources
+            .iter()
+            .any(|source| { source.path == "new_module.zyl" && source.text == new_source }));
+        assert!(loaded
+            .program
+            .functions
+            .iter()
+            .any(|function| function.name.ends_with("::added")));
+        assert!(!directory.join("new_module.zyl").exists());
+        cleanup(&directory);
+    }
+
+    #[test]
+    fn unsaved_new_import_is_linked_and_symlink_escape_is_rejected() {
+        let directory = project(&[(
+            "main.zyl",
+            "import \"src/new_module.zyl\" as generated\nfn main() { print(generated::answer()) }\n",
+        )]);
+        fs::create_dir_all(directory.join("src")).unwrap();
+        let entry = directory.join("main.zyl");
+        let loaded = load_with_source_overlays(
+            entry.to_str().unwrap(),
+            &[(
+                "src/new_module.zyl".into(),
+                "pub fn answer() -> Int { return 42 }\n".into(),
+            )],
+        )
+        .unwrap();
+        assert_eq!(execute(&loaded.program).unwrap(), ["42"]);
+
+        #[cfg(unix)]
+        {
+            let outside = directory.with_extension("outside");
+            fs::create_dir_all(&outside).unwrap();
+            std::os::unix::fs::symlink(&outside, directory.join("linked")).unwrap();
+            let escaped = load_with_source_overlays(
+                entry.to_str().unwrap(),
+                &[("linked/escape.zyl".into(), "fn escape() {}".into())],
+            )
+            .unwrap_err();
+            assert_eq!(escaped.code, "E-MOD-004");
+            fs::remove_dir_all(outside).unwrap();
+        }
+        cleanup(&directory);
     }
 
     #[test]

@@ -19,7 +19,7 @@ program and ending with a database-backed web application.
 Create a new local learning project for customers, items, and invoices with
 [`zelyra --tutorial invoice`](../../tutorials/invoice.en.md).
 
-> **Project status:** Zelyra 1.0.7 is the current stable release; the language compatibility line remains `0.1`. Database tutorials require Compose v2 or newer. See the [roadmap](../../ROADMAP.md) and [1.0.7 release notes](../../release-notes/1.0.7.en.md).
+> **Project status:** Zelyra 1.1.0 is the current stable release; the language compatibility line remains `0.1`. Database tutorials require Compose v2 or newer. See the [roadmap](../../ROADMAP.md) and [1.1.0 release notes](../../release-notes/1.1.0.en.md).
 
 Zelyra combines static type checking and clear diagnostics with
 compiler-checked database and web declarations. The platform includes
@@ -130,10 +130,10 @@ Rust or Cargo. The installer downloads the selected archive over HTTPS and
 verifies its SHA-256 checksum:
 
 ~~~bash
-./install.sh --release v1.0.7
+./install.sh --release v1.1.0
 ~~~
 
-On Windows, use `-Release v1.0.7` with `install.ps1` in PowerShell. macOS
+On Windows, use `-Release v1.1.0` with `install.ps1` in PowerShell. macOS
 currently uses the source installer.
 
 Remove a user-owned installation with `zelyra uninstall`. Use

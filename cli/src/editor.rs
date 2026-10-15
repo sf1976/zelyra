@@ -3,10 +3,26 @@ use std::io::{self, Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::thread;
 use std::time::Duration;
 use zelyra_web::{parse_request, Request};
+
+#[path = "editor_events.rs"]
+mod editor_events;
+use editor_events::EventHub;
+#[path = "editor_canvas.rs"]
+mod editor_canvas;
+#[path = "editor_capabilities.rs"]
+mod editor_capabilities;
+#[path = "editor_outbox.rs"]
+mod editor_outbox;
+#[path = "editor_pdf.rs"]
+mod editor_pdf;
+#[path = "editor_transactions.rs"]
+mod editor_transactions;
+#[path = "editor_watcher.rs"]
+mod editor_watcher;
 
 const EDITOR_HTML: &str = include_str!("../assets/editor.html");
 const EDITOR_JS: &str = include_str!("../assets/editor.js");
@@ -14,7 +30,9 @@ const EDITOR_CSS: &str = include_str!("../assets/editor.css");
 const EDITOR_THEME_JS: &str = include_str!("../assets/theme.js");
 const EDITOR_PATH: &str = "/__zelyra/editor";
 const EDITOR_MAX_CONNECTIONS: usize = 16;
+const EDITOR_MAX_EVENT_STREAMS: usize = 4;
 const EDITOR_MAX_FILE_BYTES: usize = 1_048_576;
+const EDITOR_MAX_ANALYSIS_OVERLAYS: usize = 16;
 const EDITOR_MAX_FILES: usize = 2_000;
 const EDITOR_MAX_DEPTH: usize = 8;
 const EDITOR_DATABASE_MAX_TABLES: usize = 500;
@@ -34,9 +52,13 @@ impl Drop for EditorConnection {
 }
 
 fn acquire_editor_connection(active: &AtomicUsize) -> bool {
+    acquire_editor_connection_limit(active, EDITOR_MAX_CONNECTIONS)
+}
+
+fn acquire_editor_connection_limit(active: &AtomicUsize, limit: usize) -> bool {
     let mut count = active.load(Ordering::Acquire);
     loop {
-        if count >= EDITOR_MAX_CONNECTIONS {
+        if count >= limit {
             return false;
         }
         match active.compare_exchange_weak(count, count + 1, Ordering::AcqRel, Ordering::Acquire) {
@@ -52,6 +74,10 @@ struct EditorState {
     token: String,
     authority: String,
     web_process: Arc<std::sync::Mutex<Option<std::process::Child>>>,
+    events: Arc<EventHub>,
+    active_event_streams: Arc<AtomicUsize>,
+    active_runs: Arc<AtomicUsize>,
+    run_cancel: Arc<AtomicBool>,
 }
 
 impl Drop for EditorState {
@@ -108,6 +134,12 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
             return ExitCode::from(1);
         }
     };
+    if let Err(error) = editor_transactions::recover(&root) {
+        eprintln!(
+            "error[E-EDITOR-005]: could not recover pending Studio file transaction: {error}"
+        );
+        return ExitCode::from(1);
+    }
     if !root.join("zelyra.toml").is_file()
         && !root.join("main.zyl").is_file()
         && !root.join(".zelyra").is_dir()
@@ -140,8 +172,13 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         token: token.clone(),
         authority: authority.clone(),
         web_process: Arc::new(std::sync::Mutex::new(None)),
+        events: Arc::new(EventHub::default()),
+        active_event_streams: Arc::new(AtomicUsize::new(0)),
+        active_runs: Arc::new(AtomicUsize::new(0)),
+        run_cancel: Arc::new(AtomicBool::new(false)),
     });
     let active = Arc::new(AtomicUsize::new(0));
+    editor_watcher::start(Arc::clone(&state));
     println!("Zelyra Studio ist lokal erreichbar: http://{authority}{EDITOR_PATH}/#{token}");
     println!("Projekt: {}", state.root.display());
     if open_browser && has_graphical_session() {
@@ -282,6 +319,9 @@ fn handle_editor_connection(
             r#"{"error":"not found"}"#,
         );
     }
+    if request.path == format!("{EDITOR_PATH}/api/events") {
+        return editor_event_stream(stream, &request, state);
+    }
     let (status, content_type, body) = match editor_response(&request, state) {
         Ok(response) => response,
         Err((status, message)) => (
@@ -291,6 +331,64 @@ fn handle_editor_connection(
         ),
     };
     write_editor_response(&mut stream, status, content_type, &body)
+}
+
+fn editor_event_stream(
+    mut stream: TcpStream,
+    request: &Request,
+    state: &EditorState,
+) -> io::Result<()> {
+    let rejection = authorize_editor_event_request(request, state)
+        .err()
+        .or_else(|| {
+            (!acquire_editor_connection_limit(
+                &state.active_event_streams,
+                EDITOR_MAX_EVENT_STREAMS,
+            ))
+            .then_some((429, "too many active event streams"))
+        });
+    if let Some((status, message)) = rejection {
+        return write_editor_response(
+            &mut stream,
+            status,
+            "application/json; charset=utf-8",
+            &json!({"error":message}).to_string(),
+        );
+    }
+    let _slot = EditorConnection(Arc::clone(&state.active_event_streams));
+    let (subscriber_id, receiver) = state.events.subscribe();
+    let result = editor_events::stream(stream, receiver);
+    state.events.unsubscribe(subscriber_id);
+    result
+}
+
+fn authorize_editor_event_request(
+    request: &Request,
+    state: &EditorState,
+) -> Result<(), (u16, &'static str)> {
+    if request.method != "GET" {
+        return Err((405, "event streams require GET"));
+    }
+    if request
+        .headers
+        .get("x-zelyra-editor-token")
+        .map(String::as_str)
+        != Some(state.token.as_str())
+    {
+        return Err((403, "invalid editor session"));
+    }
+    if request
+        .headers
+        .get("origin")
+        .is_some_and(|origin| origin != &format!("http://{}", state.authority))
+        || request
+            .headers
+            .get("sec-fetch-site")
+            .is_some_and(|site| site != "same-origin")
+    {
+        return Err((403, "event stream must come from the editor origin"));
+    }
+    Ok(())
 }
 
 fn editor_response(
@@ -376,7 +474,25 @@ fn editor_response(
                 values.get("name").map(String::as_str).unwrap_or(""),
             )
         }
-        ("GET", "project-map") => editor_project_map(state),
+        ("GET", "project-map") => editor_project_map(state, &json!({})),
+        ("POST", "project-map") => editor_project_map(state, &parse_json_body(&request.body)?),
+        ("GET", "pdf-views") => editor_pdf::views(state),
+        ("POST", "pdf-render") => editor_pdf::render(state, &parse_json_body(&request.body)?),
+        ("GET", "outbox") => editor_outbox::list(state, request),
+        ("POST", "outbox-requeue") => {
+            editor_outbox::requeue(state, &parse_json_body(&request.body)?)
+        }
+        ("POST", "capabilities") => {
+            editor_capabilities::inspect(state, &parse_json_body(&request.body)?)
+        }
+        ("POST", "capability-grant-preview") => {
+            editor_capabilities::preview_grant(state, &parse_json_body(&request.body)?)
+        }
+        ("POST", "capability-grant-apply") => {
+            editor_capabilities::apply_grant(state, &parse_json_body(&request.body)?)
+        }
+        ("POST", "canvas-list") => editor_canvas::list(state, &parse_json_body(&request.body)?),
+        ("POST", "canvas-render") => editor_canvas::render(state, &parse_json_body(&request.body)?),
         ("GET", "logs") => editor_logs_response(state),
         ("GET", "database-schema") => database_schema_response(state),
         ("GET", "database-target") => database_target_response(state),
@@ -398,6 +514,7 @@ fn editor_response(
             )
         }
         ("POST", "locals") => local_editor_symbols(state, &parse_json_body(&request.body)?),
+        ("POST", "semantic") => semantic_editor_query(state, &parse_json_body(&request.body)?),
         ("GET", "file") => {
             let query = request
                 .target
@@ -411,10 +528,20 @@ fn editor_response(
         }
         ("PUT", "file") => write_existing_file(state, parse_json_body(&request.body)?, false),
         ("POST", "file") => write_existing_file(state, parse_json_body(&request.body)?, true),
+        ("POST", "file-save-batch") => {
+            save_editor_files_batch(state, parse_json_body(&request.body)?)
+        }
+        ("POST", "file-rename-preview") => {
+            preview_editor_file_rename(state, parse_json_body(&request.body)?)
+        }
         ("POST", "file-rename") => rename_editor_file(state, parse_json_body(&request.body)?),
         ("DELETE", "file") => delete_editor_file(state, parse_json_body(&request.body)?),
         ("POST", "check") => check_project(state, &parse_json_body(&request.body)?),
+        ("POST", "verify") => verify_editor_project(state, &parse_json_body(&request.body)?),
+        ("POST", "typed-hole") => editor_typed_hole(state, &parse_json_body(&request.body)?),
+        ("POST", "runtime-profile") => runtime_profile(state, &parse_json_body(&request.body)?),
         ("POST", "run") => run_editor_program(state, &parse_json_body(&request.body)?),
+        ("POST", "cancel-run") => cancel_editor_run(state),
         ("POST", "stop-web-preview") => stop_editor_web_app(state),
         ("POST", "format") => format_editor_file(state, &parse_json_body(&request.body)?),
         ("POST", "crud-preview") => preview_crud_resource(state, &parse_json_body(&request.body)?),
@@ -430,6 +557,253 @@ fn editor_response(
         }
         _ => Err((404, "not found".into())),
     }
+}
+
+fn editor_analysis_overlays(
+    state: &EditorState,
+    request: &Value,
+) -> Result<Vec<language_service::SourceOverlay>, (u16, String)> {
+    let extra = match request.get("overlays") {
+        None => &[][..],
+        Some(Value::Array(items)) => items.as_slice(),
+        Some(_) => return Err((400, "overlays must be an array".into())),
+    };
+    if extra.len() >= EDITOR_MAX_ANALYSIS_OVERLAYS {
+        return Err((413, "too many unsaved source overlays".into()));
+    }
+    let mut overlays = Vec::with_capacity(extra.len() + 1);
+    let mut seen = HashSet::new();
+    let mut total_bytes = 0_usize;
+    for item in extra.iter().chain(std::iter::once(request)) {
+        let Some(source) = item.get("source") else {
+            if std::ptr::eq(item, request) {
+                continue;
+            }
+            return Err((400, "overlay source is required".into()));
+        };
+        let relative = item
+            .get("path")
+            .and_then(Value::as_str)
+            .filter(|path| path.ends_with(".zyl"))
+            .ok_or((400, "choose a Zelyra source file".into()))?;
+        let _ = safe_editor_path(&state.root, relative, false)?;
+        let source = source
+            .as_str()
+            .ok_or((400, "overlay source must be UTF-8 text".into()))?;
+        total_bytes = total_bytes.saturating_add(source.len());
+        if source.len() > EDITOR_MAX_FILE_BYTES || total_bytes > EDITOR_MAX_FILE_BYTES {
+            return Err((413, "source overlays exceed the 1 MiB editor limit".into()));
+        }
+        if !seen.insert(relative) {
+            return Err((400, "duplicate source overlay path".into()));
+        }
+        overlays.push(language_service::SourceOverlay {
+            path: relative.into(),
+            text: source.into(),
+            version: item.get("version").and_then(Value::as_i64).unwrap_or(0),
+        });
+    }
+    Ok(overlays)
+}
+
+fn editor_typed_hole(
+    state: &EditorState,
+    value: &Value,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let relative = value
+        .get("path")
+        .and_then(Value::as_str)
+        .filter(|path| path.ends_with(".zyl"))
+        .ok_or((400, "choose a Zelyra source file".into()))?;
+    let _path = safe_editor_path(&state.root, relative, false)?;
+    let source = value
+        .get("source")
+        .and_then(Value::as_str)
+        .ok_or((400, "source is required".into()))?;
+    if source.len() > EDITOR_MAX_FILE_BYTES {
+        return Err((413, "source exceeds the 1 MiB editor limit".into()));
+    }
+    let offset = value
+        .get("offset")
+        .and_then(Value::as_u64)
+        .ok_or((400, "UTF-16 offset is required".into()))?;
+    let entry = state.root.join("main.zyl");
+    if !entry.is_file() {
+        return Err((422, "project entry file main.zyl is missing".into()));
+    }
+    let version = value.get("version").and_then(Value::as_i64).unwrap_or(0);
+    let overlays = editor_analysis_overlays(state, value)?;
+    let analysis = language_service::analyze(&entry, &overlays);
+    let byte_offset = utf16_to_byte(source, usize::try_from(offset).unwrap_or(usize::MAX));
+    let result = language_service::typed_hole_entry(&analysis, relative, byte_offset)
+        .unwrap_or_else(|| json!({"found":false,"version":version}));
+    Ok((200, "application/json; charset=utf-8", result.to_string()))
+}
+
+fn verify_editor_project(
+    state: &EditorState,
+    value: &Value,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let relative = value
+        .get("path")
+        .and_then(Value::as_str)
+        .filter(|path| path.ends_with(".zyl"))
+        .ok_or((400, "choose a Zelyra source file".into()))?;
+    let _path = safe_editor_path(&state.root, relative, false)?;
+    let source = value
+        .get("source")
+        .and_then(Value::as_str)
+        .ok_or((400, "source is required".into()))?;
+    if source.len() > EDITOR_MAX_FILE_BYTES {
+        return Err((413, "source exceeds the 1 MiB editor limit".into()));
+    }
+    let entry = state.root.join("main.zyl");
+    if !entry.is_file() {
+        return Err((422, "project entry file main.zyl is missing".into()));
+    }
+    let version = value.get("version").and_then(Value::as_i64).unwrap_or(0);
+    let overlays = editor_analysis_overlays(state, value)?;
+    let analysis = language_service::analyze(&entry, &overlays);
+    let results = language_service::verification_entries(&analysis);
+    publish_editor_event(
+        state,
+        "verification",
+        relative,
+        value,
+        json!({"success":analysis.success,"diagnostics":analysis.diagnostics,"results":results}),
+    );
+    Ok((
+        200,
+        "application/json; charset=utf-8",
+        json!({
+            "success":analysis.success,"version":version,"diagnostics":analysis.diagnostics,
+            "results":results
+        })
+        .to_string(),
+    ))
+}
+
+fn semantic_editor_query(
+    state: &EditorState,
+    value: &Value,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let relative = value
+        .get("path")
+        .and_then(Value::as_str)
+        .filter(|path| path.ends_with(".zyl"))
+        .ok_or((400, "choose a Zelyra source file".into()))?;
+    let _source_path = safe_editor_path(&state.root, relative, false)?;
+    let source = value
+        .get("source")
+        .and_then(Value::as_str)
+        .ok_or((400, "source is required".into()))?;
+    if source.len() > EDITOR_MAX_FILE_BYTES {
+        return Err((413, "source exceeds the 1 MiB editor limit".into()));
+    }
+    let offset = value
+        .get("offset")
+        .and_then(Value::as_u64)
+        .ok_or((400, "UTF-16 offset is required".into()))?;
+    let action = value
+        .get("action")
+        .and_then(Value::as_str)
+        .ok_or((400, "semantic action is required".into()))?;
+    if !matches!(
+        action,
+        "definition" | "references" | "hover" | "rename-preview"
+    ) {
+        return Err((400, "unsupported semantic action".into()));
+    }
+    let entry = state.root.join("main.zyl");
+    if !entry.is_file() {
+        return Err((422, "project entry file main.zyl is missing".into()));
+    }
+    let overlays = editor_analysis_overlays(state, value)?;
+    let analysis = language_service::analyze(&entry, &overlays);
+    let index = semantic_index::SemanticIndex::from_analysis(&analysis);
+    let byte_offset = utf16_to_byte(source, usize::try_from(offset).unwrap_or(usize::MAX));
+    let selected = index.at(relative, byte_offset).or_else(|| {
+        byte_offset
+            .checked_sub(1)
+            .and_then(|offset| index.at(relative, offset))
+    });
+    let Some(occurrence) = selected else {
+        return Ok((
+            200,
+            "application/json; charset=utf-8",
+            json!({"found":false,"version":value.get("version")}).to_string(),
+        ));
+    };
+    let Some(symbol) = index.symbol(&occurrence.key) else {
+        return Ok((
+            200,
+            "application/json; charset=utf-8",
+            json!({"found":false,"version":value.get("version")}).to_string(),
+        ));
+    };
+    let result = match action {
+        "definition" => {
+            let declaration = &symbol.declaration;
+            let target = analysis
+                .sources
+                .iter()
+                .find(|source| source.path == declaration.path)
+                .ok_or((422, "definition source is unavailable".into()))?;
+            json!({
+                "found":true,"path":declaration.path,
+                "start":byte_to_utf16(&target.text, declaration.start),
+                "end":byte_to_utf16(&target.text, declaration.end),
+                "detail":symbol.detail,"version":value.get("version"),
+            })
+        }
+        "references" => json!({
+            "found":true,"symbol":symbol.name,"version":value.get("version"),
+            "matches":index.references(&symbol.key, true).iter().filter_map(|reference| {
+                let source = analysis.sources.iter().find(|source| source.path == reference.path)?;
+                let prefix = source.text.get(..reference.start)?;
+                let line_start = prefix.rfind('\n').map_or(0, |offset| offset + 1);
+                let line_end = source.text[reference.start..].find('\n').map_or(source.text.len(), |offset| reference.start + offset);
+                Some(json!({
+                    "path":reference.path,
+                    "line":prefix.bytes().filter(|byte| *byte == b'\n').count()+1,
+                    "column":prefix[line_start..].encode_utf16().count()+1,
+                    "snippet":source.text[line_start..line_end].trim(),
+                }))
+            }).collect::<Vec<_>>()
+        }),
+        "rename-preview" => {
+            let replacement = value
+                .get("newName")
+                .and_then(Value::as_str)
+                .ok_or((400, "newName is required".into()))?;
+            let changes = semantic_index::plan_symbol_rename(
+                &entry,
+                &analysis,
+                &index,
+                symbol,
+                replacement,
+                &overlays,
+            )
+            .map_err(|error| (422, error))?;
+            json!({
+                "found":true,"symbol":symbol.name,"newName":replacement,
+                "version":value.get("version"),
+                "changes":changes.iter().map(|change| json!({
+                    "path":change.path,
+                    "before":change.before,
+                    "after":change.after,
+                    "edits":change.edits.iter().map(|edit| json!({
+                        "start":byte_to_utf16(&change.before,edit.start),
+                        "end":byte_to_utf16(&change.before,edit.end),
+                        "newText":edit.replacement,
+                    })).collect::<Vec<_>>(),
+                })).collect::<Vec<_>>()
+            })
+        }
+        "hover" => json!({"found":true,"detail":symbol.detail,"version":value.get("version")}),
+        _ => unreachable!(),
+    };
+    Ok((200, "application/json; charset=utf-8", result.to_string()))
 }
 
 fn editor_symbols(
@@ -604,7 +978,10 @@ fn editor_symbols(
     ))
 }
 
-fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String), (u16, String)> {
+fn editor_project_map(
+    state: &EditorState,
+    request: &Value,
+) -> Result<(u16, &'static str, String), (u16, String)> {
     let mut project_files = Vec::new();
     collect_editor_files(&state.root, &state.root, 0, &mut project_files)?;
     if project_files.len() >= EDITOR_MAX_FILES {
@@ -625,12 +1002,14 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
         }
     }
     let entry = safe_editor_path(&state.root, "main.zyl", false)?;
-    let loaded = project::load(&entry.to_string_lossy()).map_err(|_| {
-        (
+    let overlays = editor_analysis_overlays(state, request)?;
+    let loaded = language_service::analyze(&entry, &overlays);
+    if loaded.program.is_none() {
+        return Err((
             422,
             "project map is unavailable until imported source files parse".into(),
-        )
-    })?;
+        ));
+    }
     let mut nodes = BTreeMap::<String, Value>::new();
     let mut edges = BTreeSet::<(String, String, String)>::new();
     let mut issues = BTreeSet::<String>::new();
@@ -660,6 +1039,18 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
     }
 
     let mut tables_by_name = BTreeMap::<String, Vec<String>>::new();
+    let known_tables = loaded
+        .program
+        .as_ref()
+        .unwrap()
+        .tables
+        .iter()
+        .map(|table| table.name.clone())
+        .collect::<Vec<_>>();
+    let mut records_by_name = BTreeMap::<String, Vec<(String, String, bool)>>::new();
+    let mut forms = Vec::<(String, String)>::new();
+    let mut sql_queries = Vec::<(String, String)>::new();
+    let mut typed_results = Vec::<(String, String, String, bool)>::new();
     let mut cruds = Vec::<(String, String)>::new();
     let mut api_handlers = Vec::<(String, String)>::new();
     let mut functions_by_name = BTreeMap::<String, Vec<String>>::new();
@@ -696,6 +1087,37 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
                     .push(id.clone());
                 edges.insert((module_id.clone(), id, "declares".into()));
             }
+            for record in &program.records {
+                let id = format!("struct:{}:{}", source.path, record.name);
+                node_sink.insert(
+                    &id,
+                    if record.is_class { "class" } else { "struct" },
+                    &record.name,
+                    &source.path,
+                    &source.text,
+                    record.span,
+                );
+                records_by_name
+                    .entry(record.name.clone())
+                    .or_default()
+                    .push((id.clone(), source.path.clone(), record.is_public));
+                edges.insert((module_id.clone(), id, "declares".into()));
+            }
+            for form in &program.forms {
+                let id = format!("form:{}:{}", source.path, form.name);
+                node_sink.insert(
+                    &id,
+                    "form",
+                    &form.name,
+                    &source.path,
+                    &source.text,
+                    form.span,
+                );
+                edges.insert((module_id.clone(), id.clone(), "declares".into()));
+                if let Some(table) = &form.table {
+                    forms.push((id, table.clone()));
+                }
+            }
             for view in &program.views {
                 let id = format!("view:{}:{}", source.path, view.name);
                 node_sink.insert(
@@ -724,6 +1146,31 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
                     tableview.span,
                 );
                 edges.insert((module_id.clone(), id.clone(), "declares".into()));
+                let sql_id = format!("sql:tableview:{}:{}", source.path, tableview.name);
+                let sql_span = tokens
+                    .iter()
+                    .find(|token| {
+                        matches!(token.kind, TokenKind::Sql)
+                            && token.span.start >= tableview.span.start
+                            && token.span.end <= tableview.span.end
+                    })
+                    .map(|token| token.span)
+                    .unwrap_or(tableview.span);
+                node_sink.insert(
+                    &sql_id,
+                    "sql",
+                    &format!("{} query", tableview.name),
+                    &source.path,
+                    &source.text,
+                    sql_span,
+                );
+                edges.insert((module_id.clone(), sql_id.clone(), "declares".into()));
+                edges.insert((sql_id.clone(), id.clone(), "feeds".into()));
+                sql_queries.push((sql_id.clone(), tableview.source.clone()));
+                if let Some(record_name) = project_map_record_name(&tableview.result_type) {
+                    typed_results.push((id.clone(), record_name.into(), source.path.clone(), true));
+                    typed_results.push((sql_id, record_name.into(), source.path.clone(), true));
+                }
                 if let Some(layout) = &tableview.layout {
                     tableview_layouts.push((id, layout.clone(), source.path.clone()));
                 }
@@ -755,6 +1202,28 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
                     page.span,
                 );
                 edges.insert((module_id.clone(), id.clone(), "declares".into()));
+                for data in &page.data {
+                    let sql_id = format!("sql:page:{}:{}:{}", source.path, page.path, data.name);
+                    node_sink.insert(
+                        &sql_id,
+                        "sql",
+                        &format!("{} data", data.name),
+                        &source.path,
+                        &source.text,
+                        data.span,
+                    );
+                    edges.insert((module_id.clone(), sql_id.clone(), "declares".into()));
+                    edges.insert((sql_id.clone(), id.clone(), "feeds".into()));
+                    sql_queries.push((sql_id.clone(), data.query.clone()));
+                    if let Some(record_name) = project_map_record_name(&data.result_type) {
+                        typed_results.push((
+                            sql_id,
+                            record_name.into(),
+                            source.path.clone(),
+                            false,
+                        ));
+                    }
+                }
                 if let Some(view) = &page.view {
                     page_views.push((id, view.clone(), source.path.clone()));
                 }
@@ -770,6 +1239,14 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
                     api.span,
                 );
                 edges.insert((module_id.clone(), id.clone(), "declares".into()));
+                if let Some(record_name) = project_map_record_name(&api.output) {
+                    typed_results.push((
+                        id.clone(),
+                        record_name.into(),
+                        source.path.clone(),
+                        false,
+                    ));
+                }
                 if let Some(handler) = &api.handler {
                     api_handlers.push((id, handler.clone()));
                 }
@@ -790,6 +1267,90 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
                     .or_default()
                     .push(id);
             }
+        }
+    }
+
+    for (form, table) in forms {
+        match tables_by_name.get(&table) {
+            Some(targets) if targets.len() == 1 => {
+                edges.insert((form, targets[0].clone(), "writes table".into()));
+            }
+            _ => {
+                issues.insert("form.table_unresolved".into());
+            }
+        }
+    }
+    for (sql_id, query) in sql_queries {
+        let (operation, accesses) =
+            zelyra_database::sql::analyze_table_access(&query, &known_tables);
+        if operation.is_none() || accesses.is_empty() {
+            issues.insert("sql.access_unresolved".into());
+        }
+        for access in accesses {
+            match tables_by_name.get(&access.table) {
+                Some(targets) if targets.len() == 1 => {
+                    edges.insert((
+                        targets[0].clone(),
+                        sql_id.clone(),
+                        access.mode.as_str().into(),
+                    ));
+                }
+                _ => {
+                    issues.insert("sql.access_unresolved".into());
+                }
+            }
+        }
+    }
+    for (consumer, record_name, source_path, required_record) in typed_results {
+        let (name, owner_path) = if let Some((alias, name)) = record_name.split_once("::") {
+            let owner = loaded
+                .modules
+                .iter()
+                .find(|module| module.path == source_path)
+                .and_then(|module| module.imports.iter().find(|import| import.alias == alias))
+                .map(|import| import.path.as_str());
+            (name, owner)
+        } else {
+            (record_name.as_str(), None)
+        };
+        let imported_paths = loaded
+            .modules
+            .iter()
+            .find(|module| module.path == source_path)
+            .map(|module| {
+                module
+                    .imports
+                    .iter()
+                    .map(|import| import.path.as_str())
+                    .collect::<BTreeSet<_>>()
+            })
+            .unwrap_or_default();
+        let candidates = records_by_name
+            .get(name)
+            .into_iter()
+            .flatten()
+            .filter(|(_, path, public)| {
+                owner_path.map_or_else(
+                    || path == &source_path || (*public && imported_paths.contains(path.as_str())),
+                    |owner| path == owner && *public,
+                )
+            })
+            .collect::<Vec<_>>();
+        match candidates.as_slice() {
+            [(record, _, _)] => {
+                if consumer.starts_with("sql:") {
+                    edges.insert((consumer, record.clone(), "returns".into()));
+                } else {
+                    edges.insert((record.clone(), consumer, "typed as".into()));
+                }
+            }
+            [_, ..] => {
+                issues.insert("struct.ambiguous".into());
+            }
+            [] if required_record => {
+                issues.insert("struct.unresolved".into());
+            }
+            [] => {}
         }
     }
 
@@ -865,6 +1426,17 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
         edges = edges.into_iter().take(1_000).collect();
     }
     let incomplete = !issues.is_empty();
+    let nullability_radar = loaded
+        .diagnostics
+        .iter()
+        .filter(|item| {
+            item["code"] == "E-SQL-004"
+                && item["message"]
+                    .as_str()
+                    .is_some_and(|message| message.contains("may be NULL but is not optional"))
+        })
+        .cloned()
+        .collect::<Vec<_>>();
     Ok((
         200,
         "application/json; charset=utf-8",
@@ -873,9 +1445,24 @@ fn editor_project_map(state: &EditorState) -> Result<(u16, &'static str, String)
             "edges": edges.into_iter().map(|(from, to, label)| json!({"from": from, "to": to, "label": label})).collect::<Vec<_>>(),
             "incomplete": incomplete,
             "issues": issues,
+            "nullabilityRadar": nullability_radar,
+            "version":request.get("version"),
+            "projectSource":"local files",
         })
         .to_string(),
     ))
+}
+
+fn project_map_record_name(ty: &zelyra_ast::Type) -> Option<&str> {
+    use zelyra_ast::Type;
+    match ty {
+        Type::Named(name) | Type::Applied { name, .. } => Some(name),
+        Type::Array(inner)
+        | Type::Option(inner)
+        | Type::HttpResult(inner)
+        | Type::Result(inner, _) => project_map_record_name(inner),
+        _ => None,
+    }
 }
 
 struct ProjectMapNodeSink<'a> {
@@ -964,20 +1551,7 @@ fn local_editor_symbols(
     let byte_offset = utf16_to_byte(source, usize::try_from(offset).unwrap_or(usize::MAX));
     let tokens = lex(source).map_err(|_| (422, "source is not parseable yet".into()))?;
     let program = parse(&tokens).map_err(|_| (422, "source is not parseable yet".into()))?;
-    let mut locals = Vec::new();
-    if let Some(function) = program.functions.iter().find(|function| {
-        function.body.span.start <= byte_offset && byte_offset <= function.body.span.end
-    }) {
-        for parameter in &function.params {
-            locals.push(json!({
-                "label": parameter.name,
-                "kind": "variable",
-                "detail": "parameter",
-                "valueType": parameter.ty.to_string(),
-            }));
-        }
-        collect_visible_bindings(&function.body, byte_offset, &mut locals);
-    }
+    let locals = semantic_index::visible_local_symbols(&program, 0, byte_offset);
     Ok((
         200,
         "application/json; charset=utf-8",
@@ -997,87 +1571,6 @@ fn utf16_to_byte(source: &str, requested: usize) -> usize {
         }
     }
     source.len()
-}
-
-fn collect_visible_bindings(block: &zelyra_ast::Block, offset: usize, output: &mut Vec<Value>) {
-    if offset < block.span.start || offset > block.span.end {
-        return;
-    }
-    for statement in &block.statements {
-        match statement {
-            zelyra_ast::Stmt::Let { name, ty, span, .. } if span.start < offset => {
-                output.push(json!({
-                    "label": name,
-                    "kind": "variable",
-                    "detail": "local value",
-                    "valueType": ty.as_ref().map(ToString::to_string),
-                }))
-            }
-            zelyra_ast::Stmt::If {
-                then_block,
-                else_block,
-                span,
-                ..
-            } if span.start < offset => {
-                collect_visible_bindings(then_block, offset, output);
-                if let Some(block) = else_block {
-                    collect_visible_bindings(block, offset, output);
-                }
-            }
-            zelyra_ast::Stmt::While { body, span, .. }
-            | zelyra_ast::Stmt::Loop { body, span, .. }
-            | zelyra_ast::Stmt::Transaction { body, span }
-            | zelyra_ast::Stmt::Parallel { body, span }
-                if span.start < offset =>
-            {
-                collect_visible_bindings(body, offset, output);
-            }
-            zelyra_ast::Stmt::For {
-                name,
-                additional_names,
-                body,
-                span,
-                ..
-            } if span.start < offset && body.span.start <= offset && offset <= body.span.end => {
-                for name in std::iter::once(name).chain(additional_names) {
-                    output.push(json!({
-                        "label": name,
-                        "kind": "variable",
-                        "detail": "loop value",
-                        "valueType": Value::Null,
-                    }));
-                }
-                collect_visible_bindings(body, offset, output);
-            }
-            zelyra_ast::Stmt::Match { arms, span, .. } if span.start < offset => {
-                for arm in arms
-                    .iter()
-                    .filter(|arm| arm.span.start <= offset && offset <= arm.span.end)
-                {
-                    collect_pattern_bindings(&arm.pattern, output);
-                    collect_visible_bindings(&arm.body, offset, output);
-                }
-            }
-            _ => {}
-        }
-    }
-}
-
-fn collect_pattern_bindings(pattern: &zelyra_ast::Pattern, output: &mut Vec<Value>) {
-    match &pattern.kind {
-        zelyra_ast::PatternKind::Variable(name) => output.push(json!({
-            "label": name,
-            "kind": "variable",
-            "detail": "match value",
-            "valueType": Value::Null,
-        })),
-        zelyra_ast::PatternKind::Constructor {
-            inner: Some(inner), ..
-        } => {
-            collect_pattern_bindings(inner, output);
-        }
-        _ => {}
-    }
 }
 
 fn editor_database_schemas(
@@ -2494,6 +2987,21 @@ fn validate_editor_candidate(
     target: &str,
     candidate: &str,
 ) -> Result<(bool, Vec<Value>), (u16, String)> {
+    if safe_editor_path(&state.root, target, false).is_ok() {
+        let entry = state.root.join("main.zyl");
+        if !entry.is_file() {
+            return Err((422, "project entry file main.zyl is missing".into()));
+        }
+        let analysis = language_service::analyze(
+            &entry,
+            &[language_service::SourceOverlay {
+                path: target.to_owned(),
+                text: candidate.to_owned(),
+                version: 0,
+            }],
+        );
+        return Ok((analysis.success, analysis.diagnostics));
+    }
     let cleanup = create_editor_preview_directory()?;
     let temporary_root = cleanup.0.clone();
     let mut file_count = 0;
@@ -3121,10 +3629,82 @@ fn write_existing_file(
             .map_err(|_| (500, "could not atomically replace file".into()))?;
     }
     let hash = content_hash(content.as_bytes());
+    state
+        .events
+        .changed(relative, if create { "create" } else { "save" });
     Ok((
         200,
         "application/json; charset=utf-8",
         json!({"path": relative, "content": content, "hash": hash}).to_string(),
+    ))
+}
+
+fn save_editor_files_batch(
+    state: &EditorState,
+    request: Value,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let files = request
+        .get("files")
+        .and_then(Value::as_array)
+        .ok_or((400, "files must be an array".into()))?;
+    if files.is_empty() || files.len() > EDITOR_MAX_ANALYSIS_OVERLAYS {
+        return Err((400, "save batch must contain between 1 and 16 files".into()));
+    }
+    let mut seen = HashSet::new();
+    let mut total_bytes = 0_usize;
+    let mut changes = Vec::new();
+    let mut saved = Vec::new();
+    for item in files {
+        let relative = item
+            .get("path")
+            .and_then(Value::as_str)
+            .ok_or((400, "each saved file needs a path".into()))?;
+        if !seen.insert(relative) {
+            return Err((400, "save batch contains a duplicate path".into()));
+        }
+        let path = safe_editor_path(&state.root, relative, false)?;
+        let content = item
+            .get("content")
+            .and_then(Value::as_str)
+            .ok_or((400, "file content must be text".into()))?;
+        total_bytes = total_bytes.saturating_add(content.len());
+        if content.len() > EDITOR_MAX_FILE_BYTES || total_bytes > EDITOR_MAX_FILE_BYTES {
+            return Err((413, "save batch exceeds the 1 MiB source limit".into()));
+        }
+        let base_hash = item
+            .get("baseHash")
+            .and_then(Value::as_str)
+            .ok_or((400, "each saved file needs a baseHash".into()))?;
+        let before = fs::read(&path).map_err(|_| (404, "file not found".into()))?;
+        if content_hash(&before) != base_hash {
+            return Err((
+                409,
+                format!("`{relative}` changed on disk; reload it before saving"),
+            ));
+        }
+        let after = content.as_bytes().to_vec();
+        if before != after {
+            let create_mode =
+                editor_transactions::file_mode(&path).map_err(|error| (500, error))?;
+            changes.push(editor_transactions::FileChange {
+                path: relative.into(),
+                before: Some(before),
+                after: Some(after.clone()),
+                create_mode,
+            });
+        }
+        saved.push(json!({"path":relative,"content":content,"hash":content_hash(&after)}));
+    }
+    editor_transactions::apply(&state.root, &changes).map_err(|error| (500, error))?;
+    for item in &saved {
+        if let Some(path) = item.get("path").and_then(Value::as_str) {
+            state.events.changed(path, "save");
+        }
+    }
+    Ok((
+        200,
+        "application/json; charset=utf-8",
+        json!({"files":saved,"transactional":true}).to_string(),
     ))
 }
 
@@ -3153,10 +3733,10 @@ fn protected_editor_file(relative: &str) -> bool {
     matches!(relative, "main.zyl" | "zelyra.toml")
 }
 
-fn rename_editor_file(
+fn file_rename_plan(
     state: &EditorState,
-    value: Value,
-) -> Result<(u16, &'static str, String), (u16, String)> {
+    value: &Value,
+) -> Result<(Vec<editor_transactions::FileChange>, Value, String), (u16, String)> {
     let relative = value
         .get("path")
         .and_then(Value::as_str)
@@ -3171,39 +3751,210 @@ fn rename_editor_file(
             "the project entry file and project configuration cannot be renamed".into(),
         ));
     }
-    let source = editor_file_hash(state, relative, "baseHash", &value)?;
+    let source = editor_file_hash(state, relative, "baseHash", value)?;
     let target = safe_editor_path(&state.root, new_relative, true)?;
     if source == target {
         return Err((400, "newPath must differ from path".into()));
     }
-    // hard_link creates the destination atomically only when it does not exist,
-    // so a concurrent file cannot be silently overwritten by a rename.
-    fs::hard_link(&source, &target).map_err(|error| {
-        if error.kind() == io::ErrorKind::AlreadyExists {
-            (409, "destination file already exists".into())
-        } else {
-            (500, "could not create renamed file; source and destination must be on the same filesystem".into())
+    if target.exists() {
+        return Err((409, "destination file already exists".into()));
+    }
+    if !source.is_file() {
+        return Err((404, "source file not found".into()));
+    }
+    let source_bytes = fs::read(&source).map_err(|_| (404, "source file not found".into()))?;
+    let source_mode = editor_transactions::file_mode(&source).map_err(|error| (500, error))?;
+    let mut files = vec![
+        editor_transactions::FileChange {
+            path: relative.to_owned(),
+            before: Some(source_bytes.clone()),
+            after: None,
+            create_mode: source_mode,
+        },
+        editor_transactions::FileChange {
+            path: new_relative.to_owned(),
+            before: None,
+            after: Some(source_bytes.clone()),
+            create_mode: source_mode,
+        },
+    ];
+    let mut affected = Vec::new();
+    if relative.ends_with(".zyl") && new_relative.ends_with(".zyl") {
+        let mut paths = Vec::new();
+        collect_editor_files(&state.root, &state.root, 0, &mut paths)?;
+        if paths.len() >= EDITOR_MAX_FILES {
+            return Err((
+                413,
+                "project source inventory reached the rename safety limit".into(),
+            ));
         }
-    })?;
-    let renamed =
-        fs::read(&target).map_err(|_| (500, "renamed file could not be verified".into()))?;
-    if content_hash(&renamed) != value["baseHash"].as_str().unwrap_or_default() {
-        let _ = fs::remove_file(&target);
+        for import_path in paths
+            .into_iter()
+            .filter(|path| path.ends_with(".zyl") && path != relative)
+        {
+            let path = safe_editor_path(&state.root, &import_path, false)?;
+            let bytes =
+                fs::read(&path).map_err(|_| (500, format!("could not read `{import_path}`")))?;
+            let text = std::str::from_utf8(&bytes)
+                .map_err(|_| (415, format!("`{import_path}` is not UTF-8 text")))?;
+            let tokens = lex(text).map_err(|error| {
+                (
+                    422,
+                    format!("cannot safely inspect imports in `{import_path}`: {error:?}"),
+                )
+            })?;
+            let mut edits = Vec::new();
+            let mut index = 0;
+            while index < tokens.len() {
+                if tokens[index].kind != TokenKind::Import {
+                    index += 1;
+                    continue;
+                }
+                let mut next = index + 1;
+                while matches!(
+                    tokens.get(next).map(|token| &token.kind),
+                    Some(TokenKind::Newline | TokenKind::Semicolon)
+                ) {
+                    next += 1;
+                }
+                let Some(token) = tokens.get(next) else { break };
+                if let TokenKind::String(imported) = &token.kind {
+                    if imported == relative {
+                        let replacement = serde_json::to_string(new_relative)
+                            .map_err(|_| (500, "could not encode the new module path".into()))?;
+                        edits.push((token.span.start, token.span.end, replacement));
+                    }
+                }
+                index += 1;
+            }
+            if !edits.is_empty() {
+                let mut updated = text.to_owned();
+                for (start, end, replacement) in edits.iter().rev() {
+                    if *end > updated.len()
+                        || *start > *end
+                        || !updated.is_char_boundary(*start)
+                        || !updated.is_char_boundary(*end)
+                    {
+                        return Err((
+                            422,
+                            format!("invalid import source span in `{import_path}`"),
+                        ));
+                    }
+                    updated.replace_range(*start..*end, replacement);
+                }
+                if updated.len() > EDITOR_MAX_FILE_BYTES {
+                    return Err((
+                        413,
+                        format!("updated imports make `{import_path}` exceed the 1 MiB limit"),
+                    ));
+                }
+                let mode = editor_transactions::file_mode(&path).map_err(|error| (500, error))?;
+                files.push(editor_transactions::FileChange {
+                    path: import_path.clone(),
+                    before: Some(bytes),
+                    after: Some(updated.into_bytes()),
+                    create_mode: mode,
+                });
+                affected.push(import_path);
+            }
+        }
+    }
+    // Validate the complete moved project with the compiler before offering a preview.
+    let cleanup = create_editor_preview_directory()?;
+    let temporary_root = cleanup.0.clone();
+    let mut count = 0;
+    copy_editor_sources(&state.root, &state.root, &temporary_root, 0, &mut count)?;
+    for change in &files {
+        let path = temporary_root.join(&change.path);
+        if let Some(content) = &change.after {
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent)
+                    .map_err(|_| (500, "could not prepare rename validation".into()))?;
+            }
+            fs::write(path, content)
+                .map_err(|_| (500, "could not write rename validation source".into()))?;
+        } else if path.exists() {
+            fs::remove_file(path).map_err(|_| (500, "could not prepare renamed project".into()))?;
+        }
+    }
+    let entry = temporary_root.join("main.zyl");
+    let entry_text = fs::read_to_string(&entry)
+        .map_err(|_| (422, "project entry main.zyl is missing or not UTF-8".into()))?;
+    begin_json_diagnostics(&entry.to_string_lossy(), &entry_text);
+    if validate(&entry.to_string_lossy()).is_err() {
+        let diagnostics = finish_json_diagnostics();
         return Err((
-            409,
-            "file changed during rename; reload it before retrying".into(),
+            422,
+            format!(
+                "compiler rejected the renamed project: {}",
+                diagnostics
+                    .iter()
+                    .filter_map(|item| item.get("message").and_then(Value::as_str))
+                    .take(3)
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            ),
         ));
     }
-    if fs::remove_file(&source).is_err() {
-        let _ = fs::remove_file(&target);
-        return Err((500, "could not finish file rename".into()));
+    let _ = finish_json_diagnostics();
+    let mut material = files.iter().map(|change| json!({"path":change.path,"before":change.before.as_deref().map(content_hash),"after":change.after.as_deref().map(content_hash)})).collect::<Vec<_>>();
+    material.sort_by_key(|item| item["path"].as_str().unwrap_or_default().to_owned());
+    let fingerprint = content_hash(
+        serde_json::to_string(&material)
+            .unwrap_or_default()
+            .as_bytes(),
+    );
+    let preview = json!({"path":relative,"newPath":new_relative,"updatedImports":affected,"importCount":affected.len(),"planId":fingerprint});
+    Ok((files, preview, fingerprint))
+}
+
+fn preview_editor_file_rename(
+    state: &EditorState,
+    value: Value,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let (_, preview, _) = file_rename_plan(state, &value)?;
+    Ok((200, "application/json; charset=utf-8", preview.to_string()))
+}
+
+fn rename_editor_file(
+    state: &EditorState,
+    value: Value,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let (files, preview, fingerprint) = file_rename_plan(state, &value)?;
+    if value.get("planId").and_then(Value::as_str) != Some(fingerprint.as_str()) {
+        return Err((409, "rename preview is stale; create a new preview".into()));
     }
-    Ok((
-        200,
-        "application/json; charset=utf-8",
-        json!({"path": relative, "newPath": new_relative, "hash": content_hash(&renamed)})
-            .to_string(),
-    ))
+    editor_transactions::apply(&state.root, &files).map_err(|error| (409, error))?;
+    let relative = preview["path"].as_str().unwrap_or_default();
+    let new_relative = preview["newPath"].as_str().unwrap_or_default();
+    let hash = files
+        .iter()
+        .find(|change| change.path == new_relative)
+        .and_then(|change| change.after.as_deref())
+        .map(content_hash)
+        .unwrap_or_default();
+    let updated_imports = preview["updatedImports"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let updated_files = files
+        .iter()
+        .filter(|change| {
+            updated_imports
+                .iter()
+                .any(|path| path.as_str() == Some(change.path.as_str()))
+        })
+        .filter_map(|change| {
+            let content = String::from_utf8(change.after.clone()?).ok()?;
+            Some(json!({"path":change.path,"content":content,"hash":content_hash(content.as_bytes())}))
+        })
+        .collect::<Vec<_>>();
+    state.events.changed(relative, "rename");
+    state.events.changed(new_relative, "create");
+    for importer in updated_imports.iter().filter_map(Value::as_str) {
+        state.events.changed(importer, "save");
+    }
+    Ok((200, "application/json; charset=utf-8", json!({"path":relative,"newPath":new_relative,"hash":hash,"updatedImports":updated_imports,"updatedFiles":updated_files}).to_string()))
 }
 
 fn delete_editor_file(
@@ -3222,11 +3973,36 @@ fn delete_editor_file(
     }
     let path = editor_file_hash(state, relative, "baseHash", &value)?;
     fs::remove_file(&path).map_err(|_| (500, "could not delete file".into()))?;
+    state.events.changed(relative, "delete");
     Ok((
         200,
         "application/json; charset=utf-8",
         json!({"path": relative, "deleted": true}).to_string(),
     ))
+}
+
+fn publish_editor_event(
+    state: &EditorState,
+    kind: &str,
+    path: &str,
+    request: &Value,
+    payload: Value,
+) {
+    let version = request.get("version").and_then(Value::as_i64);
+    let client_id = request
+        .get("clientId")
+        .and_then(Value::as_str)
+        .filter(|id| {
+            id.len() <= 64
+                && id
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+        });
+    state.events.publish(json!({
+        "schema":1,"kind":kind,
+        "document":{"path":path,"version":version,"clientId":client_id},
+        "workspaceRevision":state.events.revision(),"payload":payload
+    }));
 }
 
 fn check_project(
@@ -3248,8 +4024,28 @@ fn check_project(
         .unwrap_or_else(|| {
             fs::read_to_string(&path).map_err(|_| (415, "entry file is not UTF-8 text".into()))
         })?;
-    if value.get("source").and_then(Value::as_str).is_some() {
-        let (success, diagnostics) = validate_editor_candidate(state, entry, &source)?;
+    publish_editor_event(
+        state,
+        "analysis.progress",
+        entry,
+        value,
+        json!({"phase":"started"}),
+    );
+    if value.get("source").is_some() || value.get("overlays").is_some() {
+        let overlays = editor_analysis_overlays(state, value)?;
+        let project_entry = state.root.join("main.zyl");
+        if !project_entry.is_file() {
+            return Err((422, "project entry file main.zyl is missing".into()));
+        }
+        let analysis = language_service::analyze(&project_entry, &overlays);
+        let (success, diagnostics) = (analysis.success, analysis.diagnostics);
+        publish_editor_event(
+            state,
+            "diagnostics",
+            entry,
+            value,
+            json!({"success":success,"diagnostics":diagnostics}),
+        );
         return Ok((
             200,
             "application/json; charset=utf-8",
@@ -3288,6 +4084,13 @@ fn check_project(
             item
         })
         .collect::<Vec<_>>();
+    publish_editor_event(
+        state,
+        "diagnostics",
+        entry,
+        value,
+        json!({"success":success,"diagnostics":diagnostics}),
+    );
     Ok((
         200,
         "application/json; charset=utf-8",
@@ -3321,10 +4124,61 @@ pub(super) fn zelyra_executable() -> Result<PathBuf, (u16, String)> {
     Err((500, "could not locate the running Zelyra CLI".into()))
 }
 
+fn runtime_profile(
+    state: &EditorState,
+    value: &Value,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let relative = value
+        .get("path")
+        .and_then(Value::as_str)
+        .filter(|path| path.ends_with(".zyl"))
+        .ok_or((400, "choose a Zelyra source file".into()))?;
+    let _path = safe_editor_path(&state.root, relative, false)?;
+    let entry = state.root.join("main.zyl");
+    if !entry.is_file() {
+        return Err((422, "project entry file main.zyl is missing".into()));
+    }
+    let source = value.get("source").and_then(Value::as_str);
+    if source.is_some_and(|text| text.len() > EDITOR_MAX_FILE_BYTES) {
+        return Err((413, "source exceeds the 1 MiB editor limit".into()));
+    }
+    let version = value.get("version").and_then(Value::as_i64).unwrap_or(0);
+    let overlays = editor_analysis_overlays(state, value)?;
+    let analysis = language_service::analyze(&entry, &overlays);
+    let index = semantic_index::SemanticIndex::from_analysis(&analysis);
+    let (recursion_risks, recursion_incomplete) = index.recursion_risks(&analysis);
+    let configured_depth =
+        super::project_max_stack_depth(&entry.to_string_lossy()).map_err(|error| (422, error))?;
+    Ok((
+        200,
+        "application/json; charset=utf-8",
+        json!({
+            "path":relative,"version":version,"success":analysis.success,
+            "maxStackDepth":configured_depth.unwrap_or(20),
+            "configured":configured_depth.is_some(),
+            "recursionRisks":recursion_risks,"recursionAnalysisIncomplete":recursion_incomplete,
+            "diagnostics":analysis.diagnostics,
+        })
+        .to_string(),
+    ))
+}
+
 fn run_editor_program(
     state: &EditorState,
     value: &Value,
 ) -> Result<(u16, &'static str, String), (u16, String)> {
+    const MAX_STUDIO_STEPS: u64 = 100_000_000;
+    let max_steps = match value.get("maxSteps") {
+        None | Some(Value::Null) => None,
+        Some(raw) => Some(
+            raw.as_u64()
+                .filter(|steps| (1..=MAX_STUDIO_STEPS).contains(steps))
+                .ok_or((
+                    400,
+                    "maxSteps must be an integer from 1 through 100000000".into(),
+                ))?,
+        ),
+    };
     let relative = value
         .get("path")
         .and_then(Value::as_str)
@@ -3338,6 +4192,11 @@ fn run_editor_program(
     {
         return Err((413, "entry file exceeds the 1 MiB editor limit".into()));
     }
+    if !acquire_editor_connection_limit(&state.active_runs, 1) {
+        return Err((429, "another Studio program run is already active".into()));
+    }
+    let _run_slot = EditorConnection(Arc::clone(&state.active_runs));
+    state.run_cancel.store(false, Ordering::Release);
     if let Ok(project) = project::load(&path.to_string_lossy()) {
         let program = project.program;
         let database_name = program
@@ -3371,9 +4230,12 @@ fn run_editor_program(
         &format!("starting program {relative}"),
     );
     let executable = zelyra_executable()?;
-    let mut child = Command::new(executable)
-        .arg("run")
-        .arg(relative)
+    let mut command = Command::new(executable);
+    command.arg("run").arg(relative);
+    if let Some(steps) = max_steps {
+        command.arg("--max-steps").arg(steps.to_string());
+    }
+    let mut child = command
         .current_dir(&state.root)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -3406,12 +4268,20 @@ fn run_editor_program(
     let started = std::time::Instant::now();
     let timeout = Duration::from_secs(15);
     let mut timed_out = false;
+    let mut cancelled = false;
     let status = loop {
         if let Some(status) = child
             .try_wait()
             .map_err(|_| (500, "could not read program status".into()))?
         {
             break status;
+        }
+        if state.run_cancel.load(Ordering::Acquire) {
+            cancelled = true;
+            let _ = child.kill();
+            break child
+                .wait()
+                .map_err(|_| (500, "could not cancel the program".into()))?;
         }
         if started.elapsed() >= timeout {
             timed_out = true;
@@ -3426,6 +4296,7 @@ fn run_editor_program(
     let (stderr, stderr_truncated) = collect_editor_output(stderr_reader);
     let stdout = redact_editor_secrets(String::from_utf8_lossy(&stdout).into_owned(), &secrets);
     let stderr = redact_editor_secrets(String::from_utf8_lossy(&stderr).into_owned(), &secrets);
+    let budget_exceeded = stderr.contains("execution step budget exceeded");
     Ok((
         200,
         "application/json; charset=utf-8",
@@ -3433,12 +4304,27 @@ fn run_editor_program(
             "success": status.success() && !timed_out,
             "exitCode": status.code(),
             "timedOut": timed_out,
+            "cancelled":cancelled,
+            "maxSteps": max_steps,
+            "budgetExceeded": budget_exceeded,
             "durationMs": started.elapsed().as_millis(),
             "stdout": stdout,
             "stderr": stderr,
             "truncated": stdout_truncated || stderr_truncated,
         })
         .to_string(),
+    ))
+}
+
+fn cancel_editor_run(state: &EditorState) -> Result<(u16, &'static str, String), (u16, String)> {
+    let running = state.active_runs.load(Ordering::Acquire) > 0;
+    if running {
+        state.run_cancel.store(true, Ordering::Release);
+    }
+    Ok((
+        200,
+        "application/json; charset=utf-8",
+        json!({"cancelRequested":running}).to_string(),
     ))
 }
 
@@ -3622,6 +4508,12 @@ fn start_editor_web_app(
         }
         if TcpStream::connect_timeout(&address, Duration::from_millis(100)).is_ok() {
             *current = Some(child);
+            state.events.publish(json!({
+                "schema":1,"kind":"preview.changed",
+                "document":{"path":relative,"version":null},
+                "workspaceRevision":state.events.revision(),
+                "payload":{"running":true,"url":preview_url}
+            }));
             return Ok((
                 200,
                 "application/json; charset=utf-8",
@@ -3699,6 +4591,14 @@ fn stop_editor_web_app(state: &EditorState) -> Result<(u16, &'static str, String
     } else {
         false
     };
+    if stopped {
+        state.events.publish(json!({
+            "schema":1,"kind":"preview.changed",
+            "document":{"path":"main.zyl","version":null},
+            "workspaceRevision":state.events.revision(),
+            "payload":{"running":false}
+        }));
+    }
     Ok((
         200,
         "application/json; charset=utf-8",
@@ -4068,7 +4968,7 @@ fn write_editor_response(
         422 => "Unprocessable Content",
         _ => "Internal Server Error",
     };
-    let csp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'";
+    let csp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' blob:; img-src 'self' data:; font-src 'self'; frame-src blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'";
     write!(stream, "HTTP/1.1 {status} {reason}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\nCross-Origin-Resource-Policy: same-origin\r\nX-Frame-Options: DENY\r\nContent-Security-Policy: {csp}\r\n\r\n", body.len())?;
     stream.write_all(body.as_bytes())?;
     stream.flush()
@@ -4088,6 +4988,63 @@ mod tests {
         assert_eq!(active.load(Ordering::Acquire), EDITOR_MAX_CONNECTIONS);
         assert!(!acquire_editor_connection(&active));
         assert_eq!(active.load(Ordering::Acquire), EDITOR_MAX_CONNECTIONS);
+    }
+
+    #[test]
+    fn event_stream_requires_session_and_rejects_foreign_origin() {
+        let state = project();
+        let path = "/__zelyra/editor/api/events";
+        assert_eq!(
+            authorize_editor_event_request(&request("GET", path, &[]), &state),
+            Err((403, "invalid editor session"))
+        );
+        assert_eq!(
+            authorize_editor_event_request(
+                &request(
+                    "GET",
+                    path,
+                    &[
+                        ("x-zelyra-editor-token", "local-session-token"),
+                        ("origin", "https://attacker.invalid"),
+                    ]
+                ),
+                &state
+            ),
+            Err((403, "event stream must come from the editor origin"))
+        );
+        assert_eq!(
+            authorize_editor_event_request(
+                &request(
+                    "GET",
+                    path,
+                    &[
+                        ("x-zelyra-editor-token", "local-session-token"),
+                        ("sec-fetch-site", "cross-site"),
+                    ]
+                ),
+                &state
+            ),
+            Err((403, "event stream must come from the editor origin"))
+        );
+        assert!(authorize_editor_event_request(
+            &request(
+                "GET",
+                path,
+                &[
+                    ("x-zelyra-editor-token", "local-session-token"),
+                    ("origin", "http://127.0.0.1:4177"),
+                    ("sec-fetch-site", "same-origin"),
+                ]
+            ),
+            &state
+        )
+        .is_ok());
+        let active = AtomicUsize::new(EDITOR_MAX_EVENT_STREAMS);
+        assert!(!acquire_editor_connection_limit(
+            &active,
+            EDITOR_MAX_EVENT_STREAMS
+        ));
+        fs::remove_dir_all(state.root.clone()).unwrap();
     }
 
     #[test]
@@ -4143,7 +5100,7 @@ fn main() {}
 
         let entry = state.root.join("main.zyl");
         project::load(&entry.to_string_lossy()).expect("test project should load");
-        let (_, _, body) = editor_project_map(&state).expect("build project map");
+        let (_, _, body) = editor_project_map(&state, &json!({})).expect("build project map");
         let map: Value = serde_json::from_str(&body).expect("parse project map JSON");
         assert_eq!(map["incomplete"], false);
         assert_eq!(map["issues"], json!([]));
@@ -4173,7 +5130,8 @@ fn main() {}
 "#,
         )
         .expect("write unresolved-view fixture");
-        let (_, _, body) = editor_project_map(&state).expect("build incomplete project map");
+        let (_, _, body) =
+            editor_project_map(&state, &json!({})).expect("build incomplete project map");
         let incomplete: Value = serde_json::from_str(&body).expect("parse project map JSON");
         assert_eq!(incomplete["incomplete"], true);
         assert!(incomplete["issues"]
@@ -4181,6 +5139,94 @@ fn main() {}
             .expect("issues")
             .contains(&json!("view.unresolved")));
         let _ = fs::remove_dir_all(state.root.clone());
+    }
+
+    #[test]
+    fn project_map_links_sql_tables_and_structs_and_reports_compiler_nullability() {
+        let state = project();
+        let source = "database main { engine: mariadb }\ntable items { id: Id primary auto name: String? }\nstruct ItemRow { id: Id name: String? }\ntableview Items { source sql<ItemRow[]> { SELECT id, name FROM items } columns { id name } }\ntableview ItemsAgain { source sql<ItemRow[]> { SELECT id, name FROM items } columns { id name } }\n";
+        fs::write(state.root.join("main.zyl"), source).unwrap();
+        let changed = source.replace("name: String? }\ntableview", "name: String }\ntableview");
+        let (_, _, body) = editor_project_map(
+            &state,
+            &json!({
+                "path":"main.zyl","source":changed,"version":9
+            }),
+        )
+        .unwrap();
+        let map: Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(map["version"], 9);
+        let edges = map["edges"].as_array().unwrap();
+        assert!(
+            edges
+                .iter()
+                .any(|edge| edge["from"] == "table:main.zyl:items"
+                    && edge["to"] == "sql:tableview:main.zyl:Items"),
+            "{edges:?}"
+        );
+        assert!(
+            edges
+                .iter()
+                .any(|edge| edge["from"] == "table:main.zyl:items"
+                    && edge["to"] == "sql:tableview:main.zyl:ItemsAgain"),
+            "{edges:?}"
+        );
+        assert!(
+            edges
+                .iter()
+                .any(|edge| edge["from"] == "struct:main.zyl:ItemRow"
+                    && edge["to"] == "tableview:main.zyl:Items"),
+            "{edges:?}"
+        );
+        assert!(map["nullabilityRadar"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|warning| warning["code"] == "E-SQL-004"));
+        assert_eq!(
+            fs::read_to_string(state.root.join("main.zyl")).unwrap(),
+            source
+        );
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn project_map_tracks_cross_file_table_consumers_in_unsaved_module() {
+        let state = project();
+        fs::create_dir_all(state.root.join("src")).unwrap();
+        fs::write(
+            state.root.join("main.zyl"),
+            "import \"src/report.zyl\" as report\nfn main() {}\n",
+        )
+        .unwrap();
+        fs::write(state.root.join("src/data.zyl"),
+            "database main { engine: mariadb }\ntable items { id: Id primary auto name: String required }\n").unwrap();
+        let saved = "import \"src/data.zyl\" as data\nstruct ItemRow { id: Id name: String }\ntableview Items { source sql<ItemRow[]> { SELECT id, name FROM items } columns { id name } }\n";
+        fs::write(state.root.join("src/report.zyl"), saved).unwrap();
+        let unsaved = format!("{saved}tableview ItemsAgain {{ source sql<ItemRow[]> {{ SELECT id, name FROM items }} columns {{ id name }} }}\n");
+        let (_, _, body) = editor_project_map(
+            &state,
+            &json!({
+                "path":"src/report.zyl","source":unsaved,"version":3
+            }),
+        )
+        .unwrap();
+        let map: Value = serde_json::from_str(&body).unwrap();
+        let edges = map["edges"].as_array().unwrap();
+        for view in ["Items", "ItemsAgain"] {
+            assert!(
+                edges
+                    .iter()
+                    .any(|edge| edge["from"] == "table:src/data.zyl:items"
+                        && edge["to"] == format!("sql:tableview:src/report.zyl:{view}")),
+                "{edges:?}"
+            );
+        }
+        assert_eq!(
+            fs::read_to_string(state.root.join("src/report.zyl")).unwrap(),
+            saved
+        );
+        fs::remove_dir_all(state.root.clone()).unwrap();
     }
 
     fn project() -> EditorState {
@@ -4198,7 +5244,436 @@ fn main() {}
             token: "local-session-token".into(),
             authority: "127.0.0.1:4177".into(),
             web_process: Arc::new(std::sync::Mutex::new(None)),
+            events: Arc::new(EventHub::default()),
+            active_event_streams: Arc::new(AtomicUsize::new(0)),
+            active_runs: Arc::new(AtomicUsize::new(0)),
+            run_cancel: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    #[test]
+    fn pdf_preview_renders_real_bytes_from_unsaved_view_without_running_main() {
+        let state = project();
+        let disk =
+            "view InvoicePrint { html { <h1>Disk {number}</h1> } } fn main() { assert(false) }";
+        let overlay =
+            "view InvoicePrint { html { <h1>Overlay {number}</h1> } } fn main() { assert(false) }";
+        fs::write(state.root.join("main.zyl"), disk).unwrap();
+        let request = json!({"view":"InvoicePrint","record":{"number":"R-104"},"path":"main.zyl","source":overlay});
+        let (_, _, body) = editor_pdf::render(&state, &request).unwrap();
+        let response: Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(response["mimeType"], "application/pdf");
+        assert!(response["bytes"].as_u64().unwrap() > 500);
+        assert!(response["base64"].as_str().unwrap().starts_with("JVBERi0"));
+        assert_eq!(
+            fs::read_to_string(state.root.join("main.zyl")).unwrap(),
+            disk
+        );
+        let (_, _, disk_body) = editor_pdf::render(
+            &state,
+            &json!({"view":"InvoicePrint","record":{"number":"R-104"}}),
+        )
+        .unwrap();
+        assert_ne!(body, disk_body);
+    }
+
+    #[test]
+    fn pdf_preview_rejects_invalid_data_unknown_views_and_escaping_paths() {
+        let state = project();
+        fs::write(
+            state.root.join("main.zyl"),
+            "view Receipt { html { <h1>Receipt</h1> } }",
+        )
+        .unwrap();
+        assert_eq!(
+            editor_pdf::render(&state, &json!({"view":"Receipt","record":[]}))
+                .unwrap_err()
+                .0,
+            400
+        );
+        assert_eq!(
+            editor_pdf::render(&state, &json!({"view":"Other","record":{}}))
+                .unwrap_err()
+                .0,
+            404
+        );
+        assert!(editor_pdf::render(
+            &state,
+            &json!({"view":"Receipt","record":{},"path":"../outside.zyl","source":""})
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn pdf_preview_api_requires_session_and_same_origin() {
+        let state = project();
+        let list = request("GET", "/__zelyra/editor/api/pdf-views", &[]);
+        assert_eq!(editor_response(&list, &state).unwrap_err().0, 403);
+        let render = request(
+            "POST",
+            "/__zelyra/editor/api/pdf-render",
+            &[
+                ("x-zelyra-editor-token", state.token.as_str()),
+                ("origin", "http://example.test"),
+            ],
+        );
+        assert_eq!(editor_response(&render, &state).unwrap_err().0, 403);
+    }
+
+    #[test]
+    fn canvas_uses_compiled_unsaved_page_without_running_project_code() {
+        let state = project();
+        let disk = "page \"/\" { html { <main>Disk</main> } } fn main() { assert(false) }\n";
+        fs::write(state.root.join("main.zyl"), disk).unwrap();
+        fs::write(
+            state.root.join("zelyra.theme.css"),
+            ":where(html[data-z-ui]) { --z-color-primary: #23654f; }\n",
+        )
+        .unwrap();
+        let source =
+            "page \"/\" { html { <main><h1>Unsaved</h1></main> } } fn main() { assert(false) }\n";
+        let (_, _, body) = editor_canvas::render(
+            &state,
+            &json!({
+                "path":"main.zyl","source":source,"version":7,
+                "kind":"page","name":"/","sample":{}
+            }),
+        )
+        .unwrap();
+        let result: Value = serde_json::from_str(&body).unwrap();
+        assert!(result["html"].as_str().unwrap().contains("Unsaved"));
+        assert!(!result["html"].as_str().unwrap().contains("Disk"));
+        assert!(result["stylesheet"]
+            .as_str()
+            .unwrap()
+            .contains("--z-color-primary"));
+        assert!(result["theme"].as_str().unwrap().contains("#23654f"));
+        assert_eq!(result["sampleOnly"], true);
+        assert_eq!(result["scriptsExecuted"], false);
+        assert_eq!(result["source"]["path"], "main.zyl");
+        assert_eq!(
+            fs::read_to_string(state.root.join("main.zyl")).unwrap(),
+            disk
+        );
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn canvas_rejects_unknown_views_and_excessive_sample_rows() {
+        let state = project();
+        fs::write(
+            state.root.join("main.zyl"),
+            "page \"/\" { html { <h1>Hello</h1> } }\n",
+        )
+        .unwrap();
+        assert_eq!(
+            editor_canvas::render(
+                &state,
+                &json!({
+                    "kind":"view","name":"Missing","sample":{}
+                })
+            )
+            .unwrap_err()
+            .0,
+            404
+        );
+        let rows = (0..101)
+            .map(|index| json!({"name":index}))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            editor_canvas::render(
+                &state,
+                &json!({
+                    "kind":"page","name":"/","sample":{"items":rows}
+                })
+            )
+            .unwrap_err()
+            .0,
+            413
+        );
+        assert_eq!(
+            editor_canvas::render(
+                &state,
+                &json!({
+                    "path":"../outside.zyl","source":"","kind":"page","name":"/","sample":{}
+                })
+            )
+            .unwrap_err()
+            .0,
+            400
+        );
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn canvas_lists_views_and_escapes_explicit_sample_values() {
+        let state = project();
+        fs::write(state.root.join("main.zyl"),
+            "component Banner { html { <aside><slot /></aside> } }\nview Shell { html { <html><body><main><Banner><slot /></Banner></main></body></html> } }\npage \"/reports/{id}\" { view: Shell input { term: String } html { <h1>{term}</h1> } }\n").unwrap();
+        let (_, _, list_body) = editor_canvas::list(&state, &json!({})).unwrap();
+        let entries: Value = serde_json::from_str(&list_body).unwrap();
+        assert_eq!(entries["success"], true);
+        assert!(entries["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| entry["kind"] == "page" && entry["name"] == "/reports/{id}"));
+        assert!(entries["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| entry["kind"] == "view" && entry["name"] == "Shell"));
+        let (_, _, body) = editor_canvas::render(
+            &state,
+            &json!({
+                "kind":"page","name":"/reports/{id}","sample":{"term":"<Acme & Co>"}
+            }),
+        )
+        .unwrap();
+        let rendered: Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(rendered["components"][0]["name"], "Banner");
+        assert_eq!(rendered["components"][0]["source"]["path"], "main.zyl");
+        assert_eq!(rendered["components"][0]["uses"][0]["path"], "main.zyl");
+        assert_eq!(rendered["components"][0]["uses"][0]["line"], 2);
+        assert!(
+            rendered["components"][0]["uses"][0]["column"]
+                .as_u64()
+                .unwrap()
+                > 1
+        );
+        assert!(rendered["html"]
+            .as_str()
+            .unwrap()
+            .contains("&lt;Acme &amp; Co&gt;"));
+        assert!(rendered["html"].as_str().unwrap().contains("<main>"));
+        assert!(!rendered["html"].as_str().unwrap().contains("<Acme & Co>"));
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn outbox_api_requires_session_origin_and_explicit_confirmation() {
+        let state = project();
+        let list = request("GET", "/__zelyra/editor/api/outbox", &[]);
+        assert_eq!(editor_response(&list, &state).unwrap_err().0, 403);
+        let requeue = request(
+            "POST",
+            "/__zelyra/editor/api/outbox-requeue",
+            &[
+                ("x-zelyra-editor-token", state.token.as_str()),
+                ("origin", "http://example.test"),
+            ],
+        );
+        assert_eq!(editor_response(&requeue, &state).unwrap_err().0, 403);
+        assert_eq!(
+            editor_outbox::requeue(&state, &json!({"eventId":"evt-1"}))
+                .unwrap_err()
+                .0,
+            400
+        );
+    }
+
+    #[test]
+    fn capability_matrix_inspects_unsaved_uses_and_runtime_file_roots() {
+        let state = project();
+        fs::create_dir(state.root.join("notes")).unwrap();
+        fs::write(state.root.join("zelyra.toml"),
+            "name = \"editor-test\"\n[capabilities]\nfilesystem = false\nclock = true\nnetwork = true\n[filesystem]\nread_roots = [\".\"]\nwrite_roots = [\"notes\"]\n").unwrap();
+        let source = "fn main() uses FileSystem, Clock { write_text(\"notes/a.txt\", \"ok\") write_text(\"../outside.txt\", \"no\") now() }\n";
+        let response = editor_capabilities::inspect(
+            &state,
+            &json!({"path":"main.zyl","source":source,"version":9}),
+        )
+        .unwrap();
+        let value: Value = serde_json::from_str(&response.2).unwrap();
+        assert_eq!(value["version"], 9);
+        assert!(value["needed"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| entry["capability"] == "FileSystem" && entry["granted"] == false));
+        assert!(value["needed"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| entry["capability"] == "Clock" && entry["granted"] == true));
+        assert!(value["filePaths"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| entry["path"] == "notes/a.txt" && entry["status"] == "allowed"));
+        assert!(value["filePaths"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| entry["path"] == "../outside.txt" && entry["status"] == "denied"));
+        assert_eq!(value["success"], false);
+        assert!(value["grantsWithoutFunctionUse"]
+            .as_array()
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            fs::read_to_string(state.root.join("main.zyl")).unwrap(),
+            "fn main() {}\n"
+        );
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn capability_matrix_reports_unused_grants_only_for_valid_projects() {
+        let state = project();
+        fs::write(
+            state.root.join("zelyra.toml"),
+            "name = \"editor-test\"\n[capabilities]\nnetwork = true\n",
+        )
+        .unwrap();
+        let response = editor_capabilities::inspect(
+            &state,
+            &json!({"path":"main.zyl","source":"fn main() {}\n"}),
+        )
+        .unwrap();
+        let value: Value = serde_json::from_str(&response.2).unwrap();
+        assert_eq!(value["success"], true);
+        assert!(value["grantsWithoutFunctionUse"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| entry == "Network"));
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn capability_grant_requires_review_and_preserves_toml_comments() {
+        let state = project();
+        let config = "name = \"editor-test\"\n# keep this comment\n[capabilities]\nfilesystem = false # reviewed separately\n";
+        fs::write(state.root.join("zelyra.toml"), config).unwrap();
+        let (_, _, body) =
+            editor_capabilities::preview_grant(&state, &json!({"capability":"FileSystem"}))
+                .unwrap();
+        let preview: Value = serde_json::from_str(&body).unwrap();
+        assert!(preview["after"]
+            .as_str()
+            .unwrap()
+            .contains("# keep this comment"));
+        assert!(preview["after"]
+            .as_str()
+            .unwrap()
+            .contains("filesystem = true"));
+        assert_eq!(editor_capabilities::apply_grant(&state, &json!({
+            "capability":"FileSystem","baseHash":preview["baseHash"],"after":preview["after"]
+        })).unwrap_err().0, 400);
+        assert_eq!(editor_capabilities::apply_grant(&state, &json!({
+            "capability":"FileSystem","baseHash":"stale","after":preview["after"],"confirm":true
+        })).unwrap_err().0, 409);
+        assert_eq!(
+            fs::read_to_string(state.root.join("zelyra.toml")).unwrap(),
+            config
+        );
+        editor_capabilities::apply_grant(&state, &json!({
+            "capability":"FileSystem","baseHash":preview["baseHash"],"after":preview["after"],"confirm":true
+        })).unwrap();
+        assert!(fs::read_to_string(state.root.join("zelyra.toml"))
+            .unwrap()
+            .contains("filesystem = true"));
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn capability_write_api_rejects_missing_token_and_foreign_origin() {
+        let state = project();
+        let path = "/__zelyra/editor/api/capability-grant-apply";
+        assert_eq!(
+            editor_response(&request("POST", path, &[]), &state)
+                .unwrap_err()
+                .0,
+            403
+        );
+        assert_eq!(
+            editor_response(
+                &request(
+                    "POST",
+                    path,
+                    &[
+                        ("x-zelyra-editor-token", state.token.as_str()),
+                        ("origin", "http://attacker.test"),
+                    ]
+                ),
+                &state
+            )
+            .unwrap_err()
+            .0,
+            403
+        );
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn studio_outbox_reads_mariadb_metadata_and_requeues_without_sending() {
+        let Ok(database_url) = env::var("ZELYRA_DB_TIMEOUT_TEST_URL") else {
+            eprintln!("skipping Studio outbox integration: test database URL is not configured");
+            return;
+        };
+        let state = project();
+        fs::write(
+            state.root.join("main.zyl"),
+            "database main { engine: mariadb } fn main() {}\n",
+        )
+        .unwrap();
+        fs::write(
+            state.root.join(".env"),
+            format!("DATABASE_URL={database_url}\n"),
+        )
+        .unwrap();
+        zelyra_database::outbox::ensure_mariadb_outbox(&database_url).unwrap();
+        let id = format!(
+            "studio-outbox-{}-{}",
+            std::process::id(),
+            NEXT_DIRECTORY.fetch_add(1, Ordering::Relaxed)
+        );
+        let event = zelyra_database::outbox::OutboxEvent::new(
+            &id,
+            "zelyra.mail.send",
+            &json!({"to":"client@example.test","subject":"test","text":"not delivered","attachments":[{"filename":"invoice.pdf","content_type":"application/pdf","content":"JVBERi0xLjQ="}]}),
+        )
+        .unwrap();
+        zelyra_database::with_mariadb_transaction(&database_url, |transaction| {
+            zelyra_database::outbox::enqueue_mariadb_event(transaction, &event)
+        })
+        .unwrap();
+        let request = request("GET", "/__zelyra/editor/api/outbox?offset=0", &[]);
+        let (_, _, body) = editor_outbox::list(&state, &request).unwrap();
+        let page: Value = serde_json::from_str(&body).unwrap();
+        let item = page["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["id"] == id)
+            .unwrap();
+        assert_eq!(item["recipient"], "client@example.test");
+        assert_eq!(item["attachmentName"], "invoice.pdf");
+        assert!(body.contains("client@example.test"));
+        assert!(!body.contains("not delivered"));
+        zelyra_database::execute_mariadb_query(
+            &database_url,
+            "UPDATE `_zelyra_outbox` SET `exhausted_at` = UTC_TIMESTAMP(6), `attempts` = 8 WHERE `event_id` = :id",
+            vec![("id".into(), zelyra_database::QueryValue::String(id.clone()))],
+        )
+        .unwrap();
+        let (_, _, body) =
+            editor_outbox::requeue(&state, &json!({"eventId":id,"confirm":true})).unwrap();
+        assert_eq!(serde_json::from_str::<Value>(&body).unwrap()["sent"], false);
+        let row = zelyra_database::execute_mariadb_query(
+            &database_url,
+            "SELECT `delivered_at` IS NULL, `attempts` FROM `_zelyra_outbox` WHERE `event_id` = :id",
+            vec![("id".into(), zelyra_database::QueryValue::String(id.clone()))],
+        )
+        .unwrap();
+        assert_eq!(row.rows[0], ["1", "0"]);
+        zelyra_database::execute_mariadb_query(
+            &database_url,
+            "DELETE FROM `_zelyra_outbox` WHERE `event_id` = :id",
+            vec![("id".into(), zelyra_database::QueryValue::String(id))],
+        )
+        .unwrap();
     }
 
     fn request(method: &str, path: &str, headers: &[(&str, &str)]) -> Request {
@@ -4677,6 +6152,60 @@ fn main() {}
     }
 
     #[test]
+    fn studio_batch_save_updates_files_and_rejects_conflicts_before_any_write() {
+        let state = project();
+        fs::create_dir(state.root.join("src")).unwrap();
+        let main_path = state.root.join("main.zyl");
+        let module_path = state.root.join("src/math.zyl");
+        let main_before = fs::read(&main_path).unwrap();
+        let module_before = b"pub fn answer() -> Int { return 1 }\n".to_vec();
+        fs::write(&module_path, &module_before).unwrap();
+        let response = save_editor_files_batch(&state, json!({"files":[
+            {"path":"main.zyl","content":"fn main() { print(2) }\n","baseHash":content_hash(&main_before)},
+            {"path":"src/math.zyl","content":"pub fn answer() -> Int { return 2 }\n","baseHash":content_hash(&module_before)}
+        ]})).unwrap();
+        let result: Value = serde_json::from_str(&response.2).unwrap();
+        assert_eq!(result["transactional"], true);
+        assert_eq!(result["files"].as_array().unwrap().len(), 2);
+        let committed_main = fs::read(&main_path).unwrap();
+        let committed_module = fs::read(&module_path).unwrap();
+        fs::write(&main_path, b"external edit\n").unwrap();
+        let error = save_editor_files_batch(&state, json!({"files":[
+            {"path":"main.zyl","content":"fn main() {}\n","baseHash":content_hash(&committed_main)},
+            {"path":"src/math.zyl","content":"pub fn answer() -> Int { return 3 }\n","baseHash":content_hash(&committed_module)}
+        ]})).unwrap_err();
+        assert_eq!(error.0, 409);
+        assert_eq!(fs::read(&module_path).unwrap(), committed_module);
+        let _ = fs::remove_dir_all(state.root.clone());
+    }
+
+    #[test]
+    fn studio_recovers_interrupted_multi_file_save_from_private_journal() {
+        let state = project();
+        let source = state.root.join("main.zyl");
+        let before = fs::read(&source).unwrap();
+        let after = b"fn main() { print(99) }\n";
+        let journal = state.root.join(".zelyra/studio-transactions/txn-fixture");
+        fs::create_dir_all(&journal).unwrap();
+        fs::write(journal.join("backup-0000"), &before).unwrap();
+        fs::write(
+            journal.join("manifest.json"),
+            json!({"schema":1,"files":[{
+                "path":"main.zyl","beforeHash":content_hash(&before),
+                "afterHash":content_hash(after),"backup":"backup-0000"
+            }]})
+            .to_string(),
+        )
+        .unwrap();
+        fs::write(journal.join("prepared"), b"prepared").unwrap();
+        fs::write(&source, after).unwrap();
+        editor_transactions::recover(&state.root).expect("incomplete transaction should roll back");
+        assert_eq!(fs::read(source).unwrap(), before);
+        assert!(!journal.exists());
+        let _ = fs::remove_dir_all(state.root.clone());
+    }
+
+    #[test]
     fn editor_can_create_only_new_project_files() {
         let state = project();
         let request = json!({"path":"src/new_file.zyl", "content":"fn main() {}\n"});
@@ -4701,7 +6230,16 @@ fn main() {}
     fn editor_rename_is_project_scoped_hash_checked_and_never_overwrites() {
         let state = project();
         fs::create_dir(state.root.join("src")).expect("create source directory");
-        fs::write(state.root.join("src/old.zyl"), "module old\n").expect("write source");
+        fs::write(
+            state.root.join("main.zyl"),
+            "import \"src/old.zyl\" as old\nfn main() {}\n",
+        )
+        .expect("write importer");
+        fs::write(
+            state.root.join("src/old.zyl"),
+            "pub fn answer() -> Int { return 42 }\n",
+        )
+        .expect("write source");
         let source = state.root.join("src/old.zyl");
         let hash = content_hash(&fs::read(&source).expect("read source"));
 
@@ -4725,17 +6263,34 @@ fn main() {}
             "keep me"
         );
 
-        let response = rename_editor_file(
+        let preview = preview_editor_file_rename(
             &state,
             json!({"path":"src/old.zyl", "newPath":"src/new.zyl", "baseHash":hash}),
         )
-        .expect("rename source");
+        .expect("preview compiler-checked rename");
+        let preview: Value = serde_json::from_str(&preview.2).unwrap();
+        assert_eq!(preview["updatedImports"], json!(["main.zyl"]));
+        assert!(fs::read_to_string(state.root.join("main.zyl"))
+            .unwrap()
+            .contains("src/old.zyl"));
+        let stale = rename_editor_file(
+            &state,
+            json!({"path":"src/old.zyl", "newPath":"src/new.zyl", "baseHash":hash,"planId":"stale"}),
+        ).expect_err("stale confirmation must be rejected");
+        assert_eq!(stale.0, 409);
+        let response = rename_editor_file(
+            &state,
+            json!({"path":"src/old.zyl", "newPath":"src/new.zyl", "baseHash":hash,"planId":preview["planId"]}),
+        ).expect("apply reviewed rename");
         assert_eq!(response.0, 200);
         assert!(!source.exists());
         assert_eq!(
             fs::read_to_string(state.root.join("src/new.zyl")).unwrap(),
-            "module old\n"
+            "pub fn answer() -> Int { return 42 }\n"
         );
+        assert!(fs::read_to_string(state.root.join("main.zyl"))
+            .unwrap()
+            .contains("src/new.zyl"));
 
         let _ = fs::remove_dir_all(state.root.clone());
     }
@@ -4836,6 +6391,336 @@ fn main() {}
             original
         );
         let _ = fs::remove_dir_all(state.root.clone());
+    }
+
+    #[test]
+    fn studio_definition_and_references_share_the_resolved_function_index() {
+        let state = project();
+        fs::create_dir_all(state.root.join("src")).unwrap();
+        let main = "import \"src/a.zyl\" as a\nimport \"src/b.zyl\" as b\nfn main() { print(a::answer()) print(b::answer()) }\n";
+        fs::write(state.root.join("main.zyl"), main).unwrap();
+        fs::write(
+            state.root.join("src/a.zyl"),
+            "pub fn answer() -> Int { return 1 }\n",
+        )
+        .unwrap();
+        fs::write(
+            state.root.join("src/b.zyl"),
+            "pub fn answer() -> Int { return 2 }\n",
+        )
+        .unwrap();
+        let offset = byte_to_utf16(main, main.find("a::answer()").unwrap() + 3);
+        let definition = semantic_editor_query(
+            &state,
+            &json!({
+                "path":"main.zyl","source":main,"offset":offset,"action":"definition"
+            }),
+        )
+        .unwrap();
+        let payload: Value = serde_json::from_str(&definition.2).unwrap();
+        assert_eq!(payload["path"], "src/a.zyl");
+        let references = semantic_editor_query(
+            &state,
+            &json!({
+                "path":"main.zyl","source":main,"offset":offset,"action":"references"
+            }),
+        )
+        .unwrap();
+        let payload: Value = serde_json::from_str(&references.2).unwrap();
+        assert_eq!(payload["matches"].as_array().unwrap().len(), 2);
+        assert!(payload["matches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|item| item["path"] != "src/b.zyl"));
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn studio_uses_multiple_unsaved_modules_for_analysis_and_definition() {
+        let state = project();
+        fs::create_dir_all(state.root.join("src")).unwrap();
+        let main = "import \"src/math.zyl\" as math\nfn main() { print(math::answer()) }\n";
+        let saved_math = "pub fn answer() -> Int { return 1 }\n";
+        let unsaved_math = "// new line\npub fn answer() -> Int { return 2 }\n";
+        fs::write(state.root.join("main.zyl"), main).unwrap();
+        fs::write(state.root.join("src/math.zyl"), saved_math).unwrap();
+        let request = json!({
+            "path":"main.zyl","source":main,
+            "overlays":[{"path":"src/math.zyl","source":unsaved_math,"version":7}]
+        });
+        let checked = check_project(&state, &request).unwrap();
+        let checked: Value = serde_json::from_str(&checked.2).unwrap();
+        assert_eq!(checked["success"], true, "{checked}");
+        let definition = semantic_editor_query(
+            &state,
+            &json!({
+                "path":"main.zyl","source":main,
+                "offset":main.find("answer()").unwrap()+1,"action":"definition",
+                "overlays":[{"path":"src/math.zyl","source":unsaved_math,"version":7}]
+            }),
+        )
+        .unwrap();
+        let definition: Value = serde_json::from_str(&definition.2).unwrap();
+        assert_eq!(definition["path"], "src/math.zyl");
+        assert_eq!(
+            definition["start"],
+            byte_to_utf16(unsaved_math, unsaved_math.find("answer").unwrap())
+        );
+        assert_eq!(
+            fs::read_to_string(state.root.join("src/math.zyl")).unwrap(),
+            saved_math
+        );
+        let rename = semantic_editor_query(
+            &state,
+            &json!({
+                "path":"main.zyl","source":main,
+                "offset":main.find("answer()").unwrap()+1,
+                "action":"rename-preview","newName":"compute_answer",
+                "overlays":[{"path":"src/math.zyl","source":unsaved_math,"version":7}]
+            }),
+        )
+        .unwrap();
+        let rename: Value = serde_json::from_str(&rename.2).unwrap();
+        assert_eq!(rename["changes"].as_array().unwrap().len(), 2);
+        assert!(rename["changes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|change| change["path"] == "src/math.zyl"
+                && change["after"]
+                    .as_str()
+                    .unwrap()
+                    .contains("fn compute_answer")));
+        assert_eq!(
+            fs::read_to_string(state.root.join("main.zyl")).unwrap(),
+            main
+        );
+        let invalid = check_project(
+            &state,
+            &json!({
+                "path":"main.zyl","source":main,
+                "overlays":[{"path":"src/math.zyl","source":"pub fn answer( {"}]
+            }),
+        )
+        .unwrap();
+        let invalid: Value = serde_json::from_str(&invalid.2).unwrap();
+        assert_eq!(invalid["success"], false);
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn studio_semantic_rename_updates_unique_resource_references_across_files() {
+        let state = project();
+        fs::create_dir_all(state.root.join("src")).unwrap();
+        let main = "import \"src/schema.zyl\" as schema\nform CustomerCreate -> customers { fields { name } }\nfn main() {}\n";
+        let schema = "table customers { id: Id primary auto name: String(100) required access { read_write: [\"main.zyl\"] } }\n";
+        fs::write(state.root.join("main.zyl"), main).unwrap();
+        fs::write(state.root.join("src/schema.zyl"), schema).unwrap();
+        let response = semantic_editor_query(
+            &state,
+            &json!({
+                "path":"main.zyl","source":main,
+                "offset":main.find("customers {").unwrap(),
+                "action":"rename-preview","newName":"clients"
+            }),
+        )
+        .unwrap();
+        let preview: Value = serde_json::from_str(&response.2).unwrap();
+        assert_eq!(preview["changes"].as_array().unwrap().len(), 2);
+        assert!(preview["changes"].as_array().unwrap().iter().any(|change| {
+            change["path"] == "main.zyl"
+                && change["after"]
+                    .as_str()
+                    .unwrap()
+                    .contains("CustomerCreate -> clients")
+        }));
+        assert!(preview["changes"].as_array().unwrap().iter().any(|change| {
+            change["path"] == "src/schema.zyl"
+                && change["after"]
+                    .as_str()
+                    .unwrap()
+                    .contains("table clients {")
+        }));
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn studio_rejects_duplicate_and_unsafe_source_overlays() {
+        let state = project();
+        let source = fs::read_to_string(state.root.join("main.zyl")).unwrap();
+        for overlay in [
+            json!({"path":"main.zyl","source":source}),
+            json!({"path":"../outside.zyl","source":"fn main() {}"}),
+            json!({"path":"missing.zyl","source":"fn main() {}"}),
+        ] {
+            assert!(editor_analysis_overlays(
+                &state,
+                &json!({
+                    "path":"main.zyl","source":source,"overlays":[overlay]
+                })
+            )
+            .is_err());
+        }
+        assert!(editor_analysis_overlays(
+            &state,
+            &json!({
+                "path":"main.zyl","source":source,
+                "overlays":[{"path":"main.zyl","source":"x"}]
+            })
+        )
+        .is_err());
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn studio_verify_reports_real_statuses_for_unsaved_contracts() {
+        let state = project();
+        let path = state.root.join("main.zyl");
+        let original = "fn main() {}\n";
+        fs::write(&path, original).unwrap();
+        let source = "fn proven() requires { 1 < 2 } { }\nfn dynamic(value: Int) requires { value >= 0 } { }\nfn failed() ensures { 1 > 2 } { }\nfn main() {}\n";
+        let response = verify_editor_project(
+            &state,
+            &json!({
+                "path":"main.zyl","source":source,"version":12
+            }),
+        )
+        .unwrap();
+        let payload: Value = serde_json::from_str(&response.2).unwrap();
+        assert_eq!(payload["success"], true);
+        assert_eq!(payload["version"], 12);
+        let results = payload["results"].as_array().unwrap();
+        assert!(results.iter().any(|item| item["status"] == "PROVEN"));
+        assert!(results.iter().any(|item| item["status"] == "RUNTIME_CHECK"));
+        assert!(results.iter().any(|item| item["status"] == "FAILED"));
+        let invalid = verify_editor_project(
+            &state,
+            &json!({
+                "path":"main.zyl","source":"fn main( {\n","version":13
+            }),
+        )
+        .unwrap();
+        let invalid: Value = serde_json::from_str(&invalid.2).unwrap();
+        assert_eq!(invalid["success"], false);
+        assert!(invalid["results"].as_array().unwrap().is_empty());
+        assert_eq!(fs::read_to_string(path).unwrap(), original);
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn studio_typed_hole_returns_exact_replace_span_without_writing() {
+        let state = project();
+        let path = state.root.join("main.zyl");
+        let original = "fn main() {}\n";
+        fs::write(&path, original).unwrap();
+        let source = "fn pure() -> String { return \"x\" }\nfn target(name: String) -> String { message: String = _ return message }\nfn main() {}\n";
+        let offset = byte_to_utf16(source, source.find("= _").unwrap() + 3);
+        let response = editor_typed_hole(
+            &state,
+            &json!({
+                "path":"main.zyl","source":source,"offset":offset,"version":3
+            }),
+        )
+        .unwrap();
+        let payload: Value = serde_json::from_str(&response.2).unwrap();
+        assert_eq!(payload["found"], true);
+        assert_eq!(payload["expectedType"], "String");
+        assert_eq!(payload["version"], 3);
+        assert_eq!(payload["editorSpan"]["start"], offset - 1);
+        assert_eq!(payload["editorSpan"]["end"], offset);
+        assert!(payload["suggestions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["expression"] == "name"));
+        assert_eq!(fs::read_to_string(path).unwrap(), original);
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn runtime_profile_uses_project_stack_setting_and_unsaved_call_graph() {
+        let state = project();
+        let original = "fn main() {}\n";
+        fs::write(
+            state.root.join("zelyra.toml"),
+            "[project]\nname = \"runtime-profile\"\n[runtime]\nmax_stack_depth = 100\n",
+        )
+        .unwrap();
+        let source = "fn direct() -> Int { return direct() }\nfn main() {}\n";
+        let response = runtime_profile(
+            &state,
+            &json!({
+                "path":"main.zyl","source":source,"version":7
+            }),
+        )
+        .unwrap();
+        let payload: Value = serde_json::from_str(&response.2).unwrap();
+        assert_eq!(payload["maxStackDepth"], 100);
+        assert_eq!(payload["configured"], true);
+        assert_eq!(payload["version"], 7);
+        assert_eq!(payload["recursionRisks"][0]["kind"], "direct");
+        assert_eq!(
+            fs::read_to_string(state.root.join("main.zyl")).unwrap(),
+            original
+        );
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn studio_run_passes_step_budget_to_real_runtime() {
+        let state = project();
+        fs::write(state.root.join("main.zyl"), "fn main() { loop { } }\n").unwrap();
+        let result = run_editor_program(&state, &json!({"path":"main.zyl","maxSteps":30})).unwrap();
+        let payload: Value = serde_json::from_str(&result.2).unwrap();
+        assert_eq!(payload["success"], false);
+        assert_eq!(payload["timedOut"], false);
+        assert_eq!(payload["maxSteps"], 30);
+        assert_eq!(payload["budgetExceeded"], true);
+        assert!(payload["stderr"]
+            .as_str()
+            .unwrap()
+            .contains("E-RUNTIME-001"));
+        assert_eq!(
+            run_editor_program(&state, &json!({"path":"main.zyl","maxSteps":0}))
+                .unwrap_err()
+                .0,
+            400
+        );
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn studio_console_run_can_be_cancelled_and_rejects_parallel_runs() {
+        let state = project();
+        fs::write(state.root.join("main.zyl"), "fn main() { loop { } }\n").unwrap();
+        let runner = state.clone();
+        let running =
+            thread::spawn(move || run_editor_program(&runner, &json!({"path":"main.zyl"})));
+        for _ in 0..100 {
+            if state.active_runs.load(Ordering::Acquire) > 0 {
+                break;
+            }
+            thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(state.active_runs.load(Ordering::Acquire), 1);
+        assert_eq!(
+            run_editor_program(&state, &json!({"path":"main.zyl"}))
+                .unwrap_err()
+                .0,
+            429
+        );
+        let cancel = cancel_editor_run(&state).unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&cancel.2).unwrap()["cancelRequested"],
+            true
+        );
+        let result = running.join().unwrap().unwrap();
+        let payload: Value = serde_json::from_str(&result.2).unwrap();
+        assert_eq!(payload["cancelled"], true);
+        assert_eq!(payload["timedOut"], false);
+        assert_eq!(state.active_runs.load(Ordering::Acquire), 0);
+        fs::remove_dir_all(state.root.clone()).unwrap();
     }
 
     #[test]

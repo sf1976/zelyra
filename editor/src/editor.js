@@ -7,7 +7,6 @@ import {
   HighlightStyle,
   foldKeymap,
   indentOnInput,
-  StreamLanguage,
   syntaxHighlighting,
 } from "@codemirror/language";
 import { linter, setDiagnostics } from "@codemirror/lint";
@@ -19,12 +18,19 @@ import {
   zelyraUiComponentMetadata,
   zelyraUiDefaultAppearance,
 } from "./zelyra-ui-metadata.js";
+import { zelyraKeywords as keywords, zelyraLanguage } from "./zelyra-language.js";
 import {
   crosshairCursor,
   drawSelection,
   EditorView,
+  GutterMarker,
+  gutter,
   highlightActiveLine,
   highlightActiveLineGutter,
+  activateHover,
+  closeHoverTooltip,
+  hasHoverTooltips,
+  hoverTooltip,
   keymap,
   lineNumbers,
   rectangularSelection,
@@ -51,13 +57,146 @@ let activePath = null;
 let editorLogRecords = [];
 let editor = null;
 let diagnostics = [];
+let verificationResults = [];
+const verificationRefresh = StateEffect.define();
+
+class VerificationMarker extends GutterMarker {
+  constructor(status, explanation) {
+    super();
+    this.status = status;
+    this.explanation = explanation;
+  }
+  toDOM() {
+    const marker = document.createElement("span");
+    marker.className = `verify-marker ${this.status.toLowerCase()}`;
+    marker.textContent = this.status === "PROVEN" ? "◆" : this.status === "FAILED" ? "✖" : "●";
+    marker.title = this.explanation;
+    marker.setAttribute("role", "button");
+    marker.setAttribute("tabindex", "0");
+    marker.setAttribute("aria-label", this.explanation);
+    marker.addEventListener("click", () => announce(this.explanation, this.status === "FAILED" ? "error" : ""));
+    marker.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        announce(this.explanation, this.status === "FAILED" ? "error" : "");
+      }
+    });
+    return marker;
+  }
+}
+
+function setVerificationResults(results) {
+  verificationResults = results;
+  if (editor) editor.dispatch({ effects: verificationRefresh.of(null) });
+}
+
+const verificationGutter = gutter({
+  class: "verify-gutter",
+  lineMarker(view, line) {
+    const number = view.state.doc.lineAt(line.from).number;
+    const entries = verificationResults.filter((item) => item.file === activePath && item.span?.start?.line === number);
+    if (!entries.length) return null;
+    const priority = { FAILED: 0, RUNTIME_CHECK: 1, UNPROVEN: 2, PROVEN: 3 };
+    entries.sort((left, right) => priority[left.status] - priority[right.status]);
+    const explanation = entries.map((item) => `${item.status} ${item.code}: ${item.message}`).join("\n");
+    return new VerificationMarker(entries[0].status, explanation);
+  },
+  lineMarkerChange(update) {
+    return update.transactions.some((transaction) => transaction.effects.some((effect) => effect.is(verificationRefresh)));
+  },
+});
 let liveCheckTimer = null;
 let liveCheckSequence = 0;
+let pipelineMapCache = null;
+const eventClientId = crypto.randomUUID();
+let eventController = null;
+let eventReconnectTimer = null;
+let eventReconnectDelay = 1500;
+
+function onStudioEvent(message) {
+  if (message?.schema !== 1 || typeof message.kind !== "string") return;
+  if (message.kind === "workspace.changed") {
+    void refreshTree();
+    const changedPath = message.document?.path || "";
+    if (!changedPath || changedPath === activePath) setVerificationResults([]);
+    pipelineMapCache = null;
+    renderPipelineBreadcrumbs();
+    if (message.payload?.operation?.startsWith("external-")) {
+      void refreshExternallyChangedTabs(changedPath).then(() => {
+        if (activePath?.endsWith(".zyl")) scheduleLiveCheck(activePath);
+        scheduleCanvasRefresh();
+        if ((!changedPath || changedPath === "zelyra.theme.css") && !$("canvas-pane").hidden) void loadThemeColors();
+      });
+    } else {
+      if (activePath?.endsWith(".zyl")) scheduleLiveCheck(activePath);
+      scheduleCanvasRefresh();
+    }
+    return;
+  }
+  if (message.kind === "analysis.invalidated") {
+    if (message.document?.path === activePath) setVerificationResults([]);
+    return;
+  }
+  if (message.kind === "preview.changed") {
+    if (message.payload?.running) announce(t("runWebReady"), "success");
+    return;
+  }
+  const document = message.document;
+  if (document?.clientId !== eventClientId || document.path !== activePath
+      || document.version !== liveCheckSequence || !editor) return;
+  if (message.kind === "diagnostics") {
+    renderDiagnostics(message.payload?.diagnostics || [], Boolean(message.payload?.success), { silent: true });
+  } else if (message.kind === "verification") {
+    setVerificationResults(message.payload?.success ? message.payload.results || [] : []);
+  }
+}
+
+async function connectStudioEvents() {
+  if (!token || eventController) return;
+  eventController = new AbortController();
+  const current = eventController;
+  try {
+    const response = await fetch("/__zelyra/editor/api/events", {
+      headers: { "X-Zelyra-Editor-Token": token },
+      cache: "no-store", credentials: "omit", redirect: "error", signal: current.signal,
+    });
+    if (!response.ok || !response.body) throw new Error(`Studio events: HTTP ${response.status}`);
+    eventReconnectDelay = 1500;
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true }).replaceAll("\r\n", "\n");
+      if (buffer.length > 300_000) throw new Error("Studio event exceeds the client limit");
+      let end;
+      while ((end = buffer.indexOf("\n\n")) >= 0) {
+        const frame = buffer.slice(0, end);
+        buffer = buffer.slice(end + 2);
+        const data = frame.split("\n").filter((line) => line.startsWith("data: "))
+          .map((line) => line.slice(6)).join("\n");
+        if (data) {
+          try { onStudioEvent(JSON.parse(data)); } catch { /* malformed advisory event */ }
+        }
+      }
+    }
+  } catch {
+    // The request APIs remain usable while the advisory stream reconnects.
+  } finally {
+    if (eventController === current) eventController = null;
+    if (!current.signal.aborted) {
+      eventReconnectTimer = setTimeout(connectStudioEvents, eventReconnectDelay);
+      eventReconnectDelay = Math.min(eventReconnectDelay * 2, 10_000);
+    }
+  }
+}
 const symbolCache = new Map();
 const symbolRequests = new Map();
 let treeFiles = [];
 let activeFilter = "";
 let projectSearchMode = "text";
+let semanticReferenceQuery = null;
 let databaseMap = null;
 let databaseTables = [];
 let selectedDatabaseTable = null;
@@ -85,14 +224,25 @@ const messages = {
     taskCheckHelp: "Compilerdiagnosen für das Projekt anzeigen", taskDatabase: "Datenbank öffnen", taskDatabaseHelp: "Tabellen und Beziehungen ansehen",
     taskRun: "Programm oder Web-App starten", taskRunHelp: "Konsolenprogramme mit Zelyras Laufzeit ausführen oder Webanwendungen lokal starten; konfigurierte Effekte sind möglich, interaktive Eingabe fehlt",
     projectMap: "Projektkarte", projectMapTitle: "Projektbeziehungen", projectMapOpenSource: "Quelltext öffnen", projectMapLoading: "Compiler-Projektmodell wird geladen …", projectMapUnavailable: "Projektkarte konnte nicht erstellt werden.", projectMapIncomplete: "Die Karte ist unvollständig. Nicht auflösbare oder begrenzte Beziehungen werden nicht geraten.", projectMapIssues: { "view.unresolved": "Ansicht nicht gefunden", "view.ambiguous": "Ansichtsname mehrfach vorhanden", "crud.table_unresolved": "CRUD-Tabelle nicht eindeutig", "api.handler_unresolved": "API-Funktion nicht eindeutig", "import.unresolved": "Importziel nicht gefunden", "edge.target_missing": "Beziehungsziel fehlt", "limit.nodes": "Knotenlimit erreicht", "limit.edges": "Beziehungslimit erreicht" }, projectMapEmpty: "Noch keine unterstützten Beziehungen im Projekt.", projectMapModules: "Module", projectMapData: "Daten und Ansichten", projectMapWeb: "Routen und APIs", projectMapLogic: "Funktionen",
+    pipelineBreadcrumbs: "Semantische Projektbeziehungen", projectMapNullability: "NULL-Radar (Compiler E-SQL-004)", projectMapIssuesExtra: { "form.table_unresolved": "Formular-Tabelle nicht eindeutig", "struct.unresolved": "Ergebnistyp nicht gefunden", "struct.ambiguous": "Ergebnistyp mehrfach vorhanden", "sql.access_unresolved": "SQL-Tabellenbezug nicht eindeutig" },
+    pdfPreview: "PDF-Vorschau", pdfPreviewTitle: "PDF-Vorschau mit echten PDF-Bytes", pdfView: "Deklarierte View", pdfExampleData: "Beispieldaten als JSON-Objekt", pdfRender: "PDF erzeugen", pdfDownload: "PDF herunterladen", pdfNoViews: "Im Projekt ist keine View deklariert.", pdfReady: "PDF erzeugt ({0} Byte).", pdfLoading: "Views werden geladen …", pdfRendering: "PDF wird lokal erzeugt …", pdfInvalidData: "Bitte ein gültiges JSON-Objekt als Beispieldaten eingeben.", pdfError: "PDF-Vorschau fehlgeschlagen: {0}",
+    outboxButton: "Outbox", outboxTitle: "Mail-Outbox", outboxCaption: "Metadaten der MariaDB-Outbox ohne Nachrichteninhalt", outboxEvent: "Ereignis", outboxStatus: "Status", outboxRecipient: "Empfänger", outboxAttachment: "Anhang", outboxCreated: "Erstellt", outboxAvailable: "Verfügbar", outboxError: "Fehler", outboxAction: "Aktion", previous: "Zurück", next: "Weiter", outboxLoading: "Outbox wird geladen …", outboxEmpty: "Keine Ereignisse auf dieser Seite.", outboxPage: "{0}–{1} von {2}", outboxRequeue: "Erneut einreihen", outboxRequeueConfirm: "Das erschöpfte Ereignis {0} für einen späteren Worker-Lauf freigeben? Es wird jetzt keine E-Mail versendet.", outboxRequeued: "Ereignis erneut eingereiht. Ein Versand erfolgt erst durch einen ausdrücklich gestarteten Worker.", outboxLoadError: "Outbox konnte nicht geladen werden: {0}", outboxRequeueError: "Erneutes Einreihen fehlgeschlagen: {0}",
+    outboxAttempts: "Versuche: {0}", outboxLeaseUntil: "Sperre bis: {0}", outboxDeliveredAt: "Zugestellt: {0}", outboxExhaustedAt: "Erschöpft: {0}", outboxNoDatabase: "Für die Outbox ist keine MariaDB-Verbindung konfiguriert. Trage DATABASE_URL in .env oder der Umgebung ein.",
+    capabilityButton: "Rechte", capabilityTitle: "Capability- und Sicherheitsmatrix", capabilityDeclarations: "Deklarierte Rechte", capabilityUses: "Tatsächlich verwendete Operationen", capabilityPaths: "Dateipfade", capabilityUnused: "Freigaben ohne erkannten Funktionsbedarf", capabilityUnusedCaveat: "Nur analysierte Funktionen; generierte Routen und dynamische Aufrufe können weitere Rechte benötigen.", capabilityLoading: "Compiler und Projektkonfiguration werden analysiert …", capabilityEmpty: "Keine Einträge in der aktuellen Datei.", capabilityGrant: "Freigabe prüfen", capabilityGrantReview: "Änderung an zelyra.toml prüfen", capabilityGrantApply: "Freigabe übernehmen", capabilityGrantPreview: "Nur die angezeigte Konfigurationsänderung wird nach deiner Bestätigung gespeichert.", capabilityGranted: "Freigabe gespeichert. Die Runtime prüft sie beim nächsten Lauf erneut.", capabilityUnrestricted: "Keine Projektkonfiguration: Runtime-Capabilities sind nicht durch zelyra.toml eingeschränkt.", capabilityIncomplete: "Die Quellanalyse ist unvollständig; dieser Befund kann Einträge auslassen.", capabilityError: "Capability-Analyse fehlgeschlagen: {0}", capabilityPathUnknown: "Dynamische Pfade sind statisch nicht entscheidbar.", capabilityNotGranted: "nicht freigegeben", capabilityDynamic: "dynamisch",
+    externalReloaded: "Extern geänderte Datei neu geladen: {0}", externalDirty: "{0} wurde außerhalb von Studio geändert. Ungespeicherte Änderungen bleiben erhalten; vor dem Speichern prüfen.", externalMissing: "{0} wurde außerhalb von Studio entfernt. Der geöffnete Puffer bleibt erhalten.",
+    externalReloadFailed: "{0} konnte nach einer äußeren Änderung nicht neu geladen werden: {1}",
+    canvasButton: "Canvas", canvasTitle: "Statische Zelyra-Vorschau", canvasTarget: "Seite oder View", canvasSample: "Beispieldaten (JSON)", canvasRender: "Vorschau aktualisieren", canvasSource: "Zur Deklaration", canvasComponents: "Erreichbare Komponenten", canvasComponentSource: "Deklaration öffnen", canvasComponentUses: "Verwendung", canvasComponentUseSource: "Verwendung öffnen", canvasFrameTitle: "Statische Seitenvorschau", canvasLoading: "Compiler und Renderer erzeugen die Vorschau …", canvasEmpty: "Im Projekt ist keine Seite oder View deklariert.", canvasError: "Vorschau nicht verfügbar: {0}", canvasSampleError: "Beispieldaten müssen ein JSON-Objekt sein.", canvasReady: "Statisch gerendert. Projektfunktionen und Skripte wurden nicht ausgeführt.", canvasIncomplete: "Die Projektquelle ist nicht vollständig kompilierbar.",
+    canvasThemeToken: "Theme-Farbe", canvasThemeColor: "Farbwert", canvasThemeApply: "Im Quelltext ändern", canvasThemeMissing: "Für Farbbearbeitung zelyra.theme.css im Projekt anlegen.", canvasThemeNoHex: "Keine unterstützte --z-color-*-Farbe mit hexadezimalem Wert gefunden.", canvasThemeChanged: "Theme-Farbe im ungespeicherten Quelltext geändert. Speichern übernimmt sie ins Projekt.", canvasThemeStale: "Theme-Datei wurde verändert. Farbe erneut auswählen.", canvasThemeError: "Theme-Bearbeitung fehlgeschlagen: {0}",
     runButton: "Starten", runButtonTitle: "main.zyl ausführen oder Webanwendung starten",
     runOutputTitle: "Programmausgabe", runStarting: "Anwendung wird vorbereitet und gestartet …", runSuccess: "Programm erfolgreich beendet", runFailure: "Programm mit Fehler beendet", runTimeout: "Ausführung nach 15 Sekunden beendet", runOutputTruncated: "Die Ausgabe ist auf 64 KiB je Stream begrenzt.", runNoOutput: "Keine Ausgabe.", runStdout: "AUSGABE", runStderr: "FEHLER", runInputUnavailable: "Studio stellt dem Programm keine interaktive Eingabe bereit.", runWebReady: "Webanwendung läuft lokal:", runWebOpen: "Anwendung im Browser öffnen", runWebStop: "Vorschau beenden", runWebStopped: "Lokale Vorschau wurde beendet.",
+    runtimeBudgetButton: "Budget", runtimeBudgetTitle: "Laufzeitbudget und Rekursion", runtimeBudgetEnable: "Schrittbudget für Konsolenprogramme aktivieren", runtimeBudgetRange: "Schrittbudget (Regler: 1.000 bis 1.000.000)", runtimeBudgetNumber: "Maximale Schritte (1 bis 100.000.000)", runtimeBudgetWebHint: "Das Schrittbudget gilt für Konsolenprogramme. Eine Webvorschau verwendet weiterhin ihre eigenen Laufzeitgrenzen.", runtimeRecursionTitle: "Mögliche Rekursion", runtimeRecursionNone: "Keine direkte oder gegenseitige Rekursion im analysierten Funktionsgraphen gefunden.", runtimeRecursionIncomplete: "Der Funktionsgraph ist zu groß; die Rekursionsanalyse ist unvollständig.", runtimeRecursionDirect: "Direkte Rekursion", runtimeRecursionMutual: "Gegenseitige Rekursion", runtimeStackDepth: "Maximale Stacktiefe laut Projekt: {0} ({1})", runtimeStackConfigured: "konfiguriert", runtimeStackDefault: "Standard", runtimeProfileError: "Laufzeitprofil konnte nicht gelesen werden: {0}", runtimeBudgetInvalid: "Bitte eine ganze Schrittzahl von 1 bis 100.000.000 eingeben.", runtimeBudgetExceeded: "Schrittbudget überschritten", runCancel: "Ausführung abbrechen", runCancelRequested: "Abbruch angefordert …", runCancelled: "Ausführung abgebrochen", runtimeProfileInvalid: "Der ungespeicherte Quelltext ist nicht vollständig analysierbar.",
     logs: "Logs", logsTitle: "Zelyra-Logs", logsLoading: "Logs werden geladen …", logsUnavailable: "Logs konnten nicht geladen werden.", logsEmpty: "Noch keine Programmausgabe protokolliert.", logsLevel: "Stufe", logsAll: "Alle", logsSearch: "Text filtern", logsRetention: "Lokal gespeichert; begrenzte Rotation", logsCount: "{0} Einträge angezeigt",
     taskHelp: "Kontexthilfe öffnen", taskHelpHelp: "Hilfe zum Begriff am Cursor anzeigen", taskProperties: "Dateieigenschaften öffnen",
     taskPropertiesHelp: "Informationen und Aktionen zur aktuellen Datei anzeigen", taskSearch: "Text suchen", taskSearchHelp: "Im aktuellen Dokument suchen",
     taskGoToDefinition: "Zur Definition springen", taskGoToDefinitionHelp: "Zur Funktion oder zum Typ am Cursor springen (F12)",
     taskFindReferences: "Bezeichnerverwendungen finden", taskFindReferencesHelp: "Exakte Zelyra-Bezeichner im Projekt finden (Umschalt+F12)",
-    definitionNotFound: "Keine passende Definition im Projekt gefunden.", definitionSaveFirst: "Speichere die Datei vor dem Sprung, damit die Quellposition stimmt.", definitionOpened: "Definition geöffnet: {0}",
+    definitionNotFound: "Keine passende Definition im Projekt gefunden.", definitionSaveFirst: "Speichere die Datei vor dem Sprung, damit die Quellposition stimmt.", definitionOpened: "Definition geöffnet: {0}", analysisOverlayLimit: "Die ungespeicherten Zelyra-Dateien überschreiten die Analysegrenze (15 Dateien oder 1 MiB).",
+    semanticRenameTitle: "Funktion umbenennen", semanticRenameName: "Neuer Funktionsname", semanticRenamePreview: "Änderungsvorschau", semanticRenameApply: "Änderungen in Puffern übernehmen", semanticRenameReady: "{0} Dateien, {1} Fundstellen geprüft. Vor dem Speichern einzeln rückgängig machbar.", semanticRenameApplied: "{0} Dateien geändert. Prüfe und speichere die Puffer.", semanticRenameStale: "Eine Quelldatei hat sich seit der Vorschau geändert. Bitte erneut prüfen.",
     projectSearch: "Projekt durchsuchen", projectSearchTitle: "Projekt durchsuchen", projectSearchHelp: "Alle gespeicherten Zelyra-Dateien durchsuchen", projectSearchPlaceholder: "Text in Zelyra-Dateien suchen", projectSearchResults: "Suchergebnisse", projectSearchEmpty: "Keine Treffer gefunden.", projectSearchLoading: "Projekt wird durchsucht …", projectSearchSaveFirst: "Speichere offene Änderungen, bevor du das Projekt durchsuchst.", projectSearchTruncated: "Die Trefferliste ist wegen einer Suchgrenze unvollständig.", projectSearchSubmit: "Suchen",
     referencesTitle: "Bezeichnerverwendungen", referencesPlaceholder: "Zelyra-Bezeichner suchen",
     localParameter: "Parameter", localValue: "Lokaler Wert", loopValue: "Schleifenwert", matchValue: "Musterwert",
@@ -103,7 +253,7 @@ const messages = {
     subtitle: "Lokale Entwicklungsumgebung", local: "LOKAL", files: "DATEIEN", newFile: "Neue Datei",
     refresh: "Aktualisieren", filterFiles: "Dateien filtern", saveAll: "Alle speichern", save: "Speichern",
     renameFile: "Umbenennen", deleteFile: "Löschen", renamePrompt: "Neuer Projektpfad (zum Beispiel src/customer-new.zyl)",
-    renameConfirm: "Datei {0} umbenennen? Importverweise werden nicht angepasst.", deleteConfirm: "Datei {0} endgültig löschen?",
+    renameConfirm: "Datei {0} nach {1} umbenennen? {2}", renameImports: "Importe werden in folgenden Dateien aktualisiert:\n{0}", renameNoImports: "Es sind keine Importverweise betroffen.", deleteConfirm: "Datei {0} endgültig löschen?",
     fileRenamed: "Datei umbenannt: {0}", fileDeleted: "Datei gelöscht: {0}",
     switchLanguage: "Sprache wechseln", switchFontSize: "Schriftgröße anpassen", fontSizeDefaultAction: "Standard-Schriftgröße (100%)", fontSizeDefaultHelp: "Schriftgröße der Elemente und des Editors auf Standard zurücksetzen", fontSizeMediumAction: "Mittlere Schriftgröße (+15%)", fontSizeMediumHelp: "Schriftgröße um 15% vergrößern", fontSizeLargeAction: "Große Schriftgröße (+30%)", fontSizeLargeHelp: "Schriftgröße um 30% vergrößern", themeLightAction: "Helles Farbschema aktivieren", themeDarkAction: "Dunkles Farbschema aktivieren",
     format: "Formatieren", check: "Projekt prüfen", welcome: "Willkommen in Zelyra Studio",
@@ -111,8 +261,8 @@ const messages = {
     noProblems: "Keine Probleme gefunden. Dein Projekt ist bereit.", close: "Panel schließen", loadingFiles: "Dateien werden geladen",
     toggleExplorer: "Dateiübersicht umschalten", search: "Suchen", handbook: "Handbuch", projectFiles: "Projektdateien",
     openFile: "Datei öffnen", complete: "Vervollständigen", completeHelp: "Codevorschläge anzeigen (Strg+Leertaste)", ready: "Bereit", localMode: "Lokaler Modus",
-    noDocument: "Kein Dokument geöffnet", opened: "{0} geöffnet", unsaved: "Ungespeicherte Änderungen",
-    saved: "{0} gespeichert", checkRunning: "Projekt wird geprüft …", checkPassed: "Projektprüfung erfolgreich",
+    noDocument: "Kein Dokument geöffnet", opened: "{0} geöffnet", unsaved: "Ungespeicherte Änderungen", lineGutter: "{0}: Zeilennummern und Verifikationsstatus",
+    saved: "{0} gespeichert", savedAll: "{0} Dateien gemeinsam gespeichert", checkRunning: "Projekt wird geprüft …", checkPassed: "Projektprüfung erfolgreich",
     problemsFound: "{0} Problem(e) gefunden", formatRunning: "Formatiere …", formatted: "{0} formatiert",
     createPrompt: "Neuer Dateipfad im Projekt (zum Beispiel src/customer.zyl)",
     closeUnsaved: "{0} enthält ungespeicherte Änderungen. Tab trotzdem schließen?",
@@ -181,14 +331,25 @@ const messages = {
     taskCheckHelp: "Show compiler diagnostics for the project", taskDatabase: "Open database", taskDatabaseHelp: "Inspect tables and relationships",
     taskRun: "Run program or web app", taskRunHelp: "Run console programs with Zelyra or start web applications locally; configured effects are possible, and interactive input is unavailable",
     projectMap: "Project map", projectMapTitle: "Project relationships", projectMapOpenSource: "Open source location", projectMapLoading: "Loading the compiler project model …", projectMapUnavailable: "Could not create the project map.", projectMapIncomplete: "The map is incomplete. Unresolved or limited relationships are not guessed.", projectMapIssues: { "view.unresolved": "View not found", "view.ambiguous": "View name is ambiguous", "crud.table_unresolved": "CRUD table is not unique", "api.handler_unresolved": "API function is not unique", "import.unresolved": "Import target not found", "edge.target_missing": "Relationship target is missing", "limit.nodes": "Node limit reached", "limit.edges": "Relationship limit reached" }, projectMapEmpty: "No supported relationships in this project yet.", projectMapModules: "Modules", projectMapData: "Data and views", projectMapWeb: "Routes and APIs", projectMapLogic: "Functions",
+    pipelineBreadcrumbs: "Semantic project relationships", projectMapNullability: "NULL radar (compiler E-SQL-004)", projectMapIssuesExtra: { "form.table_unresolved": "Form table is not unique", "struct.unresolved": "Result type not found", "struct.ambiguous": "Result type is ambiguous", "sql.access_unresolved": "SQL table access is unresolved" },
+    pdfPreview: "PDF preview", pdfPreviewTitle: "PDF preview with real PDF bytes", pdfView: "Declared view", pdfExampleData: "Example data as a JSON object", pdfRender: "Render PDF", pdfDownload: "Download PDF", pdfNoViews: "This project declares no view.", pdfReady: "PDF rendered ({0} bytes).", pdfLoading: "Loading views …", pdfRendering: "Rendering PDF locally …", pdfInvalidData: "Enter a valid JSON object for example data.", pdfError: "PDF preview failed: {0}",
+    outboxButton: "Outbox", outboxTitle: "Mail outbox", outboxCaption: "MariaDB outbox metadata without message bodies", outboxEvent: "Event", outboxStatus: "Status", outboxRecipient: "Recipient", outboxAttachment: "Attachment", outboxCreated: "Created", outboxAvailable: "Available", outboxError: "Error", outboxAction: "Action", previous: "Previous", next: "Next", outboxLoading: "Loading outbox …", outboxEmpty: "No events on this page.", outboxPage: "{0}–{1} of {2}", outboxRequeue: "Requeue", outboxRequeueConfirm: "Release exhausted event {0} for a later worker run? No email will be sent now.", outboxRequeued: "Event requeued. Delivery requires a separately started worker.", outboxLoadError: "Could not load outbox: {0}", outboxRequeueError: "Requeue failed: {0}",
+    outboxAttempts: "Attempts: {0}", outboxLeaseUntil: "Lease until: {0}", outboxDeliveredAt: "Delivered: {0}", outboxExhaustedAt: "Exhausted: {0}", outboxNoDatabase: "No MariaDB connection is configured for the outbox. Set DATABASE_URL in .env or the environment.",
+    capabilityButton: "Permissions", capabilityTitle: "Capability and security matrix", capabilityDeclarations: "Declared capabilities", capabilityUses: "Operations actually used", capabilityPaths: "File paths", capabilityUnused: "Grants without a detected function use", capabilityUnusedCaveat: "Analyzed functions only; generated routes and dynamic calls may require more permissions.", capabilityLoading: "Analyzing compiler and project configuration …", capabilityEmpty: "No entries in the current file.", capabilityGrant: "Review grant", capabilityGrantReview: "Review change to zelyra.toml", capabilityGrantApply: "Apply grant", capabilityGrantPreview: "Only the displayed configuration change will be saved after your confirmation.", capabilityGranted: "Grant saved. The runtime checks it again on the next run.", capabilityUnrestricted: "No project configuration: runtime capabilities are not restricted by zelyra.toml.", capabilityIncomplete: "Source analysis is incomplete; this report may omit entries.", capabilityError: "Capability analysis failed: {0}", capabilityPathUnknown: "Dynamic paths cannot be decided statically.", capabilityNotGranted: "not granted", capabilityDynamic: "dynamic",
+    externalReloaded: "Reloaded externally changed file: {0}", externalDirty: "{0} changed outside Studio. Unsaved edits remain; review before saving.", externalMissing: "{0} was removed outside Studio. The open buffer remains.",
+    externalReloadFailed: "Could not reload {0} after an external change: {1}",
+    canvasButton: "Canvas", canvasTitle: "Static Zelyra preview", canvasTarget: "Page or view", canvasSample: "Sample data (JSON)", canvasRender: "Refresh preview", canvasSource: "Go to declaration", canvasComponents: "Reachable components", canvasComponentSource: "Open declaration", canvasComponentUses: "Usage", canvasComponentUseSource: "Open usage", canvasFrameTitle: "Static page preview", canvasLoading: "Compiler and renderer are preparing the preview …", canvasEmpty: "This project declares no page or view.", canvasError: "Preview unavailable: {0}", canvasSampleError: "Sample data must be a JSON object.", canvasReady: "Rendered statically. No project functions or scripts were executed.", canvasIncomplete: "The project source does not fully compile.",
+    canvasThemeToken: "Theme color", canvasThemeColor: "Color value", canvasThemeApply: "Edit source", canvasThemeMissing: "Create zelyra.theme.css in the project to edit colors.", canvasThemeNoHex: "No supported --z-color-* declaration with a hex value was found.", canvasThemeChanged: "Theme color changed in the unsaved source. Save to apply it to the project.", canvasThemeStale: "Theme file changed. Select the color again.", canvasThemeError: "Theme edit failed: {0}",
     runButton: "Run", runButtonTitle: "Run main.zyl or start the web application",
     runOutputTitle: "Program output", runStarting: "Preparing and starting the application …", runSuccess: "Program finished successfully", runFailure: "Program finished with an error", runTimeout: "Execution stopped after 15 seconds", runOutputTruncated: "Output is limited to 64 KiB per stream.", runNoOutput: "No output.", runStdout: "OUTPUT", runStderr: "ERROR", runInputUnavailable: "Studio does not provide interactive input to the program.", runWebReady: "Web application is running locally:", runWebOpen: "Open application in browser", runWebStop: "Stop preview", runWebStopped: "Local preview stopped.",
+    runtimeBudgetButton: "Budget", runtimeBudgetTitle: "Runtime budget and recursion", runtimeBudgetEnable: "Enable a step budget for console programs", runtimeBudgetRange: "Step budget (slider: 1,000 to 1,000,000)", runtimeBudgetNumber: "Maximum steps (1 to 100,000,000)", runtimeBudgetWebHint: "The step budget applies to console programs. Web previews keep their own runtime limits.", runtimeRecursionTitle: "Possible recursion", runtimeRecursionNone: "No direct or mutual recursion found in the analyzed function graph.", runtimeRecursionIncomplete: "The function graph is too large; recursion analysis is incomplete.", runtimeRecursionDirect: "Direct recursion", runtimeRecursionMutual: "Mutual recursion", runtimeStackDepth: "Project maximum stack depth: {0} ({1})", runtimeStackConfigured: "configured", runtimeStackDefault: "default", runtimeProfileError: "Could not read runtime profile: {0}", runtimeBudgetInvalid: "Enter an integer step count from 1 to 100,000,000.", runtimeBudgetExceeded: "Step budget exceeded", runCancel: "Cancel execution", runCancelRequested: "Cancellation requested …", runCancelled: "Execution cancelled", runtimeProfileInvalid: "The unsaved source cannot be fully analyzed.",
     logs: "Logs", logsTitle: "Zelyra logs", logsLoading: "Loading logs …", logsUnavailable: "Could not load logs.", logsEmpty: "No program output has been recorded yet.", logsLevel: "Level", logsAll: "All", logsSearch: "Filter text", logsRetention: "Stored locally; bounded rotation", logsCount: "Showing {0} entries",
     taskHelp: "Open contextual help", taskHelpHelp: "Show help for the term at the cursor", taskProperties: "Open file properties",
     taskPropertiesHelp: "Show information and actions for the active file", taskSearch: "Find text", taskSearchHelp: "Search in the active document",
     taskGoToDefinition: "Go to definition", taskGoToDefinitionHelp: "Go to the function or type at the cursor (F12)",
     taskFindReferences: "Find identifier occurrences", taskFindReferencesHelp: "Find exact Zelyra identifiers across the project (Shift+F12)",
-    definitionNotFound: "No matching project definition was found.", definitionSaveFirst: "Save this file before jumping so source positions stay accurate.", definitionOpened: "Opened definition: {0}",
+    definitionNotFound: "No matching project definition was found.", definitionSaveFirst: "Save this file before jumping so source positions stay accurate.", definitionOpened: "Opened definition: {0}", analysisOverlayLimit: "Unsaved Zelyra files exceed the analysis limit (15 files or 1 MiB).",
+    semanticRenameTitle: "Rename function", semanticRenameName: "New function name", semanticRenamePreview: "Change preview", semanticRenameApply: "Apply changes to buffers", semanticRenameReady: "{0} files and {1} occurrences checked. Undo each file before saving.", semanticRenameApplied: "Changed {0} files. Review and save the buffers.", semanticRenameStale: "A source file changed since the preview. Check the rename again.",
     projectSearch: "Search project", projectSearchTitle: "Search project", projectSearchHelp: "Search all saved Zelyra files", projectSearchPlaceholder: "Search text in Zelyra files", projectSearchResults: "Search results", projectSearchEmpty: "No matches found.", projectSearchLoading: "Searching the project …", projectSearchSaveFirst: "Save open changes before searching the project.", projectSearchTruncated: "The result list is incomplete because a search limit was reached.", projectSearchSubmit: "Search",
     referencesTitle: "Identifier occurrences", referencesPlaceholder: "Find a Zelyra identifier",
     localParameter: "Parameter", localValue: "Local value", loopValue: "Loop value", matchValue: "Match value",
@@ -199,7 +360,7 @@ const messages = {
     subtitle: "Local development environment", local: "LOCAL", files: "FILES", newFile: "New file",
     refresh: "Refresh", filterFiles: "Filter files", saveAll: "Save all", save: "Save",
     renameFile: "Rename", deleteFile: "Delete", renamePrompt: "New project path (for example src/customer-new.zyl)",
-    renameConfirm: "Rename {0}? Import references will not be updated.", deleteConfirm: "Permanently delete {0}?",
+    renameConfirm: "Rename {0} to {1}? {2}", renameImports: "Imports will be updated in these files:\n{0}", renameNoImports: "No import references are affected.", deleteConfirm: "Permanently delete {0}?",
     fileRenamed: "File renamed: {0}", fileDeleted: "File deleted: {0}",
     switchLanguage: "Switch language", switchFontSize: "Adjust font size", fontSizeDefaultAction: "Default font size (100%)", fontSizeDefaultHelp: "Reset font size of UI elements and editor to default", fontSizeMediumAction: "Medium font size (+15%)", fontSizeMediumHelp: "Increase font size by 15%", fontSizeLargeAction: "Large font size (+30%)", fontSizeLargeHelp: "Increase font size by 30%", themeLightAction: "Use light appearance", themeDarkAction: "Use dark appearance",
     format: "Format", check: "Check project", welcome: "Welcome to Zelyra Studio",
@@ -207,8 +368,8 @@ const messages = {
     noProblems: "No problems found. Your project is ready.", close: "Close panel", loadingFiles: "Loading files",
     toggleExplorer: "Toggle file explorer", search: "Search", handbook: "Handbook", projectFiles: "Project files",
     openFile: "Open file", complete: "Complete", completeHelp: "Show code suggestions (Ctrl+Space)", ready: "Ready", localMode: "Local mode",
-    noDocument: "No document open", opened: "Opened {0}", unsaved: "Unsaved changes",
-    saved: "Saved {0}", checkRunning: "Checking project …", checkPassed: "Project check passed",
+    noDocument: "No document open", opened: "Opened {0}", unsaved: "Unsaved changes", lineGutter: "{0}: line numbers and verification status",
+    saved: "Saved {0}", savedAll: "Saved {0} files together", checkRunning: "Checking project …", checkPassed: "Project check passed",
     problemsFound: "Found {0} problem(s)", formatRunning: "Formatting …", formatted: "Formatted {0}",
     createPrompt: "New project file path (for example src/customer.zyl)",
     closeUnsaved: "{0} has unsaved changes. Close this tab anyway?",
@@ -345,11 +506,6 @@ function setLanguage(next) {
   if (!$("studio-assistant").hidden) renderFileProperties(activePath);
 }
 
-const keywords = new Set((
-  "fn let mut if else match for in step while loop break continue return type record " +
-  "table view component layout slot page api form crud tableview auth database " +
-  "sql uses capability requires ensures invariant true false null none some ok err"
-).split(/\s+/));
 const languageHelp = {
   fn: ["Funktion", "Definiert einen benannten, wiederverwendbaren Ablauf.", "fn begruessung(name: Text) -> Text", "return \"Hallo \" + name"],
   let: ["Wert", "Legt einen veränderlichen Wert im aktuellen Gültigkeitsbereich an.", "let anzahl = 0", "anzahl = anzahl + 1"],
@@ -436,37 +592,6 @@ const languageOptions = {
     capability: ["project grant in [capabilities] in zelyra.toml"],
   },
 };
-const zelyraLanguage = StreamLanguage.define({
-  startState: () => ({ inBlockComment: false }),
-  languageData: { commentTokens: { line: "#", block: { open: "##", close: "##" } } },
-  token(stream, state) {
-    if (stream.string.trim() === "##") {
-      stream.skipToEnd();
-      state.inBlockComment = !state.inBlockComment;
-      return "comment";
-    }
-    if (state.inBlockComment) {
-      stream.skipToEnd();
-      return "comment";
-    }
-    if (stream.eatSpace()) return null;
-    if (stream.match("#")) { stream.skipToEnd(); return "comment"; }
-    if (stream.match("//")) { stream.skipToEnd(); return "comment"; }
-    if (stream.match(/(?:\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*')/)) return "string";
-    if (stream.match(/\b\d+(?:\.\d+)?\b/)) return "number";
-    if (stream.match(/[A-Za-z_][\w]*/)) {
-      const word = stream.current();
-      if (keywords.has(word)) return "keyword";
-      if (/^[A-Z]/.test(word)) return "typeName";
-      return "variableName";
-    }
-    if (stream.match(/[{}()[\],.;:]/)) return "punctuation";
-    if (stream.match(/[=<>!+*/%&|?-]+/)) return "operator";
-    stream.next();
-    return null;
-  },
-});
-
 const editorTheme = new Compartment();
 function createZelyraTheme() {
   const size = currentFontSize();
@@ -500,7 +625,7 @@ async function api(path, options = {}) {
   const headers = new Headers(options.headers || {});
   headers.set("X-Zelyra-Editor-Token", token);
   if (options.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-  const response = await fetch(`/__zelyra/editor/api/${path}`, { ...options, headers, cache: "no-store", credentials: "omit", mode: "same-origin", redirect: "error" });
+  const response = await fetch(`/__zelyra/editor/api/${path}`, { ...options, headers, cache: "no-store", credentials: "omit", redirect: "error" });
   const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
   if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
   return body;
@@ -514,6 +639,18 @@ function announce(message, kind = "") {
 function tabState(path, tab) { return path === activePath && editor ? editor.state : tab?.state; }
 function isDirty(tab, path) { return tab && tabState(path, tab).doc.toString() !== tab.saved; }
 function dirtyCount() { return [...tabs].filter(([path, tab]) => isDirty(tab, path)).length; }
+function analysisRequest(path, source, version = liveCheckSequence) {
+  const overlays = [];
+  let bytes = typeof source === "string" ? new TextEncoder().encode(source).length : 0;
+  for (const [otherPath, tab] of tabs) {
+    if (otherPath === path || !otherPath.endsWith(".zyl") || !isDirty(tab, otherPath)) continue;
+    const text = tabState(otherPath, tab).doc.toString();
+    bytes += new TextEncoder().encode(text).length;
+    overlays.push({ path: otherPath, source: text, version: tab.version || 0 });
+  }
+  if (overlays.length >= 16 || bytes > 1_048_576) throw new Error(t("analysisOverlayLimit"));
+  return { path, source, version, overlays };
+}
 
 function renderTabs() {
   const bar = $("tabs");
@@ -549,6 +686,31 @@ function completionSource(context) {
   const word = context.matchBefore(/[\w]+/);
   if (!word && !context.explicit) return null;
   const source = context.state.doc.toString();
+  if (word?.text === "_" && activePath?.endsWith(".zyl")) {
+    const path = activePath;
+    let request;
+    try { request = analysisRequest(path, source); }
+    catch { return null; }
+    return api("typed-hole", { method: "POST", body: JSON.stringify({
+      ...request, offset: context.pos,
+    }) }).then((result) => {
+      if (!result.found || activePath !== path || editor?.state.doc.toString() !== source) return null;
+      const { start, end } = result.editorSpan;
+      return {
+        from: start, to: end,
+        filter: false,
+        options: (result.suggestions || []).map((item) => ({
+          label: item.expression,
+          apply: item.expression,
+          type: item.kind === "function" ? "function" : item.kind === "value" ? "variable" : "text",
+          detail: item.type || result.expectedType || "",
+          info: item.contractReview
+            ? (language === "de" ? "Contracts müssen geprüft werden." : "Contracts need review.")
+            : undefined,
+        })),
+      };
+    }).catch(() => null);
+  }
   const from = word ? word.from : context.pos;
   const basicOptions = [
     ...[...keywords].map((label) => ({ label, type: "keyword" })),
@@ -589,6 +751,47 @@ function loadLocalSymbols(path, source, offset) {
   return api("locals", { method: "POST", body: JSON.stringify({ path, source, offset }) })
     .then((result) => result.symbols || [])
     .catch(() => []);
+}
+
+const semanticHover = hoverTooltip(async (view, pos) => {
+  const path = activePath;
+  if (!path?.endsWith(".zyl") || editor !== view) return null;
+  const source = view.state.doc.toString();
+  const version = liveCheckSequence;
+  let request;
+  try { request = analysisRequest(path, source, version); }
+  catch { return null; }
+  try {
+    const result = await api("semantic", {
+      method: "POST",
+      body: JSON.stringify({ ...request, offset: pos, action: "hover" }),
+    });
+    if (!result.found || result.version !== version || liveCheckSequence !== version
+      || activePath !== path || editor !== view || view.state.doc.toString() !== source) return null;
+    return {
+      pos,
+      end: pos,
+      create() {
+        const dom = document.createElement("div");
+        dom.className = "cm-tooltip-zelyra-hover";
+        dom.setAttribute("role", "tooltip");
+        dom.setAttribute("aria-live", "polite");
+        dom.textContent = result.detail;
+        return { dom };
+      },
+    };
+  } catch {
+    return null;
+  }
+}, { hoverTime: 350, hideOnChange: true });
+
+function openSemanticHover(view) {
+  const position = view.state.selection.main.head;
+  activateHover(view, position, 1, {
+    tooltip: semanticHover,
+    until: (transaction) => transaction.docChanged || transaction.selectionSet,
+  });
+  return true;
 }
 
 function loadProjectSymbols(path) {
@@ -872,6 +1075,10 @@ const studioTasks = [
   ["taskCheck", "taskCheckHelp", ["check", "compiler", "error", "diagnostic"], () => void checkProject()],
   ["taskRun", "taskRunHelp", ["run", "execute", "start program"], () => void runProject()],
   ["projectMap", "projectMapTitle", ["map", "diagram", "module", "route", "relationship"], () => void openProjectMap()],
+  ["pdfPreview", "pdfPreviewTitle", ["pdf", "document", "invoice", "print"], () => void openPdfPreview()],
+  ["outboxButton", "outboxTitle", ["outbox", "mail", "email", "queue"], openOutbox],
+  ["capabilityButton", "capabilityTitle", ["capability", "permission", "sandbox", "security"], openCapabilityMatrix],
+  ["canvasButton", "canvasTitle", ["canvas", "preview", "page", "view"], openCanvas],
   ["taskDatabase", "taskDatabaseHelp", ["database", "table", "relation", "schema"], () => openDatabaseWorkbench()],
   ["taskHelp", "taskHelpHelp", ["help", "documentation", "f1"], () => toggleAssistant("help")],
   ["taskProperties", "taskPropertiesHelp", ["properties", "file", "settings"], () => toggleAssistant("properties")],
@@ -930,11 +1137,13 @@ function findInDocument() {
 
 function openProjectSearch() {
   projectSearchMode = "text";
+  semanticReferenceQuery = null;
   if (dirtyCount()) { announce(t("projectSearchSaveFirst"), "warning"); return; }
   const dialog = $("project-search");
   if (!dialog.open) dialog.showModal();
   $("project-search-title").textContent = t("projectSearchTitle");
   $("project-search-input").placeholder = t("projectSearchPlaceholder");
+  $("project-search-input").readOnly = false;
   $("project-search-input").value = "";
   $("project-search-results").replaceChildren();
   $("project-search-empty").hidden = true;
@@ -946,10 +1155,6 @@ function findIdentifierOccurrences() {
     announce(t("definitionNotFound"), "warning");
     return;
   }
-  if (dirtyCount()) {
-    announce(t("projectSearchSaveFirst"), "warning");
-    return;
-  }
   const selection = editor.state.selection.main;
   const wordRange = selection.empty ? editor.state.wordAt(selection.head) : selection;
   const name = wordRange ? editor.state.sliceDoc(wordRange.from, wordRange.to).trim() : "";
@@ -958,10 +1163,18 @@ function findIdentifierOccurrences() {
     return;
   }
   projectSearchMode = "references";
+  try {
+    semanticReferenceQuery = {
+      ...analysisRequest(activePath, editor.state.doc.toString()),
+      offset: wordRange.from,
+      action: "references",
+    };
+  } catch (error) { announce(error.message, "warning"); return; }
   const dialog = $("project-search");
   if (!dialog.open) dialog.showModal();
   $("project-search-title").textContent = t("referencesTitle");
   $("project-search-input").placeholder = t("referencesPlaceholder");
+  $("project-search-input").readOnly = true;
   $("project-search-input").value = name;
   $("project-search-results").replaceChildren();
   $("project-search-empty").hidden = true;
@@ -969,7 +1182,7 @@ function findIdentifierOccurrences() {
 }
 
 async function performProjectSearch() {
-  if (dirtyCount()) { announce(t("projectSearchSaveFirst"), "warning"); $("project-search").close(); return; }
+  if (projectSearchMode !== "references" && dirtyCount()) { announce(t("projectSearchSaveFirst"), "warning"); $("project-search").close(); return; }
   const query = $("project-search-input").value.trim();
   if (!query) return;
   const results = $("project-search-results");
@@ -979,7 +1192,7 @@ async function performProjectSearch() {
   empty.hidden = false;
   try {
     const response = projectSearchMode === "references"
-      ? await api(`references?name=${encodeURIComponent(query)}`)
+      ? await api("semantic", { method: "POST", body: JSON.stringify(semanticReferenceQuery) })
       : await api(`search?q=${encodeURIComponent(query)}`);
     const matches = response.matches || [];
     empty.textContent = t("projectSearchEmpty");
@@ -1020,38 +1233,130 @@ async function performProjectSearch() {
 
 async function goToDefinition() {
   if (!editor || !activePath?.endsWith(".zyl")) return;
-  if (isDirty(tabs.get(activePath), activePath)) {
-    announce(t("definitionSaveFirst"), "warning");
-    return;
-  }
   const wordRange = editor.state.wordAt(editor.state.selection.main.head);
   const word = wordRange ? editor.state.sliceDoc(wordRange.from, wordRange.to) : "";
   if (!word) { announce(t("definitionNotFound"), "warning"); return; }
   try {
-    const symbols = await loadProjectSymbols(activePath);
-    const symbol = symbols.find((item) => item.label === word && item.path === activePath && Number.isInteger(item.position))
-      || symbols.find((item) => item.label === word && item.path && Number.isInteger(item.position));
-    if (!symbol) { announce(t("definitionNotFound"), "warning"); return; }
-    const targetTab = tabs.get(symbol.path);
-    if (targetTab && isDirty(targetTab, symbol.path)) {
-      announce(t("definitionSaveFirst"), "warning");
-      return;
-    }
-    await openFile(symbol.path);
-    if (activePath !== symbol.path || !editor) return;
-    editor.dispatch({ selection: { anchor: symbol.position, head: symbol.position + word.length }, scrollIntoView: true });
+    const source = editor.state.doc.toString();
+    const requestedPath = activePath;
+    const result = await api("semantic", { method: "POST", body: JSON.stringify({
+      ...analysisRequest(requestedPath, source), offset: wordRange.from, action: "definition",
+    }) });
+    if (activePath !== requestedPath || editor.state.doc.toString() !== source) return;
+    if (!result.found) { announce(t("definitionNotFound"), "warning"); return; }
+    if (result.path !== activePath) await openFile(result.path);
+    if (activePath !== result.path || !editor) return;
+    editor.dispatch({ selection: { anchor: result.start, head: result.end }, scrollIntoView: true });
     editor.focus();
     announce(t("definitionOpened", word), "success");
   } catch (error) { announce(error.message, "error"); }
 }
 
+let semanticRenameContext = null;
+let semanticRenamePlan = null;
+
+function openSemanticRename() {
+  if (!editor || !activePath?.endsWith(".zyl")) return;
+  const selected = editor.state.selection.main;
+  const range = selected.empty ? editor.state.wordAt(selected.head) : selected;
+  if (!range) { announce(t("definitionNotFound"), "warning"); return; }
+  try {
+    semanticRenameContext = {
+      request: { ...analysisRequest(activePath, editor.state.doc.toString()),
+        offset: range.from, action: "rename-preview" },
+      oldName: editor.state.sliceDoc(range.from, range.to),
+    };
+  } catch (error) { announce(error.message, "warning"); return; }
+  semanticRenamePlan = null;
+  $("semantic-rename-name").value = semanticRenameContext.oldName;
+  $("semantic-rename-status").textContent = "";
+  $("semantic-rename-changes").replaceChildren();
+  $("semantic-rename-apply-button").disabled = true;
+  $("semantic-rename-dialog").showModal();
+  $("semantic-rename-name").focus();
+  $("semantic-rename-name").select();
+}
+
+async function previewSemanticRename() {
+  if (!semanticRenameContext) return;
+  const newName = $("semantic-rename-name").value.trim();
+  semanticRenamePlan = null;
+  $("semantic-rename-apply-button").disabled = true;
+  const target = $("semantic-rename-changes");
+  target.replaceChildren();
+  try {
+    const result = await api("semantic", { method: "POST", body: JSON.stringify({
+      ...semanticRenameContext.request, newName,
+    }) });
+    if (!$("semantic-rename-dialog").open || $("semantic-rename-name").value.trim() !== newName) return;
+    if (!result.found) throw new Error(t("definitionNotFound"));
+    semanticRenamePlan = result;
+    let count = 0;
+    for (const change of result.changes || []) {
+      const section = document.createElement("section");
+      const heading = document.createElement("strong");
+      heading.textContent = `${change.path} · ${change.edits.length}`;
+      const before = document.createElement("pre");
+      before.textContent = change.edits.map((edit) => {
+        const line = change.before.slice(0, edit.start).split("\n").length;
+        return `${line}: ${change.before.slice(edit.start, edit.end)} → ${edit.newText}`;
+      }).join("\n");
+      section.append(heading, before);
+      target.append(section);
+      count += change.edits.length;
+    }
+    $("semantic-rename-status").textContent = t("semanticRenameReady", result.changes.length, count);
+    $("semantic-rename-apply-button").disabled = false;
+  } catch (error) { $("semantic-rename-status").textContent = error.message; }
+}
+
+async function applySemanticRename() {
+  const plan = semanticRenamePlan;
+  if (!plan) return;
+  $("semantic-rename-apply-button").disabled = true;
+  const originalPath = activePath;
+  const applied = [];
+  try {
+    for (const change of plan.changes) {
+      await openFile(change.path);
+      const tab = tabs.get(change.path);
+      if (!tab || tabState(change.path, tab).doc.toString() !== change.before) {
+        throw new Error(t("semanticRenameStale"));
+      }
+    }
+    for (const change of plan.changes) {
+      activate(change.path);
+      editor.dispatch({ changes: change.edits.map((edit) => ({
+        from: edit.start, to: edit.end, insert: edit.newText,
+      })) });
+      applied.push(change);
+      if (editor.state.doc.toString() !== change.after) throw new Error(t("semanticRenameStale"));
+    }
+    $("semantic-rename-dialog").close();
+    announce(t("semanticRenameApplied", plan.changes.length), "success");
+    if (originalPath && tabs.has(originalPath)) activate(originalPath);
+    semanticRenamePlan = null;
+  } catch (error) {
+    $("semantic-rename-status").textContent = error.message;
+    for (const change of applied.reverse()) {
+      const tab = tabs.get(change.path);
+      if (tab) {
+        activate(change.path);
+        editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: change.before } });
+      }
+    }
+    if (originalPath && tabs.has(originalPath)) activate(originalPath);
+  }
+}
+
 function createView(path, state) {
   const extensions = [
-    lineNumbers(), highlightActiveLineGutter(), foldGutter(), undoRedoHistory(), drawSelection(),
+    lineNumbers(), highlightActiveLineGutter(), foldGutter(), verificationGutter, undoRedoHistory(), drawSelection(),
     rectangularSelection(), crosshairCursor(), highlightActiveLine(), bracketMatching(),
     indentOnInput(), highlightSelectionMatches(), zelyraLanguage,
     syntaxHighlighting(defaultHighlightStyle, { fallback: true }), zelyraHighlight,
     autocompletion({ override: [completionSource], activateOnTyping: true }),
+    semanticHover,
     linter(() => diagnostics.filter((item) => !item.file || item.file.endsWith(path)).map((item) => ({
       from: Math.max(0, Math.min(state.doc.length, item.from)),
       to: Math.max(0, Math.min(state.doc.length, item.to)),
@@ -1062,8 +1367,15 @@ function createView(path, state) {
       { key: "Mod-s", run: () => { saveActive(); return true; } },
       { key: "Mod-Space", run: startCompletion },
       { key: "F12", run: () => { void goToDefinition(); return true; } },
+      { key: "F2", run: () => { openSemanticRename(); return true; } },
       { key: "Shift-F12", run: () => { void findIdentifierOccurrences(); return true; } },
       { key: "F1", run: () => { toggleAssistant("help"); return true; } },
+      { key: "Alt-Shift-h", run: () => openSemanticHover(editor) },
+      { key: "Escape", run: () => {
+        if (!hasHoverTooltips(editor.state)) return false;
+        editor.dispatch({ effects: closeHoverTooltip(semanticHover) });
+        return true;
+      } },
       ...defaultKeymap, ...historyKeymap, ...searchKeymap, ...foldKeymap,
     ]),
     EditorView.updateListener.of((update) => {
@@ -1071,13 +1383,23 @@ function createView(path, state) {
       if (!tab) return;
       tab.state = update.state;
       if (update.docChanged) {
+        tab.version = (tab.version || 0) + 1;
+        verificationResults = [];
+        pipelineMapCache = null;
         renderTabs();
+        scheduleCanvasRefresh();
         announce(t("unsaved"), "warning");
         queueMicrotask(() => {
-          if (editor === update.view) editor.dispatch(setDiagnostics(editor.state, []));
+          if (editor === update.view) {
+            editor.dispatch(setDiagnostics(editor.state, []));
+            editor.dispatch({ effects: verificationRefresh.of(null) });
+          }
         });
       }
-      if (update.selectionSet || update.docChanged) renderContextHelp(update.state, path);
+      if (update.selectionSet || update.docChanged) {
+        renderContextHelp(update.state, path);
+        renderPipelineBreadcrumbs();
+      }
       if ((update.selectionSet || update.docChanged) && !$("assistant-properties-view").hidden) {
         renderUiPropertyInspector(update.state, path);
       }
@@ -1086,10 +1408,16 @@ function createView(path, state) {
     editorTheme.of(createZelyraTheme()),
     EditorView.contentAttributes.of({ "aria-label": `${path} im Zelyra-Webeditor` }),
   ];
-  return new EditorView({
+  const view = new EditorView({
     state: state.update({ effects: StateEffect.reconfigure.of(extensions) }).state,
     parent: editorRoot,
   });
+  for (const gutterElement of view.dom.querySelectorAll(".cm-gutters")) {
+    gutterElement.removeAttribute("aria-hidden");
+    gutterElement.setAttribute("role", "group");
+    gutterElement.setAttribute("aria-label", t("lineGutter", path));
+  }
+  return view;
 }
 
 editorRoot.addEventListener("input", () => {
@@ -1113,10 +1441,47 @@ async function openFile(path) {
   } catch (error) { announce(error.message, "error"); }
 }
 
+async function refreshExternallyChangedTabs(changedPath) {
+  const paths = changedPath ? [changedPath] : [...tabs.keys()];
+  for (const path of paths) {
+    const tab = tabs.get(path);
+    if (!tab) continue;
+    if (isDirty(tab, path)) {
+      announce(t("externalDirty", path), "warning");
+      continue;
+    }
+    const expectedHash = tab.hash;
+    let file;
+    try { file = await api(`file?path=${encodeURIComponent(path)}`); }
+    catch (error) {
+      announce(error.message.includes("file not found") ? t("externalMissing", path)
+        : t("externalReloadFailed", path, error.message), "warning");
+      continue;
+    }
+    if (tabs.get(path) !== tab || isDirty(tab, path) || tab.hash !== expectedHash || file.hash === expectedHash) continue;
+    const wasActive = activePath === path;
+    if (wasActive && editor) { editor.destroy(); editor = null; }
+    tab.saved = file.content;
+    tab.hash = file.hash;
+    tab.state = EditorState.create({ doc: file.content });
+    if (wasActive) {
+      editor = createView(path, tab.state);
+      setVerificationResults([]);
+      renderContextHelp(editor.state, path);
+    }
+    symbolCache.delete(path);
+    renderTabs();
+    announce(t("externalReloaded", path));
+  }
+}
+
 function activate(path) {
   if (!tabs.has(path)) return;
   if (editor) { tabs.get(activePath).state = editor.state; editor.destroy(); }
   activePath = path;
+  pipelineMapCache = null;
+  renderPipelineBreadcrumbs();
+  verificationResults = [];
   const tab = tabs.get(path);
   editor = createView(path, tab.state);
   $("active-file").textContent = path;
@@ -1124,6 +1489,7 @@ function activate(path) {
   $("empty-state").hidden = true;
   renderTabs();
   editor.focus();
+  scheduleLiveCheck(path);
 }
 
 function closeTab(path) {
@@ -1133,6 +1499,8 @@ function closeTab(path) {
   tabs.delete(path);
   if (activePath === path) {
     activePath = null;
+    pipelineMapCache = null;
+    renderPipelineBreadcrumbs();
     const next = tabs.keys().next().value;
     if (next) activate(next);
     else { $("active-file").textContent = t("noDocument"); $("empty-state").hidden = false; }
@@ -1156,8 +1524,23 @@ async function savePath(path) {
 }
 function saveActive() { if (activePath) void savePath(activePath); }
 async function saveAll() {
-  for (const path of tabs.keys()) if (!(await savePath(path))) return false;
-  return true;
+  const files = [...tabs].filter(([path, tab]) => isDirty(tab, path)).map(([path, tab]) => ({
+    path, content: tabState(path, tab).doc.toString(), baseHash: tab.hash,
+  }));
+  if (!files.length) return true;
+  try {
+    const result = await api("file-save-batch", { method: "POST", body: JSON.stringify({ files }) });
+    for (const file of result.files || []) {
+      const tab = tabs.get(file.path);
+      if (!tab) continue;
+      tab.saved = file.content;
+      tab.hash = file.hash;
+      symbolCache.delete(file.path);
+    }
+    renderTabs();
+    announce(t("savedAll", files.length), "success");
+    return true;
+  } catch (error) { announce(error.message, "error"); return false; }
 }
 
 async function renameActiveFile() {
@@ -1165,11 +1548,25 @@ async function renameActiveFile() {
   if (!path || path === "main.zyl" || path === "zelyra.toml") return;
   const newPath = prompt(t("renamePrompt"), path);
   if (!newPath || newPath === path) return;
-  if (!confirm(t("renameConfirm", path))) return;
-  if (!(await savePath(path))) return;
+  if (!(await saveAll())) return;
   try {
     const tab = tabs.get(path);
-    const result = await api("file-rename", { method: "POST", body: JSON.stringify({ path, newPath, baseHash: tab.hash }) });
+    const request = { path, newPath, baseHash: tab.hash };
+    const preview = await api("file-rename-preview", { method: "POST", body: JSON.stringify(request) });
+    const affected = preview.updatedImports || [];
+    const details = affected.length ? t("renameImports", affected.join("\n")) : t("renameNoImports");
+    if (!confirm(t("renameConfirm", path, newPath, details))) return;
+    const result = await api("file-rename", { method: "POST", body: JSON.stringify({ ...request, planId: preview.planId }) });
+    for (const file of result.updatedFiles || []) {
+      const importerTab = tabs.get(file.path);
+      if (!importerTab) continue;
+      importerTab.state = importerTab.state.update({
+        changes: { from: 0, to: importerTab.state.doc.length, insert: file.content },
+      }).state;
+      importerTab.saved = file.content;
+      importerTab.hash = file.hash;
+      symbolCache.delete(file.path);
+    }
     if (editor) { tab.state = editor.state; editor.destroy(); editor = null; }
     tabs.delete(path);
     tab.hash = result.hash;
@@ -2421,9 +2818,18 @@ function scheduleLiveCheck(path) {
     try {
       const source = editor?.state.doc.toString();
       if (typeof source !== "string") return;
-      const result = await api("check", { method: "POST", body: JSON.stringify({ path, source }) });
+      const result = await api("check", { method: "POST", body: JSON.stringify({
+        ...analysisRequest(path, source, sequence), clientId: eventClientId,
+      }) });
       if (sequence !== liveCheckSequence || activePath !== path || editor?.state.doc.toString() !== source) return;
       renderDiagnostics(result.diagnostics || [], result.success, { silent: true });
+      void refreshPipelineContext(path, source, sequence);
+      if (!result.success) return;
+      const verified = await api("verify", { method: "POST", body: JSON.stringify({
+        ...analysisRequest(path, source, sequence), clientId: eventClientId,
+      }) });
+      if (sequence !== liveCheckSequence || activePath !== path || editor?.state.doc.toString() !== source || verified.version !== sequence) return;
+      setVerificationResults(verified.success ? verified.results || [] : []);
     } catch {
       // Live checks are advisory; explicit project checks report request failures.
     }
@@ -2439,7 +2845,57 @@ async function checkProject() {
   } catch (error) { announce(error.message, "error"); }
 }
 
+function studioEntryPath() {
+  return treeFiles.includes("main.zyl")
+    ? "main.zyl"
+    : (activePath && activePath.endsWith(".zyl") ? activePath : (treeFiles.find(f => f.endsWith(".zyl")) || "main.zyl"));
+}
+
+async function openRuntimeBudget() {
+  const dialog = $("runtime-budget-dialog");
+  if (!dialog.open) dialog.showModal();
+  const note = $("runtime-profile-note");
+  const risks = $("runtime-recursion-risks");
+  note.textContent = t("checkRunning");
+  risks.replaceChildren();
+  try {
+    const path = studioEntryPath();
+    const source = path === activePath ? editor?.state.doc.toString() : undefined;
+    const result = await api("runtime-profile", { method: "POST", body: JSON.stringify({
+      ...analysisRequest(path, source),
+    }) });
+    if (!dialog.open) return;
+    $("runtime-stack-depth").textContent = t("runtimeStackDepth", result.maxStackDepth,
+      t(result.configured ? "runtimeStackConfigured" : "runtimeStackDefault"));
+    note.textContent = result.recursionAnalysisIncomplete ? t("runtimeRecursionIncomplete")
+      : result.success ? "" : t("runtimeProfileInvalid");
+    for (const risk of result.recursionRisks || []) {
+      const item = document.createElement("li");
+      const names = (risk.functions || []).map((fn) => `${fn.name} (${fn.path}:${fn.line})`).join(" → ");
+      item.textContent = `${t(risk.kind === "mutual" ? "runtimeRecursionMutual" : "runtimeRecursionDirect")}: ${names}`;
+      risks.append(item);
+    }
+    if (!risks.childElementCount && !result.recursionAnalysisIncomplete && result.success) {
+      const item = document.createElement("li");
+      item.textContent = t("runtimeRecursionNone");
+      risks.append(item);
+    }
+  } catch (error) {
+    note.textContent = t("runtimeProfileError", error.message);
+  }
+}
+
 async function runProject() {
+  let maxSteps = null;
+  if ($("runtime-budget-enabled").checked) {
+    maxSteps = Number($("runtime-budget-number").value);
+    if (!Number.isSafeInteger(maxSteps) || maxSteps < 1 || maxSteps > 100_000_000) {
+      announce(t("runtimeBudgetInvalid"), "error");
+      if (!$("runtime-budget-dialog").open) $("runtime-budget-dialog").showModal();
+      $("runtime-budget-number").focus();
+      return;
+    }
+  }
   if (!(await saveAll())) return;
   const dialog = $("run-output");
   const state = $("run-output-state");
@@ -2450,12 +2906,12 @@ async function runProject() {
   $("run-output-web-link").hidden = true;
   $("run-output-web-url").removeAttribute("href");
   if (!dialog.open) dialog.showModal();
+  $("run-output-cancel").hidden = false;
+  $("run-output-cancel").disabled = false;
   announce(t("runStarting"));
   try {
-    const entryPath = treeFiles.includes("main.zyl")
-      ? "main.zyl"
-      : (activePath && activePath.endsWith(".zyl") ? activePath : (treeFiles.find(f => f.endsWith(".zyl")) || "main.zyl"));
-    const result = await api("run", { method: "POST", body: JSON.stringify({ path: entryPath }) });
+    const entryPath = studioEntryPath();
+    const result = await api("run", { method: "POST", body: JSON.stringify({ path: entryPath, maxSteps }) });
     const webLink = $("run-output-web-link");
     if (result.webApp && result.webUrl) {
       state.textContent = t("runWebReady");
@@ -2467,7 +2923,8 @@ async function runProject() {
       return;
     }
     webLink.hidden = true;
-    const statusText = result.timedOut ? t("runTimeout") : result.success ? t("runSuccess") : t("runFailure");
+    const statusText = result.cancelled ? t("runCancelled") : result.timedOut ? t("runTimeout")
+      : result.budgetExceeded ? t("runtimeBudgetExceeded") : result.success ? t("runSuccess") : t("runFailure");
     state.textContent = `${statusText}${result.exitCode === null ? "" : ` · exit ${result.exitCode}`} · ${result.durationMs} ms`;
     state.dataset.kind = result.success ? "success" : "error";
     const streams = [
@@ -2483,6 +2940,8 @@ async function runProject() {
     state.dataset.kind = "error";
     output.textContent = error.message;
     announce(error.message, "error");
+  } finally {
+    $("run-output-cancel").hidden = true;
   }
 }
 
@@ -2531,6 +2990,69 @@ async function openEditorLogs() {
   }
 }
 
+function renderPipelineBreadcrumbs() {
+  const target = $("pipeline-breadcrumbs");
+  target.replaceChildren();
+  if (!editor || !pipelineMapCache || pipelineMapCache.path !== activePath) return;
+  const map = pipelineMapCache.map;
+  const cursor = editor.state.selection.main.head;
+  const local = (map.nodes || []).filter((node) => node.path === activePath && node.kind !== "module"
+    && typeof node.position === "number" && node.position <= cursor);
+  local.sort((left, right) => right.position - left.position);
+  const selected = local[0];
+  if (!selected) return;
+  const nodes = new Map((map.nodes || []).map((node) => [node.id, node]));
+  const shown = [selected];
+  const visited = new Set([selected.id]);
+  let frontier = [selected.id];
+  for (let depth = 0; depth < 2 && shown.length < 8; depth += 1) {
+    const next = [];
+    for (const id of frontier) {
+      for (const edge of map.edges || []) {
+        if (edge.label === "declares" || (edge.from !== id && edge.to !== id)) continue;
+        const neighborId = edge.from === id ? edge.to : edge.from;
+        const neighbor = nodes.get(neighborId);
+        if (!neighbor || neighbor.kind === "module" || visited.has(neighborId)) continue;
+        visited.add(neighborId);
+        shown.push(neighbor);
+        next.push(neighborId);
+        if (shown.length >= 8) break;
+      }
+      if (shown.length >= 8) break;
+    }
+    frontier = next;
+  }
+  for (const node of shown) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = node.id === selected.id ? "current" : "";
+    button.textContent = `${node.kind}: ${node.label}`;
+    button.title = `${node.path}:${node.line || 1}`;
+    button.addEventListener("click", () => {
+      void openFile(node.path).then(() => {
+        if (activePath !== node.path || !editor) return;
+        editor.dispatch({ selection: { anchor: Math.min(node.position || 0, editor.state.doc.length) }, scrollIntoView: true });
+        editor.focus();
+      });
+    });
+    target.append(button);
+  }
+}
+
+async function refreshPipelineContext(path, source, version) {
+  try {
+    const map = await api("project-map", { method: "POST", body: JSON.stringify(analysisRequest(path, source, version)) });
+    if (activePath !== path || editor?.state.doc.toString() !== source || liveCheckSequence !== version) return;
+    pipelineMapCache = { path, map };
+    renderPipelineBreadcrumbs();
+  } catch {
+    if (activePath === path && liveCheckSequence === version) {
+      pipelineMapCache = null;
+      renderPipelineBreadcrumbs();
+    }
+  }
+}
+
 async function openProjectMap() {
   const dialog = $("project-map-dialog");
   const status = $("project-map-status");
@@ -2538,15 +3060,576 @@ async function openProjectMap() {
   if (!dialog.open) dialog.showModal();
   status.textContent = t("projectMapLoading");
   graph.replaceChildren();
+  $("project-map-nullability").hidden = true;
+  $("project-map-nullability-list").replaceChildren();
   try {
-    const map = await api("project-map");
+    const path = activePath?.endsWith(".zyl") ? activePath : null;
+    const source = path && editor ? editor.state.doc.toString() : null;
+    const version = liveCheckSequence;
+    const map = await api("project-map", { method: "POST", body: JSON.stringify(analysisRequest(path, source, version)) });
+    if (!dialog.open || (source !== null && (path !== activePath || editor?.state.doc.toString() !== source))) return;
     renderProjectMap(map);
-    const issueLabels = messages[language].projectMapIssues;
+    const issueLabels = { ...messages[language].projectMapIssues, ...messages[language].projectMapIssuesExtra };
     const issues = (map.issues || []).map((code) => issueLabels[code] || code);
     status.textContent = map.incomplete ? `${t("projectMapIncomplete")} ${issues.join(" · ")}` : "";
     if (!map.nodes?.length) status.textContent = t("projectMapEmpty");
+    const radar = $("project-map-nullability");
+    const list = $("project-map-nullability-list");
+    list.replaceChildren();
+    for (const warning of map.nullabilityRadar || []) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = `${warning.code} · ${warning.file}:${warning.span?.start?.line || 1} · ${warning.message}`;
+      button.addEventListener("click", () => {
+        void openFile(warning.file).then(() => {
+          if (activePath !== warning.file || !editor) return;
+          const offset = warning.editorSpan?.start ?? 0;
+          editor.dispatch({ selection: { anchor: Math.min(offset, editor.state.doc.length) }, scrollIntoView: true });
+          editor.focus();
+          dialog.close();
+        });
+      });
+      list.append(button);
+    }
+    radar.hidden = !list.childElementCount;
   } catch (error) {
     status.textContent = error.message || t("projectMapUnavailable");
+  }
+}
+
+let pdfPreviewUrl = null;
+function clearPdfPreview() {
+  $("pdf-preview-frame").hidden = true;
+  $("pdf-preview-frame").removeAttribute("src");
+  $("pdf-preview-download").hidden = true;
+  $("pdf-preview-download").removeAttribute("href");
+  if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
+  pdfPreviewUrl = null;
+}
+
+async function openPdfPreview() {
+  const dialog = $("pdf-preview-dialog");
+  const select = $("pdf-preview-view");
+  const status = $("pdf-preview-status");
+  if (!dialog.open) dialog.showModal();
+  status.textContent = t("pdfLoading");
+  clearPdfPreview();
+  select.replaceChildren();
+  try {
+    const response = await api("pdf-views");
+    if (!dialog.open) return;
+    for (const name of response.views || []) {
+      const option = document.createElement("option");
+      option.value = name;
+      option.textContent = name;
+      select.append(option);
+    }
+    status.textContent = select.options.length ? "" : t("pdfNoViews");
+    $("pdf-preview-render").disabled = !select.options.length;
+    if (select.options.length) select.focus();
+  } catch (error) {
+    status.textContent = t("pdfError", error.message);
+    $("pdf-preview-render").disabled = true;
+  }
+}
+
+async function renderPdfPreview() {
+  const status = $("pdf-preview-status");
+  let record;
+  try {
+    record = JSON.parse($("pdf-preview-data").value);
+    if (!record || Array.isArray(record) || typeof record !== "object") throw new Error();
+  } catch {
+    status.textContent = t("pdfInvalidData");
+    return;
+  }
+  const view = $("pdf-preview-view").value;
+  const path = activePath?.endsWith(".zyl") ? activePath : null;
+  const source = path && editor ? editor.state.doc.toString() : null;
+  clearPdfPreview();
+  status.textContent = t("pdfRendering");
+  $("pdf-preview-render").disabled = true;
+  try {
+    const result = await api("pdf-render", { method: "POST", body: JSON.stringify({
+      view, record, ...(path && source !== null ? { path, source } : {}),
+    }) });
+    if (!$("pdf-preview-dialog").open || (source !== null && (path !== activePath || editor?.state.doc.toString() !== source))) return;
+    const decoded = atob(result.base64);
+    const bytes = new Uint8Array(decoded.length);
+    for (let index = 0; index < decoded.length; index++) bytes[index] = decoded.charCodeAt(index);
+    if (result.mimeType !== "application/pdf" || decoded.slice(0, 5) !== "%PDF-") throw new Error("Invalid PDF response");
+    pdfPreviewUrl = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+    $("pdf-preview-frame").src = pdfPreviewUrl;
+    $("pdf-preview-frame").hidden = false;
+    $("pdf-preview-download").href = pdfPreviewUrl;
+    $("pdf-preview-download").hidden = false;
+    status.textContent = t("pdfReady", result.bytes);
+  } catch (error) {
+    status.textContent = t("pdfError", error.message);
+  } finally {
+    $("pdf-preview-render").disabled = false;
+  }
+}
+
+let canvasEntries = [];
+let canvasSequence = 0;
+let canvasTimer = null;
+let canvasDeclaration = null;
+let canvasComponentSources = [];
+let canvasThemeSource = null;
+let canvasColors = [];
+
+function themeColorDeclarations(source) {
+  const declarations = [];
+  const blocks = [];
+  for (let i = 0; i < source.length;) {
+    if (source.startsWith("/*", i)) {
+      const end = source.indexOf("*/", i + 2);
+      i = end < 0 ? source.length : end + 2;
+      continue;
+    }
+    if (source[i] === '"' || source[i] === "'") {
+      const quote = source[i++];
+      while (i < source.length && source[i] !== quote) i += source[i] === "\\" ? 2 : 1;
+      i++;
+      continue;
+    }
+    if (source[i] === "{") { blocks.push(i); i++; continue; }
+    if (source[i] === "}") { blocks.pop(); i++; continue; }
+    if (blocks.length && source.startsWith("--z-color-", i)
+        && !/[\w-]/.test(source[i - 1] || "")) {
+      const name = /^--z-color-[a-z0-9-]+/.exec(source.slice(i))?.[0];
+      if (name) {
+        let from = i + name.length;
+        while (/\s/.test(source[from] || "")) from++;
+        if (source[from] === ":") {
+          from++;
+          while (/\s/.test(source[from] || "")) from++;
+          const color = /^#(?:[0-9a-f]{6}|[0-9a-f]{3})(?![0-9a-f])/i.exec(source.slice(from))?.[0];
+          if (color) {
+            declarations.push({ name, from, to: from + color.length, color,
+              block: blocks[blocks.length - 1], line: source.slice(0, i).split("\n").length });
+            i = from + color.length;
+            continue;
+          }
+        }
+      }
+    }
+    i++;
+  }
+  return declarations;
+}
+
+function normalizedColor(color) {
+  return color.length === 4 ? `#${[...color.slice(1)].map((part) => part + part).join("")}` : color.toLowerCase();
+}
+
+function readableOnColor(background) {
+  const color = normalizedColor(background);
+  const channels = [1, 3, 5].map((index) => parseInt(color.slice(index, index + 2), 16) / 255)
+    .map((part) => part <= 0.04045 ? part / 12.92 : ((part + 0.055) / 1.055) ** 2.4);
+  const luminance = channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+  return luminance >= 0.179 ? "#000000" : "#ffffff";
+}
+
+async function loadThemeColors() {
+  const select = $("canvas-theme-token");
+  const previous = canvasColors[Number(select.value)];
+  const previousKey = previous ? `${previous.name}:${previous.line}` : "";
+  try {
+    const tab = tabs.get("zelyra.theme.css");
+    const source = tab ? tabState("zelyra.theme.css", tab).doc.toString()
+      : (await api("file?path=zelyra.theme.css")).content;
+    if ($("canvas-pane").hidden) return;
+    canvasThemeSource = source;
+    canvasColors = themeColorDeclarations(source);
+    select.replaceChildren();
+    canvasColors.forEach((entry, index) => {
+      const option = document.createElement("option");
+      option.value = String(index);
+      option.textContent = `${entry.name} · ${entry.line}`;
+      select.append(option);
+    });
+    const index = canvasColors.findIndex((entry) => `${entry.name}:${entry.line}` === previousKey);
+    select.value = String(index < 0 ? 0 : index);
+    $("canvas-theme-color").value = normalizedColor(canvasColors[Number(select.value)]?.color || "#3157a4");
+    $("canvas-theme-apply").disabled = !canvasColors.length;
+    $("canvas-theme-status").textContent = canvasColors.length ? "" : t("canvasThemeNoHex");
+  } catch {
+    canvasThemeSource = null;
+    canvasColors = [];
+    select.replaceChildren();
+    $("canvas-theme-apply").disabled = true;
+    $("canvas-theme-status").textContent = t("canvasThemeMissing");
+  }
+}
+
+async function applyThemeColor() {
+  const selected = canvasColors[Number($("canvas-theme-token").value)];
+  if (!selected || !canvasThemeSource) return;
+  try {
+    await openFile("zelyra.theme.css");
+    if (activePath !== "zelyra.theme.css" || !editor) return;
+    const source = editor.state.doc.toString();
+    if (source !== canvasThemeSource) {
+      $("canvas-theme-status").textContent = t("canvasThemeStale");
+      await loadThemeColors();
+      return;
+    }
+    const color = $("canvas-theme-color").value;
+    const changes = [{ from: selected.from, to: selected.to, insert: color }];
+    const group = selected.name.slice("--z-color-".length);
+    if (["primary", "success", "warning", "danger", "info"].includes(group)) {
+      const pairName = `--z-color-on-${group}`;
+      const onColor = readableOnColor(color);
+      const pair = canvasColors.find((entry) => entry.block === selected.block && entry.name === pairName);
+      if (pair) changes.push({ from: pair.from, to: pair.to, insert: onColor });
+      else {
+        const next = /^\s*;/.exec(source.slice(selected.to));
+        if (!next) throw new Error(`${pairName} needs a semicolon after ${selected.name}`);
+        const afterSemicolon = selected.to + next[0].length;
+        changes.push({ from: afterSemicolon, to: afterSemicolon, insert: `\n    ${pairName}: ${onColor};` });
+      }
+    }
+    changes.sort((left, right) => left.from - right.from);
+    editor.dispatch({ changes });
+    await loadThemeColors();
+    $("canvas-theme-status").textContent = t("canvasThemeChanged");
+    scheduleCanvasRefresh();
+  } catch (error) { $("canvas-theme-status").textContent = t("canvasThemeError", error.message); }
+}
+
+function canvasRequestSource() {
+  const path = activePath?.endsWith(".zyl") ? activePath : undefined;
+  const themeTab = tabs.get("zelyra.theme.css");
+  return {
+    ...analysisRequest(path, path ? editor?.state.doc.toString() : undefined),
+    themeSource: themeTab ? tabState("zelyra.theme.css", themeTab).doc.toString() : undefined,
+    version: liveCheckSequence,
+  };
+}
+
+function scheduleCanvasRefresh() {
+  if ($("canvas-pane").hidden) return;
+  clearTimeout(canvasTimer);
+  canvasTimer = setTimeout(() => {
+    void loadCanvasEntries();
+    if (activePath === "zelyra.theme.css") void loadThemeColors();
+  }, 700);
+}
+
+async function loadCanvasEntries() {
+  if ($("canvas-pane").hidden) return;
+  const sequence = ++canvasSequence;
+  const target = $("canvas-target");
+  const previous = canvasEntries[Number(target.value)];
+  const previousKey = previous ? `${previous.kind}:${previous.name}` : "";
+  $("canvas-status").textContent = t("canvasLoading");
+  try {
+    const result = await api("canvas-list", { method: "POST", body: JSON.stringify(canvasRequestSource()) });
+    if (sequence !== canvasSequence || $("canvas-pane").hidden) return;
+    canvasEntries = result.entries || [];
+    target.replaceChildren();
+    canvasEntries.forEach((entry, index) => {
+      const option = document.createElement("option");
+      option.value = String(index);
+      option.textContent = `${entry.kind} · ${entry.name}`;
+      target.append(option);
+    });
+    const index = canvasEntries.findIndex((entry) => `${entry.kind}:${entry.name}` === previousKey);
+    target.value = String(index < 0 ? 0 : index);
+    if (!canvasEntries.length) {
+      $("canvas-status").textContent = result.success ? t("canvasEmpty") : t("canvasIncomplete");
+      $("canvas-frame").srcdoc = "";
+      $("canvas-source").disabled = true;
+      $("canvas-components").hidden = true;
+      $("canvas-component-target").replaceChildren();
+      $("canvas-component-source").disabled = true;
+      canvasComponentSources = [];
+      return;
+    }
+    await renderCanvas(sequence);
+  } catch (error) {
+    if (sequence === canvasSequence && !$("canvas-pane").hidden) $("canvas-status").textContent = t("canvasError", error.message);
+  }
+}
+
+function canvasDocument(result) {
+  const stylesheet = String(result.stylesheet || "").replace(/<\/style/gi, "<\\/style");
+  const theme = String(result.theme || "").replace(/<\/style/gi, "<\\/style");
+  const csp = "default-src 'none'; script-src 'none'; connect-src 'none'; object-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'; navigate-to 'none'; img-src data:; font-src 'none'; style-src 'unsafe-inline'";
+  return `<!doctype html><html data-z-ui><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><style>${stylesheet}</style><style>${theme}</style></head><body>${result.html}</body></html>`;
+}
+
+async function renderCanvas(sequence = ++canvasSequence) {
+  if ($("canvas-pane").hidden) return;
+  const entry = canvasEntries[Number($("canvas-target").value)];
+  if (!entry) return;
+  let sample;
+  try {
+    sample = JSON.parse($("canvas-sample").value);
+    if (!sample || Array.isArray(sample) || typeof sample !== "object") throw new Error();
+  } catch {
+    $("canvas-status").textContent = t("canvasSampleError");
+    $("canvas-frame").srcdoc = "";
+    return;
+  }
+  $("canvas-status").textContent = t("canvasLoading");
+  $("canvas-source").disabled = true;
+  $("canvas-component-source").disabled = true;
+  try {
+    const result = await api("canvas-render", { method: "POST", body: JSON.stringify({
+      ...canvasRequestSource(), kind: entry.kind, name: entry.name, sample,
+    }) });
+    if (sequence !== canvasSequence || $("canvas-pane").hidden) return;
+    $("canvas-frame").srcdoc = canvasDocument(result);
+    canvasDeclaration = result.source;
+    $("canvas-source").disabled = !result.source?.path;
+    canvasComponentSources = Array.isArray(result.components) ? result.components : [];
+    const components = $("canvas-component-target");
+    components.replaceChildren();
+    canvasComponentSources.forEach((component, index) => {
+      const option = document.createElement("option");
+      option.value = String(index);
+      option.textContent = component.name;
+      components.append(option);
+    });
+    $("canvas-components").hidden = canvasComponentSources.length === 0;
+    updateCanvasComponentUses(0);
+    $("canvas-status").textContent = t("canvasReady");
+  } catch (error) {
+    if (sequence !== canvasSequence || $("canvas-pane").hidden) return;
+    $("canvas-frame").srcdoc = "";
+    canvasDeclaration = null;
+    canvasComponentSources = [];
+    $("canvas-components").hidden = true;
+    $("canvas-component-target").replaceChildren();
+    $("canvas-component-use-target").replaceChildren();
+    $("canvas-component-source").disabled = true;
+    $("canvas-component-use-source").disabled = true;
+    $("canvas-status").textContent = t("canvasError", error.message);
+  }
+}
+
+function openCanvas() {
+  if (matchMedia("(max-width: 760px)").matches && !document.body.classList.contains("sidebar-hidden")) {
+    $("sidebar-toggle").click();
+  }
+  $("canvas-pane").hidden = false;
+  $("editor-stage").classList.add("canvas-open");
+  requestAnimationFrame(() => editor?.requestMeasure());
+  void loadCanvasEntries();
+  void loadThemeColors();
+}
+
+async function goToCanvasDeclaration() {
+  await goToCanvasSource(canvasDeclaration);
+}
+
+async function goToCanvasComponentDeclaration() {
+  const source = canvasComponentSources[Number($("canvas-component-target").value)]?.source;
+  await goToCanvasSource(source);
+}
+
+function updateCanvasComponentUses(index) {
+  const component = canvasComponentSources[index];
+  const declaration = $("canvas-component-source");
+  declaration.disabled = !component?.source?.path;
+  const uses = $("canvas-component-use-target");
+  uses.replaceChildren();
+  (component?.uses || []).forEach((source, useIndex) => {
+    const option = document.createElement("option");
+    option.value = String(useIndex);
+    option.textContent = `${source.path}:${source.line}:${source.column}`;
+    uses.append(option);
+  });
+  $("canvas-component-use-source").disabled = !(component?.uses || []).length;
+}
+
+async function goToCanvasComponentUse() {
+  const component = canvasComponentSources[Number($("canvas-component-target").value)];
+  const source = component?.uses?.[Number($("canvas-component-use-target").value)];
+  await goToCanvasSource(source);
+}
+
+async function goToCanvasSource(source) {
+  if (!source?.path) return;
+  await openFile(source.path);
+  if (!editor || activePath !== source.path) return;
+  const line = Math.max(1, Math.min(editor.state.doc.lines, Number(source.line) || 1));
+  const lineDoc = editor.state.doc.line(line);
+  const character = Math.max(0, Math.min(lineDoc.length, Number(source.character) || 0));
+  editor.dispatch({ selection: { anchor: lineDoc.from + character }, scrollIntoView: true });
+  editor.focus();
+}
+
+let capabilityRequest = 0;
+let capabilityGrantPreview = null;
+
+function capabilityItem(list, label, statusName = "") {
+  const item = document.createElement("li");
+  item.textContent = label;
+  if (statusName) item.dataset.status = statusName;
+  list.append(item);
+  return item;
+}
+
+async function openCapabilityMatrix() {
+  const dialog = $("capability-dialog");
+  if (!dialog.open) dialog.showModal();
+  const request = ++capabilityRequest;
+  const status = $("capability-status");
+  status.textContent = t("capabilityLoading");
+  $("capability-preview").hidden = true;
+  capabilityGrantPreview = null;
+  for (const id of ["capability-declared", "capability-needed", "capability-paths", "capability-unused"]) $(id).replaceChildren();
+  try {
+    const path = activePath?.endsWith(".zyl") ? activePath : studioEntryPath();
+    const source = path === activePath ? editor?.state.doc.toString() : undefined;
+    const result = await api("capabilities", { method: "POST", body: JSON.stringify(analysisRequest(path, source)) });
+    if (request !== capabilityRequest || !dialog.open) return;
+    status.textContent = !result.success ? t("capabilityIncomplete") : !result.configured ? t("capabilityUnrestricted") : "";
+    const declared = $("capability-declared");
+    for (const entry of result.declared || []) {
+      capabilityItem(declared, `${entry.function} · ${entry.capability} · ${path}:${entry.line}${entry.granted ? "" : ` · ${t("capabilityNotGranted")}`}`, entry.granted ? "" : "missing");
+    }
+    if (!declared.childElementCount) capabilityItem(declared, t("capabilityEmpty"));
+    const needed = $("capability-needed");
+    const missing = new Set();
+    for (const entry of result.needed || []) {
+      capabilityItem(needed, `${entry.function} · ${entry.operation} · ${entry.capability} · ${path}:${entry.line}${entry.granted ? "" : ` · ${t("capabilityNotGranted")}`}`, entry.granted ? "" : "missing");
+      if (!entry.granted) missing.add(entry.capability);
+    }
+    if (!needed.childElementCount) capabilityItem(needed, t("capabilityEmpty"));
+    for (const capability of missing) {
+      const button = document.createElement("button");
+      button.type = "button"; button.className = "toolbar-button";
+      button.textContent = `${t("capabilityGrant")}: ${capability}`;
+      button.addEventListener("click", () => void previewCapabilityGrant(capability));
+      const item = document.createElement("li"); item.append(button); needed.append(item);
+    }
+    const paths = $("capability-paths");
+    for (const entry of result.filePaths || []) {
+      capabilityItem(paths, `${entry.function}:${entry.line} · ${entry.access} · ${entry.path ?? `(${t("capabilityDynamic")})`} · ${entry.status}: ${entry.reason}`, entry.status);
+    }
+    if (!paths.childElementCount) capabilityItem(paths, t("capabilityEmpty"));
+    const unused = $("capability-unused");
+    for (const capability of result.grantsWithoutFunctionUse || []) capabilityItem(unused, capability);
+    if (unused.childElementCount) capabilityItem(unused, t("capabilityUnusedCaveat"));
+    else capabilityItem(unused, t("capabilityEmpty"));
+  } catch (error) {
+    if (request === capabilityRequest && dialog.open) status.textContent = t("capabilityError", error.message);
+  }
+}
+
+async function previewCapabilityGrant(capability) {
+  const status = $("capability-status");
+  try {
+    const preview = await api("capability-grant-preview", { method: "POST", body: JSON.stringify({ capability }) });
+    if (!$("capability-dialog").open) return;
+    capabilityGrantPreview = preview;
+    $("capability-preview-label").textContent = `${capability}: ${t("capabilityGrantPreview")}`;
+    $("capability-preview-code").textContent = preview.after;
+    $("capability-preview").hidden = false;
+    $("capability-grant-apply").focus();
+  } catch (error) { status.textContent = t("capabilityError", error.message); }
+}
+
+async function applyCapabilityGrant() {
+  const preview = capabilityGrantPreview;
+  if (!preview) return;
+  const button = $("capability-grant-apply");
+  button.disabled = true;
+  try {
+    await api("capability-grant-apply", { method: "POST", body: JSON.stringify({
+      capability: preview.capability, baseHash: preview.baseHash, after: preview.after, confirm: true,
+    }) });
+    $("capability-preview").hidden = true;
+    capabilityGrantPreview = null;
+    await openCapabilityMatrix();
+    $("capability-status").textContent = t("capabilityGranted");
+  } catch (error) { $("capability-status").textContent = t("capabilityError", error.message); }
+  finally { button.disabled = false; }
+}
+
+let outboxOffset = 0;
+let outboxRequest = 0;
+async function loadOutbox() {
+  const request = ++outboxRequest;
+  const status = $("outbox-status");
+  const rows = $("outbox-rows");
+  status.textContent = t("outboxLoading");
+  rows.replaceChildren();
+  $("outbox-previous").disabled = true;
+  $("outbox-next").disabled = true;
+  try {
+    const result = await api(`outbox?offset=${outboxOffset}`);
+    if (request !== outboxRequest || !$("outbox-dialog").open) return;
+    if (!result.configured) {
+      status.textContent = t("outboxNoDatabase");
+      $("outbox-page-label").textContent = "";
+      return;
+    }
+    for (const event of result.events || []) {
+      const row = document.createElement("tr");
+      const cell = (value) => { const td = document.createElement("td"); td.textContent = value || "–"; row.append(td); return td; };
+      const eventCell = cell(event.id);
+      const kind = document.createElement("small"); kind.textContent = event.type;
+      eventCell.append(document.createElement("br"), kind);
+      const statusCell = cell(event.status);
+      const details = [t("outboxAttempts", event.attempts)];
+      if (event.leaseUntil) details.push(t("outboxLeaseUntil", event.leaseUntil));
+      if (event.deliveredAt) details.push(t("outboxDeliveredAt", event.deliveredAt));
+      if (event.exhaustedAt) details.push(t("outboxExhaustedAt", event.exhaustedAt));
+      const detail = document.createElement("small"); detail.textContent = details.join(" · ");
+      statusCell.append(document.createElement("br"), detail);
+      cell(event.recipient);
+      cell(event.attachmentName);
+      cell(event.createdAt);
+      cell(event.availableAt);
+      cell(event.lastError);
+      const action = cell("");
+      if (event.status === "exhausted") {
+        action.textContent = "";
+        const button = document.createElement("button");
+        button.type = "button"; button.className = "toolbar-button";
+        button.textContent = t("outboxRequeue");
+        button.addEventListener("click", () => void requeueOutboxEvent(event.id));
+        action.append(button);
+      }
+      rows.append(row);
+    }
+    status.textContent = result.events?.length ? "" : t("outboxEmpty");
+    const shownEnd = outboxOffset + (result.events?.length || 0);
+    $("outbox-page-label").textContent = result.total
+      ? t("outboxPage", outboxOffset + 1, shownEnd, result.total)
+      : t("outboxPage", 0, 0, 0);
+    $("outbox-previous").disabled = outboxOffset === 0;
+    $("outbox-next").disabled = shownEnd >= result.total || !result.events?.length;
+  } catch (error) {
+    if (request === outboxRequest && $("outbox-dialog").open) status.textContent = t("outboxLoadError", error.message);
+  }
+}
+
+function openOutbox() {
+  const dialog = $("outbox-dialog");
+  if (!dialog.open) dialog.showModal();
+  outboxOffset = 0;
+  void loadOutbox();
+}
+
+async function requeueOutboxEvent(eventId) {
+  if (!window.confirm(t("outboxRequeueConfirm", eventId))) return;
+  try {
+    const result = await api("outbox-requeue", { method: "POST", body: JSON.stringify({
+      eventId, confirm: true,
+    }) });
+    if (!result.requeued || result.sent !== false) throw new Error("Unexpected outbox response");
+    if (!$("outbox-dialog").open) return;
+    await loadOutbox();
+    $("outbox-status").textContent = t("outboxRequeued");
+  } catch (error) {
+    if ($("outbox-dialog").open) $("outbox-status").textContent = t("outboxRequeueError", error.message);
   }
 }
 
@@ -2556,7 +3639,7 @@ function renderProjectMap(map) {
   const columns = ["module", "data", "web", "logic"];
   const columnKinds = {
     module: new Set(["module"]),
-    data: new Set(["table", "tableview", "crud", "view"]),
+    data: new Set(["table", "sql", "struct", "class", "form", "tableview", "crud", "view"]),
     web: new Set(["api", "page"]),
     logic: new Set(["function"]),
   };
@@ -2691,10 +3774,46 @@ async function createFile() {
 $("save-button").addEventListener("click", saveActive);
 $("complete-button").addEventListener("click", () => { if (editor) { editor.focus(); startCompletion(editor); } });
 $("rename-file-button").addEventListener("click", renameActiveFile);
+$("semantic-rename-close").addEventListener("click", () => $("semantic-rename-dialog").close());
+$("semantic-rename-name").addEventListener("input", () => {
+  semanticRenamePlan = null;
+  $("semantic-rename-apply-button").disabled = true;
+});
+$("semantic-rename-name").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") { event.preventDefault(); void previewSemanticRename(); }
+});
+$("semantic-rename-preview-button").addEventListener("click", () => { void previewSemanticRename(); });
+$("semantic-rename-apply-button").addEventListener("click", () => { void applySemanticRename(); });
 $("delete-file-button").addEventListener("click", deleteActiveFile);
 $("save-all-button").addEventListener("click", saveAll);
 $("check-button").addEventListener("click", checkProject);
 $("run-button").addEventListener("click", runProject);
+$("runtime-budget-button").addEventListener("click", () => { void openRuntimeBudget(); });
+$("runtime-budget-close").addEventListener("click", () => $("runtime-budget-dialog").close());
+$("runtime-budget-run").addEventListener("click", () => {
+  $("runtime-budget-dialog").close();
+  void runProject();
+});
+$("runtime-budget-enabled").addEventListener("change", (event) => {
+  $("runtime-budget-range").disabled = !event.target.checked;
+  $("runtime-budget-number").disabled = !event.target.checked;
+});
+$("runtime-budget-range").addEventListener("input", (event) => {
+  $("runtime-budget-number").value = event.target.value;
+});
+$("runtime-budget-number").addEventListener("input", (event) => {
+  const value = Number(event.target.value);
+  if (Number.isFinite(value)) $("runtime-budget-range").value = String(Math.max(1000, Math.min(1_000_000, value)));
+});
+$("run-output-cancel").addEventListener("click", async () => {
+  $("run-output-cancel").disabled = true;
+  try {
+    const response = await api("cancel-run", { method: "POST", body: "{}" });
+    if (response.cancelRequested) $("run-output-state").textContent = t("runCancelRequested");
+  } catch (error) {
+    announce(error.message, "error");
+  }
+});
 $("run-output-web-stop").addEventListener("click", stopWebPreview);
 $("logs-button").addEventListener("click", openEditorLogs);
 $("logs-refresh").addEventListener("click", openEditorLogs);
@@ -2730,6 +3849,40 @@ $("run-output-close").addEventListener("click", () => $("run-output").close());
 $("logs-close").addEventListener("click", () => $("logs-dialog").close());
 $("project-map-button").addEventListener("click", openProjectMap);
 $("project-map-close").addEventListener("click", () => $("project-map-dialog").close());
+$("pdf-preview-button").addEventListener("click", openPdfPreview);
+$("pdf-preview-close").addEventListener("click", () => $("pdf-preview-dialog").close());
+$("pdf-preview-dialog").addEventListener("close", clearPdfPreview);
+$("pdf-preview-render").addEventListener("click", renderPdfPreview);
+$("outbox-button").addEventListener("click", openOutbox);
+$("capability-button").addEventListener("click", () => void openCapabilityMatrix());
+$("capability-close").addEventListener("click", () => $("capability-dialog").close());
+$("capability-dialog").addEventListener("close", () => { capabilityRequest++; capabilityGrantPreview = null; });
+$("capability-grant-apply").addEventListener("click", () => void applyCapabilityGrant());
+$("canvas-button").addEventListener("click", openCanvas);
+$("canvas-close").addEventListener("click", () => {
+  $("canvas-pane").hidden = true;
+  $("editor-stage").classList.remove("canvas-open");
+  canvasSequence++;
+  clearTimeout(canvasTimer);
+  requestAnimationFrame(() => editor?.requestMeasure());
+});
+$("canvas-target").addEventListener("change", () => void renderCanvas());
+$("canvas-render").addEventListener("click", () => void renderCanvas());
+$("canvas-source").addEventListener("click", () => void goToCanvasDeclaration());
+$("canvas-component-target").addEventListener("change", () => {
+  updateCanvasComponentUses(Number($("canvas-component-target").value));
+});
+$("canvas-component-source").addEventListener("click", () => void goToCanvasComponentDeclaration());
+$("canvas-component-use-source").addEventListener("click", () => void goToCanvasComponentUse());
+$("canvas-theme-token").addEventListener("change", () => {
+  $("canvas-theme-color").value = normalizedColor(canvasColors[Number($("canvas-theme-token").value)]?.color || "#3157a4");
+});
+$("canvas-theme-apply").addEventListener("click", () => void applyThemeColor());
+$("outbox-close").addEventListener("click", () => $("outbox-dialog").close());
+$("outbox-dialog").addEventListener("close", () => { outboxRequest++; });
+$("outbox-refresh").addEventListener("click", () => void loadOutbox());
+$("outbox-previous").addEventListener("click", () => { outboxOffset = Math.max(0, outboxOffset - 25); void loadOutbox(); });
+$("outbox-next").addEventListener("click", () => { outboxOffset += 25; void loadOutbox(); });
 $("project-search-input").addEventListener("keydown", (event) => {
   if (event.key === "Enter") { event.preventDefault(); void performProjectSearch(); }
 });
@@ -2806,6 +3959,8 @@ $("problems-toggle").addEventListener("click", () => { $("problems-panel").hidde
 $("problems-close").addEventListener("click", () => { $("problems-panel").hidden = true; });
 $("open-search").addEventListener("click", findInDocument);
 window.addEventListener("beforeunload", (event) => {
+  eventController?.abort();
+  clearTimeout(eventReconnectTimer);
   if (dirtyCount()) { event.preventDefault(); event.returnValue = ""; }
 });
 window.addEventListener("keydown", (event) => {
@@ -2850,3 +4005,4 @@ refreshTree().then(() => {
   const first = treeFiles.includes("main.zyl") ? "main.zyl" : treeFiles.find((file) => file.endsWith(".zyl"));
   if (first) void openFile(first);
 });
+void connectStudioEvents();

@@ -2706,12 +2706,12 @@ Navigate to `http://localhost:8080` in your browser—your own live Zelyra appli
 ## Chapter 41: Current scope and roadmap
 
 ### 1. What will I learn in this chapter?
-- What Zelyra 1.0.6 includes and how the language compatibility line 0.1 remains separate.
+- What Zelyra 1.0.7 includes and how the language compatibility line 0.1 remains separate.
 - Which capabilities have arrived since 1.0.0.
 - Where to find verified features, limits, and planned work.
 
 ### 2. Why is this topic important?
-Compiler versions and the language compatibility line describe different things. Updating to Zelyra 1.0.6 does not automatically change the language line declared in `zelyra.toml`. Release notes describe version changes; the implementation inventory, database matrix, and roadmap explain supported scope and limits.
+Compiler versions and the language compatibility line describe different things. Updating to Zelyra 1.0.7 does not automatically change the language line declared in `zelyra.toml`. Release notes describe version changes; the implementation inventory, database matrix, and roadmap explain supported scope and limits.
 
 ### 3. What changed since Zelyra 1.0.0?
 - **1.0.1:** Docker Compose v2 is detected; Python Compose v1 is rejected with a concrete update hint. Studio's Run button starts the project entry point.
@@ -2720,6 +2720,7 @@ Compiler versions and the language compatibility line describe different things.
 - **1.0.4:** Invoice tutorials receive a dedicated Compose project name. Older tutorials can use an isolated database after an authentication error without deleting or changing the old volume. Compose versions such as `2.40` are recognized.
 - **1.0.5:** Studio shows local structured logs; `zelyra uninstall` removes the active user-owned program after confirmation. The invoice tutorial has a workflow home, an invoice overview, date-only input, automatic invoice numbers, and expanded English and German source guides.
 - **1.0.6:** Zelyra UI supplies compiler-checked components and locally bundled styles for generated CRUD, starter projects, Studio properties, and the invoice tutorial. It adds themes, responsive layouts, chart components, browser print/PDF, and prefilled email drafts. PDF files are attached manually in the mail client.
+- **1.0.7:** Value-producing `if` expressions, record updates (`Customer { ..old, active: true }`), typed lexical lambdas for pipelines (`map`, `filter`, `find`, `reduce`), boolean match guards, nested record patterns, tuple binding, and first-class tuple returns. Configurable execution step budgets (`--max-steps`), nominal Id aliases, server-side text PDF rendering (`render_pdf`), and transactional PDF mail attachments via the outbox.
 
 See the individual [release notes](../../release-notes/). The complete standard library catalog is in [Appendix D](appendices.md#appendix-d-standard-library-overview-zelyra-103).
 
@@ -2750,14 +2751,16 @@ docker compose version
 Then read the notes for the installed release and compare your intended workflow with the database matrix.
 
 ### 9. Summary
-- Zelyra 1.0.6 is the current stable release; the language compatibility line remains `0.1`.
+- Zelyra 1.1.0 is the current stable release; the language compatibility line remains `0.1`.
 - Version 1.0.3 expands the standard library and adds `|>` pipelines and flat `else if` chains.
+- Version 1.0.6 adds Zelyra UI typed components, responsive layouts, themes, charts, and browser print previews.
+- Version 1.0.7 adds if-expressions, record updates, lambdas, match guards, tuples, step budgets (`--max-steps`), and server-side text PDF rendering (`render_pdf`).
 - The invoice tutorial runs locally with MariaDB in Docker Compose and a local web preview; Studio can start the full tutorial workflow.
 - Release notes describe shipped changes; the roadmap describes planned work.
 
 ### 10. Self-check questions
 1. What is the difference between compiler version and language compatibility line?
-2. Which capabilities arrived in 1.0.3?
+2. Which capabilities arrived in 1.0.3, 1.0.6, and 1.0.7?
 3. Which parts of the invoice tutorial run in Docker, and how do you edit the application?
 4. How can you distinguish a published feature from a roadmap item?
 

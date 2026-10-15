@@ -635,6 +635,13 @@ pub enum Stmt {
         value: Expr,
         span: Span,
     },
+    ArrayIndexAssign {
+        name: String,
+        index: Expr,
+        value: Expr,
+        operation: ArrayIndexAssignOp,
+        span: Span,
+    },
     TupleBindOrAssign {
         names: Vec<String>,
         value: Expr,
@@ -822,11 +829,18 @@ pub enum BinaryOp {
     Or,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ArrayIndexAssignOp {
+    Set,
+    Add,
+}
+
 impl Stmt {
     pub fn span(&self) -> Span {
         match self {
             Stmt::Let { span, .. } => *span,
             Stmt::BindOrAssign { span, .. } => *span,
+            Stmt::ArrayIndexAssign { span, .. } => *span,
             Stmt::TupleBindOrAssign { span, .. } => *span,
             Stmt::Expr(expr) => expr.span,
             Stmt::Return { span, .. } => *span,

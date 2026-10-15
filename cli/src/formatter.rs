@@ -68,6 +68,7 @@ impl<'a> Formatter<'a> {
                 | TokenKind::FatArrow
                 | TokenKind::PipeForward
                 | TokenKind::Plus
+                | TokenKind::PlusEqual
                 | TokenKind::Minus
                 | TokenKind::Star
                 | TokenKind::Slash
@@ -258,6 +259,7 @@ impl<'a> Formatter<'a> {
                     | TokenKind::Arrow
                     | TokenKind::FatArrow
                     | TokenKind::Plus
+                    | TokenKind::PlusEqual
                     | TokenKind::Minus
                     | TokenKind::Star
                     | TokenKind::Slash
@@ -378,6 +380,7 @@ fn is_compact_token(kind: &TokenKind) -> bool {
             | TokenKind::FatArrow
             | TokenKind::PipeForward
             | TokenKind::Plus
+            | TokenKind::PlusEqual
             | TokenKind::Minus
             | TokenKind::Star
             | TokenKind::Slash
@@ -403,6 +406,7 @@ fn token_text<'a>(token: &'a Token, source: &'a str) -> &'a str {
         | TokenKind::IntMinMagnitude
         | TokenKind::Float(_)
         | TokenKind::String(_)
+        | TokenKind::StringTemplate { .. }
         | TokenKind::Char(_) => source
             .get(token.span.start..token.span.end)
             .unwrap_or_default(),
@@ -510,6 +514,7 @@ fn token_text<'a>(token: &'a Token, source: &'a str) -> &'a str {
         TokenKind::PipeForward => "|>",
         TokenKind::Pipe => "|",
         TokenKind::Plus => "+",
+        TokenKind::PlusEqual => "+=",
         TokenKind::Minus => "-",
         TokenKind::Star => "*",
         TokenKind::Slash => "/",
@@ -573,6 +578,21 @@ mod tests {
             formatted.contains("\" text \" |> trim |> to_lower"),
             "{formatted:?}"
         );
+        assert_eq!(format(&formatted), formatted);
+    }
+
+    #[test]
+    fn formats_interpolated_strings_as_atomic_literals() {
+        let source = r#"fn main(){print("Customer {name} has {count+1} items; {{draft}}")}"#;
+        let formatted = format(source);
+        assert!(formatted.contains(r#""Customer {name} has {count+1} items; {{draft}}""#));
+        assert_eq!(format(&formatted), formatted);
+    }
+
+    #[test]
+    fn formats_in_place_array_updates_with_the_compound_operator() {
+        let formatted = format("fn main(){mutable values: Int[]=[1] values[0]+=1}");
+        assert!(formatted.contains("values[0] += 1"), "{formatted:?}");
         assert_eq!(format(&formatted), formatted);
     }
 

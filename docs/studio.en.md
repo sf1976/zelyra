@@ -1,5 +1,9 @@
 # Zelyra Studio
 
+For VS Code, Cursor, and Neovim, Zelyra also provides the standalone language
+server `zelyra lsp`. Setup, supported features, and limits are documented in
+the [LSP guide](lsp.en.md).
+
 Zelyra Studio is the local web editor included with the CLI. Start it from a
 project directory:
 
@@ -34,14 +38,45 @@ Press **F1** or choose the help action to see a description, options, and an
 example for a supported language term. **Ctrl+Shift+P** opens the searchable
 action finder. **Ctrl+Space** requests completion; available suggestions include
 project declarations and supported local parameters and bindings. F12 opens a
-saved function or type definition in the current or a directly imported file.
-Shift+F12 finds exact lexical identifier occurrences in saved `.zyl` files.
-These occurrence results are not scope-aware semantic references. Save changed
-files before navigating so source locations stay accurate.
+resolved function or record definition in the current or an imported file.
+Shift+F12 shows indexed references. These actions use the compiler's linked AST
+and analyze all open, unsaved `.zyl` files together. Record references include
+record literals, local record patterns, type aliases, function parameter and
+return types, local binding annotations, and record-field, table-column,
+component-property, form, API-input, page-input, and tableview type annotations.
+Hover over a resolved symbol or press **Alt+Shift+H** to show its compiler
+description; Escape closes a keyboard-opened hover.
+Record field rename covers declarations, record literal labels, and accesses
+whose receiver type resolves from a function parameter, a local type
+annotation, a directly constructed record, or the return type of a uniquely
+resolved function. Field labels in resolvable record patterns are renamed
+separately from local aliases. No rename is offered for a receiver without a
+statically resolvable type.
+Project-wide free-text search remains a separate tool.
 
-Compiler diagnostics update while editing saved Zelyra project files; they are
-checked against a private temporary project copy and do not write the unsaved
-buffer. **Run** is an explicit action for `main.zyl`, bounded to 15 seconds and
+Press **F2** on a resolved function, record type, or indexed record field to rename it. Studio
+previews every affected file and checks the candidate with the compiler. If an
+unindexed field use would break, the compiler rejects the plan before it can be
+applied. Applying a valid change updates open buffers;
+each file can be undone and saved separately. **Save all** writes up to 16
+files together and first creates a private recovery journal under `.zelyra/`.
+On restart, Studio rolls back an interrupted batch.
+F2 also supports tables, views, forms, CRUDs, tableviews, and components. When a
+resource name resolves uniquely in the loaded project, indexed uses in imported
+files are updated together. Rename is not offered for ambiguous resource names.
+The preview recompiles the full changed project.
+Before renaming a `.zyl` file, Studio previews detected import files, checks
+the moved project with the compiler, and applies the file and import edits
+through the journal. Open changes are saved first and stale previews are
+rejected. The operation is limited to 64 files and 8 MiB total. Other file
+types are renamed without import edits.
+
+Compiler diagnostics update while editing Zelyra project files. For existing
+`.zyl` files the current buffer and other changed `.zyl` tabs are checked through
+in-memory compiler overlays (up to 16 files and 1 MiB of source per analysis);
+generated source previews for new files still use a private temporary
+project copy. Neither path writes the unsaved buffer to the project. **Run** is
+an explicit action for `main.zyl`, bounded to 15 seconds and
 64 KiB per output stream. For the marked invoice tutorial, Run starts its
 isolated Compose database, applies the schema and sample data, and then starts
 the web preview. Other web projects need a reachable database. Open **Logs**
@@ -49,9 +84,110 @@ to search recent structured Run/setup events and program or preview output.
 Recognized environment and local `.env` values are redacted. The program does
 not receive interactive input.
 
-The **Project map** shows only unambiguous relationships from the compiler
-project model and links nodes to saved source locations. Dynamic and
-unresolved relationships remain marked incomplete instead of being inferred.
+The **Project map** shows unambiguous relationships from the compiler project
+model: modules, tables, SQL queries, records, forms, table views, CRUD, pages,
+views, APIs, and functions. It supports multiple consumers of one table and
+all open unsaved `.zyl` files as overlays. Nodes lead to their actual
+declaration or SQL token. The editor header shows related nodes for the
+current cursor context and links to their sources. The NULL radar shows only
+static nullability diagnostics from the compiler under `E-SQL-004`; it does
+not inspect a live database. Dynamic relationships or queries unresolved by
+the conservative SQL analyzer remain marked incomplete.
+
+For a parseable project, the contract gutter displays results from Zelyra's
+actual verifier on the current unsaved buffer. `PROVEN` (green, `V-001`) means
+the obligation was proved; `RUNTIME_CHECK` (amber, `V-002`) needs a runtime
+check; `FAILED` (red, `V-004`) is contradicted; `UNPROVEN` (neutral, `V-003`)
+does not establish a proof. Activate a marker with click, Enter, or Space to
+read its explanation. Syntax or type errors clear older markers rather than
+showing a stale proof. The gutter follows the current document; background
+checks use document versions to discard late responses.
+
+At an expression hole `_`, **Ctrl+Space** opens a CodeMirror completion menu
+from the compiler's hole context. Suggestions use visible bindings with known
+matching types and zero-argument functions whose declared Capabilities fit the
+current function. Candidates with contracts are labeled for review. Choose a
+suggestion with the keyboard or click; only the `_` span is replaced, and
+ordinary Undo restores it. A `_` wildcard in a match pattern is not a hole.
+Type inference for unannotated local values and general subtyping are not yet
+used for hole suggestions, so the list may omit valid expressions.
+
+### Local event stream
+
+Studio opens `GET /__zelyra/editor/api/events` as an SSE stream through
+`fetch`, putting its session token in the `X-Zelyra-Editor-Token` header rather
+than the stream URL. The server checks the local Host, token, and any supplied
+browser Origin/Fetch metadata. Mutating APIs still require the header and the
+exact editor origin. Studio reconnects with a bounded backoff; individual
+analysis requests remain usable without the stream.
+
+Each data event is a JSON object containing `schema: 1`, `kind`, `document`
+(`path`, `version`, and `clientId` for browser analyses), `workspaceRevision`,
+and `payload`. Kinds are `analysis.progress`, `diagnostics`, `verification`,
+`workspace.changed`, `analysis.invalidated`, and `preview.changed`. Studio
+accepts analysis results only for the current client and document version.
+The server permits four streams, each with a queue of 32 messages, and drops
+slow receivers. Studio requests and Studio file actions currently produce
+events. A bounded metadata watcher also reports external changes to `.zyl`,
+`.css`, and `zelyra.toml` files in the project tree. Clean open buffers reload;
+dirty buffers are preserved and show a notice. The watcher does not follow
+symlinks and may miss a same-size edit with an unchanged timestamp on
+filesystems with coarse timestamp resolution.
+
+### Runtime budget and recursion
+
+Open **Budget** to configure a console run. A switch enables `--max-steps`;
+the slider covers 1,000 to 1,000,000 steps and the numeric field accepts
+integers from 1 to 100,000,000. With the switch off, runs retain their
+existing behavior without a step budget. **Run** passes the chosen value as
+separate CLI arguments to `zelyra run`. The server allows one Studio run at a
+time, and the output dialog can cancel a running console program. The existing
+15-second timeout and output limits still apply. A budget overrun displays
+the actual `E-RUNTIME-001` output, and lines printed before the failure remain
+visible. Web previews do not use `--max-steps`.
+
+The view reads `[runtime] max_stack_depth` from `zelyra.toml`, showing the
+runtime default of 20 when absent. The permitted configuration range is 1 to
+500; invalid configuration is reported. A compiler-backed call graph marks
+possible direct and mutual recursion, including the current unsaved buffer.
+If the project has more than 500 functions, Studio marks the recursion
+analysis incomplete. The call graph cannot prove an exact maximum depth;
+Studio does not invent one or a measured step count. The duration in
+milliseconds comes from the actual program run.
+
+### Server-side PDF preview
+
+Open **PDF preview**, choose a declared `view`, and enter example data as a
+JSON object, such as `{"number":"R-104"}` for a view containing `{number}`.
+Only **Render PDF** starts rendering. Studio checks the project, including the
+current unsaved `.zyl` buffer, and uses the same local renderer as
+`render_pdf("ViewName", record)`. It shows the actual PDF file in an isolated
+browser frame and offers a download. Studio does not execute project
+functions or query a database for this preview. Example data stays on the
+local Studio server and is not written to project files.
+
+The current renderer creates a searchable text PDF from visible view content;
+it does not reproduce CSS, images, or charts as graphical layout. Embedded PDF
+display depends on browser support; the download contains the same generated
+PDF bytes. Invalid data, unknown views, and compiler errors are reported.
+This is separate from the existing presentation print view, which still uses
+the browser print dialog.
+
+### Inspect the MariaDB outbox
+
+**Outbox** reads the existing transactional MariaDB outbox when opened and
+when you choose **Refresh**. It shows 25 events per page with status,
+attempts, recipient, timestamps, a redacted error code, and the name of the
+one currently supported PDF attachment. Message bodies and attachment bytes
+are not sent to the browser. The local Studio token also protects this read
+API. Without a configured MariaDB connection, the view shows a configuration
+hint; `zelyra outbox setup main.zyl` explicitly creates the table.
+
+Only `exhausted` events offer **Requeue**. After your confirmation, Studio
+calls the existing domain requeue operation. It releases the event for a later
+worker run and sends no message. Studio neither starts nor automatically
+configures a worker. Count and rows are read in two database queries; a
+concurrent worker can change the count between those queries.
 
 ## Start the invoice tutorial in Studio
 
@@ -76,8 +212,9 @@ for setup errors; the page does not reveal credentials.
 The file tree lists Zelyra source files in the project. Tabs keep several files
 open. Search, completion, formatting, compiler diagnostics, undo/redo, and
 version-aware saving support the edit cycle. **Rename** and **Delete** provide
-explicitly confirmed source-file operations; rename does not update imports.
-`main.zyl` and `zelyra.toml` are protected. Paths stay inside the project, and
+explicitly confirmed source-file operations. Renaming a `.zyl` file updates
+detected `import` paths after compiler validation and applies them with the
+file move. `main.zyl` and `zelyra.toml` are protected. Paths stay inside the project, and
 file operations compare the saved content hash. If another application changes
 a file after Studio loads it, the operation is rejected; reload before retrying.
 
@@ -164,9 +301,62 @@ again immediately before writing. If the file changed after preview, the write
 is rejected and a new preview is required. Generated CRUD is source code; it
 does not migrate the database or change records.
 
+## Static canvas preview
+
+**Canvas** shows a declared page or view beside the source. Page composition
+and data substitution use the same functions as web delivery. Values in
+**Sample data (JSON)** are HTML escaped; arrays of objects can populate
+existing `for` blocks. The current unsaved `.zyl` buffer is compiled through
+overlays along with other open unsaved `.zyl` files. The preview does not run
+project queries, handlers, `main()`, or JavaScript. Its frame has an empty
+`sandbox` attribute and restrictive CSP.
+Only explicitly supplied sample data are displayed.
+
+The canvas uses the configured stylesheet choice and `zelyra.theme.css`.
+Unsaved theme changes refresh the canvas without reloading Studio. The color
+picker recognizes hexadecimal `--z-color-*` declarations outside CSS
+comments. **Edit source** opens the theme file and makes an undoable editor
+edit. For primary and status backgrounds it chooses black or white for the
+paired `--z-color-on-*` text color based on contrast. Hover and soft colors,
+and other related tokens, still need manual adjustment. The source button
+opens the page or view declaration. A component selector lists components
+reachable from it, including nested components. Separate actions open either
+their declaration or an actual `<Component>` use in the source. Both jumps
+target the exact source column.
+
+## Capability and path matrix
+
+The **Permissions** button analyzes the current `.zyl` file, including
+unsaved changes. The matrix shows `uses` declarations, capability operations
+found by the compiler, and grants from `zelyra.toml`. Grants with no detected
+function use are suggestions only; generated routes may still require them.
+Literal file paths use
+the same canonical root check as the runtime. Dynamic paths remain unknown;
+paths allowed at inspection time are checked again during execution. A
+compiler error marks the report as incomplete.
+
+**Review grant** prepares a missing grant and displays the complete proposed
+`zelyra.toml`. Only **Apply grant** saves it. Studio rechecks the file hash,
+preserves TOML comments, and rejects stale configuration. Without
+`zelyra.toml`, there is no project-wide runtime capability restriction, so
+Studio does not pretend to add a grant. The report covers analyzed function
+calls; dynamic calls and generated web routes are not fully resolved into a
+static permission chain.
+
+Studio scans `.zyl`, `.css`, and `zelyra.toml` files in the allowed project
+tree every 1.5 seconds for external changes. The watcher reads metadata only
+and does not follow symlinks. Clean open buffers reload; unsaved edits stay
+in place with a warning. It obeys the editor's existing tree-depth and file
+count limits. On file systems with coarse timestamps, a same-length edit with
+an unchanged timestamp may be missed.
+
 ## Scope
 
-Studio is a local IDE foundation, not yet a complete IDE. The database
-workbench supports selected schema and database actions, not unrestricted
-database design. CRUD generation works from existing declared tables and
-validates generated code before writing it.
+Studio is a local, language-specific IDE with the editor, compiler-backed
+language tools, LSP, project map, preview, runtime controls, and database
+workbench described above. Some analysis is intentionally conservative:
+unannotated local type inference is limited, dynamic call chains are not fully
+resolved for capability reports, and rename is offered only for statically
+resolved supported symbols. The database workbench provides selected schema
+and data actions, not unrestricted database design. CRUD generation works from
+existing declared tables and validates generated code before writing it.

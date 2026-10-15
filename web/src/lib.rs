@@ -10139,6 +10139,22 @@ fn render_template(
     ))
 }
 
+/// Render an already composed page or view with explicit sample data only.
+/// This shares the normal HTML escaping and collection rendering path while
+/// leaving project SQL, handlers and other runtime effects untouched.
+pub fn render_static_template_preview(
+    template: &str,
+    values: &HashMap<String, String>,
+    collections: &HashMap<String, Vec<HashMap<String, String>>>,
+) -> String {
+    normalize_ui_boolean_attributes(&render_template_fragment(
+        template,
+        values,
+        values,
+        collections,
+    ))
+}
+
 fn normalize_ui_boolean_attributes(source: &str) -> String {
     let mut html = source.to_owned();
     for attribute in [

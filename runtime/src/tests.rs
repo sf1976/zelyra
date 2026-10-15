@@ -53,6 +53,125 @@ fn if_expressions_return_the_selected_branch_value() {
 }
 
 #[test]
+fn string_interpolation_type_checks_expressions_and_supports_literal_braces() {
+    let source = r#"
+struct Customer { name: String id: Int total: Float }
+fn main() {
+    customer = Customer { name: "Ada", id: 501, total: 12.50 }
+    print("Customer {customer.name} (ID: {customer.id}) paid {customer.total} EUR. {{ok}}; state {if customer.id == 501 { \"accepted\" } else { \"unknown\" }}")
+}
+"#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap();
+    assert_eq!(
+        execute(&program).unwrap(),
+        ["Customer Ada (ID: 501) paid 12.5 EUR. {ok}; state accepted"]
+    );
+
+    let invalid = r#"fn main() { print("Hello {missing_name}") }"#;
+    let program = parse(&lex(invalid).unwrap()).unwrap();
+    let errors =
+        check(&program).expect_err("interpolation expressions must resolve and type check");
+    assert!(errors
+        .iter()
+        .any(|error| error.message.contains("unknown variable `missing_name`")));
+}
+
+#[test]
+fn string_interpolation_diagnostics_point_to_the_expression_source() {
+    let source = r#"fn main() { print("Grüße {to_string(\"quoted\") + missing}") }"#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    let errors = check(&program).expect_err("unresolved interpolation names must fail");
+    let error = errors
+        .iter()
+        .find(|error| error.message.contains("unknown variable `missing`"))
+        .expect("the missing interpolation variable should be diagnosed");
+    assert_eq!(&source[error.span.start..error.span.end], "missing");
+    assert_eq!(error.span.line, 1);
+    let line_start = source[..error.span.start]
+        .rfind('\n')
+        .map_or(0, |newline| newline + 1);
+    assert_eq!(
+        error.span.column,
+        source[line_start..error.span.start].chars().count() + 1
+    );
+}
+
+#[test]
+fn mutable_array_bindings_support_checked_in_place_index_updates() {
+    let source = r#"
+fn main() {
+    mutable values: Int[] = [1, 2, 3]
+    values[1] += 5
+    values[0] = 9
+    print(values[0])
+    print(values[1])
+}
+"#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap();
+    assert_eq!(execute(&program).unwrap(), ["9", "7"]);
+
+    let immutable = "fn main() { values = [1] values[0] += 1 }";
+    let program = parse(&lex(immutable).unwrap()).unwrap();
+    let errors =
+        check(&program).expect_err("index writes must require an explicit mutable binding");
+    assert!(errors
+        .iter()
+        .any(|error| error.message.contains("mutable array binding")));
+
+    let invalid_add = "fn main() { mutable flags: Bool[] = [true] flags[0] += false }";
+    let program = parse(&lex(invalid_add).unwrap()).unwrap();
+    let errors = check(&program).expect_err("compound addition must support only defined types");
+    assert!(errors.iter().any(|error| error.code == "E-TYPE-ARRAY-001"));
+
+    let out_of_bounds = "fn main() { mutable values: Int[] = [1] values[2] = 3 }";
+    let program = parse(&lex(out_of_bounds).unwrap()).unwrap();
+    check(&program).unwrap();
+    let error = execute(&program).expect_err("runtime must reject an out-of-range index");
+    assert!(error.message.contains("out of bounds"));
+}
+
+#[test]
+fn mutable_array_push_and_pop_use_mutable_bindings_and_explicit_options() {
+    let source = r#"
+fn main() {
+    mutable values: Int[] = []
+    push_mut(values, 4)
+    push_mut(values, 8)
+    popped = pop_mut(values)
+    match popped {
+        Some(value) => { print(value) }
+        None => { print(0) }
+    }
+    print(len(values))
+    empty = pop_mut(values)
+    match empty {
+        Some(value) => { print(value) }
+        None => { print(0) }
+    }
+}
+"#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap();
+    assert_eq!(execute(&program).unwrap(), ["8", "1", "4"]);
+
+    let immutable = "fn main() { values = [1] push_mut(values, 2) }";
+    let program = parse(&lex(immutable).unwrap()).unwrap();
+    let errors = check(&program).expect_err("push_mut must require an explicit mutable binding");
+    assert!(errors
+        .iter()
+        .any(|error| error.message.contains("mutable array binding")));
+
+    let mismatch = "fn main() { mutable values: Int[] = [] push_mut(values, \"wrong\") }";
+    let program = parse(&lex(mismatch).unwrap()).unwrap();
+    assert!(
+        check(&program).is_err(),
+        "push_mut must preserve the element type"
+    );
+}
+
+#[test]
 fn render_pdf_uses_named_views_record_data_and_escapes_interpolations() {
     let source = r#"
 struct Invoice { number: String customer: String }
@@ -1118,6 +1237,23 @@ fn opt_in_step_budget_counts_expression_evaluations_and_reports_the_exact_span()
     let finite = parse(&lex("fn main() { for value in 0..3 { print(value) } }").unwrap()).unwrap();
     let output = execute_with_capabilities_and_policies(&finite, None, Some(&policy)).unwrap();
     assert_eq!(output, ["0", "1", "2"]);
+}
+
+#[test]
+fn captured_execution_preserves_output_before_runtime_failure() {
+    let source = "fn main() { print(\"before failure\") loop { } }";
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap();
+    let policy = RuntimePolicy {
+        step_budget: Some(30),
+        ..RuntimePolicy::default()
+    };
+
+    let outcome = execute_captured_with_capabilities_and_policies(&program, None, Some(&policy));
+
+    assert_eq!(outcome.output, ["before failure"]);
+    let error = outcome.error.expect("the step budget must stop the loop");
+    assert!(error.message.contains("execution step budget exceeded"));
 }
 
 #[test]
@@ -2968,6 +3104,66 @@ fn rejects_file_system_writes_outside_configured_roots() {
         execute_with_capabilities_and_filesystem_policy(&program, Some(&grants), Some(&policy))
             .unwrap_err();
     assert!(error.message.contains("outside the configured roots"));
+}
+
+#[test]
+fn capability_use_inventory_uses_the_same_checked_operations() {
+    let source = "fn helper() uses FileSystem { write_text(\"data/note.txt\", \"ok\") } fn main() uses FileSystem, Clock { helper() now() }";
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap();
+    check_capabilities(&program).unwrap();
+    let uses = inspect_capability_uses(&program);
+    assert!(uses.iter().any(|usage| usage.function == "helper"
+        && usage.capability == "FileSystem"
+        && usage.operation == "file-system write access"));
+    let write = uses
+        .iter()
+        .find(|usage| usage.function == "helper" && usage.capability == "FileSystem")
+        .unwrap();
+    assert_eq!(write.file_paths.len(), 1);
+    assert_eq!(write.file_paths[0].path.as_deref(), Some("data/note.txt"));
+    assert!(write.file_paths[0].write);
+    assert!(write.file_paths[0].allow_missing);
+    assert!(uses.iter().any(|usage| usage.function == "main"
+        && usage.capability == "FileSystem"
+        && usage.operation == "call to `helper`"));
+    assert!(uses.iter().any(|usage| usage.function == "main"
+        && usage.capability == "Clock"
+        && usage.operation == "clock access"));
+}
+
+#[test]
+fn file_path_inspection_reuses_runtime_root_rules_for_missing_and_symlink_paths() {
+    let root = std::env::temp_dir().join(format!(
+        "zelyra-path-inspection-{}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let allowed = root.join("allowed");
+    let outside = root.join("outside");
+    std::fs::create_dir_all(&allowed).unwrap();
+    std::fs::create_dir_all(&outside).unwrap();
+    let policy = FileSystemPolicy {
+        base_dir: root.clone(),
+        read_roots: vec![allowed.clone()],
+        write_roots: vec![allowed.clone()],
+    };
+    assert_eq!(
+        inspect_filesystem_path(Some(&policy), "allowed/new.txt", true, true).unwrap(),
+        allowed.join("new.txt")
+    );
+    assert!(inspect_filesystem_path(Some(&policy), "outside/new.txt", true, true).is_err());
+    assert!(inspect_filesystem_path(Some(&policy), "allowed/new.txt", false, false).is_err());
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(&outside, allowed.join("escape")).unwrap();
+        assert!(
+            inspect_filesystem_path(Some(&policy), "allowed/escape/new.txt", true, true).is_err()
+        );
+    }
+    std::fs::remove_dir_all(root).unwrap();
 }
 
 #[test]

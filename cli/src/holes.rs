@@ -9,6 +9,7 @@ pub struct TypedHole {
     pub span: Span,
     pub expected_type: Option<Type>,
     pub visible_values: Vec<String>,
+    pub typed_values: Vec<(String, Type)>,
     pub visible_functions: Vec<String>,
     pub capabilities: Vec<String>,
     pub contract_spans: Vec<Span>,
@@ -167,6 +168,10 @@ impl Collector {
             Stmt::TupleBindOrAssign { value, .. } => {
                 self.expression(value, None, scope, capabilities, contract_spans);
             }
+            Stmt::ArrayIndexAssign { index, value, .. } => {
+                self.expression(index, Some(Type::Int), scope, capabilities, contract_spans);
+                self.expression(value, None, scope, capabilities, contract_spans);
+            }
             Stmt::Expr(expression) => {
                 self.expression(expression, None, scope, capabilities, contract_spans)
             }
@@ -286,6 +291,11 @@ impl Collector {
                 span: expression.span,
                 expected_type,
                 visible_values: scope.values.clone(),
+                typed_values: scope
+                    .values
+                    .iter()
+                    .filter_map(|name| scope.types.get(name).map(|ty| (name.clone(), ty.clone())))
+                    .collect(),
                 visible_functions: self.visible_functions.clone(),
                 capabilities: capabilities.to_vec(),
                 contract_spans: contract_spans.to_vec(),
@@ -450,6 +460,8 @@ fn visible_functions(program: &zelyra_ast::Program) -> Vec<String> {
         "text_trim",
         "text_chars",
         "append",
+        "push_mut",
+        "pop_mut",
         "tuple",
         "set",
         "set_add",

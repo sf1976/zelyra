@@ -33,6 +33,36 @@ fn run(directory: &Path, arguments: &[&str]) -> std::process::Output {
         .unwrap()
 }
 
+#[test]
+fn verify_json_uses_the_imported_module_source_for_contract_locations() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/contracts.zyl\" as contracts\nfn main() {}\n",
+        ),
+        (
+            "src/contracts.zyl",
+            "\n\npub fn proven() requires { 1 < 2 } {}\n",
+        ),
+    ]);
+    let output = run(&directory, &["verify", "main.zyl", "--json"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let entries: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let proven = entries
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["status"] == "PROVEN")
+        .unwrap();
+    assert_eq!(proven["location"]["file"], "src/contracts.zyl");
+    assert_eq!(proven["location"]["start"]["line"], 3);
+    fs::remove_dir_all(directory).unwrap();
+}
+
 fn directory_snapshot(root: &Path) -> BTreeMap<String, Vec<u8>> {
     fn collect(root: &Path, directory: &Path, files: &mut BTreeMap<String, Vec<u8>>) {
         let mut entries = fs::read_dir(directory)

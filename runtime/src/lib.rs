@@ -183,6 +183,14 @@ mod parallel;
 mod pdf;
 mod pdf_template;
 use pdf_template::interpolate_pdf_data;
+
+/// Render a declared view with supplied record data without executing project code.
+/// The same template and PDF pipeline is used by the `render_pdf` builtin.
+pub fn render_pdf_view(view: &ViewDef, data: &Value) -> Result<Vec<u8>, &'static str> {
+    let html = view.html.replace("<slot />", "").replace("<slot/>", "");
+    let html = interpolate_pdf_data(&html, data)?;
+    pdf::render_html_to_pdf(&html)
+}
 mod records;
 mod sql_results;
 
@@ -203,6 +211,24 @@ impl fmt::Display for TypeError {
 pub struct CapabilityError {
     pub message: String,
     pub span: Span,
+}
+
+/// A capability required by a concrete expression or resolved function call.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CapabilityUse {
+    pub function: String,
+    pub capability: String,
+    pub operation: String,
+    pub span: Span,
+    /// Literal paths can be checked against the runtime policy; None is dynamic.
+    pub file_paths: Vec<FilePathUse>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FilePathUse {
+    pub path: Option<String>,
+    pub write: bool,
+    pub allow_missing: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1917,6 +1943,9 @@ fn collect_loop_modified_names(block: &Block, names: &mut HashSet<String>) {
             | Stmt::BindOrAssign { name, .. } => {
                 names.insert(name.clone());
             }
+            Stmt::ArrayIndexAssign { name, .. } => {
+                names.insert(name.clone());
+            }
             Stmt::TupleBindOrAssign {
                 names: assigned, ..
             } => {
@@ -1989,6 +2018,7 @@ fn collect_loop_invariants<'a>(block: &'a Block, loops: &mut Vec<(usize, &'a [Ex
             }
             Stmt::Let { .. }
             | Stmt::BindOrAssign { .. }
+            | Stmt::ArrayIndexAssign { .. }
             | Stmt::TupleBindOrAssign { .. }
             | Stmt::Expr(_)
             | Stmt::Return { .. }
@@ -3496,6 +3526,24 @@ pub fn check_capabilities_with_grants(
     program: &Program,
     grants: Option<&HashSet<String>>,
 ) -> Result<(), Vec<CapabilityError>> {
+    let (errors, _) = analyze_capabilities(program, grants);
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
+/// Return use sites from the same traversal that enforces capability checks.
+/// Dynamic file paths and indirect calls still require runtime inspection.
+pub fn inspect_capability_uses(program: &Program) -> Vec<CapabilityUse> {
+    analyze_capabilities(program, None).1
+}
+
+fn analyze_capabilities(
+    program: &Program,
+    grants: Option<&HashSet<String>>,
+) -> (Vec<CapabilityError>, Vec<CapabilityUse>) {
     let functions = program
         .functions
         .iter()
@@ -3503,6 +3551,7 @@ pub fn check_capabilities_with_grants(
         .collect::<HashMap<_, _>>();
     let known = KNOWN_CAPABILITIES.iter().copied().collect::<HashSet<_>>();
     let mut errors = Vec::new();
+    let mut uses = Vec::new();
 
     for function in &program.functions {
         let mut declared = HashSet::new();
@@ -3530,7 +3579,14 @@ pub fn check_capabilities_with_grants(
                 });
             }
         }
-        check_capability_block(&function.body, function, &functions, &declared, &mut errors);
+        check_capability_block(
+            &function.body,
+            function,
+            &functions,
+            &declared,
+            &mut errors,
+            &mut uses,
+        );
         let mut function_values = HashMap::new();
         for parameter in &function.params {
             if let Type::Function { capabilities, .. } = &parameter.ty {
@@ -3547,17 +3603,20 @@ pub fn check_capabilities_with_grants(
             &declared,
             &mut function_values,
             &mut errors,
+            &mut uses,
         );
         for contract in function.requires.iter().chain(&function.ensures) {
-            check_capability_expr(contract, function, &functions, &declared, &mut errors);
+            check_capability_expr(
+                contract,
+                function,
+                &functions,
+                &declared,
+                &mut errors,
+                &mut uses,
+            );
         }
     }
-
-    if errors.is_empty() {
-        Ok(())
-    } else {
-        Err(errors)
-    }
+    (errors, uses)
 }
 
 fn function_value_capabilities(
@@ -3601,13 +3660,14 @@ fn check_indirect_capability_block(
     declared: &HashSet<&str>,
     values: &mut HashMap<String, HashSet<String>>,
     errors: &mut Vec<CapabilityError>,
+    uses: &mut Vec<CapabilityUse>,
 ) {
     for statement in &block.statements {
         match statement {
             Stmt::Let {
                 name, ty, value, ..
             } => {
-                check_indirect_capability_expr(value, function, declared, values, errors);
+                check_indirect_capability_expr(value, function, declared, values, errors, uses);
                 let declared_effects = ty.as_ref().and_then(|ty| match ty {
                     Type::Function { capabilities, .. } => {
                         Some(capabilities.iter().cloned().collect())
@@ -3621,7 +3681,7 @@ fn check_indirect_capability_block(
                 }
             }
             Stmt::BindOrAssign { name, value, .. } => {
-                check_indirect_capability_expr(value, function, declared, values, errors);
+                check_indirect_capability_expr(value, function, declared, values, errors, uses);
                 if let Some(capabilities) = function_value_capabilities(value, values, functions) {
                     values.entry(name.clone()).or_default().extend(capabilities);
                 } else {
@@ -3629,17 +3689,23 @@ fn check_indirect_capability_block(
                 }
             }
             Stmt::TupleBindOrAssign { names, value, .. } => {
-                check_indirect_capability_expr(value, function, declared, values, errors);
+                check_indirect_capability_expr(value, function, declared, values, errors, uses);
                 for name in names {
                     values.remove(name);
                 }
+            }
+            Stmt::ArrayIndexAssign { index, value, .. } => {
+                check_indirect_capability_expr(index, function, declared, values, errors, uses);
+                check_indirect_capability_expr(value, function, declared, values, errors, uses);
             }
             Stmt::Expr(expression)
             | Stmt::Return {
                 value: Some(expression),
                 ..
             } => {
-                check_indirect_capability_expr(expression, function, declared, values, errors);
+                check_indirect_capability_expr(
+                    expression, function, declared, values, errors, uses,
+                );
             }
             Stmt::If {
                 condition,
@@ -3647,7 +3713,7 @@ fn check_indirect_capability_block(
                 else_block,
                 ..
             } => {
-                check_indirect_capability_expr(condition, function, declared, values, errors);
+                check_indirect_capability_expr(condition, function, declared, values, errors, uses);
                 let before = values.clone();
                 let mut then_values = before.clone();
                 check_indirect_capability_block(
@@ -3657,6 +3723,7 @@ fn check_indirect_capability_block(
                     declared,
                     &mut then_values,
                     errors,
+                    uses,
                 );
                 let mut else_values = before.clone();
                 if let Some(else_block) = else_block {
@@ -3667,6 +3734,7 @@ fn check_indirect_capability_block(
                         declared,
                         &mut else_values,
                         errors,
+                        uses,
                     );
                 }
                 *values = merge_function_value_capabilities(&before, &[then_values, else_values]);
@@ -3677,9 +3745,11 @@ fn check_indirect_capability_block(
                 body,
                 ..
             } => {
-                check_indirect_capability_expr(condition, function, declared, values, errors);
+                check_indirect_capability_expr(condition, function, declared, values, errors, uses);
                 for invariant in invariants {
-                    check_indirect_capability_expr(invariant, function, declared, values, errors);
+                    check_indirect_capability_expr(
+                        invariant, function, declared, values, errors, uses,
+                    );
                 }
                 let before = values.clone();
                 let mut body_values = before.clone();
@@ -3690,11 +3760,12 @@ fn check_indirect_capability_block(
                     declared,
                     &mut body_values,
                     errors,
+                    uses,
                 );
                 *values = merge_function_value_capabilities(&before, &[body_values]);
             }
             Stmt::For { iterable, body, .. } => {
-                check_indirect_capability_expr(iterable, function, declared, values, errors);
+                check_indirect_capability_expr(iterable, function, declared, values, errors, uses);
                 let before = values.clone();
                 let mut body_values = before.clone();
                 check_indirect_capability_block(
@@ -3704,6 +3775,7 @@ fn check_indirect_capability_block(
                     declared,
                     &mut body_values,
                     errors,
+                    uses,
                 );
                 *values = merge_function_value_capabilities(&before, &[body_values]);
             }
@@ -3711,7 +3783,9 @@ fn check_indirect_capability_block(
                 invariants, body, ..
             } => {
                 for invariant in invariants {
-                    check_indirect_capability_expr(invariant, function, declared, values, errors);
+                    check_indirect_capability_expr(
+                        invariant, function, declared, values, errors, uses,
+                    );
                 }
                 let before = values.clone();
                 let mut body_values = before.clone();
@@ -3722,11 +3796,12 @@ fn check_indirect_capability_block(
                     declared,
                     &mut body_values,
                     errors,
+                    uses,
                 );
                 *values = merge_function_value_capabilities(&before, &[body_values]);
             }
             Stmt::Match { value, arms, .. } => {
-                check_indirect_capability_expr(value, function, declared, values, errors);
+                check_indirect_capability_expr(value, function, declared, values, errors, uses);
                 let before = values.clone();
                 let mut branches = Vec::new();
                 for arm in arms {
@@ -3738,6 +3813,7 @@ fn check_indirect_capability_block(
                         declared,
                         &mut branch,
                         errors,
+                        uses,
                     );
                     branches.push(branch);
                 }
@@ -3753,6 +3829,7 @@ fn check_indirect_capability_block(
                     declared,
                     &mut nested,
                     errors,
+                    uses,
                 );
                 *values = merge_function_value_capabilities(&before, &[nested]);
             }
@@ -3785,6 +3862,7 @@ fn check_indirect_capability_expr(
     declared: &HashSet<&str>,
     values: &HashMap<String, HashSet<String>>,
     errors: &mut Vec<CapabilityError>,
+    uses: &mut Vec<CapabilityUse>,
 ) {
     let mut pending = vec![expression];
     while let Some(expression) = pending.pop() {
@@ -3799,6 +3877,7 @@ fn check_indirect_capability_expr(
                             function,
                             declared,
                             errors,
+                            uses,
                         );
                     }
                 }
@@ -3848,6 +3927,7 @@ fn check_capability_block(
     functions: &HashMap<&str, &Function>,
     declared: &HashSet<&str>,
     errors: &mut Vec<CapabilityError>,
+    uses: &mut Vec<CapabilityUse>,
 ) {
     for statement in &block.statements {
         match statement {
@@ -3859,12 +3939,18 @@ fn check_capability_block(
                 value: Some(value), ..
             }
             | Stmt::Match { value, .. } => {
-                check_capability_expr(value, function, functions, declared, errors);
+                check_capability_expr(value, function, functions, declared, errors, uses);
                 if let Stmt::Match { arms, .. } = statement {
                     for arm in arms {
-                        check_capability_block(&arm.body, function, functions, declared, errors);
+                        check_capability_block(
+                            &arm.body, function, functions, declared, errors, uses,
+                        );
                     }
                 }
+            }
+            Stmt::ArrayIndexAssign { index, value, .. } => {
+                check_capability_expr(index, function, functions, declared, errors, uses);
+                check_capability_expr(value, function, functions, declared, errors, uses);
             }
             Stmt::Return { value: None, .. } | Stmt::Break { .. } | Stmt::Continue { .. } => {}
             Stmt::If {
@@ -3873,10 +3959,10 @@ fn check_capability_block(
                 else_block,
                 ..
             } => {
-                check_capability_expr(condition, function, functions, declared, errors);
-                check_capability_block(then_block, function, functions, declared, errors);
+                check_capability_expr(condition, function, functions, declared, errors, uses);
+                check_capability_block(then_block, function, functions, declared, errors, uses);
                 if let Some(else_block) = else_block {
-                    check_capability_block(else_block, function, functions, declared, errors);
+                    check_capability_block(else_block, function, functions, declared, errors, uses);
                 }
             }
             Stmt::While {
@@ -3885,29 +3971,29 @@ fn check_capability_block(
                 body,
                 ..
             } => {
-                check_capability_expr(condition, function, functions, declared, errors);
+                check_capability_expr(condition, function, functions, declared, errors, uses);
                 for invariant in invariants {
-                    check_capability_expr(invariant, function, functions, declared, errors);
+                    check_capability_expr(invariant, function, functions, declared, errors, uses);
                 }
-                check_capability_block(body, function, functions, declared, errors);
+                check_capability_block(body, function, functions, declared, errors, uses);
             }
             Stmt::For { iterable, body, .. } => {
-                check_capability_expr(iterable, function, functions, declared, errors);
-                check_capability_block(body, function, functions, declared, errors);
+                check_capability_expr(iterable, function, functions, declared, errors, uses);
+                check_capability_block(body, function, functions, declared, errors, uses);
             }
             Stmt::Loop {
                 invariants, body, ..
             } => {
                 for invariant in invariants {
-                    check_capability_expr(invariant, function, functions, declared, errors);
+                    check_capability_expr(invariant, function, functions, declared, errors, uses);
                 }
-                check_capability_block(body, function, functions, declared, errors);
+                check_capability_block(body, function, functions, declared, errors, uses);
             }
             Stmt::Transaction { body, .. } => {
-                check_capability_block(body, function, functions, declared, errors);
+                check_capability_block(body, function, functions, declared, errors, uses);
             }
             Stmt::Parallel { body, .. } => {
-                check_capability_block(body, function, functions, declared, errors);
+                check_capability_block(body, function, functions, declared, errors, uses);
             }
         }
     }
@@ -3919,6 +4005,7 @@ fn check_capability_expr(
     functions: &HashMap<&str, &Function>,
     declared: &HashSet<&str>,
     errors: &mut Vec<CapabilityError>,
+    uses: &mut Vec<CapabilityUse>,
 ) {
     let mut pending = vec![expression];
     while let Some(expression) = pending.pop() {
@@ -3932,6 +4019,7 @@ fn check_capability_expr(
                     function,
                     declared,
                     errors,
+                    uses,
                 );
             }
             ExprKind::Call { name, args, .. } => {
@@ -3943,6 +4031,7 @@ fn check_capability_expr(
                         function,
                         declared,
                         errors,
+                        uses,
                     );
                 } else if name == "now" {
                     require_capability(
@@ -3952,6 +4041,7 @@ fn check_capability_expr(
                         function,
                         declared,
                         errors,
+                        uses,
                     );
                 } else if name == "env" {
                     require_capability(
@@ -3961,6 +4051,7 @@ fn check_capability_expr(
                         function,
                         declared,
                         errors,
+                        uses,
                     );
                 } else if name == "random_int" || name == "uuid_v4" {
                     require_capability(
@@ -3970,6 +4061,7 @@ fn check_capability_expr(
                         function,
                         declared,
                         errors,
+                        uses,
                     );
                 } else if matches!(
                     name.as_str(),
@@ -3982,6 +4074,7 @@ fn check_capability_expr(
                         function,
                         declared,
                         errors,
+                        uses,
                     );
                 } else if name == "mail_queue" {
                     require_capability(
@@ -3991,6 +4084,7 @@ fn check_capability_expr(
                         function,
                         declared,
                         errors,
+                        uses,
                     );
                     require_capability(
                         "Database(write)",
@@ -3999,6 +4093,7 @@ fn check_capability_expr(
                         function,
                         declared,
                         errors,
+                        uses,
                     );
                 } else if name == "mail_deliver" {
                     require_capability(
@@ -4008,6 +4103,7 @@ fn check_capability_expr(
                         function,
                         declared,
                         errors,
+                        uses,
                     );
                 } else if name == "run_process" {
                     require_capability(
@@ -4017,6 +4113,7 @@ fn check_capability_expr(
                         function,
                         declared,
                         errors,
+                        uses,
                     );
                 } else if matches!(
                     name.as_str(),
@@ -4029,6 +4126,7 @@ fn check_capability_expr(
                         function,
                         declared,
                         errors,
+                        uses,
                     );
                 } else if matches!(
                     name.as_str(),
@@ -4047,6 +4145,7 @@ fn check_capability_expr(
                         function,
                         declared,
                         errors,
+                        uses,
                     );
                 } else if name == "delete_file" || name == "delete_file_result" {
                     require_capability(
@@ -4056,6 +4155,7 @@ fn check_capability_expr(
                         function,
                         declared,
                         errors,
+                        uses,
                     );
                 } else if name == "list_dir" {
                     require_capability(
@@ -4065,10 +4165,25 @@ fn check_capability_expr(
                         function,
                         declared,
                         errors,
+                        uses,
                     );
+                }
+                if let Some(usage) = uses.last_mut() {
+                    if usage.span == expression.span && usage.capability == "FileSystem" {
+                        usage.file_paths = file_path_uses(name, args);
+                    }
                 }
                 if let Some(callee) = functions.get(name.as_str()) {
                     for capability in &callee.capabilities {
+                        if KNOWN_CAPABILITIES.contains(&capability.as_str()) {
+                            uses.push(CapabilityUse {
+                                function: function.name.clone(),
+                                capability: capability.clone(),
+                                operation: format!("call to `{name}`"),
+                                span: expression.span,
+                                file_paths: Vec::new(),
+                            });
+                        }
                         if KNOWN_CAPABILITIES.contains(&capability.as_str())
                             && !function_declares_capability(declared, capability)
                         {
@@ -4145,7 +4260,15 @@ fn require_capability(
     function: &Function,
     declared: &HashSet<&str>,
     errors: &mut Vec<CapabilityError>,
+    uses: &mut Vec<CapabilityUse>,
 ) {
+    uses.push(CapabilityUse {
+        function: function.name.clone(),
+        capability: capability.into(),
+        operation: operation.into(),
+        span,
+        file_paths: Vec::new(),
+    });
     if !function_declares_capability(declared, capability) {
         errors.push(CapabilityError {
             message: format!(
@@ -4155,6 +4278,34 @@ fn require_capability(
             span,
         });
     }
+}
+
+fn file_path_uses(name: &str, args: &[Expr]) -> Vec<FilePathUse> {
+    let (modes, allow_missing): (&[bool], bool) = match name {
+        "read_text" | "read_text_result" | "file_size" | "list_dir" => (&[false], false),
+        "file_exists" | "dir_exists" => (&[false], true),
+        "write_text"
+        | "write_text_result"
+        | "write_text_new_result"
+        | "atomic_write_text_result"
+        | "append_text_result" => (&[true], true),
+        "delete_file" | "delete_file_result" => (&[true], false),
+        "copy_file_new_result" => (&[false, true], false),
+        "rename_file_result" => (&[true, true], false),
+        _ => return Vec::new(),
+    };
+    modes
+        .iter()
+        .enumerate()
+        .map(|(index, write)| FilePathUse {
+            path: args.get(index).and_then(|arg| match &arg.kind {
+                ExprKind::String(path) => Some(path.clone()),
+                _ => None,
+            }),
+            write: *write,
+            allow_missing: allow_missing || (index == 1 && modes.len() == 2),
+        })
+        .collect()
 }
 
 fn function_declares_capability(declared: &HashSet<&str>, capability: &str) -> bool {
@@ -4503,6 +4654,7 @@ fn statement_flow(statement: &Stmt, program: &Program) -> u8 {
         Stmt::Transaction { body, .. } => flow_outcomes(body, program),
         Stmt::Let { .. }
         | Stmt::BindOrAssign { .. }
+        | Stmt::ArrayIndexAssign { .. }
         | Stmt::TupleBindOrAssign { .. }
         | Stmt::Expr(_)
         | Stmt::Parallel { .. } => FLOW_FALLTHROUGH,
@@ -4875,6 +5027,59 @@ impl<'a> Checker<'a> {
                             ty: actual,
                             mutable: false,
                         },
+                    );
+                }
+            }
+            Stmt::ArrayIndexAssign {
+                name,
+                index,
+                value,
+                operation,
+                span,
+            } => {
+                let Some(target) = self.lookup(scopes, name).cloned() else {
+                    self.error(*span, format!("unknown variable `{name}`"));
+                    self.check_expr(index, scopes);
+                    self.check_expr(value, scopes);
+                    return;
+                };
+                if !target.mutable {
+                    self.error(
+                        *span,
+                        format!("indexed updates require a mutable array binding `{name}`"),
+                    );
+                }
+                let element_type = match target.ty {
+                    Type::Array(element) => *element,
+                    other => {
+                        self.error(
+                            *span,
+                            format!("indexed update expects an array, found `{other}`"),
+                        );
+                        self.check_expr(index, scopes);
+                        self.check_expr(value, scopes);
+                        return;
+                    }
+                };
+                let index_type = self.check_expr(index, scopes);
+                self.expect_type(&Type::Int, &index_type, index.span);
+                let value_type = self.check_expr(value, scopes);
+                self.expect_type(&element_type, &value_type, value.span);
+                if *operation == ArrayIndexAssignOp::Add
+                    && !matches!(
+                        element_type,
+                        Type::Int
+                            | Type::UInt
+                            | Type::Float
+                            | Type::Decimal
+                            | Type::String
+                            | Type::Duration
+                    )
+                {
+                    self.error_with_code(
+                        "E-TYPE-ARRAY-001",
+                        *span,
+                        format!("`+=` is not supported for array element type `{element_type}`"),
                     );
                 }
             }
@@ -6377,6 +6582,70 @@ impl<'a> Checker<'a> {
                             self.error(
                                 args[0].span,
                                 format!("`append` expects an array, found `{other}`"),
+                            );
+                            Type::Unknown
+                        }
+                    }
+                } else if name == "push_mut" {
+                    if args.len() != 2 {
+                        self.error(
+                            expr.span,
+                            "`push_mut` expects a mutable array and one value",
+                        );
+                        return Type::Unknown;
+                    }
+                    let array_type = self.check_expr(&args[0], scopes);
+                    let value_type = self.check_expr(&args[1], scopes);
+                    if let ExprKind::Variable(binding) = &args[0].kind {
+                        if self
+                            .lookup(scopes, binding)
+                            .is_none_or(|variable| !variable.mutable)
+                        {
+                            self.error(args[0].span, "`push_mut` requires a mutable array binding");
+                        }
+                    } else {
+                        self.error(
+                            args[0].span,
+                            "`push_mut` requires the name of a mutable array binding",
+                        );
+                    }
+                    match array_type {
+                        Type::Array(inner) => {
+                            self.expect_type(&inner, &value_type, args[1].span);
+                        }
+                        Type::Unknown => {}
+                        other => self.error(
+                            args[0].span,
+                            format!("`push_mut` expects an array, found `{other}`"),
+                        ),
+                    }
+                    Type::Unit
+                } else if name == "pop_mut" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "`pop_mut` expects one mutable array");
+                        return Type::Unknown;
+                    }
+                    let array_type = self.check_expr(&args[0], scopes);
+                    if let ExprKind::Variable(binding) = &args[0].kind {
+                        if self
+                            .lookup(scopes, binding)
+                            .is_none_or(|variable| !variable.mutable)
+                        {
+                            self.error(args[0].span, "`pop_mut` requires a mutable array binding");
+                        }
+                    } else {
+                        self.error(
+                            args[0].span,
+                            "`pop_mut` requires the name of a mutable array binding",
+                        );
+                    }
+                    match array_type {
+                        Type::Array(inner) => Type::Option(inner),
+                        Type::Unknown => Type::Unknown,
+                        other => {
+                            self.error(
+                                args[0].span,
+                                format!("`pop_mut` expects an array, found `{other}`"),
                             );
                             Type::Unknown
                         }
@@ -9169,6 +9438,69 @@ pub struct FileSystemPolicy {
     pub write_roots: Vec<PathBuf>,
 }
 
+/// Inspect a literal path with the exact canonicalization and root rules used
+/// by file-system builtins. Dynamic paths cannot be certified by this helper.
+pub fn inspect_filesystem_path(
+    policy: Option<&FileSystemPolicy>,
+    path: &str,
+    write: bool,
+    allow_missing: bool,
+) -> Result<PathBuf, String> {
+    let roots = policy.map_or_else(Vec::new, |policy| {
+        if write {
+            policy.write_roots.clone()
+        } else {
+            policy.read_roots.clone()
+        }
+    });
+    resolve_filesystem_path_rule(
+        policy,
+        path,
+        &roots,
+        if write { "write" } else { "read" },
+        allow_missing,
+    )
+}
+
+fn resolve_filesystem_path_rule(
+    policy: Option<&FileSystemPolicy>,
+    path: &str,
+    roots: &[PathBuf],
+    operation: &str,
+    allow_missing: bool,
+) -> Result<PathBuf, String> {
+    let Some(policy) = policy else {
+        return Ok(PathBuf::from(path));
+    };
+    let candidate = if Path::new(path).is_absolute() {
+        PathBuf::from(path)
+    } else {
+        policy.base_dir.join(path)
+    };
+    let resolved = if allow_missing && !candidate.exists() && !candidate.is_symlink() {
+        let Some(file_name) = candidate.file_name() else {
+            return Err(format!("file-system {operation} requires a file path"));
+        };
+        let parent = candidate.parent().unwrap_or(Path::new("."));
+        let parent = std::fs::canonicalize(parent)
+            .map_err(|error| format!("file-system {operation} failed for {path}: {error}"))?;
+        parent.join(file_name)
+    } else {
+        std::fs::canonicalize(&candidate)
+            .map_err(|error| format!("file-system {operation} failed for {path}: {error}"))?
+    };
+    if roots
+        .iter()
+        .any(|root| resolved == *root || resolved.starts_with(root))
+    {
+        Ok(resolved)
+    } else {
+        Err(format!(
+            "file-system {operation} denied for {path}: path is outside the configured roots"
+        ))
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NetworkPolicy {
     pub allowed_hosts: Vec<String>,
@@ -9308,6 +9640,79 @@ impl Environment {
         }
         Err("missing")
     }
+    fn mutable_array_element(&self, name: &str, index: usize) -> Result<Value, &'static str> {
+        let variable = self
+            .scopes
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(name))
+            .ok_or("unknown array binding")?;
+        if !variable.mutable {
+            return Err("cannot update an immutable array binding");
+        }
+        let Value::Array(values) = &variable.value else {
+            return Err("indexed update target is not an array");
+        };
+        values
+            .get(index)
+            .cloned()
+            .ok_or("mutable array index is out of bounds")
+    }
+    fn assign_mutable_array_element(
+        &mut self,
+        name: &str,
+        index: usize,
+        value: Value,
+    ) -> Result<(), &'static str> {
+        let variable = self
+            .scopes
+            .iter_mut()
+            .rev()
+            .find_map(|scope| scope.get_mut(name))
+            .ok_or("unknown array binding")?;
+        if !variable.mutable {
+            return Err("cannot update an immutable array binding");
+        }
+        let Value::Array(values) = &mut variable.value else {
+            return Err("indexed update target is not an array");
+        };
+        let element = values
+            .get_mut(index)
+            .ok_or("mutable array index is out of bounds")?;
+        *element = value;
+        Ok(())
+    }
+    fn push_mutable_array(&mut self, name: &str, value: Value) -> Result<(), &'static str> {
+        let variable = self
+            .scopes
+            .iter_mut()
+            .rev()
+            .find_map(|scope| scope.get_mut(name))
+            .ok_or("unknown array binding")?;
+        if !variable.mutable {
+            return Err("cannot update an immutable array binding");
+        }
+        let Value::Array(values) = &mut variable.value else {
+            return Err("push_mut target is not an array");
+        };
+        values.push(value);
+        Ok(())
+    }
+    fn pop_mutable_array(&mut self, name: &str) -> Result<Option<Value>, &'static str> {
+        let variable = self
+            .scopes
+            .iter_mut()
+            .rev()
+            .find_map(|scope| scope.get_mut(name))
+            .ok_or("unknown array binding")?;
+        if !variable.mutable {
+            return Err("cannot update an immutable array binding");
+        }
+        let Value::Array(values) = &mut variable.value else {
+            return Err("pop_mut target is not an array");
+        };
+        Ok(values.pop())
+    }
 }
 
 enum Flow {
@@ -9319,6 +9724,47 @@ enum Flow {
 
 pub fn execute(program: &Program) -> Result<Vec<String>, RuntimeError> {
     execute_internal(program, None, None, None)
+}
+
+/// Output produced before a runtime failure, together with the failure itself.
+///
+/// This is useful for command-line and editor runs, where already printed output
+/// should remain visible even if a later expression fails.
+#[derive(Debug)]
+pub struct ExecutionOutcome {
+    pub output: Vec<String>,
+    pub error: Option<RuntimeError>,
+}
+
+impl ExecutionOutcome {
+    fn into_result(self) -> Result<Vec<String>, RuntimeError> {
+        match self.error {
+            Some(error) => Err(error),
+            None => Ok(self.output),
+        }
+    }
+}
+
+pub fn execute_captured_with_capabilities_and_policies(
+    program: &Program,
+    grants: Option<&HashSet<String>>,
+    policy: Option<&RuntimePolicy>,
+) -> ExecutionOutcome {
+    execute_internal_captured(program, None, grants.cloned(), policy.cloned())
+}
+
+pub fn execute_captured_with_database_and_capabilities_and_policies(
+    program: &Program,
+    database_url: &str,
+    grants: Option<&HashSet<String>>,
+    policy: Option<&RuntimePolicy>,
+) -> ExecutionOutcome {
+    execute_internal_captured(
+        program,
+        Some(database_url.to_owned()),
+        grants.cloned(),
+        policy.cloned(),
+    )
 }
 
 pub fn execute_with_database(
@@ -9550,13 +9996,33 @@ fn execute_internal(
     granted_capabilities: Option<HashSet<String>>,
     policy: Option<RuntimePolicy>,
 ) -> Result<Vec<String>, RuntimeError> {
+    execute_internal_captured(program, database_url, granted_capabilities, policy).into_result()
+}
+
+fn execute_internal_captured(
+    program: &Program,
+    database_url: Option<String>,
+    granted_capabilities: Option<HashSet<String>>,
+    policy: Option<RuntimePolicy>,
+) -> ExecutionOutcome {
     let depth = policy
         .as_ref()
         .and_then(|policy| policy.max_stack_depth)
         .unwrap_or(MAX_FUNCTION_CALL_DEPTH);
-    run_on_runtime_stack(runtime_stack_size(depth), || {
-        execute_internal_on_runtime_stack(program, database_url, granted_capabilities, policy)
-    })
+    match run_on_runtime_stack(runtime_stack_size(depth), || {
+        Ok(execute_internal_on_runtime_stack(
+            program,
+            database_url,
+            granted_capabilities,
+            policy,
+        ))
+    }) {
+        Ok(outcome) => outcome,
+        Err(error) => ExecutionOutcome {
+            output: Vec::new(),
+            error: Some(error),
+        },
+    }
 }
 
 fn execute_internal_on_runtime_stack(
@@ -9564,7 +10030,7 @@ fn execute_internal_on_runtime_stack(
     database_url: Option<String>,
     granted_capabilities: Option<HashSet<String>>,
     policy: Option<RuntimePolicy>,
-) -> Result<Vec<String>, RuntimeError> {
+) -> ExecutionOutcome {
     let mut interpreter = Interpreter {
         functions: program
             .functions
@@ -9613,8 +10079,11 @@ fn execute_internal_on_runtime_stack(
         active_capabilities: Vec::new(),
         active_type_substitutions: Vec::new(),
     };
-    interpreter.call("main", Vec::new(), Span::default())?;
-    Ok(interpreter.output)
+    let error = interpreter.call("main", Vec::new(), Span::default()).err();
+    ExecutionOutcome {
+        output: interpreter.output,
+        error,
+    }
 }
 
 const MAX_FUNCTION_CALL_DEPTH: usize = 20;
@@ -9761,6 +10230,7 @@ fn statement_span(statement: &Stmt) -> Span {
     match statement {
         Stmt::Let { span, .. }
         | Stmt::BindOrAssign { span, .. }
+        | Stmt::ArrayIndexAssign { span, .. }
         | Stmt::TupleBindOrAssign { span, .. }
         | Stmt::Return { span, .. }
         | Stmt::If { span, .. }
@@ -9816,6 +10286,8 @@ fn is_runtime_builtin(name: &str) -> bool {
             | "find"
             | "reduce"
             | "append"
+            | "push_mut"
+            | "pop_mut"
             | "tuple"
             | "set"
             | "set_add"
@@ -10082,48 +10554,14 @@ impl<'program> Interpreter<'program> {
         span: Span,
         allow_missing: bool,
     ) -> Result<PathBuf, RuntimeError> {
-        let Some(policy) = &self.filesystem_policy else {
-            return Ok(PathBuf::from(path));
-        };
-        let candidate = if Path::new(path).is_absolute() {
-            PathBuf::from(path)
-        } else {
-            policy.base_dir.join(path)
-        };
-        let resolved = if allow_missing && !candidate.exists() && !candidate.is_symlink() {
-            let Some(file_name) = candidate.file_name() else {
-                return Err(self.runtime_error(
-                    span,
-                    format!("file-system {operation} requires a file path"),
-                ));
-            };
-            let parent = candidate.parent().unwrap_or(Path::new("."));
-            let parent = std::fs::canonicalize(parent).map_err(|error| {
-                self.runtime_error(
-                    span,
-                    format!("file-system {operation} failed for {path}: {error}"),
-                )
-            })?;
-            parent.join(file_name)
-        } else {
-            std::fs::canonicalize(&candidate).map_err(|error| {
-                self.runtime_error(
-                    span,
-                    format!("file-system {operation} failed for {path}: {error}"),
-                )
-            })?
-        };
-        if roots
-            .iter()
-            .any(|root| resolved == *root || resolved.starts_with(root))
-        {
-            Ok(resolved)
-        } else {
-            Err(self.runtime_error(
-                span,
-                format!("file-system {operation} denied for {path}: path is outside the configured roots"),
-            ))
-        }
+        resolve_filesystem_path_rule(
+            self.filesystem_policy.as_ref(),
+            path,
+            roots,
+            operation,
+            allow_missing,
+        )
+        .map_err(|message| self.runtime_error(span, message))
     }
 
     fn http_request(
@@ -11408,6 +11846,38 @@ impl<'program> Interpreter<'program> {
                 }
                 Ok(Flow::Continue)
             }
+            Stmt::ArrayIndexAssign {
+                name,
+                index,
+                value,
+                operation,
+                span,
+            } => {
+                let index_value = self.eval(index, env)?;
+                let Value::Int(index_value) = index_value else {
+                    return Err(self.runtime_error(*span, "mutable array index must be Int"));
+                };
+                let index = usize::try_from(index_value).map_err(|_| {
+                    self.runtime_error(index.span, "array index cannot be negative")
+                })?;
+                let current = if *operation == ArrayIndexAssignOp::Add {
+                    Some(
+                        env.mutable_array_element(name, index)
+                            .map_err(|reason| self.runtime_error(*span, reason))?,
+                    )
+                } else {
+                    None
+                };
+                let value = self.eval(value, env)?;
+                let updated = if let Some(current) = current {
+                    self.binary(current, BinaryOp::Add, value, *span)?
+                } else {
+                    value
+                };
+                env.assign_mutable_array_element(name, index, updated)
+                    .map_err(|reason| self.runtime_error(*span, reason))?;
+                Ok(Flow::Continue)
+            }
             Stmt::TupleBindOrAssign { names, value, span } => {
                 let value = self.eval(value, env)?;
                 let Value::Tuple(values) = value else {
@@ -11987,6 +12457,39 @@ impl<'program> Interpreter<'program> {
         env: &mut Environment,
         span: Span,
     ) -> Result<Value, RuntimeError> {
+        if name == "push_mut" {
+            if args.len() != 2 || !type_args.is_empty() {
+                return Err(self.runtime_error(
+                    span,
+                    "`push_mut` expects a mutable array binding and one value",
+                ));
+            }
+            let ExprKind::Variable(binding) = &args[0].kind else {
+                return Err(self.runtime_error(
+                    args[0].span,
+                    "`push_mut` requires the name of a mutable array binding",
+                ));
+            };
+            let value = self.eval(&args[1], env)?;
+            env.push_mutable_array(binding, value)
+                .map_err(|reason| self.runtime_error(args[0].span, reason))?;
+            return Ok(Value::Unit);
+        }
+        if name == "pop_mut" {
+            if args.len() != 1 || !type_args.is_empty() {
+                return Err(self.runtime_error(span, "`pop_mut` expects one mutable array binding"));
+            }
+            let ExprKind::Variable(binding) = &args[0].kind else {
+                return Err(self.runtime_error(
+                    args[0].span,
+                    "`pop_mut` requires the name of a mutable array binding",
+                ));
+            };
+            let value = env
+                .pop_mutable_array(binding)
+                .map_err(|reason| self.runtime_error(args[0].span, reason))?;
+            return Ok(Value::Option(value.map(Box::new)));
+        }
         if let Some(Value::Function(function)) = env.get(name) {
             if !type_args.is_empty() {
                 return Err(self.runtime_error(
@@ -12179,18 +12682,15 @@ impl<'program> Interpreter<'program> {
                     ));
                 }
             };
-            let mut html = self
+            let view = self
                 .view_definitions
                 .get(&view_name)
-                .map(|view| view.html.clone())
+                .cloned()
                 .ok_or_else(|| {
                     self.runtime_error(args[0].span, format!("unknown PDF view `{view_name}`"))
                 })?;
             let data = self.eval(&args[1], env)?;
-            html = html.replace("<slot />", "").replace("<slot/>", "");
-            html = interpolate_pdf_data(&html, &data)
-                .map_err(|message| self.runtime_error(span, message))?;
-            pdf::render_html_to_pdf(&html)
+            render_pdf_view(&view, &data)
                 .map(Value::Bytes)
                 .map_err(|error| self.runtime_error(span, error))
         } else if name == "read_console" {

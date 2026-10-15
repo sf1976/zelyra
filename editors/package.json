@@ -1,8 +1,8 @@
 {
   "name": "zelyra-language",
   "displayName": "Zelyra",
-  "description": "Official syntax highlighting and language configuration for Zelyra (.zyl)",
-  "version": "0.1.50",
+  "description": "Zelyra syntax highlighting and language server support for .zyl files",
+  "version": "0.2.0",
   "publisher": "sf1976",
   "author": "Stefan Siedelmann",
   "license": "Apache-2.0",
@@ -13,7 +13,29 @@
   },
   "icon": "icon.png",
   "engines": {
-    "vscode": "^1.60.0"
+    "vscode": "^1.80.0"
+  },
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onLanguage:zelyra"
+  ],
+  "scripts": {
+    "build": "node create-notices.cjs && esbuild extension.js --bundle --minify --platform=node --external:vscode --legal-comments=external --outfile=dist/extension.js",
+    "package": "npm run build && vsce package --out zelyra.vsix",
+    "test": "npm run build && node --test extension.test.cjs"
+  },
+  "files": [
+    "dist/extension.js",
+    "dist/THIRD-PARTY-NOTICES.txt",
+    "LICENSE",
+    "icon.png",
+    "language-configuration.json",
+    "syntaxes/**"
+  ],
+  "devDependencies": {
+    "@vscode/vsce": "3.2.1",
+    "esbuild": "^0.25.5",
+    "vscode-languageclient": "^9.0.1"
   },
   "categories": [
     "Programming Languages"
@@ -22,9 +44,20 @@
     "zelyra",
     "zyl",
     "syntax",
-    "programming language"
+    "language server",
+    "lsp"
   ],
   "contributes": {
+    "configuration": {
+      "title": "Zelyra",
+      "properties": {
+        "zelyra.languageServer.path": {
+          "type": "string",
+          "default": "zelyra",
+          "description": "Executable path for the Zelyra CLI. The extension starts it with the 'lsp' argument."
+        }
+      }
+    },
     "languages": [
       {
         "id": "zelyra",
