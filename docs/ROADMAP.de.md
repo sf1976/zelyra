@@ -1414,7 +1414,9 @@ Rückmeldungen des Projektverantwortlichen ersetzen keinen Teilnehmertest.
   Beispieldaten, Vorschau und Download. Ein Canvas-Browser-Test prüft in
   denselben Engines escaped Beispieldaten,
   blockierte Projektskripte, angepasste Farbpaare und rückgängig machbare
-  Theme-Änderungen. Die MariaDB-Outbox-Ansicht liest paginierte Metadaten und
+  Theme-Änderungen. Ein Capability-Test bestätigt in drei Browser-Engines,
+  dass die TOML-Vorschau bis zur ausdrücklichen Übernahme schreibfrei bleibt
+  und Kommentare erhält. Die MariaDB-Outbox-Ansicht liest paginierte Metadaten und
   gibt erschöpfte Ereignisse über die vorhandene Requeue-
   Operation ohne unmittelbaren Versand frei. Die Schlüsselworthervorhebung in
   CodeMirror stimmt nun mit allen Wörtern des

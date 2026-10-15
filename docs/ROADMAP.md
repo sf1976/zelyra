@@ -1355,6 +1355,8 @@ rehearsals, and owner feedback do not substitute for participant testing.
   checks real PDF bytes, invalid-data feedback, preview, and download.
   A Canvas regression in the same engines checks escaped sample values,
   blocked project scripts, color-pair updates, and undoable theme edits.
+  A Capability grant flow checks the TOML preview remains read-only until the
+  explicit apply action and preserves unrelated comments in three engines.
   The MariaDB outbox view reads paginated metadata and releases exhausted
   events through the existing requeue operation without immediate delivery.
   CodeMirror's reserved-word highlighting now matches all words in the Rust
