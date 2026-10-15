@@ -33,6 +33,44 @@ Abschnitte bleiben als historische Planung und Nachweise erhalten; sie legen
 für sich keine aktuellen Releaseziele fest. Langfristige Ideen stehen im
 Abschnitt zur Weiterentwicklung nach 1.0.0.
 
+## Geplante Architektur-Meilensteine (1.2.0 und 1.3.0)
+
+Diese Punkte sind geplant, weder bereits umgesetzt noch veröffentlicht. Die bestehenden Verpflichtungen für 1.1.0 bleiben bestehen. Vor der Implementierung den aktuellen Quellcode prüfen und bereits vorhandene Funktionen berücksichtigen.
+
+### 🗺️ [ ] Zelyra 1.2.0 — backendunabhängiges Modul- und Paketsystem
+
+- [ ] Einfache, gut lesbare Zelyra-eigene Modul-/Importsyntax und Namensräume entwickeln; Sprachphilosophie und Rückwärtskompatibilität erhalten.
+- [ ] Paketmanifest, semantische Versionsbedingungen, deterministische Abhängigkeitsauflösung, Lockdatei, lokale/offline Nutzung, Integritätsprüfung und reproduzierbare Builds integrieren.
+- [ ] Typisierte öffentliche Schnittstellen, Exporte, Abhängigkeitsgraphen, Diagnose zyklischer Abhängigkeiten, Moduleffekte und Weitergabe benötigter Capabilities umsetzen.
+- [ ] Eine versionierte, backendunabhängige Host-Service-Schnittstelle definieren, damit Module mit AST-Interpreter, späterer Bytecode-VM und möglichem AOT unverändert funktionieren.
+- [ ] Zuerst reine Zelyra-Pakete unterstützen. Rust-basierte Host-Integrationen kontrolliert ermöglichen; die instabile Rust-ABI nicht als öffentliche Pluginschnittstelle verwenden. Dynamisches Laden gegebenenfalls später über versionierte Host-API, stabile C-ABI oder Komponentenmodell prüfen.
+- [ ] Statische SQL-Prüfung, Verträge, explizite Effekte, Sandboxing und menschliche Freigabe destruktiver Aktionen bewahren. Native Einstiegspunkte dürfen Sicherheitsregeln nicht umgehen.
+- [ ] Erweiterbarkeit mit einem Referenz-Datenbankadapter und dem Entwurf einer ausschließlich lesenden Banking-Anbindung (FinTS/HBCI und EBICS) demonstrieren: explizite Autorisierung, Geheimnisschutz, Audit und Mock-Tests. Keine pauschale Bankkompatibilität ohne institutsspezifische Tests behaupten.
+- [ ] Paketvertrauen, Veröffentlichung, Supply-Chain-Sicherheit, Kompatibilität, CLI-/Studio-Anbindung, Diagnostik, positive/negative Tests und ausführbare Beispiele dokumentieren.
+- [ ] Freigabekriterium: 1.2.0 erst nach bestandenen Kompatibilitäts-, Berechtigungsverweigerungs-, Abhängigkeits-, Offline-/Reproduzierbarkeits- und Integrationstests als fertig kennzeichnen.
+
+### 🗺️ [ ] Zelyra 1.3.0 — typisierte MIR und Rust-Bytecode-VM
+
+- [ ] Vorab AST/HIR, Interpreter, Typprüfung, SQL-Prüfung, Verträge, Effekte, Closures, Collections, Nebenläufigkeit und Host-Services analysieren.
+- [ ] Typisierte, validierte MIR mit Quellpositionsbezug, explizitem Kontrollfluss und Effekten als gemeinsame Zwischenrepräsentation implementieren.
+- [ ] Semantikerhaltende MIR-Optimierungen einzeln testbar ergänzen; beobachtbare Effekte und erforderliche Laufzeitprüfungen niemals unzulässig verändern.
+- [ ] Versioniertes Bytecode-Format, Compiler, Verifier, begrenzten virtuellen Aufrufstack und Rust-VM entwickeln. Fremden Bytecode verifizieren; Berechtigungen ausschließlich aus vertrauenswürdiger Autorisierung ableiten.
+- [ ] Interpreter und VM nutzen gemeinsame Runtime-Semantik und Host-Services für SQL, Capabilities, Verträge, Fehlerbehandlung, Ressourcenlimits und Modulschnittstellen.
+- [ ] AST-Interpreter als auswählbare Referenz behalten, bis die VM den gesamten unterstützten Sprachumfang korrekt abdeckt. Differential-, Property-, Fuzz-, Sicherheits- und Regressionstests ergänzen.
+- [ ] Optionale Backend-Auswahl, MIR-/Bytecode-Inspektion, sicheres versioniertes Caching, stabile maschinenlesbare Diagnosen und Studio-Integration ohne CLI-Brüche ergänzen.
+- [ ] CPU- und I/O-lastige Benchmarks getrennt durchführen; echte Messwerte für Startzeit, Speicher, Durchsatz und Kompilieraufwand dokumentieren. Keine unbelegten Performanceversprechen.
+- [ ] Freigabekriterium: VM erst nach vollständiger Feature-Parität, Sicherheitsnachweisen, Differentialtests, dokumentierten Grenzen und reproduzierbaren Builds zum Standard machen.
+
+### ◻️ [?] Nach 1.3.0 — optionales natives AOT-Backend
+
+- [ ] Cranelift erst bei nachgewiesenem Bedarf prüfen. Typisierte MIR und gemeinsame Runtime wiederverwenden, Capability- und Vertragsgarantien erhalten und keine abweichende zweite Sprachimplementierung aufbauen.
+- [ ] AOT-Entscheidung anhand von Benchmarks, Deploymentanforderungen und Wartungsaufwand treffen.
+
+### 🗺️ [ ] Sprachkern vervollständigen (nach tatsächlichem Implementierungsstand)
+
+- [ ] Benutzerdefinierte Enums mit Payload und vollständigem Matching, generische Structs/Records, typgeprüfte String-Interpolation mit Escaping geschweifter Klammern sowie optionale mutable Arrays mit geprüften effizienten Indexupdates im Repository prüfen.
+- [ ] Nur tatsächlich offene Punkte planen; Abschluss erst bei Syntax-/API-Dokumentation, Implementierung, positiven/negativen Tests, Diagnostik und ausführbarem Beispiel.
+
 ## Aktuelle Meilensteine
 
 - [x] **1.0.5 Studio-Logs:** Studio zeigt ein Logs-Fenster und speichert
