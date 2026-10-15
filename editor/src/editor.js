@@ -257,7 +257,7 @@ const messages = {
     noProblems: "Keine Probleme gefunden. Dein Projekt ist bereit.", close: "Panel schließen", loadingFiles: "Dateien werden geladen",
     toggleExplorer: "Dateiübersicht umschalten", search: "Suchen", handbook: "Handbuch", projectFiles: "Projektdateien",
     openFile: "Datei öffnen", complete: "Vervollständigen", completeHelp: "Codevorschläge anzeigen (Strg+Leertaste)", ready: "Bereit", localMode: "Lokaler Modus",
-    noDocument: "Kein Dokument geöffnet", opened: "{0} geöffnet", unsaved: "Ungespeicherte Änderungen",
+    noDocument: "Kein Dokument geöffnet", opened: "{0} geöffnet", unsaved: "Ungespeicherte Änderungen", lineGutter: "{0}: Zeilennummern und Verifikationsstatus",
     saved: "{0} gespeichert", savedAll: "{0} Dateien gemeinsam gespeichert", checkRunning: "Projekt wird geprüft …", checkPassed: "Projektprüfung erfolgreich",
     problemsFound: "{0} Problem(e) gefunden", formatRunning: "Formatiere …", formatted: "{0} formatiert",
     createPrompt: "Neuer Dateipfad im Projekt (zum Beispiel src/customer.zyl)",
@@ -364,7 +364,7 @@ const messages = {
     noProblems: "No problems found. Your project is ready.", close: "Close panel", loadingFiles: "Loading files",
     toggleExplorer: "Toggle file explorer", search: "Search", handbook: "Handbook", projectFiles: "Project files",
     openFile: "Open file", complete: "Complete", completeHelp: "Show code suggestions (Ctrl+Space)", ready: "Ready", localMode: "Local mode",
-    noDocument: "No document open", opened: "Opened {0}", unsaved: "Unsaved changes",
+    noDocument: "No document open", opened: "Opened {0}", unsaved: "Unsaved changes", lineGutter: "{0}: line numbers and verification status",
     saved: "Saved {0}", savedAll: "Saved {0} files together", checkRunning: "Checking project …", checkPassed: "Project check passed",
     problemsFound: "Found {0} problem(s)", formatRunning: "Formatting …", formatted: "Formatted {0}",
     createPrompt: "New project file path (for example src/customer.zyl)",
@@ -1392,10 +1392,16 @@ function createView(path, state) {
     editorTheme.of(createZelyraTheme()),
     EditorView.contentAttributes.of({ "aria-label": `${path} im Zelyra-Webeditor` }),
   ];
-  return new EditorView({
+  const view = new EditorView({
     state: state.update({ effects: StateEffect.reconfigure.of(extensions) }).state,
     parent: editorRoot,
   });
+  for (const gutterElement of view.dom.querySelectorAll(".cm-gutters")) {
+    gutterElement.removeAttribute("aria-hidden");
+    gutterElement.setAttribute("role", "group");
+    gutterElement.setAttribute("aria-label", t("lineGutter", path));
+  }
+  return view;
 }
 
 editorRoot.addEventListener("input", () => {

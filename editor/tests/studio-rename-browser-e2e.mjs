@@ -167,15 +167,18 @@ try {
     status: 200, contentType: "text/javascript", body: axe.source,
   }));
   await page.addScriptTag({ url: `${sameOrigin}/__zelyra/axe-test.js` });
-  for (let themeIndex = 0; themeIndex < 2; themeIndex += 1) {
-    const accessibility = await page.evaluate(async () => axe.run(document, {
-      runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"] },
-    }));
-    const violations = accessibility.violations.map(({ id, impact, nodes }) => ({
-      id, impact, nodes: nodes.map((node) => ({ target: node.target, summary: node.failureSummary })),
-    }));
-    assert.deepEqual(violations, [], `Studio shell must pass automated WCAG A/AA checks for theme ${themeIndex}`);
-    if (themeIndex === 0) await page.locator("#theme-button").click();
+  for (const width of [360, 768, 1280, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (let themeIndex = 0; themeIndex < 2; themeIndex += 1) {
+      const accessibility = await page.evaluate(async () => axe.run(document, {
+        runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"] },
+      }));
+      const violations = accessibility.violations.map(({ id, impact, nodes }) => ({
+        id, impact, nodes: nodes.map((node) => ({ target: node.target, html: node.html, summary: node.failureSummary })),
+      }));
+      assert.deepEqual(violations, [], `Studio shell must pass automated WCAG A/AA checks at ${width}px for theme ${themeIndex}`);
+      await page.locator("#theme-button").click();
+    }
   }
   assert.deepEqual(errors, [], `browser errors: ${errors.join(", ")}`);
   console.log(`Studio semantic rename, journaled save, and import-aware file rename passed in ${engineName}; first usable editor ${firstUsableMs.toFixed(1)} ms; analysis response ${analysisMs?.toFixed(1) ?? "unmeasured"} ms`);
