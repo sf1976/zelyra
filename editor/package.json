@@ -10,6 +10,7 @@
     "test:ui-metadata": "node tests/zelyra-ui-metadata.test.mjs",
     "test:language": "node tests/zelyra-language.test.mjs",
     "test:browser-pdf": "node tests/studio-pdf-browser-e2e.mjs",
+    "test:browser-rename": "node tests/studio-rename-browser-e2e.mjs",
     "test:browser-canvas": "node tests/studio-canvas-browser-e2e.mjs",
     "test:browser-capability": "node tests/studio-capability-browser-e2e.mjs",
     "test:browser-outbox": "node tests/studio-outbox-browser-e2e.mjs",
