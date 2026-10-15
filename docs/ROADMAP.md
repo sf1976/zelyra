@@ -1353,6 +1353,8 @@ rehearsals, and owner feedback do not substitute for participant testing.
   functions; download and an isolated PDF frame passed three browser engines.
   The MariaDB outbox view reads paginated metadata and releases exhausted
   events through the existing requeue operation without immediate delivery.
+  CodeMirror's reserved-word highlighting now matches all words in the Rust
+  lexer, with a regression test that detects future compiler/editor drift.
   Other symbol kinds, recoverable refactoring, full release gates, and
   artifacts remain
   open; see the [1.1.0 work log](release-plans/1.1.0-studio-deep-native-progress.en.md).

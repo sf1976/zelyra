@@ -1411,8 +1411,11 @@ Rückmeldungen des Projektverantwortlichen ersetzen keinen Teilnehmertest.
   ohne Projektfunktionen auszuführen; Download und isolierter PDF-Rahmen sind
   in drei Browser-Engines geprüft. Die MariaDB-Outbox-Ansicht liest paginierte
   Metadaten und gibt erschöpfte Ereignisse über die vorhandene Requeue-
-  Operation ohne unmittelbaren Versand frei. Andere Symbolarten,
-  wiederherstellbares Refactoring, vollständige Release-Gates und Artefakte
+  Operation ohne unmittelbaren Versand frei. Die Schlüsselworthervorhebung in
+  CodeMirror stimmt nun mit allen Wörtern des
+  Rust-Lexers überein; ein Regressionstest erkennt künftige Abweichungen.
+  Weitere Symbolarten, wiederherstellbares Refactoring, vollständige
+  Release-Gates und Artefakte
   bleiben offen; siehe das
   [1.1.0-Arbeitsprotokoll](release-plans/1.1.0-studio-deep-native-progress.de.md).
 

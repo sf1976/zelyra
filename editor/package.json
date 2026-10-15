@@ -7,7 +7,8 @@
   "license": "MIT OR Apache-2.0",
   "scripts": {
     "build": "esbuild src/theme.js --bundle --minify --outfile=../cli/assets/theme.js && esbuild src/editor.js --bundle --minify --outfile=../cli/assets/editor.js && esbuild src/editor.css --bundle --minify --outfile=../cli/assets/editor.css",
-    "test:ui-metadata": "node tests/zelyra-ui-metadata.test.mjs"
+    "test:ui-metadata": "node tests/zelyra-ui-metadata.test.mjs",
+    "test:language": "node tests/zelyra-language.test.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.18.6",

@@ -7,7 +7,6 @@ import {
   HighlightStyle,
   foldKeymap,
   indentOnInput,
-  StreamLanguage,
   syntaxHighlighting,
 } from "@codemirror/language";
 import { linter, setDiagnostics } from "@codemirror/lint";
@@ -19,6 +18,7 @@ import {
   zelyraUiComponentMetadata,
   zelyraUiDefaultAppearance,
 } from "./zelyra-ui-metadata.js";
+import { zelyraKeywords as keywords, zelyraLanguage } from "./zelyra-language.js";
 import {
   crosshairCursor,
   drawSelection,
@@ -502,11 +502,6 @@ function setLanguage(next) {
   if (!$("studio-assistant").hidden) renderFileProperties(activePath);
 }
 
-const keywords = new Set((
-  "fn let mut if else match for in step while loop break continue return type record " +
-  "table view component layout slot page api form crud tableview auth database " +
-  "sql uses capability requires ensures invariant true false null none some ok err"
-).split(/\s+/));
 const languageHelp = {
   fn: ["Funktion", "Definiert einen benannten, wiederverwendbaren Ablauf.", "fn begruessung(name: Text) -> Text", "return \"Hallo \" + name"],
   let: ["Wert", "Legt einen veränderlichen Wert im aktuellen Gültigkeitsbereich an.", "let anzahl = 0", "anzahl = anzahl + 1"],
@@ -593,37 +588,6 @@ const languageOptions = {
     capability: ["project grant in [capabilities] in zelyra.toml"],
   },
 };
-const zelyraLanguage = StreamLanguage.define({
-  startState: () => ({ inBlockComment: false }),
-  languageData: { commentTokens: { line: "#", block: { open: "##", close: "##" } } },
-  token(stream, state) {
-    if (stream.string.trim() === "##") {
-      stream.skipToEnd();
-      state.inBlockComment = !state.inBlockComment;
-      return "comment";
-    }
-    if (state.inBlockComment) {
-      stream.skipToEnd();
-      return "comment";
-    }
-    if (stream.eatSpace()) return null;
-    if (stream.match("#")) { stream.skipToEnd(); return "comment"; }
-    if (stream.match("//")) { stream.skipToEnd(); return "comment"; }
-    if (stream.match(/(?:\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*')/)) return "string";
-    if (stream.match(/\b\d+(?:\.\d+)?\b/)) return "number";
-    if (stream.match(/[A-Za-z_][\w]*/)) {
-      const word = stream.current();
-      if (keywords.has(word)) return "keyword";
-      if (/^[A-Z]/.test(word)) return "typeName";
-      return "variableName";
-    }
-    if (stream.match(/[{}()[\],.;:]/)) return "punctuation";
-    if (stream.match(/[=<>!+*/%&|?-]+/)) return "operator";
-    stream.next();
-    return null;
-  },
-});
-
 const editorTheme = new Compartment();
 function createZelyraTheme() {
   const size = currentFontSize();
