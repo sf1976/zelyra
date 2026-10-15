@@ -757,7 +757,7 @@ const semanticHover = hoverTooltip(async (view, pos) => {
   const path = activePath;
   if (!path?.endsWith(".zyl") || editor !== view) return null;
   const source = view.state.doc.toString();
-  const version = tabs.get(path)?.version || 0;
+  const version = liveCheckSequence;
   let request;
   try { request = analysisRequest(path, source, version); }
   catch { return null; }
@@ -766,7 +766,8 @@ const semanticHover = hoverTooltip(async (view, pos) => {
       method: "POST",
       body: JSON.stringify({ ...request, offset: pos, action: "hover" }),
     });
-    if (!result.found || activePath !== path || editor !== view || view.state.doc.toString() !== source) return null;
+    if (!result.found || result.version !== version || liveCheckSequence !== version
+      || activePath !== path || editor !== view || view.state.doc.toString() !== source) return null;
     return {
       pos,
       end: pos,
