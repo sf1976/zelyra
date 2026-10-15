@@ -44,15 +44,19 @@ lokale Parameter und Bindungen. F12 öffnet aufgelöste Funktions- und
 Record-Deklarationen in derselben oder einer importierten Datei. Umschalt+F12
 zeigt indexierte Verweise. Beide Aktionen verwenden den verlinkten Compiler-
 AST und berücksichtigen alle geöffneten, ungespeicherten `.zyl`-Dateien als
-gemeinsame Projektanalyse. Record-Verweise umfassen Record-Literale, lokale
+gemeinsame Projektanalyse. Bewege die Maus über ein aufgelöstes Symbol oder
+drücke **Alt+Umschalt+H**, um seine Compilerbeschreibung anzuzeigen; Escape
+schließt die Tastatur-Hoverkarte. Record-Verweise umfassen Record-Literale, lokale
 Record-Muster, Typaliase, Funktionsparameter und Rückgabetypen, lokale
 Variablentypannotationen sowie Typen von Record-Feldern, Tabellenspalten,
 Komponenteneigenschaften, Formularen, API-Eingaben, Seiteneingaben und
 Tableviews. Ein Feld-Rename umfasst Felddeklarationen, Labels in Record-
 Literalen und Feldzugriffe, deren Empfängertyp aus einem Funktionsparameter,
-einer lokalen Typannotation oder einem direkt erstellten Record aufgelöst
-wird. Für nicht aufgelöste oder dynamische Empfänger sowie Record-Felder in
-destrukturierenden Mustern wird kein Rename angeboten. Die freie projektweite
+einer lokalen Typannotation, einem direkt erstellten Record oder dem Rückgabetyp
+einer eindeutig aufgelösten Funktion abgeleitet wird.
+Feldlabels in auflösbaren Record-Mustern werden getrennt von lokalen Aliasen
+umbenannt. Für Empfänger ohne statisch ableitbaren Typ wird kein Rename
+angeboten. Die freie projektweite
 Textsuche bleibt ein getrenntes Werkzeug.
 
 Mit **F2** lassen sich aufgelöste Funktionen, Record-Typen und indexierte

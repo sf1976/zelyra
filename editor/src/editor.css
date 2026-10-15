@@ -129,6 +129,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .cm-gutter.verify-gutter { min-width: 26px; border-left: 1px solid var(--border); }
 .verify-marker { display: inline-grid; place-items: center; width: 24px; height: 24px; min-height: 24px; font-size: 13px; line-height: 24px; font-weight: 700; cursor: pointer; }
 .cm-editor .cm-line, .cm-editor .cm-gutterElement { line-height: 26px; }
+.cm-tooltip.cm-tooltip-zelyra-hover { max-width: min(560px, calc(100vw - 24px)); padding: 9px 11px; border: 1px solid var(--border); border-radius: 7px; color: var(--ink); background: var(--surface-raised); box-shadow: var(--shadow); font: 12px/1.5 ui-monospace, SFMono-Regular, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .verify-marker.proven { color: var(--success); }
 .verify-marker.runtime_check { color: var(--warning); }
 .verify-marker.unproven { color: var(--muted); }

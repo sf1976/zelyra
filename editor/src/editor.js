@@ -27,6 +27,10 @@ import {
   gutter,
   highlightActiveLine,
   highlightActiveLineGutter,
+  activateHover,
+  closeHoverTooltip,
+  hasHoverTooltips,
+  hoverTooltip,
   keymap,
   lineNumbers,
   rectangularSelection,
@@ -749,6 +753,45 @@ function loadLocalSymbols(path, source, offset) {
     .catch(() => []);
 }
 
+const semanticHover = hoverTooltip(async (view, pos) => {
+  const path = activePath;
+  if (!path?.endsWith(".zyl") || editor !== view) return null;
+  const source = view.state.doc.toString();
+  const version = tabs.get(path)?.version || 0;
+  let request;
+  try { request = analysisRequest(path, source, version); }
+  catch { return null; }
+  try {
+    const result = await api("semantic", {
+      method: "POST",
+      body: JSON.stringify({ ...request, offset: pos, action: "hover" }),
+    });
+    if (!result.found || activePath !== path || editor !== view || view.state.doc.toString() !== source) return null;
+    return {
+      pos,
+      end: pos,
+      create() {
+        const dom = document.createElement("div");
+        dom.className = "cm-tooltip-zelyra-hover";
+        dom.setAttribute("role", "tooltip");
+        dom.textContent = result.detail;
+        return { dom };
+      },
+    };
+  } catch {
+    return null;
+  }
+}, { hoverTime: 350, hideOnChange: true });
+
+function openSemanticHover(view) {
+  const position = view.state.selection.main.head;
+  activateHover(view, position, 1, {
+    tooltip: semanticHover,
+    until: (transaction) => transaction.docChanged || transaction.selectionSet,
+  });
+  return true;
+}
+
 function loadProjectSymbols(path) {
   if (!path?.endsWith(".zyl")) return Promise.resolve([]);
   const cached = symbolCache.get(path);
@@ -1311,6 +1354,7 @@ function createView(path, state) {
     indentOnInput(), highlightSelectionMatches(), zelyraLanguage,
     syntaxHighlighting(defaultHighlightStyle, { fallback: true }), zelyraHighlight,
     autocompletion({ override: [completionSource], activateOnTyping: true }),
+    semanticHover,
     linter(() => diagnostics.filter((item) => !item.file || item.file.endsWith(path)).map((item) => ({
       from: Math.max(0, Math.min(state.doc.length, item.from)),
       to: Math.max(0, Math.min(state.doc.length, item.to)),
@@ -1324,6 +1368,12 @@ function createView(path, state) {
       { key: "F2", run: () => { openSemanticRename(); return true; } },
       { key: "Shift-F12", run: () => { void findIdentifierOccurrences(); return true; } },
       { key: "F1", run: () => { toggleAssistant("help"); return true; } },
+      { key: "Alt-Shift-h", run: () => openSemanticHover(editor) },
+      { key: "Escape", run: () => {
+        if (!hasHoverTooltips(editor.state)) return false;
+        editor.dispatch({ effects: closeHoverTooltip(semanticHover) });
+        return true;
+      } },
       ...defaultKeymap, ...historyKeymap, ...searchKeymap, ...foldKeymap,
     ]),
     EditorView.updateListener.of((update) => {

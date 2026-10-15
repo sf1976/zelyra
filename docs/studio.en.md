@@ -44,10 +44,14 @@ and analyze all open, unsaved `.zyl` files together. Record references include
 record literals, local record patterns, type aliases, function parameter and
 return types, local binding annotations, and record-field, table-column,
 component-property, form, API-input, page-input, and tableview type annotations.
+Hover over a resolved symbol or press **Alt+Shift+H** to show its compiler
+description; Escape closes a keyboard-opened hover.
 Record field rename covers declarations, record literal labels, and accesses
 whose receiver type resolves from a function parameter, a local type
-annotation, or a directly constructed record. It does not offer field rename
-for unresolved or dynamic receivers or destructured record-pattern fields.
+annotation, a directly constructed record, or the return type of a uniquely
+resolved function. Field labels in resolvable record patterns are renamed
+separately from local aliases. No rename is offered for a receiver without a
+statically resolvable type.
 Project-wide free-text search remains a separate tool.
 
 Press **F2** on a resolved function, record type, or indexed record field to rename it. Studio
