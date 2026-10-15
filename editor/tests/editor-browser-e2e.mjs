@@ -239,13 +239,12 @@ try {
   await page.waitForFunction((width) =>
     document.querySelector(".cm-content")?.getBoundingClientRect().width > width,
   initialEditorWidth);
-  await page.setViewportSize({ width: 800, height: 600 });
-  await page.waitForFunction(() => document.querySelector(".cm-content")?.getBoundingClientRect().width > 0);
-  await page.setViewportSize({ width: 360, height: 740 });
-  await page.waitForFunction(() => window.innerWidth === 360);
-  assert.ok(await page.locator("#theme-button").isVisible(), "theme control must remain reachable on a narrow screen");
-  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), "Studio must not clip horizontally at its supported 360px minimum width");
-  await page.setViewportSize({ width: 1280, height: 900 });
+  for (const width of [360, 768, 1280, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.waitForFunction((expected) => window.innerWidth === expected, width);
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `Studio must not overflow horizontally at ${width}px`);
+    if (width === 360) assert.ok(await page.locator("#theme-button").isVisible(), "theme control must remain reachable on a narrow screen");
+  }
   await sidebarToggle.click();
   assert.equal(await sidebarToggle.getAttribute("aria-expanded"), "true");
 

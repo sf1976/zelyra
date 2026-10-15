@@ -3,7 +3,7 @@
   color-scheme: dark;
   --canvas: #0b1020; --surface: #11182a; --surface-raised: #172036; --editor-bg: #0e1424;
   --editor-gutter: #0e1424; --editor-active: #ffffff0a; --ink: #e7ecf5; --muted: #8d9ab0;
-  --faint: #74819a; --border: #25314a; --accent: #9b8bff; --accent-strong: #7564eb;
+  --faint: #74819a; --border: #25314a; --accent: #9b8bff; --accent-strong: #6c5ce7;
   --accent-soft: #9682ff1e; --selection: #5e56a755; --danger: #ff7589; --success: #56d6ae;
   --warning: #f5bd62; --sidebar: #0c1221; --shadow: 0 18px 50px #0005;
   --token-keyword: #c4a4ff; --token-type: #78d8d1; --token-name: #dce5fa; --token-string: #a5d89b;
@@ -14,7 +14,7 @@
   --canvas: #eef1f7; --surface: #fff; --surface-raised: #f6f7fb; --editor-bg: #fff;
   --editor-gutter: #f7f8fb; --editor-active: #1922380a; --ink: #192238; --muted: #5d6980; --faint: #5b6880;
   --border: #dfe4ee; --accent: #6655db; --accent-strong: #5745c3; --accent-soft: #6655db18;
-  --selection: #8675ef44; --danger: #c3354b; --success: #137a61; --warning: #8e5900;
+  --selection: #8675ef44; --danger: #c3354b; --success: #0c624c; --warning: #8e5900;
   --sidebar: #f8f9fc; --shadow: 0 18px 50px #25345416;
   --token-keyword: #713bb8; --token-type: #08736f; --token-name: #26344d; --token-string: #407b2e;
   --token-number: #a5480e; --token-comment: #5b6880; --token-operator: #b33363; --token-punctuation: #5b6680;
@@ -261,8 +261,8 @@ kbd { padding: 3px 5px; border: 1px solid var(--border); border-radius: 4px; col
 .status-message { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .status-message[data-kind="error"] { color: #ffe3e7; }
 .status-message[data-kind="warning"] { color: #fff0ca; }
-.status-message[data-kind="success"] { color: #d6fff2; }
-.status-right span { opacity: .86; white-space: nowrap; }
+.status-message[data-kind="success"] { color: #fff; }
+.status-right span { opacity: 1; white-space: nowrap; }
 .toolbar-button.active { color: var(--accent); background: var(--accent-soft); border-color: var(--border); }
 .database-workbench { display: flex; flex: 1; min-height: 0; flex-direction: column; overflow: hidden; background: var(--canvas); }
 .database-workbench[hidden] { display: none; }

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import axe from "axe-core";
 import { spawn } from "node:child_process";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
@@ -119,6 +120,26 @@ try {
   assert.match(afterRename.main.content, /import \"src\/answers.zyl\" as math/);
   await page.locator('#tabs .tab').filter({ hasText: "main.zyl" }).click();
   assert.match(await page.locator(".cm-content").textContent(), /import \"src\/answers.zyl\" as math/);
+  for (const width of [360, 768, 1280, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.waitForFunction((expected) => window.innerWidth === expected, width);
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `Studio overflowed horizontally at ${width}px`);
+  }
+  const sameOrigin = new URL(url).origin;
+  await page.route(`${sameOrigin}/__zelyra/axe-test.js`, (route) => route.fulfill({
+    status: 200, contentType: "text/javascript", body: axe.source,
+  }));
+  await page.addScriptTag({ url: `${sameOrigin}/__zelyra/axe-test.js` });
+  for (let themeIndex = 0; themeIndex < 2; themeIndex += 1) {
+    const accessibility = await page.evaluate(async () => axe.run(document, {
+      runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"] },
+    }));
+    const violations = accessibility.violations.map(({ id, impact, nodes }) => ({
+      id, impact, nodes: nodes.map((node) => ({ target: node.target, summary: node.failureSummary })),
+    }));
+    assert.deepEqual(violations, [], `Studio shell must pass automated WCAG A/AA checks for theme ${themeIndex}`);
+    if (themeIndex === 0) await page.locator("#theme-button").click();
+  }
   assert.deepEqual(errors, [], `browser errors: ${errors.join(", ")}`);
   console.log(`Studio semantic rename, journaled save, and import-aware file rename passed in ${engineName}`);
 } finally {
