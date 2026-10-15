@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -72,8 +72,16 @@ fn main() {}
   await page.waitForFunction(() => !document.querySelector("#pdf-preview-frame")?.hidden);
   assert.equal(await page.locator("#pdf-preview-download").isVisible(), true);
   assert.equal(await page.locator("#pdf-preview-download").getAttribute("download"), "zelyra-preview.pdf");
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.locator("#pdf-preview-download").click(),
+  ]);
+  assert.equal(download.suggestedFilename(), "zelyra-preview.pdf");
+  const downloaded = await readFile(await download.path());
+  assert.equal(downloaded.subarray(0, 5).toString("ascii"), "%PDF-");
+  assert.deepEqual(downloaded, bytes);
   assert.deepEqual(errors, [], `browser errors: ${errors.join(", ")}`);
-  console.log(`Studio PDF preview rendered real ${bytes.length}-byte PDF data and exposed preview/download in ${engineName}.`);
+  console.log(`Studio PDF preview rendered and downloaded the same real ${bytes.length}-byte PDF in ${engineName}.`);
 } finally {
   await browser?.close();
   if (processHandle && processHandle.exitCode === null) {
