@@ -40,7 +40,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .language-button { font: 700 9px ui-monospace, monospace; letter-spacing: .3px; }
 .font-size-button { font: 700 10px ui-monospace, monospace; letter-spacing: -.5px; }
 .icon-button:hover, .toolbar-button:hover { color: var(--ink); background: var(--accent-soft); border-color: var(--border); }
-.toolbar-button { display: inline-flex; align-items: center; gap: 7px; padding: 7px 10px; border-radius: 7px; color: var(--muted); font-size: 11px; white-space: nowrap; }
+.toolbar-button { display: inline-flex; align-items: center; gap: 7px; min-width: 24px; min-height: 26px; padding: 7px 10px; border-radius: 7px; color: var(--muted); font-size: 11px; white-space: nowrap; }
 .toolbar-button:disabled { opacity: .45; cursor: default; }
 .workspace { display: flex; flex: 1; min-height: 0; }
 .explorer { width: 248px; flex: 0 0 248px; display: flex; flex-direction: column; background: var(--sidebar); border-right: 1px solid var(--border); transition: width .18s ease, flex-basis .18s ease; }

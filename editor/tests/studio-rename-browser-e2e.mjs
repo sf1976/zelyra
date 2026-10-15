@@ -219,6 +219,13 @@ try {
     await page.waitForFunction((expected) => window.innerWidth === expected, width);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `Studio overflowed horizontally at ${width}px`);
   }
+  // A 640x450 CSS viewport matches the layout area of a 1280x900 desktop at
+  // 200% browser zoom. Keep this explicit so the zoom acceptance has coverage.
+  await page.setViewportSize({ width: 640, height: 450 });
+  assert.ok(
+    await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    "Studio must not overflow horizontally at the 640x450 CSS viewport equivalent to 200% zoom",
+  );
   const sameOrigin = new URL(url).origin;
   await page.route(`${sameOrigin}/__zelyra/axe-test.js`, (route) => route.fulfill({
     status: 200, contentType: "text/javascript", body: axe.source,
@@ -236,6 +243,21 @@ try {
       assert.deepEqual(violations, [], `Studio shell must pass automated WCAG A/AA checks at ${width}px for theme ${themeIndex}`);
       await page.locator("#theme-button").click();
     }
+  }
+  await page.setViewportSize({ width: 640, height: 450 });
+  for (let themeIndex = 0; themeIndex < 2; themeIndex += 1) {
+    assert.ok(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+      `Studio must not overflow at the 200% zoom-equivalent viewport for theme ${themeIndex}`,
+    );
+    const accessibility = await page.evaluate(async () => axe.run(document, {
+      runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"] },
+    }));
+    const violations = accessibility.violations.map(({ id, impact, nodes }) => ({
+      id, impact, nodes: nodes.map((node) => ({ target: node.target, html: node.html, summary: node.failureSummary })),
+    }));
+    assert.deepEqual(violations, [], `Studio shell must pass automated WCAG A/AA checks at the 200% zoom-equivalent viewport for theme ${themeIndex}`);
+    await page.locator("#theme-button").click();
   }
   assert.deepEqual(errors, [], `browser errors: ${errors.join(", ")}`);
   console.log(`Studio function, record, and field rename; journaled save; and import-aware file rename passed in ${engineName}; first usable editor ${firstUsableMs.toFixed(1)} ms; analysis response ${analysisMs?.toFixed(1) ?? "unmeasured"} ms`);
