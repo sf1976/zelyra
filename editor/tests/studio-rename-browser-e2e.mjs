@@ -1,11 +1,36 @@
 import assert from "node:assert/strict";
 import axe from "axe-core";
+import pixelmatch from "pixelmatch";
 import { spawn } from "node:child_process";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium, firefox, webkit } from "playwright";
+import { PNG } from "pngjs";
+
+async function assertStudioScreenshot(page) {
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    document.querySelector("#project-name").textContent = "Studio Test";
+    document.querySelector("#project-name-side").textContent = "STUDIO TEST";
+  });
+  const actualBuffer = await page.screenshot({ fullPage: false, animations: "disabled" });
+  const baselinePath = new URL("./visual-baselines/studio-main-dark-desktop.png", import.meta.url);
+  if (process.env.ZELYRA_UPDATE_VISUAL_BASELINES === "1") {
+    await mkdir(new URL("./visual-baselines/", import.meta.url), { recursive: true });
+    await writeFile(baselinePath, actualBuffer);
+    return;
+  }
+  const baseline = PNG.sync.read(await readFile(baselinePath));
+  const actual = PNG.sync.read(actualBuffer);
+  assert.deepEqual({ width: actual.width, height: actual.height }, { width: baseline.width, height: baseline.height }, "Studio screenshot dimensions changed");
+  const diff = new PNG({ width: actual.width, height: actual.height });
+  const changed = pixelmatch(baseline.data, actual.data, diff.data, actual.width, actual.height, { threshold: 0.2 });
+  const limit = Math.ceil(actual.width * actual.height * 0.002);
+  assert.ok(changed <= limit, `Studio visual regression: ${changed} changed pixels, limit ${limit}`);
+}
 
 const project = await mkdtemp(join(tmpdir(), "zelyra-studio-rename-"));
 const main = 'import "src/math.zyl" as math\nfn main() { print(math::answer()) }\n';
@@ -19,6 +44,7 @@ let browser;
 
 try {
   await mkdir(join(project, "src"));
+  await writeFile(join(project, "zelyra.toml"), 'name = "studio-browser-e2e"\n');
   await writeFile(join(project, "main.zyl"), main);
   await writeFile(join(project, "src/math.zyl"), math);
   const port = await new Promise((resolvePort, reject) => {
@@ -52,6 +78,8 @@ try {
   await page.locator('.tree-item.file[title="main.zyl"]').click();
   await page.locator(".cm-content[contenteditable=true]").waitFor();
   firstUsableMs = performance.now() - navigationStartedAt;
+  await page.setViewportSize({ width: 1280, height: 900 });
+  if (engineName === "chromium") await assertStudioScreenshot(page);
   const checkResponse = page.waitForResponse((response) => response.url().endsWith("/api/check"));
   const analysisStartedAt = performance.now();
   await page.locator("#check-button").click();
