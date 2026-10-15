@@ -969,14 +969,14 @@ mod tests {
     }
 
     #[test]
-    fn record_navigation_and_rename_follow_imported_constructors() {
+    fn record_navigation_and_rename_follow_imported_types_and_constructors() {
         let root = std::env::temp_dir().join(format!(
             "zelyra-lsp-record-{}-{:?}",
             std::process::id(),
             std::thread::current().id()
         ));
         fs::create_dir_all(root.join("src")).unwrap();
-        let main = "import \"src/models.zyl\" as model\nfn main() { customer = model::Customer { name: \"Ada\" } print(customer.name) }\n";
+        let main = "import \"src/models.zyl\" as model\nfn retain(customer: model::Customer) -> model::Customer { return customer }\nfn main() { customer = model::Customer { name: \"Ada\" } print(customer.name) }\n";
         fs::write(root.join("main.zyl"), main).unwrap();
         fs::write(
             root.join("src/models.zyl"),
@@ -1006,7 +1006,7 @@ mod tests {
         let references = server
             .semantic_response("textDocument/references", &params)
             .unwrap();
-        assert_eq!(references.as_array().unwrap().len(), 1);
+        assert_eq!(references.as_array().unwrap().len(), 3);
         let rename = server
             .semantic_response(
                 "textDocument/rename",
