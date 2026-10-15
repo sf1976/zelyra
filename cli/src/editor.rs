@@ -1551,20 +1551,7 @@ fn local_editor_symbols(
     let byte_offset = utf16_to_byte(source, usize::try_from(offset).unwrap_or(usize::MAX));
     let tokens = lex(source).map_err(|_| (422, "source is not parseable yet".into()))?;
     let program = parse(&tokens).map_err(|_| (422, "source is not parseable yet".into()))?;
-    let mut locals = Vec::new();
-    if let Some(function) = program.functions.iter().find(|function| {
-        function.body.span.start <= byte_offset && byte_offset <= function.body.span.end
-    }) {
-        for parameter in &function.params {
-            locals.push(json!({
-                "label": parameter.name,
-                "kind": "variable",
-                "detail": "parameter",
-                "valueType": parameter.ty.to_string(),
-            }));
-        }
-        collect_visible_bindings(&function.body, byte_offset, &mut locals);
-    }
+    let locals = semantic_index::visible_local_symbols(&program, 0, byte_offset);
     Ok((
         200,
         "application/json; charset=utf-8",
@@ -1584,87 +1571,6 @@ fn utf16_to_byte(source: &str, requested: usize) -> usize {
         }
     }
     source.len()
-}
-
-fn collect_visible_bindings(block: &zelyra_ast::Block, offset: usize, output: &mut Vec<Value>) {
-    if offset < block.span.start || offset > block.span.end {
-        return;
-    }
-    for statement in &block.statements {
-        match statement {
-            zelyra_ast::Stmt::Let { name, ty, span, .. } if span.start < offset => {
-                output.push(json!({
-                    "label": name,
-                    "kind": "variable",
-                    "detail": "local value",
-                    "valueType": ty.as_ref().map(ToString::to_string),
-                }))
-            }
-            zelyra_ast::Stmt::If {
-                then_block,
-                else_block,
-                span,
-                ..
-            } if span.start < offset => {
-                collect_visible_bindings(then_block, offset, output);
-                if let Some(block) = else_block {
-                    collect_visible_bindings(block, offset, output);
-                }
-            }
-            zelyra_ast::Stmt::While { body, span, .. }
-            | zelyra_ast::Stmt::Loop { body, span, .. }
-            | zelyra_ast::Stmt::Transaction { body, span }
-            | zelyra_ast::Stmt::Parallel { body, span }
-                if span.start < offset =>
-            {
-                collect_visible_bindings(body, offset, output);
-            }
-            zelyra_ast::Stmt::For {
-                name,
-                additional_names,
-                body,
-                span,
-                ..
-            } if span.start < offset && body.span.start <= offset && offset <= body.span.end => {
-                for name in std::iter::once(name).chain(additional_names) {
-                    output.push(json!({
-                        "label": name,
-                        "kind": "variable",
-                        "detail": "loop value",
-                        "valueType": Value::Null,
-                    }));
-                }
-                collect_visible_bindings(body, offset, output);
-            }
-            zelyra_ast::Stmt::Match { arms, span, .. } if span.start < offset => {
-                for arm in arms
-                    .iter()
-                    .filter(|arm| arm.span.start <= offset && offset <= arm.span.end)
-                {
-                    collect_pattern_bindings(&arm.pattern, output);
-                    collect_visible_bindings(&arm.body, offset, output);
-                }
-            }
-            _ => {}
-        }
-    }
-}
-
-fn collect_pattern_bindings(pattern: &zelyra_ast::Pattern, output: &mut Vec<Value>) {
-    match &pattern.kind {
-        zelyra_ast::PatternKind::Variable(name) => output.push(json!({
-            "label": name,
-            "kind": "variable",
-            "detail": "match value",
-            "valueType": Value::Null,
-        })),
-        zelyra_ast::PatternKind::Constructor {
-            inner: Some(inner), ..
-        } => {
-            collect_pattern_bindings(inner, output);
-        }
-        _ => {}
-    }
 }
 
 fn editor_database_schemas(

@@ -677,14 +677,43 @@ impl Server {
                             .collect::<Vec<_>>()
                     })
                     .unwrap_or_default();
-                json!(
-                    symbols
+                let mut completions = symbols
+                    .iter()
+                    .filter(|(path, _, _, _)| {
+                        path == &relative || imported.contains(&path.as_str())
+                    })
+                    .map(|(_, name, kind, _)| json!({"label":name,"kind":kind}))
+                    .collect::<Vec<_>>();
+                if let (Some(source), Some(position)) = (
+                    analysis
+                        .sources
                         .iter()
-                        .filter(|(path, _, _, _)| path == &relative
-                            || imported.contains(&path.as_str()))
-                        .map(|(_, name, kind, _)| json!({"label":name,"kind":kind}))
-                        .collect::<Vec<_>>()
-                )
+                        .find(|source| source.path == relative),
+                    params.get("position"),
+                ) {
+                    if let Some(offset) = position_offset(&source.text, position) {
+                        let source_id = analysis
+                            .sources
+                            .iter()
+                            .position(|candidate| candidate.path == relative)
+                            .unwrap_or(usize::MAX);
+                        if let Ok(source_id) = u32::try_from(source_id) {
+                            completions.extend(
+                                semantic_index::visible_local_symbols(program, source_id, offset)
+                                    .into_iter()
+                                    .map(|local| {
+                                        json!({
+                                            "label":local["label"],
+                                            "kind":6,
+                                            "detail":local["detail"],
+                                            "data":{"type":local["valueType"]},
+                                        })
+                                    }),
+                            );
+                        }
+                    }
+                }
+                json!(completions)
             }
             "textDocument/documentSymbol" => {
                 let uri = params
@@ -1609,7 +1638,7 @@ mod tests {
             "[project]\nname = \"lsp-local-symbol\"\nversion = \"1.0.0\"\n",
         )
         .unwrap();
-        let source = "fn add(amount: Int) -> Int { result = amount + 1 return result }\nfn main() { print(add(2)) }\n";
+        let source = "fn add(amount: Int) -> Int { result = amount + 1 return result }\nfn main() { total = add(2) print(total) }\n";
         fs::write(root.join("main.zyl"), source).unwrap();
         let uri = Url::from_file_path(root.join("main.zyl"))
             .unwrap()
@@ -1659,6 +1688,19 @@ mod tests {
                 .len(),
             2
         );
+        let completion_offset = source.find("print(total)").unwrap() + "print(".len();
+        let completions = server.symbol_response(
+            "textDocument/completion",
+            &json!({
+                "textDocument":{"uri":uri},
+                "position":offset_position(source, completion_offset)
+            }),
+        );
+        assert!(completions
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["label"] == "total"));
         fs::remove_dir_all(root).unwrap();
     }
 }

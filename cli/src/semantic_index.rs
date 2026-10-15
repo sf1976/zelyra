@@ -922,6 +922,273 @@ fn push_record_reference(
     });
 }
 
+/// Compiler-AST based local bindings visible at a byte offset. Studio and LSP
+/// use this for ordinary completion; typed-hole completion remains stricter
+/// and uses the compiler's expected-type information.
+pub fn visible_local_symbols(program: &Program, source_id: u32, offset: usize) -> Vec<Value> {
+    let Some(function) = program.functions.iter().find(|function| {
+        function.span.source_id == source_id
+            && function.body.span.start <= offset
+            && offset <= function.body.span.end
+    }) else {
+        return Vec::new();
+    };
+    let mut output = function
+        .params
+        .iter()
+        .map(|parameter| {
+            json!({
+                "label":parameter.name,
+                "kind":"variable",
+                "detail":"parameter",
+                "valueType":parameter.ty.to_string(),
+            })
+        })
+        .collect::<Vec<_>>();
+    collect_visible_bindings(&function.body, offset, &mut output);
+    output
+}
+
+fn collect_visible_bindings(block: &Block, offset: usize, output: &mut Vec<Value>) {
+    if offset < block.span.start || offset > block.span.end {
+        return;
+    }
+    for statement in &block.statements {
+        if statement.span().start >= offset {
+            continue;
+        }
+        match statement {
+            Stmt::Let {
+                name, ty, value, ..
+            } => {
+                collect_visible_expression_bindings(value, offset, output);
+                if value.span.end <= offset {
+                    output.push(json!({
+                        "label":name,
+                        "kind":"variable",
+                        "detail":"local value",
+                        "valueType":ty.as_ref().map(ToString::to_string),
+                    }));
+                }
+            }
+            Stmt::BindOrAssign { name, value, .. } => {
+                collect_visible_expression_bindings(value, offset, output);
+                if value.span.end <= offset
+                    && !output
+                        .iter()
+                        .any(|item| item["label"].as_str() == Some(name.as_str()))
+                {
+                    output.push(json!({
+                        "label":name,
+                        "kind":"variable",
+                        "detail":"local value",
+                        "valueType":Value::Null,
+                    }));
+                }
+            }
+            Stmt::TupleBindOrAssign { names, value, .. } => {
+                collect_visible_expression_bindings(value, offset, output);
+                if value.span.end <= offset {
+                    for name in names {
+                        if !output
+                            .iter()
+                            .any(|item| item["label"].as_str() == Some(name.as_str()))
+                        {
+                            output.push(json!({
+                                "label":name,
+                                "kind":"variable",
+                                "detail":"local value",
+                                "valueType":Value::Null,
+                            }));
+                        }
+                    }
+                }
+            }
+            Stmt::Expr(expression) => {
+                collect_visible_expression_bindings(expression, offset, output)
+            }
+            Stmt::Return {
+                value: Some(expression),
+                ..
+            } => collect_visible_expression_bindings(expression, offset, output),
+            Stmt::If {
+                condition,
+                then_block,
+                else_block,
+                ..
+            } => {
+                collect_visible_expression_bindings(condition, offset, output);
+                collect_visible_bindings(then_block, offset, output);
+                if let Some(block) = else_block {
+                    collect_visible_bindings(block, offset, output);
+                }
+            }
+            Stmt::While {
+                condition,
+                invariants,
+                body,
+                ..
+            } => {
+                collect_visible_expression_bindings(condition, offset, output);
+                for invariant in invariants {
+                    collect_visible_expression_bindings(invariant, offset, output);
+                }
+                collect_visible_bindings(body, offset, output);
+            }
+            Stmt::Loop {
+                invariants, body, ..
+            } => {
+                for invariant in invariants {
+                    collect_visible_expression_bindings(invariant, offset, output);
+                }
+                collect_visible_bindings(body, offset, output);
+            }
+            Stmt::For {
+                name,
+                additional_names,
+                iterable,
+                body,
+                ..
+            } => {
+                collect_visible_expression_bindings(iterable, offset, output);
+                if body.span.start <= offset && offset <= body.span.end {
+                    for name in std::iter::once(name).chain(additional_names) {
+                        output.push(json!({
+                            "label":name,
+                            "kind":"variable",
+                            "detail":"loop value",
+                            "valueType":Value::Null,
+                        }));
+                    }
+                    collect_visible_bindings(body, offset, output);
+                }
+            }
+            Stmt::Match { value, arms, .. } => {
+                collect_visible_expression_bindings(value, offset, output);
+                for arm in arms
+                    .iter()
+                    .filter(|arm| arm.span.start <= offset && offset <= arm.span.end)
+                {
+                    collect_pattern_bindings(&arm.pattern, output);
+                    if let Some(guard) = &arm.guard {
+                        collect_visible_expression_bindings(guard, offset, output);
+                    }
+                    collect_visible_bindings(&arm.body, offset, output);
+                }
+            }
+            Stmt::Transaction { body, .. } | Stmt::Parallel { body, .. } => {
+                collect_visible_bindings(body, offset, output)
+            }
+            Stmt::Return { value: None, .. } | Stmt::Break { .. } | Stmt::Continue { .. } => {}
+        }
+    }
+}
+
+fn collect_visible_expression_bindings(expression: &Expr, offset: usize, output: &mut Vec<Value>) {
+    if expression.span.start > offset || offset > expression.span.end {
+        return;
+    }
+    match &expression.kind {
+        ExprKind::Lambda { params, body } => {
+            if body.span.start <= offset && offset <= body.span.end {
+                output.extend(params.iter().map(|parameter| {
+                    json!({
+                        "label":parameter.name,
+                        "kind":"variable",
+                        "detail":"parameter",
+                        "valueType":parameter.ty.to_string(),
+                    })
+                }));
+                collect_visible_expression_bindings(body, offset, output);
+            }
+        }
+        ExprKind::Array(items) => {
+            for item in items {
+                collect_visible_expression_bindings(item, offset, output);
+            }
+        }
+        ExprKind::Map(entries) => {
+            for (key, value) in entries {
+                collect_visible_expression_bindings(key, offset, output);
+                collect_visible_expression_bindings(value, offset, output);
+            }
+        }
+        ExprKind::Record { fields, .. } => {
+            for (_, value) in fields {
+                collect_visible_expression_bindings(value, offset, output);
+            }
+        }
+        ExprKind::Index { target, index } => {
+            collect_visible_expression_bindings(target, offset, output);
+            collect_visible_expression_bindings(index, offset, output);
+        }
+        ExprKind::Field { target, .. }
+        | ExprKind::Await(target)
+        | ExprKind::Unary { expr: target, .. } => {
+            collect_visible_expression_bindings(target, offset, output);
+        }
+        ExprKind::Call { args, .. } => {
+            for argument in args {
+                collect_visible_expression_bindings(argument, offset, output);
+            }
+        }
+        ExprKind::Binary { left, right, .. } => {
+            collect_visible_expression_bindings(left, offset, output);
+            collect_visible_expression_bindings(right, offset, output);
+        }
+        ExprKind::Match { value, arms } => {
+            collect_visible_expression_bindings(value, offset, output);
+            for arm in arms
+                .iter()
+                .filter(|arm| arm.span.start <= offset && offset <= arm.span.end)
+            {
+                collect_pattern_bindings(&arm.pattern, output);
+                if let Some(guard) = &arm.guard {
+                    collect_visible_expression_bindings(guard, offset, output);
+                }
+                collect_visible_expression_bindings(&arm.value, offset, output);
+            }
+        }
+        ExprKind::Int(_)
+        | ExprKind::UInt(_)
+        | ExprKind::Float(_)
+        | ExprKind::Bool(_)
+        | ExprKind::String(_)
+        | ExprKind::Char(_)
+        | ExprKind::FunctionValue(_)
+        | ExprKind::Variable(_)
+        | ExprKind::Sql { .. } => {}
+    }
+}
+
+fn collect_pattern_bindings(pattern: &Pattern, output: &mut Vec<Value>) {
+    match &pattern.kind {
+        PatternKind::Variable(name) => output.push(json!({
+            "label":name,"kind":"variable","detail":"match value","valueType":Value::Null,
+        })),
+        PatternKind::Constructor {
+            inner: Some(inner), ..
+        } => collect_pattern_bindings(inner, output),
+        PatternKind::EnumVariantPayload { payloads, .. } => {
+            for nested in payloads {
+                collect_pattern_bindings(nested, output);
+            }
+        }
+        PatternKind::Record { fields, .. } => {
+            for (_, nested) in fields {
+                collect_pattern_bindings(nested, output);
+            }
+        }
+        PatternKind::Wildcard
+        | PatternKind::Constructor { inner: None, .. }
+        | PatternKind::EnumVariant { .. }
+        | PatternKind::Int(_)
+        | PatternKind::Bool(_)
+        | PatternKind::String(_)
+        | PatternKind::Char(_) => {}
+    }
+}
+
 fn index_local_bindings(
     function: &zelyra_ast::Function,
     sources: &[project::ProjectSource],
