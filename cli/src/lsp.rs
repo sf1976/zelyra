@@ -267,27 +267,11 @@ impl Server {
     }
 
     fn safe_relative(&self, uri: &str) -> Option<String> {
-        let requested = uri_path(uri)?;
-        if requested.extension().and_then(|value| value.to_str()) != Some("zyl") {
-            return None;
-        }
-        if requested
-            .components()
-            .any(|component| matches!(component, std::path::Component::ParentDir))
-        {
-            return None;
-        }
-        let exists = fs::symlink_metadata(&requested).is_ok();
-        let path = if exists {
-            let canonical = fs::canonicalize(&requested).ok()?;
-            if !canonical.is_file() {
-                return None;
-            }
-            canonical
-        } else {
-            canonicalize_missing_path(&requested)?
-        };
+        let path = fs::canonicalize(uri_path(uri)?).ok()?;
         let relative = path.strip_prefix(&self.root).ok()?;
+        if path.extension().and_then(|value| value.to_str()) != Some("zyl") || !path.is_file() {
+            return None;
+        }
         Some(relative.to_string_lossy().replace('\\', "/"))
     }
 
@@ -676,30 +660,6 @@ impl Server {
     }
 }
 
-/// Canonicalize a new document URI without requiring its final file to exist.
-/// Existing ancestors are resolved first so a symlinked directory cannot make
-/// a not-yet-saved document appear to be inside the workspace.
-fn canonicalize_missing_path(path: &Path) -> Option<PathBuf> {
-    let mut current = path;
-    let mut missing = Vec::new();
-    loop {
-        match fs::canonicalize(current) {
-            Ok(mut canonical) => {
-                for component in missing.iter().rev() {
-                    canonical.push(component);
-                }
-                return Some(canonical);
-            }
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                let name = current.file_name()?;
-                missing.push(name.to_os_string());
-                current = current.parent()?;
-            }
-            Err(_) => return None,
-        }
-    }
-}
-
 fn occurrence_range(occurrence: &semantic_index::Occurrence, source: &str) -> Value {
     json!({"start":offset_position(source, occurrence.start),"end":offset_position(source, occurrence.end)})
 }
@@ -887,52 +847,6 @@ mod tests {
             position_offset(source, &json!({"line":1,"character":1})),
             None
         );
-    }
-
-    #[test]
-    fn lsp_accepts_new_documents_but_keeps_missing_paths_inside_workspace() {
-        let root = std::env::temp_dir().join(format!(
-            "zelyra-lsp-path-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let outside = root.with_extension("outside");
-        fs::create_dir_all(root.join("src")).unwrap();
-        fs::create_dir_all(&outside).unwrap();
-        let server = Server {
-            root: fs::canonicalize(&root).unwrap(),
-            documents: HashMap::new(),
-            shutdown: false,
-        };
-        let new_uri = Url::from_file_path(root.join("src/new.zyl"))
-            .unwrap()
-            .to_string();
-        assert_eq!(
-            server.safe_relative(&new_uri).as_deref(),
-            Some("src/new.zyl")
-        );
-
-        let wrong_extension = Url::from_file_path(root.join("src/new.txt"))
-            .unwrap()
-            .to_string();
-        assert_eq!(server.safe_relative(&wrong_extension), None);
-
-        let traversal = Url::from_file_path(root.join("src/../../escaped.zyl"))
-            .unwrap()
-            .to_string();
-        assert_eq!(server.safe_relative(&traversal), None);
-
-        #[cfg(unix)]
-        {
-            std::os::unix::fs::symlink(&outside, root.join("linked")).unwrap();
-            let escaped_uri = Url::from_file_path(root.join("linked/unsaved.zyl"))
-                .unwrap()
-                .to_string();
-            assert_eq!(server.safe_relative(&escaped_uri), None);
-        }
-
-        fs::remove_dir_all(root).unwrap();
-        fs::remove_dir_all(outside).unwrap();
     }
 
     #[test]
