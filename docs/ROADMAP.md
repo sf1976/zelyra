@@ -1353,6 +1353,8 @@ rehearsals, and owner feedback do not substitute for participant testing.
   functions; download and an isolated PDF frame passed three browser engines.
   The Studio PDF dialog now also has a three-engine browser regression that
   checks real PDF bytes, invalid-data feedback, preview, and download.
+  A Canvas regression in the same engines checks escaped sample values,
+  blocked project scripts, color-pair updates, and undoable theme edits.
   The MariaDB outbox view reads paginated metadata and releases exhausted
   events through the existing requeue operation without immediate delivery.
   CodeMirror's reserved-word highlighting now matches all words in the Rust

@@ -1411,8 +1411,11 @@ Rückmeldungen des Projektverantwortlichen ersetzen keinen Teilnehmertest.
   ohne Projektfunktionen auszuführen; Download und isolierter PDF-Rahmen sind
   in drei Browser-Engines geprüft. Der Studio-PDF-Dialog hat zusätzlich eine
   Browser-Regressionsprüfung in drei Engines für echte PDF-Bytes, fehlerhafte
-  Beispieldaten, Vorschau und Download. Die MariaDB-Outbox-Ansicht liest
-  paginierte Metadaten und gibt erschöpfte Ereignisse über die vorhandene Requeue-
+  Beispieldaten, Vorschau und Download. Ein Canvas-Browser-Test prüft in
+  denselben Engines escaped Beispieldaten,
+  blockierte Projektskripte, angepasste Farbpaare und rückgängig machbare
+  Theme-Änderungen. Die MariaDB-Outbox-Ansicht liest paginierte Metadaten und
+  gibt erschöpfte Ereignisse über die vorhandene Requeue-
   Operation ohne unmittelbaren Versand frei. Die Schlüsselworthervorhebung in
   CodeMirror stimmt nun mit allen Wörtern des
   Rust-Lexers überein; ein Regressionstest erkennt künftige Abweichungen.
