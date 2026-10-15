@@ -2111,6 +2111,21 @@ fn expression_type(
     match &expression.kind {
         ExprKind::Variable(name) => bindings.get(name).cloned(),
         ExprKind::Record { type_name, .. } => Some(Type::Named(type_name.clone())),
+        ExprKind::Call { name, .. } => {
+            let function = program
+                .functions
+                .iter()
+                .find(|function| function.name == *name)
+                .or_else(|| {
+                    let short = name.rsplit("::").next().unwrap_or(name);
+                    let mut matches = program.functions.iter().filter(|function| {
+                        function.name == short || function.name.ends_with(&format!("::{short}"))
+                    });
+                    let first = matches.next()?;
+                    matches.next().is_none().then_some(first)
+                })?;
+            function.return_type.clone()
+        }
         ExprKind::Index { target, .. } => match expression_type(target, bindings, program)? {
             Type::Array(inner) | Type::Set(inner) => Some(*inner),
             _ => None,
@@ -2866,7 +2881,7 @@ mod tests {
     }
 
     #[test]
-    fn record_field_rename_rejects_unindexed_dynamic_receiver() {
+    fn record_field_rename_tracks_receivers_returned_by_typed_functions() {
         let root = std::env::temp_dir().join(format!(
             "zelyra-index-dynamic-field-{}-{:?}",
             std::process::id(),
@@ -2888,11 +2903,9 @@ mod tests {
             .at("main.zyl", source.find("name: String").unwrap())
             .unwrap();
         let symbol = index.symbol(&occurrence.key).unwrap();
-        assert!(
-            plan_symbol_rename(&entry, &analysis, &index, symbol, "full_name", &[])
-                .unwrap_err()
-                .contains("renamed project does not compile")
-        );
+        let changes = plan_symbol_rename(&entry, &analysis, &index, symbol, "full_name", &[])
+            .expect("typed function return values should resolve record field receivers");
+        assert!(changes[0].after.contains("loaded_customer.full_name"));
         fs::remove_dir_all(root).unwrap();
     }
 
