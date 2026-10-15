@@ -108,7 +108,11 @@ and `payload`. Kinds are `analysis.progress`, `diagnostics`, `verification`,
 accepts analysis results only for the current client and document version.
 The server permits four streams, each with a queue of 32 messages, and drops
 slow receivers. Studio requests and Studio file actions currently produce
-events; there is no active watcher for filesystem changes made by other tools.
+events. A bounded metadata watcher also reports external changes to `.zyl`,
+`.css`, and `zelyra.toml` files in the project tree. Clean open buffers reload;
+dirty buffers are preserved and show a notice. The watcher does not follow
+symlinks and may miss a same-size edit with an unchanged timestamp on
+filesystems with coarse timestamp resolution.
 
 ### Runtime budget and recursion
 
@@ -119,7 +123,8 @@ existing behavior without a step budget. **Run** passes the chosen value as
 separate CLI arguments to `zelyra run`. The server allows one Studio run at a
 time, and the output dialog can cancel a running console program. The existing
 15-second timeout and output limits still apply. A budget overrun displays
-the actual `E-RUNTIME-001` output. Web previews do not use `--max-steps`.
+the actual `E-RUNTIME-001` output, and lines printed before the failure remain
+visible. Web previews do not use `--max-steps`.
 
 The view reads `[runtime] max_stack_depth` from `zelyra.toml`, showing the
 runtime default of 20 when absent. The permitted configuration range is 1 to

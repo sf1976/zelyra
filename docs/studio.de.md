@@ -117,9 +117,13 @@ Jedes Datenereignis ist ein JSON-Objekt mit `schema: 1`, `kind`, `document`
 `verification`, `workspace.changed`, `analysis.invalidated` und
 `preview.changed`. Studio übernimmt Analyseergebnisse nur für die aktuelle
 Client- und Dokumentversion. Der Server begrenzt auf vier Streams mit je 32
-ausstehenden Nachrichten und trennt langsame Empfänger. Derzeit erzeugen
-Studio-Anfragen und Studio-Dateiaktionen die Ereignisse; Änderungen durch
-andere Programme auf der Festplatte werden noch nicht aktiv beobachtet.
+ausstehenden Nachrichten und trennt langsame Empfänger. Ein begrenzter
+Metadatenwächter meldet außerdem externe Änderungen an `.zyl`-, `.css`- und
+`zelyra.toml`-Dateien im Projektbaum. Saubere geöffnete Puffer werden neu
+geladen; ungespeicherte Änderungen bleiben erhalten und Studio zeigt einen
+Hinweis. Der Wächter folgt keinen Symlinks. Bei grober Zeitauflösung des
+Dateisystems kann er Änderungen gleicher Dateigröße mit unverändertem
+Zeitstempel übersehen.
 
 ### Laufzeitbudget und Rekursion
 
@@ -132,7 +136,8 @@ Server begrenzt parallele Studio-Läufe auf einen; ein Konsolenlauf kann im
 Ausgabefenster abgebrochen werden. Die bisherige Zeitgrenze von 15 Sekunden
 und die Ausgabebegrenzung bleiben zusätzlich wirksam. Eine Budgetüberschreitung
 zeigt die echte `E-RUNTIME-001`-Ausgabe an. Webvorschauen verwenden nicht
-`--max-steps`.
+`--max-steps`. Bereits ausgegebene Programmzeilen bleiben auch dann sichtbar,
+wenn der Lauf später mit einem Laufzeitfehler endet.
 
 Die Anzeige liest `[runtime] max_stack_depth` aus `zelyra.toml` und zeigt bei
 fehlendem Eintrag den Runtime-Standard 20. Der erlaubte Konfigurationsbereich
