@@ -541,7 +541,7 @@ impl Server {
                 };
                 json!(symbols.iter().filter(|(path, _, _, _)| path == &relative)
                     .map(|(_, name, kind, location)| json!({
-                        "name":name,"kind":kind,"range":location["range"],"selectionRange":location["range"]
+                        "name":name,"kind":kind,"range":location["range"],"selectionRange":location["selectionRange"]
                     })).collect::<Vec<_>>())
             }
             _ => {
@@ -550,8 +550,13 @@ impl Server {
                     .and_then(Value::as_str)
                     .unwrap_or("")
                     .to_lowercase();
-                json!(symbols.iter().filter(|(_, name, _, _)| name.to_lowercase().contains(&query))
-                    .map(|(_, name, kind, location)| json!({"name":name,"kind":kind,"location":location}))
+                json!(symbols
+                    .iter()
+                    .filter(|(_, name, _, _)| name.to_lowercase().contains(&query))
+                    .map(|(_, name, kind, location)| json!({
+                        "name":name,"kind":kind,
+                        "location":{"uri":location["uri"],"range":location["range"]}
+                    }))
                     .collect::<Vec<_>>())
             }
         }
@@ -704,7 +709,13 @@ fn push_outline_symbol(
         return;
     };
     let name = qualified_name.rsplit("::").next().unwrap_or(qualified_name);
-    let location = declaration_location(root, source, span, name);
+    let name_location = declaration_location(root, source, span, name);
+    let uri = name_location["uri"].clone();
+    let location = json!({
+        "uri":uri,
+        "range":{"start":offset_position(&source.text, span.start),"end":offset_position(&source.text, span.end)},
+        "selectionRange":name_location["range"]
+    });
     symbols.push((source.path.clone(), name.to_owned(), kind, location));
 }
 
@@ -993,8 +1004,25 @@ mod tests {
         assert!(names.contains("Quantity"), "outline: {outline:?}");
         assert!(names.contains("customers"), "outline: {outline:?}");
         assert!(names.contains("main"), "outline: {outline:?}");
+        let status = outline
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|symbol| symbol["name"] == "OrderStatus")
+            .unwrap();
+        assert_eq!(status["range"]["start"], json!({"line":0,"character":0}));
+        assert_eq!(
+            status["selectionRange"]["start"],
+            json!({"line":0,"character":5})
+        );
+        assert_eq!(
+            status["selectionRange"]["end"],
+            json!({"line":0,"character":16})
+        );
+        assert!(status["range"]["end"]["character"].as_u64().unwrap() > 16);
         let search = server.symbol_response("workspace/symbol", &json!({"query":"OrderStatus"}));
         assert_eq!(search.as_array().unwrap().len(), 1);
+        assert!(search[0]["location"].get("selectionRange").is_none());
         fs::remove_dir_all(root).unwrap();
     }
 

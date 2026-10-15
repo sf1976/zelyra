@@ -1414,6 +1414,9 @@ Rückmeldungen des Projektverantwortlichen ersetzen keinen Teilnehmertest.
   Operation ohne unmittelbaren Versand frei. Die Schlüsselworthervorhebung in
   CodeMirror stimmt nun mit allen Wörtern des
   Rust-Lexers überein; ein Regressionstest erkennt künftige Abweichungen.
+  LSP-Dokumentensymbole melden jetzt den vollständigen Deklarationsbereich und
+  einen präzisen Auswahlbereich für den Namen; Workspace-Symbole verwenden
+  die standardisierte `Location`-Form.
   Weitere Symbolarten, wiederherstellbares Refactoring, vollständige
   Release-Gates und Artefakte
   bleiben offen; siehe das

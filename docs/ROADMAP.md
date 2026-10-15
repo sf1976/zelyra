@@ -1355,6 +1355,8 @@ rehearsals, and owner feedback do not substitute for participant testing.
   events through the existing requeue operation without immediate delivery.
   CodeMirror's reserved-word highlighting now matches all words in the Rust
   lexer, with a regression test that detects future compiler/editor drift.
+  LSP document symbols now report full declaration ranges and precise name
+  selection ranges; workspace symbols use the standard `Location` shape.
   Other symbol kinds, recoverable refactoring, full release gates, and
   artifacts remain
   open; see the [1.1.0 work log](release-plans/1.1.0-studio-deep-native-progress.en.md).
