@@ -227,7 +227,7 @@ const messages = {
     capabilityButton: "Rechte", capabilityTitle: "Capability- und Sicherheitsmatrix", capabilityDeclarations: "Deklarierte Rechte", capabilityUses: "Tatsächlich verwendete Operationen", capabilityPaths: "Dateipfade", capabilityUnused: "Freigaben ohne erkannten Funktionsbedarf", capabilityUnusedCaveat: "Nur analysierte Funktionen; generierte Routen und dynamische Aufrufe können weitere Rechte benötigen.", capabilityLoading: "Compiler und Projektkonfiguration werden analysiert …", capabilityEmpty: "Keine Einträge in der aktuellen Datei.", capabilityGrant: "Freigabe prüfen", capabilityGrantReview: "Änderung an zelyra.toml prüfen", capabilityGrantApply: "Freigabe übernehmen", capabilityGrantPreview: "Nur die angezeigte Konfigurationsänderung wird nach deiner Bestätigung gespeichert.", capabilityGranted: "Freigabe gespeichert. Die Runtime prüft sie beim nächsten Lauf erneut.", capabilityUnrestricted: "Keine Projektkonfiguration: Runtime-Capabilities sind nicht durch zelyra.toml eingeschränkt.", capabilityIncomplete: "Die Quellanalyse ist unvollständig; dieser Befund kann Einträge auslassen.", capabilityError: "Capability-Analyse fehlgeschlagen: {0}", capabilityPathUnknown: "Dynamische Pfade sind statisch nicht entscheidbar.", capabilityNotGranted: "nicht freigegeben", capabilityDynamic: "dynamisch",
     externalReloaded: "Extern geänderte Datei neu geladen: {0}", externalDirty: "{0} wurde außerhalb von Studio geändert. Ungespeicherte Änderungen bleiben erhalten; vor dem Speichern prüfen.", externalMissing: "{0} wurde außerhalb von Studio entfernt. Der geöffnete Puffer bleibt erhalten.",
     externalReloadFailed: "{0} konnte nach einer äußeren Änderung nicht neu geladen werden: {1}",
-    canvasButton: "Canvas", canvasTitle: "Statische Zelyra-Vorschau", canvasTarget: "Seite oder View", canvasSample: "Beispieldaten (JSON)", canvasRender: "Vorschau aktualisieren", canvasSource: "Zur Deklaration", canvasComponents: "Erreichbare Komponenten", canvasComponentSource: "Komponente öffnen", canvasFrameTitle: "Statische Seitenvorschau", canvasLoading: "Compiler und Renderer erzeugen die Vorschau …", canvasEmpty: "Im Projekt ist keine Seite oder View deklariert.", canvasError: "Vorschau nicht verfügbar: {0}", canvasSampleError: "Beispieldaten müssen ein JSON-Objekt sein.", canvasReady: "Statisch gerendert. Projektfunktionen und Skripte wurden nicht ausgeführt.", canvasIncomplete: "Die Projektquelle ist nicht vollständig kompilierbar.",
+    canvasButton: "Canvas", canvasTitle: "Statische Zelyra-Vorschau", canvasTarget: "Seite oder View", canvasSample: "Beispieldaten (JSON)", canvasRender: "Vorschau aktualisieren", canvasSource: "Zur Deklaration", canvasComponents: "Erreichbare Komponenten", canvasComponentSource: "Deklaration öffnen", canvasComponentUses: "Verwendung", canvasComponentUseSource: "Verwendung öffnen", canvasFrameTitle: "Statische Seitenvorschau", canvasLoading: "Compiler und Renderer erzeugen die Vorschau …", canvasEmpty: "Im Projekt ist keine Seite oder View deklariert.", canvasError: "Vorschau nicht verfügbar: {0}", canvasSampleError: "Beispieldaten müssen ein JSON-Objekt sein.", canvasReady: "Statisch gerendert. Projektfunktionen und Skripte wurden nicht ausgeführt.", canvasIncomplete: "Die Projektquelle ist nicht vollständig kompilierbar.",
     canvasThemeToken: "Theme-Farbe", canvasThemeColor: "Farbwert", canvasThemeApply: "Im Quelltext ändern", canvasThemeMissing: "Für Farbbearbeitung zelyra.theme.css im Projekt anlegen.", canvasThemeNoHex: "Keine unterstützte --z-color-*-Farbe mit hexadezimalem Wert gefunden.", canvasThemeChanged: "Theme-Farbe im ungespeicherten Quelltext geändert. Speichern übernimmt sie ins Projekt.", canvasThemeStale: "Theme-Datei wurde verändert. Farbe erneut auswählen.", canvasThemeError: "Theme-Bearbeitung fehlgeschlagen: {0}",
     runButton: "Starten", runButtonTitle: "main.zyl ausführen oder Webanwendung starten",
     runOutputTitle: "Programmausgabe", runStarting: "Anwendung wird vorbereitet und gestartet …", runSuccess: "Programm erfolgreich beendet", runFailure: "Programm mit Fehler beendet", runTimeout: "Ausführung nach 15 Sekunden beendet", runOutputTruncated: "Die Ausgabe ist auf 64 KiB je Stream begrenzt.", runNoOutput: "Keine Ausgabe.", runStdout: "AUSGABE", runStderr: "FEHLER", runInputUnavailable: "Studio stellt dem Programm keine interaktive Eingabe bereit.", runWebReady: "Webanwendung läuft lokal:", runWebOpen: "Anwendung im Browser öffnen", runWebStop: "Vorschau beenden", runWebStopped: "Lokale Vorschau wurde beendet.",
@@ -334,7 +334,7 @@ const messages = {
     capabilityButton: "Permissions", capabilityTitle: "Capability and security matrix", capabilityDeclarations: "Declared capabilities", capabilityUses: "Operations actually used", capabilityPaths: "File paths", capabilityUnused: "Grants without a detected function use", capabilityUnusedCaveat: "Analyzed functions only; generated routes and dynamic calls may require more permissions.", capabilityLoading: "Analyzing compiler and project configuration …", capabilityEmpty: "No entries in the current file.", capabilityGrant: "Review grant", capabilityGrantReview: "Review change to zelyra.toml", capabilityGrantApply: "Apply grant", capabilityGrantPreview: "Only the displayed configuration change will be saved after your confirmation.", capabilityGranted: "Grant saved. The runtime checks it again on the next run.", capabilityUnrestricted: "No project configuration: runtime capabilities are not restricted by zelyra.toml.", capabilityIncomplete: "Source analysis is incomplete; this report may omit entries.", capabilityError: "Capability analysis failed: {0}", capabilityPathUnknown: "Dynamic paths cannot be decided statically.", capabilityNotGranted: "not granted", capabilityDynamic: "dynamic",
     externalReloaded: "Reloaded externally changed file: {0}", externalDirty: "{0} changed outside Studio. Unsaved edits remain; review before saving.", externalMissing: "{0} was removed outside Studio. The open buffer remains.",
     externalReloadFailed: "Could not reload {0} after an external change: {1}",
-    canvasButton: "Canvas", canvasTitle: "Static Zelyra preview", canvasTarget: "Page or view", canvasSample: "Sample data (JSON)", canvasRender: "Refresh preview", canvasSource: "Go to declaration", canvasComponents: "Reachable components", canvasComponentSource: "Open component", canvasFrameTitle: "Static page preview", canvasLoading: "Compiler and renderer are preparing the preview …", canvasEmpty: "This project declares no page or view.", canvasError: "Preview unavailable: {0}", canvasSampleError: "Sample data must be a JSON object.", canvasReady: "Rendered statically. No project functions or scripts were executed.", canvasIncomplete: "The project source does not fully compile.",
+    canvasButton: "Canvas", canvasTitle: "Static Zelyra preview", canvasTarget: "Page or view", canvasSample: "Sample data (JSON)", canvasRender: "Refresh preview", canvasSource: "Go to declaration", canvasComponents: "Reachable components", canvasComponentSource: "Open declaration", canvasComponentUses: "Usage", canvasComponentUseSource: "Open usage", canvasFrameTitle: "Static page preview", canvasLoading: "Compiler and renderer are preparing the preview …", canvasEmpty: "This project declares no page or view.", canvasError: "Preview unavailable: {0}", canvasSampleError: "Sample data must be a JSON object.", canvasReady: "Rendered statically. No project functions or scripts were executed.", canvasIncomplete: "The project source does not fully compile.",
     canvasThemeToken: "Theme color", canvasThemeColor: "Color value", canvasThemeApply: "Edit source", canvasThemeMissing: "Create zelyra.theme.css in the project to edit colors.", canvasThemeNoHex: "No supported --z-color-* declaration with a hex value was found.", canvasThemeChanged: "Theme color changed in the unsaved source. Save to apply it to the project.", canvasThemeStale: "Theme file changed. Select the color again.", canvasThemeError: "Theme edit failed: {0}",
     runButton: "Run", runButtonTitle: "Run main.zyl or start the web application",
     runOutputTitle: "Program output", runStarting: "Preparing and starting the application …", runSuccess: "Program finished successfully", runFailure: "Program finished with an error", runTimeout: "Execution stopped after 15 seconds", runOutputTruncated: "Output is limited to 64 KiB per stream.", runNoOutput: "No output.", runStdout: "OUTPUT", runStderr: "ERROR", runInputUnavailable: "Studio does not provide interactive input to the program.", runWebReady: "Web application is running locally:", runWebOpen: "Open application in browser", runWebStop: "Stop preview", runWebStopped: "Local preview stopped.",
@@ -3343,7 +3343,7 @@ async function renderCanvas(sequence = ++canvasSequence) {
       components.append(option);
     });
     $("canvas-components").hidden = canvasComponentSources.length === 0;
-    $("canvas-component-source").disabled = !canvasComponentSources[0]?.source?.path;
+    updateCanvasComponentUses(0);
     $("canvas-status").textContent = t("canvasReady");
   } catch (error) {
     if (sequence !== canvasSequence || $("canvas-pane").hidden) return;
@@ -3352,6 +3352,9 @@ async function renderCanvas(sequence = ++canvasSequence) {
     canvasComponentSources = [];
     $("canvas-components").hidden = true;
     $("canvas-component-target").replaceChildren();
+    $("canvas-component-use-target").replaceChildren();
+    $("canvas-component-source").disabled = true;
+    $("canvas-component-use-source").disabled = true;
     $("canvas-status").textContent = t("canvasError", error.message);
   }
 }
@@ -3376,12 +3379,35 @@ async function goToCanvasComponentDeclaration() {
   await goToCanvasSource(source);
 }
 
+function updateCanvasComponentUses(index) {
+  const component = canvasComponentSources[index];
+  const declaration = $("canvas-component-source");
+  declaration.disabled = !component?.source?.path;
+  const uses = $("canvas-component-use-target");
+  uses.replaceChildren();
+  (component?.uses || []).forEach((source, useIndex) => {
+    const option = document.createElement("option");
+    option.value = String(useIndex);
+    option.textContent = `${source.path}:${source.line}:${source.column}`;
+    uses.append(option);
+  });
+  $("canvas-component-use-source").disabled = !(component?.uses || []).length;
+}
+
+async function goToCanvasComponentUse() {
+  const component = canvasComponentSources[Number($("canvas-component-target").value)];
+  const source = component?.uses?.[Number($("canvas-component-use-target").value)];
+  await goToCanvasSource(source);
+}
+
 async function goToCanvasSource(source) {
   if (!source?.path) return;
   await openFile(source.path);
   if (!editor || activePath !== source.path) return;
   const line = Math.max(1, Math.min(editor.state.doc.lines, Number(source.line) || 1));
-  editor.dispatch({ selection: { anchor: editor.state.doc.line(line).from }, scrollIntoView: true });
+  const lineDoc = editor.state.doc.line(line);
+  const character = Math.max(0, Math.min(lineDoc.length, Number(source.character) || 0));
+  editor.dispatch({ selection: { anchor: lineDoc.from + character }, scrollIntoView: true });
   editor.focus();
 }
 
@@ -3792,10 +3818,10 @@ $("canvas-target").addEventListener("change", () => void renderCanvas());
 $("canvas-render").addEventListener("click", () => void renderCanvas());
 $("canvas-source").addEventListener("click", () => void goToCanvasDeclaration());
 $("canvas-component-target").addEventListener("change", () => {
-  const source = canvasComponentSources[Number($("canvas-component-target").value)]?.source;
-  $("canvas-component-source").disabled = !source?.path;
+  updateCanvasComponentUses(Number($("canvas-component-target").value));
 });
 $("canvas-component-source").addEventListener("click", () => void goToCanvasComponentDeclaration());
+$("canvas-component-use-source").addEventListener("click", () => void goToCanvasComponentUse());
 $("canvas-theme-token").addEventListener("change", () => {
   $("canvas-theme-color").value = normalizedColor(canvasColors[Number($("canvas-theme-token").value)]?.color || "#3157a4");
 });

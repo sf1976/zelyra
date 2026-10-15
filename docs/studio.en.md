@@ -316,9 +316,9 @@ edit. For primary and status backgrounds it chooses black or white for the
 paired `--z-color-on-*` text color based on contrast. Hover and soft colors,
 and other related tokens, still need manual adjustment. The source button
 opens the page or view declaration. A component selector lists components
-reachable from it, including nested components, and opens each declaration at
-its source position. The preview does not yet map a rendered component instance
-back to the exact call-site span.
+reachable from it, including nested components. Separate actions open either
+their declaration or an actual `<Component>` use in the source. Both jumps
+target the exact source column.
 
 ## Capability and path matrix (1.1.0 work in progress)
 

@@ -5527,6 +5527,14 @@ fn main() {}
         let rendered: Value = serde_json::from_str(&body).unwrap();
         assert_eq!(rendered["components"][0]["name"], "Banner");
         assert_eq!(rendered["components"][0]["source"]["path"], "main.zyl");
+        assert_eq!(rendered["components"][0]["uses"][0]["path"], "main.zyl");
+        assert_eq!(rendered["components"][0]["uses"][0]["line"], 2);
+        assert!(
+            rendered["components"][0]["uses"][0]["column"]
+                .as_u64()
+                .unwrap()
+                > 1
+        );
         assert!(rendered["html"]
             .as_str()
             .unwrap()

@@ -77,6 +77,11 @@ fn main() {}
   await page.keyboard.press("Enter");
   await page.waitForFunction(() => document.querySelector(".cm-activeLine")?.textContent?.includes("component Banner"));
   assert.match(await page.locator(".cm-activeLine").textContent(), /component Banner/);
+  await page.locator("#canvas-component-use-target").focus();
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => document.querySelector(".cm-activeLine")?.textContent?.includes("<Banner>"));
+  assert.match(await page.locator(".cm-activeLine").textContent(), /<Banner>/);
 
   const primaryToken = await page.locator("#canvas-theme-token").evaluate((select) =>
     [...select.options].find((option) => option.textContent.includes("--z-color-primary"))?.value,

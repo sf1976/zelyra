@@ -27,28 +27,74 @@ fn analysis(
 }
 
 fn source_position(analysis: &language_service::Analysis, span: Span) -> Value {
-    let path = analysis
-        .sources
-        .get(span.source_id as usize)
-        .map(|source| source.path.as_str());
-    json!({"path":path,"line":span.line,"column":span.column})
+    let Some(source) = analysis.sources.get(span.source_id as usize) else {
+        return Value::Null;
+    };
+    source_position_at(analysis, span.source_id, span.start).unwrap_or_else(
+        || json!({"path":source.path,"line":span.line,"column":span.column,"character":0}),
+    )
+}
+
+fn source_position_at(
+    analysis: &language_service::Analysis,
+    source_id: u32,
+    byte_offset: usize,
+) -> Option<Value> {
+    let source = analysis.sources.get(source_id as usize)?;
+    let offset = byte_offset.min(source.text.len());
+    let offset = (0..=offset)
+        .rev()
+        .find(|offset| source.text.is_char_boundary(*offset))?;
+    let prefix = &source.text[..offset];
+    let line = prefix.bytes().filter(|byte| *byte == b'\n').count() + 1;
+    let line_start = prefix.rfind('\n').map_or(0, |index| index + 1);
+    let character = source.text[line_start..offset].encode_utf16().count();
+    Some(json!({
+        "path":source.path,"line":line,"column":character+1,"character":character
+    }))
+}
+
+fn html_body_start(
+    analysis: &language_service::Analysis,
+    owner: Span,
+    html: &str,
+) -> Option<usize> {
+    let source = analysis.sources.get(owner.source_id as usize)?;
+    super::super::lex(&source.text)
+        .ok()?
+        .into_iter()
+        .find_map(|token| match token.kind {
+            TokenKind::HtmlBody(body)
+                if body == html
+                    && token.span.start >= owner.start
+                    && token.span.end <= owner.end =>
+            {
+                Some(token.span.start)
+            }
+            _ => None,
+        })
 }
 
 fn component_source_links(
     analysis: &language_service::Analysis,
     program: &zelyra_ast::Program,
-    roots: &[&str],
+    roots: &[(&str, Span)],
 ) -> Vec<Value> {
     let mut pending = roots
         .iter()
-        .map(|html| (*html).to_owned())
+        .map(|(html, span)| ((*html).to_owned(), *span))
         .collect::<Vec<_>>();
     let mut seen = HashSet::new();
-    let mut links = Vec::new();
-    while let Some(html) = pending.pop() {
+    let mut declarations = HashMap::<String, Value>::new();
+    let mut uses = HashMap::<String, Vec<Value>>::new();
+    while let Some((html, owner_span)) = pending.pop() {
+        if seen.len() >= 128 {
+            break;
+        }
         let Ok(invocations) = super::super::component_invocations(&html) else {
             continue;
         };
+        let body_start = html_body_start(analysis, owner_span, &html);
         for invocation in invocations {
             let Some(component) = program
                 .components
@@ -57,20 +103,45 @@ fn component_source_links(
             else {
                 continue;
             };
+            if let Some(start) = body_start
+                .and_then(|offset| offset.checked_add(invocation.start + 1))
+                .and_then(|offset| source_position_at(analysis, owner_span.source_id, offset))
+            {
+                uses.entry(component.name.clone()).or_default().push(start);
+            }
+            declarations
+                .entry(component.name.clone())
+                .or_insert_with(|| source_position(analysis, component.span));
             if !seen.insert(component.name.as_str()) {
                 continue;
             }
-            links.push(json!({
-                "name":component.name,
-                "source":source_position(analysis,component.span),
-            }));
             if seen.len() >= 128 {
-                return links;
+                break;
             }
-            pending.push(component.html.clone());
+            pending.push((component.html.clone(), component.span));
         }
     }
-    links
+    let mut names = declarations.keys().cloned().collect::<Vec<_>>();
+    names.sort();
+    names
+        .into_iter()
+        .map(|name| {
+            let mut locations = uses.remove(&name).unwrap_or_default();
+            locations.sort_by(|left, right| {
+                left["path"]
+                    .as_str()
+                    .cmp(&right["path"].as_str())
+                    .then(left["line"].as_u64().cmp(&right["line"].as_u64()))
+                    .then(left["character"].as_u64().cmp(&right["character"].as_u64()))
+            });
+            locations.dedup();
+            json!({
+                "name":name,
+                "source":declarations.remove(&name).unwrap_or(Value::Null),
+                "uses":locations,
+            })
+        })
+        .collect()
 }
 
 pub(super) fn list(state: &EditorState, request: &Value) -> EditorReply {
@@ -194,10 +265,10 @@ pub(super) fn render(state: &EditorState, request: &Value) -> EditorReply {
             .iter()
             .find(|page| page.path == name)
             .ok_or((404, "page is not declared".into()))?;
-        let mut roots = vec![page.html.as_str()];
+        let mut roots = vec![(page.html.as_str(), page.span)];
         if let Some(view_name) = page.view.as_deref() {
             if let Some(view) = program.views.iter().find(|view| view.name == view_name) {
-                roots.push(view.html.as_str());
+                roots.push((view.html.as_str(), view.span));
             }
         }
         (
@@ -214,7 +285,7 @@ pub(super) fn render(state: &EditorState, request: &Value) -> EditorReply {
         (
             super::super::compose_view_html(program, &view.name, ""),
             view.span,
-            vec![view.html.as_str()],
+            vec![(view.html.as_str(), view.span)],
         )
     };
     let html = zelyra_web::render_static_template_preview(
