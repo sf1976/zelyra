@@ -3,18 +3,23 @@
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::process::Command;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static NEXT_TUTORIAL_DIRECTORY: AtomicU64 = AtomicU64::new(0);
 
 fn tutorial_with_compose(
     plugin_version: Option<&str>,
     standalone_version: &str,
 ) -> (String, String, String) {
+    let sequence = NEXT_TUTORIAL_DIRECTORY.fetch_add(1, Ordering::Relaxed);
     let directory = std::env::temp_dir().join(format!(
-        "zelyra-compose-{}-{}",
+        "zelyra-compose-{}-{}-{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
-            .as_nanos()
+            .as_nanos(),
+        sequence
     ));
     let bin = directory.join("bin");
     fs::create_dir_all(&bin).unwrap();
