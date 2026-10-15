@@ -2313,6 +2313,37 @@ mod tests {
     use super::*;
 
     #[test]
+    fn local_completion_respects_nested_blocks_loops_matches_and_lambdas() {
+        let source = "fn main(seed: Int) { base = seed if true { branch = base print(_) } mapped = values |> map(|item| item + base) for row in rows { print(row) } result_value = match seed { value if value > 0 => value _ => 0 } print(result_value) }";
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let labels_at = |needle: &str| {
+            let offset = source.find(needle).unwrap();
+            visible_local_symbols(&program, 0, offset)
+                .iter()
+                .filter_map(|item| item["label"].as_str())
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        };
+
+        let branch = labels_at("print(_)");
+        assert!(branch.contains(&"seed".to_owned()));
+        assert!(branch.contains(&"base".to_owned()));
+        assert!(branch.contains(&"branch".to_owned()));
+        assert!(!branch.contains(&"mapped".to_owned()));
+
+        let lambda = labels_at("item + base");
+        assert!(lambda.contains(&"item".to_owned()));
+        assert!(lambda.contains(&"base".to_owned()));
+
+        let loop_body = labels_at("print(row)");
+        assert!(loop_body.contains(&"row".to_owned()));
+
+        let match_guard = labels_at("value > 0");
+        assert!(match_guard.contains(&"value".to_owned()));
+        assert!(match_guard.contains(&"seed".to_owned()));
+    }
+
+    #[test]
     fn imported_record_definition_and_literal_share_a_rename_identity() {
         let root = std::env::temp_dir().join(format!(
             "zelyra-index-record-{}-{:?}",
