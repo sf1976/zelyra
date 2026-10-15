@@ -78,6 +78,26 @@ fn main() {
 }
 
 #[test]
+fn string_interpolation_diagnostics_point_to_the_expression_source() {
+    let source = r#"fn main() { print("Grüße {to_string(\"quoted\") + missing}") }"#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    let errors = check(&program).expect_err("unresolved interpolation names must fail");
+    let error = errors
+        .iter()
+        .find(|error| error.message.contains("unknown variable `missing`"))
+        .expect("the missing interpolation variable should be diagnosed");
+    assert_eq!(&source[error.span.start..error.span.end], "missing");
+    assert_eq!(error.span.line, 1);
+    let line_start = source[..error.span.start]
+        .rfind('\n')
+        .map_or(0, |newline| newline + 1);
+    assert_eq!(
+        error.span.column,
+        source[line_start..error.span.start].chars().count() + 1
+    );
+}
+
+#[test]
 fn mutable_array_bindings_support_checked_in_place_index_updates() {
     let source = r#"
 fn main() {
