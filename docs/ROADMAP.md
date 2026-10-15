@@ -1357,6 +1357,8 @@ rehearsals, and owner feedback do not substitute for participant testing.
   blocked project scripts, color-pair updates, and undoable theme edits.
   A Capability grant flow checks the TOML preview remains read-only until the
   explicit apply action and preserves unrelated comments in three engines.
+  An Outbox browser regression with disposable MariaDB verifies metadata-only
+  display, confirmation, and requeue without delivery in three engines.
   The MariaDB outbox view reads paginated metadata and releases exhausted
   events through the existing requeue operation without immediate delivery.
   CodeMirror's reserved-word highlighting now matches all words in the Rust

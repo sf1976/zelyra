@@ -1416,7 +1416,9 @@ Rückmeldungen des Projektverantwortlichen ersetzen keinen Teilnehmertest.
   blockierte Projektskripte, angepasste Farbpaare und rückgängig machbare
   Theme-Änderungen. Ein Capability-Test bestätigt in drei Browser-Engines,
   dass die TOML-Vorschau bis zur ausdrücklichen Übernahme schreibfrei bleibt
-  und Kommentare erhält. Die MariaDB-Outbox-Ansicht liest paginierte Metadaten und
+  und Kommentare erhält. Ein Outbox-Browser-Test mit Wegwerf-MariaDB prüft in
+  drei Engines Metadatenanzeige, Bestätigung und erneutes Einreihen ohne Versand.
+  Die MariaDB-Outbox-Ansicht liest paginierte Metadaten und
   gibt erschöpfte Ereignisse über die vorhandene Requeue-
   Operation ohne unmittelbaren Versand frei. Die Schlüsselworthervorhebung in
   CodeMirror stimmt nun mit allen Wörtern des
