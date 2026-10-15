@@ -11,25 +11,25 @@ Business-, Datenbank- und Webanwendungen. Schemaabhängiges SQL, Formulare,
 CRUD, Views und Geschäftslogik greifen ineinander; gewöhnlicher Programmcode
 und natives SQL bleiben jederzeit möglich.
 
-> **Veröffentlichte Version 1.0.7 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.0.7)
+> **Release 1.1.0 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.1.0)
 >
 > Die Compilerprüfung und der Verifier decken klar abgegrenzte Bereiche ab. Sie beweisen nicht die Korrektheit beliebiger Anwendungen. Prüfe vor dem Einsatz die unterstützten Abläufe und Grenzen in der jeweiligen Dokumentation.
 
-Zelyra 1.0.7 ergänzt If-Ausdrücke, Record-Updates, typisierte
-Lambdas, Match-Guards, Tupelbindung und begrenzte Ausführung. Außerdem kann
-Zelyra deklarierte Views lokal in Text-PDFs rendern und PDF-Dateien
-transaktional in die MariaDB-Mail-Outbox einreihen. Details stehen in den
-[Release-Notizen 1.0.7](docs/release-notes/1.0.7.de.md), im
+Zelyra 1.1.0 ergänzt ein offlinefähiges, eingebettetes Studio mit
+Sprachdiensten und einen eigenständigen LSP sowie typgeprüfte
+Stringinterpolation und ausdrücklich aktivierte In-place-Änderungen lokaler
+Arrays. Die Sprachfunktionen aus 1.0.7 bleiben verfügbar. Details stehen in
+den [Release-Notizen 1.1.0](docs/release-notes/1.1.0.de.md), im
 [UI-Leitfaden](docs/ui.de.md), in der
 [Datenbank-Supportmatrix](docs/database-support.de.md) und der
 [Implementierungsübersicht](docs/implemented.de.md).
 
 Die Sprachkompatibilitätslinie bleibt `0.1`; Compiler-Releases ändern sie nicht automatisch. „Korrektheit beweisen“ ist ein Entwicklungsziel: Der Verifier unterscheidet geprüfte, zur Laufzeit geprüfte und nicht bewiesene Bereiche, ist aber kein allgemeiner Theorembeweiser.
 
-## Was Zelyra 1.0.7 bietet
+## Was Zelyra 1.1.0 bietet
 
 Zelyra verbindet Sprache, Compiler, Datenbank, Webanwendung und Studio in
-einem Arbeitsablauf. Das Release 1.0.7 umfasst:
+einem Arbeitsablauf. Das Release 1.1.0 umfasst:
 
 - statisch geprüfte Geschäftslogik und schemaabhängiges SQL;
 - MariaDB als primäre Laufzeit sowie geprüfte MySQL- und PostgreSQL-Abläufe;
@@ -37,8 +37,11 @@ einem Arbeitsablauf. Das Release 1.0.7 umfasst:
 - die erweiterte Standardbibliothek aus 1.0.3 für Mathematik, Text, Arrays,
   Sets, Maps, Datumsrechnung, Parsing, Encodings und Pfade sowie `|>`-Pipelines
   und flache `else if`-Kaskaden;
-- Studio mit Editor, Compilerhinweisen, Schemaübersicht, Datenbankwerkbank,
-  Projektkarte und CRUD-Quelltextvorschau;
+- offlinefähiges Studio mit CodeMirror 6, Compilerdiagnostik und Sprachdiensten,
+  semantischer Navigation/Umbenennung, Verifier-Status, Projekt-Datenkarte,
+  Typed-Hole-Hilfe, isolierter UI-/Theme-Vorschau, Capability-Prüfung,
+  Laufzeitbudgets, PDF-Vorschau und MariaDB-Outbox-Anzeige mit erneutem Einreihen;
+- eigenständiges `zelyra lsp` mit denselben Projekt-Overlays und Sprachdiensten;
 - lokale, um Geheimnisse bereinigte JSONL-Logs für Programmlauf und Vorschau,
   abrufbar in Studio, sowie `zelyra uninstall` für die aktive benutzereigene
   Installation;
@@ -52,8 +55,8 @@ einem Arbeitsablauf. Das Release 1.0.7 umfasst:
 - CLI-Werkzeuge für Routen, Setup, Diagnose, Datenbank, Audit, SMTP und statische
   Laravel-Migrationsberichte.
 - If-Ausdrücke, Record-Updates, typisierte Lambdas, geschützte verschachtelte
-  Muster und Tupel; `--max-steps` stoppt unbeschränkte Auswertung mit
-  quellgenauer Diagnose.
+  Muster, Tupel, Stringinterpolation und ausdrücklich veränderliche lokale
+  Arrays; `--max-steps` stoppt unbeschränkte Auswertung mit quellgenauer Diagnose.
 - Lokales Text-PDF-Rendering und geprüfte PDF-Outbox-Anhänge mit Größen- und
   Zeilenlimits. Das Renderer-PDF übernimmt keine CSS-Layouts, Bilder oder
   Diagramme; für grafische Ausdrucke bleibt die Browser-Druckansicht verfügbar.

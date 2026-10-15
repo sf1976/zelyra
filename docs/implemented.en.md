@@ -1,13 +1,20 @@
-# Implemented in Zelyra 1.0.7
+# Implemented in Zelyra 1.1.0
 
-**Snapshot:** published release `v1.0.7` · language compatibility line `0.1` · 2026-10-14
+**Snapshot:** release `v1.1.0` · language compatibility line `0.1` · 2026-10-15
 **Maturity:** published; evaluate suitability and documented limits for each workflow
 
 This inventory describes the current development state by area of use. It distinguishes
 available features from bounded or experimental areas; it does not claim
 universal database portability or that arbitrary applications are defect-free.
 
-## Changes in 1.0.3–1.0.7
+## Changes in 1.0.3–1.1.0
+
+- **1.1.0:** offline embedded Studio with CodeMirror 6, compiler-backed shared
+  language services, standalone LSP, typed-hole assistance, verifier status,
+  project data map, static UI/theme preview, capability review, runtime budget
+  tools, PDF/outbox panels, and guarded semantic/file rename. Adds checked
+  string interpolation and opt-in mutable local arrays. Known boundaries and
+  verification evidence are in the [1.1.0 release notes](release-notes/1.1.0.en.md).
 
 - **1.0.3:** expanded standard library for math, text, arrays, sets, maps, dates,
   parsing, encodings, and paths; type-checked `|>` pipelines and flat `else if`
@@ -36,7 +43,14 @@ planned work. The [language specification](specification.md),
 [source-authority guide](source-authority.md), and
 [handbook](handbook/en/handbook.md) describe accepted syntax and its limits.
 
-## What Zelyra 1.0.7 provides
+## What Zelyra 1.1.0 provides
+
+The 1.1.0 Studio embeds all runtime assets in the CLI. Its analysis jobs are
+bounded and versioned but are not cooperatively preemptible. Rename supports
+resolved symbol kinds and rejects ambiguous or unresolved references. PDF
+rendering is text-oriented and does not reproduce CSS, images, or charts. The
+editor bundle is 560,316 bytes (547.2 KiB), below its 600 KiB ceiling; 400 KiB
+remains an optimization goal.
 
 ### Language and Compiler
 

@@ -1,6 +1,6 @@
-# In Zelyra 1.0.7 umgesetzt
+# In Zelyra 1.1.0 umgesetzt
 
-**Stand:** veröffentlichtes Release `v1.0.7` · Sprachkompatibilitätslinie `0.1` · 2026-10-14
+**Stand:** Release `v1.1.0` · Sprachkompatibilitätslinie `0.1` · 2026-10-15
 **Reifegrad:** veröffentlicht; Eignung und dokumentierte Grenzen sind je Ablauf zu prüfen
 
 Diese Übersicht beschreibt den aktuellen Entwicklungsstand nach
@@ -8,7 +8,16 @@ Anwendungsbereichen. Sie unterscheidet verfügbare Funktionen von begrenzten
 oder experimentellen Bereichen; sie behauptet weder universelle
 Datenbankportabilität noch Fehlerfreiheit beliebiger Anwendungen.
 
-## Änderungen in 1.0.3–1.0.7
+## Änderungen in 1.0.3–1.1.0
+
+- **1.1.0:** Offline-Studio mit eingebettetem CodeMirror 6, gemeinsamem
+  compilerbasiertem Sprachdienst, eigenständigem LSP, Typed-Hole-Hilfe,
+  Verifier-Status, Projekt-Datenkarte, statischer UI-/Theme-Vorschau,
+  Capability-Prüfung, Laufzeitbudget-Werkzeugen, PDF-/Outbox-Ansicht und
+  abgesicherter semantischer/dateiübergreifender Umbenennung. Dazu kommen
+  typgeprüfte Stringinterpolation und ausdrücklich aktivierte veränderliche
+  lokale Arrays. Grenzen und Prüfnachweise stehen in den
+  [Release-Notizen 1.1.0](release-notes/1.1.0.de.md).
 
 - **1.0.3:** erweiterte Standardbibliothek für Mathematik, Text, Arrays, Sets,
   Maps, Datum, Parsing, Encodings und Pfade; typgeprüfte `|>`-Pipelines und
@@ -40,7 +49,14 @@ Die Release-Notizen dokumentieren historische Änderungen; die
 [Handbuch](handbook/de/handbuch.md) beschreiben die akzeptierte Syntax und ihre
 Grenzen.
 
-## Was Zelyra 1.0.7 bietet
+## Was Zelyra 1.1.0 bietet
+
+Das Studio 1.1.0 bettet seine Laufzeit-Assets in die CLI ein. Analyseaufträge
+sind begrenzt und versioniert, aber nicht kooperativ abbrechbar. Rename
+unterstützt aufgelöste Symbolarten und weist mehrdeutige oder nicht auflösbare
+Verwendungen zurück. PDF-Rendering ist textorientiert und bildet CSS, Bilder
+oder Diagramme nicht nach. Das Editor-Bundle misst 560.316 Byte (547,2 KiB)
+und liegt unter der Grenze von 600 KiB; 400 KiB bleiben ein Optimierungsziel.
 
 ### Sprache und Compiler
 
