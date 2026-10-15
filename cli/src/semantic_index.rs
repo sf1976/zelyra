@@ -601,6 +601,7 @@ impl SemanticIndex {
             );
             index_local_bindings(function, &analysis.sources, &tokens, &mut index);
         }
+        index_record_pattern_fields(program, &analysis.sources, &tokens, &mut index.occurrences);
         for record in &program.records {
             for field in &record.fields {
                 push_type_references(
@@ -2308,6 +2309,252 @@ fn visit_record_pattern(
     }
 }
 
+fn index_record_pattern_fields(
+    program: &Program,
+    sources: &[project::ProjectSource],
+    tokens: &HashMap<u32, Vec<Token>>,
+    output: &mut Vec<Occurrence>,
+) {
+    for function in &program.functions {
+        index_pattern_fields_in_block(&function.body, program, sources, tokens, output);
+    }
+}
+
+fn index_pattern_fields_in_block(
+    block: &Block,
+    program: &Program,
+    sources: &[project::ProjectSource],
+    tokens: &HashMap<u32, Vec<Token>>,
+    output: &mut Vec<Occurrence>,
+) {
+    for statement in &block.statements {
+        match statement {
+            Stmt::Let { value, .. }
+            | Stmt::BindOrAssign { value, .. }
+            | Stmt::TupleBindOrAssign { value, .. }
+            | Stmt::Expr(value)
+            | Stmt::Return {
+                value: Some(value), ..
+            } => index_pattern_fields_in_expr(value, program, sources, tokens, output),
+            Stmt::If {
+                condition,
+                then_block,
+                else_block,
+                ..
+            } => {
+                index_pattern_fields_in_expr(condition, program, sources, tokens, output);
+                index_pattern_fields_in_block(then_block, program, sources, tokens, output);
+                if let Some(else_block) = else_block {
+                    index_pattern_fields_in_block(else_block, program, sources, tokens, output);
+                }
+            }
+            Stmt::While {
+                condition,
+                invariants,
+                body,
+                ..
+            } => {
+                index_pattern_fields_in_expr(condition, program, sources, tokens, output);
+                for invariant in invariants {
+                    index_pattern_fields_in_expr(invariant, program, sources, tokens, output);
+                }
+                index_pattern_fields_in_block(body, program, sources, tokens, output);
+            }
+            Stmt::For { iterable, body, .. } => {
+                index_pattern_fields_in_expr(iterable, program, sources, tokens, output);
+                index_pattern_fields_in_block(body, program, sources, tokens, output);
+            }
+            Stmt::Loop {
+                invariants, body, ..
+            } => {
+                for invariant in invariants {
+                    index_pattern_fields_in_expr(invariant, program, sources, tokens, output);
+                }
+                index_pattern_fields_in_block(body, program, sources, tokens, output);
+            }
+            Stmt::Match { value, arms, .. } => {
+                index_pattern_fields_in_expr(value, program, sources, tokens, output);
+                for arm in arms {
+                    index_record_pattern_field(&arm.pattern, program, sources, tokens, output);
+                    if let Some(guard) = &arm.guard {
+                        index_pattern_fields_in_expr(guard, program, sources, tokens, output);
+                    }
+                    index_pattern_fields_in_block(&arm.body, program, sources, tokens, output);
+                }
+            }
+            Stmt::Transaction { body, .. } | Stmt::Parallel { body, .. } => {
+                index_pattern_fields_in_block(body, program, sources, tokens, output)
+            }
+            Stmt::Return { value: None, .. } | Stmt::Break { .. } | Stmt::Continue { .. } => {}
+        }
+    }
+}
+
+fn index_pattern_fields_in_expr(
+    expression: &Expr,
+    program: &Program,
+    sources: &[project::ProjectSource],
+    tokens: &HashMap<u32, Vec<Token>>,
+    output: &mut Vec<Occurrence>,
+) {
+    match &expression.kind {
+        ExprKind::Array(items) => {
+            for item in items {
+                index_pattern_fields_in_expr(item, program, sources, tokens, output);
+            }
+        }
+        ExprKind::Map(entries) => {
+            for (key, value) in entries {
+                index_pattern_fields_in_expr(key, program, sources, tokens, output);
+                index_pattern_fields_in_expr(value, program, sources, tokens, output);
+            }
+        }
+        ExprKind::Record { fields, .. } => {
+            for (_, value) in fields {
+                index_pattern_fields_in_expr(value, program, sources, tokens, output);
+            }
+        }
+        ExprKind::Lambda { body, .. }
+        | ExprKind::Await(body)
+        | ExprKind::Unary { expr: body, .. } => {
+            index_pattern_fields_in_expr(body, program, sources, tokens, output)
+        }
+        ExprKind::Index { target, index } => {
+            index_pattern_fields_in_expr(target, program, sources, tokens, output);
+            index_pattern_fields_in_expr(index, program, sources, tokens, output);
+        }
+        ExprKind::Field { target, .. } => {
+            index_pattern_fields_in_expr(target, program, sources, tokens, output)
+        }
+        ExprKind::Call { args, .. } => {
+            for argument in args {
+                index_pattern_fields_in_expr(argument, program, sources, tokens, output);
+            }
+        }
+        ExprKind::Binary { left, right, .. } => {
+            index_pattern_fields_in_expr(left, program, sources, tokens, output);
+            index_pattern_fields_in_expr(right, program, sources, tokens, output);
+        }
+        ExprKind::Match { value, arms } => {
+            index_pattern_fields_in_expr(value, program, sources, tokens, output);
+            for arm in arms {
+                index_record_pattern_field(&arm.pattern, program, sources, tokens, output);
+                if let Some(guard) = &arm.guard {
+                    index_pattern_fields_in_expr(guard, program, sources, tokens, output);
+                }
+                index_pattern_fields_in_expr(&arm.value, program, sources, tokens, output);
+            }
+        }
+        ExprKind::Int(_)
+        | ExprKind::UInt(_)
+        | ExprKind::Float(_)
+        | ExprKind::Bool(_)
+        | ExprKind::String(_)
+        | ExprKind::Char(_)
+        | ExprKind::FunctionValue(_)
+        | ExprKind::Variable(_)
+        | ExprKind::Sql { .. } => {}
+    }
+}
+
+fn index_record_pattern_field(
+    pattern: &Pattern,
+    program: &Program,
+    sources: &[project::ProjectSource],
+    tokens: &HashMap<u32, Vec<Token>>,
+    output: &mut Vec<Occurrence>,
+) {
+    match &pattern.kind {
+        PatternKind::Record { type_name, fields } => {
+            if let Some(record) = resolve_record_type(&Type::Named(type_name.clone()), program, 0) {
+                if let (Some(source), Some(source_tokens)) = (
+                    sources.get(pattern.span.source_id as usize),
+                    tokens.get(&pattern.span.source_id),
+                ) {
+                    for (field_name, nested) in fields {
+                        if let Some(field) =
+                            record.fields.iter().find(|field| field.name == *field_name)
+                        {
+                            if let Some(span) =
+                                record_pattern_field_span(source_tokens, pattern.span, field_name)
+                            {
+                                output.push(Occurrence {
+                                    key: format!("record-field:{}:{}", record.name, field.name),
+                                    path: source.path.clone(),
+                                    start: span.start,
+                                    end: span.end,
+                                    declaration: false,
+                                });
+                            }
+                        }
+                        index_record_pattern_field(nested, program, sources, tokens, output);
+                    }
+                }
+            } else {
+                for (_, nested) in fields {
+                    index_record_pattern_field(nested, program, sources, tokens, output);
+                }
+            }
+        }
+        PatternKind::Constructor {
+            inner: Some(inner), ..
+        } => index_record_pattern_field(inner, program, sources, tokens, output),
+        PatternKind::EnumVariantPayload { payloads, .. } => {
+            for nested in payloads {
+                index_record_pattern_field(nested, program, sources, tokens, output);
+            }
+        }
+        PatternKind::Variable(_)
+        | PatternKind::Wildcard
+        | PatternKind::Constructor { inner: None, .. }
+        | PatternKind::EnumVariant { .. }
+        | PatternKind::Int(_)
+        | PatternKind::Bool(_)
+        | PatternKind::String(_)
+        | PatternKind::Char(_) => {}
+    }
+}
+
+fn record_pattern_field_span(tokens: &[Token], pattern: Span, name: &str) -> Option<Span> {
+    let start = tokens.iter().position(|token| {
+        token.span.start >= pattern.start
+            && token.span.end <= pattern.end
+            && token.kind == TokenKind::LBrace
+    })?;
+    let mut depth = 1usize;
+    let mut expect_field = true;
+    for (index, token) in tokens.iter().enumerate().skip(start + 1) {
+        if token.span.end > pattern.end {
+            break;
+        }
+        if depth == 1 && expect_field {
+            if let (TokenKind::Ident(found), Some(next)) = (&token.kind, tokens.get(index + 1)) {
+                if found == name
+                    && matches!(
+                        next.kind,
+                        TokenKind::Colon | TokenKind::Comma | TokenKind::RBrace
+                    )
+                {
+                    return Some(token.span);
+                }
+            }
+            expect_field = false;
+        }
+        match token.kind {
+            TokenKind::LBrace => depth += 1,
+            TokenKind::RBrace => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    break;
+                }
+            }
+            TokenKind::Comma if depth == 1 => expect_field = true,
+            _ => {}
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2398,18 +2645,32 @@ mod tests {
             "[project]\nname = \"record-pattern\"\nversion = \"1.0.0\"\n",
         )
         .unwrap();
-        let source = "struct Customer { name: String }\nfn main() { customer = Customer { name: \"Ada\" } result_value = match customer { Customer { name } => name } print(result_value) }\n";
+        let source = "struct Customer { name: String }\nfn main() { customer = Customer { name: \"Ada\" } result_value = match customer { Customer { name: customer_name } => customer_name } print(result_value) }\n";
         fs::write(root.join("main.zyl"), source).unwrap();
         let entry = root.join("main.zyl");
         let analysis = language_service::analyze(&entry, &[]);
         assert!(analysis.success, "{:?}", analysis.diagnostics);
         let index = SemanticIndex::from_analysis(&analysis);
-        let pattern_offset = source.find("Customer { name }").unwrap();
+        let pattern_offset = source.find("Customer { name: customer_name }").unwrap();
         let occurrence = index.at("main.zyl", pattern_offset).unwrap();
         let symbol = index.symbol(&occurrence.key).unwrap();
         let changes = plan_symbol_rename(&entry, &analysis, &index, symbol, "Account", &[])
             .expect("record declaration, literal, and pattern should rename together");
-        assert!(changes[0].after.contains("Account { name }"));
+        assert!(changes[0].after.contains("Account { name: customer_name }"));
+
+        let field_offset = source.find("name: customer_name }").unwrap();
+        let field_use = index.at("main.zyl", field_offset).unwrap();
+        assert!(field_use.key.starts_with("record-field:"));
+        let field_symbol = index.symbol(&field_use.key).unwrap();
+        let changes =
+            plan_symbol_rename(&entry, &analysis, &index, field_symbol, "display_name", &[])
+                .expect("field rename should preserve the pattern's local binding");
+        assert!(changes[0]
+            .after
+            .contains("struct Customer { display_name: String }"));
+        assert!(changes[0]
+            .after
+            .contains("Customer { display_name: customer_name }"));
         fs::remove_dir_all(root).unwrap();
     }
 
