@@ -251,6 +251,110 @@ impl SemanticIndex {
             .iter()
             .map(|symbol| symbol.key.clone())
             .collect::<HashSet<_>>();
+        for type_definition in &program.types {
+            if let Some(span) = declaration_type_value_span(
+                type_definition.span,
+                tokens
+                    .get(&type_definition.span.source_id)
+                    .map(Vec::as_slice)
+                    .unwrap_or(&[]),
+            ) {
+                push_type_references(
+                    &type_definition.target,
+                    span,
+                    &known,
+                    &analysis.sources,
+                    &tokens,
+                    &mut index.occurrences,
+                );
+            }
+        }
+        for table in &program.tables {
+            for column in &table.columns {
+                push_type_references(
+                    &column.ty,
+                    column.span,
+                    &known,
+                    &analysis.sources,
+                    &tokens,
+                    &mut index.occurrences,
+                );
+            }
+        }
+        for form in &program.forms {
+            for field in form
+                .fields
+                .iter()
+                .chain(form.actions.iter().flat_map(|action| &action.fields))
+            {
+                if let Some(ty) = &field.ty {
+                    push_type_references(
+                        ty,
+                        field.span,
+                        &known,
+                        &analysis.sources,
+                        &tokens,
+                        &mut index.occurrences,
+                    );
+                }
+            }
+        }
+        for api in &program.apis {
+            for field in &api.input {
+                push_type_references(
+                    &field.ty,
+                    field.span,
+                    &known,
+                    &analysis.sources,
+                    &tokens,
+                    &mut index.occurrences,
+                );
+            }
+        }
+        for page in &program.pages {
+            for input in &page.inputs {
+                push_type_references(
+                    &input.ty,
+                    input.span,
+                    &known,
+                    &analysis.sources,
+                    &tokens,
+                    &mut index.occurrences,
+                );
+            }
+            for data in &page.data {
+                push_type_references(
+                    &data.result_type,
+                    data.span,
+                    &known,
+                    &analysis.sources,
+                    &tokens,
+                    &mut index.occurrences,
+                );
+            }
+        }
+        for tableview in &program.tableviews {
+            push_type_references(
+                &tableview.result_type,
+                tableview.span,
+                &known,
+                &analysis.sources,
+                &tokens,
+                &mut index.occurrences,
+            );
+        }
+        for component in &program.components {
+            for prop in &component.props {
+                push_type_references(
+                    &prop.ty,
+                    prop.span,
+                    &known,
+                    &analysis.sources,
+                    &tokens,
+                    &mut index.occurrences,
+                );
+            }
+        }
         for function in &program.functions {
             for parameter in &function.params {
                 if let Some(span) = parameter_type_span(
@@ -566,6 +670,28 @@ fn function_return_type_span(function: Span, body_start: usize, tokens: &[Token]
         line: first.line,
         column: first.column,
         source_id: function.source_id,
+    })
+}
+
+fn declaration_type_value_span(declaration: Span, tokens: &[Token]) -> Option<Span> {
+    let equal = tokens
+        .iter()
+        .position(|token| token.span.start >= declaration.end && token.kind == TokenKind::Equal)?;
+    let mut type_tokens = Vec::new();
+    for token in tokens.iter().skip(equal + 1) {
+        if matches!(token.kind, TokenKind::Newline | TokenKind::Eof) {
+            break;
+        }
+        type_tokens.push(token);
+    }
+    let first = type_tokens.first()?.span;
+    let last = type_tokens.last()?.span;
+    Some(Span {
+        start: first.start,
+        end: last.end,
+        line: first.line,
+        column: first.column,
+        source_id: declaration.source_id,
     })
 }
 
@@ -1014,7 +1140,7 @@ mod tests {
             "[project]\nname = \"record-type-rename\"\nversion = \"1.0.0\"\n",
         )
         .unwrap();
-        let source = "import \"src/models.zyl\" as model\nfn retain(customer: model::Customer) -> model::Customer { return customer }\nfn main() { customer: model::Customer = model::Customer { name: \"Ada\" } print(customer.name) }\n";
+        let source = "import \"src/models.zyl\" as model\ntype CustomerAlias = model::Customer\nfn retain(customer: model::Customer) -> model::Customer { return customer }\nfn main() { customer: model::Customer = model::Customer { name: \"Ada\" } print(customer.name) }\n";
         fs::write(root.join("main.zyl"), source).unwrap();
         fs::write(
             root.join("src/models.zyl"),
@@ -1029,7 +1155,12 @@ mod tests {
             .at("main.zyl", source.find("Customer {").unwrap())
             .unwrap();
         let symbol = index.symbol(&occurrence.key).unwrap();
-        assert_eq!(index.references(&symbol.key, false).len(), 4);
+        assert_eq!(
+            index.references(&symbol.key, false).len(),
+            5,
+            "{:?}",
+            index.references(&symbol.key, false)
+        );
         let changes = plan_symbol_rename(&entry, &analysis, &index, symbol, "Account", &[])
             .expect("type annotation and record literal should be renamed together");
         assert_eq!(changes.len(), 2);
@@ -1039,6 +1170,9 @@ mod tests {
         assert!(changes.iter().any(|change| change
             .after
             .contains("fn retain(customer: model::Account) -> model::Account")));
+        assert!(changes
+            .iter()
+            .any(|change| change.after.contains("type CustomerAlias = model::Account")));
         fs::remove_dir_all(root).unwrap();
     }
 

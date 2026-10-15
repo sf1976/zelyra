@@ -37,10 +37,11 @@ project declarations and supported local parameters and bindings. F12 opens a
 resolved function or record definition in the current or an imported file.
 Shift+F12 shows indexed references. These actions use the compiler's linked AST
 and analyze all open, unsaved `.zyl` files together. Record references include
-record literals, local record patterns, function parameter and return types,
-local binding annotations, and record-field type annotations. Record field
-names and accesses are not yet indexed. Project-wide free-text search remains
-a separate tool.
+record literals, local record patterns, type aliases, function parameter and
+return types, local binding annotations, and record-field, table-column,
+component-property, form, API-input, page-input, and tableview type annotations.
+Record field names and accesses are not yet indexed. Project-wide free-text
+search remains a separate tool.
 
 Press **F2** on a resolved function or indexed record name to rename it. Studio
 previews every affected file and checks the candidate with the compiler. If an

@@ -41,10 +41,11 @@ Record-Deklarationen in derselben oder einer importierten Datei. Umschalt+F12
 zeigt indexierte Verweise. Beide Aktionen verwenden den verlinkten Compiler-
 AST und berücksichtigen alle geöffneten, ungespeicherten `.zyl`-Dateien als
 gemeinsame Projektanalyse. Record-Verweise umfassen Record-Literale, lokale
-Record-Muster, Funktionsparameter und Rückgabetypen, lokale
-Variablentypannotationen sowie Typen von Record-Feldern. Feldnamen und
-Feldzugriffe sind noch nicht indexiert. Die freie projektweite Textsuche bleibt
-ein getrenntes Werkzeug.
+Record-Muster, Typaliase, Funktionsparameter und Rückgabetypen, lokale
+Variablentypannotationen sowie Typen von Record-Feldern, Tabellenspalten,
+Komponenteneigenschaften, Formularen, API-Eingaben, Seiteneingaben und
+Tableviews. Feldnamen und Feldzugriffe sind noch nicht indexiert. Die freie
+projektweite Textsuche bleibt ein getrenntes Werkzeug.
 
 Mit **F2** lässt sich eine aufgelöste Funktion oder ein indexierter Record-Name
 umbenennen. Studio zeigt vorab alle betroffenen Dateien und prüft die Änderung
