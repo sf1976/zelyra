@@ -33,6 +33,21 @@ Abschnitte bleiben als historische Planung und Nachweise erhalten; sie legen
 für sich keine aktuellen Releaseziele fest. Langfristige Ideen stehen im
 Abschnitt zur Weiterentwicklung nach 1.0.0.
 
+## Geplanter Meilenstein 1.1.5 — Laravel-Importer und sichere Migration
+
+Dieser Meilenstein ist **geplant**, nicht implementiert oder freigegeben. Er hat vor dem Modul-/Paketsystem 1.2.0 und der MIR-/Bytecode-VM 1.3.0 Priorität. Bestehende produktive Laravel-Anwendungen bleiben während der Analyse und Migration unverändert; kein automatischer Produktivwechsel.
+
+- [ ] **Bestandsaufnahme:** Den vorhandenen Laravel-Importer im Repository prüfen und bereits unterstützte Analyse-, Import- und Diagnosefunktionen dokumentieren. Vorhandenes weiterentwickeln statt parallel neu bauen.
+- [ ] **Strukturierte Analyse:** Laravel-Routen, Controller, Models, Beziehungen, Form Requests/Validierung, Policies/Gates, Middleware, Blade-Views, Services, Jobs, Events, Queues, Composer-Abhängigkeiten und Datenbankschema erfassen; dynamische PHP-Muster und nicht auflösbare Abhängigkeiten ausdrücklich kennzeichnen.
+- [ ] **Maschinenlesbarer Migrationsbericht:** Pro Komponente Herkunft und Quellposition, Abhängigkeiten, Sicherheits- und Datenbankeffekte, unterstützte/nicht unterstützte Konstrukte, Risiken sowie Einstufung in automatisch übertragbar, teilautomatisch oder manuell erforderlich ausgeben. Keine unbelegten Vollständigkeitsbehauptungen.
+- [ ] **Kontrollierte Zelyra-Generierung:** Zuerst klar abgegrenzte CRUD-, Modell-, Validierungs-, Routing- und einfache Controller-Fälle in idiomatischen, statisch geprüften Zelyra-Code übertragen. Keine stillschweigend erfundenen Geschäftsregeln; bestehende Zelyra-Typen, SQL-Prüfung, Verträge und Capabilities nutzen.
+- [ ] **Datenbank- und Produktionssicherheit:** Bestehende Datenbank zunächst nur lesend inspizieren; keine automatischen Schemaänderungen oder Datenmigrationen. Notwendige Änderungen als überprüfbare SQL-Skripte mit Vorschau und ausdrücklicher Freigabe bereitstellen. Geheimnisse redigieren und keine produktiven Kundendaten in Testfixtures übernehmen.
+- [ ] **Schrittweise Einführung:** Bestehendes Laravel bleibt produktiv; Zelyra-Komponenten zuerst isoliert oder im Shadow-/Read-only-Betrieb validieren. Umschaltung, Rollback und Berechtigungen explizit planen; Schreiboperationen niemals unkontrolliert doppelt ausführen.
+- [ ] **Verhaltensvergleich:** Wo sicher möglich, identische Fixtures/Testfälle gegen Laravel und Zelyra ausführen und HTTP-Antworten, Validierung, Autorisierung, Geschäftsregeln und Datenbankeffekte vergleichen. Abweichungen nachvollziehbar protokollieren; Vergleichsergebnisse sind kein pauschaler formaler Äquivalenzbeweis.
+- [ ] **Reale Referenzprojekte:** Mehrere unterschiedlich komplexe bestehende Laravel-Projekte mit anonymisierten Daten als Regressionstests nutzen; Importquote, manuelle Nacharbeit, Compilerdiagnosen, Korrektheit und Laufzeitkosten messen.
+- [ ] **CLI-/Studio-Workflow und Dokumentation:** Analyse, Preview, gezielte Generierung und explizite Übernahme mit verständlichen Diagnosen, stabilen maschinenlesbaren Ergebnissen und deutsch-/englischsprachigen Beispielen bereitstellen.
+- [ ] **Freigabekriterium 1.1.5:** Dokumentation, positive/negative Tests, Berechtigungs- und SQL-Sicherheit, reproduzierbare Referenzmigrationen und geprüfter Rollback liegen vor; keine Behauptung einer vollständigen automatischen Laravel-Konvertierung.
+
 ## Geplante Architektur-Meilensteine (1.2.0 und 1.3.0)
 
 Diese Punkte sind geplant, weder bereits umgesetzt noch veröffentlicht. Die bestehenden Verpflichtungen für 1.1.0 bleiben bestehen. Vor der Implementierung den aktuellen Quellcode prüfen und bereits vorhandene Funktionen berücksichtigen.
