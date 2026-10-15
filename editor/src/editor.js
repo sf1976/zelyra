@@ -258,7 +258,7 @@ const messages = {
     toggleExplorer: "Dateiübersicht umschalten", search: "Suchen", handbook: "Handbuch", projectFiles: "Projektdateien",
     openFile: "Datei öffnen", complete: "Vervollständigen", completeHelp: "Codevorschläge anzeigen (Strg+Leertaste)", ready: "Bereit", localMode: "Lokaler Modus",
     noDocument: "Kein Dokument geöffnet", opened: "{0} geöffnet", unsaved: "Ungespeicherte Änderungen",
-    saved: "{0} gespeichert", checkRunning: "Projekt wird geprüft …", checkPassed: "Projektprüfung erfolgreich",
+    saved: "{0} gespeichert", savedAll: "{0} Dateien gemeinsam gespeichert", checkRunning: "Projekt wird geprüft …", checkPassed: "Projektprüfung erfolgreich",
     problemsFound: "{0} Problem(e) gefunden", formatRunning: "Formatiere …", formatted: "{0} formatiert",
     createPrompt: "Neuer Dateipfad im Projekt (zum Beispiel src/customer.zyl)",
     closeUnsaved: "{0} enthält ungespeicherte Änderungen. Tab trotzdem schließen?",
@@ -365,7 +365,7 @@ const messages = {
     toggleExplorer: "Toggle file explorer", search: "Search", handbook: "Handbook", projectFiles: "Project files",
     openFile: "Open file", complete: "Complete", completeHelp: "Show code suggestions (Ctrl+Space)", ready: "Ready", localMode: "Local mode",
     noDocument: "No document open", opened: "Opened {0}", unsaved: "Unsaved changes",
-    saved: "Saved {0}", checkRunning: "Checking project …", checkPassed: "Project check passed",
+    saved: "Saved {0}", savedAll: "Saved {0} files together", checkRunning: "Checking project …", checkPassed: "Project check passed",
     problemsFound: "Found {0} problem(s)", formatRunning: "Formatting …", formatted: "Formatted {0}",
     createPrompt: "New project file path (for example src/customer.zyl)",
     closeUnsaved: "{0} has unsaved changes. Close this tab anyway?",
@@ -1502,8 +1502,23 @@ async function savePath(path) {
 }
 function saveActive() { if (activePath) void savePath(activePath); }
 async function saveAll() {
-  for (const path of tabs.keys()) if (!(await savePath(path))) return false;
-  return true;
+  const files = [...tabs].filter(([path, tab]) => isDirty(tab, path)).map(([path, tab]) => ({
+    path, content: tabState(path, tab).doc.toString(), baseHash: tab.hash,
+  }));
+  if (!files.length) return true;
+  try {
+    const result = await api("file-save-batch", { method: "POST", body: JSON.stringify({ files }) });
+    for (const file of result.files || []) {
+      const tab = tabs.get(file.path);
+      if (!tab) continue;
+      tab.saved = file.content;
+      tab.hash = file.hash;
+      symbolCache.delete(file.path);
+    }
+    renderTabs();
+    announce(t("savedAll", files.length), "success");
+    return true;
+  } catch (error) { announce(error.message, "error"); return false; }
 }
 
 async function renameActiveFile() {

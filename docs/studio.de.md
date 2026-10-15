@@ -47,8 +47,11 @@ getrenntes Werkzeug.
 Mit **F2** lässt sich eine aufgelöste Funktion umbenennen. Studio zeigt vorab
 alle betroffenen Dateien und prüft die Änderung mit dem Compiler. Die Übernahme
 ändert die geöffneten Puffer; jede Datei kann separat rückgängig gemacht und
-gespeichert werden. Ein absturzsicheres gemeinsames Speichern mehrerer Dateien
-ist noch nicht implementiert.
+gespeichert werden. **Alle speichern** schreibt bis zu 16 Dateien gemeinsam
+und legt vorher ein privates Wiederherstellungsjournal unter `.zelyra/` an.
+Nach einer Unterbrechung stellt Studio nicht abgeschlossene Schreibvorgänge
+beim nächsten Start wieder her. Datei-Renames mit Importanpassungen sind noch
+nicht unterstützt.
 
 Compilerdiagnosen werden während der Bearbeitung von Zelyra-Projektdateien
 aktualisiert. Bei vorhandenen `.zyl`-Dateien prüft der Compiler den

@@ -87,8 +87,18 @@ try {
     return response.json();
   }, { token });
   assert.equal(saved.content, math, "semantic refactoring leaves disk unchanged until the user saves");
+  await page.locator("#save-all-button").click();
+  await page.waitForFunction(() => document.querySelector("#status-message")?.textContent?.includes("2 Dateien gemeinsam gespeichert"));
+  const savedFiles = await page.evaluate(async ({ token }) => {
+    const read = async (path) => (await fetch(`/__zelyra/editor/api/file?path=${encodeURIComponent(path)}`, {
+      headers: { "X-Zelyra-Editor-Token": token },
+    })).json();
+    return Promise.all([read("main.zyl"), read("src/math.zyl")]);
+  }, { token });
+  assert.match(savedFiles[0].content, /math::calculate_answer\(\)/);
+  assert.match(savedFiles[1].content, /fn calculate_answer\(\)/);
   assert.deepEqual(errors, [], `browser errors: ${errors.join(", ")}`);
-  console.log(`Studio semantic rename preview and cross-file buffer update passed in ${engineName}`);
+  console.log(`Studio semantic rename and journaled multi-file save passed in ${engineName}`);
 } finally {
   await browser?.close();
   if (processHandle && processHandle.exitCode === null) {

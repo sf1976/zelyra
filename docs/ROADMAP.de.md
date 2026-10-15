@@ -1392,8 +1392,10 @@ Rückmeldungen des Projektverantwortlichen ersetzen keinen Teilnehmertest.
   Funktionsdefinitionen und Referenzen funktionieren nun in Studio und LSP;
   das LSP liefert auch compilergeprüfte Funktions-Umbenennungen als Vorschau.
   Studio zeigt dieselben compilergeprüften Funktions-Umbenennungen und kann sie
-  in geöffneten Puffern übernehmen. Absturzsichere Mehrdatei-Schreibvorgänge
-  und Importanpassungen beim Datei-Rename fehlen noch.
+  in geöffneten Puffern übernehmen. **Alle speichern** verwendet jetzt private
+  Wiederherstellungsjournale und Konfliktprüfungen für mehrere Dateien.
+  Importanpassungen beim Datei-Rename und ein gemeinsames Journal für Rename
+  plus Quelltextänderungen fehlen noch.
   Eine versionierte Contract-Leiste zeigt jetzt echte Verifier-Ergebnisse und
   verschwindet bei ungültiger Quelle. Ein compilerbasiertes Typed-Hole-Menü in
   Studio und LSP filtert bekannte exakte Typen und deklarierte Capabilities

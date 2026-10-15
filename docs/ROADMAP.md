@@ -1338,7 +1338,8 @@ rehearsals, and owner feedback do not substitute for participant testing.
   work in Studio and LSP; LSP also previews compiler-checked function renames.
   Studio now previews and applies resolved function renames across open
   buffers using the same compiler-checked plan. Durable journaled multi-file
-  writes and import-aware file renames remain incomplete.
+  writes for Save All now have private recovery journals and conflict checks;
+  import-aware file renames and combined refactor journals remain incomplete.
   A versioned gutter now displays real verifier outcomes and clears on invalid
   source. A compiler-backed typed-hole menu in Studio and LSP filters known
   exact types and declared Capabilities, with precise replacement spans. An

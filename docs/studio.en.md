@@ -42,8 +42,10 @@ free-text search remains a separate tool.
 
 Press **F2** on a resolved function to rename it. Studio previews every
 affected file and checks the candidate with the compiler. Applying the change
-updates open buffers; each file can be undone and saved separately. A crash
-recoverable atomic save across multiple files is not implemented yet.
+updates open buffers; each file can be undone and saved separately. **Save
+all** writes up to 16 files together and first creates a private recovery
+journal under `.zelyra/`. On restart, Studio rolls back an interrupted batch.
+File rename with import updates is not supported yet.
 
 Compiler diagnostics update while editing Zelyra project files. For existing
 `.zyl` files the current buffer and other changed `.zyl` tabs are checked through

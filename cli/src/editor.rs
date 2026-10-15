@@ -19,6 +19,8 @@ mod editor_capabilities;
 mod editor_outbox;
 #[path = "editor_pdf.rs"]
 mod editor_pdf;
+#[path = "editor_transactions.rs"]
+mod editor_transactions;
 #[path = "editor_watcher.rs"]
 mod editor_watcher;
 
@@ -132,6 +134,12 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
             return ExitCode::from(1);
         }
     };
+    if let Err(error) = editor_transactions::recover(&root) {
+        eprintln!(
+            "error[E-EDITOR-005]: could not recover pending Studio file transaction: {error}"
+        );
+        return ExitCode::from(1);
+    }
     if !root.join("zelyra.toml").is_file()
         && !root.join("main.zyl").is_file()
         && !root.join(".zelyra").is_dir()
@@ -520,6 +528,9 @@ fn editor_response(
         }
         ("PUT", "file") => write_existing_file(state, parse_json_body(&request.body)?, false),
         ("POST", "file") => write_existing_file(state, parse_json_body(&request.body)?, true),
+        ("POST", "file-save-batch") => {
+            save_editor_files_batch(state, parse_json_body(&request.body)?)
+        }
         ("POST", "file-rename") => rename_editor_file(state, parse_json_body(&request.body)?),
         ("DELETE", "file") => delete_editor_file(state, parse_json_body(&request.body)?),
         ("POST", "check") => check_project(state, &parse_json_body(&request.body)?),
@@ -3719,6 +3730,72 @@ fn write_existing_file(
     ))
 }
 
+fn save_editor_files_batch(
+    state: &EditorState,
+    request: Value,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let files = request
+        .get("files")
+        .and_then(Value::as_array)
+        .ok_or((400, "files must be an array".into()))?;
+    if files.is_empty() || files.len() > EDITOR_MAX_ANALYSIS_OVERLAYS {
+        return Err((400, "save batch must contain between 1 and 16 files".into()));
+    }
+    let mut seen = HashSet::new();
+    let mut total_bytes = 0_usize;
+    let mut changes = Vec::new();
+    let mut saved = Vec::new();
+    for item in files {
+        let relative = item
+            .get("path")
+            .and_then(Value::as_str)
+            .ok_or((400, "each saved file needs a path".into()))?;
+        if !seen.insert(relative) {
+            return Err((400, "save batch contains a duplicate path".into()));
+        }
+        let path = safe_editor_path(&state.root, relative, false)?;
+        let content = item
+            .get("content")
+            .and_then(Value::as_str)
+            .ok_or((400, "file content must be text".into()))?;
+        total_bytes = total_bytes.saturating_add(content.len());
+        if content.len() > EDITOR_MAX_FILE_BYTES || total_bytes > EDITOR_MAX_FILE_BYTES {
+            return Err((413, "save batch exceeds the 1 MiB source limit".into()));
+        }
+        let base_hash = item
+            .get("baseHash")
+            .and_then(Value::as_str)
+            .ok_or((400, "each saved file needs a baseHash".into()))?;
+        let before = fs::read(&path).map_err(|_| (404, "file not found".into()))?;
+        if content_hash(&before) != base_hash {
+            return Err((
+                409,
+                format!("`{relative}` changed on disk; reload it before saving"),
+            ));
+        }
+        let after = content.as_bytes().to_vec();
+        if before != after {
+            changes.push(editor_transactions::FileChange {
+                path: relative.into(),
+                before,
+                after: after.clone(),
+            });
+        }
+        saved.push(json!({"path":relative,"content":content,"hash":content_hash(&after)}));
+    }
+    editor_transactions::apply(&state.root, &changes).map_err(|error| (500, error))?;
+    for item in &saved {
+        if let Some(path) = item.get("path").and_then(Value::as_str) {
+            state.events.changed(path, "save");
+        }
+    }
+    Ok((
+        200,
+        "application/json; charset=utf-8",
+        json!({"files":saved,"transactional":true}).to_string(),
+    ))
+}
+
 fn editor_file_hash(
     state: &EditorState,
     relative: &str,
@@ -5980,6 +6057,60 @@ fn main() {}
             fs::read_to_string(&path).expect("read saved source"),
             updated
         );
+        let _ = fs::remove_dir_all(state.root.clone());
+    }
+
+    #[test]
+    fn studio_batch_save_updates_files_and_rejects_conflicts_before_any_write() {
+        let state = project();
+        fs::create_dir(state.root.join("src")).unwrap();
+        let main_path = state.root.join("main.zyl");
+        let module_path = state.root.join("src/math.zyl");
+        let main_before = fs::read(&main_path).unwrap();
+        let module_before = b"pub fn answer() -> Int { return 1 }\n".to_vec();
+        fs::write(&module_path, &module_before).unwrap();
+        let response = save_editor_files_batch(&state, json!({"files":[
+            {"path":"main.zyl","content":"fn main() { print(2) }\n","baseHash":content_hash(&main_before)},
+            {"path":"src/math.zyl","content":"pub fn answer() -> Int { return 2 }\n","baseHash":content_hash(&module_before)}
+        ]})).unwrap();
+        let result: Value = serde_json::from_str(&response.2).unwrap();
+        assert_eq!(result["transactional"], true);
+        assert_eq!(result["files"].as_array().unwrap().len(), 2);
+        let committed_main = fs::read(&main_path).unwrap();
+        let committed_module = fs::read(&module_path).unwrap();
+        fs::write(&main_path, b"external edit\n").unwrap();
+        let error = save_editor_files_batch(&state, json!({"files":[
+            {"path":"main.zyl","content":"fn main() {}\n","baseHash":content_hash(&committed_main)},
+            {"path":"src/math.zyl","content":"pub fn answer() -> Int { return 3 }\n","baseHash":content_hash(&committed_module)}
+        ]})).unwrap_err();
+        assert_eq!(error.0, 409);
+        assert_eq!(fs::read(&module_path).unwrap(), committed_module);
+        let _ = fs::remove_dir_all(state.root.clone());
+    }
+
+    #[test]
+    fn studio_recovers_interrupted_multi_file_save_from_private_journal() {
+        let state = project();
+        let source = state.root.join("main.zyl");
+        let before = fs::read(&source).unwrap();
+        let after = b"fn main() { print(99) }\n";
+        let journal = state.root.join(".zelyra/studio-transactions/txn-fixture");
+        fs::create_dir_all(&journal).unwrap();
+        fs::write(journal.join("backup-0000"), &before).unwrap();
+        fs::write(
+            journal.join("manifest.json"),
+            json!({"schema":1,"files":[{
+                "path":"main.zyl","beforeHash":content_hash(&before),
+                "afterHash":content_hash(after),"backup":"backup-0000"
+            }]})
+            .to_string(),
+        )
+        .unwrap();
+        fs::write(journal.join("prepared"), b"prepared").unwrap();
+        fs::write(&source, after).unwrap();
+        editor_transactions::recover(&state.root).expect("incomplete transaction should roll back");
+        assert_eq!(fs::read(source).unwrap(), before);
+        assert!(!journal.exists());
         let _ = fs::remove_dir_all(state.root.clone());
     }
 
