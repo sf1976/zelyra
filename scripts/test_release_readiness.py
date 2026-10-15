@@ -152,6 +152,11 @@ class ReleaseReadinessTests(unittest.TestCase):
             failures = unfinished_gates(root, "1.1.0")
             self.assertTrue(any("release gate is incomplete" in item for item in failures))
 
+            english_path.write_text("## Outstanding acceptance\n\n- [~] Partial gate\n", encoding="utf-8")
+            failures = unfinished_gates(root, "1.1.0")
+            self.assertTrue(any("release gate is incomplete" in item for item in failures))
+            self.assertFalse(any("not a checklist item" in item for item in failures))
+
             (root / RELEASE_PLAN_CHECKLISTS["1.1.0"][1][0]).unlink()
             failures = unfinished_gates(root, "1.1.0")
             self.assertTrue(any("missing or unreadable" in item for item in failures))

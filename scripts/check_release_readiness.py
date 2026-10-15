@@ -248,7 +248,7 @@ def _unfinished_release_plan_checklist(root: Path, relative_path: str, heading: 
 
     failures = []
     for line_number, item in section:
-        match = re.match(r"^- \[([ xX])\] .+", item)
+        match = re.match(r"^- \[([ xX~])\] .+", item)
         if match is None:
             failures.append(f"release gate is not a checklist item ({relative_path}:{line_number})")
         elif match.group(1).casefold() != "x":
