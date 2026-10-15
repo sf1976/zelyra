@@ -64,8 +64,10 @@ The CLI must be available on Neovim's `PATH` in either configuration.
 
 The server uses JSON-RPC `Content-Length` framing and writes protocol messages
 only to stdout. Diagnostics carry document versions; stale edits are not
-treated as the current document state. General local bindings are not yet fully
-resolved semantically. Requests are currently processed synchronously, so an
-LSP request cannot be cancelled while analysis is running. Workspace symbols
-and semantic refactorings are limited to symbol kinds that the compiler index
-can resolve safely.
+treated as the current document state. Expensive language requests run in at
+most four background jobs. `$/cancelRequest` replies with `-32800` and discards
+the eventual result. The compiler operation itself is not preempted and keeps
+its bounded job slot until it finishes. If a document changes or closes during
+a request, the stale result is discarded with `-32801`. General local bindings
+are not yet fully resolved semantically. Workspace symbols and refactorings
+remain limited to symbol kinds that the compiler index can resolve safely.

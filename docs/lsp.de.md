@@ -67,8 +67,11 @@ In jedem Fall muss die CLI über Neovims `PATH` erreichbar sein.
 Der Server verwendet JSON-RPC `Content-Length`-Framing und schreibt
 Protokollnachrichten ausschließlich nach stdout. Diagnosen tragen
 Dokumentversionen; veraltete Änderungen werden nicht als aktueller Dokumentstand
-behandelt. Allgemeine lokale Bindings sind noch nicht vollständig semantisch
-aufgelöst. Anfragen werden derzeit synchron verarbeitet; LSP-Abbruch während
-einer laufenden Analyse ist daher noch nicht verfügbar. Workspace-Symbole und
-semantische Refactorings sind auf die vom Compilerindex sicher auflösbaren
-Symbolarten begrenzt.
+behandelt. Teure Sprachabfragen laufen in höchstens vier Hintergrundjobs.
+`$/cancelRequest` beantwortet abgebrochene Anfragen mit `-32800` und verwirft
+ihre späteren Ergebnisse. Der Compilerlauf selbst wird dabei nicht vorzeitig
+unterbrochen; er belegt seinen begrenzten Jobplatz bis zum Ende. Ändert oder
+schließt sich ein Dokument während einer Anfrage, wird das veraltete Ergebnis
+mit `-32801` verworfen. Allgemeine lokale Bindings sind noch nicht vollständig
+semantisch aufgelöst. Workspace-Symbole und Refactorings bleiben auf die vom
+Compilerindex sicher auflösbaren Symbolarten begrenzt.

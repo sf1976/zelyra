@@ -4,6 +4,9 @@
 use super::*;
 use std::io::{self, BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{mpsc, Arc};
+use std::time::Duration;
 use url::Url;
 
 const MAX_MESSAGE_BYTES: usize = 2 * 1_048_576;
@@ -16,16 +19,22 @@ struct Document {
     version: i64,
 }
 
+#[derive(Clone)]
 struct Server {
     root: PathBuf,
     documents: HashMap<String, Document>,
     shutdown: bool,
 }
 
+struct PendingRequest {
+    cancelled: Arc<AtomicBool>,
+    document: Option<(String, i64)>,
+}
+
 pub fn command() -> ExitCode {
     let stdin = io::stdin();
     let stdout = io::stdout();
-    match serve(BufReader::new(stdin.lock()), stdout.lock()) {
+    match serve(BufReader::new(stdin), stdout.lock()) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("error[E-LSP-001]: {error}");
@@ -34,18 +43,129 @@ pub fn command() -> ExitCode {
     }
 }
 
-fn serve<R: BufRead, W: Write>(mut input: R, mut output: W) -> io::Result<()> {
+fn serve<R: BufRead + Send + 'static, W: Write>(mut input: R, mut output: W) -> io::Result<()> {
     let mut server = Server {
         root: fs::canonicalize(".")?,
         documents: HashMap::new(),
         shutdown: false,
     };
-    while let Some(message) = read_message(&mut input)? {
+    let (incoming_tx, incoming_rx) = mpsc::sync_channel(32);
+    std::thread::spawn(move || loop {
+        match read_message(&mut input) {
+            Ok(Some(message)) => {
+                if incoming_tx.send(Ok(message)).is_err() {
+                    break;
+                }
+            }
+            Ok(None) => break,
+            Err(error) => {
+                let _ = incoming_tx.send(Err(error));
+                break;
+            }
+        }
+    });
+    let (completed_tx, completed_rx) = mpsc::channel::<(String, Value)>();
+    let mut pending = HashMap::<String, PendingRequest>::new();
+    let mut workers: Vec<std::thread::JoinHandle<()>> = Vec::new();
+    let mut input_closed = false;
+    while !input_closed || !pending.is_empty() {
+        while let Ok((key, response)) = completed_rx.try_recv() {
+            if let Some(request) = pending.remove(&key) {
+                if !request.cancelled.load(Ordering::Acquire) {
+                    let stale = request.document.as_ref().is_some_and(|(uri, version)| {
+                        server
+                            .documents
+                            .get(uri)
+                            .is_none_or(|document| document.version != *version)
+                    });
+                    let response = if stale {
+                        json!({
+                            "jsonrpc":"2.0",
+                            "id":response["id"],
+                            "error":{"code":-32801,"message":"document changed while the request was running"}
+                        })
+                    } else {
+                        response
+                    };
+                    write_message(&mut output, &response)?;
+                }
+            }
+        }
+        let mut running = Vec::new();
+        for worker in workers.drain(..) {
+            if worker.is_finished() {
+                let _ = worker.join();
+            } else {
+                running.push(worker);
+            }
+        }
+        workers = running;
+        if input_closed && pending.is_empty() {
+            break;
+        }
+        let message = match incoming_rx.recv_timeout(Duration::from_millis(10)) {
+            Ok(Ok(message)) => message,
+            Ok(Err(error)) => return Err(error),
+            Err(mpsc::RecvTimeoutError::Timeout) => continue,
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                input_closed = true;
+                continue;
+            }
+        };
         let Some(method) = message.get("method").and_then(Value::as_str) else {
             continue;
         };
         let id = message.get("id").cloned();
         let params = message.get("params").cloned().unwrap_or(Value::Null);
+        if matches!(
+            method,
+            "textDocument/documentSymbol"
+                | "workspace/symbol"
+                | "textDocument/completion"
+                | "textDocument/hover"
+                | "textDocument/definition"
+                | "textDocument/references"
+                | "textDocument/prepareRename"
+                | "textDocument/rename"
+        ) {
+            if let Some(id) = id {
+                if workers.len() >= 4 {
+                    write_message(
+                        &mut output,
+                        &json!({"jsonrpc":"2.0","id":id,"error":{"code":-32002,"message":"too many language requests are already running"}}),
+                    )?;
+                    continue;
+                }
+                let key = id.to_string();
+                let document = params
+                    .pointer("/textDocument/uri")
+                    .and_then(Value::as_str)
+                    .and_then(|uri| {
+                        server
+                            .documents
+                            .get(uri)
+                            .map(|doc| (uri.to_owned(), doc.version))
+                    });
+                let cancelled = Arc::new(AtomicBool::new(false));
+                pending.insert(
+                    key.clone(),
+                    PendingRequest {
+                        cancelled: cancelled.clone(),
+                        document,
+                    },
+                );
+                let snapshot = server.clone();
+                let method = method.to_owned();
+                let sender = completed_tx.clone();
+                workers.push(std::thread::spawn(move || {
+                    let response = handle_request(&snapshot, &method, &params, &id);
+                    if !cancelled.load(Ordering::Acquire) {
+                        let _ = sender.send((key, response));
+                    }
+                }));
+            }
+            continue;
+        }
         match method {
             "initialize" => {
                 if let Some(root) = params
@@ -88,14 +208,17 @@ fn serve<R: BufRead, W: Write>(mut input: R, mut output: W) -> io::Result<()> {
                 }
             }
             "exit" => {
-                return if server.shutdown {
-                    Ok(())
-                } else {
-                    Err(io::Error::new(
+                if !server.shutdown {
+                    return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
                         "LSP exit before shutdown",
-                    ))
+                    ));
                 }
+                for request in pending.values() {
+                    request.cancelled.store(true, Ordering::Release);
+                }
+                pending.clear();
+                input_closed = true;
             }
             "textDocument/didOpen" => {
                 if let Some(document) = params.get("textDocument") {
@@ -207,36 +330,29 @@ fn serve<R: BufRead, W: Write>(mut input: R, mut output: W) -> io::Result<()> {
                     }
                 }
             }
-            "textDocument/documentSymbol" | "workspace/symbol" | "textDocument/completion" => {
-                if let Some(id) = id {
-                    let result = server.symbol_response(method, &params);
-                    write_message(
-                        &mut output,
-                        &json!({"jsonrpc":"2.0","id":id,"result":result}),
-                    )?;
-                }
-            }
-            "textDocument/hover"
+            "textDocument/documentSymbol"
+            | "workspace/symbol"
+            | "textDocument/completion"
+            | "textDocument/hover"
             | "textDocument/definition"
             | "textDocument/references"
             | "textDocument/prepareRename"
-            | "textDocument/rename" => {
-                if let Some(id) = id {
-                    match server.semantic_response(method, &params) {
-                        Ok(result) => write_message(
-                            &mut output,
-                            &json!({"jsonrpc":"2.0","id":id,"result":result}),
-                        )?,
-                        Err(message) => write_message(
+            | "textDocument/rename" => {}
+            "$/cancelRequest" => {
+                if let Some(cancelled_id) = params.get("id") {
+                    let key = cancelled_id.to_string();
+                    if let Some(request) = pending.remove(&key) {
+                        request.cancelled.store(true, Ordering::Release);
+                        write_message(
                             &mut output,
                             &json!({
-                                "jsonrpc":"2.0","id":id,"error":{"code":-32602,"message":message}
+                                "jsonrpc":"2.0","id":cancelled_id,
+                                "error":{"code":-32800,"message":"request cancelled"}
                             }),
-                        )?,
+                        )?;
                     }
                 }
             }
-            "$/cancelRequest" => {}
             _ => {
                 if let Some(id) = id {
                     write_message(
@@ -250,7 +366,29 @@ fn serve<R: BufRead, W: Write>(mut input: R, mut output: W) -> io::Result<()> {
             }
         }
     }
+    for worker in workers {
+        let _ = worker.join();
+    }
     Ok(())
+}
+
+fn handle_request(server: &Server, method: &str, params: &Value, id: &Value) -> Value {
+    #[cfg(test)]
+    if let Some(delay_ms) = params.get("__testDelayMs").and_then(Value::as_u64) {
+        std::thread::sleep(Duration::from_millis(delay_ms.min(250)));
+    }
+    if matches!(
+        method,
+        "textDocument/documentSymbol" | "workspace/symbol" | "textDocument/completion"
+    ) {
+        return json!({"jsonrpc":"2.0","id":id,"result":server.symbol_response(method, params)});
+    }
+    match server.semantic_response(method, params) {
+        Ok(result) => json!({"jsonrpc":"2.0","id":id,"result":result}),
+        Err(message) => json!({
+            "jsonrpc":"2.0","id":id,"error":{"code":-32602,"message":message}
+        }),
+    }
 }
 
 impl Server {
@@ -951,7 +1089,7 @@ mod tests {
             write_message(&mut input, &request).unwrap();
         }
         let mut output = Vec::new();
-        serve(BufReader::new(input.as_slice()), &mut output).unwrap();
+        serve(BufReader::new(io::Cursor::new(input)), &mut output).unwrap();
         let mut reader = BufReader::new(output.as_slice());
         let mut messages = Vec::new();
         while let Some(message) = read_message(&mut reader).unwrap() {
@@ -999,7 +1137,7 @@ mod tests {
             write_message(&mut input, &request).unwrap();
         }
         let mut output = Vec::new();
-        serve(BufReader::new(input.as_slice()), &mut output).unwrap();
+        serve(BufReader::new(io::Cursor::new(input)), &mut output).unwrap();
         let mut reader = BufReader::new(output.as_slice());
         let mut messages = Vec::new();
         while let Some(message) = read_message(&mut reader).unwrap() {
@@ -1015,6 +1153,86 @@ mod tests {
             "messages: {messages:?}"
         );
         assert!(!root.join("src/new.zyl").exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn lsp_cancellation_replies_without_publishing_the_cancelled_result() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-lsp-cancel-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("main.zyl"), "fn main() {}\n").unwrap();
+        let uri = Url::from_file_path(root.join("main.zyl"))
+            .unwrap()
+            .to_string();
+        let root_uri = Url::from_file_path(&root).unwrap().to_string();
+        let mut input = Vec::new();
+        for request in [
+            json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"rootUri":root_uri}}),
+            json!({"jsonrpc":"2.0","id":"slow","method":"textDocument/documentSymbol","params":{"textDocument":{"uri":uri},"__testDelayMs":100}}),
+            json!({"jsonrpc":"2.0","method":"$/cancelRequest","params":{"id":"slow"}}),
+            json!({"jsonrpc":"2.0","id":2,"method":"shutdown","params":null}),
+            json!({"jsonrpc":"2.0","method":"exit"}),
+        ] {
+            write_message(&mut input, &request).unwrap();
+        }
+        let mut output = Vec::new();
+        serve(BufReader::new(io::Cursor::new(input)), &mut output).unwrap();
+        let mut reader = BufReader::new(output.as_slice());
+        let mut messages = Vec::new();
+        while let Some(message) = read_message(&mut reader).unwrap() {
+            messages.push(message);
+        }
+        assert!(messages
+            .iter()
+            .any(|message| { message["id"] == "slow" && message["error"]["code"] == -32800 }));
+        assert!(!messages
+            .iter()
+            .any(|message| message["id"] == "slow" && message.get("result").is_some()));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn lsp_discards_results_for_documents_changed_during_a_request() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-lsp-stale-result-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("main.zyl"), "fn main() {}\n").unwrap();
+        let uri = Url::from_file_path(root.join("main.zyl"))
+            .unwrap()
+            .to_string();
+        let root_uri = Url::from_file_path(&root).unwrap().to_string();
+        let mut input = Vec::new();
+        for request in [
+            json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"rootUri":root_uri}}),
+            json!({"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":uri,"version":1,"text":"fn main() {}\n"}}}),
+            json!({"jsonrpc":"2.0","id":"slow","method":"textDocument/documentSymbol","params":{"textDocument":{"uri":uri},"__testDelayMs":80}}),
+            json!({"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":uri,"version":2},"contentChanges":[{"text":"fn main() { print(\"new\") }\n"}]}}),
+        ] {
+            write_message(&mut input, &request).unwrap();
+        }
+        let mut output = Vec::new();
+        serve(BufReader::new(io::Cursor::new(input)), &mut output).unwrap();
+        let mut reader = BufReader::new(output.as_slice());
+        let mut messages = Vec::new();
+        while let Some(message) = read_message(&mut reader).unwrap() {
+            messages.push(message);
+        }
+        assert!(
+            messages
+                .iter()
+                .any(|message| { message["id"] == "slow" && message["error"]["code"] == -32801 }),
+            "messages: {messages:?}"
+        );
+        assert!(!messages
+            .iter()
+            .any(|message| message["id"] == "slow" && message.get("result").is_some()));
         fs::remove_dir_all(root).unwrap();
     }
 
