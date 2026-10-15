@@ -5,6 +5,7 @@ import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium, firefox, webkit } from "playwright";
+import axe from "axe-core";
 
 const project = await mkdtemp(join(tmpdir(), "zelyra-studio-pdf-"));
 const binary = resolve(process.env.ZELYRA_BIN || "../target/debug/zelyra");
@@ -72,6 +73,21 @@ fn main() {}
   await page.waitForFunction(() => !document.querySelector("#pdf-preview-frame")?.hidden);
   assert.equal(await page.locator("#pdf-preview-download").isVisible(), true);
   assert.equal(await page.locator("#pdf-preview-download").getAttribute("download"), "zelyra-preview.pdf");
+  const sameOrigin = new URL(url).origin;
+  await page.route(`${sameOrigin}/__zelyra/axe-test.js`, (route) => route.fulfill({
+    status: 200,
+    contentType: "text/javascript",
+    body: axe.source,
+  }));
+  await page.addScriptTag({ url: `${sameOrigin}/__zelyra/axe-test.js` });
+  const accessibility = await page.evaluate(() => axe.run(document, {
+    runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"] },
+  }));
+  assert.deepEqual(
+    accessibility.violations.map(({ id, impact, nodes }) => ({ id, impact, targets: nodes.map(({ target }) => target) })),
+    [],
+    "Studio PDF dialog must pass automated WCAG A/AA checks",
+  );
   const [download] = await Promise.all([
     page.waitForEvent("download"),
     page.locator("#pdf-preview-download").click(),
