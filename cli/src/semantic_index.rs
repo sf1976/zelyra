@@ -92,8 +92,8 @@ pub fn plan_symbol_rename(
             .iter()
             .find(|source| source.path == path)
             .ok_or("reference source is unavailable")?;
-        // This conservative rule protects local shadowing until the semantic
-        // index covers local bindings and all symbol kinds.
+        // Reject any same-spelled identifier until local binding identities
+        // are complete across the full language scope model.
         if lex(&source.text)
             .map_err(|_| "source is not lexable")?
             .iter()
@@ -1248,10 +1248,17 @@ fn resolve_record_type<'a>(
     if let Some(record) = matches.next() {
         return matches.next().is_none().then_some(record);
     }
-    let alias = program
+    if let Some(alias) = program.types.iter().find(|alias| alias.name == *name) {
+        return resolve_record_type(&alias.target, program, depth + 1);
+    }
+    let mut aliases = program
         .types
         .iter()
-        .find(|alias| alias.name == *name || alias.name == short)?;
+        .filter(|alias| alias.name == short || alias.name.ends_with(&format!("::{short}")));
+    let alias = aliases.next()?;
+    if aliases.next().is_some() {
+        return None;
+    }
     resolve_record_type(&alias.target, program, depth + 1)
 }
 
