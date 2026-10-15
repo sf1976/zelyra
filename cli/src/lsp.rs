@@ -976,7 +976,7 @@ mod tests {
             std::thread::current().id()
         ));
         fs::create_dir_all(root.join("src")).unwrap();
-        let main = "import \"src/models.zyl\" as model\nfn retain(customer: model::Customer) -> model::Customer { return customer }\nfn main() { customer = model::Customer { name: \"Ada\" } print(customer.name) }\n";
+        let main = "import \"src/models.zyl\" as model\ntype CustomerAlias = model::Customer\nfn retain(customer: model::Customer) -> model::Customer { return customer }\nfn main() { customer: model::Customer = model::Customer { name: \"Ada\" } print(customer.name) }\n";
         fs::write(root.join("main.zyl"), main).unwrap();
         fs::write(
             root.join("src/models.zyl"),
@@ -1006,7 +1006,7 @@ mod tests {
         let references = server
             .semantic_response("textDocument/references", &params)
             .unwrap();
-        assert_eq!(references.as_array().unwrap().len(), 3);
+        assert_eq!(references.as_array().unwrap().len(), 5);
         let rename = server
             .semantic_response(
                 "textDocument/rename",
@@ -1019,6 +1019,16 @@ mod tests {
             .as_str()
             .unwrap()
             .ends_with("/src/models.zyl")));
+        let main_change = changes
+            .iter()
+            .find(|change| change["textDocument"]["uri"] == uri)
+            .unwrap();
+        assert_eq!(main_change["edits"].as_array().unwrap().len(), 5);
+        assert!(main_change["edits"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|edit| edit["newText"] == "Account"));
         fs::remove_dir_all(root).unwrap();
     }
 
