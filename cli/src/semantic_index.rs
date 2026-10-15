@@ -947,7 +947,18 @@ pub fn visible_local_symbols(program: &Program, source_id: u32, offset: usize) -
         })
         .collect::<Vec<_>>();
     collect_visible_bindings(&function.body, offset, &mut output);
-    output
+    let mut seen = HashSet::new();
+    let mut visible = output
+        .into_iter()
+        .rev()
+        .filter(|item| {
+            item["label"]
+                .as_str()
+                .is_some_and(|label| seen.insert(label.to_owned()))
+        })
+        .collect::<Vec<_>>();
+    visible.reverse();
+    visible
 }
 
 fn collect_visible_bindings(block: &Block, offset: usize, output: &mut Vec<Value>) {
@@ -2576,7 +2587,7 @@ mod tests {
 
     #[test]
     fn local_completion_respects_nested_blocks_loops_matches_and_lambdas() {
-        let source = "fn main(seed: Int) { base = seed if true { branch = base print(_) } mapped = values |> map(|item| item + base) for row in rows { print(row) } result_value = match seed { value if value > 0 => value _ => 0 } print(result_value) }";
+        let source = "fn main(seed: Int) { base = seed if true { base = \"shadow\" branch = base print(_) } mapped = values |> map(|item| item + base) for row in rows { print(row) } result_value = match seed { value if value > 0 => value _ => 0 } print(result_value) }";
         let program = parse(&lex(source).unwrap()).unwrap();
         let labels_at = |needle: &str| {
             let offset = source.find(needle).unwrap();
@@ -2590,6 +2601,7 @@ mod tests {
         let branch = labels_at("print(_)");
         assert!(branch.contains(&"seed".to_owned()));
         assert!(branch.contains(&"base".to_owned()));
+        assert_eq!(branch.iter().filter(|label| *label == "base").count(), 1);
         assert!(branch.contains(&"branch".to_owned()));
         assert!(!branch.contains(&"mapped".to_owned()));
 
