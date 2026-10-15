@@ -5678,6 +5678,8 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         }
     }
 
+    env_file = doctor_environment_file(&path, env_file);
+
     let mut checks = Vec::new();
     let program = if fs::metadata(&path).is_ok() {
         checks.push(DoctorCheck {
@@ -5776,7 +5778,7 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         match build_schema(program) {
             Ok(schema) => {
                 let backend = schema.backend();
-                match file_database_url.or_else(|| database_url_from_program(program)) {
+                match database_url_from_program(program).or(file_database_url) {
                     Some(url) => match inspect_for_backend(backend, &url) {
                         Ok(current) => checks.push(DoctorCheck {
                             name: "database",
@@ -5851,6 +5853,21 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     } else {
         ExitCode::SUCCESS
     }
+}
+
+fn doctor_environment_file(source_path: &str, requested: Option<String>) -> Option<String> {
+    if requested.is_some() {
+        return requested;
+    }
+    let source_path = std::path::Path::new(source_path);
+    let project_directory = source_path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| std::path::Path::new("."));
+    let default_env_file = project_directory.join(".env");
+    default_env_file
+        .is_file()
+        .then(|| default_env_file.to_string_lossy().into_owned())
 }
 
 fn doc_command(mut args: impl Iterator<Item = String>) -> ExitCode {

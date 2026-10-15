@@ -398,7 +398,13 @@ from the process environment. The CLI does not generally auto-load `.env` for
 this purpose; Compose injects them, or they must be exported before invocation.
 `zelyra doctor --env-file <file>` checks that file in this order: the named key,
 then `DATABASE_URL`. Restart Zelyra servers after changing their process
-environment. Named variables are available starting with Zelyra 1.0.4.
+environment. Without `--env-file`, `doctor` automatically checks the `.env`
+beside the selected source file when it exists. A process-environment value
+takes precedence over a value in that file. Doctor output includes only the
+selected variable name and file path, never the connection value. This automatic
+file selection applies only to `doctor`; `run` and `serve` do not generally load
+database URLs from `.env`. Named variables are available starting with Zelyra
+1.0.4.
 
 ## MariaDB timeouts, connection pool, and TLS
 

@@ -147,7 +147,8 @@ These are proposed future milestones, not implemented or released features. Pres
   is informational output, and Canvas explains the separate explicit action
   needed to open the running application. `zelyra serve` binds a free local
   port when its requested port is occupied; `zelyra doctor` reports that case
-  as a warning when a fallback is available. Outbox connection/table warnings
+  as a warning when a fallback is available and reads the project `.env` by
+  default. Outbox connection/table warnings
   explain the optional setup and can be dismissed when unused. Verified with
   Chromium against a running local web app and unreachable MariaDB, fallback
   port unit tests, and the cold Compose invoice Studio flow. See

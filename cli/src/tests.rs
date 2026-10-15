@@ -1144,6 +1144,38 @@ fn doctor_rejects_invalid_port() {
 }
 
 #[test]
+fn doctor_uses_project_env_by_default_and_preserves_explicit_env_file() {
+    let directory = env::temp_dir().join(format!(
+        "zelyra-doctor-project-env-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&directory).unwrap();
+    let source = directory.join("main.zyl");
+    let env_file = directory.join(".env");
+    fs::write(&source, "").unwrap();
+    fs::write(
+        &env_file,
+        "DATABASE_URL=mariadb://user:secret@127.0.0.1/db\n",
+    )
+    .unwrap();
+
+    assert_eq!(
+        doctor_environment_file(source.to_str().unwrap(), None),
+        Some(env_file.to_string_lossy().into_owned())
+    );
+    assert_eq!(
+        doctor_environment_file(source.to_str().unwrap(), Some("custom.env".into())),
+        Some("custom.env".into())
+    );
+
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn doctor_warns_when_the_default_port_is_busy_but_a_fallback_is_available() {
     let occupied = TcpListener::bind(("127.0.0.1", 0)).unwrap();
     let port = occupied.local_addr().unwrap().port();

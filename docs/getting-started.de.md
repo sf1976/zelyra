@@ -251,8 +251,10 @@ Prüfen, ob ein Projekt startbereit ist:
 zelyra doctor examples/machine_management.zyl
 ~~~
 
-`doctor` prüft Quellcode und Schema, meldet die konfigurierte
-Datenbankverbindung ohne Änderungen und prüft den angeforderten Webport. Ist
+`doctor` prüft Quellcode und Schema, liest standardmäßig die Projekt-`.env`
+(oder eine mit `--env-file` angegebene Datei), meldet die konfigurierte
+Datenbankverbindung ohne Änderungen und prüft den angeforderten Webport.
+Prozessvariablen haben Vorrang vor Werten aus der Datei. Ist
 dieser belegt, aber ein Ausweichport verfügbar, erscheint eine Warnung:
 `zelyra serve` verwendet einen freien Port und gibt die Adresse aus. Eine
 fehlende `DATABASE_URL` ist ebenfalls eine Warnung; eine nicht erreichbare

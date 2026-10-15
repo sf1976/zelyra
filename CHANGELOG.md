@@ -10,6 +10,8 @@ releases follow Semantic Versioning independently of the language line.
 
 - Select a free local port when `zelyra serve` finds its requested port busy;
   have `zelyra doctor` warn instead of fail when this fallback is available.
+  Have `doctor` read the project `.env` by default, matching the database
+  configuration used by `serve`.
   Report normal browser disconnects without noisy Studio errors and classify
   the successful web-server ready message as informational output. Explain
   that Canvas is a static preview and point users to the explicit Start and
@@ -18,7 +20,8 @@ releases follow Semantic Versioning independently of the language line.
   uses mail/outbox features. / Normale
   Bei belegtem Port wählt `zelyra serve` automatisch einen freien lokalen Port;
   `zelyra doctor` warnt statt abzubrechen, wenn ein solcher Port verfügbar ist.
-  Normale Browserverbindungsabbrüche erzeugen keine irreführenden Studio-Fehler mehr;
+  `doctor` liest standardmäßig die Projekt-`.env` wie `serve`. Normale
+  Browserverbindungsabbrüche erzeugen keine irreführenden Studio-Fehler mehr;
   die Bereitschaftsmeldung des Webservers erscheint als Information. Canvas
   erklärt jetzt klar, dass es eine statische Vorschau ist, und nennt den Weg
   zur gestarteten Webanwendung. Die Outbox-Meldung erklärt ihre Voraussetzungen

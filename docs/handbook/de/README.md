@@ -280,6 +280,8 @@ Nach dem Start von Compose mit `zelyra doctor main.zyl --env-file .env
 veröffentlichten Port ohne Datenbankänderung prüfen. Ein belegter Port ist
 eine Warnung, wenn ein freier Ausweichport verfügbar ist; `zelyra serve` gibt
 den tatsächlich gewählten Port aus.
+Ohne `--env-file` liest `doctor` automatisch die Projekt-`.env`; Prozessvariablen
+haben Vorrang.
 
 Für ein vollständiges CRUD-Starterprojekt statt der minimalen Willkommensseite:
 

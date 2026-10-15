@@ -236,8 +236,10 @@ Check whether a project is ready to run:
 zelyra doctor examples/machine_management.zyl
 ~~~
 
-`doctor` checks the source and schema, reports the configured database
-connection without changing it, and checks the requested web port. If that
+`doctor` checks the source and schema, reads the project's `.env` by default
+(or a file selected with `--env-file`), reports the configured database
+connection without changing it, and checks the requested web port. Process
+environment variables take precedence over values from the environment file. If that
 port is busy but a fallback is available, it reports a warning: `zelyra serve`
 will use a free port and print the address. A missing `DATABASE_URL` is also a
 warning; an unreachable configured database or invalid project is a failure.

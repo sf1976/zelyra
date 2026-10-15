@@ -428,6 +428,12 @@ aus der Prozessumgebung. Die CLI lädt `.env` dafür nicht allgemein
 automatisch; Compose injiziert die Werte oder sie werden vor dem Aufruf
 exportiert. `zelyra doctor --env-file <datei>` sucht in dieser Reihenfolge in
 der angegebenen Datei: namensgebundener Schlüssel, dann `DATABASE_URL`.
+Ohne `--env-file` prüft `doctor` automatisch die `.env` neben der angegebenen
+Quelldatei, falls diese Datei existiert. Ein Wert aus der Prozessumgebung hat
+Vorrang vor dem Wert aus der Datei. Der Doctor zeigt nur den verwendeten
+Variablennamen und Dateipfad an, niemals den Verbindungswert. Diese automatische
+Datei-Auswahl gilt nur für `doctor`; `run` und `serve` laden Datenbank-URLs
+weiterhin nicht allgemein aus `.env`.
 Zelyra-Server müssen mit den aktualisierten Prozesswerten neu gestartet
 werden. Die namensgebundenen Variablen sind ab Zelyra 1.0.4 verfügbar.
 

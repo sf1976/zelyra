@@ -157,7 +157,8 @@ Diese Punkte sind geplant, weder bereits umgesetzt noch veröffentlicht. Die bes
   ausdrückliche Aktion zum Öffnen der laufenden Anwendung. Bei belegtem
   angefordertem Port bindet `zelyra serve` einen freien lokalen Port;
   `zelyra doctor` meldet den Konflikt als Warnung, wenn ein Ausweichport frei
-  ist. Outbox-Hinweise zu Verbindung und Tabelle nennen die optionale
+  ist, und liest standardmäßig die Projekt-`.env`. Outbox-Hinweise zu
+  Verbindung und Tabelle nennen die optionale
   Einrichtung und lassen sich bei Nichtnutzung schließen. Mit Chromium,
   echter lokaler Webanwendung, unerreichbarer MariaDB, Port-Fallback-Tests und
   dem kalten Compose-Rechnungstutorial geprüft.
