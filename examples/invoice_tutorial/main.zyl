@@ -23,6 +23,7 @@ page "/" {
                     <div class="invoice-home-actions">
                         <Button label="Create invoice" href="/invoices/new" appearance="success" translation_key="invoice.home.new_invoice" />
                         <Button label="Open invoice overview" href="/views/invoicedashboard" translation_key="invoice.home.overview" />
+                        <Button label="Explore code tour" href="/tour" appearance="default" translation_key="invoice.home.tour_action" />
                     </div>
                     <div class="invoice-home-proof">
                         <span class="invoice-home-check">✓</span>
@@ -140,6 +141,19 @@ page "/" {
                         </div>
                     </article>
                 </Grid>
+            </section>
+
+            <section class="invoice-tour-banner">
+                <div class="invoice-tour-banner-inner">
+                    <div class="invoice-tour-banner-text">
+                        <span class="invoice-section-kicker" data-zelyra-i18n="invoice.home.code_title">ZELYRA QUELLTEXT-EINBLICK</span>
+                        <h2>Wie funktioniert diese App im Quelltext?</h2>
+                        <p>Verstehe den gesamten Code hinter Kunden, Artikeln, Rechnungen und Auswertungen. Keine versteckten Frameworks, kein Boilerplate.</p>
+                    </div>
+                    <div class="invoice-tour-banner-action">
+                        <Button label="Interaktive Code-Tour starten →" href="/tour" appearance="success" />
+                    </div>
+                </div>
             </section>
         </section>
     }
@@ -270,3 +284,190 @@ page "/ui/components" {
         </section>
     }
 }
+
+page "/tour" {
+    view: InvoiceTutorialShell
+    html {
+        <section class="tutorial-tour-page">
+            <PageHeader title="Zelyra Architektur- &amp; Code-Tour" description="Vollständige Geschäftsanwendung in unter 200 Zeilen deklarativem Code – ohne JavaScript-Frameworks, ohne ORM, ohne Build-Tools." />
+
+            <Grid columns="two">
+                <Card title="Der Zelyra-Weg: Deklarativ &amp; Integriert">
+                    <p>Zelyra vereint Datenbankschema, Logik und Oberfläche in einer einzigen typsicheren Sprache.</p>
+                    <ul class="tutorial-feature-list">
+                        <li><strong>100% Typensicherheit:</strong> Vom Datenbankschema über SQL bis ins HTML-Template prüft der Compiler alles vor dem Start.</li>
+                        <li><strong>0 Build-Schritt:</strong> Keine package.json, kein Webpack/Vite, keine 500 MB Fremdpakete.</li>
+                        <li><strong>0 API-Boilerplate:</strong> Keine DTOs, Serializer, REST-Controller oder Endpunkt-Glue.</li>
+                        <li><strong>Volle Datensouveränität:</strong> Läuft lokal auf deinem Rechner mit echter MariaDB.</li>
+                    </ul>
+                </Card>
+                <Card title="Klassischer Web-Stack: Zersplittert &amp; Aufwendig">
+                    <p>Herkömmliche Architekturen erfordern Dutzende Werkzeuge und redundanten Code.</p>
+                    <ul class="tutorial-feature-list">
+                        <li><strong>Backend-Schichten:</strong> ORM-Modelle, Migrations-Dateien, Controller, Serializer und Validatoren.</li>
+                        <li><strong>Frontend-Schichten:</strong> React/Vue/Angular, State-Management (Redux/Pinia), Router und API-Clients.</li>
+                        <li><strong>Typ-Brüche:</strong> Datenbank-Spalten, JSON-Payloads und TypeScript-Typen müssen manuell synchron gehalten werden.</li>
+                        <li><strong>Hohe Komplexität:</strong> Tausende Fremdpakete und ständige Sicherheitsaktualisierungen.</li>
+                    </ul>
+                </Card>
+            </Grid>
+
+            <Card title="1. Kundenverwaltung in nur 18 Zeilen (src/customers.zyl)">
+                <p>Eine Tabelle und eine CRUD-Deklaration genügen. Zelyra erzeugt automatisch responsive Karten, Suchfunktion und Formulare.</p>
+                <Disclosure summary="Quelltext von src/customers.zyl anzeigen">
+                    <div class="tutorial-code-block">
+                        <div class="tutorial-code-header">
+                            <span>src/customers.zyl</span>
+                            <span class="tutorial-code-badge">Tabelle + CRUD</span>
+                        </div>
+                        <pre class="tutorial-code-body"><code>table customers &#123;
+    id: Id primary auto
+    name: String(120) required
+    email: Email?
+    access &#123;
+        read: [&quot;src/invoices.zyl&quot;, &quot;src/dashboard.zyl&quot;, &quot;main.zyl&quot;]
+    &#125;
+&#125;
+
+crud Customer -&gt; customers &#123;
+    layout: InvoiceTutorialShell
+    title: &quot;Kunden&quot;
+    view &#123;
+        fields &#123; name email &#125;
+        list &#123; mode: cards &#125;
+        detail &#123; mode: cards &#125;
+        form &#123; mode: cards &#125;
+    &#125;
+    list &#123; name email &#125;
+    search &#123; name email &#125;
+&#125;</code></pre>
+                    </div>
+                </Disclosure>
+                <ButtonGroup>
+                    <Button label="Kundenverwaltung live öffnen" href="/customers" appearance="success" />
+                </ButtonGroup>
+            </Card>
+
+            <Card title="2. Artikelkatalog mit Preisen &amp; Filter (src/items.zyl)">
+                <p>Exakte Dezimal-Arithmetik für Geldbeträge (Decimal) und boolesche Filter ohne eine Zeile JavaScript.</p>
+                <Disclosure summary="Quelltext von src/items.zyl anzeigen">
+                    <div class="tutorial-code-block">
+                        <div class="tutorial-code-header">
+                            <span>src/items.zyl</span>
+                            <span class="tutorial-code-badge">Dezimalpreise &amp; Filter</span>
+                        </div>
+                        <pre class="tutorial-code-body"><code>table items &#123;
+    id: Id primary auto
+    sku: String(40) required unique
+    name: String(120) required
+    unit_price: Decimal required
+    active: Bool default true
+    access &#123;
+        read: [&quot;src/invoices.zyl&quot;, &quot;src/dashboard.zyl&quot;]
+    &#125;
+&#125;
+
+crud Item -&gt; items &#123;
+    layout: InvoiceTutorialShell
+    title: &quot;Artikel&quot;
+    view &#123;
+        fields &#123; sku name unit_price active &#125;
+        list &#123; mode: cards &#125;
+    &#125;
+    list &#123; sku name unit_price active &#125;
+    search &#123; sku name &#125;
+    filter &#123; active &#125;
+&#125;</code></pre>
+                    </div>
+                </Disclosure>
+                <ButtonGroup>
+                    <Button label="Artikelkatalog live öffnen" href="/items" appearance="success" />
+                </ButtonGroup>
+            </Card>
+
+            <Card title="3. Rechnungen &amp; Positionen mit Relationen (src/invoices.zyl)">
+                <p>Typgesicherte Relationen: customer verweist direkt auf Customer, Fremdschlüssel und Nullability werden vom Compiler garantiert.</p>
+                <Disclosure summary="Quelltext von src/invoices.zyl anzeigen">
+                    <div class="tutorial-code-block">
+                        <div class="tutorial-code-header">
+                            <span>src/invoices.zyl</span>
+                            <span class="tutorial-code-badge">Relationen &amp; Typisierung</span>
+                        </div>
+                        <pre class="tutorial-code-body"><code>table invoices &#123;
+    id: Id primary auto
+    invoice_number: String(40) required unique
+    customer: customers::Customer required
+    issued_at: Date required default now
+    status: String(20) default &quot;draft&quot;
+&#125;
+
+table invoice_lines &#123;
+    id: Id primary auto
+    invoice: Invoice required
+    item: items::Item required
+    quantity: Int required
+    unit_price: Decimal required
+&#125;
+
+crud Invoice -&gt; invoices &#123;
+    layout: InvoiceTutorialShell
+    title: &quot;Rechnungsübersicht&quot;
+    list &#123; invoice_number customer issued_at status &#125;
+    search &#123; invoice_number status &#125;
+    filter &#123; status &#125;
+&#125;</code></pre>
+                    </div>
+                </Disclosure>
+                <ButtonGroup>
+                    <Button label="Rechnung erstellen" href="/invoices/new" appearance="success" />
+                    <Button label="Rechnungsliste ansehen" href="/invoices" appearance="default" />
+                </ButtonGroup>
+            </Card>
+
+            <Card title="4. Live-Dashboard mit SQL-Aggregation (src/dashboard.zyl)">
+                <p>Eine SQL-Abfrage berechnet Netto-, Steuer- und Bruttobetrag serverseitig. Die TableView übernimmt Sortierung, Suche und Pagination.</p>
+                <Disclosure summary="Quelltext von src/dashboard.zyl anzeigen">
+                    <div class="tutorial-code-block">
+                        <div class="tutorial-code-header">
+                            <span>src/dashboard.zyl</span>
+                            <span class="tutorial-code-badge">SQL-Projektion &amp; TableView</span>
+                        </div>
+                        <pre class="tutorial-code-body"><code>tableview InvoiceDashboard &#123;
+    layout: InvoiceTutorialShell
+    source sql&lt;InvoiceDashboardRow[]&gt; &#123;
+        SELECT
+            invoices.id,
+            invoices.invoice_number,
+            customers.name AS customer_name,
+            invoices.status,
+            ROUND(COALESCE(SUM(invoice_lines.quantity * invoice_lines.unit_price), 0), 2) AS net_total,
+            ROUND(COALESCE(SUM(invoice_lines.quantity * invoice_lines.unit_price), 0) * 0.19, 2) AS tax_amount,
+            ROUND(COALESCE(SUM(invoice_lines.quantity * invoice_lines.unit_price), 0) * 1.19, 2) AS gross_total
+        FROM invoices
+        JOIN customers ON customers.id = invoices.customer_id
+        LEFT JOIN invoice_lines ON invoice_lines.invoice_id = invoices.id
+        GROUP BY invoices.id, invoices.invoice_number, customers.name, invoices.status
+    &#125;
+    columns &#123; id invoice_number customer_name status net_total tax_amount gross_total &#125;
+    filter &#123; status &#125;
+    searchable
+    sortable
+    paginated 20
+&#125;</code></pre>
+                    </div>
+                </Disclosure>
+                <ButtonGroup>
+                    <Button label="Rechnungs-Dashboard live öffnen" href="/views/invoicedashboard" appearance="success" />
+                </ButtonGroup>
+            </Card>
+
+            <Card title="5. Druckbare Rechnung mit 19% MwSt. (/invoices/RE-2026-001/print)">
+                <p>Druckoptimiertes Layout: Verwendet den nativen Browser-Druckdialog und rendert Positionen direkt über typsichere Template-Schleifen.</p>
+                <ButtonGroup>
+                    <Button label="Beispielrechnung RE-2026-001 öffnen" href="/invoices/RE-2026-001/print" appearance="success" />
+                </ButtonGroup>
+            </Card>
+        </section>
+    }
+}
+

@@ -145,6 +145,7 @@ geändert werden. Die Beispieldaten behalten `RE-2026-001`.
 - Zeilen 230–259 demonstrieren Fortschritt, Breadcrumbs, Pagination, Leer-/Lade-/Fehlerzustände, Toast, Disclosure, Dropdown, Tastaturtabs und Dialog.
 - Zeilen 260–269 erklären Browserdruck/PDF, den lokalen E-Mail-Entwurf mit vorausgefüllter Rechnungsnummer und die Druckaktion für die Übersicht. Speichere die Rechnung zuerst als PDF und hänge sie im Entwurf manuell an. Die E-Mail-Schaltfläche versendet nicht selbst; Servermail verwendet eine autorisierte Route, `mail_queue` und den Outbox-Worker. Die Outbox kann noch keine Anhänge versenden.
 - Zeilen 270–272 schließen Komponentenübersicht und Route.
+- Zeile 274 deklariert `page "/tour"` als interaktive Architektur- und Code-Tour mit einfahrbaren Quelltext-Blöcken (`Disclosure`), Code-Beispielen für alle Kernmodule und einer Gegenüberstellung zu klassischen Framework-Stacks.
 
 ### `src/database.zyl` — gemeinsame Verbindung
 

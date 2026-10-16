@@ -57,5 +57,11 @@
   "invoice.home.feature_print_text": "Netto, Steuer und Gesamtbetrag werden berechnet.",
   "invoice.home.workflow_kicker": "DREI EINFACHE SCHRITTE",
   "invoice.home.workflow_title": "Deine nächste Rechnung beginnt hier.",
-  "invoice.home.all_invoices": "Alle Rechnungen ansehen →"
+  "invoice.home.all_invoices": "Alle Rechnungen ansehen →",
+  "invoice.nav.tour": "Code-Tour",
+  "invoice.nav.all_invoices": "Rechnungen",
+  "invoice.home.tour_action": "Code-Tour ansehen",
+  "invoice.home.code_title": "Zelyra-Quelltext einsehen",
+  "invoice.tour.title": "Zelyra Architektur- & Code-Tour",
+  "invoice.tour.subtitle": "Erlebe, wie wenig Code eine komplette Geschäftsanwendung in Zelyra benötigt."
 }

@@ -220,3 +220,118 @@
     :where(html[data-z-ui]) .invoice-print-document .amount { text-align: end; font-variant-numeric: tabular-nums; }
     :where(html[data-z-ui]) .invoice-print-document .invoice-totals { break-inside: avoid; }
 }
+
+/* Code Tour & Source Disclosure Styles */
+:where(html[data-z-ui]) .tutorial-code-block {
+    margin-block: 0.75rem;
+    border-radius: var(--z-radius-md);
+    background: #14221c;
+    color: #e5f2eb;
+    border: 1px solid #233e31;
+    overflow: hidden;
+    box-shadow: 0 4px 14px rgb(15 35 27 / 15%);
+}
+:where(html[data-z-ui]) .tutorial-code-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.55rem 0.95rem;
+    background: #0d1713;
+    border-bottom: 1px solid #1e362b;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: #8dafa0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+:where(html[data-z-ui]) .tutorial-code-badge {
+    padding: 0.2rem 0.55rem;
+    border-radius: 99px;
+    background: #1d4634;
+    color: #b3efd0;
+    font-size: 0.65rem;
+    font-weight: 700;
+}
+:where(html[data-z-ui]) .tutorial-code-body {
+    margin: 0;
+    padding: 0.95rem 1.05rem;
+    overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.82rem;
+    line-height: 1.6;
+    white-space: pre;
+    color: #d8ece2;
+}
+:where(html[data-z-ui]) .tutorial-tour-page {
+    display: grid;
+    gap: 1.25rem;
+    max-width: 1440px;
+    margin-inline: auto;
+}
+:where(html[data-z-ui]) .tutorial-compare-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 1rem;
+    margin-block: 0.5rem 1rem;
+}
+:where(html[data-z-ui]) .tutorial-compare-card {
+    padding: 1.2rem;
+    border-radius: var(--z-radius-md);
+    background: var(--z-color-surface);
+    border: 1px solid var(--z-color-border);
+}
+:where(html[data-z-ui]) .tutorial-compare-card--zelyra {
+    border-color: #388a68;
+    background: linear-gradient(160deg, #f3faf5, #ffffff);
+}
+:where(html[data-z-ui][data-z-theme="dark"]) .tutorial-compare-card--zelyra {
+    background: linear-gradient(160deg, #162a21, #1b232d);
+    border-color: #27654a;
+}
+:where(html[data-z-ui]) .tutorial-feature-list {
+    margin: 0.75rem 0 0;
+    padding-left: 1.25rem;
+    display: grid;
+    gap: 0.45rem;
+    font-size: 0.84rem;
+    line-height: 1.5;
+    color: var(--z-color-text);
+}
+:where(html[data-z-ui]) .invoice-tour-banner {
+    margin-top: 1.5rem;
+    padding: 1.75rem 2rem;
+    background: linear-gradient(135deg, #174233, #225c47);
+    border-radius: var(--z-radius-lg);
+    color: #ffffff;
+    box-shadow: 0 0.8rem 2.2rem rgb(20 59 46 / 14%);
+}
+:where(html[data-z-ui]) .invoice-tour-banner-inner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.25rem;
+}
+:where(html[data-z-ui]) .invoice-tour-banner-text {
+    display: grid;
+    gap: 0.4rem;
+    max-width: 48rem;
+}
+:where(html[data-z-ui]) .invoice-tour-banner-text h2 {
+    margin: 0;
+    font-size: clamp(1.3rem, 2.2vw, 1.75rem);
+    font-weight: 750;
+    color: #ffffff;
+    letter-spacing: -0.03em;
+}
+:where(html[data-z-ui]) .invoice-tour-banner-text p {
+    margin: 0;
+    font-size: 0.88rem;
+    line-height: 1.55;
+    color: #d1e7dc;
+}
+:where(html[data-z-ui]) .invoice-tour-banner-action .z-button {
+    font-weight: 750;
+    min-height: 2.85rem;
+    padding: 0.75rem 1.2rem;
+}

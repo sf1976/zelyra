@@ -26,6 +26,7 @@ pub view InvoiceTutorialShell {
                         <a href="/views/invoicedashboard" data-zelyra-i18n="invoice.nav.invoices">Invoice overview</a>
                         <a href="/invoice_lines" data-zelyra-i18n="invoice.nav.lines">Line items</a>
                         <a href="/ui/components">Zelyra UI</a>
+                        <a href="/tour" data-zelyra-i18n="invoice.nav.tour">Code tour</a>
                     </slot>
                     <div class="tutorial-content"><slot /></div>
                     <slot name="footer">

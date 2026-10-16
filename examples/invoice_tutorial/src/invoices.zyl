@@ -143,6 +143,41 @@ page "/invoices/{invoice_number}/print" {
                 <p><span>Rechnungsbetrag brutto</span><strong>{invoice.gross_total} €</strong></p>
             </section>
             <p>Die Beispielrechnung verwendet den allgemeinen Umsatzsteuersatz von 19%.</p>
+            <div class="z-no-print" style="margin-top: 2rem;">
+                <Disclosure summary="Zelyra-Quelltext dieser Druckseite einblenden (SQL + Template)">
+                    <div class="tutorial-code-block">
+                        <div class="tutorial-code-header">
+                            <span>src/invoices.zyl · page &quot;/invoices/&#123;invoice_number&#125;/print&quot;</span>
+                            <span class="tutorial-code-badge">Deklarativ &amp; Typisiert</span>
+                        </div>
+                        <pre class="tutorial-code-body"><code># 1. SQL-Abfrage lädt Rechnungsdaten und berechnet Netto-, Steuer- und Bruttobetrag
+load invoice = sql&lt;InvoicePrintSummary&gt; &#123;
+    SELECT invoices.id, invoices.invoice_number, customers.name AS customer_name,
+           invoices.issued_at, invoices.status,
+           ROUND(COALESCE(SUM(invoice_lines.quantity * invoice_lines.unit_price), 0), 2) AS net_total,
+           ROUND(COALESCE(SUM(invoice_lines.quantity * invoice_lines.unit_price), 0) * 0.19, 2) AS tax_amount,
+           ROUND(COALESCE(SUM(invoice_lines.quantity * invoice_lines.unit_price), 0) * 1.19, 2) AS gross_total
+    FROM invoices
+    JOIN customers ON customers.id = invoices.customer_id
+    LEFT JOIN invoice_lines ON invoice_lines.invoice_id = invoices.id
+    WHERE invoices.invoice_number = :invoice_number
+    GROUP BY invoices.id, invoices.invoice_number, customers.name, invoices.issued_at, invoices.status
+&#125;
+
+# 2. Template rendert alle Positionen direkt im typsicheren HTML
+# (Schleife ueber lines: Name, Artikelnummer, Menge, Einzelpreis, Summe)
+&lt;table&gt;
+    &lt;tr&gt;
+        &lt;td&gt;&#123;position.name&#125;&lt;/td&gt;
+        &lt;td&gt;&#123;position.sku&#125;&lt;/td&gt;
+        &lt;td class=&quot;amount&quot;&gt;&#123;position.quantity&#125;&lt;/td&gt;
+        &lt;td class=&quot;amount&quot;&gt;&#123;position.unit_price&#125; €&lt;/td&gt;
+        &lt;td class=&quot;amount&quot;&gt;&#123;position.line_net&#125; €&lt;/td&gt;
+    &lt;/tr&gt;
+&lt;/table&gt;</code></pre>
+                    </div>
+                </Disclosure>
+            </div>
         </article>
     }
 }

@@ -141,6 +141,7 @@ the number `RE-2026-001`.
 - Lines 230–259 demonstrate progress, breadcrumbs, pagination, empty/loading/error states, toast, disclosure, dropdown, keyboard tabs, and dialog.
 - Lines 260–269 explain browser print/PDF, a local email draft prefilled with the invoice number, and the gallery print action. Save the invoice as a PDF first, then attach it to the draft manually. The email link does not send mail itself; server email uses an authorized route, `mail_queue`, and the outbox worker, which does not yet support attachments.
 - Lines 270–272 close the gallery and route.
+- Line 274 declares `page "/tour"` as an interactive architecture and code tour with collapsible source disclosures (`Disclosure`), code walkthroughs for all core modules, and a direct comparison with traditional multi-layer web stacks.
 
 ### `src/database.zyl` — shared connection
 

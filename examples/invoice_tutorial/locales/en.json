@@ -57,5 +57,11 @@
   "invoice.home.feature_print_text": "Net, tax and total are calculated for you.",
   "invoice.home.workflow_kicker": "THREE SIMPLE STEPS",
   "invoice.home.workflow_title": "Your next invoice starts here.",
-  "invoice.home.all_invoices": "See all invoices →"
+  "invoice.home.all_invoices": "See all invoices →",
+  "invoice.nav.tour": "Code tour",
+  "invoice.nav.all_invoices": "Invoices",
+  "invoice.home.tour_action": "Explore code tour",
+  "invoice.home.code_title": "Inspect Zelyra source code",
+  "invoice.tour.title": "Zelyra Architecture & Code Tour",
+  "invoice.tour.subtitle": "Discover how concise a complete business application is in Zelyra."
 }
