@@ -32,7 +32,7 @@ view Shell {
 page "/reports/{id}" {
     view: Shell
     input { term: String }
-    html { <h1>{term}</h1><script>document.body.dataset.executed = "true"</script> }
+    html { <h1>{term}</h1><a href="/customers" id="canvas-link">Customers</a><script>document.body.dataset.executed = "true"</script> }
 }
 page "/live" {
     html { <h1>Live Zelyra app</h1> }
@@ -88,6 +88,14 @@ fn main() {}
   assert.equal(await preview.locator("h1").textContent(), "<Acme & Co>");
   assert.equal(await preview.locator("script").count(), 1, "preview keeps project markup visible for inspection");
   assert.equal(await preview.locator("body").getAttribute("data-executed"), null, "preview must not execute project scripts");
+  assert.equal(await preview.locator("body").getAttribute("inert"), "", "static canvas content must not accept user interaction");
+  const link = preview.locator("#canvas-link");
+  await link.waitFor();
+  const focused = await link.evaluate((element) => { element.focus(); return element.ownerDocument.activeElement === element; });
+  assert.equal(focused, false, "static canvas links must not accept keyboard focus");
+  const clickBlocked = await link.click({ timeout: 500 }).then(() => false, () => true);
+  assert.equal(clickBlocked, true, "static canvas links must not navigate on pointer activation");
+  assert.equal(await preview.locator("h1").textContent(), "<Acme & Co>", "static preview content remains visible after blocked interaction");
   await page.locator("#canvas-component-target").focus();
   await page.keyboard.press("Tab");
   await page.keyboard.press("Enter");
