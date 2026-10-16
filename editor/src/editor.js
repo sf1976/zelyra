@@ -218,6 +218,7 @@ const messages = {
     symbolTableview: "Abfrageansicht",
     taskFinder: "Aktionen", taskFinderTitle: "Was möchtest du tun?", taskFinderPlaceholder: "Aktion oder Befehl suchen",
     chooseAction: "Aktion auswählen", noMatchingTasks: "Keine passende Aktion gefunden.", taskOpenFile: "Datei öffnen", taskOpenFileHelp: "Projektdatei nach Namen suchen",
+    taskCloseTab: "Aktive Datei schließen", taskCloseTabHelp: "Schließt den geöffneten Tab",
     taskNewFile: "Datei erstellen", taskNewFileHelp: "Neue Datei im Projekt anlegen", taskSave: "Aktive Datei speichern",
     taskSaveHelp: "Ungespeicherte Änderungen übernehmen", taskSaveAll: "Alle Dateien speichern", taskSaveAllHelp: "Alle geänderten Dateien übernehmen",
     taskFormat: "Datei formatieren", taskFormatHelp: "Zelyra-Quelldatei kanonisch formatieren", taskCheck: "Projekt prüfen",
@@ -265,6 +266,7 @@ const messages = {
     saved: "{0} gespeichert", savedAll: "{0} Dateien gemeinsam gespeichert", checkRunning: "Projekt wird geprüft …", checkPassed: "Projektprüfung erfolgreich",
     problemsFound: "{0} Problem(e) gefunden", formatRunning: "Formatiere …", formatted: "{0} formatiert",
     createPrompt: "Neuer Dateipfad im Projekt (zum Beispiel src/customer.zyl)",
+    closeTab: "Tab schließen",
     closeUnsaved: "{0} enthält ungespeicherte Änderungen. Tab trotzdem schließen?",
     filesCount: "{0} Dateien", chooseFile: "Datei öffnen", database: "Datenbank", databaseOpenTable: "Tabelle auswählen",
     databaseStudio: "DATENBANK STUDIO", databaseTitle: "Datenbank verstehen",
@@ -325,6 +327,7 @@ const messages = {
     symbolTableview: "Query view",
     taskFinder: "Actions", taskFinderTitle: "What would you like to do?", taskFinderPlaceholder: "Search actions or commands",
     chooseAction: "Choose action", noMatchingTasks: "No matching action found.", taskOpenFile: "Open file", taskOpenFileHelp: "Find a project file by name",
+    taskCloseTab: "Close active file", taskCloseTabHelp: "Closes the current tab",
     taskNewFile: "Create file", taskNewFileHelp: "Add a new file to the project", taskSave: "Save active file",
     taskSaveHelp: "Write the current changes", taskSaveAll: "Save all files", taskSaveAllHelp: "Write all changed files",
     taskFormat: "Format file", taskFormatHelp: "Format a Zelyra source file", taskCheck: "Check project",
@@ -372,6 +375,7 @@ const messages = {
     saved: "Saved {0}", savedAll: "Saved {0} files together", checkRunning: "Checking project …", checkPassed: "Project check passed",
     problemsFound: "Found {0} problem(s)", formatRunning: "Formatting …", formatted: "Formatted {0}",
     createPrompt: "New project file path (for example src/customer.zyl)",
+    closeTab: "Close tab",
     closeUnsaved: "{0} has unsaved changes. Close this tab anyway?",
     filesCount: "{0} files", chooseFile: "Open file", database: "Database", databaseOpenTable: "Select table",
     databaseStudio: "DATABASE STUDIO", databaseTitle: "Understand your data",
@@ -668,7 +672,7 @@ function renderTabs() {
     const close = document.createElement("span");
     close.className = "tab-close";
     close.textContent = "×";
-    close.title = "Tab schließen";
+    close.title = t("closeTab");
     close.addEventListener("click", (event) => { event.stopPropagation(); closeTab(path); });
     button.append(close);
     bar.append(button);
@@ -1068,6 +1072,7 @@ function toggleAssistant(tab = "help") {
 
 const studioTasks = [
   ["taskOpenFile", "taskOpenFileHelp", ["file", "open"], () => { const query = prompt(t("chooseFile")); if (query) { const match = treeFiles.find((file) => file.toLowerCase().includes(query.toLowerCase())); if (match) void openFile(match); } }],
+  ["taskCloseTab", "taskCloseTabHelp", ["close", "tab", "file", "schließen"], () => { if (activePath) closeTab(activePath); }],
   ["taskNewFile", "taskNewFileHelp", ["file", "create", "new"], () => void createFile()],
   ["taskSave", "taskSaveHelp", ["save", "write"], () => void saveActive()],
   ["taskSaveAll", "taskSaveAllHelp", ["save", "all"], () => void saveAll()],
@@ -3358,7 +3363,8 @@ function canvasDocument(result) {
   const stylesheet = String(result.stylesheet || "").replace(/<\/style/gi, "<\\/style");
   const theme = String(result.theme || "").replace(/<\/style/gi, "<\\/style");
   const csp = "default-src 'none'; script-src 'none'; connect-src 'none'; object-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'; navigate-to 'none'; img-src data:; font-src 'none'; style-src 'unsafe-inline'";
-  return `<!doctype html><html data-z-ui><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><style>${stylesheet}</style><style>${theme}</style></head><body>${result.html}</body></html>`;
+  const canvasReset = "a, a * { pointer-events: none !important; cursor: default !important; } button, input[type=\"submit\"], input[type=\"reset\"] { pointer-events: none !important; }";
+  return `<!doctype html><html data-z-ui><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><style>${stylesheet}</style><style>${theme}</style><style>${canvasReset}</style></head><body inert>${result.html}</body></html>`;
 }
 
 async function renderCanvas(sequence = ++canvasSequence) {
@@ -3991,9 +3997,9 @@ window.addEventListener("keydown", (event) => {
   if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "f") { event.preventDefault(); openProjectSearch(); }
   if (event.key === "F1") { event.preventDefault(); toggleAssistant("help"); }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); saveActive(); }
-  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "p") {
+  if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === "p") {
     event.preventDefault();
-    const query = prompt("Datei öffnen");
+    const query = prompt(t("chooseFile"));
     if (query) { const match = treeFiles.find((path) => path.toLowerCase().includes(query.toLowerCase())); if (match) void openFile(match); }
   }
 });

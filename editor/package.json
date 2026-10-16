@@ -7,15 +7,22 @@
   "license": "MIT OR Apache-2.0",
   "scripts": {
     "build": "esbuild src/theme.js --bundle --minify --outfile=../cli/assets/theme.js && esbuild src/editor.js --bundle --minify --outfile=../cli/assets/editor.js && esbuild src/editor.css --bundle --minify --outfile=../cli/assets/editor.css",
+    "test": "npm run test:ui-metadata && npm run test:language",
     "test:ui-metadata": "node tests/zelyra-ui-metadata.test.mjs",
     "test:language": "node tests/zelyra-language.test.mjs",
+    "test:browser": "npm run test:browser-hover && npm run test:browser-pdf && npm run test:browser-rename && npm run test:browser-canvas && npm run test:browser-capability && npm run test:browser-runtime-budget && npm run test:browser-capabilities && npm run test:browser-external-change && npm run test:browser-pipeline && npm run test:browser-runtime && npm run test:browser-semantic",
     "test:browser-hover": "node tests/studio-hover-browser-e2e.mjs",
     "test:browser-pdf": "node tests/studio-pdf-browser-e2e.mjs",
     "test:browser-rename": "node tests/studio-rename-browser-e2e.mjs",
     "test:browser-canvas": "node tests/studio-canvas-browser-e2e.mjs",
     "test:browser-capability": "node tests/studio-capability-browser-e2e.mjs",
-    "test:browser-outbox": "node tests/studio-outbox-browser-e2e.mjs",
-    "test:browser-runtime-budget": "node tests/studio-runtime-budget-browser-e2e.mjs"
+    "test:browser-capabilities": "node tests/studio-capabilities-browser-e2e.mjs",
+    "test:browser-external-change": "node tests/studio-external-change-browser-e2e.mjs",
+    "test:browser-pipeline": "node tests/studio-pipeline-browser-e2e.mjs",
+    "test:browser-runtime": "node tests/studio-runtime-browser-e2e.mjs",
+    "test:browser-runtime-budget": "node tests/studio-runtime-budget-browser-e2e.mjs",
+    "test:browser-semantic": "node tests/studio-semantic-browser-e2e.mjs",
+    "test:browser-outbox": "node tests/studio-outbox-browser-e2e.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.18.6",
