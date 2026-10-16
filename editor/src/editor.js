@@ -3363,7 +3363,8 @@ function canvasDocument(result) {
   const stylesheet = String(result.stylesheet || "").replace(/<\/style/gi, "<\\/style");
   const theme = String(result.theme || "").replace(/<\/style/gi, "<\\/style");
   const csp = "default-src 'none'; script-src 'none'; connect-src 'none'; object-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'; navigate-to 'none'; img-src data:; font-src 'none'; style-src 'unsafe-inline'";
-  return `<!doctype html><html data-z-ui><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><style>${stylesheet}</style><style>${theme}</style></head><body>${result.html}</body></html>`;
+  const canvasReset = "a, a * { pointer-events: none !important; cursor: default !important; } button, input[type=\"submit\"], input[type=\"reset\"] { pointer-events: none !important; }";
+  return `<!doctype html><html data-z-ui><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><style>${stylesheet}</style><style>${theme}</style><style>${canvasReset}</style></head><body inert>${result.html}</body></html>`;
 }
 
 async function renderCanvas(sequence = ++canvasSequence) {
