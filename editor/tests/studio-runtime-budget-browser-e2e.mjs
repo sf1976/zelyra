@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { spawn } from "node:child_process";
@@ -8,7 +9,12 @@ import { chromium, firefox, webkit } from "playwright";
 import axe from "axe-core";
 
 const project = await mkdtemp(join(tmpdir(), "zelyra-studio-budget-"));
-const binary = resolve(process.env.ZELYRA_BIN || "../target/debug/zelyra");
+const defaultBinary = existsSync(resolve("../target/debug/zelyra"))
+  ? resolve("../target/debug/zelyra")
+  : existsSync(resolve("target/debug/zelyra"))
+    ? resolve("target/debug/zelyra")
+    : resolve("../target/debug/zelyra");
+const binary = resolve(process.env.ZELYRA_BIN || defaultBinary);
 const engineName = process.env.ZELYRA_BROWSER_ENGINE || "chromium";
 const engine = { chromium, firefox, webkit }[engineName];
 assert.ok(engine, `unknown browser engine: ${engineName}`);

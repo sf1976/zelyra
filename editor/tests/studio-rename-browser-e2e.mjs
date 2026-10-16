@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import axe from "axe-core";
 import pixelmatch from "pixelmatch";
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -35,7 +36,12 @@ async function assertStudioScreenshot(page) {
 const project = await mkdtemp(join(tmpdir(), "zelyra-studio-rename-"));
 const main = 'import "src/math.zyl" as math\nfn retain(record: math::Answer) -> math::Answer { return record }\nfn main() { print(math::answer()) customer: math::Answer = math::Answer { value: 42 } print(customer.value) }\n';
 const math = "pub fn answer() -> Int { return 42 }\npub struct Answer { value: Int }\n";
-const binary = resolve(process.env.ZELYRA_BIN || "../target/debug/zelyra");
+const defaultBinary = existsSync(resolve("../target/debug/zelyra"))
+  ? resolve("../target/debug/zelyra")
+  : existsSync(resolve("target/debug/zelyra"))
+    ? resolve("target/debug/zelyra")
+    : resolve("../target/debug/zelyra");
+const binary = resolve(process.env.ZELYRA_BIN || defaultBinary);
 const engineName = process.env.ZELYRA_BROWSER_ENGINE || "chromium";
 const engine = { chromium, firefox, webkit }[engineName];
 assert.ok(engine, `unknown browser engine: ${engineName}`);

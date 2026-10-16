@@ -4128,6 +4128,27 @@ pub(super) fn zelyra_executable() -> Result<PathBuf, (u16, String)> {
                         return Ok(bin);
                     }
                 }
+                if let Some(bin) = current
+                    .parent()
+                    .and_then(|p| p.parent())
+                    .map(|p| p.join("release").join("zelyra"))
+                {
+                    if bin.is_file() {
+                        return Ok(bin);
+                    }
+                }
+                if let Some(paths) = env::var_os("PATH") {
+                    for dir in env::split_paths(&paths) {
+                        let candidate = dir.join("zelyra");
+                        if candidate.is_file() {
+                            return Ok(candidate);
+                        }
+                    }
+                }
+                return Err((
+                    500,
+                    "could not locate the Zelyra CLI binary (build with `cargo build --bin zelyra`)".into(),
+                ));
             }
         }
         return Ok(current);
