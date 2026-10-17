@@ -484,21 +484,26 @@ fn registry_build(args: &mut impl Iterator<Item = String>) -> Result<String, Str
         ));
     }
     artifacts.sort_by(|left, right| left.0.cmp(&right.0));
-    let entries = artifacts
-        .into_iter()
-        .map(|(path, bytes)| {
-            let artifact = verify_artifact(&bytes)?;
-            Ok(serde_json::json!({
-                "name": artifact.name,
-                "version": artifact.version,
-                "publisher": artifact.publisher,
-                "public_key": hex_encode(&artifact.public_key),
-                "checksum": artifact.checksum,
-                "artifact_sha256": format!("sha256:{:x}", Sha256::digest(&bytes)),
-                "artifact": path,
-            }))
-        })
-        .collect::<Result<Vec<_>, String>>()?;
+    let mut identities = BTreeSet::new();
+    let mut entries = Vec::with_capacity(artifacts.len());
+    for (path, bytes) in artifacts {
+        let artifact = verify_artifact(&bytes)?;
+        if !identities.insert((artifact.name.clone(), artifact.version.clone())) {
+            return Err(format!(
+                "registry contains more than one artifact for {} {}",
+                artifact.name, artifact.version
+            ));
+        }
+        entries.push(serde_json::json!({
+            "name": artifact.name,
+            "version": artifact.version,
+            "publisher": artifact.publisher,
+            "public_key": hex_encode(&artifact.public_key),
+            "checksum": artifact.checksum,
+            "artifact_sha256": format!("sha256:{:x}", Sha256::digest(&bytes)),
+            "artifact": path,
+        }));
+    }
     let package_count = entries.len();
     let bytes = serde_json::to_vec_pretty(&serde_json::json!({
         "format_version": 1,
