@@ -65,8 +65,9 @@ Handler laufen gleichzeitig; ein weiterer Lauf desselben Handlers wird
 übersprungen, solange er noch aktiv ist. Fehler und Programmausgabe gehen an
 stdout/stderr des Dienstes (bei systemd typischerweise ins Journal).
 
-Die explizite Cron-Vorschau ist nur für externe, selbst verwaltete Ausführung
-gedacht und darf nicht parallel zum integrierten Scheduler aktiviert werden.
+Die Cron-Ausgabe ist in diesem Arbeitsstand nur eine prüfbare Vorschau; sie richtet
+keine externe Ausführung ein. Deklarierte Zeitpläne laufen ausschließlich im
+installierten, aktiven Linux-systemd-Dienst.
 Zelyra installiert oder bearbeitet keine Benutzer-Crontab. Frühere manuelle
 Crontab-Zeilen kann Zelyra nicht aus der fremdverwalteten Crontab löschen; der
 Legacy-Trigger wird im aktiven Dienst übersprungen, damit keine doppelte
@@ -85,7 +86,8 @@ Monatstag als auch Wochentag eingeschränkt, genügt eine der beiden
 Start des Dienst-Schedulers tatsächlich aufgelöst; unbekannte Zonen verhindern
 dessen Start.
 
-`schedule trigger` ist ein Legacy-Schutz für zuvor exportierte Cron-Zeilen.
-Wenn der aktive Projekt-Dienst läuft, überspringt der Trigger die Ausführung,
-weil der residente Scheduler denselben Zeitplan verwaltet. Secrets gehören
+`schedule trigger` führt keine Zeitpläne aus. Er verwirft alte exportierte
+Cron-Aufrufe und gibt bei aktivem Projekt-Dienst ausdrücklich aus, dass der
+integrierte Scheduler die Deklarationen verwaltet. Ohne aktiven Dienst bleiben
+Zeitpläne ebenfalls inaktiv. Secrets gehören
 nicht in Command-Zeilen oder Cron-Ausgaben.

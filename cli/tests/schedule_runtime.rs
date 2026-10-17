@@ -10,13 +10,15 @@ static NEXT_DIRECTORY: AtomicU64 = AtomicU64::new(0);
 
 #[test]
 fn run_help_describes_the_resident_scheduler_gate() {
-    for (language, expected) in [
+    for (language, expected, manual_serve) in [
         (
             "en",
+            "Outside this active service, declared schedules remain inactive",
             "Starting `serve` manually does not start the scheduler",
         ),
         (
             "de",
+            "Außerhalb dieses aktiven Dienstes bleiben deklarierte Zeitpläne in diesem Stand inaktiv",
             "Ein manuell gestartetes `serve` startet den Scheduler nicht",
         ),
     ] {
@@ -28,6 +30,7 @@ fn run_help_describes_the_resident_scheduler_gate() {
         assert!(output.status.success());
         let help = String::from_utf8_lossy(&output.stdout);
         assert!(help.contains(expected), "{language} help: {help}");
+        assert!(help.contains(manual_serve), "{language} help: {help}");
         assert!(!help.contains("does not run a resident scheduler"));
         assert!(!help.contains("startet keinen residenten Scheduler"));
     }

@@ -61,8 +61,9 @@ different schedule handlers run concurrently; a schedule is skipped while its
 previous invocation is still active. Errors and program output go to the
 service's stdout/stderr (typically the systemd journal).
 
-The explicit cron preview is only for externally managed execution and must not
-be activated alongside the integrated scheduler. Zelyra does not install or
+In this worktree, cron output is a reviewable preview only; it does not configure
+external execution. Declared schedules run only inside the installed, active
+Linux systemd service. Zelyra does not install or
 edit user crontabs. It cannot remove old manually installed crontab rows from a
 crontab managed by someone else; the legacy trigger skips inside an active
 service to prevent duplicate execution. The scheduler does not catch up minutes
@@ -78,7 +79,8 @@ both day-of-month and day-of-week are restricted, either match is sufficient.
 If no timezone is declared, UTC is used. The service scheduler resolves the
 IANA timezone at startup and refuses to start for an unknown zone.
 
-`schedule trigger` is a legacy guard for previously exported cron rows. When
-the active project service is running, it skips execution because the resident
-scheduler owns those declarations. Do not put secrets in command lines or cron
+`schedule trigger` does not execute schedules. It rejects old exported cron
+invocations and reports that the integrated scheduler owns declarations when
+the project service is active. Schedules remain inactive without that service
+as well. Do not put secrets in command lines or cron
 output.
