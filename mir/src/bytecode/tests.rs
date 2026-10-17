@@ -1641,11 +1641,12 @@ fn main() {}
         assert_eq!(bytecode_result.value, expected, "bytecode {name}");
     }
 
-    for (name, values, message) in [(
-        "max_float",
-        vec![Value::Float(1.0), Value::Float(f64::NAN)],
-        "max_of requires finite Float elements",
-    )] {
+    {
+        let (name, values, message) = (
+            "max_float",
+            vec![Value::Float(1.0), Value::Float(f64::NAN)],
+            "max_of requires finite Float elements",
+        );
         let arguments = vec![Value::Array(values)];
         let expected = zelyra_runtime::execute_function(&ast, name, arguments.clone(), None)
             .expect_err("AST extrema must reject non-finite Float values");
