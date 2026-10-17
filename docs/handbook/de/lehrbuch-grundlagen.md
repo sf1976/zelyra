@@ -296,7 +296,7 @@ Zelyra öffnet einen lokalen HTTP-Server auf `127.0.0.1:3030` mit einem zufälli
   *Ursache:* Ein anderer lokaler Dienst belegt den Port. Zelyra wählt bei `zelyra setup` und `zelyra new` automatisch den nächsten freien Host-Port, sodass kein Konflikt entsteht.
 
 ### 6. Merksätze
-1. Das Zelyra-CLI bündelt Compiler, Runner, Formularprüfer, Migrator, Webserver und Setup-Assistenten in einem einzigen Werkzeug.
+1. Das Zelyra-CLI bündelt Compiler, Runner, Formularprüfer, Webserver und Setup-Assistenten in einem einzigen Werkzeug.
 2. Mit `docker compose version` und `zelyra doctor` überprüfst du jederzeit den Zustand deiner Toolchain.
 3. Das stabile Release kann mit `--release v1.1.0` direkt ohne Rust-Compiler installiert werden.
 4. `zelyra setup --web` bietet eine intuitive, browserbasierte Ersteinrichtung mit sicherem Einmal-Token.

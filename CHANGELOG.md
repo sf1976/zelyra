@@ -6,6 +6,10 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+## 1.1.2 — 2026-10-17
+
+- Remove the experimental Laravel analyzer and scaffold command from the CLI, current documentation, and shipped tests. Preserve its source and historical reports in a separate archive; this release does not include a Laravel importer. / Den experimentellen Laravel-Analysator und Gerüstbefehl aus CLI, aktueller Dokumentation und Tests entfernen. Quellcode und historische Berichte bleiben separat archiviert; dieses Release enthält keinen Laravel-Importer.
+
 ## 1.1.1 — 2026-10-15
 
 - Select a free local port when `zelyra serve` finds its requested port busy;
