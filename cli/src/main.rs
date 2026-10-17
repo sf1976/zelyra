@@ -6803,13 +6803,14 @@ fn project_runtime_policy(path: &str) -> Result<Option<RuntimePolicy>, String> {
     let network = project_network_policy(path)?;
     let process = project_process_policy(path)?;
     let mail = project_mail_policy(path)?;
-    let max_stack_depth = project_max_stack_depth(path)?;
+    let (step_budget, max_stack_depth) = project_runtime_limits(path)?;
     let sources = PROJECT_SOURCES.with(|sources| sources.borrow().clone());
     let package_settings = module_settings::resolve_runtime_settings(path, &sources)?;
     if filesystem.is_none()
         && network.is_none()
         && process.is_none()
         && mail.is_none()
+        && step_budget.is_none()
         && max_stack_depth.is_none()
         && package_settings.is_none()
     {
@@ -6820,21 +6821,22 @@ fn project_runtime_policy(path: &str) -> Result<Option<RuntimePolicy>, String> {
             network,
             process,
             mail,
-            step_budget: None,
+            step_budget,
             max_stack_depth,
             package_settings,
         }))
     }
 }
 
-fn project_max_stack_depth(path: &str) -> Result<Option<usize>, String> {
+fn project_runtime_limits(path: &str) -> Result<(Option<usize>, Option<usize>), String> {
     let Some(config_path) = project_config_path(path)? else {
-        return Ok(None);
+        return Ok((None, None));
     };
     let contents = fs::read_to_string(&config_path)
         .map_err(|error| format!("cannot read {}: {error}", config_path.display()))?;
     let mut in_runtime = false;
-    let mut value = None;
+    let mut max_steps = None;
+    let mut max_stack_depth = None;
     for (line_index, raw_line) in contents.lines().enumerate() {
         let line = raw_line.split('#').next().unwrap_or("").trim();
         if line.is_empty() {
@@ -6854,21 +6856,37 @@ fn project_max_stack_depth(path: &str) -> Result<Option<usize>, String> {
             ));
         };
         let key = raw_key.trim();
-        if key != "max_stack_depth" {
-            return Err(format!("unknown runtime setting {key}"));
+        match key {
+            "max_stack_depth" => {
+                if max_stack_depth.is_some() {
+                    return Err(
+                        "runtime setting max_stack_depth is configured more than once".into(),
+                    );
+                }
+                let depth = raw_value.trim().parse::<usize>().map_err(|_| {
+                    format!("runtime max_stack_depth must be an integer from 1 through {MAX_CONFIGURED_FUNCTION_CALL_DEPTH}")
+                })?;
+                if !(1..=MAX_CONFIGURED_FUNCTION_CALL_DEPTH).contains(&depth) {
+                    return Err(format!("runtime max_stack_depth must be from 1 through {MAX_CONFIGURED_FUNCTION_CALL_DEPTH}"));
+                }
+                max_stack_depth = Some(depth);
+            }
+            "max_steps" => {
+                if max_steps.is_some() {
+                    return Err("runtime setting max_steps is configured more than once".into());
+                }
+                let steps = raw_value
+                    .trim()
+                    .parse::<usize>()
+                    .ok()
+                    .filter(|steps| *steps > 0)
+                    .ok_or_else(|| "runtime max_steps must be a positive integer".to_owned())?;
+                max_steps = Some(steps);
+            }
+            _ => return Err(format!("unknown runtime setting {key}")),
         }
-        if value.is_some() {
-            return Err("runtime setting max_stack_depth is configured more than once".into());
-        }
-        let depth = raw_value.trim().parse::<usize>().map_err(|_| {
-            format!("runtime max_stack_depth must be an integer from 1 through {MAX_CONFIGURED_FUNCTION_CALL_DEPTH}")
-        })?;
-        if !(1..=MAX_CONFIGURED_FUNCTION_CALL_DEPTH).contains(&depth) {
-            return Err(format!("runtime max_stack_depth must be from 1 through {MAX_CONFIGURED_FUNCTION_CALL_DEPTH}"));
-        }
-        value = Some(depth);
     }
-    Ok(value)
+    Ok((max_steps, max_stack_depth))
 }
 
 fn project_mail_policy(path: &str) -> Result<Option<MailPolicy>, String> {

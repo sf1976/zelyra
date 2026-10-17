@@ -2464,6 +2464,39 @@ fn enforces_scoped_database_effects_in_generated_api_handlers() {
 }
 
 #[test]
+fn project_step_budget_applies_to_executed_api_handlers() {
+    let program = parse(
+        &lex(
+            "api GET \"/bounded\" { handler bounded output Int } fn bounded() -> Int { loop { } } fn main() { }",
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(check_apis(&program).is_ok());
+    let request =
+        zelyra_web::parse_request("GET /bounded HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+    let response = dispatch_api_with_capabilities(
+        &program,
+        &program.apis[0],
+        "bounded",
+        &request,
+        &HashMap::new(),
+        ApiRuntimeContext {
+            database_url: None,
+            capability_grants: None,
+            runtime_policy: Some(&RuntimePolicy {
+                step_budget: Some(30),
+                ..RuntimePolicy::default()
+            }),
+        },
+    );
+    assert_eq!(response.status, 500);
+    assert!(response
+        .body
+        .contains("execution step budget exceeded (limit 30)"));
+}
+
+#[test]
 fn dispatches_string_keyed_map_api_input_and_output() {
     let program = parse(
         &lex(
@@ -3379,13 +3412,26 @@ fn project_runtime_policy_reads_and_bounds_max_stack_depth() {
     fs::write(&entry, "fn main() {}\n").unwrap();
     fs::write(
         directory.join("zelyra.toml"),
-        "[project]\nname = \"runtime-policy\"\n\n[runtime]\nmax_stack_depth = 500\n",
+        "[project]\nname = \"runtime-policy\"\n\n[runtime]\nmax_stack_depth = 500\nmax_steps = 12000\n",
     )
     .unwrap();
     let policy = project_runtime_policy(entry.to_str().unwrap())
         .unwrap()
         .unwrap();
     assert_eq!(policy.max_stack_depth, Some(500));
+    assert_eq!(policy.step_budget, Some(12000));
+
+    fs::write(directory.join("zelyra.toml"), "[runtime]\nmax_steps = 0\n").unwrap();
+    let error = project_runtime_policy(entry.to_str().unwrap()).unwrap_err();
+    assert!(error.contains("max_steps must be a positive integer"));
+
+    fs::write(
+        directory.join("zelyra.toml"),
+        "[runtime]\nmax_steps = 10\nmax_steps = 20\n",
+    )
+    .unwrap();
+    let error = project_runtime_policy(entry.to_str().unwrap()).unwrap_err();
+    assert!(error.contains("max_steps is configured more than once"));
 
     fs::write(
         directory.join("zelyra.toml"),

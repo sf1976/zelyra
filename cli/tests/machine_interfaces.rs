@@ -174,6 +174,36 @@ fn run_step_budget_is_opt_in_and_reports_a_controlled_runtime_error() {
 }
 
 #[test]
+fn project_runtime_step_budget_limits_ast_run_without_cli_override() {
+    let (directory, path) =
+        temporary_project_source("project-step-budget", "fn main() { loop { } }");
+    fs::write(
+        directory.join("zelyra.toml"),
+        "[project]\nname = \"step-budget\"\n[runtime]\nmax_steps = 30\n",
+    )
+    .unwrap();
+
+    let output = run(&["run", path.to_str().unwrap()]);
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("E-RUNTIME-001"), "{stderr}");
+    assert!(
+        stderr.contains("execution step budget exceeded (limit 30)"),
+        "{stderr}"
+    );
+
+    let overridden = run(&["run", path.to_str().unwrap(), "--max-steps", "7"]);
+    assert!(!overridden.status.success());
+    let stderr = String::from_utf8_lossy(&overridden.stderr);
+    assert!(
+        stderr.contains("execution step budget exceeded (limit 7)"),
+        "{stderr}"
+    );
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn run_step_budget_keeps_output_written_before_runtime_error() {
     let source = "fn main() { print(\"visible before failure\") loop { } }";
     let (directory, path) = temporary_project_source("step-budget-output", source);

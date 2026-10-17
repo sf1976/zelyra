@@ -22,7 +22,7 @@ let browser;
 let startupTimer;
 try {
   await writeFile(join(project, "zelyra.toml"),
-    '[project]\nname = "runtime-browser"\n[runtime]\nmax_stack_depth = 100\n');
+    '[project]\nname = "runtime-browser"\n[runtime]\nmax_stack_depth = 100\nmax_steps = 24000\n');
   await writeFile(join(project, "main.zyl"),
     "fn direct() -> Int { return direct() }\nfn main() { loop { } }\n");
   const port = await new Promise((resolvePort, reject) => {
@@ -58,6 +58,7 @@ try {
   await page.locator("#runtime-budget-button").click();
   await page.locator("#runtime-budget-dialog[open]").waitFor();
   await page.waitForFunction(() => document.querySelector("#runtime-stack-depth")?.textContent?.includes("100"));
+  await page.waitForFunction(() => document.querySelector("#runtime-step-budget")?.textContent?.includes("24000"));
   assert.match(await page.locator("#runtime-recursion-risks").textContent(), /direct/);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true,
     "the budget dialog must not overflow a 360px viewport");
@@ -76,6 +77,27 @@ try {
     || document.querySelector("#run-output-state")?.textContent?.includes("Step budget"));
   assert.match(await page.locator("#run-output-content").textContent(), /E-RUNTIME-001/);
   await page.locator("#run-output-close").click();
+  await page.evaluate(async () => {
+    const token = sessionStorage.getItem("zelyra-editor-session-token");
+    const api = async (path, options = {}) => {
+      const response = await fetch(`/__zelyra/editor/api/${path}`, {
+        ...options,
+        headers: { "X-Zelyra-Editor-Token": token, ...(options.headers || {}) },
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    };
+    const file = await api("file?path=zelyra.toml");
+    await api("file", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        path: "zelyra.toml",
+        content: file.content.replace("max_steps = 24000\n", ""),
+        baseHash: file.hash,
+      }),
+    });
+  });
   await page.locator("#runtime-budget-button").click();
   await page.locator("#runtime-budget-enabled").uncheck();
   const cancelledResponse = page.waitForResponse((reply) => reply.url().endsWith("/api/run"), { timeout: 15_000 });

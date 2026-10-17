@@ -159,9 +159,13 @@ den gewählten Wert als getrennte CLI-Argumente an `zelyra run` weiter. Der
 Server begrenzt parallele Studio-Läufe auf einen; ein Konsolenlauf kann im
 Ausgabefenster abgebrochen werden. Die bisherige Zeitgrenze von 15 Sekunden
 und die Ausgabebegrenzung bleiben zusätzlich wirksam. Eine Budgetüberschreitung
-zeigt die echte `E-RUNTIME-001`-Ausgabe an. Webvorschauen verwenden nicht
-`--max-steps`. Bereits ausgegebene Programmzeilen bleiben auch dann sichtbar,
-wenn der Lauf später mit einem Laufzeitfehler endet.
+zeigt die echte `E-RUNTIME-001`-Ausgabe an. Die Eigenschaften zeigen außerdem
+das Projektlimit aus `[runtime] max_steps` oder weisen darauf hin, dass keines
+gesetzt ist. Dieses TOML-Limit gilt für `zelyra run`, ausgeführte API-Handler
+und geplante Commands; es wird nicht durch `.env` überschrieben. Die statische
+Canvas-Vorschau führt keine Projektfunktionen aus. Bereits ausgegebene
+Programmzeilen bleiben auch dann sichtbar, wenn der Lauf später mit einem
+Laufzeitfehler endet.
 
 Die Anzeige liest `[runtime] max_stack_depth` aus `zelyra.toml` und zeigt bei
 fehlendem Eintrag den Runtime-Standard 20. Der erlaubte Konfigurationsbereich

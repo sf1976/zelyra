@@ -574,6 +574,10 @@ allowed_commands = ["git"]
 timeout_ms = 5000
 max_output_bytes = 1048576
 
+[runtime]
+max_steps = 100000
+max_stack_depth = 100
+
 [web]
 allowed_origins = ["http://localhost:5173"]
 allow_credentials = false
@@ -582,6 +586,20 @@ allow_credentials = false
 Diese Bereiche sind keine bequeme Umgehung von Sicherheit: Capabilities,
 Allowlisten, SQL-Prüfungen, CSRF und destruktive Datenbankfreigaben bleiben
 explizit und werden nicht durch `.env` abgeschaltet.
+
+`[runtime].max_steps` ist optional und muss eine positive, für die Plattform
+darstellbare Ganzzahl sein. Ist der Wert nicht gesetzt, begrenzt AST-Ausführung
+über `zelyra run` und normale Webhandler die Auswertungsschritte nicht; MIR und
+Bytecode verwenden bei CLI-Läufen ihr dokumentiertes Budget von 100.000
+Schritten. Ein explizites `zelyra run --max-steps <n>` hat Vorrang vor dem
+Projektwert. Das Projektlimit gilt für `zelyra run`, ausgeführte
+Webhandler sowie Scheduler-Commands, die der integrierte Dienst per `zelyra
+run` startet. Es begrenzt nicht die Laufzeit externer Programme und ersetzt
+keine Netzwerk-, Datenbank- oder Prozess-Timeouts. Es ist keine geheime
+Einstellung; `.env` und Prozessvariablen überschreiben es nicht.
+
+Der bestehende `[runtime].max_stack_depth`-Wert bleibt davon getrennt und
+begrenzt Funktionsaufruftiefe auf Werte von 1 bis 500 (Standard 20).
 
 Funktions-SQL kann die engeren Deklarationen `uses Database(read)` für
 `SELECT` und `uses Database(write)` für `INSERT`, `UPDATE` oder `DELETE`

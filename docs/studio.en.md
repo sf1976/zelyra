@@ -144,7 +144,10 @@ separate CLI arguments to `zelyra run`. The server allows one Studio run at a
 time, and the output dialog can cancel a running console program. The existing
 15-second timeout and output limits still apply. A budget overrun displays
 the actual `E-RUNTIME-001` output, and lines printed before the failure remain
-visible. Web previews do not use `--max-steps`.
+visible. Studio also displays the project limit from `[runtime] max_steps`, or
+shows that none is set. This TOML limit applies to `zelyra run`, executed API
+handlers, and scheduled commands; `.env` does not override it. The static
+Canvas preview does not execute project functions.
 
 The view reads `[runtime] max_stack_depth` from `zelyra.toml`, showing the
 runtime default of 20 when absent. The permitted configuration range is 1 to

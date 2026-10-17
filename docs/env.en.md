@@ -512,9 +512,30 @@ environments and never store real values in examples.
 
 Not every project option belongs in `.env`. Current supported configuration
 sections include `[capabilities]`, `[filesystem]`, `[network]`, `[process]`,
-`[web]`, and `[features]`. They are explicit policy, not a way to bypass
+`[runtime]`, `[web]`, and `[features]`. They are explicit policy, not a way to bypass
 security: capabilities, allowlists, SQL checks, CSRF, and destructive database
 approval cannot be disabled through `.env`.
+
+Example runtime configuration:
+
+```toml
+[runtime]
+max_steps = 100000
+max_stack_depth = 100
+```
+
+`[runtime].max_steps` is optional and must be a positive integer representable
+on the platform. If unset, AST evaluation through `zelyra run` and regular web
+handlers has no evaluation-step limit; MIR and bytecode CLI runs use their
+documented 100,000-step default. An explicit `zelyra run --max-steps <n>` takes
+precedence over the project value. The project limit applies to `zelyra run`,
+web handlers, and scheduler commands launched by the integrated service through
+`zelyra run`. It does not limit external process runtime and does not replace
+network, database, or process timeouts. It is not secret; `.env` and process
+variables do not override it.
+
+The existing `[runtime].max_stack_depth` is separate and limits function-call
+depth to 1 through 500 (default 20).
 
 Function-level SQL can use the narrower declarations `uses Database(read)` for
 `SELECT` and `uses Database(write)` for `INSERT`, `UPDATE`, or `DELETE`. Grant
