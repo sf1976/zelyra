@@ -958,7 +958,10 @@ CMD ["zelyra", "serve", "main.zyl", "0.0.0.0:__WEB_PORT__"]
                 ".dockerignore",
                 ".git\ntarget\n.env\n.env.*\n*.sqlite3\n*.db\n*.pem\n*.key\n*.p12\n*.pfx\n".to_owned(),
             ),
-            (".gitignore", ".env\ntarget/\n".to_owned()),
+            (
+                ".gitignore",
+                ".env\ntarget/\n.zelyra/schedules.cron\n".to_owned(),
+            ),
         ]);
     }
     for (name, contents) in files {
@@ -5415,6 +5418,15 @@ fn setup_action(path: &str, action: &str, options: &SetupOptions) -> Result<Stri
             }
         }
         messages.push("database schema setup completed".into());
+        let entry_path = directory.join("main.zyl");
+        match task_cli::setup_declared_schedules(&entry_path) {
+            Ok(schedule_messages) => messages.extend(schedule_messages),
+            Err(error) => {
+                return Err(format!(
+                    "schedule preparation failed after schema setup: {error}"
+                ));
+            }
+        }
         if seed_invoice_tutorial_database(&directory)? {
             messages.push("invoice tutorial sample data loaded (repeatable)".into());
         }

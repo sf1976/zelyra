@@ -49,13 +49,19 @@ werden. Für produktive Deployments sind auch systemd-Timer oder Plattform-
 Scheduler mögliche Hosts. Zelyra startet standardmäßig keinen residenten
 Scheduler.
 
-Das ist der aktuelle Stand. Ziel der 1.2.5-Integration ist, Zeitpläne im
-geprüften Projektgraphen zu erkennen, benötigten Outbox-Speicher beim Setup
-idempotent einzurichten, einen projektverwalteten Cron-Export zu pflegen und
-deklarierte Zeitpläne in `serve` über einen koordinierten Scheduler
-auszuführen. Der Export bleibt für externe Hosts verfügbar, ist aber nicht
-selbst der Scheduler; Zelyra ändert die Crontab des Benutzers nicht
-stillschweigend. Dieses Ziel ist noch nicht implementiert oder veröffentlicht.
+Dies beschreibt das veröffentlichte Verhalten von 1.1.5. Im aktuellen,
+unveröffentlichten 1.2.5-Arbeitsstand erkennen `zelyra setup --schema` und
+`--all` geprüfte Zeitpläne aus `main.zyl`, erzeugen einmalig
+`.zelyra/schedules.cron` und richten die MariaDB-Outbox ein, wenn ein
+geplanter Handler die Capability `Email` deklariert. Symlinks für den
+Schedulerstatus oder den Export werden abgewiesen; Zelyra-eigene Exporte
+werden nach geänderten Deklarationen aktualisiert, fremde Dateien nicht
+überschrieben. Dieser getestete Vorbereitungsschritt aktiviert aber
+weder einen Host-Cronjob noch führt er Zeitpläne in `serve` aus. Als nächster
+1.2.5-Schritt folgt die koordinierte Ausführung über `serve`. Der generierte
+Befehl enthält keine Geheimnisse; `zelyra run` liest Datenbank- und
+Maileinstellungen aus der geschützten lokalen `.env`. Zelyra ändert die
+Crontab des Benutzers nicht stillschweigend.
 
 Ein Schedule mit `cron` verwendet fünf numerische Felder für Minute, Stunde,
 Monatstag, Monat und Wochentag. Unterstützt werden Zahlen, `*`, Listen,

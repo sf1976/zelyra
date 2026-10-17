@@ -312,7 +312,10 @@ werden. Details stehen im [Projektlayout-Arbeitsplan](release-plans/1.3.0-projec
   und Rollback fertigstellen. Linux-Befehlsweg und simulierte Rollbacktests
   sind im aktuellen Arbeitszweig vorhanden; Live-systemd-Lifecycletests und
   Mandanten-/Query-/Form-/Jobpfade bleiben offen. Weitere Serviceplattformen
-  nur mit Lifecycle-Tests ergänzen.
+  nur mit Lifecycle-Tests ergänzen. Das Schedule-Setup erzeugt nach einem
+  ausdrücklichen Schema-Setup einen projektlokalen Export und richtet für
+  geplante Handler mit `Email`-Capability die MariaDB-Outbox ein. Dieser
+  unveröffentlichte Stand führt Zeitpläne noch nicht über `serve` aus.
 - [ ] **1.2.8 Integrität und Distribution:** Geprüfte Schnitte für
   Zustandsübergänge, Audit/Historie, ausgeglichenes Ledger, Reflection,
   Healthchecks, Bundles, statisches `public/` und Reverse-Proxy-Sicherheit

@@ -72,7 +72,9 @@ security and compatibility gates stated for that milestone.
   operating systems only with lifecycle and upgrade tests. The Linux service
   command path and simulated rollback tests exist in the current work branch;
   live systemd lifecycle coverage and the tenant/query/form/job slices remain
-  open.
+  open. Schedule bootstrap now creates a project-local export on explicit
+  schema setup and initializes the MariaDB outbox for scheduled `Email`
+  handlers; this is unreleased and does not yet execute schedules in `serve`.
 - [ ] **1.2.8 — cross-cutting integrity and distribution:** Deliver tested
   vertical slices for state transitions, audit/history, balanced ledger
   operations, reflection/export metadata, health checks, and modular bundles

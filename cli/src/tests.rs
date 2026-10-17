@@ -3549,6 +3549,7 @@ fn generated_mariadb_template_uses_selected_web_port() {
     assert!(dockerignore.contains(".env"));
     assert!(dockerignore.contains(".env.*"));
     assert!(gitignore.contains(".env"));
+    assert!(gitignore.contains(".zelyra/schedules.cron"));
 
     fs::remove_dir_all(path).unwrap();
 }
