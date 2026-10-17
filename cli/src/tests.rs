@@ -49,13 +49,16 @@ fn compiler_scope_gate_rejects_tableviews_reading_tenant_tables() {
             tenant_id: TenantId required
             amount: Decimal required
         }
+        table customers { id: Id primary auto }
         struct InvoiceSummary {
             id: Id
             amount: Decimal
         }
         tableview InvoiceSummaryView {
             source sql<InvoiceSummary[]> {
-                SELECT id, amount FROM invoices
+                SELECT i.id, i.amount
+                FROM invoices AS i
+                JOIN customers AS c ON c.id = i.id
             }
             columns { id amount }
         }
@@ -67,6 +70,32 @@ fn compiler_scope_gate_rejects_tableviews_reading_tenant_tables() {
     assert!(
         !validate_tenant_access_boundaries("main.zyl", &program, &schema),
         "tableview SQL must not bypass tenant-scoped CRUD boundaries"
+    );
+
+    let unscoped_tableview = r#"
+        type TenantId = Id
+        table invoices scoped by tenant_id: TenantId {
+            id: Id primary auto
+            tenant_id: TenantId required
+        }
+        table customers {
+            id: Id primary auto
+            name: String(100) required
+        }
+        struct CustomerSummary { id: Id name: String }
+        tableview CustomerSummaryView {
+            source sql<CustomerSummary[]> {
+                SELECT id, name FROM customers
+            }
+            columns { id name }
+        }
+        fn main() {}
+    "#;
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(unscoped_tableview).unwrap()).unwrap();
+    let schema = build_schema(&program).unwrap();
+    assert!(
+        validate_tenant_access_boundaries("main.zyl", &program, &schema),
+        "unscoped tableviews should remain available when they read unprotected tables"
     );
 }
 
