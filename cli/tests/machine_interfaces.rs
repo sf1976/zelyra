@@ -1490,6 +1490,12 @@ fn command_help_explains_options_without_running_the_command() {
     let database_help = String::from_utf8_lossy(&database_group.stdout);
     assert!(database_help.contains("ZELYRA_DATABASE_<NAME>_URL"));
     assert!(database_help.contains("DATABASE_URL"));
+
+    let package = run(&["package", "--help"]);
+    assert!(package.status.success());
+    let package_help = String::from_utf8_lossy(&package.stdout);
+    assert!(package_help.contains("cache clean [--apply]"));
+    assert!(package_help.contains("Statischen Index"));
 }
 
 #[test]
@@ -1513,6 +1519,16 @@ fn command_help_is_available_in_english() {
     let database_help = String::from_utf8_lossy(&database.stdout);
     assert!(database_help.contains("ZELYRA_DATABASE_<NAME>_URL"));
     assert!(database_help.contains("DATABASE_URL"));
+
+    let package = Command::new(binary())
+        .args(["package", "--help"])
+        .env("ZELYRA_LANGUAGE", "en")
+        .output()
+        .expect("package help command should run");
+    assert!(package.status.success());
+    let package_help = String::from_utf8_lossy(&package.stdout);
+    assert!(package_help.contains("cache clean [--apply]"));
+    assert!(package_help.contains("Build a static index"));
 }
 
 #[test]
