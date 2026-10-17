@@ -9,6 +9,31 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 static NEXT_DIRECTORY: AtomicU64 = AtomicU64::new(0);
 
 #[test]
+fn run_help_describes_the_resident_scheduler_gate() {
+    for (language, expected) in [
+        (
+            "en",
+            "Starting `serve` manually does not start the scheduler",
+        ),
+        (
+            "de",
+            "Ein manuell gestartetes `serve` startet den Scheduler nicht",
+        ),
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_zelyra"))
+            .args(["run", "--help"])
+            .env("ZELYRA_LANGUAGE", language)
+            .output()
+            .expect("run CLI help");
+        assert!(output.status.success());
+        let help = String::from_utf8_lossy(&output.stdout);
+        assert!(help.contains(expected), "{language} help: {help}");
+        assert!(!help.contains("does not run a resident scheduler"));
+        assert!(!help.contains("startet keinen residenten Scheduler"));
+    }
+}
+
+#[test]
 #[cfg(target_os = "linux")]
 fn active_project_service_starts_resident_scheduler_without_cron_export() {
     let nonce = NEXT_DIRECTORY.fetch_add(1, Ordering::Relaxed);
