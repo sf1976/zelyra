@@ -9548,6 +9548,19 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         capability_grants.as_ref(),
         runtime_policy.as_ref(),
     );
+    if !program.schedules.is_empty() {
+        match task_cli::setup_declared_schedules(std::path::Path::new(&path)) {
+            Ok(messages) => {
+                for message in messages {
+                    println!("{message}");
+                }
+            }
+            Err(error) => {
+                diagnostic(&path, "E-TASK-004", &error, 1, 1);
+                return ExitCode::from(1);
+            }
+        }
+    }
     let (listener, actual_address, used_fallback) = match bind_web_application(&address) {
         Ok(bound) => bound,
         Err(error) => {

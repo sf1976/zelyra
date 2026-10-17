@@ -48,13 +48,13 @@ the target host. systemd timers and platform schedulers are also possible
 deployment hosts. Zelyra does not start a resident scheduler by default.
 
 This describes the released 1.1.5 behavior. In the current unreleased 1.2.5
-worktree, `zelyra setup --schema` and `--all` discover checked schedules in
-`main.zyl`, create `.zelyra/schedules.cron` once, and ensure the MariaDB outbox
+worktree, `zelyra setup --schema`, `--all`, and `zelyra serve` discover checked
+schedules in `main.zyl`, create `.zelyra/schedules.cron` once, and ensure the MariaDB outbox
 when a scheduled handler declares the `Email` capability. Zelyra refreshes its
 own generated export when declarations change and refuses to overwrite an
 unmanaged file. Scheduler-state or export symlinks are rejected. This bootstrap
-is tested, but it does not activate a host cron job or execute
-schedules in `serve` yet. The remaining 1.2.5 target is coordinated execution
+does not activate a host cron job or execute schedules in `serve` yet. The
+remaining 1.2.5 target is coordinated execution
 through `serve`. The generated command contains no secret values; `zelyra run`
 resolves project database and mail settings from the protected local `.env`.
 Zelyra will not silently edit a user's crontab.
