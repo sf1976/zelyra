@@ -216,10 +216,27 @@ compatibility behavior before changing syntax. See the detailed
 - [ ] Evaluate Cranelift after profiling shows a material need. Reuse typed MIR and the shared runtime, preserve capability and contract guarantees, and avoid an independent divergent language implementation.
 - [ ] Decide on AOT only from benchmark evidence, deployment requirements, and maintenance costs.
 
-### 🗺️ [ ] Language completeness follow-up (schedule by actual implementation status)
+### Language features audit — four gaps closed; VM backend remains experimental
 
-- [ ] Audit user-defined payload enums and exhaustive matching, generic structs/records, type-checked string interpolation with literal-brace escaping, and opt-in mutable arrays with checked efficient indexed updates.
-- [ ] Mark each item complete only with syntax/API docs, implementation, positive and negative tests, diagnostics, and a working example; do not duplicate functionality already present.
+- [x] User-defined payload enums and exhaustive matching are parsed, checked,
+  and executable. The type-system examples and AST/MIR/bytecode tests cover
+  payload arity/types, guards, round trips, and rejection of non-exhaustive
+  matches.
+- [x] String interpolation type-checks embedded expressions, supports literal
+  braces with `{{`/`}}`, and reports source-mapped errors. The technical
+  reference documents that interpolated text is not HTML-escaped output.
+- [x] Generic structs and records support explicit/inferred type arguments,
+  field checks, updates, and JSON round trips; the bytecode test compares the
+  supported subset against AST execution.
+- [x] Opt-in mutable arrays support checked O(1) index assignment and
+  `push_mut`/`pop_mut`. AST, MIR, and bytecode tests cover supported updates,
+  immutability errors, bounds errors, and differential results. This does not
+  claim a general array optimizer or a benchmarked numeric-performance target.
+- [~] Portable versioned bytecode and an iterative VM are implemented for a
+  documented subset, with differential tests. AST remains the default and
+  reference; complete language/effect/security parity and all 1.3.0 gates are
+  still open. Native machine-code AOT remains an optional post-1.3.0 decision
+  based on measured need.
 
 ## Current milestones
 

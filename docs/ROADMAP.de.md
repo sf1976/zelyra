@@ -211,10 +211,28 @@ werden. Details stehen im [Projektlayout-Arbeitsplan](release-plans/1.3.0-projec
 - [ ] Cranelift erst bei nachgewiesenem Bedarf prüfen. Typisierte MIR und gemeinsame Runtime wiederverwenden, Capability- und Vertragsgarantien erhalten und keine abweichende zweite Sprachimplementierung aufbauen.
 - [ ] AOT-Entscheidung anhand von Benchmarks, Deploymentanforderungen und Wartungsaufwand treffen.
 
-### 🗺️ [ ] Sprachkern vervollständigen (nach tatsächlichem Implementierungsstand)
+### Sprachfunktionen geprüft — vier Lücken geschlossen; VM bleibt experimentell
 
-- [ ] Benutzerdefinierte Enums mit Payload und vollständigem Matching, generische Structs/Records, typgeprüfte String-Interpolation mit Escaping geschweifter Klammern sowie optionale mutable Arrays mit geprüften effizienten Indexupdates im Repository prüfen.
-- [ ] Nur tatsächlich offene Punkte planen; Abschluss erst bei Syntax-/API-Dokumentation, Implementierung, positiven/negativen Tests, Diagnostik und ausführbarem Beispiel.
+- [x] Eigene Payload-Enums und vollständiges Matching werden geparst,
+  typgeprüft und ausgeführt. Typsystembeispiele sowie AST-/MIR-/Bytecode-Tests
+  prüfen Payload-Anzahl und -Typen, Guards, Rundreisen und unvollständige
+  Matches.
+- [x] Stringinterpolation prüft eingebettete Ausdrücke, unterstützt literale
+  Klammern mit `{{`/`}}` und liefert quellgenaue Diagnosen. Das technische
+  Referenzhandbuch erklärt, dass interpolierter Text keine HTML-Ausgabe ist.
+- [x] Generische Structs und Records unterstützen explizite und inferierte
+  Typargumente, Feldprüfungen, Updates und JSON-Rundreisen; der unterstützte
+  Bytecode-Ausschnitt wird mit AST-Ausführung verglichen.
+- [x] Opt-in-mutable Arrays bieten geprüfte O(1)-Indexzuweisung sowie
+  `push_mut`/`pop_mut`. AST-/MIR-/Bytecode-Tests decken Updates,
+  Unveränderlichkeits- und Bereichsfehler sowie differentielle Ergebnisse ab.
+  Das behauptet keinen allgemeinen Array-Optimizer oder ein benchmarktes
+  Zahlenperformanceziel.
+- [~] Portabler versionierter Bytecode und eine iterative VM sind für einen
+  dokumentierten Ausschnitt umgesetzt und differentiell getestet. AST bleibt
+  Standard und Referenz; vollständige Sprach-/Effekt-/Sicherheitsparität und
+  alle 1.3.0-Gates sind offen. Native Maschinencode-AOT bleibt eine optionale
+  Entscheidung nach 1.3.0 auf Basis gemessenen Bedarfs.
 
 ## Aktuelle Meilensteine
 
