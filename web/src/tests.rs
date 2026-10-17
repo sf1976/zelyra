@@ -3940,6 +3940,63 @@ fn form_post_requires_csrf_and_reports_validation_errors() {
 }
 
 #[test]
+fn invalid_form_post_preserves_safe_input_and_redacts_secrets() {
+    let mut route = form_route();
+    route.form.fields.push(zelyra_ast::FormField {
+        name: "email".into(),
+        ty: Some(Type::String),
+        label: Some("Email".into()),
+        placeholder: None,
+        required: true,
+        min_length: None,
+        max: None,
+        min_value: None,
+        max_value: None,
+        choices: Vec::new(),
+        widget: Some("email".into()),
+        appearance: None,
+        readonly: false,
+        span: zelyra_ast::Span::default(),
+    });
+    for name in ["password", "api_token"] {
+        route.form.fields.push(zelyra_ast::FormField {
+            name: name.into(),
+            ty: Some(Type::String),
+            label: Some(name.into()),
+            placeholder: None,
+            required: false,
+            min_length: None,
+            max: None,
+            min_value: None,
+            max_value: None,
+            choices: Vec::new(),
+            widget: (name == "password").then(|| "password".into()),
+            appearance: None,
+            readonly: false,
+            span: zelyra_ast::Span::default(),
+        });
+    }
+    let request = parse_request(
+        "POST /forms/CustomerCreate HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\n\r\n_zelyra_csrf=csrf-token&name=%3Cscript%3Ealert%281%29%3C%2Fscript%3E&email=not-an-email&password=never-render-this&api_token=never-render-this-token",
+    )
+    .unwrap();
+
+    let response = dispatch_form(&route, &request, &HashMap::new(), None, None);
+
+    assert_eq!(response.status, 422);
+    assert!(response
+        .body
+        .contains("value=\"&lt;script&gt;alert(1)&lt;/script&gt;\""));
+    assert!(response.body.contains("value=\"not-an-email\""));
+    assert!(response.body.contains("id=\"email\""));
+    assert!(response.body.contains("aria-invalid=\"true\""));
+    assert!(response.body.contains("type=\"password\" value=\"\""));
+    assert!(!response.body.contains("never-render-this"));
+    assert!(!response.body.contains("never-render-this-token"));
+    assert!(!response.body.contains("<script>alert(1)</script>"));
+}
+
+#[test]
 fn edit_form_rejects_posts_without_a_signed_record_snapshot() {
     let mut route = form_route();
     route.form.name = "CustomerEdit".into();
