@@ -2778,7 +2778,11 @@ impl Checker<'_> {
         }
         let mut left_type = self.check_expr(cursor, scopes);
         for (op, right, span, left_span) in operations.into_iter().rev() {
-            let right_type = self.check_expr(right, scopes);
+            let right_type = if matches!(op, BinaryOp::Equal | BinaryOp::NotEqual) {
+                self.check_expr_expected(right, scopes, Some(&left_type))
+            } else {
+                self.check_expr(right, scopes)
+            };
             left_type = match op {
                 BinaryOp::Add => {
                     if left_type == Type::String && right_type == Type::String {
@@ -2963,6 +2967,68 @@ impl Checker<'_> {
     ) -> Type {
         let contextual_type = expected.map(|ty| self.normalize_alias(ty, expr.span));
         let ty = match (&expr.kind, contextual_type) {
+            (ExprKind::Array(values), Some(Type::Array(expected_element))) => {
+                for value in values {
+                    let actual = self.check_expr_expected(value, scopes, Some(&expected_element));
+                    self.expect_type(&expected_element, &actual, value.span);
+                }
+                Type::Array(expected_element)
+            }
+            (ExprKind::Map(entries), Some(Type::Map(expected_key, expected_value))) => {
+                for (key, value) in entries {
+                    let actual_key = self.check_expr_expected(key, scopes, Some(&expected_key));
+                    let actual_value =
+                        self.check_expr_expected(value, scopes, Some(&expected_value));
+                    self.expect_type(&expected_key, &actual_key, key.span);
+                    self.expect_type(&expected_value, &actual_value, value.span);
+                }
+                Type::Map(expected_key, expected_value)
+            }
+            (ExprKind::Call { name, args, .. }, Some(Type::Option(expected_value)))
+                if name == "Some" && args.len() == 1 =>
+            {
+                let actual = self.check_expr_expected(&args[0], scopes, Some(&expected_value));
+                self.expect_type(&expected_value, &actual, args[0].span);
+                Type::Option(expected_value)
+            }
+            (
+                ExprKind::Call { name, args, .. },
+                Some(Type::Result(expected_ok, expected_error)),
+            ) if (name == "Ok" || name == "Err") && args.len() == 1 => {
+                let expected_argument = if name == "Ok" {
+                    &expected_ok
+                } else {
+                    &expected_error
+                };
+                let actual = self.check_expr_expected(&args[0], scopes, Some(expected_argument));
+                self.expect_type(expected_argument, &actual, args[0].span);
+                Type::Result(expected_ok, expected_error)
+            }
+            (ExprKind::Match { value, arms }, Some(expected_result)) => {
+                let value_type = self.check_expr(value, scopes);
+                let mut covered = std::collections::HashSet::new();
+                for arm in arms {
+                    let mut pattern_scope = HashMap::new();
+                    self.check_pattern(
+                        &arm.pattern,
+                        &value_type,
+                        &mut pattern_scope,
+                        &mut covered,
+                        arm.guard.is_none(),
+                    );
+                    let mut arm_scopes = scopes.to_vec();
+                    arm_scopes.push(pattern_scope);
+                    if let Some(guard) = &arm.guard {
+                        let guard_type = self.check_expr(guard, &arm_scopes);
+                        self.expect_type(&Type::Bool, &guard_type, guard.span);
+                    }
+                    let arm_type =
+                        self.check_expr_expected(&arm.value, &arm_scopes, Some(&expected_result));
+                    self.expect_type(&expected_result, &arm_type, arm.value.span);
+                }
+                self.check_exhaustiveness(&value_type, &covered, expr.span);
+                expected_result
+            }
             (
                 ExprKind::Lambda { params, body },
                 Some(Type::Function {

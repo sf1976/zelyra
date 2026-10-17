@@ -415,7 +415,10 @@ werden. Details stehen im [Projektlayout-Arbeitsplan](release-plans/1.3.0-projec
   `push_mut`/`pop_mut` sind implementiert. Die ausführbare Übungssammlung
   deckt Sortierung, Suche, Stackverhalten, Rekursion und dynamische
   Programmierung ab; spezielle Stacktypen bleiben Folgearbeit. Funktionale
-  Arrays und Maps behalten ansonsten ihre Wertsemantik.
+  Arrays und Maps behalten ansonsten ihre Wertsemantik. Der AST ist für diese
+  Beispiele geprüft; MIR/Bytecode unterstützen den vollständigen Übungssatz
+  noch nicht, insbesondere veränderliches `push_mut`/`pop_mut` und einige
+  typisierte Option-/Result-Vergleiche.
 - [x] **1.2.5 — interaktive Studio-Konsole:** Studio Run zeigt die Prompt-Ausgabe
   des echten Zelyra-Prozesses live an, nimmt eine begrenzte Eingabezeile an und
   setzt denselben Prozess fort. EOF, Abbruch, 15-Sekunden-Limit und

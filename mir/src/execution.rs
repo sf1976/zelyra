@@ -4796,12 +4796,15 @@ fn main() {}
     }
 
     #[test]
-    fn unsupported_builtins_fail_closed() {
-        let (_, mir) = program("fn main() { assert(true) }");
-        let error = execute_function(&mir, "main", vec![], ExecutionLimits::default()).unwrap_err();
-        assert!(error
-            .message
-            .contains("MIR interpreter does not support expression `call`"));
+    fn assertion_builtin_uses_shared_success_and_failure_semantics() {
+        let (_, mir) = program("fn main() { assert(true, \"ok\") }");
+        let success = execute_function(&mir, "main", vec![], ExecutionLimits::default()).unwrap();
+        assert_eq!(success.value, Value::Unit);
+
+        let (_, mir) = program("fn main() { assert(false, \"inventory mismatch\") }");
+        let failure =
+            execute_function(&mir, "main", vec![], ExecutionLimits::default()).unwrap_err();
+        assert_eq!(failure.message, "inventory mismatch");
     }
 
     #[test]

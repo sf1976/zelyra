@@ -1514,6 +1514,30 @@ fn mutable_array_example_checks_and_runs() {
 }
 
 #[test]
+fn assertion_builtin_has_the_same_result_on_ast_mir_and_bytecode() {
+    let source = r#"
+fn main() {
+    assert(true, "successful assertion")
+    print("PASS assertion")
+}
+"#;
+    let (directory, path) = temporary_project_source("assertion-backends", source);
+    for backend in ["ast", "mir", "bytecode"] {
+        let output = run(&["run", path.to_str().unwrap(), "--backend", backend]);
+        assert!(
+            output.status.success(),
+            "backend {backend} failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim(),
+            "PASS assertion"
+        );
+    }
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn algorithm_workbench_examples_are_bounded_and_match_expected_outputs() {
     let path = example("algorithms/main.zyl");
     let check = run(&["check", path.to_str().unwrap()]);

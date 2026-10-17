@@ -394,7 +394,9 @@ compatibility behavior before changing syntax. See the detailed
   `push_mut`/`pop_mut` are implemented. The runnable exercise project covers
   sorting, search, stack behavior, recursion, and dynamic programming; dedicated
   stack types remain follow-up work. Functional arrays and maps otherwise
-  retain value semantics.
+  retain value semantics. The AST backend is checked for these examples; MIR
+  and Bytecode do not yet support the complete exercise suite, especially
+  mutable `push_mut`/`pop_mut` and some typed Option/Result comparisons.
 - [x] **1.2.5 — interactive Studio console:** Studio Run streams prompt output
   from the real Zelyra process, accepts one bounded input line, resumes the
   same process, and supports explicit EOF, cancellation, a 15-second limit, and
