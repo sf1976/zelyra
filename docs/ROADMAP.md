@@ -156,7 +156,7 @@ semantic parity.
 - [~] **Structured AST type checker:** Control-flow/match-exhaustiveness analysis lives in `runtime/src/type_checker/flow.rs`; type relations, generic inference, alias expansion, and type-annotation validation live in `runtime/src/type_checker/type_relations.rs`. Return/fallthrough, loop, guard, and type rules are unchanged. Focused match, generic record/function, and alias-error tests plus workspace tests pass. This is internal restructuring; further decomposition, flow diagnostics, and complete MIR/bytecode parity remain open.
 - [ ] Keep the AST interpreter selectable until the VM reaches complete supported-language compatibility. Add differential, property-based, fuzz, security, and regression tests.
 - [~] Opt-in CLI execution is available for AST, MIR, and the supported bytecode subset. MIR/bytecode inspection, safe versioned caching, stable machine-readable diagnostics, and Studio integration remain open without breaking existing CLI behavior.
-- [ ] Benchmark CPU-bound and I/O-bound workloads separately; record actual measurements, startup, memory, throughput, and compilation cost. Do not promise speedups without evidence.
+- [~] A reproducible CPU benchmark compares mutable array updates across AST, MIR, and Bytecode; its method and three release runs are recorded in the [benchmark report](benchmarks/mutable-array-backends.en.md). I/O workloads, startup, memory, throughput, and compilation cost remain open.
 - [ ] Release gate: no default-VM switch or production-readiness claim before feature parity, safety checks, differential tests, documented limitations, and reproducible builds.
 
 ### Cross-cutting business-platform extensions added to the 1.2.0–1.3.0 goal
