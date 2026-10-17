@@ -91,6 +91,34 @@ fn serve_registry(root: std::path::PathBuf) -> (String, thread::JoinHandle<()>) 
     (format!("http://{address}/index.json"), server)
 }
 
+fn serve_index(root: std::path::PathBuf) -> (String, thread::JoinHandle<()>) {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+            .unwrap();
+        let mut request = [0_u8; 4096];
+        let count = stream.read(&mut request).unwrap();
+        let request = String::from_utf8_lossy(&request[..count]);
+        assert!(request
+            .lines()
+            .next()
+            .unwrap()
+            .starts_with("GET /index.json "));
+        let body = fs::read(root.join("index.json")).unwrap();
+        write!(
+            stream,
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            body.len()
+        )
+        .unwrap();
+        stream.write_all(&body).unwrap();
+    });
+    (format!("http://{address}/index.json"), server)
+}
+
 #[test]
 fn package_signature_requires_explicit_trust_and_detects_tampering() {
     let root = fixture();
@@ -323,6 +351,14 @@ fn package_add_downloads_exact_trusted_release_and_updates_offline_lock() {
         "{}",
         String::from_utf8_lossy(&indexed.stderr)
     );
+    let (search_url, search_server) = serve_index(registry.clone());
+    let search = zelyra(&root, &["package", "search", &search_url, "sam"]);
+    search_server.join().unwrap();
+    assert!(search.status.success());
+    let search_output = stdout(&search);
+    assert!(search_output.contains("metadata is untrusted"));
+    assert!(search_output.contains("sample 1.2.4"));
+    assert!(!search_output.contains("another-package"));
 
     fs::write(
         app.join("zelyra.toml"),

@@ -134,6 +134,12 @@ not a trust decision: clients must still trust the publisher key. The command
 does not upload files. Publish the artifacts and generated index together using
 the hosting system of your choice.
 
+Inspect a static registry index with `zelyra package search <index-url>
+[name-filter]`. Search output is discovery metadata only and is explicitly
+untrusted; it does not add a publisher key or install source. The `add` and
+`update` commands still verify the artifact signature, digest, and configured
+publisher trust before changing the project.
+
 An exact, trusted release can be fetched into the local project package store:
 
 ```sh

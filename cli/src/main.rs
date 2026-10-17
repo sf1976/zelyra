@@ -193,6 +193,9 @@ fn usage() {
     eprintln!("  module bundle --dry-run emits a machine-readable file plan without publishing the bundle");
     eprintln!("  package keygen|sign|verify|trust manages signed Zelyra source packages and trusted publishers");
     eprintln!("  package registry build <dir> [--output index.json] builds a deterministic static-host registry index");
+    eprintln!(
+        "  package search <index-url> [name-filter] searches an untrusted static registry index"
+    );
     eprintln!("  package add <index-url> <name> <exact-version> --as <alias> installs one explicitly trusted package release");
     eprintln!("  package update <index-url> <name> <exact-version> --as <alias> explicitly upgrades one dependency to an exact release");
     eprintln!("  package remove <alias> removes a dependency and refreshes its lock while retaining cached sources");

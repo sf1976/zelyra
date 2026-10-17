@@ -28,6 +28,7 @@ pub(super) fn command(
         "verify" => verify_command(&mut arguments),
         "trust" => trust_command(&mut arguments),
         "registry" => registry_command(&mut arguments),
+        "search" => search_command(&mut arguments),
         "add" => add_command(&mut arguments, false),
         "update" => add_command(&mut arguments, true),
         "remove" => remove_command(&mut arguments),
@@ -44,6 +45,49 @@ pub(super) fn command(
             ExitCode::FAILURE
         }
     }
+}
+
+fn search_command(args: &mut impl Iterator<Item = String>) -> Result<String, String> {
+    let registry_text = args.next().ok_or_else(|| {
+        "usage: zelyra package search <registry-index-url> [name-filter]".to_owned()
+    })?;
+    let filter = args.next().map(|value| value.to_ascii_lowercase());
+    if args.next().is_some() {
+        return Err("usage: zelyra package search <registry-index-url> [name-filter]".into());
+    }
+    let registry_url = parse_registry_url(&registry_text)?;
+    let agent = ureq::Agent::config_builder()
+        .timeout_global(Some(Duration::from_secs(20)))
+        .max_redirects(0)
+        .build()
+        .into();
+    let index_bytes = fetch_limited(&agent, registry_url.as_str(), 4 * 1024 * 1024)?;
+    let index: Value = serde_json::from_slice(&index_bytes)
+        .map_err(|error| format!("invalid package registry index: {error}"))?;
+    let entries = parse_registry_index(&index)?;
+    let matches = entries
+        .iter()
+        .filter(|entry| {
+            filter
+                .as_deref()
+                .is_none_or(|filter| entry.name.to_ascii_lowercase().contains(filter))
+        })
+        .collect::<Vec<_>>();
+    let mut output = vec![
+        "Registry metadata is untrusted; `package add` verifies publisher trust and signatures."
+            .to_owned(),
+    ];
+    if matches.is_empty() {
+        output.push("no matching packages".into());
+    } else {
+        output.extend(matches.into_iter().map(|entry| {
+            format!(
+                "{} {}  publisher: {}",
+                entry.name, entry.version, entry.publisher
+            )
+        }));
+    }
+    Ok(output.join("\n"))
 }
 
 fn cache_command(args: &mut impl Iterator<Item = String>) -> Result<String, String> {

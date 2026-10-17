@@ -145,6 +145,12 @@ weiterhin ausdrücklich vertrauen. Der Befehl lädt nichts hoch. Artefakte und
 Index müssen gemeinsam mit einem Hostingdienst eigener Wahl veröffentlicht
 werden.
 
+Mit `zelyra package search <index-url> [namensfilter]` lässt sich ein statischer
+Index durchsuchen. Die Ausgabe ist ausdrücklich nicht vertrauenswürdige
+Suchmetadaten; sie fügt keinen Herausgeberschlüssel hinzu und installiert keine
+Quelle. `add` und `update` prüfen weiterhin Signatur, Hash und konfiguriertes
+Herausgebervertrauen, bevor sie das Projekt ändern.
+
 Eine exakte, vertrauenswürdige Version kann in den lokalen Paketspeicher des
 Projekts geladen werden:
 
