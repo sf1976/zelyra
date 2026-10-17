@@ -642,6 +642,20 @@ Ausführung schreibfrei gegen die deklarierte Struktur geprüft. Fehlende Spalte
 falsche Typen und unpassende Zeitpräzision werden mit Fundstelle abgewiesen;
 Metadatenzugriff ist erforderlich. Migrationen bleiben ausdrücklich zu prüfen.
 Es gibt keinen neuen Schalter. Siehe [Datumsregeln](dates.de.md).
+
+## Interne Kennung des Linux-Systemdienstes
+
+`ZELYRA_SYSTEMD_SERVICE_ID` wird ausschließlich in einer von
+`zelyra service install` oder `zelyra service change` erzeugten
+systemd-User-Unit gesetzt. Der Wert ist eine aus dem kanonischen Projektpfad
+abgeleitete Kennung, kein Geheimnis und kein Berechtigungsnachweis. Die Unit
+setzt ihn nach der optionalen Projekt-`.env`, sodass ein dort eingetragener
+Wert die interne Kennung nicht überschreibt. Manuelles Setzen aktiviert den
+Scheduler nicht: Zelyra prüft zusätzlich, dass die zu genau diesem Projekt
+gehörende systemd-Unit tatsächlich aktiv ist. Ohne Kennung oder außerhalb
+dieses Dienstes führt `serve` keine Zeitpläne aus. Betroffen sind
+`zelyra service install|change` und `zelyra serve`; der Linux-Scheduler-
+Integrationstest prüft die Dienstbindung.
 ## Lokale Paket-Einstellungen (experimentell)
 
 `zelyra.settings.toml` speichert nicht geheime Paketwerte unter

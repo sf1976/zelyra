@@ -50,42 +50,42 @@ Scheduler mögliche Hosts. Zelyra startet standardmäßig keinen residenten
 Scheduler.
 
 Dies beschreibt das veröffentlichte Verhalten von 1.1.5. Im aktuellen,
-unveröffentlichten 1.2.5-Arbeitsstand erkennen `zelyra setup --schema`,
-`--all` und `zelyra serve` geprüfte Zeitpläne aus `main.zyl`, erzeugen
-`.zelyra/schedules.cron` und richten für geplante `Email`-Handler die
-MariaDB-Outbox idempotent ein. Geänderte Deklarationen aktualisieren nur den
-Zelyra-eigenen Export; wenn keine Zeitpläne mehr deklariert sind, wird genau
-dieser verwaltete Export entfernt. Fremde Dateien und Symlinks bleiben
-geschützt.
-`serve` erstellt zusätzlich `.zelyra/serve.json` mit Loopback-Adresse und
-zufälligem Sitzungstoken (Verzeichnis `0700`, Datei `0600` auf Unix). Der
-exportierte Cron-Aufruf führt `zelyra schedule trigger` aus: Dieser prüft mit
-einem authentifizierten lokalen Aufruf, ob genau dieses Projekt gerade über
-den installierten und aktiven Zelyra-Systemdienst läuft. Manuell gestartetes
-`serve` reicht nicht. Ohne aktiven Dienst oder dessen laufenden Server wird der
-Job übersprungen. Bei positivem Nachweis startet Zelyra den compilergeprüften
-Command-Handler als Kindprozess.
-Der Zeitplan wird weiterhin durch einen ausdrücklich installierten Host-Cron
-ausgelöst; Zelyra bearbeitet die Benutzer-Crontab nicht stillschweigend. Ein
-bereits manuell installierter Host-Cron-Eintrag wird durch Löschen der
-Deklaration nicht aus der Crontab entfernt; sein Trigger scheitert dann an der
-erneuten Prüfung der aktuellen Quelldatei und führt den Handler nicht aus.
-Ein direkt in `serve` eingebauter Scheduler ist das Ziel für die nächste
-Scheduler-Etappe und soll externe Cron-Einträge überflüssig machen. Bis dahin
-gibt es keine Garantie gegen doppelte Ausführungen. Geheimnisse stehen weder
-im Cron-Eintrag noch in der Kommandozeile;
-`zelyra run` liest die Einstellungen aus der Projekt-`.env`.
+unveröffentlichten 1.2.5-Arbeitsstand prüfen `zelyra setup --schema`,
+`--all` und `zelyra serve` die Zeitpläne aus `main.zyl` und richten für
+geplante `Email`-Handler die MariaDB-Outbox idempotent ein. Das Setup erzeugt
+keine Cron-Zeilen; alte, von Zelyra markierte Dateien
+`.zelyra/schedules.cron` werden entfernt. Fremde Dateien und Symlinks bleiben
+geschützt. Der installierte und aktive Linux-systemd-Userdienst startet den
+Scheduler im selben `serve`-Prozess. Er liest und prüft das Projekt an jeder
+Minutengrenze neu; entfernte, geänderte oder gerade ungültige Deklarationen
+werden deshalb nicht aus einem alten Startzustand ausgeführt. Manuell
+gestartetes `serve` führt keine Zeitpläne aus. Zeitpläne folgen ihrer IANA-
+Zeitzone; ohne Angabe gilt UTC. Höchstens vier unterschiedliche Schedule-
+Handler laufen gleichzeitig; ein weiterer Lauf desselben Handlers wird
+übersprungen, solange er noch aktiv ist. Fehler und Programmausgabe gehen an
+stdout/stderr des Dienstes (bei systemd typischerweise ins Journal).
+
+Die explizite Cron-Vorschau ist nur für externe, selbst verwaltete Ausführung
+gedacht und darf nicht parallel zum integrierten Scheduler aktiviert werden.
+Zelyra installiert oder bearbeitet keine Benutzer-Crontab. Frühere manuelle
+Crontab-Zeilen kann Zelyra nicht aus der fremdverwalteten Crontab löschen; der
+Legacy-Trigger wird im aktiven Dienst übersprungen, damit keine doppelte
+Ausführung entsteht. Der Scheduler holt während eines Dienstausfalls verpasste
+Minuten nicht nach und bietet noch keine dauerhafte verteilte Lease- oder
+Retry-Garantie; das gehört in die nächste Jobsystem-Etappe. `zelyra run` liest
+die Einstellungen weiterhin aus der Projekt-`.env`.
 
 Ein Schedule mit `cron` verwendet fünf numerische Felder für Minute, Stunde,
 Monatstag, Monat und Wochentag. Unterstützt werden Zahlen, `*`, Listen,
 Bereiche und `/Schritt`; Monats- und Wochentagsnamen sind derzeit nicht
-unterstützt. Das Feld- und Wertebereichsformat wird compilergeprüft. Die
-konkrete Ausführungssemantik bleibt Aufgabe des Host-Schedulers. Ohne
-Zeitzonenangabe verwendet der Export UTC. Der Compiler prüft die Form des
-Zeitzonennamens, aber nicht, ob das Zielsystem diesen Eintrag kennt.
+unterstützt. Das Feld- und Wertebereichsformat wird compilergeprüft. Der
+integrierte Scheduler verwendet die üblichen Cron-Feldbereiche; sind sowohl
+Monatstag als auch Wochentag eingeschränkt, genügt eine der beiden
+Übereinstimmungen. Ohne Zeitzonenangabe gilt UTC. Die IANA-Zeitzone wird beim
+Start des Dienst-Schedulers tatsächlich aufgelöst; unbekannte Zonen verhindern
+dessen Start.
 
-`schedule trigger` akzeptiert ausschließlich deklarierte Zeitplannamen und
-führt nichts aus, wenn der authentifizierte Servernachweis fehlt. Anschließend
-startet es Zelyra erneut mit dem deklarierten Handler. Dadurch gelten die
-normalen Projektprüfungen, Runtime-Budgets und Capability-Freigaben. Secrets
-gehören nicht in Command-Zeilen oder Cron-Ausgaben.
+`schedule trigger` ist ein Legacy-Schutz für zuvor exportierte Cron-Zeilen.
+Wenn der aktive Projekt-Dienst läuft, überspringt der Trigger die Ausführung,
+weil der residente Scheduler denselben Zeitplan verwaltet. Secrets gehören
+nicht in Command-Zeilen oder Cron-Ausgaben.

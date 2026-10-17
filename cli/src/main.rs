@@ -9627,6 +9627,20 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         && schedule_project_root
             .as_deref()
             .is_some_and(service_cli::current_project_service_is_active);
+    let _scheduler_thread = if is_managed_service && !program.schedules.is_empty() {
+        match task_cli::start_resident_scheduler(PathBuf::from(&path), &program) {
+            Ok(thread) => {
+                println!("Zelyra scheduler is active in the project service; schedules are rechecked each minute");
+                Some(thread)
+            }
+            Err(error) => {
+                diagnostic(&path, "E-TASK-004", &error, 1, 1);
+                return ExitCode::from(1);
+            }
+        }
+    } else {
+        None
+    };
     let (schedule_probe_token, _schedule_state_guard) =
         if program.schedules.is_empty() || !is_managed_service {
             (None, None)

@@ -48,35 +48,37 @@ the target host. systemd timers and platform schedulers are also possible
 deployment hosts. Zelyra does not start a resident scheduler by default.
 
 This describes the released 1.1.5 behavior. In the current unreleased 1.2.5
-worktree, `zelyra setup --schema`, `--all`, and `zelyra serve` discover checked
-schedules in `main.zyl`, create `.zelyra/schedules.cron`, and idempotently
-ensure the MariaDB outbox for scheduled `Email` handlers. Changed declarations
-refresh only Zelyra's own export; when no schedules remain, that managed export
-is removed. Foreign files and symlinks are protected.
-When schedules exist, `serve` also creates `.zelyra/serve.json` with its
-loopback address and a random session token (directory mode `0700`, file mode
-`0600` on Unix). Exported cron entries call `zelyra schedule trigger`. That
-command makes an authenticated local request to verify that this exact project
-is running under its installed, active Zelyra OS service. A manually started
-`serve` process is not sufficient. The trigger skips the job when the service
-or its server is down. After a valid probe, Zelyra starts the compiler-checked
-command handler as a child process. A host cron must still be explicitly
-installed; Zelyra never silently edits a user's crontab. Removing a schedule
-declaration does not delete an already manually installed host crontab row;
-the trigger revalidates the source and refuses to run that removed schedule.
-A scheduler integrated directly into `serve` is the next scheduler milestone
-and is intended to make external cron entries unnecessary. Duplicate-run
-coordination is not yet guaranteed. Secrets are absent from the cron entry and
-command line; `zelyra run` reads project settings from `.env`.
+worktree, `zelyra setup --schema`, `--all`, and `zelyra serve` check schedules
+in `main.zyl` and idempotently ensure the MariaDB outbox for scheduled
+`Email` handlers. Setup does not generate cron rows; it removes old
+Zelyra-managed `.zelyra/schedules.cron` files. Foreign files and symlinks are
+protected. The installed and active Linux systemd user service starts the
+scheduler inside the same `serve` process. It reloads and checks project source
+at every minute boundary, so removed, changed, or currently invalid declarations
+are not executed from stale startup state. Manually started `serve` does not run
+schedules. Schedules use their IANA timezone, defaulting to UTC. At most four
+different schedule handlers run concurrently; a schedule is skipped while its
+previous invocation is still active. Errors and program output go to the
+service's stdout/stderr (typically the systemd journal).
+
+The explicit cron preview is only for externally managed execution and must not
+be activated alongside the integrated scheduler. Zelyra does not install or
+edit user crontabs. It cannot remove old manually installed crontab rows from a
+crontab managed by someone else; the legacy trigger skips inside an active
+service to prevent duplicate execution. The scheduler does not catch up minutes
+missed during downtime and does not yet provide durable distributed leases or
+retries; those belong to the next job-system milestone. `zelyra run` continues
+to read project settings from `.env`.
 
 The `cron` property uses five numeric fields for minute, hour, day of month,
 month, and day of week. Numbers, `*`, lists, ranges, and `/step` are supported;
 month and weekday names are not supported yet. The field syntax and ranges are
-compiler-checked. Actual trigger behavior belongs to the host scheduler.
-If no timezone is declared, export uses UTC. The compiler checks the shape of
-the timezone name, but does not verify that the target host has the entry.
+compiler-checked. The resident scheduler uses standard cron field ranges; when
+both day-of-month and day-of-week are restricted, either match is sufficient.
+If no timezone is declared, UTC is used. The service scheduler resolves the
+IANA timezone at startup and refuses to start for an unknown zone.
 
-`schedule trigger` accepts only a declared schedule name and does nothing when
-the authenticated server probe fails. It then starts Zelyra again with the
-declared handler, preserving normal project checks, runtime budgets, and
-capability grants. Do not put secrets in command lines or cron output.
+`schedule trigger` is a legacy guard for previously exported cron rows. When
+the active project service is running, it skips execution because the resident
+scheduler owns those declarations. Do not put secrets in command lines or cron
+output.

@@ -1,14 +1,16 @@
 use std::fs;
+use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::mpsc;
 use std::thread;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 static NEXT_DIRECTORY: AtomicU64 = AtomicU64::new(0);
 
 #[test]
 #[cfg(target_os = "linux")]
-fn serve_prepares_declared_schedule_export_before_listening() {
+fn active_project_service_starts_resident_scheduler_without_cron_export() {
     let nonce = NEXT_DIRECTORY.fetch_add(1, Ordering::Relaxed);
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -25,7 +27,7 @@ fn serve_prepares_declared_schedule_export_before_listening() {
     html { <html><body><main>Schedule test</main></body></html> }
 }
 command daily { handler: run_daily }
-schedule daily { command: daily cron: "0 0 * * *" }
+schedule daily { command: daily cron: "* * * * *" }
 fn run_daily() { print("daily task executed") }
 fn main() { }
 "#,
@@ -79,52 +81,75 @@ fn main() { }
         .env("ZELYRA_SYSTEMD_SERVICE_ID", &service_id)
         .env("ZELYRA_FAKE_SYSTEMD_ACTIVE", &active_marker)
         .env("PATH", &test_path)
-        .stdout(Stdio::null())
+        .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .expect("start Zelyra server");
+    let stdout = server.stdout.take().expect("capture service stdout");
+    let (line_sender, line_receiver) = mpsc::channel();
+    thread::spawn(move || {
+        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+            if line_sender.send(line).is_err() {
+                break;
+            }
+        }
+    });
 
-    let export = project.join(".zelyra/schedules.cron");
+    let state = project.join(".zelyra/serve.json");
     for _ in 0..150 {
-        if export.is_file() {
+        if state.is_file() {
             break;
         }
         if let Some(status) = server.try_wait().expect("poll server process") {
             let output = server.wait_with_output().expect("collect server output");
             let _ = fs::remove_dir_all(&project);
             panic!(
-                "zelyra serve exited before preparing schedules: {status}\n{}",
+                "zelyra serve exited before starting schedules: {status}\n{}",
                 String::from_utf8_lossy(&output.stderr)
             );
         }
         thread::sleep(Duration::from_millis(20));
     }
-    let generated = fs::read_to_string(&export).expect("serve should create schedule export");
-    assert!(generated.contains("Zelyra schedule: daily"));
-    assert!(generated.contains("schedule trigger"));
-    assert!(generated.contains("--name 'daily'"));
-    for _ in 0..150 {
-        if project.join(".zelyra/serve.json").is_file() {
-            break;
-        }
-        thread::sleep(Duration::from_millis(10));
-    }
+    assert!(!project.join(".zelyra/schedules.cron").exists());
 
-    let trigger = Command::new(env!("CARGO_BIN_EXE_zelyra"))
+    let deadline = Instant::now() + Duration::from_secs(70);
+    let mut scheduler_started = false;
+    let mut job_executed = false;
+    while Instant::now() < deadline && !job_executed {
+        if let Some(status) = server.try_wait().expect("poll scheduler service") {
+            panic!("Zelyra service exited before scheduled command ran: {status}");
+        }
+        match line_receiver.recv_timeout(Duration::from_millis(250)) {
+            Ok(line) => {
+                scheduler_started |=
+                    line.contains("Zelyra scheduler is active in the project service");
+                job_executed |= line.contains("daily task executed");
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => break,
+        }
+    }
+    assert!(
+        scheduler_started,
+        "service should start its resident scheduler"
+    );
+    assert!(
+        job_executed,
+        "resident scheduler should run the declared command at a minute boundary"
+    );
+
+    let legacy_trigger = Command::new(env!("CARGO_BIN_EXE_zelyra"))
         .args(["schedule", "trigger", "main.zyl", "--name", "daily"])
         .current_dir(&project)
         .env("XDG_CONFIG_HOME", &config_home)
         .env("ZELYRA_FAKE_SYSTEMD_ACTIVE", &active_marker)
         .env("PATH", &test_path)
         .output()
-        .expect("trigger schedule through live server");
-    assert!(trigger.status.success());
-    assert!(
-        String::from_utf8_lossy(&trigger.stdout).contains("daily task executed"),
-        "trigger output: {}\n{}",
-        String::from_utf8_lossy(&trigger.stdout),
-        String::from_utf8_lossy(&trigger.stderr)
-    );
+        .expect("attempt a legacy cron trigger while resident service runs");
+    assert!(legacy_trigger.status.success());
+    assert!(String::from_utf8_lossy(&legacy_trigger.stderr)
+        .contains("runs declared schedules in-process"));
+    assert!(!String::from_utf8_lossy(&legacy_trigger.stdout).contains("daily task executed"));
 
     fs::remove_file(&active_marker).expect("mark fake service stopped");
     let inactive_trigger = Command::new(env!("CARGO_BIN_EXE_zelyra"))
@@ -144,7 +169,11 @@ fn main() { }
         .expect("restore fake service state for server stop check");
 
     let _ = server.kill();
-    let _ = server.wait();
+    let server_output = server.wait_with_output().expect("collect server output");
+    assert!(
+        !server_output.status.success(),
+        "test intentionally terminates the server"
+    );
     let stopped_trigger = Command::new(env!("CARGO_BIN_EXE_zelyra"))
         .args(["schedule", "trigger", "main.zyl", "--name", "daily"])
         .current_dir(&project)

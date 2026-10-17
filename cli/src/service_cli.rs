@@ -287,12 +287,11 @@ fn render_unit_for(
         }
     }
     let mut unit = format!(
-        "[Unit]\nDescription=Zelyra application service\nAfter=network.target\n\n[Service]\nType=simple\nWorkingDirectory={}\nExecStart={} serve {} 127.0.0.1:{}\nEnvironment=ZELYRA_SYSTEMD_SERVICE_ID={}\nRestart=on-failure\nRestartSec=2\n# Zelyra-Port: {}\n",
+        "[Unit]\nDescription=Zelyra application service\nAfter=network.target\n\n[Service]\nType=simple\nWorkingDirectory={}\nExecStart={} serve {} 127.0.0.1:{}\nRestart=on-failure\nRestartSec=2\n# Zelyra-Port: {}\n",
         systemd_escape_path(&workspace.to_string_lossy()),
         systemd_quote(&executable.to_string_lossy()),
         systemd_quote(&entry.to_string_lossy()),
         port,
-        project_service_id(workspace),
         port,
     );
     if include_env_file {
@@ -301,6 +300,10 @@ fn render_unit_for(
             systemd_escape_path(&env_file.to_string_lossy())
         ));
     }
+    unit.push_str(&format!(
+        "Environment=ZELYRA_SYSTEMD_SERVICE_ID={}\n",
+        project_service_id(workspace)
+    ));
     unit.push_str("\n[Install]\nWantedBy=default.target\n");
     Ok(unit)
 }
@@ -604,6 +607,11 @@ mod tests {
         assert!(unit.contains("WorkingDirectory=/srv/invoice\\x20tutorial"));
         assert!(unit.contains("serve \"/srv/invoice tutorial/main.zyl\" 127.0.0.1:3001"));
         assert!(unit.contains("EnvironmentFile=-/srv/invoice\\x20tutorial/.env"));
+        assert!(unit.contains("Environment=ZELYRA_SYSTEMD_SERVICE_ID="));
+        assert!(
+            unit.find("Environment=ZELYRA_SYSTEMD_SERVICE_ID=").unwrap()
+                > unit.find("EnvironmentFile=-").unwrap()
+        );
         assert!(unit.contains("# Zelyra-Port: 3001"));
         assert!(!unit.contains("Description=Zelyra application (/srv"));
     }
