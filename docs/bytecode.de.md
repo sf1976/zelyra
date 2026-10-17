@@ -39,6 +39,8 @@ sind nicht als unterstützter Pfad geprüft. Ausdrücklich veränderliche Arrays
 unterstützen indizierte Ersetzung, `+=`-Updates und `push_mut`/`pop_mut` auf
 explizit mutable Bindungen. Bytecode v25 codiert `pop_mut` als eigene
 verifizierte Instruktion; der Verifier prüft Zielmutabilität und Payloadtyp.
+Indizierte Änderungen aktualisieren das vorhandene lokale Array in AST, MIR
+und Bytecode direkt; dabei wird nicht das vollständige Array kopiert.
 Array-, Tuple-, Option- und Resultwerte gleichen Typs können mit `==`/`!=`
 verglichen werden. Die Indexierung verwendet die gemeinsame MIR-Runtime-Semantik,
 einschließlich quellpositionsgebundener Fehler für negative und ungültige

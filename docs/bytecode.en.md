@@ -35,7 +35,9 @@ Set/Map-of-record behavior has not been tested as a supported path.
 Opt-in mutable arrays support indexed replacement, `+=` updates, and
 `push_mut`/`pop_mut` on explicitly mutable bindings. Bytecode v25 encodes
 `pop_mut` as a dedicated verified instruction; the verifier checks target
-mutability and payload type. Arrays, tuples, Options, and Results of matching
+mutability and payload type. Indexed writes update the existing local vector
+in place in AST, MIR, and Bytecode; they do not clone the entire array. Arrays,
+tuples, Options, and Results of matching
 types can use `==`/`!=`. Indexing uses the shared MIR runtime semantics, including
 source-mapped negative-index and bounds errors. Tuple indices must be
 non-negative integer literals, as required by the language type checker.

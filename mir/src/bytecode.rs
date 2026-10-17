@@ -2586,8 +2586,8 @@ fn execute_bytecode_entry(
                     let index = stack.pop().ok_or_else(|| {
                         runtime_error(instruction.span, "bytecode array-update stack underflow")
                     })?;
-                    let mut values = match frame.locals.get(&local).cloned() {
-                        Some(Value::Array(values)) => values,
+                    let values_len = match frame.locals.get(&local) {
+                        Some(Value::Array(values)) => values.len(),
                         Some(other) => {
                             return Err(runtime_error(
                                 instruction.span,
@@ -2601,28 +2601,55 @@ fn execute_bytecode_entry(
                             ));
                         }
                     };
-                    let index = array_assignment_index(index, values.len(), instruction.span)?;
-                    let value = match operation {
-                        ArrayIndexAssignOp::Set => value,
-                        ArrayIndexAssignOp::Add => evaluate_binary(
-                            values[index].clone(),
-                            BinaryOp::Add,
-                            value,
-                            instruction.span,
-                        )?,
+                    let index = array_assignment_index(index, values_len, instruction.span)?;
+                    let (expected_type, current) = match frame.locals.get(&local) {
+                        Some(Value::Array(values)) => {
+                            let current = values.get(index).ok_or_else(|| {
+                                runtime_error(
+                                    instruction.span,
+                                    "bytecode mutable array index is out of bounds",
+                                )
+                            })?;
+                            (
+                                current.ty(),
+                                (operation == ArrayIndexAssignOp::Add).then(|| current.clone()),
+                            )
+                        }
+                        _ => {
+                            return Err(runtime_error(
+                                instruction.span,
+                                "bytecode array update target changed during evaluation",
+                            ));
+                        }
                     };
-                    if !runtime_type_matches(&values[index].ty(), &value.ty()) {
+                    let value = match current {
+                        None => value,
+                        Some(current) => {
+                            evaluate_binary(current, BinaryOp::Add, value, instruction.span)?
+                        }
+                    };
+                    if !runtime_type_matches(&expected_type, &value.ty()) {
                         return Err(runtime_error(
                             instruction.span,
                             format!(
-                                "bytecode array update expected `{}`, got `{}`",
-                                values[index].ty(),
+                                "bytecode array update expected `{expected_type}`, got `{}`",
                                 value.ty()
                             ),
                         ));
                     }
-                    values[index] = value;
-                    frame.locals.insert(local, Value::Array(values));
+                    let Some(Value::Array(values)) = frame.locals.get_mut(&local) else {
+                        return Err(runtime_error(
+                            instruction.span,
+                            "bytecode array update target changed during evaluation",
+                        ));
+                    };
+                    let Some(element) = values.get_mut(index) else {
+                        return Err(runtime_error(
+                            instruction.span,
+                            "bytecode mutable array index is out of bounds",
+                        ));
+                    };
+                    *element = value;
                 }
                 BytecodeOp::ArrayAppend {
                     local,

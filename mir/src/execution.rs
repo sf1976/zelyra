@@ -820,8 +820,8 @@ impl Machine<'_> {
                             span,
                             ..
                         } => {
-                            let mut items = match locals.get(local).cloned() {
-                                Some(Value::Array(items)) => items,
+                            let items_len = match locals.get(local) {
+                                Some(Value::Array(items)) => items.len(),
                                 Some(other) => {
                                     return Err(runtime_error(
                                         *span,
@@ -839,19 +839,35 @@ impl Machine<'_> {
                                 }
                             };
                             let index = self.expression(*index, &mut locals, depth, *span)?;
-                            let index = array_assignment_index(index, items.len(), *span)?;
-                            let value = self.expression(*value, &mut locals, depth, *span)?;
-                            let value = match operation {
-                                ArrayIndexAssignOp::Set => value,
-                                ArrayIndexAssignOp::Add => evaluate_binary(
-                                    items[index].clone(),
-                                    BinaryOp::Add,
-                                    value,
-                                    *span,
-                                )?,
+                            let index = array_assignment_index(index, items_len, *span)?;
+                            let current = if *operation == ArrayIndexAssignOp::Add {
+                                let Some(Value::Array(items)) = locals.get(local) else {
+                                    return Err(runtime_error(
+                                        *span,
+                                        "MIR indexed assignment target changed during evaluation",
+                                    ));
+                                };
+                                Some(items[index].clone())
+                            } else {
+                                None
                             };
-                            items[index] = value;
-                            locals.insert(*local, Value::Array(items));
+                            let value = self.expression(*value, &mut locals, depth, *span)?;
+                            let value = match current {
+                                None => value,
+                                Some(current) => {
+                                    evaluate_binary(current, BinaryOp::Add, value, *span)?
+                                }
+                            };
+                            let Some(Value::Array(items)) = locals.get_mut(local) else {
+                                return Err(runtime_error(
+                                    *span,
+                                    "MIR indexed assignment target changed during evaluation",
+                                ));
+                            };
+                            let element = items.get_mut(index).ok_or_else(|| {
+                                runtime_error(*span, "MIR mutable array index is out of bounds")
+                            })?;
+                            *element = value;
                         }
                         MirInstruction::MatchInit {
                             match_id,
