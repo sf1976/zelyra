@@ -1,8 +1,12 @@
-# Local Zelyra packages (experimental)
+# Zelyra packages (experimental)
 
-This unreleased 1.1.5 work adds offline local packages on top of the existing
-explicit module imports. It does not download packages or run build scripts.
-Projects without a `[package]` table keep the existing file-import behavior.
+This guide describes two states: local offline packages from the released
+package workflow, and the unreleased registry work on the 1.2.5 development
+branch. The local workflow does not download packages or run build scripts.
+The development branch adds signed source artifacts, explicit publisher trust,
+static registry indexes, search, and verified installation of exact versions.
+These features are not yet part of a stable release. Projects without a
+`[package]` table keep the existing file-import behavior.
 
 Local packages are currently source dependencies, not installable modules
 managed through ordinary application pages. `zelyra module list` provides a
@@ -97,10 +101,11 @@ changes relative to the lockfile that the project already trusts; it does not
 authenticate a publisher, prove where files came from, or make a malicious
 package safe. `zelyra package lock --update` deliberately accepts the current
 local files as the new locked contents, so review the source and diff before
-using that option. The stable 1.1.5 package workflow has no registry or remote
-downloads. The unreleased ecosystem work adds signed source artifacts, an
-explicit local publisher trust file, and a deterministic static-host registry
-index builder; remote discovery and verified installation remain unfinished. A signature proves that the corresponding
+using that option. The local offline package workflow still does not download
+packages. The unreleased 1.2.5 development branch implements signed source
+artifacts, an explicit local publisher trust file, a deterministic static
+registry index builder, search, and verified installation of exact versions.
+Separately published transitive dependencies remain open. A signature proves that the corresponding
 trusted key signed the artifact digest. It does not prove that the code is safe
 or that a publisher is reputable. Package `effects` ceilings are additional
 compile-time limits; they do not grant or bypass application capabilities, SQL

@@ -1,9 +1,13 @@
-# Lokale Zelyra-Pakete (experimentell)
+# Zelyra-Pakete (experimentell)
 
-Diese unveröffentlichte Arbeit für 1.1.5 ergänzt Offline-Pakete aus lokalen
-Pfaden auf Basis der vorhandenen expliziten Modulimporte. Zelyra lädt keine
-Pakete herunter und führt keine Build-Skripte aus. Projekte ohne `[package]`
-behalten das bisherige Verhalten mit Dateiimporten.
+Dieser Leitfaden beschreibt zwei Stände: lokale Offline-Pakete aus dem
+veröffentlichten Paketablauf sowie die noch unveröffentlichte Registry-Arbeit
+des Entwicklungszweigs 1.2.5. Der lokale Ablauf lädt keine Pakete herunter und
+führt keine Build-Skripte aus. Der Entwicklungszweig ergänzt signierte
+Quellartefakte, ausdrückliches Herausgebervertrauen, statische Registry-Indizes,
+Suche und verifizierte Installation exakter Versionen. Diese Funktionen sind
+noch kein stabiles Release. Projekte ohne `[package]` behalten das bisherige
+Verhalten mit Dateiimporten.
 
 Lokale Pakete sind derzeit Quellcode-Abhängigkeiten und keine installierbaren
 oder über normale Anwendungsseiten verwalteten Module. `zelyra module list`
@@ -103,12 +107,13 @@ Lockfile erkennt Änderungen relativ zu einem Lockfile, dem das Projekt bereits
 vertraut. Sie authentifiziert weder den Herausgeber noch die Herkunft der
 Dateien und macht ein schädliches Paket nicht sicher. `zelyra package lock
 --update` übernimmt bewusst die aktuellen lokalen Dateien als neuen gesperrten
-Stand; prüfe daher Quelle und Diff vor diesem Schritt. Der stabile Paketablauf
-in 1.1.5 enthält keine Registry und keine Downloads aus dem Netz. Die
-unveröffentlichte Ökosystemarbeit ergänzt signierte Quellartefakte, eine
-ausdrückliche lokale Herausgeber-Vertrauensdatei und einen deterministischen
-Generator für statische Registry-Indizes; Netzsuche und verifizierte
-Installation sind noch offen. Eine Signatur weist nach, dass der
+Stand; prüfe daher Quelle und Diff vor diesem Schritt. Der lokale
+Offline-Paketablauf lädt weiterhin nichts aus dem Netz. Im unveröffentlichten
+Entwicklungszweig 1.2.5 sind signierte Quellartefakte, eine ausdrückliche
+lokale Herausgeber-Vertrauensdatei, ein deterministischer Generator für
+statische Registry-Indizes, Suche und verifizierte Installation exakter
+Versionen implementiert. Separat veröffentlichte transitive Abhängigkeiten
+bleiben offen. Eine Signatur weist nach, dass der
 zugehörige vertrauenswürdige Schlüssel den Artefakt-Hash signiert hat. Sie
 beweist weder, dass der Code sicher ist, noch dass ein Herausgeber
 vertrauenswürdig handelt. Paketobergrenzen für `effects` sind zusätzliche
