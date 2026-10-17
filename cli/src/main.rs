@@ -194,6 +194,8 @@ fn usage() {
     eprintln!("  package keygen|sign|verify|trust manages signed Zelyra source packages and trusted publishers");
     eprintln!("  package registry build <dir> [--output index.json] builds a deterministic static-host registry index");
     eprintln!("  package add <index-url> <name> <exact-version> --as <alias> installs one explicitly trusted package release");
+    eprintln!("  package update <index-url> <name> <exact-version> --as <alias> explicitly upgrades one dependency to an exact release");
+    eprintln!("  package remove <alias> removes a dependency and refreshes its lock while retaining cached sources");
     eprintln!("  package lock [entry.zyl] [--check|--update] resolves local packages and checks or writes zelyra.lock");
     eprintln!("  doctor supports `--env-file <path>` for generated MariaDB projects");
     eprintln!("  setup supports `--database`, `--schema`, `--all`, `--host-port`, `--db-host-port`, and `--web [--port <port>]`");

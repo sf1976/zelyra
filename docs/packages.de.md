@@ -166,6 +166,20 @@ separat aufgelöst oder geladen. Paketabhängigkeiten müssen bereits im signier
 Paketverzeichnis enthalten sein. Prüfung und Ausführung installierter Pakete sind
 offline möglich.
 
+Eine Abhängigkeit wird ausdrücklich mit `zelyra package remove <alias>`
+entfernt. Der Befehl prüft das verbleibende Projekt und aktualisiert
+`zelyra.toml` sowie `zelyra.lock` mit Rollback bei Fehlern. Dateien im Cache
+bleiben erhalten, damit gemeinsam genutzte oder Nutzerdaten nicht ungefragt
+gelöscht werden. Eine sichere Cache-Bereinigung ist ein eigener späterer Befehl.
+
+Ein vorhandener Alias lässt sich ausdrücklich auf eine andere exakte Version
+aktualisieren: `zelyra package update <index-url> <name> <exact-version> --as
+<alias>`. Das neue Artefakt muss dieselbe Paketidentität wie die bisherige
+Abhängigkeit haben und dieselben Vertrauens- und Integritätsprüfungen bestehen
+wie bei `add`. Manifest und Lock werden mit Rollback aktualisiert. Vorherige
+Cacheversionen bleiben erhalten; es gibt weder SemVer-Bereich noch implizite
+Auswahl der neuesten Version.
+
 Die Standarddatei heißt `zelyra.trust.toml` im aktuellen Verzeichnis. Mit
 `--file <pfad>` kann eine andere Vertrauensdatei verwaltet oder für die Prüfung
 verwendet werden. Signierte Quellartefakte enthalten ausschließlich

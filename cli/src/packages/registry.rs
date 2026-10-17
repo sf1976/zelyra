@@ -27,7 +27,9 @@ pub(super) fn command(
         "verify" => verify_command(&mut arguments),
         "trust" => trust_command(&mut arguments),
         "registry" => registry_command(&mut arguments),
-        "add" => add_command(&mut arguments),
+        "add" => add_command(&mut arguments, false),
+        "update" => add_command(&mut arguments, true),
+        "remove" => remove_command(&mut arguments),
         _ => Err(format!("unknown package action `{action}`")),
     };
     match result {
@@ -42,22 +44,148 @@ pub(super) fn command(
     }
 }
 
-fn add_command(args: &mut impl Iterator<Item = String>) -> Result<String, String> {
+fn remove_command(args: &mut impl Iterator<Item = String>) -> Result<String, String> {
+    let alias = args
+        .next()
+        .ok_or_else(|| "usage: zelyra package remove <dependency-alias>".to_owned())?;
+    if args.next().is_some() {
+        return Err("usage: zelyra package remove <dependency-alias>".into());
+    }
+    validate_dependency_alias(&alias)?;
+    let workspace = std::env::current_dir()
+        .map_err(|error| format!("cannot read current directory: {error}"))?;
+    let workspace = fs::canonicalize(workspace)
+        .map_err(|error| format!("cannot resolve project directory: {error}"))?;
+    let manifest_path = workspace.join(MANIFEST);
+    let original_manifest = read_regular_file(&manifest_path, 4 * 1024 * 1024, "project manifest")?;
+    let mut document = std::str::from_utf8(&original_manifest)
+        .map_err(|_| "project manifest must be UTF-8".to_owned())?
+        .parse::<DocumentMut>()
+        .map_err(|error| format!("invalid project manifest: {error}"))?;
+    let no_dependencies = {
+        let dependencies = document
+            .get_mut("dependencies")
+            .and_then(Item::as_table_mut)
+            .ok_or_else(|| format!("project dependency alias `{alias}` does not exist"))?;
+        if dependencies.remove(&alias).is_none() {
+            return Err(format!("project dependency alias `{alias}` does not exist"));
+        }
+        dependencies.is_empty()
+    };
+    if no_dependencies {
+        document.remove("dependencies");
+    }
+    let no_sources = if let Some(sources) = document
+        .get_mut("package_sources")
+        .and_then(Item::as_table_mut)
+    {
+        sources.remove(&alias);
+        sources.is_empty()
+    } else {
+        false
+    };
+    if no_sources {
+        document.remove("package_sources");
+    }
+    let lock_path = workspace.join(LOCKFILE);
+    reject_output_target(&lock_path, "package lockfile")?;
+    let previous_lock = match fs::read(&lock_path) {
+        Ok(bytes) => Some(bytes),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(format!("cannot read existing package lockfile: {error}")),
+    };
+    let entry = document
+        .get("package")
+        .and_then(Item::as_table)
+        .and_then(|package| package.get("entry"))
+        .and_then(Item::as_str)
+        .unwrap_or("main.zyl");
+    let entry_relative = safe_relative_path(entry)
+        .ok_or_else(|| "project package entry must be a safe relative path".to_owned())?;
+    let entry_path = workspace.join(entry_relative);
+    let entry_path = fs::canonicalize(&entry_path)
+        .map_err(|error| format!("cannot resolve project entry for validation: {error}"))?;
+    if !entry_path.starts_with(&workspace) || !entry_path.is_file() {
+        return Err("project entry resolves outside the workspace".into());
+    }
+    let result = (|| {
+        write_atomic(&manifest_path, document.to_string().as_bytes(), 0o644)?;
+        let graph = PackageGraph::load(&workspace)
+            .map_err(|error| error.message)?
+            .ok_or_else(|| "project package graph disappeared after manifest update".to_owned())?;
+        write_lockfile(&graph, true).map_err(|error| error.message)?;
+        let entry = entry_path
+            .to_str()
+            .ok_or_else(|| "project entry path is not UTF-8".to_owned())?;
+        super::super::validate(entry).map_err(|_| {
+            "project compiler validation failed after dependency removal".to_owned()
+        })?;
+        Ok::<(), String>(())
+    })();
+    if let Err(error) = result {
+        let mut rollback_errors = Vec::new();
+        if let Err(rollback) = write_atomic(&manifest_path, &original_manifest, 0o644) {
+            rollback_errors.push(format!("manifest rollback failed: {rollback}"));
+        }
+        match previous_lock {
+            Some(bytes) => {
+                if let Err(rollback) = write_atomic(&lock_path, &bytes, 0o644) {
+                    rollback_errors.push(format!("lockfile rollback failed: {rollback}"));
+                }
+            }
+            None => {
+                if let Err(rollback) = fs::remove_file(&lock_path) {
+                    if rollback.kind() != std::io::ErrorKind::NotFound {
+                        rollback_errors.push(format!("new lockfile cleanup failed: {rollback}"));
+                    }
+                }
+            }
+        }
+        return Err(if rollback_errors.is_empty() {
+            error
+        } else {
+            format!(
+                "{error}; transaction rollback incomplete: {}",
+                rollback_errors.join("; ")
+            )
+        });
+    }
+    Ok(format!("removed package dependency `{alias}`; updated zelyra.lock (cached source files were retained)"))
+}
+
+fn reject_output_target(path: &Path, description: &str) -> Result<(), String> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => Err(format!(
+            "{description} {} must be a regular non-symlink file",
+            path.display()
+        )),
+        Ok(_) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!(
+            "cannot inspect {description} {}: {error}",
+            path.display()
+        )),
+    }
+}
+
+fn add_command(args: &mut impl Iterator<Item = String>, updating: bool) -> Result<String, String> {
+    let action = if updating { "update" } else { "add" };
     let registry_text = args.next().ok_or_else(|| {
-        "usage: zelyra package add <registry-index-url> <name> <exact-version> --as <alias>"
-            .to_owned()
+        format!("usage: zelyra package {action} <registry-index-url> <name> <exact-version> --as <alias>")
     })?;
     let name = args
         .next()
-        .ok_or_else(|| "package add requires a package name".to_owned())?;
+        .ok_or_else(|| format!("package {action} requires a package name"))?;
     validate_package_name(&name).map_err(|error| error.message)?;
     let version_text = args
         .next()
-        .ok_or_else(|| "package add requires an exact SemVer version".to_owned())?;
+        .ok_or_else(|| format!("package {action} requires an exact SemVer version"))?;
     let version = Version::parse(&version_text)
         .map_err(|error| format!("invalid exact package version `{version_text}`: {error}"))?;
     if version.to_string() != version_text {
-        return Err("package add requires a normalized exact SemVer version".into());
+        return Err(format!(
+            "package {action} requires a normalized exact SemVer version"
+        ));
     }
     let mut alias = None;
     while let Some(argument) = args.next() {
@@ -66,7 +194,7 @@ fn add_command(args: &mut impl Iterator<Item = String>) -> Result<String, String
             _ => return Err("unexpected or repeated package add option".into()),
         }
     }
-    let alias = alias.ok_or_else(|| "package add requires `--as <alias>`".to_owned())?;
+    let alias = alias.ok_or_else(|| format!("package {action} requires `--as <alias>`"))?;
     validate_dependency_alias(&alias)?;
     let registry_url = parse_registry_url(&registry_text)?;
     let agent = ureq::Agent::config_builder()
@@ -119,16 +247,29 @@ fn add_command(args: &mut impl Iterator<Item = String>) -> Result<String, String
         .parse::<DocumentMut>()
         .map_err(|error| format!("invalid project manifest: {error}"))?;
     if document.get("package").and_then(Item::as_table).is_none() {
-        return Err("package add requires a project [package] table".into());
+        return Err(format!(
+            "package {action} requires a project [package] table"
+        ));
     }
     if let Some(sources) = document.get("package_sources") {
         let sources = sources
             .as_table()
             .ok_or_else(|| "project `package_sources` must be a table".to_owned())?;
-        if sources.contains_key(&alias) {
+        if !updating && sources.contains_key(&alias) {
             return Err(format!(
                 "package source metadata for `{alias}` already exists"
             ));
+        }
+        if updating {
+            if let Some(previous) = sources.get(&alias).and_then(Item::as_table) {
+                let previous_publisher = previous.get("publisher").and_then(Item::as_str);
+                let previous_key = previous.get("public_key").and_then(Item::as_str);
+                if previous_publisher != Some(artifact.publisher.as_str())
+                    || previous_key != Some(hex_encode(&artifact.public_key).as_str())
+                {
+                    return Err(format!("package update for `{alias}` changes the trusted publisher or signing key; remove and add the dependency again after reviewing the new publisher"));
+                }
+            }
         }
     }
     let dependencies = document
@@ -136,10 +277,42 @@ fn add_command(args: &mut impl Iterator<Item = String>) -> Result<String, String
         .or_insert(Item::Table(Table::new()))
         .as_table_mut()
         .ok_or_else(|| "project `dependencies` must be a table".to_owned())?;
-    if dependencies.contains_key(&alias) {
-        return Err(format!(
-            "dependency alias `{alias}` already exists; choose a new alias"
-        ));
+    if updating {
+        let current = dependencies
+            .get(&alias)
+            .and_then(Item::as_table)
+            .ok_or_else(|| {
+                format!("cannot update `{alias}` because it is not a declared dependency")
+            })?;
+        let current_path = current
+            .get("path")
+            .and_then(Item::as_str)
+            .and_then(super::safe_dependency_path)
+            .ok_or_else(|| {
+                format!("dependency `{alias}` does not have a safe local package path")
+            })?;
+        let current_root = fs::canonicalize(workspace.join(current_path))
+            .map_err(|error| format!("cannot resolve current dependency `{alias}`: {error}"))?;
+        if !current_root.starts_with(&workspace) {
+            return Err(format!(
+                "current dependency `{alias}` resolves outside the project workspace"
+            ));
+        }
+        let current_manifest =
+            read_manifest(&current_root.join(MANIFEST)).map_err(|error| error.message)?;
+        let current_name = current_manifest
+            .get("package")
+            .and_then(toml::Value::as_table)
+            .and_then(|package| package.get("name"))
+            .and_then(toml::Value::as_str)
+            .ok_or_else(|| format!("current dependency `{alias}` has no package identity"))?;
+        if current_name != name {
+            return Err(format!(
+                "dependency alias `{alias}` currently names package `{current_name}`, not `{name}`"
+            ));
+        }
+    } else if dependencies.contains_key(&alias) {
+        return Err(format!("dependency alias `{alias}` already exists; use `zelyra package update` for an explicit exact-version upgrade"));
     }
     let relative_install = PathBuf::from(".zelyra")
         .join("packages")
@@ -215,6 +388,7 @@ fn add_command(args: &mut impl Iterator<Item = String>) -> Result<String, String
             .map_err(|error| error.message)?
             .ok_or_else(|| "project package graph disappeared after manifest update".to_owned())?;
         write_lockfile(&graph, true).map_err(|error| error.message)?;
+        validate_project_manifest(&workspace, &new_manifest)?;
         Ok::<(), String>(())
     })();
     if let Err(error) = transaction_result {
@@ -248,7 +422,11 @@ fn add_command(args: &mut impl Iterator<Item = String>) -> Result<String, String
             )
         });
     }
-    Ok(format!("installed trusted package {name} {version_text} as `{alias}` from {} and updated zelyra.lock", registry_url))
+    if updating {
+        Ok(format!("updated `{alias}` to trusted package {name} {version_text} from {} and updated zelyra.lock; previous cached versions were retained", registry_url))
+    } else {
+        Ok(format!("installed trusted package {name} {version_text} as `{alias}` from {} and updated zelyra.lock", registry_url))
+    }
 }
 
 #[derive(Debug)]
@@ -420,6 +598,31 @@ fn validate_dependency_alias(alias: &str) -> Result<(), String> {
         return Err("dependency alias must contain 1–64 ASCII letters, digits, `_`, or `-`".into());
     }
     Ok(())
+}
+
+fn validate_project_manifest(workspace: &Path, manifest_source: &str) -> Result<(), String> {
+    let manifest: toml::Value = toml::from_str(manifest_source)
+        .map_err(|error| format!("updated project manifest is invalid: {error}"))?;
+    let entry = manifest
+        .get("package")
+        .and_then(toml::Value::as_table)
+        .and_then(|package| package.get("entry"))
+        .and_then(toml::Value::as_str)
+        .unwrap_or("main.zyl");
+    let relative = super::safe_relative_path(entry)
+        .ok_or_else(|| "project package entry must be a safe relative path".to_owned())?;
+    let entry_path = fs::canonicalize(workspace.join(relative)).map_err(|error| {
+        format!("cannot resolve project entry for compiler validation: {error}")
+    })?;
+    if !entry_path.starts_with(workspace) || !entry_path.is_file() {
+        return Err("project entry resolves outside the workspace".into());
+    }
+    let entry = entry_path
+        .to_str()
+        .ok_or_else(|| "project entry path is not UTF-8".to_owned())?;
+    super::super::validate(entry)
+        .map(|_| ())
+        .map_err(|_| "project compiler validation failed after package manifest change".to_owned())
 }
 
 fn ensure_no_symlink_path(root: &Path, path: &Path) -> Result<(), String> {

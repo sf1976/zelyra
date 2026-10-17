@@ -153,6 +153,19 @@ resolve or download dependencies separately. Any package dependencies must
 be included inside the signed package directory and use contained relative paths.
 Installed package checks and execution are offline.
 
+Remove a dependency explicitly with `zelyra package remove <alias>`. The
+command validates the remaining project, rewrites `zelyra.toml` and
+`zelyra.lock` with rollback on failure, and leaves cached source files in place
+so no shared or user data is deleted implicitly. Safe garbage collection is a
+separate future operation.
+
+Upgrade an existing alias explicitly to another exact release with
+`zelyra package update <index-url> <name> <exact-version> --as <alias>`.
+The new artifact must have the same package identity as the alias currently
+declares and must pass the same trust and integrity checks as `add`. The
+manifest and lock are updated with rollback. Previous cached versions remain
+available; no semver range or implicit latest-version choice is applied.
+
 The default trust file is `zelyra.trust.toml` in the current directory. Use
 `--file <path>` to manage or verify against another trust file. Signed source
 artifacts contain only `zelyra.toml` and `.zyl` source files, are limited to

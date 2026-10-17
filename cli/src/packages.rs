@@ -1310,7 +1310,9 @@ fn replace_lockfile_windows(temporary: &Path, target: &Path) -> std::io::Result<
 pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> std::process::ExitCode {
     use std::process::ExitCode;
     let Some(action) = arguments.next() else {
-        eprintln!("Usage: zelyra package <lock|keygen|sign|verify|trust|registry> ...");
+        eprintln!(
+            "Usage: zelyra package <lock|keygen|sign|verify|trust|registry|add|update|remove> ..."
+        );
         return ExitCode::from(2);
     };
     if action != "lock" {

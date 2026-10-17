@@ -49,6 +49,48 @@ fn stdout(output: &Output) -> String {
     String::from_utf8(output.stdout.clone()).unwrap()
 }
 
+fn serve_registry(root: std::path::PathBuf) -> (String, thread::JoinHandle<()>) {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        for _ in 0..2 {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+                .unwrap();
+            let mut request = [0_u8; 4096];
+            let count = stream.read(&mut request).unwrap();
+            let request = String::from_utf8_lossy(&request[..count]);
+            let path = request
+                .lines()
+                .next()
+                .unwrap()
+                .split_whitespace()
+                .nth(1)
+                .unwrap();
+            let file = if path == "/index.json" {
+                root.join("index.json")
+            } else {
+                let name = path.strip_prefix('/').unwrap();
+                assert!(
+                    name.ends_with(".zpkg"),
+                    "unexpected registry request path: {path}"
+                );
+                root.join(name)
+            };
+            let body = fs::read(file).unwrap();
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            )
+            .unwrap();
+            stream.write_all(&body).unwrap();
+        }
+    });
+    (format!("http://{address}/index.json"), server)
+}
+
 #[test]
 fn package_signature_requires_explicit_trust_and_detects_tampering() {
     let root = fixture();
@@ -70,6 +112,14 @@ fn package_signature_requires_explicit_trust_and_detects_tampering() {
         "{}",
         String::from_utf8_lossy(&generated.stderr)
     );
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            fs::metadata(&private_key).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+    }
     let output = stdout(&generated);
     let public_key = output
         .split("public key: ")
@@ -239,6 +289,34 @@ fn package_add_downloads_exact_trusted_release_and_updates_offline_lock() {
         "{}",
         String::from_utf8_lossy(&signed.stderr)
     );
+    let package_manifest = root.join("package/zelyra.toml");
+    let original_package_manifest = fs::read_to_string(&package_manifest).unwrap();
+    fs::write(
+        &package_manifest,
+        original_package_manifest.replace("version = \"1.2.3\"", "version = \"1.2.4\""),
+    )
+    .unwrap();
+    let artifact_124 = registry.join("sample-1.2.4.zpkg");
+    let signed_124 = zelyra(
+        &root,
+        &[
+            "package",
+            "sign",
+            "package",
+            "--publisher",
+            "example-publisher",
+            "--key",
+            key.to_str().unwrap(),
+            "--output",
+            artifact_124.to_str().unwrap(),
+        ],
+    );
+    assert!(
+        signed_124.status.success(),
+        "{}",
+        String::from_utf8_lossy(&signed_124.stderr)
+    );
+    fs::write(&package_manifest, original_package_manifest).unwrap();
     let indexed = zelyra(&root, &["package", "registry", "build", "registry"]);
     assert!(
         indexed.status.success(),
@@ -266,43 +344,7 @@ fn package_add_downloads_exact_trusted_release_and_updates_offline_lock() {
         String::from_utf8_lossy(&trusted.stderr)
     );
 
-    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
-    let address = listener.local_addr().unwrap();
-    let registry_root = registry.clone();
-    let server = thread::spawn(move || {
-        for _ in 0..2 {
-            let (mut stream, _) = listener.accept().unwrap();
-            stream
-                .set_read_timeout(Some(std::time::Duration::from_secs(5)))
-                .unwrap();
-            let mut request = [0_u8; 4096];
-            let count = stream.read(&mut request).unwrap();
-            let request = String::from_utf8_lossy(&request[..count]);
-            let path = request
-                .lines()
-                .next()
-                .unwrap()
-                .split_whitespace()
-                .nth(1)
-                .unwrap();
-            let file = if path == "/index.json" {
-                registry_root.join("index.json")
-            } else if path == "/sample-1.2.3.zpkg" {
-                registry_root.join("sample-1.2.3.zpkg")
-            } else {
-                panic!("unexpected registry request path: {path}");
-            };
-            let body = fs::read(file).unwrap();
-            write!(
-                stream,
-                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-                body.len()
-            )
-            .unwrap();
-            stream.write_all(&body).unwrap();
-        }
-    });
-    let registry_url = format!("http://{address}/index.json");
+    let (registry_url, server) = serve_registry(registry.clone());
     let added = zelyra(
         &app,
         &[
@@ -346,6 +388,74 @@ fn package_add_downloads_exact_trusted_release_and_updates_offline_lock() {
         compiled.status.success(),
         "{}",
         String::from_utf8_lossy(&compiled.stderr)
+    );
+    let (upgrade_registry_url, upgrade_server) = serve_registry(registry.clone());
+    let updated = zelyra(
+        &app,
+        &[
+            "package",
+            "update",
+            &upgrade_registry_url,
+            "sample",
+            "1.2.4",
+            "--as",
+            "billing",
+        ],
+    );
+    upgrade_server.join().unwrap();
+    assert!(
+        updated.status.success(),
+        "{}",
+        String::from_utf8_lossy(&updated.stderr)
+    );
+    assert!(app
+        .join(".zelyra/packages/sample/1.2.4/src/lib.zyl")
+        .is_file());
+    assert!(app
+        .join(".zelyra/packages/sample/1.2.3/src/lib.zyl")
+        .is_file());
+    let lock_after_update = fs::read_to_string(app.join("zelyra.lock")).unwrap();
+    assert!(lock_after_update.contains("version = \"1.2.4\""));
+    let checked_after_update = zelyra(&app, &["package", "lock", "--check"]);
+    assert!(checked_after_update.status.success());
+    fs::write(
+        app.join("main.zyl"),
+        "import \"pkg:billing\" as billing\nfn main() {}\n",
+    )
+    .unwrap();
+    let manifest_before_failed_remove = fs::read(app.join("zelyra.toml")).unwrap();
+    let lock_before_failed_remove = fs::read(app.join("zelyra.lock")).unwrap();
+    let rejected_remove = zelyra(&app, &["package", "remove", "billing"]);
+    assert!(!rejected_remove.status.success());
+    assert_eq!(
+        fs::read(app.join("zelyra.toml")).unwrap(),
+        manifest_before_failed_remove
+    );
+    assert_eq!(
+        fs::read(app.join("zelyra.lock")).unwrap(),
+        lock_before_failed_remove
+    );
+    fs::write(app.join("main.zyl"), "fn main() {}\n").unwrap();
+    let removed = zelyra(&app, &["package", "remove", "billing"]);
+    assert!(
+        removed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&removed.stderr)
+    );
+    let manifest: toml::Value =
+        toml::from_str(&fs::read_to_string(app.join("zelyra.toml")).unwrap()).unwrap();
+    assert!(manifest.get("dependencies").is_none());
+    assert!(manifest.get("package_sources").is_none());
+    assert!(app
+        .join(".zelyra/packages/sample/1.2.3/vendor/text/src/lib.zyl")
+        .is_file());
+    let checked_after_remove = zelyra(&app, &["package", "lock", "--check"]);
+    assert!(checked_after_remove.status.success());
+    let compiled_after_remove = zelyra(&app, &["check", "main.zyl"]);
+    assert!(
+        compiled_after_remove.status.success(),
+        "{}",
+        String::from_utf8_lossy(&compiled_after_remove.stderr)
     );
 
     fs::remove_dir_all(root).unwrap();
