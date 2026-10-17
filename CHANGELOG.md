@@ -27,12 +27,10 @@ releases follow Semantic Versioning independently of the language line.
   database. / Ein wiederverwendbares, nebenwirkungsfreies Paket `csv_import`
   zum Geschäftsmodule-Beispiel hinzufügen. Es prüft nicht leere Kopfspalten
   und Zeilenbreiten, ohne in eine Datenbank zu schreiben.
-- Remove the Laravel migration analyzer/scaffolder command, source, tests, and
-  current guides from the project. Preserve prior implementation and generated
-  reports in an external archive for possible future review. / Den
-  Laravel-Migrationsanalysator, Gerüstgenerator, Befehl, Tests und aktuelle
-  Anleitungen aus dem Projekt entfernen. Frühere Implementierung und Berichte
-  bleiben für eine mögliche spätere Prüfung extern archiviert.
+
+## 1.1.2 — 2026-10-17
+
+- Remove the experimental Laravel analyzer and scaffold command from the CLI, current documentation, and shipped tests. Preserve its source and historical reports in a separate archive; this release does not include a Laravel importer. / Den experimentellen Laravel-Analysator und Gerüstbefehl aus CLI, aktueller Dokumentation und Tests entfernen. Quellcode und historische Berichte bleiben separat archiviert; dieses Release enthält keinen Laravel-Importer.
 
 ## 1.1.1 — 2026-10-15
 
