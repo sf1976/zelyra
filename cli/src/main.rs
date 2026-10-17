@@ -811,9 +811,8 @@ console = false
     let mut files = vec![
         ("zelyra.toml", project_config.to_owned()),
         ("main.zyl", main_source),
-        // This directory is the optional document root for a fronting web
-        // server. Zelyra's development server does not serve arbitrary files
-        // from it; Apache/Nginx may serve static files and proxy app routes.
+        // This directory is the optional, path-bounded static document root.
+        // Apache/Nginx may still serve it directly and proxy app routes.
         ("public/.keep", String::new()),
         // Keep the conventional module source directory present so the
         // generated Dockerfile can copy it even for a fresh single-file app.
@@ -9704,6 +9703,11 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         .with_project_ui_catalogs(ui_catalogs)
         .with_schedule_probe_token(schedule_probe_token)
         .with_database_capability(database_capability_granted)
+        .with_public_dir(schedule_project_root.as_deref().unwrap_or_else(|| {
+            std::path::Path::new(&path)
+                .parent()
+                .unwrap_or_else(|| std::path::Path::new("."))
+        }))
         .with_apis(api_routes)
         .with_auth(
             env::var("ZELYRA_AUTH_TOKEN").ok(),

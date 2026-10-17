@@ -66,10 +66,11 @@ abgeschlossen.
   mit Unit-Rollback, `status`/`restart`/`remove`, `.env`-Referenz und eine
   fünfsekündige Listenerprüfung. `zelyra new` erzeugt jetzt `public/`; neue
   deutsch- und englischsprachige Apache-/Nginx-Beispiele beschreiben den
-  Loopback-Proxy und die Host-Allowlist. Diese Webserver liefern vorhandene
-  Dateien aus `public/` aus; `zelyra serve` selbst tut dies noch nicht. Live-
-  Lifecycletests mit einem systemd-Benutzermanager und weitere Grundlagen sind
-  unveröffentlicht und offen.
+  Loopback-Proxy und die Host-Allowlist. `zelyra serve` liefert nun statische
+  Dateien aus `public/` mit Pfad-/Symlink-Schutz, MIME-Typen sowie GET/HEAD aus;
+  deklarierte Routen haben Vorrang. Die Apache-/Nginx-Beispiele können Dateien
+  weiterhin direkt ausliefern. Live-Lifecycletests mit einem systemd-
+  Benutzermanager und weitere Grundlagen sind unveröffentlicht und offen.
 - [~] **1.2.5 — Integration der Geschäftsabläufe:** Mandantenbezogene
   Abfragen, Forms und Berechtigungen, begrenzte dauerhafte Jobs und koordinierte
   Zeitpläne, Moduleinstellungen auf normalen Anwendungsseiten sowie erste
@@ -82,12 +83,12 @@ abgeschlossen.
   Linux-Befehlsweg und simulierte Rollbacktests sind im aktuellen Arbeitszweig
   vorhanden; Live-systemd-Lifecycletests und Mandanten-/Query-/Form-/Jobpfade
   bleiben offen.
-- [ ] **1.2.8 — Integrität und Distribution:** Geprüfte vertikale Schnitte für
+- [~] **1.2.8 — Integrität und Distribution:** Geprüfte vertikale Schnitte für
   Zustandsübergänge, Audit/Historie, ausgeglichene Ledger-Buchungen,
   Metadatenexport, Healthchecks und modulare Bundles gemäß Geschäftsplattform-
-  Detailplan liefern. `public/`-Pfadbegrenzung und sicheres Verhalten für
-  statische Dateien ergänzen sowie Apache-/Nginx-Weiterleitungsheader und
-  erlaubte Hosts prüfen. Dies ist ein Integrationsrelease, keine pauschale
+  Detailplan liefern. `public/`-Pfadbegrenzung und statische Auslieferung sind
+  im aktuellen Arbeitszweig umgesetzt; Apache-/Nginx-Weiterleitungsheader und
+  erlaubte Hosts sind noch zu prüfen. Dies ist ein Integrationsrelease, keine pauschale
   Compliance- oder Performancezusage.
 - [ ] **1.3.0 — kanonische Struktur und Bytecode-Standard:** Das optionale,
   versionierte Projektlayout (`routes/`, `domain/`, `schema/`, `public/`,

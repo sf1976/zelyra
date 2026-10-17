@@ -2,9 +2,9 @@
 
 Neue Projekte enthalten den Ordner `public/`. Verwende ihn als DocumentRoot
 für öffentliche Dateien wie Bilder, Stylesheets, JavaScript und `robots.txt`.
-Apache oder Nginx liefert vorhandene Dateien direkt aus und leitet übrige
-Anfragen an Zelyra `serve` weiter. Der Zelyra-Server selbst liefert derzeit
-keine beliebigen Dateien aus `public/` aus.
+`zelyra serve` kann Dateien aus diesem Verzeichnis direkt ausliefern; deklarierte
+Zelyra-Routen haben Vorrang. Apache oder Nginx kann Dateien alternativ direkt
+ausliefern und übrige Anfragen an Zelyra `serve` weiterleiten.
 
 Zelyra sollte nur an Loopback gebunden sein. Installiere dafür den
 [systemd-Projektdienst](service.de.md) mit einem festen Port und setze
@@ -76,11 +76,16 @@ vom lokalen Proxy erreichbar ist.
 
 ## Grenzen
 
-- `public/` ist ein Verzeichnisvertrag für den vorgeschalteten Webserver; es
-  wird nicht automatisch in Zelyra-Routen oder Compilerimporte aufgenommen.
+- `public/` wird weder automatisch in Zelyra-Routen noch in Compilerimporte
+  aufgenommen. `serve` liefert nur Dateien bis 32 MiB und nur über GET/HEAD aus;
+  Dotfiles sind gesperrt, mit Ausnahme von `.well-known/`.
+- Statische HTML-Dateien erhalten `default-src 'self'`; Inline-Skripte und
+  Inline-Styles sind dadurch blockiert. Binde solche Assets als lokale Dateien
+  ein.
+- Die eingebaute Auslieferung prüft kanonische Pfade und weist Ziele außerhalb
+  des echten `public/`-Verzeichnisses zurück. Sie ersetzt keine TLS-Terminierung
+  oder vorgeschaltete Produktionskonfiguration.
 - Die Beispiele nehmen einen lokalen Zelyra-Dienst auf Port 3000 an.
 - Weitergereichte Anfragen müssen zum Projekt-Host-Allowlistwert passen.
 - Diese Beispielkonfigurationen ersetzen keinen Test mit der konkreten
   Apache-/Nginx-Version, TLS-Konfiguration, Dateirechten und Firewall.
-- Die integrierte Auslieferung statischer Dateien durch `zelyra serve` samt
-  eigener Pfad- und Symlink-Prüfung bleibt für einen späteren Release-Schnitt.

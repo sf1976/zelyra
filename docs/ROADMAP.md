@@ -61,9 +61,11 @@ security and compatibility gates stated for that milestone.
   port changes with unit rollback, status/restart/remove, `.env` references,
   and a five-second listener check. `zelyra new` now creates `public/`; new
   English and German Apache/Nginx examples describe loopback proxying and the
-  host allowlist. Those web servers serve existing files from `public/`;
-  `zelyra serve` does not yet do so itself. This remains unreleased; live
-  user-manager lifecycle coverage and other deployment foundations are open.
+  host allowlist. `zelyra serve` now serves static files from `public/` with
+  path/symlink confinement, MIME types, and GET/HEAD; declared routes take
+  precedence. Apache/Nginx may still serve files directly. Live user-manager
+  lifecycle coverage and other deployment foundations remain open; this is
+  unreleased.
 - [~] **1.2.5 — business workflow integration:** Finish and verify tenant-aware
   query/forms/authorization paths, durable bounded jobs and coordinated
   schedules, module settings on normal application pages, and the first
@@ -79,12 +81,13 @@ security and compatibility gates stated for that milestone.
   `Email` handlers. The integrated resident scheduler now executes declared
   schedules in `serve` only while the installed project service is active; it
   does not install host cron entries. This work is unreleased.
-- [ ] **1.2.8 — cross-cutting integrity and distribution:** Deliver tested
+- [~] **1.2.8 — cross-cutting integrity and distribution:** Deliver tested
   vertical slices for state transitions, audit/history, balanced ledger
   operations, reflection/export metadata, health checks, and modular bundles
-  according to the detailed business-platform plan. Add `public/` path
-  confinement and static-file cache/security behavior, and deployment checks
-  for Apache/Nginx forwarded headers and allowed hosts. This is an integration
+  according to the detailed business-platform plan. `public/` path confinement
+  and static serving are implemented in the current work branch; deployment
+  checks for Apache/Nginx forwarded headers and allowed hosts remain open.
+  This is an integration
   milestone, not a blanket compliance or performance claim.
 - [ ] **1.3.0 — canonical structure and Bytecode default:** Complete the
   opt-in versioned project layout (`routes/`, `domain/`, `schema/`, `public/`,

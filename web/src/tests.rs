@@ -1912,6 +1912,125 @@ fn returns_not_found_and_method_errors() {
 }
 
 #[test]
+fn public_files_are_served_as_bytes_with_safe_path_and_method_rules() {
+    let root = std::env::temp_dir().join(format!(
+        "zelyra-public-{}-{}",
+        std::process::id(),
+        AtomicUsize::new(0).fetch_add(1, Ordering::Relaxed)
+    ));
+    fs::create_dir_all(root.join("public/assets")).unwrap();
+    fs::create_dir_all(root.join("public/.well-known/acme-challenge")).unwrap();
+    fs::write(root.join("public/index.html"), "<h1>Static home</h1>").unwrap();
+    fs::write(root.join("public/assets/pixel.png"), [0, 1, 2, 255]).unwrap();
+    fs::write(root.join("public/.env"), "secret=value").unwrap();
+    fs::write(
+        root.join("public/.well-known/acme-challenge/token"),
+        "challenge",
+    )
+    .unwrap();
+    fs::write(root.join("public/declared.html"), "static fallback").unwrap();
+    fs::File::create(root.join("public/large.bin"))
+        .unwrap()
+        .set_len(MAX_PUBLIC_FILE_BYTES + 1)
+        .unwrap();
+    let app = WebApp::new(
+        vec![Route {
+            path: "/declared.html".into(),
+            html: "<h1>Declared route</h1>".into(),
+            query: Vec::new(),
+            page_size: None,
+            sort_columns: Vec::new(),
+            search_columns: Vec::new(),
+            filters: Vec::new(),
+            data: Vec::new(),
+            requires_auth: false,
+            permissions: Vec::new(),
+        }],
+        Vec::new(),
+    )
+    .with_public_dir(&root);
+    let request = |method: &str, path: &str| {
+        parse_request(&format!(
+            "{method} {path} HTTP/1.1\r\nHost: localhost\r\n\r\n"
+        ))
+        .unwrap()
+    };
+
+    let home = app.dispatch(&request("GET", "/"));
+    assert_eq!(home.status, 200);
+    assert_eq!(home.content_type, "text/html; charset=utf-8");
+    assert_eq!(
+        home.body_bytes.as_deref(),
+        Some(b"<h1>Static home</h1>".as_slice())
+    );
+    assert!(home
+        .headers
+        .iter()
+        .any(|(name, value)| name == "Content-Security-Policy"
+            && value.contains("default-src 'self'")));
+
+    let image = app.dispatch(&request("GET", "/assets/pixel.png"));
+    assert_eq!(image.content_type, "image/png");
+    assert_eq!(image.body_bytes.as_deref(), Some([0, 1, 2, 255].as_slice()));
+    assert!(image.to_http_bytes().ends_with(&[0, 1, 2, 255]));
+
+    let head = app.dispatch(&request("HEAD", "/assets/pixel.png"));
+    assert_eq!(head.status, 200);
+    assert!(head.body_bytes.as_deref().unwrap().is_empty());
+    assert!(head
+        .to_http_bytes()
+        .windows(b"Content-Length: 4\r\n".len())
+        .any(|window| window == b"Content-Length: 4\r\n"));
+
+    assert_eq!(
+        app.dispatch(&request("GET", "/%2e%2e/private.txt")).status,
+        404
+    );
+    assert_eq!(
+        app.dispatch(&request("GET", "/assets%2fpixel.png")).status,
+        404
+    );
+    assert_eq!(
+        app.dispatch(&request("POST", "/assets/pixel.png")).status,
+        405
+    );
+    assert_eq!(app.dispatch(&request("GET", "/.env")).status, 404);
+    assert_eq!(
+        app.dispatch(&request("GET", "/.well-known/acme-challenge/token"))
+            .body_bytes
+            .as_deref(),
+        Some(b"challenge".as_slice())
+    );
+    assert_eq!(app.dispatch(&request("GET", "/large.bin")).status, 413);
+    assert!(app
+        .dispatch(&request("GET", "/declared.html"))
+        .body
+        .contains("Declared route"));
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn public_files_reject_symlinks_outside_the_document_root() {
+    use std::os::unix::fs::symlink;
+
+    let root = std::env::temp_dir().join(format!(
+        "zelyra-public-symlink-{}-{}",
+        std::process::id(),
+        AtomicUsize::new(0).fetch_add(1, Ordering::Relaxed)
+    ));
+    fs::create_dir_all(root.join("public")).unwrap();
+    fs::write(root.join("secret.txt"), "private").unwrap();
+    symlink(root.join("secret.txt"), root.join("public/leak.txt")).unwrap();
+    let app = WebApp::new(Vec::new(), Vec::new()).with_public_dir(&root);
+    let request = parse_request("GET /leak.txt HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+
+    assert_eq!(app.dispatch(&request).status, 404);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn parses_request_and_query_string() {
     let request = parse_request(
         "GET /hello/Ada?active=true HTTP/1.1\r\nHost: localhost\r\nAccept: text/html\r\n\r\n",

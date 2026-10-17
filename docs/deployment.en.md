@@ -2,9 +2,9 @@
 
 New projects include a `public/` directory. Use it as the document root for
 public files such as images, stylesheets, JavaScript, and `robots.txt`. Apache
-or Nginx serves files that exist there and forwards the remaining requests to
-Zelyra `serve`. The Zelyra server itself does not currently serve arbitrary
-files from `public/`.
+or Nginx can serve files that exist there and forward the remaining requests
+to Zelyra `serve`. Zelyra `serve` can also serve files from this directory;
+declared Zelyra routes take precedence.
 
 Bind Zelyra to loopback. Install the
 [systemd project service](service.en.md) on a fixed port and set
@@ -75,11 +75,15 @@ when the application port is reachable exclusively through the local proxy.
 
 ## Limits
 
-- `public/` is a directory contract for the fronting web server; it is not
-  automatically added to Zelyra routes or compiler imports.
+- `public/` is not automatically added to Zelyra routes or compiler imports.
+  `serve` serves files up to 32 MiB through GET/HEAD only; dotfiles are denied
+  except beneath `.well-known/`.
+- Static HTML gets `default-src 'self'`, which blocks inline scripts and styles.
+  Load those assets from local files instead.
+- The built-in handler checks canonical paths and rejects targets outside the
+  real `public/` directory. It does not replace TLS termination or production
+  reverse-proxy configuration.
 - The examples assume a local Zelyra service on port 3000.
 - Forwarded requests must match the project's host allowlist.
 - These examples do not replace testing with your Apache/Nginx version, TLS
   configuration, file permissions, and firewall.
-- Serving arbitrary static files directly from `zelyra serve`, with its own
-  path and symlink checks, remains for a later release slice.
