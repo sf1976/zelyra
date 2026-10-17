@@ -103,11 +103,57 @@ Lockfile erkennt Änderungen relativ zu einem Lockfile, dem das Projekt bereits
 vertraut. Sie authentifiziert weder den Herausgeber noch die Herkunft der
 Dateien und macht ein schädliches Paket nicht sicher. `zelyra package lock
 --update` übernimmt bewusst die aktuellen lokalen Dateien als neuen gesperrten
-Stand; prüfe daher Quelle und Diff vor diesem Schritt. Das Paketsystem besitzt
-derzeit keine Registry, Signaturen, Herausgeberidentitäten oder Downloads aus
-dem Netz. Paketobergrenzen für `effects` sind zusätzliche Compilergrenzen; sie
-erteilen oder umgehen weder Anwendungs-Capabilities noch SQL-Prüfungen,
-Contracts oder Laufzeitregeln.
+Stand; prüfe daher Quelle und Diff vor diesem Schritt. Der stabile Paketablauf
+in 1.1.5 enthält keine Registry und keine Downloads aus dem Netz. Die
+unveröffentlichte Ökosystemarbeit ergänzt signierte Quellartefakte, eine
+ausdrückliche lokale Herausgeber-Vertrauensdatei und einen deterministischen
+Generator für statische Registry-Indizes; Netzsuche und verifizierte
+Installation sind noch offen. Eine Signatur weist nach, dass der
+zugehörige vertrauenswürdige Schlüssel den Artefakt-Hash signiert hat. Sie
+beweist weder, dass der Code sicher ist, noch dass ein Herausgeber
+vertrauenswürdig handelt. Paketobergrenzen für `effects` sind zusätzliche
+Compilergrenzen; sie erteilen oder umgehen weder Anwendungs-Capabilities noch
+SQL-Prüfungen, Contracts oder Laufzeitregeln.
+
+Im aktuellen Entwicklungszweig kann ein Herausgeber einen Schlüssel anlegen
+und ein Paket ohne Abhängigkeiten signieren:
+
+```sh
+zelyra package keygen --publisher rechnungsteam --output rechnungsteam.key
+zelyra package sign packages/billing --publisher rechnungsteam \
+  --key rechnungsteam.key --output billing-1.0.0.zpkg
+```
+
+Die private Schlüsseldatei wird ohne Überschreiben angelegt und erhält unter
+Unix nur Rechte für den Eigentümer. Bewahre sie außerhalb des Projekts auf und
+sichere sie geschützt. `keygen` gibt den öffentlichen Schlüssel aus. Eine
+Projektverantwortliche Person muss ihn ausdrücklich hinzufügen, bevor die
+Signatur als vertrauenswürdig gilt:
+
+```sh
+zelyra package trust add rechnungsteam <public-key-hex>
+zelyra package trust list
+zelyra package verify billing-1.0.0.zpkg
+zelyra package registry build ./veroeffentlichte-pakete
+```
+
+`registry build` durchsucht einen echten Verzeichnisbaum ohne Symlinks nach
+`.zpkg`-Dateien, prüft Signatur und Quellprüfsumme und schreibt deterministisch
+eine `index.json`, die statisch gehostet werden kann. Der Index dient nur zur
+Suche und begründet kein Vertrauen: Clients müssen dem Herausgeberschlüssel
+weiterhin ausdrücklich vertrauen. Der Befehl lädt nichts hoch. Artefakte und
+Index müssen gemeinsam mit einem Hostingdienst eigener Wahl veröffentlicht
+werden.
+
+Die Standarddatei heißt `zelyra.trust.toml` im aktuellen Verzeichnis. Mit
+`--file <pfad>` kann eine andere Vertrauensdatei verwaltet oder für die Prüfung
+verwendet werden. Signierte Quellartefakte enthalten ausschließlich
+`zelyra.toml` und `.zyl`-Quellen, sind auf 32 MiB und 4.096 Dateien begrenzt
+und weisen Pakete mit Abhängigkeiten derzeit zurück. Das versionierte
+Signaturformat bindet Herausgeber-ID, Paketname, exakte Version,
+Kompatibilitätsmanifest und normalisierten Quell-Hash. Download, Installation,
+Herkunftsdaten im Lockfile und eine veröffentlichte stabile Schnittstelle
+fehlen noch.
 
 Pakete können Konfigurationsfelder unter `[settings.<name>]` beschreiben:
 

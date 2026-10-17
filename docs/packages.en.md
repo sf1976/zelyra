@@ -97,10 +97,51 @@ changes relative to the lockfile that the project already trusts; it does not
 authenticate a publisher, prove where files came from, or make a malicious
 package safe. `zelyra package lock --update` deliberately accepts the current
 local files as the new locked contents, so review the source and diff before
-using that option. The package system currently has no registry, signatures,
-publisher identities, or remote downloads. Package `effects` ceilings are
-additional compile-time limits; they do not grant or bypass application
-capabilities, SQL checks, contracts, or runtime policy.
+using that option. The stable 1.1.5 package workflow has no registry or remote
+downloads. The unreleased ecosystem work adds signed source artifacts, an
+explicit local publisher trust file, and a deterministic static-host registry
+index builder; remote discovery and verified installation remain unfinished. A signature proves that the corresponding
+trusted key signed the artifact digest. It does not prove that the code is safe
+or that a publisher is reputable. Package `effects` ceilings are additional
+compile-time limits; they do not grant or bypass application capabilities, SQL
+checks, contracts, or runtime policy.
+
+On the current development branch, a publisher can create a key and sign a
+dependency-free source package:
+
+```sh
+zelyra package keygen --publisher billing-team --output billing-team.key
+zelyra package sign packages/billing --publisher billing-team \
+  --key billing-team.key --output billing-1.0.0.zpkg
+```
+
+The private key file is created without overwriting an existing file and uses
+owner-only permissions on Unix. Keep it outside the project and back it up
+securely. The public key is printed by `keygen`; a project owner must add that
+key deliberately before verification:
+
+```sh
+zelyra package trust add billing-team <public-key-hex>
+zelyra package trust list
+zelyra package verify billing-1.0.0.zpkg
+zelyra package registry build ./published-packages
+```
+
+`registry build` scans a real, symlink-free directory tree for `.zpkg` files,
+checks each artifact's signature and source digest, and writes a deterministic
+`index.json` suitable for static hosting. The index is a discovery catalogue,
+not a trust decision: clients must still trust the publisher key. The command
+does not upload files. Publish the artifacts and generated index together using
+the hosting system of your choice.
+
+The default trust file is `zelyra.trust.toml` in the current directory. Use
+`--file <path>` to manage or verify against another trust file. Signed source
+artifacts contain only `zelyra.toml` and `.zyl` source files, are limited to
+32 MiB and 4,096 files, and currently reject packages with dependencies. The
+signing format is versioned and binds publisher ID, package name, exact
+version, compatibility manifest, and normalized source digest. Remote fetch,
+installation, provenance-preserving locks, and a published stable interface
+remain unfinished.
 
 Packages may describe configuration fields under `[settings.<name>]`:
 

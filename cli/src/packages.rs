@@ -4,6 +4,8 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
+mod registry;
+
 const MANIFEST: &str = "zelyra.toml";
 const LOCKFILE: &str = "zelyra.lock";
 static NEXT_LOCK_TEMP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -1268,12 +1270,11 @@ fn replace_lockfile_windows(temporary: &Path, target: &Path) -> std::io::Result<
 pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> std::process::ExitCode {
     use std::process::ExitCode;
     let Some(action) = arguments.next() else {
-        eprintln!("Usage: zelyra package lock [entry.zyl] [--check|--update]");
+        eprintln!("Usage: zelyra package <lock|keygen|sign|verify|trust|registry> ...");
         return ExitCode::from(2);
     };
     if action != "lock" {
-        eprintln!("error[E-PKG-001]: unknown package action `{action}`");
-        return ExitCode::from(2);
+        return registry::command(&action, arguments);
     }
     let mut entry = None;
     let mut mode = None;

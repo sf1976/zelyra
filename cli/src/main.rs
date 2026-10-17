@@ -191,6 +191,8 @@ fn usage() {
     eprintln!("  module plan: `zelyra module plan <entry.zyl> <module.zyl|resource-id>` previews known dependencies");
     eprintln!("  module bundle: `zelyra module bundle <entry.zyl> <module.zyl|resource-id> --output <dir> [--dry-run] [--docker --compiler-ref <40-char-commit>]` plans or writes a checked experimental bundle");
     eprintln!("  module bundle --dry-run emits a machine-readable file plan without publishing the bundle");
+    eprintln!("  package keygen|sign|verify|trust manages signed Zelyra source packages and trusted publishers");
+    eprintln!("  package registry build <dir> [--output index.json] builds a deterministic static-host registry index");
     eprintln!("  package lock [entry.zyl] [--check|--update] resolves local packages and checks or writes zelyra.lock");
     eprintln!("  doctor supports `--env-file <path>` for generated MariaDB projects");
     eprintln!("  setup supports `--database`, `--schema`, `--all`, `--host-port`, `--db-host-port`, and `--web [--port <port>]`");
