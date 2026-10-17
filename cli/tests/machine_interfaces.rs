@@ -1814,6 +1814,11 @@ fn new_mariadb_project_propagates_the_selected_web_port() {
     assert!(env_file.contains("ZELYRA_ALLOWED_HOSTS=localhost,127.0.0.1,[::1]"));
     assert!(env_file.contains("# ZELYRA_WEB_PORT=8080"));
     assert!(env_file.contains(&format!("# ZELYRA_HOST_PORT={web_host_port}")));
+    assert!(env_file.contains("# ZELYRA_FEATURE_API=true"));
+    assert!(env_file.contains("# ZELYRA_MFA_ENCRYPTION_KEY="));
+    assert!(env_file.contains("# ZELYRA_SMTP_PASSWORD="));
+    assert!(!env_file.contains("\nZELYRA_FEATURE_API=true"));
+    assert!(!env_file.contains("\nZELYRA_MFA_ENCRYPTION_KEY="));
     assert!(env_file.contains(&format!("ZELYRA_DB_HOST_PORT={database_host_port}")));
     assert!(!env_file.contains("change-me"));
     assert!(compose.contains(&format!(
@@ -1822,6 +1827,16 @@ fn new_mariadb_project_propagates_the_selected_web_port() {
     assert!(compose.contains(&format!(
         "127.0.0.1:${{ZELYRA_DB_HOST_PORT:-{database_host_port}}}:3306"
     )));
+    for setting in [
+        "ZELYRA_FEATURE_API: ${ZELYRA_FEATURE_API:-true}",
+        "ZELYRA_AUTH_TOKEN: ${ZELYRA_AUTH_TOKEN:-}",
+        "ZELYRA_MFA_ENCRYPTION_KEY: ${ZELYRA_MFA_ENCRYPTION_KEY:-}",
+    ] {
+        assert!(
+            compose.contains(setting),
+            "missing Compose forwarding: {setting}"
+        );
+    }
     fs::remove_dir_all(directory).unwrap();
 }
 

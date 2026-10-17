@@ -72,10 +72,14 @@ command for existing MariaDB projects.
 
 The generated `.env` activates only the values required by Compose and local
 database commands. The selected MariaDB host port stays active so
-`ZELYRA_DATABASE_MAIN_URL` and Compose use the same port. Web port overrides, feature switches, authentication, and other
-options are described extensively as commented lines. `.env.example` has the
-same structure, but its `change-me` placeholders and active secret fields are
-only a template.
+`ZELYRA_DATABASE_MAIN_URL` and Compose use the same port. Optional web-port,
+feature, authentication, MFA, email, and database TLS settings are included
+as commented examples in `.env` and `.env.example`; they take effect only
+after the operator deliberately uncomments and configures them. The generated
+Compose service forwards the supported settings to the application. Test-only
+variables and arbitrary application values read with `env(...)` are not
+presented as Zelyra-wide defaults. `.env.example` has the same structure, but
+its `change-me` placeholders and active secret fields are only a template.
 
 | Variable | Generated default | Use |
 |---|---:|---|
@@ -466,6 +470,14 @@ Windows TLS has not been tested separately.
 Applications may use `env(...)` only when the corresponding capability is
 granted. `DATABASE_URL` and auth secrets do not belong in source, JSON
 diagnostics, context output, or logs.
+
+Optional MFA encryption also uses `ZELYRA_MFA_ENCRYPTION_KEY`. It is an
+operator-managed secret containing 64 hexadecimal characters (32 random
+bytes), is never set by default, and must remain stable across restarts and
+all app instances. Generated MariaDB projects can set it in `.env`; Compose
+forwards it to the web service. Leave it empty when MFA is not used. See the
+[technical reference handbook](handbook/en/technical-reference.md) for key
+loss and backup requirements.
 
 ## CLI and test variables
 

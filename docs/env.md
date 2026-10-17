@@ -75,8 +75,12 @@ Nachholbefehl für bestehende MariaDB-Projekte verfügbar.
 Die erzeugte `.env` aktiviert nur die für Compose und lokale
 Datenbankbefehle notwendigen Werte. Der gewählte MariaDB-Host-Port bleibt
 aktiv, damit `ZELYRA_DATABASE_MAIN_URL` und Compose denselben Port verwenden.
-Web-Portüberschreibungen, Feature-Schalter,
-Auth- und sonstige Optionen stehen ausführlich auskommentiert in der Datei.
+Optionale Konfigurationen für Web-Ports, Features, Authentifizierung, MFA,
+E-Mail und Datenbank-TLS stehen als auskommentierte Beispiele in `.env` und
+`.env.example`. Erst nach bewusstem Entfernen von `#` werden sie wirksam.
+Der generierte Compose-Dienst reicht die dafür unterstützten Einstellungen an
+die Anwendung weiter. Testvariablen und anwendungseigene, beliebige Werte aus
+`env(...)` werden nicht als Zelyra-Standardoptionen vorgetäuscht.
 `.env.example` enthält dieselbe Struktur, aber die Platzhalter
 `change-me` und die aktivierten Secrets sind nur als Vorlage gedacht.
 
@@ -503,6 +507,15 @@ separat geprüft.
 Die Anwendung darf mit `env(...)` nur auf Umgebungswerte zugreifen, wenn die
 entsprechende Capability gewährt wurde. `DATABASE_URL` und Auth-Secrets
 gehören nicht in Zelyra-Quellcode, JSON-Diagnosen, Kontextausgaben oder Logs.
+
+Die lokale, optionale MFA-Verschlüsselung verwendet zusätzlich
+`ZELYRA_MFA_ENCRYPTION_KEY`. Der Wert ist ein vom Betreiber verwaltetes
+Geheimnis aus 64 hexadezimalen Zeichen (32 zufällige Bytes), wird nie
+standardmäßig gesetzt und muss über Neustarts und alle App-Instanzen stabil
+bleiben. Er kann in generierten MariaDB-Projekten in `.env` eingetragen
+werden; Compose reicht ihn an den Webdienst weiter. Ohne MFA bleibt die
+Variable leer. Details zu Schlüsselverlust und Sicherung stehen im
+[technischen Referenzhandbuch](handbook/de/technisches-referenzhandbuch.md).
 
 ## CLI- und Testvariablen
 

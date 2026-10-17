@@ -431,18 +431,22 @@ ZELYRA_DB_TLS_MODE=disabled
 # ZELYRA_SMTP_PORT=1025
 # ZELYRA_SMTP_SECURITY=local_plaintext
 # ZELYRA_SMTP_FROM=Zelyra <no-reply@example.test>
+# ZELYRA_SMTP_USERNAME=
+# ZELYRA_SMTP_PASSWORD=
 # Queue with mail_queue and deliver only through an explicit outbox worker.
 # See https://github.com/sf1976/zelyra/blob/main/docs/mail.en.md
 # Optional password recovery mail delivery. Configure these values only when
 # auth declares a reset_tokens table; credentials remain local secrets.
 # ZELYRA_PUBLIC_BASE_URL=https://app.example.test
-# ZELYRA_SMTP_HOST=mail.example.test
-# ZELYRA_SMTP_PORT=465
-# ZELYRA_SMTP_SECURITY=implicit_tls
-# ZELYRA_SMTP_FROM=Zelyra <no-reply@example.test>
-# ZELYRA_SMTP_USERNAME=
-# ZELYRA_SMTP_PASSWORD=
 # ZELYRA_RESET_DELIVERY_KEY=replace-with-64-hex-characters
+# Optional multi-factor-authentication encryption key. Generate 32 random
+# bytes as 64 hexadecimal characters and keep the same secret for every app
+# instance. Do not use the example text as a real key.
+# ZELYRA_MFA_ENCRYPTION_KEY=
+# Optional local bearer-token protection for routes that use the local auth
+# integration. Set a private value and the exact comma-separated permissions.
+# ZELYRA_AUTH_TOKEN=
+# ZELYRA_AUTH_PERMISSIONS=customers.view,customers.edit
 ZELYRA_DATABASE_MAIN_URL=mariadb://zelyra:change-me@127.0.0.1:${{ZELYRA_DB_HOST_PORT:-3306}}/zelyra_app
 # Compatibility fallback used by CRUD routes and tools that do not select a named database.
 DATABASE_URL=mariadb://zelyra:change-me@127.0.0.1:${{ZELYRA_DB_HOST_PORT:-3306}}/zelyra_app
@@ -468,8 +472,6 @@ MARIADB_ROOT_PASSWORD=change-me-root
 # ZELYRA_FEATURE_AUDIT=true
 
 # Optional local request protection and application settings.
-# ZELYRA_AUTH_TOKEN=replace-with-a-local-token
-# ZELYRA_AUTH_PERMISSIONS=customers.view,customers.edit
 # ZELYRA_MODE=development
 
 # Optional CORS settings belong in zelyra.toml and should only be enabled with
@@ -894,6 +896,14 @@ console = false
       ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS: ${ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS:-10}
       ZELYRA_DB_TLS_MODE: ${ZELYRA_DB_TLS_MODE:-disabled}
       ZELYRA_DB_TLS_CA_CERT_FILE: ${ZELYRA_DB_TLS_CA_CERT_FILE:-}
+      ZELYRA_FEATURE_WEB: ${ZELYRA_FEATURE_WEB:-true}
+      ZELYRA_FEATURE_API: ${ZELYRA_FEATURE_API:-true}
+      ZELYRA_FEATURE_CRUD: ${ZELYRA_FEATURE_CRUD:-true}
+      ZELYRA_FEATURE_AUTH: ${ZELYRA_FEATURE_AUTH:-true}
+      ZELYRA_FEATURE_AUDIT: ${ZELYRA_FEATURE_AUDIT:-true}
+      ZELYRA_AUTH_TOKEN: ${ZELYRA_AUTH_TOKEN:-}
+      ZELYRA_AUTH_PERMISSIONS: ${ZELYRA_AUTH_PERMISSIONS:-}
+      ZELYRA_MFA_ENCRYPTION_KEY: ${ZELYRA_MFA_ENCRYPTION_KEY:-}
       ZELYRA_PUBLIC_BASE_URL: ${ZELYRA_PUBLIC_BASE_URL:-}
       ZELYRA_SMTP_HOST: ${ZELYRA_SMTP_HOST:-}
       ZELYRA_SMTP_PORT: ${ZELYRA_SMTP_PORT:-}
