@@ -41,6 +41,36 @@ fn compiler_scope_gate_rejects_sql_touching_declared_tenant_tables() {
 }
 
 #[test]
+fn compiler_scope_gate_rejects_tableviews_reading_tenant_tables() {
+    let source = r#"
+        type TenantId = Id
+        table invoices scoped by tenant_id: TenantId {
+            id: Id primary auto
+            tenant_id: TenantId required
+            amount: Decimal required
+        }
+        struct InvoiceSummary {
+            id: Id
+            amount: Decimal
+        }
+        tableview InvoiceSummaryView {
+            source sql<InvoiceSummary[]> {
+                SELECT id, amount FROM invoices
+            }
+            columns { id amount }
+        }
+        fn main() {}
+    "#;
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
+    let schema = build_schema(&program).unwrap();
+
+    assert!(
+        !validate_tenant_access_boundaries("main.zyl", &program, &schema),
+        "tableview SQL must not bypass tenant-scoped CRUD boundaries"
+    );
+}
+
+#[test]
 fn project_mail_policy_reads_local_smtp_settings_and_redacts_secrets() {
     let directory = std::env::temp_dir().join(format!(
         "zelyra-mail-policy-{}-{}",
