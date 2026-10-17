@@ -1874,8 +1874,13 @@ fn language_compatibility_line_is_enforced_and_legacy_projects_stay_supported() 
 #[test]
 fn new_mariadb_project_propagates_the_selected_web_port() {
     let directory = temporary_directory("new-web-port");
-    let database_host_port = free_test_port();
     let web_host_port = free_test_port();
+    let database_host_port = loop {
+        let port = free_test_port();
+        if port != web_host_port {
+            break port;
+        }
+    };
     let output = run(&[
         "new",
         directory.to_str().unwrap(),
@@ -3091,7 +3096,12 @@ fn setup_creates_a_local_env_without_printing_or_overwriting_secrets() {
         "--db-host-port",
         &database_host_port,
     ]);
-    assert!(scaffold.status.success());
+    assert!(
+        scaffold.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&scaffold.stdout),
+        String::from_utf8_lossy(&scaffold.stderr)
+    );
     fs::remove_file(directory.join(".env")).unwrap();
 
     let setup = run(&["setup", directory.to_str().unwrap()]);
