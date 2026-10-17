@@ -1,0 +1,10 @@
+pub fn encode(rows: String[][]) -> Result<String, String> {
+    return csv_encode(rows, ',')
+}
+
+pub fn write_csv(path: String, rows: String[][]) -> Result<Unit, String> uses FileSystem {
+    return match encode(rows) {
+        Ok(contents) => write_text_result(path, contents)
+        Err(message) => Err(message)
+    }
+}

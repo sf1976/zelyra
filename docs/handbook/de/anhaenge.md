@@ -171,7 +171,6 @@ page "/items" {
 | `zelyra form validate <file> <Form>` | | Prüft Formulare mit Testwerten auf der Konsole |
 | `zelyra context <file.zyl>` | `[--format json]` | Gibt den semantischen Quellcode-Kontext für Tools aus |
 | `zelyra module plan <entry> <module-or-resource-id>` | | Zeigt bekannte Quellabhängigkeiten und deklarierte Laufzeiteffekte; Blocker bleiben sichtbar, kein Deploymentexport |
-| `zelyra migrate laravel <projekt>` | `[--report <pfad>] [--output <ziel>] [--format md\|json]` | Statische, isolierte Laravel-Quelltextanalyse (10.x/11.x); erzeugt geheimnisfreien Migrationsbericht und optionales Zelyra-Projektgerüst |
 
 ---
 

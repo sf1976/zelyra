@@ -2394,9 +2394,18 @@ Anweisung, damit die Diagnose unabhängig von der Threadreihenfolge bleibt:
 zelyra run main.zyl --max-steps 30000
 ```
 
+Der experimentelle MIR-Interpreter kann zusätzlich mit
+`zelyra run main.zyl --backend mir --optimize-mir` ausgewählt werden. Die
+Konstantenfaltung gilt dort nur für `Int`, `UInt`, `Float`, `Bool` und `Char`.
+Das Schrittbudget zählt die Ausführung nach der Optimierung; ein Test bestätigt
+für das Beispiel weniger Schritte. Ohne beide MIR-Optionen bleibt die
+Standardausführung unverändert.
+
 Die Rekursion bleibt begrenzt. `[runtime] max_stack_depth` kann in
 `zelyra.toml` auf einen Wert von 1 bis 500 gesetzt werden; ein höherer Wert
-reserviert mehr Stack-Speicher. Ein `transaction { ... }`-Block kann offline
+reserviert mehr Stack-Speicher. Auch direkte Rust-Aufrufe der AST-, MIR- und
+Bytecode-Laufzeit können diese gemeinsame Obergrenze nicht erhöhen.
+Ein `transaction { ... }`-Block kann offline
 geprüft werden, seine Ausführung benötigt aber eine gestartete MariaDB- oder
 MySQL-Laufzeit.
 

@@ -60,6 +60,7 @@
             <button class="toolbar-button" id="format-button" title="Aktive Zelyra-Datei formatieren" data-i18n="format">Formatieren</button>
             <button class="toolbar-button" id="runtime-budget-button" type="button" title="Laufzeitbudget und Rekursion prüfen" data-i18n-title="runtimeBudgetTitle"><span class="button-icon">◴</span><span data-i18n="runtimeBudgetButton">Budget</span></button>
             <button class="toolbar-button" id="capability-button" type="button" title="Capabilities und Pfadfreigaben prüfen" data-i18n-title="capabilityTitle"><span class="button-icon">▣</span><span data-i18n="capabilityButton">Rechte</span></button>
+            <button class="toolbar-button" id="module-settings-button" type="button" title="Typisierte Einstellungen lokaler Module verwalten" data-i18n-title="moduleSettingsTitle"><span class="button-icon">⚙</span><span data-i18n="moduleSettingsButton">Moduleinstellungen</span></button>
             <button class="toolbar-button" id="canvas-button" type="button" title="Seite oder View statisch ansehen" data-i18n-title="canvasTitle"><span class="button-icon">◫</span><span data-i18n="canvasButton">Canvas</span></button>
             <button class="toolbar-button" id="run-button" title="main.zyl ausführen" data-i18n-title="runButtonTitle" data-i18n="runButton">Starten</button>
             <button class="primary-button" id="check-button" title="Projekt prüfen" data-i18n-title="check"><span>✓</span> <span data-i18n="check">Projekt prüfen</span></button>
@@ -277,6 +278,11 @@
     <div class="outbox-controls"><button id="outbox-refresh" type="button" class="toolbar-button" data-i18n="refresh">Aktualisieren</button><span id="outbox-page-label"></span><button id="outbox-previous" type="button" class="toolbar-button" data-i18n="previous">Zurück</button><button id="outbox-next" type="button" class="toolbar-button" data-i18n="next">Weiter</button></div>
     <p id="outbox-status" class="project-map-status" role="status"></p>
     <div class="outbox-table-scroll"><table><caption data-i18n="outboxCaption">Metadaten der MariaDB-Outbox ohne Nachrichteninhalt</caption><thead><tr><th scope="col" data-i18n="outboxEvent">Ereignis</th><th scope="col" data-i18n="outboxStatus">Status</th><th scope="col" data-i18n="outboxRecipient">Empfänger</th><th scope="col" data-i18n="outboxAttachment">Anhang</th><th scope="col" data-i18n="outboxCreated">Erstellt</th><th scope="col" data-i18n="outboxAvailable">Verfügbar</th><th scope="col" data-i18n="outboxError">Fehler</th><th scope="col" data-i18n="outboxAction">Aktion</th></tr></thead><tbody id="outbox-rows"></tbody></table></div>
+  </dialog>
+  <dialog id="module-settings-dialog" class="project-map-dialog module-settings-dialog" aria-labelledby="module-settings-title">
+    <header class="project-map-header"><div><span class="database-eyebrow" data-i18n="moduleSettingsButton">Moduleinstellungen</span><h2 id="module-settings-title" data-i18n="moduleSettingsTitle">Moduleinstellungen</h2></div><button id="module-settings-close" type="button" aria-label="Schließen" data-i18n-aria="close">×</button></header>
+    <p id="module-settings-status" class="project-map-status" role="status"></p>
+    <form id="module-settings-form"><div id="module-settings-fields"></div><div class="module-settings-actions"><button id="module-settings-reload" type="button" class="toolbar-button" data-i18n="refresh">Aktualisieren</button><button id="module-settings-save" type="submit" class="primary-button" data-i18n="moduleSettingsSave">Einstellungen speichern</button></div></form>
   </dialog>
 </body>
 </html>

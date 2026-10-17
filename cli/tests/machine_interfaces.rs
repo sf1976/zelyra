@@ -19,6 +19,72 @@ fn run(arguments: &[&str]) -> Output {
 }
 
 #[test]
+fn reflect_exports_checked_project_metadata_deterministically_without_source_literals() {
+    let source = r#"
+table customers {
+    id: Id primary auto
+    name: String required
+}
+
+struct Customer {
+    id: Id
+    name: String
+}
+
+form CustomerCreate -> customers {
+    fields { name }
+}
+page "/customers" { html { <p>Private display copy</p> } }
+fn main() {}
+"#;
+    let (directory, path) = temporary_project_source("reflect", source);
+    let run_reflect = || {
+        Command::new(binary())
+            .args(["reflect", path.to_str().unwrap(), "--format=json"])
+            .output()
+            .expect("reflect command should run")
+    };
+    let first = run_reflect();
+    let second = run_reflect();
+    assert!(
+        first.status.success(),
+        "{}",
+        String::from_utf8_lossy(&first.stderr)
+    );
+    assert!(
+        second.status.success(),
+        "{}",
+        String::from_utf8_lossy(&second.stderr)
+    );
+    assert_eq!(first.stdout, second.stdout);
+    let json: serde_json::Value = serde_json::from_slice(&first.stdout).unwrap();
+    assert_eq!(json["reflect_schema_version"], 1);
+    assert_eq!(json["checked"], true);
+    assert_eq!(json["tables"][0]["name"], "customers");
+    assert!(json["routes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|route| route["path"] == "/customers"));
+    assert!(!String::from_utf8_lossy(&first.stdout).contains("Private display copy"));
+    assert!(!String::from_utf8_lossy(&first.stdout).contains(directory.to_str().unwrap()));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn reflect_rejects_unchecked_projects_without_emitting_a_success_document() {
+    let (directory, path) = temporary_project_source("reflect-invalid", "fn main( {");
+    let output = Command::new(binary())
+        .args(["reflect", path.to_str().unwrap(), "--format=json"])
+        .output()
+        .expect("reflect command should run");
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("E-PARSE-001"));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn nested_cli_help_describes_database_creation_and_setup_accurately() {
     let run_german_help = |arguments: &[&str]| {
         Command::new(binary())
@@ -124,6 +190,732 @@ fn run_step_budget_keeps_output_written_before_runtime_error() {
 }
 
 #[test]
+fn all_execution_backends_report_the_configured_step_budget_consistently() {
+    let source = "fn main() -> Int { mutable i: Int = 0 while i < 100 { i = i + 1 } return i }";
+    let (directory, path) = temporary_project_source("shared-step-budget", source);
+    let mut failures = Vec::new();
+    for backend in ["ast", "mir", "bytecode"] {
+        let output = run(&[
+            "run",
+            path.to_str().unwrap(),
+            "--backend",
+            backend,
+            "--max-steps",
+            "20",
+        ]);
+        assert!(
+            !output.status.success(),
+            "backend {backend} unexpectedly succeeded"
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("execution step budget exceeded (limit 20)"),
+            "backend {backend}: {stderr}"
+        );
+        failures.push(stderr.into_owned());
+    }
+    assert!(failures
+        .iter()
+        .all(|failure| { failure.contains("execution step budget exceeded (limit 20)") }));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn reusable_csv_export_package_runs_with_matching_backend_output() {
+    let entry = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../examples/business_modules/main.zyl");
+    let entry = entry.to_str().unwrap();
+    let checked = run(&["check", entry]);
+    assert!(
+        checked.status.success(),
+        "{}",
+        String::from_utf8_lossy(&checked.stderr)
+    );
+
+    let mut outputs = Vec::new();
+    for backend in ["ast", "mir", "bytecode"] {
+        let output = run(&["run", entry, "--entry", "csv_demo", "--backend", backend]);
+        assert!(
+            output.status.success(),
+            "{backend}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        outputs.push(output.stdout);
+    }
+    assert_eq!(
+        outputs[0],
+        b"number,customer,note\nINV-1,\"Acme, Inc.\",\"Paid\nby transfer\"\n"
+    );
+    assert!(outputs.iter().all(|output| output == &outputs[0]));
+}
+
+#[test]
+fn reusable_csv_import_package_checks_rows_on_all_execution_backends() {
+    let entry = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../examples/business_modules/main.zyl");
+    let entry = entry.to_str().unwrap();
+    let checked = run(&["check", entry]);
+    assert!(
+        checked.status.success(),
+        "{}",
+        String::from_utf8_lossy(&checked.stderr)
+    );
+
+    let expected = b"2\nAcme GmbH\nCSV row 2 has a different number of columns than the header\nCSV header column 2 is empty\n";
+    for backend in ["ast", "mir", "bytecode"] {
+        let output = run(&[
+            "run",
+            entry,
+            "--entry",
+            "csv_import_demo",
+            "--backend",
+            backend,
+        ]);
+        assert!(
+            output.status.success(),
+            "{backend}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(output.stdout, expected, "backend {backend}");
+    }
+}
+
+#[test]
+fn run_can_invoke_an_explicit_parameterless_entry_without_running_main() {
+    let source = r#"
+fn main() { print("main entry") }
+fn scheduled_invoice() { print("invoice task") }
+"#;
+    let (directory, path) = temporary_project_source("named-entry", source);
+    let output = run(&[
+        "run",
+        path.to_str().unwrap(),
+        "--entry",
+        "scheduled_invoice",
+    ]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        "invoice task"
+    );
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn run_rejects_missing_entries_and_requires_arguments_for_parameterized_entries() {
+    let source = r#"
+fn main() {}
+fn takes_argument(value: Int) { print(value) }
+fn generic_entry<T>() {}
+"#;
+    let (directory, path) = temporary_project_source("invalid-named-entry", source);
+    let missing = run(&["run", path.to_str().unwrap(), "--entry", "missing"]);
+    assert!(!missing.status.success());
+    assert!(
+        String::from_utf8_lossy(&missing.stderr).contains("entry function `missing` was not found")
+    );
+
+    let parameterized = run(&["run", path.to_str().unwrap(), "--entry", "takes_argument"]);
+    assert!(!parameterized.status.success());
+    assert!(String::from_utf8_lossy(&parameterized.stderr).contains("expects 1 argument(s)"));
+
+    let generic = run(&["run", path.to_str().unwrap(), "--entry", "generic_entry"]);
+    assert!(!generic.status.success());
+    assert!(String::from_utf8_lossy(&generic.stderr).contains("generic type parameters"));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn named_entries_accept_type_checked_json_arguments_on_each_backend() {
+    let source = r#"
+fn main() { print("wrong entry") }
+fn scheduled_invoice(invoice_id: Int, attempt: UInt, dry_run: Bool, recipient: String) -> Int {
+    print(invoice_id)
+    print(attempt)
+    print(dry_run)
+    print(recipient)
+    return 0
+}
+"#;
+    let (directory, path) = temporary_project_source("named-entry-arguments", source);
+    let args = r#"[501,2,false,"billing@example.test"]"#;
+    let mut outputs = Vec::new();
+    for backend in ["ast", "mir", "bytecode"] {
+        let output = run(&[
+            "run",
+            path.to_str().unwrap(),
+            "--entry",
+            "scheduled_invoice",
+            "--entry-args",
+            args,
+            "--backend",
+            backend,
+        ]);
+        assert!(
+            output.status.success(),
+            "{backend}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        outputs.push(output.stdout);
+    }
+    assert_eq!(outputs[0], b"501\n2\nfalse\nbilling@example.test\n");
+    assert_eq!(outputs[1], outputs[0]);
+    assert_eq!(outputs[2], outputs[0]);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn named_entry_arguments_reject_shape_and_type_errors_before_execution() {
+    let source = r#"
+fn main() {}
+fn scheduled_invoice(invoice_id: Int) { print("must not run") }
+"#;
+    let (directory, path) = temporary_project_source("named-entry-argument-errors", source);
+    for args in ["[\"501\"]", "[]", "[501,502]", "not-json"] {
+        let output = run(&[
+            "run",
+            path.to_str().unwrap(),
+            "--entry",
+            "scheduled_invoice",
+            "--entry-args",
+            args,
+        ]);
+        assert!(!output.status.success(), "unexpected success for {args}");
+        assert!(
+            output.stdout.is_empty(),
+            "entry ran for invalid arguments {args}"
+        );
+        assert!(String::from_utf8_lossy(&output.stderr).contains("E-CLI-001"));
+    }
+    let no_entry = run(&["run", path.to_str().unwrap(), "--entry-args", "[501]"]);
+    assert!(!no_entry.status.success());
+    assert!(String::from_utf8_lossy(&no_entry.stderr).contains("requires --entry"));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn named_entry_arguments_support_aliases_options_arrays_chars_and_json() {
+    let source = r#"
+type BatchCount = Int
+fn main() {}
+fn inspect(batch: BatchCount, note: Option<String>, values: Int[], marker: Char, metadata: Json) {
+    print(batch)
+    match note {
+        Some(text) => { print(text) }
+        None => { print("no note") }
+    }
+    print(values[1])
+    print(marker)
+}
+"#;
+    let (directory, path) = temporary_project_source("named-entry-argument-shapes", source);
+    let output = run(&[
+        "run",
+        path.to_str().unwrap(),
+        "--entry",
+        "inspect",
+        "--entry-args",
+        r#"[8,"ready",[3,9],"✓",{"source":"scheduler"}]"#,
+    ]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "8\nready\n9\n✓\n");
+    let no_note = run(&[
+        "run",
+        path.to_str().unwrap(),
+        "--entry",
+        "inspect",
+        "--entry-args",
+        r#"[8,null,[3,9],"✓",{"source":"scheduler"}]"#,
+    ]);
+    assert!(
+        no_note.status.success(),
+        "{}",
+        String::from_utf8_lossy(&no_note.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&no_note.stdout),
+        "8\nno note\n9\n✓\n"
+    );
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn named_entry_arguments_do_not_erase_nominal_database_id_types() {
+    let source = r#"
+type OrderId = Id
+fn main() {}
+fn inspect(order_id: OrderId) { print("must not run") }
+"#;
+    let (directory, path) = temporary_project_source("named-entry-nominal-id", source);
+    let output = run(&[
+        "run",
+        path.to_str().unwrap(),
+        "--entry",
+        "inspect",
+        "--entry-args",
+        "[501]",
+    ]);
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("E-CLI-001"));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Id"));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn named_entry_preserves_output_and_honors_step_budget() {
+    let source = r#"
+fn main() { print("wrong entry") }
+fn limited_job() {
+    print("job started")
+    loop { }
+}
+"#;
+    let (directory, path) = temporary_project_source("named-entry-budget", source);
+    let output = run(&[
+        "run",
+        path.to_str().unwrap(),
+        "--entry",
+        "limited_job",
+        "--max-steps",
+        "30",
+    ]);
+    assert!(!output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        "job started"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("E-RUNTIME-001"));
+    assert!(stderr.contains("step budget exceeded"));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn named_entry_maps_result_errors_and_integer_exit_codes_to_process_status() {
+    let source = r#"
+fn main() {}
+fn failed_job() -> Result<Int, String> { return Err("invoice job failed") }
+fn exit_job() -> Int { return 7 }
+"#;
+    let (directory, path) = temporary_project_source("named-entry-status", source);
+    let failed = run(&["run", path.to_str().unwrap(), "--entry", "failed_job"]);
+    assert_eq!(failed.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&failed.stderr).contains("entry function returned Err"));
+    assert!(String::from_utf8_lossy(&failed.stderr).contains("returned Err"));
+    assert!(String::from_utf8_lossy(&failed.stderr).contains("invoice job failed"));
+
+    let failed_mir = run(&[
+        "run",
+        path.to_str().unwrap(),
+        "--entry",
+        "failed_job",
+        "--backend",
+        "mir",
+    ]);
+    assert_eq!(failed_mir.status.code(), Some(1));
+    let failed_mir_stderr = String::from_utf8_lossy(&failed_mir.stderr);
+    assert!(failed_mir_stderr.contains("returned Err"));
+    assert!(failed_mir_stderr.contains("invoice job failed"));
+
+    let exit = run(&["run", path.to_str().unwrap(), "--entry", "exit_job"]);
+    assert_eq!(exit.status.code(), Some(7));
+    let exit_mir = run(&[
+        "run",
+        path.to_str().unwrap(),
+        "--entry",
+        "exit_job",
+        "--backend",
+        "mir",
+    ]);
+    assert_eq!(exit_mir.status.code(), exit.status.code());
+    let exit_bytecode = run(&[
+        "run",
+        path.to_str().unwrap(),
+        "--entry",
+        "exit_job",
+        "--backend",
+        "bytecode",
+    ]);
+    assert_eq!(exit_bytecode.status.code(), exit.status.code());
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn run_mir_backend_is_opt_in_and_matches_ast_exit_code_for_supported_programs() {
+    let source = "fn main() -> Int { return 7 }";
+    let (directory, path) = temporary_project_source("mir-backend", source);
+    let ast = run(&["run", path.to_str().unwrap(), "--backend", "ast"]);
+    let mir = run(&["run", path.to_str().unwrap(), "--backend", "mir"]);
+    assert_eq!(ast.status.code(), Some(7));
+    assert_eq!(mir.status.code(), ast.status.code());
+    assert!(mir.stdout.is_empty());
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn run_mir_backend_honors_the_configured_step_budget() {
+    let source = "fn main() { print(\"before budget\") loop { } }";
+    let (directory, path) = temporary_project_source("mir-budget", source);
+    let output = run(&[
+        "run",
+        path.to_str().unwrap(),
+        "--backend",
+        "mir",
+        "--max-steps",
+        "30",
+    ]);
+    assert!(!output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        "before budget"
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("step budget exceeded"),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn run_mir_backend_print_output_matches_ast() {
+    let source = "fn main() { print(42) }";
+    let (directory, path) = temporary_project_source("print-output", source);
+    let ast = run(&["run", path.to_str().unwrap(), "--backend", "ast"]);
+    assert!(ast.status.success());
+
+    let mir = run(&["run", path.to_str().unwrap(), "--backend", "mir"]);
+    assert!(mir.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&mir.stdout),
+        String::from_utf8_lossy(&ast.stdout)
+    );
+    let bytecode = run(&["run", path.to_str().unwrap(), "--backend", "bytecode"]);
+    assert!(
+        bytecode.status.success(),
+        "{}",
+        String::from_utf8_lossy(&bytecode.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&bytecode.stdout),
+        String::from_utf8_lossy(&ast.stdout)
+    );
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn run_mir_constant_folding_is_explicit_and_matches_ast_output() {
+    let source = "fn main() { print((2 + 3) * 4) }";
+    let (directory, path) = temporary_project_source("mir-constant-folding", source);
+    let ast = run(&["run", path.to_str().unwrap(), "--backend", "ast"]);
+    let optimized = run(&[
+        "run",
+        path.to_str().unwrap(),
+        "--backend",
+        "mir",
+        "--optimize-mir",
+    ]);
+    assert!(ast.status.success());
+    assert!(
+        optimized.status.success(),
+        "{}",
+        String::from_utf8_lossy(&optimized.stderr)
+    );
+    assert_eq!(optimized.stdout, ast.stdout);
+    assert_eq!(String::from_utf8_lossy(&optimized.stdout).trim(), "20");
+
+    let without_mir = run(&["run", path.to_str().unwrap(), "--optimize-mir"]);
+    assert_eq!(without_mir.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&without_mir.stderr).contains("requires --backend mir"));
+
+    let bytecode = run(&[
+        "run",
+        path.to_str().unwrap(),
+        "--backend",
+        "bytecode",
+        "--optimize-mir",
+    ]);
+    assert_eq!(bytecode.status.code(), Some(2));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn run_bytecode_backend_matches_ast_exit_code_for_supported_programs() {
+    let source = "fn main() -> Int { return 7 }";
+    let (directory, path) = temporary_project_source("bytecode-backend", source);
+    let ast = run(&["run", path.to_str().unwrap(), "--backend", "ast"]);
+    let bytecode = run(&["run", path.to_str().unwrap(), "--backend", "bytecode"]);
+    assert_eq!(ast.status.code(), Some(7));
+    assert_eq!(bytecode.status.code(), ast.status.code());
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn run_bytecode_backend_matches_ast_for_stored_capturing_closures() {
+    let source = r#"
+fn make_adder(base: Int) -> Function<(Int) -> Int> {
+    mutable offset = base
+    callback: Function<(Int) -> Int> = |value| value + offset
+    offset = offset + 100
+    return callback
+}
+fn apply(values: Int[], callback: Function<(Int) -> Int>) -> Int[] {
+    return values |> map(callback)
+}
+fn main() {
+    add = make_adder(20)
+    values = apply([2, 3], add)
+    print(values[0] + values[1])
+}
+"#;
+    let (directory, path) = temporary_project_source("bytecode-stored-closure", source);
+    let ast = run(&["run", path.to_str().unwrap(), "--backend", "ast"]);
+    let bytecode = run(&["run", path.to_str().unwrap(), "--backend", "bytecode"]);
+    assert!(
+        ast.status.success(),
+        "{}",
+        String::from_utf8_lossy(&ast.stderr)
+    );
+    assert!(
+        bytecode.status.success(),
+        "{}",
+        String::from_utf8_lossy(&bytecode.stderr)
+    );
+    assert_eq!(bytecode.stdout, ast.stdout);
+    assert_eq!(String::from_utf8_lossy(&bytecode.stdout).trim(), "45");
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn run_bytecode_parallel_await_matches_ast_values_and_output_order() {
+    let source = r#"
+fn load(value: Int) -> Int {
+    print(value)
+    return value * 2
+}
+fn main() -> Int {
+    mutable existing = 5
+    parallel {
+        first = await load(existing)
+        existing = await load(3)
+    }
+    print(first + existing)
+    return 0
+}
+"#;
+    let (directory, path) = temporary_project_source("bytecode-parallel", source);
+    let ast = run(&["run", path.to_str().unwrap(), "--backend", "ast"]);
+    assert!(
+        ast.status.success(),
+        "{}",
+        String::from_utf8_lossy(&ast.stderr)
+    );
+    let bytecode = run(&["run", path.to_str().unwrap(), "--backend", "bytecode"]);
+    assert!(
+        bytecode.status.success(),
+        "{}",
+        String::from_utf8_lossy(&bytecode.stderr)
+    );
+    assert_eq!(bytecode.stdout, ast.stdout);
+    assert_eq!(String::from_utf8_lossy(&bytecode.stdout), "5\n3\n16\n");
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn run_bytecode_backend_honors_the_configured_step_budget() {
+    let source = "fn main() -> Int { print(\"before budget\") mutable value: Int = 0 while value < 1000 { value = value + 1 } return value }";
+    let (directory, path) = temporary_project_source("bytecode-budget", source);
+    let output = run(&[
+        "run",
+        path.to_str().unwrap(),
+        "--backend",
+        "bytecode",
+        "--max-steps",
+        "30",
+    ]);
+    assert!(!output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        "before budget"
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("step budget exceeded"),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn run_bytecode_console_preflight_requires_project_grant_before_prompt() {
+    let directory = temporary_directory("bytecode-console-grant");
+    fs::create_dir_all(&directory).unwrap();
+    let project = directory.join("zelyra.toml");
+    let source = directory.join("main.zyl");
+    fs::write(
+        &project,
+        "[project]\nname = \"bytecode-console-grant\"\nversion = \"0.1.0\"\nzelyra = \"0.1\"\n\n[capabilities]\nconsole = true\ndatabase = false\nnetwork = false\n",
+    )
+    .unwrap();
+    fs::write(
+        &source,
+        "fn main() uses Console { answer = read_console(\"Input? \") }\n",
+    )
+    .unwrap();
+
+    let granted = Command::new(binary())
+        .args(["run", source.to_str().unwrap(), "--backend", "bytecode"])
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(
+        granted.status.success(),
+        "{}",
+        String::from_utf8_lossy(&granted.stderr)
+    );
+    assert_eq!(granted.stdout, b"Input? ");
+
+    fs::write(
+        &project,
+        "[project]\nname = \"bytecode-console-grant\"\nversion = \"0.1.0\"\nzelyra = \"0.1\"\n\n[capabilities]\nconsole = false\ndatabase = false\nnetwork = false\n",
+    )
+    .unwrap();
+    let denied = run(&["run", source.to_str().unwrap(), "--backend", "bytecode"]);
+    assert!(!denied.status.success());
+    assert!(denied.stdout.is_empty());
+    let stderr = String::from_utf8_lossy(&denied.stderr);
+    assert!(stderr.contains("Console"), "{stderr}");
+    assert!(stderr.contains("E-CAP-001"), "{stderr}");
+    assert!(stderr.contains("not enabled by the project"), "{stderr}");
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn run_bytecode_file_reads_use_project_roots_and_fail_closed_outside_them() {
+    let directory = temporary_directory("bytecode-file-read-roots");
+    let data = directory.join("data");
+    fs::create_dir_all(&data).unwrap();
+    fs::write(data.join("input.txt"), "approved input\n").unwrap();
+    fs::write(directory.join("outside.txt"), "private input\n").unwrap();
+    fs::write(
+        directory.join("zelyra.toml"),
+        "[project]\nname = \"bytecode-file-read\"\nversion = \"0.1.0\"\nzelyra = \"0.1\"\n\n[capabilities]\nfilesystem = true\ndatabase = false\nnetwork = false\n\n[filesystem]\nread_roots = [\"data\"]\nwrite_roots = [\"data\"]\n",
+    )
+    .unwrap();
+    let source = directory.join("main.zyl");
+    fs::write(
+        &source,
+        "fn main() uses FileSystem { print(read_text(\"data/input.txt\")) }\n",
+    )
+    .unwrap();
+    let allowed = run(&["run", source.to_str().unwrap(), "--backend", "bytecode"]);
+    assert!(
+        allowed.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&allowed.stdout),
+        String::from_utf8_lossy(&allowed.stderr)
+    );
+    assert_eq!(allowed.stdout, b"approved input\n\n");
+
+    fs::write(
+        &source,
+        "fn main() uses FileSystem { write_text(\"data/output.txt\", \"written\"); print(read_text(\"data/output.txt\")) }\n",
+    )
+    .unwrap();
+    let write_allowed = run(&["run", source.to_str().unwrap(), "--backend", "bytecode"]);
+    assert!(
+        write_allowed.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&write_allowed.stdout),
+        String::from_utf8_lossy(&write_allowed.stderr)
+    );
+    assert_eq!(write_allowed.stdout, b"written\n");
+    assert_eq!(
+        fs::read_to_string(data.join("output.txt")).unwrap(),
+        "written"
+    );
+
+    fs::write(
+        &source,
+        "fn main() uses FileSystem { print(read_text(\"outside.txt\")) }\n",
+    )
+    .unwrap();
+    let denied = run(&["run", source.to_str().unwrap(), "--backend", "bytecode"]);
+    assert!(!denied.status.success());
+    assert!(denied.stdout.is_empty());
+    let stderr = String::from_utf8_lossy(&denied.stderr);
+    assert!(stderr.contains("E-RUNTIME-001"), "{stderr}");
+    assert!(stderr.contains("outside the configured roots"), "{stderr}");
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn run_mir_backend_retains_output_from_parallel_branches() {
+    let source = r#"
+fn fetch_left() -> Int { print("first") return 1 }
+fn fetch_right() -> Int { print("second") return 2 }
+fn main() -> Int {
+    parallel {
+        left = await fetch_left()
+        right = await fetch_right()
+    }
+    return left + right
+}
+"#;
+    let (directory, path) = temporary_project_source("mir-parallel-output", source);
+    let output = run(&["run", path.to_str().unwrap(), "--backend", "mir"]);
+    assert_eq!(output.status.code(), Some(3));
+    let mut lines = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    lines.sort();
+    assert_eq!(lines, ["first", "second"]);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn run_rejects_unknown_or_repeated_backend_selection() {
+    let (directory, path) = temporary_project_source("backend-option", "fn main() {}");
+    let unknown = run(&["run", path.to_str().unwrap(), "--backend", "native"]);
+    assert_eq!(unknown.status.code(), Some(2));
+    assert!(
+        String::from_utf8_lossy(&unknown.stderr).contains("requires `ast`, `mir`, or `bytecode`")
+    );
+
+    let duplicate = run(&[
+        "run",
+        path.to_str().unwrap(),
+        "--backend",
+        "mir",
+        "--backend",
+        "ast",
+    ]);
+    assert_eq!(duplicate.status.code(), Some(2));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn run_help_documents_backend_default_and_mir_limit() {
+    let output = run(&["run", "--help"]);
+    assert!(output.status.success());
+    let help = String::from_utf8_lossy(&output.stdout);
+    assert!(help.contains("--backend ast|mir|bytecode"));
+    assert!(help.contains("100.000 Schritte"));
+    assert!(help.contains("AST bleibt Standard"));
+    assert!(help.contains("--optimize-mir"));
+}
+
+#[test]
 fn form_validate_covers_valid_and_invalid_inputs_without_database_access() {
     let source = example("customer_form.zyl");
     let valid = run(&[
@@ -159,6 +951,7 @@ fn every_documented_cli_command_has_specific_nested_help() {
         "zelyra editor",
         "zelyra text edit",
         "zelyra outbox",
+        "zelyra package lock",
         "zelyra db <create|setup|bootstrap|inspect|map|plan|apply|history>",
     ] {
         assert!(
@@ -186,9 +979,10 @@ fn every_documented_cli_command_has_specific_nested_help() {
         &["serve", "--help"],
         &["routes", "--help"],
         &["editor", "--help"],
-        &["migrate", "laravel", "--help"],
         &["module", "plan", "--help"],
         &["module", "bundle", "--help"],
+        &["package", "--help"],
+        &["package", "lock", "--help"],
         &["doctor", "--help"],
         &["verify", "--help"],
         &["doc", "--help"],
@@ -270,6 +1064,136 @@ fn temporary_project_source(name: &str, source: &str) -> (PathBuf, PathBuf) {
     let source_path = directory.join("main.zyl");
     fs::write(&source_path, source).expect("temporary project source should be written");
     (directory, source_path)
+}
+
+#[test]
+fn native_commands_and_schedules_are_listed_validated_run_and_exported_as_preview() {
+    let source = r#"
+command report_status {
+    handler: report_status
+    description: "Print the current business status"
+}
+schedule morning_status {
+    command: report_status
+    cron: "0 8 * * 1-5"
+    timezone: "Europe/Berlin"
+}
+fn report_status() { print("ready") }
+fn main() { }
+"#;
+    let (directory, path) = temporary_project_source("native-tasks", source);
+
+    let commands = run(&["task", "list", path.to_str().unwrap(), "--json"]);
+    assert!(
+        commands.status.success(),
+        "{}",
+        String::from_utf8_lossy(&commands.stderr)
+    );
+    let command_json: serde_json::Value = serde_json::from_slice(&commands.stdout).unwrap();
+    assert_eq!(command_json["commands"][0]["name"], "report_status");
+    assert_eq!(command_json["commands"][0]["handler"], "report_status");
+
+    let schedules = run(&["schedule", "list", path.to_str().unwrap(), "--json"]);
+    assert!(
+        schedules.status.success(),
+        "{}",
+        String::from_utf8_lossy(&schedules.stderr)
+    );
+    let schedule_json: serde_json::Value = serde_json::from_slice(&schedules.stdout).unwrap();
+    assert_eq!(schedule_json["schedules"][0]["cron"], "0 8 * * 1-5");
+
+    let execution = run(&["task", "run", path.to_str().unwrap(), "report_status"]);
+    assert!(
+        execution.status.success(),
+        "{}",
+        String::from_utf8_lossy(&execution.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&execution.stdout).trim(), "ready");
+
+    let preview = run(&[
+        "schedule",
+        "export",
+        path.to_str().unwrap(),
+        "--format",
+        "cron",
+    ]);
+    assert!(
+        preview.status.success(),
+        "{}",
+        String::from_utf8_lossy(&preview.stderr)
+    );
+    let cron = String::from_utf8_lossy(&preview.stdout);
+    assert!(cron.contains("CRON_TZ=Europe/Berlin\n0 8 * * 1-5"));
+    assert!(cron.contains("--entry 'report_status'"));
+    assert!(String::from_utf8_lossy(&preview.stderr).contains("did not install or enable"));
+
+    let deploy_dir = directory.join("deploy");
+    fs::create_dir(&deploy_dir).unwrap();
+    let exported = run(&[
+        "schedule",
+        "export",
+        path.to_str().unwrap(),
+        "--output",
+        "deploy/zelyra.cron",
+    ]);
+    assert!(
+        exported.status.success(),
+        "{}",
+        String::from_utf8_lossy(&exported.stderr)
+    );
+    assert!(exported.stdout.is_empty());
+    let cron_file = fs::read_to_string(deploy_dir.join("zelyra.cron")).unwrap();
+    assert!(cron_file.contains("CRON_TZ=Europe/Berlin\n0 8 * * 1-5"));
+    assert!(String::from_utf8_lossy(&exported.stderr).contains("did not install or enable"));
+
+    let overwrite = run(&[
+        "schedule",
+        "export",
+        path.to_str().unwrap(),
+        "--output",
+        "deploy/zelyra.cron",
+    ]);
+    assert!(!overwrite.status.success());
+    assert_eq!(
+        fs::read_to_string(deploy_dir.join("zelyra.cron")).unwrap(),
+        cron_file
+    );
+    let escape = run(&[
+        "schedule",
+        "export",
+        path.to_str().unwrap(),
+        "--output",
+        "../outside.cron",
+    ]);
+    assert!(!escape.status.success());
+    assert!(String::from_utf8_lossy(&escape.stderr).contains("E-TASK-004"));
+
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn schedule_export_rejects_symlinked_output_directories_outside_project() {
+    let (directory, path) = temporary_project_source(
+        "schedule-output-symlink",
+        "command c { handler: run_c }\nschedule s { command: c cron: \"0 0 * * *\" }\nfn run_c() {}\nfn main() {}\n",
+    );
+    let outside = temporary_directory("schedule-export-outside");
+    fs::create_dir_all(&outside).unwrap();
+    std::os::unix::fs::symlink(&outside, directory.join("linked"))
+        .expect("test should create an output-directory symlink");
+    let result = run(&[
+        "schedule",
+        "export",
+        path.to_str().unwrap(),
+        "--output",
+        "linked/schedules.cron",
+    ]);
+    assert!(!result.status.success());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("outside the project"));
+    assert!(!outside.join("schedules.cron").exists());
+    fs::remove_dir_all(directory).unwrap();
+    fs::remove_dir_all(outside).unwrap();
 }
 
 fn temporary_directory(name: &str) -> PathBuf {
@@ -566,19 +1490,6 @@ fn command_help_explains_options_without_running_the_command() {
     let database_help = String::from_utf8_lossy(&database_group.stdout);
     assert!(database_help.contains("ZELYRA_DATABASE_<NAME>_URL"));
     assert!(database_help.contains("DATABASE_URL"));
-
-    let migrator = run(&["migrate", "laravel", "--help"]);
-    assert!(migrator.status.success());
-    let migrator_help = String::from_utf8_lossy(&migrator.stdout);
-    assert!(migrator_help
-        .contains("zelyra migrate laravel <projekt> [--report <pfad>] [--output <ziel>]"));
-    assert!(migrator_help.contains("`.env`-Dateien werden nicht"));
-
-    let migration_group = run(&["migrate", "--help"]);
-    assert!(migration_group.status.success());
-    assert!(
-        String::from_utf8_lossy(&migration_group.stdout).contains("zelyra migrate laravel --help")
-    );
 }
 
 #[test]
@@ -602,340 +1513,6 @@ fn command_help_is_available_in_english() {
     let database_help = String::from_utf8_lossy(&database.stdout);
     assert!(database_help.contains("ZELYRA_DATABASE_<NAME>_URL"));
     assert!(database_help.contains("DATABASE_URL"));
-}
-
-#[test]
-fn laravel_migrator_cli_writes_machine_report_outside_read_only_source() {
-    let unique = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("clock is available")
-        .as_nanos();
-    let project = std::env::temp_dir().join(format!("zelyra-laravel-cli-{unique}"));
-    let reports = std::env::temp_dir().join(format!("zelyra-laravel-output-{unique}"));
-    fs::create_dir_all(project.join("routes")).expect("project fixture is created");
-    fs::create_dir_all(&reports).expect("report directory is created");
-    fs::write(project.join(".env"), "APP_KEY=private-test-value").expect("env fixture is written");
-    fs::write(
-        project.join("routes/web.php"),
-        "<?php\nRoute::post('/orders', [OrderController::class, 'store']);\n",
-    )
-    .expect("Laravel route fixture is written");
-    let report = reports.join("migration.json");
-    let output = Command::new(binary())
-        .args([
-            "migrate",
-            "laravel",
-            project.to_str().unwrap(),
-            "--report",
-            report.to_str().unwrap(),
-            "--format",
-            "json",
-        ])
-        .output()
-        .expect("migrator command should run");
-    assert!(
-        output.status.success(),
-        "stdout: {}\nstderr: {}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let result: serde_json::Value = serde_json::from_slice(&fs::read(&report).unwrap()).unwrap();
-    assert_eq!(result["env_files_read"], false);
-    assert_eq!(result["findings"][0]["file"], "routes/web.php");
-    let contents = fs::read_to_string(&report).unwrap();
-    assert!(!contents.contains("private-test-value"));
-    assert_eq!(
-        fs::read_to_string(project.join(".env")).unwrap(),
-        "APP_KEY=private-test-value"
-    );
-    assert!(!project.join("report.json").exists());
-    let _ = fs::remove_dir_all(project);
-    let _ = fs::remove_dir_all(reports);
-}
-
-#[test]
-fn laravel_migrator_0_9_8_fixture_covers_business_security_and_integration_clues() {
-    let unique = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("clock is available")
-        .as_nanos();
-    let parent = std::env::temp_dir().join(format!("zelyra-laravel-review-{unique}"));
-    let project = parent.join("legacy-app");
-    fs::create_dir_all(project.join("routes")).unwrap();
-    fs::create_dir_all(project.join("app/Models")).unwrap();
-    fs::create_dir_all(project.join("app/Http/Controllers")).unwrap();
-    fs::create_dir_all(project.join("app/Jobs")).unwrap();
-    fs::create_dir_all(project.join("database/migrations")).unwrap();
-    fs::create_dir_all(project.join("resources/views")).unwrap();
-    fs::create_dir_all(parent.join("reports")).unwrap();
-    fs::write(
-        project.join("composer.json"),
-        r#"{"require":{"laravel/framework":"^11.0","laravel/sanctum":"^4.0"}}"#,
-    )
-    .unwrap();
-    fs::write(
-        project.join("routes/web.php"),
-        "<?php\nRoute::post('/orders', [OrderController::class, 'store'])->middleware('auth');\n",
-    )
-    .unwrap();
-    fs::write(
-        project.join("app/Models/Order.php"),
-        "<?php\nclass Order extends Model { public function customer() { return $this->belongsTo(Customer::class); } }\n",
-    )
-    .unwrap();
-    fs::write(
-        project.join("app/Http/Controllers/OrderController.php"),
-        "<?php\nclass OrderController { function store($request) { $this->authorize('create', Order::class); $request->validate([]); $order->tenant_id = $tenantId; $order->total = $items->sum('price'); Storage::put('orders', $request->file('attachment')); DB::transaction(fn () => $order->save()); Mail::send('order'); $order->charge(100); DB::raw('NOW()'); $secret = env('DB_PASSWORD'); } }\n",
-    )
-    .unwrap();
-    fs::write(
-        project.join("app/Jobs/SendOrder.php"),
-        "<?php\nclass SendOrder implements ShouldQueue { public function handle() {} }\n",
-    )
-    .unwrap();
-    fs::write(
-        project.join("database/migrations/2026_01_01_create_orders.php"),
-        "<?php\nSchema::create('orders', function ($table) { $table->decimal('total', 12, 2); });\n",
-    )
-    .unwrap();
-    fs::write(
-        project.join("resources/views/orders.blade.php"),
-        "<h1>{{ $order->total }}</h1>\n",
-    )
-    .unwrap();
-    fs::write(
-        project.join(".env"),
-        "APP_KEY=fixture-secret-must-not-appear\n",
-    )
-    .unwrap();
-
-    let report = parent.join("reports/migration.json");
-    let result = Command::new(binary())
-        .args([
-            "migrate",
-            "laravel",
-            project.to_str().unwrap(),
-            "--report",
-            report.to_str().unwrap(),
-            "--format",
-            "json",
-        ])
-        .output()
-        .unwrap();
-    assert!(
-        result.status.success(),
-        "stdout: {}\nstderr: {}",
-        String::from_utf8_lossy(&result.stdout),
-        String::from_utf8_lossy(&result.stderr)
-    );
-    let report_bytes = fs::read(&report).unwrap();
-    let parsed: serde_json::Value = serde_json::from_slice(&report_bytes).unwrap();
-    assert_eq!(parsed["analyzer"], "Zelyra Laravel Migrator 1.0.0");
-    assert_eq!(parsed["mapping_ruleset"], "1.0.0");
-    assert_eq!(parsed["laravel_constraint"], "^11.0");
-    let findings = parsed["findings"].as_array().unwrap();
-    for kind in [
-        "route",
-        "model",
-        "controller",
-        "migration",
-        "relationship",
-        "validation",
-        "job",
-        "authorization",
-        "tenant_boundary",
-        "financial_rule",
-        "file_access",
-        "payment_rule",
-        "ambiguity",
-        "environment_access",
-        "integration",
-        "transaction",
-        "view",
-    ] {
-        assert!(
-            findings.iter().any(|finding| finding["kind"] == kind),
-            "missing {kind} fixture finding: {findings:#?}"
-        );
-    }
-    assert!(findings
-        .iter()
-        .all(|finding| finding["status"] != "supported"));
-    assert!(!String::from_utf8_lossy(&report_bytes).contains("fixture-secret-must-not-appear"));
-    assert_eq!(
-        fs::read_to_string(project.join("app/Http/Controllers/OrderController.php")).unwrap(),
-        "<?php\nclass OrderController { function store($request) { $this->authorize('create', Order::class); $request->validate([]); $order->tenant_id = $tenantId; $order->total = $items->sum('price'); Storage::put('orders', $request->file('attachment')); DB::transaction(fn () => $order->save()); Mail::send('order'); $order->charge(100); DB::raw('NOW()'); $secret = env('DB_PASSWORD'); } }\n"
-    );
-    fs::remove_dir_all(parent).unwrap();
-}
-
-#[test]
-fn laravel_migrator_creates_a_separate_compiler_checked_scaffold() {
-    let unique = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("clock is available")
-        .as_nanos();
-    let parent = std::env::temp_dir().join(format!("zelyra-laravel-scaffold-{unique}"));
-    let project = parent.join("legacy-app");
-    fs::create_dir_all(project.join("routes")).expect("Laravel project fixture is created");
-    fs::write(project.join(".env"), "APP_KEY=secret-that-must-not-leak")
-        .expect("environment fixture is written");
-    fs::write(
-        project.join("routes/web.php"),
-        "<?php\nRoute::post('/orders', [OrderController::class, 'store']);\n",
-    )
-    .expect("route fixture is written");
-    let report = parent.join("migration.json");
-    let target = parent.join("zelyra-project");
-    let result = run(&[
-        "migrate",
-        "laravel",
-        project.to_str().unwrap(),
-        "--report",
-        report.to_str().unwrap(),
-        "--output",
-        target.to_str().unwrap(),
-        "--format",
-        "json",
-    ]);
-    assert!(
-        result.status.success(),
-        "stdout: {}\nstderr: {}",
-        String::from_utf8_lossy(&result.stdout),
-        String::from_utf8_lossy(&result.stderr)
-    );
-    assert!(target.join("main.zyl").is_file());
-    assert!(target.join("zelyra.toml").is_file());
-    assert!(target.join("MIGRATION_REPORT.md").is_file());
-    let todo = fs::read_to_string(target.join("MIGRATION_TODO.md")).unwrap();
-    assert!(todo.contains("No Laravel business logic has been transferred"));
-    assert!(
-        todo.contains("1.0.0/route"),
-        "TODO entries need versioned mapping IDs: {todo}"
-    );
-    let report_text = fs::read_to_string(&report).unwrap();
-    assert!(report_text.contains("routes/web.php"));
-    assert!(!report_text.contains("secret-that-must-not-leak"));
-    assert_eq!(
-        fs::read_to_string(project.join("routes/web.php")).unwrap(),
-        "<?php\nRoute::post('/orders', [OrderController::class, 'store']);\n"
-    );
-    assert_eq!(
-        fs::read_to_string(project.join(".env")).unwrap(),
-        "APP_KEY=secret-that-must-not-leak"
-    );
-    let check = run(&["check", target.join("main.zyl").to_str().unwrap()]);
-    assert!(
-        check.status.success(),
-        "stdout: {}\nstderr: {}",
-        String::from_utf8_lossy(&check.stdout),
-        String::from_utf8_lossy(&check.stderr)
-    );
-
-    let output_only_target = parent.join("output-only-scaffold");
-    let output_only = run(&[
-        "migrate",
-        "laravel",
-        project.to_str().unwrap(),
-        "--output",
-        output_only_target.to_str().unwrap(),
-    ]);
-    assert!(
-        output_only.status.success(),
-        "stdout: {}\nstderr: {}",
-        String::from_utf8_lossy(&output_only.stdout),
-        String::from_utf8_lossy(&output_only.stderr)
-    );
-    assert!(output_only_target.join("main.zyl").is_file());
-    assert!(!String::from_utf8_lossy(&output_only.stdout).contains("Report:"));
-
-    let blocked_target = parent.join("existing");
-    fs::create_dir(&blocked_target).unwrap();
-    fs::write(blocked_target.join("keep.txt"), "unchanged").unwrap();
-    let blocked = run(&[
-        "migrate",
-        "laravel",
-        project.to_str().unwrap(),
-        "--output",
-        blocked_target.to_str().unwrap(),
-    ]);
-    assert!(!blocked.status.success());
-    assert_eq!(
-        fs::read_to_string(blocked_target.join("keep.txt")).unwrap(),
-        "unchanged"
-    );
-
-    let inside_source = project.join("generated");
-    let overlap = run(&[
-        "migrate",
-        "laravel",
-        project.to_str().unwrap(),
-        "--output",
-        inside_source.to_str().unwrap(),
-    ]);
-    assert!(!overlap.status.success());
-    assert!(!inside_source.exists());
-
-    let occupied_report = parent.join("occupied-report.json");
-    fs::write(&occupied_report, "keep this report").unwrap();
-    let target_for_report = parent.join("must-not-appear");
-    let report_collision = run(&[
-        "migrate",
-        "laravel",
-        project.to_str().unwrap(),
-        "--report",
-        occupied_report.to_str().unwrap(),
-        "--output",
-        target_for_report.to_str().unwrap(),
-    ]);
-    assert!(!report_collision.status.success());
-    assert_eq!(
-        fs::read_to_string(&occupied_report).unwrap(),
-        "keep this report"
-    );
-    assert!(!target_for_report.exists());
-
-    let traversal = run(&[
-        "migrate",
-        "laravel",
-        project.to_str().unwrap(),
-        "--report",
-        parent.join("../escaped.json").to_str().unwrap(),
-    ]);
-    assert!(!traversal.status.success());
-    assert!(!parent.parent().unwrap().join("escaped.json").exists());
-
-    let missing_report_target = parent.join("missing-parent/report.json");
-    let scaffold_for_missing_report = parent.join("no-partial-scaffold");
-    let missing_report_parent = run(&[
-        "migrate",
-        "laravel",
-        project.to_str().unwrap(),
-        "--report",
-        missing_report_target.to_str().unwrap(),
-        "--output",
-        scaffold_for_missing_report.to_str().unwrap(),
-    ]);
-    assert!(!missing_report_parent.status.success());
-    assert!(!scaffold_for_missing_report.exists());
-    assert!(!missing_report_target.exists());
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::symlink;
-        let symlink_target = parent.join("target-link");
-        symlink(&target, &symlink_target).unwrap();
-        let through_symlink = run(&[
-            "migrate",
-            "laravel",
-            project.to_str().unwrap(),
-            "--output",
-            symlink_target.to_str().unwrap(),
-        ]);
-        assert!(!through_symlink.status.success());
-        assert!(target.join("main.zyl").is_file());
-    }
-    fs::remove_dir_all(parent).unwrap();
 }
 
 #[test]
@@ -2686,7 +3263,10 @@ fn invalid_check_json_keeps_human_logs_off_stdout() {
     assert_eq!(document["schema_version"], "1");
     assert_eq!(document["success"], false);
     let diagnostics = document["diagnostics"].as_array().unwrap();
-    assert!(diagnostics.len() >= 2);
+    assert!(!diagnostics.is_empty());
+    assert!(diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic["code"] == "E-NAME-001"));
     assert!(diagnostics.iter().all(|diagnostic| {
         diagnostic["code"].as_str().is_some()
             && diagnostic["severity"] == "error"

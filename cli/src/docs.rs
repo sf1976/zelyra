@@ -467,6 +467,7 @@ pub(super) fn typescript_type(ty: &Type) -> String {
         Type::Decimal => "string".into(),
         Type::Bool => "boolean".into(),
         Type::String | Type::Char | Type::Bytes | Type::Date | Type::Time => "string".into(),
+        Type::Json => "JsonValue".into(),
         Type::Unit => "void".into(),
         Type::Option(inner) => format!("{} | null", typescript_type(inner)),
         Type::Result(ok, _) => typescript_type(ok),

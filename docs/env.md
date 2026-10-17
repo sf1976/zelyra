@@ -513,6 +513,7 @@ gehören nicht in Zelyra-Quellcode, JSON-Diagnosen, Kontextausgaben oder Logs.
 | `NO_COLOR` | implementiert | Wenn gesetzt, schaltet es automatische Farben aus; `ZELYRA_COLOR=always` hat Vorrang |
 | `CLICOLOR_FORCE` | implementiert | Ein nicht leerer Wert außer `0` erzwingt Farben, sofern `ZELYRA_COLOR` nicht gesetzt ist und `NO_COLOR` fehlt |
 | `ZELYRA_DB_TIMEOUT_TEST_URL` | CI-/Testvariable | MariaDB-URL für Timeout- und Pool-Integrationstests; ausschließlich lokale/isolierte Testdatenbank |
+| `ZELYRA_MODULE_IMPORTS_DATABASE_URL` | CI-/Testvariable | Optionale MariaDB-Basis-URL für Paket-/Modul-Laufzeitintegrationstests; ohne Wert wird der Datenbankfall übersprungen. Nur mit isoliertem Testserver setzen, da der Test eine eindeutig benannte Datenbank anlegt und löscht |
 | `ZELYRA_MARIADB_ROOT_PASSWORD` | Test-/Entwicklungswerkzeug | Passwort für lokale MariaDB-Testläufe |
 | `ZELYRA_MARIADB_PASSWORD` | Test-/Entwicklungswerkzeug | Benutzerpasswort für lokale MariaDB-Testläufe |
 | `ZELYRA_GENERATED_E2E_ROOT_PASSWORD` | Test-/Entwicklungswerkzeug | Root-Passwort des generierten Docker-E2E-Tests |
@@ -641,3 +642,17 @@ Ausführung schreibfrei gegen die deklarierte Struktur geprüft. Fehlende Spalte
 falsche Typen und unpassende Zeitpräzision werden mit Fundstelle abgewiesen;
 Metadatenzugriff ist erforderlich. Migrationen bleiben ausdrücklich zu prüfen.
 Es gibt keinen neuen Schalter. Siehe [Datumsregeln](dates.de.md).
+## Lokale Paket-Einstellungen (experimentell)
+
+`zelyra.settings.toml` speichert nicht geheime Paketwerte unter
+`[package_settings."<paketpfad>"]`; Standardwerte aus dem Paketmanifest gelten
+bei ausgelassenen optionalen Feldern. Geheimnisfelder dürfen nur auf
+Prozessumgebungsnamen im Format `UPPERCASE_NAME` verweisen. Die CLI liest deren
+Werte ausschließlich für `zelyra module settings check`; es gibt keine
+Fallback-Datei und keine automatische `.env`-Auflösung für diesen Mechanismus.
+Ein vorhandener Prozesswert ist die einzige Quelle; Standardwerte für
+Geheimnisse sind verboten. Die Ausgabe enthält nur Verfügbarkeitsstatus und
+nie Variablennamen oder Werte. Die Datei wird auf Symlinks, Typen und eine
+Größe von höchstens 1 MiB geprüft und ist weder Bestandteil des Paket-Lockfiles
+noch derzeit eine Runtime-Einstellung. Geprüft durch Paket- und CLI-
+Integrationstests.

@@ -6,6 +6,34 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+- Add optional `zelyra` SemVer compatibility requirements to local package
+  manifests. Check them against the running CLI before package use or lockfile
+  generation and expose them through `zelyra module list`. The package manifest
+  checksum makes requirement changes invalidate the lockfile. / Optionale
+  SemVer-Kompatibilitätsvorgaben `zelyra` in lokalen Paketmanifesten ergänzen.
+  Sie werden vor Paketverwendung und Lockfile-Erstellung gegen die laufende
+  CLI geprüft und in `zelyra module list` angezeigt. Die Manifestprüfsumme
+  macht das Lockfile bei Änderungen ungültig.
+- Add `zelyra module init` to scaffold a versioned local package entirely
+  offline. It writes a compatible manifest, an empty effect ceiling, a typed
+  public starter function, and a README; it refuses to overwrite any existing
+  destination and rejects duplicate options. / `zelyra module init` erstellt
+  vollständig offline ein versioniertes lokales Paket. Der Befehl erzeugt ein
+  kompatibles Manifest, eine leere Effektobergrenze, eine getypte öffentliche
+  Startfunktion und eine README. Vorhandene Ziele und doppelte Optionen werden
+  abgewiesen.
+- Add a reusable, pure `csv_import` package to the business-module example.
+  It validates non-empty header names and row widths without writing to a
+  database. / Ein wiederverwendbares, nebenwirkungsfreies Paket `csv_import`
+  zum Geschäftsmodule-Beispiel hinzufügen. Es prüft nicht leere Kopfspalten
+  und Zeilenbreiten, ohne in eine Datenbank zu schreiben.
+- Remove the Laravel migration analyzer/scaffolder command, source, tests, and
+  current guides from the project. Preserve prior implementation and generated
+  reports in an external archive for possible future review. / Den
+  Laravel-Migrationsanalysator, Gerüstgenerator, Befehl, Tests und aktuelle
+  Anleitungen aus dem Projekt entfernen. Frühere Implementierung und Berichte
+  bleiben für eine mögliche spätere Prüfung extern archiviert.
+
 ## 1.1.1 — 2026-10-15
 
 - Select a free local port when `zelyra serve` finds its requested port busy;

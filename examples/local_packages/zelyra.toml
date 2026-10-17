@@ -1,0 +1,8 @@
+[package]
+name = "local_packages_demo"
+version = "1.0.0"
+entry = "main.zyl"
+
+[dependencies.money]
+path = "packages/money"
+version = "^1.2"

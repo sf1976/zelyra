@@ -279,22 +279,6 @@ der [Setup-Anleitung](setup-web.de.md) und den
   Rabatt-/Umsatzsteuerberechnung, Stornierung, Aktionsprotokoll und ausführbaren
   Geschäftsprüfungen.
 
-## Laravel-Migrator
-
-- 🧪 `zelyra migrate laravel <projekt> --report <pfad>` inventarisiert
-  erkannte Laravel-Muster ausschließlich statisch. PHP, Artisan,
-  Datenbanken und `.env`-Dateien werden nicht ausgeführt, verbunden oder
-  gelesen. Der neue Bericht liegt außerhalb des Quellprojekts und enthält
-  Fundstellen, Status und nächste Prüfschritte als Markdown oder JSON. Der
-  Scanner deckt Composer-Vorgaben, einfache Routen, Models, Controller,
-  `Schema::create`, ausgewählte Beziehungen, Validierungseinstiege, Jobs,
-  Blade-Views und Integrationsaufrufe ab. Analyzer-Version 0.9.8 und Regelwerk
-  0.9.6 sind getrennt; Fixture-Prüfungen benennen erkannte Syntax, behaupten
-  jedoch weder einen Routen-Daten-Graphen noch Funktionsübertragung. Der
-  experimentelle Muster-Scanner ist kein PHP-Parser und kein Nachweis für
-  Geschäftslogik- oder Sicherheitsparität. Das getrennte, compilergeprüfte
-  Gerüst enthält keine kopierte Geschäftslogik. [Details zum Migrator](laravel-migrator.de.md).
-
 ## APIs, Authentifizierung, Berechtigungen und Audit
 
 - ✅ Typisierte API-Deklarationen prüfen unterstützte Eingaben, Ausgaben und

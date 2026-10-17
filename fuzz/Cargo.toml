@@ -13,6 +13,7 @@ zelyra-ast = { path = "../ast" }
 zelyra-database = { path = "../database", features = ["fuzzing"] }
 zelyra-forms = { path = "../forms" }
 zelyra-lexer = { path = "../lexer" }
+zelyra-mir = { path = "../mir" }
 zelyra-parser = { path = "../parser" }
 zelyra-runtime = { path = "../runtime" }
 zelyra-web = { path = "../web" }
@@ -44,6 +45,13 @@ bench = false
 [[bin]]
 name = "http_request"
 path = "fuzz_targets/http_request.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "bytecode_decode"
+path = "fuzz_targets/bytecode_decode.rs"
 test = false
 doc = false
 bench = false

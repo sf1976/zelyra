@@ -40,6 +40,8 @@ pub struct HirFunction {
     pub capabilities: Vec<String>,
     pub requires: Vec<HirExpr>,
     pub ensures: Vec<HirExpr>,
+    /// Local used by `result` references in postconditions.
+    pub contract_result_local: LocalId,
     pub body: HirBlock,
     pub span: Span,
 }
@@ -235,6 +237,7 @@ pub enum HirExprKind {
     Call {
         name: String,
         function: Option<FunctionId>,
+        callee_local: Option<LocalId>,
         type_args: Vec<Type>,
         args: Vec<HirExpr>,
     },
@@ -249,11 +252,12 @@ pub enum HirExprKind {
     },
     BinaryChain {
         first: Box<HirExpr>,
-        operations: Vec<(BinaryOp, HirExpr)>,
+        operations: Vec<(BinaryOp, HirExpr, Span)>,
     },
     Sql {
         result_type: Type,
         query: String,
+        parameters: Vec<(String, LocalId)>,
     },
     Await(Box<HirExpr>),
     Match {
@@ -322,7 +326,7 @@ pub fn lower(program: &Program) -> Result<HirProgram, Vec<ResolveError>> {
             .iter()
             .map(|contract| resolver.expr(contract))
             .collect();
-        resolver.bind("result".into(), function.span);
+        let contract_result_local = resolver.bind("result".into(), function.span);
         let ensures = function
             .ensures
             .iter()
@@ -338,6 +342,7 @@ pub fn lower(program: &Program) -> Result<HirProgram, Vec<ResolveError>> {
             capabilities: function.capabilities.clone(),
             requires,
             ensures,
+            contract_result_local,
             body,
             span: function.span,
         });
@@ -743,6 +748,7 @@ impl<'a> Resolver<'a> {
                 None if name == "None" => HirExprKind::Call {
                     name: name.clone(),
                     function: None,
+                    callee_local: None,
                     type_args: Vec::new(),
                     args: Vec::new(),
                 },
@@ -757,8 +763,9 @@ impl<'a> Resolver<'a> {
                 args,
             } => {
                 let function = self.functions.get(name).copied();
+                let callee_local = function.is_none().then(|| self.lookup(name)).flatten();
                 if function.is_none()
-                    && self.lookup(name).is_none()
+                    && callee_local.is_none()
                     && !name
                         .rsplit_once("::")
                         .is_some_and(|(enum_name, _)| self.enum_names.contains(enum_name))
@@ -812,6 +819,7 @@ impl<'a> Resolver<'a> {
                             | "json_decode_result"
                             | "sql_decode"
                             | "json_decode_tagged_result"
+                            | "module_setting"
                             | "csv_decode_result"
                             | "csv_encode"
                             | "text_contains"
@@ -832,6 +840,7 @@ impl<'a> Resolver<'a> {
                             | "join"
                             | "text_to_lower"
                             | "text_to_upper"
+                            | "text_ucfirst"
                             | "text_starts_with"
                             | "text_ends_with"
                             | "text_replace"
@@ -931,6 +940,7 @@ impl<'a> Resolver<'a> {
                 HirExprKind::Call {
                     name: name.clone(),
                     function,
+                    callee_local,
                     type_args: type_args.clone(),
                     args: args.iter().map(|arg| self.expr(arg)).collect(),
                 }
@@ -952,10 +962,33 @@ impl<'a> Resolver<'a> {
                 target: Box::new(self.expr(target)),
                 field: field.clone(),
             },
-            ExprKind::Sql { result_type, query } => HirExprKind::Sql {
-                result_type: result_type.clone(),
-                query: query.clone(),
-            },
+            ExprKind::Sql { result_type, query } => {
+                let mut parameters = Vec::new();
+                match zelyra_database::sql_parameter_names(query) {
+                    Ok(names) => {
+                        for name in names {
+                            if parameters.iter().any(|(existing, _)| existing == &name) {
+                                continue;
+                            }
+                            match self.lookup(&name) {
+                                Some(local) => parameters.push((name.clone(), local)),
+                                None => self.error(
+                                    expr.span,
+                                    format!("SQL parameter `:{name}` is not available"),
+                                ),
+                            }
+                        }
+                    }
+                    Err(error) => {
+                        self.error(expr.span, format!("could not scan SQL parameters: {error}"))
+                    }
+                }
+                HirExprKind::Sql {
+                    result_type: result_type.clone(),
+                    query: query.clone(),
+                    parameters,
+                }
+            }
             ExprKind::Await(inner) => HirExprKind::Await(Box::new(self.expr(inner))),
             ExprKind::Match { value, arms } => HirExprKind::Match {
                 value: Box::new(self.expr(value)),
@@ -986,7 +1019,7 @@ impl<'a> Resolver<'a> {
         let mut cursor = expr;
         let mut operations = Vec::new();
         while let ExprKind::Binary { left, op, right } = &cursor.kind {
-            operations.push((*op, right.as_ref()));
+            operations.push((*op, right.as_ref(), cursor.span));
             cursor = left;
         }
         HirExpr {
@@ -995,7 +1028,7 @@ impl<'a> Resolver<'a> {
                 operations: operations
                     .into_iter()
                     .rev()
-                    .map(|(op, right)| (op, self.expr(right)))
+                    .map(|(op, right, span)| (op, self.expr(right), span))
                     .collect(),
             },
             span: expr.span,

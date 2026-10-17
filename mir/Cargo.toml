@@ -1,0 +1,15 @@
+[package]
+name = "zelyra-mir"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+zelyra-ast.workspace = true
+zelyra-database.workspace = true
+zelyra-hir.workspace = true
+zelyra-runtime.workspace = true
+
+[dev-dependencies]
+zelyra-lexer.workspace = true
+zelyra-parser.workspace = true

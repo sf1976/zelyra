@@ -1,0 +1,15 @@
+lock_version = 1
+
+[[package]]
+name = "local_packages_demo"
+version = "1.0.0"
+path = ""
+checksum = "sha256:45502a060caa42212b4e630c949c653fa14485ab9fc91f3681a5defd4932d9ac"
+dependencies = ["money=packages/money"]
+
+[[package]]
+name = "money"
+version = "1.2.3"
+path = "packages/money"
+checksum = "sha256:2e4dfb18d0e754f5a6c1018237f2e48d8334b43d9ef28349042748e5d2dfcd42"
+dependencies = []

@@ -50,6 +50,7 @@ pub enum Type {
     String,
     Char,
     Bytes,
+    Json,
     Timestamp,
     Date,
     Time,
@@ -86,6 +87,7 @@ impl fmt::Display for Type {
             Type::String => "String",
             Type::Char => "Char",
             Type::Bytes => "Bytes",
+            Type::Json => "Json",
             Type::Timestamp => "Timestamp",
             Type::Date => "Date",
             Type::Time => "Time",
@@ -158,7 +160,28 @@ pub struct Program {
     pub cruds: Vec<CrudDef>,
     pub auth: Vec<AuthDef>,
     pub apis: Vec<ApiDef>,
+    pub commands: Vec<CommandDef>,
+    pub schedules: Vec<ScheduleDef>,
     pub functions: Vec<Function>,
+}
+
+/// A named process entry that can be inspected and invoked by the Zelyra CLI.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CommandDef {
+    pub name: String,
+    pub handler: String,
+    pub description: Option<String>,
+    pub span: Span,
+}
+
+/// A host-triggered schedule for a declared Zelyra command.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ScheduleDef {
+    pub name: String,
+    pub command: String,
+    pub cron: String,
+    pub timezone: Option<String>,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug)]
@@ -175,7 +198,7 @@ pub struct EnumDef {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ImportDef {
-    /// Project-root-relative path to another `.zyl` source file.
+    /// Project-relative `.zyl` path or a local package specifier such as `pkg:math`.
     pub path: String,
     /// The local namespace used to qualify public declarations.
     pub alias: String,
@@ -269,7 +292,15 @@ pub struct FormField {
     pub label: Option<String>,
     pub placeholder: Option<String>,
     pub required: bool,
+    /// Minimum character count for String and Email inputs.
+    pub min_length: Option<u32>,
     pub max: Option<u32>,
+    /// Inclusive numeric bounds for numeric inputs, written as decimal text
+    /// so exact Decimal values are not rounded through binary floats.
+    pub min_value: Option<String>,
+    pub max_value: Option<String>,
+    /// Explicit allowed values for a static select; values are validated server-side.
+    pub choices: Vec<String>,
     pub widget: Option<String>,
     /// Optional visual variant; it does not alter validation state.
     pub appearance: Option<String>,
@@ -530,6 +561,16 @@ pub struct TableDef {
     pub indexes: Vec<IndexDef>,
     pub uniques: Vec<IndexDef>,
     pub access: TableAccessDef,
+    /// Declares a nominal tenant identity column. Until checked tenant-aware
+    /// query expressions are available, raw SQL access to this table is denied.
+    pub tenant_scope: Option<TenantScopeDef>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TenantScopeDef {
+    pub column: String,
+    pub tenant_type: Type,
     pub span: Span,
 }
 
@@ -546,12 +587,40 @@ pub struct ColumnDef {
     pub name: String,
     pub ty: Type,
     pub length: Option<u32>,
+    /// Optional explicit database column name; useful when a relation column
+    /// does not follow Zelyra's default `<field>_id` naming convention.
+    pub storage_name: Option<String>,
+    /// Optional total precision and fractional scale for fixed-point database columns.
+    pub decimal_precision: Option<(u32, u32)>,
     pub required: bool,
     pub primary_key: bool,
     pub auto: bool,
     pub unique: bool,
     pub default: Option<DefaultValue>,
+    pub on_delete: Option<ReferentialAction>,
     pub span: Span,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ReferentialAction {
+    #[default]
+    NoAction,
+    Restrict,
+    Cascade,
+    SetNull,
+    SetDefault,
+}
+
+impl fmt::Display for ReferentialAction {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::NoAction => "no_action",
+            Self::Restrict => "restrict",
+            Self::Cascade => "cascade",
+            Self::SetNull => "set_null",
+            Self::SetDefault => "set_default",
+        })
+    }
 }
 
 #[derive(Clone, Debug)]

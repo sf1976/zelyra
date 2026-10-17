@@ -1,0 +1,14 @@
+database main { engine: mariadb database: "business" }
+
+table invoices {
+    id: Id primary auto
+    customer: String(80) required
+    access { read: ["packages/storage/src/lib.zyl"] }
+}
+
+pub fn invoice_count() -> Int uses Database(read) {
+    rows = sql_decode<Invoice[]>(sql<Invoice[]> {
+        SELECT id, customer FROM invoices
+    })
+    return len(rows)
+}

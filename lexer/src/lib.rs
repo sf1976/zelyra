@@ -487,6 +487,8 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                         'n' => '\n',
                         'r' => '\r',
                         't' => '\t',
+                        'v' => '\u{000b}',
+                        '0' => '\0',
                         '\\' => '\\',
                         '"' => '"',
                         '\'' => '\'',
@@ -772,6 +774,10 @@ mod tests {
         assert_eq!(
             lex(r#""hello\n""#).unwrap()[0].kind,
             TokenKind::String("hello\n".into())
+        );
+        assert_eq!(
+            lex(r#""\0\v""#).unwrap()[0].kind,
+            TokenKind::String("\0\u{000b}".into())
         );
     }
 

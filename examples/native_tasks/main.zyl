@@ -1,0 +1,14 @@
+command process_recurring_invoices {
+    handler: run_recurring_invoices
+    description: "Create invoices for active subscriptions"
+}
+schedule recurring_invoices {
+    command: process_recurring_invoices
+    cron: "0 4 * * *"
+    timezone: "Europe/Berlin"
+}
+fn run_recurring_invoices() {
+    print("recurring invoice task started")
+}
+fn main() {
+}

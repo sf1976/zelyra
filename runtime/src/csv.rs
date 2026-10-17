@@ -1,8 +1,32 @@
 //! Strict delimited-text support used by the language's CSV built-ins.
 
+/// Maximum UTF-8 byte size for one complete CSV input or encoded output.
+pub(crate) const MAX_CSV_DOCUMENT_BYTES: usize = 16 * 1024 * 1024;
+
+fn append_bounded(output: &mut String, value: &str) -> Result<(), String> {
+    if output
+        .len()
+        .checked_add(value.len())
+        .is_none_or(|length| length > MAX_CSV_DOCUMENT_BYTES)
+    {
+        return Err(format!(
+            "CSV document exceeds the {} byte limit",
+            MAX_CSV_DOCUMENT_BYTES
+        ));
+    }
+    output.push_str(value);
+    Ok(())
+}
+
 /// Parses one CSV document. Quoted fields support doubled quotes and embedded
 /// LF or CRLF newlines. A UTF-8 BOM is ignored only at the start of a file.
 pub(crate) fn decode(input: &str, delimiter: char) -> Result<Vec<Vec<String>>, String> {
+    if input.len() > MAX_CSV_DOCUMENT_BYTES {
+        return Err(format!(
+            "CSV document exceeds the {} byte limit",
+            MAX_CSV_DOCUMENT_BYTES
+        ));
+    }
     if delimiter == '"' || delimiter == '\r' || delimiter == '\n' {
         return Err("CSV delimiter cannot be a quote or newline".into());
     }
@@ -144,11 +168,12 @@ pub(crate) fn encode(rows: &[Vec<String>], delimiter: char) -> Result<String, St
     let mut output = String::new();
     for (row_index, row) in rows.iter().enumerate() {
         if row_index > 0 {
-            output.push('\n');
+            append_bounded(&mut output, "\n")?;
         }
         for (field_index, value) in row.iter().enumerate() {
             if field_index > 0 {
-                output.push(delimiter);
+                let mut separator = [0; 4];
+                append_bounded(&mut output, delimiter.encode_utf8(&mut separator))?;
             }
             let needs_quotes = (value.is_empty() && row.len() == 1)
                 || value.contains(delimiter)
@@ -156,17 +181,18 @@ pub(crate) fn encode(rows: &[Vec<String>], delimiter: char) -> Result<String, St
                 || value.contains('\r')
                 || value.contains('\n');
             if needs_quotes {
-                output.push('"');
+                append_bounded(&mut output, "\"")?;
                 for character in value.chars() {
                     if character == '"' {
-                        output.push_str("\"\"");
+                        append_bounded(&mut output, "\"\"")?;
                     } else {
-                        output.push(character);
+                        let mut encoded = [0; 4];
+                        append_bounded(&mut output, character.encode_utf8(&mut encoded))?;
                     }
                 }
-                output.push('"');
+                append_bounded(&mut output, "\"")?;
             } else {
-                output.push_str(value);
+                append_bounded(&mut output, value)?;
             }
         }
     }
@@ -293,6 +319,22 @@ mod tests {
             .unwrap_err()
             .contains("bare carriage return"));
         assert_eq!(decode("\u{feff}a;b\n1;2", ';').unwrap()[0], ["a", "b"]);
+    }
+
+    #[test]
+    fn csv_input_and_output_have_a_utf8_byte_limit() {
+        let oversized = "x".repeat(MAX_CSV_DOCUMENT_BYTES + 1);
+        assert!(decode(&oversized, ',')
+            .unwrap_err()
+            .contains("CSV document exceeds"));
+        assert!(encode(&[vec![oversized]], ',')
+            .unwrap_err()
+            .contains("CSV document exceeds"));
+
+        let multibyte = "ä".repeat(MAX_CSV_DOCUMENT_BYTES / 2 + 1);
+        assert!(encode(&[vec![multibyte]], ',')
+            .unwrap_err()
+            .contains("CSV document exceeds"));
     }
 
     #[test]

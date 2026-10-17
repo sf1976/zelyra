@@ -110,10 +110,17 @@ pub(super) fn outbox_command(mut args: impl Iterator<Item = String>) -> ExitCode
         eprintln!("error[E-OUTBOX-002]: the local outbox currently supports MariaDB projects only");
         return ExitCode::from(1);
     }
-    let Some(database_url) = database_url_from_schema(&schema) else {
+    let database_url = match project_outbox_database_url(&path, &schema) {
+        Ok(database_url) => database_url,
+        Err(_) => {
+            eprintln!("error[E-OUTBOX-003]: could not read the project database configuration");
+            return ExitCode::from(1);
+        }
+    };
+    let Some(database_url) = database_url else {
         eprintln!("error[E-OUTBOX-003]: a MariaDB database URL is required for outbox {action}");
         eprintln!(
-            "hint: set the project database URL without committing credentials to source control"
+            "hint: set DATABASE_URL in the project .env file or export it in the environment; credentials are never copied into source"
         );
         return ExitCode::from(1);
     };
@@ -159,6 +166,24 @@ pub(super) fn outbox_command(mut args: impl Iterator<Item = String>) -> ExitCode
         },
         _ => unreachable!("action was validated above"),
     }
+}
+
+pub(super) fn project_outbox_database_url(
+    source_path: &str,
+    schema: &zelyra_database::Schema,
+) -> Result<Option<String>, String> {
+    let source_path = std::path::Path::new(source_path);
+    let directory = source_path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| std::path::Path::new("."));
+    database_url_for_project(
+        directory,
+        schema
+            .database
+            .as_ref()
+            .map(|database| database.name.as_str()),
+    )
 }
 
 pub(super) fn run_outbox_worker(

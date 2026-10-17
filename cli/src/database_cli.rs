@@ -114,6 +114,7 @@ pub(super) fn schema_fingerprint(schema: &Schema) -> String {
                         "column": key.column,
                         "referenced_table": key.referenced_table,
                         "referenced_column": key.referenced_column,
+                        "on_delete": key.on_delete.to_string(),
                     })
                 })
                 .collect::<Vec<_>>();
@@ -802,11 +803,13 @@ fn database_map_table_json(
             "column": key.column,
             "references_table": key.referenced_table,
             "references_column": key.referenced_column,
+            "on_delete": key.on_delete.to_string(),
         })).collect::<Vec<_>>(),
         "live_foreign_keys": live_foreign_keys.iter().map(|key| json!({
             "column": key.column,
             "references_table": key.referenced_table,
             "references_column": key.referenced_column,
+            "on_delete": key.on_delete.to_string(),
         })).collect::<Vec<_>>(),
     })
 }
@@ -918,8 +921,8 @@ fn print_database_map(declared: &Schema, live: &Schema, owners: &HashMap<String,
             }
             for key in &table.foreign_keys {
                 println!(
-                    "    {} -> {}.{}",
-                    key.column, key.referenced_table, key.referenced_column
+                    "    {} -> {}.{} ON DELETE {}",
+                    key.column, key.referenced_table, key.referenced_column, key.on_delete
                 );
             }
         }

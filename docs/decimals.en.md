@@ -22,6 +22,22 @@ needed; valid results no longer fail solely because an intermediate exceeds
 128 bits. Excess fractional digits still truncate toward zero. This is not
 automatic monetary rounding.
 
+Database columns may declare an explicit storage precision and scale:
+
+```zelyra
+table invoice_lines {
+    id: Id primary auto
+    quantity: Decimal(10, 2) required
+    unit_price: Decimal(12, 2) required
+}
+```
+
+Precision is 1–39 and scale is 0–9, strictly less than precision. MariaDB
+receives `DECIMAL(p,s)`; PostgreSQL and SQLite receive `NUMERIC(p,s)`. An
+unqualified `Decimal` keeps the existing `39,9` storage default. Explicit
+precision constrains storage without changing the runtime Decimal range, so
+application values must still satisfy the declared column's range.
+
 Constructors and forms use a decimal point, reject exponents, leading plus,
 whitespace, NaN/infinity, and more than nine fractional digits.
 `decimal_scaled_result` retains its separate checked cent-input contract,
@@ -33,7 +49,7 @@ including decimal commas.
 `Result<Decimal, String>`. Modes are `toward_zero`, `floor`, `ceiling`,
 `half_up` (ties away from zero), and `half_even` (ties to an even final digit).
 They also apply to negative values. Scales 0 through 9 are supported. Rounding
-cannot undo precision already lost during arithmetic.
+cannot undo precision already lost during arithmetic. `decimal_quantize_result`, `decimal_scaled_result`, and `format_scaled_result` use the same pure runtime implementation in AST, MIR, and bytecode; differential tests cover rounding and fixed-point formatting.
 
 `format_text` removes insignificant fractional zeros. For a fixed display such
 as `119.00`, pass the rounded value through `decimal_scaled_result` and

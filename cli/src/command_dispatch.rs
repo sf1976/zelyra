@@ -1,5 +1,117 @@
 use super::*;
 
+fn parse_entry_arguments(
+    entry: &str,
+    parameters: &[zelyra_ast::Param],
+    raw_arguments: Option<&str>,
+    program: &zelyra_ast::Program,
+) -> Result<Vec<RuntimeValue>, String> {
+    let json_arguments = match raw_arguments {
+        Some(raw) => serde_json::from_str::<Vec<serde_json::Value>>(raw)
+            .map_err(|error| format!("--entry-args must be a JSON array: {error}"))?,
+        None if parameters.is_empty() => Vec::new(),
+        None => {
+            return Err(format!(
+                "entry function `{entry}` expects {} argument(s); provide them with --entry-args '<JSON array>'",
+                parameters.len()
+            ));
+        }
+    };
+    if json_arguments.len() != parameters.len() {
+        return Err(format!(
+            "entry function `{entry}` expects {} argument(s), received {}",
+            parameters.len(),
+            json_arguments.len()
+        ));
+    }
+    parameters
+        .iter()
+        .zip(json_arguments.iter())
+        .map(|(parameter, value)| {
+            entry_argument_value(value, &parameter.ty, program, 0).map_err(|reason| {
+                format!(
+                    "entry argument `{}` does not match `{}`: {reason}",
+                    parameter.name, parameter.ty
+                )
+            })
+        })
+        .collect()
+}
+
+fn entry_argument_value(
+    value: &serde_json::Value,
+    ty: &zelyra_ast::Type,
+    program: &zelyra_ast::Program,
+    depth: usize,
+) -> Result<RuntimeValue, String> {
+    use zelyra_ast::Type;
+
+    if depth >= 64 {
+        return Err("argument type nesting exceeds the supported limit".into());
+    }
+    match ty {
+        Type::Int => value
+            .as_i64()
+            .map(RuntimeValue::Int)
+            .ok_or_else(|| "expected a JSON integer in the signed 64-bit range".into()),
+        Type::UInt => value.as_u64().map(RuntimeValue::UInt).ok_or_else(|| {
+            "expected a non-negative JSON integer in the unsigned 64-bit range".into()
+        }),
+        Type::Float => value
+            .as_f64()
+            .filter(|number| number.is_finite())
+            .map(RuntimeValue::Float)
+            .ok_or_else(|| "expected a finite JSON number".into()),
+        Type::Bool => value
+            .as_bool()
+            .map(RuntimeValue::Bool)
+            .ok_or_else(|| "expected a JSON boolean".into()),
+        Type::String => value
+            .as_str()
+            .map(|value| RuntimeValue::String(value.to_owned()))
+            .ok_or_else(|| "expected a JSON string".into()),
+        Type::Char => {
+            let value = value
+                .as_str()
+                .ok_or_else(|| "expected a one-character JSON string".to_owned())?;
+            let mut chars = value.chars();
+            match (chars.next(), chars.next()) {
+                (Some(character), None) => Ok(RuntimeValue::Char(character)),
+                _ => Err("expected a one-character JSON string".into()),
+            }
+        }
+        Type::Json => Ok(RuntimeValue::Json(value.clone())),
+        Type::Option(inner) if value.is_null() => Ok(RuntimeValue::Option(None)),
+        Type::Option(inner) => entry_argument_value(value, inner, program, depth + 1)
+            .map(|value| RuntimeValue::Option(Some(Box::new(value)))),
+        Type::Array(inner) => {
+            let values = value
+                .as_array()
+                .ok_or_else(|| "expected a JSON array".to_owned())?;
+            values
+                .iter()
+                .map(|value| entry_argument_value(value, inner, program, depth + 1))
+                .collect::<Result<Vec<_>, _>>()
+                .map(RuntimeValue::Array)
+        }
+        Type::Named(name) => {
+            let alias = program
+                .types
+                .iter()
+                .find(|definition| definition.name == *name)
+                .ok_or_else(|| {
+                    format!("named type `{name}` is not a supported JSON entry-argument type")
+                })?;
+            entry_argument_value(value, &alias.target, program, depth + 1)
+        }
+        Type::Decimal => Err(
+            "Decimal arguments are not accepted as JSON numbers because that could lose precision"
+                .into(),
+        ),
+        _ => Err("this parameter type is not supported by --entry-args".into()),
+    }
+}
+
 pub(super) fn run() -> ExitCode {
     let mut args = env::args().skip(1);
     let Some(command) = args.next() else {
@@ -54,6 +166,12 @@ pub(super) fn run() -> ExitCode {
     if command == "outbox" {
         return outbox_cli::outbox_command(args);
     }
+    if command == "task" {
+        return task_cli::task_command(args);
+    }
+    if command == "schedule" {
+        return task_cli::schedule_command(args);
+    }
     if command == "editor" {
         return editor::command(args);
     }
@@ -63,9 +181,6 @@ pub(super) fn run() -> ExitCode {
             return ExitCode::from(2);
         }
         return lsp::command();
-    }
-    if command == "migrate" {
-        return laravel_migrator::command(args);
     }
     if command == "setup" {
         let mut path = ".".to_owned();
@@ -430,6 +545,9 @@ pub(super) fn run() -> ExitCode {
     if command == "routes" {
         return route_cli::command(args);
     }
+    if command == "reflect" {
+        return reflect::command(args);
+    }
     if command == "fmt" {
         return fmt_command(args);
     }
@@ -447,6 +565,9 @@ pub(super) fn run() -> ExitCode {
     }
     if command == "module" {
         return module_command(args);
+    }
+    if command == "package" {
+        return packages::command(args);
     }
     if command == "config" {
         return config_command(args);
@@ -475,23 +596,79 @@ pub(super) fn run() -> ExitCode {
         return ExitCode::from(2);
     };
     let mut step_budget = None;
+    let mut entry_function = None;
+    let mut entry_arguments_json = None;
+    let mut run_backend = "ast";
+    let mut backend_given = false;
+    let mut optimize_mir = false;
     if command == "run" {
         while let Some(argument) = args.next() {
-            if argument != "--max-steps" || step_budget.is_some() {
-                usage();
-                return ExitCode::from(2);
-            }
-            let Some(value) = args.next() else {
-                eprintln!("error[E-CLI-001]: --max-steps requires a positive integer");
-                return ExitCode::from(2);
-            };
-            step_budget = match value.parse::<usize>() {
-                Ok(value) if value > 0 => Some(value),
+            match argument.as_str() {
+                "--max-steps" if step_budget.is_none() => {
+                    let Some(value) = args.next() else {
+                        eprintln!("error[E-CLI-001]: --max-steps requires a positive integer");
+                        return ExitCode::from(2);
+                    };
+                    step_budget = match value.parse::<usize>() {
+                        Ok(value) if value > 0 => Some(value),
+                        _ => {
+                            eprintln!("error[E-CLI-001]: --max-steps requires a positive integer");
+                            return ExitCode::from(2);
+                        }
+                    };
+                }
+                "--entry" if entry_function.is_none() => {
+                    let Some(value) = args.next() else {
+                        eprintln!("error[E-CLI-001]: --entry requires a function name");
+                        return ExitCode::from(2);
+                    };
+                    if value.is_empty() || value.starts_with('-') {
+                        eprintln!("error[E-CLI-001]: --entry requires a function name");
+                        return ExitCode::from(2);
+                    }
+                    entry_function = Some(value);
+                }
+                "--entry-args" if entry_arguments_json.is_none() => {
+                    let Some(value) = args.next() else {
+                        eprintln!("error[E-CLI-001]: --entry-args requires a JSON array");
+                        return ExitCode::from(2);
+                    };
+                    entry_arguments_json = Some(value);
+                }
+                "--backend" if !backend_given => {
+                    let Some(value) = args.next() else {
+                        eprintln!(
+                            "error[E-CLI-001]: --backend requires `ast`, `mir`, or `bytecode`"
+                        );
+                        return ExitCode::from(2);
+                    };
+                    if value != "ast" && value != "mir" && value != "bytecode" {
+                        eprintln!(
+                            "error[E-CLI-001]: --backend requires `ast`, `mir`, or `bytecode`"
+                        );
+                        return ExitCode::from(2);
+                    }
+                    backend_given = true;
+                    run_backend = match value.as_str() {
+                        "mir" => "mir",
+                        "bytecode" => "bytecode",
+                        _ => "ast",
+                    };
+                }
+                "--optimize-mir" if !optimize_mir => optimize_mir = true,
                 _ => {
-                    eprintln!("error[E-CLI-001]: --max-steps requires a positive integer");
+                    usage();
                     return ExitCode::from(2);
                 }
-            };
+            }
+        }
+        if entry_arguments_json.is_some() && entry_function.is_none() {
+            eprintln!("error[E-CLI-001]: --entry-args requires --entry");
+            return ExitCode::from(2);
+        }
+        if optimize_mir && run_backend != "mir" {
+            eprintln!("error[E-CLI-001]: --optimize-mir requires --backend mir");
+            return ExitCode::from(2);
         }
     } else if args.next().is_some() {
         usage();
@@ -507,6 +684,47 @@ pub(super) fn run() -> ExitCode {
             }
         }
         "run" => match validate(&path).and_then(|program| {
+            validate_execution_settings(&path)?;
+            let entry_arguments = if let Some(entry) = entry_function.as_deref() {
+                match program.functions.iter().find(|function| function.name == entry) {
+                    Some(function) if !function.type_params.is_empty() => {
+                        diagnostic(
+                            &path,
+                            "E-CLI-001",
+                            &format!("entry function `{entry}` must not have generic type parameters"),
+                            1,
+                            1,
+                        );
+                        return Err(());
+                    }
+                    Some(function) => {
+                        match parse_entry_arguments(
+                            entry,
+                            &function.params,
+                            entry_arguments_json.as_deref(),
+                            &program,
+                        ) {
+                            Ok(arguments) => arguments,
+                            Err(error) => {
+                                diagnostic(&path, "E-CLI-001", &error, 1, 1);
+                                return Err(());
+                            }
+                        }
+                    }
+                    None => {
+                        diagnostic(
+                            &path,
+                            "E-CLI-001",
+                            &format!("entry function `{entry}` was not found"),
+                            1,
+                            1,
+                        );
+                        return Err(());
+                    }
+                }
+            } else {
+                Vec::new()
+            };
             let grants = match project_capability_grants(&path) {
                 Ok(grants) => grants,
                 Err(error) => {
@@ -526,23 +744,159 @@ pub(super) fn run() -> ExitCode {
                     .get_or_insert_with(RuntimePolicy::default)
                     .step_budget = Some(step_budget);
             }
-            let result = match database_url_from_program(&program) {
-                Some(database_url) => execute_captured_with_database_and_capabilities_and_policies(
-                    &program,
-                    &database_url,
-                    grants.as_ref(),
-                    runtime_policy.as_ref(),
-                ),
-                None => execute_captured_with_capabilities_and_policies(
-                    &program,
-                    grants.as_ref(),
-                    runtime_policy.as_ref(),
-                ),
+            let database_url = database_url_from_program(&program);
+            let function_name = entry_function.as_deref().unwrap_or("main");
+            let (output, error, return_value) = match run_backend {
+                "ast" => {
+                    let outcome = execute_function_captured_with_capabilities_and_policies(
+                        &program,
+                        function_name,
+                        entry_arguments.clone(),
+                        database_url.as_deref(),
+                        grants.as_ref(),
+                        runtime_policy.as_ref(),
+                    );
+                    (outcome.output, outcome.error, outcome.value)
+                }
+                "mir" => {
+                    let mut mir = match zelyra_mir::lower(&program) {
+                        Ok(mir) => mir,
+                        Err(errors) => {
+                            for error in errors {
+                                diagnostic(
+                                    &path,
+                                    error.code,
+                                    &error.message,
+                                    error.span.line,
+                                    error.span.column,
+                                );
+                            }
+                            return Err(());
+                        }
+                    };
+                    if optimize_mir {
+                        if let Err(errors) = zelyra_mir::optimize_scalar_constants(&mut mir) {
+                            for error in errors {
+                                diagnostic(
+                                    &path,
+                                    error.code,
+                                    &error.message,
+                                    error.span.line,
+                                    error.span.column,
+                                );
+                            }
+                            return Err(());
+                        }
+                    }
+                    let limits = zelyra_mir::execution::ExecutionLimits {
+                        max_steps: runtime_policy
+                            .as_ref()
+                            .and_then(|policy| policy.step_budget)
+                            .unwrap_or(100_000),
+                        max_stack_depth: runtime_policy
+                            .as_ref()
+                            .and_then(|policy| policy.max_stack_depth)
+                            .unwrap_or(20),
+                    };
+                    let execution = match database_url.as_deref() {
+                        Some(database_url) => {
+                            zelyra_mir::execution::execute_function_captured_with_database_and_host_services_and_policy(
+                                &mir,
+                                function_name,
+                                entry_arguments.clone(),
+                                limits,
+                                grants.as_ref(),
+                                runtime_policy.as_ref(),
+                                zelyra_mir::execution::DatabaseExecution {
+                                    url: database_url,
+                                    host_services: Arc::new(SystemHostServices),
+                                },
+                            )
+                        }
+                        None => zelyra_mir::execution::execute_function_captured_with_host_services_and_policy(
+                            &mir,
+                            function_name,
+                            entry_arguments.clone(),
+                            limits,
+                            grants.as_ref(),
+                            runtime_policy.as_ref(),
+                            Arc::new(SystemHostServices),
+                        ),
+                    };
+                    (execution.output, execution.error, execution.value)
+                }
+                "bytecode" => {
+                    let mir = match zelyra_mir::lower(&program) {
+                        Ok(mir) => mir,
+                        Err(errors) => {
+                            for error in errors {
+                                diagnostic(
+                                    &path,
+                                    error.code,
+                                    &error.message,
+                                    error.span.line,
+                                    error.span.column,
+                                );
+                            }
+                            return Err(());
+                        }
+                    };
+                    let bytecode = match zelyra_mir::bytecode::compile(&mir, function_name) {
+                        Ok(bytecode) => bytecode,
+                        Err(errors) => {
+                            for error in errors {
+                                diagnostic(
+                                    &path,
+                                    error.code,
+                                    &error.message,
+                                    error.span.line,
+                                    error.span.column,
+                                );
+                            }
+                            return Err(());
+                        }
+                    };
+                    let limits = zelyra_mir::execution::ExecutionLimits {
+                        max_steps: runtime_policy
+                            .as_ref()
+                            .and_then(|policy| policy.step_budget)
+                            .unwrap_or(100_000),
+                        max_stack_depth: runtime_policy
+                            .as_ref()
+                            .and_then(|policy| policy.max_stack_depth)
+                            .unwrap_or(20),
+                    };
+                    let host = Arc::new(SystemHostServices);
+                    let execution = match database_url.as_deref() {
+                        Some(database_url) => zelyra_mir::bytecode::execute_with_database_and_host_services_and_policy_captured(
+                            &bytecode,
+                            entry_arguments.clone(),
+                            limits,
+                            grants.as_ref(),
+                            runtime_policy.as_ref(),
+                            zelyra_mir::bytecode::BytecodeDatabaseExecution {
+                                url: database_url,
+                                schema: &mir.database_schema,
+                            },
+                            host,
+                        ),
+                        None => zelyra_mir::bytecode::execute_with_host_services_and_policy_captured(
+                            &bytecode,
+                            entry_arguments.clone(),
+                            limits,
+                            grants.as_ref(),
+                            runtime_policy.as_ref(),
+                            host,
+                        ),
+                    };
+                    (execution.output, execution.error, execution.value)
+                }
+                _ => unreachable!("run backend is validated while parsing options"),
             };
-            for line in result.output {
+            for line in output {
                 println!("{line}");
             }
-            if let Some(error) = result.error {
+            if let Some(error) = error {
                 diagnostic(
                     &path,
                     "E-RUNTIME-001",
@@ -552,10 +906,39 @@ pub(super) fn run() -> ExitCode {
                 );
                 Err(())
             } else {
-                Ok(())
+                match return_value {
+                    None | Some(RuntimeValue::Unit) | Some(RuntimeValue::Result(Ok(_))) => Ok(0),
+                    Some(RuntimeValue::Int(code)) if (0..=255).contains(&code) => {
+                        Ok(code as u8)
+                    }
+                    Some(RuntimeValue::UInt(code)) if code <= 255 => Ok(code as u8),
+                    Some(RuntimeValue::Result(Err(error))) => {
+                        diagnostic(
+                            &path,
+                            "E-RUNTIME-001",
+                            &format!("entry function returned Err: {}", error.output()),
+                            1,
+                            1,
+                        );
+                        Err(())
+                    }
+                    Some(value) => {
+                        diagnostic(
+                            &path,
+                            "E-CLI-001",
+                            &format!(
+                                "entry function must return Unit, Result, or an exit code from 0 through 255; found {}",
+                                value.ty()
+                            ),
+                            1,
+                            1,
+                        );
+                        Err(())
+                    }
+                }
             }
         }) {
-            Ok(()) => ExitCode::SUCCESS,
+            Ok(code) => ExitCode::from(code),
             Err(()) => ExitCode::from(1),
         },
         _ => {

@@ -1,6 +1,46 @@
 use super::*;
 
 #[test]
+fn compiler_scope_gate_rejects_sql_touching_declared_tenant_tables() {
+    let source = r#"
+        type TenantId = Id
+        table invoices scoped by tenant_id: TenantId {
+            id: Id primary auto
+            tenant_id: TenantId required
+        }
+        table customers { id: Id primary auto }
+        fn read_invoice() uses Database(read) {
+            rows = sql<Int[]> { SELECT id FROM invoices }
+        }
+        fn main() {}
+    "#;
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
+    let schema = build_schema(&program).unwrap();
+    assert!(
+        !validate_tenant_access_boundaries("main.zyl", &program, &schema),
+        "raw SQL touching a scoped table must fail the compiler gate"
+    );
+
+    let unscoped_source = r#"
+        type TenantId = Id
+        table invoices scoped by tenant_id: TenantId {
+            id: Id primary auto
+            tenant_id: TenantId required
+        }
+        table customers { id: Id primary auto }
+        fn read_customer() uses Database(read) {
+            rows = sql<Int[]> { SELECT id FROM customers }
+        }
+        fn main() {}
+    "#;
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(unscoped_source).unwrap()).unwrap();
+    let schema = build_schema(&program).unwrap();
+    assert!(validate_tenant_access_boundaries(
+        "main.zyl", &program, &schema
+    ));
+}
+
+#[test]
 fn project_mail_policy_reads_local_smtp_settings_and_redacts_secrets() {
     let directory = std::env::temp_dir().join(format!(
         "zelyra-mail-policy-{}-{}",
@@ -71,6 +111,7 @@ fn migration_fixture_schema(columns: Vec<zelyra_database::Column>) -> Schema {
         }),
         tables: vec![zelyra_database::Table {
             name: "customers".into(),
+            tenant_scope_column: None,
             columns,
             foreign_keys: Vec::new(),
             indexes: Vec::new(),
@@ -102,18 +143,21 @@ fn database_map_json_groups_source_tables_and_reports_unmapped_live_tables() {
         tables: vec![
             zelyra_database::Table {
                 name: "customers".into(),
+                tenant_scope_column: None,
                 columns: vec![migration_fixture_column("id", "BIGINT", false)],
                 foreign_keys: vec![zelyra_database::ForeignKey {
                     name: None,
                     column: "group_id".into(),
                     referenced_table: "customer_groups".into(),
                     referenced_column: "id".into(),
+                    on_delete: zelyra_ast::ReferentialAction::NoAction,
                 }],
                 indexes: Vec::new(),
                 uniques: Vec::new(),
             },
             zelyra_database::Table {
                 name: "invoices".into(),
+                tenant_scope_column: None,
                 columns: vec![migration_fixture_column("id", "BIGINT", false)],
                 foreign_keys: Vec::new(),
                 indexes: Vec::new(),
@@ -133,6 +177,7 @@ fn database_map_json_groups_source_tables_and_reports_unmapped_live_tables() {
             live_customer,
             zelyra_database::Table {
                 name: "legacy_notes".into(),
+                tenant_scope_column: None,
                 columns: vec![migration_fixture_column("body", "TEXT", false)],
                 foreign_keys: Vec::new(),
                 indexes: Vec::new(),
@@ -1247,6 +1292,36 @@ fn outbox_cli_requires_an_explicit_handler_for_run() {
 }
 
 #[test]
+fn outbox_cli_loads_database_url_from_the_project_env_file() {
+    let directory = env::temp_dir().join(format!(
+        "zelyra-outbox-env-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&directory).unwrap();
+    let source_path = directory.join("main.zyl");
+    fs::write(
+        &source_path,
+        "database main { engine: mariadb } table events { id: Id primary auto } fn main() {}\n",
+    )
+    .unwrap();
+    fs::write(
+        directory.join(".env"),
+        "ZELYRA_DATABASE_MAIN_URL=mariadb://user:pass@127.0.0.1:3312/app\n",
+    )
+    .unwrap();
+    let schema = database_cli::load_schema(source_path.to_str().unwrap()).unwrap();
+    assert_eq!(
+        outbox_cli::project_outbox_database_url(source_path.to_str().unwrap(), &schema).unwrap(),
+        Some("mariadb://user:pass@127.0.0.1:3312/app".into())
+    );
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn outbox_cli_run_invokes_zelyra_handler_and_skips_unmapped_event_types() {
     let Ok(database_url) = env::var("ZELYRA_DB_TIMEOUT_TEST_URL") else {
         eprintln!("skipping outbox CLI integration test: database URL is not configured");
@@ -1728,6 +1803,28 @@ fn rejects_unknown_view_values() {
     "#;
     let program = parse(&lex(source).unwrap()).unwrap();
     assert!(!validate_components("views.zyl", &program));
+}
+
+#[test]
+fn component_string_properties_are_html_escaped() {
+    let source = r#"
+        component ModuleNotice {
+            props { module: String }
+            html { <h1>{module}</h1> }
+        }
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    assert!(validate_components("notice.zyl", &program));
+
+    let rendered = render_view_component(
+        &program.components[0],
+        "module=\"<script>alert(1)</script> & 'quoted'\"",
+        None,
+    );
+    assert_eq!(
+        rendered.trim(),
+        "<h1>&lt;script&gt;alert(1)&lt;/script&gt; &amp; &#39;quoted&#39;</h1>"
+    );
 }
 
 #[test]

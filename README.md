@@ -51,8 +51,7 @@ reliability fixes listed above:
 - an invoice tutorial with repeatable sample data, available-port selection,
   isolated Compose volumes, a task-focused home page, date-only invoice input,
   server-assigned invoice numbers, and complete English and German guides;
-- CLI tools for routes, setup, diagnostics, databases, audit, SMTP, and static
-  Laravel migration reports.
+- CLI tools for routes, setup, diagnostics, databases, audit, and SMTP.
 - if expressions, record updates, typed lambdas, guarded nested patterns,
   tuples, string interpolation, and opt-in mutable local arrays;
   `--max-steps` stops unbounded evaluation with a source diagnostic;

@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 zelyra-ast.workspace = true
+zelyra-database.workspace = true
 
 [dev-dependencies]
 zelyra-lexer.workspace = true

@@ -1,0 +1,36 @@
+import "pkg:billing" as billing
+import "pkg:csv_export" as csv_export
+import "pkg:csv_import" as csv_import
+
+fn csv_demo() {
+    rows = [["number", "customer", "note"], ["INV-1", "Acme, Inc.", "Paid\nby transfer"]]
+    match csv_export::encode(rows) {
+        Ok(contents) => { print(contents) }
+        Err(message) => { print(message) }
+    }
+}
+
+fn csv_import_demo() {
+    source_text = "number;customer\nINV-1;Acme GmbH"
+    match csv_import::decode_table(source_text, ';') {
+        Ok(rows) => {
+            print(len(rows))
+            print(rows[1][1])
+        }
+        Err(message) => { print(message) }
+    }
+
+    match csv_import::decode_table("name;email\nAnna", ';') {
+        Ok(_) => { print("unexpected CSV import success") }
+        Err(message) => { print(message) }
+    }
+
+    match csv_import::decode_table("name;;email\nAnna;anna@example.test;anna@example.test", ';') {
+        Ok(_) => { print("unexpected CSV import success") }
+        Err(message) => { print(message) }
+    }
+}
+
+fn main() uses Database(read) {
+    print(billing::invoice_count())
+}

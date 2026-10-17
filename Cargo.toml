@@ -1,5 +1,5 @@
 [workspace]
-members = ["ast", "lexer", "parser", "hir", "database", "mail", "runtime", "web", "forms", "cli"]
+members = ["ast", "lexer", "parser", "hir", "mir", "database", "mail", "runtime", "web", "forms", "cli"]
 resolver = "2"
 
 [workspace.package]
@@ -22,7 +22,7 @@ sha2 = "0.10"
 mysql = { version = "28.0.3", default-features = false, features = ["minimal-rust", "rustls-tls-ring"] }
 r2d2 = "0.8.10"
 r2d2_postgres = "0.18.2"
-postgres = "0.19.12"
+postgres = { version = "0.19.12", features = ["with-serde_json-1"] }
 tokio-postgres-rustls = { version = "0.14.0", default-features = false, features = ["ring"] }
 webpki-roots = "1.0.9"
 rustls = { version = "0.23", default-features = false, features = ["std", "ring", "tls12"] }
@@ -37,6 +37,7 @@ zelyra-ast = { path = "ast", version = "1.0" }
 zelyra-lexer = { path = "lexer", version = "1.0" }
 zelyra-parser = { path = "parser", version = "1.0" }
 zelyra-hir = { path = "hir", version = "1.0" }
+zelyra-mir = { path = "mir", version = "1.0" }
 zelyra-database = { path = "database", version = "1.0" }
 zelyra-mail = { path = "mail", version = "1.0" }
 zelyra-runtime = { path = "runtime", version = "1.0" }

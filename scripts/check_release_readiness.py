@@ -214,6 +214,10 @@ RELEASE_PLAN_CHECKLISTS = {
         ("docs/release-plans/1.1.0-studio-deep-native-progress.en.md", "## Outstanding acceptance"),
         ("docs/release-plans/1.1.0-studio-deep-native-progress.de.md", "## Offene Abnahme"),
     ),
+    "1.1.5": (
+        ("docs/release-plans/1.1.5.en.md", "## Release gates"),
+        ("docs/release-plans/1.1.5.de.md", "## Release-Gates"),
+    ),
 }
 
 

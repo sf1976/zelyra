@@ -1,0 +1,5 @@
+import "pkg:money" as money
+
+fn main() {
+    print(money::add_cents(1250, 50))
+}

@@ -1,4 +1,5 @@
 use super::*;
+use std::path::Path;
 
 fn context_span(fallback_source: &str, span: zelyra_ast::Span) -> Value {
     let source =
@@ -98,6 +99,7 @@ fn context_declarations(program: &zelyra_ast::Program, source: &str) -> Value {
                     json!({
                         "name": column.name,
                         "type": column.ty.to_string(),
+                        "decimal_precision": column.decimal_precision.map(|(precision, scale)| json!({ "precision": precision, "scale": scale })),
                         "optional": !column.required,
                         "primary_key": column.primary_key,
                         "auto_increment": column.auto,
@@ -513,12 +515,419 @@ fn qualify_impact_declaration(
 
 pub(super) fn module_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     match arguments.next().as_deref() {
+        Some("init") => crate::module_init::command(arguments),
+        Some("list") => module_list_command(arguments),
+        Some("settings") => module_settings_command(arguments),
         Some("plan") => module_plan_command(arguments),
         Some("bundle") => module_bundle_command(arguments),
         _ => {
             usage();
             ExitCode::from(2)
         }
+    }
+}
+
+/// Refuse to start an execution path when a loaded package's required
+/// settings are absent or malformed. Values are only inspected for readiness;
+/// this helper never returns or prints them.
+pub(crate) fn validate_execution_settings(entry: &str) -> Result<(), (&'static str, String)> {
+    let root = Path::new(entry)
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let Some(graph) =
+        crate::packages::PackageGraph::load(root).map_err(|error| ("E-PKG-001", error.message))?
+    else {
+        return Ok(());
+    };
+    let statuses = graph
+        .settings_status(|name| std::env::var(name).ok().filter(|value| !value.is_empty()))
+        .map_err(|error| ("E-PKG-SETTINGS-001", error.message))?;
+    let missing = statuses
+        .iter()
+        .flat_map(|package| {
+            package
+                .values
+                .iter()
+                .filter(|setting| setting.required && setting.status == "missing")
+                .map(|setting| format!("{}::{}", package.path, setting.name))
+        })
+        .collect::<Vec<_>>();
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        Err((
+            "E-PKG-SETTINGS-002",
+            format!(
+                "required module settings are missing: {}",
+                missing.join(", ")
+            ),
+        ))
+    }
+}
+
+fn module_settings_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
+    if arguments.next().as_deref() != Some("check") {
+        eprintln!("usage: zelyra module settings check <entry.zyl> [--format human|json]");
+        return ExitCode::from(2);
+    }
+    let Some(entry) = arguments.next() else {
+        eprintln!("usage: zelyra module settings check <entry.zyl> [--format human|json]");
+        return ExitCode::from(2);
+    };
+    let mut format = OutputFormat::Human;
+    while let Some(argument) = arguments.next() {
+        if argument == "--format=json" {
+            format = OutputFormat::Json;
+        } else if argument == "--format=human" {
+            format = OutputFormat::Human;
+        } else if argument == "--format" {
+            format = match arguments.next().as_deref().and_then(parse_output_format) {
+                Some(format) => format,
+                None => {
+                    eprintln!("error[E-CLI-001]: format must be `human` or `json`");
+                    return ExitCode::from(2);
+                }
+            };
+        } else {
+            eprintln!("error[E-CLI-001]: unknown module settings option `{argument}`");
+            return ExitCode::from(2);
+        }
+    }
+
+    let source = fs::read_to_string(&entry).unwrap_or_default();
+    if format == OutputFormat::Json {
+        begin_json_diagnostics(&entry, &source);
+    }
+    let validation = validate(&entry);
+    let root = Path::new(&entry)
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let graph = match crate::packages::PackageGraph::load(root) {
+        Ok(Some(graph)) => graph,
+        Ok(None) => {
+            diagnostic(
+                &entry,
+                "E-PKG-SETTINGS-001",
+                "module settings require a project package graph",
+                1,
+                1,
+            );
+            let diagnostics = finish_json_diagnostics();
+            if format == OutputFormat::Json {
+                print_machine_document(&machine_document(
+                    "module settings check",
+                    false,
+                    diagnostics,
+                    [
+                        ("entry".into(), json!(context_entry(&entry))),
+                        ("settings_file".into(), json!("zelyra.settings.toml")),
+                        ("settings".into(), json!([])),
+                        ("secret_values_included".into(), json!(false)),
+                    ],
+                ));
+            }
+            return ExitCode::from(1);
+        }
+        Err(error) => {
+            diagnostic(&entry, "E-PKG-SETTINGS-001", &error.message, 1, 1);
+            let diagnostics = finish_json_diagnostics();
+            if format == OutputFormat::Json {
+                print_machine_document(&machine_document(
+                    "module settings check",
+                    false,
+                    diagnostics,
+                    [
+                        ("entry".into(), json!(context_entry(&entry))),
+                        ("settings_file".into(), json!("zelyra.settings.toml")),
+                        ("settings".into(), json!([])),
+                        ("secret_values_included".into(), json!(false)),
+                    ],
+                ));
+            }
+            return ExitCode::from(1);
+        }
+    };
+
+    let mut package_ok = true;
+    if let Err(error) = graph.check_lockfile() {
+        package_ok = false;
+        diagnostic(&entry, "E-PKG-002", &error.message, 1, 1);
+    }
+    let statuses = match graph
+        .settings_status(|name| std::env::var(name).ok().filter(|value| !value.is_empty()))
+    {
+        Ok(statuses) => statuses,
+        Err(error) => {
+            package_ok = false;
+            diagnostic(&entry, "E-PKG-SETTINGS-001", &error.message, 1, 1);
+            Vec::new()
+        }
+    };
+    let missing = statuses
+        .iter()
+        .flat_map(|package| {
+            package
+                .values
+                .iter()
+                .filter(|setting| setting.required && setting.status == "missing")
+                .map(|setting| format!("{}::{}", package.path, setting.name))
+        })
+        .collect::<Vec<_>>();
+    if !missing.is_empty() {
+        package_ok = false;
+        diagnostic(
+            &entry,
+            "E-PKG-SETTINGS-002",
+            &format!(
+                "required module settings are missing: {}",
+                missing.join(", ")
+            ),
+            1,
+            1,
+        );
+    }
+    let mut diagnostics = finish_json_diagnostics();
+    let valid = validation.is_ok() && package_ok && missing.is_empty() && diagnostics.is_empty();
+    let settings = statuses
+        .iter()
+        .map(|package| {
+            json!({
+                "path": package.path,
+                "package": package.name,
+                "values": package.values.iter().map(|setting| json!({
+                    "name": setting.name,
+                    "status": setting.status,
+                    "secret": setting.secret,
+                    "required": setting.required
+                })).collect::<Vec<_>>()
+            })
+        })
+        .collect::<Vec<_>>();
+    if format == OutputFormat::Human {
+        if valid {
+            println!("Module settings in {}:", context_entry(&entry));
+        }
+        for package in &statuses {
+            println!("\n{} ({})", package.name, package.path);
+            for setting in &package.values {
+                println!(
+                    "  {}: {}{}",
+                    setting.name,
+                    setting.status,
+                    if setting.secret { " (secret)" } else { "" }
+                );
+            }
+        }
+        if !valid {
+            for diagnostic in diagnostics.drain(..) {
+                eprintln!(
+                    "error[{}]: {}",
+                    diagnostic["code"].as_str().unwrap_or("E-PKG-SETTINGS-001"),
+                    diagnostic["message"]
+                        .as_str()
+                        .unwrap_or("module settings check failed")
+                );
+            }
+        }
+    } else {
+        print_machine_document(&machine_document(
+            "module settings check",
+            valid,
+            diagnostics,
+            [
+                ("entry".into(), json!(context_entry(&entry))),
+                ("settings_file".into(), json!("zelyra.settings.toml")),
+                ("settings".into(), json!(settings)),
+                ("secret_values_included".into(), json!(false)),
+            ],
+        ));
+    }
+    if valid {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(1)
+    }
+}
+
+fn module_list_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
+    let Some(entry) = arguments.next() else {
+        usage();
+        return ExitCode::from(2);
+    };
+    let mut format = OutputFormat::Human;
+    while let Some(argument) = arguments.next() {
+        if argument == "--format=json" {
+            format = OutputFormat::Json;
+        } else if argument == "--format=human" {
+            format = OutputFormat::Human;
+        } else if argument == "--format" {
+            format = match arguments.next().as_deref().and_then(parse_output_format) {
+                Some(format) => format,
+                None => {
+                    eprintln!("error[E-CLI-001]: format must be `human` or `json`");
+                    return ExitCode::from(2);
+                }
+            };
+        } else {
+            eprintln!("error[E-CLI-001]: unknown module list option `{argument}`");
+            return ExitCode::from(2);
+        }
+    }
+
+    let source = fs::read_to_string(&entry).unwrap_or_default();
+    if format == OutputFormat::Json {
+        begin_json_diagnostics(&entry, &source);
+    }
+    let validation = validate(&entry);
+    let modules = PROJECT_MODULES.with(|modules| modules.borrow().clone());
+    let root = Path::new(&entry)
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let graph = crate::packages::PackageGraph::load(root).ok().flatten();
+    let packages = graph.as_ref().map_or_else(Vec::new, |graph| {
+        graph
+            .inventory()
+            .into_iter()
+            .map(|package| {
+                json!({
+                    "path": package.path,
+                    "name": package.name,
+                    "version": package.version.to_string(),
+                    "entry": package.entry,
+                    "zelyra": package.zelyra_requirement,
+                    "checksum": package.checksum,
+                    "declared_effect_ceiling": package.effects,
+                    "settings_schema": package.settings.iter().map(|setting| json!({
+                        "name": setting.name,
+                        "type": setting.type_name,
+                        "required": setting.required,
+                        "secret": setting.secret,
+                        "default": setting.default,
+                        "description": setting.description
+                    })).collect::<Vec<_>>(),
+                    "dependencies": package.dependencies.iter().map(|(alias, path)| json!({
+                        "alias": alias,
+                        "path": path
+                    })).collect::<Vec<_>>()
+                })
+            })
+            .collect::<Vec<_>>()
+    });
+    let modules_json = context_modules_json(&modules);
+    if format == OutputFormat::Human {
+        let Ok(_) = validation else {
+            return ExitCode::from(1);
+        };
+        println!("Modules in {}:", context_entry(&entry));
+        for module in &modules {
+            println!("\n{}", module.path);
+            if module.imports.is_empty() {
+                println!("  imports: none");
+            } else {
+                for import in &module.imports {
+                    println!("  import {} -> {}", import.alias, import.path);
+                }
+            }
+            if module.exports.is_empty() {
+                println!("  exports: none");
+            } else {
+                for export in &module.exports {
+                    println!("  export {} {}", export.kind, export.name);
+                }
+            }
+        }
+        if !packages.is_empty() {
+            println!("\nPackages:");
+            for package in &packages {
+                println!(
+                    "  {} {} ({})",
+                    package["name"].as_str().unwrap_or("?"),
+                    package["version"].as_str().unwrap_or("?"),
+                    package["path"].as_str().unwrap_or("?")
+                );
+                if let Some(requirement) = package["zelyra"].as_str() {
+                    println!("    zelyra compatibility: {requirement}");
+                }
+                let effects = package["declared_effect_ceiling"]
+                    .as_array()
+                    .map(|values| {
+                        values
+                            .iter()
+                            .filter_map(Value::as_str)
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    })
+                    .filter(|values| !values.is_empty())
+                    .unwrap_or_else(|| "not declared".into());
+                println!("    effect ceiling: {effects}");
+                if let Some(settings) = package["settings_schema"].as_array() {
+                    for setting in settings {
+                        println!(
+                            "    setting {}: {} ({}, {})",
+                            setting["name"].as_str().unwrap_or("?"),
+                            setting["type"].as_str().unwrap_or("?"),
+                            if setting["required"] == true {
+                                "required"
+                            } else {
+                                "optional"
+                            },
+                            if setting["secret"] == true {
+                                "secret"
+                            } else {
+                                "not secret"
+                            }
+                        );
+                        if !setting["default"].is_null() {
+                            println!("      default: {}", setting["default"]);
+                        }
+                        if let Some(description) = setting["description"].as_str() {
+                            println!("      description: {description}");
+                        }
+                    }
+                }
+                if let Some(dependencies) = package["dependencies"].as_array() {
+                    for dependency in dependencies {
+                        println!(
+                            "    dependency {} -> {}",
+                            dependency["alias"].as_str().unwrap_or("?"),
+                            dependency["path"].as_str().unwrap_or("?")
+                        );
+                    }
+                }
+            }
+        }
+        return ExitCode::SUCCESS;
+    }
+
+    let diagnostics = finish_json_diagnostics();
+    let success = validation.is_ok() && diagnostics.is_empty();
+    let lock_status = match graph.as_ref() {
+        None if validation.is_ok() => "not_applicable",
+        None => "not_verified",
+        Some(graph) if graph.dependencies_present() && validation.is_ok() => "current",
+        Some(graph) if graph.dependencies_present() => "not_verified",
+        Some(_) => "not_required",
+    };
+    print_machine_document(&machine_document(
+        "module list",
+        success,
+        diagnostics,
+        [
+            ("entry".into(), json!(context_entry(&entry))),
+            ("modules".into(), modules_json),
+            ("packages".into(), json!(packages)),
+            ("package_lock".into(), json!({ "status": lock_status })),
+            ("capabilities_granted".into(), json!(false)),
+            ("secrets_included".into(), json!(false)),
+        ],
+    ));
+    if success {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(1)
     }
 }
 
@@ -544,6 +953,19 @@ fn module_plan_command(mut arguments: impl Iterator<Item = String>) -> ExitCode 
             .map(|module| (module.path.as_str(), module))
             .collect::<HashMap<_, _>>();
         let owners = module_declaration_owners(&program);
+        let selected_package = selected
+            .strip_prefix("pkg:")
+            .and_then(|alias| {
+                let project_root = Path::new(&entry)
+                    .parent()
+                    .filter(|parent| !parent.as_os_str().is_empty())
+                    .unwrap_or_else(|| Path::new("."));
+                crate::packages::PackageGraph::load(project_root)
+                    .ok()
+                    .flatten()?
+                    .root_dependency_entry_relative(alias)
+            })
+            .filter(|path| by_path.contains_key(path.as_str()));
         let selected_resource = if by_path.contains_key(selected.as_str()) {
             None
         } else if is_application_resource_id(&selected) && owners.contains_key(&selected) {
@@ -551,14 +973,16 @@ fn module_plan_command(mut arguments: impl Iterator<Item = String>) -> ExitCode 
         } else {
             None
         };
-        let selected_module = selected_resource
-            .as_ref()
-            .and_then(|resource| owners.get(resource).cloned())
-            .or_else(|| {
-                by_path
-                    .contains_key(selected.as_str())
-                    .then(|| selected.clone())
-            });
+        let selected_module = selected_package.clone().or_else(|| {
+            selected_resource
+                .as_ref()
+                .and_then(|resource| owners.get(resource).cloned())
+                .or_else(|| {
+                    by_path
+                        .contains_key(selected.as_str())
+                        .then(|| selected.clone())
+                })
+        });
         if let Some(selected_module) = selected_module {
             let project_sources = PROJECT_SOURCES.with(|sources| sources.borrow().clone());
             let impact = build_impact_with_modules(&program, &project_sources, &modules, &source);
@@ -852,7 +1276,8 @@ fn module_plan_command(mut arguments: impl Iterator<Item = String>) -> ExitCode 
                     "closure_semantics": "explicit-imports-plus-statically-recognized-references",
                     "selected_module": selected_module,
                     "selected_resource": selected_resource,
-                    "selection_kind": if selected_resource.is_some() { "resource" } else { "module" },
+                    "selected_package": selected_package,
+                    "selection_kind": if selected_resource.is_some() { "resource" } else if selected_package.is_some() { "package" } else { "module" },
                     "entry": context_entry(&entry),
                     "source_files": included,
                     "declaration_closure": {
@@ -1154,12 +1579,20 @@ fn module_bundle_command(mut arguments: impl Iterator<Item = String>) -> ExitCod
         eprintln!("error[E-MOD-018]: dependency plan contains no source files");
         return ExitCode::from(1);
     }
-    if plan
-        .get("unresolved_references")
-        .and_then(Value::as_array)
-        .is_none_or(|references| !references.is_empty())
-    {
+    let Some(unresolved_references) = plan.get("unresolved_references").and_then(Value::as_array)
+    else {
+        eprintln!("error[E-MOD-018]: dependency plan has no unresolved-reference inventory");
+        return ExitCode::from(1);
+    };
+    if !unresolved_references.is_empty() {
         eprintln!("error[E-MOD-018]: refusing to bundle a plan with unresolved references");
+        return ExitCode::from(1);
+    }
+    let source_closure_complete = plan["kind"] == "known-semantic-dependency-closure"
+        && unresolved_references.is_empty()
+        && !source_files.is_empty();
+    if !source_closure_complete {
+        eprintln!("error[E-MOD-018]: refusing to claim an incomplete source closure");
         return ExitCode::from(1);
     }
 
@@ -1173,6 +1606,26 @@ fn module_bundle_command(mut arguments: impl Iterator<Item = String>) -> ExitCod
     let Some(project_root) = entry_path.parent() else {
         eprintln!("error[E-MOD-018]: entry has no project directory");
         return ExitCode::from(1);
+    };
+    let package_support = match crate::packages::PackageGraph::load(project_root) {
+        Ok(Some(graph)) => match graph.bundle_support(&source_files) {
+            Ok(support) => Some(support),
+            Err(error) => {
+                eprintln!(
+                    "error[E-MOD-018]: cannot prepare local package closure: {}",
+                    error.message
+                );
+                return ExitCode::from(1);
+            }
+        },
+        Ok(None) => None,
+        Err(error) => {
+            eprintln!(
+                "error[E-MOD-018]: cannot read package graph: {}",
+                error.message
+            );
+            return ExitCode::from(1);
+        }
     };
     let entry_relative = match entry_path.strip_prefix(project_root) {
         Ok(path) => path.to_string_lossy().replace('\\', "/"),
@@ -1265,6 +1718,7 @@ fn module_bundle_command(mut arguments: impl Iterator<Item = String>) -> ExitCod
 
     let build_result = (|| -> Result<ModuleBundleFiles, String> {
         let mut copied = Vec::new();
+        let mut support_files = Vec::new();
         let mut docker_files = Vec::new();
         if full_project {
             copy_bundle_source(project_root, &staging, &entry_relative, "main.zyl")?;
@@ -1276,6 +1730,19 @@ fn module_bundle_command(mut arguments: impl Iterator<Item = String>) -> ExitCod
             }
             copy_bundle_source(project_root, &staging, relative, relative)?;
             copied.push(relative.clone());
+        }
+        if let Some(package_support) = &package_support {
+            for relative in &package_support.package_files {
+                if copied.contains(relative) {
+                    continue;
+                }
+                copy_bundle_source(project_root, &staging, relative, relative)?;
+                if relative.ends_with(".zyl") {
+                    copied.push(relative.clone());
+                } else {
+                    support_files.push(relative.clone());
+                }
+            }
         }
         if !full_project {
             let imports = source_files
@@ -1294,11 +1761,40 @@ fn module_bundle_command(mut arguments: impl Iterator<Item = String>) -> ExitCod
             copied.push("main.zyl".to_owned());
         }
 
-        let mut support_files = Vec::new();
         for relative in ["zelyra.toml", PROJECT_THEME_CSS_FILE] {
             if project_root.join(relative).exists() {
-                copy_bundle_source(project_root, &staging, relative, relative)?;
+                if relative == "zelyra.toml" {
+                    if let Some(package_support) = &package_support {
+                        fs::write(staging.join(relative), &package_support.root_manifest).map_err(
+                            |error| format!("cannot write filtered package manifest: {error}"),
+                        )?;
+                    } else {
+                        copy_bundle_source(project_root, &staging, relative, relative)?;
+                    }
+                } else {
+                    copy_bundle_source(project_root, &staging, relative, relative)?;
+                }
                 support_files.push(relative.to_owned());
+            }
+        }
+        if let Some(package_support) = &package_support {
+            for relative in &package_support.package_files {
+                if !relative.ends_with(".zyl") && !support_files.contains(relative) {
+                    support_files.push(relative.clone());
+                }
+            }
+            if !package_support.package_names.is_empty() {
+                let graph = crate::packages::PackageGraph::load(&staging)
+                    .map_err(|error| {
+                        format!("cannot validate bundled package graph: {}", error.message)
+                    })?
+                    .ok_or_else(|| {
+                        "filtered bundle manifest lost its package declaration".to_owned()
+                    })?;
+                crate::packages::write_lockfile(&graph, true).map_err(|error| {
+                    format!("cannot write bundled package lockfile: {}", error.message)
+                })?;
+                support_files.push("zelyra.lock".into());
             }
         }
         let locales = project_root.join("locales");
@@ -1389,6 +1885,9 @@ RUN git init /zelyra \
     && git -C /zelyra fetch --depth=1 origin "$ZELYRA_REF" \
     && git -C /zelyra checkout --detach FETCH_HEAD
 RUN cargo install --locked --path /zelyra/cli --root /out
+WORKDIR /app
+COPY . ./
+RUN /out/bin/zelyra check main.zyl
 
 FROM debian:bookworm-slim
 RUN apt-get update \
@@ -1462,7 +1961,13 @@ ZELYRA_DB_TLS_MODE=auto
                 .cloned()
                 .unwrap_or(Value::Null),
             "external_service_contracts": external_service_contracts,
-            "source_closure_complete": false,
+            "source_closure_complete": source_closure_complete,
+            "source_closure_evidence": {
+                "unresolved_references": unresolved_references.len(),
+                "source_files": copied.len(),
+                "compiler_check": "passed_before_publication",
+                "semantics": "all planned source files are copied and the generated entry is compiler-checked before publication"
+            },
             "complete_deployment": false,
             "docker": if docker {
                 json!({
@@ -1478,7 +1983,7 @@ ZELYRA_DB_TLS_MODE=auto
                 Value::Null
             },
             "limitations": [
-                "The static dependency graph is incomplete; this bundle is not a deployment manifest.",
+            "A complete checked source closure does not prove that runtime effects or deployment requirements are configured.",
                 if docker { "The Docker package builds the compiler from the pinned source commit; runtime deployment completeness is not yet proven." } else { "No Dockerfile, Compose stack, runtime binary, database service, or .env file is included." },
                 "Database credentials and other runtime secrets are intentionally not copied.",
                 "The selected source file is included in full; resource selection does not remove co-located declarations."
@@ -1492,9 +1997,9 @@ ZELYRA_DB_TLS_MODE=auto
         )
         .map_err(|error| format!("cannot write bundle manifest: {error}"))?;
         let readme = if docker {
-            format!("# Experimental Zelyra Docker package\n\nThis package contains the selected known source closure and a Docker Compose app service. It is experimental, not a verified complete deployment; inspect `zelyra.bundle.json` (`complete_deployment: false`). The Dockerfile builds Zelyra from the exact compiler commit recorded in that manifest.\n\nCopy `.env.example` to `.env`, set a private `{connection_environment}` if needed, then run `docker compose up --build`. The MariaDB service is external and is not created by this package. The default `host.docker.internal` address is for a database on the Docker host; adjust it for your network. Remote database connections use verified TLS by default. For a private CA, mount its file into the app container and set `ZELYRA_DB_TLS_CA_CERT_FILE` to that in-container path. Disable TLS only for an isolated local network. Never commit `.env`.\n")
+            format!("# Experimental Zelyra Docker package\n\nThe generated source dependency closure has no unresolved references and must pass `zelyra check` before publication. This is not a verified complete deployment; inspect `zelyra.bundle.json` (`complete_deployment: false`) for runtime effects and deployment requirements. The Dockerfile builds Zelyra from the exact compiler commit recorded in that manifest and runs that compiler's `zelyra check main.zyl` against this bundle during image construction. Choose a compiler commit that supports every syntax and package feature used by the bundle; incompatible pins fail the image build.\n\nCopy `.env.example` to `.env`, set a private `{connection_environment}` if needed, then run `docker compose up --build`. The MariaDB service is external and is not created by this package. The default `host.docker.internal` address is for a database on the Docker host; adjust it for your network. Remote database connections use verified TLS by default. For a private CA, mount its file into the app container and set `ZELYRA_DB_TLS_CA_CERT_FILE` to that in-container path. Disable TLS only for an isolated local network. Never commit `.env`.\n")
         } else {
-            "# Experimental Zelyra source bundle\n\nThis directory contains the selected project module and source files in the dependency preview. It is not a Docker export or a complete deployment. Review `zelyra.bundle.json`; its `complete_deployment` value is `false`.\n\nRun `zelyra check main.zyl` with a compiler build that supports project imports. Configure any required external database and runtime settings separately. No `.env` file or credentials were copied.\n".to_owned()
+            "# Experimental Zelyra source bundle\n\nThe generated source dependency closure has no unresolved references and must pass `zelyra check` before publication. It is not a Docker export or a complete deployment. Review `zelyra.bundle.json`; its `complete_deployment` value is `false` because runtime effects and deployment requirements may need configuration.\n\nConfigure any required external database and runtime settings separately. No `.env` file or credentials were copied.\n".to_owned()
         };
         fs::write(staging.join("README.md"), readme)
             .map_err(|error| format!("cannot write bundle README: {error}"))?;
@@ -1547,7 +2052,13 @@ ZELYRA_DB_TLS_MODE=auto
                         "compiler_commit": compiler_ref,
                         "files": planned_files,
                         "secrets_included": false,
-                        "source_closure_complete": false,
+                        "source_closure_complete": source_closure_complete,
+                        "source_closure_evidence": {
+                            "unresolved_references": unresolved_references.len(),
+                            "source_files": source_files.len(),
+                            "compiler_check": "passed_in_staging",
+                            "semantics": "all planned source files are copied and the generated entry passed the compiler check"
+                        },
                         "complete_deployment": false,
                         "writes_performed": false
                     }
@@ -1591,7 +2102,7 @@ ZELYRA_DB_TLS_MODE=auto
                 docker_files.len()
             );
             println!("the generated bundle passed `zelyra check`");
-            println!("the static dependency graph is incomplete; complete_deployment remains false in zelyra.bundle.json");
+            println!("the source closure passed `zelyra check`; complete_deployment remains false until runtime and deployment requirements are reviewed");
             ExitCode::SUCCESS
         }
         Err(error) => {

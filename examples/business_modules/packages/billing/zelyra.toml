@@ -1,0 +1,10 @@
+[package]
+name = "billing"
+version = "1.2.0"
+zelyra = ">=1.1.0, <1.2.0"
+entry = "src/lib.zyl"
+effects = ["Database(read)"]
+
+[dependencies.storage]
+path = "../storage"
+version = "^1.0"

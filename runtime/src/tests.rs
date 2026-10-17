@@ -1,7 +1,9 @@
 use super::*;
 
-use std::net::TcpListener;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
+use std::time::{SystemTime, UNIX_EPOCH};
+use std::{io::Read, net::TcpListener};
 use zelyra_lexer::lex;
 use zelyra_parser::parse;
 
@@ -45,11 +47,163 @@ fn recursion_is_bounded_and_reports_the_call_site_without_crashing() {
 }
 
 #[test]
+fn embedding_policy_cannot_raise_ast_call_depth_above_the_runtime_cap() {
+    let source = "fn dive(depth: Int) -> Int { if depth == 0 { return 0 } return dive(depth - 1) + 1 } fn main() { print(dive(600)) }";
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap();
+    let policy = RuntimePolicy {
+        max_stack_depth: Some(usize::MAX),
+        ..RuntimePolicy::default()
+    };
+    let outcome = execute_captured_with_capabilities_and_policies(&program, None, Some(&policy));
+    let error = outcome
+        .error
+        .expect("the runtime must enforce its hard call-depth cap");
+    assert!(error
+        .message
+        .contains("call depth limit exceeded (maximum 500)"));
+    assert!(error.span.start > 0);
+}
+
+#[test]
 fn if_expressions_return_the_selected_branch_value() {
     let source = "fn choose(ready: Bool) -> Int { return if ready { 7 } else { 2 } } fn main() { print(choose(true)); print(choose(false)) }";
     let program = parse(&lex(source).unwrap()).unwrap();
     check(&program).unwrap();
     assert_eq!(execute(&program).unwrap(), ["7", "2"]);
+}
+
+#[test]
+fn numeric_conversion_builtins_reject_type_arguments() {
+    for (source, builtin) in [
+        ("fn main() { value = to_int<Int>(1) }", "to_int"),
+        ("fn main() { value = to_float<Float>(1) }", "to_float"),
+        ("fn main() { value = parse_int<Int>(\"1\") }", "parse_int"),
+        (
+            "fn main() { value = parse_float<Float>(\"1.0\") }",
+            "parse_float",
+        ),
+    ] {
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let errors = check(&program).expect_err("scalar conversions are not generic");
+        assert!(
+            errors.iter().any(|error| {
+                error.message.contains(builtin) && error.message.contains("no type arguments")
+            }),
+            "expected a clear type-argument diagnostic for {builtin}, got {errors:?}"
+        );
+    }
+}
+
+#[test]
+fn command_and_schedule_declarations_are_compiler_checked() {
+    let valid = r#"
+command process_recurring_invoices {
+    handler: run_recurring_invoices
+    description: "Create recurring invoices"
+}
+schedule recurring_invoices {
+    command: process_recurring_invoices
+    cron: "0 4 * * *"
+    timezone: "Europe/Berlin"
+}
+fn run_recurring_invoices() { }
+fn main() { }
+"#;
+    let program = parse(&lex(valid).unwrap()).unwrap();
+    check(&program).unwrap();
+
+    let unknown_handler = r#"
+command process { handler: missing }
+fn main() { }
+"#;
+    let errors = check(&parse(&lex(unknown_handler).unwrap()).unwrap()).unwrap_err();
+    assert!(errors.iter().any(|error| {
+        error.code == "E-TASK-001" && error.message.contains("unknown handler function")
+    }));
+
+    let invalid_schedule = r#"
+command process { handler: run }
+schedule recurring { command: absent cron: "61 * * * *" }
+fn run() { }
+fn main() { }
+"#;
+    let errors = check(&parse(&lex(invalid_schedule).unwrap()).unwrap()).unwrap_err();
+    assert!(errors
+        .iter()
+        .any(|error| { error.code == "E-TASK-001" && error.message.contains("unknown command") }));
+    assert!(errors.iter().any(|error| {
+        error.code == "E-TASK-001" && error.message.contains("invalid cron expression")
+    }));
+
+    let scheduled_arguments = r#"
+command process { handler: run }
+schedule recurring { command: process cron: "0 4 * * *" }
+fn run(account_id: Int) { }
+fn main() { }
+"#;
+    let errors = check(&parse(&lex(scheduled_arguments).unwrap()).unwrap()).unwrap_err();
+    assert!(errors.iter().any(|error| {
+        error.code == "E-TASK-001" && error.message.contains("zero-argument handler")
+    }));
+}
+
+#[test]
+fn json_values_round_trip_as_typed_json_not_strings() {
+    let source = r#"
+fn main() {
+    payload: Json = json_decode<Json>("{\"items\":[1,true,null],\"name\":\"Ada\"}")
+    print(json_encode(payload))
+}
+"#;
+    assert_eq!(run(source), [r#"{"items":[1,true,null],"name":"Ada"}"#]);
+}
+
+#[test]
+fn sql_decode_accepts_json_scalars_and_json_record_fields() {
+    let source = r#"
+database main { engine: mariadb }
+table events { id: Id primary auto payload: Json required }
+struct EventRecord { id: Id payload: Json }
+fn main() uses Database(read) {
+    scalar = sql_decode<Json>(sql<Json> { SELECT payload FROM events })
+    record = sql_decode<EventRecord>(sql<EventRecord> { SELECT id, payload FROM events })
+    print(json_encode(scalar))
+    print(json_encode(record.payload))
+}
+"#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap();
+}
+
+#[test]
+fn checked_program_exposes_source_mapped_inferred_expression_types() {
+    let source =
+        "fn increment(value: Int) -> Int { return value + 1 } fn main() { print(increment(41)) }";
+    let program = parse(&lex(source).unwrap()).unwrap();
+    let inferred = check_with_inferred_types(&program).unwrap();
+
+    assert!(!inferred.is_empty());
+    assert!(inferred.windows(2).all(|pair| {
+        (pair[0].span.source_id, pair[0].span.start, pair[0].span.end)
+            <= (pair[1].span.source_id, pair[1].span.start, pair[1].span.end)
+    }));
+    let expression_start = source.find("value + 1").unwrap();
+    assert!(inferred.iter().any(|expression| {
+        expression.span.start == expression_start && expression.ty == Type::Int
+    }));
+    assert!(inferred.iter().any(|expression| {
+        expression.span.start == source.find("increment(41)").unwrap() && expression.ty == Type::Int
+    }));
+}
+
+#[test]
+fn inferred_expression_types_are_not_returned_for_invalid_programs() {
+    let program = parse(&lex("fn main() { value: Int = \"wrong\" }").unwrap()).unwrap();
+    let errors =
+        check_with_inferred_types(&program).expect_err("type errors must block typed output");
+    assert!(errors.iter().any(|error| error.code == "E-TYPE-001"));
+    assert!(check(&program).is_err());
 }
 
 #[test]
@@ -169,6 +323,45 @@ fn main() {
         check(&program).is_err(),
         "push_mut must preserve the element type"
     );
+}
+
+#[test]
+fn snapshot_lambdas_reject_mutation_of_captured_bindings_statically() {
+    let sources = [
+        r#"
+fn main() {
+    mutable values: Int[] = []
+    append_value: Function<(Int) -> Unit> = |value| push_mut(values, value)
+}
+"#,
+        r#"
+fn main() {
+    mutable values: Int[] = []
+    mapped = map([1], |value| push_mut(values, value))
+}
+"#,
+        r#"
+fn main() {
+    mutable values: Int[] = [1]
+    pop_value: Function<(Int) -> Int?> = |unused| pop_mut(values)
+}
+"#,
+    ];
+
+    for source in sources {
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let errors = check(&program)
+            .expect_err("snapshot closures cannot mutate bindings in their creator scope");
+        assert!(
+            errors.iter().any(|error| {
+                error
+                    .message
+                    .contains("cannot assign to immutable variable `current`")
+                    || error.message.contains("mutable array binding")
+            }),
+            "expected a static captured-mutation error, got: {errors:?}"
+        );
+    }
 }
 
 #[test]
@@ -327,6 +520,150 @@ fn main() {
     let program = parse(&lex(source).unwrap()).unwrap();
     check(&program).unwrap_or_else(|errors| panic!("lambda type check failed: {errors:?}"));
     assert_eq!(execute(&program).unwrap(), ["6", "12", "27", "9"]);
+}
+
+#[test]
+fn returned_lambdas_use_the_declared_function_type_for_body_checking() {
+    let source = r#"
+fn make_adder(base: Int) -> Function<(Int) -> Int> {
+    return |value| value + base
+}
+fn main() {
+    add = make_adder(40)
+    print(add(2))
+}
+"#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap_or_else(|errors| panic!("returned lambda check failed: {errors:?}"));
+    assert_eq!(execute(&program).unwrap(), ["42"]);
+
+    let initialized_from_context = r#"
+fn make_adder(base: Int) -> Function<(Int) -> Int> {
+    mutable offset = base
+    callback: Function<(Int) -> Int> = |value| value + offset
+    offset = offset + 100
+    return callback
+}
+fn main() {
+    add = make_adder(20)
+    print(add(2))
+}
+"#;
+    let initialized_from_context = parse(&lex(initialized_from_context).unwrap()).unwrap();
+    check(&initialized_from_context)
+        .unwrap_or_else(|errors| panic!("typed lambda initializer check failed: {errors:?}"));
+    assert_eq!(execute(&initialized_from_context).unwrap(), ["22"]);
+
+    let assigned_from_context = r#"
+fn make_adder(base: Int) -> Function<(Int) -> Int> {
+    mutable offset = base
+    mutable callback: Function<(Int) -> Int> = |value| value + offset
+    offset = offset + 100
+    callback = |value| value + offset
+    return callback
+}
+fn main() {
+    add = make_adder(20)
+    print(add(2))
+}
+"#;
+    let assigned_from_context = parse(&lex(assigned_from_context).unwrap()).unwrap();
+    check(&assigned_from_context)
+        .unwrap_or_else(|errors| panic!("typed lambda assignment check failed: {errors:?}"));
+    assert_eq!(execute(&assigned_from_context).unwrap(), ["122"]);
+
+    let invalid_initializer = r#"
+fn main() {
+    callback: Function<(Int) -> Int> = |value| "not an Int"
+}
+"#;
+    let invalid_initializer = parse(&lex(invalid_initializer).unwrap()).unwrap();
+    let errors = check(&invalid_initializer)
+        .expect_err("typed lambda initializer body must match its declared function type");
+    assert!(errors.iter().any(|error| {
+        error.message.contains("type mismatch")
+            && error.message.contains("expected `Int`")
+            && error.message.contains("found `String`")
+    }));
+
+    let invalid = r#"
+fn wrong_result() -> Function<(Int) -> Int> {
+    return |value: Int| "not an Int"
+}
+fn main() {}
+"#;
+    let invalid = parse(&lex(invalid).unwrap()).unwrap();
+    let errors = check(&invalid).expect_err("lambda body must match the declared return type");
+    assert!(errors.iter().any(|error| {
+        error.message.contains("type mismatch")
+            && error.message.contains("expected `Int`")
+            && error.message.contains("found `String`")
+    }));
+
+    let invalid_parameter = r#"
+fn wrong_parameter() -> Function<(Int) -> Int> {
+    return |value: String| 1
+}
+fn main() {}
+"#;
+    let invalid_parameter = parse(&lex(invalid_parameter).unwrap()).unwrap();
+    let errors = check(&invalid_parameter)
+        .expect_err("lambda parameter must match the declared function type");
+    assert!(errors.iter().any(|error| {
+        error.message.contains("type mismatch")
+            && error.message.contains("expected `Int`")
+            && error.message.contains("found `String`")
+    }));
+}
+
+#[test]
+fn typed_lambdas_must_declare_effects_used_by_their_bodies() {
+    let source = r#"
+fn current(unused: Int) -> Timestamp uses Clock { return now() }
+fn db_read(unused: Int) -> Int uses Database(read) { return 1 }
+fn missing_builtin_effect() uses Clock {
+    callback: Function<(Int) -> Timestamp> = |unused| now()
+}
+fn missing_callee_effect() uses Clock {
+    callback: Function<(Int) -> Timestamp> = |unused| current(unused)
+}
+fn declared_effect() uses Clock {
+    callback: Function<(Int) -> Timestamp> uses {Clock} = |unused| now()
+}
+fn broad_database_effect() uses Database {
+    callback: Function<(Int) -> Int> uses {Database} = |unused| db_read(unused)
+}
+fn main() {}
+"#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    let errors =
+        check(&program).expect_err("a function type must declare effects performed by its lambda");
+    let effect_errors = errors
+        .iter()
+        .filter(|error| error.code == "E-TYPE-FUNCTION-001")
+        .collect::<Vec<_>>();
+    assert_eq!(effect_errors.len(), 2, "unexpected diagnostics: {errors:?}");
+    assert!(effect_errors
+        .iter()
+        .all(|error| error.message.contains("requires capability `Clock`")));
+
+    let valid = r#"
+fn declared_effect() uses Clock {
+    callback: Function<(Int) -> Timestamp> uses {Clock} = |unused| now()
+}
+fn main() {}
+"#;
+    let valid = parse(&lex(valid).unwrap()).unwrap();
+    check(&valid).expect("explicitly declared lambda effects type-check");
+
+    let broad_database = r#"
+fn db_read(unused: Int) -> Int uses Database(read) { return 1 }
+fn main() uses Database {
+    callback: Function<(Int) -> Int> uses {Database} = |unused| db_read(unused)
+}
+"#;
+    let broad_database = parse(&lex(broad_database).unwrap()).unwrap();
+    check(&broad_database).expect("broad Database authority covers read-only use");
 }
 
 #[test]
@@ -1240,6 +1577,38 @@ fn opt_in_step_budget_counts_expression_evaluations_and_reports_the_exact_span()
 }
 
 #[test]
+fn module_setting_reads_an_explicitly_typed_source_scoped_value() {
+    let program = parse(
+        &lex(
+            "fn timeout() -> Int { return module_setting<Int>(\"api_timeout\") } fn main() { print(timeout()) }",
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    check(&program).unwrap();
+    let mut settings = PackageSettings::default();
+    settings.insert_json(0, "api_timeout", "45".into()).unwrap();
+    let policy = RuntimePolicy {
+        package_settings: Some(settings),
+        ..RuntimePolicy::default()
+    };
+    assert_eq!(
+        execute_with_capabilities_and_policies(&program, None, Some(&policy)).unwrap(),
+        ["45"]
+    );
+
+    let mut tokens = lex("fn main() { print(module_setting<Int>(\"api_timeout\")) }").unwrap();
+    for token in &mut tokens {
+        token.span.source_id = 1;
+    }
+    let wrong_source = parse(&tokens).unwrap();
+    check(&wrong_source).unwrap();
+    let error = execute_with_capabilities_and_policies(&wrong_source, None, Some(&policy))
+        .expect_err("a different source must not inherit another source's settings");
+    assert!(error.message.contains("unavailable for this source"));
+}
+
+#[test]
 fn captured_execution_preserves_output_before_runtime_failure() {
     let source = "fn main() { print(\"before failure\") loop { } }";
     let program = parse(&lex(source).unwrap()).unwrap();
@@ -1651,6 +2020,46 @@ fn executes_parallel_await_bindings_and_merges_results() {
 }
 
 #[test]
+fn parallel_branch_limit_is_checked_before_ast_execution() {
+    let four_branches = r#"
+fn value(arg: Int) -> Int { return arg }
+fn main() {
+    parallel {
+        first = await value(1)
+        second = await value(2)
+        third = await value(3)
+        fourth = await value(4)
+    }
+    print(first + second + third + fourth)
+}
+"#;
+    let program = parse(&lex(four_branches).unwrap()).unwrap();
+    check(&program).expect("the shared maximum number of branches is supported");
+    assert_eq!(execute(&program).unwrap(), ["10"]);
+
+    let five_branches = r#"
+fn value(arg: Int) -> Int { return arg }
+fn main() {
+    parallel {
+        first = await value(1)
+        second = await value(2)
+        third = await value(3)
+        fourth = await value(4)
+        fifth = await value(5)
+    }
+    print(first + second + third + fourth + fifth)
+}
+"#;
+    let program = parse(&lex(five_branches).unwrap()).unwrap();
+    let errors = check(&program).expect_err("the type checker must cap spawned branches");
+    assert!(errors.iter().any(|error| {
+        error.code == "E-TYPE-001" && error.message.contains("maximum of 4 branches")
+    }));
+    let error = execute(&program).expect_err("direct AST execution also enforces the cap");
+    assert!(error.message.contains("maximum of 4 branches"));
+}
+
+#[test]
 fn parallel_await_bindings_share_the_global_step_budget() {
     let source = "fn load_customer() -> String { return \"customer\" } fn load_orders() -> Int { return 3 } fn main() { parallel { customer = await load_customer() orders = await load_orders() } }";
     let program = parse(&lex(source).unwrap()).unwrap();
@@ -1928,6 +2337,186 @@ fn rejects_sql_without_database_capability() {
 }
 
 #[test]
+fn scoped_sql_guard_rejects_reads_writes_and_unverifiable_sql() {
+    let scoped = vec!["invoices".to_owned()];
+    assert!(check_scoped_sql("SELECT id FROM customers", &scoped).is_ok());
+    for query in [
+        "SELECT id FROM invoices",
+        "SELECT i.id FROM customers c JOIN invoices i ON i.id = c.id",
+        "UPDATE invoices SET status = 'paid'",
+        "INSERT INTO invoices (id) VALUES (1)",
+        "DELETE FROM invoices WHERE id = 1",
+        "CREATE VIEW public_invoices AS SELECT id FROM invoices",
+        "SELECT id FROM `invoices`",
+    ] {
+        assert!(
+            check_scoped_sql(query, &scoped).is_err(),
+            "scope guard accepted {query:?}"
+        );
+    }
+    assert!(check_scoped_sql("SELECT id FROM invoices", &[]).is_ok());
+}
+
+#[test]
+fn tenant_scope_requires_a_required_nominal_id_column() {
+    let valid = parse(
+        &lex("type TenantId = Id table invoices scoped by tenant_id: TenantId { id: Id primary auto tenant_id: TenantId required } fn main() {}")
+            .unwrap(),
+    )
+    .unwrap();
+    check(&valid).expect("matching nominal Id column is accepted");
+
+    for source in [
+        "type TenantId = String table invoices scoped by tenant_id: TenantId { id: Id primary auto tenant_id: TenantId required } fn main() {}",
+        "type TenantId = Id table invoices scoped by tenant_id: TenantId { id: Id primary auto tenant_id: TenantId? } fn main() {}",
+        "type TenantId = Id table invoices scoped by tenant_id: TenantId { id: Id primary auto owner_id: TenantId required } fn main() {}",
+    ] {
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let errors = check(&program).expect_err("invalid tenant scope must be rejected");
+        assert!(
+            errors.iter().any(|error| error.code == "E-TENANT-001"),
+            "unexpected diagnostics for {source}: {errors:?}"
+        );
+    }
+}
+
+#[test]
+fn ast_runtime_rejects_scoped_sql_before_database_access() {
+    let source = "type TenantId = Id table invoices scoped by tenant_id: TenantId { id: Id primary auto tenant_id: TenantId required } fn main() uses Database(read) { rows = sql<Int[]> { SELECT id FROM invoices } }";
+    let program = parse(&lex(source).unwrap()).unwrap();
+    let error = execute(&program).expect_err("unscoped SQL must fail closed");
+    assert!(error.message.contains("tenant-scoped table `invoices`"));
+}
+
+#[test]
+fn database_queries_and_transactions_use_the_injected_host_after_capability_checks() {
+    struct RecordingDatabaseHost {
+        queries: std::sync::Mutex<Vec<String>>,
+        batch_transactions: std::sync::Mutex<Vec<bool>>,
+        calls: AtomicUsize,
+    }
+
+    impl HostServices for RecordingDatabaseHost {
+        fn unix_time_millis(&self) -> Result<i64, String> {
+            Ok(0)
+        }
+
+        fn environment_variable(&self, _name: &str) -> Result<Option<String>, String> {
+            Ok(None)
+        }
+
+        fn fill_random(&self, output: &mut [u8]) -> Result<(), String> {
+            output.fill(0);
+            Ok(())
+        }
+
+        fn execute_database_query(
+            &self,
+            database_url: &str,
+            query: &zelyra_database::Query,
+        ) -> Result<zelyra_database::QueryResult, String> {
+            self.calls.fetch_add(1, Ordering::Relaxed);
+            assert_eq!(database_url, "memory://business-db");
+            self.queries
+                .lock()
+                .map_err(|_| "query log lock poisoned".to_owned())?
+                .push(query.sql.clone());
+            Ok(zelyra_database::QueryResult::default())
+        }
+
+        fn execute_database_batch(
+            &self,
+            database_url: &str,
+            queries: &[zelyra_database::Query],
+            transaction: bool,
+        ) -> Result<Vec<zelyra_database::QueryResult>, String> {
+            self.calls.fetch_add(1, Ordering::Relaxed);
+            assert_eq!(database_url, "memory://business-db");
+            self.batch_transactions
+                .lock()
+                .map_err(|_| "transaction log lock poisoned".to_owned())?
+                .push(transaction);
+            self.queries
+                .lock()
+                .map_err(|_| "query log lock poisoned".to_owned())?
+                .extend(queries.iter().map(|query| query.sql.clone()));
+            Ok(vec![zelyra_database::QueryResult::default(); queries.len()])
+        }
+    }
+
+    let program = parse(
+        &lex("fn read_data() uses Database(read) { rows = sql<Int> { SELECT 1 } } fn write_data() uses Database(write) { transaction { sql { UPDATE inventory SET quantity = 1 } } } fn main() {}")
+            .unwrap(),
+    )
+    .unwrap();
+    check(&program).unwrap();
+    check_capabilities(&program).unwrap();
+    let host = Arc::new(RecordingDatabaseHost {
+        queries: std::sync::Mutex::new(Vec::new()),
+        batch_transactions: std::sync::Mutex::new(Vec::new()),
+        calls: AtomicUsize::new(0),
+    });
+    let host_services: Arc<dyn HostServices> = host.clone();
+
+    let denied = execute_function_with_host_services_and_capabilities_and_policies(
+        &program,
+        "read_data",
+        Vec::new(),
+        Some("memory://business-db"),
+        Some(&HashSet::new()),
+        None,
+        Arc::clone(&host_services),
+    )
+    .expect_err("database access must be denied before contacting the host");
+    assert!(denied.message.contains("Database(read)"));
+    assert_eq!(host.calls.load(Ordering::Relaxed), 0);
+
+    let read_grants = HashSet::from(["Database(read)".to_owned()]);
+    execute_function_with_host_services_and_capabilities_and_policies(
+        &program,
+        "read_data",
+        Vec::new(),
+        Some("memory://business-db"),
+        Some(&read_grants),
+        None,
+        Arc::clone(&host_services),
+    )
+    .unwrap();
+    assert_eq!(host.calls.load(Ordering::Relaxed), 1);
+
+    let write_grants = HashSet::from(["Database(write)".to_owned()]);
+    let denied_transaction = execute_function_with_host_services_and_capabilities_and_policies(
+        &program,
+        "write_data",
+        Vec::new(),
+        Some("memory://business-db"),
+        Some(&HashSet::new()),
+        None,
+        Arc::clone(&host_services),
+    )
+    .expect_err("transaction SQL must enforce database capabilities at runtime");
+    assert!(denied_transaction.message.contains("Database(write)"));
+    assert_eq!(host.calls.load(Ordering::Relaxed), 1);
+
+    execute_function_with_host_services_and_capabilities_and_policies(
+        &program,
+        "write_data",
+        Vec::new(),
+        Some("memory://business-db"),
+        Some(&write_grants),
+        None,
+        host_services,
+    )
+    .unwrap();
+    assert_eq!(host.calls.load(Ordering::Relaxed), 2);
+    assert_eq!(*host.batch_transactions.lock().unwrap(), [true]);
+    assert_eq!(
+        *host.queries.lock().unwrap(),
+        [" SELECT 1 ", " UPDATE inventory SET quantity = 1 "]
+    );
+}
+
+#[test]
 fn propagates_called_function_capabilities() {
     let program =
         parse(&lex("fn send() uses Network { print(1) } fn main() { send() }").unwrap()).unwrap();
@@ -2097,6 +2686,7 @@ fn performs_http_get_with_network_policy() {
         mail: None,
         step_budget: None,
         max_stack_depth: None,
+        package_settings: None,
     };
     let body = execute_function_with_capabilities_and_policies(
         &program,
@@ -2109,6 +2699,184 @@ fn performs_http_get_with_network_policy() {
     .unwrap();
     assert_eq!(body, Value::String("hello".into()));
     server.join().unwrap();
+}
+
+#[test]
+fn injected_network_host_receives_only_policy_checked_requests() {
+    struct NetworkHost {
+        calls: AtomicUsize,
+        response_body: Vec<u8>,
+        response_headers: Vec<(String, String)>,
+    }
+    impl HostServices for NetworkHost {
+        fn unix_time_millis(&self) -> Result<i64, String> {
+            Ok(0)
+        }
+        fn environment_variable(&self, _name: &str) -> Result<Option<String>, String> {
+            Ok(None)
+        }
+        fn fill_random(&self, output: &mut [u8]) -> Result<(), String> {
+            output.fill(0);
+            Ok(())
+        }
+        fn http_request(
+            &self,
+            method: &str,
+            url: &str,
+            headers: &[(String, String)],
+            body: Option<&[u8]>,
+            timeout_ms: u64,
+            max_response_bytes: usize,
+        ) -> Result<HostHttpResponse, String> {
+            assert_eq!(method, "POST");
+            assert_eq!(url, "https://api.example.test/customers");
+            assert_eq!(headers, [("x-request-id".into(), "test-7".into())]);
+            assert_eq!(body, Some(b"payload".as_slice()));
+            assert_eq!(timeout_ms, 321);
+            assert_eq!(max_response_bytes, 8);
+            self.calls.fetch_add(1, Ordering::Relaxed);
+            Ok(HostHttpResponse {
+                status: 202,
+                headers: self.response_headers.clone(),
+                body: self.response_body.clone(),
+            })
+        }
+    }
+
+    let program = parse(
+        &lex("fn request() -> HttpResponse uses Network { return http_request(\"POST\", \"https://api.example.test/customers\", [\"X-Request-ID: test-7\"], Some(\"payload\")) } fn main() {}")
+            .unwrap(),
+    )
+    .unwrap();
+    check(&program).unwrap();
+    check_capabilities(&program).unwrap();
+    let host = Arc::new(NetworkHost {
+        calls: AtomicUsize::new(0),
+        response_body: b"accepted".to_vec(),
+        response_headers: vec![("content-type".into(), "text/plain".into())],
+    });
+    let grants = HashSet::from(["Network".to_owned()]);
+    let policy = RuntimePolicy {
+        filesystem: None,
+        network: Some(NetworkPolicy {
+            allowed_hosts: vec!["api.example.test".into()],
+            timeout_ms: 321,
+            max_response_bytes: 8,
+        }),
+        process: None,
+        mail: None,
+        step_budget: None,
+        max_stack_depth: None,
+        package_settings: None,
+    };
+    let response = execute_function_with_host_services_and_capabilities_and_policies(
+        &program,
+        "request",
+        Vec::new(),
+        None,
+        Some(&grants),
+        Some(&policy),
+        host.clone(),
+    )
+    .unwrap();
+    let Value::Object { fields, .. } = response else {
+        panic!("expected structured HTTP response");
+    };
+    assert_eq!(fields.get("status"), Some(&Value::Int(202)));
+    assert_eq!(fields.get("body"), Some(&Value::String("accepted".into())));
+    assert_eq!(host.calls.load(Ordering::Relaxed), 1);
+
+    let denied_grant = execute_function_with_host_services_and_capabilities_and_policies(
+        &program,
+        "request",
+        Vec::new(),
+        None,
+        Some(&HashSet::new()),
+        Some(&policy),
+        host.clone(),
+    )
+    .expect_err("the runtime must check Network before calling the provider");
+    assert!(denied_grant.message.contains("Network"));
+    assert_eq!(host.calls.load(Ordering::Relaxed), 1);
+
+    let denied_host = execute_function_with_host_services_and_capabilities_and_policies(
+        &program,
+        "request",
+        Vec::new(),
+        None,
+        Some(&grants),
+        Some(&RuntimePolicy {
+            network: Some(NetworkPolicy {
+                allowed_hosts: vec!["other.example.test".into()],
+                timeout_ms: 321,
+                max_response_bytes: 8,
+            }),
+            ..policy.clone()
+        }),
+        host.clone(),
+    )
+    .expect_err("the runtime must enforce the host allowlist before provider access");
+    assert!(denied_host.message.contains("network access denied"));
+    assert_eq!(host.calls.load(Ordering::Relaxed), 1);
+
+    let zero_timeout = execute_function_with_host_services_and_capabilities_and_policies(
+        &program,
+        "request",
+        Vec::new(),
+        None,
+        Some(&grants),
+        Some(&RuntimePolicy {
+            network: Some(NetworkPolicy {
+                allowed_hosts: vec!["api.example.test".into()],
+                timeout_ms: 0,
+                max_response_bytes: 8,
+            }),
+            ..policy.clone()
+        }),
+        host.clone(),
+    )
+    .expect_err("the runtime must reject unbounded network timeouts");
+    assert!(zero_timeout.message.contains("positive timeout"));
+    assert_eq!(host.calls.load(Ordering::Relaxed), 1);
+
+    let oversized = Arc::new(NetworkHost {
+        calls: AtomicUsize::new(0),
+        response_body: b"too large".to_vec(),
+        response_headers: Vec::new(),
+    });
+    let size_error = execute_function_with_host_services_and_capabilities_and_policies(
+        &program,
+        "request",
+        Vec::new(),
+        None,
+        Some(&grants),
+        Some(&policy),
+        oversized.clone(),
+    )
+    .expect_err("the runtime must enforce response limits for injected providers");
+    assert!(size_error.message.contains("exceeds the 8 byte limit"));
+    assert_eq!(oversized.calls.load(Ordering::Relaxed), 1);
+
+    let oversized_headers = Arc::new(NetworkHost {
+        calls: AtomicUsize::new(0),
+        response_body: b"ok".to_vec(),
+        response_headers: vec![("x-large".into(), "x".repeat(65_537))],
+    });
+    let header_error = execute_function_with_host_services_and_capabilities_and_policies(
+        &program,
+        "request",
+        Vec::new(),
+        None,
+        Some(&grants),
+        Some(&policy),
+        oversized_headers.clone(),
+    )
+    .expect_err("the runtime must enforce response-header limits on injected hosts");
+    assert!(header_error
+        .message
+        .contains("headers exceed the 65536 byte limit"));
+    assert_eq!(oversized_headers.calls.load(Ordering::Relaxed), 1);
+    assert_eq!(HOST_SERVICES_API_VERSION, 7);
 }
 
 #[test]
@@ -2129,6 +2897,7 @@ fn rejects_http_get_outside_network_allowlist() {
         mail: None,
         step_budget: None,
         max_stack_depth: None,
+        package_settings: None,
     };
     let error = execute_function_with_capabilities_and_policies(
         &program,
@@ -2188,6 +2957,7 @@ fn sends_typed_http_request_and_returns_structured_response() {
         mail: None,
         step_budget: None,
         max_stack_depth: None,
+        package_settings: None,
     };
     let response = execute_function_with_capabilities_and_policies(
         &program,
@@ -2263,6 +3033,7 @@ fn sends_and_decodes_typed_json_http_request() {
         mail: None,
         step_budget: None,
         max_stack_depth: None,
+        package_settings: None,
     };
     let customer = execute_function_with_capabilities_and_policies(
         &program,
@@ -2324,6 +3095,7 @@ fn returns_structured_http_result_for_http_errors() {
         mail: None,
         step_budget: None,
         max_stack_depth: None,
+        package_settings: None,
     };
     let result = execute_function_with_capabilities_and_policies(
         &program,
@@ -2371,6 +3143,7 @@ fn rejects_http_request_body_for_get() {
         mail: None,
         step_budget: None,
         max_stack_depth: None,
+        package_settings: None,
     };
     let error = execute_function_with_capabilities_and_policies(
         &program,
@@ -2528,6 +3301,54 @@ fn rejects_json_decode_unknown_record_field() {
 }
 
 #[test]
+fn shared_json_codec_handles_checked_record_definitions() {
+    let span = zelyra_ast::Span::default();
+    let record = zelyra_ast::RecordDef {
+        name: "CustomerDto".into(),
+        is_public: true,
+        is_class: false,
+        type_params: Vec::new(),
+        fields: vec![
+            zelyra_ast::RecordField {
+                name: "name".into(),
+                ty: Type::String,
+                span,
+            },
+            zelyra_ast::RecordField {
+                name: "id".into(),
+                ty: Type::Int,
+                span,
+            },
+        ],
+        span,
+    };
+    let value = Value::Object {
+        type_name: "CustomerDto".into(),
+        type_args: Vec::new(),
+        fields: std::collections::HashMap::from([
+            ("name".into(), Value::String("Ada".into())),
+            ("id".into(), Value::Int(7)),
+        ]),
+    };
+
+    let json =
+        encode_json_value_with_definitions(&value, std::slice::from_ref(&record), &[], &[], span)
+            .unwrap();
+    assert_eq!(json, r#"{"id":7,"name":"Ada"}"#);
+
+    let decoded = decode_json_value(
+        &json,
+        &Type::Named("CustomerDto".into()),
+        &[record],
+        &[],
+        &[],
+        span,
+    )
+    .unwrap();
+    assert_eq!(decoded, value);
+}
+
+#[test]
 fn rejects_json_decode_without_target_type() {
     let source = "fn decode(body: String) -> String { return json_decode(body) } fn main() { }";
     let program = parse(&lex(source).unwrap()).unwrap();
@@ -2567,6 +3388,7 @@ fn runs_allowlisted_process_without_a_shell() {
         mail: None,
         step_budget: None,
         max_stack_depth: None,
+        package_settings: None,
     };
     let output = execute_function_with_capabilities_and_policies(
         &program,
@@ -2578,6 +3400,319 @@ fn runs_allowlisted_process_without_a_shell() {
     )
     .unwrap();
     assert_eq!(output, Value::String("hello".into()));
+}
+
+#[test]
+fn process_execution_uses_injected_host_after_runtime_policy_checks() {
+    struct ProcessHost {
+        calls: std::sync::atomic::AtomicUsize,
+    }
+
+    impl HostServices for ProcessHost {
+        fn unix_time_millis(&self) -> Result<i64, String> {
+            Ok(0)
+        }
+
+        fn environment_variable(&self, _name: &str) -> Result<Option<String>, String> {
+            Ok(None)
+        }
+
+        fn fill_random(&self, output: &mut [u8]) -> Result<(), String> {
+            output.fill(0);
+            Ok(())
+        }
+
+        fn run_process(
+            &self,
+            command: &str,
+            arguments: &[String],
+            timeout_ms: u64,
+            max_output_bytes: usize,
+        ) -> Result<String, String> {
+            self.calls.fetch_add(1, Ordering::Relaxed);
+            assert_eq!(command, "approved-tool");
+            assert_eq!(arguments, ["--format", "json"]);
+            assert_eq!(timeout_ms, 250);
+            assert_eq!(max_output_bytes, 80);
+            Ok("host-output".into())
+        }
+    }
+
+    let program = parse(
+        &lex("fn run() -> String uses Process { return run_process(\"approved-tool\", [\"--format\", \"json\"]) } fn main() {}")
+            .unwrap(),
+    )
+    .unwrap();
+    check(&program).unwrap();
+    check_capabilities(&program).unwrap();
+    let host = Arc::new(ProcessHost {
+        calls: AtomicUsize::new(0),
+    });
+    let host_services: Arc<dyn HostServices> = host.clone();
+    let grants = HashSet::from(["Process".to_owned()]);
+    let policy = RuntimePolicy {
+        filesystem: None,
+        network: None,
+        process: Some(ProcessPolicy {
+            allowed_commands: vec!["approved-tool".into()],
+            timeout_ms: 250,
+            max_output_bytes: 80,
+        }),
+        mail: None,
+        step_budget: None,
+        max_stack_depth: None,
+        package_settings: None,
+    };
+
+    let denied = execute_function_with_host_services_and_capabilities_and_policies(
+        &program,
+        "run",
+        Vec::new(),
+        None,
+        Some(&HashSet::new()),
+        Some(&policy),
+        Arc::clone(&host_services),
+    )
+    .expect_err("capability denial must happen before the injected process host");
+    assert!(denied.message.contains("Process"));
+    assert_eq!(host.calls.load(Ordering::Relaxed), 0);
+
+    let result = execute_function_with_host_services_and_capabilities_and_policies(
+        &program,
+        "run",
+        Vec::new(),
+        None,
+        Some(&grants),
+        Some(&policy),
+        Arc::clone(&host_services),
+    )
+    .unwrap();
+    assert_eq!(result, Value::String("host-output".into()));
+    assert_eq!(host.calls.load(Ordering::Relaxed), 1);
+}
+
+#[test]
+fn filesystem_builtins_use_the_injected_host_after_capability_checks() {
+    struct VirtualFiles {
+        files: std::sync::Mutex<std::collections::HashMap<String, String>>,
+        calls: AtomicUsize,
+        canonicalizations: AtomicUsize,
+        metadata_calls: AtomicUsize,
+        directory_calls: AtomicUsize,
+        root: std::path::PathBuf,
+    }
+
+    impl HostServices for VirtualFiles {
+        fn unix_time_millis(&self) -> Result<i64, String> {
+            Ok(0)
+        }
+
+        fn environment_variable(&self, _name: &str) -> Result<Option<String>, String> {
+            Ok(None)
+        }
+
+        fn fill_random(&self, output: &mut [u8]) -> Result<(), String> {
+            output.fill(0);
+            Ok(())
+        }
+
+        fn canonicalize_path(
+            &self,
+            path: &std::path::Path,
+            allow_missing: bool,
+        ) -> Result<std::path::PathBuf, String> {
+            self.canonicalizations.fetch_add(1, Ordering::Relaxed);
+            SystemHostServices.canonicalize_path(path, allow_missing)
+        }
+
+        fn write_text(&self, path: &std::path::Path, content: &str) -> Result<(), String> {
+            self.calls.fetch_add(1, Ordering::Relaxed);
+            let path = path
+                .to_str()
+                .ok_or_else(|| "virtual path must be UTF-8".to_owned())?;
+            self.files
+                .lock()
+                .map_err(|_| "virtual filesystem lock poisoned".to_owned())?
+                .insert(path.to_owned(), content.to_owned());
+            Ok(())
+        }
+
+        fn read_text(&self, path: &std::path::Path) -> Result<String, String> {
+            self.calls.fetch_add(1, Ordering::Relaxed);
+            let path = path
+                .to_str()
+                .ok_or_else(|| "virtual path must be UTF-8".to_owned())?;
+            self.files
+                .lock()
+                .map_err(|_| "virtual filesystem lock poisoned".to_owned())?
+                .get(path)
+                .cloned()
+                .ok_or_else(|| format!("virtual file `{path}` does not exist"))
+        }
+
+        fn file_metadata(&self, path: &std::path::Path) -> Result<HostFileMetadata, String> {
+            self.metadata_calls.fetch_add(1, Ordering::Relaxed);
+            if path == self.root {
+                Ok(HostFileMetadata {
+                    is_file: false,
+                    is_directory: true,
+                    length: 0,
+                })
+            } else {
+                Ok(HostFileMetadata {
+                    is_file: true,
+                    is_directory: false,
+                    length: 23,
+                })
+            }
+        }
+
+        fn list_directory(&self, path: &std::path::Path) -> Result<Vec<String>, String> {
+            self.directory_calls.fetch_add(1, Ordering::Relaxed);
+            if path == self.root {
+                Ok(vec!["virtual.txt".into()])
+            } else {
+                Err("unknown virtual directory".into())
+            }
+        }
+    }
+
+    let program = parse(
+        &lex("fn roundtrip() -> String uses FileSystem { write_text(\"virtual.txt\", \"content\") return read_text(\"virtual.txt\") } fn read_path(path: String) -> String uses FileSystem { return read_text(path) } fn file_check(path: String) -> Bool uses FileSystem { return file_exists(path) } fn directory_check(path: String) -> Bool uses FileSystem { return dir_exists(path) } fn file_length(path: String) -> Result<Int, String> uses FileSystem { return file_size(path) } fn entries(path: String) -> String[] uses FileSystem { return list_dir(path) } fn main() {}")
+            .unwrap(),
+    )
+    .unwrap();
+    check(&program).unwrap();
+    check_capabilities(&program).unwrap();
+    let root = std::env::temp_dir().join(format!(
+        "zelyra-injected-filesystem-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir(&root).unwrap();
+    std::fs::write(root.join("virtual.txt"), "placeholder").unwrap();
+    let outside_name = format!("{}.outside", root.file_name().unwrap().to_string_lossy());
+    let outside = root.parent().unwrap().join(&outside_name);
+    std::fs::write(&outside, "outside").unwrap();
+    let policy = RuntimePolicy {
+        filesystem: Some(FileSystemPolicy {
+            base_dir: root.clone(),
+            read_roots: vec![root.clone()],
+            write_roots: vec![root.clone()],
+        }),
+        network: None,
+        process: None,
+        mail: None,
+        step_budget: None,
+        max_stack_depth: None,
+        package_settings: None,
+    };
+    let host = Arc::new(VirtualFiles {
+        files: std::sync::Mutex::new(std::collections::HashMap::new()),
+        calls: AtomicUsize::new(0),
+        canonicalizations: AtomicUsize::new(0),
+        metadata_calls: AtomicUsize::new(0),
+        directory_calls: AtomicUsize::new(0),
+        root: root.clone(),
+    });
+    let host_services: Arc<dyn HostServices> = host.clone();
+    let denied = execute_function_with_host_services_and_capabilities_and_policies(
+        &program,
+        "roundtrip",
+        Vec::new(),
+        None,
+        Some(&HashSet::new()),
+        Some(&policy),
+        Arc::clone(&host_services),
+    )
+    .expect_err("capability denial must precede virtual filesystem access");
+    assert!(denied.message.contains("FileSystem"));
+    assert_eq!(host.calls.load(Ordering::Relaxed), 0);
+
+    let grants = HashSet::from(["FileSystem".to_owned()]);
+    let result = execute_function_with_host_services_and_capabilities_and_policies(
+        &program,
+        "roundtrip",
+        Vec::new(),
+        None,
+        Some(&grants),
+        Some(&policy),
+        Arc::clone(&host_services),
+    )
+    .unwrap();
+    assert_eq!(result, Value::String("content".into()));
+    assert_eq!(host.calls.load(Ordering::Relaxed), 2);
+    assert_eq!(host.canonicalizations.load(Ordering::Relaxed), 2);
+
+    let file_exists = execute_function_with_host_services_and_capabilities_and_policies(
+        &program,
+        "file_check",
+        vec![Value::String("virtual.txt".into())],
+        None,
+        Some(&grants),
+        Some(&policy),
+        Arc::clone(&host_services),
+    )
+    .unwrap();
+    assert_eq!(file_exists, Value::Bool(true));
+    let directory_exists = execute_function_with_host_services_and_capabilities_and_policies(
+        &program,
+        "directory_check",
+        vec![Value::String(".".into())],
+        None,
+        Some(&grants),
+        Some(&policy),
+        Arc::clone(&host_services),
+    )
+    .unwrap();
+    assert_eq!(directory_exists, Value::Bool(true));
+    let file_length = execute_function_with_host_services_and_capabilities_and_policies(
+        &program,
+        "file_length",
+        vec![Value::String("virtual.txt".into())],
+        None,
+        Some(&grants),
+        Some(&policy),
+        Arc::clone(&host_services),
+    )
+    .unwrap();
+    assert_eq!(file_length, Value::Result(Ok(Box::new(Value::Int(23)))));
+    let entries = execute_function_with_host_services_and_capabilities_and_policies(
+        &program,
+        "entries",
+        vec![Value::String(".".into())],
+        None,
+        Some(&grants),
+        Some(&policy),
+        Arc::clone(&host_services),
+    )
+    .unwrap();
+    assert_eq!(
+        entries,
+        Value::Array(vec![Value::String("virtual.txt".into())])
+    );
+    assert_eq!(host.metadata_calls.load(Ordering::Relaxed), 3);
+    assert_eq!(host.directory_calls.load(Ordering::Relaxed), 1);
+
+    let denied_path = execute_function_with_host_services_and_capabilities_and_policies(
+        &program,
+        "read_path",
+        vec![Value::String(format!("../{outside_name}"))],
+        None,
+        Some(&grants),
+        Some(&policy),
+        Arc::clone(&host_services),
+    )
+    .expect_err("the runtime must reject a canonical path outside its configured roots");
+    assert!(denied_path.message.contains("outside the configured roots"));
+    assert_eq!(host.calls.load(Ordering::Relaxed), 2);
+    assert_eq!(host.canonicalizations.load(Ordering::Relaxed), 7);
+    std::fs::remove_file(root.join("virtual.txt")).unwrap();
+    std::fs::remove_dir(root).unwrap();
+    std::fs::remove_file(outside).unwrap();
 }
 
 #[test]
@@ -2609,6 +3744,7 @@ fn rejects_processes_outside_allowlist_and_output_limit() {
         mail: None,
         step_budget: None,
         max_stack_depth: None,
+        package_settings: None,
     };
     let error = execute_function_with_capabilities_and_policies(
         &program,
@@ -2684,6 +3820,132 @@ fn requires_clock_and_environment_capabilities_for_host_apis() {
 }
 
 #[test]
+fn injected_host_services_drive_clock_environment_and_random_builtins() {
+    struct FixedHost {
+        calls: AtomicUsize,
+    }
+
+    impl HostServices for FixedHost {
+        fn unix_time_millis(&self) -> Result<i64, String> {
+            self.calls.fetch_add(1, Ordering::Relaxed);
+            Ok(1_700_000_000_123)
+        }
+
+        fn environment_variable(&self, name: &str) -> Result<Option<String>, String> {
+            self.calls.fetch_add(1, Ordering::Relaxed);
+            Ok((name == "ZELYRA_TEST_HOST").then(|| "host-value".to_owned()))
+        }
+
+        fn fill_random(&self, output: &mut [u8]) -> Result<(), String> {
+            self.calls.fetch_add(1, Ordering::Relaxed);
+            output.fill(7);
+            Ok(())
+        }
+    }
+
+    let source = "fn clock_value() -> Timestamp uses Clock { return now() }\
+        fn environment_value() -> Option<String> uses Environment { return env(\"ZELYRA_TEST_HOST\") }\
+        fn random_value() -> Int uses Random { return random_int(10, 10) }\
+        fn random_uuid() -> String uses Random { return uuid_v4() }\
+        fn main() {}";
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap();
+    check_capabilities(&program).unwrap();
+
+    let host = Arc::new(FixedHost {
+        calls: AtomicUsize::new(0),
+    });
+    let host_services: Arc<dyn HostServices> = host.clone();
+    let denied = execute_function_with_host_services_and_capabilities_and_policies(
+        &program,
+        "clock_value",
+        Vec::new(),
+        None,
+        Some(&HashSet::new()),
+        None,
+        Arc::clone(&host_services),
+    )
+    .expect_err("runtime grants must be checked before calling an injected provider");
+    assert!(denied.message.contains("Clock"), "{}", denied.message);
+    assert_eq!(host.calls.load(Ordering::Relaxed), 0);
+
+    let grants = HashSet::from([
+        "Clock".to_owned(),
+        "Environment".to_owned(),
+        "Random".to_owned(),
+    ]);
+    let call = |name| {
+        execute_function_with_host_services_and_capabilities_and_policies(
+            &program,
+            name,
+            Vec::new(),
+            None,
+            Some(&grants),
+            None,
+            Arc::clone(&host_services),
+        )
+        .unwrap()
+    };
+    assert!(matches!(
+        call("clock_value"),
+        Value::Timestamp(1_700_000_000_123)
+    ));
+    assert!(matches!(
+        call("environment_value"),
+        Value::Option(Some(value)) if matches!(*value, Value::String(ref value) if value == "host-value")
+    ));
+    assert!(matches!(call("random_value"), Value::Int(10)));
+    assert!(matches!(
+        call("random_uuid"),
+        Value::String(value) if value == "07070707-0707-4707-8707-070707070707"
+    ));
+    assert_eq!(host.calls.load(Ordering::Relaxed), 4);
+
+    let parallel_source = "fn clock_value() -> Timestamp uses Clock { return now() }\
+        fn main() uses Clock { parallel { observed = await clock_value() } print(observed) }";
+    let parallel_program = parse(&lex(parallel_source).unwrap()).unwrap();
+    check(&parallel_program).unwrap();
+    check_capabilities(&parallel_program).unwrap();
+    let output = execute_with_host_services(
+        &parallel_program,
+        Arc::clone(&host_services),
+        Some(&grants),
+        None,
+    )
+    .unwrap();
+    assert_eq!(output, ["1700000000123"]);
+    assert_eq!(host.calls.load(Ordering::Relaxed), 5);
+
+    struct InvalidClockHost;
+    impl HostServices for InvalidClockHost {
+        fn unix_time_millis(&self) -> Result<i64, String> {
+            Ok(i64::MAX)
+        }
+        fn environment_variable(&self, _name: &str) -> Result<Option<String>, String> {
+            Ok(None)
+        }
+        fn fill_random(&self, output: &mut [u8]) -> Result<(), String> {
+            output.fill(0);
+            Ok(())
+        }
+    }
+    let invalid_time = execute_function_with_host_services_and_capabilities_and_policies(
+        &program,
+        "clock_value",
+        Vec::new(),
+        None,
+        Some(&grants),
+        None,
+        Arc::new(InvalidClockHost),
+    )
+    .expect_err("an embedding cannot introduce a Timestamp outside the language range");
+    assert!(invalid_time
+        .message
+        .contains("outside years 0001 through 9999"));
+    assert_eq!(HOST_SERVICES_API_VERSION, 7);
+}
+
+#[test]
 fn read_console_is_typed_and_requires_its_capability() {
     let program = parse(
             &lex(
@@ -2714,6 +3976,41 @@ fn read_console_is_typed_and_requires_its_capability() {
         .unwrap_err()
         .iter()
         .any(|error| error.message.contains("expected `String`, found `Int`")));
+
+    struct ConsoleHost(AtomicUsize);
+    impl HostServices for ConsoleHost {
+        fn unix_time_millis(&self) -> Result<i64, String> {
+            Ok(0)
+        }
+        fn environment_variable(&self, _name: &str) -> Result<Option<String>, String> {
+            Ok(None)
+        }
+        fn fill_random(&self, output: &mut [u8]) -> Result<(), String> {
+            output.fill(0);
+            Ok(())
+        }
+        fn read_console_line(&self, prompt: &str) -> Result<Option<String>, String> {
+            assert_eq!(prompt, "Date: ");
+            self.0.fetch_add(1, Ordering::Relaxed);
+            Ok(Some("2026-10-16".into()))
+        }
+    }
+    let host = Arc::new(ConsoleHost(AtomicUsize::new(0)));
+    let grants = HashSet::from(["Console".to_owned()]);
+    let output = execute_with_host_services(
+        &program,
+        Arc::clone(&host) as Arc<dyn HostServices>,
+        Some(&grants),
+        None,
+    )
+    .unwrap();
+    assert_eq!(output, ["2026-10-16"]);
+    assert_eq!(host.0.load(Ordering::Relaxed), 1);
+
+    let denied = execute_with_host_services(&program, host.clone(), Some(&HashSet::new()), None)
+        .expect_err("the runtime must deny console input before provider access");
+    assert!(denied.message.contains("Console"));
+    assert_eq!(host.0.load(Ordering::Relaxed), 1);
 }
 
 #[test]
@@ -2803,6 +4100,111 @@ fn main() { }
 }
 
 #[test]
+fn mail_queue_creates_a_validated_outbox_row_inside_one_database_batch() {
+    struct OutboxHost {
+        batches: std::sync::Mutex<Vec<(Vec<zelyra_database::Query>, bool)>>,
+        calls: AtomicUsize,
+    }
+
+    impl HostServices for OutboxHost {
+        fn unix_time_millis(&self) -> Result<i64, String> {
+            Ok(0)
+        }
+
+        fn environment_variable(&self, _name: &str) -> Result<Option<String>, String> {
+            Ok(None)
+        }
+
+        fn fill_random(&self, output: &mut [u8]) -> Result<(), String> {
+            output.fill(0);
+            Ok(())
+        }
+
+        fn execute_database_batch(
+            &self,
+            database_url: &str,
+            queries: &[zelyra_database::Query],
+            transaction: bool,
+        ) -> Result<Vec<zelyra_database::QueryResult>, String> {
+            assert!(supports_mail_outbox_database(database_url));
+            self.calls.fetch_add(1, Ordering::Relaxed);
+            self.batches
+                .lock()
+                .map_err(|_| "outbox test lock poisoned".to_owned())?
+                .push((queries.to_vec(), transaction));
+            Ok(vec![zelyra_database::QueryResult::default(); queries.len()])
+        }
+    }
+
+    let source = r#"
+database main { engine: mariadb database: "outbox_test" }
+table accounts { id: Id primary auto balance: Int required }
+fn enqueue() uses Email, Database(write) {
+    transaction {
+        mail_queue("customer@example.test", "Invoice ready", "Your invoice is ready.")
+        sql { UPDATE accounts SET balance = 1 WHERE id = 1 }
+    }
+}
+fn invalid_recipient() uses Email, Database(write) {
+    transaction { mail_queue("not-an-email", "Invoice ready", "Your invoice is ready.") }
+}
+fn main() {}
+"#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap();
+    check_capabilities(&program).unwrap();
+    let host = Arc::new(OutboxHost {
+        batches: std::sync::Mutex::new(Vec::new()),
+        calls: AtomicUsize::new(0),
+    });
+    let host_services: Arc<dyn HostServices> = host.clone();
+    let grants = HashSet::from(["Email".to_owned(), "Database(write)".to_owned()]);
+    let database_url = "mariadb://user:secret@127.0.0.1:3306/outbox_test";
+
+    execute_function_with_host_services_and_capabilities_and_policies(
+        &program,
+        "enqueue",
+        Vec::new(),
+        Some(database_url),
+        Some(&grants),
+        None,
+        Arc::clone(&host_services),
+    )
+    .unwrap();
+    assert_eq!(host.calls.load(Ordering::Relaxed), 1);
+    let batches = host.batches.lock().unwrap();
+    assert_eq!(batches.len(), 1);
+    assert!(batches[0].1);
+    assert_eq!(batches[0].0.len(), 2);
+    assert!(batches[0].0[0].sql.contains("INSERT INTO `_zelyra_outbox`"));
+    assert!(matches!(
+        batches[0].0[0].params[0].1,
+        zelyra_database::QueryValue::String(ref event_id)
+            if event_id == "00000000000000000000000000000000"
+    ));
+    assert!(matches!(
+        batches[0].0[0].params[2].1,
+        zelyra_database::QueryValue::String(ref payload)
+            if payload.contains("customer@example.test")
+                && payload.contains("Invoice ready")
+    ));
+    drop(batches);
+
+    let invalid = execute_function_with_host_services_and_capabilities_and_policies(
+        &program,
+        "invalid_recipient",
+        Vec::new(),
+        Some(database_url),
+        Some(&grants),
+        None,
+        host_services,
+    )
+    .unwrap_err();
+    assert!(invalid.message.contains("invalid message"));
+    assert_eq!(host.calls.load(Ordering::Relaxed), 1);
+}
+
+#[test]
 fn mail_delivery_failure_returns_redacted_result() {
     let program = parse(
         &lex("fn deliver(id: String, payload: String) -> Result<Unit, String> uses Email { return mail_deliver(id, payload) } fn main() { }")
@@ -2830,17 +4232,130 @@ fn mail_delivery_failure_returns_redacted_result() {
 }
 
 #[test]
+fn mail_delivery_uses_host_only_after_capability_and_smtp_allowlist_checks() {
+    struct MailHost(AtomicUsize);
+    impl HostServices for MailHost {
+        fn unix_time_millis(&self) -> Result<i64, String> {
+            Ok(0)
+        }
+        fn environment_variable(&self, _name: &str) -> Result<Option<String>, String> {
+            Ok(None)
+        }
+        fn fill_random(&self, output: &mut [u8]) -> Result<(), String> {
+            output.fill(0);
+            Ok(())
+        }
+        fn deliver_outbox_message(
+            &self,
+            event_id: &str,
+            payload_json: &str,
+            mail: &MailPolicy,
+            network: &NetworkPolicy,
+        ) -> Result<(), String> {
+            assert_eq!(event_id, "event-01");
+            assert!(payload_json.contains("a@example.test"));
+            assert_eq!(mail.host.as_deref(), Some("smtp.example.test"));
+            assert!(network
+                .allowed_hosts
+                .iter()
+                .any(|host| host == "smtp.example.test"));
+            self.0.fetch_add(1, Ordering::Relaxed);
+            Ok(())
+        }
+    }
+
+    let program = parse(
+        &lex("fn deliver(id: String, payload: String) -> Result<Unit, String> uses Email { return mail_deliver(id, payload) } fn main() {}")
+            .unwrap(),
+    )
+    .unwrap();
+    check(&program).unwrap();
+    check_capabilities(&program).unwrap();
+    let grants = HashSet::from(["Email".to_owned()]);
+    let mut mail_policy = MailPolicy::default();
+    mail_policy.host = Some("smtp.example.test".into());
+    mail_policy.from = Some("billing@example.test".into());
+    let policy = RuntimePolicy {
+        filesystem: None,
+        network: Some(NetworkPolicy {
+            allowed_hosts: vec!["smtp.example.test".into()],
+            timeout_ms: 1_000,
+            max_response_bytes: 128,
+        }),
+        process: None,
+        mail: Some(mail_policy),
+        step_budget: None,
+        max_stack_depth: None,
+        package_settings: None,
+    };
+    let host = Arc::new(MailHost(AtomicUsize::new(0)));
+    let arguments = || {
+        vec![
+            Value::String("event-01".into()),
+            Value::String(r#"{"to":"a@example.test","subject":"Hi","text":"Body"}"#.into()),
+        ]
+    };
+    let delivered = execute_function_with_host_services_and_capabilities_and_policies(
+        &program,
+        "deliver",
+        arguments(),
+        None,
+        Some(&grants),
+        Some(&policy),
+        host.clone(),
+    )
+    .unwrap();
+    assert!(matches!(delivered, Value::Result(Ok(value)) if matches!(*value, Value::Unit)));
+    assert_eq!(host.0.load(Ordering::Relaxed), 1);
+
+    let denied_smtp = execute_function_with_host_services_and_capabilities_and_policies(
+        &program,
+        "deliver",
+        arguments(),
+        None,
+        Some(&grants),
+        Some(&RuntimePolicy {
+            network: Some(NetworkPolicy {
+                allowed_hosts: vec!["other.example.test".into()],
+                timeout_ms: 1_000,
+                max_response_bytes: 128,
+            }),
+            ..policy.clone()
+        }),
+        host.clone(),
+    )
+    .unwrap();
+    assert!(
+        matches!(denied_smtp, Value::Result(Err(message)) if matches!(*message, Value::String(ref message) if message.contains("not allowed")))
+    );
+    assert_eq!(host.0.load(Ordering::Relaxed), 1);
+
+    let denied_capability = execute_function_with_host_services_and_capabilities_and_policies(
+        &program,
+        "deliver",
+        arguments(),
+        None,
+        Some(&HashSet::new()),
+        Some(&policy),
+        host.clone(),
+    )
+    .expect_err("the Email capability must be checked before host mail delivery");
+    assert!(denied_capability.message.contains("Email"));
+    assert_eq!(host.0.load(Ordering::Relaxed), 1);
+}
+
+#[test]
 fn mail_outbox_database_support_is_explicit() {
-    assert!(supports_mariadb_outbox(
+    assert!(supports_mail_outbox_database(
         "mariadb://user:secret@127.0.0.1:3306/app"
     ));
-    assert!(supports_mariadb_outbox(
+    assert!(supports_mail_outbox_database(
         "mysql://user:secret@127.0.0.1:3306/app"
     ));
-    assert!(!supports_mariadb_outbox(
+    assert!(!supports_mail_outbox_database(
         "postgres://user:secret@127.0.0.1:5432/app"
     ));
-    assert!(!supports_mariadb_outbox("sqlite:///tmp/app.db"));
+    assert!(!supports_mail_outbox_database("sqlite:///tmp/app.db"));
 }
 
 #[test]
@@ -4123,6 +5638,10 @@ fn main() {
     // Strings
     print(text_to_lower("ZELYRA"))
     print(text_to_upper("sicher"))
+    print(text_ucfirst("status"))
+    print(text_ucfirst("Über"))
+    print(text_ucfirst("7days"))
+    print(text_ucfirst(""))
     print(text_starts_with("test.zyl", "test"))
     print(text_ends_with("test.zyl", ".zyl"))
     print(text_replace("Hallo Welt", "Welt", "Zelyra"))
@@ -4159,6 +5678,10 @@ fn main() {
             "10",
             "zelyra",
             "SICHER",
+            "Status",
+            "Über",
+            "7days",
+            "",
             "true",
             "true",
             "Hallo Zelyra",

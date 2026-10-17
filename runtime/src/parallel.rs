@@ -30,6 +30,12 @@ impl Interpreter<'_> {
             }
             branches.push((name.as_str(), inner.as_ref(), value.span));
         }
+        if branches.len() > MAX_PARALLEL_BRANCHES {
+            return Err(self.runtime_error(
+                span,
+                format!("parallel block exceeds the maximum of {MAX_PARALLEL_BRANCHES} branches"),
+            ));
+        }
         let mut results = Vec::new();
         let mut first_error = None;
         std::thread::scope(|scope| {
@@ -42,18 +48,20 @@ impl Interpreter<'_> {
                         output: Vec::new(),
                         next_class_object_id: Arc::clone(&self.next_class_object_id),
                         parallel_worker: true,
-                        steps: Arc::clone(&self.steps),
-                        step_budget: self.step_budget,
+                        step_budget: self.step_budget.clone(),
                         call_depth_limit: self.call_depth_limit,
                         call_depth: 0,
                         database_url: self.database_url.clone(),
                         storage_schema: self.storage_schema.clone(),
                         storage_checked: self.storage_checked,
+                        scoped_tables: self.scoped_tables.clone(),
                         granted_capabilities: self.granted_capabilities.clone(),
                         filesystem_policy: self.filesystem_policy.clone(),
                         network_policy: self.network_policy.clone(),
                         process_policy: self.process_policy.clone(),
                         mail_policy: self.mail_policy.clone(),
+                        package_settings: self.package_settings.clone(),
+                        host_services: Arc::clone(&self.host_services),
                         record_definitions: self.record_definitions.clone(),
                         sql_record_definitions: self.sql_record_definitions.clone(),
                         type_aliases: self.type_aliases.clone(),
@@ -62,7 +70,7 @@ impl Interpreter<'_> {
                         active_type_substitutions: self.active_type_substitutions.clone(),
                     };
                     let mut child_env = env.clone();
-                    let stack_size = runtime_stack_size(child.call_depth_limit);
+                    let stack_size = execution_api::runtime_stack_size(child.call_depth_limit);
                     std::thread::Builder::new()
                         .name("zelyra-parallel".into())
                         .stack_size(stack_size)

@@ -33,6 +33,23 @@ fn run(directory: &Path, arguments: &[&str]) -> std::process::Output {
         .unwrap()
 }
 
+fn run_with_environment(
+    directory: &Path,
+    arguments: &[&str],
+    key: &str,
+    value: Option<&str>,
+) -> std::process::Output {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_zelyra"));
+    command
+        .current_dir(directory)
+        .args(arguments)
+        .env_remove(key);
+    if let Some(value) = value {
+        command.env(key, value);
+    }
+    command.output().unwrap()
+}
+
 #[test]
 fn verify_json_uses_the_imported_module_source_for_contract_locations() {
     let directory = project(&[
@@ -60,6 +77,830 @@ fn verify_json_uses_the_imported_module_source_for_contract_locations() {
         .unwrap();
     assert_eq!(proven["location"]["file"], "src/contracts.zyl");
     assert_eq!(proven["location"]["start"]["line"], 3);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn local_packages_are_version_checked_locked_and_importable_offline() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"pkg:math\" as math\nfn main() { print(math::add(2, 3)) }\n",
+        ),
+        (
+            "zelyra.toml",
+            "[package]\nname = \"invoice_app\"\nversion = \"1.0.0\"\nentry = \"main.zyl\"\n\n[dependencies.math]\npath = \"packages/math\"\nversion = \"^1.2\"\n",
+        ),
+        (
+            "packages/math/zelyra.toml",
+            "[package]\nname = \"math\"\nversion = \"1.2.3\"\nentry = \"src/lib.zyl\"\n",
+        ),
+        (
+            "packages/math/src/lib.zyl",
+            "import \"src/arithmetic.zyl\" as arithmetic\npub fn add(left: Int, right: Int) -> Int { return arithmetic::sum(left, right) }\n",
+        ),
+        (
+            "packages/math/src/arithmetic.zyl",
+            "pub fn sum(left: Int, right: Int) -> Int { return left + right }\n",
+        ),
+    ]);
+
+    let lock = run(&directory, &["package", "lock", "main.zyl"]);
+    assert!(
+        lock.status.success(),
+        "{}",
+        String::from_utf8_lossy(&lock.stderr)
+    );
+    let lock_contents = fs::read_to_string(directory.join("zelyra.lock")).unwrap();
+    assert!(lock_contents.contains("name = \"math\""));
+    assert!(lock_contents.contains("checksum = \"sha256:"));
+
+    let check = run(&directory, &["check", "main.zyl"]);
+    assert!(
+        check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&check.stderr)
+    );
+    let executed = run(&directory, &["run", "main.zyl"]);
+    assert!(
+        executed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&executed.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&executed.stdout).trim(), "5");
+    let bytecode = run(&directory, &["run", "main.zyl", "--backend", "bytecode"]);
+    assert!(
+        bytecode.status.success(),
+        "{}",
+        String::from_utf8_lossy(&bytecode.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&bytecode.stdout).trim(), "5");
+
+    fs::write(
+        directory.join("packages/math/src/arithmetic.zyl"),
+        "pub fn sum(left: Int, right: Int) -> Int { return left + right + 2 }\n",
+    )
+    .unwrap();
+    let stale = run(&directory, &["check", "main.zyl"]);
+    assert!(!stale.status.success());
+    assert!(String::from_utf8_lossy(&stale.stderr).contains("E-PKG-002"));
+    let stale_run = run(&directory, &["run", "main.zyl"]);
+    assert!(!stale_run.status.success());
+    assert!(String::from_utf8_lossy(&stale_run.stderr).contains("E-PKG-002"));
+    let updated = run(&directory, &["package", "lock", "main.zyl", "--update"]);
+    assert!(
+        updated.status.success(),
+        "{}",
+        String::from_utf8_lossy(&updated.stderr)
+    );
+    let checked_lock = run(&directory, &["package", "lock", "main.zyl", "--check"]);
+    assert!(checked_lock.status.success());
+    let refreshed_check = run(&directory, &["check", "main.zyl"]);
+    assert!(
+        refreshed_check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&refreshed_check.stderr)
+    );
+    let refreshed_run = run(&directory, &["run", "main.zyl"]);
+    assert!(
+        refreshed_run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&refreshed_run.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&refreshed_run.stdout).trim(), "7");
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn named_function_values_cross_package_boundaries_on_ast_and_bytecode_backends() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"pkg:math\" as math\nfn double(value: Int) -> Int { return value * 2 }\nfn main() { print(math::sum_mapped([1, 2, 3], &double)) }\n",
+        ),
+        (
+            "zelyra.toml",
+            "[package]\nname = \"callback_app\"\nversion = \"1.0.0\"\nentry = \"main.zyl\"\n\n[dependencies.math]\npath = \"packages/math\"\nversion = \"^1.2\"\n",
+        ),
+        (
+            "packages/math/zelyra.toml",
+            "[package]\nname = \"math\"\nversion = \"1.2.3\"\nentry = \"src/lib.zyl\"\n",
+        ),
+        (
+            "packages/math/src/lib.zyl",
+            "pub fn sum_mapped(values: Int[], callback: Function<(Int) -> Int>) -> Int {\n    mapped = values |> map(callback)\n    return mapped |> reduce(0, |sum, value| sum + value)\n}\n",
+        ),
+    ]);
+
+    let locked = run(&directory, &["package", "lock", "main.zyl"]);
+    assert!(
+        locked.status.success(),
+        "{}",
+        String::from_utf8_lossy(&locked.stderr)
+    );
+    let checked = run(&directory, &["check", "main.zyl"]);
+    assert!(
+        checked.status.success(),
+        "{}",
+        String::from_utf8_lossy(&checked.stderr)
+    );
+    for args in [
+        vec!["run", "main.zyl"],
+        vec!["run", "main.zyl", "--backend", "bytecode"],
+    ] {
+        let output = run(&directory, &args);
+        assert!(
+            output.status.success(),
+            "command {args:?} failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "12");
+    }
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn imported_modules_contribute_namespaced_commands_and_schedules() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/tasks.zyl\" as tasks\nfn main() { }\n",
+        ),
+        (
+            "src/tasks.zyl",
+            "command refresh { handler: refresh_data }\nschedule refresh_hourly { command: refresh cron: \"0 * * * *\" }\nfn refresh_data() { print(\"refreshed\") }\n",
+        ),
+    ]);
+    let check = run(&directory, &["check", "main.zyl"]);
+    assert!(
+        check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&check.stderr)
+    );
+    let commands = run(&directory, &["task", "list", "main.zyl", "--json"]);
+    assert!(
+        commands.status.success(),
+        "{}",
+        String::from_utf8_lossy(&commands.stderr)
+    );
+    let command_json: Value = serde_json::from_slice(&commands.stdout).unwrap();
+    assert_eq!(command_json["commands"].as_array().unwrap().len(), 1);
+    let namespaced_command = command_json["commands"][0]["name"].as_str().unwrap();
+    assert!(namespaced_command.ends_with("::refresh"));
+    let task_run = run(&directory, &["task", "run", "main.zyl", namespaced_command]);
+    assert!(
+        task_run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&task_run.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&task_run.stdout).trim(),
+        "refreshed"
+    );
+    let schedules = run(&directory, &["schedule", "list", "main.zyl", "--json"]);
+    assert!(
+        schedules.status.success(),
+        "{}",
+        String::from_utf8_lossy(&schedules.stderr)
+    );
+    let schedule_json: Value = serde_json::from_slice(&schedules.stdout).unwrap();
+    assert_eq!(schedule_json["schedules"].as_array().unwrap().len(), 1);
+    assert!(schedule_json["schedules"][0]["command"]
+        .as_str()
+        .unwrap()
+        .ends_with("::refresh"));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn task_arguments_are_checked_and_schedule_export_is_reviewable() {
+    let directory = project(&[(
+        "main.zyl",
+        r#"command greet {
+    handler: greet
+    description: "Greet a user"
+}
+command heartbeat { handler: heartbeat }
+schedule hourly_heartbeat {
+    command: heartbeat
+    cron: "0 * * * *"
+    timezone: "Europe/Berlin"
+}
+fn greet(name: String) { print(name) }
+fn heartbeat() { print("alive") }
+fn main() { }
+"#,
+    )]);
+
+    let listed = run(&directory, &["task", "list", "main.zyl", "--json"]);
+    assert!(
+        listed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&listed.stderr)
+    );
+    let listed: Value = serde_json::from_slice(&listed.stdout).unwrap();
+    let greet = listed["commands"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|command| command["name"] == "greet")
+        .unwrap();
+    assert_eq!(greet["description"], "Greet a user");
+    assert_eq!(greet["parameters"][0]["name"], "name");
+    assert_eq!(greet["parameters"][0]["type"], "String");
+
+    let executed = run(
+        &directory,
+        &["task", "run", "main.zyl", "greet", "--args", r#"["Ada"]"#],
+    );
+    assert!(
+        executed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&executed.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&executed.stdout).trim(), "Ada");
+
+    let wrong_type = run(
+        &directory,
+        &["task", "run", "main.zyl", "greet", "--args", "[42]"],
+    );
+    assert!(!wrong_type.status.success());
+    assert!(String::from_utf8_lossy(&wrong_type.stderr).contains("E-CLI-001"));
+
+    let preview = run(
+        &directory,
+        &["schedule", "export", "main.zyl", "--format", "cron"],
+    );
+    assert!(
+        preview.status.success(),
+        "{}",
+        String::from_utf8_lossy(&preview.stderr)
+    );
+    let preview = String::from_utf8_lossy(&preview.stdout);
+    assert!(preview.contains("CRON_TZ=Europe/Berlin"));
+    assert!(preview.contains("0 * * * *"));
+    assert!(preview.contains("--entry 'heartbeat'"));
+
+    fs::create_dir_all(directory.join("deploy")).unwrap();
+    let written = run(
+        &directory,
+        &[
+            "schedule",
+            "export",
+            "main.zyl",
+            "--format",
+            "cron",
+            "--output",
+            "deploy/zelyra.cron",
+        ],
+    );
+    assert!(
+        written.status.success(),
+        "{}",
+        String::from_utf8_lossy(&written.stderr)
+    );
+    assert!(directory.join("deploy/zelyra.cron").is_file());
+
+    let traversal = run(
+        &directory,
+        &[
+            "schedule",
+            "export",
+            "main.zyl",
+            "--format",
+            "cron",
+            "--output",
+            "../outside.cron",
+        ],
+    );
+    assert!(!traversal.status.success());
+    assert!(String::from_utf8_lossy(&traversal.stderr).contains("E-TASK-004"));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn local_package_graph_supports_two_versions_of_one_package_identity() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"pkg:legacy_api\" as legacy_api\nimport \"pkg:modern_api\" as modern_api\nfn main() { print(legacy_api::value() + modern_api::value()) }\n",
+        ),
+        (
+            "zelyra.toml",
+            "[package]\nname = \"multi_version_app\"\nversion = \"1.0.0\"\nentry = \"main.zyl\"\n\n[dependencies.legacy_api]\npath = \"packages/api-v1\"\nversion = \"^1.0\"\n\n[dependencies.modern_api]\npath = \"packages/api-v2\"\nversion = \"^2.0\"\n",
+        ),
+        (
+            "packages/api-v1/zelyra.toml",
+            "[package]\nname = \"legacy_api\"\nversion = \"1.0.0\"\nentry = \"src/lib.zyl\"\n\n[dependencies.math]\npath = \"../math-v1\"\nversion = \"^1.0\"\n",
+        ),
+        (
+            "packages/api-v1/src/lib.zyl",
+            "import \"pkg:math\" as math\npub fn value() -> Int { return math::value() }\n",
+        ),
+        (
+            "packages/api-v2/zelyra.toml",
+            "[package]\nname = \"modern_api\"\nversion = \"2.0.0\"\nentry = \"src/lib.zyl\"\n\n[dependencies.math]\npath = \"../math-v2\"\nversion = \"^2.0\"\n",
+        ),
+        (
+            "packages/api-v2/src/lib.zyl",
+            "import \"pkg:math\" as math\npub fn value() -> Int { return math::value() }\n",
+        ),
+        (
+            "packages/math-v1/zelyra.toml",
+            "[package]\nname = \"math\"\nversion = \"1.4.2\"\nentry = \"src/lib.zyl\"\n",
+        ),
+        (
+            "packages/math-v1/src/lib.zyl",
+            "pub fn value() -> Int { return 20 }\n",
+        ),
+        (
+            "packages/math-v2/zelyra.toml",
+            "[package]\nname = \"math\"\nversion = \"2.1.0\"\nentry = \"src/lib.zyl\"\n",
+        ),
+        (
+            "packages/math-v2/src/lib.zyl",
+            "pub fn value() -> Int { return 22 }\n",
+        ),
+    ]);
+
+    let lock = run(&directory, &["package", "lock", "main.zyl"]);
+    assert!(
+        lock.status.success(),
+        "{}",
+        String::from_utf8_lossy(&lock.stderr)
+    );
+    let lock_contents = fs::read_to_string(directory.join("zelyra.lock")).unwrap();
+    assert!(
+        lock_contents.contains("name = \"math\"\nversion = \"1.4.2\"\npath = \"packages/math-v1\"")
+    );
+    assert!(
+        lock_contents.contains("name = \"math\"\nversion = \"2.1.0\"\npath = \"packages/math-v2\"")
+    );
+
+    let check = run(&directory, &["check", "main.zyl"]);
+    assert!(
+        check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&check.stderr)
+    );
+    for backend_args in [
+        vec!["run", "main.zyl"],
+        vec!["run", "main.zyl", "--backend", "bytecode"],
+    ] {
+        let execution = run(&directory, &backend_args);
+        assert!(
+            execution.status.success(),
+            "{}",
+            String::from_utf8_lossy(&execution.stderr)
+        );
+        assert_eq!(String::from_utf8_lossy(&execution.stdout).trim(), "42");
+    }
+
+    let bundle = directory.with_extension("multi-version-bundle");
+    let bundle_arg = bundle.to_string_lossy().into_owned();
+    let bundled = run(
+        &directory,
+        &[
+            "module",
+            "bundle",
+            "main.zyl",
+            "main.zyl",
+            "--output",
+            &bundle_arg,
+        ],
+    );
+    assert!(
+        bundled.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&bundled.stdout),
+        String::from_utf8_lossy(&bundled.stderr)
+    );
+    let bundled_lock = fs::read_to_string(bundle.join("zelyra.lock")).unwrap();
+    assert!(bundled_lock.contains("version = \"1.4.2\""));
+    assert!(bundled_lock.contains("version = \"2.1.0\""));
+    let bundled_check = run(&bundle, &["check", "main.zyl"]);
+    assert!(
+        bundled_check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&bundled_check.stderr)
+    );
+    let bundled_execution = run(&bundle, &["run", "main.zyl"]);
+    assert!(bundled_execution.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&bundled_execution.stdout).trim(),
+        "42"
+    );
+
+    fs::remove_dir_all(directory).unwrap();
+    fs::remove_dir_all(bundle).unwrap();
+}
+
+#[test]
+fn package_effect_ceiling_is_locked_and_does_not_grant_runtime_capabilities() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"pkg:network_client\" as client\nfn main() uses Network { client::fetch() }\n",
+        ),
+        (
+            "zelyra.toml",
+            "[package]\nname = \"effect_app\"\nversion = \"1.0.0\"\nentry = \"main.zyl\"\n\n[dependencies.network_client]\npath = \"packages/client\"\nversion = \"^1.0\"\n\n[capabilities]\nnetwork = true\n",
+        ),
+        (
+            "packages/client/zelyra.toml",
+            "[package]\nname = \"network_client\"\nversion = \"1.0.0\"\nentry = \"src/lib.zyl\"\neffects = [\"Network\"]\n",
+        ),
+        (
+            "packages/client/src/lib.zyl",
+            "pub fn fetch() uses Network {}\n",
+        ),
+    ]);
+
+    let lock = run(&directory, &["package", "lock", "main.zyl"]);
+    assert!(
+        lock.status.success(),
+        "{}",
+        String::from_utf8_lossy(&lock.stderr)
+    );
+    let allowed = run(&directory, &["check", "main.zyl", "--format=json"]);
+    assert!(
+        allowed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&allowed.stdout)
+    );
+
+    let package_manifest = directory.join("packages/client/zelyra.toml");
+    let declared = fs::read_to_string(&package_manifest).unwrap();
+    fs::write(
+        &package_manifest,
+        declared.replace("effects = [\"Network\"]", "effects = []"),
+    )
+    .unwrap();
+    let stale = run(&directory, &["check", "main.zyl", "--format=json"]);
+    assert!(!stale.status.success());
+    assert!(String::from_utf8_lossy(&stale.stdout).contains("E-PKG-002"));
+
+    let update = run(&directory, &["package", "lock", "main.zyl", "--update"]);
+    assert!(update.status.success());
+    let denied_by_package = run(&directory, &["check", "main.zyl", "--format=json"]);
+    assert!(!denied_by_package.status.success());
+    let diagnostics: Value = serde_json::from_slice(&denied_by_package.stdout).unwrap();
+    assert!(diagnostics["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|item| {
+            item["code"] == "E-PKG-003"
+                && item["file"] == "packages/client/src/lib.zyl"
+                && item["message"].as_str().is_some_and(|message| {
+                    message.contains("Network") && message.contains("package.effects")
+                })
+        }));
+
+    fs::write(&package_manifest, declared).unwrap();
+    let update = run(&directory, &["package", "lock", "main.zyl", "--update"]);
+    assert!(update.status.success());
+    fs::write(
+        directory.join("zelyra.toml"),
+        "[package]\nname = \"effect_app\"\nversion = \"1.0.0\"\nentry = \"main.zyl\"\n\n[dependencies.network_client]\npath = \"packages/client\"\nversion = \"^1.0\"\n\n[capabilities]\nnetwork = false\n",
+    )
+    .unwrap();
+    let update = run(&directory, &["package", "lock", "main.zyl", "--update"]);
+    assert!(update.status.success());
+    let denied_by_project = run(&directory, &["check", "main.zyl", "--format=json"]);
+    assert!(!denied_by_project.status.success());
+    let diagnostics: Value = serde_json::from_slice(&denied_by_project.stdout).unwrap();
+    assert!(diagnostics["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|item| {
+            item["code"] == "E-CAP-001" && item["file"] == "packages/client/src/lib.zyl"
+        }));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn package_dependency_alias_can_differ_from_package_identity() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"pkg:money_core\" as money\nfn main() { print(money::add(12, 50)) }\n",
+        ),
+        (
+            "zelyra.toml",
+            "[package]\nname = \"invoice_app\"\nversion = \"1.0.0\"\nentry = \"main.zyl\"\n\n[dependencies.money_core]\npath = \"packages/money\"\nversion = \"^2.1\"\n",
+        ),
+        (
+            "packages/money/zelyra.toml",
+            "[package]\nname = \"money\"\nversion = \"2.1.4\"\nentry = \"src/lib.zyl\"\n",
+        ),
+        (
+            "packages/money/src/lib.zyl",
+            "pub fn add(euros: Int, fraction: Int) -> Int { return euros * 100 + fraction }\n",
+        ),
+    ]);
+
+    let lock = run(&directory, &["package", "lock", "main.zyl"]);
+    assert!(
+        lock.status.success(),
+        "{}",
+        String::from_utf8_lossy(&lock.stderr)
+    );
+    let lock_contents = fs::read_to_string(directory.join("zelyra.lock")).unwrap();
+    assert!(lock_contents.contains(r#"dependencies = ["money_core=packages/money"]"#));
+
+    let check = run(&directory, &["check", "main.zyl"]);
+    assert!(
+        check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&check.stderr)
+    );
+    let executed = run(&directory, &["run", "main.zyl"]);
+    assert!(
+        executed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&executed.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&executed.stdout).trim(), "1250");
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn package_lock_rejects_an_incompatible_zelyra_requirement_before_writing() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"pkg:math\" as math\nfn main() { print(math::value()) }\n",
+        ),
+        (
+            "zelyra.toml",
+            "[package]\nname = \"compatibility_app\"\nversion = \"1.0.0\"\nentry = \"main.zyl\"\n\n[dependencies.math]\npath = \"packages/math\"\nversion = \"^1.0\"\n",
+        ),
+        (
+            "packages/math/zelyra.toml",
+            "[package]\nname = \"math\"\nversion = \"1.0.0\"\nentry = \"src/lib.zyl\"\nzelyra = \">=99.0.0\"\n",
+        ),
+        (
+            "packages/math/src/lib.zyl",
+            "pub fn value() -> Int { return 42 }\n",
+        ),
+    ]);
+    let result = run(&directory, &["package", "lock", "main.zyl"]);
+    assert!(!result.status.success());
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(stderr.contains("E-PKG-001"), "{stderr}");
+    assert!(stderr.contains("requires Zelyra `>=99.0.0`"), "{stderr}");
+    assert!(!directory.join("zelyra.lock").exists());
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn module_init_creates_a_checkable_local_package_and_never_overwrites() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"pkg:small_tools\" as tools\nfn main() { print(tools::module_name()) }\n",
+        ),
+        (
+            "zelyra.toml",
+            "[package]\nname = \"module_init_app\"\nversion = \"1.0.0\"\nentry = \"main.zyl\"\n\n[dependencies.small_tools]\npath = \"packages/small_tools\"\nversion = \"^0.4.2\"\n",
+        ),
+    ]);
+    let created = run(
+        &directory,
+        &[
+            "module",
+            "init",
+            "packages/small_tools",
+            "--name",
+            "small_tools",
+            "--version",
+            "0.4.2",
+        ],
+    );
+    assert!(
+        created.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&created.stdout),
+        String::from_utf8_lossy(&created.stderr)
+    );
+    let package_manifest =
+        fs::read_to_string(directory.join("packages/small_tools/zelyra.toml")).unwrap();
+    assert!(package_manifest.contains("zelyra = \">=1.1.0, <1.2.0\""));
+    assert!(package_manifest.contains("effects = []"));
+    assert!(directory.join("packages/small_tools/README.md").is_file());
+
+    let lock = run(&directory, &["package", "lock", "."]);
+    assert!(
+        lock.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&lock.stdout),
+        String::from_utf8_lossy(&lock.stderr)
+    );
+    let checked = run(&directory, &["check", "main.zyl"]);
+    assert!(
+        checked.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&checked.stdout),
+        String::from_utf8_lossy(&checked.stderr)
+    );
+    let executed = run(&directory, &["run", "main.zyl"]);
+    assert!(
+        executed.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&executed.stdout),
+        String::from_utf8_lossy(&executed.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&executed.stdout).trim(),
+        "small_tools"
+    );
+
+    let source_before =
+        fs::read_to_string(directory.join("packages/small_tools/src/lib.zyl")).unwrap();
+    let duplicate = run(
+        &directory,
+        &[
+            "module",
+            "init",
+            "packages/small_tools",
+            "--name",
+            "replacement",
+        ],
+    );
+    assert!(!duplicate.status.success());
+    assert!(String::from_utf8_lossy(&duplicate.stderr).contains("already exists"));
+    assert_eq!(
+        fs::read_to_string(directory.join("packages/small_tools/src/lib.zyl")).unwrap(),
+        source_before
+    );
+
+    let invalid = run(
+        &directory,
+        &["module", "init", "packages/bad_name", "--name", "BadName"],
+    );
+    assert!(!invalid.status.success());
+    assert!(!directory.join("packages/bad_name").exists());
+
+    let duplicate_version = run(
+        &directory,
+        &[
+            "module",
+            "init",
+            "packages/duplicate_version",
+            "--name",
+            "duplicate_version",
+            "--version",
+            "0.1.0",
+            "--version",
+            "0.2.0",
+        ],
+    );
+    assert!(!duplicate_version.status.success());
+    assert!(String::from_utf8_lossy(&duplicate_version.stderr).contains("at most once"));
+    assert!(!directory.join("packages/duplicate_version").exists());
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn package_imports_cannot_reach_sources_excluded_from_lock_checksums() {
+    for excluded_dir in [".git", "target"] {
+        let directory = project(&[
+            (
+                "main.zyl",
+                "import \"pkg:math\" as math\nfn main() { print(math::value()) }\n",
+            ),
+            (
+                "zelyra.toml",
+                "[package]\nname = \"invoice_app\"\nversion = \"1.0.0\"\nentry = \"main.zyl\"\n\n[dependencies.math]\npath = \"packages/math\"\nversion = \"1.0.0\"\n",
+            ),
+            (
+                "packages/math/zelyra.toml",
+                "[package]\nname = \"math\"\nversion = \"1.0.0\"\nentry = \"src/lib.zyl\"\n",
+            ),
+            (
+                "packages/math/src/lib.zyl",
+                &format!(
+                    "import \"{excluded_dir}/hidden.zyl\" as hidden\npub fn value() -> Int {{ return hidden::value() }}\n"
+                ),
+            ),
+            (
+                &format!("packages/math/{excluded_dir}/hidden.zyl"),
+                "pub fn value() -> Int { return 42 }\n",
+            ),
+        ]);
+
+        let lock = run(&directory, &["package", "lock", "main.zyl"]);
+        assert!(
+            lock.status.success(),
+            "{}",
+            String::from_utf8_lossy(&lock.stderr)
+        );
+
+        let check = run(&directory, &["check", "main.zyl"]);
+        assert!(
+            !check.status.success(),
+            "{excluded_dir} import was accepted"
+        );
+        let diagnostics = String::from_utf8_lossy(&check.stderr);
+        assert!(diagnostics.contains("E-MOD-001"), "{diagnostics}");
+        assert!(
+            diagnostics.contains("excluded from package checksums"),
+            "{diagnostics}"
+        );
+
+        fs::remove_dir_all(directory).unwrap();
+    }
+}
+
+#[test]
+fn package_entry_cannot_come_from_a_directory_excluded_from_lock_checksums() {
+    for excluded_dir in [".git", "target"] {
+        let directory = project(&[
+            (
+                "main.zyl",
+                "import \"pkg:math\" as math\nfn main() { print(math::add(2, 3)) }\n",
+            ),
+            (
+                "zelyra.toml",
+                "[package]\nname = \"invoice_app\"\nversion = \"1.0.0\"\nentry = \"main.zyl\"\n\n[dependencies.math]\npath = \"packages/math\"\nversion = \"1.0.0\"\n",
+            ),
+            (
+                "packages/math/zelyra.toml",
+                &format!(
+                    "[package]\nname = \"math\"\nversion = \"1.0.0\"\nentry = \"{excluded_dir}/lib.zyl\"\n"
+                ),
+            ),
+            (
+                &format!("packages/math/{excluded_dir}/lib.zyl"),
+                "pub fn add(left: Int, right: Int) -> Int { return left + right }\n",
+            ),
+        ]);
+
+        let lock = run(&directory, &["package", "lock", "main.zyl"]);
+        assert!(!lock.status.success(), "{excluded_dir} entry was accepted");
+        let diagnostics = String::from_utf8_lossy(&lock.stderr);
+        assert!(
+            diagnostics.contains("excluded from package checksums"),
+            "{diagnostics}"
+        );
+
+        fs::remove_dir_all(directory).unwrap();
+    }
+}
+
+#[test]
+fn local_packages_can_depend_on_a_sibling_package_without_leaving_the_workspace() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"pkg:math\" as math\nfn main() { print(math::double(21)) }\n",
+        ),
+        (
+            "zelyra.toml",
+            "[package]\nname = \"sibling_app\"\nversion = \"1.0.0\"\nentry = \"main.zyl\"\n\n[dependencies.math]\npath = \"packages/math\"\nversion = \"^1.0\"\n",
+        ),
+        (
+            "packages/math/zelyra.toml",
+            "[package]\nname = \"math\"\nversion = \"1.1.0\"\nentry = \"src/lib.zyl\"\n\n[dependencies.base]\npath = \"../base\"\nversion = \"^2.0\"\n",
+        ),
+        (
+            "packages/math/src/lib.zyl",
+            "import \"pkg:base\" as base\npub fn double(value: Int) -> Int { return base::twice(value) }\n",
+        ),
+        (
+            "packages/base/zelyra.toml",
+            "[package]\nname = \"base\"\nversion = \"2.3.0\"\nentry = \"src/lib.zyl\"\n",
+        ),
+        (
+            "packages/base/src/lib.zyl",
+            "pub fn twice(value: Int) -> Int { return value * 2 }\n",
+        ),
+    ]);
+
+    let lock = run(&directory, &["package", "lock", "main.zyl"]);
+    assert!(
+        lock.status.success(),
+        "{}",
+        String::from_utf8_lossy(&lock.stderr)
+    );
+    let lock_contents = fs::read_to_string(directory.join("zelyra.lock")).unwrap();
+    assert!(lock_contents.contains(r#"path = "packages/base""#));
+    assert!(lock_contents.contains(r#"dependencies = ["base=packages/base"]"#));
+    let check = run(&directory, &["check", "main.zyl"]);
+    assert!(
+        check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&check.stderr)
+    );
+    let executed = run(&directory, &["run", "main.zyl"]);
+    assert!(
+        executed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&executed.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&executed.stdout).trim(), "42");
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -262,6 +1103,86 @@ fn checked_in_customer_orders_module_example_checks_and_plans_its_boundaries() {
 }
 
 #[test]
+fn checked_in_business_package_example_locks_checks_and_exports_database_provider() {
+    let example = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("examples/business_modules");
+    let lock = run(&example, &["package", "lock", "main.zyl", "--check"]);
+    assert!(
+        lock.status.success(),
+        "{}",
+        String::from_utf8_lossy(&lock.stderr)
+    );
+    let check = run(&example, &["check", "main.zyl"]);
+    assert!(
+        check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&check.stderr)
+    );
+
+    let output = std::env::temp_dir().join(format!(
+        "zelyra-checked-business-package-{}-{}",
+        std::process::id(),
+        NEXT_TEMP.fetch_add(1, Ordering::Relaxed)
+    ));
+    let output_arg = output.to_string_lossy().into_owned();
+    let bundled = run(
+        &example,
+        &[
+            "module",
+            "bundle",
+            "main.zyl",
+            "pkg:billing",
+            "--output",
+            &output_arg,
+            "--docker",
+            "--compiler-ref",
+            &"a".repeat(40),
+        ],
+    );
+    assert!(
+        bundled.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&bundled.stdout),
+        String::from_utf8_lossy(&bundled.stderr)
+    );
+    for path in [
+        "Dockerfile",
+        "docker-compose.yml",
+        "packages/billing/src/lib.zyl",
+        "packages/storage/src/lib.zyl",
+    ] {
+        assert!(output.join(path).is_file(), "missing bundled {path}");
+    }
+    let bundled_billing_manifest =
+        fs::read_to_string(output.join("packages/billing/zelyra.toml")).unwrap();
+    assert!(bundled_billing_manifest.contains("zelyra = \">=1.1.0, <1.2.0\""));
+    let bundled_lock = run(&output, &["package", "lock", "main.zyl", "--check"]);
+    assert!(
+        bundled_lock.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&bundled_lock.stdout),
+        String::from_utf8_lossy(&bundled_lock.stderr)
+    );
+    let bundled_check = run(&output, &["check", "main.zyl"]);
+    assert!(
+        bundled_check.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&bundled_check.stdout),
+        String::from_utf8_lossy(&bundled_check.stderr)
+    );
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(output.join("zelyra.bundle.json")).unwrap()).unwrap();
+    assert_eq!(
+        manifest["database"]["connection_environment"],
+        "ZELYRA_DATABASE_MAIN_URL"
+    );
+    assert_eq!(manifest["complete_deployment"], false);
+    fs::remove_dir_all(output).unwrap();
+}
+
+#[test]
 fn module_bundle_materializes_a_checked_source_closure_without_secrets() {
     let directory = project(&[
         (
@@ -316,7 +1237,15 @@ fn module_bundle_materializes_a_checked_source_closure_without_secrets() {
         serde_json::from_slice(&fs::read(bundle.join("zelyra.bundle.json")).unwrap()).unwrap();
     assert_eq!(manifest["format_version"], 1);
     assert_eq!(manifest["kind"], "experimental-source-bundle");
-    assert_eq!(manifest["source_closure_complete"], false);
+    assert_eq!(manifest["source_closure_complete"], true);
+    assert_eq!(
+        manifest["source_closure_evidence"]["unresolved_references"],
+        0
+    );
+    assert_eq!(
+        manifest["source_closure_evidence"]["compiler_check"],
+        "passed_before_publication"
+    );
     assert_eq!(manifest["complete_deployment"], false);
     let check = run(&bundle, &["check", "main.zyl", "--format=json"]);
     assert!(
@@ -477,6 +1406,10 @@ fn module_bundle_can_generate_a_pinned_experimental_docker_package() {
     let dockerfile = fs::read_to_string(bundle.join("Dockerfile")).unwrap();
     assert!(dockerfile.contains(&format!("ARG ZELYRA_REF={compiler_ref}")));
     assert!(dockerfile.contains("git -C /zelyra fetch --depth=1 origin \"$ZELYRA_REF\""));
+    assert!(dockerfile.contains("RUN /out/bin/zelyra check main.zyl"));
+    assert!(dockerfile.contains("COPY . ./"));
+    let bundle_readme = fs::read_to_string(bundle.join("README.md")).unwrap();
+    assert!(bundle_readme.contains("incompatible pins fail the image build"));
     let env_example = fs::read_to_string(bundle.join(".env.example")).unwrap();
     assert!(env_example.contains("DATABASE_URL="));
     assert!(env_example.contains("ZELYRA_DB_CONNECT_TIMEOUT_SECS=10"));
@@ -493,7 +1426,15 @@ fn module_bundle_can_generate_a_pinned_experimental_docker_package() {
     assert_eq!(manifest["format_version"], 1);
     assert_eq!(manifest["kind"], "experimental-docker-source-package");
     assert_eq!(manifest["docker"]["compiler_commit"], compiler_ref);
-    assert_eq!(manifest["source_closure_complete"], false);
+    assert_eq!(manifest["source_closure_complete"], true);
+    assert_eq!(
+        manifest["source_closure_evidence"]["unresolved_references"],
+        0
+    );
+    assert_eq!(
+        manifest["source_closure_evidence"]["compiler_check"],
+        "passed_before_publication"
+    );
     assert_eq!(manifest["complete_deployment"], false);
     let check = run(&bundle, &["check", "main.zyl", "--format=json"]);
     assert!(
@@ -563,7 +1504,15 @@ fn module_bundle_dry_run_lists_every_output_without_creating_the_target() {
     assert_eq!(document["diagnostics"], serde_json::json!([]));
     assert_eq!(document["plan"]["writes_performed"], false);
     assert_eq!(document["plan"]["secrets_included"], false);
-    assert_eq!(document["plan"]["source_closure_complete"], false);
+    assert_eq!(document["plan"]["source_closure_complete"], true);
+    assert_eq!(
+        document["plan"]["source_closure_evidence"]["unresolved_references"],
+        0
+    );
+    assert_eq!(
+        document["plan"]["source_closure_evidence"]["compiler_check"],
+        "passed_in_staging"
+    );
     assert_eq!(document["plan"]["complete_deployment"], false);
     let files = document["plan"]["files"].as_array().unwrap();
     for expected in [
@@ -773,7 +1722,15 @@ fn independent_database_using_bundles_get_separate_connection_configuration() {
             false
         );
         assert_eq!(manifest["docker"]["runtime_packages"][1], "mariadb-client");
-        assert_eq!(manifest["source_closure_complete"], false);
+        assert_eq!(manifest["source_closure_complete"], true);
+        assert_eq!(
+            manifest["source_closure_evidence"]["unresolved_references"],
+            0
+        );
+        assert_eq!(
+            manifest["source_closure_evidence"]["compiler_check"],
+            "passed_before_publication"
+        );
         assert_eq!(manifest["complete_deployment"], false);
 
         fs::remove_dir_all(bundle).unwrap();
@@ -877,7 +1834,7 @@ fn context_reports_database_provider_bindings_without_exposing_credentials() {
         ),
         (
             "src/billing.zyl",
-            "import \"src/storage.zyl\" as storage\ntable invoices { id: Id primary auto }\npub fn count() -> Int uses Database { rows = sql<Int[]> { SELECT id FROM invoices } return 0 }\n",
+            "import \"src/storage.zyl\" as storage\ntable invoices { id: Id primary auto }\npub fn count() -> Int uses Database(read) { rows = sql<Int[]> { SELECT id FROM invoices } return 0 }\n",
         ),
         (
             "src/storage.zyl",
@@ -885,7 +1842,7 @@ fn context_reports_database_provider_bindings_without_exposing_credentials() {
         ),
         (
             "src/report.zyl",
-            "import \"src/database.zyl\" as dbconfig\ntable reports { id: Id primary auto }\npub fn report_count() -> Int uses Database { rows = sql<Int[]> { SELECT id FROM reports } return 0 }\n",
+            "import \"src/database.zyl\" as dbconfig\ntable reports { id: Id primary auto }\npub fn report_count() -> Int uses Database(read) { rows = sql<Int[]> { SELECT id FROM reports } return 0 }\n",
         ),
         (
             "src/database.zyl",
@@ -956,7 +1913,7 @@ fn context_marks_legacy_database_url_when_no_provider_is_declared() {
         ),
         (
             "src/reports.zyl",
-            "table reports { id: Id primary auto }\npub fn report_count() -> Int uses Database { rows = sql<Int[]> { SELECT id FROM reports } return 0 }\n",
+            "table reports { id: Id primary auto }\npub fn report_count() -> Int uses Database(read) { rows = sql<Int[]> { SELECT id FROM reports } return 0 }\n",
         ),
         (
             "zelyra.toml",
@@ -1047,6 +2004,438 @@ fn module_plan_lists_only_the_selected_modules_source_dependency_closure() {
         ["src/invoices.zyl", "src/money.zyl"]
     );
     assert_eq!(document["plan"]["complete_deployment"], false);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn module_list_is_deterministic_and_shows_exports_package_lock_and_effect_ceiling() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"pkg:ledger\" as ledger\nfn main() { print(ledger::balance()) }\n",
+        ),
+        (".env", "ZELYRA_MODULE_LEDGER_API_TOKEN=sentinel-private-value\n"),
+        (
+            "zelyra.toml",
+            "[package]\nname = \"business_app\"\nversion = \"1.0.0\"\nentry = \"main.zyl\"\n\n[dependencies.ledger]\npath = \"packages/ledger\"\nversion = \"^2.0\"\n",
+        ),
+        (
+            "packages/ledger/zelyra.toml",
+            "[package]\nname = \"ledger\"\nversion = \"2.1.0\"\nentry = \"src/lib.zyl\"\nzelyra = \">=1.0.0\"\neffects = [\"Database(read)\"]\n\n[settings.api_timeout]\ntype = \"Int\"\nrequired = false\ndefault = 15\ndescription = \"Request timeout in seconds\"\n\n[settings.api_token]\ntype = \"String\"\nrequired = true\nsecret = true\ndescription = \"Private API credential\"\n",
+        ),
+        (
+            "packages/ledger/src/lib.zyl",
+            "pub fn balance() -> Int { return 0 }\n",
+        ),
+    ]);
+    let lock = run(&directory, &["package", "lock", "main.zyl"]);
+    assert!(
+        lock.status.success(),
+        "{}",
+        String::from_utf8_lossy(&lock.stderr)
+    );
+
+    let first = run(&directory, &["module", "list", "main.zyl", "--format=json"]);
+    let second = run(&directory, &["module", "list", "main.zyl", "--format=json"]);
+    assert!(
+        first.status.success(),
+        "{}",
+        String::from_utf8_lossy(&first.stderr)
+    );
+    assert_eq!(first.stdout, second.stdout);
+    assert!(!String::from_utf8_lossy(&first.stdout).contains("sentinel-private-value"));
+    let document: Value = serde_json::from_slice(&first.stdout).unwrap();
+    assert_eq!(document["command"], "module list");
+    assert_eq!(document["success"], true);
+    assert_eq!(document["package_lock"]["status"], "current");
+    assert_eq!(document["capabilities_granted"], false);
+    assert_eq!(document["secrets_included"], false);
+    assert!(document["modules"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|module| {
+            module["path"] == "packages/ledger/src/lib.zyl"
+                && module["exports"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|export| export["kind"] == "function" && export["name"] == "balance")
+        }));
+    assert!(document["packages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|package| {
+            package["name"] == "ledger"
+                && package["version"] == "2.1.0"
+                && package["zelyra"] == ">=1.0.0"
+                && package["declared_effect_ceiling"] == serde_json::json!(["Database(read)"])
+                && package["settings_schema"]
+                    == serde_json::json!([
+                        {
+                            "name": "api_timeout",
+                            "type": "Int",
+                            "required": false,
+                            "secret": false,
+                            "default": 15,
+                            "description": "Request timeout in seconds"
+                        },
+                        {
+                            "name": "api_token",
+                            "type": "String",
+                            "required": true,
+                            "secret": true,
+                            "default": null,
+                            "description": "Private API credential"
+                        }
+                    ])
+                && package["dependencies"].as_array().unwrap().is_empty()
+        }));
+    let human = run(&directory, &["module", "list", "main.zyl"]);
+    assert!(human.status.success());
+    assert!(String::from_utf8_lossy(&human.stdout).contains("export function balance"));
+    assert!(String::from_utf8_lossy(&human.stdout).contains("zelyra compatibility: >=1.0.0"));
+    assert!(String::from_utf8_lossy(&human.stdout).contains("effect ceiling: Database(read)"));
+    assert!(String::from_utf8_lossy(&human.stdout)
+        .contains("setting api_timeout: Int (optional, not secret)"));
+    assert!(String::from_utf8_lossy(&human.stdout).contains("default: 15"));
+    assert!(String::from_utf8_lossy(&human.stdout)
+        .contains("setting api_token: String (required, secret)"));
+    let help = run(&directory, &["module", "list", "--help"]);
+    assert!(help.status.success());
+    assert!(String::from_utf8_lossy(&help.stdout).contains("Effektobergrenze"));
+
+    fs::write(
+        directory.join("packages/ledger/src/lib.zyl"),
+        "pub fn balance() -> Int { return 1 }\n",
+    )
+    .unwrap();
+    let stale = run(&directory, &["module", "list", "main.zyl", "--format=json"]);
+    assert!(!stale.status.success());
+    let stale_document: Value = serde_json::from_slice(&stale.stdout).unwrap();
+    assert_eq!(stale_document["package_lock"]["status"], "not_verified");
+    assert!(stale_document["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|diagnostic| diagnostic["code"] == "E-PKG-002"));
+}
+
+#[test]
+fn module_settings_check_validates_values_and_never_emits_secret_data() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"pkg:ledger\" as ledger\nfn main() { print(ledger::timeout()) print(ledger::token_configured()) }\n",
+        ),
+        (
+            "zelyra.toml",
+            "[package]\nname = \"business_app\"\nversion = \"1.0.0\"\nentry = \"main.zyl\"\n\n[dependencies.ledger]\npath = \"packages/ledger\"\nversion = \"^2.0\"\n",
+        ),
+        (
+            "packages/ledger/zelyra.toml",
+            "[package]\nname = \"ledger\"\nversion = \"2.1.0\"\nentry = \"src/lib.zyl\"\n\n[settings.api_timeout]\ntype = \"Int\"\nrequired = false\ndefault = 15\n\n[settings.api_token]\ntype = \"String\"\nrequired = true\nsecret = true\n",
+        ),
+        (
+            "packages/ledger/src/lib.zyl",
+            "pub fn balance() -> Int { return 0 }\npub fn timeout() -> Int { return module_setting<Int>(\"api_timeout\") }\npub fn token_configured() -> Bool { return module_setting<String>(\"api_token\") != \"\" }\n",
+        ),
+        (
+            "zelyra.settings.toml",
+            "[package_settings.\"packages/ledger\"]\napi_token = { env = \"LEDGER_TOKEN\" }\n",
+        ),
+    ]);
+    let lock = run(&directory, &["package", "lock", "main.zyl"]);
+    assert!(
+        lock.status.success(),
+        "{}",
+        String::from_utf8_lossy(&lock.stderr)
+    );
+
+    let secret = "never-print-this-token";
+    let execution_missing =
+        run_with_environment(&directory, &["run", "main.zyl"], "LEDGER_TOKEN", None);
+    assert!(!execution_missing.status.success());
+    assert!(
+        String::from_utf8_lossy(&execution_missing.stderr).contains("error[E-PKG-SETTINGS-002]"),
+        "{}",
+        String::from_utf8_lossy(&execution_missing.stderr)
+    );
+    assert!(!String::from_utf8_lossy(&execution_missing.stderr).contains("LEDGER_TOKEN"));
+    let serve_missing = run_with_environment(
+        &directory,
+        &["serve", "main.zyl", "127.0.0.1:0"],
+        "LEDGER_TOKEN",
+        None,
+    );
+    assert!(!serve_missing.status.success());
+    assert!(String::from_utf8_lossy(&serve_missing.stderr).contains("error[E-PKG-SETTINGS-002]"));
+    assert!(!String::from_utf8_lossy(&serve_missing.stderr).contains("LEDGER_TOKEN"));
+    for backend in ["ast", "mir", "bytecode"] {
+        let execution_ready = run_with_environment(
+            &directory,
+            &["run", "main.zyl", "--backend", backend],
+            "LEDGER_TOKEN",
+            Some(secret),
+        );
+        assert!(
+            execution_ready.status.success(),
+            "backend {backend}: {}",
+            String::from_utf8_lossy(&execution_ready.stderr)
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&execution_ready.stdout).trim(),
+            "15\ntrue",
+            "backend {backend}"
+        );
+        assert!(!String::from_utf8_lossy(&execution_ready.stdout).contains(secret));
+    }
+    let configured = run_with_environment(
+        &directory,
+        &["module", "settings", "check", "main.zyl", "--format=json"],
+        "LEDGER_TOKEN",
+        Some(secret),
+    );
+    assert!(
+        configured.status.success(),
+        "{}",
+        String::from_utf8_lossy(&configured.stderr)
+    );
+    let document: Value = serde_json::from_slice(&configured.stdout).unwrap();
+    assert_eq!(document["command"], "module settings check");
+    assert_eq!(document["success"], true);
+    assert_eq!(document["secret_values_included"], false);
+    assert!(configured
+        .stdout
+        .windows(secret.len())
+        .all(|window| window != secret.as_bytes()));
+    let settings = document["settings"][0]["values"].as_array().unwrap();
+    assert!(settings.iter().any(|setting| {
+        setting["name"] == "api_token" && setting["status"] == "secret_available"
+    }));
+    assert!(settings.iter().any(|setting| {
+        setting["name"] == "api_timeout"
+            && setting["status"] == "defaulted"
+            && setting["required"] == false
+    }));
+    assert!(settings
+        .iter()
+        .any(|setting| { setting["name"] == "api_token" && setting["required"] == true }));
+
+    let missing = run_with_environment(
+        &directory,
+        &["module", "settings", "check", "main.zyl", "--format=json"],
+        "LEDGER_TOKEN",
+        None,
+    );
+    assert!(!missing.status.success());
+    let document: Value = serde_json::from_slice(&missing.stdout).unwrap();
+    assert_eq!(document["success"], false);
+    assert!(document["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|item| {
+            item["code"] == "E-PKG-SETTINGS-002"
+                && item["message"].as_str().unwrap().contains("api_token")
+        }));
+    assert!(!String::from_utf8_lossy(&missing.stdout).contains("LEDGER_TOKEN"));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn typed_secret_package_settings_are_checked_and_shared_by_all_backends() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"pkg:limits\" as limits\nfn main() { print(limits::max_connections()) }\n",
+        ),
+        (
+            "zelyra.toml",
+            "[package]\nname = \"business_app\"\nversion = \"1.0.0\"\nentry = \"main.zyl\"\n\n[dependencies.limits]\npath = \"packages/limits\"\nversion = \"^1.0\"\n",
+        ),
+        (
+            "packages/limits/zelyra.toml",
+            "[package]\nname = \"limits\"\nversion = \"1.0.0\"\nentry = \"src/lib.zyl\"\n\n[settings.max_connections]\ntype = \"Int\"\nrequired = true\nsecret = true\n",
+        ),
+        (
+            "packages/limits/src/lib.zyl",
+            "pub fn max_connections() -> Int { return module_setting<Int>(\"max_connections\") }\n",
+        ),
+        (
+            "zelyra.settings.toml",
+            "[package_settings.\"packages/limits\"]\nmax_connections = { env = \"MAX_CONNECTIONS\" }\n",
+        ),
+    ]);
+    let lock = run(&directory, &["package", "lock", "main.zyl"]);
+    assert!(
+        lock.status.success(),
+        "{}",
+        String::from_utf8_lossy(&lock.stderr)
+    );
+
+    for backend in ["ast", "mir", "bytecode"] {
+        let execution = run_with_environment(
+            &directory,
+            &["run", "main.zyl", "--backend", backend],
+            "MAX_CONNECTIONS",
+            Some("64"),
+        );
+        assert!(
+            execution.status.success(),
+            "backend {backend}: {}",
+            String::from_utf8_lossy(&execution.stderr)
+        );
+        assert_eq!(String::from_utf8_lossy(&execution.stdout).trim(), "64");
+    }
+
+    let invalid = run_with_environment(
+        &directory,
+        &["module", "settings", "check", "main.zyl", "--format=json"],
+        "MAX_CONNECTIONS",
+        Some("64-connections-private"),
+    );
+    assert!(!invalid.status.success());
+    let output = format!(
+        "{}{}",
+        String::from_utf8_lossy(&invalid.stdout),
+        String::from_utf8_lossy(&invalid.stderr)
+    );
+    assert!(output.contains("does not match type `Int`"), "{output}");
+    assert!(!output.contains("64-connections-private"));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn module_setting_requires_a_declared_setting_and_exact_schema_type() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"pkg:config\" as config\nfn main() { print(config::timeout()) }\n",
+        ),
+        (
+            "zelyra.toml",
+            "[package]\nname = \"app\"\nversion = \"1.0.0\"\nentry = \"main.zyl\"\n\n[dependencies.config]\npath = \"packages/config\"\nversion = \"^1.0\"\n",
+        ),
+        (
+            "packages/config/zelyra.toml",
+            "[package]\nname = \"config\"\nversion = \"1.0.0\"\nentry = \"src/lib.zyl\"\n\n[settings.timeout]\ntype = \"Int\"\nrequired = false\ndefault = 30\n",
+        ),
+        (
+            "packages/config/src/lib.zyl",
+            "pub fn timeout() -> String { return module_setting<String>(\"timeout\") }\n",
+        ),
+    ]);
+    let lock = run(&directory, &["package", "lock", "main.zyl"]);
+    assert!(
+        lock.status.success(),
+        "{}",
+        String::from_utf8_lossy(&lock.stderr)
+    );
+
+    let invalid_type = run(&directory, &["check", "main.zyl"]);
+    assert!(!invalid_type.status.success());
+    let type_errors = String::from_utf8_lossy(&invalid_type.stderr);
+    assert!(
+        type_errors.contains("error[E-PKG-SETTINGS-004]"),
+        "{type_errors}"
+    );
+
+    fs::write(
+        directory.join("packages/config/src/lib.zyl"),
+        "pub fn timeout() -> Int { return module_setting<Int>(\"timeout\") }\n",
+    )
+    .unwrap();
+    fs::write(
+        directory.join("main.zyl"),
+        "import \"pkg:config\" as config\nfn main() { print(module_setting<Int>(\"timeout\")) }\n",
+    )
+    .unwrap();
+    let refreshed = run(&directory, &["package", "lock", "main.zyl", "--update"]);
+    assert!(
+        refreshed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&refreshed.stderr)
+    );
+    let cross_package = run(&directory, &["check", "main.zyl"]);
+    assert!(!cross_package.status.success());
+    let errors = String::from_utf8_lossy(&cross_package.stderr);
+    assert!(errors.contains("error[E-PKG-SETTINGS-003]"), "{errors}");
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn reusable_csv_package_writes_escaped_output_through_file_capability() {
+    const CSV_PACKAGE_SOURCE: &str =
+        include_str!("../../examples/business_modules/packages/csv_export/src/lib.zyl");
+    let directory = project(&[
+        (
+            "main.zyl",
+            r#"
+                import "pkg:csv_export" as csv_export
+                fn main() uses FileSystem {
+                    rows = [["name", "note"], ["A", "quoted, value"], ["B", "line\nbreak"]]
+                    match csv_export::write_csv("data/export.csv", rows) {
+                        Ok(_) => { print("CSV exported") }
+                        Err(message) => { print(message) }
+                    }
+                }
+            "#,
+        ),
+        (
+            "zelyra.toml",
+            "[package]\nname = \"csv_demo\"\nversion = \"1.0.0\"\nentry = \"main.zyl\"\n\n[capabilities]\nfilesystem = true\ndatabase = false\nnetwork = false\n\n[filesystem]\nread_roots = [\"data\"]\nwrite_roots = [\"data\"]\n\n[dependencies.csv_export]\npath = \"packages/csv_export\"\nversion = \"^1.0\"\n",
+        ),
+        (
+            "packages/csv_export/zelyra.toml",
+            "[package]\nname = \"csv_export\"\nversion = \"1.0.0\"\nentry = \"src/lib.zyl\"\neffects = [\"FileSystem\"]\n",
+        ),
+        ("packages/csv_export/src/lib.zyl", CSV_PACKAGE_SOURCE),
+    ]);
+    fs::create_dir_all(directory.join("data")).unwrap();
+    let locked = run(&directory, &["package", "lock", "main.zyl"]);
+    assert!(
+        locked.status.success(),
+        "{}",
+        String::from_utf8_lossy(&locked.stderr)
+    );
+    let output = run(&directory, &["run", "main.zyl"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("CSV exported"));
+    assert_eq!(
+        fs::read_to_string(directory.join("data/export.csv")).unwrap(),
+        "name,note\nA,\"quoted, value\"\nB,\"line\nbreak\""
+    );
+
+    let manifest_path = directory.join("zelyra.toml");
+    let manifest = fs::read_to_string(&manifest_path).unwrap();
+    fs::write(
+        &manifest_path,
+        manifest.replace("filesystem = true", "filesystem = false"),
+    )
+    .unwrap();
+    let relocked = run(&directory, &["package", "lock", "main.zyl", "--update"]);
+    assert!(
+        relocked.status.success(),
+        "{}",
+        String::from_utf8_lossy(&relocked.stderr)
+    );
+    let denied = run(&directory, &["run", "main.zyl"]);
+    assert!(!denied.status.success());
+    assert!(
+        String::from_utf8_lossy(&denied.stderr).contains("FileSystem"),
+        "{}",
+        String::from_utf8_lossy(&denied.stderr)
+    );
+    assert_eq!(
+        fs::read_to_string(directory.join("data/export.csv")).unwrap(),
+        "name,note\nA,\"quoted, value\"\nB,\"line\nbreak\""
+    );
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -1480,11 +2869,11 @@ fn module_plan_reports_inferred_table_owner_and_sql_access_modes() {
         ),
         (
             "src/customer_service.zyl",
-            "import \"src/customer_schema.zyl\" as schema\npub fn listCustomers() uses Database { return sql<Customer[]> { SELECT id, name FROM customers } }\npub fn renameCustomer(id: Id, name: String) uses Database { schema::renameCustomer(id, name) }\n",
+            "import \"src/customer_schema.zyl\" as schema\npub fn listCustomers() uses Database(read) { return sql<Customer[]> { SELECT id, name FROM customers } }\npub fn renameCustomer(id: Id, name: String) uses Database(write) { schema::renameCustomer(id, name) }\n",
         ),
         (
             "src/customer_schema.zyl",
-            "import \"src/database.zyl\" as storage\ntable customers { id: Id primary auto name: String(100) required access { read: [\"src/customer_service.zyl\"] } }\npub fn renameCustomer(id: Id, name: String) uses Database { sql { UPDATE customers SET name = :name WHERE id = :id } }\n",
+            "import \"src/database.zyl\" as storage\ntable customers { id: Id primary auto name: String(100) required access { read: [\"src/customer_service.zyl\"] } }\npub fn renameCustomer(id: Id, name: String) uses Database(write) { sql { UPDATE customers SET name = :name WHERE id = :id } }\n",
         ),
         (
             "src/database.zyl",
@@ -1576,7 +2965,7 @@ fn module_plan_reports_inferred_table_owner_and_sql_access_modes() {
 
 #[test]
 fn cross_module_table_access_requires_the_owner_in_the_import_graph() {
-    let source = "pub fn listCustomers() uses Database { return sql<Customer[]> { SELECT id, name FROM customers } }\npub fn renameCustomer(id: Id, name: String) uses Database { sql { UPDATE customers SET name = :name WHERE id = :id } }\n";
+    let source = "pub fn listCustomers() uses Database(read) { return sql<Customer[]> { SELECT id, name FROM customers } }\npub fn renameCustomer(id: Id, name: String) uses Database(write) { sql { UPDATE customers SET name = :name WHERE id = :id } }\n";
     let allowed = project(&[
         (
             "main.zyl",
@@ -1584,11 +2973,11 @@ fn cross_module_table_access_requires_the_owner_in_the_import_graph() {
         ),
         (
             "src/customer_service.zyl",
-            "import \"src/customer_schema.zyl\" as schema\npub fn listCustomers() uses Database { return schema::listCustomers() }\npub fn renameCustomer(id: Id, name: String) uses Database { schema::renameCustomer(id, name) }\n",
+            "import \"src/customer_schema.zyl\" as schema\npub fn listCustomers() uses Database(read) { return schema::listCustomers() }\npub fn renameCustomer(id: Id, name: String) uses Database(write) { schema::renameCustomer(id, name) }\n",
         ),
         (
             "src/customer_schema.zyl",
-            "import \"src/database.zyl\" as storage\ntable customers { id: Id primary auto name: String(100) required access { read: [\"src/customer_service.zyl\"] } }\npub fn listCustomers() uses Database { return sql<Customer[]> { SELECT id, name FROM customers } }\npub fn renameCustomer(id: Id, name: String) uses Database { sql { UPDATE customers SET name = :name WHERE id = :id } }\n",
+            "import \"src/database.zyl\" as storage\ntable customers { id: Id primary auto name: String(100) required access { read: [\"src/customer_service.zyl\"] } }\npub fn listCustomers() uses Database(read) { return sql<Customer[]> { SELECT id, name FROM customers } }\npub fn renameCustomer(id: Id, name: String) uses Database(write) { sql { UPDATE customers SET name = :name WHERE id = :id } }\n",
         ),
         (
             "src/database.zyl",
@@ -1688,7 +3077,7 @@ fn an_unmatched_table_access_grant_does_not_authorize_a_consumer() {
         ),
         (
             "src/report.zyl",
-            "import \"src/schema.zyl\" as schema\nfn load() uses Database { return sql<Int[]> { SELECT id FROM customers } }\n",
+            "import \"src/schema.zyl\" as schema\nfn load() uses Database(read) { return sql<Int[]> { SELECT id FROM customers } }\n",
         ),
         (
             "src/schema.zyl",
@@ -1723,7 +3112,7 @@ fn imported_modules_must_import_schema_instead_of_inheriting_entry_tables() {
         ),
         (
             "src/customer_service.zyl",
-            "pub fn listCustomers() -> Customer[] uses Database { return sql<Customer[]> { SELECT id, name FROM customers } }\n",
+            "pub fn listCustomers() -> Customer[] uses Database(read) { return sql<Customer[]> { SELECT id, name FROM customers } }\n",
         ),
     ]);
 
@@ -1992,7 +3381,7 @@ fn module_plan_tracks_types_used_inside_function_bodies() {
         ),
         (
             "src/logic.zyl",
-            "import \"src/database.zyl\" as storage\nimport \"src/schema.zyl\" as schema\nimport \"src/models.zyl\" as models\npub fn load() -> Int {\n id: models::CustomerId? = None\n customer = models::Customer { name: \"Example\" }\n return 0\n}\npub fn count() -> Int uses Database {\n customers = sql<models::Customer[]> { SELECT name FROM customers }\n return 0\n}\n",
+            "import \"src/database.zyl\" as storage\nimport \"src/schema.zyl\" as schema\nimport \"src/models.zyl\" as models\npub fn load() -> Int {\n id: models::CustomerId? = None\n customer = models::Customer { name: \"Example\" }\n return 0\n}\npub fn count() -> Int uses Database(read) {\n customers = sql<models::Customer[]> { SELECT name FROM customers }\n return 0\n}\n",
         ),
         (
             "src/schema.zyl",
@@ -2990,7 +4379,7 @@ fn check_composes_a_project_database_from_an_imported_configuration_module() {
     let directory = project(&[
         (
             "main.zyl",
-            "import \"src/database.zyl\" as storage\nimport \"src/invoices.zyl\" as invoices\nfn main() uses Database { invoices::count() }\n",
+            "import \"src/database.zyl\" as storage\nimport \"src/invoices.zyl\" as invoices\nfn main() uses Database(read) { invoices::count() }\n",
         ),
         (
             "src/database.zyl",
@@ -2998,7 +4387,7 @@ fn check_composes_a_project_database_from_an_imported_configuration_module() {
         ),
         (
             "src/invoices.zyl",
-            "import \"src/database.zyl\" as storage\ntable invoices { id: Id primary auto number: String(40) required total: Decimal required }\npub fn count() -> Int uses Database { rows = sql<Invoice[]> { SELECT id, number, total FROM invoices } return 0 }\n",
+            "import \"src/database.zyl\" as storage\ntable invoices { id: Id primary auto number: String(40) required total: Decimal required }\npub fn count() -> Int uses Database(read) { rows = sql<Invoice[]> { SELECT id, number, total FROM invoices } return 0 }\n",
         ),
         (
             "zelyra.toml",
@@ -3090,11 +4479,11 @@ fn database_consumers_must_import_the_provider_module_through_their_own_graph() 
     let allowed = project(&[
         (
             "main.zyl",
-            "import \"src/service.zyl\" as service\nfn main() uses Database { service::count() }\n",
+            "import \"src/service.zyl\" as service\nfn main() uses Database(read) { service::count() }\n",
         ),
         (
             "src/service.zyl",
-            "import \"src/storage_facade.zyl\" as storage\ntable things { id: Id primary auto }\npub fn count() -> Int uses Database { rows = sql<Int[]> { SELECT id FROM things } return 0 }\n",
+            "import \"src/storage_facade.zyl\" as storage\ntable things { id: Id primary auto }\npub fn count() -> Int uses Database(read) { rows = sql<Int[]> { SELECT id FROM things } return 0 }\n",
         ),
         (
             "src/storage_facade.zyl",
@@ -3120,11 +4509,11 @@ fn database_consumers_must_import_the_provider_module_through_their_own_graph() 
     let denied = project(&[
         (
             "main.zyl",
-            "import \"src/service.zyl\" as service\nimport \"src/database.zyl\" as db\nfn main() uses Database { service::count() }\n",
+            "import \"src/service.zyl\" as service\nimport \"src/database.zyl\" as db\nfn main() uses Database(read) { service::count() }\n",
         ),
         (
             "src/service.zyl",
-            "table things { id: Id primary auto }\npub fn count() -> Int uses Database { rows = sql<Int[]> { SELECT id FROM things } return 0 }\n",
+            "table things { id: Id primary auto }\npub fn count() -> Int uses Database(read) { rows = sql<Int[]> { SELECT id FROM things } return 0 }\n",
         ),
         (
             "src/database.zyl",
@@ -3154,11 +4543,11 @@ fn database_consumers_must_import_the_provider_module_through_their_own_graph() 
     let misplaced = project(&[
         (
             "main.zyl",
-            "import \"src/service.zyl\" as service\ndatabase main { engine: mariadb database: \"things\" }\nfn main() uses Database { service::count() }\n",
+            "import \"src/service.zyl\" as service\ndatabase main { engine: mariadb database: \"things\" }\nfn main() uses Database(read) { service::count() }\n",
         ),
         (
             "src/service.zyl",
-            "table things { id: Id primary auto }\npub fn count() -> Int uses Database { rows = sql<Int[]> { SELECT id FROM things } return 0 }\n",
+            "table things { id: Id primary auto }\npub fn count() -> Int uses Database(read) { rows = sql<Int[]> { SELECT id FROM things } return 0 }\n",
         ),
         (
             "zelyra.toml",
@@ -3278,4 +4667,325 @@ fn deeply_nested_module_calls_stop_at_the_controlled_runtime_limit() {
         "diagnostic should include a source location: {stderr}"
     );
     fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn package_dependencies_can_be_planned_and_bundled_with_a_filtered_locked_graph() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"pkg:money_core\" as cash\nfn main() { print(cash::amount()) }\n",
+        ),
+        (
+            "zelyra.toml",
+            "[package]\nname = \"business_app\"\nversion = \"1.0.0\"\nentry = \"main.zyl\"\n\n[dependencies.money_core]\npath = \"packages/money\"\nversion = \"^1.2\"\n\n[dependencies.unused]\npath = \"packages/unused\"\nversion = \"^1.0\"\n",
+        ),
+        (
+            "packages/money/zelyra.toml",
+            "[package]\nname = \"money\"\nversion = \"1.2.3\"\nentry = \"src/lib.zyl\"\n\n[dependencies.currency]\npath = \"../currency\"\nversion = \"^1.0\"\n",
+        ),
+        (
+            "packages/money/src/lib.zyl",
+            "import \"pkg:currency\" as currency\nimport \"src/math.zyl\" as math\npub fn amount() -> Int { return math::plus(currency::cents()) }\n",
+        ),
+        (
+            "packages/money/src/math.zyl",
+            "pub fn plus(value: Int) -> Int { return value + 100 }\n",
+        ),
+        (
+            "packages/money/src/unreferenced.zyl",
+            "pub fn extra() -> Int { return 7 }\n",
+        ),
+        (
+            "packages/currency/zelyra.toml",
+            "[package]\nname = \"currency\"\nversion = \"1.0.2\"\nentry = \"src/lib.zyl\"\n",
+        ),
+        (
+            "packages/currency/src/lib.zyl",
+            "pub fn cents() -> Int { return 25 }\n",
+        ),
+        (
+            "packages/unused/zelyra.toml",
+            "[package]\nname = \"unused\"\nversion = \"1.0.1\"\nentry = \"src/lib.zyl\"\n",
+        ),
+        (
+            "packages/unused/src/lib.zyl",
+            "pub fn unused() -> Int { return 0 }\n",
+        ),
+    ]);
+    let lock = run(&directory, &["package", "lock", "main.zyl"]);
+    assert!(
+        lock.status.success(),
+        "{}",
+        String::from_utf8_lossy(&lock.stderr)
+    );
+
+    let plan = run(
+        &directory,
+        &["module", "plan", "main.zyl", "pkg:money_core"],
+    );
+    assert!(
+        plan.status.success(),
+        "package selection should resolve to its checked entry: {}",
+        String::from_utf8_lossy(&plan.stdout)
+    );
+    let plan: Value = serde_json::from_slice(&plan.stdout).unwrap();
+    assert_eq!(plan["plan"]["selection_kind"], "package");
+    assert_eq!(
+        plan["plan"]["selected_module"],
+        "packages/money/src/lib.zyl"
+    );
+    assert_eq!(
+        plan["plan"]["source_files"],
+        serde_json::json!([
+            "packages/currency/src/lib.zyl",
+            "packages/money/src/lib.zyl",
+            "packages/money/src/math.zyl"
+        ])
+    );
+
+    let output_parent = std::env::temp_dir().join(format!(
+        "zelyra-cli-package-bundle-{}-{}",
+        std::process::id(),
+        NEXT_TEMP.fetch_add(1, Ordering::Relaxed)
+    ));
+    fs::create_dir_all(&output_parent).unwrap();
+    let output = output_parent.join("bundle");
+    let bundle = run(
+        &directory,
+        &[
+            "module",
+            "bundle",
+            "main.zyl",
+            "pkg:money_core",
+            "--output",
+            output.to_str().unwrap(),
+        ],
+    );
+    assert!(
+        bundle.status.success(),
+        "{}",
+        String::from_utf8_lossy(&bundle.stdout)
+    );
+    let bundled_manifest = fs::read_to_string(output.join("zelyra.toml")).unwrap();
+    assert!(bundled_manifest.contains("[dependencies.money_core]"));
+    assert!(!bundled_manifest.contains("[dependencies.money]\n"));
+    assert!(bundled_manifest.contains("path = \"packages/money\""));
+    assert!(!bundled_manifest.contains("unused"));
+    assert!(output.join("zelyra.lock").is_file());
+    assert!(output.join("packages/money/zelyra.toml").is_file());
+    let bundled_package_manifest =
+        fs::read_to_string(output.join("packages/money/zelyra.toml")).unwrap();
+    assert!(bundled_package_manifest.contains("path = \"../currency\""));
+    assert!(output.join("packages/money/src/unreferenced.zyl").is_file());
+    assert!(!output.join("packages/unused").exists());
+
+    let bundled_lock = run(&output, &["package", "lock", "main.zyl", "--check"]);
+    assert!(
+        bundled_lock.status.success(),
+        "bundled dependency lock should be current: {}",
+        String::from_utf8_lossy(&bundled_lock.stderr)
+    );
+    let check = run(&output, &["check", "main.zyl"]);
+    assert!(
+        check.status.success(),
+        "package-backed bundle should compile: {}",
+        String::from_utf8_lossy(&check.stderr)
+    );
+
+    fs::remove_dir_all(directory).unwrap();
+    fs::remove_dir_all(output_parent).unwrap();
+}
+
+#[test]
+fn package_database_provider_and_business_module_export_as_docker_app() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"pkg:billing\" as billing\nfn main() uses Database(read) { print(billing::invoice_count()) }\n",
+        ),
+        (
+            "zelyra.toml",
+            "[package]\nname = \"business_app\"\nversion = \"1.0.0\"\nentry = \"main.zyl\"\n\n[capabilities]\ndatabase = true\n\n[dependencies.billing]\npath = \"packages/billing\"\nversion = \"^1.0\"\n",
+        ),
+        (
+            "packages/billing/zelyra.toml",
+            "[package]\nname = \"billing\"\nversion = \"1.2.0\"\nentry = \"src/lib.zyl\"\neffects = [\"Database(read)\"]\n\n[dependencies.storage]\npath = \"../storage\"\nversion = \"^1.0\"\n",
+        ),
+        (
+            "packages/billing/src/lib.zyl",
+            "import \"pkg:storage\" as storage\npub fn invoice_count() -> Int uses Database(read) { return storage::invoice_count() }\n",
+        ),
+        (
+            "packages/storage/zelyra.toml",
+            "[package]\nname = \"storage\"\nversion = \"1.1.0\"\nentry = \"src/lib.zyl\"\neffects = [\"Database(read)\"]\n",
+        ),
+        (
+            "packages/storage/src/lib.zyl",
+            "database main { engine: mariadb database: \"business\" }\ntable invoices { id: Id primary auto customer: String(80) required access { read: [\"packages/storage/src/lib.zyl\"] } }\npub fn invoice_count() -> Int uses Database(read) { rows = sql_decode<Int[]>(sql<Int[]> { SELECT id FROM invoices }) return len(rows) }\n",
+        ),
+    ]);
+    let lock = run(&directory, &["package", "lock", "main.zyl"]);
+    assert!(
+        lock.status.success(),
+        "{}",
+        String::from_utf8_lossy(&lock.stderr)
+    );
+    let check = run(&directory, &["check", "main.zyl"]);
+    assert!(
+        check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&check.stderr)
+    );
+
+    let output = directory.with_extension("package-business-docker");
+    let output_arg = output.to_string_lossy().into_owned();
+    let compiler_ref = "a".repeat(40);
+    let bundle = run(
+        &directory,
+        &[
+            "module",
+            "bundle",
+            "main.zyl",
+            "pkg:billing",
+            "--output",
+            &output_arg,
+            "--docker",
+            "--compiler-ref",
+            &compiler_ref,
+        ],
+    );
+    assert!(
+        bundle.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&bundle.stdout),
+        String::from_utf8_lossy(&bundle.stderr)
+    );
+
+    for path in [
+        "Dockerfile",
+        "docker-compose.yml",
+        ".dockerignore",
+        ".env.example",
+        "zelyra.lock",
+        "packages/billing/src/lib.zyl",
+        "packages/storage/src/lib.zyl",
+    ] {
+        assert!(output.join(path).is_file(), "missing bundled {path}");
+    }
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(output.join("zelyra.bundle.json")).unwrap()).unwrap();
+    assert_eq!(manifest["source_closure_complete"], true);
+    assert_eq!(manifest["complete_deployment"], false);
+    assert_eq!(manifest["database"]["required"], true);
+    assert_eq!(
+        manifest["database"]["connection_environment"],
+        "ZELYRA_DATABASE_MAIN_URL"
+    );
+    assert_eq!(
+        manifest["database"]["configurations"][0]["module"],
+        "packages/storage/src/lib.zyl"
+    );
+    let env_example = fs::read_to_string(output.join(".env.example")).unwrap();
+    assert!(env_example
+        .lines()
+        .any(|line| line == "ZELYRA_DATABASE_MAIN_URL="));
+    let bundled_lock = run(&output, &["package", "lock", "main.zyl", "--check"]);
+    assert!(
+        bundled_lock.status.success(),
+        "{}",
+        String::from_utf8_lossy(&bundled_lock.stderr)
+    );
+    let bundled_check = run(&output, &["check", "main.zyl"]);
+    assert!(
+        bundled_check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&bundled_check.stderr)
+    );
+
+    if let Ok(base_database_url) = std::env::var("ZELYRA_MODULE_IMPORTS_DATABASE_URL") {
+        let database_root = base_database_url
+            .rsplit_once('/')
+            .map(|(root, _)| root)
+            .expect("configured MariaDB test URL must include a database");
+        let database_name = format!(
+            "zelyra_package_business_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        let database_url = format!("{database_root}/{database_name}");
+        let bootstrap = Command::new(env!("CARGO_BIN_EXE_zelyra"))
+            .current_dir(&directory)
+            .env("DATABASE_URL", &database_url)
+            .args(["db", "bootstrap", "main.zyl"])
+            .output()
+            .unwrap();
+        assert!(
+            bootstrap.status.success(),
+            "{}",
+            String::from_utf8_lossy(&bootstrap.stderr)
+        );
+        let executed = Command::new(env!("CARGO_BIN_EXE_zelyra"))
+            .current_dir(&directory)
+            .env("DATABASE_URL", &database_url)
+            .args(["run", "main.zyl"])
+            .output()
+            .unwrap();
+        assert!(
+            executed.status.success(),
+            "{}",
+            String::from_utf8_lossy(&executed.stderr)
+        );
+        assert_eq!(String::from_utf8_lossy(&executed.stdout).trim(), "0");
+        drop_test_database(&database_url);
+    }
+
+    // The provider is intentionally read-only. A consuming package may ask
+    // for Database(write), but that must not widen the provider's ceiling.
+    fs::write(
+        directory.join("main.zyl"),
+        "import \"pkg:billing\" as billing\nfn main() uses Database(write) { print(billing::invoice_count()) }\n",
+    )
+    .unwrap();
+    fs::write(
+        directory.join("packages/billing/zelyra.toml"),
+        "[package]\nname = \"billing\"\nversion = \"1.2.0\"\nentry = \"src/lib.zyl\"\neffects = [\"Database(write)\"]\n\n[dependencies.storage]\npath = \"../storage\"\nversion = \"^1.0\"\n",
+    )
+    .unwrap();
+    fs::write(
+        directory.join("packages/billing/src/lib.zyl"),
+        "import \"pkg:storage\" as storage\npub fn invoice_count() -> Int uses Database(write) { return storage::invoice_count() }\n",
+    )
+    .unwrap();
+    fs::write(
+        directory.join("packages/storage/src/lib.zyl"),
+        "database main { engine: mariadb database: \"business\" }\ntable invoices { id: Id primary auto customer: String(80) required }\npub fn invoice_count() -> Int uses Database(write) { sql { UPDATE invoices SET customer = 'example' WHERE id = 1 } return 1 }\n",
+    )
+    .unwrap();
+    let update_lock = run(&directory, &["package", "lock", "main.zyl", "--update"]);
+    assert!(
+        update_lock.status.success(),
+        "{}",
+        String::from_utf8_lossy(&update_lock.stderr)
+    );
+    let denied_write = run(&directory, &["check", "main.zyl", "--format=json"]);
+    assert!(!denied_write.status.success());
+    let diagnostics: Value = serde_json::from_slice(&denied_write.stdout).unwrap();
+    assert!(diagnostics["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|item| {
+            item["code"] == "E-PKG-003"
+                && item["file"] == "packages/storage/src/lib.zyl"
+                && item["message"].as_str().is_some_and(|message| {
+                    message.contains("Database(write)") && message.contains("package.effects")
+                })
+        }));
+
+    fs::remove_dir_all(directory).unwrap();
+    fs::remove_dir_all(output).unwrap();
 }

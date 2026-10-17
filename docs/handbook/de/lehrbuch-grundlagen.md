@@ -2069,7 +2069,7 @@ Geheimnisse übernommen und keine Zieldateien veröffentlicht werden. Das
 gewünschte Ausgabeverzeichnis wird nicht angelegt; intern erzeugt Zelyra ein
 temporäres Paket, prüft es mit `zelyra check` und entfernt es anschließend.
 Der Plan bleibt experimentell und kennzeichnet weiterhin
-`source_closure_complete: false` sowie `complete_deployment: false`.
+`source_closure_complete: true` wird nur bei leerer Liste ungelöster Verweise und nach erfolgreicher Compilerprüfung des generierten Einstiegs gemeldet. `complete_deployment` bleibt `false`, bis Laufzeit- und Betriebsanforderungen separat geprüft sind.
 
 Für den eigentlichen Export lässt du `--dry-run` weg:
 
@@ -2090,7 +2090,7 @@ geschrieben werden. Derzeit ist nur eine projektweite `DATABASE_URL`-Verbindung
 implementiert.
 
 Das Ergebnis ist ausdrücklich nur ein experimentelles Quellpaket:
-`zelyra.bundle.json` setzt sowohl `source_closure_complete` als auch
+`zelyra.bundle.json` dokumentiert den geprüften Quellabschluss und hält
 `complete_deployment` auf `false`. Es enthält weder Docker-/Compose-Dateien,
 Compiler-Binärdatei, Datenbankdienst noch `.env`; Zugangsdaten werden nicht
 kopiert. Für Betrieb und Datenbank sind weiterhin eine passende Zelyra-Version,
@@ -2127,9 +2127,9 @@ weist diesen begrenzten Umfang unter
 `docker.database_connection_scope: "per_exported_compose_project"` aus.
 
 Auch diese Docker-Paketierung ist noch kein vollständiger Modul-Export:
-`source_closure_complete` und `complete_deployment` bleiben `false`, weil der
-statische Abhängigkeitsgraph noch nicht alle Laufzeit- und Asset-Abhängigkeiten
-beweist. Ein erfolgreicher `zelyra check` ersetzt diesen Nachweis nicht.
+`source_closure_complete` dokumentiert den geprüften Quellabschluss;
+`complete_deployment` bleibt `false`, weil Laufzeit- und Asset-Anforderungen
+nicht vollständig belegt sind. Ein erfolgreicher `zelyra check` ersetzt diesen Nachweis nicht.
 Der Docker-End-to-End-Test exportiert zwei CRUD-Ressourcen aus getrennten
 Quelldateien in separate Compose-Projekte. Jedes Paket erhält eine eigene
 `DATABASE_URL`, ein separat bereitgestelltes Schema und ein MariaDB-Konto mit
