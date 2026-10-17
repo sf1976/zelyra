@@ -474,6 +474,18 @@ MARIADB_ROOT_PASSWORD=change-me-root
 # Optional local request protection and application settings.
 # ZELYRA_MODE=development
 
+# Optional native Commands and schedules. First declare `command` and
+# `schedule` in main.zyl, then review the compiler-checked schedule and export
+# a cron preview. The deploy directory must exist before export.
+# zelyra check main.zyl
+# zelyra task list main.zyl
+# zelyra schedule list main.zyl
+# mkdir -p deploy
+# zelyra schedule export main.zyl --format cron --output deploy/zelyra.cron
+# Review deploy/zelyra.cron, then add its appropriate lines with `crontab -e`.
+# This preview does not install or enable a cron job automatically.
+# See https://github.com/sf1976/zelyra/blob/main/docs/tasks.de.md
+
 # Optional CORS settings belong in zelyra.toml and should only be enabled with
 # an explicit project decision. Do not put production secrets in this file.
 "#

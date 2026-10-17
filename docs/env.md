@@ -83,6 +83,11 @@ die Anwendung weiter. Testvariablen und anwendungseigene, beliebige Werte aus
 `env(...)` werden nicht als Zelyra-Standardoptionen vorgetäuscht.
 `.env.example` enthält dieselbe Struktur, aber die Platzhalter
 `change-me` und die aktivierten Secrets sind nur als Vorlage gedacht.
+Am Ende der generierten Datei stehen außerdem auskommentierte Befehle, um
+deklarierte Commands und Zeitpläne zu prüfen, eine Cron-Vorschau zu erzeugen
+und sie nach Prüfung manuell mit `crontab -e` einzutragen. Die Vorschau
+installiert keinen Job; eine eingerichtete Systemplanung bleibt eine bewusste
+Betreiberaktion. Details stehen in [Commands und Zeitplänen](tasks.de.md).
 
 | Variable | Standard im generierten Projekt | Verwendung |
 |---|---:|---|

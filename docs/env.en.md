@@ -80,6 +80,10 @@ Compose service forwards the supported settings to the application. Test-only
 variables and arbitrary application values read with `env(...)` are not
 presented as Zelyra-wide defaults. `.env.example` has the same structure, but
 its `change-me` placeholders and active secret fields are only a template.
+The generated file also ends with commented commands to validate declared
+commands and schedules, export a cron preview, and add its reviewed lines
+manually with `crontab -e`. Export does not install a job; enabling host
+scheduling remains an explicit operator action. See [commands and schedules](tasks.en.md).
 
 | Variable | Generated default | Use |
 |---|---:|---|

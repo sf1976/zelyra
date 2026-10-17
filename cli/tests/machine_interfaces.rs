@@ -1817,6 +1817,11 @@ fn new_mariadb_project_propagates_the_selected_web_port() {
     assert!(env_file.contains("# ZELYRA_FEATURE_API=true"));
     assert!(env_file.contains("# ZELYRA_MFA_ENCRYPTION_KEY="));
     assert!(env_file.contains("# ZELYRA_SMTP_PASSWORD="));
+    assert!(env_file
+        .contains("# zelyra schedule export main.zyl --format cron --output deploy/zelyra.cron"));
+    assert!(env_file.contains(
+        "# Review deploy/zelyra.cron, then add its appropriate lines with `crontab -e`."
+    ));
     assert!(!env_file.contains("\nZELYRA_FEATURE_API=true"));
     assert!(!env_file.contains("\nZELYRA_MFA_ENCRYPTION_KEY="));
     assert!(env_file.contains(&format!("ZELYRA_DB_HOST_PORT={database_host_port}")));
