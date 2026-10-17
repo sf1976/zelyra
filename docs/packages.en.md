@@ -107,7 +107,7 @@ compile-time limits; they do not grant or bypass application capabilities, SQL
 checks, contracts, or runtime policy.
 
 On the current development branch, a publisher can create a key and sign a
-dependency-free source package:
+source package (including its package-local dependency closure):
 
 ```sh
 zelyra package keygen --publisher billing-team --output billing-team.key
@@ -149,14 +149,16 @@ SemVer version, verifies the index digest and signed artifact against
 under `.zelyra/packages/<name>/<version>` without overwriting an existing
 version, updates the dependency manifest and lock transactionally, and records
 registry, signer, public key, and artifact digest in `zelyra.lock`. It does not
-resolve or download transitive dependencies yet. Installed package checks and
-execution are offline.
+resolve or download dependencies separately. Any package dependencies must
+be included inside the signed package directory and use contained relative paths.
+Installed package checks and execution are offline.
 
 The default trust file is `zelyra.trust.toml` in the current directory. Use
 `--file <path>` to manage or verify against another trust file. Signed source
 artifacts contain only `zelyra.toml` and `.zyl` source files, are limited to
-32 MiB and 4,096 files, and currently reject packages with dependencies. The
-signing format is versioned and binds publisher ID, package name, exact
+32 MiB and 4,096 files. Package-local dependencies are included recursively
+when they are inside the signed package directory; external path dependencies
+are not portable and fail compiler validation. The signing format is versioned and binds publisher ID, package name, exact
 version, compatibility manifest, and normalized source digest. Transitive
 dependency resolution/upgrades and a published stable interface remain
 unfinished.

@@ -13,13 +13,24 @@ fn fixture() -> std::path::PathBuf {
         .as_nanos();
     let root = std::env::temp_dir().join(format!("zelyra-package-signatures-{stamp}"));
     fs::create_dir_all(root.join("package/src")).unwrap();
+    fs::create_dir_all(root.join("package/vendor/text/src")).unwrap();
     fs::write(
         root.join("package/zelyra.toml"),
-        "[package]\nname = \"sample\"\nversion = \"1.2.3\"\nentry = \"src/lib.zyl\"\nzelyra = \">=1.1, <2.0\"\n",
+        "[package]\nname = \"sample\"\nversion = \"1.2.3\"\nentry = \"src/lib.zyl\"\nzelyra = \">=1.1, <2.0\"\n\n[dependencies.text]\npath = \"vendor/text\"\nversion = \"=1.0.0\"\n",
     )
     .unwrap();
     fs::write(
         root.join("package/src/lib.zyl"),
+        "import \"pkg:text\" as text\npub fn greeting() -> String { return text::greeting() }\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("package/vendor/text/zelyra.toml"),
+        "[package]\nname = \"text\"\nversion = \"1.0.0\"\nentry = \"src/lib.zyl\"\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("package/vendor/text/src/lib.zyl"),
         "pub fn greeting() -> String { return \"hello\" }\n",
     )
     .unwrap();
@@ -317,8 +328,12 @@ fn package_add_downloads_exact_trusted_release_and_updates_offline_lock() {
     assert_eq!(source["publisher"].as_str(), Some("example-publisher"));
     assert_eq!(source["registry"].as_str(), Some(registry_url.as_str()));
     assert_eq!(source["artifact_sha256"].as_str().unwrap().len(), 71);
+    assert_eq!(lock["package"].as_array().unwrap().len(), 3);
     assert!(app
         .join(".zelyra/packages/sample/1.2.3/src/lib.zyl")
+        .is_file());
+    assert!(app
+        .join(".zelyra/packages/sample/1.2.3/vendor/text/src/lib.zyl")
         .is_file());
     let checked = zelyra(&app, &["package", "lock", "--check"]);
     assert!(

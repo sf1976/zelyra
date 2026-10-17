@@ -644,13 +644,6 @@ fn sign_command(args: &mut impl Iterator<Item = String>) -> Result<String, Strin
     let output = output.ok_or_else(|| "package sign requires --output".to_owned())?;
     let manifest_path = directory.join(MANIFEST);
     let manifest = read_manifest(&manifest_path).map_err(|error| error.message)?;
-    if manifest
-        .get("dependencies")
-        .and_then(toml::Value::as_table)
-        .is_some_and(|deps| !deps.is_empty())
-    {
-        return Err("signed source artifacts currently require a dependency-free package; publish dependencies as separate packages first".into());
-    }
     let package_table = manifest
         .get("package")
         .and_then(toml::Value::as_table)
@@ -1069,7 +1062,7 @@ fn validate_archive_path(path: &str) -> Result<(), String> {
         .components()
         .any(|component| !matches!(component, Component::Normal(_)))
         || is_unhashed_package_path(candidate)
-        || !(path == MANIFEST || path.ends_with(".zyl"))
+        || !(path == MANIFEST || path.ends_with("/zelyra.toml") || path.ends_with(".zyl"))
     {
         return Err(format!(
             "unsafe or unsupported package source path `{path}`"

@@ -116,7 +116,7 @@ Compilergrenzen; sie erteilen oder umgehen weder Anwendungs-Capabilities noch
 SQL-Prüfungen, Contracts oder Laufzeitregeln.
 
 Im aktuellen Entwicklungszweig kann ein Herausgeber einen Schlüssel anlegen
-und ein Paket ohne Abhängigkeiten signieren:
+und ein Quellpaket samt vollständig enthaltenen Paketabhängigkeiten signieren:
 
 ```sh
 zelyra package keygen --publisher rechnungsteam --output rechnungsteam.key
@@ -162,18 +162,20 @@ dem Ursprung des Index. Er schreibt ohne Überschreiben nach
 `.zelyra/packages/<name>/<version>`, aktualisiert Manifest und Lockfile mit
 Rollback und vermerkt Registry, Signierer, öffentlichen Schlüssel und
 Artefakt-Hash im `zelyra.lock`. Transitive Abhängigkeiten werden noch nicht
-aufgelöst oder geladen. Prüfung und Ausführung installierter Pakete sind offline
-möglich.
+separat aufgelöst oder geladen. Paketabhängigkeiten müssen bereits im signierten
+Paketverzeichnis enthalten sein. Prüfung und Ausführung installierter Pakete sind
+offline möglich.
 
 Die Standarddatei heißt `zelyra.trust.toml` im aktuellen Verzeichnis. Mit
 `--file <pfad>` kann eine andere Vertrauensdatei verwaltet oder für die Prüfung
 verwendet werden. Signierte Quellartefakte enthalten ausschließlich
 `zelyra.toml` und `.zyl`-Quellen, sind auf 32 MiB und 4.096 Dateien begrenzt
-und weisen Pakete mit Abhängigkeiten derzeit zurück. Das versionierte
-Signaturformat bindet Herausgeber-ID, Paketname, exakte Version,
-Kompatibilitätsmanifest und normalisierten Quell-Hash. Transitive
-Abhängigkeitsauflösung, Updates und eine veröffentlichte stabile Schnittstelle
-fehlen noch.
+und unterstützen Paketabhängigkeiten, wenn deren Dateien vollständig im
+Paketverzeichnis enthalten sind und relative Pfade verwenden. Externe Pfad-
+Abhängigkeiten scheitern an der Compilerprüfung. Das versionierte Signaturformat
+bindet Herausgeber-ID, Paketname, exakte Version, Kompatibilitätsmanifest und
+normalisierten Quell-Hash. Entfernte transitive Auflösung, Updates und eine
+veröffentlichte stabile Schnittstelle fehlen noch.
 
 Pakete können Konfigurationsfelder unter `[settings.<name>]` beschreiben:
 
