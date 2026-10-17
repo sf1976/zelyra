@@ -2993,6 +2993,9 @@ fn renders_crud_list_with_escaped_rows_and_pagination() {
     );
     assert!(cards_html.contains("zelyra-crud-cards"));
     assert!(cards_html.contains("zelyra-crud-card"));
+    assert!(cards_html
+        .contains("</legend><div class=\"z-query-controls__fields\"><label for=\"search\">"));
+    assert!(cards_html.contains("</button></div></fieldset></form>"));
     assert!(cards_html.contains("data-loading-message=\"Loading machines...\""));
     assert!(!cards_html.contains("<table>"));
 
