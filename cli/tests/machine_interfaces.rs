@@ -1495,6 +1495,7 @@ fn command_help_explains_options_without_running_the_command() {
     assert!(package.status.success());
     let package_help = String::from_utf8_lossy(&package.stdout);
     assert!(package_help.contains("cache clean [--apply]"));
+    assert!(package_help.contains("update --plan <datei.toml>"));
     assert!(package_help.contains("Statischen Index"));
 }
 
@@ -1528,6 +1529,7 @@ fn command_help_is_available_in_english() {
     assert!(package.status.success());
     let package_help = String::from_utf8_lossy(&package.stdout);
     assert!(package_help.contains("cache clean [--apply]"));
+    assert!(package_help.contains("update --plan <file.toml>"));
     assert!(package_help.contains("Build a static index"));
 }
 

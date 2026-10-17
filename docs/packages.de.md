@@ -203,6 +203,37 @@ Cacheversionen bleiben bis zum ausdrücklichen Aufruf von
 `zelyra package cache clean --apply` erhalten; es gibt weder SemVer-Bereich noch
 implizite Auswahl der neuesten Version.
 
+Mehrere Aliase lassen sich mit einem expliziten Plan gemeinsam aktualisieren:
+
+```toml
+[[update]]
+alias = "billing"
+registry = "https://packages.example.test/index.json"
+name = "billing"
+version = "1.2.4"
+
+[[update]]
+alias = "reporting"
+registry = "https://packages.example.test/index.json"
+name = "reporting"
+version = "2.0.1"
+```
+
+Speichere die Datei etwa als `updates.toml` und starte
+`zelyra package update --plan updates.toml`. Jeder Alias, jede Paketidentität
+und jede normalisierte exakte SemVer-Version muss eindeutig sein. Pro Alias
+müssen Herausgeber und Signierschlüssel mit dem bereits installierten Paket
+übereinstimmen und aktuell vertraut sein. Der Plan ist auf 128 Einträge, 256
+MiB Gesamtdownload, fünf Minuten und 16.384 Quell-Dateien begrenzt. Vor dem
+Umschalten werden sämtliche Registryeinträge, Hashes, Signaturen und Pakete
+geprüft. Danach werden Cacheversionen installiert, Manifest und Lock aktualisiert
+und das Gesamtprojekt kompiliert. Bei einem erkannten Fehler werden Manifest,
+Lock und neu installierte Cacheversionen zurückgerollt; vorhandene ältere
+Cacheversionen bleiben erhalten. Ein Prozessabbruch oder Stromausfall ist keine
+dateisystemübergreifend atomare Transaktion: Ein veraltetes Lockfile blockiert
+die Verwendung und muss nach Prüfung des Manifests mit
+`zelyra package lock --update` neu erzeugt werden.
+
 Die Standarddatei heißt `zelyra.trust.toml` im aktuellen Verzeichnis. Mit
 `--file <pfad>` kann eine andere Vertrauensdatei verwaltet oder für die Prüfung
 verwendet werden. Signierte Quellartefakte enthalten ausschließlich

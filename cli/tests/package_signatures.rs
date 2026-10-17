@@ -50,11 +50,32 @@ fn stdout(output: &Output) -> String {
 }
 
 fn serve_registry(root: std::path::PathBuf) -> (String, thread::JoinHandle<()>) {
+    serve_registry_requests(root, 2)
+}
+
+fn serve_registry_requests(
+    root: std::path::PathBuf,
+    request_count: usize,
+) -> (String, thread::JoinHandle<()>) {
     let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    listener.set_nonblocking(true).unwrap();
     let address = listener.local_addr().unwrap();
     let server = thread::spawn(move || {
-        for _ in 0..2 {
-            let (mut stream, _) = listener.accept().unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        for _ in 0..request_count {
+            let (mut stream, _) = loop {
+                match listener.accept() {
+                    Ok(connection) => break connection,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        assert!(
+                            std::time::Instant::now() < deadline,
+                            "registry request timed out"
+                        );
+                        thread::sleep(std::time::Duration::from_millis(5));
+                    }
+                    Err(error) => panic!("registry accept failed: {error}"),
+                }
+            };
             stream
                 .set_read_timeout(Some(std::time::Duration::from_secs(5)))
                 .unwrap();
@@ -89,6 +110,16 @@ fn serve_registry(root: std::path::PathBuf) -> (String, thread::JoinHandle<()>) 
         }
     });
     (format!("http://{address}/index.json"), server)
+}
+
+fn write_test_package(root: &Path, name: &str, version: &str, source: &str) {
+    fs::create_dir_all(root.join("src")).unwrap();
+    fs::write(
+        root.join("zelyra.toml"),
+        format!("[package]\nname = {name:?}\nversion = {version:?}\nentry = \"src/lib.zyl\"\n"),
+    )
+    .unwrap();
+    fs::write(root.join("src/lib.zyl"), source).unwrap();
 }
 
 fn serve_index(root: std::path::PathBuf) -> (String, thread::JoinHandle<()>) {
@@ -558,5 +589,341 @@ fn package_add_downloads_exact_trusted_release_and_updates_offline_lock() {
     assert!(cache_after_remove.status.success());
     assert!(!app.join(".zelyra/packages/sample/1.2.4").exists());
 
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn package_update_plan_updates_multiple_aliases_and_rolls_back_before_commit() {
+    let root = fixture();
+    let registry = root.join("registry");
+    let app = root.join("app");
+    fs::create_dir_all(&registry).unwrap();
+    fs::create_dir_all(&app).unwrap();
+    let key = root.join("publisher.key");
+    let generated = zelyra(
+        &root,
+        &[
+            "package",
+            "keygen",
+            "--publisher",
+            "example-publisher",
+            "--output",
+            key.to_str().unwrap(),
+        ],
+    );
+    assert!(
+        generated.status.success(),
+        "{}",
+        String::from_utf8_lossy(&generated.stderr)
+    );
+    let public_key = stdout(&generated)
+        .split("public key: ")
+        .nth(1)
+        .unwrap()
+        .split_ascii_whitespace()
+        .next()
+        .unwrap()
+        .to_owned();
+
+    for (name, new_version, old_version) in
+        [("billing", "1.1.0", "1.0.0"), ("reports", "2.1.0", "2.0.0")]
+    {
+        let package = root.join(format!("source-{name}"));
+        write_test_package(
+            &package,
+            name,
+            new_version,
+            "pub fn renamed() -> String { return \"new\" }\n",
+        );
+        let artifact_path = registry.join(format!("{name}-{new_version}.zpkg"));
+        let signed = zelyra(
+            &root,
+            &[
+                "package",
+                "sign",
+                package.to_str().unwrap(),
+                "--publisher",
+                "example-publisher",
+                "--key",
+                key.to_str().unwrap(),
+                "--output",
+                artifact_path.to_str().unwrap(),
+            ],
+        );
+        assert!(
+            signed.status.success(),
+            "{}",
+            String::from_utf8_lossy(&signed.stderr)
+        );
+        let cached = app.join(".zelyra/packages").join(name).join(old_version);
+        write_test_package(
+            &cached,
+            name,
+            old_version,
+            "pub fn label() -> String { return \"old\" }\n",
+        );
+    }
+    let indexed = zelyra(&root, &["package", "registry", "build", "registry"]);
+    assert!(
+        indexed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&indexed.stderr)
+    );
+
+    fs::write(
+        app.join("zelyra.toml"),
+        format!(
+            "[package]\nname = \"update_app\"\nversion = \"0.1.0\"\nentry = \"main.zyl\"\n\n[dependencies.billing]\npath = \".zelyra/packages/billing/1.0.0\"\nversion = \"=1.0.0\"\n\n[dependencies.reports]\npath = \".zelyra/packages/reports/2.0.0\"\nversion = \"=2.0.0\"\n\n[package_sources.billing]\nregistry = \"http://127.0.0.1:9/index.json\"\npublisher = \"example-publisher\"\npublic_key = {public_key:?}\nartifact_sha256 = \"sha256:{}\"\n\n[package_sources.reports]\nregistry = \"http://127.0.0.1:9/index.json\"\npublisher = \"example-publisher\"\npublic_key = {public_key:?}\nartifact_sha256 = \"sha256:{}\"\n",
+            "a".repeat(64),
+            "b".repeat(64),
+        ),
+    )
+    .unwrap();
+    fs::write(
+        app.join("main.zyl"),
+        "import \"pkg:billing\" as billing\nimport \"pkg:reports\" as reports\nfn main() { print(billing::label()); print(reports::label()) }\n",
+    )
+    .unwrap();
+    let trusted = zelyra(
+        &app,
+        &[
+            "package",
+            "trust",
+            "add",
+            "example-publisher",
+            public_key.as_str(),
+        ],
+    );
+    assert!(
+        trusted.status.success(),
+        "{}",
+        String::from_utf8_lossy(&trusted.stderr)
+    );
+    let locked = zelyra(&app, &["package", "lock", "--update"]);
+    assert!(
+        locked.status.success(),
+        "{}",
+        String::from_utf8_lossy(&locked.stderr)
+    );
+    let baseline_check = zelyra(&app, &["check", "main.zyl"]);
+    assert!(
+        baseline_check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&baseline_check.stderr)
+    );
+
+    let plan_path = app.join("updates.toml");
+    fs::write(
+        &plan_path,
+        format!(
+            "[[update]]\nalias = \"billing\"\nregistry = \"http://127.0.0.1:9/index.json\"\nname = \"billing\"\nversion = \"1.1.0\"\n\n[[update]]\nalias = \"reports\"\nregistry = \"http://127.0.0.1:9/index.json\"\nname = \"reports\"\nversion = \"2.1.0\"\n"
+        ),
+    )
+    .unwrap();
+    let original_plan = fs::read_to_string(&plan_path).unwrap();
+    fs::write(
+        &plan_path,
+        original_plan.replace("alias = \"reports\"", "alias = \"billing\""),
+    )
+    .unwrap();
+    let duplicate = zelyra(
+        &app,
+        &["package", "update", "--plan", plan_path.to_str().unwrap()],
+    );
+    assert!(!duplicate.status.success());
+    assert!(String::from_utf8_lossy(&duplicate.stderr).contains("duplicate alias"));
+    fs::write(
+        &plan_path,
+        original_plan
+            .replace("name = \"reports\"", "name = \"billing\"")
+            .replace("version = \"2.1.0\"", "version = \"1.1.0\""),
+    )
+    .unwrap();
+    let duplicate_package = zelyra(
+        &app,
+        &["package", "update", "--plan", plan_path.to_str().unwrap()],
+    );
+    assert!(!duplicate_package.status.success());
+    assert!(
+        String::from_utf8_lossy(&duplicate_package.stderr).contains("repeats package"),
+        "unexpected duplicate package error: {}",
+        String::from_utf8_lossy(&duplicate_package.stderr)
+    );
+    fs::write(&plan_path, &original_plan).unwrap();
+
+    let untrusted = zelyra(
+        &app,
+        &[
+            "package",
+            "trust",
+            "remove",
+            "example-publisher",
+            public_key.as_str(),
+        ],
+    );
+    assert!(untrusted.status.success());
+    let (untrusted_registry_url, untrusted_server) = serve_registry_requests(registry.clone(), 2);
+    fs::write(
+        &plan_path,
+        original_plan.replace("http://127.0.0.1:9/index.json", &untrusted_registry_url),
+    )
+    .unwrap();
+    let rejected_untrusted = zelyra(
+        &app,
+        &["package", "update", "--plan", plan_path.to_str().unwrap()],
+    );
+    assert!(!rejected_untrusted.status.success());
+    assert!(String::from_utf8_lossy(&rejected_untrusted.stderr).contains("no longer trusted"));
+    untrusted_server.join().unwrap();
+    let restored_trust = zelyra(
+        &app,
+        &[
+            "package",
+            "trust",
+            "add",
+            "example-publisher",
+            public_key.as_str(),
+        ],
+    );
+    assert!(restored_trust.status.success());
+    let (registry_url, server) = serve_registry_requests(registry.clone(), 4);
+    fs::write(
+        &plan_path,
+        original_plan.replace("http://127.0.0.1:9/index.json", &registry_url),
+    )
+    .unwrap();
+
+    let valid_reports = fs::read(registry.join("reports-2.1.0.zpkg")).unwrap();
+    let mut damaged = valid_reports.clone();
+    damaged.push(b' ');
+    fs::write(registry.join("reports-2.1.0.zpkg"), damaged).unwrap();
+    let original_manifest = fs::read(app.join("zelyra.toml")).unwrap();
+    let original_lock = fs::read(app.join("zelyra.lock")).unwrap();
+    let rejected = zelyra(
+        &app,
+        &["package", "update", "--plan", plan_path.to_str().unwrap()],
+    );
+    assert!(!rejected.status.success());
+    assert!(
+        String::from_utf8_lossy(&rejected.stderr).contains("digest"),
+        "unexpected digest rollback error: {}",
+        String::from_utf8_lossy(&rejected.stderr)
+    );
+    server.join().unwrap();
+    assert_eq!(
+        fs::read(app.join("zelyra.toml")).unwrap(),
+        original_manifest
+    );
+    assert_eq!(fs::read(app.join("zelyra.lock")).unwrap(), original_lock);
+    assert!(!app.join(".zelyra/packages/billing/1.1.0").exists());
+    fs::write(registry.join("reports-2.1.0.zpkg"), valid_reports).unwrap();
+
+    let (compiler_registry_url, compiler_server) = serve_registry_requests(registry.clone(), 4);
+    fs::write(
+        &plan_path,
+        original_plan.replace("http://127.0.0.1:9/index.json", &compiler_registry_url),
+    )
+    .unwrap();
+    let original_manifest = fs::read(app.join("zelyra.toml")).unwrap();
+    let original_lock = fs::read(app.join("zelyra.lock")).unwrap();
+    let compiler_rejected = zelyra(
+        &app,
+        &["package", "update", "--plan", plan_path.to_str().unwrap()],
+    );
+    assert!(!compiler_rejected.status.success());
+    assert!(
+        String::from_utf8_lossy(&compiler_rejected.stderr).contains("compiler validation failed"),
+        "unexpected update-plan error: {}",
+        String::from_utf8_lossy(&compiler_rejected.stderr)
+    );
+    compiler_server.join().unwrap();
+    assert_eq!(
+        fs::read(app.join("zelyra.toml")).unwrap(),
+        original_manifest
+    );
+    assert_eq!(fs::read(app.join("zelyra.lock")).unwrap(), original_lock);
+    assert!(!app.join(".zelyra/packages/billing/1.1.0").exists());
+    assert!(!app.join(".zelyra/packages/reports/2.1.0").exists());
+
+    for (name, version) in [("billing", "1.1.1"), ("reports", "2.1.1")] {
+        let package = root.join(format!("source-{name}-compatible"));
+        write_test_package(
+            &package,
+            name,
+            version,
+            "pub fn label() -> String { return \"updated\" }\n",
+        );
+        let artifact_path = registry.join(format!("{name}-{version}.zpkg"));
+        let signed = zelyra(
+            &root,
+            &[
+                "package",
+                "sign",
+                package.to_str().unwrap(),
+                "--publisher",
+                "example-publisher",
+                "--key",
+                key.to_str().unwrap(),
+                "--output",
+                artifact_path.to_str().unwrap(),
+            ],
+        );
+        assert!(
+            signed.status.success(),
+            "{}",
+            String::from_utf8_lossy(&signed.stderr)
+        );
+    }
+    let indexed = zelyra(&root, &["package", "registry", "build", "registry"]);
+    assert!(
+        indexed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&indexed.stderr)
+    );
+
+    let (success_registry_url, server) = serve_registry_requests(registry, 4);
+    fs::write(
+        &plan_path,
+        original_plan
+            .replace("1.1.0", "1.1.1")
+            .replace("2.1.0", "2.1.1")
+            .replace("http://127.0.0.1:9/index.json", &success_registry_url),
+    )
+    .unwrap();
+    let updated = zelyra(
+        &app,
+        &["package", "update", "--plan", plan_path.to_str().unwrap()],
+    );
+    assert!(
+        updated.status.success(),
+        "{}",
+        String::from_utf8_lossy(&updated.stderr)
+    );
+    assert!(stdout(&updated).contains("updated 2 package alias(es) atomically"));
+    server.join().unwrap();
+    assert!(app
+        .join(".zelyra/packages/billing/1.1.1/src/lib.zyl")
+        .is_file());
+    assert!(app
+        .join(".zelyra/packages/reports/2.1.1/src/lib.zyl")
+        .is_file());
+    assert!(app
+        .join(".zelyra/packages/billing/1.0.0/src/lib.zyl")
+        .is_file());
+    assert!(app
+        .join(".zelyra/packages/reports/2.0.0/src/lib.zyl")
+        .is_file());
+    let lock_check = zelyra(&app, &["package", "lock", "--check"]);
+    assert!(
+        lock_check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&lock_check.stderr)
+    );
+    let compiled = zelyra(&app, &["check", "main.zyl"]);
+    assert!(
+        compiled.status.success(),
+        "{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
     fs::remove_dir_all(root).unwrap();
 }

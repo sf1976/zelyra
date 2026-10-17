@@ -187,6 +187,35 @@ manifest and lock are updated with rollback. Previous cached versions remain
 available until explicitly removed with `zelyra package cache clean --apply`;
 no semver range or implicit latest-version choice is applied.
 
+Update several aliases together with an explicit plan:
+
+```toml
+[[update]]
+alias = "billing"
+registry = "https://packages.example.test/index.json"
+name = "billing"
+version = "1.2.4"
+
+[[update]]
+alias = "reporting"
+registry = "https://packages.example.test/index.json"
+name = "reporting"
+version = "2.0.1"
+```
+
+Save the file as `updates.toml`, for example, and run
+`zelyra package update --plan updates.toml`. Each alias, package identity, and
+normalized exact SemVer version must be unique. For each alias, the publisher
+and signing key must match the installed package and remain explicitly trusted.
+The plan is bounded to 128 entries, 256 MiB total download, five minutes, and
+16,384 source files. Before switching versions, Zelyra verifies every registry
+entry, digest, signature, and package. It then installs cache versions, updates
+the manifest and lock, and compiles the complete project. A detected failure
+rolls back the manifest, lock, and newly installed cache versions; old cached
+versions are retained. A process interruption or power loss cannot be one
+filesystem-wide atomic transaction: a stale lock blocks project use and must
+be regenerated with `zelyra package lock --update` after reviewing the manifest.
+
 The default trust file is `zelyra.trust.toml` in the current directory. Use
 `--file <path>` to manage or verify against another trust file. Signed source
 artifacts contain only `zelyra.toml` and `.zyl` source files, are limited to
