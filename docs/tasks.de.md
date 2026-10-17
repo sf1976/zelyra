@@ -76,6 +76,15 @@ Minuten nicht nach und bietet noch keine dauerhafte verteilte Lease- oder
 Retry-Garantie; das gehört in die nächste Jobsystem-Etappe. `zelyra run` liest
 die Einstellungen weiterhin aus der Projekt-`.env`.
 
+`zelyra schedule status main.zyl [--json]` zeigt die compilergeprüften
+Zeitpläne, den Installations-/Aktivzustand des Projekt-Dienstes und den daraus
+ermittelten Schedulerzustand. Es startet oder verändert nichts. Die JSON-
+Ausgabe ist Version 1 und enthält `platform_service_supported`,
+`declared_schedule_count`, `service_installed`, `service_active`,
+`scheduler_active` und die Zeitplanmetadaten. Auf nicht unterstützten
+Plattformen wird der Dienst als nicht verfügbar und der Scheduler als inaktiv
+gemeldet.
+
 Ein Schedule mit `cron` verwendet fünf numerische Felder für Minute, Stunde,
 Monatstag, Monat und Wochentag. Unterstützt werden Zahlen, `*`, Listen,
 Bereiche und `/Schritt`; Monats- und Wochentagsnamen sind derzeit nicht

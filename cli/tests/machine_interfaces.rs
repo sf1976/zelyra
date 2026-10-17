@@ -1135,6 +1135,27 @@ fn main() { }
     let schedule_json: serde_json::Value = serde_json::from_slice(&schedules.stdout).unwrap();
     assert_eq!(schedule_json["schedules"][0]["cron"], "0 8 * * 1-5");
 
+    let config_home = directory.join("isolated-config");
+    fs::create_dir_all(&config_home).unwrap();
+    let status = Command::new(binary())
+        .args(["schedule", "status", path.to_str().unwrap(), "--json"])
+        .env("XDG_CONFIG_HOME", &config_home)
+        .output()
+        .expect("schedule status command should run");
+    assert!(
+        status.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&status.stdout),
+        String::from_utf8_lossy(&status.stderr)
+    );
+    let status_json: serde_json::Value = serde_json::from_slice(&status.stdout).unwrap();
+    assert_eq!(status_json["schema_version"], 1);
+    assert_eq!(status_json["declared_schedule_count"], 1);
+    assert_eq!(status_json["service_installed"], false);
+    assert_eq!(status_json["service_active"], false);
+    assert_eq!(status_json["scheduler_active"], false);
+    assert_eq!(status_json["schedules"][0]["name"], "morning_status");
+
     let execution = run(&["task", "run", path.to_str().unwrap(), "report_status"]);
     assert!(
         execution.status.success(),

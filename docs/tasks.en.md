@@ -71,6 +71,14 @@ missed during downtime and does not yet provide durable distributed leases or
 retries; those belong to the next job-system milestone. `zelyra run` continues
 to read project settings from `.env`.
 
+`zelyra schedule status main.zyl [--json]` reports compiler-checked schedule
+declarations, the project service's installed/active state, and the resulting
+scheduler state. It does not start or change anything. The version 1 JSON
+output includes `platform_service_supported`, `declared_schedule_count`,
+`service_installed`, `service_active`, `scheduler_active`, and schedule
+metadata. On unsupported platforms the service is reported unavailable and
+the scheduler inactive.
+
 The `cron` property uses five numeric fields for minute, hour, day of month,
 month, and day of week. Numbers, `*`, lists, ranges, and `/step` are supported;
 month and weekday names are not supported yet. The field syntax and ranges are

@@ -438,6 +438,89 @@ pub(super) fn schedule_command(mut args: impl Iterator<Item = String>) -> ExitCo
         return ExitCode::from(2);
     };
     match action.as_str() {
+        "status" => {
+            let json = match args.next().as_deref() {
+                None => false,
+                Some("--json") => true,
+                _ => {
+                    schedule_usage();
+                    return ExitCode::from(2);
+                }
+            };
+            if args.next().is_some() {
+                schedule_usage();
+                return ExitCode::from(2);
+            }
+            let Ok(program) = validate(&path) else {
+                return ExitCode::from(1);
+            };
+            let Some(workspace) = std::path::Path::new(&path)
+                .canonicalize()
+                .ok()
+                .and_then(|entry| entry.parent().map(std::path::Path::to_path_buf))
+            else {
+                eprintln!("error[E-TASK-003]: cannot resolve project directory");
+                return ExitCode::from(1);
+            };
+            let manager_supported = cfg!(target_os = "linux");
+            let (service_installed, service_active) =
+                super::service_cli::current_project_service_state(&workspace);
+            let scheduler_active = manager_supported
+                && !program.schedules.is_empty()
+                && service_installed
+                && service_active;
+            if json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&json!({
+                        "schema_version": 1,
+                        "platform_service_supported": manager_supported,
+                        "declared_schedule_count": program.schedules.len(),
+                        "service_installed": service_installed,
+                        "service_active": service_active,
+                        "scheduler_active": scheduler_active,
+                        "schedules": program.schedules.iter().map(|schedule| json!({
+                            "name": schedule.name,
+                            "command": schedule.command,
+                            "cron": schedule.cron,
+                            "timezone": schedule.timezone.as_deref().unwrap_or("UTC"),
+                        })).collect::<Vec<_>>(),
+                    }))
+                    .expect("schedule status JSON is serializable")
+                );
+            } else {
+                println!("Declared schedules: {}", program.schedules.len());
+                println!(
+                    "Project service: {}",
+                    if !manager_supported {
+                        "unsupported on this platform"
+                    } else if service_active {
+                        "active"
+                    } else if service_installed {
+                        "installed but inactive"
+                    } else {
+                        "not installed"
+                    }
+                );
+                println!(
+                    "Scheduler: {}",
+                    if scheduler_active {
+                        "active in the installed project service"
+                    } else {
+                        "inactive"
+                    }
+                );
+                for schedule in &program.schedules {
+                    println!(
+                        "{}: {}  {}",
+                        schedule.name,
+                        schedule.cron,
+                        schedule.timezone.as_deref().unwrap_or("UTC (default)")
+                    );
+                }
+            }
+            ExitCode::SUCCESS
+        }
         "trigger" => {
             let Some(flag) = args.next() else {
                 schedule_usage();
@@ -1091,7 +1174,7 @@ fn task_usage() {
 }
 
 fn schedule_usage() {
-    eprintln!("Usage: zelyra schedule list <main.zyl> [--json] | schedule export <main.zyl> [--format cron] [--output <project-relative-file>] | schedule trigger <main.zyl> --name <schedule>");
+    eprintln!("Usage: zelyra schedule status <main.zyl> [--json] | schedule list <main.zyl> [--json] | schedule export <main.zyl> [--format cron] [--output <project-relative-file>] | schedule trigger <main.zyl> --name <schedule>");
 }
 
 #[cfg(test)]

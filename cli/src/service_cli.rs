@@ -79,32 +79,37 @@ pub(super) fn current_project_service_id(workspace: &std::path::Path) -> Option<
 }
 
 pub(super) fn current_project_service_is_active(workspace: &std::path::Path) -> bool {
+    current_project_service_state(workspace).1
+}
+
+pub(super) fn current_project_service_state(workspace: &std::path::Path) -> (bool, bool) {
     #[cfg(target_os = "linux")]
     {
         let Ok(workspace) = workspace.canonicalize() else {
-            return false;
+            return (false, false);
         };
         let Ok(unit_path) = service_file_path(&workspace) else {
-            return false;
+            return (false, false);
         };
         let Ok(metadata) = std::fs::symlink_metadata(&unit_path) else {
-            return false;
+            return (false, false);
         };
         if metadata.file_type().is_symlink() || !metadata.is_file() {
-            return false;
+            return (false, false);
         }
         let Some(name) = unit_path.file_name().and_then(|name| name.to_str()) else {
-            return false;
+            return (false, false);
         };
-        Command::new("systemctl")
+        let active = Command::new("systemctl")
             .args(["--user", "is-active", "--quiet", name])
             .status()
-            .is_ok_and(|status| status.success())
+            .is_ok_and(|status| status.success());
+        (true, active)
     }
     #[cfg(not(target_os = "linux"))]
     {
         let _ = workspace;
-        false
+        (false, false)
     }
 }
 
