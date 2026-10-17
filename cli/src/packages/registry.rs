@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use toml_edit::{value, ArrayOfTables, DocumentMut, Item, Table};
 use url::Url;
+use zeroize::Zeroize;
 
 const PACKAGE_FORMAT: u64 = 1;
 const MAX_PACKAGE_BYTES: u64 = 32 * 1024 * 1024;
@@ -895,8 +896,10 @@ fn sign_command(args: &mut impl Iterator<Item = String>) -> Result<String, Strin
     files.sort_by(|left, right| left.0.cmp(&right.0));
     validate_package_sources(&files, &name, &version)?;
     let checksum = checksum_source_files(&files);
-    let key_bytes = read_regular_file(&key_path, 4096, "private signing key")?;
-    let key = Ed25519KeyPair::from_pkcs8(&key_bytes)
+    let mut key_bytes = read_regular_file(&key_path, 4096, "private signing key")?;
+    let key_result = Ed25519KeyPair::from_pkcs8(&key_bytes);
+    key_bytes.zeroize();
+    let key = key_result
         .map_err(|_| "private signing key is not a valid Ed25519 PKCS#8 key".to_owned())?;
     let payload = signature_payload(&publisher, &name, &version, &checksum);
     let signature = key.sign(payload.as_bytes());
