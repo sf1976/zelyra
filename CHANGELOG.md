@@ -6,6 +6,30 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+## 1.1.5 — 2026-10-17
+
+- Add optional `zelyra` SemVer compatibility requirements to local package
+  manifests. Check them against the running CLI before package use or lockfile
+  generation and expose them through `zelyra module list`. The package manifest
+  checksum makes requirement changes invalidate the lockfile. / Optionale
+  SemVer-Kompatibilitätsvorgaben `zelyra` in lokalen Paketmanifesten ergänzen.
+  Sie werden vor Paketverwendung und Lockfile-Erstellung gegen die laufende
+  CLI geprüft und in `zelyra module list` angezeigt. Die Manifestprüfsumme
+  macht das Lockfile bei Änderungen ungültig.
+- Add `zelyra module init` to scaffold a versioned local package entirely
+  offline. It writes a compatible manifest, an empty effect ceiling, a typed
+  public starter function, and a README; it refuses to overwrite any existing
+  destination and rejects duplicate options. / `zelyra module init` erstellt
+  vollständig offline ein versioniertes lokales Paket. Der Befehl erzeugt ein
+  kompatibles Manifest, eine leere Effektobergrenze, eine getypte öffentliche
+  Startfunktion und eine README. Vorhandene Ziele und doppelte Optionen werden
+  abgewiesen.
+- Add a reusable, pure `csv_import` package to the business-module example.
+  It validates non-empty header names and row widths without writing to a
+  database. / Ein wiederverwendbares, nebenwirkungsfreies Paket `csv_import`
+  zum Geschäftsmodule-Beispiel hinzufügen. Es prüft nicht leere Kopfspalten
+  und Zeilenbreiten, ohne in eine Datenbank zu schreiben.
+
 ## 1.1.2 — 2026-10-17
 
 - Remove the experimental Laravel analyzer and scaffold command from the CLI, current documentation, and shipped tests. Preserve its source and historical reports in a separate archive; this release does not include a Laravel importer. / Den experimentellen Laravel-Analysator und Gerüstbefehl aus CLI, aktueller Dokumentation und Tests entfernen. Quellcode und historische Berichte bleiben separat archiviert; dieses Release enthält keinen Laravel-Importer.

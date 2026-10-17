@@ -22,6 +22,23 @@ begrenzten Zwischenwert; ein gültiges Ergebnis scheitert nicht allein an einem
 128-Bit-Zwischenüberlauf. Überschüssige Nachkommastellen werden weiterhin gegen
 null abgeschnitten. Das ist keine automatische Geldrundung.
 
+Datenbankspalten können Speicherpräzision und Skala ausdrücklich angeben:
+
+```zelyra
+table invoice_lines {
+    id: Id primary auto
+    quantity: Decimal(10, 2) required
+    unit_price: Decimal(12, 2) required
+}
+```
+
+Die Präzision beträgt 1–39, die Skala 0–9 und muss kleiner als die Präzision
+sein. MariaDB erhält `DECIMAL(p,s)`, PostgreSQL und SQLite `NUMERIC(p,s)`.
+Ein nicht qualifiziertes `Decimal` behält den bisherigen Speicherstandard
+`39,9`. Explizite Präzision begrenzt den Speicher, ändert aber nicht den
+Laufzeitbereich von Decimal; Anwendungswerte müssen weiterhin in die
+deklarierte Spalte passen.
+
 Konstruktor und Formulare akzeptieren einen Punkt als Dezimaltrennzeichen,
 keine Exponenten, kein führendes Plus, keine Leerzeichen, kein NaN/Unendlich
 und höchstens neun Nachkommastellen. `decimal_scaled_result` behält seinen
@@ -33,7 +50,7 @@ separaten Vertrag für geprüfte Cent-Eingaben, einschließlich Dezimalkomma.
 `Result<Decimal, String>`. Modi: `toward_zero`, `floor`, `ceiling`, `half_up`
 (Halbwerte vom Nullpunkt weg) und `half_even` (Halbwerte zur geraden letzten
 Ziffer). Sie gelten auch für negative Werte. Skalen von 0 bis 9 sind zulässig.
-Das Runden beseitigt keinen bereits beim Rechnen eingetretenen Präzisionsverlust.
+Das Runden beseitigt keinen bereits beim Rechnen eingetretenen Präzisionsverlust. `decimal_quantize_result`, `decimal_scaled_result` und `format_scaled_result` verwenden dieselbe reine Runtime-Implementierung in AST, MIR und Bytecode; Differenzialtests decken Rundungsmodi und Festkommaformatierung ab.
 
 `format_text` entfernt bedeutungslose Nachkommastellen. Für eine feste
 Geldanzeige wie `119.00` den gerundeten Wert über `decimal_scaled_result` und

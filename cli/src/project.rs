@@ -1,3 +1,4 @@
+use crate::packages::PackageGraph;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -64,6 +65,7 @@ struct Loader {
     order: Vec<PathBuf>,
     visiting: Vec<PathBuf>,
     source_overrides: HashMap<PathBuf, String>,
+    packages: Option<PackageGraph>,
 }
 
 fn builtin_ui_module_path() -> PathBuf {
@@ -208,6 +210,27 @@ fn load_with_overrides(
         });
     }
 
+    let packages = PackageGraph::load(&root).map_err(|error| ProjectError {
+        code: "E-PKG-001",
+        message: error.message,
+        path: "zelyra.toml".into(),
+        span: Span::default(),
+        sources: Box::default(),
+    })?;
+    if let Some(packages) = &packages {
+        // A package without dependencies has no external resolution state to
+        // pin; source modules keep their legacy project-local rules.
+        if packages.dependencies_present() {
+            packages.check_lockfile().map_err(|error| ProjectError {
+                code: "E-PKG-002",
+                message: error.message,
+                path: "zelyra.lock".into(),
+                span: Span::default(),
+                sources: Box::default(),
+            })?;
+        }
+    }
+
     let mut loader = Loader {
         root,
         sources: Vec::new(),
@@ -215,6 +238,7 @@ fn load_with_overrides(
         order: Vec::new(),
         visiting: Vec::new(),
         source_overrides,
+        packages,
     };
     loader.visit(canonical_entry.clone(), None)?;
     let mut open_paths = loader.source_overrides.keys().cloned().collect::<Vec<_>>();
@@ -600,6 +624,34 @@ impl Loader {
             }
         };
 
+        let package_effect_violation = self.packages.as_ref().and_then(|packages| {
+            let (package_name, allowed_effects) = packages.declared_effects_for(&canonical)?;
+            program.functions.iter().find_map(|function| {
+                function
+                    .capabilities
+                    .iter()
+                    .find(|capability| !allowed_effects.contains(*capability))
+                    .map(|capability| {
+                        (
+                            package_name.to_owned(),
+                            function.name.clone(),
+                            capability.clone(),
+                            function.span,
+                        )
+                    })
+            })
+        });
+        if let Some((package_name, function, capability, span)) = package_effect_violation {
+            return Err(self.error(
+                "E-PKG-003",
+                format!(
+                    "function `{function}` declares effect `{capability}`, which is not included in package `{package_name}`'s `package.effects` ceiling"
+                ),
+                display_path,
+                span,
+            ));
+        }
+
         let mut aliases = HashSet::new();
         for import in &program.imports {
             if !aliases.insert(import.alias.clone()) {
@@ -615,7 +667,7 @@ impl Loader {
         self.visiting.push(canonical.clone());
         let mut resolved_imports = HashMap::new();
         for import in &program.imports {
-            let target = self.import_target(import, &display_path)?;
+            let target = self.import_target(import, &display_path, &canonical)?;
             self.visit(target.clone(), Some((display_path.clone(), import.span)))?;
             let resolved = if is_builtin_ui_module(&target) {
                 target
@@ -648,9 +700,40 @@ impl Loader {
         Ok(())
     }
 
-    fn import_target(&self, import: &ImportDef, importer: &str) -> Result<PathBuf, ProjectError> {
+    fn import_target(
+        &self,
+        import: &ImportDef,
+        importer: &str,
+        importer_path: &Path,
+    ) -> Result<PathBuf, ProjectError> {
         if import.path == "zelyra/ui" {
             return Ok(builtin_ui_module_path());
+        }
+        if import.path.starts_with("pkg:") {
+            let Some(packages) = &self.packages else {
+                return Err(self.error(
+                    "E-PKG-001",
+                    format!(
+                        "package import `{}` requires package metadata in `zelyra.toml`",
+                        import.path
+                    ),
+                    importer.to_owned(),
+                    import.span,
+                ));
+            };
+            return packages
+                .import_target(importer_path, &import.path)
+                .map_err(|error| {
+                    self.error("E-PKG-001", error.message, importer.to_owned(), import.span)
+                })?
+                .ok_or_else(|| {
+                    self.error(
+                        "E-PKG-001",
+                        format!("invalid package import `{}`", import.path),
+                        importer.to_owned(),
+                        import.span,
+                    )
+                });
         }
         let relative = Path::new(&import.path);
         let valid_components = relative
@@ -670,7 +753,23 @@ impl Loader {
                 import.span,
             ));
         }
-        Ok(self.root.join(relative))
+        let package_base = self
+            .packages
+            .as_ref()
+            .and_then(|packages| packages.source_base(importer_path));
+        if package_base.is_some() && crate::packages::is_unhashed_package_path(relative) {
+            return Err(self.error(
+                "E-MOD-001",
+                format!(
+                    "package import `{}` may not traverse `.git` or `target`; these generated or version-control directories are excluded from package checksums",
+                    import.path
+                ),
+                importer.to_owned(),
+                import.span,
+            ));
+        }
+        let base = package_base.unwrap_or_else(|| self.root.clone());
+        Ok(base.join(relative))
     }
 
     fn relative(&self, path: &Path) -> String {
@@ -811,6 +910,40 @@ fn link_modules(
             )?;
             function.name = internal_name(module_name, &function.name);
             linked.functions.push(function);
+        }
+        for mut command in module.program.commands.clone() {
+            let mut handler = Expr {
+                kind: ExprKind::Call {
+                    name: command.handler.clone(),
+                    type_args: Vec::new(),
+                    args: Vec::new(),
+                },
+                span: command.span,
+            };
+            rewrite_expr(
+                &mut handler,
+                path,
+                module_name,
+                &module.imports,
+                function_sets
+                    .get(path)
+                    .expect("current module functions are indexed"),
+                &function_sets,
+                &module_names,
+                &root_functions,
+                &module.relative_path,
+                false,
+            )?;
+            if let ExprKind::Call { name, .. } = handler.kind {
+                command.handler = name;
+            }
+            command.name = internal_name(module_name, &command.name);
+            linked.commands.push(command);
+        }
+        for mut schedule in module.program.schedules.clone() {
+            schedule.name = internal_name(module_name, &schedule.name);
+            schedule.command = internal_name(module_name, &schedule.command);
+            linked.schedules.push(schedule);
         }
         for mut form in module.program.forms.clone() {
             for field in &mut form.fields {
@@ -1572,6 +1705,7 @@ impl TypeLinker<'_> {
             | Type::String
             | Type::Char
             | Type::Bytes
+            | Type::Json
             | Type::Timestamp
             | Type::Date
             | Type::Time
@@ -2511,10 +2645,37 @@ fn project_error(
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::{Arc, Mutex};
     use zelyra_database::build_schema;
     use zelyra_runtime::{check, execute};
 
     static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
+
+    struct PackageConsoleHost {
+        calls: AtomicU64,
+        prompt: Mutex<Option<String>>,
+    }
+
+    impl zelyra_runtime::HostServices for PackageConsoleHost {
+        fn unix_time_millis(&self) -> Result<i64, String> {
+            Ok(0)
+        }
+
+        fn environment_variable(&self, _name: &str) -> Result<Option<String>, String> {
+            Ok(None)
+        }
+
+        fn fill_random(&self, output: &mut [u8]) -> Result<(), String> {
+            output.fill(0);
+            Ok(())
+        }
+
+        fn read_console_line(&self, prompt: &str) -> Result<Option<String>, String> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            *self.prompt.lock().unwrap() = Some(prompt.into());
+            Ok(Some("approved by test host".into()))
+        }
+    }
 
     fn project(files: &[(&str, &str)]) -> PathBuf {
         let id = NEXT_TEMP.fetch_add(1, Ordering::Relaxed);
@@ -2659,6 +2820,195 @@ mod tests {
                 }
             ]
         );
+        cleanup(&directory);
+    }
+
+    #[test]
+    fn flattened_local_package_graph_lowers_and_executes_in_mir_like_ast() {
+        let directory = project(&[
+            (
+                "zelyra.toml",
+                "[package]\nname = \"modular_app\"\nversion = \"1.0.0\"\nentry = \"main.zyl\"\n\n[dependencies.money]\npath = \"packages/money\"\nversion = \"^1.2\"\n",
+            ),
+            (
+                "main.zyl",
+                "import \"pkg:money\" as money\nfn main() -> Int { total = money::add_cents(1250, 50) return total.cents }\n",
+            ),
+            (
+                "packages/money/zelyra.toml",
+                "[package]\nname = \"money\"\nversion = \"1.2.3\"\nentry = \"src/lib.zyl\"\n",
+            ),
+            (
+                "packages/money/src/lib.zyl",
+                "import \"src/arithmetic.zyl\" as arithmetic\npub struct Money { cents: Int }\npub fn add_cents(left: Int, right: Int) -> Money { return Money { cents: arithmetic::sum(left, right) } }\n",
+            ),
+            (
+                "packages/money/src/arithmetic.zyl",
+                "pub fn sum(left: Int, right: Int) -> Int { return left + right }\n",
+            ),
+        ]);
+        let package_graph = crate::packages::PackageGraph::load(&directory)
+            .unwrap()
+            .expect("package manifest is present");
+        crate::packages::write_lockfile(&package_graph, true).unwrap();
+
+        let entry = directory.join("main.zyl");
+        let loaded = load(entry.to_str().unwrap()).unwrap();
+        assert_eq!(loaded.sources.len(), 3);
+        assert_eq!(loaded.modules.len(), 3);
+        let ast_value =
+            zelyra_runtime::execute_function(&loaded.program, "main", vec![], None).unwrap();
+        assert_eq!(ast_value, zelyra_runtime::Value::Int(1300));
+
+        let mir = zelyra_mir::lower(&loaded.program).expect("linked package program lowers");
+        zelyra_mir::verify(&mir).expect("linked package MIR verifies");
+        let actual = zelyra_mir::execution::execute_function(
+            &mir,
+            "main",
+            vec![],
+            zelyra_mir::execution::ExecutionLimits::default(),
+        )
+        .unwrap();
+        assert_eq!(actual.value, ast_value);
+
+        let bytecode = zelyra_mir::bytecode::compile(&mir, "main")
+            .expect("linked package MIR compiles to bytecode");
+        let encoded = zelyra_mir::bytecode::encode(&bytecode).expect("package bytecode encodes");
+        let decoded = zelyra_mir::bytecode::decode(&encoded).expect("package bytecode decodes");
+        let bytecode_result = zelyra_mir::bytecode::execute(
+            &decoded,
+            vec![],
+            zelyra_mir::execution::ExecutionLimits::default(),
+        )
+        .expect("bytecode executes the linked package graph");
+        assert_eq!(bytecode_result.value, ast_value);
+        cleanup(&directory);
+    }
+
+    #[test]
+    fn imported_package_capabilities_are_enforced_by_mir_and_match_ast() {
+        let directory = project(&[
+            (
+                "zelyra.toml",
+                "[package]\nname = \"capability_app\"\nversion = \"1.0.0\"\nentry = \"main.zyl\"\n\n[dependencies.alerts]\npath = \"packages/alerts\"\nversion = \"1.0.0\"\n",
+            ),
+            (
+                "main.zyl",
+                "import \"pkg:alerts\" as alerts\nfn main() -> String? uses Console { return alerts::prompt() }\n",
+            ),
+            (
+                "packages/alerts/zelyra.toml",
+                "[package]\nname = \"alerts\"\nversion = \"1.0.0\"\nentry = \"src/lib.zyl\"\neffects = [\"Console\"]\n",
+            ),
+            (
+                "packages/alerts/src/lib.zyl",
+                "pub fn prompt() -> String? uses Console { return read_console(\"Approval? \") }\n",
+            ),
+        ]);
+        let package_graph = crate::packages::PackageGraph::load(&directory)
+            .unwrap()
+            .expect("package manifest is present");
+        crate::packages::write_lockfile(&package_graph, true).unwrap();
+
+        let entry = directory.join("main.zyl");
+        let loaded = load(entry.to_str().unwrap()).unwrap();
+        let mir = zelyra_mir::lower(&loaded.program).expect("capability-bearing package lowers");
+        zelyra_mir::verify(&mir).expect("capability-bearing package MIR verifies");
+        let bytecode = zelyra_mir::bytecode::compile(&mir, "main")
+            .expect("capability-bearing package compiles to bytecode");
+        let bytecode = zelyra_mir::bytecode::decode(
+            &zelyra_mir::bytecode::encode(&bytecode).expect("package bytecode encodes"),
+        )
+        .expect("package bytecode decodes");
+        let grants = std::collections::HashSet::from(["Console".to_owned()]);
+        let mir_host = Arc::new(PackageConsoleHost {
+            calls: AtomicU64::new(0),
+            prompt: Mutex::new(None),
+        });
+        let mir_result = zelyra_mir::execution::execute_function_with_host_services(
+            &mir,
+            "main",
+            vec![],
+            zelyra_mir::execution::ExecutionLimits::default(),
+            Some(&grants),
+            mir_host.clone(),
+        )
+        .unwrap();
+        let bytecode_host = Arc::new(PackageConsoleHost {
+            calls: AtomicU64::new(0),
+            prompt: Mutex::new(None),
+        });
+        let bytecode_result = zelyra_mir::bytecode::execute_with_host_services(
+            &bytecode,
+            vec![],
+            zelyra_mir::execution::ExecutionLimits::default(),
+            Some(&grants),
+            bytecode_host.clone(),
+        )
+        .unwrap();
+        let ast_host = Arc::new(PackageConsoleHost {
+            calls: AtomicU64::new(0),
+            prompt: Mutex::new(None),
+        });
+        let ast_result =
+            zelyra_runtime::execute_function_with_host_services_and_capabilities_and_policies(
+                &loaded.program,
+                "main",
+                vec![],
+                None,
+                Some(&grants),
+                None,
+                ast_host.clone(),
+            )
+            .unwrap();
+        assert_eq!(mir_result.value, ast_result);
+        assert_eq!(bytecode_result.value, ast_result);
+        assert_eq!(
+            mir_result.value,
+            zelyra_runtime::Value::Option(Some(Box::new(zelyra_runtime::Value::String(
+                "approved by test host".into()
+            ))))
+        );
+        assert_eq!(mir_host.calls.load(Ordering::SeqCst), 1);
+        assert_eq!(bytecode_host.calls.load(Ordering::SeqCst), 1);
+        assert_eq!(ast_host.calls.load(Ordering::SeqCst), 1);
+        assert_eq!(*mir_host.prompt.lock().unwrap(), Some("Approval? ".into()));
+        assert_eq!(
+            *bytecode_host.prompt.lock().unwrap(),
+            Some("Approval? ".into())
+        );
+
+        let denied_host = Arc::new(PackageConsoleHost {
+            calls: AtomicU64::new(0),
+            prompt: Mutex::new(None),
+        });
+        let denied = zelyra_mir::execution::execute_function_with_host_services(
+            &mir,
+            "main",
+            vec![],
+            zelyra_mir::execution::ExecutionLimits::default(),
+            Some(&std::collections::HashSet::new()),
+            denied_host.clone(),
+        )
+        .unwrap_err();
+        assert!(denied.message.contains("`Console` is not granted"));
+        assert_eq!(denied_host.calls.load(Ordering::SeqCst), 0);
+        assert_eq!(*denied_host.prompt.lock().unwrap(), None);
+        let denied_bytecode_host = Arc::new(PackageConsoleHost {
+            calls: AtomicU64::new(0),
+            prompt: Mutex::new(None),
+        });
+        let denied_bytecode = zelyra_mir::bytecode::execute_with_host_services(
+            &bytecode,
+            vec![],
+            zelyra_mir::execution::ExecutionLimits::default(),
+            Some(&std::collections::HashSet::new()),
+            denied_bytecode_host.clone(),
+        )
+        .unwrap_err();
+        assert!(denied_bytecode.message.contains("`Console` is not granted"));
+        assert_eq!(denied_bytecode_host.calls.load(Ordering::SeqCst), 0);
+        assert_eq!(*denied_bytecode_host.prompt.lock().unwrap(), None);
         cleanup(&directory);
     }
 

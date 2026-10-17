@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 use rand_core::{OsRng, RngCore};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
@@ -9,7 +11,7 @@ use std::{
     fs,
     io::{Read, Write as _},
     net::{SocketAddr, TcpListener, ToSocketAddrs},
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::ExitCode,
     process::Stdio,
     process::{Child, Command, Output},
@@ -30,11 +32,11 @@ use zelyra_lexer::{lex, TokenKind};
 use zelyra_parser::parse;
 use zelyra_runtime::{
     check, check_apis, check_capabilities_with_grants,
-    execute_captured_with_capabilities_and_policies,
-    execute_captured_with_database_and_capabilities_and_policies,
+    execute_function_captured_with_capabilities_and_policies,
     execute_function_with_capabilities_and_policies, verify as verify_program, FileSystemPolicy,
-    MailPolicy, NetworkPolicy, ProcessPolicy, RuntimePolicy, Value as RuntimeValue,
-    VerificationResult, VerificationStatus, KNOWN_CAPABILITIES,
+    MailPolicy, NetworkPolicy, ProcessPolicy, RuntimePolicy, SystemHostServices,
+    Value as RuntimeValue, VerificationResult, VerificationStatus, KNOWN_CAPABILITIES,
+    MAX_CONFIGURED_FUNCTION_CALL_DEPTH,
 };
 use zelyra_web::{
     audit_insert_queries, html_escape, parse_urlencoded, serve_app, serve_app_listener, ApiRoute,
@@ -60,10 +62,15 @@ mod impact;
 mod language_service;
 mod lsp;
 mod module_cli;
+mod module_init;
+mod module_settings;
 mod outbox_cli;
+mod packages;
 mod project;
+mod reflect;
 mod route_cli;
 mod semantic_index;
+mod task_cli;
 mod terminal;
 #[cfg(test)]
 mod tests;
@@ -184,11 +191,12 @@ fn usage() {
     eprintln!("  module plan: `zelyra module plan <entry.zyl> <module.zyl|resource-id>` previews known dependencies");
     eprintln!("  module bundle: `zelyra module bundle <entry.zyl> <module.zyl|resource-id> --output <dir> [--dry-run] [--docker --compiler-ref <40-char-commit>]` plans or writes a checked experimental bundle");
     eprintln!("  module bundle --dry-run emits a machine-readable file plan without publishing the bundle");
+    eprintln!("  package lock [entry.zyl] [--check|--update] resolves local packages and checks or writes zelyra.lock");
     eprintln!("  doctor supports `--env-file <path>` for generated MariaDB projects");
     eprintln!("  setup supports `--database`, `--schema`, `--all`, `--host-port`, `--db-host-port`, and `--web [--port <port>]`");
     eprintln!("  outbox: `setup [file.zyl]`, `list [file.zyl] [--limit <1..200>] [--format text|json]`, `requeue <event-id> [file.zyl]`, or `run [file.zyl] --handler <event.type=function_name> [--once] [--lease-seconds <5..3600>]");
     eprintln!("  Detailhilfe / detailed help: `zelyra fmt --help`, `zelyra init --help`, or `zelyra db plan --help` shows options and examples");
-    eprintln!("{}", terminal::help(&format!("Zelyra {}\n\nUsage:\n  zelyra --help\n  zelyra --version\n  zelyra version\n  zelyra update [--check]\n  zelyra uninstall [--yes] [--dry-run]\n  zelyra --tutorial invoice [directory] [--no-start]\n  zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] [--database|--schema|--all] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] --web [--port <port>]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra config <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl> [--max-steps <n>]\n  zelyra serve <file.zyl> [address]\n  zelyra routes <entry.zyl> [--format human|json]\n  zelyra editor [directory] [--port <port>] [--no-open]\n  zelyra module plan <entry.zyl> <module.zyl|resource-id>\n  zelyra module bundle <entry.zyl> <module.zyl|resource-id> --output <dir> [--docker --compiler-ref <40-character-commit>]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra outbox <setup|list|requeue|run> [file.zyl] [options]\n  zelyra db <create|setup|bootstrap|inspect|map|plan|apply|history> <file.zyl>\n\nSchnelleinstieg\n  Geführtes Rechnungstutorial:\n    zelyra --tutorial invoice                 Erstellt Projekt, Datenbank und Schema, startet die Anwendung und öffnet den Browser.\n    Die ausgegebene Anwendungsadresse manuell öffnen, falls kein Browser startet.\n    zelyra editor invoice-tutorial            Öffnet Studio für das Tutorialprojekt.\n  Kleines eigenes Projekt:\n    zelyra init ./mein-projekt                Erstellt ein minimales Projekt ohne Datenbank.\n    cd mein-projekt && zelyra run main.zyl    Startet das Programm direkt.\n    zelyra editor                              Startet Studio im aktuellen Ordner und öffnet den Standardbrowser.\n\nWichtige Befehle\n  init/new  Projektgerüst erstellen; init ist der kurze Einstieg, new bietet Vorlagen und Optionen.\n  check     Datei oder Projekt auf Syntax- und Compilerfehler prüfen.\n  run       Ein Zelyra-Programm direkt ausführen.\n  serve     Eine Webanwendung lokal starten.\n  setup     MariaDB-Projekt vorbereiten; `--all` startet Stack und Schema sichtbar. `.` bedeutet aktuelles Verzeichnis, `./test_a` einen Unterordner.\n  db plan   Schemaänderungen zuerst nur anzeigen; db apply setzt einen geprüften Plan um.\n  db create Gibt CREATE-SQL aus; `db setup` richtet das MariaDB-Schema ein.\n  outbox    Transaktionale Ereignisse einrichten, prüfen und mit Handlern verarbeiten.\n  routes    `zelyra routes main.zyl` listet deklarierte Seiten, APIs und erzeugte Ressourcenrouten; `--format json` liefert maschinenlesbare Ausgabe.\n  editor    Startet den lokalen Studio-Server und öffnet den Standardbrowser; ohne Argument gilt der aktuelle Ordner. `--no-open` überspringt den Browserstart.\n  uninstall Entfernt nach Bestätigung die aktive Binärdatei; paketverwaltete Installationen werden mit dem Paketmanager entfernt.\n\nGetting started\n  Guided invoice tutorial:\n    zelyra --tutorial invoice                 Creates the project, database, and schema, starts the app, and opens the browser.\n    Open the printed application URL manually if no browser starts.\n    zelyra editor invoice-tutorial            Opens Studio for the tutorial project.\n  Small project of your own:\n    zelyra init ./my-project                  Creates a minimal project without a database.\n    cd my-project && zelyra run main.zyl      Runs the program directly.\n    zelyra editor                              Starts Studio in the current folder and opens the default browser.\n\nKey commands\n  init/new  Create a project; init is the short path, new offers templates and options.\n  check     Check a file or project for syntax and compiler errors.\n  run       Execute a Zelyra program directly.\n  serve     Start a web application locally.\n  setup     Prepare a MariaDB project; `--all` visibly starts the stack and applies the schema. `.` is the current folder, `./test_a` a subfolder.\n  db plan   Preview schema changes; db apply applies a reviewed plan.\n  db create Emit CREATE SQL; `db setup` initializes the MariaDB database and schema.\n  outbox    Set up, inspect, and process transactional events with explicit handlers.\n  routes    `zelyra routes main.zyl` lists declared pages, APIs, and generated resource routes; use `--format json` for machine-readable output.\n  editor    Start the local Studio server and open the default browser; defaults to the current folder. Use `--no-open` to skip browser launch.\n  uninstall Remove the active executable after confirmation; use its package manager for managed installs.\n\nColor: set ZELYRA_COLOR=always|never|auto; NO_COLOR disables automatic ANSI output. Key help headings and commands use a terminal-safe palette.", env!("CARGO_PKG_VERSION"))));
+    eprintln!("{}", terminal::help(&format!("Zelyra {}\n\nUsage:\n  zelyra --help\n  zelyra --version\n  zelyra version\n  zelyra update [--check]\n  zelyra uninstall [--yes] [--dry-run]\n  zelyra --tutorial invoice [directory] [--no-start]\n  zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] [--database|--schema|--all] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] --web [--port <port>]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra config <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl> [--entry <function> [--entry-args <JSON-array>]] [--backend ast|mir|bytecode] [--optimize-mir] [--max-steps <n>]\n  zelyra serve <file.zyl> [address]\n  zelyra routes <entry.zyl> [--format human|json]\n  zelyra reflect <entry.zyl> [--format=json|human]\n  zelyra editor [directory] [--port <port>] [--no-open]\n  zelyra module init <directory> --name <package-name> [--version <semver>]\n  zelyra module plan <entry.zyl> <module.zyl|resource-id>\n  zelyra module bundle <entry.zyl> <module.zyl|resource-id> --output <dir> [--docker --compiler-ref <40-character-commit>]\n  zelyra package lock [entry.zyl] [--check|--update]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra outbox <setup|list|requeue|run> [file.zyl] [options]\n  zelyra task <list|run> <main.zyl> [command] [options]\n  zelyra schedule <list|export> <main.zyl> [options]\n  zelyra db <create|setup|bootstrap|inspect|map|plan|apply|history> <file.zyl>\n\nSchnelleinstieg\n  Geführtes Rechnungstutorial:\n    zelyra --tutorial invoice                 Erstellt Projekt, Datenbank und Schema, startet die Anwendung und öffnet den Browser.\n    Die ausgegebene Anwendungsadresse manuell öffnen, falls kein Browser startet.\n    zelyra editor invoice-tutorial            Öffnet Studio für das Tutorialprojekt.\n  Kleines eigenes Projekt:\n    zelyra init ./mein-projekt                Erstellt ein minimales Projekt ohne Datenbank.\n    cd mein-projekt && zelyra run main.zyl    Startet das Programm direkt.\n    zelyra editor                              Startet Studio im aktuellen Ordner und öffnet den Standardbrowser.\n\nWichtige Befehle\n  init/new  Projektgerüst erstellen; init ist der kurze Einstieg, new bietet Vorlagen und Optionen.\n  check     Datei oder Projekt auf Syntax- und Compilerfehler prüfen.\n  run       Ein Zelyra-Programm direkt ausführen.\n  serve     Eine Webanwendung lokal starten.\n  setup     MariaDB-Projekt vorbereiten; `--all` startet Stack und Schema sichtbar. `.` bedeutet aktuelles Verzeichnis, `./test_a` einen Unterordner.\n  db plan   Schemaänderungen zuerst nur anzeigen; db apply setzt einen geprüften Plan um.\n  db create Gibt CREATE-SQL aus; `db setup` richtet das MariaDB-Schema ein.\n  outbox    Transaktionale Ereignisse einrichten, prüfen und mit Handlern verarbeiten.\n  task      Native Command-Definitionen anzeigen und compilergeprüft ausführen.\n  schedule  Native Zeitpläne anzeigen oder als Cron-Vorschau ausgeben.\n  routes    `zelyra routes main.zyl` listet deklarierte Seiten, APIs und erzeugte Ressourcenrouten; `--format json` liefert maschinenlesbare Ausgabe.\n  reflect   Prüft das Projekt und exportiert Symbole, Schema, Routen, APIs, Forms und Contracts als versioniertes JSON.\n  editor    Startet den lokalen Studio-Server und öffnet den Standardbrowser; ohne Argument gilt der aktuelle Ordner. `--no-open` überspringt den Browserstart.\n  module init Erstellt ein lokales, offline nutzbares Paketgerüst.\n  uninstall Entfernt nach Bestätigung die aktive Binärdatei; paketverwaltete Installationen werden mit dem Paketmanager entfernt.\n\nGetting started\n  Guided invoice tutorial:\n    zelyra --tutorial invoice                 Creates the project, database, and schema, starts the app, and opens the browser.\n    Open the printed application URL manually if no browser starts.\n    zelyra editor invoice-tutorial            Opens Studio for the tutorial project.\n  Small project of your own:\n    zelyra init ./my-project                  Creates a minimal project without a database.\n    cd my-project && zelyra run main.zyl      Runs the program directly.\n    zelyra editor                              Starts Studio in the current folder and opens the default browser.\n\nKey commands\n  init/new  Create a project; init is the short path, new offers templates and options.\n  check     Check a file or project for syntax and compiler errors.\n  run       Execute a Zelyra program directly.\n  serve     Start a web application locally.\n  setup     Prepare a MariaDB project; `--all` visibly starts the stack and applies the schema. `.` is the current folder, `./test_a` a subfolder.\n  db plan   Preview schema changes; db apply applies a reviewed plan.\n  db create Emit CREATE SQL; `db setup` initializes the MariaDB database and schema.\n  outbox    Set up, inspect, and process transactional events with explicit handlers.\n  task      List and run native, compiler-checked command declarations.\n  schedule  List native schedules or print a cron preview.\n  routes    `zelyra routes main.zyl` lists declared pages, APIs, and generated resource routes; use `--format json` for machine-readable output.\n  editor    Start the local Studio server and open the default browser; defaults to the current folder. Use `--no-open` to skip browser launch.\n  module init Create a local package starter without network or build scripts.\n  uninstall Remove the active executable after confirmation; use its package manager for managed installs.\n\nColor: set ZELYRA_COLOR=always|never|auto; NO_COLOR disables automatic ANSI output. Key help headings and commands use a terminal-safe palette.", env!("CARGO_PKG_VERSION"))));
 }
 
 fn version_command() -> ExitCode {
@@ -573,16 +581,16 @@ fn render_local_env(template: &str) -> Result<String, String> {
         ))
 }
 
-fn protect_env_file(path: &std::path::Path) -> Result<(), String> {
+fn protect_env_file(_path: &std::path::Path) -> Result<(), String> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let mut permissions = fs::metadata(path)
-            .map_err(|error| format!("cannot inspect `{}`: {error}", path.display()))?
+        let mut permissions = fs::metadata(_path)
+            .map_err(|error| format!("cannot inspect `{}`: {error}", _path.display()))?
             .permissions();
         permissions.set_mode(0o600);
-        fs::set_permissions(path, permissions)
-            .map_err(|error| format!("cannot protect `{}`: {error}", path.display()))?;
+        fs::set_permissions(_path, permissions)
+            .map_err(|error| format!("cannot protect `{}`: {error}", _path.display()))?;
     }
     Ok(())
 }
@@ -1231,6 +1239,14 @@ fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
     validate_loaded_project(path, loaded)
 }
 
+fn validate_execution_settings(path: &str) -> Result<(), ()> {
+    if let Err((code, message)) = module_cli::validate_execution_settings(path) {
+        diagnostic(path, code, &message, 1, 1);
+        return Err(());
+    }
+    Ok(())
+}
+
 fn validate_candidate(path: &str, source: &str) -> Result<zelyra_ast::Program, ()> {
     let loaded = load_project_with_entry_source(path, source)?;
     validate_loaded_project(path, loaded)
@@ -1240,6 +1256,23 @@ fn validate_loaded_project(
     path: &str,
     loaded: project::LoadedProject,
 ) -> Result<zelyra_ast::Program, ()> {
+    let package_root = Path::new(path)
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let packages = match packages::PackageGraph::load(package_root) {
+        Ok(packages) => packages,
+        Err(error) => {
+            diagnostic(path, "E-PKG-001", &error.message, 1, 1);
+            return Err(());
+        }
+    };
+    if let Err(error) =
+        module_settings::validate_usage(&loaded.program, &loaded.sources, packages.as_ref())
+    {
+        diagnostic_with_span(&error.path, error.code, &error.message, error.span);
+        return Err(());
+    }
     let table_dependencies_valid = validate_module_table_dependencies(path, &loaded);
     let database_dependencies_valid = validate_module_database_dependencies(path, &loaded);
     if !table_dependencies_valid || !database_dependencies_valid {
@@ -6687,11 +6720,14 @@ fn project_runtime_policy(path: &str) -> Result<Option<RuntimePolicy>, String> {
     let process = project_process_policy(path)?;
     let mail = project_mail_policy(path)?;
     let max_stack_depth = project_max_stack_depth(path)?;
+    let sources = PROJECT_SOURCES.with(|sources| sources.borrow().clone());
+    let package_settings = module_settings::resolve_runtime_settings(path, &sources)?;
     if filesystem.is_none()
         && network.is_none()
         && process.is_none()
         && mail.is_none()
         && max_stack_depth.is_none()
+        && package_settings.is_none()
     {
         Ok(None)
     } else {
@@ -6702,6 +6738,7 @@ fn project_runtime_policy(path: &str) -> Result<Option<RuntimePolicy>, String> {
             mail,
             step_budget: None,
             max_stack_depth,
+            package_settings,
         }))
     }
 }
@@ -6740,10 +6777,10 @@ fn project_max_stack_depth(path: &str) -> Result<Option<usize>, String> {
             return Err("runtime setting max_stack_depth is configured more than once".into());
         }
         let depth = raw_value.trim().parse::<usize>().map_err(|_| {
-            "runtime max_stack_depth must be an integer from 1 through 500".to_owned()
+            format!("runtime max_stack_depth must be an integer from 1 through {MAX_CONFIGURED_FUNCTION_CALL_DEPTH}")
         })?;
-        if !(1..=500).contains(&depth) {
-            return Err("runtime max_stack_depth must be from 1 through 500".into());
+        if !(1..=MAX_CONFIGURED_FUNCTION_CALL_DEPTH).contains(&depth) {
+            return Err(format!("runtime max_stack_depth must be from 1 through {MAX_CONFIGURED_FUNCTION_CALL_DEPTH}"));
         }
         value = Some(depth);
     }
@@ -8222,11 +8259,22 @@ fn validate_tenant_access_boundaries(
     program: &zelyra_ast::Program,
     schema: &Schema,
 ) -> bool {
+    let scoped_tenant_tables = program
+        .tables
+        .iter()
+        .filter_map(|table| {
+            table
+                .tenant_scope
+                .as_ref()
+                .map(|scope| (table.name.clone(), scope.column.clone()))
+        })
+        .collect::<HashMap<_, _>>();
     let tenant_tables = program
         .cruds
         .iter()
         .filter(|crud| crud.tenant_column.is_some())
         .map(|crud| crud.table.clone())
+        .chain(scoped_tenant_tables.keys().cloned())
         .collect::<HashSet<_>>();
     let recipient_tables = program
         .cruds
@@ -8244,12 +8292,31 @@ fn validate_tenant_access_boundaries(
         .chain(tenant_tables.iter().cloned())
         .chain(recipient_tables.iter().cloned())
         .collect::<HashSet<_>>();
+    let mut valid = true;
+    for table in program
+        .tables
+        .iter()
+        .filter(|table| table.tenant_scope.is_some())
+    {
+        if program.auth.iter().any(|auth| {
+            auth.membership_table
+                .as_deref()
+                .is_some_and(|membership| membership.eq_ignore_ascii_case(&table.name))
+        }) {
+            diagnostic_with_span(
+                path,
+                "E-TENANT-001",
+                "the tenant membership table cannot itself be tenant-scoped",
+                table.tenant_scope.as_ref().unwrap().span,
+            );
+            valid = false;
+        }
+    }
     let known_tables = schema
         .tables
         .iter()
         .map(|table| table.name.clone())
         .collect::<Vec<_>>();
-    let mut valid = true;
     let check_query = |query: &str, span: zelyra_ast::Span, allowed_table: Option<&str>| -> bool {
         let (operation, accesses) =
             zelyra_database::sql::analyze_table_access(query, &known_tables);
@@ -8358,6 +8425,24 @@ fn validate_tenant_access_boundaries(
         }
     }
     for crud in &program.cruds {
+        if let Some(expected_column) = scoped_tenant_tables
+            .iter()
+            .find(|(table, _)| table.eq_ignore_ascii_case(&crud.table))
+            .map(|(_, column)| column.as_str())
+        {
+            if crud.tenant_column.as_deref() != Some(expected_column) {
+                diagnostic_with_span(
+                    path,
+                    "E-TENANT-001",
+                    &format!(
+                        "CRUD for scoped table `{}` must use its declared tenant column `{expected_column}`",
+                        crud.table
+                    ),
+                    crud.span,
+                );
+                valid = false;
+            }
+        }
         if tenant_tables
             .iter()
             .any(|table| table.eq_ignore_ascii_case(&crud.table))
@@ -8937,6 +9022,9 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     if args.next().is_some() {
         usage();
         return ExitCode::from(2);
+    }
+    if validate_execution_settings(&path).is_err() {
+        return ExitCode::from(1);
     }
     let (ui_language, ui_level) = match project_ui_settings(&path) {
         Ok(settings) => settings,
@@ -9556,7 +9644,11 @@ fn generated_crud_form(
                 placeholder: generated_invoice_number
                     .then(|| "@i18n:invoice.number.auto_hint".into()),
                 required: false,
+                min_length: None,
                 max: None,
+                min_value: None,
+                max_value: None,
+                choices: Vec::new(),
                 widget: None,
                 appearance: None,
                 readonly: generated_invoice_number,
@@ -10337,6 +10429,7 @@ fn api_json_value_node(value: &RuntimeValue) -> serde_json::Value {
                 .map(serde_json::Value::from)
                 .collect(),
         ),
+        RuntimeValue::Json(value) => value.clone(),
         RuntimeValue::Array(values) => {
             serde_json::Value::Array(values.iter().map(api_json_value_node).collect())
         }

@@ -99,7 +99,11 @@ fn form_route() -> FormRoute {
                 label: Some("Name".into()),
                 placeholder: None,
                 required: true,
+                min_length: None,
                 max: Some(20),
+                min_value: None,
+                max_value: None,
+                choices: Vec::new(),
                 widget: None,
                 appearance: None,
                 readonly: false,
@@ -696,7 +700,11 @@ fn relation_form_route() -> FormRoute {
         label: Some("Department".into()),
         placeholder: None,
         required: true,
+        min_length: None,
         max: None,
+        min_value: None,
+        max_value: None,
+        choices: Vec::new(),
         widget: None,
         appearance: None,
         readonly: false,
@@ -704,15 +712,19 @@ fn relation_form_route() -> FormRoute {
     });
     route.table = Some(zelyra_ast::TableDef {
         name: "customers".into(),
+        tenant_scope: None,
         columns: vec![zelyra_ast::ColumnDef {
             name: "department".into(),
             ty: Type::Named("Department".into()),
             length: None,
+            storage_name: None,
+            decimal_precision: None,
             required: true,
             primary_key: false,
             auto: false,
             unique: false,
             default: None,
+            on_delete: None,
             span: zelyra_ast::Span::default(),
         }],
         indexes: Vec::new(),
@@ -724,6 +736,7 @@ fn relation_form_route() -> FormRoute {
         database: None,
         tables: vec![zelyra_database::Table {
             name: "departments".into(),
+            tenant_scope_column: None,
             columns: vec![
                 zelyra_database::Column {
                     name: "id".into(),
@@ -757,6 +770,7 @@ fn formats_crud_audit_changes_without_exposing_sensitive_values() {
     let mut route = form_route();
     route.table = Some(zelyra_ast::TableDef {
         name: "customers".into(),
+        tenant_scope: None,
         columns: Vec::new(),
         indexes: Vec::new(),
         uniques: Vec::new(),
@@ -769,7 +783,11 @@ fn formats_crud_audit_changes_without_exposing_sensitive_values() {
         label: None,
         placeholder: None,
         required: false,
+        min_length: None,
         max: None,
+        min_value: None,
+        max_value: None,
+        choices: Vec::new(),
         widget: None,
         appearance: None,
         readonly: false,
@@ -1580,6 +1598,20 @@ fn escapes_route_parameters() {
 }
 
 #[test]
+fn decodes_path_parameters_without_accepting_encoded_path_structure() {
+    assert_eq!(
+        match_path("/module/{name}", "/module/Anfrage%20A%2B%20%F0%9F%93%84").unwrap()["name"],
+        "Anfrage A+ 📄"
+    );
+    assert!(match_path("/module/{name}", "/module/%2e%2e").is_none());
+    assert!(match_path("/module/{name}", "/module/%2Fetc").is_none());
+    assert!(match_path("/module/{name}", "/module/%5Cwindows").is_none());
+    assert!(match_path("/module/{name}", "/module/%00").is_none());
+    assert!(match_path("/module/{name}", "/module/%ZZ").is_none());
+    assert!(match_path("/module/{name}", "/module/%E0%A4").is_none());
+}
+
+#[test]
 fn escapes_loaded_page_data_fields() {
     let params = HashMap::new();
     let data = HashMap::from([("customer.name".into(), "<script>".into())]);
@@ -2370,6 +2402,7 @@ fn session_administration_preserves_legacy_tables_and_escapes_rows() {
             database: None,
             tables: vec![zelyra_database::Table {
                 name: "sessions".into(),
+                tenant_scope_column: None,
                 columns: vec![],
                 foreign_keys: vec![],
                 indexes: vec![],
@@ -2412,12 +2445,74 @@ fn session_administration_preserves_legacy_tables_and_escapes_rows() {
 
 #[test]
 fn renders_form_with_csrf_and_field_attributes() {
-    let route = form_route();
+    let mut route = form_route();
+    route.form.fields[0].min_length = Some(3);
+    let mut amount = zelyra_ast::FormField {
+        name: "amount".into(),
+        ty: Some(Type::Decimal),
+        label: Some("Amount".into()),
+        placeholder: None,
+        required: false,
+        min_length: None,
+        max: None,
+        min_value: Some("0.10".into()),
+        max_value: Some("12.50".into()),
+        choices: Vec::new(),
+        widget: None,
+        appearance: None,
+        readonly: false,
+        span: zelyra_ast::Span::default(),
+    };
+    amount.required = true;
+    route.form.fields.push(amount);
+    let mut priority = zelyra_ast::FormField {
+        name: "priority".into(),
+        ty: Some(Type::Int),
+        label: Some("Priority".into()),
+        placeholder: None,
+        required: false,
+        min_length: None,
+        max: None,
+        min_value: Some("1".into()),
+        max_value: Some("9".into()),
+        choices: Vec::new(),
+        widget: None,
+        appearance: None,
+        readonly: false,
+        span: zelyra_ast::Span::default(),
+    };
+    priority.required = true;
+    route.form.fields.push(priority);
+    route.form.fields.push(zelyra_ast::FormField {
+        name: "status".into(),
+        ty: Some(Type::String),
+        label: Some("Status".into()),
+        placeholder: None,
+        required: false,
+        min_length: None,
+        max: None,
+        min_value: None,
+        max_value: None,
+        choices: vec!["draft".into(), "<script>".into()],
+        widget: None,
+        appearance: None,
+        readonly: false,
+        span: zelyra_ast::Span::default(),
+    });
     let html = render_form(&route, &HashMap::new(), &[], None);
     assert!(html.contains("name=\"_zelyra_csrf\" value=\"csrf-token\""));
     assert!(html.contains("name=\"name\" type=\"text\""));
     assert!(html.contains(" required"));
     assert!(html.contains("maxlength=\"20\""));
+    assert!(html.contains("minlength=\"3\""));
+    assert!(html.contains("name=\"amount\" type=\"text\" inputmode=\"decimal\""));
+    assert!(html.contains("name=\"priority\" type=\"number\""));
+    assert!(html.contains("min=\"1\""));
+    assert!(html.contains("max=\"9\""));
+    assert!(html.contains("<select class=\""));
+    assert!(html.contains("id=\"status\" name=\"status\""));
+    assert!(html.contains("&lt;script&gt;</option>"));
+    assert!(!html.contains("<script>"));
 
     let mut cards_route = route.clone();
     cards_route.form_view.mode = CrudFormViewMode::Cards;
@@ -2570,6 +2665,7 @@ fn supports_typed_filter_operators() {
 fn builds_safe_filter_conditions_for_text_and_null_checks() {
     let table = zelyra_database::Table {
         name: "machines".into(),
+        tenant_scope_column: None,
         columns: vec![zelyra_database::Column {
             name: "name".into(),
             sql_type: "VARCHAR(100)".into(),
@@ -2749,6 +2845,7 @@ fn renders_crud_list_with_escaped_rows_and_pagination() {
     };
     let _table = zelyra_database::Table {
         name: "machines".into(),
+        tenant_scope_column: None,
         columns: vec![
             zelyra_database::Column {
                 name: "id".into(),
@@ -2984,6 +3081,7 @@ fn renders_relationship_labels_in_crud_views() {
         tables: vec![
             zelyra_database::Table {
                 name: "departments".into(),
+                tenant_scope_column: None,
                 columns: vec![zelyra_database::Column {
                     name: "name".into(),
                     sql_type: "VARCHAR(100)".into(),
@@ -2999,6 +3097,7 @@ fn renders_relationship_labels_in_crud_views() {
             },
             zelyra_database::Table {
                 name: "machines".into(),
+                tenant_scope_column: None,
                 columns: vec![
                     zelyra_database::Column {
                         name: "id".into(),
@@ -3024,6 +3123,7 @@ fn renders_relationship_labels_in_crud_views() {
                     column: "department_id".into(),
                     referenced_table: "departments".into(),
                     referenced_column: "id".into(),
+                    on_delete: zelyra_ast::ReferentialAction::NoAction,
                 }],
                 indexes: Vec::new(),
                 uniques: Vec::new(),
@@ -4099,6 +4199,7 @@ fn nullable_storage_binds_omitted_text_as_null_without_weakening_required_fields
         database: None,
         tables: vec![zelyra_database::Table {
             name: "notes".into(),
+            tenant_scope_column: None,
             columns: vec![zelyra_database::Column {
                 name: "name".into(),
                 sql_type: "VARCHAR(100)".into(),

@@ -1,0 +1,5 @@
+import "src/arithmetic.zyl" as arithmetic
+
+pub fn add_cents(left: Int, right: Int) -> Int {
+    return arithmetic::sum(left, right)
+}

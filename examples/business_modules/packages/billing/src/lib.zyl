@@ -1,0 +1,5 @@
+import "pkg:storage" as storage
+
+pub fn invoice_count() -> Int uses Database(read) {
+    return storage::invoice_count()
+}

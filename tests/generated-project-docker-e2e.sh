@@ -10,7 +10,21 @@ database_host_port="${ZELYRA_DOCKER_E2E_DB_HOST_PORT:-3309}"
 bundle_host_port="${ZELYRA_DOCKER_E2E_BUNDLE_HOST_PORT:-18083}"
 second_bundle_host_port="${ZELYRA_DOCKER_E2E_SECOND_BUNDLE_HOST_PORT:-18084}"
 address="${ZELYRA_DOCKER_E2E_ADDRESS:-127.0.0.1:${host_port}}"
-zelyra_ref="${ZELYRA_DOCKER_E2E_REF:-$(git -C "${repo_dir}" branch --show-current 2>/dev/null || true)}"
+if [[ -n "${ZELYRA_DOCKER_E2E_REF:-}" ]]; then
+    zelyra_ref="${ZELYRA_DOCKER_E2E_REF}"
+else
+    local_branch="$(git -C "${repo_dir}" branch --show-current 2>/dev/null || true)"
+    if [[ -n "${local_branch}" ]] \
+        && git -C "${repo_dir}" ls-remote --exit-code origin "refs/heads/${local_branch}" >/dev/null 2>&1; then
+        zelyra_ref="${local_branch}"
+    else
+        remote_head="$(git -C "${repo_dir}" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)"
+        zelyra_ref="${remote_head#origin/}"
+        if [[ -z "${zelyra_ref}" ]]; then
+            zelyra_ref="main"
+        fi
+    fi
+fi
 bundle_compiler_commit="${ZELYRA_DOCKER_E2E_MODULE_COMMIT:-$(git -C "${repo_dir}" rev-parse HEAD)}"
 
 if [[ ! -x "${zelyra_bin}" ]]; then
@@ -813,11 +827,25 @@ DATABASE_URL="${business_database_url}" "${zelyra_bin}" db plan \
 business_migration_plan_id="$(python3 -c \
     'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["plan_id"])' \
     "${business_migration_plan}")"
-DATABASE_URL="${business_database_url}" "${zelyra_bin}" db apply \
-    "${project_dir}/main.zyl" --plan-id "${business_migration_plan_id}" \
-    >"${project_root}/business-migration-apply.log"
-DATABASE_URL="${business_database_url}" "${zelyra_bin}" db plan \
-    "${project_dir}/main.zyl" | grep -Fq "No schema changes."
+if ! DATABASE_URL="${business_database_url}" "${zelyra_bin}" db apply \
+    "${project_dir}/main.zyl" --plan-id "${business_migration_plan_id}" --allow-risky \
+    >"${project_root}/business-migration-apply.log" 2>&1; then
+    cat "${project_root}/business-migration-apply.log" >&2
+    echo "error: reviewed business schema migration failed" >&2
+    exit 1
+fi
+business_migration_followup_plan="${project_root}/business-migration-followup-plan.txt"
+if ! DATABASE_URL="${business_database_url}" "${zelyra_bin}" db plan \
+    "${project_dir}/main.zyl" >"${business_migration_followup_plan}" 2>&1; then
+    cat "${business_migration_followup_plan}" >&2
+    echo "error: could not verify schema after business migration" >&2
+    exit 1
+fi
+if ! grep -Fq "No schema changes." "${business_migration_followup_plan}"; then
+    cat "${business_migration_followup_plan}" >&2
+    echo "error: applied business schema plan still reports changes" >&2
+    exit 1
+fi
 business_data_after_migration="$(docker compose --project-name "${compose_project}" \
     --env-file "${project_dir}/.env" \
     -f "${project_dir}/docker-compose.mariadb.yml" \

@@ -288,6 +288,35 @@ fn available_capacity(total: Int, reserved: Int) -> Int {
 }
 ~~~
 
+Lambdas can be stored as function values, returned, and passed to functions
+such as `map`, `filter`, `find`, and `reduce`. A typed variable supplies the
+expected lambda parameter and return types:
+
+~~~zelyra
+fn make_adder(base: Int) -> Function<(Int) -> Int> {
+    mutable offset = base
+    callback: Function<(Int) -> Int> = |value| value + offset
+    offset = offset + 100
+    return callback
+}
+
+fn main() {
+    add = make_adder(20)
+    print(add(2))
+}
+~~~
+
+The output is `22`: the closure keeps a snapshot of `offset` from when the
+lambda was created. Bytecode also has its documented supported subset and
+must be selected explicitly.
+
+Effects used by a stored lambda must also appear in its function value type.
+`Function<(Int) -> Timestamp> uses {Clock}` may call `now()`; without
+`uses {Clock}`, the type checker rejects the lambda with
+`E-TYPE-FUNCTION-001`. The same check applies when the lambda calls another
+function with declared capabilities. This prevents a closure from hiding an
+effect behind a callback type that claims to be effect-free.
+
 Nominal IDs keep domains separate:
 
 ~~~zelyra
@@ -397,6 +426,35 @@ table machines {
 
 Zelyra recognizes the relationship and can use it for foreign keys, forms, and
 select controls.
+
+Foreign-key delete behavior can be made explicit on a relation column:
+
+~~~zelyra
+table invoices {
+    customer: Customer required on_delete cascade
+    template: Template on_delete set_null
+}
+~~~
+
+Supported actions are `no_action`, `restrict`, `cascade`, `set_null`, and
+`set_default`. `set_null` requires an optional relation; `set_default` requires
+a column default and is rejected for MariaDB because that backend does not
+support the SQL action. The chosen action is included in generated DDL,
+database inspection, and schema-diff planning. Action changes require review
+and preflight like other foreign-key changes.
+
+For a foreign key whose physical name does not follow the default
+`<field>_id` convention, specify it explicitly:
+
+~~~zelyra
+table vacation_requests {
+    approved_by: User storage_name "approved_by" on_delete set_null
+}
+~~~
+
+`storage_name` is checked as a portable database identifier. The relation
+field, foreign key, and SQL use this name while retaining type checking and the
+delete action.
 
 | Zelyra | MariaDB |
 |---|---|
@@ -800,7 +858,7 @@ Then visit:
 http://127.0.0.1:3000/machines/Press-7
 ~~~
 
-Path parameters are HTML-escaped by default. The web core handles GET routes, path parameters, query strings, and HTML responses.
+Percent-encoded URL path parameters are decoded as individual UTF-8 segments; `+` remains a plus sign in paths. Invalid encodings, encoded slashes, backslashes, NUL bytes, and decoded `.`/`..` segments are rejected so decoding cannot introduce new path structure or traversal. Values are HTML-escaped when rendered. The web core handles GET routes, path parameters, query strings, HTTP parsing, and HTML responses.
 
 ### Typed view data loading and collection loops
 
@@ -946,11 +1004,25 @@ form ContactForm {
     field email: Email {
         label: "Email"
         required
+        min_length: 5
         max: 255
         widget: email
     }
+    field status: String {
+        required
+        choices: ["draft", "issued", "paid"]
+    }
+    field total: Decimal {
+        min_value: "0.01"
+        max_value: "9999.99"
+    }
 }
 ~~~
+
+`choices` renders a fixed option list and is also enforced on POST by server
+validation. `min_length`/`max` constrain text length; `min_value`/`max_value`
+constrain numeric values inclusively. Decimal bounds are checked exactly. HTML
+input hints do not replace server validation.
 
 Validate without a server:
 
@@ -1707,6 +1779,13 @@ records, nested records, arrays, options, and scalar values. `json_encode`
 serializes the same value families. Malformed JSON, type mismatches, unknown
 record fields, and missing required fields are explicit runtime errors.
 
+The opaque `Json` type preserves JSON objects, arrays, and scalars without
+converting them to an application-specific record. It can be validated with
+`json_decode<Json>`, serialized with `json_encode`, and used in typed SQL
+results for JSON columns. Database storage is backend-specific: MariaDB uses
+its JSON/LONGTEXT representation with a `JSON_VALID` check, PostgreSQL uses
+`JSONB`, and SQLite uses `TEXT` with runtime validation.
+
 Zelyra supports nested array types such as `String[][]` and typed CSV and
 fixed-point APIs for delimited text files:
 
@@ -1767,6 +1846,11 @@ parts = "one,two" |> text_split(",")
 `trim`, `to_lower`, and `to_upper` are pipeline aliases for `text_trim`,
 `text_to_lower`, and `text_to_upper`. Further arguments follow the piped value,
 as in `text |> text_replace("old", "new")`.
+
+`text_ucfirst(text)` follows PHP 8.2+'s `ucfirst` rule: it uppercases only an
+initial ASCII letter from `a` through `z`. A non-ASCII initial character such
+as `ä` and the rest of the text remain unchanged. This is separate from
+`text_capitalize`, which handles Unicode characters.
 
 `text_chars(text)` returns a text's Unicode code points as `String[]`. This lets
 programs process grids and other character-oriented text formats with ordinary
@@ -1890,7 +1974,10 @@ snapshot of surrounding values and are merged in source order before execution
 continues. An error in one branch fails the whole block after the started
 branches finish. The type checker rejects `await` outside a `parallel` block.
 The current runtime uses one worker thread per branch; cancellation and
-database connection-pool integration are not implemented yet.
+database connection-pool integration are not implemented yet. Each block may
+contain at most four branches. The type checker, MIR and bytecode verifiers, and
+runtimes enforce the same limit before starting workers, bounding their combined
+stack reservation.
 
 ## 15. Contracts and verification
 
@@ -2298,6 +2385,7 @@ and was checked with the installed Rust toolchain or Zelyra CLI. `🧪`, `🗺�
 | Decimal | `Float` or `Decimal` | `f64` or fixed point | `Decimal` has nine fractional digits; division truncates toward zero; overflow returns a runtime error | ✅ |
 | Boolean | `true`, `false`, `Bool` | `true`, `false`, `bool` | own base-type model | ✅ |
 | String | `String` and character literals | `String`, `&str`, character literals | Rust distinguishes ownership and borrowing | ✅ |
+| String escapes | `\n`, `\r`, `\t`, `\0`, `\v`, `\\`, `\"`, `\'` | Rust string escapes | Zelyra decodes these escapes in ordinary string literals | ✅ |
 | Optional value | `Email?` or `Option<String>` | `Option<String>` | `?` is Zelyra's Option shorthand | ✅ |
 | Missing value | `None` | `None` | same name in different enum models | ✅ |
 | Lists/arrays | `Int[]`, `[1, 2, 3]` | `Vec<i64>`, `vec![1, 2, 3]` | no Rust macro syntax in Zelyra | ✅ |
@@ -2317,7 +2405,7 @@ and was checked with the installed Rust toolchain or Zelyra CLI. `🧪`, `🗺�
 | Error handling | `Result<T, E>`, `Some`/`None` | `Result<T, E>`, `?`, `panic!` | Zelyra has no Rust `?` operator | ✅ |
 | String interpolation | `message = "Customer {customer.name} (ID: {customer.id})"`; `{{` and `}}` produce literal braces | `format!("{name}")` or `println!("{}", name)` | Expressions are compiler-checked and converted to text. The result is not HTML; HTML output must be escaped at the existing view boundary. | ✅ |
 | Modules | `pub fn`, `pub view`, `pub component`, and other declarations in imported files | `mod name {}`, files and modules | supported with documented limits; UI visibility and namespace resolution remain constrained | 🧪 |
-| Imports | `import "src/math.zyl" as math`, `math::add()` | `use crate::module::Item;` | project-local imports; `check`, `build`, `run`, `serve`, `context`, `verify`, and `impact` load the graph | 🧪 |
+| Imports | `import "src/math.zyl" as math`, `math::add()` | `use crate::module::Item;` | project-local imports load the explicit graph in `check`, `build`, `run`, `serve`, `context`, `verify`, and `impact`; unreleased 1.1.5 work adds offline local packages via `pkg:` and `zelyra.lock`, typed settings, and optional CLI compatibility requirements (see [local packages](../../packages.en.md)) | 🧪 |
 | Generics | `fn identity<T>(...)`, `struct Box<T>`, `enum Maybe<T>` | general generics and traits | user-defined functions, records, and enums support inference/explicit arguments; general constraints, generic aliases, and generic function references are unavailable | 🧪 |
 | Function values | `callback: Function<(Int) -> Int>`, `&increment` | `fn(Int) -> Int` | Zelyra 1.0.7 adds typed lexical lambdas and closures for `map`, `filter`, `find`, and `reduce`; generic function references remain limited | 🧪 |
 | Async functions | no `async fn`; `await`/`parallel` are limited | `async fn`, `.await`, futures | no stable Zelyra async model | 🧪 |

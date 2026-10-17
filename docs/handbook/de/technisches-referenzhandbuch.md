@@ -330,6 +330,36 @@ fn available_capacity(total: Int, reserved: Int) -> Int {
 }
 ~~~
 
+Lambdas können als Funktionswerte gespeichert, zurückgegeben und an
+Funktionen wie `map`, `filter`, `find` und `reduce` übergeben werden. Bei einer
+typisierten Variable liefert der Funktionstyp den erwarteten Parameter- und
+Rückgabetyp für die Lambda:
+
+~~~zelyra
+fn make_adder(base: Int) -> Function<(Int) -> Int> {
+    mutable offset = base
+    callback: Function<(Int) -> Int> = |value| value + offset
+    offset = offset + 100
+    return callback
+}
+
+fn main() {
+    add = make_adder(20)
+    print(add(2))
+}
+~~~
+
+Die Ausgabe ist `22`: Die Closure behält den Wert von `offset` beim Erzeugen
+der Lambda als Snapshot. Für Bytecode gelten zusätzlich dessen dokumentierte
+Untermenge und die ausdrückliche Backend-Auswahl.
+
+Effekte einer gespeicherten Lambda müssen auch im Funktionswerttyp stehen.
+Der Typ `Function<(Int) -> Timestamp> uses {Clock}` darf `now()` aufrufen;
+ohne `uses {Clock}` weist der Typprüfer die Lambda mit `E-TYPE-FUNCTION-001`
+zurück. Dieselbe Prüfung gilt für Aufrufe anderer Funktionen mit deklarierten
+Capabilities. So kann eine Closure einen Effekt nicht hinter einem
+effektfreien Callback-Typ verbergen.
+
 Nominale IDs verhindern Verwechslungen:
 
 ~~~zelyra
@@ -444,6 +474,36 @@ table machines {
 
 Zelyra erkennt die Beziehung zwischen Maschine und Abteilung. Daraus können
 Foreign Keys, Formulare und Auswahlfelder entstehen.
+
+Das Löschverhalten eines Fremdschlüssels kann am Relationsfeld festgelegt
+werden:
+
+~~~zelyra
+table invoices {
+    customer: Customer required on_delete cascade
+    template: Template on_delete set_null
+}
+~~~
+
+Unterstützte Aktionen sind `no_action`, `restrict`, `cascade`, `set_null` und
+`set_default`. `set_null` erfordert eine optionale Relation; `set_default`
+erfordert einen Spalten-Default und wird für MariaDB abgelehnt, weil dieses
+Backend die SQL-Aktion nicht unterstützt. Die Aktion fließt in erzeugtes DDL,
+Datenbankinspektion und Schema-Diff-Planung ein. Änderungen an der Aktion
+benötigen wie andere Fremdschlüsseländerungen Prüfung und Vorabkontrolle.
+
+Wenn der physische Fremdschlüsselname nicht dem Standard `<feld>_id`
+entspricht, kann er ausdrücklich angegeben werden:
+
+~~~zelyra
+table vacation_requests {
+    approved_by: User storage_name "approved_by" on_delete set_null
+}
+~~~
+
+`storage_name` wird als portable Datenbankspalte geprüft. Relationsfeld,
+Fremdschlüssel und SQL verwenden diesen Namen; Typprüfung und Löschregel
+bleiben erhalten.
 
 Typische Abbildung:
 
@@ -872,7 +932,7 @@ Dann beispielsweise:
 http://127.0.0.1:3000/machines/Presse-7
 ~~~
 
-Pfadwerte werden standardmäßig HTML-escaped. Der derzeitige Web Core umfasst GET-Routen, Pfadparameter, Query-String-Behandlung, HTTP-Parsing und HTML-Antworten.
+URL-kodierte Pfadparameter werden segmentweise UTF-8-dekodiert; ein `+` bleibt im Pfad ein Pluszeichen. Ungültige Kodierungen sowie kodierte Schrägstriche, Backslashes, NUL-Bytes und dekodierte `.`-/`..`-Segmente werden abgewiesen, damit die Dekodierung keine neue Pfadstruktur oder Traversal erzeugt. Pfadwerte werden beim Rendern standardmäßig HTML-escaped. Der Web Core umfasst GET-Routen, Pfadparameter, Query-String-Behandlung, HTTP-Parsing und HTML-Antworten.
 
 ### Typisierte Datenbindung und Collections in Views
 
@@ -1018,11 +1078,26 @@ form ContactForm {
     field email: Email {
         label: "E-Mail"
         required
+        min_length: 5
         max: 255
         widget: email
     }
+    field status: String {
+        required
+        choices: ["draft", "issued", "paid"]
+    }
+    field total: Decimal {
+        min_value: "0.01"
+        max_value: "9999.99"
+    }
 }
 ~~~
+
+`choices` rendert eine feste Auswahlliste und wird bei POST zusätzlich
+serverseitig geprüft. `min_length`/`max` begrenzen Textlängen;
+`min_value`/`max_value` begrenzen Zahlen inklusive der angegebenen Grenze.
+Decimal-Grenzen werden exakt geprüft. Die HTML-Eingabehilfe ersetzt keine
+Servervalidierung.
 
 Werte ohne Server prüfen:
 
@@ -1844,6 +1919,13 @@ Records, verschachtelte Records, Arrays, Optionen und Skalarwerte.
 unbekannte Record-Felder und fehlende Pflichtfelder werden als ausdrückliche
 Laufzeitfehler gemeldet.
 
+Der opake Typ `Json` bewahrt JSON-Objekte, Arrays und Skalare ohne Umwandlung in
+einen anwendungsspezifischen Record. Er kann mit `json_decode<Json>` geprüft,
+mit `json_encode` serialisiert und in typisierten SQL-Ergebnissen für JSON-
+Spalten verwendet werden. Die Datenbankabbildung ist backendabhängig:
+MariaDB verwendet seinen JSON/LONGTEXT-Speicher mit `JSON_VALID`-Prüfung,
+PostgreSQL `JSONB`, SQLite `TEXT` mit Runtime-Validierung.
+
 Für tabellarische Textdateien unterstützt Zelyra
 verschachtelte Arraytypen wie `String[][]` sowie typisierte CSV- und
 Festkomma-APIs:
@@ -1878,7 +1960,7 @@ einzelnes Dezimaltrennzeichen zulässig, höchstens `scale` Nachkommastellen.
 `format_scaled_result(value, scale)` erzeugt die feste Dezimalschreibweise für
 den Export. Beide Funktionen erlauben Skalen von 0 bis 9 und melden ungültige
 Texte, zu viele Stellen oder Überläufe als `Err(String)`. Fachliche Regeln wie
-„Preis darf nicht negativ sein“ prüft die Anwendung nach der Konvertierung.
+„Preis darf nicht negativ sein“ prüft die Anwendung nach der Konvertierung. `decimal_quantize_result`, `decimal_scaled_result` und `format_scaled_result` teilen ihre reine Runtime-Implementierung über AST, MIR und Bytecode; die Backend-Differenzialtests prüfen half-even-Rundung und feste Geldformatierung.
 
 Das vollständige Beispiel `examples/csv_catalog` erzeugt eine UTF-8-Datei,
 importiert und validiert Artikel, schreibt gültige und fehlerhafte Datensätze
@@ -1907,6 +1989,11 @@ teile = "eins,zwei" |> text_split(",")
 `trim`, `to_lower` und `to_upper` sind Pipeline-Aliase für `text_trim`,
 `text_to_lower` und `text_to_upper`. Weitere Argumente folgen dem übergebenen
 Wert, zum Beispiel `text |> text_replace("alt", "neu")`.
+
+`text_ucfirst(text)` entspricht der PHP-8.2+-Regel von `ucfirst`: Nur ein
+anfänglicher ASCII-Buchstabe `a` bis `z` wird großgeschrieben. Ein nicht-ASCII-
+Anfang wie `ä` und der übrige Text bleiben unverändert. Die Funktion ist von
+`text_capitalize` getrennt, das Unicode-Zeichen berücksichtigt.
 
 `text_chars(text)` liefert die Unicode-Codepoints eines Textes als `String[]`.
 So lassen sich Raster und andere zeichenweise Textformate mit normalen,
@@ -2035,7 +2122,10 @@ Fortsetzung in Quelltextreihenfolge zusammengeführt. Ein Fehler in einem Zweig
 lässt den gesamten Block fehlschlagen, nachdem die gestarteten Zweige beendet
 wurden. `await` außerhalb eines `parallel`-Blocks weist der Type Checker ab.
 Die aktuelle Runtime verwendet einen Worker-Thread pro Zweig; Abbruch und die
-Verwendung eines Datenbank-Connection-Pools sind noch nicht umgesetzt.
+Verwendung eines Datenbank-Connection-Pools sind noch nicht umgesetzt. Ein
+`parallel`-Block darf höchstens vier Zweige enthalten. Type Checker, MIR-/
+Bytecode-Verifier und Runtime erzwingen dieselbe Grenze vor dem Start; sie
+begrenzt die reservierte Worker-Stackgröße.
 
 ## 15. Contracts und Verify
 
@@ -2469,6 +2559,7 @@ geplante oder derzeit nicht verfügbare Sprachmerkmale.
 | Dezimalzahl | `Float` oder `Decimal` | `f64` oder Festkomma | `Decimal` hat neun Nachkommastellen; Division kürzt Richtung null; Überläufe liefern Runtimefehler | ✅ |
 | Boolean | `true`, `false`, `Bool` | `true`, `false`, `bool` | eigenes Zelyra-Basistypmodell | ✅ |
 | Zeichenkette | `String` und Zeichenliterale | `String`, `&str`, Zeichenliterale | Rust unterscheidet Besitz und Borrowing | ✅ |
+| String-Escapes | `\n`, `\r`, `\t`, `\0`, `\v`, `\\`, `\"`, `\'` | Rust-String-Escapes | Zelyra dekodiert diese Sequenzen in normalen Stringliteralen | ✅ |
 | optionale Werte | `Email?` oder `Option<String>` | `Option<String>` | `?` ist Zelyras Kurzform für Option | ✅ |
 | fehlender Wert | `None` | `None` | gleiche Bezeichnung in verschiedenem Enum-Modell | ✅ |
 | Listen/Arrays | `Int[]`, `[1, 2, 3]` | `Vec<i64>`, `vec![1, 2, 3]` | Zelyra bietet keine Rust-Makrosyntax | ✅ |
@@ -2488,7 +2579,7 @@ geplante oder derzeit nicht verfügbare Sprachmerkmale.
 | Fehlerbehandlung | `Result<T, E>`, `Some`/`None` | `Result<T, E>`, `?`, `panic!` | Zelyra hat keinen Rust-Operator `?` | ✅ |
 | Stringinterpolation | `message = "Kunde {customer.name} (ID: {customer.id})"`; `{{` und `}}` erzeugen geschweifte Klammern | `format!("{name}")` oder `println!("{}", name)` | Ausdrücke werden geprüft und als Text konvertiert. Das Ergebnis ist kein HTML: HTML-Ausgabe muss an der bestehenden View-Grenze escaped werden. | ✅ |
 | Module | `pub fn`, `pub view`, `pub component` und weitere Deklarationen in importierten Dateien | `mod name {}`, Dateien und Module | unterstützt mit dokumentierten Grenzen; UI-Sichtbarkeit und Namespace-Auflösung bleiben eingeschränkt | 🧪 |
-| Imports | `import "src/math.zyl" as math`, `math::add()` | `use crate::module::Item;` | projektlokale Imports; `check`, `build`, `run`, `serve`, `context`, `verify`, `impact` verarbeiten den Graphen | 🧪 |
+| Imports | `import "src/math.zyl" as math`, `math::add()` | `use crate::module::Item;` | projektlokale Importe laden den expliziten Graphen in `check`, `build`, `run`, `serve`, `context`, `verify` und `impact`; unveröffentlichte Arbeit zu 1.1.5 ergänzt lokale Offlinepakete über `pkg:` und `zelyra.lock`, typisierte Einstellungen und optionale CLI-Kompatibilitätsvorgaben (siehe [lokale Pakete](../../packages.de.md)) | 🧪 |
 | Generics | `fn identity<T>(...)`, `struct Box<T>`, `enum Maybe<T>` | allgemeine Generics und Traits | eigene Funktionen, Records und Enums unterstützen Inferenz/Typangaben; allgemeine Constraints, generische Aliase und generische Funktionsreferenzen fehlen | 🧪 |
 | Funktionswerte | `callback: Function<(Int) -> Int>`, `&increment` | `fn(Int) -> Int` | Zelyra 1.0.7 ergänzt typisierte lexikalische Lambdas und Closures für `map`, `filter`, `find` und `reduce`; generische Funktionsreferenzen bleiben eingeschränkt | 🧪 |
 | asynchrone Funktionen | `async fn` nicht vorhanden; `await`/`parallel` nur eingeschränkt | `async fn`, `.await`, Futures | kein stabiles Zelyra-Async-Modell | 🧪 |

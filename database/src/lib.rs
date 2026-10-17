@@ -43,6 +43,8 @@ pub struct Schema {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Table {
     pub name: String,
+    /// Logical tenant scope metadata; it does not alter generated DDL.
+    pub tenant_scope_column: Option<String>,
     pub columns: Vec<Column>,
     pub foreign_keys: Vec<ForeignKey>,
     pub indexes: Vec<Index>,
@@ -66,6 +68,7 @@ pub struct ForeignKey {
     pub column: String,
     pub referenced_table: String,
     pub referenced_column: String,
+    pub on_delete: ReferentialAction,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -176,6 +179,19 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
                 });
                 continue;
             }
+            if let Some((precision, scale)) = definition.decimal_precision {
+                if resolved_inner != &Type::Decimal
+                    || !(1..=39).contains(&precision)
+                    || scale >= precision
+                    || scale > 9
+                {
+                    errors.push(SchemaError {
+                        message: "fixed-point column precision must be 1 to 39, with a scale from 0 to 9 smaller than precision, on a Decimal column".into(),
+                        span: definition.span,
+                    });
+                    continue;
+                }
+            }
             if let Type::Named(name) = &definition.ty {
                 let known_named_type = ["Id", "Email", "Url", "Uuid", "Money"]
                     .contains(&name.as_str())
@@ -194,8 +210,65 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
                     continue;
                 }
             }
-            let (storage_name, sql_type, relation) =
+            let (default_storage_name, sql_type, relation) =
                 column_mapping(definition, &table_names, &program.types, backend);
+            let storage_name = definition
+                .storage_name
+                .as_deref()
+                .unwrap_or(&default_storage_name)
+                .to_owned();
+            if !is_portable_column_identifier(&storage_name) {
+                errors.push(SchemaError {
+                    message: format!(
+                        "database storage name `{storage_name}` for {}.{} must be a portable identifier",
+                        table.name, definition.name
+                    ),
+                    span: definition.span,
+                });
+                continue;
+            }
+            if columns
+                .iter()
+                .any(|column: &Column| column.name == storage_name)
+            {
+                errors.push(SchemaError {
+                    message: format!(
+                        "duplicate database storage column `{storage_name}` in table {}",
+                        table.name
+                    ),
+                    span: definition.span,
+                });
+                continue;
+            }
+            let nullable = !definition.required && !definition.primary_key && !definition.auto;
+            if let Some(action) = definition.on_delete {
+                if relation.is_none() {
+                    errors.push(SchemaError {
+                        message:
+                            "`on_delete` is valid only for a column that references another table"
+                                .into(),
+                        span: definition.span,
+                    });
+                }
+                if action == ReferentialAction::SetNull && !nullable {
+                    errors.push(SchemaError {
+                        message: "`on_delete set_null` requires a nullable relation column".into(),
+                        span: definition.span,
+                    });
+                }
+                if action == ReferentialAction::SetDefault && definition.default.is_none() {
+                    errors.push(SchemaError {
+                        message: "`on_delete set_default` requires a column default".into(),
+                        span: definition.span,
+                    });
+                }
+                if action == ReferentialAction::SetDefault && backend == Backend::MariaDb {
+                    errors.push(SchemaError {
+                        message: "MariaDB does not support `ON DELETE SET DEFAULT`".into(),
+                        span: definition.span,
+                    });
+                }
+            }
             if let Some(limit) =
                 identifier_limit(backend).filter(|limit| storage_name.len() > *limit)
             {
@@ -226,10 +299,10 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
                         column: storage_name.clone(),
                         referenced_table: relation,
                         referenced_column: "id".into(),
+                        on_delete: definition.on_delete.unwrap_or_default(),
                     });
                 }
             }
-            let nullable = !definition.required && !definition.primary_key && !definition.auto;
             let default = definition.default.as_ref().map(default_sql).or_else(|| {
                 (definition.auto && matches!(definition.ty, Type::Timestamp))
                     .then(|| "CURRENT_TIMESTAMP".into())
@@ -289,6 +362,10 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
             .collect();
         tables.push(Table {
             name: table.name.clone(),
+            tenant_scope_column: table
+                .tenant_scope
+                .as_ref()
+                .map(|scope| scope.column.clone()),
             columns,
             foreign_keys,
             indexes,
@@ -315,6 +392,14 @@ fn identifier_limit(backend: Backend) -> Option<usize> {
         Backend::Postgres => Some(63),
         Backend::Sqlite => None,
     }
+}
+
+fn is_portable_column_identifier(value: &str) -> bool {
+    let mut bytes = value.bytes();
+    bytes
+        .next()
+        .is_some_and(|byte| byte.is_ascii_alphabetic() || byte == b'_')
+        && bytes.all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
 }
 
 /// Preserve established short names; shorten generated names with a stable
@@ -418,9 +503,23 @@ fn column_mapping(
             Backend::MariaDb => "DOUBLE",
             Backend::Sqlite => "REAL",
         },
-        Type::Decimal => match backend {
-            Backend::MariaDb => "DECIMAL(39,9)",
-            Backend::Postgres | Backend::Sqlite => "NUMERIC(39,9)",
+        Type::Decimal => match (backend, definition.decimal_precision) {
+            (Backend::MariaDb, Some((precision, scale))) => {
+                return (
+                    definition.name.clone(),
+                    format!("DECIMAL({precision},{scale})"),
+                    None,
+                );
+            }
+            (Backend::Postgres | Backend::Sqlite, Some((precision, scale))) => {
+                return (
+                    definition.name.clone(),
+                    format!("NUMERIC({precision},{scale})"),
+                    None,
+                );
+            }
+            (Backend::MariaDb, None) => "DECIMAL(39,9)",
+            (Backend::Postgres | Backend::Sqlite, None) => "NUMERIC(39,9)",
         },
         Type::Bool => match backend {
             Backend::Postgres | Backend::MariaDb => "BOOLEAN",
@@ -429,6 +528,11 @@ fn column_mapping(
         Type::String => match definition.length {
             Some(length) => return (definition.name.clone(), format!("VARCHAR({length})"), None),
             None => "TEXT",
+        },
+        Type::Json => match backend {
+            Backend::Postgres => "JSONB",
+            Backend::MariaDb => "JSON",
+            Backend::Sqlite => "TEXT",
         },
         Type::Char => "CHAR(1)",
         Type::Bytes => match backend {
@@ -669,7 +773,32 @@ fn quote_string(value: &str) -> String {
 impl Schema {
     pub fn create_sql(&self) -> String {
         let backend = self.backend();
-        self.tables
+        let names = self
+            .tables
+            .iter()
+            .map(|table| table.name.as_str())
+            .collect::<HashSet<_>>();
+        let mut pending = self.tables.iter().collect::<Vec<_>>();
+        let mut created = HashSet::<&str>::new();
+        let mut ordered = Vec::with_capacity(pending.len());
+        while !pending.is_empty() {
+            let next = pending.iter().position(|table| {
+                table.foreign_keys.iter().all(|foreign_key| {
+                    !names.contains(foreign_key.referenced_table.as_str())
+                        || created.contains(foreign_key.referenced_table.as_str())
+                })
+            });
+            let Some(index) = next else {
+                // Keep the output deterministic for cyclic schemas. The database
+                // will return its own constraint diagnostic when the DDL is run.
+                ordered.append(&mut pending);
+                break;
+            };
+            let table = pending.remove(index);
+            created.insert(table.name.as_str());
+            ordered.push(table);
+        }
+        ordered
             .iter()
             .map(|table| table_create_with_indexes_sql(table, backend))
             .collect::<Vec<_>>()
@@ -728,11 +857,12 @@ fn table_create_sql(table: &Table, backend: Backend) -> String {
             )
         });
         format!(
-            "CONSTRAINT {} FOREIGN KEY ({}) REFERENCES {} ({})",
+            "CONSTRAINT {} FOREIGN KEY ({}) REFERENCES {} ({}){}",
             quote_identifier(&name, backend),
             quote_identifier(&foreign_key.column, backend),
             quote_identifier(&foreign_key.referenced_table, backend),
-            quote_identifier(&foreign_key.referenced_column, backend)
+            quote_identifier(&foreign_key.referenced_column, backend),
+            referential_action_sql(foreign_key.on_delete)
         )
     }));
     let table_options = match backend {
@@ -1151,8 +1281,40 @@ pub fn diff(desired: &Schema, current: &Schema) -> SchemaPlan {
             if !current_table
                 .foreign_keys
                 .iter()
-                .any(|current| same_foreign_key(current, foreign_key))
+                .any(|current| same_foreign_key(current, foreign_key, backend))
             {
+                if let Some(previous) = current_table.foreign_keys.iter().find(|current| {
+                    same_foreign_key_identity(current, foreign_key)
+                        && !foreign_key_actions_equivalent(
+                            current.on_delete,
+                            foreign_key.on_delete,
+                            backend,
+                        )
+                }) {
+                    if !is_zelyra_managed_foreign_key(desired_table, previous, backend) {
+                        plan.changes.push(SchemaChange {
+                            description: format!(
+                                "replace untracked foreign key {}.{}",
+                                desired_table.name, foreign_key.column
+                            ),
+                            sql: format!(
+                                "-- Cannot safely replace the untracked foreign key on {}.{}.",
+                                desired_table.name, foreign_key.column
+                            ),
+                            risk: Risk::Unsupported,
+                        });
+                        continue;
+                    }
+                    let (sql, risk) = drop_foreign_key_sql(desired_table, previous, backend);
+                    plan.changes.push(SchemaChange {
+                        description: format!(
+                            "drop foreign key {}.{} before changing its on-delete action",
+                            desired_table.name, foreign_key.column
+                        ),
+                        sql,
+                        risk,
+                    });
+                }
                 let sql = add_foreign_key_sql(desired_table, foreign_key, backend);
                 let risk = if backend == Backend::Sqlite {
                     Risk::Unsupported
@@ -1180,10 +1342,17 @@ pub fn diff(desired: &Schema, current: &Schema) -> SchemaPlan {
             }
         }
         for foreign_key in &current_table.foreign_keys {
+            if desired_table
+                .foreign_keys
+                .iter()
+                .any(|desired| same_foreign_key_identity(foreign_key, desired))
+            {
+                continue;
+            }
             if !desired_table
                 .foreign_keys
                 .iter()
-                .any(|desired| same_foreign_key(foreign_key, desired))
+                .any(|desired| same_foreign_key(foreign_key, desired, backend))
             {
                 if !is_zelyra_managed_foreign_key(desired_table, foreign_key, backend) {
                     plan.changes.push(SchemaChange {
@@ -1577,10 +1746,39 @@ fn drop_index_sql(table: &Table, index: &Index, backend: Backend) -> (String, Ri
     (sql, Risk::RequiresApproval)
 }
 
-fn same_foreign_key(left: &ForeignKey, right: &ForeignKey) -> bool {
+fn same_foreign_key(left: &ForeignKey, right: &ForeignKey, backend: Backend) -> bool {
+    same_foreign_key_identity(left, right)
+        && foreign_key_actions_equivalent(left.on_delete, right.on_delete, backend)
+}
+
+fn foreign_key_actions_equivalent(
+    left: ReferentialAction,
+    right: ReferentialAction,
+    backend: Backend,
+) -> bool {
+    left == right
+        || (backend == Backend::MariaDb
+            && matches!(
+                (left, right),
+                (ReferentialAction::NoAction, ReferentialAction::Restrict)
+                    | (ReferentialAction::Restrict, ReferentialAction::NoAction)
+            ))
+}
+
+fn same_foreign_key_identity(left: &ForeignKey, right: &ForeignKey) -> bool {
     left.column == right.column
         && left.referenced_table == right.referenced_table
         && left.referenced_column == right.referenced_column
+}
+
+fn referential_action_sql(action: ReferentialAction) -> &'static str {
+    match action {
+        ReferentialAction::NoAction => "",
+        ReferentialAction::Restrict => " ON DELETE RESTRICT",
+        ReferentialAction::Cascade => " ON DELETE CASCADE",
+        ReferentialAction::SetNull => " ON DELETE SET NULL",
+        ReferentialAction::SetDefault => " ON DELETE SET DEFAULT",
+    }
 }
 
 fn add_foreign_key_sql(table: &Table, foreign_key: &ForeignKey, backend: Backend) -> String {
@@ -1591,12 +1789,13 @@ fn add_foreign_key_sql(table: &Table, foreign_key: &ForeignKey, backend: Backend
         )
     });
     format!(
-        "ALTER TABLE {} ADD CONSTRAINT {} FOREIGN KEY ({}) REFERENCES {} ({});",
+        "ALTER TABLE {} ADD CONSTRAINT {} FOREIGN KEY ({}) REFERENCES {} ({}){};",
         quote_identifier(&table.name, backend),
         quote_identifier(&name, backend),
         quote_identifier(&foreign_key.column, backend),
         quote_identifier(&foreign_key.referenced_table, backend),
-        quote_identifier(&foreign_key.referenced_column, backend)
+        quote_identifier(&foreign_key.referenced_column, backend),
+        referential_action_sql(foreign_key.on_delete)
     )
 }
 
@@ -2055,7 +2254,7 @@ pub fn inspect_postgres(database_url: &str) -> Result<Schema, DatabaseError> {
     parse_index_output(&mut schema, &index_output)?;
     let foreign_keys = run_psql(
         database_url,
-        "SELECT child.relname, child_column.attname, parent.relname, parent_column.attname, constraint_row.conname FROM pg_constraint constraint_row JOIN pg_class child ON child.oid = constraint_row.conrelid JOIN pg_namespace child_schema ON child_schema.oid = child.relnamespace JOIN pg_class parent ON parent.oid = constraint_row.confrelid JOIN LATERAL unnest(constraint_row.conkey) WITH ORDINALITY AS child_key(attnum, position) ON TRUE JOIN LATERAL unnest(constraint_row.confkey) WITH ORDINALITY AS parent_key(attnum, position) ON parent_key.position = child_key.position JOIN pg_attribute child_column ON child_column.attrelid = child.oid AND child_column.attnum = child_key.attnum JOIN pg_attribute parent_column ON parent_column.attrelid = parent.oid AND parent_column.attnum = parent_key.attnum WHERE constraint_row.contype = 'f' AND child_schema.nspname = 'public' AND child.relname <> '_zelyra_schema_history' ORDER BY child.relname, constraint_row.conname, child_key.position",
+        "SELECT child.relname, child_column.attname, parent.relname, parent_column.attname, constraint_row.conname, CASE constraint_row.confdeltype WHEN 'c' THEN 'CASCADE' WHEN 'r' THEN 'RESTRICT' WHEN 'n' THEN 'SET NULL' WHEN 'd' THEN 'SET DEFAULT' ELSE 'NO ACTION' END FROM pg_constraint constraint_row JOIN pg_class child ON child.oid = constraint_row.conrelid JOIN pg_namespace child_schema ON child_schema.oid = child.relnamespace JOIN pg_class parent ON parent.oid = constraint_row.confrelid JOIN LATERAL unnest(constraint_row.conkey) WITH ORDINALITY AS child_key(attnum, position) ON TRUE JOIN LATERAL unnest(constraint_row.confkey) WITH ORDINALITY AS parent_key(attnum, position) ON parent_key.position = child_key.position JOIN pg_attribute child_column ON child_column.attrelid = child.oid AND child_column.attnum = child_key.attnum JOIN pg_attribute parent_column ON parent_column.attrelid = parent.oid AND parent_column.attnum = parent_key.attnum WHERE constraint_row.contype = 'f' AND child_schema.nspname = 'public' AND child.relname <> '_zelyra_schema_history' ORDER BY child.relname, constraint_row.conname, child_key.position",
     )?;
     parse_foreign_key_output(&mut schema, &foreign_keys)?;
     Ok(schema)
@@ -2106,6 +2305,7 @@ fn parse_inspection_output(output: &str) -> Result<Schema, DatabaseError> {
         } else {
             tables.push(Table {
                 name: table_name,
+                tenant_scope_column: None,
                 columns: vec![column],
                 foreign_keys: Vec::new(),
                 indexes: Vec::new(),
@@ -2248,6 +2448,12 @@ pub fn inspect_mariadb(database_url: &str) -> Result<Schema, DatabaseError> {
         None,
     )?;
     let mut schema = parse_mariadb_columns(&output)?;
+    let json_checks = run_mariadb(
+        database_url,
+        "SELECT tc.TABLE_NAME, HEX(cc.CHECK_CLAUSE) FROM information_schema.TABLE_CONSTRAINTS tc JOIN information_schema.CHECK_CONSTRAINTS cc ON cc.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA AND cc.CONSTRAINT_NAME = tc.CONSTRAINT_NAME WHERE tc.CONSTRAINT_SCHEMA = DATABASE() AND tc.CONSTRAINT_TYPE = 'CHECK' ORDER BY tc.TABLE_NAME, tc.CONSTRAINT_NAME",
+        None,
+    )?;
+    parse_mariadb_json_checks(&mut schema, &json_checks)?;
     let indexes = run_mariadb(
         database_url,
         "SELECT TABLE_NAME, INDEX_NAME, NON_UNIQUE, SEQ_IN_INDEX, COLUMN_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME <> '_zelyra_schema_history' AND INDEX_NAME <> 'PRIMARY' ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX",
@@ -2256,7 +2462,7 @@ pub fn inspect_mariadb(database_url: &str) -> Result<Schema, DatabaseError> {
     parse_mariadb_indexes(&mut schema, &indexes)?;
     let foreign_keys = run_mariadb(
         database_url,
-        "SELECT TABLE_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME, CONSTRAINT_NAME FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME <> '_zelyra_schema_history' AND REFERENCED_TABLE_NAME IS NOT NULL ORDER BY TABLE_NAME, CONSTRAINT_NAME, ORDINAL_POSITION",
+        "SELECT kcu.TABLE_NAME, kcu.COLUMN_NAME, kcu.REFERENCED_TABLE_NAME, kcu.REFERENCED_COLUMN_NAME, kcu.CONSTRAINT_NAME, rules.DELETE_RULE FROM information_schema.KEY_COLUMN_USAGE kcu JOIN information_schema.REFERENTIAL_CONSTRAINTS rules ON rules.CONSTRAINT_SCHEMA = kcu.CONSTRAINT_SCHEMA AND rules.CONSTRAINT_NAME = kcu.CONSTRAINT_NAME AND rules.TABLE_NAME = kcu.TABLE_NAME WHERE kcu.TABLE_SCHEMA = DATABASE() AND kcu.TABLE_NAME <> '_zelyra_schema_history' AND kcu.REFERENCED_TABLE_NAME IS NOT NULL ORDER BY kcu.TABLE_NAME, kcu.CONSTRAINT_NAME, kcu.ORDINAL_POSITION",
         None,
     )?;
     parse_foreign_key_output(&mut schema, &foreign_keys)?;
@@ -2551,6 +2757,7 @@ pub enum QueryValue {
     Timestamp(i64),
     Bool(bool),
     String(String),
+    Json(String),
 }
 
 /// Native result families retained independently of the legacy text view.
@@ -2565,6 +2772,7 @@ pub enum QueryColumnType {
     Date,
     Time,
     Timestamp,
+    Json,
     Unsupported,
 }
 
@@ -2777,6 +2985,14 @@ fn postgres_parameter_value(
         QueryValue::Timestamp(value) => Ok(Box::new(temporal::Parameter::Timestamp(*value))),
         QueryValue::Bool(value) => Ok(Box::new(*value)),
         QueryValue::String(value) => Ok(Box::new(value.clone())),
+        QueryValue::Json(value) => {
+            let parsed = serde_json::from_str::<serde_json::Value>(value).map_err(|error| {
+                DatabaseError {
+                    message: format!("invalid JSON SQL parameter: {error}"),
+                }
+            })?;
+            Ok(Box::new(postgres::types::Json(parsed)))
+        }
     }
 }
 
@@ -2836,6 +3052,7 @@ fn execute_prepared_postgres_query(
 
 fn postgres_column_type(ty: &PostgresType) -> QueryColumnType {
     match *ty {
+        PostgresType::JSON | PostgresType::JSONB => QueryColumnType::Json,
         PostgresType::BOOL => QueryColumnType::Bool,
         PostgresType::INT2 | PostgresType::INT4 | PostgresType::INT8 => QueryColumnType::Integer,
         PostgresType::FLOAT4 | PostgresType::FLOAT8 => QueryColumnType::Float,
@@ -2872,6 +3089,12 @@ fn postgres_row_cells(
                 PostgresType::FLOAT4 => value!(f32),
                 PostgresType::FLOAT8 => value!(f64),
                 PostgresType::NUMERIC => value!(numeric::NumericText),
+                PostgresType::JSON | PostgresType::JSONB => row
+                    .try_get::<_, Option<postgres::types::Json<serde_json::Value>>>(index)
+                    .map_err(postgres_driver_error)?
+                    .map(|postgres::types::Json(value)| serde_json::to_string(&value))
+                    .transpose()
+                    .map_err(postgres_driver_error),
                 PostgresType::DATE | PostgresType::TIME | PostgresType::TIMESTAMPTZ => value!(temporal::TemporalText),
                 PostgresType::TEXT | PostgresType::VARCHAR | PostgresType::BPCHAR | PostgresType::NAME => value!(String),
                 _ => Err(DatabaseError {
@@ -2942,6 +3165,17 @@ pub fn validate_decimal_storage(database_url: &str, schema: &Schema) -> Result<(
         message: "could not verify declared Decimal/Money/UInt storage; check database access and metadata privileges".into()
     })?;
     check_decimal_metadata(schema, &result.rows)
+}
+
+/// Return whether the declared schema needs a backend storage metadata check
+/// before runtime SQL can safely use its fixed-point or temporal columns.
+pub fn schema_requires_storage_validation(schema: &Schema, postgres: bool) -> bool {
+    schema.tables.iter().any(|table| {
+        table.columns.iter().any(|column| {
+            decimal_storage_precision(&column.sql_type).is_some()
+                || temporal_storage_kind(&column.sql_type, postgres).is_some()
+        })
+    })
 }
 
 fn decimal_storage_precision(sql_type: &str) -> Option<(&str, &str)> {
@@ -3319,6 +3553,12 @@ fn mysql_parameter_value(value: &QueryValue) -> Result<Value, DatabaseError> {
         }
         QueryValue::Bool(value) => Value::Int(i64::from(*value)),
         QueryValue::String(value) => Value::Bytes(value.as_bytes().to_vec()),
+        QueryValue::Json(value) => {
+            serde_json::from_str::<serde_json::Value>(value).map_err(|error| DatabaseError {
+                message: format!("invalid JSON SQL parameter: {error}"),
+            })?;
+            Value::Bytes(value.as_bytes().to_vec())
+        }
     })
 }
 
@@ -3372,6 +3612,7 @@ fn mysql_column_type(column: &mysql::Column) -> QueryColumnType {
     use mysql::consts::ColumnType::*;
     match column.column_type() {
         MYSQL_TYPE_NULL => QueryColumnType::Null,
+        MYSQL_TYPE_JSON => QueryColumnType::Json,
         MYSQL_TYPE_TINY | MYSQL_TYPE_SHORT | MYSQL_TYPE_LONG | MYSQL_TYPE_LONGLONG
         | MYSQL_TYPE_INT24 | MYSQL_TYPE_YEAR => QueryColumnType::Integer,
         MYSQL_TYPE_DECIMAL | MYSQL_TYPE_NEWDECIMAL => QueryColumnType::Decimal,
@@ -3714,6 +3955,7 @@ pub fn inspect_sqlite(database_url: &str) -> Result<Schema, DatabaseError> {
         let columns = parse_sqlite_columns(&output, has_autoincrement)?;
         schema.tables.push(Table {
             name: table_name.into(),
+            tenant_scope_column: None,
             columns,
             foreign_keys: Vec::new(),
             indexes: Vec::new(),
@@ -4243,24 +4485,25 @@ fn run_mariadb_sql(
     let mut child = command.spawn().map_err(|error| DatabaseError {
         message: format!("could not start {client}: {error}"),
     })?;
-    child
+    let write_result = child
         .stdin
         .take()
         .expect("mariadb stdin was piped")
-        .write_all(sql.as_bytes())
-        .map_err(|error| DatabaseError {
-            message: format!("could not send SQL to mariadb: {error}"),
-        })?;
+        .write_all(sql.as_bytes());
     let output = child.wait_with_output().map_err(|error| DatabaseError {
         message: format!("could not wait for mariadb: {error}"),
     })?;
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err(DatabaseError {
+    if !output.status.success() {
+        return Err(DatabaseError {
             message: String::from_utf8_lossy(&output.stderr).trim().to_string(),
-        })
+        });
     }
+    if let Err(error) = write_result {
+        return Err(DatabaseError {
+            message: format!("could not send SQL to mariadb: {error}"),
+        });
+    }
+    Ok(())
 }
 
 fn parse_mariadb_columns(output: &str) -> Result<Schema, DatabaseError> {
@@ -4298,6 +4541,7 @@ fn parse_mariadb_columns(output: &str) -> Result<Schema, DatabaseError> {
         } else {
             schema.tables.push(Table {
                 name: fields[0].into(),
+                tenant_scope_column: None,
                 columns: vec![column],
                 foreign_keys: Vec::new(),
                 indexes: Vec::new(),
@@ -4306,6 +4550,98 @@ fn parse_mariadb_columns(output: &str) -> Result<Schema, DatabaseError> {
         }
     }
     Ok(schema)
+}
+
+fn parse_mariadb_json_checks(schema: &mut Schema, output: &str) -> Result<(), DatabaseError> {
+    for line in output.lines().filter(|line| !line.trim().is_empty()) {
+        let Some((table_name, clause_hex)) = line.split_once('\t') else {
+            return Err(DatabaseError {
+                message: "unexpected MariaDB check-constraint metadata".into(),
+            });
+        };
+        let clause = decode_hex_metadata(clause_hex)?;
+        let columns = json_valid_check_columns(&clause);
+        let Some(table) = schema
+            .tables
+            .iter_mut()
+            .find(|table| table.name == table_name)
+        else {
+            continue;
+        };
+        for column_name in columns {
+            if let Some(column) = table
+                .columns
+                .iter_mut()
+                .find(|column| column.name == column_name && column.sql_type == "LONGTEXT")
+            {
+                column.sql_type = "JSON".into();
+            }
+        }
+    }
+    Ok(())
+}
+
+fn json_valid_check_columns(clause: &str) -> Vec<String> {
+    let bytes = clause.as_bytes();
+    let mut columns = Vec::new();
+    let mut offset = 0;
+    while offset + "JSON_VALID".len() <= bytes.len() {
+        if !clause[offset..]
+            .to_ascii_uppercase()
+            .starts_with("JSON_VALID")
+        {
+            offset += clause[offset..]
+                .chars()
+                .next()
+                .map(char::len_utf8)
+                .unwrap_or(1);
+            continue;
+        }
+        let mut cursor = offset + "JSON_VALID".len();
+        while bytes.get(cursor).is_some_and(u8::is_ascii_whitespace) {
+            cursor += 1;
+        }
+        if bytes.get(cursor) != Some(&b'(') {
+            offset += "JSON_VALID".len();
+            continue;
+        }
+        cursor += 1;
+        while bytes.get(cursor).is_some_and(u8::is_ascii_whitespace) {
+            cursor += 1;
+        }
+        let quote = match bytes.get(cursor) {
+            Some(b'`') => Some(b'`'),
+            Some(b'"') => Some(b'"'),
+            _ => None,
+        };
+        let start = if quote.is_some() { cursor + 1 } else { cursor };
+        let mut end = start;
+        while let Some(byte) = bytes.get(end) {
+            if let Some(quote) = quote {
+                if *byte == quote {
+                    break;
+                }
+            } else if !(byte.is_ascii_alphanumeric() || *byte == b'_' || *byte == b'$') {
+                break;
+            }
+            end += 1;
+        }
+        if end > start {
+            let name = String::from_utf8_lossy(&bytes[start..end]).into_owned();
+            let after_name = if quote.is_some() { end + 1 } else { end };
+            let mut close = after_name;
+            while bytes.get(close).is_some_and(u8::is_ascii_whitespace) {
+                close += 1;
+            }
+            if bytes.get(close) == Some(&b')') {
+                columns.push(name);
+            }
+        }
+        offset = cursor.max(offset + 1);
+    }
+    columns.sort();
+    columns.dedup();
+    columns
 }
 
 fn mariadb_default_value(
@@ -4425,7 +4761,7 @@ fn parse_mariadb_indexes(schema: &mut Schema, output: &str) -> Result<(), Databa
 fn parse_foreign_key_output(schema: &mut Schema, output: &str) -> Result<(), DatabaseError> {
     for line in output.lines().filter(|line| !line.trim().is_empty()) {
         let fields = line.split('\t').collect::<Vec<_>>();
-        if fields.len() != 5 {
+        if !matches!(fields.len(), 5 | 6) {
             return Err(DatabaseError {
                 message: format!("unexpected foreign-key inspection row: {line}"),
             });
@@ -4440,10 +4776,28 @@ fn parse_foreign_key_output(schema: &mut Schema, output: &str) -> Result<(), Dat
                 column: fields[1].into(),
                 referenced_table: fields[2].into(),
                 referenced_column: fields[3].into(),
+                on_delete: fields
+                    .get(5)
+                    .map_or(Ok(ReferentialAction::NoAction), |action| {
+                        parse_referential_action(action)
+                    })?,
             });
         }
     }
     Ok(())
+}
+
+fn parse_referential_action(value: &str) -> Result<ReferentialAction, DatabaseError> {
+    match value.trim().to_ascii_uppercase().as_str() {
+        "NO ACTION" | "NO_ACTION" | "A" => Ok(ReferentialAction::NoAction),
+        "RESTRICT" | "R" => Ok(ReferentialAction::Restrict),
+        "CASCADE" | "C" => Ok(ReferentialAction::Cascade),
+        "SET NULL" | "SET_NULL" | "N" => Ok(ReferentialAction::SetNull),
+        "SET DEFAULT" | "SET_DEFAULT" | "D" => Ok(ReferentialAction::SetDefault),
+        _ => Err(DatabaseError {
+            message: "database reported an unknown foreign-key delete action".into(),
+        }),
+    }
 }
 
 fn sqlite_path(database_url: &str) -> Result<String, DatabaseError> {
@@ -4672,6 +5026,11 @@ fn parse_sqlite_foreign_keys(table: &mut Table, output: &str) -> Result<(), Data
             column: fields[3].into(),
             referenced_table: fields[2].into(),
             referenced_column: fields[4].into(),
+            on_delete: fields
+                .get(6)
+                .map_or(Ok(ReferentialAction::NoAction), |action| {
+                    parse_referential_action(action)
+                })?,
         });
     }
     Ok(())
@@ -4840,6 +5199,39 @@ mod tests {
             let desired = schema(&format!("database Main {{ engine: {engine} }} table amounts {{ id: Id primary amount: Decimal required }}"));
             assert_eq!(desired.tables[0].columns[1].sql_type, expected);
         }
+    }
+
+    #[test]
+    fn json_columns_emit_backend_native_storage_types() {
+        for (engine, expected_type) in [
+            ("mariadb", "JSON"),
+            ("postgres", "JSONB"),
+            ("sqlite", "TEXT"),
+        ] {
+            let schema = schema(&format!(
+                "database main {{ engine: {engine} }} table events {{ id: Id primary payload: Json required }}"
+            ));
+            assert_eq!(schema.tables[0].columns[1].sql_type, expected_type);
+            let create_sql = schema.create_sql();
+            assert!(create_sql.contains(expected_type));
+            assert!(create_sql.contains("NOT NULL"));
+        }
+    }
+
+    #[test]
+    fn json_sql_parameters_validate_and_keep_json_encoding() {
+        let query = Query {
+            sql: "INSERT INTO events (payload) VALUES (:payload)".into(),
+            params: vec![("payload".into(), QueryValue::Json(r#"{"ok":true}"#.into()))],
+        };
+        let (mariadb_sql, mariadb_values) = prepare_mariadb_query(&query).unwrap();
+        assert_eq!(mariadb_sql, "INSERT INTO events (payload) VALUES (?)");
+        assert_eq!(mariadb_values, [Value::Bytes(br#"{"ok":true}"#.to_vec())]);
+        let (postgres_sql, postgres_values) = prepare_postgres_query(&query).unwrap();
+        assert_eq!(postgres_sql, "INSERT INTO events (payload) VALUES ($1)");
+        assert_eq!(postgres_values.len(), 1);
+        assert!(postgres_parameter_value(&QueryValue::Json("not-json".into())).is_err());
+        assert!(mysql_parameter_value(&QueryValue::Json("not-json".into())).is_err());
     }
 
     #[test]
@@ -5064,6 +5456,135 @@ mod tests {
     fn schema(source: &str) -> Schema {
         let program = parse(&lex(source).unwrap()).unwrap();
         build_schema(&program).unwrap()
+    }
+
+    #[test]
+    fn compiles_foreign_key_delete_actions_and_requires_valid_nullability() {
+        let schema = schema(
+            "database main { engine: mariadb } table customers { id: Id primary auto } table invoices { customer: Customer required on_delete cascade template: Template on_delete set_null } table templates { id: Id primary auto }",
+        );
+        let invoices = schema
+            .tables
+            .iter()
+            .find(|table| table.name == "invoices")
+            .unwrap();
+        assert_eq!(invoices.foreign_keys.len(), 2);
+        assert_eq!(
+            invoices.foreign_keys[0].on_delete,
+            ReferentialAction::Cascade
+        );
+        assert_eq!(
+            invoices.foreign_keys[1].on_delete,
+            ReferentialAction::SetNull
+        );
+        let ddl = table_create_sql(invoices, Backend::MariaDb);
+        assert!(ddl.contains("REFERENCES `customers` (`id`) ON DELETE CASCADE"));
+        assert!(ddl.contains("REFERENCES `templates` (`id`) ON DELETE SET NULL"));
+
+        let program = parse(&lex(
+            "database main { engine: mariadb } table customers { id: Id primary auto } table invoices { customer: Customer required on_delete set_null }",
+        ).unwrap()).unwrap();
+        let errors = build_schema(&program).unwrap_err();
+        assert!(errors.iter().any(|error| error
+            .message
+            .contains("requires a nullable relation column")));
+    }
+
+    #[test]
+    fn explicit_storage_name_preserves_nonstandard_relation_column_and_delete_action() {
+        let schema = schema(
+            "database main { engine: mariadb } table users { id: Id primary auto } table vacation_requests { approved_by: User storage_name \"approved_by\" on_delete set_null }",
+        );
+        let requests = schema
+            .tables
+            .iter()
+            .find(|table| table.name == "vacation_requests")
+            .unwrap();
+        assert!(requests.columns.iter().any(|column| {
+            column.name == "approved_by" && column.nullable && column.sql_type == "BIGINT"
+        }));
+        assert_eq!(requests.foreign_keys.len(), 1);
+        assert_eq!(requests.foreign_keys[0].column, "approved_by");
+        assert_eq!(requests.foreign_keys[0].referenced_table, "users");
+        assert_eq!(
+            requests.foreign_keys[0].on_delete,
+            ReferentialAction::SetNull
+        );
+        let sql = schema.create_sql();
+        assert!(sql.contains("`approved_by` BIGINT,"), "{sql}");
+        assert!(
+            sql.contains(
+                "FOREIGN KEY (`approved_by`) REFERENCES `users` (`id`) ON DELETE SET NULL"
+            ),
+            "{sql}"
+        );
+        assert!(!sql.contains("approved_by_id"), "{sql}");
+    }
+
+    #[test]
+    fn rejects_invalid_or_duplicate_explicit_storage_names() {
+        for source in [
+            "table items { id: Id primary auto external: UInt storage_name \"bad-name\" }",
+            "table items { id: Id primary auto external: UInt storage_name \"id\" }",
+        ] {
+            let program = parse(&lex(source).unwrap()).unwrap();
+            let errors = build_schema(&program).unwrap_err();
+            assert_eq!(errors.len(), 1, "{source}: {errors:?}");
+            assert!(
+                errors[0].message.contains("storage name")
+                    || errors[0].message.contains("storage column"),
+                "{source}: {errors:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn foreign_key_delete_action_changes_are_diffed_as_constraint_changes() {
+        let desired = schema("table customers { id: Id primary auto } table invoices { customer: Customer required on_delete cascade }");
+        let current = schema("table customers { id: Id primary auto } table invoices { customer: Customer required on_delete restrict }");
+        let plan = diff(&desired, &current);
+        assert_eq!(plan.changes.len(), 2);
+        assert!(plan.changes.iter().any(|change| {
+            change.description.starts_with("add foreign key")
+                && change.sql.contains("ON DELETE CASCADE")
+        }));
+        assert!(plan
+            .changes
+            .iter()
+            .any(|change| { change.description.starts_with("drop foreign key") }));
+    }
+
+    #[test]
+    fn mariadb_does_not_rediff_no_action_as_restrict() {
+        let desired = schema(
+            "database main { engine: mariadb } table customers { id: Id primary auto } table invoices { customer: Customer required }",
+        );
+        let current = schema(
+            "database main { engine: mariadb } table customers { id: Id primary auto } table invoices { customer: Customer required on_delete restrict }",
+        );
+
+        assert!(diff(&desired, &current).changes.is_empty());
+    }
+
+    #[test]
+    fn postgres_still_diffs_no_action_as_restrict() {
+        let desired = schema(
+            "database main { engine: postgres } table customers { id: Id primary auto } table invoices { customer: Customer required }",
+        );
+        let current = schema(
+            "database main { engine: postgres } table customers { id: Id primary auto } table invoices { customer: Customer required on_delete restrict }",
+        );
+        let plan = diff(&desired, &current);
+
+        assert_eq!(plan.changes.len(), 2);
+        assert!(plan
+            .changes
+            .iter()
+            .any(|change| { change.description.starts_with("drop foreign key") }));
+        assert!(plan
+            .changes
+            .iter()
+            .any(|change| { change.description.starts_with("add foreign key") }));
     }
 
     #[test]
@@ -5665,6 +6186,22 @@ mod tests {
         assert!(schema.create_sql().contains("REFERENCES \"departments\""));
         assert!(schema.create_sql().contains("VARCHAR(30)"));
         assert!(schema.create_sql().contains("DEFAULT TRUE"));
+    }
+
+    #[test]
+    fn maps_explicit_decimal_precision_for_each_backend() {
+        for (engine, expected) in [
+            ("mariadb", "DECIMAL(12,2)"),
+            ("postgres", "NUMERIC(12,2)"),
+            ("sqlite", "NUMERIC(12,2)"),
+        ] {
+            let source = format!(
+                "database main {{ engine: {engine} database: \"precision_test\" }} table invoices {{ id: Id primary auto amount: Decimal(12, 2) required }}"
+            );
+            let schema = schema(&source);
+            assert_eq!(schema.tables[0].columns[1].sql_type, expected);
+            assert!(schema.create_sql().contains(expected));
+        }
     }
 
     #[test]
@@ -6398,6 +6935,7 @@ mod tests {
     fn drops_postgres_constraint_owned_unique_indexes_as_constraints() {
         let table = Table {
             name: "users".into(),
+            tenant_scope_column: None,
             columns: Vec::new(),
             foreign_keys: Vec::new(),
             indexes: Vec::new(),
@@ -6499,6 +7037,18 @@ mod tests {
     }
 
     #[test]
+    fn initial_schema_ddl_creates_referenced_tables_before_dependent_tables() {
+        let schema = schema(
+            "database main { engine: mariadb } table invoices { id: Id primary auto customer: Customer required } table customers { id: Id primary auto name: String(80) required }",
+        );
+        let ddl = schema.create_sql();
+        let customer = ddl.find("CREATE TABLE IF NOT EXISTS `customers`").unwrap();
+        let invoice = ddl.find("CREATE TABLE IF NOT EXISTS `invoices`").unwrap();
+        assert!(customer < invoice);
+        assert!(ddl.contains("REFERENCES `customers` (`id`)"));
+    }
+
+    #[test]
     fn renders_mariadb_and_sqlite_dialects() {
         let mariadb = schema(
             r#"
@@ -6553,6 +7103,7 @@ mod tests {
         .unwrap();
         let mut table = Table {
             name: "machines".into(),
+            tenant_scope_column: None,
             columns,
             foreign_keys: Vec::new(),
             indexes: Vec::new(),
@@ -6560,10 +7111,11 @@ mod tests {
         };
         parse_sqlite_foreign_keys(
             &mut table,
-            "0\t0\tdepartments\tdepartment_id\tid\tNO ACTION\tNO ACTION\tNONE\n",
+            "0\t0\tdepartments\tdepartment_id\tid\tNO ACTION\tCASCADE\tNONE\n",
         )
         .unwrap();
         assert_eq!(table.foreign_keys[0].referenced_table, "departments");
+        assert_eq!(table.foreign_keys[0].on_delete, ReferentialAction::Cascade);
         assert!(table.columns[0].auto);
     }
 
@@ -6640,16 +7192,42 @@ mod tests {
     }
 
     #[test]
+    fn recognizes_mariadb_json_only_when_a_json_valid_check_proves_it() {
+        let mut schema = parse_mariadb_columns(
+            "events\tpayload\tlongtext\tNO\t\t\t\t\t\tN\nevents\tcomment\tlongtext\tYES\t\t\t\t\t\tN\n",
+        )
+        .unwrap();
+        let clause = "json_valid(`payload`)";
+        let clause_hex = clause
+            .as_bytes()
+            .iter()
+            .map(|byte| format!("{byte:02X}"))
+            .collect::<String>();
+        parse_mariadb_json_checks(&mut schema, &format!("events\t{clause_hex}\n")).unwrap();
+        assert_eq!(schema.tables[0].columns[0].sql_type, "JSON");
+        assert_eq!(schema.tables[0].columns[1].sql_type, "LONGTEXT");
+
+        let mut schema =
+            parse_mariadb_columns("events\tpayload\tlongtext\tNO\t\t\t\t\t\tN\n").unwrap();
+        parse_mariadb_json_checks(&mut schema, "events\t6E6F745F686578\n").unwrap();
+        assert_eq!(schema.tables[0].columns[0].sql_type, "LONGTEXT");
+    }
+
+    #[test]
     fn parses_mariadb_foreign_keys() {
         let mut schema =
             parse_mariadb_columns("machines\tid\tbigint\tNO\tPRI\tauto_increment\t\t\t\tN\n")
                 .unwrap();
         parse_foreign_key_output(
             &mut schema,
-            "machines\tdepartment_id\tdepartments\tid\tfk_machines_department_id\n",
+            "machines\tdepartment_id\tdepartments\tid\tfk_machines_department_id\tSET NULL\n",
         )
         .unwrap();
         assert_eq!(schema.tables[0].foreign_keys[0].column, "department_id");
+        assert_eq!(
+            schema.tables[0].foreign_keys[0].on_delete,
+            ReferentialAction::SetNull
+        );
     }
 
     #[test]

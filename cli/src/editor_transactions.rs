@@ -124,7 +124,7 @@ fn atomic_write(target: &Path, bytes: &[u8]) -> Result<(), String> {
     Err("cannot allocate a unique atomic replacement file".into())
 }
 
-fn atomic_create(target: &Path, bytes: &[u8], mode: u32) -> Result<(), String> {
+fn atomic_create(target: &Path, bytes: &[u8], _mode: u32) -> Result<(), String> {
     let parent = target.parent().ok_or("file has no parent directory")?;
     let name = target
         .file_name()
@@ -137,7 +137,7 @@ fn atomic_create(target: &Path, bytes: &[u8], mode: u32) -> Result<(), String> {
         #[cfg(unix)]
         {
             use std::os::unix::fs::OpenOptionsExt;
-            options.mode(mode);
+            options.mode(_mode);
         }
         match options.open(&temporary) {
             Ok(mut file) => {

@@ -3,6 +3,8 @@ use std::fmt;
 use zelyra_ast::*;
 use zelyra_lexer::{lex, Token, TokenKind};
 
+type ParsedColumnType = (Type, Option<u32>, Option<(u32, u32)>);
+
 const MAX_NESTING_DEPTH: usize = 32;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -191,6 +193,16 @@ impl<'a> Parser<'a> {
             _ => self.ident(label),
         }
     }
+
+    fn table_ident(&mut self, label: &str) -> Result<(String, Span), ParseError> {
+        match &self.current().kind {
+            TokenKind::Sessions => {
+                let span = self.advance().span;
+                Ok(("sessions".into(), span))
+            }
+            _ => self.ident(label),
+        }
+    }
     fn program(mut self) -> Result<Program, ParseError> {
         let mut imports = Vec::new();
         let mut databases = Vec::new();
@@ -206,6 +218,8 @@ impl<'a> Parser<'a> {
         let mut cruds = Vec::new();
         let mut auth = Vec::new();
         let mut apis = Vec::new();
+        let mut commands = Vec::new();
+        let mut schedules = Vec::new();
         let mut functions = Vec::new();
         self.skip_newlines();
         let mut declarations_started = false;
@@ -273,6 +287,12 @@ impl<'a> Parser<'a> {
             } else if self.at(&TokenKind::Api) {
                 declarations_started = true;
                 apis.push(self.api_definition()?);
+            } else if self.at_word("command") {
+                declarations_started = true;
+                commands.push(self.command_definition()?);
+            } else if self.at_word("schedule") {
+                declarations_started = true;
+                schedules.push(self.schedule_definition()?);
             } else {
                 declarations_started = true;
                 functions.push(self.function(false)?);
@@ -294,7 +314,103 @@ impl<'a> Parser<'a> {
             cruds,
             auth,
             apis,
+            commands,
+            schedules,
             functions,
+        })
+    }
+
+    fn command_definition(&mut self) -> Result<zelyra_ast::CommandDef, ParseError> {
+        let start = self.advance().span;
+        let (name, _) = self.ident("command name")?;
+        self.expect(TokenKind::LBrace, "`{` after command name")?;
+        let mut handler = None;
+        let mut description = None;
+        self.skip_newlines();
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            let (field, _) = if self.at(&TokenKind::Handler) {
+                ("handler".to_owned(), self.advance().span)
+            } else {
+                self.ident("command property (`handler` or `description`)")?
+            };
+            self.expect(TokenKind::Colon, "colon after command property")?;
+            match field.as_str() {
+                "handler" if handler.is_none() => {
+                    handler = Some(self.ident("command handler function")?.0);
+                }
+                "description" if description.is_none() => {
+                    description = Some(self.string_value("command description")?);
+                }
+                "handler" | "description" => {
+                    return self.error(format!(
+                        "command property `{field}` is declared more than once"
+                    ));
+                }
+                _ => return self.error(format!("unknown command property `{field}`")),
+            }
+            if self.at(&TokenKind::Semicolon) {
+                self.advance();
+            }
+            self.skip_newlines();
+        }
+        let end = self.expect(TokenKind::RBrace, "`}` after command declaration")?;
+        let Some(handler) = handler else {
+            return self.error("command requires `handler`");
+        };
+        Ok(zelyra_ast::CommandDef {
+            name,
+            handler,
+            description,
+            span: start.join(end),
+        })
+    }
+
+    fn schedule_definition(&mut self) -> Result<zelyra_ast::ScheduleDef, ParseError> {
+        let start = self.advance().span;
+        let (name, _) = self.ident("schedule name")?;
+        self.expect(TokenKind::LBrace, "`{` after schedule name")?;
+        let mut command = None;
+        let mut cron = None;
+        let mut timezone = None;
+        self.skip_newlines();
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            let (field, _) = self.ident("schedule property (`command`, `cron`, or `timezone`)")?;
+            self.expect(TokenKind::Colon, "colon after schedule property")?;
+            match field.as_str() {
+                "command" if command.is_none() => {
+                    command = Some(self.ident("declared command name")?.0);
+                }
+                "cron" if cron.is_none() => {
+                    cron = Some(self.string_value("five-field cron expression")?);
+                }
+                "timezone" if timezone.is_none() => {
+                    timezone = Some(self.string_value("timezone name")?);
+                }
+                "command" | "cron" | "timezone" => {
+                    return self.error(format!(
+                        "schedule property `{field}` is declared more than once"
+                    ));
+                }
+                _ => return self.error(format!("unknown schedule property `{field}`")),
+            }
+            if self.at(&TokenKind::Semicolon) {
+                self.advance();
+            }
+            self.skip_newlines();
+        }
+        let end = self.expect(TokenKind::RBrace, "`}` after schedule declaration")?;
+        let Some(command) = command else {
+            return self.error("schedule requires `command`");
+        };
+        let Some(cron) = cron else {
+            return self.error("schedule requires `cron`");
+        };
+        Ok(zelyra_ast::ScheduleDef {
+            name,
+            command,
+            cron,
+            timezone,
+            span: start.join(end),
         })
     }
 
@@ -1555,14 +1671,18 @@ impl<'a> Parser<'a> {
                 self.expect(TokenKind::LBrace, "`{` after `fields`")?;
                 self.skip_newlines();
                 while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
-                    let (field_name, field_span) = self.ident("form field name")?;
+                    let (field_name, field_span) = self.field_ident("form field name")?;
                     fields.push(FormField {
                         name: field_name,
                         ty: None,
                         label: None,
                         placeholder: None,
                         required: false,
+                        min_length: None,
                         max: None,
+                        min_value: None,
+                        max_value: None,
+                        choices: Vec::new(),
                         widget: None,
                         appearance: None,
                         readonly: false,
@@ -1593,7 +1713,7 @@ impl<'a> Parser<'a> {
     }
     fn form_field(&mut self) -> Result<FormField, ParseError> {
         let start = self.expect(TokenKind::Field, "`field`")?;
-        let (name, _) = self.ident("form field name")?;
+        let (name, _) = self.field_ident("form field name")?;
         let ty = if self.at(&TokenKind::Colon) {
             self.advance();
             Some(self.type_name()?)
@@ -1607,7 +1727,11 @@ impl<'a> Parser<'a> {
             label: None,
             placeholder: None,
             required: false,
+            min_length: None,
             max: None,
+            min_value: None,
+            max_value: None,
+            choices: Vec::new(),
             widget: None,
             appearance: None,
             readonly: false,
@@ -1634,6 +1758,42 @@ impl<'a> Parser<'a> {
                     self.advance();
                     self.expect(TokenKind::Colon, "`:` after max")?;
                     field.max = Some(self.positive_integer("maximum length")?);
+                }
+                TokenKind::Ident(ref name) if name == "min_length" => {
+                    self.advance();
+                    self.expect(TokenKind::Colon, "`:` after min_length")?;
+                    field.min_length = Some(self.positive_integer("minimum length")?);
+                }
+                TokenKind::Ident(ref name) if name == "min_value" || name == "max_value" => {
+                    let is_min = name == "min_value";
+                    self.advance();
+                    self.expect(TokenKind::Colon, "`:` after numeric bound")?;
+                    let bound = self.string_value("numeric bound")?;
+                    if is_min {
+                        field.min_value = Some(bound);
+                    } else {
+                        field.max_value = Some(bound);
+                    }
+                }
+                TokenKind::Ident(ref name) if name == "choices" => {
+                    self.advance();
+                    self.expect(TokenKind::Colon, "`:` after choices")?;
+                    self.expect(TokenKind::LBracket, "`[` before choices")?;
+                    self.skip_newlines();
+                    while !self.at(&TokenKind::RBracket) && !self.at(&TokenKind::Eof) {
+                        field.choices.push(self.string_value("choice")?);
+                        self.skip_newlines();
+                        if self.at(&TokenKind::Comma) {
+                            self.advance();
+                            self.skip_newlines();
+                        } else if !self.at(&TokenKind::RBracket) {
+                            return self.error("expected `,` or `]` after choice");
+                        }
+                    }
+                    self.expect(TokenKind::RBracket, "`]` after choices")?;
+                    if field.choices.is_empty() {
+                        return self.error("form choices must contain at least one value");
+                    }
                 }
                 TokenKind::Widget => {
                     self.advance();
@@ -1805,7 +1965,27 @@ impl<'a> Parser<'a> {
     }
     fn table_definition(&mut self) -> Result<TableDef, ParseError> {
         let start = self.expect(TokenKind::Table, "`table`")?;
-        let (name, _) = self.ident("table name")?;
+        let (name, _) = self.table_ident("table name")?;
+        let tenant_scope = if self.at_word("scoped") {
+            let (_, scope_start) = self.ident("`scoped`")?;
+            let (by, by_span) = self.ident("`by` after `scoped`")?;
+            if by != "by" {
+                return Err(ParseError {
+                    message: "expected `by` after `scoped`".into(),
+                    span: by_span,
+                });
+            }
+            let (column, _) = self.field_ident("tenant scope column")?;
+            self.expect(TokenKind::Colon, "`:` after tenant scope column")?;
+            let tenant_type = self.type_name()?;
+            Some(TenantScopeDef {
+                column,
+                tenant_type,
+                span: scope_start.join(self.tokens[self.pos - 1].span),
+            })
+        } else {
+            None
+        };
         self.expect(TokenKind::LBrace, "`{` after table name")?;
         let mut columns = Vec::new();
         let mut indexes = Vec::new();
@@ -1834,6 +2014,7 @@ impl<'a> Parser<'a> {
             indexes,
             uniques,
             access,
+            tenant_scope,
             span: start.join(end),
         })
     }
@@ -1908,14 +2089,16 @@ impl<'a> Parser<'a> {
         Ok(modules)
     }
     fn column_definition(&mut self) -> Result<ColumnDef, ParseError> {
-        let (name, span) = self.ident("column name")?;
+        let (name, span) = self.field_ident("column name")?;
         self.expect(TokenKind::Colon, "`:` after column name")?;
-        let (ty, length) = self.column_type()?;
+        let (ty, length, decimal_precision) = self.column_type()?;
+        let mut storage_name = None;
         let mut required = false;
         let mut primary_key = false;
         let mut auto = false;
         let mut unique = false;
         let mut default = None;
+        let mut on_delete = None;
         loop {
             match self.current().kind.clone() {
                 TokenKind::Required => {
@@ -1938,6 +2121,28 @@ impl<'a> Parser<'a> {
                     self.advance();
                     default = Some(self.default_value()?);
                 }
+                TokenKind::Ident(ref value) if value == "on_delete" => {
+                    self.advance();
+                    if on_delete.is_some() {
+                        return self.error("`on_delete` may be specified only once");
+                    }
+                    let (action, _) = self.ident("referential action")?;
+                    on_delete = Some(match action.as_str() {
+                        "no_action" => ReferentialAction::NoAction,
+                        "restrict" => ReferentialAction::Restrict,
+                        "cascade" => ReferentialAction::Cascade,
+                        "set_null" => ReferentialAction::SetNull,
+                        "set_default" => ReferentialAction::SetDefault,
+                        _ => return self.error(format!("unknown on-delete action `{action}`")),
+                    });
+                }
+                TokenKind::Ident(ref value) if value == "storage_name" => {
+                    self.advance();
+                    if storage_name.is_some() {
+                        return self.error("`storage_name` may be specified only once");
+                    }
+                    storage_name = Some(self.string_value("quoted database storage name")?);
+                }
                 _ => break,
             }
         }
@@ -1945,32 +2150,67 @@ impl<'a> Parser<'a> {
             name,
             ty,
             length,
+            storage_name,
+            decimal_precision,
             required,
             primary_key,
             auto,
             unique,
             default,
+            on_delete,
             span,
         })
     }
-    fn column_type(&mut self) -> Result<(Type, Option<u32>), ParseError> {
+    fn column_type(&mut self) -> Result<ParsedColumnType, ParseError> {
         let ty = self.type_name()?;
         if self.at(&TokenKind::LParen) {
-            if ty != Type::String {
-                return self.error("length is only supported for String columns");
-            }
             self.advance();
-            let length = match self.current().kind.clone() {
-                TokenKind::Int(value) if value > 0 => {
+            let first = match self.current().kind.clone() {
+                TokenKind::Int(value) if value > 0 && value <= 65_535 => {
                     self.advance();
                     value as u32
                 }
-                _ => return self.error("expected positive String length"),
+                _ => return self.error("expected a positive column type size"),
             };
-            self.expect(TokenKind::RParen, "`)` after String length")?;
-            Ok((ty, Some(length)))
+            if ty == Type::String {
+                let length = first;
+                if !self.at(&TokenKind::RParen) {
+                    return self.error("String columns accept only one length value");
+                }
+                self.expect(TokenKind::RParen, "`)` after String length")?;
+                let ty = if self.at(&TokenKind::Question) {
+                    self.advance();
+                    Type::Option(Box::new(ty))
+                } else {
+                    ty
+                };
+                return Ok((ty, Some(length), None));
+            }
+            if ty == Type::Decimal {
+                self.expect(TokenKind::Comma, "`,` between Decimal precision and scale")?;
+                let scale = match self.current().kind.clone() {
+                    TokenKind::Int(value) if (0..=9).contains(&value) => {
+                        self.advance();
+                        value as u32
+                    }
+                    _ => return self.error("Decimal scale must be an integer from 0 to 9"),
+                };
+                self.expect(TokenKind::RParen, "`)` after Decimal precision and scale")?;
+                if first > 39 || scale >= first {
+                    return self
+                        .error("Decimal precision must be 1 to 39 and greater than its scale");
+                }
+                let ty = if self.at(&TokenKind::Question) {
+                    self.advance();
+                    Type::Option(Box::new(ty))
+                } else {
+                    ty
+                };
+                return Ok((ty, None, Some((first, scale))));
+            }
+            self.error("parenthesized sizes are supported only for String and Decimal columns")
         } else {
-            Ok((ty, None))
+            Ok((ty, None, None))
         }
     }
     fn default_value(&mut self) -> Result<DefaultValue, ParseError> {
@@ -1991,7 +2231,7 @@ impl<'a> Parser<'a> {
         let mut columns = Vec::new();
         self.skip_newlines();
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
-            let (column, _) = self.ident("indexed column name")?;
+            let (column, _) = self.field_ident("indexed column name")?;
             columns.push(column);
             self.skip_newlines();
             if self.at(&TokenKind::Comma) {
@@ -2317,6 +2557,7 @@ impl<'a> Parser<'a> {
             "String" => Type::String,
             "Char" => Type::Char,
             "Bytes" => Type::Bytes,
+            "Json" => Type::Json,
             "Timestamp" => Type::Timestamp,
             "Date" => Type::Date,
             "Time" => Type::Time,
@@ -3524,6 +3765,7 @@ impl<'a> Parser<'a> {
                             | "json_decode_tagged_result"
                             | "http_json"
                             | "http_result"
+                            | "module_setting"
                     ) || self.looks_like_generic_call())
                 {
                     self.advance();
@@ -3639,6 +3881,7 @@ impl<'a> Parser<'a> {
     ) -> Result<Expr, ParseError> {
         self.expect(TokenKind::LBrace, "`{` after record type")?;
         let mut fields = Vec::new();
+        let mut update_field_spans = Vec::new();
         let mut base = None;
         self.skip_newlines();
         if self.at(&TokenKind::DotDot) {
@@ -3663,6 +3906,9 @@ impl<'a> Parser<'a> {
                     span: field_span,
                 });
             }
+            if base.is_some() {
+                update_field_spans.push(field_span);
+            }
             fields.push((field, value));
             self.skip_newlines();
             if self.at(&TokenKind::Comma) {
@@ -3681,10 +3927,10 @@ impl<'a> Parser<'a> {
                 }
             };
             let mut args = vec![base];
-            for (field, value) in fields {
+            for ((field, value), field_span) in fields.into_iter().zip(update_field_spans) {
                 args.push(Expr {
                     kind: ExprKind::String(field),
-                    span: value.span,
+                    span: field_span,
                 });
                 args.push(value);
             }
@@ -4062,6 +4308,10 @@ mod tests {
         assert_eq!(type_args, &[Type::Named("Invoice".into())]);
         assert_eq!(args.len(), 3);
         assert!(matches!(args[1].kind, ExprKind::String(ref field) if field == "status"));
+        assert_ne!(
+            args[1].span, args[2].span,
+            "the synthetic field-name expression needs its own source span"
+        );
     }
 
     #[test]
@@ -4594,12 +4844,157 @@ mod tests {
     }
 
     #[test]
+    fn parses_foreign_key_delete_actions_on_table_columns() {
+        let source = r#"
+            table customers { id: Id primary auto }
+            table invoices {
+                customer: Customer required on_delete cascade
+                template: Template on_delete set_null
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert_eq!(
+            program.tables[1].columns[0].on_delete,
+            Some(ReferentialAction::Cascade)
+        );
+        assert_eq!(
+            program.tables[1].columns[1].on_delete,
+            Some(ReferentialAction::SetNull)
+        );
+    }
+
+    #[test]
+    fn parses_tenant_scoped_table_column_and_identity_type() {
+        let program = parse(
+            &lex("table invoices scoped by tenant_id: TenantId { id: Id primary auto tenant_id: TenantId required }\n")
+                .unwrap(),
+        )
+        .unwrap();
+        let scope = program.tables[0].tenant_scope.as_ref().unwrap();
+        assert_eq!(scope.column, "tenant_id");
+        assert_eq!(scope.tenant_type, Type::Named("TenantId".into()));
+        assert_eq!(scope.span.line, 1);
+    }
+
+    #[test]
+    fn accepts_scoped_clause_after_table_name_before_body() {
+        let source = "table invoices scoped by tenant_id: TenantId { id: Id primary auto tenant_id: TenantId required }";
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert_eq!(program.tables[0].name, "invoices");
+        assert!(program.tables[0].tenant_scope.is_some());
+    }
+
+    #[test]
+    fn rejects_malformed_tenant_scope_clause() {
+        let error = parse(
+            &lex("table invoices scoped tenant_id: TenantId { id: Id primary auto }\n").unwrap(),
+        )
+        .unwrap_err();
+        assert!(error.message.contains("expected `by` after `scoped`"));
+    }
+
+    #[test]
+    fn parses_explicit_storage_names_for_relation_columns() {
+        let program = parse(&lex(
+            "table users { id: Id primary auto } table vacation_requests { approved_by: User storage_name \"approved_by\" on_delete set_null }",
+        )
+        .unwrap())
+        .unwrap();
+        let relation = &program.tables[1].columns[0];
+        assert_eq!(relation.name, "approved_by");
+        assert_eq!(relation.storage_name.as_deref(), Some("approved_by"));
+        assert_eq!(relation.on_delete, Some(ReferentialAction::SetNull));
+    }
+
+    #[test]
+    fn parses_decimal_precision_and_scale_for_table_columns() {
+        let program = parse(
+            &lex("table invoices { id: Id primary auto total: Decimal(12, 2) required tax: Decimal(8, 4)? }\n").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(program.tables[0].columns[1].ty, Type::Decimal);
+        assert_eq!(
+            program.tables[0].columns[1].decimal_precision,
+            Some((12, 2))
+        );
+        assert_eq!(program.tables[0].columns[2].decimal_precision, Some((8, 4)));
+        assert_eq!(
+            program.tables[0].columns[2].ty,
+            Type::Option(Box::new(Type::Decimal))
+        );
+    }
+
+    #[test]
+    fn parses_json_columns_as_the_native_json_type() {
+        let program = parse(
+            &lex("table events { id: Id primary payload: Json required metadata: Json? }\n")
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(program.tables[0].columns[1].ty, Type::Json);
+        assert_eq!(
+            program.tables[0].columns[2].ty,
+            Type::Option(Box::new(Type::Json))
+        );
+    }
+
+    #[test]
+    fn parses_contextual_type_and_version_table_column_names() {
+        let program = parse(
+            &lex("table metadata { id: Id primary auto type: String(32) version: Int required }\n")
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(program.tables[0].columns[1].name, "type");
+        assert_eq!(program.tables[0].columns[2].name, "version");
+    }
+
+    #[test]
+    fn parses_sessions_as_a_table_name_outside_auth_configuration() {
+        let program = parse(&lex("table sessions { id: String primary }").unwrap()).unwrap();
+        assert_eq!(program.tables[0].name, "sessions");
+        assert_eq!(program.tables[0].columns[0].name, "id");
+        assert!(program.tables[0].columns[0].primary_key);
+        assert!(!program.tables[0].columns[0].auto);
+    }
+
+    #[test]
+    fn parses_contextual_type_and_version_names_in_indexes() {
+        let program = parse(
+            &lex("table metadata { id: Id primary auto type: String(32) version: Int required index { type version } }\n")
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(program.tables[0].indexes[0].columns, ["type", "version"]);
+    }
+
+    #[test]
+    fn rejects_decimal_precision_outside_runtime_limits() {
+        for source in [
+            "table values { id: Id primary auto amount: Decimal(40, 2) }",
+            "table values { id: Id primary auto amount: Decimal(8, 10) }",
+            "table values { id: Id primary auto amount: Decimal(2, 2) }",
+            "table values { id: Id primary auto amount: Decimal(8) }",
+        ] {
+            assert!(parse(&lex(source).unwrap()).is_err(), "accepted {source}");
+        }
+    }
+
+    #[test]
+    fn rejects_unknown_foreign_key_delete_actions() {
+        let source = "table customers { id: Id primary auto } table invoices { customer: Customer on_delete truncate }";
+        let error = parse(&lex(source).unwrap()).unwrap_err();
+        assert!(error.message.contains("unknown on-delete action"));
+    }
+
+    #[test]
     fn parses_explicit_and_schema_mapped_form() {
         let source = r#"
             form CustomerForm {
                 field email: Email {
                     label: "E-Mail"
                     required
+                    min_length: 2
                     max: 255
                     widget: email
                 }
@@ -4623,6 +5018,7 @@ mod tests {
         let program = parse(&lex(source).unwrap()).unwrap();
         assert_eq!(program.forms.len(), 2);
         assert_eq!(program.forms[0].fields[0].widget.as_deref(), Some("email"));
+        assert_eq!(program.forms[0].fields[0].min_length, Some(2));
         assert_eq!(
             program.forms[0].actions[0].redirect.as_deref(),
             Some("/customers")
@@ -4638,6 +5034,48 @@ mod tests {
         ));
         assert_eq!(program.forms[1].table.as_deref(), Some("customers"));
         assert_eq!(program.forms[1].fields.len(), 2);
+    }
+
+    #[test]
+    fn parses_exact_numeric_form_bounds() {
+        let source = r#"
+            form Invoice {
+                field total: Decimal {
+                    min_value: "0.01"
+                    max_value: "9999.99"
+                }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let field = &program.forms[0].fields[0];
+        assert_eq!(field.min_value.as_deref(), Some("0.01"));
+        assert_eq!(field.max_value.as_deref(), Some("9999.99"));
+    }
+
+    #[test]
+    fn parses_static_form_choice_lists() {
+        let source = r#"
+            form Invoice {
+                field status: String {
+                    required
+                    choices: ["draft", "issued", "paid"]
+                }
+                field type: String {
+                    choices: ["invoice", "quote"]
+                }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert_eq!(
+            program.forms[0].fields[0].choices,
+            ["draft", "issued", "paid"]
+        );
+        assert_eq!(program.forms[0].fields[1].name, "type");
+        let empty = r#"form Invalid { field status: String { choices: [] } }"#;
+        assert!(parse(&lex(empty).unwrap())
+            .unwrap_err()
+            .message
+            .contains("must contain at least one value"));
     }
 
     #[test]
@@ -5570,5 +6008,54 @@ mod tests {
             program.apis[0].errors[0].payload,
             Some(Type::Named("Problem".into()))
         );
+    }
+
+    #[test]
+    fn parses_native_command_and_host_schedule_declarations() {
+        let source = r#"
+command process_recurring_invoices {
+    handler: run_recurring_invoices
+    description: "Create invoices for active subscriptions"
+}
+
+schedule recurring_invoices {
+    command: process_recurring_invoices
+    cron: "0 4 * * *"
+    timezone: "Europe/Berlin"
+}
+
+fn run_recurring_invoices() { }
+"#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert_eq!(program.commands.len(), 1);
+        assert_eq!(program.commands[0].name, "process_recurring_invoices");
+        assert_eq!(program.commands[0].handler, "run_recurring_invoices");
+        assert_eq!(
+            program.commands[0].description.as_deref(),
+            Some("Create invoices for active subscriptions")
+        );
+        assert_eq!(program.schedules.len(), 1);
+        assert_eq!(program.schedules[0].command, "process_recurring_invoices");
+        assert_eq!(program.schedules[0].cron, "0 4 * * *");
+        assert_eq!(
+            program.schedules[0].timezone.as_deref(),
+            Some("Europe/Berlin")
+        );
+    }
+
+    #[test]
+    fn rejects_unknown_or_missing_command_and_schedule_properties() {
+        let unknown =
+            parse(&lex("command sync { handler: run extra: true }").unwrap()).unwrap_err();
+        assert!(unknown.message.contains("unknown command property"));
+
+        let missing_handler =
+            parse(&lex("command sync { description: \"Sync\" }").unwrap()).unwrap_err();
+        assert!(missing_handler.message.contains("requires `handler`"));
+
+        let missing_cron =
+            parse(&lex("schedule nightly { command: sync timezone: \"UTC\" }").unwrap())
+                .unwrap_err();
+        assert!(missing_cron.message.contains("requires `cron`"));
     }
 }

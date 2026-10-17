@@ -82,6 +82,18 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
                     span: field.span,
                 });
             }
+            let declared_type = form
+                .table
+                .as_deref()
+                .and_then(|name| program.tables.iter().find(|table| table.name == name))
+                .and_then(|table| {
+                    table
+                        .columns
+                        .iter()
+                        .find(|column| column.name == field.name)
+                })
+                .map(|column| &column.ty);
+            validate_constraints(field, declared_type, &mut errors);
         }
         let mut actions = HashSet::new();
         for action in &form.actions {
@@ -136,6 +148,18 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
                         span: field.span,
                     });
                 }
+                let declared_type = program
+                    .tables
+                    .iter()
+                    .find(|definition| definition.name == crud.table)
+                    .and_then(|definition| {
+                        definition
+                            .columns
+                            .iter()
+                            .find(|column| column.name == field.name)
+                    })
+                    .map(|column| &column.ty);
+                validate_constraints(field, declared_type, &mut errors);
             }
         }
     }
@@ -302,6 +326,19 @@ pub fn validate(
             });
             continue;
         }
+        if field
+            .min_length
+            .is_some_and(|min| value.chars().count() < min as usize)
+        {
+            errors.push(FieldError {
+                field: field.name.clone(),
+                message: format!(
+                    "value is shorter than minimum length of {}",
+                    field.min_length.unwrap()
+                ),
+            });
+            continue;
+        }
         let ty = field_value_type(form, table_definition, schema, field);
         if let Some(ty) = &ty {
             if let Some(message) = type_error(ty, value) {
@@ -312,9 +349,206 @@ pub fn validate(
                 continue;
             }
         }
+        if let Some(ty) = &ty {
+            if let Some(message) = numeric_bound_error(
+                ty,
+                value,
+                field.min_value.as_deref(),
+                field.max_value.as_deref(),
+            ) {
+                errors.push(FieldError {
+                    field: field.name.clone(),
+                    message: message.into(),
+                });
+                continue;
+            }
+        }
+        if !field.choices.is_empty() && !field.choices.iter().any(|choice| choice == value) {
+            errors.push(FieldError {
+                field: field.name.clone(),
+                message: "value is not an allowed choice".into(),
+            });
+            continue;
+        }
         values.insert(field.name.clone(), value.into());
     }
     ValidationResult { values, errors }
+}
+
+fn validate_constraints(
+    field: &FormField,
+    inferred_type: Option<&Type>,
+    errors: &mut Vec<FormError>,
+) {
+    let span = field.span;
+    let ty = field.ty.as_ref().or(inferred_type);
+    let numeric = ty.is_some_and(is_numeric_type);
+    let text = ty.is_some_and(is_text_type);
+    if field.min_length == Some(0) {
+        errors.push(FormError {
+            message: format!("minimum length for `{}` must be positive", field.name),
+            span,
+        });
+    }
+    if field.min_length.is_some() && !text {
+        errors.push(FormError {
+            message: format!(
+                "minimum length for `{}` requires String or Email type",
+                field.name
+            ),
+            span,
+        });
+    }
+    if field.max.is_some() && !text {
+        errors.push(FormError {
+            message: format!(
+                "maximum length for `{}` requires String or Email type",
+                field.name
+            ),
+            span,
+        });
+    }
+    if (field.min_value.is_some() || field.max_value.is_some()) && !numeric {
+        errors.push(FormError {
+            message: format!("numeric bounds for `{}` require a numeric type", field.name),
+            span,
+        });
+    }
+    if !field.choices.is_empty() {
+        if field.choices.len() > 64
+            || field
+                .choices
+                .iter()
+                .any(|choice| choice.is_empty() || choice.len() > 64)
+        {
+            errors.push(FormError {
+                message: format!("choices for `{}` exceed the supported limit", field.name),
+                span,
+            });
+        }
+        if field.choices.iter().collect::<HashSet<_>>().len() != field.choices.len() {
+            errors.push(FormError {
+                message: format!("choices for `{}` must be unique", field.name),
+                span,
+            });
+        }
+        if let Some(ty) = ty {
+            for choice in &field.choices {
+                if type_error(ty, choice).is_some() {
+                    errors.push(FormError {
+                        message: format!("choice `{choice}` is invalid for field `{}`", field.name),
+                        span,
+                    });
+                }
+            }
+        }
+    }
+    let scale = ty.map(numeric_scale).unwrap_or(0);
+    for bound in [&field.min_value, &field.max_value].into_iter().flatten() {
+        if parse_numeric_bound(ty.unwrap_or(&Type::Int), bound, scale).is_none() {
+            errors.push(FormError {
+                message: format!("numeric bound `{bound}` is invalid for `{}`", field.name),
+                span,
+            });
+        }
+    }
+    if let (Some(min), Some(max)) = (&field.min_value, &field.max_value) {
+        if let (Some(min), Some(max)) = (
+            parse_numeric_bound(ty.unwrap_or(&Type::Int), min, scale),
+            parse_numeric_bound(ty.unwrap_or(&Type::Int), max, scale),
+        ) {
+            if min > max {
+                errors.push(FormError {
+                    message: format!("minimum numeric bound exceeds maximum for `{}`", field.name),
+                    span,
+                });
+            }
+        }
+    }
+}
+
+fn is_numeric_type(ty: &Type) -> bool {
+    match ty {
+        Type::Int | Type::UInt | Type::Float | Type::Decimal | Type::Duration => true,
+        Type::Named(name) => name == "Money",
+        Type::Option(inner) => is_numeric_type(inner),
+        _ => false,
+    }
+}
+
+fn is_text_type(ty: &Type) -> bool {
+    match ty {
+        Type::String => true,
+        Type::Named(name) => matches!(name.as_str(), "Email" | "Uuid"),
+        Type::Option(inner) => is_text_type(inner),
+        _ => false,
+    }
+}
+
+fn numeric_scale(ty: &Type) -> u32 {
+    match ty {
+        Type::Decimal => 9,
+        Type::Named(name) if name == "Money" => 4,
+        Type::Option(inner) => numeric_scale(inner),
+        _ => 0,
+    }
+}
+
+fn parse_numeric_bound(ty: &Type, value: &str, scale: u32) -> Option<i128> {
+    match ty {
+        Type::Int | Type::Duration => value.parse::<i64>().ok().map(i128::from),
+        Type::UInt => value.parse::<u64>().ok().map(i128::from),
+        Type::Float | Type::Decimal => zelyra_ast::decimal::parse_scaled(value, scale.max(9)),
+        Type::Named(name) if name == "Money" => zelyra_ast::decimal::parse_money(value),
+        Type::Option(inner) => parse_numeric_bound(inner, value, scale),
+        _ => None,
+    }
+}
+
+fn numeric_bound_error(
+    ty: &Type,
+    value: &str,
+    min: Option<&str>,
+    max: Option<&str>,
+) -> Option<&'static str> {
+    let scalar_ty = match ty {
+        Type::Option(inner) => inner.as_ref(),
+        other => other,
+    };
+    if let Type::Float = scalar_ty {
+        let actual = value
+            .parse::<f64>()
+            .ok()
+            .filter(|value| value.is_finite())?;
+        if min
+            .and_then(|bound| bound.parse::<f64>().ok())
+            .is_some_and(|bound| actual < bound)
+        {
+            return Some("value is below the minimum");
+        }
+        if max
+            .and_then(|bound| bound.parse::<f64>().ok())
+            .is_some_and(|bound| actual > bound)
+        {
+            return Some("value exceeds the maximum");
+        }
+        return None;
+    }
+    let scale = numeric_scale(ty);
+    let actual = parse_numeric_bound(ty, value, scale)?;
+    if min
+        .and_then(|bound| parse_numeric_bound(ty, bound, scale))
+        .is_some_and(|bound| actual < bound)
+    {
+        return Some("value is below the minimum");
+    }
+    if max
+        .and_then(|bound| parse_numeric_bound(ty, bound, scale))
+        .is_some_and(|bound| actual > bound)
+    {
+        return Some("value exceeds the maximum");
+    }
+    None
 }
 
 fn find_column<'a>(
@@ -384,10 +618,27 @@ fn type_error(ty: &Type, value: &str) -> Option<&'static str> {
             .map(|_| ())
             .is_none()
             .then_some("must be an integer identifier"),
-        Type::Named(name) if name == "Uuid" => (value.len() != 36).then_some("must be a UUID"),
+        Type::Named(name) if name == "Uuid" => (!valid_uuid(value))
+            .then_some("must be a UUID in canonical 8-4-4-4-12 hexadecimal form"),
         Type::Option(inner) => type_error(inner, value),
         _ => None,
     }
+}
+
+fn valid_uuid(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    if bytes.len() != 36
+        || ![8, 13, 18, 23]
+            .into_iter()
+            .all(|index| bytes[index] == b'-')
+        || !bytes
+            .iter()
+            .enumerate()
+            .all(|(index, byte)| [8, 13, 18, 23].contains(&index) || byte.is_ascii_hexdigit())
+    {
+        return false;
+    }
+    true
 }
 
 #[cfg(test)]
@@ -403,7 +654,11 @@ mod tests {
             label: None,
             placeholder: None,
             required,
+            min_length: None,
             max,
+            min_value: None,
+            max_value: None,
+            choices: Vec::new(),
             widget: None,
             appearance: None,
             readonly: false,
@@ -421,6 +676,30 @@ mod tests {
             ],
             actions: Vec::new(),
             span: Span::default(),
+        }
+    }
+
+    #[test]
+    fn validates_uuid_format_like_laravel_default_rule() {
+        for uuid in [
+            "f47ac10b-58cc-11cf-a447-001122334455",
+            "550e8400-e29b-41d4-a716-446655440000",
+            "01901234-5678-7abc-8def-0123456789ab",
+            // Laravel's unversioned `uuid` rule checks canonical hex groups,
+            // not the version or RFC variant bits.
+            "550e8400-e29b-01d4-c716-446655440000",
+        ] {
+            assert_eq!(type_error(&Type::Named("Uuid".into()), uuid), None);
+        }
+        for uuid in [
+            "550e8400e29b41d4a716446655440000",
+            "550e8400-e29b-41d4-a716-44665544000g",
+            "550e8400-e29b-41d4-a716-44665544000",
+        ] {
+            assert_eq!(
+                type_error(&Type::Named("Uuid".into()), uuid),
+                Some("must be a UUID in canonical 8-4-4-4-12 hexadecimal form")
+            );
         }
     }
 
@@ -467,6 +746,8 @@ mod tests {
             cruds: Vec::new(),
             auth: Vec::new(),
             apis: Vec::new(),
+            commands: Vec::new(),
+            schedules: Vec::new(),
             functions: Vec::new(),
         };
         let schema = build_schema(&program).unwrap();
@@ -527,6 +808,126 @@ mod tests {
     }
 
     #[test]
+    fn enforces_text_lengths_and_exact_numeric_bounds_on_server() {
+        let mut name = field("name", Type::String, false, None);
+        name.min_length = Some(3);
+        let mut amount = field("amount", Type::Decimal, false, None);
+        amount.min_value = Some("0.10".into());
+        amount.max_value = Some("10.00".into());
+        let bounded = FormDef {
+            name: "Bounded".into(),
+            table: None,
+            fields: vec![name, amount],
+            actions: Vec::new(),
+            span: Span::default(),
+        };
+
+        for (name, amount) in [("ab", "1"), ("abc", "0.09"), ("abc", "10.01")] {
+            let input = HashMap::from([
+                ("name".into(), name.into()),
+                ("amount".into(), amount.into()),
+            ]);
+            assert!(!validate(&bounded, None, None, &input).is_valid());
+        }
+        let valid = HashMap::from([
+            ("name".into(), "abc".into()),
+            ("amount".into(), "10.00".into()),
+        ]);
+        assert!(validate(&bounded, None, None, &valid).is_valid());
+    }
+
+    #[test]
+    fn form_constraints_must_match_the_declared_type_and_order() {
+        let mut invalid = field("name", Type::String, false, None);
+        invalid.min_value = Some("1".into());
+        let mut inverted = field("amount", Type::Decimal, false, None);
+        inverted.min_value = Some("2".into());
+        inverted.max_value = Some("1".into());
+        let program = zelyra_ast::Program {
+            imports: Vec::new(),
+            databases: Vec::new(),
+            tables: Vec::new(),
+            types: Vec::new(),
+            records: Vec::new(),
+            enums: Vec::new(),
+            views: Vec::new(),
+            components: Vec::new(),
+            pages: Vec::new(),
+            tableviews: Vec::new(),
+            forms: vec![FormDef {
+                name: "Invalid".into(),
+                table: None,
+                fields: vec![invalid, inverted],
+                actions: Vec::new(),
+                span: Span::default(),
+            }],
+            cruds: Vec::new(),
+            auth: Vec::new(),
+            apis: Vec::new(),
+            commands: Vec::new(),
+            schedules: Vec::new(),
+            functions: Vec::new(),
+        };
+        let errors = check_program(&program, &build_schema(&program).unwrap()).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("require a numeric type")));
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("exceeds maximum")));
+    }
+
+    #[test]
+    fn static_choices_are_type_checked_and_enforced_on_submission() {
+        let mut status = field("status", Type::String, true, None);
+        status.choices = vec!["draft".into(), "paid".into()];
+        let form = FormDef {
+            name: "Invoice".into(),
+            table: None,
+            fields: vec![status],
+            actions: Vec::new(),
+            span: Span::default(),
+        };
+        let accepted = HashMap::from([("status".into(), "paid".into())]);
+        assert!(validate(&form, None, None, &accepted).is_valid());
+        let rejected = HashMap::from([("status".into(), "padi".into())]);
+        let result = validate(&form, None, None, &rejected);
+        assert_eq!(result.errors[0].message, "value is not an allowed choice");
+
+        let mut invalid = field("priority", Type::Int, true, None);
+        invalid.choices = vec!["high".into()];
+        let program = zelyra_ast::Program {
+            imports: Vec::new(),
+            databases: Vec::new(),
+            tables: Vec::new(),
+            types: Vec::new(),
+            records: Vec::new(),
+            enums: Vec::new(),
+            views: Vec::new(),
+            components: Vec::new(),
+            pages: Vec::new(),
+            tableviews: Vec::new(),
+            forms: vec![FormDef {
+                name: "InvalidChoice".into(),
+                table: None,
+                fields: vec![invalid],
+                actions: Vec::new(),
+                span: Span::default(),
+            }],
+            cruds: Vec::new(),
+            auth: Vec::new(),
+            apis: Vec::new(),
+            commands: Vec::new(),
+            schedules: Vec::new(),
+            functions: Vec::new(),
+        };
+        let errors = check_program(&program, &build_schema(&program).unwrap()).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("invalid for field")));
+    }
+
+    #[test]
     fn accepts_valid_values_and_rejects_unknown_fields() {
         let input = HashMap::from([
             (String::from("name"), String::from("Anna")),
@@ -550,7 +951,11 @@ mod tests {
                 label: None,
                 placeholder: None,
                 required: false,
+                min_length: None,
                 max: None,
+                min_value: None,
+                max_value: None,
+                choices: Vec::new(),
                 widget: None,
                 appearance: None,
                 readonly: false,
@@ -561,15 +966,19 @@ mod tests {
         };
         let table = TableDef {
             name: "customers".into(),
+            tenant_scope: None,
             columns: vec![ColumnDef {
                 name: "name".into(),
                 ty: Type::String,
                 length: Some(4),
+                storage_name: None,
+                decimal_precision: None,
                 required: true,
                 primary_key: false,
                 auto: false,
                 unique: false,
                 default: Some(DefaultValue::String("".into())),
+                on_delete: None,
                 span: Span::default(),
             }],
             indexes: Vec::new(),

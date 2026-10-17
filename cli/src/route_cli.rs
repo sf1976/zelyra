@@ -1,14 +1,14 @@
 use super::*;
 
 #[derive(Clone, Debug)]
-struct RouteEntry {
-    method: String,
-    path: String,
-    kind: String,
-    span: zelyra_ast::Span,
+pub(super) struct RouteEntry {
+    pub method: String,
+    pub path: String,
+    pub kind: String,
+    pub span: zelyra_ast::Span,
 }
 
-fn route_entries(program: &zelyra_ast::Program) -> Vec<RouteEntry> {
+pub(super) fn route_entries(program: &zelyra_ast::Program) -> Vec<RouteEntry> {
     let mut entries = Vec::new();
     for page in &program.pages {
         entries.push(RouteEntry {
@@ -298,6 +298,8 @@ mod tests {
             cruds: vec![],
             auth: vec![],
             apis: vec![],
+            commands: vec![],
+            schedules: vec![],
             functions: vec![],
             imports: vec![],
             tables: vec![],

@@ -227,6 +227,7 @@ const messages = {
     projectMap: "Projektkarte", projectMapTitle: "Projektbeziehungen", projectMapOpenSource: "Quelltext öffnen", projectMapLoading: "Compiler-Projektmodell wird geladen …", projectMapUnavailable: "Projektkarte konnte nicht erstellt werden.", projectMapIncomplete: "Die Karte ist unvollständig. Nicht auflösbare oder begrenzte Beziehungen werden nicht geraten.", projectMapIssues: { "view.unresolved": "Ansicht nicht gefunden", "view.ambiguous": "Ansichtsname mehrfach vorhanden", "crud.table_unresolved": "CRUD-Tabelle nicht eindeutig", "api.handler_unresolved": "API-Funktion nicht eindeutig", "import.unresolved": "Importziel nicht gefunden", "edge.target_missing": "Beziehungsziel fehlt", "limit.nodes": "Knotenlimit erreicht", "limit.edges": "Beziehungslimit erreicht" }, projectMapEmpty: "Noch keine unterstützten Beziehungen im Projekt.", projectMapModules: "Module", projectMapData: "Daten und Ansichten", projectMapWeb: "Routen und APIs", projectMapLogic: "Funktionen",
     pipelineBreadcrumbs: "Semantische Projektbeziehungen", projectMapNullability: "NULL-Radar (Compiler E-SQL-004)", projectMapIssuesExtra: { "form.table_unresolved": "Formular-Tabelle nicht eindeutig", "struct.unresolved": "Ergebnistyp nicht gefunden", "struct.ambiguous": "Ergebnistyp mehrfach vorhanden", "sql.access_unresolved": "SQL-Tabellenbezug nicht eindeutig" },
     pdfPreview: "PDF-Vorschau", pdfPreviewTitle: "PDF-Vorschau mit echten PDF-Bytes", pdfView: "Deklarierte View", pdfExampleData: "Beispieldaten als JSON-Objekt", pdfRender: "PDF erzeugen", pdfDownload: "PDF herunterladen", pdfNoViews: "Im Projekt ist keine View deklariert.", pdfReady: "PDF erzeugt ({0} Byte).", pdfLoading: "Views werden geladen …", pdfRendering: "PDF wird lokal erzeugt …", pdfInvalidData: "Bitte ein gültiges JSON-Objekt als Beispieldaten eingeben.", pdfError: "PDF-Vorschau fehlgeschlagen: {0}",
+    moduleSettingsButton: "Moduleinstellungen", moduleSettingsTitle: "Typisierte Moduleinstellungen", moduleSettingsSave: "Einstellungen speichern", moduleSettingsLoading: "Moduleinstellungen werden geladen …", moduleSettingsEmpty: "Keine lokalen Pakete deklarieren Einstellungen.", moduleSettingsSaved: "Moduleinstellungen gespeichert.", moduleSettingsError: "Moduleinstellungen konnten nicht geladen oder gespeichert werden: {0}", moduleSettingsSecretHint: "Geheimnisse werden nicht im Projekt gespeichert. Trage hier den Namen einer Umgebungsvariablen ein; ein leeres Feld lässt die bisherige Referenz unverändert.", moduleSettingsStatus: "Status", moduleSettingsRequired: "Pflichtfeld", moduleSettingsDefault: "Standard", moduleSettingsUnset: "Nicht gesetzt", moduleSettingsValue: "Wert", moduleSettingsSecret: "Umgebungsvariable für Geheimnis",
     outboxButton: "Outbox", outboxTitle: "Mail-Outbox", outboxCaption: "Metadaten der MariaDB-Outbox ohne Nachrichteninhalt", outboxEvent: "Ereignis", outboxStatus: "Status", outboxRecipient: "Empfänger", outboxAttachment: "Anhang", outboxCreated: "Erstellt", outboxAvailable: "Verfügbar", outboxError: "Fehler", outboxAction: "Aktion", previous: "Zurück", next: "Weiter", outboxLoading: "Outbox wird geladen …", outboxEmpty: "Keine Ereignisse auf dieser Seite.", outboxPage: "{0}–{1} von {2}", outboxRequeue: "Erneut einreihen", outboxRequeueConfirm: "Das erschöpfte Ereignis {0} für einen späteren Worker-Lauf freigeben? Es wird jetzt keine E-Mail versendet.", outboxRequeued: "Ereignis erneut eingereiht. Ein Versand erfolgt erst durch einen ausdrücklich gestarteten Worker.", outboxLoadError: "Outbox nicht verfügbar: MariaDB ist nicht erreichbar oder die Outbox-Tabelle fehlt. Wenn du E-Mail-/Outbox-Funktionen verwendest, prüfe die Verbindung und führe einmalig `zelyra outbox setup main.zyl` aus. Ohne Outbox-Nutzung kannst du diese Meldung schließen.", outboxRequeueError: "Erneutes Einreihen fehlgeschlagen: {0}",
     outboxAttempts: "Versuche: {0}", outboxLeaseUntil: "Sperre bis: {0}", outboxDeliveredAt: "Zugestellt: {0}", outboxExhaustedAt: "Erschöpft: {0}", outboxNoDatabase: "Für die Outbox ist keine MariaDB-Verbindung konfiguriert. Trage DATABASE_URL in .env oder der Umgebung ein.",
     capabilityButton: "Rechte", capabilityTitle: "Capability- und Sicherheitsmatrix", capabilityDeclarations: "Deklarierte Rechte", capabilityUses: "Tatsächlich verwendete Operationen", capabilityPaths: "Dateipfade", capabilityUnused: "Freigaben ohne erkannten Funktionsbedarf", capabilityUnusedCaveat: "Nur analysierte Funktionen; generierte Routen und dynamische Aufrufe können weitere Rechte benötigen.", capabilityLoading: "Compiler und Projektkonfiguration werden analysiert …", capabilityEmpty: "Keine Einträge in der aktuellen Datei.", capabilityGrant: "Freigabe prüfen", capabilityGrantReview: "Änderung an zelyra.toml prüfen", capabilityGrantApply: "Freigabe übernehmen", capabilityGrantPreview: "Nur die angezeigte Konfigurationsänderung wird nach deiner Bestätigung gespeichert.", capabilityGranted: "Freigabe gespeichert. Die Runtime prüft sie beim nächsten Lauf erneut.", capabilityUnrestricted: "Keine Projektkonfiguration: Runtime-Capabilities sind nicht durch zelyra.toml eingeschränkt.", capabilityIncomplete: "Die Quellanalyse ist unvollständig; dieser Befund kann Einträge auslassen.", capabilityError: "Capability-Analyse fehlgeschlagen: {0}", capabilityPathUnknown: "Dynamische Pfade sind statisch nicht entscheidbar.", capabilityNotGranted: "nicht freigegeben", capabilityDynamic: "dynamisch",
@@ -336,6 +337,7 @@ const messages = {
     projectMap: "Project map", projectMapTitle: "Project relationships", projectMapOpenSource: "Open source location", projectMapLoading: "Loading the compiler project model …", projectMapUnavailable: "Could not create the project map.", projectMapIncomplete: "The map is incomplete. Unresolved or limited relationships are not guessed.", projectMapIssues: { "view.unresolved": "View not found", "view.ambiguous": "View name is ambiguous", "crud.table_unresolved": "CRUD table is not unique", "api.handler_unresolved": "API function is not unique", "import.unresolved": "Import target not found", "edge.target_missing": "Relationship target is missing", "limit.nodes": "Node limit reached", "limit.edges": "Relationship limit reached" }, projectMapEmpty: "No supported relationships in this project yet.", projectMapModules: "Modules", projectMapData: "Data and views", projectMapWeb: "Routes and APIs", projectMapLogic: "Functions",
     pipelineBreadcrumbs: "Semantic project relationships", projectMapNullability: "NULL radar (compiler E-SQL-004)", projectMapIssuesExtra: { "form.table_unresolved": "Form table is not unique", "struct.unresolved": "Result type not found", "struct.ambiguous": "Result type is ambiguous", "sql.access_unresolved": "SQL table access is unresolved" },
     pdfPreview: "PDF preview", pdfPreviewTitle: "PDF preview with real PDF bytes", pdfView: "Declared view", pdfExampleData: "Example data as a JSON object", pdfRender: "Render PDF", pdfDownload: "Download PDF", pdfNoViews: "This project declares no view.", pdfReady: "PDF rendered ({0} bytes).", pdfLoading: "Loading views …", pdfRendering: "Rendering PDF locally …", pdfInvalidData: "Enter a valid JSON object for example data.", pdfError: "PDF preview failed: {0}",
+    moduleSettingsButton: "Module settings", moduleSettingsTitle: "Typed module settings", moduleSettingsSave: "Save settings", moduleSettingsLoading: "Loading module settings …", moduleSettingsEmpty: "No local packages declare settings.", moduleSettingsSaved: "Module settings saved.", moduleSettingsError: "Could not load or save module settings: {0}", moduleSettingsSecretHint: "Secrets are not stored in the project. Enter an environment variable name; leaving it empty keeps the current reference.", moduleSettingsStatus: "Status", moduleSettingsRequired: "Required", moduleSettingsDefault: "Default", moduleSettingsUnset: "Unset", moduleSettingsValue: "Value", moduleSettingsSecret: "Environment variable for secret",
     outboxButton: "Outbox", outboxTitle: "Mail outbox", outboxCaption: "MariaDB outbox metadata without message bodies", outboxEvent: "Event", outboxStatus: "Status", outboxRecipient: "Recipient", outboxAttachment: "Attachment", outboxCreated: "Created", outboxAvailable: "Available", outboxError: "Error", outboxAction: "Action", previous: "Previous", next: "Next", outboxLoading: "Loading outbox …", outboxEmpty: "No events on this page.", outboxPage: "{0}–{1} of {2}", outboxRequeue: "Requeue", outboxRequeueConfirm: "Release exhausted event {0} for a later worker run? No email will be sent now.", outboxRequeued: "Event requeued. Delivery requires a separately started worker.", outboxLoadError: "Outbox unavailable: MariaDB cannot be reached or the outbox table is missing. If this project uses email/outbox features, check the connection and run `zelyra outbox setup main.zyl` once. If it does not use the outbox, you can close this message.", outboxRequeueError: "Requeue failed: {0}",
     outboxAttempts: "Attempts: {0}", outboxLeaseUntil: "Lease until: {0}", outboxDeliveredAt: "Delivered: {0}", outboxExhaustedAt: "Exhausted: {0}", outboxNoDatabase: "No MariaDB connection is configured for the outbox. Set DATABASE_URL in .env or the environment.",
     capabilityButton: "Permissions", capabilityTitle: "Capability and security matrix", capabilityDeclarations: "Declared capabilities", capabilityUses: "Operations actually used", capabilityPaths: "File paths", capabilityUnused: "Grants without a detected function use", capabilityUnusedCaveat: "Analyzed functions only; generated routes and dynamic calls may require more permissions.", capabilityLoading: "Analyzing compiler and project configuration …", capabilityEmpty: "No entries in the current file.", capabilityGrant: "Review grant", capabilityGrantReview: "Review change to zelyra.toml", capabilityGrantApply: "Apply grant", capabilityGrantPreview: "Only the displayed configuration change will be saved after your confirmation.", capabilityGranted: "Grant saved. The runtime checks it again on the next run.", capabilityUnrestricted: "No project configuration: runtime capabilities are not restricted by zelyra.toml.", capabilityIncomplete: "Source analysis is incomplete; this report may omit entries.", capabilityError: "Capability analysis failed: {0}", capabilityPathUnknown: "Dynamic paths cannot be decided statically.", capabilityNotGranted: "not granted", capabilityDynamic: "dynamic",
@@ -3558,6 +3560,100 @@ async function applyCapabilityGrant() {
   finally { button.disabled = false; }
 }
 
+let moduleSettingsRevision = "";
+let moduleSettingsRequest = 0;
+function moduleSettingInput(setting, packagePath) {
+  const input = document.createElement("input");
+  input.dataset.settingName = setting.name;
+  input.dataset.settingType = setting.type;
+  input.dataset.secret = String(setting.secret);
+  input.id = `module-setting-${`${packagePath}-${setting.name}`.replace(/[^A-Za-z0-9_-]/g, "-")}`;
+  if (setting.secret) {
+    input.type = "text"; input.autocomplete = "off"; input.placeholder = "ENVIRONMENT_VARIABLE";
+    input.setAttribute("aria-describedby", `${input.id}-hint`);
+  } else {
+    input.type = setting.type === "Bool" ? "checkbox" : setting.type === "Int" || setting.type === "Float" ? "number" : "text";
+    if (setting.type === "Float") input.step = "any";
+    if (setting.type === "String") input.maxLength = 4096;
+    if (setting.type === "Bool") input.checked = setting.value === true;
+    else if (setting.value !== null && setting.value !== undefined) input.value = String(setting.value);
+  }
+  return input;
+}
+
+async function loadModuleSettings() {
+  const request = ++moduleSettingsRequest;
+  const status = $("module-settings-status");
+  const fields = $("module-settings-fields");
+  status.textContent = t("moduleSettingsLoading"); fields.replaceChildren();
+  try {
+    const result = await api("module-settings");
+    if (request !== moduleSettingsRequest || !$("module-settings-dialog").open) return;
+    moduleSettingsRevision = result.revision;
+    for (const pkg of result.packages || []) {
+      const section = document.createElement("section"); section.className = "module-settings-package";
+      const heading = document.createElement("h3"); heading.textContent = `${pkg.name} · ${pkg.path} · v${pkg.version}`; section.append(heading);
+      section.dataset.packagePath = pkg.path;
+      for (const setting of pkg.settings || []) {
+        const field = document.createElement("div"); field.className = "module-settings-field";
+        const label = document.createElement("label"); const input = moduleSettingInput(setting, pkg.path); label.htmlFor = input.id;
+        label.textContent = `${setting.name} · ${setting.type}${setting.required ? ` · ${t("moduleSettingsRequired")}` : ""}`;
+        field.append(label, input);
+        if (setting.description) { const description = document.createElement("p"); description.textContent = setting.description; field.append(description); }
+        const meta = document.createElement("small");
+        meta.textContent = `${t("moduleSettingsStatus")}: ${setting.status}${setting.default !== null && setting.default !== undefined ? ` · ${t("moduleSettingsDefault")}: ${JSON.stringify(setting.default)}` : ""}`;
+        field.append(meta);
+        if (setting.secret) { const hint = document.createElement("small"); hint.id = `${input.id}-hint`; hint.textContent = t("moduleSettingsSecretHint"); field.append(hint); }
+        section.append(field);
+      }
+      fields.append(section);
+    }
+    status.textContent = fields.childElementCount ? "" : t("moduleSettingsEmpty");
+    $("module-settings-save").disabled = fields.childElementCount === 0;
+  } catch (error) {
+    if (request === moduleSettingsRequest && $("module-settings-dialog").open) status.textContent = t("moduleSettingsError", error.message);
+  }
+}
+
+async function saveModuleSettings(event) {
+  event.preventDefault();
+  const button = $("module-settings-save"); button.disabled = true;
+  const updates = [];
+  for (const section of $("module-settings-fields").querySelectorAll(".module-settings-package")) {
+    const packagePath = section.dataset.packagePath;
+    for (const input of section.querySelectorAll("input[data-setting-name]")) {
+      if (input.dataset.secret === "true") {
+        if (input.value.trim()) updates.push({ packagePath, name: input.dataset.settingName, env: input.value.trim() });
+        continue;
+      }
+      let value;
+      if (input.type === "checkbox") value = input.checked;
+      else if ((input.dataset.settingType === "Int" || input.dataset.settingType === "Float") && input.value === "") {
+        updates.push({ packagePath, name: input.dataset.settingName, clear: true });
+        continue;
+      }
+      else if (input.dataset.settingType === "Int") value = Number.parseInt(input.value, 10);
+      else if (input.dataset.settingType === "Float") value = Number(input.value);
+      else value = input.value;
+      if ((input.dataset.settingType === "Int" || input.dataset.settingType === "Float") && !Number.isFinite(value)) {
+        input.setCustomValidity("Enter a valid number"); input.reportValidity(); button.disabled = false; return;
+      }
+      input.setCustomValidity(""); updates.push({ packagePath, name: input.dataset.settingName, value });
+    }
+  }
+  try {
+    const result = await api("module-settings", { method: "POST", body: JSON.stringify({ revision: moduleSettingsRevision, updates }) });
+    moduleSettingsRevision = result.revision;
+    await loadModuleSettings();
+    $("module-settings-status").textContent = t("moduleSettingsSaved");
+  } catch (error) {
+    $("module-settings-status").textContent = t("moduleSettingsError", error.message);
+    if (error.message.includes("another editor")) await loadModuleSettings();
+  } finally { button.disabled = false; }
+}
+
+function openModuleSettings() { $("module-settings-dialog").showModal(); void loadModuleSettings(); }
+
 let outboxOffset = 0;
 let outboxRequest = 0;
 async function loadOutbox() {
@@ -3859,6 +3955,11 @@ $("pdf-preview-button").addEventListener("click", openPdfPreview);
 $("pdf-preview-close").addEventListener("click", () => $("pdf-preview-dialog").close());
 $("pdf-preview-dialog").addEventListener("close", clearPdfPreview);
 $("pdf-preview-render").addEventListener("click", renderPdfPreview);
+$("module-settings-button").addEventListener("click", openModuleSettings);
+$("module-settings-close").addEventListener("click", () => $("module-settings-dialog").close());
+$("module-settings-dialog").addEventListener("close", () => { moduleSettingsRequest++; });
+$("module-settings-reload").addEventListener("click", () => void loadModuleSettings());
+$("module-settings-form").addEventListener("submit", (event) => void saveModuleSettings(event));
 $("outbox-button").addEventListener("click", openOutbox);
 $("capability-button").addEventListener("click", () => void openCapabilityMatrix());
 $("capability-close").addEventListener("click", () => $("capability-dialog").close());
@@ -3960,6 +4061,11 @@ $("font-size-button").addEventListener("click", cycleFontSize);
 $("sidebar-toggle").addEventListener("click", (event) => {
   const hidden = document.body.classList.toggle("sidebar-hidden");
   event.currentTarget.setAttribute("aria-expanded", String(!hidden));
+});
+window.matchMedia("(max-width: 760px)").addEventListener("change", (event) => {
+  if (!event.matches || !activePath) return;
+  document.body.classList.add("sidebar-hidden");
+  $("sidebar-toggle").setAttribute("aria-expanded", "false");
 });
 $("problems-toggle").addEventListener("click", () => { $("problems-panel").hidden = !$("problems-panel").hidden; });
 $("problems-close").addEventListener("click", () => { $("problems-panel").hidden = true; });

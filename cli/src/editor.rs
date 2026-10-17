@@ -15,6 +15,8 @@ use editor_events::EventHub;
 mod editor_canvas;
 #[path = "editor_capabilities.rs"]
 mod editor_capabilities;
+#[path = "editor_module_settings.rs"]
+mod editor_module_settings;
 #[path = "editor_outbox.rs"]
 mod editor_outbox;
 #[path = "editor_pdf.rs"]
@@ -490,6 +492,10 @@ fn editor_response(
         ("GET", "pdf-views") => editor_pdf::views(state),
         ("POST", "pdf-render") => editor_pdf::render(state, &parse_json_body(&request.body)?),
         ("GET", "outbox") => editor_outbox::list(state, request),
+        ("GET", "module-settings") => editor_module_settings::read(state),
+        ("POST", "module-settings") => {
+            editor_module_settings::write(state, &parse_json_body(&request.body)?)
+        }
         ("POST", "outbox-requeue") => {
             editor_outbox::requeue(state, &parse_json_body(&request.body)?)
         }
@@ -2944,6 +2950,7 @@ fn build_crud_preview(state: &EditorState, value: &Value) -> Result<Value, (u16,
                         "fromColumn": key.column,
                         "toTable": key.referenced_table,
                         "toColumn": key.referenced_column,
+                        "onDelete": key.on_delete.to_string(),
                     })
                 })
         })
@@ -2957,6 +2964,7 @@ fn build_crud_preview(state: &EditorState, value: &Value) -> Result<Value, (u16,
                 "fromColumn": key.column,
                 "toTable": key.referenced_table,
                 "toColumn": key.referenced_column,
+                "onDelete": key.on_delete.to_string(),
             })
         })
         .chain(incoming_relationships)
@@ -3172,12 +3180,14 @@ fn create_editor_preview_directory() -> Result<EditorPreviewDirectory, (u16, Str
             "zelyra-studio-preview-{}-{name}",
             std::process::id()
         ));
-        let mut builder = fs::DirBuilder::new();
+        let builder = fs::DirBuilder::new();
         #[cfg(unix)]
-        {
+        let builder = {
             use std::os::unix::fs::DirBuilderExt;
+            let mut builder = builder;
             builder.mode(0o700);
-        }
+            builder
+        };
         match builder.create(&path) {
             Ok(()) => return Ok(EditorPreviewDirectory(path)),
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,

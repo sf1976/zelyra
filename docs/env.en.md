@@ -476,6 +476,7 @@ diagnostics, context output, or logs.
 | `NO_COLOR` | implemented | When present, disables automatic color; `ZELYRA_COLOR=always` takes precedence |
 | `CLICOLOR_FORCE` | implemented | Any nonempty value other than `0` forces color when `ZELYRA_COLOR` is unset and `NO_COLOR` is absent |
 | `ZELYRA_DB_TIMEOUT_TEST_URL` | CI/test variable | MariaDB URL for timeout and pool integration tests; local/isolated test database only |
+| `ZELYRA_MODULE_IMPORTS_DATABASE_URL` | CI/test variable | Optional base MariaDB URL for package/module runtime integration tests; unset skips the database case, set only to an isolated test server because the test creates and drops a uniquely named database |
 | `ZELYRA_MARIADB_ROOT_PASSWORD` | test/development tool | password for local MariaDB test runs |
 | `ZELYRA_MARIADB_PASSWORD` | test/development tool | user password for local MariaDB test runs |
 | `ZELYRA_GENERATED_E2E_ROOT_PASSWORD` | test/development tool | root password for generated Docker E2E tests |
@@ -569,3 +570,15 @@ interpreter SQL operation, read-only metadata verifies declared Date, Time and
 Timestamp storage. Missing columns, wrong kinds and incompatible time precision
 produce source-located errors; metadata access is required. Migrations retain
 explicit review. There is no new switch. See [date rules](dates.en.md).
+## Local package settings (experimental)
+
+`zelyra.settings.toml` stores non-secret package values under
+`[package_settings."<package-path>"]`; manifest defaults apply to omitted optional
+fields. Secret fields may only reference process environment names matching
+`UPPERCASE_NAME`. The CLI reads those values solely for
+`zelyra module settings check`; there is no fallback file and no automatic
+`.env` resolution for this mechanism. An existing process value is the only
+source; secret defaults are forbidden. Output contains only availability
+status, never variable names or values. The file is checked for symlinks, types,
+and a 1 MiB size limit; it is neither part of the package lockfile nor a runtime
+setting yet. Package and CLI integration tests cover the behavior.

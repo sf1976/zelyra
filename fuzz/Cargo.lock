@@ -1014,6 +1014,8 @@ dependencies = [
  "bytes",
  "fallible-iterator",
  "postgres-protocol",
+ "serde_core",
+ "serde_json",
 ]
 
 [[package]]
@@ -1941,18 +1943,23 @@ dependencies = [
 
 [[package]]
 name = "zelyra-ast"
-version = "0.5.0"
+version = "1.1.1"
+dependencies = [
+ "serde_json",
+]
 
 [[package]]
 name = "zelyra-database"
-version = "0.5.0"
+version = "1.1.1"
 dependencies = [
+ "bytes",
  "mysql",
  "postgres",
  "r2d2",
  "r2d2_postgres",
  "rustls",
  "rustls-pemfile",
+ "serde_json",
  "sha2 0.10.9",
  "tokio-postgres-rustls",
  "webpki-roots",
@@ -1961,7 +1968,7 @@ dependencies = [
 
 [[package]]
 name = "zelyra-forms"
-version = "0.5.0"
+version = "1.1.1"
 dependencies = [
  "zelyra-ast",
  "zelyra-database",
@@ -1976,21 +1983,47 @@ dependencies = [
  "zelyra-database",
  "zelyra-forms",
  "zelyra-lexer",
+ "zelyra-mir",
  "zelyra-parser",
  "zelyra-runtime",
  "zelyra-web",
 ]
 
 [[package]]
+name = "zelyra-hir"
+version = "1.1.1"
+dependencies = [
+ "zelyra-ast",
+ "zelyra-database",
+]
+
+[[package]]
 name = "zelyra-lexer"
-version = "0.5.0"
+version = "1.1.1"
 dependencies = [
  "zelyra-ast",
 ]
 
 [[package]]
+name = "zelyra-mail"
+version = "1.1.1"
+dependencies = [
+ "lettre",
+]
+
+[[package]]
+name = "zelyra-mir"
+version = "1.1.1"
+dependencies = [
+ "zelyra-ast",
+ "zelyra-database",
+ "zelyra-hir",
+ "zelyra-runtime",
+]
+
+[[package]]
 name = "zelyra-parser"
-version = "0.5.0"
+version = "1.1.1"
 dependencies = [
  "zelyra-ast",
  "zelyra-lexer",
@@ -1998,18 +2031,22 @@ dependencies = [
 
 [[package]]
 name = "zelyra-runtime"
-version = "0.5.0"
+version = "1.1.1"
 dependencies = [
+ "num-bigint",
  "rand_core 0.6.4",
  "serde_json",
+ "sha2 0.10.9",
  "ureq",
  "zelyra-ast",
  "zelyra-database",
+ "zelyra-mail",
+ "zeroize",
 ]
 
 [[package]]
 name = "zelyra-web"
-version = "0.5.0"
+version = "1.1.1"
 dependencies = [
  "argon2",
  "blake2",
@@ -2017,10 +2054,12 @@ dependencies = [
  "rand_core 0.6.4",
  "ring",
  "serde_json",
+ "subtle",
  "url",
  "zelyra-ast",
  "zelyra-database",
  "zelyra-forms",
+ "zelyra-mail",
  "zeroize",
 ]
 

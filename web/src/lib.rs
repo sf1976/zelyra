@@ -9556,7 +9556,7 @@ fn match_path(pattern: &str, path: &str) -> Option<HashMap<String, String>> {
             if name.is_empty() {
                 return None;
             }
-            params.insert(name.into(), path_part.into());
+            params.insert(name.into(), decode_path_segment(path_part)?);
         } else if *pattern_part != path_part {
             return None;
         }
@@ -9569,6 +9569,36 @@ fn path_parts(path: &str) -> Vec<&str> {
         .split('/')
         .filter(|part| !part.is_empty())
         .collect()
+}
+
+/// Decode one already-separated URL path parameter. Encoded separators and
+/// dot segments are rejected so decoding cannot change the route hierarchy or
+/// smuggle path traversal into handlers. Unlike form/query decoding, `+` is
+/// preserved as a literal plus in a URL path.
+fn decode_path_segment(segment: &str) -> Option<String> {
+    let bytes = segment.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        let byte = if bytes[index] == b'%' {
+            if index + 2 >= bytes.len() {
+                return None;
+            }
+            let high = hex_value(bytes[index + 1])?;
+            let low = hex_value(bytes[index + 2])?;
+            index += 2;
+            high * 16 + low
+        } else {
+            bytes[index]
+        };
+        if matches!(byte, b'/' | b'\\' | 0) {
+            return None;
+        }
+        decoded.push(byte);
+        index += 1;
+    }
+    let decoded = String::from_utf8(decoded).ok()?;
+    (!matches!(decoded.as_str(), "." | "..")).then_some(decoded)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

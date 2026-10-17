@@ -104,7 +104,6 @@ Welcome to the complete Zelyra Handbook. It includes both the introductory textb
 - [22. Roadmap from the current repository](technical-reference.md#22-roadmap-from-the-current-repository)
 - [23. AI-native development](technical-reference.md#23-ai-native-development)
 - [24. Application email](technical-reference.md#24-application-email-095)
-- [25. Laravel migration: static analysis and scaffolding](technical-reference.md#25-laravel-migration-static-analysis-and-scaffolding)
 - [Authoritative Sources and Compiler Verification (Source Authority)](appendices.md#24-authoritative-sources-and-compiler-verification-source-authority)
 
 ### Appendices

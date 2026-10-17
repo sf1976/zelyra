@@ -1014,6 +1014,8 @@ dependencies = [
  "bytes",
  "fallible-iterator",
  "postgres-protocol",
+ "serde_core",
+ "serde_json",
 ]
 
 [[package]]
@@ -2033,14 +2035,14 @@ dependencies = [
 
 [[package]]
 name = "zelyra-ast"
-version = "1.1.2"
+version = "1.1.5"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "zelyra-cli"
-version = "1.1.2"
+version = "1.1.5"
 dependencies = [
  "glob",
  "libc",
@@ -2061,14 +2063,16 @@ dependencies = [
  "zelyra-hir",
  "zelyra-lexer",
  "zelyra-mail",
+ "zelyra-mir",
  "zelyra-parser",
  "zelyra-runtime",
  "zelyra-web",
+ "zeroize",
 ]
 
 [[package]]
 name = "zelyra-database"
-version = "1.1.2"
+version = "1.1.5"
 dependencies = [
  "bytes",
  "mysql",
@@ -2088,7 +2092,7 @@ dependencies = [
 
 [[package]]
 name = "zelyra-forms"
-version = "1.1.2"
+version = "1.1.5"
 dependencies = [
  "zelyra-ast",
  "zelyra-database",
@@ -2096,30 +2100,43 @@ dependencies = [
 
 [[package]]
 name = "zelyra-hir"
-version = "1.1.2"
+version = "1.1.5"
 dependencies = [
  "zelyra-ast",
+ "zelyra-database",
  "zelyra-lexer",
  "zelyra-parser",
 ]
 
 [[package]]
 name = "zelyra-lexer"
-version = "1.1.2"
+version = "1.1.5"
 dependencies = [
  "zelyra-ast",
 ]
 
 [[package]]
 name = "zelyra-mail"
-version = "1.1.2"
+version = "1.1.5"
 dependencies = [
  "lettre",
 ]
 
 [[package]]
+name = "zelyra-mir"
+version = "1.1.5"
+dependencies = [
+ "zelyra-ast",
+ "zelyra-database",
+ "zelyra-hir",
+ "zelyra-lexer",
+ "zelyra-parser",
+ "zelyra-runtime",
+]
+
+[[package]]
 name = "zelyra-parser"
-version = "1.1.2"
+version = "1.1.5"
 dependencies = [
  "zelyra-ast",
  "zelyra-lexer",
@@ -2127,7 +2144,7 @@ dependencies = [
 
 [[package]]
 name = "zelyra-runtime"
-version = "1.1.2"
+version = "1.1.5"
 dependencies = [
  "num-bigint",
  "rand_core 0.6.4",
@@ -2144,7 +2161,7 @@ dependencies = [
 
 [[package]]
 name = "zelyra-web"
-version = "1.1.2"
+version = "1.1.5"
 dependencies = [
  "argon2",
  "blake2",

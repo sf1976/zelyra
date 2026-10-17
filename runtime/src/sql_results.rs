@@ -4,7 +4,7 @@ use zelyra_database::QueryColumnType as Kind;
 
 /// Records and table storage rows share one projection description. Explicit
 /// records take precedence; relations expose their stored `<name>_id` column.
-pub(super) fn definitions(program: &Program) -> HashMap<String, RecordDef> {
+pub(crate) fn definitions(program: &Program) -> HashMap<String, RecordDef> {
     let aliases = program
         .types
         .iter()
@@ -59,6 +59,24 @@ pub(super) fn definitions(program: &Program) -> HashMap<String, RecordDef> {
     records
 }
 
+/// Return table-derived SQL projection records that are not declared records.
+/// Execution backends carry these separately so SQL decoding can materialize
+/// storage rows without making table projections constructible as ordinary
+/// source records.
+pub fn projection_records(program: &Program) -> Vec<RecordDef> {
+    let declared = program
+        .records
+        .iter()
+        .map(|record| record.name.as_str())
+        .collect::<HashSet<_>>();
+    let mut records = definitions(program)
+        .into_values()
+        .filter(|record| !declared.contains(record.name.as_str()))
+        .collect::<Vec<_>>();
+    records.sort_by(|left, right| left.name.cmp(&right.name));
+    records
+}
+
 fn scalar_supported(
     ty: &Type,
     records: &HashMap<String, RecordDef>,
@@ -72,6 +90,7 @@ fn scalar_supported(
         | Type::Decimal
         | Type::Bool
         | Type::String
+        | Type::Json
         | Type::Char
         | Type::Date
         | Type::Time
@@ -147,7 +166,7 @@ fn projection(
     }))
 }
 
-pub(super) fn validate_target(target: &Type, program: &Program) -> Result<(), String> {
+pub(crate) fn validate_target(target: &Type, program: &Program) -> Result<(), String> {
     let aliases = program
         .types
         .iter()
@@ -172,7 +191,7 @@ pub(super) fn validate_target(target: &Type, program: &Program) -> Result<(), St
 }
 
 impl Interpreter<'_> {
-    pub(super) fn eval_sql_decode(
+    pub(crate) fn eval_sql_decode(
         &mut self,
         type_args: &[Type],
         args: &[Expr],
@@ -198,148 +217,177 @@ impl Interpreter<'_> {
         self.decode_sql_rows(rows, &target, span)
     }
 
-    pub(super) fn decode_sql_rows(
+    pub(crate) fn decode_sql_rows(
         &self,
         value: Value,
         target: &Type,
         span: Span,
     ) -> Result<Value, RuntimeError> {
-        let Value::Rows {
-            columns,
-            rows,
-            metadata,
-            ..
-        } = value
-        else {
-            return Err(self.runtime_error(span, "sql_decode requires native SQL rows"));
-        };
-        let SqlRowsMetadata {
-            nulls,
-            column_types,
-        } = *metadata;
-        let aliases = &self.type_aliases;
-        let target = expand_type_aliases(target, aliases)
-            .map_err(|message| self.runtime_error(span, message))?;
-        let row_type = match &target {
-            Type::Array(inner) | Type::Option(inner) => inner.as_ref(),
-            _ => &target,
-        };
-        let record = projection(
-            row_type,
+        let enums = self
+            .enum_definitions
+            .keys()
+            .cloned()
+            .collect::<HashSet<_>>();
+        decode_native_sql_rows(
+            value,
+            target,
             &self.sql_record_definitions,
-            aliases,
-            &self.enum_definitions.keys().cloned().collect(),
+            &self.type_aliases,
+            &enums,
+            span,
         )
-        .map_err(|message| self.runtime_error(span, format!("SQL decoding: {message}")))?;
-        if columns.len() != column_types.len()
-            || rows.len() != nulls.len()
-            || rows
-                .iter()
-                .zip(&nulls)
-                .any(|(row, nulls)| row.len() != columns.len() || nulls.len() != columns.len())
-        {
-            return Err(
-                self.runtime_error(span, "SQL decoding: inconsistent native result metadata")
-            );
-        }
-        let mut seen = HashSet::new();
-        for column in &columns {
-            if !seen.insert(column) {
-                return Err(self.runtime_error(
-                    span,
-                    format!("SQL decoding: duplicate column `{column}`; use explicit aliases"),
-                ));
-            }
-        }
-        let expected = match &record {
-            Some(Projection { record, .. }) => record
-                .fields
-                .iter()
-                .map(|field| field.name.clone())
-                .collect::<Vec<_>>(),
-            None if columns.len() == 1 => columns.clone(),
-            None => {
-                return Err(self.runtime_error(
-                    span,
-                    format!(
-                        "SQL decoding: scalar row requires exactly one column, found {}",
-                        columns.len()
-                    ),
-                ))
-            }
-        };
-        let indices = expected
+    }
+}
+
+pub fn decode_native_sql_rows(
+    value: Value,
+    target: &Type,
+    records: &HashMap<String, RecordDef>,
+    aliases: &HashMap<String, Type>,
+    enums: &HashSet<String>,
+    span: Span,
+) -> Result<Value, RuntimeError> {
+    let Value::Rows {
+        columns,
+        rows,
+        metadata,
+        ..
+    } = value
+    else {
+        return Err(sql_decode_error(
+            span,
+            "sql_decode requires native SQL rows",
+        ));
+    };
+    let SqlRowsMetadata {
+        nulls,
+        column_types,
+    } = *metadata;
+    let target =
+        expand_type_aliases(target, aliases).map_err(|message| sql_decode_error(span, message))?;
+    let row_type = match &target {
+        Type::Array(inner) | Type::Option(inner) => inner.as_ref(),
+        _ => &target,
+    };
+    let record = projection(row_type, records, aliases, enums)
+        .map_err(|message| sql_decode_error(span, format!("SQL decoding: {message}")))?;
+    if columns.len() != column_types.len()
+        || rows.len() != nulls.len()
+        || rows
             .iter()
-            .map(|name| {
-                columns
-                    .iter()
-                    .position(|column| column == name)
-                    .ok_or_else(|| {
-                        self.runtime_error(span, format!("SQL decoding: missing column `{name}`"))
-                    })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        if let Some(column) = columns.iter().find(|column| !expected.contains(column)) {
-            return Err(
-                self.runtime_error(span, format!("SQL decoding: unexpected column `{column}`"))
-            );
+            .zip(&nulls)
+            .any(|(row, nulls)| row.len() != columns.len() || nulls.len() != columns.len())
+    {
+        return Err(sql_decode_error(
+            span,
+            "SQL decoding: inconsistent native result metadata",
+        ));
+    }
+    let mut seen = HashSet::new();
+    for column in &columns {
+        if !seen.insert(column) {
+            return Err(sql_decode_error(
+                span,
+                format!("SQL decoding: duplicate column `{column}`; use explicit aliases"),
+            ));
         }
-        let types = match &record {
-            Some(Projection { types, .. }) => types.clone(),
-            None => vec![row_type.clone()],
-        };
-        // Check native column families even for empty arrays/optional results.
-        for (index, ty) in indices.iter().zip(&types) {
-            if !column_compatible(ty, column_types[*index]) {
-                return Err(self.runtime_error(
-                    span,
-                    format!(
-                        "SQL decoding: column `{}` has native type {:?}, expected `{ty}`",
-                        columns[*index], column_types[*index]
-                    ),
-                ));
-            }
+    }
+    let expected = match &record {
+        Some(Projection { record, .. }) => record
+            .fields
+            .iter()
+            .map(|field| field.name.clone())
+            .collect::<Vec<_>>(),
+        None if columns.len() == 1 => columns.clone(),
+        None => {
+            return Err(sql_decode_error(
+                span,
+                format!(
+                    "SQL decoding: scalar row requires exactly one column, found {}",
+                    columns.len()
+                ),
+            ))
         }
-        match &target {
-            Type::Array(_) => {}
-            Type::Option(_) if rows.len() > 1 => {
-                return Err(self.runtime_error(
-                    span,
-                    format!(
-                        "SQL decoding: optional result requires at most one row, found {}",
-                        rows.len()
-                    ),
-                ))
-            }
-            Type::Option(_) => {}
-            _ if rows.len() != 1 => {
-                return Err(self.runtime_error(
-                    span,
-                    format!(
-                        "SQL decoding: result requires exactly one row, found {}",
-                        rows.len()
-                    ),
-                ))
-            }
-            _ => {}
+    };
+    let indices = expected
+        .iter()
+        .map(|name| {
+            columns
+                .iter()
+                .position(|column| column == name)
+                .ok_or_else(|| {
+                    sql_decode_error(span, format!("SQL decoding: missing column `{name}`"))
+                })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    if let Some(column) = columns.iter().find(|column| !expected.contains(column)) {
+        return Err(sql_decode_error(
+            span,
+            format!("SQL decoding: unexpected column `{column}`"),
+        ));
+    }
+    let types = match &record {
+        Some(Projection { types, .. }) => types.clone(),
+        None => vec![row_type.clone()],
+    };
+    // Check native column families even for empty arrays/optional results.
+    for (index, ty) in indices.iter().zip(&types) {
+        if !column_compatible(ty, column_types[*index]) {
+            return Err(sql_decode_error(
+                span,
+                format!(
+                    "SQL decoding: column `{}` has native type {:?}, expected `{ty}`",
+                    columns[*index], column_types[*index]
+                ),
+            ));
         }
-        let values = rows.iter().zip(&nulls).enumerate().map(|(row_index, (row, nulls))| {
+    }
+    match &target {
+        Type::Array(_) => {}
+        Type::Option(_) if rows.len() > 1 => {
+            return Err(sql_decode_error(
+                span,
+                format!(
+                    "SQL decoding: optional result requires at most one row, found {}",
+                    rows.len()
+                ),
+            ))
+        }
+        Type::Option(_) => {}
+        _ if rows.len() != 1 => {
+            return Err(sql_decode_error(
+                span,
+                format!(
+                    "SQL decoding: result requires exactly one row, found {}",
+                    rows.len()
+                ),
+            ))
+        }
+        _ => {}
+    }
+    let values = rows.iter().zip(&nulls).enumerate().map(|(row_index, (row, nulls))| {
             let fields = indices.iter().zip(&types).map(|(index, ty)| {
-                decode_cell(&row[*index], nulls[*index], ty).ok_or_else(|| self.runtime_error(span, format!("SQL decoding: row {}, column `{}` is NULL, invalid, out of range, or inexact for `{ty}`", row_index + 1, columns[*index])))
+                decode_cell(&row[*index], nulls[*index], ty).ok_or_else(|| sql_decode_error(span, format!("SQL decoding: row {}, column `{}` is NULL, invalid, out of range, or inexact for `{ty}`", row_index + 1, columns[*index])))
             }).collect::<Result<Vec<_>, _>>()?;
             match &record {
                 Some(Projection { record, args, .. }) => Ok(Value::Object { type_name: record.name.clone(), type_args: args.clone(), fields: expected.iter().cloned().zip(fields).collect() }),
                 None => Ok(fields.into_iter().next().expect("scalar projection has one column")),
             }
         }).collect::<Result<Vec<_>, RuntimeError>>()?;
-        Ok(match target {
-            Type::Array(_) => Value::Array(values),
-            Type::Option(_) => Value::Option(values.into_iter().next().map(Box::new)),
-            _ => values
-                .into_iter()
-                .next()
-                .expect("required cardinality was checked"),
-        })
+    Ok(match target {
+        Type::Array(_) => Value::Array(values),
+        Type::Option(_) => Value::Option(values.into_iter().next().map(Box::new)),
+        _ => values
+            .into_iter()
+            .next()
+            .expect("required cardinality was checked"),
+    })
+}
+
+fn sql_decode_error(span: Span, message: impl Into<String>) -> RuntimeError {
+    RuntimeError {
+        message: message.into(),
+        span,
     }
 }
 
@@ -352,6 +400,7 @@ fn column_compatible(target: &Type, kind: Kind) -> bool {
         Type::Float => matches!(kind, Kind::Integer | Kind::Decimal | Kind::Float),
         Type::Bool => matches!(kind, Kind::Bool | Kind::Integer),
         Type::String | Type::Char => kind == Kind::Text,
+        Type::Json => matches!(kind, Kind::Json | Kind::Text),
         Type::Date => kind == Kind::Date,
         Type::Time => kind == Kind::Time,
         Type::Timestamp => kind == Kind::Timestamp,
@@ -403,6 +452,7 @@ fn decode_cell(text: &str, null: bool, ty: &Type) -> Option<Value> {
             _ => None,
         },
         Type::String => Some(Value::String(text.into())),
+        Type::Json => serde_json::from_str(text).ok().map(Value::Json),
         Type::Char => {
             let mut chars = text.chars();
             let character = chars.next()?;
@@ -421,7 +471,7 @@ fn decode_cell(text: &str, null: bool, ty: &Type) -> Option<Value> {
     }
 }
 
-pub(super) fn parse_money(text: &str) -> Option<i128> {
+pub(crate) fn parse_money(text: &str) -> Option<i128> {
     let value = parse_decimal(text)?;
     // Match the declared DECIMAL(19,4) storage contract without rounding.
     (value % 100_000 == 0 && value.unsigned_abs() < 1_000_000_000_000_000_000_000_000)

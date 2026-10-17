@@ -54,6 +54,24 @@ pub struct SqlTableAccess {
     pub mode: SqlAccessMode,
 }
 
+/// Re-check a compiled SQL expression against the project schema and its
+/// runtime parameter types. Alternate execution backends use this boundary
+/// when accepting decoded bytecode artifacts.
+pub fn check_sql_query(
+    query: &str,
+    result_type: &Type,
+    schema: &Schema,
+    parameters: &HashMap<String, Type>,
+    span: Span,
+) -> Result<(), Vec<SqlError>> {
+    let errors = check_query(query, result_type, schema, parameters, span);
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
 /// Reports conservative table access modes for the SQL statement forms
 /// accepted by the current checker. Complex joined UPDATE/DELETE statements
 /// are marked unknown because their write targets are dialect-sensitive.
@@ -1177,7 +1195,9 @@ fn parameter_column_type(
 
 fn sql_type_to_type(sql_type: &str) -> Type {
     let upper = sql_type.to_ascii_uppercase();
-    if upper.contains("CHAR") || upper.contains("TEXT") || upper.contains("CLOB") {
+    if matches!(upper.as_str(), "JSON" | "JSONB") {
+        Type::Json
+    } else if upper.contains("CHAR") || upper.contains("TEXT") || upper.contains("CLOB") {
         Type::String
     } else if upper.contains("BOOL") {
         Type::Bool

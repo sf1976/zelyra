@@ -3,6 +3,7 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
     process::{Command, Stdio},
+    sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -17,13 +18,15 @@ fn example() -> PathBuf {
 }
 
 fn temporary_copy() -> PathBuf {
+    static NEXT_TEMP_PROJECT: AtomicU64 = AtomicU64::new(0);
     let unique = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("system clock should be after UNIX epoch")
         .as_nanos();
+    let sequence = NEXT_TEMP_PROJECT.fetch_add(1, Ordering::Relaxed);
     let destination = std::env::temp_dir().join(format!(
-        "zelyra-inventory-orders-{}-{unique}",
-        std::process::id()
+        "zelyra-inventory-orders-{}-{unique}-{sequence}",
+        std::process::id(),
     ));
     copy_directory(&example(), &destination);
     destination

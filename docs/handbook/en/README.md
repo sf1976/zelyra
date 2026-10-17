@@ -2233,10 +2233,17 @@ so that diagnostics do not depend on thread scheduling:
 zelyra run main.zyl --max-steps 30000
 ```
 
+The experimental MIR interpreter also accepts
+`zelyra run main.zyl --backend mir --optimize-mir`. Its constant-folding pass
+currently handles only `Int`, `UInt`, `Float`, `Bool`, and `Char`. The step
+budget counts execution after optimization; a test confirms fewer steps for
+the example. Without both MIR options, default execution is unchanged.
+
 Recursion remains bounded. `[runtime] max_stack_depth` in `zelyra.toml` accepts
 values from 1 to 500; larger values reserve more stack memory. A
-`transaction { ... }` can be checked offline, but executing it requires a
-running MariaDB or MySQL runtime.
+direct Rust call into the AST, MIR, or bytecode runtime cannot raise this
+shared hard ceiling. A `transaction { ... }` can be checked offline, but
+executing it requires a running MariaDB or MySQL runtime.
 
 ```toml
 [runtime]

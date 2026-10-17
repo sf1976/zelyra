@@ -7,7 +7,11 @@ Datenbankfeature und kein vollständiger Queue-Dienst.
 ## Einrichten und inspizieren
 
 Verwende ein MariaDB-Projekt mit konfigurierter Datenbank-URL und erstelle die
-interne Tabelle ausdrücklich:
+interne Tabelle ausdrücklich. Die CLI liest zuerst die passende
+`ZELYRA_DATABASE_<NAME>_URL` oder `DATABASE_URL` aus der Prozessumgebung und
+verwendet andernfalls den entsprechenden Eintrag aus der `.env` im Ordner von
+`main.zyl`. Bei einem generierten Projekt kannst du daher direkt aus dem
+Projektordner ausführen:
 
 ```sh
 zelyra outbox setup main.zyl

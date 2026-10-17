@@ -1,8 +1,9 @@
 //! Record/class construction kept outside the recursive expression dispatch frame.
 use super::*;
+use std::sync::atomic::Ordering;
 
 impl Interpreter<'_> {
-    pub(super) fn eval_record_value(
+    pub(crate) fn eval_record_value(
         &mut self,
         type_name: &str,
         type_args: &[Type],

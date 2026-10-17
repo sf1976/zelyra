@@ -1,0 +1,21 @@
+[package]
+name = "business_app"
+version = "1.0.0"
+zelyra = ">=1.1.0, <1.2.0"
+entry = "main.zyl"
+
+[capabilities]
+database = true
+filesystem = true
+
+[dependencies.billing]
+path = "packages/billing"
+version = "^1.0"
+
+[dependencies.csv_export]
+path = "packages/csv_export"
+version = "^1.0"
+
+[dependencies.csv_import]
+path = "packages/csv_import"
+version = "^1.0"

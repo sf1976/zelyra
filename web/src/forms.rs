@@ -163,6 +163,41 @@ pub(super) fn render_form_with_language(
                 html.push_str("</option>");
             }
             html.push_str("</select>");
+        } else if !field.choices.is_empty() {
+            html.push_str("<select class=\"");
+            html.push_str(&form_field_appearance_classes(field, "z-select"));
+            html.push_str("\" id=\"");
+            html.push_str(&html_escape(&field.name));
+            html.push_str("\" name=\"");
+            html.push_str(&html_escape(&field.name));
+            html.push('"');
+            if required {
+                html.push_str(" required");
+            }
+            if !field_errors.is_empty() {
+                html.push_str(" aria-invalid=\"true\" aria-describedby=\"");
+                html.push_str(&format!("{}-error", html_escape(&field.name)));
+                html.push('"');
+            }
+            html.push('>');
+            if !required {
+                html.push_str(&format!(
+                    "<option value=\"\">-- {} --</option>",
+                    tr(language, "action.select")
+                ));
+            }
+            for choice in &field.choices {
+                html.push_str("<option value=\"");
+                html.push_str(&html_escape(choice));
+                html.push('"');
+                if choice == value {
+                    html.push_str(" selected");
+                }
+                html.push('>');
+                html.push_str(&html_escape(choice));
+                html.push_str("</option>");
+            }
+            html.push_str("</select>");
         } else {
             let input_type = field_input_type;
             html.push_str("<input class=\"");
@@ -216,6 +251,23 @@ pub(super) fn render_form_with_language(
                 html.push_str(" maxlength=\"");
                 html.push_str(&max.to_string());
                 html.push('"');
+            }
+            if let Some(min_length) = field.min_length {
+                html.push_str(" minlength=\"");
+                html.push_str(&min_length.to_string());
+                html.push('"');
+            }
+            if input_type == "number" {
+                if let Some(min) = &field.min_value {
+                    html.push_str(" min=\"");
+                    html.push_str(&html_escape(min));
+                    html.push('"');
+                }
+                if let Some(max) = &field.max_value {
+                    html.push_str(" max=\"");
+                    html.push_str(&html_escape(max));
+                    html.push('"');
+                }
             }
             if let Some(placeholder) = &field.placeholder {
                 html.push_str(" placeholder=\"");
@@ -301,6 +353,9 @@ pub(super) fn localized_validation_message(language: UiLanguage, message: &str) 
         "unknown form field" => "validation.unknown_field",
         "read-only field cannot be submitted" => "validation.readonly",
         "value is required" => "validation.required",
+        "value is below the minimum" => "validation.min_value",
+        "value exceeds the maximum" => "validation.max_value",
+        "value is not an allowed choice" => "validation.choice",
         "must be an integer" => "validation.integer",
         "must be an unsigned integer" => "validation.unsigned_integer",
         "must be a number" => "validation.number",
@@ -320,6 +375,9 @@ pub(super) fn localized_validation_message(language: UiLanguage, message: &str) 
         _ => {
             if let Some(maximum) = message.strip_prefix("value exceeds maximum length of ") {
                 return i18n::parameterized_reference("validation.max_length", "max", maximum);
+            }
+            if let Some(minimum) = message.strip_prefix("value is shorter than minimum length of ") {
+                return i18n::parameterized_reference("validation.min_length", "min", minimum);
             }
             return message.to_owned();
         }

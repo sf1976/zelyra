@@ -2194,6 +2194,7 @@ fn push_type_references(
         | Type::String
         | Type::Char
         | Type::Bytes
+        | Type::Json
         | Type::Timestamp
         | Type::Date
         | Type::Time

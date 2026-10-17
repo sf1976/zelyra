@@ -17,6 +17,7 @@ WORKSPACE_PACKAGES = (
     "zelyra-forms",
     "zelyra-hir",
     "zelyra-lexer",
+    "zelyra-mail",
     "zelyra-parser",
     "zelyra-runtime",
     "zelyra-web",

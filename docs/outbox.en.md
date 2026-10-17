@@ -7,7 +7,10 @@ queue service.
 ## Set up and inspect
 
 Use a MariaDB project with its database URL configured, then explicitly create
-the internal table:
+the internal table. The CLI first checks the matching
+`ZELYRA_DATABASE_<NAME>_URL` or `DATABASE_URL` process variable, then reads the
+matching value from the `.env` file beside `main.zyl`. Generated projects can
+run the command directly from the project directory:
 
 ```sh
 zelyra outbox setup main.zyl

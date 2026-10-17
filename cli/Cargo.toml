@@ -27,9 +27,13 @@ zelyra-hir.workspace = true
 zelyra-lexer.workspace = true
 zelyra-parser.workspace = true
 zelyra-runtime.workspace = true
+zeroize.workspace = true
+zelyra-mir.workspace = true
 zelyra-mail.workspace = true
 zelyra-web.workspace = true
 zelyra-forms.workspace = true
+
+[dev-dependencies]
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

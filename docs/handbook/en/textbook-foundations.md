@@ -2071,8 +2071,7 @@ name and its full destination path. It also states that no secrets are copied
 and no destination files are published. The requested output directory is not
 created; internally, Zelyra builds a temporary package, checks it with
 `zelyra check`, and removes it afterward. The plan remains experimental and
-continues to report `source_closure_complete: false` and
-`complete_deployment: false`.
+`source_closure_complete: true` is reported only when the dependency plan has no unresolved references and the generated entry passes `zelyra check`. `complete_deployment` remains `false` because runtime and operational requirements are reviewed separately.
 
 For the actual export, omit `--dry-run`:
 
@@ -2092,8 +2091,8 @@ stops with `E-DB-001` before any bundle files are written. Only one
 project-wide `DATABASE_URL` connection is currently implemented.
 
 The result is explicitly only an experimental source bundle:
-`zelyra.bundle.json` sets both `source_closure_complete` and
-`complete_deployment` to `false`. It contains no Docker/Compose files, compiler
+`zelyra.bundle.json` records source-closure evidence and keeps
+`complete_deployment` at `false`. It contains no Docker/Compose files, compiler
 binary, database service, or `.env`; credentials are not copied. Running it
 still requires a compatible Zelyra build, external runtime configuration, and
 MariaDB when applicable. This is not yet an independent Docker export.
@@ -2127,8 +2126,8 @@ connections inside one process. The manifest records this limited scope as
 `docker.database_connection_scope: "per_exported_compose_project"`.
 
 This Docker package is still not a complete module export:
-`source_closure_complete` and `complete_deployment` remain `false` because the
-static dependency graph does not yet prove every runtime and asset dependency.
+`source_closure_complete` records the checked source closure;
+`complete_deployment` remains `false` because runtime and asset requirements are not fully proven.
 A successful `zelyra check` is not that proof. The Docker end-to-end test
 exports two CRUD resources from separate source files into separate Compose
 projects. Each package gets its own `DATABASE_URL`, separately provisioned
