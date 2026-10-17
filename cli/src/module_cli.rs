@@ -1720,6 +1720,16 @@ fn module_bundle_command(mut arguments: impl Iterator<Item = String>) -> ExitCod
         let mut copied = Vec::new();
         let mut support_files = Vec::new();
         let mut docker_files = Vec::new();
+        let package_destinations = package_support
+            .as_ref()
+            .map(|support| {
+                support
+                    .package_files
+                    .iter()
+                    .cloned()
+                    .collect::<std::collections::BTreeMap<_, _>>()
+            })
+            .unwrap_or_default();
         if full_project {
             copy_bundle_source(project_root, &staging, &entry_relative, "main.zyl")?;
             copied.push("main.zyl".to_owned());
@@ -1728,19 +1738,28 @@ fn module_bundle_command(mut arguments: impl Iterator<Item = String>) -> ExitCod
             if full_project && relative == &entry_relative {
                 continue;
             }
-            copy_bundle_source(project_root, &staging, relative, relative)?;
-            copied.push(relative.clone());
+            let destination = package_destinations
+                .get(relative)
+                .map(String::as_str)
+                .unwrap_or(relative);
+            copy_bundle_source(project_root, &staging, relative, destination)?;
+            copied.push(destination.to_owned());
         }
         if let Some(package_support) = &package_support {
-            for relative in &package_support.package_files {
-                if copied.contains(relative) {
+            for (source_relative, destination_relative) in &package_support.package_files {
+                if copied.contains(destination_relative) {
                     continue;
                 }
-                copy_bundle_source(project_root, &staging, relative, relative)?;
-                if relative.ends_with(".zyl") {
-                    copied.push(relative.clone());
+                copy_bundle_source(
+                    project_root,
+                    &staging,
+                    source_relative,
+                    destination_relative,
+                )?;
+                if destination_relative.ends_with(".zyl") {
+                    copied.push(destination_relative.clone());
                 } else {
-                    support_files.push(relative.clone());
+                    support_files.push(destination_relative.clone());
                 }
             }
         }
@@ -1749,7 +1768,11 @@ fn module_bundle_command(mut arguments: impl Iterator<Item = String>) -> ExitCod
                 .iter()
                 .enumerate()
                 .map(|(index, path)| {
-                    let escaped = path.replace('\\', "\\\\").replace('"', "\\\"");
+                    let bundle_path = package_destinations
+                        .get(path)
+                        .map(String::as_str)
+                        .unwrap_or(path);
+                    let escaped = bundle_path.replace('\\', "\\\\").replace('"', "\\\"");
                     format!("import \"{escaped}\" as bundle_{index}")
                 })
                 .collect::<Vec<_>>();
@@ -1778,9 +1801,11 @@ fn module_bundle_command(mut arguments: impl Iterator<Item = String>) -> ExitCod
             }
         }
         if let Some(package_support) = &package_support {
-            for relative in &package_support.package_files {
-                if !relative.ends_with(".zyl") && !support_files.contains(relative) {
-                    support_files.push(relative.clone());
+            for (_, destination_relative) in &package_support.package_files {
+                if !destination_relative.ends_with(".zyl")
+                    && !support_files.contains(destination_relative)
+                {
+                    support_files.push(destination_relative.clone());
                 }
             }
             if !package_support.package_names.is_empty() {

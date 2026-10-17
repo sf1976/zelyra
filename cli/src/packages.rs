@@ -53,7 +53,7 @@ pub(crate) struct PackageGraph {
 
 pub(crate) struct PackageBundleSupport {
     pub(crate) root_manifest: String,
-    pub(crate) package_files: Vec<String>,
+    pub(crate) package_files: Vec<(String, String)>,
     pub(crate) package_names: Vec<String>,
 }
 
@@ -840,7 +840,7 @@ impl PackageGraph {
             let mut dependency = toml::map::Map::new();
             dependency.insert(
                 "path".into(),
-                toml::Value::String(package.relative_root.clone()),
+                toml::Value::String(bundle_package_path(&package.relative_root)),
             );
             dependency.insert(
                 "version".into(),
@@ -885,7 +885,7 @@ impl PackageGraph {
             message: format!("cannot render filtered bundle package manifest: {error}"),
         })?;
 
-        let mut package_files = BTreeSet::<String>::new();
+        let mut package_files = BTreeMap::<String, String>::new();
         for package_key in &included {
             let package = self.packages.get(package_key).ok_or_else(|| PackageError {
                 message: format!(
@@ -894,7 +894,7 @@ impl PackageGraph {
             })?;
             for relative in package_source_files(&package.root)? {
                 let source = package.root.join(&relative);
-                let relative_to_workspace = source
+                let source_relative = source
                     .strip_prefix(&self.workspace_root)
                     .map_err(|_| PackageError {
                         message: format!(
@@ -904,7 +904,18 @@ impl PackageGraph {
                     })?
                     .to_string_lossy()
                     .replace('\\', "/");
-                package_files.insert(relative_to_workspace);
+                let destination_relative = bundle_package_path(&source_relative);
+                if let Some(previous) =
+                    package_files.insert(destination_relative.clone(), source_relative.clone())
+                {
+                    if previous != source_relative {
+                        return Err(PackageError {
+                            message: format!(
+                                "bundle package path collision at `{destination_relative}`"
+                            ),
+                        });
+                    }
+                }
             }
         }
         let package_names = included
@@ -914,7 +925,10 @@ impl PackageGraph {
             .collect();
         Ok(PackageBundleSupport {
             root_manifest,
-            package_files: package_files.into_iter().collect(),
+            package_files: package_files
+                .into_iter()
+                .map(|(destination, source)| (source, destination))
+                .collect(),
             package_names,
         })
     }
@@ -1851,6 +1865,12 @@ fn package_source_files(root: &Path) -> Result<Vec<PathBuf>, PackageError> {
     visit(root, root, &mut files)?;
     files.sort_by(|left, right| left.to_string_lossy().cmp(&right.to_string_lossy()));
     Ok(files)
+}
+
+fn bundle_package_path(path: &str) -> String {
+    path.strip_prefix(".zelyra/packages/")
+        .map(|relative| format!("packages/{relative}"))
+        .unwrap_or_else(|| path.to_owned())
 }
 
 fn render_lock(packages: &BTreeMap<String, Package>) -> String {

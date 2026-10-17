@@ -389,6 +389,33 @@ fn package_add_downloads_exact_trusted_release_and_updates_offline_lock() {
         "{}",
         String::from_utf8_lossy(&compiled.stderr)
     );
+    let bundle = root.join("bundle-output");
+    let bundle_text = bundle.to_string_lossy().into_owned();
+    let bundled = zelyra(
+        &app,
+        &[
+            "module",
+            "bundle",
+            "main.zyl",
+            "pkg:billing",
+            "--output",
+            &bundle_text,
+        ],
+    );
+    assert!(
+        bundled.status.success(),
+        "{}",
+        String::from_utf8_lossy(&bundled.stderr)
+    );
+    let bundled_manifest: toml::Value =
+        toml::from_str(&fs::read_to_string(bundle.join("zelyra.toml")).unwrap()).unwrap();
+    assert!(bundled_manifest["package_sources"]["billing"].is_table());
+    let bundled_check = zelyra(&bundle, &["check", "main.zyl"]);
+    assert!(
+        bundled_check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&bundled_check.stderr)
+    );
     let (upgrade_registry_url, upgrade_server) = serve_registry(registry.clone());
     let updated = zelyra(
         &app,

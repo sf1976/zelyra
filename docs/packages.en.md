@@ -152,6 +152,10 @@ registry, signer, public key, and artifact digest in `zelyra.lock`. It does not
 resolve or download dependencies separately. Any package dependencies must
 be included inside the signed package directory and use contained relative paths.
 Installed package checks and execution are offline.
+The installer also compiler-checks the project after the tentative lock update
+and rolls back if the new dependency breaks it. `zelyra module bundle` moves
+cache-backed packages into portable `packages/<name>/<version>` paths in the
+bundle, preserves lock provenance, and keeps the generated project offline.
 
 Remove a dependency explicitly with `zelyra package remove <alias>`. The
 command validates the remaining project, rewrites `zelyra.toml` and

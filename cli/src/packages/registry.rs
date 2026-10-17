@@ -374,6 +374,7 @@ fn add_command(args: &mut impl Iterator<Item = String>, updating: bool) -> Resul
     source_table.insert(&alias, Item::Table(source));
     let new_manifest = document.to_string();
     let lock_path = workspace.join(LOCKFILE);
+    reject_output_target(&lock_path, "package lockfile")?;
     let previous_lock = match fs::read(&lock_path) {
         Ok(bytes) => Some(bytes),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
@@ -410,15 +411,18 @@ fn add_command(args: &mut impl Iterator<Item = String>, updating: bool) -> Resul
                 }
             }
         }
-        if let Err(rollback) = fs::remove_dir_all(&install_root) {
-            rollback_errors.push(format!("package rollback failed: {rollback}"));
+        if rollback_errors.is_empty() {
+            if let Err(rollback) = fs::remove_dir_all(&install_root) {
+                rollback_errors.push(format!("package rollback failed: {rollback}"));
+            }
         }
         return Err(if rollback_errors.is_empty() {
             error
         } else {
             format!(
-                "{error}; transaction rollback incomplete: {}",
-                rollback_errors.join("; ")
+                "{error}; transaction rollback incomplete: {}; package store path left for recovery at {}",
+                rollback_errors.join("; "),
+                install_root.display()
             )
         });
     }
@@ -537,6 +541,9 @@ fn parse_registry_url(text: &str) -> Result<Url, String> {
 fn validate_registry_artifact_path(path: &str) -> Result<(), String> {
     let candidate = Path::new(path);
     if path.contains('\\')
+        || path
+            .split('/')
+            .any(|segment| segment.is_empty() || segment == "." || segment == "..")
         || candidate
             .components()
             .any(|component| !matches!(component, Component::Normal(_)))
@@ -1257,7 +1264,14 @@ fn trusted_key(path: &Path, publisher: &str, key: &[u8]) -> Result<bool, String>
 }
 
 fn validate_archive_path(path: &str) -> Result<(), String> {
-    if path.is_empty() || path.starts_with('/') || path.contains('\\') || path.contains(':') {
+    if path.is_empty()
+        || path.starts_with('/')
+        || path.contains('\\')
+        || path.contains(':')
+        || path
+            .split('/')
+            .any(|segment| segment.is_empty() || segment == "." || segment == "..")
+    {
         return Err(format!("unsafe package source path `{path}`"));
     }
     let candidate = Path::new(path);
@@ -1647,6 +1661,9 @@ mod tests {
             .contains("safe relative"));
         assert!(parse_registry_url("http://packages.example.test/index.json").is_err());
         assert!(parse_registry_url("http://127.0.0.1:8123/index.json").is_ok());
+        assert!(validate_archive_path("src/./mod.zyl").is_err());
+        assert!(validate_archive_path("src//mod.zyl").is_err());
+        assert!(validate_registry_artifact_path("releases//x.zpkg").is_err());
     }
 
     #[test]

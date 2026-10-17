@@ -165,6 +165,11 @@ Artefakt-Hash im `zelyra.lock`. Transitive Abhängigkeiten werden noch nicht
 separat aufgelöst oder geladen. Paketabhängigkeiten müssen bereits im signierten
 Paketverzeichnis enthalten sein. Prüfung und Ausführung installierter Pakete sind
 offline möglich.
+Nach der vorläufigen Lock-Aktualisierung prüft der Installer außerdem das
+gesamte Projekt mit dem Compiler und rollt bei Fehlern zurück. `zelyra module
+bundle` verschiebt Pakete aus dem Cache in portable Pfade unter
+`packages/<name>/<version>`, erhält die Herkunft im Lock und hält das Bundle
+offline ausführbar.
 
 Eine Abhängigkeit wird ausdrücklich mit `zelyra package remove <alias>`
 entfernt. Der Befehl prüft das verbleibende Projekt und aktualisiert
