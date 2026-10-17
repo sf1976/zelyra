@@ -149,6 +149,18 @@ shows that none is set. This TOML limit applies to `zelyra run`, executed API
 handlers, and scheduled commands; `.env` does not override it. The static
 Canvas preview does not execute project functions.
 
+### Interactive console input
+
+When a console program calls `read_console(prompt)`, **Run** shows its prompt
+output live and reveals a labeled input field. **Send input** sends one line to
+the same running process; another `read_console` call can read the next line.
+**End input (EOF)** closes standard input as end-of-file. **Cancel** stops the
+run. A line can contain at most 4,096 UTF-8 bytes and cannot contain line
+breaks; the existing 15-second runtime limit still applies. Input stays in the
+local Studio process and is not written to project files or logs. Output is
+redacted against recognized project secrets before display and logging. CLI
+input through `zelyra run` remains available as before.
+
 The view reads `[runtime] max_stack_depth` from `zelyra.toml`, showing the
 runtime default of 20 when absent. The permitted configuration range is 1 to
 500; invalid configuration is reported. A compiler-backed call graph marks
@@ -157,6 +169,10 @@ If the project has more than 500 functions, Studio marks the recursion
 analysis incomplete. The call graph cannot prove an exact maximum depth;
 Studio does not invent one or a measured step count. The duration in
 milliseconds comes from the actual program run.
+
+The runtime profile also displays `[runtime].scheduler_job_timeout_seconds`.
+Its default is 300 seconds; a configured value limits only scheduler jobs in
+the installed, active Linux systemd service.
 
 ### Server-side PDF preview
 

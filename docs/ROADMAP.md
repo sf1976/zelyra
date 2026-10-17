@@ -394,11 +394,11 @@ compatibility behavior before changing syntax. See the detailed
   `push_mut`/`pop_mut` are implemented. Dedicated stack types and the broader
   algorithm-exercise suite remain follow-up work; functional arrays and maps
   otherwise retain value semantics.
-- [ ] **1.2.5 — interactive Studio console:** Give Studio Run a
-  real interactive input panel for `read_console`; preserve the pending prompt,
-  accept and submit a line, resume the running program, and support explicit
-  EOF/cancel and bounded execution. Keep CLI console input working and test the
-  same number-guessing program in CLI and Studio.
+- [x] **1.2.5 — interactive Studio console:** Studio Run streams prompt output
+  from the real Zelyra process, accepts one bounded input line, resumes the
+  same process, and supports explicit EOF, cancellation, a 15-second limit, and
+  secret-redacted output. The CLI remains interactive; browser E2E runs the
+  same console program in CLI and Studio and compares their output.
 - [ ] **1.2.5 — idiomatic algorithm exercises:** Ship runnable,
   documented console examples for common algorithms, including sorting,
   search, stacks, recursion, and dynamic programming, with checked inputs,

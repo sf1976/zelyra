@@ -415,11 +415,12 @@ werden. Details stehen im [Projektlayout-Arbeitsplan](release-plans/1.3.0-projec
   `push_mut`/`pop_mut` sind implementiert. Spezielle Stacktypen und eine
   breitere Übungssammlung bleiben Folgearbeit; funktionale Arrays und Maps
   behalten ansonsten ihre Wertsemantik.
-- [ ] **1.2.5 — interaktive Studio-Konsole:** Studio Run soll
-  ein interaktives Eingabefeld für `read_console` mit sichtbarer ausstehender
-  Eingabe, Zeilenübermittlung, Programmfortsetzung sowie explizitem EOF/Abbruch
-  und begrenzter Laufzeit erhalten. CLI-Eingabe bleibt verfügbar; dasselbe
-  Zahlenratespiel wird in CLI und Studio geprüft.
+- [x] **1.2.5 — interaktive Studio-Konsole:** Studio Run zeigt die Prompt-Ausgabe
+  des echten Zelyra-Prozesses live an, nimmt eine begrenzte Eingabezeile an und
+  setzt denselben Prozess fort. EOF, Abbruch, 15-Sekunden-Limit und
+  geheimnisredigierte Ausgabe sind unterstützt. Die CLI bleibt interaktiv;
+  Browser-E2E führt dasselbe Konsolenprogramm in CLI und Studio aus und
+  vergleicht die Ausgabe.
 - [ ] **1.2.5 — idiomatische Algorithmusübungen:** Ausführbare,
   erläuterte Konsolenbeispiele für verbreitete Algorithmen, einschließlich
   Sortierung, Suche, Stacks, Rekursion und dynamischer Programmierung,

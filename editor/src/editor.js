@@ -236,7 +236,7 @@ const messages = {
     canvasButton: "Canvas", canvasTitle: "Statische Zelyra-Vorschau", canvasTarget: "Seite oder View", canvasSample: "Beispieldaten (JSON)", canvasRender: "Vorschau aktualisieren", canvasSource: "Zur Deklaration", canvasComponents: "Erreichbare Komponenten", canvasComponentSource: "Deklaration öffnen", canvasComponentUses: "Verwendung", canvasComponentUseSource: "Verwendung öffnen", canvasFrameTitle: "Statische Canvas-Vorschau", canvasLoading: "Compiler und Renderer erzeugen die Vorschau …", canvasEmpty: "Im Projekt ist keine Seite oder View deklariert.", canvasError: "Vorschau nicht verfügbar: {0}", canvasSampleError: "Beispieldaten müssen ein JSON-Objekt sein.", canvasReady: "Statische Canvas-Vorschau: Hier laufen keine Projektfunktionen oder Skripte. Für die echte Webanwendung oben „Starten“ wählen und danach „Anwendung im Browser öffnen“.", canvasIncomplete: "Die Projektquelle ist nicht vollständig kompilierbar.",
     canvasThemeToken: "Theme-Farbe", canvasThemeColor: "Farbwert", canvasThemeApply: "Im Quelltext ändern", canvasThemeMissing: "Für Farbbearbeitung zelyra.theme.css im Projekt anlegen.", canvasThemeNoHex: "Keine unterstützte --z-color-*-Farbe mit hexadezimalem Wert gefunden.", canvasThemeChanged: "Theme-Farbe im ungespeicherten Quelltext geändert. Speichern übernimmt sie ins Projekt.", canvasThemeStale: "Theme-Datei wurde verändert. Farbe erneut auswählen.", canvasThemeError: "Theme-Bearbeitung fehlgeschlagen: {0}",
     runButton: "Starten", runButtonTitle: "main.zyl ausführen oder Webanwendung starten",
-    runOutputTitle: "Programmausgabe", runStarting: "Anwendung wird vorbereitet und gestartet …", runSuccess: "Programm erfolgreich beendet", runFailure: "Programm mit Fehler beendet", runTimeout: "Ausführung nach 15 Sekunden beendet", runOutputTruncated: "Die Ausgabe ist auf 64 KiB je Stream begrenzt.", runNoOutput: "Keine Ausgabe.", runStdout: "AUSGABE", runStderr: "FEHLER", runInputUnavailable: "Studio stellt dem Programm keine interaktive Eingabe bereit.", runWebReady: "Webanwendung läuft lokal:", runWebOpen: "Anwendung im Browser öffnen", runWebStop: "Vorschau beenden", runWebStopped: "Lokale Vorschau wurde beendet.",
+    runOutputTitle: "Programmausgabe", runStarting: "Anwendung wird vorbereitet und gestartet …", runSuccess: "Programm erfolgreich beendet", runFailure: "Programm mit Fehler beendet", runTimeout: "Ausführung nach 15 Sekunden beendet", runOutputTruncated: "Die Ausgabe ist auf 64 KiB je Stream begrenzt.", runNoOutput: "Keine Ausgabe.", runStdout: "AUSGABE", runStderr: "FEHLER", runConsoleInput: "Eingabe für read_console", runConsoleSubmit: "Eingabe senden", runConsoleEof: "Eingabe beenden (EOF)", runConsoleSent: "Eingabe wurde übermittelt.", runConsoleError: "Eingabe konnte nicht gesendet werden: {0}", runWebReady: "Webanwendung läuft lokal:", runWebOpen: "Anwendung im Browser öffnen", runWebStop: "Vorschau beenden", runWebStopped: "Lokale Vorschau wurde beendet.",
     runtimeBudgetButton: "Budget", runtimeBudgetTitle: "Laufzeitbudget und Rekursion", runtimeBudgetEnable: "Schrittbudget für Konsolenprogramme aktivieren", runtimeBudgetRange: "Schrittbudget (Regler: 1.000 bis 1.000.000)", runtimeBudgetNumber: "Maximale Schritte (1 bis 100.000.000)", runtimeBudgetWebHint: "Der Regler gilt für diesen Konsolenlauf. Das Projektlimit aus zelyra.toml gilt auch für API-Handler und geplante Commands.", runtimeProjectSteps: "Projektlimit für Interpreterläufe: {0}", runtimeStepsUnbounded: "nicht gesetzt (AST ohne Schrittlimit)", runtimeStepsConfigured: "{0} Schritte", runtimeSchedulerTimeout: "Zeitlimit je Scheduler-Auftrag: {0} Sekunden ({1})", runtimeSchedulerTimeoutConfigured: "konfiguriert", runtimeSchedulerTimeoutDefault: "Standard", runtimeRecursionTitle: "Mögliche Rekursion", runtimeRecursionNone: "Keine direkte oder gegenseitige Rekursion im analysierten Funktionsgraphen gefunden.", runtimeRecursionIncomplete: "Der Funktionsgraph ist zu groß; die Rekursionsanalyse ist unvollständig.", runtimeRecursionDirect: "Direkte Rekursion", runtimeRecursionMutual: "Gegenseitige Rekursion", runtimeStackDepth: "Maximale Stacktiefe laut Projekt: {0} ({1})", runtimeStackConfigured: "konfiguriert", runtimeStackDefault: "Standard", runtimeProfileError: "Laufzeitprofil konnte nicht gelesen werden: {0}", runtimeBudgetInvalid: "Bitte eine ganze Schrittzahl von 1 bis 100.000.000 eingeben.", runtimeBudgetExceeded: "Schrittbudget überschritten", runCancel: "Ausführung abbrechen", runCancelRequested: "Abbruch angefordert …", runCancelled: "Ausführung abgebrochen", runtimeProfileInvalid: "Der ungespeicherte Quelltext ist nicht vollständig analysierbar.",
     logs: "Logs", logsTitle: "Zelyra-Logs", logsLoading: "Logs werden geladen …", logsUnavailable: "Logs konnten nicht geladen werden.", logsEmpty: "Noch keine Programmausgabe protokolliert.", logsLevel: "Stufe", logsAll: "Alle", logsSearch: "Text filtern", logsRetention: "Lokal gespeichert; begrenzte Rotation", logsCount: "{0} Einträge angezeigt",
     taskHelp: "Kontexthilfe öffnen", taskHelpHelp: "Hilfe zum Begriff am Cursor anzeigen", taskProperties: "Dateieigenschaften öffnen",
@@ -346,7 +346,7 @@ const messages = {
     canvasButton: "Canvas", canvasTitle: "Static Zelyra preview", canvasTarget: "Page or view", canvasSample: "Sample data (JSON)", canvasRender: "Refresh preview", canvasSource: "Go to declaration", canvasComponents: "Reachable components", canvasComponentSource: "Open declaration", canvasComponentUses: "Usage", canvasComponentUseSource: "Open usage", canvasFrameTitle: "Static Canvas preview", canvasLoading: "Compiler and renderer are preparing the preview …", canvasEmpty: "This project declares no page or view.", canvasError: "Preview unavailable: {0}", canvasSampleError: "Sample data must be a JSON object.", canvasReady: "Static Canvas preview: project functions and scripts do not run here. To run the web application, select Start in the top bar, then Open application in browser.", canvasIncomplete: "The project source does not fully compile.",
     canvasThemeToken: "Theme color", canvasThemeColor: "Color value", canvasThemeApply: "Edit source", canvasThemeMissing: "Create zelyra.theme.css in the project to edit colors.", canvasThemeNoHex: "No supported --z-color-* declaration with a hex value was found.", canvasThemeChanged: "Theme color changed in the unsaved source. Save to apply it to the project.", canvasThemeStale: "Theme file changed. Select the color again.", canvasThemeError: "Theme edit failed: {0}",
     runButton: "Run", runButtonTitle: "Run main.zyl or start the web application",
-    runOutputTitle: "Program output", runStarting: "Preparing and starting the application …", runSuccess: "Program finished successfully", runFailure: "Program finished with an error", runTimeout: "Execution stopped after 15 seconds", runOutputTruncated: "Output is limited to 64 KiB per stream.", runNoOutput: "No output.", runStdout: "OUTPUT", runStderr: "ERROR", runInputUnavailable: "Studio does not provide interactive input to the program.", runWebReady: "Web application is running locally:", runWebOpen: "Open application in browser", runWebStop: "Stop preview", runWebStopped: "Local preview stopped.",
+    runOutputTitle: "Program output", runStarting: "Preparing and starting the application …", runSuccess: "Program finished successfully", runFailure: "Program finished with an error", runTimeout: "Execution stopped after 15 seconds", runOutputTruncated: "Output is limited to 64 KiB per stream.", runNoOutput: "No output.", runStdout: "OUTPUT", runStderr: "ERROR", runConsoleInput: "Input for read_console", runConsoleSubmit: "Send input", runConsoleEof: "End input (EOF)", runConsoleSent: "Input sent.", runConsoleError: "Could not send input: {0}", runWebReady: "Web application is running locally:", runWebOpen: "Open application in browser", runWebStop: "Stop preview", runWebStopped: "Local preview stopped.",
     runtimeBudgetButton: "Budget", runtimeBudgetTitle: "Runtime budget and recursion", runtimeBudgetEnable: "Enable a step budget for console programs", runtimeBudgetRange: "Step budget (slider: 1,000 to 1,000,000)", runtimeBudgetNumber: "Maximum steps (1 to 100,000,000)", runtimeBudgetWebHint: "The slider applies to this console run. The project limit in zelyra.toml also applies to API handlers and scheduled commands.", runtimeProjectSteps: "Project interpreter limit: {0}", runtimeStepsUnbounded: "not set (AST has no step limit)", runtimeStepsConfigured: "{0} steps", runtimeSchedulerTimeout: "Scheduler job time limit: {0} seconds ({1})", runtimeSchedulerTimeoutConfigured: "configured", runtimeSchedulerTimeoutDefault: "default", runtimeRecursionTitle: "Possible recursion", runtimeRecursionNone: "No direct or mutual recursion found in the analyzed function graph.", runtimeRecursionIncomplete: "The function graph is too large; recursion analysis is incomplete.", runtimeRecursionDirect: "Direct recursion", runtimeRecursionMutual: "Mutual recursion", runtimeStackDepth: "Project maximum stack depth: {0} ({1})", runtimeStackConfigured: "configured", runtimeStackDefault: "default", runtimeProfileError: "Could not read runtime profile: {0}", runtimeBudgetInvalid: "Enter an integer step count from 1 to 100,000,000.", runtimeBudgetExceeded: "Step budget exceeded", runCancel: "Cancel execution", runCancelRequested: "Cancellation requested …", runCancelled: "Execution cancelled", runtimeProfileInvalid: "The unsaved source cannot be fully analyzed.",
     logs: "Logs", logsTitle: "Zelyra logs", logsLoading: "Loading logs …", logsUnavailable: "Could not load logs.", logsEmpty: "No program output has been recorded yet.", logsLevel: "Level", logsAll: "All", logsSearch: "Filter text", logsRetention: "Stored locally; bounded rotation", logsCount: "Showing {0} entries",
     taskHelp: "Open contextual help", taskHelpHelp: "Show help for the term at the cursor", taskProperties: "Open file properties",
@@ -2912,9 +2912,16 @@ async function runProject() {
   const dialog = $("run-output");
   const state = $("run-output-state");
   const output = $("run-output-content");
+  const consoleForm = $("run-console-form");
   state.textContent = t("runStarting");
   state.dataset.kind = "pending";
   output.textContent = "";
+  consoleForm.hidden = true;
+  $("run-console-input").value = "";
+  $("run-console-input").disabled = true;
+  $("run-console-submit").disabled = true;
+  $("run-console-eof").disabled = true;
+  $("run-console-state").textContent = "";
   $("run-output-web-link").hidden = true;
   $("run-output-web-url").removeAttribute("href");
   if (!dialog.open) dialog.showModal();
@@ -2923,7 +2930,22 @@ async function runProject() {
   announce(t("runStarting"));
   try {
     const entryPath = studioEntryPath();
-    const result = await api("run", { method: "POST", body: JSON.stringify({ path: entryPath, maxSteps }) });
+    let runSettled = false;
+    const runRequest = api("run", { method: "POST", body: JSON.stringify({ path: entryPath, maxSteps }) })
+      .finally(() => { runSettled = true; });
+    while (!runSettled) {
+      try {
+        const progress = await api("run-progress");
+        output.textContent = progress.text || "";
+        output.scrollTop = output.scrollHeight;
+        consoleForm.hidden = !progress.active;
+        $("run-console-input").disabled = !progress.active;
+        $("run-console-submit").disabled = !progress.active;
+        $("run-console-eof").disabled = !progress.active;
+      } catch { /* the final run response remains authoritative */ }
+      if (!runSettled) await new Promise((resolve) => setTimeout(resolve, 120));
+    }
+    const result = await runRequest;
     const webLink = $("run-output-web-link");
     if (result.webApp && result.webUrl) {
       state.textContent = t("runWebReady");
@@ -2944,7 +2966,6 @@ async function runProject() {
       result.stderr && `${t("runStderr")}\n${result.stderr}`,
     ].filter(Boolean).join("\n\n");
     output.textContent = streams || t("runNoOutput");
-    output.textContent = `${output.textContent || t("runNoOutput")}\n\n${t("runInputUnavailable")}`;
     if (result.truncated) output.textContent += `\n${t("runOutputTruncated")}`;
     announce(statusText, result.success ? "success" : "error");
   } catch (error) {
@@ -2954,6 +2975,35 @@ async function runProject() {
     announce(error.message, "error");
   } finally {
     $("run-output-cancel").hidden = true;
+    consoleForm.hidden = true;
+    $("run-console-input").disabled = true;
+    $("run-console-submit").disabled = true;
+    $("run-console-eof").disabled = true;
+  }
+}
+
+async function submitConsoleInput(event) {
+  event.preventDefault();
+  const input = $("run-console-input");
+  try {
+    await api("run-input", { method: "POST", body: JSON.stringify({ line: input.value }) });
+    input.value = "";
+    input.focus();
+    $("run-console-state").textContent = t("runConsoleSent");
+  } catch (error) {
+    $("run-console-state").textContent = t("runConsoleError", error.message);
+  }
+}
+
+async function endConsoleInput() {
+  try {
+    await api("run-input", { method: "POST", body: JSON.stringify({ eof: true }) });
+    $("run-console-state").textContent = t("runConsoleEof");
+    $("run-console-input").disabled = true;
+    $("run-console-submit").disabled = true;
+    $("run-console-eof").disabled = true;
+  } catch (error) {
+    $("run-console-state").textContent = t("runConsoleError", error.message);
   }
 }
 
@@ -3921,6 +3971,8 @@ $("run-output-cancel").addEventListener("click", async () => {
     announce(error.message, "error");
   }
 });
+$("run-console-form").addEventListener("submit", submitConsoleInput);
+$("run-console-eof").addEventListener("click", endConsoleInput);
 $("run-output-web-stop").addEventListener("click", stopWebPreview);
 $("logs-button").addEventListener("click", openEditorLogs);
 $("logs-refresh").addEventListener("click", openEditorLogs);
