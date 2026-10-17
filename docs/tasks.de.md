@@ -49,6 +49,12 @@ werden. Für produktive Deployments sind auch systemd-Timer oder Plattform-
 Scheduler mögliche Hosts. Zelyra startet standardmäßig keinen residenten
 Scheduler.
 
+Für einen Zelyra-Webprozess unter Linux gibt es im aktiven 1.2.0-Zweig eine
+systemd-Benutzerdienst-Installation mit festem Port. Sie startet nach der
+Anmeldung; für den Boot ohne Anmeldung ist systemd-Lingering nötig. Siehe den
+[Dienstleitfaden](service.de.md). Dies ist kein Scheduler für deklarierte
+Zeitpläne.
+
 Ein Schedule mit `cron` verwendet fünf numerische Felder für Minute, Stunde,
 Monatstag, Monat und Wochentag. Unterstützt werden Zahlen, `*`, Listen,
 Bereiche und `/Schritt`; Monats- und Wochentagsnamen sind derzeit nicht

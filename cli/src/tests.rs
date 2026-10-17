@@ -1236,7 +1236,8 @@ fn doctor_warns_when_the_default_port_is_busy_but_a_fallback_is_available() {
 fn web_server_uses_an_ephemeral_port_when_the_requested_port_is_busy() {
     let occupied = TcpListener::bind(("127.0.0.1", 0)).unwrap();
     let requested = occupied.local_addr().unwrap();
-    let (listener, actual, used_fallback) = bind_web_application(&requested.to_string()).unwrap();
+    let (listener, actual, used_fallback) =
+        bind_web_application(&requested.to_string(), true).unwrap();
     assert!(used_fallback);
     assert_eq!(actual.ip(), requested.ip());
     assert_ne!(actual.port(), requested.port());

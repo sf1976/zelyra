@@ -70,6 +70,7 @@ mod project;
 mod reflect;
 mod route_cli;
 mod semantic_index;
+mod service_cli;
 mod task_cli;
 mod terminal;
 #[cfg(test)]
@@ -183,6 +184,7 @@ fn usage() {
     eprintln!(
         "  zelyra uninstall [--yes] [--dry-run] removes the active installation after confirmation"
     );
+    eprintln!("  zelyra service install --port <port> installs a project as a fixed-port Linux user service");
     eprintln!("  zelyra --tutorial invoice [directory] [--no-start] creates the guided invoice app, starts it, and opens the browser");
     eprintln!("  zelyra editor [directory] [--port <port>] [--no-open] starts local Studio and opens the default browser");
     eprintln!("  zelyra lsp starts the local JSON-RPC language server over stdio");
@@ -8942,13 +8944,16 @@ fn decimal_storage_error_span(program: &zelyra_ast::Program, message: &str) -> z
         })
 }
 
-fn bind_web_application(address: &str) -> std::io::Result<(TcpListener, SocketAddr, bool)> {
+fn bind_web_application(
+    address: &str,
+    allow_port_fallback: bool,
+) -> std::io::Result<(TcpListener, SocketAddr, bool)> {
     match TcpListener::bind(address) {
         Ok(listener) => {
             let actual = listener.local_addr()?;
             Ok((listener, actual, false))
         }
-        Err(error) if error.kind() == std::io::ErrorKind::AddrInUse => {
+        Err(error) if error.kind() == std::io::ErrorKind::AddrInUse && allow_port_fallback => {
             let candidates = address.to_socket_addrs()?.collect::<Vec<_>>();
             for candidate in candidates {
                 let fallback = SocketAddr::new(candidate.ip(), 0);
@@ -9018,11 +9023,21 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         usage();
         return ExitCode::from(2);
     };
-    let address = args.next().unwrap_or_else(|| "127.0.0.1:3000".into());
-    if args.next().is_some() {
-        usage();
-        return ExitCode::from(2);
+    let mut address = None;
+    let mut allow_port_fallback = true;
+    let mut fixed_port_given = false;
+    for argument in args {
+        if argument == "--fixed-port" && !fixed_port_given {
+            allow_port_fallback = false;
+            fixed_port_given = true;
+        } else if address.is_none() {
+            address = Some(argument);
+        } else {
+            usage();
+            return ExitCode::from(2);
+        }
     }
+    let address = address.unwrap_or_else(|| "127.0.0.1:3000".into());
     if validate_execution_settings(&path).is_err() {
         return ExitCode::from(1);
     }
@@ -9535,13 +9550,14 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         capability_grants.as_ref(),
         runtime_policy.as_ref(),
     );
-    let (listener, actual_address, used_fallback) = match bind_web_application(&address) {
-        Ok(bound) => bound,
-        Err(error) => {
-            eprintln!("error[E-WEB-002]: cannot start server on {address}: {error}");
-            return ExitCode::from(1);
-        }
-    };
+    let (listener, actual_address, used_fallback) =
+        match bind_web_application(&address, allow_port_fallback) {
+            Ok(bound) => bound,
+            Err(error) => {
+                eprintln!("error[E-WEB-002]: cannot start server on {address}: {error}");
+                return ExitCode::from(1);
+            }
+        };
     if used_fallback {
         println!("note: {address} is already in use; using free port {actual_address}");
     }

@@ -6,7 +6,9 @@ English · [Deutsche Ausgabe](/handbuch)
 
 Welcome to the complete Zelyra Handbook. It includes both the introductory textbook **"Learning Zelyra – Understandable Programming from the Foundations to Your Own Application"** (Parts I to X, Chapters 1 to 42), the **Technical Reference Manual** (Chapters 1 to 25), and comprehensive **Appendices** (A to J).
 
-> **Project status:** Zelyra 1.1.0 is the current stable release; the language compatibility line remains `0.1`. See the [implementation inventory](../../implemented.en.md) for supported scope and limits. The [1.1.0 release notes](../../release-notes/1.1.0.en.md) cover Studio and language-service changes; [1.0.7 notes](../../release-notes/1.0.7.en.md) remain available for earlier language and runtime changes.
+> **Project status:** Zelyra 1.1.5 is the current stable release; the language compatibility line remains `0.1`. See the [implementation inventory](../../implemented.en.md) for supported scope and limits. The [1.1.5 release notes](../../release-notes/1.1.5.en.md) cover local packages and modules; earlier release notes remain available for Studio and language-service changes.
+
+> **Service installation (work in progress for 1.2.0):** The current implementation branch documents a Linux systemd user-service command in the [service guide](../../service.en.md). It is not available in stable 1.1.5.
 
 > **Zelyra UI:** The [component reference](../../ui.en.md) documents the released components and their tested limits. The invoice PDF uses the browser print dialog; attach the saved file manually to the prefilled email draft.
 

@@ -25,10 +25,12 @@ telemetry, explicit effects, portable data, resource discipline, and honest
 proof claims guide every phase. The [manifesto](MANIFESTO.md) states the
 principles; the roadmap below tracks what is actually implemented.
 
-The current stable release is 1.1.2. **Current milestones** is the source of
-near-term commitments. Older numbered release sections below are retained as
-historical planning and evidence; they do not by themselves define current
-release targets. Longer-term ideas remain in the post-1.0 evolution section.
+The current stable release is 1.1.5. It ships the local module and package
+foundation; publisher trust and broader integrations remain explicit follow-up
+work. **Current milestones** is the source of near-term commitments. Older
+numbered release sections below are retained as historical planning and
+evidence; they do not by themselves define current release targets.
+Longer-term ideas remain in the post-1.0 evolution section.
 
 ## Release sequence through 1.3.0
 
@@ -38,14 +40,13 @@ for context and are not additional unscheduled commitments. Release completion
 requires implementation, documentation, positive and negative tests, and the
 security and compatibility gates stated for that milestone.
 
-- [ ] **1.1.5 — reusable Zelyra modules and packages:** Complete the local,
-  offline package workflow, typed public APIs and effects, deterministic locks,
-  reusable business modules, safe settings management, and documented
-  deployment evidence. Close remaining package trust, extension-boundary,
-  module configuration, and integration gaps. CSV is the first exchange
-  module; ODBC, Excel-compatible export, PDF workflows, and additional
-  backends are only included when their own bounded, tested integrations are
-  ready. No Laravel-specific implementation is part of this release.
+- [~] **1.1.5 — reusable Zelyra modules and packages (released foundation):**
+  The local offline package workflow, typed APIs, deterministic locks, module
+  settings, CSV examples, and bundle tooling shipped. Publisher trust,
+  extension-boundary, application-page configuration, and additional
+  integrations remain open and are carried into 1.2.5. ODBC, Excel-compatible
+  export, and PDF workflows are included only with bounded, tested
+  integrations. No Laravel-specific implementation is part of this release.
 - [ ] **1.2.0 — application operations and deployment foundation:** Add the
   declarative command/scheduler/job lifecycle and management views in bounded
   stages; typed request/forms and scoped query foundations; and the static
@@ -103,9 +104,11 @@ reprioritized.
 
 ## Active architecture milestones (1.1.5 through 1.3.0)
 
-These milestones are in progress and unreleased. Items with `[~]` are partially implemented; open subgoals remain explicit. Entries for released versions remain historical evidence.
+This section records the released 1.1.5 foundation and active work through
+1.3.0. Items with `[~]` are partially implemented; open subgoals remain
+explicit. Entries for older released versions remain historical evidence.
 
-### 🗺️ [ ] Zelyra 1.1.5 — backend-independent modules and packages
+### 🧪 [~] Zelyra 1.1.5 — released module foundation; follow-up remains
 
 - [~] **Local package import slice:** Existing `import "path.zyl" as alias` remains compatible; experimental `import "pkg:name" as alias` resolves the declared local package entry by dependency key, which may differ from the package identity, and uses existing `pub`, type, cycle, and capability checks. Package entries and internal source imports resolve within their package root and reject `.git/` and `target/`, which are deliberately omitted from package checksums. A generated bundle marks its source closure complete only after an empty unresolved-reference inventory and a successful compiler check; this does not mark deployment complete. A transitive three-source local package example also passes package locking, project linking, MIR verification, and AST/MIR result comparison for pure cross-package record construction and a field read; MIR remains experimental and is not selected by CLI execution.
 - [~] **Local manifest and lock foundation:** `[package]`, path-only `[dependencies.<name>]`, SemVer constraints, deterministic graph resolution, and `zelyra.lock` with sorted package metadata and SHA-256 hashes over manifests and `.zyl` source are implemented. Optional package-level `zelyra = "<SemVer requirement>"` is checked against the running CLI before the package graph is used and is visible in `zelyra module list`; changing it invalidates the manifest checksum and lockfile. Invalid and incompatible requirements have negative tests. Sibling packages can use `..` paths only when normalization stays inside the workspace; symlink traversal is rejected. `zelyra package lock [entry] [--check|--update]` is offline; compiler commands reject missing/stale locks when dependencies exist. An integration test mutates a transitive package source and confirms both `check` and `run` fail with `E-PKG-002` until the lock is explicitly updated. Tests also verify imports cannot bypass the checksum through `.git/` or `target/`. `zelyra module plan` accepts `pkg:<dependency-key>`; bundles include only used package dependencies and their transitive packages, preserve checksum-covered sources, and write a matching filtered manifest/lockfile. Multiple locally resolved versions of the same package name now work through distinct dependency aliases and paths; package lock entries include each path/name/version/checksum, and duplicate name/version identities at different paths are rejected. The local-only trust boundary is documented: lock hashes detect drift from a trusted lock but do not authenticate publishers. Registry, signatures, and publisher trust remain open.
@@ -282,17 +285,21 @@ compatibility behavior before changing syntax. See the detailed
   [`v1.1.2`](https://github.com/sf1976/zelyra/releases/tag/v1.1.2); its release
   workflow completed for Linux and Windows artifacts.
 
-- [~] **1.1.5 reusable modules and packages — active:** Finish the offline,
-  compiler-checked local package system, typed module APIs, backend-independent
-  host services, safe settings, and runnable modular deployment evidence.
-  Package trust, extension boundaries, application-page settings, exchange
-  modules, and release gates remain open; see the detailed 1.1.5 section above.
-  No Laravel import is part of this milestone.
-- [ ] **1.2.0 operations and deployment foundation:** Add staged command,
+- [~] **1.1.5 reusable modules and packages — released foundation:** The
+  local offline package workflow, typed APIs, settings, CSV examples, and
+  bundle tooling shipped in v1.1.5. Publisher trust, extension boundaries,
+  application-page settings, and additional exchange modules remain open and
+  are carried into 1.2.5. See the detailed 1.1.5 section above. No Laravel
+  import is part of this milestone.
+- [~] **1.2.0 operations and deployment foundation — active:** Add staged command,
   scheduler and job workflows, typed request/forms and scoped query
   foundations, `public/`, production serving guidance, Apache/Nginx reverse
   proxy examples, and Linux systemd service installation with an explicit
-  fixed port.
+  fixed port. `zelyra service install --port <port>` now writes a local-only
+  user unit, rejects occupied ports, and rolls the unit back if startup fails.
+  Starting at boot before user login still requires administrator-enabled
+  systemd lingering. Command/scheduler lifecycle, `public/`, and deployment
+  examples remain open.
 - [ ] **1.2.5 business workflow integration:** Complete bounded tenant-aware
   query/form/job slices and `zelyra service change --port <port>` with stop,
   restart, and rollback behavior. Expand service platforms only with lifecycle

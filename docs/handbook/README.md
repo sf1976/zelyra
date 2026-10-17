@@ -27,8 +27,13 @@ For the binding order of language sources and the required validation workflow,
 see the [source authority guide](../source-authority.md) and the
 [deutsche Quellenlandkarte](../source-authority.de.md).
 
-> Zelyra 1.1.0 is the current stable release. Supported workflows and limits
+> Zelyra 1.1.5 is the current stable release. Supported workflows and limits
 > are documented in the [implementation inventory](../implemented.en.md) and
 > [database support matrix](../database-support.en.md). Keep backups, inspect
 > generated SQL, and never test a destructive schema plan on data you cannot
 > afford to lose.
+
+For the unreleased Linux service-installation work targeting 1.2.0, see the
+[German](../service.de.md) and [English](../service.en.md) implementation
+guide. It describes current branch behavior and is not a claim that this
+feature is available in stable 1.1.5.

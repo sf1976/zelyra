@@ -6,7 +6,9 @@
 
 Willkommen beim vollständigen Zelyra-Handbuch. Es umfasst sowohl das didaktische Lehrbuch **»Zelyra lernen – Verständlich programmieren von den Grundlagen bis zur eigenen Anwendung«** (Teil I bis X, Kapitel 1 bis 42) als auch das **technische Referenzhandbuch** (Kapitel 1 bis 25) sowie ausführliche **Anhänge** (A bis J).
 
-> **Projektstatus:** Das aktuelle stabile Release ist Zelyra 1.1.0; die Sprachkompatibilitätslinie bleibt `0.1`. Der Funktionsumfang und seine Grenzen stehen in der [Implementierungsübersicht](../../implemented.de.md). Die [Release-Notizen 1.1.0](../../release-notes/1.1.0.de.md) beschreiben Studio und Sprachdienste; die [Notizen 1.0.7](../../release-notes/1.0.7.de.md) dokumentieren frühere Sprach- und Laufzeitänderungen.
+> **Projektstatus:** Das aktuelle stabile Release ist Zelyra 1.1.5; die Sprachkompatibilitätslinie bleibt `0.1`. Der Funktionsumfang und seine Grenzen stehen in der [Implementierungsübersicht](../../implemented.de.md). Die [Release-Notizen 1.1.5](../../release-notes/1.1.5.de.md) beschreiben lokale Pakete und Module; frühere Release-Notizen dokumentieren Studio und Sprachdienste.
+
+> **Dienstinstallation (in Arbeit für 1.2.0):** Der aktuelle Implementierungszweig dokumentiert einen Linux-systemd-Benutzerdienst im [Dienstleitfaden](../../service.de.md). In der stabilen Version 1.1.5 ist diese Funktion noch nicht enthalten.
 
 > **Zelyra UI:** Die [Komponentenreferenz](../../ui.de.md) beschreibt die veröffentlichten Komponenten und ihre geprüften Grenzen. Das Rechnungs-PDF wird im Browserdruckdialog erstellt; die gespeicherte Datei muss manuell an den vorausgefüllten E-Mail-Entwurf angehängt werden.
 

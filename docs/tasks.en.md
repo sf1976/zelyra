@@ -47,6 +47,11 @@ timezone, daylight-saving, and environment-variable behavior; verify these on
 the target host. systemd timers and platform schedulers are also possible
 deployment hosts. Zelyra does not start a resident scheduler by default.
 
+The active 1.2.0 branch adds a Linux systemd user-service installation for a
+Zelyra web process on a fixed port. It starts after login; boot without login
+requires systemd lingering. See the [service guide](service.en.md). This is
+not a scheduler for declared schedules.
+
 The `cron` property uses five numeric fields for minute, hour, day of month,
 month, and day of week. Numbers, `*`, lists, ranges, and `/step` are supported;
 month and weekday names are not supported yet. The field syntax and ranges are

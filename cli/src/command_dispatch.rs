@@ -172,6 +172,9 @@ pub(super) fn run() -> ExitCode {
     if command == "schedule" {
         return task_cli::schedule_command(args);
     }
+    if command == "service" {
+        return service_cli::service_command(args);
+    }
     if command == "editor" {
         return editor::command(args);
     }

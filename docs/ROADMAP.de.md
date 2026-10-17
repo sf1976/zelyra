@@ -27,11 +27,13 @@ Ressourcendisziplin und ehrliche Beweisaussagen leiten jede Phase. Das
 [Manifest](MANIFESTO.de.md) beschreibt die Prinzipien; die Roadmap kennzeichnet
 den tatsächlich implementierten Stand.
 
-Das aktuelle stabile Release ist 1.1.2. **Aktuelle Meilensteine** ist die
-verbindliche Übersicht der nächsten Vorhaben. Ältere, nummerierte Release-
-Abschnitte bleiben als historische Planung und Nachweise erhalten; sie legen
-für sich keine aktuellen Releaseziele fest. Langfristige Ideen stehen im
-Abschnitt zur Weiterentwicklung nach 1.0.0.
+Das aktuelle stabile Release ist 1.1.5. Es enthält die lokale Modul- und
+Paketgrundlage; Herausgebervertrauen und breitere Integrationen bleiben
+ausdrücklich offen. **Aktuelle Meilensteine** ist die verbindliche Übersicht
+der nächsten Vorhaben. Ältere, nummerierte Release-Abschnitte bleiben als
+historische Planung und Nachweise erhalten; sie legen für sich keine aktuellen
+Releaseziele fest. Langfristige Ideen stehen im Abschnitt zur Weiterentwicklung
+nach 1.0.0.
 
 ## Releasefolge bis 1.3.0
 
@@ -42,14 +44,14 @@ Release gilt erst nach Implementierung, Dokumentation, positiven und negativen
 Tests sowie den jeweiligen Sicherheits- und Kompatibilitätsprüfungen als
 abgeschlossen.
 
-- [ ] **1.1.5 — wiederverwendbare Zelyra-Module und Pakete:** Offline-
-  Paketabläufe, typisierte öffentliche APIs und Effekte, deterministische
-  Lockfiles, wiederverwendbare Geschäftsmodule, sichere Einstellungen und
-  dokumentierte Deployment-Nachweise abschließen. Offene Paketvertrauens-,
-  Erweiterungs-, Modulkonfigurations- und Integrationslücken schließen. CSV
-  ist das erste Austauschmodul; ODBC, Excel-kompatibler Export, PDF-Abläufe und
-  weitere Backends werden nur aufgenommen, wenn ihre begrenzten Integrationen
-  jeweils getestet sind. Keine Laravel-spezifische Umsetzung.
+- [~] **1.1.5 — wiederverwendbare Zelyra-Module und Pakete (veröffentlichte
+  Grundlage):** Der lokale Offline-Paketablauf, typisierte APIs, deterministische
+  Lockfiles, Moduleinstellungen, CSV-Beispiele und Bundle-Werkzeuge wurden
+  veröffentlicht. Herausgebervertrauen, Erweiterungsgrenzen, Konfiguration auf
+  Anwendungsseiten und weitere Integrationen bleiben offen und werden unter
+  1.2.5 weitergeführt. ODBC, Excel-kompatibler Export und PDF-Abläufe werden
+  erst mit begrenzten, getesteten Integrationen aufgenommen. Keine
+  Laravel-spezifische Umsetzung.
 - [ ] **1.2.0 — Betriebs- und Deployment-Grundlage:** Deklarative Commands,
   Scheduler und Jobabläufe samt Verwaltungsansichten schrittweise ergänzen;
   typisierte Request-/Form- und begrenzte Query-Grundlagen sowie den statischen
@@ -107,9 +109,12 @@ den aktiven Architektur-Meilensteinen oder bei ausdrücklicher Priorisierung.
 
 ## Aktive Architektur-Meilensteine (1.1.5 bis 1.3.0)
 
-Diese Meilensteine sind in Arbeit und noch nicht veröffentlicht. Bereits teilweise umgesetzte Punkte sind mit `[~]` markiert; offene Teilziele bleiben ausdrücklich stehen. Einträge veröffentlichter Versionen bleiben historische Nachweise.
+Dieser Abschnitt dokumentiert die veröffentlichte 1.1.5-Grundlage und aktive
+Arbeiten bis 1.3.0. `[~]` kennzeichnet teilweise implementierte Punkte; offene
+Teilziele bleiben ausdrücklich sichtbar. Ältere veröffentlichte Versionen
+bleiben historische Nachweise.
 
-### 🗺️ [ ] Zelyra 1.1.5 — backendunabhängiges Modul- und Paketsystem
+### 🧪 [~] Zelyra 1.1.5 — veröffentlichte Modulgrundlage; Folgearbeit offen
 
 - [~] **Lokaler Paketimport:** Bestehendes `import "pfad.zyl" as alias` bleibt kompatibel; der experimentelle Import `import "pkg:name" as alias` löst den lokalen Paketeinstieg über den Abhängigkeitsschlüssel auf, der von der Paketidentität abweichen darf. Vorhandene `pub`-, Typ-, Zyklus- und Capability-Prüfungen bleiben aktiv. Paketeinstiege und interne Quellimporte werden innerhalb des Paketverzeichnisses aufgelöst und dürfen `.git/` sowie `target/` nicht betreten, da diese Verzeichnisse bei Prüfsummen bewusst ausgelassen werden. Ein generiertes Bundle meldet den Quellabschluss erst bei leerer Liste ungelöster Verweise und erfolgreicher Compilerprüfung als vollständig; der Deploymentstatus bleibt davon unabhängig.
 - [~] **Lokales Manifest und Lockfile:** `[package]`, pfadbasierte `[dependencies.<name>]`, SemVer-Vorgaben, deterministische Graphauflösung und `zelyra.lock` mit sortierten Paketdaten sowie SHA-256 über Manifeste und `.zyl`-Quellen sind implementiert. Die optionale Paketvorgabe `zelyra = "<SemVer-Vorgabe>"` wird vor der Paketverwendung gegen die laufende CLI-Version geprüft und in `zelyra module list` angezeigt; Änderungen machen Manifestprüfsumme und Lockfile ungültig. Fehlerhafte und inkompatible Vorgaben haben Negativtests. Geschwisterpakete dürfen `..` verwenden, wenn der normalisierte Pfad im Workspace bleibt; Symlink-Traversierung wird abgelehnt. `zelyra package lock [entry] [--check|--update]` arbeitet offline; Compilerbefehle lehnen fehlende/veraltete Lockfiles bei Abhängigkeiten ab. Ein Integrationstest ändert eine transitive Paketquelle und bestätigt, dass sowohl `check` als auch `run` bis zur ausdrücklichen Lock-Aktualisierung mit `E-PKG-002` abbrechen. Ein Negativtest schützt außerdem davor, Prüfsummen durch Importe aus `.git/` oder `target/` zu umgehen. `zelyra module plan` akzeptiert `pkg:<Abhängigkeitsschlüssel>`; Bundles übernehmen nur die verwendeten Paketabhängigkeiten samt transitiver Pakete, erhalten deren Prüfsummenquellen und schreiben ein passendes gefiltertes Manifest/Lockfile. Mehrere lokal aufgelöste Versionen desselben Paketnamens funktionieren über unterschiedliche Abhängigkeitsschlüssel und Pfade; Lock-Einträge enthalten Pfad, Name, Version und Prüfsumme, während doppelte Name-Version-Identitäten an verschiedenen Pfaden abgelehnt werden. Die Vertrauensgrenze lokaler Pakete ist dokumentiert: Lock-Prüfsummen erkennen Abweichungen von einem bereits vertrauten Lockfile, authentifizieren aber keine Herausgeber. Registry, Signaturen und Herausgebervertrauen bleiben offen.
@@ -289,17 +294,22 @@ werden. Details stehen im [Projektlayout-Arbeitsplan](release-plans/1.3.0-projec
   veröffentlicht; der Release-Workflow für Linux- und Windows-Artefakte war
   erfolgreich.
 
-- [~] **1.1.5 wiederverwendbare Module und Pakete — aktiv:** Offline-
-  Paketsystem, typisierte Modul-APIs, Compilerprüfung, backendunabhängige
-  Hostservices, sichere Einstellungen und ausführbare Deployment-Nachweise
-  fertigstellen. Paketvertrauen, Erweiterungsgrenzen, Einstellungen auf
-  Anwendungsseiten, Austauschmodule und Release-Gates bleiben offen; siehe den
-  ausführlichen Abschnitt zu 1.1.5. Ein Laravel-Import gehört nicht dazu.
-- [ ] **1.2.0 Betriebs- und Deployment-Grundlage:** Command-, Scheduler- und
+- [~] **1.1.5 wiederverwendbare Module und Pakete — Grundlage veröffentlicht:**
+  Der lokale Offline-Paketablauf, typisierte APIs, Einstellungen, CSV-Beispiele
+  und Bundle-Werkzeuge wurden mit v1.1.5 veröffentlicht. Herausgebervertrauen,
+  Erweiterungsgrenzen, Einstellungen auf Anwendungsseiten und weitere
+  Austauschmodule bleiben offen und werden unter 1.2.5 weitergeführt. Siehe
+  den ausführlichen Abschnitt zu 1.1.5. Ein Laravel-Import gehört nicht dazu.
+- [~] **1.2.0 Betriebs- und Deployment-Grundlage — aktiv:** Command-, Scheduler- und
   Jobabläufe schrittweise hinzufügen, typisierte Request-/Form- und Query-
   Grundlagen schaffen, `public/` bereitstellen, Produktionsbetrieb sowie
   Apache-/Nginx-Reverse-Proxy dokumentieren und Linux-systemd-Dienste mit
-  ausdrücklich festgelegtem Port installieren.
+  ausdrücklich festgelegtem Port installieren. `zelyra service install
+  --port <port>` erstellt jetzt eine lokale Benutzerdienst-Unit, weist belegte
+  Ports zurück und rollt die Unit bei fehlgeschlagenem Start zurück; Boot ohne
+  Benutzeranmeldung erfordert systemd-Lingering durch eine
+  Administratorfreigabe. Command-/Scheduler-Lifecycle, `public/` und Deployment-Beispiele
+  sind noch offen.
 - [ ] **1.2.5 Integration der Geschäftsabläufe:** Begrenzte Mandanten-, Form-
   und Jobpfade sowie `zelyra service change --port <port>` mit Stopp, Neustart
   und Rollback fertigstellen. Weitere Serviceplattformen nur mit Lifecycle-
