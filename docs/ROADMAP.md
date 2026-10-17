@@ -59,8 +59,11 @@ security and compatibility gates stated for that milestone.
   directory, and safe environment references without copying secret values.
   The current work branch implements Linux `systemd --user` install, explicit
   port changes with unit rollback, status/restart/remove, `.env` references,
-  and a five-second listener check. It is unreleased; live user-manager
-  lifecycle coverage and the remaining deployment foundation are open.
+  and a five-second listener check. `zelyra new` now creates `public/`; new
+  English and German Apache/Nginx examples describe loopback proxying and the
+  host allowlist. Those web servers serve existing files from `public/`;
+  `zelyra serve` does not yet do so itself. This remains unreleased; live
+  user-manager lifecycle coverage and other deployment foundations are open.
 - [~] **1.2.5 — business workflow integration:** Finish and verify tenant-aware
   query/forms/authorization paths, durable bounded jobs and coordinated
   schedules, module settings on normal application pages, and the first

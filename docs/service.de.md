@@ -59,3 +59,7 @@ loginctl enable-linger "$USER"
 Zelyra aktiviert Lingering nicht selbst und benötigt dafür keine versteckte
 Privilegienerhöhung. Apache oder Nginx können auf `127.0.0.1:<port>` proxien;
 sie führen keine Zelyra-Quelldateien aus.
+
+Neue Projekte enthalten `public/` als Dokumentenverzeichnis für den
+vorgeschalteten Webserver. Beispiele und Grenzen stehen in der
+[Deployment-Anleitung](deployment.de.md).

@@ -64,8 +64,12 @@ abgeschlossen.
   speichern, ohne Geheimniswerte zu kopieren. Der aktuelle Arbeitszweig
   implementiert Linux-`systemd --user`-Installation, ausdrücklichen Portwechsel
   mit Unit-Rollback, `status`/`restart`/`remove`, `.env`-Referenz und eine
-  fünfsekündige Listenerprüfung. Live-Lifecycletests mit einem systemd-
-  Benutzermanager und die übrigen Grundlagen sind unveröffentlicht und offen.
+  fünfsekündige Listenerprüfung. `zelyra new` erzeugt jetzt `public/`; neue
+  deutsch- und englischsprachige Apache-/Nginx-Beispiele beschreiben den
+  Loopback-Proxy und die Host-Allowlist. Diese Webserver liefern vorhandene
+  Dateien aus `public/` aus; `zelyra serve` selbst tut dies noch nicht. Live-
+  Lifecycletests mit einem systemd-Benutzermanager und weitere Grundlagen sind
+  unveröffentlicht und offen.
 - [~] **1.2.5 — Integration der Geschäftsabläufe:** Mandantenbezogene
   Abfragen, Forms und Berechtigungen, begrenzte dauerhafte Jobs und koordinierte
   Zeitpläne, Moduleinstellungen auf normalen Anwendungsseiten sowie erste

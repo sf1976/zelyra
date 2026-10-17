@@ -811,6 +811,10 @@ console = false
     let mut files = vec![
         ("zelyra.toml", project_config.to_owned()),
         ("main.zyl", main_source),
+        // This directory is the optional document root for a fronting web
+        // server. Zelyra's development server does not serve arbitrary files
+        // from it; Apache/Nginx may serve static files and proxy app routes.
+        ("public/.keep", String::new()),
         // Keep the conventional module source directory present so the
         // generated Dockerfile can copy it even for a fresh single-file app.
         ("src/.keep", String::new()),

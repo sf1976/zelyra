@@ -3425,6 +3425,7 @@ fn generates_project_with_target_release_version() {
     assert!(dockerfile.contains("COPY . ./"));
     let compose = fs::read_to_string(path.join("docker-compose.mariadb.yml")).unwrap();
     assert!(compose.contains("ZELYRA_UI_STYLESHEET: ${ZELYRA_UI_STYLESHEET:-zelyra}"));
+    assert!(path.join("public/.keep").is_file());
     assert!(path.join("src/.keep").is_file());
     assert!(path.join("locales/de.json").is_file());
     assert!(path.join("locales/en.json").is_file());

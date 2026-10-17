@@ -57,3 +57,6 @@ loginctl enable-linger "$USER"
 Zelyra does not enable lingering itself or perform a hidden privilege
 escalation. Apache or Nginx can proxy to `127.0.0.1:<port>`; they do not
 execute Zelyra source files.
+
+New projects include `public/` as the fronting web server's document root. See
+the [deployment guide](deployment.en.md) for examples and limits.
