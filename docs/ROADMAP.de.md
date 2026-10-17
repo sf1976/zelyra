@@ -412,19 +412,22 @@ werden. Details stehen im [Projektlayout-Arbeitsplan](release-plans/1.3.0-projec
 - [~] **Sammlungen und Algorithmen:** Typisierte Pipelines mit `map`, `filter`,
   `find`, `reduce`, gefangene lexikalische Lambdas, Tuple-`entries`, geprüftes
   `map_increment` und opt-in veränderliche Arrays mit Indexupdates sowie
-  `push_mut`/`pop_mut` sind implementiert. Spezielle Stacktypen und eine
-  breitere Übungssammlung bleiben Folgearbeit; funktionale Arrays und Maps
-  behalten ansonsten ihre Wertsemantik.
+  `push_mut`/`pop_mut` sind implementiert. Die ausführbare Übungssammlung
+  deckt Sortierung, Suche, Stackverhalten, Rekursion und dynamische
+  Programmierung ab; spezielle Stacktypen bleiben Folgearbeit. Funktionale
+  Arrays und Maps behalten ansonsten ihre Wertsemantik.
 - [x] **1.2.5 — interaktive Studio-Konsole:** Studio Run zeigt die Prompt-Ausgabe
   des echten Zelyra-Prozesses live an, nimmt eine begrenzte Eingabezeile an und
   setzt denselben Prozess fort. EOF, Abbruch, 15-Sekunden-Limit und
   geheimnisredigierte Ausgabe sind unterstützt. Die CLI bleibt interaktiv;
   Browser-E2E führt dasselbe Konsolenprogramm in CLI und Studio aus und
   vergleicht die Ausgabe.
-- [ ] **1.2.5 — idiomatische Algorithmusübungen:** Ausführbare,
-  erläuterte Konsolenbeispiele für verbreitete Algorithmen, einschließlich
-  Sortierung, Suche, Stacks, Rekursion und dynamischer Programmierung,
-  mit geprüften Eingaben, begrenztem Aufwand, Sollausgaben und Grenztests.
+- [x] **1.2.5 — idiomatische Algorithmusübungen:** `examples/algorithms/`
+  enthält ausführbare Einfügesortierung, lineare Suche, einen arraybasierten
+  Stack, begrenzte rekursive Fakultät und Fibonacci mit dynamischer
+  Programmierung. Das Projekt begrenzt die Auswertung auf 20.000 Schritte und
+  jede Übung ihre Eingaben; erwartete Ausgabe und Grenzfälle sind dokumentiert
+  und durch CLI-Integrationstests geprüft.
 - [~] **Compilerdiagnosen:** Gezielte Fehler und Quellbereiche gibt es für
   Syntax, Typen, Callbacks, Pipelines und Laufzeitgrenzen. Breitere
   Korrekturvorschläge für verschachtelte Fehler bleiben Verbesserungsbedarf.

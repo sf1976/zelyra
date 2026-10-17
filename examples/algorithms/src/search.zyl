@@ -1,0 +1,21 @@
+pub fn linear_search(values: Int[], target: Int) -> Option<Int> {
+    if len(values) > 100 {
+        return None
+    }
+    mutable cursor = 0
+    for value in values {
+        if value == target {
+            return Some(cursor)
+        }
+        cursor = cursor + 1
+    }
+    return None
+}
+
+pub fn run() {
+    assert(linear_search([], 4) == None, "empty input has no match")
+    assert(linear_search([8, 3, 5, 3], 8) == Some(0), "search finds first position")
+    assert(linear_search([8, 3, 5, 3], 3) == Some(1), "search returns the first duplicate")
+    assert(linear_search([8, 3, 5, 3], 7) == None, "missing value returns None")
+    print("PASS linear search: empty, first, duplicate and missing values")
+}

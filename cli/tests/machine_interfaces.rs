@@ -1493,6 +1493,39 @@ fn mutable_array_example_checks_and_runs() {
 }
 
 #[test]
+fn algorithm_workbench_examples_are_bounded_and_match_expected_outputs() {
+    let path = example("algorithms/main.zyl");
+    let check = run(&["check", path.to_str().unwrap()]);
+    assert!(
+        check.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&check.stdout),
+        String::from_utf8_lossy(&check.stderr)
+    );
+    let execution = run(&["run", path.to_str().unwrap()]);
+    assert!(
+        execution.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&execution.stdout),
+        String::from_utf8_lossy(&execution.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&execution.stdout)
+            .lines()
+            .collect::<Vec<_>>(),
+        [
+            "PASS insertion sort: empty, single item, duplicates and negative values",
+            "PASS linear search: empty, first, duplicate and missing values",
+            "PASS array-backed stack: LIFO order and empty pop",
+            "PASS bounded recursion: factorial base cases, valid input and rejected bounds",
+            "PASS bottom-up Fibonacci: base cases, bounded work and invalid inputs",
+            "PASS all algorithm examples",
+        ]
+    );
+    assert!(execution.stderr.is_empty());
+}
+
+#[test]
 fn help_lists_the_route_inventory_command_and_syntax() {
     let output = run(&["--help"]);
     assert!(output.status.success());

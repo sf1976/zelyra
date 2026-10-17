@@ -391,18 +391,20 @@ compatibility behavior before changing syntax. See the detailed
 - [~] **Collections and algorithms:** Typed `map`, `filter`, `find`, and
   `reduce` pipelines, captured lexical lambdas, tuple `entries`, checked
   `map_increment`, and opt-in mutable arrays with indexed updates and
-  `push_mut`/`pop_mut` are implemented. Dedicated stack types and the broader
-  algorithm-exercise suite remain follow-up work; functional arrays and maps
-  otherwise retain value semantics.
+  `push_mut`/`pop_mut` are implemented. The runnable exercise project covers
+  sorting, search, stack behavior, recursion, and dynamic programming; dedicated
+  stack types remain follow-up work. Functional arrays and maps otherwise
+  retain value semantics.
 - [x] **1.2.5 — interactive Studio console:** Studio Run streams prompt output
   from the real Zelyra process, accepts one bounded input line, resumes the
   same process, and supports explicit EOF, cancellation, a 15-second limit, and
   secret-redacted output. The CLI remains interactive; browser E2E runs the
   same console program in CLI and Studio and compares their output.
-- [ ] **1.2.5 — idiomatic algorithm exercises:** Ship runnable,
-  documented console examples for common algorithms, including sorting,
-  search, stacks, recursion, and dynamic programming, with checked inputs,
-  bounded work, expected outputs, and edge-case tests.
+- [x] **1.2.5 — idiomatic algorithm exercises:** `examples/algorithms/` now
+  contains executable insertion sort, linear search, an array-backed stack,
+  bounded recursive factorial, and bottom-up Fibonacci. The project has a
+  20,000-step budget, per-algorithm input limits, documented expected output,
+  and CLI integration tests for edge cases.
 - [~] **Compiler diagnostics:** Targeted errors and source spans exist for
   syntax, types, callbacks, pipelines, and runtime limits. Broader recovery
   suggestions for nested errors remain an improvement area.
