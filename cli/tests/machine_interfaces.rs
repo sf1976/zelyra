@@ -174,24 +174,27 @@ fn run_step_budget_is_opt_in_and_reports_a_controlled_runtime_error() {
 }
 
 #[test]
-fn project_runtime_step_budget_limits_ast_run_without_cli_override() {
-    let (directory, path) =
-        temporary_project_source("project-step-budget", "fn main() { loop { } }");
+fn project_runtime_step_budget_limits_all_run_backends_without_cli_override() {
+    let (directory, path) = temporary_project_source(
+        "project-step-budget",
+        "fn main() -> Int { mutable i: Int = 0 while i < 1000 { i = i + 1 } return i }",
+    );
     fs::write(
         directory.join("zelyra.toml"),
         "[project]\nname = \"step-budget\"\n[runtime]\nmax_steps = 30\n",
     )
     .unwrap();
 
-    let output = run(&["run", path.to_str().unwrap()]);
-
-    assert!(!output.status.success());
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("E-RUNTIME-001"), "{stderr}");
-    assert!(
-        stderr.contains("execution step budget exceeded (limit 30)"),
-        "{stderr}"
-    );
+    for backend in ["ast", "mir", "bytecode"] {
+        let output = run(&["run", path.to_str().unwrap(), "--backend", backend]);
+        assert!(!output.status.success(), "{backend} unexpectedly succeeded");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("E-RUNTIME-001"), "{backend}: {stderr}");
+        assert!(
+            stderr.contains("execution step budget exceeded (limit 30)"),
+            "{backend}: {stderr}"
+        );
+    }
 
     let overridden = run(&["run", path.to_str().unwrap(), "--max-steps", "7"]);
     assert!(!overridden.status.success());
