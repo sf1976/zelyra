@@ -11,10 +11,12 @@ Business-, Datenbank- und Webanwendungen. Schemaabhängiges SQL, Formulare,
 CRUD, Views und Geschäftslogik greifen ineinander; gewöhnlicher Programmcode
 und natives SQL bleiben jederzeit möglich.
 
-> **Release 1.1.1 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.1.1)
+> **Release 1.1.2 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.1.2)
 >
 > Die Compilerprüfung und der Verifier decken klar abgegrenzte Bereiche ab. Sie beweisen nicht die Korrektheit beliebiger Anwendungen. Prüfe vor dem Einsatz die unterstützten Abläufe und Grenzen in der jeweiligen Dokumentation.
 
+Zelyra 1.1.2 entfernt den experimentellen Laravel-Analysator und den
+Gerüstbefehl. Siehe die [Release-Notizen 1.1.2](docs/release-notes/1.1.2.de.md).
 Zelyra 1.1.1 enthält die Studio-Korrekturen aus den
 [Release-Notizen 1.1.1](docs/release-notes/1.1.1.de.md). Zelyra 1.1.0 ergänzte
 ein offlinefähiges, eingebettetes Studio mit Sprachdiensten und einen
@@ -28,11 +30,11 @@ den [Release-Notizen 1.1.0](docs/release-notes/1.1.0.de.md), im
 
 Die Sprachkompatibilitätslinie bleibt `0.1`; Compiler-Releases ändern sie nicht automatisch. „Korrektheit beweisen“ ist ein Entwicklungsziel: Der Verifier unterscheidet geprüfte, zur Laufzeit geprüfte und nicht bewiesene Bereiche, ist aber kein allgemeiner Theorembeweiser.
 
-## Was Zelyra 1.1.1 bietet
+## Was Zelyra 1.1.2 bietet
 
 Zelyra verbindet Sprache, Compiler, Datenbank, Webanwendung und Studio in
-einem Arbeitsablauf. Release 1.1.1 umfasst die Funktionen aus 1.1.0 und die
-oben genannten Studio-Korrekturen:
+einem Arbeitsablauf. Release 1.1.2 behält die Funktionen aus 1.1.1 und 1.1.0 bei
+und entfernt den experimentellen Laravel-Migrationsbefehl:
 
 - statisch geprüfte Geschäftslogik und schemaabhängiges SQL;
 - MariaDB als primäre Laufzeit sowie geprüfte MySQL- und PostgreSQL-Abläufe;
@@ -55,8 +57,7 @@ oben genannten Studio-Korrekturen:
   isolierten Compose-Volumes, aufgabenorientierter Startseite, reinem Datumsfeld,
   serverseitiger Rechnungsnummer und vollständiger deutscher und englischer
   Quelltexterklärung;
-- CLI-Werkzeuge für Routen, Setup, Diagnose, Datenbank, Audit, SMTP und statische
-  Laravel-Migrationsberichte.
+- CLI-Werkzeuge für Routen, Setup, Diagnose, Datenbank, Audit und SMTP.
 - If-Ausdrücke, Record-Updates, typisierte Lambdas, geschützte verschachtelte
   Muster, Tupel, Stringinterpolation und ausdrücklich veränderliche lokale
   Arrays; `--max-steps` stoppt unbeschränkte Auswertung mit quellgenauer Diagnose.

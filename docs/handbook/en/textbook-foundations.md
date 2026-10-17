@@ -296,7 +296,7 @@ Zelyra opens a local HTTP server on `127.0.0.1:3030` with a random, single-use s
   *Cause:* Another local service is using the port. `zelyra setup` and `zelyra new` automatically detect collisions and select the next free host port.
 
 ### 6. Key takeaways
-1. The Zelyra CLI bundles compiler, runner, form checker, migrator, web server, and setup assistant in a single tool.
+1. The Zelyra CLI bundles compiler, runner, form checker, web server, and setup assistant in a single tool.
 2. `docker compose version` and `zelyra doctor` verify the health of your environment at any time.
 3. The stable release can be installed without Rust using `--release v1.1.0`.
 4. `zelyra setup --web` provides an intuitive, browser-based initial setup with a secure one-time token.

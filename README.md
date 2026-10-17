@@ -11,11 +11,13 @@ for database-backed business and web applications. It brings schema-aware SQL,
 forms, CRUD, views, and application logic together while keeping ordinary code
 and native SQL available.
 
-> **Release 1.1.1 · language compatibility line: 0.1** · [GitHub release](https://github.com/sf1976/zelyra/releases/tag/v1.1.1)
+> **Release 1.1.2 · language compatibility line: 0.1** · [GitHub release](https://github.com/sf1976/zelyra/releases/tag/v1.1.2)
 >
 > Compiler checks and the verifier cover defined scopes. They do not prove arbitrary applications correct. Review the documented support and limits for each workflow before deployment.
 
-Zelyra 1.1.1 includes the Studio fixes described in the
+Zelyra 1.1.2 removes the experimental Laravel analyzer and scaffold command.
+See the [1.1.2 release notes](docs/release-notes/1.1.2.en.md). Zelyra 1.1.1
+includes the Studio fixes described in the
 [1.1.1 release notes](docs/release-notes/1.1.1.en.md). Zelyra 1.1.0 added
 offline, embedded Studio language services and a standalone
 LSP, plus typed string interpolation and opt-in in-place mutation for local
@@ -26,11 +28,11 @@ and [implementation inventory](docs/implemented.en.md).
 
 The language compatibility line remains `0.1`; compiler releases do not change it automatically. “Prove correctness” is a design goal: the verifier distinguishes proven, runtime-checked, and unproven scopes, but is not a general-purpose theorem prover.
 
-## What Zelyra 1.1.1 provides
+## What Zelyra 1.1.2 provides
 
 Zelyra connects its language, compiler, database, web application, and Studio in
-one workflow. The 1.1.1 release includes the 1.1.0 features and the Studio
-reliability fixes listed above:
+one workflow. Release 1.1.2 retains the 1.1.1 and 1.1.0 capabilities and removes
+the experimental Laravel migration command:
 
 - statically checked business logic and schema-aware SQL;
 - MariaDB as the primary runtime, plus verified MySQL and PostgreSQL workflows;
@@ -51,8 +53,7 @@ reliability fixes listed above:
 - an invoice tutorial with repeatable sample data, available-port selection,
   isolated Compose volumes, a task-focused home page, date-only invoice input,
   server-assigned invoice numbers, and complete English and German guides;
-- CLI tools for routes, setup, diagnostics, databases, audit, SMTP, and static
-  Laravel migration reports.
+- CLI tools for routes, setup, diagnostics, databases, audit, and SMTP;
 - if expressions, record updates, typed lambdas, guarded nested patterns,
   tuples, string interpolation, and opt-in mutable local arrays;
   `--max-steps` stops unbounded evaluation with a source diagnostic;

@@ -64,9 +64,6 @@ pub(super) fn run() -> ExitCode {
         }
         return lsp::command();
     }
-    if command == "migrate" {
-        return laravel_migrator::command(args);
-    }
     if command == "setup" {
         let mut path = ".".to_owned();
         let mut path_given = false;

@@ -252,21 +252,6 @@ For usage details see the [web and database quickstart](getting-started.md),
   customers, and orders with JSON persistence, cent-exact discount/VAT
   calculations, cancellation, an action log, and runnable business checks.
 
-## Laravel Migrator
-
-- 🧪 `zelyra migrate laravel <project> --report <path>` statically inventories
-  recognized Laravel patterns. PHP, Artisan, databases, and `.env`
-  files are not run, contacted, or read. The new report is written outside the
-  source project and includes source locations, status, and next steps in
-  Markdown or JSON. The scanner covers Composer constraints, simple
-  routes, models, controllers, `Schema::create`, selected relationships,
-  validation entry points, jobs, Blade views, and integration calls. The 0.9.8
-  analyzer version is separate from the 0.9.6 mapping ruleset; fixture coverage
-  names syntactic findings without claiming a route-to-data graph or behavior
-  transfer. It is an experimental pattern scanner, not a PHP parser or proof of
-  business/security parity. Its separate compiler-checked scaffold contains no
-  copied business behavior. [Migrator details](laravel-migrator.en.md).
-
 ## APIs, authentication, permissions, and audit
 
 - ✅ Typed API declarations validate supported inputs, outputs, and errors;

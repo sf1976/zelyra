@@ -2869,29 +2869,3 @@ runs `db apply` in a separate container that is removed afterward; it does not
 require an already running web server. `--all` starts the web service only
 after successful schema application and then prints its address. Review-gated
 plans remain blocked; this order bypasses no precision or migration checks.
-
-## 25. Laravel migration: static analysis and scaffolding
-
-Zelyra includes a static migration assistant for existing Laravel 10.x and
-11.x applications. It reads source files as text; it does not execute PHP or
-Artisan, connect to the application's database, or read its `.env` files.
-Reports and generated projects must be placed outside the Laravel source tree.
-Findings are marked `partial` or `manual` so they are reviewed by a developer.
-
-Create a Markdown report, a JSON report for tools and CI, or an independent
-Zelyra scaffold:
-
-~~~bash
-zelyra migrate laravel ./my-laravel-project --report ./reports/migration.md
-zelyra migrate laravel ./my-laravel-project --report ./reports/migration.json --format json
-zelyra migrate laravel ./my-laravel-project --report ./reports/migration.md --output ./new-zelyra-project
-~~~
-
-The scanner recognizes selected models, schema migrations, relationships,
-routes, controller actions, validation rules, policies, tenant fields, direct
-SQL, transactions, mail/queue use, and package integrations. It is a pattern
-scanner, not a PHP parser, and does not establish behavior or security parity.
-The generated scaffold contains no copied Laravel business logic; review the
-report and implement each application-specific behavior separately. See the
-[Laravel Migrator guide](../../laravel-migrator.en.md) for the scanner's exact
-coverage and limits.
