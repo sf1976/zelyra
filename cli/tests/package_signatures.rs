@@ -445,6 +445,40 @@ fn package_add_downloads_exact_trusted_release_and_updates_offline_lock() {
     assert!(lock_after_update.contains("version = \"1.2.4\""));
     let checked_after_update = zelyra(&app, &["package", "lock", "--check"]);
     assert!(checked_after_update.status.success());
+    let cache_preview = zelyra(&app, &["package", "cache", "clean"]);
+    assert!(cache_preview.status.success());
+    assert!(String::from_utf8_lossy(&cache_preview.stdout).contains("1.2.3"));
+    assert!(app
+        .join(".zelyra/packages/sample/1.2.3/src/lib.zyl")
+        .is_file());
+    let manifest_before_stale_check = fs::read(app.join("zelyra.toml")).unwrap();
+    let mut stale_manifest = manifest_before_stale_check.clone();
+    stale_manifest.extend_from_slice(b"\n# force a stale lock\n");
+    fs::write(app.join("zelyra.toml"), stale_manifest).unwrap();
+    let stale_cache_check = zelyra(&app, &["package", "cache", "clean"]);
+    assert!(!stale_cache_check.status.success());
+    assert!(String::from_utf8_lossy(&stale_cache_check.stderr).contains("lock"));
+    fs::write(app.join("zelyra.toml"), manifest_before_stale_check).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::symlink;
+        let symlink_path = app.join(".zelyra/packages/sample/1.2.3/unexpected-link");
+        symlink(app.join("main.zyl"), &symlink_path).unwrap();
+        let symlink_cache_clean = zelyra(&app, &["package", "cache", "clean", "--apply"]);
+        assert!(!symlink_cache_clean.status.success());
+        assert!(String::from_utf8_lossy(&symlink_cache_clean.stderr).contains("symlink"));
+        fs::remove_file(symlink_path).unwrap();
+    }
+    let cache_cleaned = zelyra(&app, &["package", "cache", "clean", "--apply"]);
+    assert!(
+        cache_cleaned.status.success(),
+        "{}",
+        String::from_utf8_lossy(&cache_cleaned.stderr)
+    );
+    assert!(!app.join(".zelyra/packages/sample/1.2.3").exists());
+    assert!(app
+        .join(".zelyra/packages/sample/1.2.4/src/lib.zyl")
+        .is_file());
     fs::write(
         app.join("main.zyl"),
         "import \"pkg:billing\" as billing\nfn main() {}\n",
@@ -474,7 +508,7 @@ fn package_add_downloads_exact_trusted_release_and_updates_offline_lock() {
     assert!(manifest.get("dependencies").is_none());
     assert!(manifest.get("package_sources").is_none());
     assert!(app
-        .join(".zelyra/packages/sample/1.2.3/vendor/text/src/lib.zyl")
+        .join(".zelyra/packages/sample/1.2.4/vendor/text/src/lib.zyl")
         .is_file());
     let checked_after_remove = zelyra(&app, &["package", "lock", "--check"]);
     assert!(checked_after_remove.status.success());
@@ -484,6 +518,9 @@ fn package_add_downloads_exact_trusted_release_and_updates_offline_lock() {
         "{}",
         String::from_utf8_lossy(&compiled_after_remove.stderr)
     );
+    let cache_after_remove = zelyra(&app, &["package", "cache", "clean", "--apply"]);
+    assert!(cache_after_remove.status.success());
+    assert!(!app.join(".zelyra/packages/sample/1.2.4").exists());
 
     fs::remove_dir_all(root).unwrap();
 }

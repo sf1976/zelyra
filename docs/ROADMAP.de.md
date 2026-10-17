@@ -296,7 +296,11 @@ werden. Details stehen im [Projektlayout-Arbeitsplan](release-plans/1.3.0-projec
 - [~] **1.1.5 wiederverwendbare Module und Pakete — aktiv:** Offline-
   Paketsystem, typisierte Modul-APIs, Compilerprüfung, backendunabhängige
   Hostservices, sichere Einstellungen und ausführbare Deployment-Nachweise
-  fertigstellen. Paketvertrauen, Erweiterungsgrenzen, Einstellungen auf
+  fertigstellen. Signierte Quellpakete, explizites Herausgebervertrauen,
+  statischer Registry-Index, exakter Abruf, Update/Entfernen mit Rollback und
+  Lock-geschützte Cachebereinigung mit Vorschau sind implementiert und werden
+  im offenen Releasekandidaten geprüft. Separat veröffentlichte transitive
+  Auflösung, koordinierte Mehrfachupdates, Einstellungsformulare auf normalen
   Anwendungsseiten, Austauschmodule und Release-Gates bleiben offen; siehe den
   ausführlichen Abschnitt zu 1.1.5. Ein Laravel-Import gehört nicht dazu.
 - [ ] **1.2.0 Betriebs- und Deployment-Grundlage:** Command-, Scheduler- und

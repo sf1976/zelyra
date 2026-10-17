@@ -31,6 +31,7 @@ pub(super) fn command(
         "add" => add_command(&mut arguments, false),
         "update" => add_command(&mut arguments, true),
         "remove" => remove_command(&mut arguments),
+        "cache" => cache_command(&mut arguments),
         _ => Err(format!("unknown package action `{action}`")),
     };
     match result {
@@ -43,6 +44,209 @@ pub(super) fn command(
             ExitCode::FAILURE
         }
     }
+}
+
+fn cache_command(args: &mut impl Iterator<Item = String>) -> Result<String, String> {
+    if args.next().as_deref() != Some("clean") {
+        return Err("usage: zelyra package cache clean [--apply]".into());
+    }
+    let mut apply = false;
+    for argument in args {
+        match argument.as_str() {
+            "--apply" if !apply => apply = true,
+            _ => return Err("usage: zelyra package cache clean [--apply]".into()),
+        }
+    }
+    clean_package_cache(apply)
+}
+
+fn clean_package_cache(apply: bool) -> Result<String, String> {
+    let workspace = std::env::current_dir()
+        .map_err(|error| format!("cannot read current directory: {error}"))?;
+    let workspace = fs::canonicalize(workspace)
+        .map_err(|error| format!("cannot resolve project directory: {error}"))?;
+    let graph = PackageGraph::load(&workspace)
+        .map_err(|error| error.message)?
+        .ok_or_else(|| "package cache clean requires a project [package] table".to_owned())?;
+    graph.check_lockfile().map_err(|error| {
+        format!(
+            "{}; run `zelyra package lock --update` after reviewing dependency changes",
+            error.message
+        )
+    })?;
+    let active = graph
+        .inventory()
+        .into_iter()
+        .filter(|package| package.path.starts_with(".zelyra/packages/"))
+        .map(|package| package.path)
+        .collect::<BTreeSet<_>>();
+    let cache_root = workspace.join(".zelyra/packages");
+    ensure_no_symlink_path(&workspace, &cache_root)?;
+    match fs::symlink_metadata(&cache_root) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok("package cache is empty".into())
+        }
+        Err(error) => return Err(format!("cannot inspect package cache: {error}")),
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+            return Err("package cache root must be a real directory".into())
+        }
+        Ok(_) => {}
+    }
+    let mut candidates = Vec::new();
+    let mut names = fs::read_dir(&cache_root)
+        .map_err(|error| format!("cannot read package cache: {error}"))?
+        .map(|entry| entry.map(|entry| entry.path()))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("cannot inspect package cache: {error}"))?;
+    names.sort();
+    for name_dir in names {
+        let name_meta = fs::symlink_metadata(&name_dir)
+            .map_err(|error| format!("cannot inspect package cache path: {error}"))?;
+        if name_meta.file_type().is_symlink() {
+            return Err(format!(
+                "package cache may not contain symlinks: {}",
+                name_dir.display()
+            ));
+        }
+        if !name_meta.is_dir() {
+            continue;
+        }
+        let mut versions = fs::read_dir(&name_dir)
+            .map_err(|error| format!("cannot read cached package versions: {error}"))?
+            .map(|entry| entry.map(|entry| entry.path()))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("cannot inspect cached package versions: {error}"))?;
+        versions.sort();
+        for version_dir in versions {
+            let metadata = fs::symlink_metadata(&version_dir)
+                .map_err(|error| format!("cannot inspect cached package: {error}"))?;
+            if metadata.file_type().is_symlink() {
+                return Err(format!(
+                    "package cache may not contain symlinks: {}",
+                    version_dir.display()
+                ));
+            }
+            if !metadata.is_dir() {
+                continue;
+            }
+            let manifest = version_dir.join(MANIFEST);
+            match fs::symlink_metadata(&manifest) {
+                Ok(meta) if meta.is_file() && !meta.file_type().is_symlink() => {}
+                Ok(_) => continue,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(error) => {
+                    return Err(format!("cannot inspect cached package manifest: {error}"))
+                }
+            }
+            let relative = version_dir
+                .strip_prefix(&workspace)
+                .map_err(|_| "package cache path escaped the project workspace".to_owned())?
+                .to_string_lossy()
+                .replace('\\', "/");
+            if !active.contains(&relative) {
+                ensure_no_symlinks_in_tree(&version_dir)?;
+                candidates.push((relative, version_dir));
+            }
+        }
+    }
+    if candidates.is_empty() {
+        return Ok(
+            "package cache is clean; all cached package versions are referenced by zelyra.lock"
+                .into(),
+        );
+    }
+    if !apply {
+        let mut lines = vec![format!(
+            "{} unused package version(s) found (dry run):",
+            candidates.len()
+        )];
+        lines.extend(
+            candidates
+                .iter()
+                .map(|(relative, _)| format!("  {relative}")),
+        );
+        lines.push("review the list, then run `zelyra package cache clean --apply` to remove these sources".into());
+        return Ok(lines.join("\n"));
+    }
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| format!("system clock is before Unix epoch: {error}"))?
+        .as_nanos();
+    let quarantine = workspace.join(".zelyra").join(format!(
+        "package-cache-trash-{}-{stamp}",
+        std::process::id()
+    ));
+    ensure_no_symlink_path(&workspace, &quarantine)?;
+    fs::create_dir(&quarantine)
+        .map_err(|error| format!("cannot create package cache quarantine: {error}"))?;
+    for (relative, _) in &candidates {
+        let destination = quarantine.join(
+            relative
+                .strip_prefix(".zelyra/packages/")
+                .unwrap_or(relative),
+        );
+        if let Some(parent) = destination.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|error| format!("cannot prepare package cache quarantine: {error}"))?;
+        }
+    }
+    let mut moved = Vec::<(PathBuf, PathBuf)>::new();
+    for (relative, source) in &candidates {
+        let destination = quarantine.join(
+            relative
+                .strip_prefix(".zelyra/packages/")
+                .unwrap_or(relative),
+        );
+        if let Err(error) = fs::rename(source, &destination) {
+            let mut recovery_errors = Vec::new();
+            for (original, staged) in moved.iter().rev() {
+                if let Err(rollback_error) = fs::rename(staged, original) {
+                    recovery_errors.push(format!("{}: {rollback_error}", original.display()));
+                }
+            }
+            if recovery_errors.is_empty() {
+                let _ = fs::remove_dir_all(&quarantine);
+                return Err(format!(
+                    "cannot stage unused package `{relative}` for removal: {error}; prior moves were restored"
+                ));
+            }
+            return Err(format!(
+                "cannot stage unused package `{relative}` for removal: {error}; rollback was incomplete for {}; recoverable files remain under {}",
+                recovery_errors.join(", "),
+                quarantine.display()
+            ));
+        }
+        moved.push((source.clone(), destination));
+    }
+    if let Err(error) = fs::remove_dir_all(&quarantine) {
+        return Err(format!("unused packages were moved out of the active cache but quarantine cleanup failed: {error}; recoverable files remain under {}", quarantine.display()));
+    }
+    Ok(format!(
+        "removed {} unused cached package version(s); active package sources were preserved",
+        candidates.len()
+    ))
+}
+
+fn ensure_no_symlinks_in_tree(root: &Path) -> Result<(), String> {
+    for entry in
+        fs::read_dir(root).map_err(|error| format!("cannot inspect package tree: {error}"))?
+    {
+        let path = entry
+            .map_err(|error| format!("cannot inspect package tree entry: {error}"))?
+            .path();
+        let metadata = fs::symlink_metadata(&path)
+            .map_err(|error| format!("cannot inspect package tree entry: {error}"))?;
+        if metadata.file_type().is_symlink() {
+            return Err(format!(
+                "package cache cleanup refuses symlinked package content: {}",
+                path.display()
+            ));
+        }
+        if metadata.is_dir() {
+            ensure_no_symlinks_in_tree(&path)?;
+        }
+    }
+    Ok(())
 }
 
 fn remove_command(args: &mut impl Iterator<Item = String>) -> Result<String, String> {

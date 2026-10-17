@@ -1325,7 +1325,7 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> std::proce
     use std::process::ExitCode;
     let Some(action) = arguments.next() else {
         eprintln!(
-            "Usage: zelyra package <lock|keygen|sign|verify|trust|registry|add|update|remove> ..."
+            "Usage: zelyra package <lock|keygen|sign|verify|trust|registry|add|update|remove|cache> ..."
         );
         return ExitCode::from(2);
     };
