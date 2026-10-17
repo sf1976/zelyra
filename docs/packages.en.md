@@ -1,12 +1,12 @@
 # Zelyra packages (experimental)
 
-This guide describes two states: local offline packages from the released
-package workflow, and the unreleased registry work on the 1.2.5 development
-branch. The local workflow does not download packages or run build scripts.
-The development branch adds signed source artifacts, explicit publisher trust,
-static registry indexes, search, and verified installation of exact versions.
-These features are not yet part of a stable release. Projects without a
-`[package]` table keep the existing file-import behavior.
+This guide covers local offline packages and the experimental signed registry
+features in the unreleased 1.1.5 candidate. The local workflow does not download
+packages or run build scripts. The candidate adds signed source artifacts,
+explicit publisher trust, static registry indexes, search, and verified exact-
+version installation. Separately published transitive packages and settings
+pages for ordinary applications remain open. Projects without a `[package]`
+table keep the existing file-import behavior.
 
 Local packages are currently source dependencies, not installable modules
 managed through ordinary application pages. `zelyra module list` provides a
@@ -102,10 +102,12 @@ authenticate a publisher, prove where files came from, or make a malicious
 package safe. `zelyra package lock --update` deliberately accepts the current
 local files as the new locked contents, so review the source and diff before
 using that option. The local offline package workflow still does not download
-packages. The unreleased 1.2.5 development branch implements signed source
+packages. The unreleased 1.1.5 candidate also implements signed source
 artifacts, an explicit local publisher trust file, a deterministic static
 registry index builder, search, and verified installation of exact versions.
-Separately published transitive dependencies remain open. A signature proves that the corresponding
+Downloads occur only after an explicit `add` or `update`; checks and program
+execution can then run offline. Separately published transitive dependencies
+remain open. A signature proves that the corresponding
 trusted key signed the artifact digest. It does not prove that the code is safe
 or that a publisher is reputable. Package `effects` ceilings are additional
 compile-time limits; they do not grant or bypass application capabilities, SQL

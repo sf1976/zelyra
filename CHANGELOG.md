@@ -29,6 +29,21 @@ releases follow Semantic Versioning independently of the language line.
   database. / Ein wiederverwendbares, nebenwirkungsfreies Paket `csv_import`
   zum Geschäftsmodule-Beispiel hinzufügen. Es prüft nicht leere Kopfspalten
   und Zeilenbreiten, ohne in eine Datenbank zu schreiben.
+- Add experimental Ed25519-signed source packages, explicit publisher trust,
+  static registry indexes, package search, and exact-version installation and
+  updates. Multi-alias update plans validate all packages before switching the
+  manifest and lock; cache cleanup previews by default and retains versions
+  still used by the lock. Registry downloads are explicit, and installed
+  projects remain usable offline. Separately published transitive dependencies
+  and application-served settings pages remain roadmap work. / Experimentelle
+  Ed25519-Signaturen für Quellpakete, ausdrückliches Herausgebervertrauen,
+  statische Registry-Indizes, Paketsuche sowie Installation und Updates
+  exakter Versionen ergänzen. Mehrfachupdates prüfen erst alle Pakete und
+  schalten dann Manifest und Lockfile um; Cachebereinigung zeigt standardmäßig
+  nur eine Vorschau und erhält noch gesperrte Versionen. Registry-Downloads
+  erfolgen ausdrücklich; installierte Projekte bleiben offline nutzbar.
+  Separat veröffentlichte transitive Abhängigkeiten und Einstellungsseiten
+  bleiben Roadmap-Arbeit.
 
 ## 1.1.2 — 2026-10-17
 
