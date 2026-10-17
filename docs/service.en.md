@@ -45,20 +45,24 @@ account configuration and may require administrator privileges.
 
 ## Manage and remove
 
-Zelyra prints the unit name and status command after installation. Other
-systemd operations are available directly:
+Zelyra prints the unit name and status command after installation. CLI
+subcommands always target the Zelyra project in the current working directory:
 
 ```sh
-systemctl --user status <unit>
-systemctl --user restart <unit>
-systemctl --user stop <unit>
-systemctl --user disable --now <unit>
+zelyra service status
+zelyra service restart
+zelyra service stop
+zelyra service change --port 3001
+zelyra service remove
 ```
 
-To remove the unit, disable and stop it first, delete the printed unit file
-from `~/.config/systemd/user/` (or the configured `XDG_CONFIG_HOME`), then
-run `systemctl --user daemon-reload`. A dedicated `service change`, `status`,
-or `remove` subcommand is not part of this first release slice.
+`change` checks the new port, stops the service, atomically rewrites its
+managed unit, and starts it again. If the change fails, Zelyra attempts to
+restore the previous unit and restart the old service. The error reports if
+that rollback also fails. `remove` stops and disables only the Zelyra-marked
+unit belonging to this project. `status`, `restart`, `stop`, and `remove` take
+no extra arguments. For diagnostics and manual administration,
+`systemctl --user status <unit>` remains available.
 
 ## Limits and security
 
@@ -75,5 +79,4 @@ or `remove` subcommand is not part of this first release slice.
   Zelyra web process.
 
 Linux systemd is the only service manager supported so far. Other operating
-systems, automatic port changes, and an integrated service-change operation
-are not implemented yet.
+systems and automatic port changes are not implemented yet.

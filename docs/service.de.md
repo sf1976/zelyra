@@ -48,20 +48,25 @@ Kontokonfiguration ändert und Administratorrechte erfordern kann.
 ## Verwaltung und Entfernen
 
 Zelyra zeigt nach der Installation den Namen der Unit und den Statusbefehl an.
-Weitere systemd-Befehle:
+Die CLI-Unterbefehle beziehen sich immer auf das Zelyra-Projekt im aktuellen
+Arbeitsverzeichnis:
 
 ```sh
-systemctl --user status <unit>
-systemctl --user restart <unit>
-systemctl --user stop <unit>
-systemctl --user disable --now <unit>
+zelyra service status
+zelyra service restart
+zelyra service stop
+zelyra service change --port 3001
+zelyra service remove
 ```
 
-Zum vollständigen Entfernen zuerst den Dienst deaktivieren und stoppen, dann
-die ausgegebene Unit-Datei aus `~/.config/systemd/user/` beziehungsweise dem
-konfigurierten `XDG_CONFIG_HOME` löschen und `systemctl --user daemon-reload`
-ausführen. Ein eigener `service change`, `status` oder `remove`-Unterbefehl
-ist in diesem ersten Release-Schnitt noch nicht enthalten.
+`change` prüft den neuen Port, stoppt den Dienst, schreibt die verwaltete Unit
+atomar neu und startet ihn wieder. Scheitert die Änderung, versucht Zelyra,
+die vorherige Unit wiederherzustellen und den bisherigen Dienst neu zu starten.
+Der Fehler nennt ausdrücklich, wenn auch dieser Rollback fehlschlägt.
+`remove` stoppt und deaktiviert nur die zu diesem Projekt gehörende,
+Zelyra-markierte Unit. `status`, `restart`, `stop` und `remove` benötigen keine
+zusätzlichen Argumente. Für Diagnose und manuelle Verwaltung bleibt
+`systemctl --user status <unit>` verfügbar.
 
 ## Grenzen und Sicherheit
 
@@ -77,6 +82,5 @@ ist in diesem ersten Release-Schnitt noch nicht enthalten.
 - Apache und Nginx führen keine `.zyl`-Dateien aus. Sie leiten HTTP an den
   laufenden Zelyra-Webprozess weiter.
 
-Der Dienstmanager unterstützt derzeit Linux systemd. Andere Betriebssysteme,
-automatische Portwechsel und eine integrierte Dienständerung sind noch nicht
-implementiert.
+Der Dienstmanager unterstützt derzeit Linux systemd. Andere Betriebssysteme
+und automatische Portwechsel sind nicht implementiert.

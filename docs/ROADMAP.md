@@ -58,14 +58,12 @@ security and compatibility gates stated for that milestone.
   definition (Linux systemd first). A busy port is an error; installation must
   never silently select another port. Persist project, executable, working
   directory, and safe environment references without copying secret values.
+  Include `service change --port`, `status`, `restart`, `stop`, and `remove`
+  with ownership checks and rollback for configuration changes.
 - [ ] **1.2.5 — business workflow integration:** Finish and verify tenant-aware
   query/forms/authorization paths, durable bounded jobs and coordinated
   schedules, module settings on normal application pages, and the first
-  reusable data-exchange integrations. `zelyra service change --port <port>`
-  validates the new port, stops the old service, updates its configuration,
-  and starts the new one; on failure it restores the prior configuration and
-  service. Include explicit `status`, `restart`, and `remove` operations where
-  the platform service manager supports them. Extend service support to other
+  reusable data-exchange integrations. Extend service support to other
   operating systems only with lifecycle and upgrade tests.
 - [ ] **1.2.8 — cross-cutting integrity and distribution:** Deliver tested
   vertical slices for state transitions, audit/history, balanced ledger
@@ -297,6 +295,9 @@ compatibility behavior before changing syntax. See the detailed
   proxy examples, and Linux systemd service installation with an explicit
   fixed port. `zelyra service install --port <port>` writes a local-only user
   unit, rejects occupied ports, and rolls it back if startup fails. The
+  service CLI also changes a port with stop/restart and unit rollback, and
+  provides project-scoped status, restart, stop, and remove operations after
+  verifying the managed unit identity. The
   `public/` directory serves bounded local files after application routes,
   rejects traversal and out-of-root symlinks, and preserves binary bytes.
   Starting a user service at boot before login requires administrator-enabled
@@ -304,9 +305,7 @@ compatibility behavior before changing syntax. See the detailed
   open. See the [service](service.en.md) and
   [public-directory](public-directory.en.md) guides.
 - [ ] **1.2.5 business workflow integration:** Complete bounded tenant-aware
-  query/form/job slices and `zelyra service change --port <port>` with stop,
-  restart, and rollback behavior. Expand service platforms only with lifecycle
-  tests.
+  query/form/job slices and extend service platforms only with lifecycle tests.
 - [ ] **1.2.8 integrity and distribution:** Integrate tested state transition,
   audit/history, balanced ledger, reflection, health, bundle, static `public/`
   and reverse-proxy security slices; make no unsupported compliance claims.

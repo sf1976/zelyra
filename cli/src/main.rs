@@ -184,7 +184,9 @@ fn usage() {
     eprintln!(
         "  zelyra uninstall [--yes] [--dry-run] removes the active installation after confirmation"
     );
-    eprintln!("  zelyra service install --port <port> installs a project as a fixed-port Linux user service");
+    eprintln!(
+        "  zelyra service install|change --port <port> manages a fixed-port Linux user service"
+    );
     eprintln!("  zelyra --tutorial invoice [directory] [--no-start] creates the guided invoice app, starts it, and opens the browser");
     eprintln!("  zelyra editor [directory] [--port <port>] [--no-open] starts local Studio and opens the default browser");
     eprintln!("  zelyra lsp starts the local JSON-RPC language server over stdio");

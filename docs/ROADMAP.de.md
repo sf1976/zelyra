@@ -63,15 +63,13 @@ abgeschlossen.
   Betriebssystemdienst installieren (zuerst Linux systemd). Ein belegter Port
   ist ein Fehler; der Befehl darf nicht still einen anderen Port wählen.
   Projekt, Programmdatei, Arbeitsverzeichnis und sichere Env-Referenzen
-  speichern, ohne Geheimniswerte zu kopieren.
+  speichern, ohne Geheimniswerte zu kopieren. `service change --port`,
+  `status`, `restart`, `stop` und `remove` mit Projektzuordnung und Rollback
+  bei Konfigurationsfehlern gehören ebenfalls zu dieser Stufe.
 - [ ] **1.2.5 — Integration der Geschäftsabläufe:** Mandantenbezogene
   Abfragen, Forms und Berechtigungen, begrenzte dauerhafte Jobs und koordinierte
   Zeitpläne, Moduleinstellungen auf normalen Anwendungsseiten sowie erste
   wiederverwendbare Datenaustausch-Integrationen fertigstellen und prüfen.
-  `zelyra service change --port <port>` prüft den Zielport, stoppt den alten
-  Dienst, aktualisiert seine Konfiguration und startet ihn neu. Bei Fehlern
-  stellt es Konfiguration und Dienst wieder her. `status`, `restart` und
-  `remove` ergänzen, sofern der Plattformdienstmanager dies unterstützt.
   Weitere Betriebssysteme erst nach Lifecycle- und Upgrade-Tests unterstützen.
 - [ ] **1.2.8 — Integrität und Distribution:** Geprüfte vertikale Schnitte für
   Zustandsübergänge, Audit/Historie, ausgeglichene Ledger-Buchungen,
@@ -310,12 +308,13 @@ werden. Details stehen im [Projektlayout-Arbeitsplan](release-plans/1.3.0-projec
   begrenzte lokale Dateien nach Anwendungsrouten aus, weist Traversal und
   Symlinks außerhalb des Ordners zurück und erhält Binärdaten unverändert.
   Boot ohne Benutzeranmeldung erfordert systemd-Lingering durch eine
-  Administratorfreigabe. Command-/Scheduler-Lifecycle und Deployment-Beispiele
-  bleiben offen. Siehe [Dienst](service.de.md) und
-  [öffentlichen Ordner](public-directory.de.md).
+  Administratorfreigabe. Der Dienstbetrieb bietet außerdem Portwechsel mit
+  Stopp/Neustart und Unit-Rollback sowie projektbezogenes `status`, `restart`,
+  `stop` und `remove` nach Prüfung der verwalteten Unit-Identität.
+  Command-/Scheduler-Lifecycle und Deployment-Beispiele bleiben offen. Siehe
+  [Dienst](service.de.md) und [öffentlichen Ordner](public-directory.de.md).
 - [ ] **1.2.5 Integration der Geschäftsabläufe:** Begrenzte Mandanten-, Form-
-  und Jobpfade sowie `zelyra service change --port <port>` mit Stopp, Neustart
-  und Rollback fertigstellen. Weitere Serviceplattformen nur mit Lifecycle-
+  und Jobpfade fertigstellen. Weitere Serviceplattformen nur mit Lifecycle-
   Tests ergänzen.
 - [ ] **1.2.8 Integrität und Distribution:** Geprüfte Schnitte für
   Zustandsübergänge, Audit/Historie, ausgeglichenes Ledger, Reflection,

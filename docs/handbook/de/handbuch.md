@@ -8,7 +8,7 @@ Willkommen beim vollständigen Zelyra-Handbuch. Es umfasst sowohl das didaktisch
 
 > **Projektstatus:** Das aktuelle stabile Release ist Zelyra 1.1.5; die Sprachkompatibilitätslinie bleibt `0.1`. Der Funktionsumfang und seine Grenzen stehen in der [Implementierungsübersicht](../../implemented.de.md). Die [Release-Notizen 1.1.5](../../release-notes/1.1.5.de.md) beschreiben lokale Pakete und Module; frühere Release-Notizen dokumentieren Studio und Sprachdienste.
 
-> **Dienstinstallation (in Arbeit für 1.2.0):** Der aktuelle Implementierungszweig dokumentiert einen Linux-systemd-Benutzerdienst im [Dienstleitfaden](../../service.de.md). In der stabilen Version 1.1.5 ist diese Funktion noch nicht enthalten.
+> **Dienstverwaltung (in Arbeit für 1.2.0):** Der aktuelle Implementierungszweig dokumentiert Installation, Portwechsel und Lifecycle-Befehle für Linux-systemd-Benutzerdienste im [Dienstleitfaden](../../service.de.md). In der stabilen Version 1.1.5 ist diese Funktion noch nicht enthalten.
 
 > **Statische `public/`-Dateien (in Arbeit für 1.2.0):** Der [Leitfaden zum öffentlichen Ordner](../../public-directory.de.md) beschreibt aktuellen Umfang und Grenzen. In der stabilen Version 1.1.5 ist diese Funktion noch nicht enthalten.
 

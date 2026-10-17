@@ -8,7 +8,7 @@ Welcome to the complete Zelyra Handbook. It includes both the introductory textb
 
 > **Project status:** Zelyra 1.1.5 is the current stable release; the language compatibility line remains `0.1`. See the [implementation inventory](../../implemented.en.md) for supported scope and limits. The [1.1.5 release notes](../../release-notes/1.1.5.en.md) cover local packages and modules; earlier release notes remain available for Studio and language-service changes.
 
-> **Service installation (work in progress for 1.2.0):** The current implementation branch documents a Linux systemd user-service command in the [service guide](../../service.en.md). It is not available in stable 1.1.5.
+> **Service management (work in progress for 1.2.0):** The current implementation branch documents installation, port changes, and lifecycle commands for Linux systemd user services in the [service guide](../../service.en.md). It is not available in stable 1.1.5.
 
 > **Static `public/` files (work in progress for 1.2.0):** See the [public-directory guide](../../public-directory.en.md) for current behavior and limits. This feature is not available in stable 1.1.5.
 

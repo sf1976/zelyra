@@ -1,10 +1,15 @@
 use super::*;
 
-const SERVICE_HELP: &str = "Usage: zelyra service install --port <1..65535>\n\nInstalls and starts this project as a per-user Linux systemd service. It binds Zelyra to 127.0.0.1 and never chooses a different port. The command requires main.zyl, a working systemd user manager, and an unused port. See docs/service.en.md for reboot persistence and reverse-proxy setup.";
+const SERVICE_HELP: &str = "Usage: zelyra service install --port <1..65535>\n       zelyra service change --port <1..65535>\n       zelyra service status\n       zelyra service restart\n       zelyra service stop\n       zelyra service remove\n\nManages this project as a per-user Linux systemd service bound to 127.0.0.1. Ports are always explicit; Zelyra never chooses another port. See docs/service.en.md for reboot persistence and reverse-proxy setup.";
 
 pub(super) fn service_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     match args.next().as_deref() {
         Some("install") => install_command(args),
+        Some("change") => change_command(args),
+        Some("status") => lifecycle_command("status", args),
+        Some("restart") => lifecycle_command("restart", args),
+        Some("stop") => lifecycle_command("stop", args),
+        Some("remove") => lifecycle_command("remove", args),
         Some("--help" | "-h") | None => {
             println!("{SERVICE_HELP}");
             ExitCode::SUCCESS
@@ -47,7 +52,7 @@ fn install_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     match install_user_service(port) {
         Ok(unit_name) => {
             println!("Installed and started {unit_name} on http://127.0.0.1:{port}");
-            println!("Manage it with: systemctl --user status {unit_name}");
+            println!("Check it with: zelyra service status");
             println!("A user service starts after login. See docs/service.en.md to enable start-at-boot with systemd lingering.");
             ExitCode::SUCCESS
         }
@@ -115,6 +120,223 @@ fn install_user_service(port: u16) -> Result<String, String> {
         return Err(format!("systemd could not enable and start the service; the unit file was rolled back: {error}"));
     }
     Ok(unit_name)
+}
+
+fn change_command(mut args: impl Iterator<Item = String>) -> ExitCode {
+    let port = match parse_service_port(&mut args, "change") {
+        Ok(port) => port,
+        Err(error) => {
+            eprintln!("{error}\n\n{SERVICE_HELP}");
+            return ExitCode::from(2);
+        }
+    };
+    match change_user_service(port) {
+        Ok(unit_name) => {
+            println!("Changed and restarted {unit_name} on http://127.0.0.1:{port}");
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("service change: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn parse_service_port(
+    args: &mut impl Iterator<Item = String>,
+    command: &str,
+) -> Result<u16, String> {
+    let mut port = None;
+    while let Some(argument) = args.next() {
+        match argument.as_str() {
+            "--port" if port.is_none() => {
+                let value = args
+                    .next()
+                    .ok_or_else(|| format!("service {command}: --port requires a port number"))?;
+                port = Some(
+                    value
+                        .parse::<u16>()
+                        .ok()
+                        .filter(|value| *value != 0)
+                        .ok_or_else(|| {
+                            format!(
+                                "service {command}: port must be an integer from 1 through 65535"
+                            )
+                        })?,
+                );
+            }
+            _ => {
+                return Err(format!(
+                    "service {command}: unexpected argument {argument:?}"
+                ))
+            }
+        }
+    }
+    port.ok_or_else(|| format!("service {command}: --port is required"))
+}
+
+fn current_project_service() -> Result<(PathBuf, String, PathBuf), String> {
+    if !cfg!(target_os = "linux") {
+        return Err("this command currently supports Linux with systemd only".into());
+    }
+    let project_root = fs::canonicalize(
+        env::current_dir().map_err(|error| format!("cannot read current directory: {error}"))?,
+    )
+    .map_err(|error| format!("cannot resolve project directory: {error}"))?;
+    if !project_root.join("main.zyl").is_file() {
+        return Err("run this command from a Zelyra project directory containing main.zyl".into());
+    }
+    let unit_name = unit_name_for_project(&project_root)?;
+    let unit_path = user_unit_directory()?.join(&unit_name);
+    Ok((project_root, unit_name, unit_path))
+}
+
+fn load_managed_unit(path: &Path, project_root: &Path) -> Result<Vec<u8>, String> {
+    let contents = fs::read(path)
+        .map_err(|error| format!("cannot read service unit {}: {error}", path.display()))?;
+    let text =
+        std::str::from_utf8(&contents).map_err(|_| "service unit is not valid UTF-8".to_owned())?;
+    let expected = format!(
+        "WorkingDirectory={}",
+        escape_systemd_value(
+            project_root
+                .to_str()
+                .ok_or_else(|| "project path is not valid UTF-8".to_owned())?
+        )
+    );
+    if !text.lines().any(|line| line == "# Managed by Zelyra")
+        || !text.lines().any(|line| line == expected)
+    {
+        return Err(
+            "the unit is not a Zelyra-managed service for this project; refusing to modify it"
+                .into(),
+        );
+    }
+    Ok(contents)
+}
+
+fn change_user_service(port: u16) -> Result<String, String> {
+    let (project_root, unit_name, unit_path) = current_project_service()?;
+    let previous = load_managed_unit(&unit_path, &project_root)?;
+    let old_text =
+        std::str::from_utf8(&previous).map_err(|_| "service unit is not valid UTF-8".to_owned())?;
+    let old_port = old_text
+        .lines()
+        .find_map(|line| line.strip_prefix("# Port: ")?.parse::<u16>().ok())
+        .ok_or_else(|| {
+            "managed service unit has no valid port marker; refusing to change it".to_owned()
+        })?;
+    if old_port == port {
+        return Err(format!("service already uses port {port}"));
+    }
+    ensure_port_is_free(port)?;
+    ensure_systemd_user_manager()?;
+    let executable = fs::canonicalize(
+        env::current_exe().map_err(|error| format!("cannot locate Zelyra executable: {error}"))?,
+    )
+    .map_err(|error| format!("cannot resolve Zelyra executable: {error}"))?;
+    let executable = executable
+        .to_str()
+        .ok_or_else(|| "Zelyra executable path is not valid UTF-8".to_owned())?;
+    let project = project_root
+        .to_str()
+        .ok_or_else(|| "project path is not valid UTF-8".to_owned())?;
+    let replacement = render_systemd_user_unit(executable, project, port)?;
+    systemctl_user(&["stop", &unit_name])
+        .map_err(|error| format!("could not stop service on port {old_port}: {error}"))?;
+    let update_result = write_unit_file(&unit_path, replacement.as_bytes())
+        .and_then(|()| systemctl_user(&["daemon-reload"]))
+        .and_then(|()| systemctl_user(&["start", &unit_name]));
+    if let Err(error) = update_result {
+        let restored = write_unit_file(&unit_path, &previous)
+            .and_then(|()| systemctl_user(&["daemon-reload"]))
+            .and_then(|()| systemctl_user(&["start", &unit_name]));
+        return match restored {
+            Ok(()) => Err(format!("new port {port} could not be activated ({error}); restored and restarted the previous service on port {old_port}")),
+            Err(rollback_error) => Err(format!("new port {port} failed ({error}); rollback also failed ({rollback_error}). The saved unit is at {}", unit_path.display())),
+        };
+    }
+    Ok(unit_name)
+}
+
+fn lifecycle_command(action: &str, mut args: impl Iterator<Item = String>) -> ExitCode {
+    if args.next().is_some() {
+        eprintln!("service {action}: this command takes no arguments\n\n{SERVICE_HELP}");
+        return ExitCode::from(2);
+    }
+    match lifecycle_user_service(action) {
+        Ok(message) => {
+            println!("{message}");
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("service {action}: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn lifecycle_user_service(action: &str) -> Result<String, String> {
+    let (project_root, unit_name, unit_path) = current_project_service()?;
+    let contents = load_managed_unit(&unit_path, &project_root)?;
+    ensure_systemd_user_manager()?;
+    if action == "remove" {
+        if let Err(error) = systemctl_user(&["disable", "--now", &unit_name]) {
+            let rollback = systemctl_user(&["enable", "--now", &unit_name]);
+            return Err(match rollback {
+                Ok(()) => format!("could not stop and disable {unit_name}; it was re-enabled: {error}"),
+                Err(rollback_error) => format!("could not stop and disable {unit_name} ({error}); restoring its enabled state also failed ({rollback_error})"),
+            });
+        }
+        if let Err(error) = fs::remove_file(&unit_path) {
+            let rollback = systemctl_user(&["enable", "--now", &unit_name]);
+            return Err(match rollback {
+                Ok(()) => format!("cannot remove unit file; service was re-enabled: {error}"),
+                Err(rollback_error) => format!(
+                    "cannot remove unit file ({error}); re-enabling also failed ({rollback_error})"
+                ),
+            });
+        }
+        if let Err(error) = systemctl_user(&["daemon-reload"]) {
+            let restored = write_unit_file(&unit_path, &contents)
+                .and_then(|()| systemctl_user(&["daemon-reload"]))
+                .and_then(|()| systemctl_user(&["enable", "--now", &unit_name]));
+            return Err(match restored {
+                Ok(()) => format!("systemd could not reload after removal; restored and restarted {unit_name}: {error}"),
+                Err(rollback_error) => format!("systemd could not reload after removal ({error}); restoring the service also failed ({rollback_error})"),
+            });
+        }
+        return Ok(format!("Removed {unit_name}"));
+    }
+    if action == "status" {
+        let output = Command::new("systemctl")
+            .args(["--user", "status", &unit_name])
+            .output()
+            .map_err(|error| format!("cannot run systemctl: {error}"))?;
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+        if !stdout.is_empty() {
+            return Ok(stdout);
+        }
+        return if output.status.success() {
+            Ok(format!("{unit_name} is active"))
+        } else {
+            Err(if stderr.is_empty() {
+                output.status.to_string()
+            } else {
+                stderr
+            })
+        };
+    }
+    systemctl_user(&[action, &unit_name])?;
+    let port = std::str::from_utf8(&contents).ok().and_then(|text| {
+        text.lines()
+            .find_map(|line| line.strip_prefix("# Port: ")?.parse::<u16>().ok())
+    });
+    Ok(match (action, port) {
+        (_, Some(port)) => format!("{action} requested for {unit_name} (configured port {port})"),
+        _ => format!("{action} requested for {unit_name}"),
+    })
 }
 
 fn ensure_port_is_free(port: u16) -> Result<(), String> {
@@ -198,7 +420,7 @@ fn render_systemd_user_unit(
     let executable = quote_systemd_exec_arg(executable)?;
     let working_directory = escape_systemd_value(project_root);
     Ok(format!(
-        "[Unit]\nDescription=Zelyra application on port {port}\nAfter=network.target\n\n[Service]\nType=simple\nWorkingDirectory={working_directory}\nExecStart={executable} serve main.zyl 127.0.0.1:{port} --fixed-port\nRestart=on-failure\nRestartSec=3\n\n[Install]\nWantedBy=default.target\n"
+        "# Managed by Zelyra\n# Port: {port}\n[Unit]\nDescription=Zelyra application on port {port}\nAfter=network.target\n\n[Service]\nType=simple\nWorkingDirectory={working_directory}\nExecStart={executable} serve main.zyl 127.0.0.1:{port} --fixed-port\nRestart=on-failure\nRestartSec=3\n\n[Install]\nWantedBy=default.target\n"
     ))
 }
 
@@ -279,11 +501,39 @@ mod tests {
     fn unit_uses_the_requested_fixed_loopback_port_and_project_working_directory() {
         let unit = render_systemd_user_unit("/home/stefan/bin/zelyra", "/srv/invoices app", 4317)
             .expect("valid unit");
+        assert!(unit.starts_with("# Managed by Zelyra\n# Port: 4317\n"));
         assert!(unit.contains("WorkingDirectory=/srv/invoices\\x20app\n"));
         assert!(unit.contains(
             "ExecStart=\"/home/stefan/bin/zelyra\" serve main.zyl 127.0.0.1:4317 --fixed-port\n"
         ));
         assert!(unit.contains("Restart=on-failure\n"));
+    }
+
+    #[test]
+    fn service_port_parser_requires_one_explicit_valid_port() {
+        assert_eq!(
+            parse_service_port(&mut ["--port".into(), "3001".into()].into_iter(), "change"),
+            Ok(3001)
+        );
+        assert!(
+            parse_service_port(&mut ["--port".into(), "0".into()].into_iter(), "change").is_err()
+        );
+        assert!(
+            parse_service_port(&mut ["--port".into(), "70000".into()].into_iter(), "change")
+                .is_err()
+        );
+        assert!(parse_service_port(
+            &mut [
+                "--port".into(),
+                "3001".into(),
+                "--port".into(),
+                "3002".into()
+            ]
+            .into_iter(),
+            "change"
+        )
+        .is_err());
+        assert!(parse_service_port(&mut std::iter::empty(), "change").is_err());
     }
 
     #[test]
