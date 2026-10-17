@@ -68,14 +68,15 @@ CSV export output and the importer's valid and malformed inputs across all three
 backends. A consuming application must also configure its allowed roots before
 calling `write_csv`; the package effect declaration alone never grants access.
 
-Validate the dependency graph and build a standalone source bundle for the
-billing package:
+Validate the dependency graph and build a standalone Docker app from the full
+web application. The app imports the reusable billing and storage packages;
+bundling only `pkg:billing` would produce a library without an HTTP route.
 
 ```sh
 cd examples/business_modules
 zelyra package lock main.zyl
 zelyra check main.zyl
-zelyra module bundle main.zyl pkg:billing \
+zelyra module bundle main.zyl main.zyl \
   --output /tmp/zelyra-billing-bundle \
   --docker --compiler-ref <40-character-commit>
 ```

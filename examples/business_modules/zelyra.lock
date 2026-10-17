@@ -4,7 +4,7 @@ lock_version = 1
 name = "business_app"
 version = "1.0.0"
 path = ""
-checksum = "sha256:5b0244da3f389399126ccdbba201d101bbe067b84550d8cd20febeca238dfb47"
+checksum = "sha256:75c2a8d4fd96033340856a3979505db4180ca004b1c7f462fcba54f0a9f2ffcb"
 dependencies = ["billing=packages/billing", "csv_export=packages/csv_export", "csv_import=packages/csv_import"]
 
 [[package]]

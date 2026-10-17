@@ -1595,6 +1595,10 @@ fn module_bundle_command(mut arguments: impl Iterator<Item = String>) -> ExitCod
         eprintln!("error[E-MOD-018]: refusing to claim an incomplete source closure");
         return ExitCode::from(1);
     }
+    if docker && !plan_contains_web_entry(plan) {
+        eprintln!("error[E-MOD-018]: this Docker bundle uses `zelyra serve` and therefore needs at least one page, form, CRUD resource, API, or auth declaration in its selected module closure; bundle a route-bearing module or the full application entry");
+        return ExitCode::from(1);
+    }
 
     let entry_path = match fs::canonicalize(&entry) {
         Ok(path) => path,
@@ -2136,6 +2140,28 @@ ZELYRA_DB_TLS_MODE=auto
             ExitCode::from(1)
         }
     }
+}
+
+fn plan_contains_web_entry(plan: &Value) -> bool {
+    plan.get("modules")
+        .and_then(Value::as_array)
+        .is_some_and(|modules| {
+            modules.iter().any(|module| {
+                module
+                    .get("declarations")
+                    .and_then(Value::as_array)
+                    .is_some_and(|declarations| {
+                        declarations
+                            .iter()
+                            .filter_map(Value::as_str)
+                            .any(|declaration| {
+                                ["page:", "form:", "crud:", "api:", "auth:"]
+                                    .iter()
+                                    .any(|prefix| declaration.starts_with(prefix))
+                            })
+                    })
+            })
+        })
 }
 
 fn copy_bundle_source(

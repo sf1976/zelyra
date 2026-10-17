@@ -356,7 +356,11 @@ closure. The generated Docker build compiles that exact compiler, copies the
 bundle into its build stage, and runs `zelyra check main.zyl` before producing
 the runtime image. A stale or incompatible compiler pin therefore fails the
 image build. `complete_deployment` remains `false` until external effects and
-operational requirements are reviewed.
+operational requirements are reviewed. Because this Docker profile starts
+`zelyra serve`, the selected closure must contain a page, form, CRUD resource,
+API, or authentication routes. A library-only or database-only module is
+rejected before writing; bundle the full application or a module that actually
+contains web routes.
 
 Create and validate a reproducible local lock:
 

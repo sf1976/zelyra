@@ -387,7 +387,11 @@ enthalten. Der erzeugte Docker-Build kompiliert genau diesen Compiler, kopiert
 das Bundle in die Build-Stufe und führt vor dem Runtime-Image
 `zelyra check main.zyl` aus. Ein veralteter oder inkompatibler Compiler-Pin
 bricht daher den Image-Build ab. `complete_deployment` bleibt `false`, bis
-externe Effekte und Betriebsanforderungen geprüft sind.
+externe Effekte und Betriebsanforderungen geprüft sind. Da das Dockerprofil
+`zelyra serve` startet, muss der ausgewählte Abschluss eine Seite, ein Formular,
+CRUD, eine API oder Authentifizierungsrouten enthalten. Ein reines Bibliotheks-
+oder Datenbankmodul wird vor dem Schreiben abgelehnt; bündle dafür die
+vollständige Anwendung oder ein tatsächlich routenhaltiges Modul.
 
 Ein reproduzierbares lokales Lockfile erzeugen und prüfen:
 
