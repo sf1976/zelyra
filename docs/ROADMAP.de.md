@@ -305,11 +305,14 @@ werden. Details stehen im [Projektlayout-Arbeitsplan](release-plans/1.3.0-projec
   Grundlagen schaffen, `public/` bereitstellen, Produktionsbetrieb sowie
   Apache-/Nginx-Reverse-Proxy dokumentieren und Linux-systemd-Dienste mit
   ausdrücklich festgelegtem Port installieren. `zelyra service install
-  --port <port>` erstellt jetzt eine lokale Benutzerdienst-Unit, weist belegte
-  Ports zurück und rollt die Unit bei fehlgeschlagenem Start zurück; Boot ohne
-  Benutzeranmeldung erfordert systemd-Lingering durch eine
-  Administratorfreigabe. Command-/Scheduler-Lifecycle, `public/` und Deployment-Beispiele
-  sind noch offen.
+  --port <port>` erstellt eine lokale Benutzerdienst-Unit, weist belegte Ports
+  zurück und rollt sie bei fehlgeschlagenem Start zurück. `public/` liefert
+  begrenzte lokale Dateien nach Anwendungsrouten aus, weist Traversal und
+  Symlinks außerhalb des Ordners zurück und erhält Binärdaten unverändert.
+  Boot ohne Benutzeranmeldung erfordert systemd-Lingering durch eine
+  Administratorfreigabe. Command-/Scheduler-Lifecycle und Deployment-Beispiele
+  bleiben offen. Siehe [Dienst](service.de.md) und
+  [öffentlichen Ordner](public-directory.de.md).
 - [ ] **1.2.5 Integration der Geschäftsabläufe:** Begrenzte Mandanten-, Form-
   und Jobpfade sowie `zelyra service change --port <port>` mit Stopp, Neustart
   und Rollback fertigstellen. Weitere Serviceplattformen nur mit Lifecycle-

@@ -10,6 +10,8 @@ Willkommen beim vollständigen Zelyra-Handbuch. Es umfasst sowohl das didaktisch
 
 > **Dienstinstallation (in Arbeit für 1.2.0):** Der aktuelle Implementierungszweig dokumentiert einen Linux-systemd-Benutzerdienst im [Dienstleitfaden](../../service.de.md). In der stabilen Version 1.1.5 ist diese Funktion noch nicht enthalten.
 
+> **Statische `public/`-Dateien (in Arbeit für 1.2.0):** Der [Leitfaden zum öffentlichen Ordner](../../public-directory.de.md) beschreibt aktuellen Umfang und Grenzen. In der stabilen Version 1.1.5 ist diese Funktion noch nicht enthalten.
+
 > **Zelyra UI:** Die [Komponentenreferenz](../../ui.de.md) beschreibt die veröffentlichten Komponenten und ihre geprüften Grenzen. Das Rechnungs-PDF wird im Browserdruckdialog erstellt; die gespeicherte Datei muss manuell an den vorausgefüllten E-Mail-Entwurf angehängt werden.
 
 ## Statuszeichen

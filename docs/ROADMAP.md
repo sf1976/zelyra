@@ -295,11 +295,14 @@ compatibility behavior before changing syntax. See the detailed
   scheduler and job workflows, typed request/forms and scoped query
   foundations, `public/`, production serving guidance, Apache/Nginx reverse
   proxy examples, and Linux systemd service installation with an explicit
-  fixed port. `zelyra service install --port <port>` now writes a local-only
-  user unit, rejects occupied ports, and rolls the unit back if startup fails.
-  Starting at boot before user login still requires administrator-enabled
-  systemd lingering. Command/scheduler lifecycle, `public/`, and deployment
-  examples remain open.
+  fixed port. `zelyra service install --port <port>` writes a local-only user
+  unit, rejects occupied ports, and rolls it back if startup fails. The
+  `public/` directory serves bounded local files after application routes,
+  rejects traversal and out-of-root symlinks, and preserves binary bytes.
+  Starting a user service at boot before login requires administrator-enabled
+  systemd lingering. Command/scheduler lifecycle and deployment examples remain
+  open. See the [service](service.en.md) and
+  [public-directory](public-directory.en.md) guides.
 - [ ] **1.2.5 business workflow integration:** Complete bounded tenant-aware
   query/form/job slices and `zelyra service change --port <port>` with stop,
   restart, and rollback behavior. Expand service platforms only with lifecycle

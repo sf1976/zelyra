@@ -1,6 +1,52 @@
 use super::*;
 
 #[test]
+fn project_public_directory_is_optional_and_rejects_symlinks() {
+    let directory = std::env::temp_dir().join(format!(
+        "zelyra-public-root-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&directory).unwrap();
+    fs::write(directory.join("main.zyl"), "fn main() {}\n").unwrap();
+    assert!(
+        project_public_directory(directory.join("main.zyl").to_str().unwrap())
+            .unwrap()
+            .is_none()
+    );
+    fs::create_dir(directory.join("public")).unwrap();
+    assert_eq!(
+        project_public_directory(directory.join("main.zyl").to_str().unwrap()).unwrap(),
+        Some(fs::canonicalize(directory.join("public")).unwrap())
+    );
+    let _ = fs::remove_dir_all(directory);
+}
+
+#[cfg(unix)]
+#[test]
+fn project_public_directory_rejects_symlink_roots() {
+    use std::os::unix::fs::symlink;
+
+    let directory = std::env::temp_dir().join(format!(
+        "zelyra-public-symlink-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&directory).unwrap();
+    fs::create_dir(directory.join("outside")).unwrap();
+    fs::write(directory.join("main.zyl"), "fn main() {}\n").unwrap();
+    symlink(directory.join("outside"), directory.join("public")).unwrap();
+    assert!(project_public_directory(directory.join("main.zyl").to_str().unwrap()).is_err());
+    let _ = fs::remove_dir_all(directory);
+}
+
+#[test]
 fn compiler_scope_gate_rejects_sql_touching_declared_tenant_tables() {
     let source = r#"
         type TenantId = Id
@@ -3409,6 +3455,7 @@ fn generates_project_with_target_release_version() {
     let compose = fs::read_to_string(path.join("docker-compose.mariadb.yml")).unwrap();
     assert!(compose.contains("ZELYRA_UI_STYLESHEET: ${ZELYRA_UI_STYLESHEET:-zelyra}"));
     assert!(path.join("src/.keep").is_file());
+    assert!(path.join("public/.keep").is_file());
     assert!(path.join("locales/de.json").is_file());
     assert!(path.join("locales/en.json").is_file());
     for token in [

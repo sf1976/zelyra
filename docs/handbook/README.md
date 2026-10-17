@@ -37,3 +37,7 @@ For the unreleased Linux service-installation work targeting 1.2.0, see the
 [German](../service.de.md) and [English](../service.en.md) implementation
 guide. It describes current branch behavior and is not a claim that this
 feature is available in stable 1.1.5.
+
+The static `public/` work is also in progress for 1.2.0; see the
+[German](../public-directory.de.md) and
+[English](../public-directory.en.md) guide for its current limits.

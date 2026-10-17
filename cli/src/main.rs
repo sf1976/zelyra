@@ -815,6 +815,7 @@ console = false
         // Keep the conventional module source directory present so the
         // generated Dockerfile can copy it even for a fresh single-file app.
         ("src/.keep", String::new()),
+        ("public/.keep", String::new()),
         (PROJECT_THEME_CSS_FILE, PROJECT_THEME_TEMPLATE.to_owned()),
         ("locales/de.json", "{}\n".to_owned()),
         ("locales/en.json", "{}\n".to_owned()),
@@ -4256,6 +4257,29 @@ fn project_ui_settings(path: &str) -> Result<(UiLanguage, UiLevel), String> {
     let level = UiLevel::parse(&level.to_ascii_lowercase())
         .ok_or_else(|| "ZELYRA_LEVEL must be `learn` or `work`".to_owned())?;
     Ok((language, level))
+}
+
+fn project_public_directory(source_path: &str) -> Result<Option<PathBuf>, String> {
+    let source_path = Path::new(source_path);
+    let project_directory = source_path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let public_path = project_directory.join("public");
+    let metadata = match fs::symlink_metadata(&public_path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(format!("cannot inspect {}: {error}", public_path.display())),
+    };
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(format!(
+            "{} must be a real directory, not a file or symlink",
+            public_path.display()
+        ));
+    }
+    fs::canonicalize(&public_path)
+        .map(Some)
+        .map_err(|error| format!("cannot resolve {}: {error}", public_path.display()))
 }
 
 fn project_ui_stylesheet_css(path: &str) -> Result<Option<String>, String> {
@@ -9080,6 +9104,13 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         Ok(project) => project.program,
         Err(()) => return ExitCode::from(1),
     };
+    let public_directory = match project_public_directory(&path) {
+        Ok(directory) => directory,
+        Err(error) => {
+            diagnostic(&path, "E-WEB-006", &error, 1, 1);
+            return ExitCode::from(1);
+        }
+    };
     if let Some(reserved_path) = project_uses_reserved_ui_asset_route(&program) {
         diagnostic(
             &path,
@@ -9550,18 +9581,6 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         capability_grants.as_ref(),
         runtime_policy.as_ref(),
     );
-    let (listener, actual_address, used_fallback) =
-        match bind_web_application(&address, allow_port_fallback) {
-            Ok(bound) => bound,
-            Err(error) => {
-                eprintln!("error[E-WEB-002]: cannot start server on {address}: {error}");
-                return ExitCode::from(1);
-            }
-        };
-    if used_fallback {
-        println!("note: {address} is already in use; using free port {actual_address}");
-    }
-    println!("Zelyra server listening on http://{actual_address}");
     let app = WebApp::with_database_url(routes, form_routes, database_url_from_program(&program))
         .with_ui_settings(ui_language, ui_level)
         .with_ui_stylesheet_css(ui_stylesheet_css)
@@ -9581,6 +9600,17 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         )
         .with_cruds(crud_routes)
         .with_tableviews(tableview_routes);
+    let app = if let Some(public_directory) = public_directory {
+        match app.with_public_directory(public_directory) {
+            Ok(app) => app,
+            Err(error) => {
+                diagnostic(&path, "E-WEB-006", &error.message, 1, 1);
+                return ExitCode::from(1);
+            }
+        }
+    } else {
+        app
+    };
     let app = match app.with_allowed_hosts(allowed_hosts) {
         Ok(app) => app,
         Err(error) => {
@@ -9603,6 +9633,18 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     } else {
         app
     };
+    let (listener, actual_address, used_fallback) =
+        match bind_web_application(&address, allow_port_fallback) {
+            Ok(bound) => bound,
+            Err(error) => {
+                eprintln!("error[E-WEB-002]: cannot start server on {address}: {error}");
+                return ExitCode::from(1);
+            }
+        };
+    if used_fallback {
+        println!("note: {address} is already in use; using free port {actual_address}");
+    }
+    println!("Zelyra server listening on http://{actual_address}");
     match serve_app_listener(app, listener) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {

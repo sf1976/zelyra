@@ -22,6 +22,7 @@ mod http;
 mod i18n;
 mod mfa;
 mod password_reset;
+mod public_files;
 mod server;
 mod ui;
 use edit_snapshot::{form_snapshot_matches, sign_form_snapshot, verify_form_snapshot, EditValues};
@@ -36,6 +37,7 @@ use i18n::{
     LOCALE_REFERENCE_END, LOCALE_REFERENCE_PARAMETER, LOCALE_REFERENCE_START,
 };
 pub use password_reset::{PasswordResetMailer, PasswordResetSmtpConfig};
+use public_files::PublicDirectory;
 pub use server::{serve_app, serve_app_listener};
 #[cfg(test)]
 pub(crate) use server::{spawn_connection, MAX_CONCURRENT_CONNECTIONS};
@@ -213,6 +215,8 @@ pub struct Response {
     pub body: String,
     pub location: Option<String>,
     pub headers: Vec<(String, String)>,
+    body_bytes: Option<Vec<u8>>,
+    suppress_body: bool,
 }
 
 impl Response {
@@ -224,6 +228,8 @@ impl Response {
             body: body.into(),
             location: None,
             headers: Vec::new(),
+            body_bytes: None,
+            suppress_body: false,
         }
     }
 
@@ -235,6 +241,8 @@ impl Response {
             body: body.into(),
             location: None,
             headers: Vec::new(),
+            body_bytes: None,
+            suppress_body: false,
         }
     }
 
@@ -246,6 +254,8 @@ impl Response {
             body: body.into(),
             location: None,
             headers: Vec::new(),
+            body_bytes: None,
+            suppress_body: false,
         }
     }
 
@@ -257,6 +267,8 @@ impl Response {
             body: body.into(),
             location: None,
             headers: Vec::new(),
+            body_bytes: None,
+            suppress_body: false,
         }
     }
 
@@ -268,12 +280,34 @@ impl Response {
             body: String::new(),
             location: None,
             headers: Vec::new(),
+            body_bytes: None,
+            suppress_body: false,
         }
     }
 
+    pub fn bytes(status: u16, content_type: impl Into<String>, body: Vec<u8>) -> Self {
+        Self {
+            status,
+            reason: reason_phrase(status).into(),
+            content_type: content_type.into(),
+            body: String::new(),
+            location: None,
+            headers: Vec::new(),
+            body_bytes: Some(body),
+            suppress_body: false,
+        }
+    }
+
+    /// Serialize a text-friendly HTTP response. Binary bodies are converted
+    /// lossily here; use `to_http_bytes` when exact response bytes matter.
     pub fn to_http(&self) -> String {
-        format!(
-            "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nReferrer-Policy: same-origin\r\n{}{}Content-Length: {}\r\nConnection: close\r\n\r\n{}",
+        String::from_utf8_lossy(&self.to_http_bytes()).into_owned()
+    }
+
+    pub fn to_http_bytes(&self) -> Vec<u8> {
+        let body = self.body_bytes.as_deref().unwrap_or(self.body.as_bytes());
+        let mut response = format!(
+            "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nReferrer-Policy: same-origin\r\n{}{}Content-Length: {}\r\nConnection: close\r\n\r\n",
             self.status,
             self.reason,
             self.content_type,
@@ -284,9 +318,13 @@ impl Response {
                 .iter()
                 .map(|(name, value)| format!("{name}: {value}\r\n"))
                 .collect::<String>(),
-            self.body.len(),
-            self.body
+            body.len(),
         )
+        .into_bytes();
+        if !self.suppress_body {
+            response.extend_from_slice(body);
+        }
+        response
     }
 
     pub fn redirect(location: impl Into<String>) -> Self {
@@ -303,6 +341,8 @@ impl Response {
             body: String::new(),
             location: Some(location),
             headers: Vec::new(),
+            body_bytes: None,
+            suppress_body: false,
         }
     }
 
@@ -856,6 +896,7 @@ pub struct WebApp {
     pub project_theme_css: Option<String>,
     allowed_hosts: Vec<String>,
     project_ui_catalogs: ProjectUiCatalogs,
+    public_directory: Option<PublicDirectory>,
     sessions: Arc<Mutex<HashMap<String, Session>>>,
     login_throttle: Arc<Mutex<HashMap<String, LoginThrottle>>>,
     password_reset_issue_lock: Arc<Mutex<()>>,
@@ -883,6 +924,7 @@ impl WebApp {
             project_theme_css: None,
             allowed_hosts: default_allowed_hosts(),
             project_ui_catalogs: ProjectUiCatalogs::default(),
+            public_directory: None,
             sessions: Arc::new(Mutex::new(HashMap::new())),
             login_throttle: Arc::new(Mutex::new(HashMap::new())),
             password_reset_issue_lock: Arc::new(Mutex::new(())),
@@ -914,6 +956,7 @@ impl WebApp {
             project_theme_css: None,
             allowed_hosts: default_allowed_hosts(),
             project_ui_catalogs: ProjectUiCatalogs::default(),
+            public_directory: None,
             sessions: Arc::new(Mutex::new(HashMap::new())),
             login_throttle: Arc::new(Mutex::new(HashMap::new())),
             password_reset_issue_lock: Arc::new(Mutex::new(())),
@@ -1013,6 +1056,17 @@ impl WebApp {
     pub fn with_project_ui_catalogs(mut self, catalogs: ProjectUiCatalogs) -> Self {
         self.project_ui_catalogs = catalogs;
         self
+    }
+
+    /// Serves files from an explicitly configured project `public/` directory.
+    /// The root itself must be a real directory, not a symlink.
+    pub fn with_public_directory(
+        mut self,
+        path: impl AsRef<std::path::Path>,
+    ) -> Result<Self, HttpError> {
+        self.public_directory =
+            Some(PublicDirectory::new(path.as_ref()).map_err(|message| HttpError { message })?);
+        Ok(self)
     }
 
     fn default_ui_context(&self, request: &Request) -> Option<DefaultUiContext> {
@@ -1152,6 +1206,7 @@ impl WebApp {
             .headers
             .insert("x-request-id".into(), request_id.clone());
 
+        let mut is_public_file = false;
         let mut response = if (correlated_request.headers.contains_key("host")
             || request_has_browser_origin_or_session(&correlated_request))
             && !request_host_is_allowed(request, &self.allowed_hosts)
@@ -1177,46 +1232,62 @@ impl WebApp {
                 ),
             )
         } else {
-            self.dispatch_inner(&correlated_request)
-        };
-        if response.content_type.starts_with("text/html") {
-            if response.location.is_none() {
-                if let Some(context) = self.default_ui_context(&correlated_request) {
-                    response.body = render_default_application_shell(
-                        &response.body,
-                        &context,
-                        self.ui_language,
-                    );
+            let application_response = self.dispatch_inner(&correlated_request);
+            if application_response.status == 404 {
+                if let Some(public_directory) = &self.public_directory {
+                    if let Some(static_response) = public_directory.response(&correlated_request) {
+                        is_public_file = true;
+                        static_response
+                    } else {
+                        application_response
+                    }
+                } else {
+                    application_response
                 }
+            } else {
+                application_response
             }
-            response.body = inject_design_system(
-                &response.body,
-                self.ui_stylesheet_css.is_some(),
-                self.project_theme_css.is_some(),
-            );
-        }
-        if self.ui_level == UiLevel::Learn
-            && correlated_request.method == "GET"
-            && response.status == 200
-            && response.content_type.starts_with("text/html")
-        {
-            let generated_crud = self
-                .cruds
-                .iter()
-                .any(|crud| crud_route_matches_path(crud, &request.path));
-            response.body = append_learning_assistant(
-                &response.body,
-                &correlated_request.path,
-                self.ui_language,
-                generated_crud,
-            );
-        }
-        if response.content_type.starts_with("text/html") {
-            response.body = localize_html_with_catalog(
-                &response.body,
-                self.ui_language,
-                &self.project_ui_catalogs,
-            );
+        };
+        if !is_public_file {
+            if response.content_type.starts_with("text/html") {
+                if response.location.is_none() {
+                    if let Some(context) = self.default_ui_context(&correlated_request) {
+                        response.body = render_default_application_shell(
+                            &response.body,
+                            &context,
+                            self.ui_language,
+                        );
+                    }
+                }
+                response.body = inject_design_system(
+                    &response.body,
+                    self.ui_stylesheet_css.is_some(),
+                    self.project_theme_css.is_some(),
+                );
+            }
+            if self.ui_level == UiLevel::Learn
+                && correlated_request.method == "GET"
+                && response.status == 200
+                && response.content_type.starts_with("text/html")
+            {
+                let generated_crud = self
+                    .cruds
+                    .iter()
+                    .any(|crud| crud_route_matches_path(crud, &request.path));
+                response.body = append_learning_assistant(
+                    &response.body,
+                    &correlated_request.path,
+                    self.ui_language,
+                    generated_crud,
+                );
+            }
+            if response.content_type.starts_with("text/html") {
+                response.body = localize_html_with_catalog(
+                    &response.body,
+                    self.ui_language,
+                    &self.project_ui_catalogs,
+                );
+            }
         }
         response
             .headers
@@ -10610,7 +10681,7 @@ fn handle_connection_until(
             .headers
             .push(("X-Request-ID".into(), new_request_id()));
     }
-    let response = response.to_http().into_bytes();
+    let response = response.to_http_bytes();
     let mut written_total = 0;
     while written_total < response.len() {
         let remaining = deadline.saturating_duration_since(Instant::now());

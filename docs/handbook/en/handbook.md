@@ -10,6 +10,8 @@ Welcome to the complete Zelyra Handbook. It includes both the introductory textb
 
 > **Service installation (work in progress for 1.2.0):** The current implementation branch documents a Linux systemd user-service command in the [service guide](../../service.en.md). It is not available in stable 1.1.5.
 
+> **Static `public/` files (work in progress for 1.2.0):** See the [public-directory guide](../../public-directory.en.md) for current behavior and limits. This feature is not available in stable 1.1.5.
+
 > **Zelyra UI:** The [component reference](../../ui.en.md) documents the released components and their tested limits. The invoice PDF uses the browser print dialog; attach the saved file manually to the prefilled email draft.
 
 ## Status marks
