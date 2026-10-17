@@ -1,4 +1,4 @@
-# Experimentelles Zelyra-Bytecode v24
+# Experimentelles Zelyra-Bytecode v25
 
 `zelyra-mir::bytecode` bietet das erste ausführbare Bytecode-Backend für
 bereits typgeprüfte und verifizierte MIR. Der AST-Interpreter bleibt die Referenzimplementierung und das normale
@@ -36,7 +36,11 @@ Recordtypen werden nach ihren konkreten Typargumenten geprüft. JSON-Feldzugriff
 gehören nicht zu diesem Umfang. Record-Arrays können durchlaufen werden; ihre
 typisierten Felder lassen sich im Schleifenkörper lesen. Sets/Maps mit Records
 sind nicht als unterstützter Pfad geprüft. Ausdrücklich veränderliche Arrays
-unterstützen indizierte Ersetzung und `+=`-Updates. Die Indexierung verwendet die gemeinsame MIR-Runtime-Semantik,
+unterstützen indizierte Ersetzung, `+=`-Updates und `push_mut`/`pop_mut` auf
+explizit mutable Bindungen. Bytecode v25 codiert `pop_mut` als eigene
+verifizierte Instruktion; der Verifier prüft Zielmutabilität und Payloadtyp.
+Array-, Tuple-, Option- und Resultwerte gleichen Typs können mit `==`/`!=`
+verglichen werden. Die Indexierung verwendet die gemeinsame MIR-Runtime-Semantik,
 einschließlich quellpositionsgebundener Fehler für negative und ungültige
 Indizes. Tupelindizes müssen, wie vom Typprüfer verlangt, nicht-negative
 Integerliterale sein. Decimal-Arithmetik, Addition/Subtraktion von `Duration`
@@ -228,7 +232,9 @@ Hostfreigaben.
 
 ## Format- und Sicherheitsgrenzen
 
-`BYTECODE_VERSION` bezeichnet Version `24` des deterministischen Binärformats.
+`BYTECODE_VERSION` bezeichnet Version `25` des deterministischen Binärformats.
+Version 25 ergänzt die verifizierte mutable Array-Pop-Instruktion und die
+typisierten strukturellen Array-/Tuple-/Option-/Result-Gleichheitsoperationen.
 Version 24 serialisiert die Namen tenant-gescopter Tabellen. Verifier und VM
 weisen rohes SQL auf solchen Tabellen ab; bei Datenbankausführung muss diese
 Liste mit dem aus dem geprüften Projekt stammenden Schema übereinstimmen.

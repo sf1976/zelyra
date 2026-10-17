@@ -1411,6 +1411,69 @@ impl Machine<'_> {
             MirExpressionKind::Call {
                 name,
                 function: None,
+                args,
+                ..
+            } if name == "push_mut" || name == "pop_mut" => {
+                let expected_arity = if name == "push_mut" { 2 } else { 1 };
+                if args.len() != expected_arity {
+                    return Err(runtime_error(
+                        span,
+                        format!("`{name}` expects {expected_arity} argument(s)"),
+                    ));
+                }
+                let Some(MirExpressionKind::Local(local)) = self
+                    .program
+                    .expressions
+                    .get(args[0].0)
+                    .map(|expression| &expression.kind)
+                else {
+                    return Err(runtime_error(
+                        span,
+                        format!("`{name}` requires a mutable array binding"),
+                    ));
+                };
+                let local = *local;
+                let expected_element = self
+                    .program
+                    .expressions
+                    .get(args[0].0)
+                    .and_then(|expression| match &expression.ty {
+                        Type::Array(element) => Some(element.as_ref().clone()),
+                        _ => None,
+                    })
+                    .ok_or_else(|| {
+                        runtime_error(span, format!("`{name}` target is not an array"))
+                    })?;
+                let pushed_value = if name == "push_mut" {
+                    Some(self.expression(args[1], locals, depth, span)?)
+                } else {
+                    None
+                };
+                let Some(Value::Array(values)) = locals.get_mut(&local) else {
+                    return Err(runtime_error(
+                        span,
+                        format!("`{name}` target local is not an initialized array"),
+                    ));
+                };
+                if let Some(value) = pushed_value {
+                    if !runtime_type_matches(&expected_element, &value.ty()) {
+                        return Err(runtime_error(
+                            span,
+                            format!(
+                                "`push_mut` expected `{expected_element}`, found `{}`",
+                                value.ty()
+                            ),
+                        ));
+                    }
+                    values.push(value);
+                    Ok(Value::Unit)
+                } else {
+                    Ok(Value::Option(values.pop().map(Box::new)))
+                }
+            }
+            MirExpressionKind::Call {
+                name,
+                function: None,
                 type_args,
                 args,
                 ..
@@ -4713,6 +4776,29 @@ fn main() {}
         let expected = zelyra_runtime::execute_function(&ast, "main", vec![], None).unwrap();
         assert_eq!(actual.value, expected);
         assert_eq!(actual.value, Value::Int(14));
+    }
+
+    #[test]
+    fn executes_mutable_array_push_and_pop_differentially() {
+        let source = r#"
+fn main() -> Int {
+    mutable values: Int[] = []
+    push_mut(values, 4)
+    push_mut(values, 8)
+    last = pop_mut(values)
+    first = pop_mut(values)
+    empty = pop_mut(values)
+    last_value = match last { Some(value) => value None => 0 }
+    first_value = match first { Some(value) => value None => 0 }
+    if is_none(empty) { return last_value * 10 + first_value }
+    return 0
+}
+"#;
+        let (ast, mir) = program(source);
+        let actual = execute_function(&mir, "main", vec![], ExecutionLimits::default()).unwrap();
+        let expected = zelyra_runtime::execute_function(&ast, "main", vec![], None).unwrap();
+        assert_eq!(actual.value, expected);
+        assert_eq!(actual.value, Value::Int(84));
     }
 
     #[test]

@@ -879,6 +879,19 @@ pub fn verify(program: &MirProgram) -> Result<(), Vec<MirError>> {
 fn verify_capability_call_edges(program: &MirProgram, errors: &mut Vec<MirError>) {
     for caller in &program.functions {
         let local_types = capability_local_types(program, caller);
+        let mutable_locals = caller
+            .blocks
+            .iter()
+            .flat_map(|block| &block.instructions)
+            .filter_map(|instruction| match instruction {
+                MirInstruction::Let {
+                    local,
+                    mutable: true,
+                    ..
+                } => Some(*local),
+                _ => None,
+            })
+            .collect::<HashSet<_>>();
         let mut declared = HashSet::new();
         for capability in &caller.declared_capabilities {
             if !zelyra_runtime::KNOWN_CAPABILITIES.contains(&capability.as_str()) {
@@ -1021,6 +1034,68 @@ fn verify_capability_call_edges(program: &MirProgram, errors: &mut Vec<MirError>
                     args,
                     ..
                 } => {
+                    if name == "push_mut" || name == "pop_mut" {
+                        let expected_arity = if name == "push_mut" { 2 } else { 1 };
+                        if args.len() != expected_arity {
+                            errors.push(MirError {
+                                code: "E-MIR-VERIFY-002",
+                                message: format!("`{name}` expects {expected_arity} argument(s)"),
+                                span: expression.span,
+                            });
+                            continue;
+                        }
+                        let target = program.expressions.get(args[0].0);
+                        let local = match target.map(|target| &target.kind) {
+                            Some(MirExpressionKind::Local(local)) => Some(*local),
+                            _ => None,
+                        };
+                        let Some(local) = local else {
+                            errors.push(MirError {
+                                code: "E-MIR-VERIFY-002",
+                                message: format!("`{name}` must target a mutable array local"),
+                                span: expression.span,
+                            });
+                            continue;
+                        };
+                        if !mutable_locals.contains(&local) {
+                            errors.push(MirError {
+                                code: "E-MIR-VERIFY-002",
+                                message: format!("`{name}` cannot mutate an immutable local"),
+                                span: expression.span,
+                            });
+                        }
+                        let element_type = match target.map(|target| &target.ty) {
+                            Some(Type::Array(element)) => Some(element.as_ref()),
+                            _ => None,
+                        };
+                        if let Some(element_type) = element_type {
+                            if name == "push_mut" {
+                                let value_type = program.expressions.get(args[1].0).map(|e| &e.ty);
+                                if value_type != Some(element_type) || expression.ty != Type::Unit {
+                                    errors.push(MirError {
+                                        code: "E-MIR-VERIFY-002",
+                                        message: "`push_mut` argument or result type is invalid"
+                                            .into(),
+                                        span: expression.span,
+                                    });
+                                }
+                            } else if expression.ty != Type::Option(Box::new(element_type.clone()))
+                            {
+                                errors.push(MirError {
+                                    code: "E-MIR-VERIFY-002",
+                                    message: "`pop_mut` result type does not match its array"
+                                        .into(),
+                                    span: expression.span,
+                                });
+                            }
+                        } else {
+                            errors.push(MirError {
+                                code: "E-MIR-VERIFY-002",
+                                message: format!("`{name}` target must be an array"),
+                                span: expression.span,
+                            });
+                        }
+                    }
                     for (capability, operation) in
                         zelyra_runtime::builtin_capability_requirements(name)
                     {
@@ -3726,6 +3801,31 @@ fn main() {
             .any(|error| error
                 .message
                 .contains("cannot mutate immutable local `fixed`")));
+    }
+
+    #[test]
+    fn verifier_rejects_mutable_array_builtins_on_immutable_locals() {
+        let mut mir = lower(&parse_program(
+            "fn main() { mutable values: Int[] = [] push_mut(values, 1) pop_mut(values) }",
+        ))
+        .expect("checked mutable-array operations lower");
+        let declaration = mir
+            .functions
+            .iter_mut()
+            .flat_map(|function| &mut function.blocks)
+            .flat_map(|block| &mut block.instructions)
+            .find_map(|instruction| match instruction {
+                MirInstruction::Let { name, mutable, .. } if name == "values" => {
+                    *mutable = false;
+                    Some(())
+                }
+                _ => None,
+            });
+        assert!(declaration.is_some());
+        let errors = verify(&mir).expect_err("mutated MIR must not pop from an immutable local");
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("cannot mutate an immutable local")));
     }
 
     #[test]

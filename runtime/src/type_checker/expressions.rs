@@ -2991,6 +2991,14 @@ impl Checker<'_> {
                 self.expect_type(&expected_value, &actual, args[0].span);
                 Type::Option(expected_value)
             }
+            (ExprKind::Call { name, args, .. }, Some(Type::Option(expected_value)))
+                if name == "None" && args.is_empty() =>
+            {
+                Type::Option(expected_value)
+            }
+            (ExprKind::Variable(name), Some(Type::Option(expected_value))) if name == "None" => {
+                Type::Option(expected_value)
+            }
             (
                 ExprKind::Call { name, args, .. },
                 Some(Type::Result(expected_ok, expected_error)),

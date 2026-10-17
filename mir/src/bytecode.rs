@@ -39,7 +39,7 @@ pub use format::{decode, decode_with_limits, encode, encode_with_limits, Bytecod
 mod compiler;
 pub use compiler::compile;
 
-pub const BYTECODE_VERSION: u16 = 24;
+pub const BYTECODE_VERSION: u16 = 25;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum BytecodeIteratorKind {
@@ -148,6 +148,10 @@ pub enum BytecodeOp {
     },
     /// Append one checked element to a compiler-generated collection result.
     ArrayAppend {
+        local: LocalId,
+        element_type: Type,
+    },
+    ArrayPopMut {
         local: LocalId,
         element_type: Type,
     },
@@ -582,6 +586,15 @@ pub fn verify_bytecode(program: &BytecodeProgram) -> Result<(), Vec<MirError>> {
                 } => {
                     return Err(vec![bytecode_error(
                         "bytecode array append has an unknown element type",
+                        instruction.span,
+                    )]);
+                }
+                BytecodeOp::ArrayPopMut {
+                    element_type: Type::Unknown,
+                    ..
+                } => {
+                    return Err(vec![bytecode_error(
+                        "bytecode mutable array pop has an unknown element type",
                         instruction.span,
                     )]);
                 }
@@ -1363,6 +1376,7 @@ fn bytecode_written_locals(operation: &BytecodeOp) -> Vec<LocalId> {
         BytecodeOp::StoreLocal(local)
         | BytecodeOp::ArrayIndexAssign { local, .. }
         | BytecodeOp::ArrayAppend { local, .. }
+        | BytecodeOp::ArrayPopMut { local, .. }
         | BytecodeOp::RangeNext { local, .. } => vec![*local],
         BytecodeOp::TupleBind { locals } | BytecodeOp::CollectionNext { locals, .. } => {
             locals.clone()
@@ -1384,6 +1398,7 @@ fn bytecode_captured_write(operation: &BytecodeOp, captured: &HashSet<LocalId>) 
         BytecodeOp::StoreLocal(local)
         | BytecodeOp::ArrayIndexAssign { local, .. }
         | BytecodeOp::ArrayAppend { local, .. }
+        | BytecodeOp::ArrayPopMut { local, .. }
         | BytecodeOp::RangeNext { local, .. } => captured.contains(local).then_some(*local),
         BytecodeOp::TupleBind { locals } | BytecodeOp::CollectionNext { locals, .. } => locals
             .iter()
@@ -1540,6 +1555,10 @@ fn verify_function(function: &BytecodeFunction, span: Span) -> Result<usize, Vec
             BytecodeOp::ArrayAppend { .. } => {
                 require_stack(height, 1, instruction.span)?;
                 next_height -= 1;
+                vec![pc + 1]
+            }
+            BytecodeOp::ArrayPopMut { .. } => {
+                next_height += 1;
                 vec![pc + 1]
             }
             BytecodeOp::OptionSome { .. } => {
@@ -2628,6 +2647,30 @@ fn execute_bytecode_entry(
                         ));
                     };
                     values.push(value);
+                }
+                BytecodeOp::ArrayPopMut {
+                    local,
+                    element_type,
+                } => {
+                    let Some(Value::Array(values)) = frame.locals.get_mut(&local) else {
+                        return Err(runtime_error(
+                            instruction.span,
+                            "bytecode array pop targets an uninitialized or non-array local",
+                        ));
+                    };
+                    let value = values.pop();
+                    if let Some(value) = &value {
+                        if !runtime_type_matches(&element_type, &value.ty()) {
+                            return Err(runtime_error(
+                                instruction.span,
+                                format!(
+                                    "bytecode array pop expected `{element_type}`, got `{}`",
+                                    value.ty()
+                                ),
+                            ));
+                        }
+                    }
+                    stack.push(Value::Option(value.map(Box::new)));
                 }
                 BytecodeOp::OptionSome { value_type } => {
                     let value = stack.pop().ok_or_else(|| {

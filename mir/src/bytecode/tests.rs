@@ -4783,6 +4783,7 @@ fn add_at(initial: Int, position: Int, amount: Int) -> Int {
     values[position] += amount
     return values[0] + values[1]
 }
+
 fn set_at(initial: Int, position: Int, replacement: Int) -> Int {
     mutable values: Int[] = [initial, 2]
     values[position] = replacement
@@ -4824,6 +4825,67 @@ fn main() {}
     let actual = execute(&add_code, arguments, ExecutionLimits::default()).unwrap_err();
     assert_eq!(actual.message, expected.message);
     assert_eq!(actual.span, expected.span);
+}
+
+#[test]
+fn bytecode_push_mut_and_pop_mut_match_ast_and_mir_after_roundtrip() {
+    let source = r#"
+fn exercise_stack() -> Int {
+    mutable values: Int[] = []
+    push_mut(values, 4)
+    push_mut(values, 8)
+    last = pop_mut(values)
+    first = pop_mut(values)
+    empty = pop_mut(values)
+    last_value = match last { Some(value) => value None => 0 }
+    first_value = match first { Some(value) => value None => 0 }
+    if is_none(empty) { return last_value * 10 + first_value }
+    return 0
+}
+fn main() {}
+"#;
+    let (mir, code) = compile_source(source, "exercise_stack");
+    let code = decode(&encode(&code).expect("encode mutable array bytecode"))
+        .expect("decode mutable array bytecode");
+    let ast = parse(&lex(source).expect("source lexes")).expect("source parses");
+    let expected = zelyra_runtime::execute_function(&ast, "exercise_stack", vec![], None)
+        .expect("AST execution");
+    let mir_result =
+        execution::execute_function(&mir, "exercise_stack", vec![], ExecutionLimits::default())
+            .expect("MIR execution");
+    let bytecode_result =
+        execute(&code, vec![], ExecutionLimits::default()).expect("bytecode execution");
+
+    assert_eq!(expected, Value::Int(84));
+    assert_eq!(mir_result.value, expected);
+    assert_eq!(bytecode_result.value, expected);
+}
+
+#[test]
+fn bytecode_verifier_rejects_pop_mut_on_an_immutable_local() {
+    let source = "fn main() { mutable values: Int[] = [1] pop_mut(values) }";
+    let (_mir, mut bytecode) = compile_source(source, "main");
+    let function = &mut bytecode.functions[bytecode.entry];
+    let target = function
+        .code
+        .iter()
+        .find_map(|instruction| match &instruction.operation {
+            BytecodeOp::ArrayPopMut { local, .. } => Some(*local),
+            _ => None,
+        })
+        .expect("source lowers the checked array-pop operation");
+    let target_mutability = function
+        .local_mutability
+        .iter_mut()
+        .find(|(local, _)| *local == target)
+        .expect("array target has local mutability metadata");
+    target_mutability.1 = false;
+
+    let errors =
+        verify_bytecode(&bytecode).expect_err("a mutated artifact cannot pop an immutable local");
+    assert!(errors
+        .iter()
+        .any(|error| error.message.contains("mutate immutable local")));
 }
 
 #[test]

@@ -1538,7 +1538,7 @@ fn main() {
 }
 
 #[test]
-fn algorithm_workbench_examples_are_bounded_and_match_expected_outputs() {
+fn algorithm_workbench_examples_run_on_all_backends_with_expected_outputs() {
     let path = example("algorithms/main.zyl");
     let check = run(&["check", path.to_str().unwrap()]);
     assert!(
@@ -1547,27 +1547,34 @@ fn algorithm_workbench_examples_are_bounded_and_match_expected_outputs() {
         String::from_utf8_lossy(&check.stdout),
         String::from_utf8_lossy(&check.stderr)
     );
-    let execution = run(&["run", path.to_str().unwrap()]);
-    assert!(
-        execution.status.success(),
-        "stdout: {}\nstderr: {}",
-        String::from_utf8_lossy(&execution.stdout),
-        String::from_utf8_lossy(&execution.stderr)
-    );
-    assert_eq!(
-        String::from_utf8_lossy(&execution.stdout)
-            .lines()
-            .collect::<Vec<_>>(),
-        [
-            "PASS insertion sort: empty, single item, duplicates and negative values",
-            "PASS linear search: empty, first, duplicate and missing values",
-            "PASS array-backed stack: LIFO order and empty pop",
-            "PASS bounded recursion: factorial base cases, valid input and rejected bounds",
-            "PASS bottom-up Fibonacci: base cases, bounded work and invalid inputs",
-            "PASS all algorithm examples",
-        ]
-    );
-    assert!(execution.stderr.is_empty());
+    let expected = [
+        "PASS insertion sort: empty, single item, duplicates and negative values",
+        "PASS linear search: empty, first, duplicate and missing values",
+        "PASS array-backed stack: LIFO order and empty pop",
+        "PASS bounded recursion: factorial base cases, valid input and rejected bounds",
+        "PASS bottom-up Fibonacci: base cases, bounded work and invalid inputs",
+        "PASS all algorithm examples",
+    ];
+    for backend in ["ast", "mir", "bytecode"] {
+        let execution = run(&["run", path.to_str().unwrap(), "--backend", backend]);
+        assert!(
+            execution.status.success(),
+            "backend {backend} failed; stdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&execution.stdout),
+            String::from_utf8_lossy(&execution.stderr)
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&execution.stdout)
+                .lines()
+                .collect::<Vec<_>>(),
+            expected,
+            "backend {backend} output differs"
+        );
+        assert!(
+            execution.stderr.is_empty(),
+            "backend {backend} wrote stderr"
+        );
+    }
 }
 
 #[test]

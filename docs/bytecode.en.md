@@ -1,4 +1,4 @@
-# Experimental Zelyra Bytecode v24
+# Experimental Zelyra Bytecode v25
 
 `zelyra-mir::bytecode` provides the first executable bytecode backend for
 already type-checked and verified MIR. The AST interpreter remains the reference implementation and the normal
@@ -32,7 +32,11 @@ explicitly named fields; generic record types are checked after substituting
 their concrete type arguments. JSON field reads remain outside this slice.
 Arrays of records can be iterated and their typed fields read in the loop body;
 Set/Map-of-record behavior has not been tested as a supported path.
-Opt-in mutable arrays support indexed replacement and `+=` updates. Indexing uses the shared MIR runtime semantics, including
+Opt-in mutable arrays support indexed replacement, `+=` updates, and
+`push_mut`/`pop_mut` on explicitly mutable bindings. Bytecode v25 encodes
+`pop_mut` as a dedicated verified instruction; the verifier checks target
+mutability and payload type. Arrays, tuples, Options, and Results of matching
+types can use `==`/`!=`. Indexing uses the shared MIR runtime semantics, including
 source-mapped negative-index and bounds errors. Tuple indices must be
 non-negative integer literals, as required by the language type checker.
 Decimal arithmetic, `Duration` addition/subtraction, and ordering comparisons
@@ -196,7 +200,9 @@ function arguments, return values, capability declarations, and host grants.
 
 ## Format and safety limits
 
-`BYTECODE_VERSION` identifies version `24` of a deterministic binary format.
+`BYTECODE_VERSION` identifies version `25` of a deterministic binary format.
+Version 25 adds the verified mutable-array pop instruction and typed structural
+array/tuple/Option/Result equality operations.
 Version 24 serializes tenant-scoped table names. The verifier and VM reject raw
 SQL against those tables; database execution also requires this list to match
 the schema derived from the checked project. Typed tenant queries are not yet

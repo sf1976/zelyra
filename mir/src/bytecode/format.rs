@@ -634,6 +634,14 @@ impl Writer {
                 self.usize(local.0)?;
                 self.ty(element_type, 0)
             }
+            BytecodeOp::ArrayPopMut {
+                local,
+                element_type,
+            } => {
+                self.u8(49)?;
+                self.usize(local.0)?;
+                self.ty(element_type, 0)
+            }
             BytecodeOp::OptionSome { value_type } => {
                 self.u8(39)?;
                 self.ty(value_type, 0)
@@ -1292,6 +1300,10 @@ impl<'a> Reader<'a> {
             },
             43 => BytecodeOp::FunctionRef {
                 function: self.usize()?,
+            },
+            49 => BytecodeOp::ArrayPopMut {
+                local: LocalId(self.usize()?),
+                element_type: self.ty(0)?,
             },
             44 => BytecodeOp::CallValue {
                 arguments: self.count(self.limits.max_instructions, "function-value argument")?,

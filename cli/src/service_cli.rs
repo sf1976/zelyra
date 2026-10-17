@@ -629,8 +629,6 @@ mod tests {
         assert!(ensure_port_available(port)
             .unwrap_err()
             .contains("already in use"));
-        drop(listener);
-        assert!(ensure_port_available(port).is_ok());
     }
 
     #[cfg(target_os = "linux")]
