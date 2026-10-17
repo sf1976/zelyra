@@ -7,6 +7,8 @@ const MANAGED_SCHEDULE_EXPORT_HEADER: &str =
 const SCHEDULE_SERVE_STATE_FILE: &str = "serve.json";
 const SCHEDULE_PROBE_PATH: &str = zelyra_web::SCHEDULE_PROBE_PATH;
 const SCHEDULER_MAX_CONCURRENT_JOBS: usize = 4;
+pub(super) const DEFAULT_SCHEDULER_JOB_TIMEOUT: std::time::Duration =
+    std::time::Duration::from_secs(300);
 
 /// Start the in-process scheduler. The caller must only invoke this from the
 /// installed, active project service; the worker rechecks project source at
@@ -14,6 +16,7 @@ const SCHEDULER_MAX_CONCURRENT_JOBS: usize = 4;
 pub(super) fn start_resident_scheduler(
     entry_path: PathBuf,
     program: &zelyra_ast::Program,
+    job_timeout: std::time::Duration,
 ) -> Result<std::thread::JoinHandle<()>, String> {
     validate_schedule_timezones(program)?;
     let entry_path = entry_path
@@ -55,6 +58,7 @@ pub(super) fn start_resident_scheduler(
                     let entry = entry.clone();
                     let active = Arc::clone(&running);
                     let worker_name = schedule_name.clone();
+                    let timeout_worker_name = worker_name.clone();
                     let spawn_result = std::thread::Builder::new()
                         .name(format!("zelyra-job-{worker_name}"))
                         .spawn(move || {
@@ -62,10 +66,18 @@ pub(super) fn start_resident_scheduler(
                             let result = env::current_exe()
                                 .map_err(|error| error.to_string())
                                 .and_then(|executable| {
-                                    Command::new(executable)
+                                    let mut child = Command::new(executable)
                                         .args(["run", &entry, "--entry", &handler])
-                                        .status()
-                                        .map_err(|error| error.to_string())
+                                        .spawn()
+                                        .map_err(|error| error.to_string())?;
+                                    match wait_for_child_with_timeout(&mut child, job_timeout) {
+                                        Ok(Some(status)) => Ok(status),
+                                        Ok(None) => {
+                                            eprintln!("zelyra scheduler: `{timeout_worker_name}` exceeded its {} second wall-clock limit and was stopped", job_timeout.as_secs());
+                                            Err("scheduler job timed out".to_owned())
+                                        }
+                                        Err(error) => Err(error.to_string()),
+                                    }
                                 });
                             match result {
                                 Ok(status) if status.success() => {
@@ -92,6 +104,25 @@ pub(super) fn start_resident_scheduler(
             }
         })
         .map_err(|error| format!("cannot start the in-process scheduler: {error}"))
+}
+
+fn wait_for_child_with_timeout(
+    child: &mut Child,
+    timeout: std::time::Duration,
+) -> std::io::Result<Option<std::process::ExitStatus>> {
+    let started = std::time::Instant::now();
+    loop {
+        if let Some(status) = child.try_wait()? {
+            return Ok(Some(status));
+        }
+        let elapsed = started.elapsed();
+        if elapsed >= timeout {
+            child.kill()?;
+            child.wait()?;
+            return Ok(None);
+        }
+        std::thread::sleep((timeout - elapsed).min(std::time::Duration::from_millis(50)));
+    }
 }
 
 fn validate_schedule_timezones(program: &zelyra_ast::Program) -> Result<(), String> {
@@ -1068,6 +1099,33 @@ mod tests {
     use super::*;
     use chrono::TimeZone;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn scheduler_stops_a_handler_process_after_its_wall_clock_limit() {
+        let executable = std::env::current_exe().expect("test executable path");
+        let mut child = Command::new(executable)
+            .args([
+                "--exact",
+                "task_cli::tests::scheduler_timeout_child_fixture",
+                "--nocapture",
+            ])
+            .env("ZELYRA_SCHEDULER_TIMEOUT_FIXTURE", "sleep")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn timeout fixture");
+        let status = wait_for_child_with_timeout(&mut child, std::time::Duration::from_millis(150))
+            .expect("wait for timeout fixture");
+        assert!(status.is_none(), "long-running child should be terminated");
+        assert!(child.try_wait().expect("reap terminated child").is_some());
+    }
+
+    #[test]
+    fn scheduler_timeout_child_fixture() {
+        if std::env::var_os("ZELYRA_SCHEDULER_TIMEOUT_FIXTURE").is_some() {
+            std::thread::sleep(std::time::Duration::from_secs(10));
+        }
+    }
 
     #[test]
     fn scheduler_matches_five_field_cron_in_declared_timezones() {

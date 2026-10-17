@@ -577,6 +577,7 @@ max_output_bytes = 1048576
 [runtime]
 max_steps = 100000
 max_stack_depth = 100
+scheduler_job_timeout_seconds = 300
 
 [web]
 allowed_origins = ["http://localhost:5173"]
@@ -600,6 +601,16 @@ Einstellung; `.env` und Prozessvariablen überschreiben es nicht.
 
 Der bestehende `[runtime].max_stack_depth`-Wert bleibt davon getrennt und
 begrenzt Funktionsaufruftiefe auf Werte von 1 bis 500 (Standard 20).
+
+`[runtime].scheduler_job_timeout_seconds` begrenzt die Wandzeit eines einzelnen
+Handlers im residenten Scheduler auf 1 bis 86.400 Sekunden; Standard sind
+300 Sekunden. Nach Ablauf beendet der Dienst den Handler-Prozess und protokolliert
+den Timeout. Das gilt nur für Zeitpläne im installierten, aktiven Linux-
+systemd-Projektdienst, nicht für manuelle `zelyra task run`-Aufrufe oder normale
+Webhandler. Eine Beendigung kann externe Effekte, die der Handler bereits
+ausgelöst hat, nicht rückgängig machen; der Scheduler wiederholt fehlgeschlagene
+Aufträge derzeit nicht automatisch. Der Wert ist nicht geheim und wird weder
+durch `.env` noch Prozessvariablen überschrieben.
 
 Funktions-SQL kann die engeren Deklarationen `uses Database(read)` für
 `SELECT` und `uses Database(write)` für `INSERT`, `UPDATE` oder `DELETE`

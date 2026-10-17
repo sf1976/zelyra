@@ -3471,7 +3471,7 @@ fn project_runtime_policy_reads_and_bounds_max_stack_depth() {
     fs::write(&entry, "fn main() {}\n").unwrap();
     fs::write(
         directory.join("zelyra.toml"),
-        "[project]\nname = \"runtime-policy\"\n\n[runtime]\nmax_stack_depth = 500\nmax_steps = 12000\n",
+        "[project]\nname = \"runtime-policy\"\n\n[runtime]\nmax_stack_depth = 500\nmax_steps = 12000\nscheduler_job_timeout_seconds = 900\n",
     )
     .unwrap();
     let policy = project_runtime_policy(entry.to_str().unwrap())
@@ -3479,6 +3479,8 @@ fn project_runtime_policy_reads_and_bounds_max_stack_depth() {
         .unwrap();
     assert_eq!(policy.max_stack_depth, Some(500));
     assert_eq!(policy.step_budget, Some(12000));
+    let limits = project_runtime_limits(entry.to_str().unwrap()).unwrap();
+    assert_eq!(limits.scheduler_job_timeout_seconds, Some(900));
 
     fs::write(directory.join("zelyra.toml"), "[runtime]\nmax_steps = 0\n").unwrap();
     let error = project_runtime_policy(entry.to_str().unwrap()).unwrap_err();
@@ -3499,6 +3501,21 @@ fn project_runtime_policy_reads_and_bounds_max_stack_depth() {
     .unwrap();
     let error = project_runtime_policy(entry.to_str().unwrap()).unwrap_err();
     assert!(error.contains("from 1 through 500"));
+
+    fs::write(
+        directory.join("zelyra.toml"),
+        "[runtime]\nscheduler_job_timeout_seconds = 86401\n",
+    )
+    .unwrap();
+    let error = project_runtime_policy(entry.to_str().unwrap()).unwrap_err();
+    assert!(error.contains("scheduler_job_timeout_seconds must be an integer from 1 through 86400"));
+    fs::write(
+        directory.join("zelyra.toml"),
+        "[runtime]\nscheduler_job_timeout_seconds = 30\nscheduler_job_timeout_seconds = 60\n",
+    )
+    .unwrap();
+    let error = project_runtime_policy(entry.to_str().unwrap()).unwrap_err();
+    assert!(error.contains("scheduler_job_timeout_seconds is configured more than once"));
     fs::remove_dir_all(directory).unwrap();
 }
 

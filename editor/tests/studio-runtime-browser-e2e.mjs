@@ -22,7 +22,7 @@ let browser;
 let startupTimer;
 try {
   await writeFile(join(project, "zelyra.toml"),
-    '[project]\nname = "runtime-browser"\n[runtime]\nmax_stack_depth = 100\nmax_steps = 24000\n');
+    '[project]\nname = "runtime-browser"\n[runtime]\nmax_stack_depth = 100\nmax_steps = 24000\nscheduler_job_timeout_seconds = 900\n');
   await writeFile(join(project, "main.zyl"),
     "fn direct() -> Int { return direct() }\nfn main() { loop { } }\n");
   const port = await new Promise((resolvePort, reject) => {
@@ -59,6 +59,7 @@ try {
   await page.locator("#runtime-budget-dialog[open]").waitFor();
   await page.waitForFunction(() => document.querySelector("#runtime-stack-depth")?.textContent?.includes("100"));
   await page.waitForFunction(() => document.querySelector("#runtime-step-budget")?.textContent?.includes("24000"));
+  await page.waitForFunction(() => document.querySelector("#runtime-scheduler-timeout")?.textContent?.includes("900"));
   assert.match(await page.locator("#runtime-recursion-risks").textContent(), /direct/);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true,
     "the budget dialog must not overflow a 360px viewport");

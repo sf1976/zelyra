@@ -4189,16 +4189,19 @@ fn runtime_profile(
     let analysis = language_service::analyze(&entry, &overlays);
     let index = semantic_index::SemanticIndex::from_analysis(&analysis);
     let (recursion_risks, recursion_incomplete) = index.recursion_risks(&analysis);
-    let (configured_steps, configured_depth) =
+    let runtime_limits =
         super::project_runtime_limits(&entry.to_string_lossy()).map_err(|error| (422, error))?;
     Ok((
         200,
         "application/json; charset=utf-8",
         json!({
             "path":relative,"version":version,"success":analysis.success,
-            "maxStackDepth":configured_depth.unwrap_or(20),
-            "configured":configured_depth.is_some(),
-            "maxSteps":configured_steps,
+            "maxStackDepth":runtime_limits.max_stack_depth.unwrap_or(20),
+            "configured":runtime_limits.max_stack_depth.is_some(),
+            "maxSteps":runtime_limits.max_steps,
+            "schedulerJobTimeoutSeconds":runtime_limits.scheduler_job_timeout_seconds
+                .unwrap_or(task_cli::DEFAULT_SCHEDULER_JOB_TIMEOUT.as_secs()),
+            "schedulerJobTimeoutConfigured":runtime_limits.scheduler_job_timeout_seconds.is_some(),
             "recursionRisks":recursion_risks,"recursionAnalysisIncomplete":recursion_incomplete,
             "diagnostics":analysis.diagnostics,
         })
@@ -6701,7 +6704,7 @@ fn main() {}
         let original = "fn main() {}\n";
         fs::write(
             state.root.join("zelyra.toml"),
-            "[project]\nname = \"runtime-profile\"\n[runtime]\nmax_stack_depth = 100\nmax_steps = 24000\n",
+            "[project]\nname = \"runtime-profile\"\n[runtime]\nmax_stack_depth = 100\nmax_steps = 24000\nscheduler_job_timeout_seconds = 900\n",
         )
         .unwrap();
         let source = "fn direct() -> Int { return direct() }\nfn main() {}\n";
@@ -6715,6 +6718,8 @@ fn main() {}
         let payload: Value = serde_json::from_str(&response.2).unwrap();
         assert_eq!(payload["maxStackDepth"], 100);
         assert_eq!(payload["maxSteps"], 24000);
+        assert_eq!(payload["schedulerJobTimeoutSeconds"], 900);
+        assert_eq!(payload["schedulerJobTimeoutConfigured"], true);
         assert_eq!(payload["configured"], true);
         assert_eq!(payload["version"], 7);
         assert_eq!(payload["recursionRisks"][0]["kind"], "direct");

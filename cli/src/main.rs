@@ -6802,7 +6802,9 @@ fn project_runtime_policy(path: &str) -> Result<Option<RuntimePolicy>, String> {
     let network = project_network_policy(path)?;
     let process = project_process_policy(path)?;
     let mail = project_mail_policy(path)?;
-    let (step_budget, max_stack_depth) = project_runtime_limits(path)?;
+    let limits = project_runtime_limits(path)?;
+    let step_budget = limits.max_steps;
+    let max_stack_depth = limits.max_stack_depth;
     let sources = PROJECT_SOURCES.with(|sources| sources.borrow().clone());
     let package_settings = module_settings::resolve_runtime_settings(path, &sources)?;
     if filesystem.is_none()
@@ -6827,15 +6829,23 @@ fn project_runtime_policy(path: &str) -> Result<Option<RuntimePolicy>, String> {
     }
 }
 
-fn project_runtime_limits(path: &str) -> Result<(Option<usize>, Option<usize>), String> {
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct ProjectRuntimeLimits {
+    max_steps: Option<usize>,
+    max_stack_depth: Option<usize>,
+    scheduler_job_timeout_seconds: Option<u64>,
+}
+
+fn project_runtime_limits(path: &str) -> Result<ProjectRuntimeLimits, String> {
     let Some(config_path) = project_config_path(path)? else {
-        return Ok((None, None));
+        return Ok(ProjectRuntimeLimits::default());
     };
     let contents = fs::read_to_string(&config_path)
         .map_err(|error| format!("cannot read {}: {error}", config_path.display()))?;
     let mut in_runtime = false;
     let mut max_steps = None;
     let mut max_stack_depth = None;
+    let mut scheduler_job_timeout_seconds = None;
     for (line_index, raw_line) in contents.lines().enumerate() {
         let line = raw_line.split('#').next().unwrap_or("").trim();
         if line.is_empty() {
@@ -6882,10 +6892,26 @@ fn project_runtime_limits(path: &str) -> Result<(Option<usize>, Option<usize>), 
                     .ok_or_else(|| "runtime max_steps must be a positive integer".to_owned())?;
                 max_steps = Some(steps);
             }
+            "scheduler_job_timeout_seconds" => {
+                if scheduler_job_timeout_seconds.is_some() {
+                    return Err("runtime setting scheduler_job_timeout_seconds is configured more than once".into());
+                }
+                let timeout = raw_value
+                    .trim()
+                    .parse::<u64>()
+                    .ok()
+                    .filter(|seconds| (1..=86_400).contains(seconds))
+                    .ok_or_else(|| "runtime scheduler_job_timeout_seconds must be an integer from 1 through 86400".to_owned())?;
+                scheduler_job_timeout_seconds = Some(timeout);
+            }
             _ => return Err(format!("unknown runtime setting {key}")),
         }
     }
-    Ok((max_steps, max_stack_depth))
+    Ok(ProjectRuntimeLimits {
+        max_steps,
+        max_stack_depth,
+        scheduler_job_timeout_seconds,
+    })
 }
 
 fn project_mail_policy(path: &str) -> Result<Option<MailPolicy>, String> {
@@ -9667,7 +9693,17 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             .as_deref()
             .is_some_and(service_cli::current_project_service_is_active);
     let _scheduler_thread = if is_managed_service && !program.schedules.is_empty() {
-        match task_cli::start_resident_scheduler(PathBuf::from(&path), &program) {
+        let job_timeout = match project_runtime_limits(&path) {
+            Ok(limits) => limits
+                .scheduler_job_timeout_seconds
+                .map(std::time::Duration::from_secs)
+                .unwrap_or(task_cli::DEFAULT_SCHEDULER_JOB_TIMEOUT),
+            Err(error) => {
+                diagnostic(&path, "E-POLICY-002", &error, 1, 1);
+                return ExitCode::from(1);
+            }
+        };
+        match task_cli::start_resident_scheduler(PathBuf::from(&path), &program, job_timeout) {
             Ok(thread) => {
                 println!("Zelyra scheduler is active in the project service; schedules are rechecked each minute");
                 Some(thread)

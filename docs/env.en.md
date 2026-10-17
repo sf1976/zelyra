@@ -522,6 +522,7 @@ Example runtime configuration:
 [runtime]
 max_steps = 100000
 max_stack_depth = 100
+scheduler_job_timeout_seconds = 300
 ```
 
 `[runtime].max_steps` is optional and must be a positive integer representable
@@ -536,6 +537,15 @@ variables do not override it.
 
 The existing `[runtime].max_stack_depth` is separate and limits function-call
 depth to 1 through 500 (default 20).
+
+`[runtime].scheduler_job_timeout_seconds` limits one resident scheduler
+handler's wall-clock time to 1 through 86,400 seconds; the default is 300
+seconds. When it expires, the service terminates the handler process and logs
+the timeout. This applies only to schedules in the installed, active Linux
+systemd project service, not to manual `zelyra task run` invocations or regular
+web handlers. Termination cannot undo external effects the handler already
+performed; the scheduler does not automatically retry failed jobs yet. This is
+not a secret and is not overridden by `.env` or process variables.
 
 Function-level SQL can use the narrower declarations `uses Database(read)` for
 `SELECT` and `uses Database(write)` for `INSERT`, `UPDATE`, or `DELETE`. Grant
