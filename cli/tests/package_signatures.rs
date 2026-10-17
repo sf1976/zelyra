@@ -715,9 +715,7 @@ fn package_update_plan_updates_multiple_aliases_and_rolls_back_before_commit() {
     let plan_path = app.join("updates.toml");
     fs::write(
         &plan_path,
-        format!(
-            "[[update]]\nalias = \"billing\"\nregistry = \"http://127.0.0.1:9/index.json\"\nname = \"billing\"\nversion = \"1.1.0\"\n\n[[update]]\nalias = \"reports\"\nregistry = \"http://127.0.0.1:9/index.json\"\nname = \"reports\"\nversion = \"2.1.0\"\n"
-        ),
+        "[[update]]\nalias = \"billing\"\nregistry = \"http://127.0.0.1:9/index.json\"\nname = \"billing\"\nversion = \"1.1.0\"\n\n[[update]]\nalias = \"reports\"\nregistry = \"http://127.0.0.1:9/index.json\"\nname = \"reports\"\nversion = \"2.1.0\"\n",
     )
     .unwrap();
     let original_plan = fs::read_to_string(&plan_path).unwrap();

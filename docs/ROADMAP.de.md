@@ -62,25 +62,40 @@ abgeschlossen.
   ist ein Fehler; der Befehl darf nicht still einen anderen Port wählen.
   Projekt, Programmdatei, Arbeitsverzeichnis und sichere Env-Referenzen
   speichern, ohne Geheimniswerte zu kopieren.
-- [ ] **1.2.5 — Integration der Geschäftsabläufe:** Mandantenbezogene
-  Abfragen, Forms und Berechtigungen, begrenzte dauerhafte Jobs und koordinierte
-  Zeitpläne, Moduleinstellungen auf normalen Anwendungsseiten sowie erste
-  wiederverwendbare Datenaustausch-Integrationen fertigstellen und prüfen.
-  Signierte Quellpakete, Herausgebervertrauen, exakten Versionsabruf aus einer
-  statisch hostbaren Registry und Offline-Locks abschließen; siehe den
+- [ ] **1.2.5 — Integrationsgrundlage:** Mandantenbezogene Abfragen, Forms und
+  Berechtigungen, begrenzte dauerhafte Jobs und koordinierte Zeitpläne sowie
+  die signierte Paketbasis mit explizitem Herausgebervertrauen, exaktem
+  Registry-Abruf und Offline-Locks bereitstellen. Der Paketabschluss wird in
+  1.2.6–1.2.8 gestaffelt; siehe den
   [Paketökosystem-Plan](release-plans/1.2.5-module-ecosystem.de.md).
   `zelyra service change --port <port>` prüft den Zielport, stoppt den alten
   Dienst, aktualisiert seine Konfiguration und startet ihn neu. Bei Fehlern
   stellt es Konfiguration und Dienst wieder her. `status`, `restart` und
   `remove` ergänzen, sofern der Plattformdienstmanager dies unterstützt.
   Weitere Betriebssysteme erst nach Lifecycle- und Upgrade-Tests unterstützen.
-- [ ] **1.2.8 — Integrität und Distribution:** Geprüfte vertikale Schnitte für
-  Zustandsübergänge, Audit/Historie, ausgeglichene Ledger-Buchungen,
-  Metadatenexport, Healthchecks und modulare Bundles gemäß Geschäftsplattform-
-  Detailplan liefern. `public/`-Pfadbegrenzung und sicheres Verhalten für
-  statische Dateien ergänzen sowie Apache-/Nginx-Weiterleitungsheader und
-  erlaubte Hosts prüfen. Dies ist ein Integrationsrelease, keine pauschale
-  Compliance- oder Performancezusage.
+- [ ] **1.2.6 — vollständige Paketauflösung:** Separat veröffentlichte
+  transitive Paketabhängigkeiten mit exakten Versionen, unabhängig geprüften
+  Herausgebern und Herkunft pro Paket auflösen. Lockfile-Änderungen,
+  Paketcache und Updates müssen nach erkannten Fehlern zurückrollen und nach
+  Prozessabbruch sicher wiederherstellbar sein. Installation, Offline-Build,
+  Update, Entfernung und Docker-Bundle mit mehrstufigem Registrygraphen
+  integrieren und testen.
+- [ ] **1.2.7 — verwaltbare und wiederverwendbare Module:** Compilergeprüfte
+  Moduleinstellungen über normale Anwendungsseiten mit Revisionsprüfung,
+  Secret-Redaktion und ohne implizite Capability-Freigabe ermöglichen. Eine
+  stabile HostServices-Grundlage für wiederverwendbare Datenintegrationen
+  liefern und mindestens CSV-Import/-Export als installierbare, getestete
+  Pakete bereitstellen. Weitere Adapter wie ODBC oder Excel nur mit
+  reproduzierbaren Provider- und Sicherheitsprüfungen aufnehmen.
+- [ ] **1.2.8 — Integrität, Backend- und Deploymentparität:** Die Paket- und
+  Modulverträge für Einstellungen, Effekte, Jobs, Datenzugriff und
+  HostServices zwischen AST, MIR und Bytecode nachweisen oder nicht
+  unterstützte Pfade überall mit stabilen Diagnosen fail-closed abweisen.
+  Geprüfte vertikale Schnitte für Zustandsübergänge, Audit/Historie,
+  ausgeglichene Ledger-Buchungen, Metadatenexport, Healthchecks und modulare
+  Bundles liefern. `public/`-Pfadbegrenzung, statische Assets sowie
+  Apache-/Nginx-Weiterleitungsheader und erlaubte Hosts mit Deploymenttests
+  absichern. Dies ist keine pauschale Compliance- oder Performancezusage.
 - [ ] **1.3.0 — kanonische Struktur und Bytecode-Standard:** Das optionale,
   versionierte Projektlayout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, `plugins/`), Architekturprüfungen und eine sichere
@@ -315,8 +330,17 @@ werden. Details stehen im [Projektlayout-Arbeitsplan](release-plans/1.3.0-projec
   und Jobpfade sowie `zelyra service change --port <port>` mit Stopp, Neustart
   und Rollback fertigstellen. Weitere Serviceplattformen nur mit Lifecycle-
   Tests ergänzen.
-- [ ] **1.2.8 Integrität und Distribution:** Geprüfte Schnitte für
-  Zustandsübergänge, Audit/Historie, ausgeglichenes Ledger, Reflection,
+- [ ] **1.2.6 Paketauflösung und Recovery:** Separat veröffentlichte
+  transitive Abhängigkeiten, pro Paket geprüfte Herkunft, installierbare
+  Updates und Absturz-Recovery mit mehrstufigen Registry-Integrationstests
+  abschließen.
+- [ ] **1.2.7 Moduleinstellungen und Integrationen:** Compilergeprüfte
+  Einstellungen über Anwendungsseiten bereitstellen und wiederverwendbare
+  HostServices-Module mit getesteten CSV-Import-/Exportpaketen liefern.
+  Weitere Provider erst nach reproduzierbaren Plattform- und Sicherheitstests.
+- [ ] **1.2.8 Ökosystemparität und Distribution:** Modul-/Paketpfade in AST,
+  MIR und Bytecode angleichen oder fail-closed diagnostizieren. Geprüfte
+  Schnitte für Zustandsübergänge, Audit/Historie, Ledger, Reflection,
   Healthchecks, Bundles, statisches `public/` und Reverse-Proxy-Sicherheit
   integrieren; keine unbelegten Compliance-Zusagen.
 - [~] **1.3.0 Interpreterarchitektur — nach den 1.2.0-Grundlagen aktiv:**

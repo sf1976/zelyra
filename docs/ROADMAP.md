@@ -57,25 +57,38 @@ security and compatibility gates stated for that milestone.
   definition (Linux systemd first). A busy port is an error; installation must
   never silently select another port. Persist project, executable, working
   directory, and safe environment references without copying secret values.
-- [ ] **1.2.5 — business workflow integration:** Finish and verify tenant-aware
-  query/forms/authorization paths, durable bounded jobs and coordinated
-  schedules, module settings on normal application pages, and the first
-  reusable data-exchange integrations. Complete signed source-package
-  publishing, publisher trust, exact-version retrieval from a static-hostable
-  registry, and offline locking; see the [package ecosystem plan](release-plans/1.2.5-module-ecosystem.en.md).
+- [ ] **1.2.5 — integration foundation:** Provide tenant-aware query,
+  forms/authorization, bounded durable jobs and coordinated schedules, plus
+  the signed package foundation with explicit publisher trust, exact registry
+  retrieval, and offline locks. Complete the package ecosystem in 1.2.6–1.2.8;
+  see the [package ecosystem plan](release-plans/1.2.5-module-ecosystem.en.md).
   `zelyra service change --port <port>`
   validates the new port, stops the old service, updates its configuration,
   and starts the new one; on failure it restores the prior configuration and
   service. Include explicit `status`, `restart`, and `remove` operations where
   the platform service manager supports them. Extend service support to other
   operating systems only with lifecycle and upgrade tests.
-- [ ] **1.2.8 — cross-cutting integrity and distribution:** Deliver tested
-  vertical slices for state transitions, audit/history, balanced ledger
-  operations, reflection/export metadata, health checks, and modular bundles
-  according to the detailed business-platform plan. Add `public/` path
-  confinement and static-file cache/security behavior, and deployment checks
-  for Apache/Nginx forwarded headers and allowed hosts. This is an integration
-  milestone, not a blanket compliance or performance claim.
+- [ ] **1.2.6 — complete package resolution:** Resolve separately published
+  transitive package dependencies with exact versions, independently verified
+  publishers, and per-package provenance. Lock changes, package cache, and
+  updates must roll back on detected failures and recover safely after process
+  interruption. Integrate and test install, offline build, update, removal,
+  and Docker bundling over a multi-level registry graph.
+- [ ] **1.2.7 — manageable and reusable modules:** Expose compiler-checked
+  module settings through ordinary application pages with revision checks,
+  secret redaction, and no implicit capability grants. Deliver a stable
+  HostServices foundation for reusable data integrations and at least CSV
+  import/export as installable, tested packages. Add ODBC or Excel adapters
+  only with reproducible provider and security tests.
+- [ ] **1.2.8 — integrity, backend, and deployment parity:** Prove package and
+  module contracts for settings, effects, jobs, data access, and HostServices
+  across AST, MIR, and Bytecode, or make unsupported paths fail closed with
+  stable diagnostics in every backend. Deliver tested vertical slices for
+  state transitions, audit/history, balanced ledger operations,
+  reflection/export metadata, health checks, and modular bundles. Secure
+  `public/` path confinement, static assets, and Apache/Nginx forwarded-header
+  and allowed-host behavior with deployment tests. This is not a blanket
+  compliance or performance claim.
 - [ ] **1.3.0 — canonical structure and Bytecode default:** Complete the
   opt-in versioned project layout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, and `plugins/`), architecture checks, and safe layout migration
@@ -300,9 +313,18 @@ compatibility behavior before changing syntax. See the detailed
   query/form/job slices and `zelyra service change --port <port>` with stop,
   restart, and rollback behavior. Expand service platforms only with lifecycle
   tests.
-- [ ] **1.2.8 integrity and distribution:** Integrate tested state transition,
-  audit/history, balanced ledger, reflection, health, bundle, static `public/`
-  and reverse-proxy security slices; make no unsupported compliance claims.
+- [ ] **1.2.6 package resolution and recovery:** Complete separately published
+  transitive dependencies, per-package verified provenance, installable
+  updates, and crash recovery with multi-level registry integration tests.
+- [ ] **1.2.7 module settings and integrations:** Provide compiler-checked
+  application-page settings and reusable HostServices modules with tested CSV
+  import/export packages. Add further providers only after reproducible
+  platform and security tests.
+- [ ] **1.2.8 ecosystem parity and distribution:** Align module/package paths
+  across AST, MIR, and Bytecode or reject them fail-closed with diagnostics.
+  Integrate tested state transitions, audit/history, ledger, reflection,
+  health, bundles, static `public/`, and reverse-proxy security; make no
+  unsupported compliance claims.
 - [~] **1.3.0 interpreter architecture — active after 1.2.0 foundations:**
   Continue typed MIR and the opt-in bytecode VM while keeping AST as the
   reference. The goal is verified Bytecode by default for `run`, `serve`, and
