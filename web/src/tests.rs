@@ -2031,6 +2031,46 @@ fn public_files_reject_symlinks_outside_the_document_root() {
 }
 
 #[test]
+fn public_binary_assets_survive_real_http_serialization() {
+    let root = std::env::temp_dir().join(format!(
+        "zelyra-public-http-{}-{}",
+        std::process::id(),
+        AtomicUsize::new(0).fetch_add(1, Ordering::Relaxed)
+    ));
+    fs::create_dir_all(root.join("public")).unwrap();
+    let image = [0x89, b'P', b'N', b'G', 0, 0xff, 0x80];
+    fs::write(root.join("public/image.png"), image).unwrap();
+    let app = WebApp::new(Vec::new(), Vec::new()).with_public_dir(&root);
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        handle_connection(&mut stream, &app).unwrap();
+    });
+    let mut client = TcpStream::connect(address).unwrap();
+    client
+        .write_all(b"GET /image.png HTTP/1.1\r\nHost: localhost\r\n\r\n")
+        .unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
+    let mut response = Vec::new();
+    client.read_to_end(&mut response).unwrap();
+    server.join().unwrap();
+
+    let separator = response
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .unwrap();
+    let headers = std::str::from_utf8(&response[..separator]).unwrap();
+    assert!(headers.starts_with("HTTP/1.1 200 OK\r\n"));
+    assert!(headers.contains("Content-Type: image/png\r\n"));
+    assert!(headers.contains("Content-Length: 7\r\n"));
+    assert_eq!(&response[separator + 4..], &image);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn parses_request_and_query_string() {
     let request = parse_request(
         "GET /hello/Ada?active=true HTTP/1.1\r\nHost: localhost\r\nAccept: text/html\r\n\r\n",
