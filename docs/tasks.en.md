@@ -47,6 +47,14 @@ timezone, daylight-saving, and environment-variable behavior; verify these on
 the target host. systemd timers and platform schedulers are also possible
 deployment hosts. Zelyra does not start a resident scheduler by default.
 
+This is the current behavior. The 1.2.5 integration target is to discover
+schedules across the checked project graph, ensure required outbox storage
+idempotently during project setup, maintain one project-owned cron export, and
+execute declared schedules through a coordinated scheduler in `serve`. The
+export remains useful for external hosts, but is not the scheduler itself;
+Zelyra will not silently edit a user's crontab. This target is not implemented
+or released yet.
+
 The `cron` property uses five numeric fields for minute, hour, day of month,
 month, and day of week. Numbers, `*`, lists, ranges, and `/step` are supported;
 month and weekday names are not supported yet. The field syntax and ranges are

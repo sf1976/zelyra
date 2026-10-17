@@ -46,7 +46,7 @@ security and compatibility gates stated for that milestone.
   module; ODBC, Excel-compatible export, PDF workflows, and additional
   backends are only included when their own bounded, tested integrations are
   ready. No Laravel-specific implementation is part of this release.
-- [ ] **1.2.0 — application operations and deployment foundation:** Add the
+- [~] **1.2.0 — application operations and deployment foundation:** Add the
   declarative command/scheduler/job lifecycle and management views in bounded
   stages; typed request/forms and scoped query foundations; and the static
   `public/` directory. Provide production `serve` configuration and reviewed
@@ -57,7 +57,11 @@ security and compatibility gates stated for that milestone.
   definition (Linux systemd first). A busy port is an error; installation must
   never silently select another port. Persist project, executable, working
   directory, and safe environment references without copying secret values.
-- [ ] **1.2.5 — business workflow integration:** Finish and verify tenant-aware
+  The current work branch implements Linux `systemd --user` install, explicit
+  port changes with unit rollback, status/restart/remove, `.env` references,
+  and a five-second listener check. It is unreleased; live user-manager
+  lifecycle coverage and the remaining deployment foundation are open.
+- [~] **1.2.5 — business workflow integration:** Finish and verify tenant-aware
   query/forms/authorization paths, durable bounded jobs and coordinated
   schedules, module settings on normal application pages, and the first
   reusable data-exchange integrations. `zelyra service change --port <port>`
@@ -65,7 +69,10 @@ security and compatibility gates stated for that milestone.
   and starts the new one; on failure it restores the prior configuration and
   service. Include explicit `status`, `restart`, and `remove` operations where
   the platform service manager supports them. Extend service support to other
-  operating systems only with lifecycle and upgrade tests.
+  operating systems only with lifecycle and upgrade tests. The Linux service
+  command path and simulated rollback tests exist in the current work branch;
+  live systemd lifecycle coverage and the tenant/query/form/job slices remain
+  open.
 - [ ] **1.2.8 — cross-cutting integrity and distribution:** Deliver tested
   vertical slices for state transitions, audit/history, balanced ledger
   operations, reflection/export metadata, health checks, and modular bundles
@@ -288,15 +295,17 @@ compatibility behavior before changing syntax. See the detailed
   Package trust, extension boundaries, application-page settings, exchange
   modules, and release gates remain open; see the detailed 1.1.5 section above.
   No Laravel import is part of this milestone.
-- [ ] **1.2.0 operations and deployment foundation:** Add staged command,
+- [~] **1.2.0 operations and deployment foundation:** Add staged command,
   scheduler and job workflows, typed request/forms and scoped query
   foundations, `public/`, production serving guidance, Apache/Nginx reverse
   proxy examples, and Linux systemd service installation with an explicit
   fixed port.
-- [ ] **1.2.5 business workflow integration:** Complete bounded tenant-aware
+- [~] **1.2.5 business workflow integration:** Complete bounded tenant-aware
   query/form/job slices and `zelyra service change --port <port>` with stop,
-  restart, and rollback behavior. Expand service platforms only with lifecycle
-  tests.
+  restart, and rollback behavior. Linux command and simulated rollback paths
+  exist on the current branch; live systemd lifecycle coverage and tenant,
+  query, form, and job slices remain open. Expand service platforms only with
+  lifecycle tests.
 - [ ] **1.2.8 integrity and distribution:** Integrate tested state transition,
   audit/history, balanced ledger, reflection, health, bundle, static `public/`
   and reverse-proxy security slices; make no unsupported compliance claims.

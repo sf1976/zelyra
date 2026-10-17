@@ -49,6 +49,14 @@ werden. Für produktive Deployments sind auch systemd-Timer oder Plattform-
 Scheduler mögliche Hosts. Zelyra startet standardmäßig keinen residenten
 Scheduler.
 
+Das ist der aktuelle Stand. Ziel der 1.2.5-Integration ist, Zeitpläne im
+geprüften Projektgraphen zu erkennen, benötigten Outbox-Speicher beim Setup
+idempotent einzurichten, einen projektverwalteten Cron-Export zu pflegen und
+deklarierte Zeitpläne in `serve` über einen koordinierten Scheduler
+auszuführen. Der Export bleibt für externe Hosts verfügbar, ist aber nicht
+selbst der Scheduler; Zelyra ändert die Crontab des Benutzers nicht
+stillschweigend. Dieses Ziel ist noch nicht implementiert oder veröffentlicht.
+
 Ein Schedule mit `cron` verwendet fünf numerische Felder für Minute, Stunde,
 Monatstag, Monat und Wochentag. Unterstützt werden Zahlen, `*`, Listen,
 Bereiche und `/Schritt`; Monats- und Wochentagsnamen sind derzeit nicht

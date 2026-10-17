@@ -50,7 +50,7 @@ abgeschlossen.
   ist das erste Austauschmodul; ODBC, Excel-kompatibler Export, PDF-Abläufe und
   weitere Backends werden nur aufgenommen, wenn ihre begrenzten Integrationen
   jeweils getestet sind. Keine Laravel-spezifische Umsetzung.
-- [ ] **1.2.0 — Betriebs- und Deployment-Grundlage:** Deklarative Commands,
+- [~] **1.2.0 — Betriebs- und Deployment-Grundlage:** Deklarative Commands,
   Scheduler und Jobabläufe samt Verwaltungsansichten schrittweise ergänzen;
   typisierte Request-/Form- und begrenzte Query-Grundlagen sowie den statischen
   Ordner `public/` bereitstellen. Produktionskonfiguration für `serve` und
@@ -61,8 +61,12 @@ abgeschlossen.
   Betriebssystemdienst installieren (zuerst Linux systemd). Ein belegter Port
   ist ein Fehler; der Befehl darf nicht still einen anderen Port wählen.
   Projekt, Programmdatei, Arbeitsverzeichnis und sichere Env-Referenzen
-  speichern, ohne Geheimniswerte zu kopieren.
-- [ ] **1.2.5 — Integration der Geschäftsabläufe:** Mandantenbezogene
+  speichern, ohne Geheimniswerte zu kopieren. Der aktuelle Arbeitszweig
+  implementiert Linux-`systemd --user`-Installation, ausdrücklichen Portwechsel
+  mit Unit-Rollback, `status`/`restart`/`remove`, `.env`-Referenz und eine
+  fünfsekündige Listenerprüfung. Live-Lifecycletests mit einem systemd-
+  Benutzermanager und die übrigen Grundlagen sind unveröffentlicht und offen.
+- [~] **1.2.5 — Integration der Geschäftsabläufe:** Mandantenbezogene
   Abfragen, Forms und Berechtigungen, begrenzte dauerhafte Jobs und koordinierte
   Zeitpläne, Moduleinstellungen auf normalen Anwendungsseiten sowie erste
   wiederverwendbare Datenaustausch-Integrationen fertigstellen und prüfen.
@@ -71,6 +75,9 @@ abgeschlossen.
   stellt es Konfiguration und Dienst wieder her. `status`, `restart` und
   `remove` ergänzen, sofern der Plattformdienstmanager dies unterstützt.
   Weitere Betriebssysteme erst nach Lifecycle- und Upgrade-Tests unterstützen.
+  Linux-Befehlsweg und simulierte Rollbacktests sind im aktuellen Arbeitszweig
+  vorhanden; Live-systemd-Lifecycletests und Mandanten-/Query-/Form-/Jobpfade
+  bleiben offen.
 - [ ] **1.2.8 — Integrität und Distribution:** Geprüfte vertikale Schnitte für
   Zustandsübergänge, Audit/Historie, ausgeglichene Ledger-Buchungen,
   Metadatenexport, Healthchecks und modulare Bundles gemäß Geschäftsplattform-
@@ -300,10 +307,12 @@ werden. Details stehen im [Projektlayout-Arbeitsplan](release-plans/1.3.0-projec
   Grundlagen schaffen, `public/` bereitstellen, Produktionsbetrieb sowie
   Apache-/Nginx-Reverse-Proxy dokumentieren und Linux-systemd-Dienste mit
   ausdrücklich festgelegtem Port installieren.
-- [ ] **1.2.5 Integration der Geschäftsabläufe:** Begrenzte Mandanten-, Form-
+- [~] **1.2.5 Integration der Geschäftsabläufe:** Begrenzte Mandanten-, Form-
   und Jobpfade sowie `zelyra service change --port <port>` mit Stopp, Neustart
-  und Rollback fertigstellen. Weitere Serviceplattformen nur mit Lifecycle-
-  Tests ergänzen.
+  und Rollback fertigstellen. Linux-Befehlsweg und simulierte Rollbacktests
+  sind im aktuellen Arbeitszweig vorhanden; Live-systemd-Lifecycletests und
+  Mandanten-/Query-/Form-/Jobpfade bleiben offen. Weitere Serviceplattformen
+  nur mit Lifecycle-Tests ergänzen.
 - [ ] **1.2.8 Integrität und Distribution:** Geprüfte Schnitte für
   Zustandsübergänge, Audit/Historie, ausgeglichenes Ledger, Reflection,
   Healthchecks, Bundles, statisches `public/` und Reverse-Proxy-Sicherheit
