@@ -3307,6 +3307,9 @@ fn validate_crud_layout_slots(
 }
 
 const UI_SEMANTIC_APPEARANCES: &[&str] = &["default", "success", "warning", "danger"];
+const UI_FORM_WIDGETS: &[&str] = &[
+    "text", "email", "number", "url", "checkbox", "date", "time", "password",
+];
 
 fn component_prop_enum<'a>(
     program: &'a zelyra_ast::Program,
@@ -3364,6 +3367,21 @@ fn validate_form_ui_appearances(path: &str, program: &zelyra_ast::Program) -> bo
     let mut valid = true;
     for form in &program.forms {
         for field in &form.fields {
+            if let Some(widget) = field.widget.as_deref() {
+                if !UI_FORM_WIDGETS.contains(&widget) {
+                    diagnostic_with_span(
+                        path,
+                        "E-FORM-006",
+                        &format!(
+                            "field `{}` widget must be one of: {}",
+                            field.name,
+                            UI_FORM_WIDGETS.join(", ")
+                        ),
+                        field.span,
+                    );
+                    valid = false;
+                }
+            }
             if let Some(appearance) = field.appearance.as_deref() {
                 if !UI_SEMANTIC_APPEARANCES.contains(&appearance) {
                     diagnostic_with_span(

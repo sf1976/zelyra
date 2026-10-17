@@ -2581,6 +2581,25 @@ fn form_appearance_is_separate_from_server_validation_state() {
     assert!(checkbox_html.contains("class=\"z-check z-check--warning\""));
     assert!(!checkbox_html.contains("class=\"z-check z-check--warning\" id=\"active\" name=\"active\" type=\"checkbox\" aria-invalid=\"true\""));
 
+    let mut password = route.form.fields[0].clone();
+    password.name = "password".into();
+    password.label = Some("Password".into());
+    password.widget = Some("password".into());
+    route.form.fields.push(password);
+    let mut token = route.form.fields[0].clone();
+    token.name = "api_token".into();
+    token.label = Some("API token".into());
+    route.form.fields.push(token);
+    let submitted = HashMap::from([
+        ("name".into(), "Alice".into()),
+        ("password".into(), "do-not-reflect-this".into()),
+        ("api_token".into(), "also-do-not-reflect-this".into()),
+    ]);
+    let html = render_form(&route, &submitted, &invalid, None);
+    assert!(html.contains("id=\"password\" name=\"password\" type=\"password\" value=\"\""));
+    assert!(!html.contains("do-not-reflect-this"));
+    assert!(!html.contains("also-do-not-reflect-this"));
+
     let mut relation_route = relation_form_route();
     relation_route.form.fields[1].appearance = Some("success".into());
     let options = HashMap::from([(

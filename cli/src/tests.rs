@@ -1618,6 +1618,7 @@ fn imports_zelyra_ui_and_renders_checked_semantic_appearances() {
             }
             form Search {
                 field number: String { appearance: warning }
+                field password: String { widget: password }
             }
         "#,
     )
@@ -1658,6 +1659,16 @@ fn imports_zelyra_ui_and_renders_checked_semantic_appearances() {
     let invalid = project::load(entry.to_str().unwrap()).unwrap();
     assert!(!validate_components("main.zyl", &invalid.program));
     assert!(!validate_form_ui_appearances("main.zyl", &invalid.program));
+    fs::write(
+        &entry,
+        r#"form Search { field token: String { widget: hidden } }"#,
+    )
+    .unwrap();
+    let invalid_widget = project::load(entry.to_str().unwrap()).unwrap();
+    assert!(!validate_form_ui_appearances(
+        "main.zyl",
+        &invalid_widget.program
+    ));
     fs::remove_dir_all(directory).unwrap();
 }
 
