@@ -50,6 +50,7 @@ pub const ZELYRA_UI_JS_PATH: &str =
 pub const PROJECT_UI_CSS_PATH: &str = "/__zelyra/ui/project.css";
 pub const PROJECT_THEME_CSS_PATH: &str = "/__zelyra/theme.css";
 pub const HEALTH_LIVENESS_PATH: &str = "/__zelyra/health/live";
+pub const SCHEDULE_PROBE_PATH: &str = "/__zelyra/schedule/probe";
 pub const ACCOUNT_SESSIONS_PATH: &str = "/account/sessions";
 pub const ACCOUNT_SECURITY_PATH: &str = "/account/security";
 pub const LOGIN_MFA_PATH: &str = "/login/mfa";
@@ -847,6 +848,7 @@ pub struct WebApp {
     pub database_url: Option<String>,
     pub database_capability_granted: Option<bool>,
     pub auth_token: Option<String>,
+    schedule_probe_token: Option<String>,
     pub auth_permissions: Vec<String>,
     pub auth_route: Option<AuthRoute>,
     pub cors_policy: Option<CorsPolicy>,
@@ -874,6 +876,7 @@ impl WebApp {
             database_url: None,
             database_capability_granted: None,
             auth_token: None,
+            schedule_probe_token: None,
             auth_permissions: Vec::new(),
             auth_route: None,
             cors_policy: None,
@@ -905,6 +908,7 @@ impl WebApp {
             database_url,
             database_capability_granted: None,
             auth_token: None,
+            schedule_probe_token: None,
             auth_permissions: Vec::new(),
             auth_route: None,
             cors_policy: None,
@@ -975,6 +979,13 @@ impl WebApp {
     pub fn with_auth(mut self, token: Option<String>, permissions: Vec<String>) -> Self {
         self.auth_token = token;
         self.auth_permissions = permissions;
+        self
+    }
+
+    /// Configure the private local endpoint used by generated schedule
+    /// triggers to verify that this exact project server is still running.
+    pub fn with_schedule_probe_token(mut self, token: Option<String>) -> Self {
+        self.schedule_probe_token = token;
         self
     }
 
@@ -1155,6 +1166,7 @@ impl WebApp {
         let mut response = if (correlated_request.headers.contains_key("host")
             || request_has_browser_origin_or_session(&correlated_request))
             && !request_host_is_allowed(request, &self.allowed_hosts)
+            && !self.valid_schedule_probe(&correlated_request)
         {
             let title = framework_text_with_catalog(
                 self.ui_language,
@@ -1226,6 +1238,13 @@ impl WebApp {
     }
 
     fn dispatch_inner(&self, request: &Request) -> Response {
+        if request.path == SCHEDULE_PROBE_PATH {
+            return if self.valid_schedule_probe(request) {
+                Response::empty(204).with_header("Cache-Control", "no-store")
+            } else {
+                Response::empty(404).with_header("Cache-Control", "no-store")
+            };
+        }
         if request.path == HEALTH_LIVENESS_PATH {
             return match request.method.as_str() {
                 "GET" => Response::json(200, r#"{"status":"ok"}"#)
@@ -1806,6 +1825,19 @@ impl WebApp {
             response = response.with_header("X-Zelyra-API-Deprecated", "true");
         }
         response
+    }
+
+    fn valid_schedule_probe(&self, request: &Request) -> bool {
+        if request.path != SCHEDULE_PROBE_PATH || request.method != "POST" {
+            return false;
+        }
+        let Some(expected) = self.schedule_probe_token.as_deref() else {
+            return false;
+        };
+        let Some(candidate) = request.headers.get("x-zelyra-schedule-token") else {
+            return false;
+        };
+        constant_time_equal(expected.as_bytes(), candidate.as_bytes())
     }
 
     fn api_rate_limit_retry_after(&self, api: &ApiRoute, request: &Request) -> Option<u64> {

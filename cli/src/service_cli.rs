@@ -65,6 +65,49 @@ pub(super) fn service_command(mut args: impl Iterator<Item = String>) -> ExitCod
     }
 }
 
+pub(super) fn current_project_service_id(workspace: &std::path::Path) -> Option<String> {
+    #[cfg(target_os = "linux")]
+    {
+        let workspace = workspace.canonicalize().ok()?;
+        Some(project_service_id(&workspace))
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = workspace;
+        None
+    }
+}
+
+pub(super) fn current_project_service_is_active(workspace: &std::path::Path) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        let Ok(workspace) = workspace.canonicalize() else {
+            return false;
+        };
+        let Ok(unit_path) = service_file_path(&workspace) else {
+            return false;
+        };
+        let Ok(metadata) = std::fs::symlink_metadata(&unit_path) else {
+            return false;
+        };
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return false;
+        }
+        let Some(name) = unit_path.file_name().and_then(|name| name.to_str()) else {
+            return false;
+        };
+        Command::new("systemctl")
+            .args(["--user", "is-active", "--quiet", name])
+            .status()
+            .is_ok_and(|status| status.success())
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = workspace;
+        false
+    }
+}
+
 fn parse_port_arg(args: &mut impl Iterator<Item = String>) -> Result<u16, String> {
     if args.next().as_deref() != Some("--port") {
         return Err("expected --port <port>".into());
@@ -200,12 +243,17 @@ fn service_file_path(workspace: &Path) -> Result<PathBuf, String> {
     if !config_home.is_absolute() {
         return Err("XDG_CONFIG_HOME must be an absolute path".into());
     }
-    let mut digest = Sha256::new();
-    digest.update(workspace.as_os_str().as_encoded_bytes());
-    let id = format!("{:x}", digest.finalize());
+    let id = project_service_id(workspace);
     Ok(config_home
         .join("systemd/user")
         .join(format!("{SERVICE_PREFIX}{}.service", &id[..16])))
+}
+
+#[cfg(target_os = "linux")]
+fn project_service_id(workspace: &Path) -> String {
+    let mut digest = Sha256::new();
+    digest.update(workspace.as_os_str().as_encoded_bytes());
+    format!("{:x}", digest.finalize())[..16].to_owned()
 }
 
 #[cfg(target_os = "linux")]
@@ -239,11 +287,12 @@ fn render_unit_for(
         }
     }
     let mut unit = format!(
-        "[Unit]\nDescription=Zelyra application service\nAfter=network.target\n\n[Service]\nType=simple\nWorkingDirectory={}\nExecStart={} serve {} 127.0.0.1:{}\nRestart=on-failure\nRestartSec=2\n# Zelyra-Port: {}\n",
+        "[Unit]\nDescription=Zelyra application service\nAfter=network.target\n\n[Service]\nType=simple\nWorkingDirectory={}\nExecStart={} serve {} 127.0.0.1:{}\nEnvironment=ZELYRA_SYSTEMD_SERVICE_ID={}\nRestart=on-failure\nRestartSec=2\n# Zelyra-Port: {}\n",
         systemd_escape_path(&workspace.to_string_lossy()),
         systemd_quote(&executable.to_string_lossy()),
         systemd_quote(&entry.to_string_lossy()),
         port,
+        project_service_id(workspace),
         port,
     );
     if include_env_file {

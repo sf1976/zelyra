@@ -68,6 +68,29 @@ fn built_in_liveness_endpoint_is_database_free_and_method_bounded() {
 }
 
 #[test]
+fn schedule_probe_is_private_to_the_configured_server_token() {
+    let app = WebApp::new(Vec::new(), Vec::new())
+        .with_schedule_probe_token(Some("random-per-server-secret".into()));
+    let authorized = parse_request(
+        "POST /__zelyra/schedule/probe HTTP/1.1\r\nHost: 127.0.0.1:3000\r\nx-zelyra-schedule-token: random-per-server-secret\r\nContent-Length: 0\r\n\r\n",
+    )
+    .unwrap();
+    assert_eq!(app.dispatch(&authorized).status, 204);
+
+    let missing = parse_request(
+        "POST /__zelyra/schedule/probe HTTP/1.1\r\nHost: 127.0.0.1:3000\r\nContent-Length: 0\r\n\r\n",
+    )
+    .unwrap();
+    assert_eq!(app.dispatch(&missing).status, 404);
+
+    let wrong = parse_request(
+        "POST /__zelyra/schedule/probe HTTP/1.1\r\nHost: 127.0.0.1:3000\r\nx-zelyra-schedule-token: wrong\r\nContent-Length: 0\r\n\r\n",
+    )
+    .unwrap();
+    assert_eq!(app.dispatch(&wrong).status, 404);
+}
+
+#[test]
 fn applies_crud_layout_only_to_html_responses() {
     let response = apply_generated_layout(
         Response::html(200, "<main>CRUD content</main>"),

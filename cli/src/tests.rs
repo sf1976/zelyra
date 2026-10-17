@@ -1112,6 +1112,24 @@ fn project_routes_cannot_shadow_the_builtin_liveness_endpoint() {
 }
 
 #[test]
+fn project_routes_cannot_shadow_the_private_schedule_probe() {
+    let direct = parse(
+        &lex(r#"page "/__zelyra/schedule/probe" { html { <main>Project page</main> } }"#).unwrap(),
+    )
+    .unwrap();
+    let wildcard =
+        parse(&lex(r#"api POST "/__zelyra/{resource}/{action}" { output String }"#).unwrap())
+            .unwrap();
+    let unrelated =
+        parse(&lex(r#"page "/scheduled" { html { <main>Schedule page</main> } }"#).unwrap())
+            .unwrap();
+
+    assert!(project_uses_reserved_schedule_probe_route(&direct));
+    assert!(project_uses_reserved_schedule_probe_route(&wildcard));
+    assert!(!project_uses_reserved_schedule_probe_route(&unrelated));
+}
+
+#[test]
 fn account_session_route_is_reserved_for_authenticated_projects() {
     let auth_page = parse(
         &lex(r#"auth users { table: users }

@@ -4532,6 +4532,42 @@ fn project_uses_reserved_health_route(program: &zelyra_ast::Program) -> bool {
         })
 }
 
+fn project_uses_reserved_schedule_probe_route(program: &zelyra_ast::Program) -> bool {
+    let reserved_path = zelyra_web::SCHEDULE_PROBE_PATH;
+    program
+        .pages
+        .iter()
+        .any(|page| zelyra_web::route_pattern_matches_path(&page.path, reserved_path))
+        || program
+            .apis
+            .iter()
+            .any(|api| zelyra_web::route_pattern_matches_path(&api.path, reserved_path))
+        || program.auth.iter().any(|auth| {
+            auth.admin_path
+                .as_deref()
+                .is_some_and(|path| zelyra_web::route_pattern_matches_path(path, reserved_path))
+        })
+        || program.cruds.iter().any(|crud| {
+            let base = format!("/{}", crud.table);
+            [
+                base.clone(),
+                format!("{base}/new"),
+                format!("{base}/{{id}}"),
+                format!("{base}/{{id}}/edit"),
+                format!("{base}/{{id}}/delete"),
+                format!("{base}/{{id}}/restore"),
+            ]
+            .iter()
+            .any(|pattern| zelyra_web::route_pattern_matches_path(pattern, reserved_path))
+                || crud.actions.iter().any(|action| {
+                    zelyra_web::route_pattern_matches_path(
+                        &format!("{base}/{{id}}/{}", action.name),
+                        reserved_path,
+                    )
+                })
+        })
+}
+
 fn project_uses_reserved_account_sessions_route(program: &zelyra_ast::Program) -> bool {
     !program.auth.is_empty()
         && (program.pages.iter().any(|page| {
@@ -6425,6 +6461,19 @@ fn validate_project_features(path: &str, program: &zelyra_ast::Program) -> Resul
             &format!(
                 "route `{}` is reserved for Zelyra liveness checks",
                 zelyra_web::HEALTH_LIVENESS_PATH
+            ),
+            1,
+            1,
+        );
+        return Err(());
+    }
+    if project_uses_reserved_schedule_probe_route(program) {
+        diagnostic(
+            path,
+            "E-WEB-005",
+            &format!(
+                "route `{}` is reserved for authenticated scheduler probes",
+                zelyra_web::SCHEDULE_PROBE_PATH
             ),
             1,
             1,
@@ -9548,17 +9597,15 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         capability_grants.as_ref(),
         runtime_policy.as_ref(),
     );
-    if !program.schedules.is_empty() {
-        match task_cli::setup_declared_schedules(std::path::Path::new(&path)) {
-            Ok(messages) => {
-                for message in messages {
-                    println!("{message}");
-                }
+    match task_cli::setup_declared_schedules(std::path::Path::new(&path)) {
+        Ok(messages) => {
+            for message in messages {
+                println!("{message}");
             }
-            Err(error) => {
-                diagnostic(&path, "E-TASK-004", &error, 1, 1);
-                return ExitCode::from(1);
-            }
+        }
+        Err(error) => {
+            diagnostic(&path, "E-TASK-004", &error, 1, 1);
+            return ExitCode::from(1);
         }
     }
     let (listener, actual_address, used_fallback) = match bind_web_application(&address) {
@@ -9568,6 +9615,30 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             return ExitCode::from(1);
         }
     };
+    let schedule_project_root = std::path::Path::new(&path)
+        .canonicalize()
+        .ok()
+        .and_then(|entry| entry.parent().map(std::path::Path::to_path_buf));
+    let service_id = schedule_project_root
+        .as_deref()
+        .and_then(service_cli::current_project_service_id);
+    let is_managed_service = service_id.as_deref()
+        == env::var("ZELYRA_SYSTEMD_SERVICE_ID").ok().as_deref()
+        && schedule_project_root
+            .as_deref()
+            .is_some_and(service_cli::current_project_service_is_active);
+    let (schedule_probe_token, _schedule_state_guard) =
+        if program.schedules.is_empty() || !is_managed_service {
+            (None, None)
+        } else {
+            match task_cli::activate_schedule_probe(std::path::Path::new(&path), actual_address) {
+                Ok((token, guard)) => (Some(token), Some(guard)),
+                Err(error) => {
+                    diagnostic(&path, "E-TASK-004", &error, 1, 1);
+                    return ExitCode::from(1);
+                }
+            }
+        };
     if used_fallback {
         println!("note: {address} is already in use; using free port {actual_address}");
     }
@@ -9577,6 +9648,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         .with_ui_stylesheet_css(ui_stylesheet_css)
         .with_project_theme_css(theme_css)
         .with_project_ui_catalogs(ui_catalogs)
+        .with_schedule_probe_token(schedule_probe_token)
         .with_database_capability(database_capability_granted)
         .with_apis(api_routes)
         .with_auth(

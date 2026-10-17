@@ -155,7 +155,7 @@ Die AST-Implementierung bleibt Referenz, ist aber kein alleiniger Erfüllungsnac
 
 - [~] **1.2.0–1.3.0 compilererzwungene Mandantengrenzen und typisierte Abfragen:** Die erste Scope-Stufe parst und prüft `table ... scoped by tenant_id: TenantId` (`TenantId` muss nominal zu `Id` auflösen; die Spalte muss erforderlich sein). `zelyra check`, AST, MIR- und Bytecode-Verifier/Runtime weisen rohes SQL für solche Tabellen fail-closed ab; Bytecode v24 führt die Metadaten und gleicht sie bei DB-Ausführung mit dem geprüften Projektschema ab. Authentifiziertes Tenant-CRUD ist nur mit derselben Scope-Spalte zulässig. Autorisierter Tenant-Kontext, Query-HIR und sichere scoped Reads/Writes gehören zu 1.2.5; Backendparität ist Freigabekriterium von 1.3.0. Keine automatische N+1-Vermeidung ohne unabhängigen Nachweis behaupten.
 - [~] **1.2.0–1.2.5 Request/Response und Forms:** Vorhandene `Request`-, Page/Form/CRUD- und CSRF-Pfade bilden die Grundlage. Typisierter Handler-/Middleware-/Response-Lebenszyklus, Feldfehler, sichere Übernahme zulässiger Eingaben und Redirects/Meldungen gehören zu 1.2.5. Zugangsdaten und sensible Eingaben dürfen niemals wieder ausgegeben werden.
-- [~] **1.2.0–1.2.5 dauerhafte Jobs und Scheduler-Runtime:** Deklarative `command`-/`schedule`-Syntax und CLI-Ausführung/Liste/Export sind vorhanden; die Ausführung nutzt derzeit explizite Host-Scheduler. Begrenzter Jobvertrag und Scheduler-Lifecycle gehören zu 1.2.0; transaktionaler Jobvertrag, Lease-Worker und koordinierter Scheduler in `serve` gehören zu 1.2.5. Die Mail-Outbox allein ist kein Jobsystem.
+- [~] **1.2.0–1.2.5 dauerhafte Jobs und Scheduler-Runtime:** Deklarative `command`-/`schedule`-Syntax und CLI-Ausführung/Liste/Export sind vorhanden. Der aktuelle 1.2.5-Zwischenstand sichert externe Trigger gegen einen fehlenden oder inaktiven Projekt-Systemdienst ab und entfernt Zelyras verwalteten Export, wenn alle Schedule-Deklarationen entfallen. Ziel ist ein in den Zelyra-`serve`-Systemdienst integrierter Scheduler mit Lease-Worker, der die aktuelle Quelldatei als maßgeblich behandelt und keine Host-Crontab-Einträge benötigt. Transaktionaler Jobvertrag und koordinierte Ausführung gehören zu 1.2.5. Die Mail-Outbox allein ist kein Jobsystem.
 - [~] **1.2.8–1.3.0 Wasm- und Sidecar-Brücke:** Versionierte HostServices und lokale gesperrte Quellpakete bestehen. Begrenzte versionierte Wasm-Ausführung und ausdrücklich gestartetes, authentifiziertes lokales Sidecar-RPC gehören zu 1.2.8; Cross-Backend- und Releaseparität gehört zu 1.3.0. Keine stabile Rust-ABI, kein automatischer Download und keine implizite Capability-Freigabe. Einer echten Providerintegration geht ein lokaler Mock voraus.
 - [ ] **Backendübergreifendes Freigabekriterium:** Query-, Tenant-, Request- und Jobsemantik muss in AST, MIR und Bytecode übereinstimmen oder mit expliziter Unsupported-Diagnose abgewiesen werden. Sicherheits-, MariaDB-Integrations-, Kompatibilitäts-, Offline- und adversariale Tests sind erforderlich. 1.3.0 darf erst nach Erfüllung dieser Gates und des Detailplans als abgeschlossen oder produktionsreif gelten.
 
@@ -313,9 +313,10 @@ werden. Details stehen im [Projektlayout-Arbeitsplan](release-plans/1.3.0-projec
   sind im aktuellen Arbeitszweig vorhanden; Live-systemd-Lifecycletests und
   Mandanten-/Query-/Form-/Jobpfade bleiben offen. Weitere Serviceplattformen
   nur mit Lifecycle-Tests ergänzen. Das Schedule-Setup erzeugt nach einem
-  ausdrücklichen Schema-Setup einen projektlokalen Export und richtet für
-  geplante Handler mit `Email`-Capability die MariaDB-Outbox ein. Dieser
-  unveröffentlichte Stand führt Zeitpläne noch nicht über `serve` aus.
+  ausdrücklichen Schema-Setup oder beim Start von `serve` einen projektlokalen
+  Export und stellt für geplante Handler mit `Email`-Capability die
+  MariaDB-Outbox idempotent sicher. Der unveröffentlichte Stand führt
+  Zeitpläne noch nicht über `serve` aus und aktiviert keinen Host-Cronjob.
 - [ ] **1.2.8 Integrität und Distribution:** Geprüfte Schnitte für
   Zustandsübergänge, Audit/Historie, ausgeglichenes Ledger, Reflection,
   Healthchecks, Bundles, statisches `public/` und Reverse-Proxy-Sicherheit

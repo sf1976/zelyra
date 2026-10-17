@@ -1124,7 +1124,8 @@ fn main() { }
     );
     let cron = String::from_utf8_lossy(&preview.stdout);
     assert!(cron.contains("CRON_TZ=Europe/Berlin\n0 8 * * 1-5"));
-    assert!(cron.contains("--entry 'report_status'"));
+    assert!(cron.contains("schedule trigger"));
+    assert!(cron.contains("--name 'morning_status'"));
     assert!(String::from_utf8_lossy(&preview.stderr).contains("did not install or enable"));
 
     let deploy_dir = directory.join("deploy");

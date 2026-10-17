@@ -160,7 +160,7 @@ The AST implementation remains the reference, but it is not sufficient by itself
 
 - [~] **1.2.0–1.3.0 compiler-enforced tenancy and typed queries:** First scope slice: `table ... scoped by tenant_id: TenantId` is parsed and type-checked (`TenantId` must resolve nominally to `Id`; the column must be required). `zelyra check`, AST, MIR verifier/runtime, and bytecode verifier/VM reject raw SQL against these tables; bytecode v24 carries the metadata and checks it against the checked project schema at database execution. Authenticated tenant CRUD remains allowed only with the same scope column. The authorized tenant context, query HIR and safe scoped reads/writes are assigned to 1.2.5; final backend parity is a 1.3.0 gate. Do not claim automatic N+1 prevention without independent evidence.
 - [~] **1.2.0–1.2.5 request/response and forms:** Existing `Request`, Page/Form/CRUD and CSRF paths are the foundation. The typed handler/middleware/response lifecycle, field validation errors, safe old input and redirects/notices are assigned to 1.2.5; credentials and sensitive input must never be replayed.
-- [~] **1.2.0–1.2.5 durable jobs and scheduler runtime:** Declarative `command`/`schedule` syntax and CLI run/list/export are implemented, but execution currently relies on explicit host scheduling. The bounded job contract and scheduler lifecycle are assigned to 1.2.0; a transactional job contract, lease-based worker and coordinated scheduler in `serve` are assigned to 1.2.5. The mail outbox alone is not a job system.
+- [~] **1.2.0–1.2.5 durable jobs and scheduler runtime:** Declarative `command`/`schedule` syntax and CLI run/list/export exist. The current 1.2.5 intermediate step gates external triggers on the project's active OS service and removes Zelyra's managed export when all schedule declarations are removed. The target is a scheduler integrated into Zelyra's `serve` system service, with lease workers and the live source file as authority, requiring no host crontab entries. The transactional job contract and coordinated execution belong to 1.2.5. The mail outbox alone is not a job system.
 - [~] **1.2.8–1.3.0 Wasm and sidecar bridge:** Versioned HostServices and local locked source packages exist. Sandboxed/versioned Wasm computation and explicitly launched, authenticated local sidecar RPC are assigned to 1.2.8, with cross-backend and release parity in 1.3.0. No stable Rust ABI, auto-download, or implicit capability grant. A local mock integration precedes any real provider claims.
 - [ ] **Cross-backend release gate:** Query, tenant, request, and job semantics must match across AST, MIR, and bytecode or be rejected with explicit unsupported diagnostics. Add security, MariaDB integration, compatibility, offline, and adversarial tests. Do not claim 1.3.0 completion or production readiness until these gates and the detailed plan are satisfied.
 
@@ -307,7 +307,10 @@ compatibility behavior before changing syntax. See the detailed
   restart, and rollback behavior. Linux command and simulated rollback paths
   exist on the current branch; live systemd lifecycle coverage and tenant,
   query, form, and job slices remain open. Expand service platforms only with
-  lifecycle tests.
+  lifecycle tests. Schedule setup creates a project-local export after explicit
+  schema setup or when `serve` starts, and idempotently ensures the MariaDB
+  outbox for scheduled handlers declaring `Email`. This unreleased worktree
+  does not execute schedules in `serve` or activate a host cron job.
 - [ ] **1.2.8 integrity and distribution:** Integrate tested state transition,
   audit/history, balanced ledger, reflection, health, bundle, static `public/`
   and reverse-proxy security slices; make no unsupported compliance claims.
