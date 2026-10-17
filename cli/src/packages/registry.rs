@@ -3,13 +3,15 @@ use ring::signature::{Ed25519KeyPair, KeyPair, UnparsedPublicKey, ED25519};
 use serde_json::Value;
 use std::io::Write;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use toml_edit::{value, ArrayOfTables, DocumentMut, Item, Table};
+use url::Url;
 
 const PACKAGE_FORMAT: u64 = 1;
 const MAX_PACKAGE_BYTES: u64 = 32 * 1024 * 1024;
 const MAX_PACKAGE_FILES: usize = 4096;
 const MAX_REGISTRY_ARTIFACTS: usize = 10_000;
+const MAX_REGISTRY_BYTES: u64 = 256 * 1024 * 1024;
 const MAX_TRUST_BYTES: u64 = 1024 * 1024;
 const DEFAULT_TRUST_FILE: &str = "zelyra.trust.toml";
 static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
@@ -25,6 +27,7 @@ pub(super) fn command(
         "verify" => verify_command(&mut arguments),
         "trust" => trust_command(&mut arguments),
         "registry" => registry_command(&mut arguments),
+        "add" => add_command(&mut arguments),
         _ => Err(format!("unknown package action `{action}`")),
     };
     match result {
@@ -37,6 +40,408 @@ pub(super) fn command(
             ExitCode::FAILURE
         }
     }
+}
+
+fn add_command(args: &mut impl Iterator<Item = String>) -> Result<String, String> {
+    let registry_text = args.next().ok_or_else(|| {
+        "usage: zelyra package add <registry-index-url> <name> <exact-version> --as <alias>"
+            .to_owned()
+    })?;
+    let name = args
+        .next()
+        .ok_or_else(|| "package add requires a package name".to_owned())?;
+    validate_package_name(&name).map_err(|error| error.message)?;
+    let version_text = args
+        .next()
+        .ok_or_else(|| "package add requires an exact SemVer version".to_owned())?;
+    let version = Version::parse(&version_text)
+        .map_err(|error| format!("invalid exact package version `{version_text}`: {error}"))?;
+    if version.to_string() != version_text {
+        return Err("package add requires a normalized exact SemVer version".into());
+    }
+    let mut alias = None;
+    while let Some(argument) = args.next() {
+        match argument.as_str() {
+            "--as" if alias.is_none() => alias = Some(required_value(args, "--as")?),
+            _ => return Err("unexpected or repeated package add option".into()),
+        }
+    }
+    let alias = alias.ok_or_else(|| "package add requires `--as <alias>`".to_owned())?;
+    validate_dependency_alias(&alias)?;
+    let registry_url = parse_registry_url(&registry_text)?;
+    let agent = ureq::Agent::config_builder()
+        .timeout_global(Some(Duration::from_secs(20)))
+        .max_redirects(0)
+        .build()
+        .into();
+    let index_bytes = fetch_limited(&agent, registry_url.as_str(), 4 * 1024 * 1024)?;
+    let index: Value = serde_json::from_slice(&index_bytes)
+        .map_err(|error| format!("invalid package registry index: {error}"))?;
+    let entries = parse_registry_index(&index)?;
+    let entry = entries
+        .iter()
+        .find(|entry| entry.name == name && entry.version == version_text)
+        .ok_or_else(|| format!("registry has no exact release for {name} {version_text}"))?;
+    let artifact_url = registry_url
+        .join(&entry.artifact)
+        .map_err(|error| format!("invalid registry artifact URL: {error}"))?;
+    ensure_same_registry_origin(&registry_url, &artifact_url)?;
+    let artifact_bytes = fetch_limited(&agent, artifact_url.as_str(), MAX_PACKAGE_BYTES)?;
+    let artifact_sha256 = format!("sha256:{:x}", Sha256::digest(&artifact_bytes));
+    if artifact_sha256 != entry.artifact_sha256 {
+        return Err("downloaded artifact digest does not match the registry index".into());
+    }
+    let artifact = verify_artifact(&artifact_bytes)?;
+    if artifact.name != entry.name
+        || artifact.version != entry.version
+        || artifact.publisher != entry.publisher
+        || hex_encode(&artifact.public_key) != entry.public_key
+        || artifact.checksum != entry.checksum
+    {
+        return Err("registry index metadata does not match the signed package artifact".into());
+    }
+
+    let workspace = std::env::current_dir()
+        .map_err(|error| format!("cannot read current directory: {error}"))?;
+    let workspace = fs::canonicalize(&workspace)
+        .map_err(|error| format!("cannot resolve project directory: {error}"))?;
+    if !trusted_key(
+        &workspace.join(DEFAULT_TRUST_FILE),
+        &artifact.publisher,
+        &artifact.public_key,
+    )? {
+        return Err(format!("publisher `{}` is not trusted in {}; add the reviewed key with `zelyra package trust add` before installing", artifact.publisher, workspace.join(DEFAULT_TRUST_FILE).display()));
+    }
+    let manifest_path = workspace.join(MANIFEST);
+    let manifest_bytes = read_regular_file(&manifest_path, 4 * 1024 * 1024, "project manifest")?;
+    let mut document = std::str::from_utf8(&manifest_bytes)
+        .map_err(|_| "project manifest must be UTF-8".to_owned())?
+        .parse::<DocumentMut>()
+        .map_err(|error| format!("invalid project manifest: {error}"))?;
+    if document.get("package").and_then(Item::as_table).is_none() {
+        return Err("package add requires a project [package] table".into());
+    }
+    if let Some(sources) = document.get("package_sources") {
+        let sources = sources
+            .as_table()
+            .ok_or_else(|| "project `package_sources` must be a table".to_owned())?;
+        if sources.contains_key(&alias) {
+            return Err(format!(
+                "package source metadata for `{alias}` already exists"
+            ));
+        }
+    }
+    let dependencies = document
+        .entry("dependencies")
+        .or_insert(Item::Table(Table::new()))
+        .as_table_mut()
+        .ok_or_else(|| "project `dependencies` must be a table".to_owned())?;
+    if dependencies.contains_key(&alias) {
+        return Err(format!(
+            "dependency alias `{alias}` already exists; choose a new alias"
+        ));
+    }
+    let relative_install = PathBuf::from(".zelyra")
+        .join("packages")
+        .join(&name)
+        .join(&version_text);
+    let install_root = workspace.join(&relative_install);
+    ensure_no_symlink_path(&workspace, &install_root)?;
+    if install_root.exists() {
+        return Err(format!(
+            "package install destination {} already exists",
+            relative_install.display()
+        ));
+    }
+    let parent = install_root.parent().expect("package install has parent");
+    ensure_no_symlink_path(&workspace, parent)?;
+    fs::create_dir_all(parent).map_err(|error| format!("cannot create package store: {error}"))?;
+    ensure_no_symlink_path(&workspace, parent)?;
+    let staging = parent.join(format!(".{version_text}.{}.tmp", std::process::id()));
+    if staging.exists() {
+        return Err("package install staging directory already exists".into());
+    }
+    fs::create_dir(&staging)
+        .map_err(|error| format!("cannot create package staging directory: {error}"))?;
+    let materialize_result = (|| {
+        for (path, source) in &artifact.files {
+            validate_archive_path(path)?;
+            let output_path = staging.join(path);
+            fs::create_dir_all(output_path.parent().expect("source path has parent"))
+                .map_err(|error| format!("cannot prepare package source path: {error}"))?;
+            fs::write(output_path, source)
+                .map_err(|error| format!("cannot write verified package source: {error}"))?;
+        }
+        validate_package_sources(&artifact.files, &name, &version_text)?;
+        fs::rename(&staging, &install_root).map_err(|error| {
+            format!("cannot publish verified package into local store: {error}")
+        })?;
+        Ok::<(), String>(())
+    })();
+    if let Err(error) = materialize_result {
+        let _ = fs::remove_dir_all(&staging);
+        return Err(error);
+    }
+
+    let dependency_path = relative_install.to_string_lossy().replace('\\', "/");
+    let mut dependency = Table::new();
+    dependency["path"] = value(dependency_path);
+    dependency["version"] = value(format!("={version_text}"));
+    dependencies.insert(&alias, Item::Table(dependency));
+    let source_table = document
+        .entry("package_sources")
+        .or_insert(Item::Table(Table::new()))
+        .as_table_mut()
+        .expect("package_sources table was validated before installation");
+    let mut source = Table::new();
+    source["registry"] = value(registry_url.as_str());
+    source["publisher"] = value(artifact.publisher.clone());
+    source["public_key"] = value(hex_encode(&artifact.public_key));
+    source["artifact_sha256"] = value(entry.artifact_sha256.clone());
+    source_table.insert(&alias, Item::Table(source));
+    let new_manifest = document.to_string();
+    let lock_path = workspace.join(LOCKFILE);
+    let previous_lock = match fs::read(&lock_path) {
+        Ok(bytes) => Some(bytes),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => {
+            let _ = fs::remove_dir_all(&install_root);
+            return Err(format!("cannot read existing package lockfile: {error}"));
+        }
+    };
+    let transaction_result = (|| {
+        write_atomic(&manifest_path, new_manifest.as_bytes(), 0o644)?;
+        let graph = PackageGraph::load(&workspace)
+            .map_err(|error| error.message)?
+            .ok_or_else(|| "project package graph disappeared after manifest update".to_owned())?;
+        write_lockfile(&graph, true).map_err(|error| error.message)?;
+        Ok::<(), String>(())
+    })();
+    if let Err(error) = transaction_result {
+        let mut rollback_errors = Vec::new();
+        if let Err(rollback) = write_atomic(&manifest_path, &manifest_bytes, 0o644) {
+            rollback_errors.push(format!("manifest rollback failed: {rollback}"));
+        }
+        match previous_lock {
+            Some(bytes) => {
+                if let Err(rollback) = write_atomic(&lock_path, &bytes, 0o644) {
+                    rollback_errors.push(format!("lockfile rollback failed: {rollback}"));
+                }
+            }
+            None => {
+                if let Err(rollback) = fs::remove_file(&lock_path) {
+                    if rollback.kind() != std::io::ErrorKind::NotFound {
+                        rollback_errors.push(format!("new lockfile cleanup failed: {rollback}"));
+                    }
+                }
+            }
+        }
+        if let Err(rollback) = fs::remove_dir_all(&install_root) {
+            rollback_errors.push(format!("package rollback failed: {rollback}"));
+        }
+        return Err(if rollback_errors.is_empty() {
+            error
+        } else {
+            format!(
+                "{error}; transaction rollback incomplete: {}",
+                rollback_errors.join("; ")
+            )
+        });
+    }
+    Ok(format!("installed trusted package {name} {version_text} as `{alias}` from {} and updated zelyra.lock", registry_url))
+}
+
+#[derive(Debug)]
+struct RegistryEntry {
+    name: String,
+    version: String,
+    publisher: String,
+    public_key: String,
+    checksum: String,
+    artifact_sha256: String,
+    artifact: String,
+}
+
+fn parse_registry_index(index: &Value) -> Result<Vec<RegistryEntry>, String> {
+    let object = index
+        .as_object()
+        .ok_or_else(|| "registry index must be an object".to_owned())?;
+    if object.len() != 2 || object.get("format_version").and_then(Value::as_u64) != Some(1) {
+        return Err("unsupported or malformed registry index".into());
+    }
+    let packages = object
+        .get("packages")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "registry index must contain a packages array".to_owned())?;
+    if packages.len() > MAX_REGISTRY_ARTIFACTS {
+        return Err("registry index exceeds the 10,000 package limit".into());
+    }
+    let mut entries = Vec::with_capacity(packages.len());
+    let mut identities = BTreeSet::new();
+    for package in packages {
+        let package = package
+            .as_object()
+            .ok_or_else(|| "registry package entry must be an object".to_owned())?;
+        let fields = [
+            "name",
+            "version",
+            "publisher",
+            "public_key",
+            "checksum",
+            "artifact_sha256",
+            "artifact",
+        ];
+        if package.len() != fields.len()
+            || package
+                .keys()
+                .any(|field| !fields.contains(&field.as_str()))
+        {
+            return Err("registry package entry has missing or unknown fields".into());
+        }
+        let get = |key: &str| required_string(package, key).map(str::to_owned);
+        let entry = RegistryEntry {
+            name: get("name")?,
+            version: get("version")?,
+            publisher: get("publisher")?,
+            public_key: get("public_key")?,
+            checksum: get("checksum")?,
+            artifact_sha256: get("artifact_sha256")?,
+            artifact: get("artifact")?,
+        };
+        validate_package_name(&entry.name).map_err(|error| error.message)?;
+        Version::parse(&entry.version)
+            .map_err(|error| format!("invalid package version in registry: {error}"))?;
+        validate_publisher_id(&entry.publisher)?;
+        validate_registry_artifact_path(&entry.artifact)?;
+        if !entry.checksum.starts_with("sha256:")
+            || entry.checksum.len() != 71
+            || !entry.artifact_sha256.starts_with("sha256:")
+            || entry.artifact_sha256.len() != 71
+            || !entry.artifact_sha256[7..]
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit())
+            || !entry.checksum[7..]
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit())
+            || hex_decode(&entry.public_key)?.len() != 32
+        {
+            return Err(
+                "registry package entry contains malformed digest, key, or artifact path".into(),
+            );
+        }
+        if !identities.insert((entry.name.clone(), entry.version.clone())) {
+            return Err("registry index repeats a package name and version".into());
+        }
+        entries.push(entry);
+    }
+    Ok(entries)
+}
+
+fn parse_registry_url(text: &str) -> Result<Url, String> {
+    let url = Url::parse(text).map_err(|error| format!("invalid registry URL: {error}"))?;
+    if !url.username().is_empty()
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err("registry URL may not contain credentials, a query, or a fragment".into());
+    }
+    let loopback_http = url.scheme() == "http" && url.host_str().is_some_and(is_loopback_host);
+    if url.scheme() != "https" && !loopback_http {
+        return Err(
+            "package registries require HTTPS (HTTP is allowed only on loopback for local testing)"
+                .into(),
+        );
+    }
+    Ok(url)
+}
+
+fn validate_registry_artifact_path(path: &str) -> Result<(), String> {
+    let candidate = Path::new(path);
+    if path.contains('\\')
+        || candidate
+            .components()
+            .any(|component| !matches!(component, Component::Normal(_)))
+        || candidate
+            .extension()
+            .is_none_or(|extension| extension != "zpkg")
+        || path.contains(['?', '#', '%'])
+    {
+        return Err("registry artifact path must be a safe relative `.zpkg` path".into());
+    }
+    Ok(())
+}
+
+fn is_loopback_host(host: &str) -> bool {
+    host.eq_ignore_ascii_case("localhost")
+        || host
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|ip| ip.is_loopback())
+}
+
+fn ensure_same_registry_origin(index: &Url, artifact: &Url) -> Result<(), String> {
+    if index.scheme() != artifact.scheme()
+        || index.host_str() != artifact.host_str()
+        || index.port_or_known_default() != artifact.port_or_known_default()
+        || artifact.username() != ""
+        || artifact.password().is_some()
+    {
+        return Err("registry artifact URL must remain on the same origin as the index".into());
+    }
+    Ok(())
+}
+
+fn fetch_limited(agent: &ureq::Agent, url: &str, maximum: u64) -> Result<Vec<u8>, String> {
+    let mut response = agent
+        .get(url)
+        .header("User-Agent", concat!("zelyra/", env!("CARGO_PKG_VERSION")))
+        .header("Accept", "application/json, application/octet-stream")
+        .call()
+        .map_err(|error| format!("package registry request failed: {error}"))?;
+    let bytes = response
+        .body_mut()
+        .with_config()
+        .limit(maximum + 1)
+        .read_to_vec()
+        .map_err(|error| format!("cannot read package registry response: {error}"))?;
+    if bytes.len() as u64 > maximum {
+        return Err(format!("package registry response exceeds {maximum} bytes"));
+    }
+    Ok(bytes)
+}
+
+fn validate_dependency_alias(alias: &str) -> Result<(), String> {
+    if alias.is_empty()
+        || alias.len() > 64
+        || !alias
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+    {
+        return Err("dependency alias must contain 1–64 ASCII letters, digits, `_`, or `-`".into());
+    }
+    Ok(())
+}
+
+fn ensure_no_symlink_path(root: &Path, path: &Path) -> Result<(), String> {
+    let relative = path
+        .strip_prefix(root)
+        .map_err(|_| "package store path escaped project root".to_owned())?;
+    let mut current = root.to_path_buf();
+    for component in relative.components() {
+        current.push(component);
+        match fs::symlink_metadata(&current) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(format!(
+                    "package store may not traverse symlink {}",
+                    current.display()
+                ))
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(format!("cannot inspect package store path: {error}")),
+        }
+    }
+    Ok(())
 }
 
 fn registry_command(args: &mut impl Iterator<Item = String>) -> Result<String, String> {
@@ -71,7 +476,8 @@ fn registry_build(args: &mut impl Iterator<Item = String>) -> Result<String, Str
     let root = fs::canonicalize(&root)
         .map_err(|error| format!("cannot resolve registry artifact directory: {error}"))?;
     let mut artifacts = Vec::new();
-    collect_registry_artifacts(&root, &root, &mut artifacts)?;
+    let mut total_bytes = 0;
+    collect_registry_artifacts(&root, &root, &mut artifacts, &mut total_bytes)?;
     if artifacts.len() > MAX_REGISTRY_ARTIFACTS {
         return Err(format!(
             "registry contains more than {MAX_REGISTRY_ARTIFACTS} package artifacts"
@@ -112,6 +518,7 @@ fn collect_registry_artifacts(
     root: &Path,
     directory: &Path,
     artifacts: &mut Vec<(String, Vec<u8>)>,
+    total_bytes: &mut u64,
 ) -> Result<(), String> {
     let mut entries = fs::read_dir(directory)
         .map_err(|error| format!("cannot read registry directory: {error}"))?
@@ -129,7 +536,7 @@ fn collect_registry_artifacts(
             ));
         }
         if metadata.is_dir() {
-            collect_registry_artifacts(root, &path, artifacts)?;
+            collect_registry_artifacts(root, &path, artifacts, total_bytes)?;
         } else if metadata.is_file()
             && path
                 .extension()
@@ -147,10 +554,17 @@ fn collect_registry_artifacts(
                 .to_str()
                 .ok_or_else(|| "registry paths must be UTF-8".to_owned())?
                 .replace('\\', "/");
+            *total_bytes = total_bytes.saturating_add(metadata.len());
+            if *total_bytes > MAX_REGISTRY_BYTES {
+                return Err("registry artifact tree exceeds the 256 MiB scan limit".into());
+            }
             artifacts.push((
                 relative,
-                fs::read(&path)
-                    .map_err(|error| format!("cannot read registry artifact: {error}"))?,
+                read_regular_file(
+                    &path,
+                    MAX_PACKAGE_BYTES as usize,
+                    "registry package artifact",
+                )?,
             ));
             if artifacts.len() > MAX_REGISTRY_ARTIFACTS {
                 return Err(format!(
@@ -342,6 +756,7 @@ struct VerifiedArtifact {
     version: String,
     checksum: String,
     public_key: Vec<u8>,
+    files: Vec<(String, String)>,
 }
 
 fn verify_artifact(bytes: &[u8]) -> Result<VerifiedArtifact, String> {
@@ -461,6 +876,7 @@ fn verify_artifact(bytes: &[u8]) -> Result<VerifiedArtifact, String> {
         version,
         checksum,
         public_key,
+        files,
     })
 }
 
@@ -1011,6 +1427,25 @@ mod tests {
         assert!(verify_artifact(&serde_json::to_vec(&value).unwrap())
             .unwrap_err()
             .contains("unsafe"));
+    }
+
+    #[test]
+    fn registry_index_rejects_path_escape_and_non_loopback_http() {
+        let mut index = serde_json::json!({
+            "format_version": 1,
+            "packages": [{
+                "name": "hello", "version": "1.0.0", "publisher": "acme",
+                "public_key": hex_encode(&[1; 32]), "checksum": format!("sha256:{}", "a".repeat(64)),
+                "artifact_sha256": format!("sha256:{}", "b".repeat(64)), "artifact": "hello-1.0.0.zpkg"
+            }]
+        });
+        assert!(parse_registry_index(&index).is_ok());
+        index["packages"][0]["artifact"] = Value::String("../hello.zpkg".into());
+        assert!(parse_registry_index(&index)
+            .unwrap_err()
+            .contains("safe relative"));
+        assert!(parse_registry_url("http://packages.example.test/index.json").is_err());
+        assert!(parse_registry_url("http://127.0.0.1:8123/index.json").is_ok());
     }
 
     #[test]

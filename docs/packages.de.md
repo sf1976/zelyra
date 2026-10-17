@@ -145,14 +145,34 @@ weiterhin ausdrücklich vertrauen. Der Befehl lädt nichts hoch. Artefakte und
 Index müssen gemeinsam mit einem Hostingdienst eigener Wahl veröffentlicht
 werden.
 
+Eine exakte, vertrauenswürdige Version kann in den lokalen Paketspeicher des
+Projekts geladen werden:
+
+```sh
+zelyra package add https://pakete.example.test/index.json rechnung 1.0.0 --as billing
+zelyra package lock --check
+zelyra check main.zyl
+```
+
+Der Installer verlangt HTTPS (unverschlüsseltes HTTP ist nur beim Test über
+Loopback erlaubt), folgt keinen Weiterleitungen, begrenzt Antwortgröße und
+Laufzeit, verlangt eine normalisierte exakte SemVer-Version, prüft Index-Hash
+und Artefaktsignatur gegen `zelyra.trust.toml` und hält Artefaktdownloads auf
+dem Ursprung des Index. Er schreibt ohne Überschreiben nach
+`.zelyra/packages/<name>/<version>`, aktualisiert Manifest und Lockfile mit
+Rollback und vermerkt Registry, Signierer, öffentlichen Schlüssel und
+Artefakt-Hash im `zelyra.lock`. Transitive Abhängigkeiten werden noch nicht
+aufgelöst oder geladen. Prüfung und Ausführung installierter Pakete sind offline
+möglich.
+
 Die Standarddatei heißt `zelyra.trust.toml` im aktuellen Verzeichnis. Mit
 `--file <pfad>` kann eine andere Vertrauensdatei verwaltet oder für die Prüfung
 verwendet werden. Signierte Quellartefakte enthalten ausschließlich
 `zelyra.toml` und `.zyl`-Quellen, sind auf 32 MiB und 4.096 Dateien begrenzt
 und weisen Pakete mit Abhängigkeiten derzeit zurück. Das versionierte
 Signaturformat bindet Herausgeber-ID, Paketname, exakte Version,
-Kompatibilitätsmanifest und normalisierten Quell-Hash. Download, Installation,
-Herkunftsdaten im Lockfile und eine veröffentlichte stabile Schnittstelle
+Kompatibilitätsmanifest und normalisierten Quell-Hash. Transitive
+Abhängigkeitsauflösung, Updates und eine veröffentlichte stabile Schnittstelle
 fehlen noch.
 
 Pakete können Konfigurationsfelder unter `[settings.<name>]` beschreiben:

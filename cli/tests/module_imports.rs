@@ -765,7 +765,7 @@ fn module_init_creates_a_checkable_local_package_and_never_overwrites() {
 
 #[test]
 fn package_imports_cannot_reach_sources_excluded_from_lock_checksums() {
-    for excluded_dir in [".git", "target"] {
+    for excluded_dir in [".git", "target", ".zelyra"] {
         let directory = project(&[
             (
                 "main.zyl",
@@ -816,7 +816,7 @@ fn package_imports_cannot_reach_sources_excluded_from_lock_checksums() {
 
 #[test]
 fn package_entry_cannot_come_from_a_directory_excluded_from_lock_checksums() {
-    for excluded_dir in [".git", "target"] {
+    for excluded_dir in [".git", "target", ".zelyra"] {
         let directory = project(&[
             (
                 "main.zyl",

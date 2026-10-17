@@ -193,6 +193,7 @@ fn usage() {
     eprintln!("  module bundle --dry-run emits a machine-readable file plan without publishing the bundle");
     eprintln!("  package keygen|sign|verify|trust manages signed Zelyra source packages and trusted publishers");
     eprintln!("  package registry build <dir> [--output index.json] builds a deterministic static-host registry index");
+    eprintln!("  package add <index-url> <name> <exact-version> --as <alias> installs one explicitly trusted package release");
     eprintln!("  package lock [entry.zyl] [--check|--update] resolves local packages and checks or writes zelyra.lock");
     eprintln!("  doctor supports `--env-file <path>` for generated MariaDB projects");
     eprintln!("  setup supports `--database`, `--schema`, `--all`, `--host-port`, `--db-host-port`, and `--web [--port <port>]`");

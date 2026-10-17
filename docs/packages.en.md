@@ -134,14 +134,32 @@ not a trust decision: clients must still trust the publisher key. The command
 does not upload files. Publish the artifacts and generated index together using
 the hosting system of your choice.
 
+An exact, trusted release can be fetched into the local project package store:
+
+```sh
+zelyra package add https://packages.example.test/index.json billing 1.0.0 --as billing
+zelyra package lock --check
+zelyra check main.zyl
+```
+
+The installer requires HTTPS (plain HTTP is accepted only for loopback testing),
+uses no redirects, limits response sizes and time, requires an exact normalized
+SemVer version, verifies the index digest and signed artifact against
+`zelyra.trust.toml`, and keeps the artifact on the index's origin. It writes
+under `.zelyra/packages/<name>/<version>` without overwriting an existing
+version, updates the dependency manifest and lock transactionally, and records
+registry, signer, public key, and artifact digest in `zelyra.lock`. It does not
+resolve or download transitive dependencies yet. Installed package checks and
+execution are offline.
+
 The default trust file is `zelyra.trust.toml` in the current directory. Use
 `--file <path>` to manage or verify against another trust file. Signed source
 artifacts contain only `zelyra.toml` and `.zyl` source files, are limited to
 32 MiB and 4,096 files, and currently reject packages with dependencies. The
 signing format is versioned and binds publisher ID, package name, exact
-version, compatibility manifest, and normalized source digest. Remote fetch,
-installation, provenance-preserving locks, and a published stable interface
-remain unfinished.
+version, compatibility manifest, and normalized source digest. Transitive
+dependency resolution/upgrades and a published stable interface remain
+unfinished.
 
 Packages may describe configuration fields under `[settings.<name>]`:
 
