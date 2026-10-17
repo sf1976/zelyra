@@ -11,13 +11,13 @@ Business-, Datenbank- und Webanwendungen. Schemaabhängiges SQL, Formulare,
 CRUD, Views und Geschäftslogik greifen ineinander; gewöhnlicher Programmcode
 und natives SQL bleiben jederzeit möglich.
 
-> **Release 1.1.2 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.1.2)
+> **Release 1.1.5 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.1.5)
 >
 > Die Compilerprüfung und der Verifier decken klar abgegrenzte Bereiche ab. Sie beweisen nicht die Korrektheit beliebiger Anwendungen. Prüfe vor dem Einsatz die unterstützten Abläufe und Grenzen in der jeweiligen Dokumentation.
 
-Zelyra 1.1.2 entfernt den experimentellen Laravel-Analysator und den
-Gerüstbefehl. Siehe die [Release-Notizen 1.1.2](docs/release-notes/1.1.2.de.md).
-Zelyra 1.1.1 enthält die Studio-Korrekturen aus den
+Zelyra 1.1.5 ergänzt offline nutzbare lokale Pakete mit deterministischen
+Lockfiles, typisierten Paketeinstellungen, Modulplanung/-bundles und einem
+geprüften Paketgerüst-Befehl. Siehe die [Release-Notizen 1.1.5](docs/release-notes/1.1.5.de.md) und den [Paketleitfaden](docs/packages.de.md). Zelyra 1.1.2 entfernte den experimentellen Laravel-Analysator und Gerüstbefehl; siehe die [Release-Notizen 1.1.2](docs/release-notes/1.1.2.de.md). Zelyra 1.1.1 enthält die Studio-Korrekturen aus den
 [Release-Notizen 1.1.1](docs/release-notes/1.1.1.de.md). Zelyra 1.1.0 ergänzte
 ein offlinefähiges, eingebettetes Studio mit Sprachdiensten und einen
 eigenständigen LSP sowie typgeprüfte
@@ -30,11 +30,11 @@ den [Release-Notizen 1.1.0](docs/release-notes/1.1.0.de.md), im
 
 Die Sprachkompatibilitätslinie bleibt `0.1`; Compiler-Releases ändern sie nicht automatisch. „Korrektheit beweisen“ ist ein Entwicklungsziel: Der Verifier unterscheidet geprüfte, zur Laufzeit geprüfte und nicht bewiesene Bereiche, ist aber kein allgemeiner Theorembeweiser.
 
-## Was Zelyra 1.1.2 bietet
+## Was Zelyra 1.1.5 bietet
 
 Zelyra verbindet Sprache, Compiler, Datenbank, Webanwendung und Studio in
-einem Arbeitsablauf. Release 1.1.2 behält die Funktionen aus 1.1.1 und 1.1.0 bei
-und entfernt den experimentellen Laravel-Migrationsbefehl:
+einem Arbeitsablauf. Release 1.1.5 behält die Funktionen aus 1.1.2, 1.1.1 und
+1.1.0 bei und ergänzt den lokalen Paketablauf:
 
 - statisch geprüfte Geschäftslogik und schemaabhängiges SQL;
 - MariaDB als primäre Laufzeit sowie geprüfte MySQL- und PostgreSQL-Abläufe;
@@ -58,6 +58,10 @@ und entfernt den experimentellen Laravel-Migrationsbefehl:
   serverseitiger Rechnungsnummer und vollständiger deutscher und englischer
   Quelltexterklärung;
 - CLI-Werkzeuge für Routen, Setup, Diagnose, Datenbank, Audit und SMTP.
+- Offline-Lokalpakete mit SemVer-Kompatibilität, deterministischen
+  Quell-Lockfiles, ausdrücklichen Importen, geprüften Paketplänen/-bundles,
+  typisierten Einstellungen und `zelyra module init`; wiederverwendbare,
+  begrenzte CSV-Import-/Export-Beispiele.
 - If-Ausdrücke, Record-Updates, typisierte Lambdas, geschützte verschachtelte
   Muster, Tupel, Stringinterpolation und ausdrücklich veränderliche lokale
   Arrays; `--max-steps` stoppt unbeschränkte Auswertung mit quellgenauer Diagnose.

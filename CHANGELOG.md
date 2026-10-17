@@ -6,6 +6,8 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+## 1.1.5 — 2026-10-17
+
 - Add optional `zelyra` SemVer compatibility requirements to local package
   manifests. Check them against the running CLI before package use or lockfile
   generation and expose them through `zelyra module list`. The package manifest

@@ -4062,6 +4062,11 @@ $("sidebar-toggle").addEventListener("click", (event) => {
   const hidden = document.body.classList.toggle("sidebar-hidden");
   event.currentTarget.setAttribute("aria-expanded", String(!hidden));
 });
+window.matchMedia("(max-width: 760px)").addEventListener("change", (event) => {
+  if (!event.matches || !activePath) return;
+  document.body.classList.add("sidebar-hidden");
+  $("sidebar-toggle").setAttribute("aria-expanded", "false");
+});
 $("problems-toggle").addEventListener("click", () => { $("problems-panel").hidden = !$("problems-panel").hidden; });
 $("problems-close").addEventListener("click", () => { $("problems-panel").hidden = true; });
 $("open-search").addEventListener("click", findInDocument);

@@ -581,16 +581,16 @@ fn render_local_env(template: &str) -> Result<String, String> {
         ))
 }
 
-fn protect_env_file(path: &std::path::Path) -> Result<(), String> {
+fn protect_env_file(_path: &std::path::Path) -> Result<(), String> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let mut permissions = fs::metadata(path)
-            .map_err(|error| format!("cannot inspect `{}`: {error}", path.display()))?
+        let mut permissions = fs::metadata(_path)
+            .map_err(|error| format!("cannot inspect `{}`: {error}", _path.display()))?
             .permissions();
         permissions.set_mode(0o600);
-        fs::set_permissions(path, permissions)
-            .map_err(|error| format!("cannot protect `{}`: {error}", path.display()))?;
+        fs::set_permissions(_path, permissions)
+            .map_err(|error| format!("cannot protect `{}`: {error}", _path.display()))?;
     }
     Ok(())
 }

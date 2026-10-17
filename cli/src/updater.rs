@@ -17,6 +17,7 @@ struct LatestRelease {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum InstallResult {
+    #[cfg(unix)]
     Installed,
     #[cfg(windows)]
     StagedForWindows,
@@ -96,6 +97,7 @@ fn update(check_only: bool) -> Result<(), String> {
     let checksum = fetch_bytes(&agent, &checksum_url, MAX_CHECKSUM_BYTES)?;
     verify_sha256(&binary, &checksum)?;
     match install_verified_binary(&executable, &binary)? {
+        #[cfg(unix)]
         InstallResult::Installed => {
             println!("Updated successfully to Zelyra {}.", release.version);
             println!("Run `zelyra --version` to verify the installed version.");

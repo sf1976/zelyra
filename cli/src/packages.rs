@@ -1710,7 +1710,10 @@ fn package_source_files(root: &Path) -> Result<Vec<PathBuf>, PackageError> {
 
 fn render_lock(packages: &BTreeMap<String, Package>) -> String {
     let mut output = String::from("lock_version = 1\n\n");
-    for package in packages.values() {
+    for (index, package) in packages.values().enumerate() {
+        if index > 0 {
+            output.push('\n');
+        }
         output.push_str("[[package]]\n");
         output.push_str(&format!("name = {:?}\n", package.name));
         output.push_str(&format!("version = {:?}\n", package.version.to_string()));
@@ -1722,7 +1725,6 @@ fn render_lock(packages: &BTreeMap<String, Package>) -> String {
             .map(|(alias, path)| format!("{alias}={path}"))
             .collect::<Vec<_>>();
         output.push_str(&format!("dependencies = {:?}\n", dependencies));
-        output.push('\n');
     }
     output
 }
@@ -1806,6 +1808,8 @@ mod tests {
             graph.lock_contents(),
             PackageGraph::load(&root).unwrap().unwrap().lock_contents()
         );
+        assert!(graph.lock_contents().ends_with('\n'));
+        assert!(!graph.lock_contents().ends_with("\n\n"));
         assert!(write_lockfile(&graph, false).unwrap());
         graph.check_lockfile().unwrap();
         assert!(!write_lockfile(&graph, false).unwrap());

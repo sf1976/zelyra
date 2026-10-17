@@ -3180,12 +3180,14 @@ fn create_editor_preview_directory() -> Result<EditorPreviewDirectory, (u16, Str
             "zelyra-studio-preview-{}-{name}",
             std::process::id()
         ));
-        let mut builder = fs::DirBuilder::new();
+        let builder = fs::DirBuilder::new();
         #[cfg(unix)]
-        {
+        let builder = {
             use std::os::unix::fs::DirBuilderExt;
+            let mut builder = builder;
             builder.mode(0o700);
-        }
+            builder
+        };
         match builder.create(&path) {
             Ok(()) => return Ok(EditorPreviewDirectory(path)),
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
