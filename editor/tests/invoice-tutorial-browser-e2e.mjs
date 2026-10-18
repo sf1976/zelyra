@@ -70,7 +70,7 @@ try {
   const cssResponse = await stylesheet;
   assert.equal(cssResponse.status(), 200);
   const css = await cssResponse.text();
-  assert.match(css, /Invoice tutorial theme: local overrides of Zelyra UI/);
+  assert.match(css, /Zelyra UI theme for the invoice tutorial/);
   assert.match(css, /--z-color-primary/);
   assert.match(css, /\.invoice-home-hero/);
   assert.match(css, /invoice-ui-gallery \.z-toast-region/);
@@ -93,6 +93,18 @@ try {
   assert.equal(desktop.invoiceButton, true, "home page should offer invoice creation");
   for (const route of ["/customers", "/customers/new", "/items", "/items/new", "/invoices", "/invoices/new", "/invoice_lines", "/views/invoicedashboard"]) {
     await page.goto(`${baseUrl}${route}`, { waitUntil: "networkidle" });
+    if (route === "/customers") {
+      const cardLayout = await page.evaluate(() => {
+        const list = document.querySelector(".zelyra-crud-cards");
+        return {
+          display: list ? getComputedStyle(list).display : null,
+          cardLefts: [...document.querySelectorAll(".zelyra-crud-cards > .zelyra-crud-card")]
+            .map((card) => Math.round(card.getBoundingClientRect().left)),
+        };
+      });
+      assert.equal(cardLayout.display, "grid", `customer cards should use the shared grid layout: ${JSON.stringify(cardLayout)}`);
+      assert.ok(new Set(cardLayout.cardLefts).size > 1, `desktop customer cards should share rows where space allows: ${JSON.stringify(cardLayout)}`);
+    }
     const width = await page.evaluate(() => ({
       viewport: innerWidth,
       document: document.documentElement.scrollWidth,

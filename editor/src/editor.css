@@ -54,6 +54,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .tree-search input::placeholder { color: var(--faint); }
 .project-root { display: flex; align-items: center; gap: 8px; padding: 7px 14px; color: var(--muted); font-size: 10px; letter-spacing: .6px; }
 .project-root strong { color: var(--ink); font-size: 10px; }
+.project-theme-shortcut { min-height: 30px; margin: 0 0 5px; color: var(--accent); background: var(--accent-soft); }
+.project-theme-shortcut:hover { color: var(--ink); }
 .file-tree { flex: 1; overflow: auto; padding: 0 0 12px; }
 .tree-item { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 28px; padding: 0 9px 0 calc(12px + var(--depth) * 15px); border: 0; border-radius: 0; text-align: left; background: transparent; color: var(--muted); font-size: 11px; }
 .tree-item:hover { color: var(--ink); background: var(--surface-raised); }
