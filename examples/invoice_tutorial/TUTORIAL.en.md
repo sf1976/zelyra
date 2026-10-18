@@ -268,6 +268,12 @@ The two repository copies are kept in sync.
   forms share the same surfaces, borders, and spacing as the invoice overview.
 - Custom home and invoice-print styles extend the system. Layouts respond to
   smaller screens; wide tables can scroll within their own area.
+- The home page presents its sample invoice as a structured document. Line
+  items, date, tax rate, and totals remain visually distinct; the three
+  workflow cards share a row on wide screens.
+- Generated CRUD cards place each field label immediately above its value.
+  Decimal values omit insignificant trailing zeroes and Boolean values render
+  as “Yes” or “No”; stored data and submitted values are unchanged.
 - The dark theme uses adjusted color variables. Print rules hide navigation
   and explicitly marked actions.
 
@@ -276,6 +282,13 @@ live centrally in Zelyra UI. The project theme sets tokens and adds only the
 tutorial brand, landing page, and invoice-print design.
 `examples/invoice_tutorial.theme.css` is the synchronized project-theme template
 copied by `zelyra --tutorial invoice` as `zelyra.theme.css`.
+
+The “ⓘ Quelltext erklärt” button belongs to the shared `InvoiceTutorialShell`,
+so generated customer, item, invoice, and line-item pages receive it too. The
+dialog maps visible pages to their Zelyra source files, identifies routes
+generated from `crud` and `tableview`, and points to the project CSS file. Its
+content, like the rest of the page, loads at request time; opening the dialog
+does not run another database query.
 
 ### `locales/en.json` and `locales/de.json` — localized labels
 

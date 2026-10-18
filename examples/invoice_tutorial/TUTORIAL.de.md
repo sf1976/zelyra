@@ -283,6 +283,13 @@ mitkopiert. Beide Vorlagen im Repository werden zusammen gehalten.
   die Rechnungsübersicht.
 - Eigene Startseiten- und Rechnungsdruckstile ergänzen das System. Die Regeln
   sind responsiv; breite Tabellen können in ihrem eigenen Bereich scrollen.
+- Die Startseite zeigt die Beispielsrechnung als gegliederten Beleg. Positionen,
+  Datum, Steuersatz und Rechnungssumme sind getrennt lesbar; die drei
+  Arbeitsablauf-Karten teilen sich bei breiten Ansichten eine Zeile.
+- Die automatisch erzeugten CRUD-Karten stellen jedes Feld mit dem Label direkt
+  über dem zugehörigen Wert dar. Dezimalwerte werden ohne bedeutungslose
+  Nachkommastellen angezeigt, und boolesche Zustände erscheinen als „Ja“ oder
+  „Nein“. Eingabewerte und gespeicherte Daten bleiben unverändert.
 - Das dunkle Theme nutzt angepasste Farbvariablen. Druckregeln blenden
   Navigation und ausdrücklich markierte Aktionen aus.
 
@@ -291,6 +298,13 @@ Tabellencontainer liegen zentral in Zelyra UI. Das Projekt-Theme setzt Tokens
 und ergänzt nur Tutorial-Marke, Startseite und Rechnungsdruck.
 `examples/invoice_tutorial.theme.css` ist die synchrone Projekt-Themevorlage,
 die `zelyra --tutorial invoice` als `zelyra.theme.css` übernimmt.
+
+Der Button „ⓘ Quelltext erklärt“ gehört zum gemeinsamen `InvoiceTutorialShell`
+und erscheint daher auch auf automatisch erzeugten Kunden-, Artikel-, Rechnungs-
+und Positionsseiten. Der Dialog ordnet die sichtbaren Seiten den Zelyra-Dateien
+zu, nennt die durch `crud` und `tableview` erzeugten Routen und zeigt die
+Projekt-CSS-Datei. Seine Inhalte werden wie die übrigen Texte beim Seitenaufruf
+geladen; beim Öffnen des Dialogs erfolgt keine zusätzliche Datenbankabfrage.
 
 ### `locales/de.json` und `locales/en.json` — lokalisierte Beschriftungen
 

@@ -4516,6 +4516,64 @@ fn decimal_presentation_retains_digits_without_padding_or_float_conversion() {
 }
 
 #[test]
+fn crud_cards_present_exact_decimals_and_localized_booleans() {
+    let schema = Schema {
+        database: None,
+        tables: vec![zelyra_database::Table {
+            name: "items".into(),
+            tenant_scope_column: None,
+            columns: vec![
+                zelyra_database::Column {
+                    name: "unit_price".into(),
+                    sql_type: "DECIMAL(39,9)".into(),
+                    nullable: false,
+                    primary_key: false,
+                    auto: false,
+                    unique: false,
+                    default: None,
+                },
+                zelyra_database::Column {
+                    name: "active".into(),
+                    sql_type: "BOOLEAN".into(),
+                    nullable: false,
+                    primary_key: false,
+                    auto: false,
+                    unique: false,
+                    default: None,
+                },
+            ],
+            foreign_keys: Vec::new(),
+            indexes: Vec::new(),
+            uniques: Vec::new(),
+        }],
+    };
+    assert_eq!(
+        display_crud_database_value(
+            "125.000000000",
+            &schema,
+            "items",
+            "unit_price",
+            UiLanguage::German
+        ),
+        "125"
+    );
+    let active_de =
+        display_crud_database_value("1", &schema, "items", "active", UiLanguage::German);
+    let active_en =
+        display_crud_database_value("0", &schema, "items", "active", UiLanguage::English);
+    assert!(active_de.contains("identifier.yes"));
+    assert!(active_en.contains("identifier.no"));
+    assert!(
+        display_crud_database_value("t", &schema, "items", "active", UiLanguage::English)
+            .contains("identifier.yes")
+    );
+    assert!(
+        display_crud_database_value("f", &schema, "items", "active", UiLanguage::German)
+            .contains("identifier.no")
+    );
+}
+
+#[test]
 fn edit_snapshots_distinguish_native_null_literal_marker_and_empty_text() {
     let csrf = CsrfProtection::new("snapshot-key");
     let literal = EditValues {

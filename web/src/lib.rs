@@ -8865,22 +8865,23 @@ fn render_crud_list_with_actions(
                     .and_then(|index| row.get(index))
                     .map(String::as_str)
                     .unwrap_or("");
-                let value = display_database_value(value);
+                let value =
+                    display_crud_database_value(value, &crud.schema, &crud.table, column, language);
                 html.push_str("<dl><dt>");
                 html.push_str(&html_escape_preserving_locale_references(
                     &crud_column_label(language, &crud.schema, &crud.table, column),
                 ));
                 html.push_str("</dt><dd>");
                 if let Some(href) =
-                    crud_list_detail_href(crud, query_columns, display_columns, row, column, value)
+                    crud_list_detail_href(crud, query_columns, display_columns, row, column, &value)
                 {
                     html.push_str("<a href=\"");
                     html.push_str(&html_escape(&href));
                     html.push_str("\">");
-                    html.push_str(&html_escape(value));
+                    html.push_str(&html_escape_preserving_locale_references(&value));
                     html.push_str("</a>");
                 } else {
-                    html.push_str(&html_escape(value));
+                    html.push_str(&html_escape_preserving_locale_references(&value));
                 }
                 html.push_str("</dd></dl>");
             }
@@ -8907,17 +8908,18 @@ fn render_crud_list_with_actions(
                     .and_then(|index| row.get(index))
                     .map(String::as_str)
                     .unwrap_or("");
-                let value = display_database_value(value);
+                let value =
+                    display_crud_database_value(value, &crud.schema, &crud.table, column, language);
                 if let Some(href) =
-                    crud_list_detail_href(crud, query_columns, display_columns, row, column, value)
+                    crud_list_detail_href(crud, query_columns, display_columns, row, column, &value)
                 {
                     html.push_str("<a href=\"");
                     html.push_str(&html_escape(&href));
                     html.push_str("\">");
-                    html.push_str(&html_escape(value));
+                    html.push_str(&html_escape(&value));
                     html.push_str("</a>");
                 } else {
-                    html.push_str(&html_escape(value));
+                    html.push_str(&html_escape(&value));
                 }
                 html.push_str("</td>");
             }
@@ -9034,7 +9036,9 @@ fn render_crud_detail_with_actions(
             &crud_column_label(language, &crud.schema, &crud.table, column),
         ));
         html.push_str("</dt><dd>");
-        html.push_str(&html_escape(display_database_value(value)));
+        html.push_str(&html_escape_preserving_locale_references(
+            &display_crud_database_value(value, &crud.schema, &crud.table, column, language),
+        ));
         html.push_str("</dd>");
     }
     if ui_actions.edit || ui_actions.create {
@@ -10388,6 +10392,41 @@ fn display_database_value(value: &str) -> &str {
     } else {
         value
     }
+}
+
+fn display_crud_database_value(
+    value: &str,
+    schema: &Schema,
+    table_name: &str,
+    column_name: &str,
+    language: UiLanguage,
+) -> String {
+    let value = display_database_value(value);
+    let Some(column) = schema
+        .tables
+        .iter()
+        .find(|table| table.name == table_name)
+        .and_then(|table| {
+            table
+                .columns
+                .iter()
+                .find(|column| column.name == column_name)
+        })
+    else {
+        return value.to_owned();
+    };
+    let sql_type = column.sql_type.trim().to_ascii_uppercase();
+    if sql_type.starts_with("DECIMAL") || sql_type.starts_with("NUMERIC") {
+        return display_exact_decimal_value(value).to_owned();
+    }
+    if sql_type == "BOOLEAN" || sql_type == "BOOL" {
+        return match value {
+            "1" | "true" | "TRUE" | "t" | "T" => localized_identifier_reference(language, "yes"),
+            "0" | "false" | "FALSE" | "f" | "F" => localized_identifier_reference(language, "no"),
+            _ => value.to_owned(),
+        };
+    }
+    value.to_owned()
 }
 
 struct TemplateForBlock {
