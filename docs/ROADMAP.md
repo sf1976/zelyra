@@ -126,10 +126,11 @@ security and compatibility gates stated for that milestone.
   CRUD, form, filter, and table styling in Zelyra UI; give the invoice tutorial
   one responsive design and generated forms the same page frame, with only
   project-specific design retained in its synchronized theme template.
-- [ ] **1.2.12 — application settings, ecosystem parity, and business slices:**
-  Add application-served module settings only with server-side authorization,
+- [~] **1.2.12 — application settings, ecosystem parity, and business slices:**
+  Application-served module settings are implemented with server-side authorization,
   CSRF, schema validation, redaction, and explicit runtime behavior after a
-  change. Prove package/module contracts for settings, effects, jobs, data
+  change. The public host allowlist and forwarded-header contract are documented
+  and tested; Apache/Nginx runtime tests remain open. Prove package/module contracts for settings, effects, jobs, data
   access, and HostServices across AST, MIR, and Bytecode, or make unsupported
   paths fail closed with stable diagnostics. Secure `public/`, static assets,
   and Apache/Nginx forwarded-header and allowed-host behavior with deployment

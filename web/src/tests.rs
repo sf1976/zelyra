@@ -1513,6 +1513,39 @@ fn host_allowlist_blocks_dns_rebinding_and_accepts_configured_hosts() {
 }
 
 #[test]
+fn forwarded_host_never_overrides_the_allowlisted_request_host() {
+    let app = WebApp::new(
+        vec![Route {
+            path: "/health".into(),
+            html: "ok".into(),
+            query: Vec::new(),
+            page_size: None,
+            sort_columns: Vec::new(),
+            search_columns: Vec::new(),
+            filters: Vec::new(),
+            data: Vec::new(),
+            requires_auth: false,
+            permissions: Vec::new(),
+        }],
+        Vec::new(),
+    )
+    .with_allowed_hosts(vec!["app.example".into()])
+    .unwrap();
+
+    let forged = parse_request(
+        "GET /health HTTP/1.1\r\nHost: attacker.example\r\nX-Forwarded-Host: app.example\r\n\r\n",
+    )
+    .unwrap();
+    assert_eq!(app.dispatch(&forged).status, 400);
+
+    let allowed_with_forged_forward = parse_request(
+        "GET /health HTTP/1.1\r\nHost: app.example\r\nX-Forwarded-Host: attacker.example\r\n\r\n",
+    )
+    .unwrap();
+    assert_eq!(app.dispatch(&allowed_with_forged_forward).status, 200);
+}
+
+#[test]
 fn host_allowlist_normalizes_equivalent_ipv6_literals() {
     let app = WebApp::new(Vec::new(), Vec::new());
     let request = parse_request("GET / HTTP/1.1\r\nHost: [0:0:0:0:0:0:0:1]\r\n\r\n").unwrap();
