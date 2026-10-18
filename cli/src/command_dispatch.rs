@@ -113,6 +113,11 @@ fn entry_argument_value(
 }
 
 pub(super) fn run() -> ExitCode {
+    #[cfg(unix)]
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
+
     let mut args = env::args().skip(1);
     let Some(command) = args.next() else {
         usage();
