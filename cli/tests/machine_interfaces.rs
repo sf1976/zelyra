@@ -1005,14 +1005,21 @@ fn check_rejects_external_or_header_injecting_form_redirects() {
         );
         let (directory, path) = temporary_project_source(&format!("form-redirect-{name}"), &source);
         let output = Command::new(binary())
-            .args(["check", path.to_str().unwrap()])
+            .args(["check", path.to_str().unwrap(), "--format", "json"])
             .output()
             .expect("check command should run");
         assert!(!output.status.success(), "accepted redirect {target:?}");
+        assert!(output.stderr.is_empty());
+        let diagnostics: serde_json::Value = serde_json::from_slice(&output.stdout)
+            .expect("check should return structured diagnostics");
+        assert_eq!(diagnostics["success"], false);
         assert!(
-            String::from_utf8_lossy(&output.stderr).contains("E-FORM-007"),
-            "missing redirect diagnostic for {target:?}: {}",
-            String::from_utf8_lossy(&output.stderr)
+            diagnostics["diagnostics"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|diagnostic| diagnostic["code"] == "E-FORM-007"),
+            "missing redirect diagnostic for {target:?}: {diagnostics}"
         );
         fs::remove_dir_all(directory).unwrap();
     }
