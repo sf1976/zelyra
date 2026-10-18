@@ -70,7 +70,7 @@ try {
   const cssResponse = await stylesheet;
   assert.equal(cssResponse.status(), 200);
   const css = await cssResponse.text();
-  assert.match(css, /Invoice tutorial project theme/);
+  assert.match(css, /Zelyra UI theme for the invoice tutorial/);
   assert.match(css, /--z-color-primary/);
   assert.match(css, /\.invoice-home-hero/);
   assert.match(css, /invoice-ui-gallery \.z-toast-region/);
