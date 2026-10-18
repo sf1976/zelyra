@@ -27,7 +27,7 @@ Ressourcendisziplin und ehrliche Beweisaussagen leiten jede Phase. Das
 [Manifest](MANIFESTO.de.md) beschreibt die Prinzipien; die Roadmap kennzeichnet
 den tatsächlich implementierten Stand.
 
-Das aktuelle stabile Release ist 1.2.11 und wurde unter https://github.com/sf1976/zelyra/releases/tag/v1.2.11 veröffentlicht. **Aktuelle Meilensteine** ist die
+Das aktuelle stabile Release ist 1.2.12 und wurde unter https://github.com/sf1976/zelyra/releases/tag/v1.2.12 veröffentlicht. **Aktuelle Meilensteine** ist die
 verbindliche Übersicht der nächsten Vorhaben. Ältere, nummerierte Release-
 Abschnitte bleiben als historische Planung und Nachweise erhalten; sie legen
 für sich keine aktuellen Releaseziele fest. Langfristige Ideen stehen im
@@ -135,24 +135,14 @@ abgeschlossen.
   Formular-, Filter- und Tabellenstile zentral in Zelyra UI bündeln; ein
   durchgängiges responsives Tutorialdesign schaffen und generierte Formulare in
   denselben Seitenrahmen setzen.
-- [~] **1.2.12 Rechnungstutorial-Feinschliff:** Benutzerdefinierte AppShell-
-  Seiten mit generierten CRUD-Formularen abstimmen, Karten responsiv anordnen
-  und Projekt-Theme-CSS im Studio leicht auffindbar und sicher änderbar machen.
-- [~] **1.2.12 — Anwendungseinstellungen, Ökosystemparität und Geschäftsabläufe:**
-  Anwendungseigene Moduleinstellungen sind mit serverseitiger Autorisierung,
-  CSRF, Schemaprüfung, Redaktion und ausdrücklich definiertem Verhalten nach
-  Änderungen umgesetzt. Der öffentliche Host-Allowlist- und Forwarded-Header-
-  Vertrag ist dokumentiert und getestet; Nginx lieferte im Loopback-Container
-  statische Dateien aus und leitete Routen weiter. Apache- und TLS-Integrationstests
-  fehlen noch. Paket-/Modulverträge für Einstellungen,
-  Effekte, Jobs, Datenzugriff und HostServices über AST, MIR und Bytecode
-  nachweisen oder nicht unterstützte Pfade in jedem Backend mit stabilen
-  Diagnosen geschlossen abweisen. `public/`, statische Assets sowie
-  Apache-/Nginx-Weiterleitungsheader und erlaubte Hosts mit Deploymenttests
-  absichern. Begrenzte, getestete Zustandsübergänge, Audit/Historie,
-  ausgeglichene Ledger-Buchungen, Reflection-/Exportmetadaten, Healthchecks,
-  modulare Bundles und einen ausdrücklich begrenzten Wasm-/Sidecar-Zugang
-  liefern. Keine universellen Compliance- oder Performanceversprechen.
+- [x] **1.2.12 — Anwendungseinstellungen und Tutorial-Feinschliff:** Als
+  [`v1.2.12`](https://github.com/sf1976/zelyra/releases/tag/v1.2.12)
+  veröffentlicht. Die App-Einstellungsseite, Dialog-Standardwerte, der
+  Studio-Zugriff auf `zelyra.theme.css`, responsives Invoice-CRUD und die
+  zugehörigen Sicherheitstests bestanden die vollständigen Release-Gates.
+  Apache-/TLS-Tests, vollständige Paket-/Backendparität und die übrigen
+  Geschäftsabläufe blieben außerhalb dieses abgegrenzten Releases und sind
+  1.2.14–1.2.15 zugeordnet.
 - [~] **1.2.13 — kanonische Projektstruktur:** `zelyra new --layout standard`
   erstellt ein prüfbares Minimalprojekt mit `routes/`, `domain/`, `schema/`,
   `public/` und `assets/`. `[project].layout = "standard"` aktiviert das
@@ -163,10 +153,19 @@ abgeschlossen.
   bleiben unverändert. Alte Projekte bleiben unverändert. Datenbankvorlagen,
   Architekturregeln und sichere Migrationsvorschau fehlen noch; `plugins/` wird
   bis zu einem abgesicherten Loader zurückgestellt.
-- [ ] **1.2.14–1.2.15 — Bytecode-Parität und Freigabenachweis:** Verifizierte
-  Bytecodesemantik, Hostoperationen, Fuzzing, Differentialtests,
-  Ressourcenlimits, Diagnostik sowie Paket-/Deploymentunterstützung ausbauen.
-  Lücken vor dem finalen 1.3.0-Gate schließen, nicht durch Umschalten verbergen.
+- [ ] **1.2.14 — Deployment- und Architekturprüfung:** Apache-/TLS-
+  Integration, sichere `public/`- und Asset-Auslieferung, Host-/Forwarded-
+  Header-Grenzen sowie Architekturregeln und eine deterministische lesende
+  `migrate-layout --check`-Vorschau implementieren. Fehlende/unsichere Pfade
+  geschlossen abweisen; keine automatische Mehrdateiänderung ohne Recovery-
+  Journal.
+- [ ] **1.2.15 — Geschäftsabläufe und Backendparität:** Einstellungen, Effects,
+  Jobs, Datenzugriff und HostServices für unterstützte AST/MIR/Bytecode-Pfade
+  nachweisen oder mit stabilen Diagnosen fail-closed abweisen. CSV-Module,
+  begrenzte Zustandsübergänge, Audit/Historie, ausgeglichene Ledger-Buchungen,
+  Reflection-/Exportmetadaten, Healthchecks und modulare Bundles mit konkreten
+  Integrationstests abschließen. Wasm/Sidecars bleiben optional und benötigen
+  ein eigenes Sandbox-/ABI-Gate.
 - [ ] **1.3.0 — kanonische Struktur und Bytecode-Standard:** Das optionale,
   versionierte Projektlayout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, `plugins/`), Architekturprüfungen und eine sichere
@@ -328,7 +327,13 @@ werden. Details stehen im [Projektlayout-Arbeitsplan](release-plans/1.3.0-projec
 
 ## Aktuelle Meilensteine
 
-- [~] **1.2.12 Anwendungseinstellungen und Tutorial-Feinschliff — Release in Vorbereitung:** Die authentifizierte, CSRF-geschützte und revisionsgeprüfte Einstellungsseite ist mit Schema-Validierung, Geheimnisredaktion und sicheren atomaren Schreibvorgängen integriert. Die Dialog-Standardwerte, der Studio-Zugriff auf `zelyra.theme.css`, responsive Invoice-CRUD-Stile sowie die Integrationstests sind enthalten. PR #108 und seine vollständige CI bestanden; das versionierte Release ist in Vorbereitung. Apache-/TLS-Tests und MIR-/Bytecode-Parität sind ausdrücklich nicht enthalten und bleiben offenen Folgemeilensteinen zugeordnet.
+- [x] **1.2.12 Anwendungseinstellungen und Tutorial-Feinschliff — veröffentlicht:** [v1.2.12](https://github.com/sf1976/zelyra/releases/tag/v1.2.12) enthält die authentifizierte, CSRF-geschützte und revisionsgeprüfte Einstellungsseite mit Schema-Validierung, Geheimnisredaktion und sicheren atomaren Schreibvorgängen, vereinfachte Dialog-Standardwerte, den Studio-Zugriff auf `zelyra.theme.css`, responsive Invoice-CRUD-Stile sowie zugehörige Integrationstests. PR #107 und #108 bestanden vollständige CI. Die Release-Workflows bauten Linux- und Windows-Archive reproduzierbar und attestierten sie; alle vier Archive und Installer wurden gegen SHA-256 geprüft. Das Linux-Binary meldet `zelyra 1.2.12`. Apache-/TLS-Tests und MIR-/Bytecode-Parität bleiben offen.
+
+- [~] **1.2.13 — Projektlayout-Grundlage — Release in Vorbereitung:** `zelyra new --layout standard` erstellt und prüft das opt-in Layout mit sicheren `routes/`, `domain/`, `schema/`, `public/`- und `assets/`-Wurzeln sowie compiler-/runtimegestützten Namespace-Imports. Legacyprojekte bleiben unverändert. Vollständige Architekturregeln und eine sichere Migrationsvorschau bleiben für 1.3.0 vorgesehen; `plugins/` erhält erst nach einem eigenen Loader- und Sicherheitsnachweis einen Standardplatz. Die vollständige CI von PR #109 ist bestanden; das versionierte Release wird vorbereitet.
+
+
+
+
 
 
 - [x] **1.0.5 Studio-Logs:** Studio zeigt ein Logs-Fenster und speichert

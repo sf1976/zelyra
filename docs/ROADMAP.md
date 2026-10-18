@@ -25,7 +25,7 @@ telemetry, explicit effects, portable data, resource discipline, and honest
 proof claims guide every phase. The [manifesto](MANIFESTO.md) states the
 principles; the roadmap below tracks what is actually implemented.
 
-The current stable release is 1.2.11, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.11. **Current milestones** is the source of
+The current stable release is 1.2.12, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.12. **Current milestones** is the source of
 near-term commitments. Older numbered release sections below are retained as
 historical planning and evidence; they do not by themselves define current
 release targets. Longer-term ideas remain in the post-1.0 evolution section.
@@ -126,22 +126,13 @@ security and compatibility gates stated for that milestone.
   CRUD, form, filter, and table styling in Zelyra UI; give the invoice tutorial
   one responsive design and generated forms the same page frame. Keep
   project-specific design in the synchronized theme template.
-- [~] **1.2.12 invoice tutorial refinement:** Keep custom AppShell pages aligned
-  with generated CRUD forms, lay out cards responsively, and make project theme
-  CSS easy to open and safely customize in Studio.
-- [~] **1.2.12 — application settings, ecosystem parity, and business slices:**
-  Application-served module settings are implemented with server-side authorization,
-  CSRF, schema validation, redaction, and explicit runtime behavior after a
-  change. The public host allowlist and forwarded-header contract are documented
-  and tested; a loopback Nginx container serves static files and proxies routes,
-  while Apache and TLS integration tests remain open. Prove package/module contracts for settings, effects, jobs, data
-  access, and HostServices across AST, MIR, and Bytecode, or make unsupported
-  paths fail closed with stable diagnostics. Secure `public/`, static assets,
-  and Apache/Nginx forwarded-header and allowed-host behavior with deployment
-  tests. Deliver bounded, tested state transitions, audit/history, balanced
-  ledger operations, reflection/export metadata, health checks, modular
-  bundles, and any explicitly scoped Wasm or sidecar bridge. Make no universal
-  compliance or performance claims.
+- [x] **1.2.12 — application settings and tutorial polish:** Released as
+  [`v1.2.12`](https://github.com/sf1976/zelyra/releases/tag/v1.2.12). The app
+  settings page, dialog defaults, Studio access to `zelyra.theme.css`,
+  responsive invoice CRUD, and related security tests passed the full release
+  gates. Apache/TLS testing, full package/backend parity, and the remaining
+  business workflows stayed outside this scoped release and are assigned to
+  1.2.14–1.2.15.
 - [~] **1.2.13 — canonical project structure:** `zelyra new --layout standard`
   creates a checkable minimal `routes/`, `domain/`, `schema/`, `public/`, and
   `assets/` tree. `[project].layout = "standard"` opts in; `check`, `run`, and
@@ -151,10 +142,17 @@ security and compatibility gates stated for that milestone.
   this profile; legacy imports remain unchanged. Database templates,
   architecture rules, and safe migration preview remain open; `plugins/` is
   deferred until it has a secured loader.
-- [ ] **1.2.14–1.2.15 — Bytecode parity and release proof:** Expand verified
-  Bytecode semantics, host operations, fuzzing, differential tests, resource
-  accounting, diagnostics, and package/deployment support. Fix gaps before the
-  final 1.3.0 gate rather than hiding them behind a backend switch.
+- [ ] **1.2.14 — deployment and architecture checks:** Implement Apache/TLS
+  integration, secure `public/` and asset serving, Host/forwarded-header
+  boundaries, architecture rules, and a deterministic read-only
+  `migrate-layout --check` preview. Fail closed on unsafe paths; add no
+  multi-file write mode without a recovery journal.
+- [ ] **1.2.15 — business workflows and backend parity:** Prove settings,
+  effects, jobs, data access, and HostServices across supported AST/MIR/Bytecode
+  paths, or fail closed with stable diagnostics. Complete CSV modules, bounded
+  state transitions, audit/history, balanced ledger operations, reflection and
+  export metadata, health checks, and modular bundles with concrete integration
+  tests. Wasm/sidecars remain optional and require their own sandbox/ABI gate.
 - [ ] **1.3.0 — canonical structure and Bytecode default:** Complete the
   opt-in versioned project layout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, and `plugins/`), architecture checks, and safe layout migration
@@ -319,7 +317,13 @@ compatibility behavior before changing syntax. See the detailed
 
 ## Current milestones
 
-- [~] **1.2.12 application settings and tutorial polish — release preparation:** The authenticated, CSRF-protected, revision-checked settings page is integrated with schema validation, secret redaction, and safe atomic writes. Dialog defaults, Studio access to `zelyra.theme.css`, responsive invoice CRUD styling, and integration coverage are included. PR #108 and its full CI passed; the versioned release is being prepared. Apache/TLS tests and MIR/Bytecode parity are explicitly out of scope and remain assigned to later milestones.
+- [x] **1.2.12 application settings and tutorial polish — released:** [v1.2.12](https://github.com/sf1976/zelyra/releases/tag/v1.2.12) includes the authenticated, CSRF-protected, revision-checked settings page with schema validation, secret redaction, and safe atomic writes; simpler dialog defaults; Studio access to `zelyra.theme.css`; responsive invoice CRUD styles; and integration tests. PRs #107 and #108 passed full CI. Release workflows built reproducible Linux and Windows archives and attested them; all four archives and installers passed SHA-256 verification. The Linux binary reports `zelyra 1.2.12`. Apache/TLS testing and MIR/Bytecode parity remain open.
+
+- [~] **1.2.13 project layout foundation — release preparation:** `zelyra new --layout standard` creates and validates the opt-in layout with safe `routes/`, `domain/`, `schema/`, `public/`, and `assets/` roots plus compiler/runtime namespace imports. Legacy projects remain unchanged. Full architecture rules and a safe migration preview remain assigned to 1.3.0; `plugins/` will become standard only after a loader and security gate. Full PR #109 CI passed; the versioned release is being prepared.
+
+
+
+
 
 
 - [x] **1.0.5 Studio logs:** Added the Studio Logs panel and a local JSONL
