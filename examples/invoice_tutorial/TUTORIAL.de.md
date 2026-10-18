@@ -123,7 +123,7 @@ geändert werden. Die Beispieldaten behalten `RE-2026-001`.
 - Zeile 2 importiert die compilergeprüfte Standardbibliothek `zelyra/ui`; die Komponenten werden in HTML über ihren Namen verwendet. Zeilen 3–8 importieren Datenbank, Layout, Kunden, Artikel, Rechnungen und Übersicht. Die Namen nach `as` sind lokale Modul-Aliase.
 - Zeilen 9–11 deklarieren `GET /`, wählen `InvoiceTutorialShell` und beginnen die HTML-Ausgabe. Die Route `/` ist hier ausdrücklich festgelegt.
 - Zeile 12 öffnet den Hauptbereich. Zeilen 13–14 beginnen das zweispaltige Hero- und Beispielrechnungs-Layout.
-- Zeilen 15–19 bilden Kennzeichnung, Z-Marke und lokale Statusplakette. Die Beschriftungen mit `data-zelyra-i18n` werden aus den Sprachdateien ersetzt.
+- Zeilen 15–19 bilden Kennzeichnung, Z-Marke und lokale Statusplakette. Die Beschriftungen mit `data-zelyra-i18n` werden aus `locales/de.json` oder `locales/en.json` ersetzt; `.env` wählt mit `ZELYRA_LANGUAGE` den Katalog (das Tutorial startet auf Deutsch).
 - Zeile 20 setzt die übersetzte Hauptüberschrift; Zeile 21 den Einführungstext.
 - Zeilen 22–25 bilden Aktionsbereich und Links: `/invoices/new` startet die Rechnungserstellung, `/views/invoicedashboard` öffnet die Übersicht.
 - Zeilen 26–30 zeigen den lokalen Datenhinweis und schließen den Hero-Bereich.
@@ -144,6 +144,7 @@ geändert werden. Die Beispieldaten behalten `RE-2026-001`.
 - Zeilen 216–229 zeigen serverseitig gerenderte Balken-, Ring- und Liniendiagramme. Die Linie erhält eine lesbare Tabellenalternative.
 - Zeilen 230–259 demonstrieren Fortschritt, Breadcrumbs, Pagination, Leer-/Lade-/Fehlerzustände, Toast, Disclosure, Dropdown, Tastaturtabs und Dialog.
 - Zeilen 260–269 erklären Browserdruck/PDF, den lokalen E-Mail-Entwurf mit vorausgefüllter Rechnungsnummer und die Druckaktion für die Übersicht. Speichere die Rechnung zuerst als PDF und hänge sie im Entwurf manuell an. Die E-Mail-Schaltfläche versendet nicht selbst; Servermail verwendet eine autorisierte Route, `mail_queue` und den Outbox-Worker. Die Outbox kann noch keine Anhänge versenden.
+- Im gemeinsamen Kopf schaltet „Farbschema“ zwischen System, dunkel und hell um. Die Auswahl bleibt lokal im Browser gespeichert; projektweite Farben und die Darstellung der Beispielrechnung stehen in `zelyra.theme.css`.
 - Zeilen 270–272 schließen Komponentenübersicht und Route.
 - Zeile 274 deklariert `page "/tour"` als interaktive Architektur- und Code-Tour mit einfahrbaren Quelltext-Blöcken (`Disclosure`), Code-Beispielen für alle Kernmodule und einer Gegenüberstellung zu klassischen Framework-Stacks.
 
@@ -306,11 +307,13 @@ zu, nennt die durch `crud` und `tableview` erzeugten Routen und zeigt die
 Projekt-CSS-Datei. Seine Inhalte werden wie die übrigen Texte beim Seitenaufruf
 geladen; beim Öffnen des Dialogs erfolgt keine zusätzliche Datenbankabfrage.
 
+Die Komponentenübersicht unter `/ui/components` bezieht Titel, Beschreibungen und Feldbeschriftungen ebenfalls aus den Locale-Dateien. Für Texte in Eigenschaften einer Komponente verwendet `main.zyl` die Schreibweise `@i18n:invoice.ui.schlüssel`; normale HTML-Texte erhalten `data-zelyra-i18n="invoice.ui.schlüssel"`. Beide Kataloge müssen denselben Schlüssel enthalten. `ZELYRA_LANGUAGE` in `.env` wählt `de` oder `en`.
+
 ### `locales/de.json` und `locales/en.json` — lokalisierte Beschriftungen
 
 Beide Dateien enthalten dieselben Schlüssel in derselben Reihenfolge. Die Zeilenerklärung gilt für beide: `de.json` ordnet jeden stabilen Schlüssel dem deutschen und `en.json` dem englischen Anzeigetext zu. `main.zyl`, das Layout und generierte Formulare verweisen auf diese Schlüssel; die Werte verändern weder Routen noch Datenbankzugriff.
 
-- Zeile 1 öffnet das JSON-Objekt; Zeile 61 schließt es.
+- Zeile 1 öffnet das JSON-Objekt; Zeile 169 schließt es.
 - Zeile 2 (`invoice.number.label`) beschriftet das Eingabefeld der Rechnungsnummer.
 - Zeile 3 (`invoice.number.auto_hint`) erklärt die automatische Vergabe beim Speichern.
 - Zeile 4 (`invoice.issued_at.label`) beschriftet das Ausstellungsdatum.
@@ -324,49 +327,50 @@ Beide Dateien enthalten dieselben Schlüssel in derselben Reihenfolge. Die Zeile
 - Zeile 12 (`invoice.nav.lines`) beschriftet den Rechnungspositionslink.
 - Zeile 13 (`invoice.nav.new_invoice`) beschriftet die Schaltfläche für neue Rechnungen.
 - Zeile 14 (`invoice.nav.footer`) liefert den Hinweis im Fußbereich.
-- Zeile 15 (`invoice.home.eyebrow`) liefert die kleine Kennzeichnung über der Überschrift.
-- Zeile 16 (`invoice.home.title`) liefert die Hauptüberschrift der Startseite.
-- Zeile 17 (`invoice.home.intro`) erklärt den Beispielablauf.
-- Zeile 18 (`invoice.home.new_invoice`) beschriftet die primäre Aktion.
-- Zeile 19 (`invoice.home.overview`) beschriftet den Link zur Rechnungsübersicht.
-- Zeile 20 (`invoice.home.workflow`) liefert den Namen des Rechnungsablaufs.
-- Zeile 21 (`invoice.home.customer_title`) benennt Schritt und Karte für Kunden.
-- Zeile 22 (`invoice.home.customer_text`) erklärt den Kundenschritt.
-- Zeile 23 (`invoice.home.customer_link`) beschriftet den Link zum Kundenformular.
-- Zeile 24 (`invoice.home.item_title`) benennt Schritt und Karte für Artikel.
-- Zeile 25 (`invoice.home.item_text`) erklärt den Artikelschritt.
-- Zeile 26 (`invoice.home.item_link`) beschriftet den Link zum Artikelformular.
-- Zeile 27 (`invoice.home.invoice_title`) benennt Schritt und Karte für Rechnungen.
-- Zeile 28 (`invoice.home.invoice_text`) erklärt Auswahl des Kunden und Nummernvergabe.
-- Zeile 29 (`invoice.home.invoice_link`) beschriftet den Link zum Rechnungsformular.
-- Zeile 30 (`invoice.home.local_badge`) kennzeichnet die lokale, startbereite Beispielanwendung.
-- Zeile 31 (`invoice.home.proof`) erklärt, dass die Daten lokal im Projekt bleiben.
-- Zeile 32 (`invoice.home.sample_label`) kennzeichnet die Rechnung als Beispiel.
-- Zeile 33 (`invoice.home.sample_status`) zeigt den Entwurfsstatus der Beispielrechnung.
-- Zeile 34 (`invoice.home.billed_to`) kennzeichnet den Rechnungsempfänger.
-- Zeile 35 (`invoice.home.issue_date`) kennzeichnet das Ausstellungsdatum.
-- Zeile 36 (`invoice.home.tax_rate`) kennzeichnet den Umsatzsteuersatz.
-- Zeile 37 (`invoice.home.tax_rate_value`) zeigt den in der Druckansicht verwendeten Steuersatz.
-- Zeile 38 (`invoice.home.sample_date`) zeigt das lokalisierte Beispieldatum.
-- Zeile 39 (`invoice.home.sample_item_1`) benennt den ersten Beispielartikel.
-- Zeile 40 (`invoice.home.sample_item_1_detail`) zeigt Menge und Nettopreis je Einheit des ersten Artikels.
-- Zeile 41 (`invoice.home.sample_amount_1`) zeigt die Nettosumme des ersten Artikels.
-- Zeile 42 (`invoice.home.sample_item_2`) benennt den zweiten Beispielartikel.
-- Zeile 43 (`invoice.home.sample_item_2_detail`) zeigt Menge und Nettopreis je Einheit des zweiten Artikels.
-- Zeile 44 (`invoice.home.sample_amount_2`) zeigt die Nettosumme des zweiten Artikels.
-- Zeile 45 (`invoice.home.net_total`) beschriftet die Nettosumme.
-- Zeile 46 (`invoice.home.sample_net`) zeigt den Nettobetrag der Beispielrechnung.
-- Zeile 47 (`invoice.home.tax_total`) beschriftet Umsatzsteuer und Steuersatz.
-- Zeile 48 (`invoice.home.sample_tax`) zeigt den Steuerbetrag der Beispielrechnung.
-- Zeile 49 (`invoice.home.gross_total`) beschriftet den fälligen Bruttobetrag.
-- Zeile 50 (`invoice.home.sample_gross`) zeigt den Bruttobetrag der Beispielrechnung.
-- Zeile 51 (`invoice.home.open_sample`) beschriftet den Link zur Druckansicht.
-- Zeile 52 (`invoice.home.feature_date_title`) benennt den Datums-Hinweis.
-- Zeile 53 (`invoice.home.feature_date_text`) erklärt die reine Datumseingabe ohne Uhrzeit.
-- Zeile 54 (`invoice.home.feature_number_title`) benennt die automatische Nummernvergabe.
-- Zeile 55 (`invoice.home.feature_number_text`) erklärt, wann die Nummer entsteht.
-- Zeile 56 (`invoice.home.feature_print_title`) benennt die Druckfunktion.
-- Zeile 57 (`invoice.home.feature_print_text`) erklärt die berechneten Summen.
-- Zeile 58 (`invoice.home.workflow_kicker`) kennzeichnet die Ablaufsektion als drei Schritte.
-- Zeile 59 (`invoice.home.workflow_title`) setzt deren Hauptüberschrift.
-- Zeile 60 (`invoice.home.all_invoices`) beschriftet den Link zu allen Rechnungen.
+- Zeile 24 (`invoice.home.eyebrow`) liefert die kleine Kennzeichnung über der Überschrift.
+- Zeile 25 (`invoice.home.title`) liefert die Hauptüberschrift der Startseite.
+- Zeile 26 (`invoice.home.intro`) erklärt den Beispielablauf.
+- Zeile 27 (`invoice.home.new_invoice`) beschriftet die primäre Aktion.
+- Zeile 28 (`invoice.home.overview`) beschriftet den Link zur Rechnungsübersicht.
+- Zeile 29 (`invoice.home.workflow`) liefert den Namen des Rechnungsablaufs.
+- Zeile 30 (`invoice.home.customer_title`) benennt Schritt und Karte für Kunden.
+- Zeile 31 (`invoice.home.customer_text`) erklärt den Kundenschritt.
+- Zeile 32 (`invoice.home.customer_link`) beschriftet den Link zum Kundenformular.
+- Zeile 33 (`invoice.home.item_title`) benennt Schritt und Karte für Artikel.
+- Zeile 34 (`invoice.home.item_text`) erklärt den Artikelschritt.
+- Zeile 35 (`invoice.home.item_link`) beschriftet den Link zum Artikelformular.
+- Zeile 36 (`invoice.home.invoice_title`) benennt Schritt und Karte für Rechnungen.
+- Zeile 37 (`invoice.home.invoice_text`) erklärt Auswahl des Kunden und Nummernvergabe.
+- Zeile 38 (`invoice.home.invoice_link`) beschriftet den Link zum Rechnungsformular.
+- Zeile 39 (`invoice.home.local_badge`) kennzeichnet die lokale, startbereite Beispielanwendung.
+- Zeile 40 (`invoice.home.proof`) erklärt, dass die Daten lokal im Projekt bleiben.
+- Zeile 41 (`invoice.home.sample_label`) kennzeichnet die Rechnung als Beispiel.
+- Zeile 42 (`invoice.home.sample_status`) zeigt den Entwurfsstatus der Beispielrechnung.
+- Zeile 43 (`invoice.home.billed_to`) kennzeichnet den Rechnungsempfänger.
+- Zeile 44 (`invoice.home.issue_date`) kennzeichnet das Ausstellungsdatum.
+- Zeile 45 (`invoice.home.tax_rate`) kennzeichnet den Umsatzsteuersatz.
+- Zeile 46 (`invoice.home.tax_rate_value`) zeigt den in der Druckansicht verwendeten Steuersatz.
+- Zeile 47 (`invoice.home.sample_date`) zeigt das lokalisierte Beispieldatum.
+- Zeile 48 (`invoice.home.sample_item_1`) benennt den ersten Beispielartikel.
+- Zeile 49 (`invoice.home.sample_item_1_detail`) zeigt Menge und Nettopreis je Einheit des ersten Artikels.
+- Zeile 50 (`invoice.home.sample_amount_1`) zeigt die Nettosumme des ersten Artikels.
+- Zeile 51 (`invoice.home.sample_item_2`) benennt den zweiten Beispielartikel.
+- Zeile 52 (`invoice.home.sample_item_2_detail`) zeigt Menge und Nettopreis je Einheit des zweiten Artikels.
+- Zeile 53 (`invoice.home.sample_amount_2`) zeigt die Nettosumme des zweiten Artikels.
+- Zeile 54 (`invoice.home.net_total`) beschriftet die Nettosumme.
+- Zeile 55 (`invoice.home.sample_net`) zeigt den Nettobetrag der Beispielrechnung.
+- Zeile 56 (`invoice.home.tax_total`) beschriftet Umsatzsteuer und Steuersatz.
+- Zeile 57 (`invoice.home.sample_tax`) zeigt den Steuerbetrag der Beispielrechnung.
+- Zeile 58 (`invoice.home.gross_total`) beschriftet den fälligen Bruttobetrag.
+- Zeile 59 (`invoice.home.sample_gross`) zeigt den Bruttobetrag der Beispielrechnung.
+- Zeile 60 (`invoice.home.open_sample`) beschriftet den Link zur Druckansicht.
+- Zeile 61 (`invoice.home.feature_date_title`) benennt den Datums-Hinweis.
+- Zeile 62 (`invoice.home.feature_date_text`) erklärt die reine Datumseingabe ohne Uhrzeit.
+- Zeile 63 (`invoice.home.feature_number_title`) benennt die automatische Nummernvergabe.
+- Zeile 64 (`invoice.home.feature_number_text`) erklärt, wann die Nummer entsteht.
+- Zeile 65 (`invoice.home.feature_print_title`) benennt die Druckfunktion.
+- Zeile 66 (`invoice.home.feature_print_text`) erklärt die berechneten Summen.
+- Zeile 67 (`invoice.home.workflow_kicker`) kennzeichnet die Ablaufsektion als drei Schritte.
+- Zeile 68 (`invoice.home.workflow_title`) setzt deren Hauptüberschrift.
+- Zeile 69 (`invoice.home.all_invoices`) beschriftet den Link zu allen Rechnungen.
+- Zeilen 79–168 enthalten `invoice.ui.*`: Titel, Beschreibungen, Formularbeschriftungen, Status, Diagramme und Hilfetexte der Komponentenübersicht. `main.zyl` bindet Eigenschaftstexte mit `@i18n:invoice.ui.schlüssel` und HTML-Text mit `data-zelyra-i18n` ein.

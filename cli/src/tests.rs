@@ -1900,7 +1900,9 @@ fn invoice_tutorial_component_gallery_renders_its_charts_and_accessible_tables()
     assert!(html.contains("<figure class=\"z-chart z-chart--bar\">"));
     assert!(html.contains("<figure class=\"z-chart z-chart--line\">"));
     assert!(html.contains("<figure class=\"z-chart z-chart--donut\">"));
-    assert!(html.contains("<caption>Rechnungsvolumen nach Monat</caption>"));
+    assert!(html.contains(
+        "<caption data-zelyra-i18n=\"invoice.ui.volume_caption\">Rechnungsvolumen nach Monat</caption>"
+    ));
     assert!(html.contains("<dialog class=\"z-dialog\""));
 }
 
@@ -2222,6 +2224,30 @@ fn component_string_properties_are_html_escaped() {
         rendered.trim(),
         "<h1>&lt;script&gt;alert(1)&lt;/script&gt; &amp; &#39;quoted&#39;</h1>"
     );
+}
+
+#[test]
+fn component_properties_resolve_explicit_project_locale_references() {
+    let source = r#"
+        component LocalizedHeader {
+            props { title: String }
+            html { <h1>{title}</h1> }
+        }
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    assert!(validate_components("localized.zyl", &program));
+    let rendered = render_view_component(
+        &program.components[0],
+        "title=\"@i18n:invoice.ui.title\"",
+        None,
+    );
+    assert_eq!(
+        rendered.trim(),
+        "<h1>\u{e000}zelyra-locale:invoice.ui.title\u{e001}</h1>"
+    );
+
+    let invalid = render_view_component(&program.components[0], "title=\"@i18n:bad key\"", None);
+    assert_eq!(invalid.trim(), "<h1>@i18n:bad key</h1>");
 }
 
 #[test]

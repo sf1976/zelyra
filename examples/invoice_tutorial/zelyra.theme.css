@@ -52,6 +52,7 @@
     --z-radius-lg: 1.2rem;
 }
 :where(html[data-z-ui]) .tutorial-brand { display: flex; min-width: 0; align-items: center; gap: .75rem; color: #183b2e; text-decoration: none; }
+:where(html[data-z-ui]) .tutorial-theme-toggle { flex: 0 0 auto; white-space: nowrap; }
 :where(html[data-z-ui]) .tutorial-brand > span:last-child { display: grid; line-height: 1.2; }
 :where(html[data-z-ui]) .tutorial-brand small { margin-top: .2rem; color: var(--z-color-text-muted); font-size: .68rem; font-weight: 500; }
 :where(html[data-z-ui]) .tutorial-brand-mark { display: grid; width: 2.55rem; height: 2.55rem; flex: 0 0 auto; place-items: center; color: #fff; background: linear-gradient(145deg, #27765a, #174534); border-radius: .8rem; font-size: 1.1rem; font-weight: 800; }
@@ -256,6 +257,7 @@
 :where(html[data-z-ui][data-z-theme="dark"]) .invoice-totals p:last-child { color: var(--z-color-text); }
 :where(html[data-z-ui][data-z-theme="dark"]) .tutorial-footer { background: var(--z-color-surface); color: var(--z-color-text-muted); border-color: var(--z-color-border); }
 :where(html[data-z-ui][data-z-theme="dark"]) .tutorial-brand { color: var(--z-color-text); }
+:where(html[data-z-ui][data-z-theme="dark"]) .tutorial-theme-toggle { color: var(--z-color-text); background: var(--z-color-surface-raised); border-color: var(--z-color-border); }
 @media (prefers-color-scheme: dark) {
     :where(html[data-z-ui][data-z-theme="system"]) .invoice-preview,
     :where(html[data-z-ui][data-z-theme="system"]) .invoice-highlight,
@@ -271,6 +273,7 @@
     :where(html[data-z-ui][data-z-theme="system"]) .invoice-workflow-card h3,
     :where(html[data-z-ui][data-z-theme="system"]) .invoice-totals p:last-child { color: var(--z-color-text); }
     :where(html[data-z-ui][data-z-theme="system"]) .tutorial-brand { color: var(--z-color-text); }
+    :where(html[data-z-ui][data-z-theme="system"]) .tutorial-theme-toggle { color: var(--z-color-text); background: var(--z-color-surface-raised); border-color: var(--z-color-border); }
     :where(html[data-z-ui][data-z-theme="system"]) .z-app-shell__footer { background: var(--z-color-surface); color: var(--z-color-text-muted); border-color: var(--z-color-border); }
 }
 @media print {
@@ -602,4 +605,140 @@
     :where(html[data-z-ui]) .invoice-home-hero,
     :where(html[data-z-ui]) .invoice-preview,
     :where(html[data-z-ui]) .invoice-workflow-card { transition: none; }
+}
+
+/* Keep the later, compact invoice rules theme-aware as well. */
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-preview,
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-highlight,
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-workflow-card,
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-totals {
+    background: var(--z-color-surface);
+    border-color: var(--z-color-border);
+    color: var(--z-color-text);
+}
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-preview-number,
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-preview-recipient strong,
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-preview-line strong,
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-preview-grand-total strong,
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-highlight strong,
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-workflow-card h3,
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-totals p:last-child { color: var(--z-color-text); }
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-preview-eyebrow,
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-preview-recipient > span,
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-preview-dates span,
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-preview-recipient small,
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-preview-line small,
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-preview-total > div,
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-highlight p,
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-workflow-card p { color: var(--z-color-text-muted); }
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-preview-rule,
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-preview-dates,
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-preview-line,
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-preview-total,
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-preview-total .invoice-preview-grand-total { border-color: var(--z-color-border); }
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-preview-total .invoice-preview-grand-total,
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-workflow-card-primary { background: var(--z-color-surface-raised); color: var(--z-color-text); }
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-preview-link {
+    background: var(--z-color-surface-raised);
+    border-color: var(--z-color-border);
+    color: var(--z-color-link);
+}
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-preview-link:hover,
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-section-link:hover,
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-workflow-card a:hover { color: var(--z-color-primary-hover); }
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-section-kicker,
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-section-heading h2,
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-section-link,
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-workflow-card a { color: var(--z-color-link); }
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-step-number { color: var(--z-color-text-muted); }
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-step-icon { color: var(--z-color-text); background: var(--z-color-primary-soft); }
+
+@media (prefers-color-scheme: dark) {
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-preview,
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-highlight,
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-workflow-card,
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-totals {
+        background: var(--z-color-surface);
+        border-color: var(--z-color-border);
+        color: var(--z-color-text);
+    }
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-preview-number,
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-preview-recipient strong,
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-preview-line strong,
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-preview-grand-total strong,
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-highlight strong,
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-workflow-card h3,
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-totals p:last-child { color: var(--z-color-text); }
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-preview-eyebrow,
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-preview-recipient > span,
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-preview-dates span,
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-preview-recipient small,
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-preview-line small,
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-preview-total > div,
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-highlight p,
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-workflow-card p { color: var(--z-color-text-muted); }
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-preview-rule,
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-preview-dates,
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-preview-line,
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-preview-total,
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-preview-total .invoice-preview-grand-total { border-color: var(--z-color-border); }
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-preview-total .invoice-preview-grand-total,
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-workflow-card-primary { background: var(--z-color-surface-raised); color: var(--z-color-text); }
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-preview-link { background: var(--z-color-surface-raised); border-color: var(--z-color-border); color: var(--z-color-link); }
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-section-kicker,
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-section-heading h2,
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-section-link,
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-workflow-card a { color: var(--z-color-link); }
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-step-number { color: var(--z-color-text-muted); }
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-step-icon { color: var(--z-color-text); background: var(--z-color-primary-soft); }
+}
+
+/* Keep theme tokens after the later light-token defaults above. */
+html[data-z-ui][data-z-theme="dark"] {
+    --z-color-primary: #9bd8b8;
+    --z-color-on-primary: #143b2e;
+    --z-color-primary-hover: #b4e8cc;
+    --z-color-primary-soft: #263a31;
+    --z-color-success: #9bd8b8;
+    --z-color-on-success: #143b2e;
+    --z-color-success-soft: #263a31;
+    --z-color-warning: #f0ca75;
+    --z-color-on-warning: #33270f;
+    --z-color-warning-soft: #3c321d;
+    --z-color-danger: #ffafb2;
+    --z-color-on-danger: #411a20;
+    --z-color-danger-soft: #3e262b;
+    --z-color-canvas: #141a22;
+    --z-color-surface: #1b232d;
+    --z-color-surface-raised: #222c38;
+    --z-color-text: #edf2f8;
+    --z-color-text-muted: #b7c2d0;
+    --z-color-border: #3a4655;
+    --z-color-focus: #9bd8b8;
+    --z-color-link: #b4e8cc;
+}
+@media (prefers-color-scheme: dark) {
+    html[data-z-ui][data-z-theme="system"] {
+        --z-color-primary: #9bd8b8;
+        --z-color-on-primary: #143b2e;
+        --z-color-primary-hover: #b4e8cc;
+        --z-color-primary-soft: #263a31;
+        --z-color-success: #9bd8b8;
+        --z-color-on-success: #143b2e;
+        --z-color-success-soft: #263a31;
+        --z-color-warning: #f0ca75;
+        --z-color-on-warning: #33270f;
+        --z-color-warning-soft: #3c321d;
+        --z-color-danger: #ffafb2;
+        --z-color-on-danger: #411a20;
+        --z-color-danger-soft: #3e262b;
+        --z-color-canvas: #141a22;
+        --z-color-surface: #1b232d;
+        --z-color-surface-raised: #222c38;
+        --z-color-text: #edf2f8;
+        --z-color-text-muted: #b7c2d0;
+        --z-color-border: #3a4655;
+        --z-color-focus: #9bd8b8;
+        --z-color-link: #b4e8cc;
+    }
 }

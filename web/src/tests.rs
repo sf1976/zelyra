@@ -1022,6 +1022,51 @@ fn project_catalogs_override_markers_escape_html_and_fall_back_to_english() {
 }
 
 #[test]
+fn project_catalog_references_localize_component_properties_in_both_languages() {
+    let reference = localize_user_text(UiLanguage::German, "@i18n:invoice.ui.title");
+    let route = Route {
+        path: "/".into(),
+        html: format!("<main><h1 title=\"{reference}\">{reference}</h1></main>"),
+        query: Vec::new(),
+        page_size: None,
+        sort_columns: Vec::new(),
+        search_columns: Vec::new(),
+        filters: Vec::new(),
+        data: Vec::new(),
+        requires_auth: false,
+        permissions: Vec::new(),
+    };
+    let request = parse_request("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+    let mut catalogs = ProjectUiCatalogs::default();
+    catalogs
+        .set_json(
+            UiLanguage::English,
+            r#"{"invoice.ui.title":"Zelyra UI – Components"}"#,
+        )
+        .unwrap();
+    catalogs
+        .set_json(
+            UiLanguage::German,
+            r#"{"invoice.ui.title":"Zelyra UI – Komponenten"}"#,
+        )
+        .unwrap();
+
+    for (language, title) in [
+        (UiLanguage::German, "Zelyra UI – Komponenten"),
+        (UiLanguage::English, "Zelyra UI – Components"),
+    ] {
+        let app = WebApp::new(vec![route.clone()], Vec::new())
+            .with_ui_settings(language, UiLevel::Work)
+            .with_project_ui_catalogs(catalogs.clone());
+        let response = app.dispatch(&request);
+        assert!(response
+            .body
+            .contains(&format!("<h1 title=\"{title}\">{title}</h1>")));
+        assert!(!response.body.contains(LOCALE_REFERENCE_START));
+    }
+}
+
+#[test]
 fn project_catalogs_override_generated_ui_and_parameterized_labels() {
     let auth = AuthRoute {
         table: "users".into(),

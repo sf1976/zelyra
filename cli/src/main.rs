@@ -11815,6 +11815,34 @@ fn render_component_property(
     }
     if value.starts_with('{') && value.ends_with('}') {
         template.replace(&placeholder, value)
+    } else if matches!(
+        prop.name.as_str(),
+        "title"
+            | "description"
+            | "label"
+            | "caption"
+            | "legend"
+            | "summary"
+            | "text"
+            | "message"
+            | "first_label"
+            | "second_label"
+            | "open_label"
+            | "close_label"
+            | "placeholder"
+            | "navigation_label"
+    ) {
+        if let Some(key) = value.strip_prefix("@i18n:").filter(|key| {
+            !key.is_empty()
+                && key
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.'))
+        }) {
+            let reference = format!("\u{e000}zelyra-locale:{key}\u{e001}");
+            template.replace(&placeholder, &reference)
+        } else {
+            template.replace(&placeholder, &html_escape(value))
+        }
     } else {
         template.replace(&placeholder, &html_escape(value))
     }
