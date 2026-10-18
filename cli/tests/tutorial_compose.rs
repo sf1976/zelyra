@@ -5,6 +5,15 @@ use std::os::unix::fs::PermissionsExt;
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+#[test]
+fn invoice_tutorial_theme_template_matches_the_runnable_example() {
+    assert_eq!(
+        include_str!("../../examples/invoice_tutorial.theme.css"),
+        include_str!("../../examples/invoice_tutorial/zelyra.theme.css"),
+        "the generated tutorial theme and checked-in project theme must stay aligned"
+    );
+}
+
 static NEXT_TUTORIAL_DIRECTORY: AtomicU64 = AtomicU64::new(0);
 
 fn tutorial_with_compose(

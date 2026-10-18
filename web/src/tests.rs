@@ -703,6 +703,7 @@ fn default_design_system_covers_all_generated_state_families_responsively() {
         ".zelyra-crud-error",
         ".zelyra-delete-message",
         ".zelyra-query-controls",
+        ".z-generated-page",
         ".zelyra-pagination",
         "main[data-loading-message]",
     ] {
@@ -713,6 +714,8 @@ fn default_design_system_covers_all_generated_state_families_responsively() {
     }
     assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains("@media (max-width: 900px)"));
     assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains("@media (max-width: 600px)"));
+    assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains(".z-generated-page .zelyra-crud-form-card form"));
+    assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains(".z-query-controls__fields"));
 }
 
 fn relation_form_route() -> FormRoute {
@@ -2701,6 +2704,8 @@ fn renders_form_with_csrf_and_field_attributes() {
     cards_route.form_view.title = Some("Customer form".into());
     cards_route.form_view.submit = Some("Save customer <now>".into());
     let cards_html = render_form(&cards_route, &HashMap::new(), &[], None);
+    assert!(cards_html.starts_with("<section class=\"z-generated-page\"><h1"));
+    assert!(cards_html.ends_with("</section></section>"));
     assert!(cards_html.contains(">Customer form</h1>"));
     assert!(cards_html.contains("zelyra-crud-form-card"));
     assert!(cards_html.contains("Save customer &lt;now&gt;"));
@@ -3100,8 +3105,13 @@ fn renders_crud_list_with_escaped_rows_and_pagination() {
     assert!(html.contains("class=\"zelyra-unread-count\""));
     assert!(!html.contains("&amp;#xe000;"));
     assert!(html.contains(": 4</strong>"));
-    assert!(html
-        .contains("<fieldset class=\"zelyra-query-controls\"><legend>Search and filters</legend>"));
+    assert!(html.contains(
+        "<fieldset class=\"z-fieldset zelyra-query-controls\"><legend>Search and filters</legend>"
+    ));
+    assert!(html.contains(
+        "<div class=\"z-field\"><label for=\"search\">Search</label><input class=\"z-input\" id=\"search\""
+    ));
+    assert!(html.contains("<select class=\"z-select\" id=\"sort\""));
     assert!(html.contains("for=\"filter_name__operator\">Filter Name operator</label>"));
     assert!(html.contains("for=\"filter_name\">Filter Name value</label>"));
     assert!(html.contains(
@@ -3194,8 +3204,9 @@ fn renders_crud_list_with_escaped_rows_and_pagination() {
     );
     assert!(cards_html.contains("zelyra-crud-cards"));
     assert!(cards_html.contains("zelyra-crud-card"));
-    assert!(cards_html
-        .contains("</legend><div class=\"z-query-controls__fields\"><label for=\"search\">"));
+    assert!(cards_html.contains(
+        "</legend><div class=\"z-query-controls__fields\"><div class=\"z-field\"><label for=\"search\">"
+    ));
     assert!(cards_html.contains("</button></div></fieldset></form>"));
     assert!(cards_html.contains("data-loading-message=\"Loading machines...\""));
     assert!(!cards_html.contains("<table>"));

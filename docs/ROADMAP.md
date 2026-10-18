@@ -25,7 +25,7 @@ telemetry, explicit effects, portable data, resource discipline, and honest
 proof claims guide every phase. The [manifesto](MANIFESTO.md) states the
 principles; the roadmap below tracks what is actually implemented.
 
-The current stable release is 1.2.9, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.9. **Current milestones** is the source of
+The current stable release is 1.2.10, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.10. **Current milestones** is the source of
 near-term commitments. Older numbered release sections below are retained as
 historical planning and evidence; they do not by themselves define current
 release targets. Longer-term ideas remain in the post-1.0 evolution section.
@@ -122,11 +122,15 @@ security and compatibility gates stated for that milestone.
   an actionable, project-specific setup command. Correct Debian/Ubuntu
   Compose-v2 version detection, load project `.env` database URLs in audit and
   auth-role commands, and preserve Unix SIGPIPE behavior for piped CLI output.
-  Prove package/module
-  contracts for settings, effects, jobs, data access, and HostServices across
-  AST, MIR, and Bytecode, or make unsupported paths fail closed with stable
-  diagnostics. Secure `public/`, static assets, and Apache/Nginx
-  forwarded-header and allowed-host behavior with deployment tests.
+  Prove package/module contracts for settings, effects, jobs, data access, and
+  HostServices across AST, MIR, and Bytecode, or make unsupported paths fail
+  closed with stable diagnostics. Secure `public/`, static assets, and
+  Apache/Nginx forwarded-header and allowed-host behavior with deployment
+  tests.
+- [✅] **1.2.11 invoice tutorial CSS subtask:** Centralize generated-page,
+  CRUD, form, filter, and table styling in Zelyra UI; give the invoice tutorial
+  one responsive design and generated forms the same page frame, with only
+  project-specific design retained in its synchronized theme template.
 - [ ] **1.2.12 — business-platform vertical slices:** Deliver bounded, tested
   state transitions, audit/history, balanced ledger operations,
   reflection/export metadata, health checks, modular bundles, and any

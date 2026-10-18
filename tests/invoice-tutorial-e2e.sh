@@ -121,6 +121,22 @@ for route in / /customers /items /invoices /invoice_lines /invoices/new /views/i
     cat "${temporary_root}/server.log" >&2
     exit 1
   fi
+  if [[ "${body}" != *'class="tutorial-content"'* ]]; then
+    echo "invoice tutorial route ${route} did not use the shared page shell" >&2
+    exit 1
+  fi
+  if [[ "${body}" != *'class="z-button z-mobile-nav__toggle"'* ]]; then
+    echo "invoice tutorial route ${route} did not render the styled mobile navigation button" >&2
+    exit 1
+  fi
+  if [[ "${route}" == "/views/invoicedashboard" && "${body}" != *'class="z-generated-page"'* ]]; then
+    echo "invoice overview did not render its generated page container" >&2
+    exit 1
+  fi
+  if [[ "${route}" == "/customers" && ( "${body}" != *'class="z-field"'* || "${body}" != *'class="z-input"'* || "${body}" != *'class="z-select"'* ) ]]; then
+    echo "customer filters did not use the shared Zelyra UI form controls" >&2
+    exit 1
+  fi
   if [[ "${route}" == "/" && \
     ! ( ("${body}" == *"Vom ersten Kunden bis zur fertigen Rechnung."* && "${body}" == *"Rechnungsübersicht öffnen"* && "${body}" == *"354,62 €"*) || \
        ("${body}" == *"From the first customer to the finished invoice."* && "${body}" == *"Open invoice overview"* && "${body}" == *"€354.62"*) ) ]]; then
@@ -148,10 +164,33 @@ if [[ "${home}" != *'href="/__zelyra/theme.css"'* ]]; then
   exit 1
 fi
 theme="$(curl --silent --show-error --fail "http://${address}/__zelyra/theme.css")"
-if [[ "${theme}" != *"--z-color-primary"* || "${theme}" != *".invoice-home-hero"* || "${theme}" != *"max-width: 991px"* ]]; then
-  echo "invoice tutorial did not serve its local responsive Zelyra UI theme" >&2
+for shared_style in \
+  '.invoice-home-hero' \
+  '--z-color-primary' \
+  'max-width: 991px'; do
+  if [[ "${theme}" != *"${shared_style}"* ]]; then
+    echo "invoice tutorial theme is missing its project design token or landing-page style ${shared_style}" >&2
+    exit 1
+  fi
+done
+ui_css_path="$(printf '%s' "${home}" | sed -n 's/.*href="\([^" ]*\/zelyra-ui.css\)".*/\1/p')"
+if [[ -z "${ui_css_path}" ]]; then
+  echo "invoice tutorial did not link its bundled Zelyra UI stylesheet" >&2
   exit 1
 fi
+ui_css="$(curl --silent --show-error --fail "http://${address}${ui_css_path}")"
+for shared_style in \
+  '.z-generated-page' \
+  '.zelyra-query-controls' \
+  '.zelyra-crud-card' \
+  '.zelyra-crud-detail-card' \
+  '.zelyra-crud-form-card' \
+  '.z-table-scroll'; do
+  if [[ "${ui_css}" != *"${shared_style}"* ]]; then
+    echo "shared Zelyra UI stylesheet is missing common page style ${shared_style}" >&2
+    exit 1
+  fi
+done
 if [[ "${theme}" == *"cdn.tabler.io"* || "${theme}" == *"cdn.jsdelivr.net"* ]]; then
   echo "invoice tutorial theme must remain self-hosted" >&2
   exit 1
@@ -160,6 +199,14 @@ form_page="${temporary_root}/customer-form.html"
 cookie_jar="${temporary_root}/cookies.txt"
 curl --silent --show-error --fail --cookie-jar "${cookie_jar}" \
   "http://${address}/customers/new" >"${form_page}"
+if [[ "$(cat "${form_page}")" != *'class="zelyra-crud-form-card"'* ]]; then
+  echo "customer create form did not render its shared form card" >&2
+  exit 1
+fi
+if [[ "$(cat "${form_page}")" != *'<section class="z-generated-page"><h1 class="z-page-header__title">'* ]]; then
+  echo "customer create form did not render inside the shared generated-page frame" >&2
+  exit 1
+fi
 csrf_token="$(python3 - "${form_page}" <<'PY'
 import pathlib, re, sys
 page = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")

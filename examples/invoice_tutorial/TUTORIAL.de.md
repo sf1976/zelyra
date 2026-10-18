@@ -119,7 +119,7 @@ geändert werden. Die Beispieldaten behalten `RE-2026-001`.
 
 ### `main.zyl` — Programmeinstieg und Startseite
 
-- Zeile 1 erklärt, dass diese Datei die Fachmodule verbindet und die Startseite enthält.
+- Zeile 1 erklärt, dass diese Datei Fachmodule und Startseite verbindet. Zelyra UI liefert die gemeinsamen CSS-Regeln; projektweite Farben und eigene Gestaltung werden in `zelyra.theme.css` angepasst.
 - Zeile 2 importiert die compilergeprüfte Standardbibliothek `zelyra/ui`; die Komponenten werden in HTML über ihren Namen verwendet. Zeilen 3–8 importieren Datenbank, Layout, Kunden, Artikel, Rechnungen und Übersicht. Die Namen nach `as` sind lokale Modul-Aliase.
 - Zeilen 9–11 deklarieren `GET /`, wählen `InvoiceTutorialShell` und beginnen die HTML-Ausgabe. Die Route `/` ist hier ausdrücklich festgelegt.
 - Zeile 12 öffnet den Hauptbereich. Zeilen 13–14 beginnen das zweispaltige Hero- und Beispielrechnungs-Layout.
@@ -265,18 +265,32 @@ geändert werden. Die Beispieldaten behalten `RE-2026-001`.
   verwendet gespeicherte Schlüssel und die `NOT EXISTS`-Bedingung, daher
   erzeugt ein weiterer Start keine Kopien.
 
-### `zelyra.theme.css` — lokale Gestaltung
+### `zelyra.theme.css` — ein gemeinsames Erscheinungsbild
 
-- Zeile 1 erklärt: Dies ist ein Theme-Override von Zelyra UI und kein zweites CSS-Framework.
-- Zeilen 2–27 passen im begrenzten `html[data-z-ui]`-Bereich die Geschäftsfarben, Kontrastfarben, Flächen, Fokus, Inhaltsbreite und Rundungen an.
-- Zeilen 28–42 gestalten Marke und Abstände für Tutorialkarten, Komponentenübersicht und Druckaktionen.
-- Zeilen 43–60 bauen Startseitenrahmen und Hero mit Geschäftsmarke, Handlungslinks und lokalem Beispiel auf.
-- Zeilen 61–83 gestalten die Beispielrechnung als Papierkarte mit Empfänger, Datum, Positionen, Summen und Link.
-- Zeilen 84–105 gestalten Funktionshinweise und die drei Workflowkarten.
-- Zeilen 106–114 passen Abschnittsabstände, Formular-/Tabellenbereiche und Rechnungssummen an.
-- Zeilen 116–135 ordnen Hero und Karten für Tablet und schmale Mobilansichten um; bei 600 px wird der Ablauf einspaltig.
-- Zeilen 136–191 passen Designvariablen und Beispielkarten an ein explizites dunkles Theme sowie an die dunkle Systempräferenz an.
-- Zeilen 192–209 sind Druckregeln: Kopf/Fuß und `z-no-print`-Aktionen verschwinden; Rechnungstabellen bleiben druckbar und Karten verlieren Schatten.
+Die Datei passt Zelyra UI an die grüne Geschäftsgestaltung des Tutorials an.
+Sie ist zugleich Theme-Vorlage und wird beim Erstellen des Rechnungstutorials
+mitkopiert. Beide Vorlagen im Repository werden zusammen gehalten.
+
+- Die `--z-color-*`-Variablen legen Farben samt Kontrastfarben, Flächen und
+  Fokus fest. Rundungen und Inhaltsbreite verwenden die Zelyra-UI-Variablen.
+- `InvoiceTutorialShell` aus `src/shell.zyl` stellt auf allen Seiten denselben
+  Kopfbereich, die Navigation, den Inhaltsbereich und die Fußzeile bereit.
+- Der gemeinsame Inhaltsrahmen gestaltet die automatisch erzeugten
+  Tabellenübersichten, Kunden-, Artikel-, Rechnungs- und Positionsseiten sowie
+  ihre Detail- und Formularansichten einheitlich.
+- Such- und Filterfelder verwenden die Zelyra-UI-Komponentenregeln. Karten,
+  Details und Formulare übernehmen dieselben Flächen, Rahmen und Abstände wie
+  die Rechnungsübersicht.
+- Eigene Startseiten- und Rechnungsdruckstile ergänzen das System. Die Regeln
+  sind responsiv; breite Tabellen können in ihrem eigenen Bereich scrollen.
+- Das dunkle Theme nutzt angepasste Farbvariablen. Druckregeln blenden
+  Navigation und ausdrücklich markierte Aktionen aus.
+
+Die allgemeinen Regeln für Seitenrahmen, CRUD-Karten, Formulare, Filter und
+Tabellencontainer liegen zentral in Zelyra UI. Das Projekt-Theme setzt Tokens
+und ergänzt nur Tutorial-Marke, Startseite und Rechnungsdruck.
+`examples/invoice_tutorial.theme.css` ist die synchrone Projekt-Themevorlage,
+die `zelyra --tutorial invoice` als `zelyra.theme.css` übernimmt.
 
 ### `locales/de.json` und `locales/en.json` — lokalisierte Beschriftungen
 

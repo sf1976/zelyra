@@ -57,6 +57,12 @@ navigation, content, and footer shell as the rest of the tutorial.
 `zelyra routes main.zyl` lists declared and generated routes with their source
 files.
 
+The visual style is consistent throughout: Zelyra UI centrally provides the
+shared frame, CRUD cards, filters, forms, and table containers. The project
+theme sets colors and adds only the tutorial brand, landing page, and print
+view. `examples/invoice_tutorial.theme.css` and the generated project's
+`zelyra.theme.css` stay synchronized as the project-theme template.
+
 **Issued on** uses the `Date` type and accepts a date without a time. Its
 localized format hint is `YYYY-MM-DD` or `JJJJ-MM-TT`. The server assigns the
 invoice number from the newly generated record ID and preserves it during later

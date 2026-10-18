@@ -290,7 +290,7 @@ curl --silent --show-error --fail "${base_url}/machines" -o "${temp_dir}/machine
 grep -Fq '<section class="zelyra-crud-cards">' "${temp_dir}/machine-list.html"
 grep -Fq '<h1>Machine fleet</h1>' "${temp_dir}/machine-list.html"
 grep -Fq "<dt>Department</dt>" "${temp_dir}/machine-list.html"
-grep -Fq '<fieldset class="zelyra-query-controls"><legend>Search and filters</legend>' "${temp_dir}/machine-list.html"
+grep -Fq '<fieldset class="z-fieldset zelyra-query-controls"><legend>Search and filters</legend>' "${temp_dir}/machine-list.html"
 grep -Fq 'for="filter_active__operator">Filter Active operator</label>' "${temp_dir}/machine-list.html"
 grep -Fq 'for="filter_active">Filter Active value</label>' "${temp_dir}/machine-list.html"
 grep -Fq "${department_name}" "${temp_dir}/machine-list.html"

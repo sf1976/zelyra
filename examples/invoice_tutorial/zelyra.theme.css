@@ -31,11 +31,6 @@
 :where(html[data-z-ui]) .tutorial-brand-mark { display: grid; width: 2.55rem; height: 2.55rem; flex: 0 0 auto; place-items: center; color: #fff; background: linear-gradient(145deg, #27765a, #174534); border-radius: .8rem; font-size: 1.1rem; font-weight: 800; }
 :where(html[data-z-ui]) .tutorial-new-invoice { white-space: nowrap; }
 :where(html[data-z-ui]) .tutorial-content { min-width: 0; padding: 1.25rem clamp(.75rem, 2vw, 2rem) 3rem; }
-:where(html[data-z-ui]) .invoice-home-actions .z-button--success { color: #173f30; background: #d5f39a; border-color: #d5f39a; box-shadow: 0 .5rem 1.25rem rgb(7 29 21 / 18%); }
-:where(html[data-z-ui]) .invoice-home-actions .z-button--success:hover { background: #e2f8b6; border-color: #e2f8b6; }
-:where(html[data-z-ui]) .invoice-home-actions .z-button:not(.z-button--success) { color: #f4faf6; background: transparent; border-color: rgb(255 255 255 / 55%); }
-:where(html[data-z-ui]) .invoice-home-actions .z-button:not(.z-button--success):hover { color: #173f30; background: #fff; }
-:where(html[data-z-ui]) .invoice-workflow .z-grid { row-gap: .75rem; }
 :where(html[data-z-ui]) .invoice-ui-gallery { display: grid; gap: 1rem; }
 :where(html[data-z-ui]) .invoice-ui-gallery > .z-grid { align-items: start; }
 :where(html[data-z-ui]) .invoice-ui-gallery .z-card { height: 100%; }
@@ -105,11 +100,8 @@
 .invoice-workflow-card-primary { background: linear-gradient(145deg, #f5faef, #fff); border-color: #d8e7d9; }
 .tutorial-footer { padding: 1rem 0; color: #78877f; background: #fff; border-top: 1px solid #e2eae5; font-size: 0.72rem; }
 .tutorial-content > section, .tutorial-content > article { margin-block: 1rem; }
-.tutorial-content form:not(.z-table-tools) { display: grid; gap: 0.85rem; }
-.tutorial-content form label { color: #344a40; font-size: 0.9rem; font-weight: 650; }
 .tutorial-content table:not(.z-table) { display: block; max-width: 100%; overflow-x: auto; border-radius: 0.65rem; }
-.tutorial-content .z-table-scroll { max-width: 100%; overflow-x: auto; border-radius: 0.65rem; }
-.tutorial-content input:focus, .tutorial-content select:focus, .tutorial-content textarea:focus { border-color: #438469; box-shadow: 0 0 0 0.2rem rgb(67 132 105 / 17%); }
+.tutorial-content .z-table { min-width: 42rem; }
 .invoice-totals { max-width: 26rem; margin: 1.5rem 0 1.5rem auto; padding: 1rem 1.2rem; background: #f2f7f3; border: 1px solid #dfe8e3; border-radius: 0.8rem; }
 .invoice-totals p { display: flex; justify-content: space-between; gap: 1rem; margin: 0; padding: 0.55rem 0; border-bottom: 1px solid #dce6e0; }
 .invoice-totals p:last-child { padding-top: 0.85rem; border-bottom: 0; color: #174437; font-size: 1.08rem; font-weight: 750; }
@@ -170,7 +162,11 @@
 :where(html[data-z-ui][data-z-theme="dark"]) .invoice-preview,
 :where(html[data-z-ui][data-z-theme="dark"]) .invoice-highlight,
 :where(html[data-z-ui][data-z-theme="dark"]) .invoice-workflow-card,
+:where(html[data-z-ui][data-z-theme="dark"]) .tutorial-content .zelyra-crud-card,
 :where(html[data-z-ui][data-z-theme="dark"]) .invoice-totals { background: var(--z-color-surface); color: var(--z-color-text); border-color: var(--z-color-border); }
+:where(html[data-z-ui][data-z-theme="dark"]) .tutorial-content .zelyra-crud-card dl + dl { border-color: var(--z-color-border); }
+:where(html[data-z-ui][data-z-theme="dark"]) .tutorial-content .zelyra-crud-card dt { color: var(--z-color-text-muted); }
+:where(html[data-z-ui][data-z-theme="dark"]) .tutorial-content .zelyra-crud-card dd { color: var(--z-color-text); }
 :where(html[data-z-ui][data-z-theme="dark"]) .invoice-preview strong,
 :where(html[data-z-ui][data-z-theme="dark"]) .invoice-preview-total,
 :where(html[data-z-ui][data-z-theme="dark"]) .invoice-highlight strong,
@@ -182,7 +178,11 @@
     :where(html[data-z-ui][data-z-theme="system"]) .invoice-preview,
     :where(html[data-z-ui][data-z-theme="system"]) .invoice-highlight,
     :where(html[data-z-ui][data-z-theme="system"]) .invoice-workflow-card,
+    :where(html[data-z-ui][data-z-theme="system"]) .tutorial-content .zelyra-crud-card,
     :where(html[data-z-ui][data-z-theme="system"]) .invoice-totals { background: var(--z-color-surface); color: var(--z-color-text); border-color: var(--z-color-border); }
+    :where(html[data-z-ui][data-z-theme="system"]) .tutorial-content .zelyra-crud-card dl + dl { border-color: var(--z-color-border); }
+    :where(html[data-z-ui][data-z-theme="system"]) .tutorial-content .zelyra-crud-card dt { color: var(--z-color-text-muted); }
+    :where(html[data-z-ui][data-z-theme="system"]) .tutorial-content .zelyra-crud-card dd { color: var(--z-color-text); }
     :where(html[data-z-ui][data-z-theme="system"]) .invoice-preview strong,
     :where(html[data-z-ui][data-z-theme="system"]) .invoice-preview-total,
     :where(html[data-z-ui][data-z-theme="system"]) .invoice-highlight strong,

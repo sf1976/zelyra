@@ -27,7 +27,7 @@ Ressourcendisziplin und ehrliche Beweisaussagen leiten jede Phase. Das
 [Manifest](MANIFESTO.de.md) beschreibt die Prinzipien; die Roadmap kennzeichnet
 den tatsächlich implementierten Stand.
 
-Das aktuelle stabile Release ist 1.2.9 und wurde unter https://github.com/sf1976/zelyra/releases/tag/v1.2.9 veröffentlicht. **Aktuelle Meilensteine** ist die
+Das aktuelle stabile Release ist 1.2.10 und wurde unter https://github.com/sf1976/zelyra/releases/tag/v1.2.10 veröffentlicht. **Aktuelle Meilensteine** ist die
 verbindliche Übersicht der nächsten Vorhaben. Ältere, nummerierte Release-
 Abschnitte bleiben als historische Planung und Nachweise erhalten; sie legen
 für sich keine aktuellen Releaseziele fest. Langfristige Ideen stehen im
@@ -131,12 +131,17 @@ abgeschlossen.
   und nennt bei fehlender Tabelle einen passenden Setup-Befehl. Compose-v2-
   Erkennung für Debian/Ubuntu korrigieren, Datenbank-URLs aus der Projekt-`.env`
   für Audit- und Auth-Rollenbefehle laden und das Unix-SIGPIPE-Verhalten bei
-  weitergeleiteten CLI-Ausgaben erhalten. Paket- und
-  Modulverträge für Einstellungen, Effekte, Jobs, Datenzugriff und HostServices
-  über AST, MIR und Bytecode nachweisen oder nicht unterstützte Pfade in jedem
-  Backend mit stabilen Diagnosen geschlossen abweisen. `public/`, statische
-  Assets sowie Apache-/Nginx-Weiterleitungsheader und erlaubte Hosts mit
-  Deploymenttests absichern.
+  weitergeleiteten CLI-Ausgaben erhalten. Paket- und Modulverträge für
+  Einstellungen, Effekte, Jobs, Datenzugriff und HostServices über AST, MIR und
+  Bytecode nachweisen oder nicht unterstützte Pfade in jedem Backend mit
+  stabilen Diagnosen geschlossen abweisen. `public/`, statische Assets sowie
+  Apache-/Nginx-Weiterleitungsheader und erlaubte Hosts mit Deploymenttests
+  absichern.
+- [✅] **1.2.11 CSS-Teilschritt für das Rechnungstutorial:** Seiten-, CRUD-,
+  Formular-, Filter- und Tabellenstile zentral in Zelyra UI bündeln; ein
+  durchgängiges responsives Tutorialdesign schaffen und generierte Formulare in
+  denselben Seitenrahmen setzen. Im synchronen Projekt-Theme bleiben nur
+  projektspezifische Gestaltungen.
 - [ ] **1.2.12 — Geschäftsplattform-Vertikalschnitte:** Begrenzte, getestete
   Zustandsübergänge, Audit/Historie, ausgeglichene Ledger-Buchungen,
   Reflection-/Exportmetadaten, Healthchecks, modulare Bundles und einen
