@@ -16,6 +16,10 @@ run the command directly from the project directory:
 zelyra outbox setup main.zyl
 ```
 
+If `zelyra outbox list` reports that `_zelyra_outbox` does not exist, run the
+setup command once against the same project file. Listing remains read-only;
+it does not create database tables implicitly.
+
 List up to 200 rows of operator metadata:
 
 ```sh
