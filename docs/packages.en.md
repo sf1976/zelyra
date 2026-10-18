@@ -334,7 +334,8 @@ values. Non-secret values are type-checked and saved atomically with revision
 checks. A project-scoped operating-system lock in `.zelyra.settings.lock`
 serializes saves from cooperating Studio instances. The revision is checked only
 after the lock is acquired; stale data receives HTTP 409 instead of overwriting a
-newer save. The lock file contains no setting values, and symlinks at that path
+newer save. A busy lock returns HTTP 423 after five seconds. The lock file
+contains no setting values, and symlinks at that path
 are rejected. Unknown fields, invalid types, and symlinks are rejected. The screen never displays existing
 secret values or stored environment-variable names. A new environment
 reference can be entered for a secret; leaving that field blank preserves its

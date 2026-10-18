@@ -361,6 +361,7 @@ Revisionsabgleich atomar gespeichert. Eine Betriebssystem-Dateisperre in
 `.zelyra.settings.lock` serialisiert Schreibvorgänge kooperierender Studio-
 Instanzen. Die Revision wird erst nach Erhalt der Sperre geprüft; ein
 veralteter Stand erhält HTTP 409 und überschreibt keine neuere Speicherung.
+Nach fünf Sekunden Wartezeit antwortet eine belegte Sperre mit HTTP 423.
 Die Sperrdatei enthält keine Einstellungswerte; Symlinks an diesem Pfad werden
 abgewiesen. Unbekannte Felder, ungültige Typen und Symlinks in der
 Einstellungsdatei werden ebenfalls abgewiesen. Die Oberfläche zeigt keine vorhandenen

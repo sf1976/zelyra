@@ -6,11 +6,14 @@ use fs2::FileExt;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant};
 use toml_edit::{DocumentMut, Item, Table};
 
 type EditorReply = Result<(u16, &'static str, String), (u16, String)>;
 const SETTINGS_FILE: &str = "zelyra.settings.toml";
 const SETTINGS_LOCK_FILE: &str = ".zelyra.settings.lock";
+const SETTINGS_LOCK_TIMEOUT: Duration = Duration::from_secs(5);
+const SETTINGS_LOCK_RETRY_INTERVAL: Duration = Duration::from_millis(10);
 const MAX_SETTINGS_BYTES: usize = 1024 * 1024;
 static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
 
@@ -55,6 +58,13 @@ fn contents(path: &Path) -> Result<Vec<u8>, (u16, String)> {
 }
 
 fn acquire_settings_file_lock(root: &Path) -> Result<fs::File, (u16, String)> {
+    acquire_settings_file_lock_with_timeout(root, SETTINGS_LOCK_TIMEOUT)
+}
+
+fn acquire_settings_file_lock_with_timeout(
+    root: &Path,
+    timeout: Duration,
+) -> Result<fs::File, (u16, String)> {
     let path = root.join(SETTINGS_LOCK_FILE);
     if fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
         return Err((
@@ -87,8 +97,26 @@ fn acquire_settings_file_lock(root: &Path) -> Result<fs::File, (u16, String)> {
     if !metadata.is_file() || metadata.file_type().is_symlink() {
         return Err((422, "module settings lock must be a regular file".into()));
     }
-    file.lock_exclusive()
-        .map_err(|_| (500, "module settings lock could not be acquired".into()))?;
+    let deadline = Instant::now() + timeout;
+    loop {
+        match file.try_lock_exclusive() {
+            Ok(()) => break,
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                if Instant::now() >= deadline {
+                    return Err((
+                        423,
+                        "module settings are being changed by another Studio process; retry shortly"
+                            .into(),
+                    ));
+                }
+                std::thread::sleep(
+                    SETTINGS_LOCK_RETRY_INTERVAL
+                        .min(deadline.saturating_duration_since(Instant::now())),
+                );
+            }
+            Err(_) => return Err((500, "module settings lock could not be acquired".into())),
+        }
+    }
     Ok(file)
 }
 
@@ -440,6 +468,18 @@ mod tests {
         assert!(second.try_lock_exclusive().is_err());
         drop(first);
         second.try_lock_exclusive().unwrap();
+    }
+
+    #[test]
+    fn settings_file_lock_times_out_without_waiting_indefinitely() {
+        let state = state();
+        let root = state.root.clone();
+        let held = acquire_settings_file_lock(&root).unwrap();
+        let error =
+            acquire_settings_file_lock_with_timeout(&root, Duration::from_millis(20)).unwrap_err();
+        assert_eq!(error.0, 423);
+        assert!(error.1.contains("retry shortly"));
+        drop(held);
     }
 
     #[cfg(unix)]
