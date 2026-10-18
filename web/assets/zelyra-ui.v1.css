@@ -785,9 +785,9 @@
     :where(html[data-z-ui] .zelyra-ui-toolbar .z-button) { max-width: 100%; padding-inline: .6rem; font-size: .82rem; }
     :where(html[data-z-ui] .zelyra-page-content > main) { padding: 1rem .75rem; }
     :where(html[data-z-ui] .zelyra-page-content table) { display: block; overflow-x: auto; white-space: nowrap; }
-    :where(html[data-z-ui] .zelyra-crud-form-card form) { grid-template-columns: minmax(0, 1fr); }
-    :where(html[data-z-ui] .zelyra-crud-form-card form > .z-button,
-      html[data-z-ui] .zelyra-crud-form-card form > .zelyra-notice) { grid-column: 1; }
+    :where(html[data-z-ui]) .zelyra-crud-form-card form { grid-template-columns: minmax(0, 1fr); }
+    :where(html[data-z-ui]) .zelyra-crud-form-card form > .z-button,
+    :where(html[data-z-ui]) .zelyra-crud-form-card form > .zelyra-notice { grid-column: 1; }
     :where(html[data-z-ui] .z-query-controls__fields .z-button) { grid-column: 1 / -1; }
     :where(html[data-z-ui]) .zelyra-crud-detail-card dl { grid-template-columns: minmax(0, 1fr); }
     :where(html[data-z-ui]) .zelyra-crud-form-card form > .z-button { grid-column: 1; }
