@@ -213,11 +213,11 @@
   :where(html[data-z-ui]) .z-mobile-nav__panel[data-z-collapsed="true"] { display: none; }
   :where(html[data-z-ui]) .z-mobile-nav__toggle[hidden] { display: none; }
 
-  :where(html[data-z-ui]) .z-dialog { width: min(38rem, calc(100vw - 2rem)); max-height: min(90vh, 48rem); padding: 0; overflow: auto; border: 1px solid var(--z-color-border); border-radius: var(--z-radius-lg); background: var(--z-color-surface); color: var(--z-color-text); box-shadow: var(--z-shadow-md); }
+  :where(html[data-z-ui]) .z-dialog { display: flex; width: min(38rem, calc(100vw - 2rem)); max-height: min(90vh, 48rem); flex-direction: column; padding: 0; overflow: hidden; border: 1px solid var(--z-color-border); border-radius: var(--z-radius-lg); background: var(--z-color-surface); color: var(--z-color-text); box-shadow: var(--z-shadow-md); }
   :where(html[data-z-ui]) .z-dialog::backdrop { background: rgb(10 20 35 / 58%); }
   :where(html[data-z-ui]) .z-dialog__header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 1.25rem; border-bottom: 1px solid var(--z-color-border); }
   :where(html[data-z-ui]) .z-dialog__header h2 { margin: 0; font-size: 1.15rem; }
-  :where(html[data-z-ui]) .z-dialog__body { padding: var(--z-space-6); }
+  :where(html[data-z-ui]) .z-dialog__body { min-height: 0; padding: var(--z-space-6); overflow: auto; overscroll-behavior: contain; }
   :where(html[data-z-ui]) .z-dialog[data-z-enhanced="true"]:not([open]) { display: none; }
   :where(html[data-z-ui]) .z-confirmation { max-width: 42rem; padding: 1.25rem; border: 1px solid var(--z-color-warning); border-radius: var(--z-radius-md); background: var(--z-color-warning-soft); }
   :where(html[data-z-ui]) .z-toast-region { position: fixed; z-index: var(--z-layer-toast); inset: auto 1rem 1rem auto; display: grid; width: min(24rem, calc(100vw - 2rem)); gap: .5rem; }

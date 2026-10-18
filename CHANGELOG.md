@@ -6,6 +6,7 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+
 - Add a schema-backed `/__zelyra/module-settings` page to authenticated
   applications when package settings and `admin_permission` are configured.
   Protect writes with permission and CSRF checks, redact secret references,
@@ -16,6 +17,12 @@ releases follow Semantic Versioning independently of the language line.
   und CSRF-Prüfung schützen, Geheimnisreferenzen redigieren, den gemeinsamen
   Projekteinstellungs-Store validieren lassen und einen Neustart verlangen,
   damit geänderte Werte wirksam werden.
+- Make the standard UI `Dialog` simpler with optional IDs and close labels,
+  stable per-document IDs (including collection loops), localized defaults, and
+  a responsive native modal with guarded focus boundaries. / Die UI-Dialog-
+  Komponente durch optionale IDs und Schließbeschriftungen, stabile IDs je
+  Dokument (auch in Sammlungs-Schleifen), lokalisierte Standardwerte und ein
+  responsives natives Modal mit abgesicherten Fokusgrenzen vereinfachen.
 
 ## 1.2.11 — 2026-10-18
 

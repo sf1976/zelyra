@@ -4,6 +4,7 @@
   const themeKey = "zelyra-ui-theme";
   const densityKey = "zelyra-ui-density";
   const controllers = new WeakMap();
+  const dialogOpeners = new WeakMap();
 
   function controllerFor(element) {
     let controller = controllers.get(element);
@@ -134,9 +135,8 @@
       bind(button, "click", () => {
         const dialog = document.getElementById(button.getAttribute("data-z-dialog-open"));
         if (!(dialog instanceof HTMLDialogElement)) return;
-        dialog.dataset.zOpener = button.id || "";
+        dialogOpeners.set(dialog, button);
         if (!dialog.open) dialog.showModal();
-        dialog.querySelector("[data-z-dialog-close]")?.focus();
       });
     });
 
@@ -148,16 +148,39 @@
       // script is running, close it and only open it in response to an action.
       if (dialog.open) dialog.close();
       bind(dialog, "close", () => {
-        const opener = dialog.dataset.zOpener ? document.getElementById(dialog.dataset.zOpener) : null;
-        opener?.focus();
+        const opener = dialogOpeners.get(dialog);
+        if (opener?.isConnected && !opener.disabled) opener.focus();
+        dialogOpeners.delete(dialog);
       });
       bind(dialog, "click", (event) => {
         if (event.target === dialog && dialog.dataset.zBackdropClose === "true") dialog.close();
       });
       bind(dialog, "keydown", (event) => {
-        if (event.key === "Escape" && dialog.open) dialog.close();
+        if (event.key !== "Tab" || !dialog.open) return;
+        const focusable = Array.from(dialog.querySelectorAll(
+          'a[href], area[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), iframe, object, embed, [contenteditable="true"], [tabindex]:not([tabindex="-1"])',
+        )).filter((element) => element.getClientRects().length > 0);
+        if (!focusable.length) {
+          event.preventDefault();
+          dialog.focus();
+          return;
+        }
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        const active = document.activeElement;
+        if (!dialog.contains(active) || (!event.shiftKey && active === last)) {
+          event.preventDefault();
+          (event.shiftKey ? last : first).focus();
+        } else if (event.shiftKey && active === first) {
+          event.preventDefault();
+          last.focus();
+        }
       });
       dialog.querySelectorAll("[data-z-dialog-close]").forEach((button) => {
+        if (button.hasAttribute("data-z-dialog-close-default") && button.textContent.trim() === "Schließen") {
+          const german = document.documentElement.lang.toLowerCase().startsWith("de");
+          if (!german) button.textContent = "Close";
+        }
         bind(button, "click", () => dialog.close());
       });
     });

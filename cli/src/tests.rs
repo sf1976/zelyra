@@ -1817,6 +1817,68 @@ fn imports_zelyra_ui_and_renders_checked_semantic_appearances() {
 }
 
 #[test]
+fn dialog_defaults_generate_document_local_ids_and_keep_explicit_values() {
+    let directory = std::env::temp_dir().join(format!(
+        "zelyra-dialog-defaults-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&directory).unwrap();
+    let entry = directory.join("main.zyl");
+    fs::write(
+        &entry,
+        r#"
+            import "zelyra/ui" as ui
+            page "/dialogs" {
+                html {
+                    <Dialog title="A &amp; B" open_label="Open &amp; view">
+                        <p>Dialogue contents</p>
+                    </Dialog>
+                    <Dialog title="Second dialog" open_label="Open second">
+                        <p>Second contents</p>
+                    </Dialog>
+                    <Dialog id="explicit-dialog" title="Explicit" open_label="Explicit opener" close_label="Dismiss">
+                        <p>Explicit contents</p>
+                    </Dialog>
+                }
+            }
+        "#,
+    )
+    .unwrap();
+    let loaded = project::load(entry.to_str().unwrap()).unwrap();
+    assert!(validate_components("main.zyl", &loaded.program));
+    let html = compose_page_view(&loaded.program, &loaded.program.pages[0]);
+    assert_eq!(html.matches("data-z-dialog-auto=\"").count(), 2);
+    assert!(html.contains(
+        "id=\"z-dialog-auto-0000000000\" data-z-dialog data-z-dialog-auto=\"z-dialog-auto-0000000000\""
+    ));
+    assert!(html.contains(
+        "id=\"z-dialog-auto-0000000001\" data-z-dialog data-z-dialog-auto=\"z-dialog-auto-0000000001\""
+    ));
+    assert!(html.contains("aria-controls=\"z-dialog-auto-0000000000\" aria-haspopup=\"dialog\""));
+    assert!(html.contains("aria-labelledby=\"z-dialog-auto-0000000000-title\""));
+    assert!(html.contains("data-z-dialog-close-default=\"true\" data-zelyra-i18n=\"ui.dialog.close\">Schließen</button>"));
+    assert!(html.contains("Open &amp;amp; view"));
+    assert!(html.contains("id=\"explicit-dialog\""));
+    assert!(html.contains("data-z-dialog-close>Dismiss</button>"));
+    assert!(html.contains("A &amp;amp; B"));
+    assert!(!html.contains("A & B"));
+
+    fs::write(
+        &entry,
+        r#"import "zelyra/ui" as ui
+           page "/missing-opener" { html { <Dialog title="Required opener"><p>Content</p></Dialog> } }"#,
+    )
+    .unwrap();
+    let missing_required = project::load(entry.to_str().unwrap()).unwrap();
+    assert!(!validate_components("main.zyl", &missing_required.program));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn invoice_tutorial_component_gallery_renders_its_charts_and_accessible_tables() {
     let entry = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
