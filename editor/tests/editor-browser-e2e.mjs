@@ -10,7 +10,6 @@ try {
   const page = await browser.newPage();
   page.setDefaultTimeout(10_000);
   const browserErrors = [];
-  const liveChecks = [];
   const databaseRowRequests = [];
   const chartRequests = [];
   let databaseCreateRequest = null;
@@ -20,9 +19,6 @@ try {
   const base = `http://127.0.0.1:${port}/__zelyra/editor`;
   const url = `${base}/#${token}`;
   page.on("pageerror", (error) => browserErrors.push(error.message));
-  page.on("response", async (response) => {
-    if (response.url().endsWith("/api/check")) liveChecks.push({ status: response.status(), body: await response.text() });
-  });
   await page.route("**/__zelyra/editor/api/database-schema", (route) => route.fulfill({
     status: 200,
     contentType: "application/json",
@@ -507,9 +503,17 @@ try {
   const current = page.locator(".cm-content[contenteditable=true]");
   await current.focus();
   await page.keyboard.press("Control+A");
+  const invalidCompilerResponse = page.waitForResponse(async (response) => {
+    if (!response.url().endsWith("/api/check") || response.status() !== 200) return false;
+    try {
+      return (await response.json()).success === false;
+    } catch {
+      return false;
+    }
+  });
   await page.keyboard.type("fn main( {\n");
+  await invalidCompilerResponse;
   await page.locator("#problems-panel:not([hidden])").waitFor();
-  assert.ok(liveChecks.some((check) => check.status === 200 && JSON.parse(check.body).success === false), "unsaved invalid source must be checked by the compiler");
   assert.ok(await page.locator(".tab-state.dirty").count(), "live checking must leave unsaved source untouched");
   await current.press("Control+S");
   await page.locator(".tab-state.dirty").waitFor({ state: "detached" });
