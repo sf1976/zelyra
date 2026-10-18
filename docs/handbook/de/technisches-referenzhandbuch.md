@@ -257,9 +257,12 @@ Dieses Minimalprojekt erstellt `routes/`, `domain/`, `schema/`, `public/` und
 `assets/` und setzt in `[project]` der `zelyra.toml` `layout = "standard"`.
 `check`, `run` und `serve` prüfen, dass jeder dieser Stammordner ein echtes
 Verzeichnis innerhalb des Projekts ist. Projekte ohne diese Einstellung
-bleiben im bisherigen Modus. Dieser erste Schritt unterstützt nur die
-Minimalvorlage; MariaDB-Vorlagen, Architekturregeln und Migrationsvorschau
-werden noch entwickelt. Innerhalb dieses Profils akzeptiert die bestehende
+bleiben im bisherigen Modus. MariaDB-Vorlagen und weitergehende
+Callgraph-Architekturregeln werden noch entwickelt. Die read-only Vorschau
+`zelyra migrate-layout --check main.zyl [--format human|json]` ordnet geparste
+Quelldateien vorläufig den Bereichen zu; gemischte, unbekannte oder fehlerhafte
+Quellen erfordern manuelle Prüfung. Sie verschiebt keine Dateien. Innerhalb
+dieses Profils akzeptiert die bestehende
 Importsyntax auch Projektnamensräume, die ohne `../../` auf Zelyra-Dateien
 zeigen:
 
@@ -274,10 +277,12 @@ muss ein einfacher Modulname sein; der Loader hält die Auflösung innerhalb des
 Projektordners. Namespace-Imports benötigen das aktivierte Profil. Paketmodule
 verwenden weiterhin projektbezogene Datei- oder `pkg:`-Importe. Ausdrückliche
 Dateiimporte bleiben möglich. Die separate Syntax `use schema::...` gehört
-nicht zur Sprache. Im aktivierten Standardprofil wird
-`strict_architecture = true` ausdrücklich abgewiesen, da die Architekturregeln
-noch fehlen. Ein solcher Schlüssel ändert ein Legacyprojekt ohne Layoutprofil
-nicht.
+nicht zur Sprache. Mit `strict_architecture = true` prüft `zelyra check`, ob
+importierte Module unter den passenden `schema/`, `domain/` und `routes/`
+liegen und ob ihre Deklarationstypen zum jeweiligen Bereich passen. Die
+Zuordnung ist eine Strukturprüfung; sie beweist keine vollständige Trennung
+von Netzwerk- und Datenbankzugriffen. Die Option wirkt nur zusammen mit `layout = "standard"`. Legacyprojekte ohne
+diese Einstellung bleiben unverändert.
 
 ### ✅ Zelyra-Setup-Assistent (Konsole und Browser)
 

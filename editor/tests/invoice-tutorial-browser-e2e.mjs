@@ -74,6 +74,8 @@ try {
   assert.match(css, /--z-color-primary/);
   assert.match(css, /\.invoice-home-hero/);
   assert.match(css, /invoice-ui-gallery \.z-toast-region/);
+  assert.match(css, /\.tutorial-content \.zelyra-crud-card dl \{/);
+  assert.match(css, /\.invoice-preview-grand-total/);
   assert.match(css, /max-width: 991px/);
   assert.match(await page.locator("h1").innerText(), /Vom ersten Kunden bis zur fertigen Rechnung\.|From the first customer to the finished invoice\./);
   assert.equal(await page.locator(".invoice-home .invoice-workflow-card").count(), 3);
@@ -93,6 +95,27 @@ try {
   assert.equal(desktop.invoiceButton, true, "home page should offer invoice creation");
   for (const route of ["/customers", "/customers/new", "/items", "/items/new", "/invoices", "/invoices/new", "/invoice_lines", "/views/invoicedashboard"]) {
     await page.goto(`${baseUrl}${route}`, { waitUntil: "networkidle" });
+    assert.equal(await page.getByRole("button", { name: /Quelltext erklärt/ }).count(), 1, `${route} uses the shared source-help dialog`);
+    const helpControl = await page.getByRole("button", { name: /Quelltext erklärt/ }).getAttribute("aria-controls");
+    assert.ok(helpControl, `${route} source-help opener points to its dialog`);
+    assert.equal(await page.locator(`#${helpControl}[data-z-dialog]`).count(), 1, `${route} renders the associated source-help dialog`);
+    if (route === "/items") {
+      const itemCard = page.locator(".zelyra-crud-card").filter({ hasText: "ZYL-BERATUNG" }).first();
+      assert.equal(await itemCard.count(), 1, "the sample item is displayed in its generated card");
+      assert.match(await itemCard.innerText(), /Artikelnummer|SKU/);
+      assert.match(await itemCard.innerText(), /Einzelpreis|Unit price/i);
+      assert.match(await itemCard.innerText(), /125(?:,00)?(?:\.00)?(?:\s*€)?/);
+      assert.match(await itemCard.innerText(), /Ja|Yes/);
+      assert.doesNotMatch(await itemCard.innerText(), /125\.000000000/);
+      const fieldLayout = await itemCard.locator("dl").first().evaluate((field) => ({
+        columns: getComputedStyle(field).gridTemplateColumns.split(" ").length,
+        labelTop: field.querySelector("dt").getBoundingClientRect().top,
+        valueTop: field.querySelector("dd").getBoundingClientRect().top,
+      }));
+      assert.equal(fieldLayout.columns, 1, `card labels and values should form a clear vertical pair: ${JSON.stringify(fieldLayout)}`);
+      assert.ok(fieldLayout.valueTop >= fieldLayout.labelTop, `card value must stay directly below its label: ${JSON.stringify(fieldLayout)}`);
+      if (browserName === "chromium") await assertVisualSnapshot(page, "invoice-items-cards-desktop");
+    }
     if (route === "/customers") {
       const cardLayout = await page.evaluate(() => {
         const list = document.querySelector(".zelyra-crud-cards");
@@ -211,7 +234,7 @@ try {
   assert.equal(await secondTab.getAttribute("aria-selected"), "true");
   assert.match(await page.getByRole("tabpanel").innerText(), /Sprunglinks und beide Inhalte (?:bleiben )?sichtbar/);
   const openDialog = page.getByRole("button", { name: "Dialog öffnen" });
-  const dialog = page.locator("dialog[data-z-dialog]");
+  const dialog = page.locator("dialog[data-z-dialog]").filter({ hasText: "Escape schließt den nativen Dialog" });
   const dialogId = await dialog.getAttribute("id");
   assert.match(dialogId, /^z-dialog-auto-/);
   assert.equal(await openDialog.getAttribute("aria-controls"), dialogId);
@@ -259,18 +282,18 @@ try {
   );
   await page.getByRole("button", { name: "Schließen" }).waitFor();
   await page.keyboard.press("Tab");
-  const tabState = await page.evaluate(() => ({
+  const tabState = await page.evaluate((id) => ({
     activeTag: document.activeElement?.tagName,
     activeId: document.activeElement?.id,
     insideDialog: Boolean(document.activeElement.closest("dialog")),
-    dialogOpen: document.querySelector("dialog[data-z-dialog]")?.open,
-  }));
+    dialogOpen: document.querySelector(`[aria-labelledby="${id}-title"]`)?.open,
+  }), dialogId);
   assert.equal(tabState.insideDialog, true, `native modal keyboard navigation remains inside the dialog: ${JSON.stringify(tabState)}`);
   await page.keyboard.press("Escape");
   await dialog.waitFor({ state: "hidden" });
   assert.equal(await openDialog.evaluate((element) => element === document.activeElement), true, "dialog close returns focus to its opener");
   assert.equal(await page.locator("#dialog-opener-form-fixture").getAttribute("data-submissions"), "0", "dialog opener does not submit its containing form");
-  await page.evaluate(() => {
+  await page.evaluate((id) => {
     const form = document.querySelector("#dialog-opener-form-fixture");
     const opener = form.querySelector("[data-z-dialog-open]");
     const placeholder = document.createTreeWalker(document.body, NodeFilter.SHOW_COMMENT);
@@ -280,8 +303,8 @@ try {
     }
     marker.replaceWith(opener);
     form.remove();
-    document.querySelector("dialog[data-z-dialog] .z-dialog__body button[autofocus]").remove();
-  });
+    document.querySelector(`#${id} .z-dialog__body button[autofocus]`).remove();
+  }, dialogId);
   await page.setViewportSize({ width: 360, height: 700 });
   await dialog.evaluate((element) => {
     const body = element.querySelector(".z-dialog__body");
@@ -355,9 +378,23 @@ try {
   assert.match(await invoiceNumber.getAttribute("placeholder"), /automatisch|automatically/i);
 
   await page.goto(baseUrl, { waitUntil: "networkidle" });
+  const sourceHelpButton = page.getByRole("button", { name: /Quelltext erklärt/ });
+  assert.equal(await sourceHelpButton.count(), 1, "the shared shell exposes source help on the home page");
+  const sourceHelpId = await sourceHelpButton.getAttribute("aria-controls");
+  const sourceHelpDialog = page.locator(`#${sourceHelpId}[data-z-dialog]`);
+  assert.match(sourceHelpId, /^z-dialog-auto-/);
+  assert.equal(await sourceHelpButton.getAttribute("aria-controls"), sourceHelpId);
+  await sourceHelpButton.click();
+  assert.equal(await sourceHelpDialog.evaluate((element) => element.open), true);
+  assert.match(await sourceHelpDialog.innerText(), /src\/invoices\.zyl/);
+  assert.match(await sourceHelpDialog.innerText(), /zelyra\.theme\.css/);
+  await page.keyboard.press("Escape");
+  assert.equal(await sourceHelpDialog.evaluate((element) => element.open), false);
+  assert.equal(await sourceHelpButton.evaluate((element) => element === document.activeElement), true, "source-help dialog returns focus to its opener");
   await page.setViewportSize({ width: 1440, height: 960 });
   await page.evaluate(() => window.ZelyraUI.setTheme("light", false));
   await page.emulateMedia({ colorScheme: "light" });
+  await page.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());
   if (browserName === "chromium") await assertVisualSnapshot(page, "invoice-home-desktop");
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForFunction(() => document.querySelector(".z-app-shell__navigation")?.dataset.zCollapsed === "true");
@@ -376,10 +413,17 @@ try {
   assert.equal(new Set(mobile.cardLefts).size, 1, "mobile workflow should use one column");
   assert.equal(mobile.navExpanded, false, `mobile navigation starts collapsed after enhancement: ${JSON.stringify(mobile)}`);
   assert.equal(mobile.navToggleHidden, false, "mobile navigation has a visible toggle");
+  await page.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());
+  if (browserName === "chromium") await assertVisualSnapshot(page, "invoice-home-mobile");
   await page.locator("[data-z-mobile-nav-toggle]").click();
   assert.equal(await page.locator("[data-z-mobile-nav-toggle]").getAttribute("aria-expanded"), "true");
   for (const route of ["/customers", "/customers/new", "/items", "/items/new", "/invoices", "/invoices/new", "/invoice_lines", "/views/invoicedashboard"]) {
     await page.goto(`${baseUrl}${route}`, { waitUntil: "networkidle" });
+    const sourceButton = page.getByRole("button", { name: /Quelltext erklärt/ });
+    assert.equal(await sourceButton.count(), 1, `${route} uses the shared source-help dialog`);
+    const sourceDialog = await sourceButton.getAttribute("aria-controls");
+    assert.ok(sourceDialog, `${route} source-help button names its dialog`);
+    assert.equal(await page.locator(`#${sourceDialog}[data-z-dialog]`).count(), 1, `${route} renders the associated source-help dialog`);
     const width = await page.evaluate(() => ({
       viewport: innerWidth,
       document: document.documentElement.scrollWidth,

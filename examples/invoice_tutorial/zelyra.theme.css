@@ -131,6 +131,51 @@
 .invoice-totals { max-width: 26rem; margin: 1.5rem 0 1.5rem auto; padding: 1rem 1.2rem; background: #f2f7f3; border: 1px solid #dfe8e3; border-radius: 0.8rem; }
 .invoice-totals p { display: flex; justify-content: space-between; gap: 1rem; margin: 0; padding: 0.55rem 0; border-bottom: 1px solid #dce6e0; }
 .invoice-totals p:last-child { padding-top: 0.85rem; border-bottom: 0; color: #174437; font-size: 1.08rem; font-weight: 750; }
+.invoice-print-source { margin-top: 2rem; }
+
+/* Keep generated record cards readable: each label belongs directly above its value. */
+:where(html[data-z-ui]) .tutorial-content .zelyra-crud-cards { gap: 1rem; }
+:where(html[data-z-ui]) .tutorial-content .zelyra-crud-card {
+    align-content: start;
+    gap: 0;
+    padding: .35rem 1.15rem;
+    background: var(--z-color-surface);
+    border-color: var(--z-color-border);
+    border-radius: .85rem;
+    box-shadow: 0 .35rem 1.1rem rgb(25 54 42 / 5%);
+}
+:where(html[data-z-ui]) .tutorial-content .zelyra-crud-card dl {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: .28rem;
+    min-width: 0;
+    margin: .38rem 0;
+    padding: .62rem .72rem;
+    background: var(--z-color-surface-raised);
+    border: 1px solid var(--z-color-border);
+    border-radius: .62rem;
+}
+:where(html[data-z-ui]) .tutorial-content .zelyra-crud-card dl:last-child { margin-bottom: 0; }
+:where(html[data-z-ui]) .tutorial-content .zelyra-crud-card dt {
+    color: var(--z-color-text-muted);
+    font-size: .7rem;
+    font-weight: 650;
+    letter-spacing: .015em;
+    line-height: 1.35;
+}
+:where(html[data-z-ui]) .tutorial-content .zelyra-crud-card dd {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: var(--z-color-text);
+    font-size: .88rem;
+    font-weight: 700;
+    line-height: 1.4;
+}
+:where(html[data-z-ui]) .tutorial-content .zelyra-crud-card dd a {
+    color: var(--z-color-primary);
+    text-decoration-thickness: .08em;
+    text-underline-offset: .16em;
+}
 
 
 @media (max-width: 991px) {
@@ -192,6 +237,7 @@
 :where(html[data-z-ui][data-z-theme="dark"]) .invoice-totals { background: var(--z-color-surface); color: var(--z-color-text); border-color: var(--z-color-border); }
 :where(html[data-z-ui][data-z-theme="dark"]) .tutorial-content .zelyra-crud-card dl + dl { border-color: var(--z-color-border); }
 :where(html[data-z-ui][data-z-theme="dark"]) .tutorial-content .zelyra-crud-card dt { color: var(--z-color-text-muted); }
+:where(html[data-z-ui][data-z-theme="dark"]) .tutorial-content .zelyra-crud-card dl { border-color: var(--z-color-border); }
 :where(html[data-z-ui][data-z-theme="dark"]) .tutorial-content .zelyra-crud-card dd { color: var(--z-color-text); }
 :where(html[data-z-ui][data-z-theme="dark"]) .invoice-preview strong,
 :where(html[data-z-ui][data-z-theme="dark"]) .invoice-preview-total,
@@ -208,6 +254,7 @@
     :where(html[data-z-ui][data-z-theme="system"]) .invoice-totals { background: var(--z-color-surface); color: var(--z-color-text); border-color: var(--z-color-border); }
     :where(html[data-z-ui][data-z-theme="system"]) .tutorial-content .zelyra-crud-card dl + dl { border-color: var(--z-color-border); }
     :where(html[data-z-ui][data-z-theme="system"]) .tutorial-content .zelyra-crud-card dt { color: var(--z-color-text-muted); }
+    :where(html[data-z-ui][data-z-theme="system"]) .tutorial-content .zelyra-crud-card dl { border-color: var(--z-color-border); }
     :where(html[data-z-ui][data-z-theme="system"]) .tutorial-content .zelyra-crud-card dd { color: var(--z-color-text); }
     :where(html[data-z-ui][data-z-theme="system"]) .invoice-preview strong,
     :where(html[data-z-ui][data-z-theme="system"]) .invoice-preview-total,
@@ -360,4 +407,190 @@
     font-weight: 750;
     min-height: 2.85rem;
     padding: 0.75rem 1.2rem;
+}
+
+/* Shared invoice workspace finish: the same local theme styles every route. */
+:where(html[data-z-ui]) {
+    --z-color-primary: #1d654d;
+    --z-color-on-primary: #ffffff;
+    --z-color-primary-hover: #174d3b;
+    --z-color-primary-soft: #e8f3ed;
+    --z-color-success: #24694e;
+    --z-color-on-success: #ffffff;
+    --z-color-success-soft: #e7f3eb;
+    --z-color-canvas: #f3f6f4;
+    --z-color-surface: #ffffff;
+    --z-color-surface-raised: #f8faf9;
+    --z-color-text: #26372f;
+    --z-color-text-muted: #5f7066;
+    --z-color-border: #dce5df;
+    --z-color-focus: #247652;
+    --z-color-link: #1d654d;
+    --z-content-width: 82rem;
+}
+:where(html[data-z-ui]) .tutorial-content { padding: clamp(.75rem, 2vw, 1.5rem) clamp(.75rem, 2.2vw, 2rem) 3rem; }
+:where(html[data-z-ui]) .invoice-home { max-width: 82rem; padding: .75rem 0 2rem; }
+:where(html[data-z-ui]) .invoice-home-hero-grid {
+    grid-template-columns: minmax(0, 1.15fr) minmax(19rem, .85fr);
+    gap: 1rem;
+    align-items: stretch;
+}
+:where(html[data-z-ui]) .invoice-home-hero {
+    min-height: 0;
+    justify-content: center;
+    padding: clamp(1.35rem, 2.5vw, 2.15rem);
+    border-radius: 1rem;
+    background: radial-gradient(ellipse at 95% 0, rgb(161 207 177 / 19%), transparent 35%), linear-gradient(145deg, #153d30, #205c45 68%, #2c7357);
+    box-shadow: 0 .75rem 2rem rgb(23 55 42 / 13%);
+}
+:where(html[data-z-ui]) .invoice-home-hero h1 {
+    max-width: 19ch;
+    margin-block: .8rem .65rem;
+    font-size: clamp(1.9rem, 2.8vw, 2.65rem);
+    line-height: 1.1;
+    letter-spacing: -.04em;
+}
+:where(html[data-z-ui]) .invoice-home-intro { max-width: 38rem; font-size: 1rem; }
+:where(html[data-z-ui]) .invoice-home-actions { align-items: center; gap: .6rem; margin-top: 1.35rem; }
+:where(html[data-z-ui]) .invoice-home-actions .z-button {
+    display: inline-flex;
+    width: auto;
+    min-height: 2.7rem;
+    align-items: center;
+    justify-content: center;
+    padding: .58rem .72rem;
+    border-radius: .65rem;
+    font-size: .76rem;
+}
+:where(html[data-z-ui]) .invoice-home-proof { margin-top: 1.35rem; }
+:where(html[data-z-ui]) .invoice-preview {
+    display: flex;
+    width: auto;
+    max-width: none;
+    min-width: 0;
+    flex-direction: column;
+    justify-content: center;
+    margin: 0;
+    padding: clamp(1.05rem, 1.7vw, 1.4rem);
+    transform: none;
+    box-shadow: 0 .65rem 1.8rem rgb(27 50 39 / 7%);
+}
+:where(html[data-z-ui]) .invoice-home-highlights { gap: .7rem; margin: .85rem 0 2.2rem; }
+:where(html[data-z-ui]) .invoice-highlight {
+    min-height: 5.25rem;
+    padding: .85rem 1rem;
+    border-radius: .75rem;
+    box-shadow: none;
+}
+:where(html[data-z-ui]) .invoice-workflow { padding-top: .25rem; }
+:where(html[data-z-ui]) .invoice-workflow-card {
+    min-height: 12rem;
+    padding: 1.15rem;
+    border-radius: .75rem;
+    box-shadow: 0 .35rem 1rem rgb(27 50 39 / 4%);
+}
+:where(html[data-z-ui]) .tutorial-source-help { max-width: 56rem; line-height: 1.6; }
+:where(html[data-z-ui]) .tutorial-source-help dl {
+    display: grid;
+    grid-template-columns: minmax(9rem, .32fr) minmax(0, 1fr);
+    gap: .65rem 1rem;
+    margin: 1.1rem 0;
+}
+:where(html[data-z-ui]) .tutorial-source-help dt { color: var(--z-color-text); font-weight: 750; }
+:where(html[data-z-ui]) .tutorial-source-help dd {
+    min-width: 0;
+    margin: 0;
+    padding-bottom: .55rem;
+    color: var(--z-color-text-muted);
+    border-bottom: 1px solid var(--z-color-border);
+}
+:where(html[data-z-ui]) .tutorial-source-help code {
+    padding: .08rem .28rem;
+    color: var(--z-color-primary);
+    background: var(--z-color-primary-soft);
+    border-radius: .25rem;
+    overflow-wrap: anywhere;
+}
+:where(html[data-z-ui]) .tutorial-source-help-next {
+    margin-top: 1rem;
+    padding: .8rem 1rem;
+    background: var(--z-color-surface-raised);
+    border-inline-start: .2rem solid var(--z-color-primary);
+    border-radius: .25rem .6rem .6rem .25rem;
+}
+:where(html[data-z-ui]) .invoice-preview-top {
+    align-items: center;
+    padding-bottom: .3rem;
+}
+:where(html[data-z-ui]) .invoice-preview-number {
+    font-size: clamp(1.05rem, 1.25vw, 1.25rem);
+    letter-spacing: -.02em;
+}
+:where(html[data-z-ui]) .invoice-preview-recipient {
+    padding: .2rem 0 .65rem;
+}
+:where(html[data-z-ui]) .invoice-preview-dates {
+    grid-template-columns: minmax(0, 1.35fr) minmax(5rem, .65fr);
+    margin-block: .4rem .7rem;
+    padding-block: .65rem;
+}
+:where(html[data-z-ui]) .invoice-preview-lines { gap: 0; }
+:where(html[data-z-ui]) .invoice-preview-line {
+    align-items: center;
+    padding-block: .55rem;
+    border-bottom: 1px solid #edf1ee;
+}
+:where(html[data-z-ui]) .invoice-preview-line > div { min-width: 0; }
+:where(html[data-z-ui]) .invoice-preview-line > strong {
+    flex: 0 0 auto;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+:where(html[data-z-ui]) .invoice-preview-line small { line-height: 1.4; }
+:where(html[data-z-ui]) .invoice-preview-total {
+    gap: .35rem;
+    margin-top: .65rem;
+    padding-top: .65rem;
+}
+:where(html[data-z-ui]) .invoice-preview-total > div { padding-block: .12rem; }
+:where(html[data-z-ui]) .invoice-preview-total .invoice-preview-grand-total {
+    margin-top: .3rem;
+    padding: .7rem .75rem;
+    color: #174b37;
+    background: #edf6f0;
+    border: 0;
+    border-radius: .55rem;
+}
+:where(html[data-z-ui]) .invoice-preview-grand-total strong { font-size: 1.12rem; }
+:where(html[data-z-ui]) .invoice-preview-link {
+    display: flex;
+    justify-content: center;
+    padding: .65rem .8rem;
+    background: #f1f7f3;
+    border: 1px solid #dcebe1;
+    border-radius: .55rem;
+}
+:where(html[data-z-ui]) .invoice-preview-link:hover { background: #e7f2eb; }
+:where(html[data-z-ui][data-z-theme="dark"]) .invoice-home-hero {
+    background: radial-gradient(ellipse at 95% 0, rgb(107 169 130 / 17%), transparent 35%), linear-gradient(145deg, #14271e, #1c3c2d 68%, #244a37);
+}
+@media (prefers-color-scheme: dark) {
+    :where(html[data-z-ui][data-z-theme="system"]) .invoice-home-hero {
+        background: radial-gradient(ellipse at 95% 0, rgb(107 169 130 / 17%), transparent 35%), linear-gradient(145deg, #14271e, #1c3c2d 68%, #244a37);
+    }
+}
+@media (max-width: 991px) {
+    :where(html[data-z-ui]) .invoice-home-hero-grid { grid-template-columns: minmax(0, 1fr); }
+    :where(html[data-z-ui]) .invoice-preview { max-width: 42rem; margin-inline: auto; }
+}
+@media (max-width: 600px) {
+    :where(html[data-z-ui]) .invoice-home-actions { display: grid; grid-template-columns: minmax(0, 1fr); align-items: stretch; }
+    :where(html[data-z-ui]) .invoice-home-actions .z-button { width: 100%; }
+    :where(html[data-z-ui]) .tutorial-source-help dl { grid-template-columns: minmax(0, 1fr); gap: .25rem; }
+    :where(html[data-z-ui]) .tutorial-source-help dd { margin-bottom: .45rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+    :where(html[data-z-ui]) .invoice-home-hero,
+    :where(html[data-z-ui]) .invoice-preview,
+    :where(html[data-z-ui]) .invoice-workflow-card { transition: none; }
 }

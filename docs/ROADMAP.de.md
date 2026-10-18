@@ -27,7 +27,7 @@ Ressourcendisziplin und ehrliche Beweisaussagen leiten jede Phase. Das
 [Manifest](MANIFESTO.de.md) beschreibt die Prinzipien; die Roadmap kennzeichnet
 den tatsächlich implementierten Stand.
 
-Das aktuelle stabile Release ist 1.2.12 und wurde unter https://github.com/sf1976/zelyra/releases/tag/v1.2.12 veröffentlicht. **Aktuelle Meilensteine** ist die
+Das aktuelle stabile Release ist 1.2.13 und wurde unter https://github.com/sf1976/zelyra/releases/tag/v1.2.13 veröffentlicht. **Aktuelle Meilensteine** ist die
 verbindliche Übersicht der nächsten Vorhaben. Ältere, nummerierte Release-
 Abschnitte bleiben als historische Planung und Nachweise erhalten; sie legen
 für sich keine aktuellen Releaseziele fest. Langfristige Ideen stehen im
@@ -143,29 +143,37 @@ abgeschlossen.
   Apache-/TLS-Tests, vollständige Paket-/Backendparität und die übrigen
   Geschäftsabläufe blieben außerhalb dieses abgegrenzten Releases und sind
   1.2.14–1.2.15 zugeordnet.
-- [~] **1.2.13 — kanonische Projektstruktur:** `zelyra new --layout standard`
+- [x] **1.2.13 — kanonische Projektstruktur:** Veröffentlicht als [`v1.2.13`](https://github.com/sf1976/zelyra/releases/tag/v1.2.13). `zelyra new --layout standard`
   erstellt ein prüfbares Minimalprojekt mit `routes/`, `domain/`, `schema/`,
   `public/` und `assets/`. `[project].layout = "standard"` aktiviert das
   Profil; `check`, `run` und `serve` verlangen echte, innerhalb des Projekts
   liegende Ordner. Die bestehende Schreibweise `import
   "domain::feature::actions" as actions` löst Projektnamensräume unter
   `schema/`, `domain/` und `routes/` nur in diesem Profil auf; bisherige Importe
-  bleiben unverändert. Alte Projekte bleiben unverändert. Datenbankvorlagen,
-  Architekturregeln und sichere Migrationsvorschau fehlen noch; `plugins/` wird
-  bis zu einem abgesicherten Loader zurückgestellt.
-- [ ] **1.2.14 — Deployment- und Architekturprüfung:** Apache-/TLS-
-  Integration, sichere `public/`- und Asset-Auslieferung, Host-/Forwarded-
-  Header-Grenzen sowie Architekturregeln und eine deterministische lesende
-  `migrate-layout --check`-Vorschau implementieren. Fehlende/unsichere Pfade
-  geschlossen abweisen; keine automatische Mehrdateiänderung ohne Recovery-
-  Journal.
+  bleiben unverändert. Alte Projekte bleiben unverändert. Datenbankvorlagen
+  und weitergehende Architekturprüfungen bleiben offen; `plugins/` wird bis
+  zu einem abgesicherten Loader zurückgestellt.
+- [~] **1.2.14 — Rechnungstutorial und Projektarchitektur:** Das
+  Rechnungstutorial erhält ein durchgängiges responsives Zelyra-UI-Theme,
+  eine gestaltete Beispielrechnung, ausgerichtete CRUD-Karten mit
+  verständlichen Labels sowie einen Quelltextdialog im gemeinsamen Layout.
+  `zelyra migrate-layout --check [entry.zyl] [--format human|json]` liefert
+  eine deterministische, AST-geparste read-only Vorschau mit manueller
+  Kennzeichnung gemischter/unbekannter Dateien. Symlink-Quellen werden
+  abgewiesen; Dateien werden nicht verändert. `strict_architecture = true`
+  prüft Deklarationstypen in `schema/`, `domain/` und `routes/` (`E-ARCH-001`);
+  es ist keine vollständige Callgraph- oder Effect-Analyse. Das Tutorial wurde
+  mit Beispieldaten in Chromium, Firefox und WebKit getestet. Apache-/TLS-
+  Integration und tiefergehende Architekturregeln werden nach 1.2.14
+  fortgesetzt.
 - [ ] **1.2.15 — Geschäftsabläufe und Backendparität:** Einstellungen, Effects,
   Jobs, Datenzugriff und HostServices für unterstützte AST/MIR/Bytecode-Pfade
   nachweisen oder mit stabilen Diagnosen fail-closed abweisen. CSV-Module,
   begrenzte Zustandsübergänge, Audit/Historie, ausgeglichene Ledger-Buchungen,
   Reflection-/Exportmetadaten, Healthchecks und modulare Bundles mit konkreten
-  Integrationstests abschließen. Wasm/Sidecars bleiben optional und benötigen
-  ein eigenes Sandbox-/ABI-Gate.
+  Integrationstests abschließen. Apache-/TLS-Loopback-Tests und Reverse-Proxy-
+  Konfigurationen werden ebenfalls hier abgeschlossen. Wasm/Sidecars bleiben
+  optional und benötigen ein eigenes Sandbox-/ABI-Gate.
 - [ ] **1.3.0 — kanonische Struktur und Bytecode-Standard:** Das optionale,
   versionierte Projektlayout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, `plugins/`), Architekturprüfungen und eine sichere
@@ -329,7 +337,7 @@ werden. Details stehen im [Projektlayout-Arbeitsplan](release-plans/1.3.0-projec
 
 - [x] **1.2.12 Anwendungseinstellungen und Tutorial-Feinschliff — veröffentlicht:** [v1.2.12](https://github.com/sf1976/zelyra/releases/tag/v1.2.12) enthält die authentifizierte, CSRF-geschützte und revisionsgeprüfte Einstellungsseite mit Schema-Validierung, Geheimnisredaktion und sicheren atomaren Schreibvorgängen, vereinfachte Dialog-Standardwerte, den Studio-Zugriff auf `zelyra.theme.css`, responsive Invoice-CRUD-Stile sowie zugehörige Integrationstests. PR #107 und #108 bestanden vollständige CI. Die Release-Workflows bauten Linux- und Windows-Archive reproduzierbar und attestierten sie; alle vier Archive und Installer wurden gegen SHA-256 geprüft. Das Linux-Binary meldet `zelyra 1.2.12`. Apache-/TLS-Tests und MIR-/Bytecode-Parität bleiben offen.
 
-- [~] **1.2.13 — Projektlayout-Grundlage — Release in Vorbereitung:** `zelyra new --layout standard` erstellt und prüft das opt-in Layout mit sicheren `routes/`, `domain/`, `schema/`, `public/`- und `assets/`-Wurzeln sowie compiler-/runtimegestützten Namespace-Imports. Legacyprojekte bleiben unverändert. Vollständige Architekturregeln und eine sichere Migrationsvorschau bleiben für 1.3.0 vorgesehen; `plugins/` erhält erst nach einem eigenen Loader- und Sicherheitsnachweis einen Standardplatz. Die vollständige CI von PR #109 ist bestanden; das versionierte Release wird vorbereitet.
+- [x] **1.2.13 — Projektlayout-Grundlage — veröffentlicht:** [`v1.2.13`](https://github.com/sf1976/zelyra/releases/tag/v1.2.13) liefert `zelyra new --layout standard`, prüft die realen Layoutwurzeln und löst Schema-/Domain-/Routen-Namespaces nur für Projekte mit Opt-in auf. Die vollständige PR-CI bestand; Linux-/Windows-Archive wurden reproduzierbar gebaut und attestiert, alle vier Archive/Installer gegen SHA-256 geprüft und das Linux-Binary meldete `zelyra 1.2.13`. Architekturregeln und Migrationsvorschau bleiben bis zu ihrer geprüften Umsetzung offen; `plugins/` ist nicht enthalten.
 
 
 

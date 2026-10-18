@@ -17,6 +17,28 @@ pub view InvoiceTutorialShell {
                             <span class="tutorial-brand-mark" aria-hidden="true">Z</span>
                             <span><strong>Rechnungsbüro</strong><small data-zelyra-i18n="invoice.nav.subtitle">Create invoices with ease</small></span>
                         </a>
+                        <Dialog title="Quelltext verstehen" open_label="ⓘ Quelltext erklärt">
+                            <div class="tutorial-source-help">
+                                <p data-zelyra-i18n="invoice.source.intro">Diese Hilfe erklärt, welche Zelyra-Dateien die aktuelle Anwendung aufbauen. Die Links der Navigation öffnen echte Seiten; einige entstehen automatisch aus Deklarationen.</p>
+                                <dl>
+                                    <dt><code>main.zyl</code></dt>
+                                <dd data-zelyra-i18n="invoice.source.main">Verbindet die Module und legt mit <code>page "/"</code> die Startseite ausdrücklich an.</dd>
+                                    <dt><code>src/shell.zyl</code></dt>
+                                    <dd data-zelyra-i18n="invoice.source.shell">Definiert den gemeinsamen AppShell mit Kopf, Navigation und Fußzeile. Eigene Seiten und generierte CRUD-Seiten verwenden dieses Layout.</dd>
+                                    <dt><code>src/database.zyl</code></dt>
+                                    <dd data-zelyra-i18n="invoice.source.database">Enthält die Tabellen- und Felddefinitionen. Daraus prüft Zelyra SQL-Abfragen und erzeugt das relationale Schema.</dd>
+                                    <dt><code>src/customers.zyl</code> und <code>src/items.zyl</code></dt>
+                                    <dd data-zelyra-i18n="invoice.source.catalogs">Die <code>crud</code>-Deklarationen erzeugen Listen, Suche, Formulare, Details und Aktionen für Kunden und Artikel.</dd>
+                                    <dt><code>src/invoices.zyl</code></dt>
+                                    <dd data-zelyra-i18n="invoice.source.invoices">Definiert Rechnungsfelder, Validierung und automatische Nummernvergabe. <code>crud Invoice -&gt; invoices</code> erzeugt unter anderem <code>/invoices</code> und <code>/invoices/new</code>.</dd>
+                                    <dt><code>src/dashboard.zyl</code></dt>
+                                    <dd data-zelyra-i18n="invoice.source.dashboard">Die typisierte SQL-Projektion und <code>tableview InvoiceDashboard</code> erzeugen die Rechnungsübersicht unter <code>/views/invoicedashboard</code>.</dd>
+                                    <dt><code>zelyra.theme.css</code></dt>
+                                    <dd data-zelyra-i18n="invoice.source.theme">Steuert Farben, Abstände und projektspezifische Komponentenstile zentral. Zelyra UI liefert die Basis; Anpassungen stehen in dieser Datei und brauchen weder CDN noch Frontend-Build.</dd>
+                                </dl>
+                                <p class="tutorial-source-help-next" data-zelyra-i18n="invoice.source.next">Öffne im Editor eine Quelldatei, um die Deklarationen zu sehen. Prüfe das Projekt mit <code>zelyra check main.zyl</code> und starte den Webserver mit <code>zelyra serve main.zyl</code>.</p>
+                            </div>
+                        </Dialog>
                         <a class="z-button z-button--primary tutorial-new-invoice" href="/invoices/new" data-zelyra-i18n="invoice.nav.new_invoice">+ New invoice</a>
                     </slot>
                     <slot name="navigation">

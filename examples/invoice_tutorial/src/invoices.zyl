@@ -143,7 +143,7 @@ page "/invoices/{invoice_number}/print" {
                 <p><span>Rechnungsbetrag brutto</span><strong>{invoice.gross_total} €</strong></p>
             </section>
             <p>Die Beispielrechnung verwendet den allgemeinen Umsatzsteuersatz von 19%.</p>
-            <div class="z-no-print" style="margin-top: 2rem;">
+            <div class="z-no-print invoice-print-source">
                 <Disclosure summary="Zelyra-Quelltext dieser Druckseite einblenden (SQL + Template)">
                     <div class="tutorial-code-block">
                         <div class="tutorial-code-header">

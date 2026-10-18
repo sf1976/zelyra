@@ -404,6 +404,12 @@ fn module_declarations(program: &Program) -> Vec<String> {
     );
     declarations.extend(
         program
+            .enums
+            .iter()
+            .map(|declaration| format!("enum:{}", declaration.name)),
+    );
+    declarations.extend(
+        program
             .records
             .iter()
             .map(|declaration| format!("record:{}", declaration.name)),
@@ -455,6 +461,18 @@ fn module_declarations(program: &Program) -> Vec<String> {
             .functions
             .iter()
             .map(|declaration| format!("function:{}", declaration.name)),
+    );
+    declarations.extend(
+        program
+            .commands
+            .iter()
+            .map(|declaration| format!("command:{}", declaration.name)),
+    );
+    declarations.extend(
+        program
+            .schedules
+            .iter()
+            .map(|declaration| format!("schedule:{}", declaration.name)),
     );
     declarations.sort();
     declarations

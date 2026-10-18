@@ -1,5 +1,24 @@
 ## Unreleased
 
+## 1.2.14 — 2026-10-18
+
+- Refresh the invoice tutorial with a responsive, unified Zelyra UI theme,
+  structured sample invoice, consistent CRUD cards and a source-code dialog on
+  every shared-shell page. / Das Rechnungstutorial erhält ein responsives,
+  einheitliches Zelyra-UI-Theme, eine gegliederte Beispielrechnung, konsistente
+  CRUD-Karten und einen Quelltextdialog auf jeder Seite des gemeinsamen Layouts.
+- Present generated CRUD decimal values without insignificant trailing zeroes,
+  localize Boolean values, and provide clearer German and English field labels.
+  / Generierte CRUD-Dezimalwerte ohne bedeutungslose Nachkommastellen anzeigen,
+  Wahrheitswerte lokalisieren und verständlichere deutsche und englische
+  Feldbeschriftungen ergänzen.
+- Add a deterministic, read-only `zelyra migrate-layout --check` preview and
+  bounded `strict_architecture` declaration placement checks. The preview does
+  not move project files. / Eine deterministische, schreibgeschützte Vorschau
+  `zelyra migrate-layout --check` und begrenzte Prüfungen der
+  Deklarationsposition über `strict_architecture` ergänzen. Die Vorschau
+  verschiebt keine Projektdateien.
+
 ## 1.2.13 — 2026-10-18
 
 - Add opt-in `zelyra new --layout standard` for a compiler-checked minimal
