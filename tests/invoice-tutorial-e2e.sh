@@ -121,6 +121,14 @@ for route in / /customers /items /invoices /invoice_lines /invoices/new /views/i
     cat "${temporary_root}/server.log" >&2
     exit 1
   fi
+  if [[ "${body}" != *'class="tutorial-content"'* ]]; then
+    echo "invoice tutorial route ${route} did not use the shared page shell" >&2
+    exit 1
+  fi
+  if [[ "${route}" == "/views/invoicedashboard" && "${body}" != *'class="z-generated-page"'* ]]; then
+    echo "invoice overview did not render its generated page container" >&2
+    exit 1
+  fi
   if [[ "${route}" == "/" && \
     ! ( ("${body}" == *"Vom ersten Kunden bis zur fertigen Rechnung."* && "${body}" == *"Rechnungsübersicht öffnen"* && "${body}" == *"354,62 €"*) || \
        ("${body}" == *"From the first customer to the finished invoice."* && "${body}" == *"Open invoice overview"* && "${body}" == *"€354.62"*) ) ]]; then
@@ -171,6 +179,10 @@ form_page="${temporary_root}/customer-form.html"
 cookie_jar="${temporary_root}/cookies.txt"
 curl --silent --show-error --fail --cookie-jar "${cookie_jar}" \
   "http://${address}/customers/new" >"${form_page}"
+if [[ "$(cat "${form_page}")" != *'class="zelyra-crud-form-card"'* ]]; then
+  echo "customer create form did not render its shared form card" >&2
+  exit 1
+fi
 csrf_token="$(python3 - "${form_page}" <<'PY'
 import pathlib, re, sys
 page = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
