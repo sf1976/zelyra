@@ -115,19 +115,22 @@ security and compatibility gates stated for that milestone.
   ABI or package plugin contract. Verify reusable CSV import/export packages
   across supported execution backends. Ordinary application-served settings
 -  pages and cross-process settings transactions move to 1.2.12.
-- [~] **1.2.11 — tutorial UI and CLI reliability:** Release the consistent
+- [✅] **1.2.11 — tutorial UI and CLI reliability:** Released the consistent
   invoice tutorial design, actionable missing-outbox-table guidance,
   Debian/Ubuntu Compose-v2 version recognition, project `.env` resolution for
-  audit/auth-role commands, and normal Unix SIGPIPE behavior. The invoice UI
-  styling subtask is implemented; stable-release gates are in progress. The
+  audit/auth-role commands, and normal Unix SIGPIPE behavior. Further invoice
+  layout and project-theme editor refinements are tracked under 1.2.12. The
   wider application-settings, ecosystem parity, and deployment-security work
-  is explicitly moved to 1.2.12.
+  remains in 1.2.12.
 - [✅] **1.2.11 invoice tutorial CSS subtask:** Centralize generated-page,
   CRUD, form, filter, and table styling in Zelyra UI; give the invoice tutorial
   one responsive design and generated forms the same page frame. Studio has a
   fixed explorer shortcut to `zelyra.theme.css`, whose comments explain how to
   adjust existing UI components and `--z-` tokens; only project-specific design
   remains in the synchronized theme template.
+- [~] **1.2.12 invoice tutorial refinement:** Keep custom AppShell pages aligned
+  with generated CRUD forms, lay out cards responsively, and make project theme
+  CSS easy to open and safely customize in Studio.
 - [ ] **1.2.12 — application settings, ecosystem parity, and business slices:**
   Add application-served module settings only with server-side authorization,
   CSRF, schema validation, redaction, and explicit runtime behavior after a
