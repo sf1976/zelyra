@@ -1493,217 +1493,37 @@ fn update_plan_command(args: &mut impl Iterator<Item = String>) -> Result<String
     {
         return Err("package update plan requires existing package dependencies".into());
     }
-    let mut prepared = Vec::with_capacity(specs.len());
-    let mut staged_paths = UpdatePlanStageCleanup::default();
-    let mut total_download_bytes = 0_u64;
-    let mut total_source_files = 0_usize;
-    let deadline = std::time::Instant::now() + Duration::from_secs(300);
-    for (alias, name, version, registry) in specs {
-        let current_path = document
-            .get("dependencies")
-            .and_then(Item::as_table)
-            .and_then(|dependencies| dependencies.get(&alias))
-            .and_then(Item::as_table)
-            .ok_or_else(|| {
-                format!("cannot update `{alias}` because it is not a declared dependency")
-            })?
-            .get("path")
-            .and_then(Item::as_str)
-            .and_then(super::safe_dependency_path)
-            .ok_or_else(|| {
-                format!("dependency `{alias}` does not have a safe local package path")
-            })?;
-        let current_root = super::resolve_dependency_root(&workspace, &workspace, &current_path)
-            .map_err(|error| error.message)?;
-        let current_manifest =
-            read_manifest(&current_root.join(MANIFEST)).map_err(|error| error.message)?;
-        let current_package = current_manifest
-            .get("package")
-            .and_then(toml::Value::as_table)
-            .ok_or_else(|| format!("current dependency `{alias}` has no package identity"))?;
-        let current_name = current_package.get("name").and_then(toml::Value::as_str);
-        if current_name != Some(name.as_str()) {
-            return Err(format!(
-                "dependency alias `{alias}` does not name package `{name}`"
-            ));
-        }
-        let sources = document
-            .get("package_sources")
-            .and_then(Item::as_table)
-            .and_then(|sources| sources.get(&alias))
-            .and_then(Item::as_table)
-            .ok_or_else(|| format!("dependency `{alias}` has no trusted registry provenance; remove and add it after review"))?;
-        let old_publisher = sources
-            .get("publisher")
-            .and_then(Item::as_str)
-            .ok_or_else(|| format!("dependency `{alias}` has incomplete registry provenance"))?;
-        let old_key = sources
-            .get("public_key")
-            .and_then(Item::as_str)
-            .ok_or_else(|| format!("dependency `{alias}` has incomplete registry provenance"))?;
-
-        let index_bytes = fetch_limited_before(registry.as_str(), 4 * 1024 * 1024, deadline)?;
-        total_download_bytes = total_download_bytes.saturating_add(index_bytes.len() as u64);
-        if total_download_bytes > MAX_REGISTRY_BYTES {
-            return Err("package update plan downloads exceed the 256 MiB total limit".into());
-        }
-        let index: Value = serde_json::from_slice(&index_bytes)
-            .map_err(|error| format!("invalid package registry index: {error}"))?;
-        let entries = parse_registry_index(&index)?;
-        let entry = entries
-            .iter()
-            .find(|entry| entry.name == name && entry.version == version)
-            .ok_or_else(|| format!("registry has no exact release for {name} {version}"))?;
-        let artifact_url = registry
-            .join(&entry.artifact)
-            .map_err(|error| format!("invalid registry artifact URL: {error}"))?;
-        ensure_same_registry_origin(&registry, &artifact_url)?;
-        let bytes = fetch_limited_before(artifact_url.as_str(), MAX_PACKAGE_BYTES, deadline)?;
-        total_download_bytes = total_download_bytes.saturating_add(bytes.len() as u64);
-        if total_download_bytes > MAX_REGISTRY_BYTES {
-            return Err("package update plan downloads exceed the 256 MiB total limit".into());
-        }
-        let artifact_sha256 = format!("sha256:{:x}", Sha256::digest(&bytes));
-        if artifact_sha256 != entry.artifact_sha256 {
-            return Err(format!(
-                "downloaded artifact digest for `{alias}` does not match the registry index"
-            ));
-        }
-        let artifact = verify_artifact(&bytes)?;
-        total_source_files = total_source_files.saturating_add(artifact.files.len());
-        if total_source_files > 16_384 {
-            return Err("package update plan exceeds the 16,384 total source-file limit".into());
-        }
-        if artifact.name != name
-            || artifact.version != version
-            || artifact.publisher != entry.publisher
-            || hex_encode(&artifact.public_key) != entry.public_key
-            || artifact.checksum != entry.checksum
-        {
-            return Err(format!(
-                "registry metadata does not match signed package `{alias}`"
-            ));
-        }
-        if artifact.publisher != old_publisher || hex_encode(&artifact.public_key) != old_key {
-            return Err(format!("package update for `{alias}` changes the trusted publisher or signing key; remove and re-add it after reviewing the new publisher"));
-        }
-        if !trusted_key(&trust_path, &artifact.publisher, &artifact.public_key)? {
-            return Err(format!(
-                "publisher `{}` is no longer trusted for `{alias}`",
-                artifact.publisher
-            ));
-        }
-        validate_package_sources(&artifact.files, &artifact.name, &artifact.version)?;
-
-        let relative_install = PathBuf::from(".zelyra")
+    let mut staging_by_alias = BTreeMap::new();
+    let mut cleanup_paths = Vec::with_capacity(specs.len() * 2);
+    for (alias, name, version, _) in &specs {
+        let install_root = workspace
+            .join(".zelyra")
             .join("packages")
-            .join(&name)
-            .join(&version);
-        let install_root = workspace.join(&relative_install);
+            .join(name)
+            .join(version);
         ensure_no_symlink_path(&workspace, &install_root)?;
-        let reused = if install_root.exists() {
-            ensure_no_symlinks_in_tree(&install_root)?;
-            let cached_manifest = read_manifest(&install_root.join(MANIFEST)).map_err(|_| {
-                format!("cached package destination for `{alias}` is not a valid package")
-            })?;
-            let cached_identity = cached_manifest
-                .get("package")
-                .and_then(toml::Value::as_table);
-            let cached_checksum =
-                super::package_checksum(&install_root).map_err(|error| error.message)?;
-            if cached_identity
-                .and_then(|package| package.get("name"))
-                .and_then(toml::Value::as_str)
-                != Some(name.as_str())
-                || cached_identity
-                    .and_then(|package| package.get("version"))
-                    .and_then(toml::Value::as_str)
-                    != Some(version.as_str())
-                || cached_checksum != artifact.checksum
-            {
-                return Err(format!(
-                    "cached package destination for `{alias}` does not match the verified artifact"
-                ));
-            }
-            true
-        } else {
-            false
-        };
-        let staging = if reused {
-            None
-        } else {
-            let parent = install_root.parent().expect("package cache parent exists");
-            ensure_no_symlink_path(&workspace, parent)?;
-            fs::create_dir_all(parent)
-                .map_err(|error| format!("cannot create package cache: {error}"))?;
-            ensure_no_symlink_path(&workspace, parent)?;
-            let staging = parent.join(format!(
-                ".{}.update-{}-{}",
-                version,
-                std::process::id(),
-                NEXT_TEMP.fetch_add(1, Ordering::Relaxed)
+        let parent = install_root
+            .parent()
+            .expect("package installation path has a parent");
+        ensure_no_symlink_path(&workspace, parent)?;
+        let staging = parent.join(format!(
+            ".{version}.update-{}-{}",
+            std::process::id(),
+            NEXT_TEMP.fetch_add(1, Ordering::Relaxed)
+        ));
+        ensure_no_symlink_path(&workspace, &staging)?;
+        if staging.exists() {
+            return Err(format!(
+                "package update staging path already exists: {}",
+                staging.display()
             ));
-            if staging.exists() {
-                return Err(format!(
-                    "package update staging path already exists: {}",
-                    staging.display()
-                ));
-            }
-            fs::create_dir(&staging)
-                .map_err(|error| format!("cannot stage package `{alias}`: {error}"))?;
-            staged_paths.0.push(staging.clone());
-            for (path, source) in &artifact.files {
-                if let Err(error) = validate_archive_path(path) {
-                    let _ = fs::remove_dir_all(&staging);
-                    return Err(error);
-                }
-                let output = staging.join(path);
-                if let Err(error) =
-                    fs::create_dir_all(output.parent().expect("archive file has parent"))
-                        .and_then(|()| fs::write(output, source))
-                {
-                    let _ = fs::remove_dir_all(&staging);
-                    return Err(format!("cannot stage verified package `{alias}`: {error}"));
-                }
-            }
-            Some(staging)
-        };
-        let dependency = document
-            .get_mut("dependencies")
-            .and_then(Item::as_table_mut)
-            .and_then(|dependencies| dependencies.get_mut(&alias))
-            .and_then(Item::as_table_mut)
-            .expect("dependency was validated above");
-        dependency["path"] = value(relative_install.to_string_lossy().replace('\\', "/"));
-        dependency["version"] = value(format!("={version}"));
-        let source = document
-            .get_mut("package_sources")
-            .and_then(Item::as_table_mut)
-            .and_then(|sources| sources.get_mut(&alias))
-            .and_then(Item::as_table_mut)
-            .expect("package source was validated above");
-        source["registry"] = value(registry.as_str());
-        source["artifact_sha256"] = value(artifact_sha256.clone());
-        prepared.push(PlannedPackageUpdate {
-            alias,
-            name,
-            version,
-            install_root,
-            staging,
-        });
+        }
+        cleanup_paths.push(staging.clone());
+        if !install_root.exists() {
+            cleanup_paths.push(install_root);
+        }
+        staging_by_alias.insert(alias.clone(), staging);
     }
-
-    let new_manifest = document.to_string();
-    let cleanup_paths = prepared
-        .iter()
-        .filter_map(|update| {
-            update
-                .staging
-                .as_ref()
-                .map(|staging| (staging, &update.install_root))
-        })
-        .flat_map(|(staging, install)| [staging.clone(), install.clone()])
-        .collect::<Vec<_>>();
     let mut transaction_journal = PackageTransaction::prepare(
         &workspace,
         "update",
@@ -1711,7 +1531,215 @@ fn update_plan_command(args: &mut impl Iterator<Item = String>) -> Result<String
         Some(&original_lock),
         &cleanup_paths,
     )?;
-    let transaction = (|| {
+    let mut prepared = Vec::with_capacity(specs.len());
+    let mut staged_paths = UpdatePlanStageCleanup::default();
+    let mut total_download_bytes = 0_u64;
+    let mut total_source_files = 0_usize;
+    let deadline = std::time::Instant::now() + Duration::from_secs(300);
+    let update_result = (|| {
+        for (alias, name, version, registry) in specs {
+            let current_path = document
+                .get("dependencies")
+                .and_then(Item::as_table)
+                .and_then(|dependencies| dependencies.get(&alias))
+                .and_then(Item::as_table)
+                .ok_or_else(|| {
+                    format!("cannot update `{alias}` because it is not a declared dependency")
+                })?
+                .get("path")
+                .and_then(Item::as_str)
+                .and_then(super::safe_dependency_path)
+                .ok_or_else(|| {
+                    format!("dependency `{alias}` does not have a safe local package path")
+                })?;
+            let current_root =
+                super::resolve_dependency_root(&workspace, &workspace, &current_path)
+                    .map_err(|error| error.message)?;
+            let current_manifest =
+                read_manifest(&current_root.join(MANIFEST)).map_err(|error| error.message)?;
+            let current_package = current_manifest
+                .get("package")
+                .and_then(toml::Value::as_table)
+                .ok_or_else(|| format!("current dependency `{alias}` has no package identity"))?;
+            let current_name = current_package.get("name").and_then(toml::Value::as_str);
+            if current_name != Some(name.as_str()) {
+                return Err(format!(
+                    "dependency alias `{alias}` does not name package `{name}`"
+                ));
+            }
+            let sources = document
+            .get("package_sources")
+            .and_then(Item::as_table)
+            .and_then(|sources| sources.get(&alias))
+            .and_then(Item::as_table)
+            .ok_or_else(|| format!("dependency `{alias}` has no trusted registry provenance; remove and add it after review"))?;
+            let old_publisher =
+                sources
+                    .get("publisher")
+                    .and_then(Item::as_str)
+                    .ok_or_else(|| {
+                        format!("dependency `{alias}` has incomplete registry provenance")
+                    })?;
+            let old_key = sources
+                .get("public_key")
+                .and_then(Item::as_str)
+                .ok_or_else(|| {
+                    format!("dependency `{alias}` has incomplete registry provenance")
+                })?;
+
+            let index_bytes = fetch_limited_before(registry.as_str(), 4 * 1024 * 1024, deadline)?;
+            total_download_bytes = total_download_bytes.saturating_add(index_bytes.len() as u64);
+            if total_download_bytes > MAX_REGISTRY_BYTES {
+                return Err("package update plan downloads exceed the 256 MiB total limit".into());
+            }
+            let index: Value = serde_json::from_slice(&index_bytes)
+                .map_err(|error| format!("invalid package registry index: {error}"))?;
+            let entries = parse_registry_index(&index)?;
+            let entry = entries
+                .iter()
+                .find(|entry| entry.name == name && entry.version == version)
+                .ok_or_else(|| format!("registry has no exact release for {name} {version}"))?;
+            let artifact_url = registry
+                .join(&entry.artifact)
+                .map_err(|error| format!("invalid registry artifact URL: {error}"))?;
+            ensure_same_registry_origin(&registry, &artifact_url)?;
+            let bytes = fetch_limited_before(artifact_url.as_str(), MAX_PACKAGE_BYTES, deadline)?;
+            total_download_bytes = total_download_bytes.saturating_add(bytes.len() as u64);
+            if total_download_bytes > MAX_REGISTRY_BYTES {
+                return Err("package update plan downloads exceed the 256 MiB total limit".into());
+            }
+            let artifact_sha256 = format!("sha256:{:x}", Sha256::digest(&bytes));
+            if artifact_sha256 != entry.artifact_sha256 {
+                return Err(format!(
+                    "downloaded artifact digest for `{alias}` does not match the registry index"
+                ));
+            }
+            let artifact = verify_artifact(&bytes)?;
+            total_source_files = total_source_files.saturating_add(artifact.files.len());
+            if total_source_files > 16_384 {
+                return Err(
+                    "package update plan exceeds the 16,384 total source-file limit".into(),
+                );
+            }
+            if artifact.name != name
+                || artifact.version != version
+                || artifact.publisher != entry.publisher
+                || hex_encode(&artifact.public_key) != entry.public_key
+                || artifact.checksum != entry.checksum
+            {
+                return Err(format!(
+                    "registry metadata does not match signed package `{alias}`"
+                ));
+            }
+            if artifact.publisher != old_publisher || hex_encode(&artifact.public_key) != old_key {
+                return Err(format!("package update for `{alias}` changes the trusted publisher or signing key; remove and re-add it after reviewing the new publisher"));
+            }
+            if !trusted_key(&trust_path, &artifact.publisher, &artifact.public_key)? {
+                return Err(format!(
+                    "publisher `{}` is no longer trusted for `{alias}`",
+                    artifact.publisher
+                ));
+            }
+            validate_package_sources(&artifact.files, &artifact.name, &artifact.version)?;
+
+            let relative_install = PathBuf::from(".zelyra")
+                .join("packages")
+                .join(&name)
+                .join(&version);
+            let install_root = workspace.join(&relative_install);
+            ensure_no_symlink_path(&workspace, &install_root)?;
+            let reused = if install_root.exists() {
+                ensure_no_symlinks_in_tree(&install_root)?;
+                let cached_manifest =
+                    read_manifest(&install_root.join(MANIFEST)).map_err(|_| {
+                        format!("cached package destination for `{alias}` is not a valid package")
+                    })?;
+                let cached_identity = cached_manifest
+                    .get("package")
+                    .and_then(toml::Value::as_table);
+                let cached_checksum =
+                    super::package_checksum(&install_root).map_err(|error| error.message)?;
+                if cached_identity
+                    .and_then(|package| package.get("name"))
+                    .and_then(toml::Value::as_str)
+                    != Some(name.as_str())
+                    || cached_identity
+                        .and_then(|package| package.get("version"))
+                        .and_then(toml::Value::as_str)
+                        != Some(version.as_str())
+                    || cached_checksum != artifact.checksum
+                {
+                    return Err(format!(
+                    "cached package destination for `{alias}` does not match the verified artifact"
+                ));
+                }
+                true
+            } else {
+                false
+            };
+            let staging = if reused {
+                None
+            } else {
+                let parent = install_root.parent().expect("package cache parent exists");
+                ensure_no_symlink_path(&workspace, parent)?;
+                fs::create_dir_all(parent)
+                    .map_err(|error| format!("cannot create package cache: {error}"))?;
+                ensure_no_symlink_path(&workspace, parent)?;
+                let staging = staging_by_alias
+                    .get(&alias)
+                    .expect("every update alias has a precomputed staging path")
+                    .clone();
+                ensure_no_symlink_path(&workspace, &staging)?;
+                if staging.exists() {
+                    return Err(format!(
+                        "package update staging path already exists: {}",
+                        staging.display()
+                    ));
+                }
+                fs::create_dir(&staging)
+                    .map_err(|error| format!("cannot stage package `{alias}`: {error}"))?;
+                staged_paths.0.push(staging.clone());
+                for (path, source) in &artifact.files {
+                    if let Err(error) = validate_archive_path(path) {
+                        let _ = fs::remove_dir_all(&staging);
+                        return Err(error);
+                    }
+                    let output = staging.join(path);
+                    if let Err(error) =
+                        fs::create_dir_all(output.parent().expect("archive file has parent"))
+                            .and_then(|()| fs::write(output, source))
+                    {
+                        let _ = fs::remove_dir_all(&staging);
+                        return Err(format!("cannot stage verified package `{alias}`: {error}"));
+                    }
+                }
+                Some(staging)
+            };
+            let dependency = document
+                .get_mut("dependencies")
+                .and_then(Item::as_table_mut)
+                .and_then(|dependencies| dependencies.get_mut(&alias))
+                .and_then(Item::as_table_mut)
+                .expect("dependency was validated above");
+            dependency["path"] = value(relative_install.to_string_lossy().replace('\\', "/"));
+            dependency["version"] = value(format!("={version}"));
+            let source = document
+                .get_mut("package_sources")
+                .and_then(Item::as_table_mut)
+                .and_then(|sources| sources.get_mut(&alias))
+                .and_then(Item::as_table_mut)
+                .expect("package source was validated above");
+            source["registry"] = value(registry.as_str());
+            source["artifact_sha256"] = value(artifact_sha256.clone());
+            prepared.push(PlannedPackageUpdate {
+                alias,
+                name,
+                version,
+                install_root,
+                staging,
+            });
+        }
+        let new_manifest = document.to_string();
         let current_manifest =
             read_regular_file(&manifest_path, 4 * 1024 * 1024, "project manifest")?;
         let current_lock = read_regular_file(&lock_path, 16 * 1024 * 1024, "package lockfile")?;
@@ -1748,7 +1776,7 @@ fn update_plan_command(args: &mut impl Iterator<Item = String>) -> Result<String
         validate_project_manifest(&workspace, &new_manifest)?;
         Ok::<(), String>(())
     })();
-    if let Err(error) = transaction {
+    if let Err(error) = update_result {
         return Err(match transaction_journal.rollback() {
             Ok(()) => error,
             Err(recovery) => format!("{error}; package recovery is pending: {recovery}"),
