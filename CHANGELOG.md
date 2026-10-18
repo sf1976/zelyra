@@ -1,10 +1,17 @@
-# Changelog
-
-All notable changes to the Zelyra compiler and runtime are documented here.
-The language compatibility line remains `0.1`. Compiler and repository
-releases follow Semantic Versioning independently of the language line.
-
 ## Unreleased
+
+- Add opt-in `zelyra new --layout standard` for a compiler-checked minimal
+  project tree; validate required roots and reject symlinked or escaping
+  directories while leaving legacy projects unchanged. Within that profile,
+  `import "domain::sales::actions" as sales` resolves modules under the
+  `domain/` root; schema and route namespaces work the same way. Strict
+  architecture checks and database templates remain open. / Das mit
+  `zelyra new --layout standard` aktivierbare, compilergeprüfte
+  Minimalprojektlayout ergänzen; Pflichtordner validieren und Symlinks oder aus
+  dem Projekt führende Verzeichnisse abweisen, ohne alte Projekte zu verändern.
+  In diesem Profil löst `import "domain::sales::actions" as sales` Module unter
+  `domain/` auf; Schema- und Routennamensräume funktionieren entsprechend.
+  Strenge Architekturprüfungen und Datenbankvorlagen bleiben offen.
 
 ## 1.2.12 — 2026-10-18
 

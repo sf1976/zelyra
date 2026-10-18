@@ -153,10 +153,16 @@ abgeschlossen.
   ausgeglichene Ledger-Buchungen, Reflection-/Exportmetadaten, Healthchecks,
   modulare Bundles und einen ausdrücklich begrenzten Wasm-/Sidecar-Zugang
   liefern. Keine universellen Compliance- oder Performanceversprechen.
-- [ ] **1.2.13 — kanonische Projektstruktur:** Das optionale, versionierte
-  Layout (`routes/`, `domain/`, `schema/`, `public/`, `assets/`, `plugins/`),
-  Architekturprüfungen und sichere Migrationsvorschau abschließen. Bestehende
-  Projekte bleiben ohne Opt-in im Legacy-Modus.
+- [~] **1.2.13 — kanonische Projektstruktur:** `zelyra new --layout standard`
+  erstellt ein prüfbares Minimalprojekt mit `routes/`, `domain/`, `schema/`,
+  `public/` und `assets/`. `[project].layout = "standard"` aktiviert das
+  Profil; `check`, `run` und `serve` verlangen echte, innerhalb des Projekts
+  liegende Ordner. Die bestehende Schreibweise `import
+  "domain::feature::actions" as actions` löst Projektnamensräume unter
+  `schema/`, `domain/` und `routes/` nur in diesem Profil auf; bisherige Importe
+  bleiben unverändert. Alte Projekte bleiben unverändert. Datenbankvorlagen,
+  Architekturregeln und sichere Migrationsvorschau fehlen noch; `plugins/` wird
+  bis zu einem abgesicherten Loader zurückgestellt.
 - [ ] **1.2.14–1.2.15 — Bytecode-Parität und Freigabenachweis:** Verifizierte
   Bytecodesemantik, Hostoperationen, Fuzzing, Differentialtests,
   Ressourcenlimits, Diagnostik sowie Paket-/Deploymentunterstützung ausbauen.

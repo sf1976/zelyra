@@ -202,6 +202,42 @@ Linux, `/machine-management` is an absolute path from the filesystem root. If
 **Automatic Port Selection on Conflict:**
 If default ports `3000` (web) or `3306` (MariaDB) are occupied, `zelyra new`, `zelyra init`, and `zelyra setup` automatically select the next free host ports and record them in `.env`. The optional `--web-port <p>`, `--host-port <p>`, and `--db-host-port <p>` flags enforce exact ports.
 
+### Opt in to the standard project folders
+
+New projects can opt into the incremental standard layout:
+
+~~~bash
+zelyra new billing-app --layout standard
+cd billing-app
+zelyra check main.zyl
+zelyra run main.zyl
+~~~
+
+This minimal starter creates `routes/`, `domain/`, `schema/`, `public/`, and
+`assets/`, and declares `layout = "standard"` in `[project]` in `zelyra.toml`.
+`check`, `run`, and `serve` verify that each root is a real directory inside
+the project. Existing projects without this setting keep legacy behavior.
+This first step supports only the minimal starter; MariaDB templates,
+architecture lint rules, and migration preview are still being developed.
+Within this profile, the existing import syntax also accepts project namespaces
+that map to Zelyra files without `../../` paths:
+
+~~~zelyra
+import "schema::tables" as schema
+import "domain::invoices::actions" as invoice_actions
+import "routes::web" as web
+~~~
+
+The supported namespace roots are `schema`, `domain`, and `routes`. Each
+segment must be a simple module name and the loader confines resolution to the
+project root. Namespace imports require the opt-in profile; package modules
+continue to use project-relative or `pkg:` imports. Existing explicit file
+imports remain supported. The separate `use schema::...` syntax is not part of
+the language. Under the opt-in standard profile, setting
+`strict_architecture = true` currently fails explicitly because those rules
+are not available yet. A `strict_architecture` key does not change an
+unprofiled legacy project.
+
 ### ✅ Zelyra Setup Assistant (Console and Web)
 
 `zelyra setup` provides unified setup actions across CLI and browser:

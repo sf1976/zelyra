@@ -1412,6 +1412,115 @@ fn run_reads_console_input_and_handles_eof_and_capability_denial() {
 }
 
 #[test]
+fn standard_layout_namespaces_resolve_and_remain_opt_in() {
+    let directory = temporary_directory("standard-layout-namespaces");
+    for path in ["schema", "domain/sales", "routes", "public", "assets"] {
+        fs::create_dir_all(directory.join(path)).unwrap();
+    }
+    fs::write(
+        directory.join("zelyra.toml"),
+        "[project]\nname = \"namespace-test\"\nlayout = \"standard\"\n",
+    )
+    .unwrap();
+    fs::write(
+        directory.join("main.zyl"),
+        "import \"domain::sales::actions\" as sales\nfn main() { print(sales::greeting()) }\n",
+    )
+    .unwrap();
+    fs::write(
+        directory.join("domain/sales/actions.zyl"),
+        "pub fn greeting() -> String { return \"namespaces work\" }\n",
+    )
+    .unwrap();
+    let entry = directory.join("main.zyl");
+    let checked = Command::new(binary())
+        .args(["check", entry.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(
+        checked.status.success(),
+        "{}",
+        String::from_utf8_lossy(&checked.stderr)
+    );
+    let run = Command::new(binary())
+        .args(["run", entry.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&run.stdout).trim(),
+        "namespaces work"
+    );
+
+    fs::write(
+        &entry,
+        "import \"domain::..::outside\" as outside\nfn main() {}\n",
+    )
+    .unwrap();
+    let traversal = Command::new(binary())
+        .args(["check", entry.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(!traversal.status.success());
+    assert!(String::from_utf8_lossy(&traversal.stderr)
+        .contains("invalid standard-layout namespace import"));
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::symlink;
+
+        let outside = temporary_directory("standard-layout-namespace-outside");
+        fs::create_dir_all(&outside).unwrap();
+        fs::write(
+            outside.join("actions.zyl"),
+            "pub fn greeting() -> String { return \"outside\" }\n",
+        )
+        .unwrap();
+        symlink(&outside, directory.join("domain/external")).unwrap();
+        fs::write(
+            &entry,
+            "import \"domain::external::actions\" as external\nfn main() {}\n",
+        )
+        .unwrap();
+        let escaped = Command::new(binary())
+            .args(["check", entry.to_str().unwrap()])
+            .output()
+            .unwrap();
+        assert!(!escaped.status.success());
+        assert!(String::from_utf8_lossy(&escaped.stderr).contains("E-MOD-004"));
+        fs::remove_dir_all(outside).unwrap();
+    }
+
+    let legacy = temporary_directory("legacy-layout-namespace");
+    fs::create_dir_all(legacy.join("domain/sales")).unwrap();
+    fs::write(legacy.join("zelyra.toml"), "[project]\nname = \"legacy\"\n").unwrap();
+    fs::write(
+        legacy.join("main.zyl"),
+        "import \"domain::sales::actions\" as sales\nfn main() {}\n",
+    )
+    .unwrap();
+    fs::write(
+        legacy.join("domain/sales/actions.zyl"),
+        "pub fn greeting() -> String { return \"unreachable\" }\n",
+    )
+    .unwrap();
+    let legacy_entry = legacy.join("main.zyl");
+    let rejected = Command::new(binary())
+        .args(["check", legacy_entry.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(!rejected.status.success());
+    assert!(String::from_utf8_lossy(&rejected.stderr)
+        .contains("namespace imports require `[project].layout = \"standard\"`"));
+    fs::remove_dir_all(directory).unwrap();
+    fs::remove_dir_all(legacy).unwrap();
+}
+
+#[test]
 fn digits_in_words_example_handles_signed_ints_and_unicode_output() {
     let directory = temporary_directory("digits-in-words");
     fs::create_dir_all(&directory).unwrap();
@@ -2017,6 +2126,64 @@ fn new_mariadb_project_propagates_the_selected_web_port() {
             "missing Compose forwarding: {setting}"
         );
     }
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn new_standard_layout_generates_a_checkable_project_tree() {
+    let directory = temporary_directory("new-standard-layout");
+    let created = Command::new(binary())
+        .args(["new", directory.to_str().unwrap(), "--layout", "standard"])
+        .output()
+        .unwrap();
+    assert!(
+        created.status.success(),
+        "{}",
+        String::from_utf8_lossy(&created.stderr)
+    );
+    let expected_files = [
+        "schema/tables.zyl",
+        "domain/dashboard/actions.zyl",
+        "routes/web.zyl",
+        "assets/.keep",
+        "public/.keep",
+    ];
+    for file in expected_files {
+        assert!(directory.join(file).is_file(), "missing {file}");
+    }
+    let manifest = fs::read_to_string(directory.join("zelyra.toml")).unwrap();
+    assert!(manifest.contains("layout = \"standard\""));
+
+    let entry = directory.join("main.zyl");
+    let generated_main = fs::read_to_string(&entry).unwrap();
+    assert!(generated_main.contains("import \"domain::dashboard::actions\" as dashboard"));
+    let checked = Command::new(binary())
+        .args(["check", entry.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(
+        checked.status.success(),
+        "{}",
+        String::from_utf8_lossy(&checked.stderr)
+    );
+    let executed = Command::new(binary())
+        .args(["run", entry.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(
+        executed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&executed.stderr)
+    );
+    assert!(String::from_utf8_lossy(&executed.stdout).contains("Welcome to your Zelyra project"));
+    fs::remove_dir_all(directory.join("assets")).unwrap();
+    let invalid = Command::new(binary())
+        .args(["check", entry.to_str().unwrap(), "--format=json"])
+        .output()
+        .unwrap();
+    assert!(!invalid.status.success());
+    let diagnostics: serde_json::Value = serde_json::from_slice(&invalid.stdout).unwrap();
+    assert_eq!(diagnostics["diagnostics"][0]["code"], "E-LAYOUT-002");
     fs::remove_dir_all(directory).unwrap();
 }
 

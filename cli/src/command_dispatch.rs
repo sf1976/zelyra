@@ -304,6 +304,7 @@ pub(super) fn run() -> ExitCode {
         let mut crud_template = false;
         let mut auth_template = false;
         let mut business_template = false;
+        let mut canonical_layout = false;
         let mut web_port = DEFAULT_WEB_PORT;
         let mut web_port_given = false;
         let mut host_port = DEFAULT_WEB_PORT;
@@ -314,6 +315,16 @@ pub(super) fn run() -> ExitCode {
         while let Some(argument) = arguments.next() {
             if argument == "--mariadb" && !with_mariadb {
                 with_mariadb = true;
+            } else if argument == "--layout" && !canonical_layout {
+                let Some(value) = arguments.next() else {
+                    eprintln!("error[E-CLI-001]: --layout requires the value `standard`");
+                    return ExitCode::from(2);
+                };
+                if value != "standard" {
+                    eprintln!("error[E-CLI-001]: unknown layout `{value}`; expected `standard`");
+                    return ExitCode::from(2);
+                }
+                canonical_layout = true;
             } else if argument == "--template" {
                 let Some(value) = arguments.next() else {
                     eprintln!("error[E-CLI-001]: --template requires a value");
@@ -408,6 +419,7 @@ pub(super) fn run() -> ExitCode {
                 crud_template,
                 auth_template,
                 business_template,
+                canonical_layout,
                 web_port,
                 host_port,
                 database_host_port,
@@ -530,6 +542,7 @@ pub(super) fn run() -> ExitCode {
                 crud_template,
                 auth_template,
                 business_template,
+                canonical_layout: false,
                 web_port,
                 host_port,
                 database_host_port,

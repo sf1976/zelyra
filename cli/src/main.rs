@@ -67,6 +67,7 @@ mod module_settings;
 mod outbox_cli;
 mod packages;
 mod project;
+mod project_layout;
 mod reflect;
 mod route_cli;
 mod semantic_index;
@@ -222,7 +223,7 @@ fn usage() {
     eprintln!("  setup supports `--database`, `--schema`, `--all`, `--host-port`, `--db-host-port`, and `--web [--port <port>]`");
     eprintln!("  outbox: `setup [file.zyl]`, `list [file.zyl] [--limit <1..200>] [--format text|json]`, `requeue <event-id> [file.zyl]`, or `run [file.zyl] --handler <event.type=function_name> [--once] [--lease-seconds <5..3600>]");
     eprintln!("  Detailhilfe / detailed help: `zelyra fmt --help`, `zelyra init --help`, or `zelyra db plan --help` shows options and examples");
-    eprintln!("{}", terminal::help(&format!("Zelyra {}\n\nUsage:\n  zelyra --help\n  zelyra --version\n  zelyra version\n  zelyra update [--check]\n  zelyra uninstall [--yes] [--dry-run]\n  zelyra --tutorial invoice [directory] [--no-start]\n  zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] [--database|--schema|--all] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] --web [--port <port>]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra config <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl> [--entry <function> [--entry-args <JSON-array>]] [--backend ast|mir|bytecode] [--optimize-mir] [--max-steps <n>]\n  zelyra serve <file.zyl> [address]\n  zelyra routes <entry.zyl> [--format human|json]\n  zelyra reflect <entry.zyl> [--format=json|human]\n  zelyra editor [directory] [--port <port>] [--no-open]\n  zelyra module init <directory> --name <package-name> [--version <semver>]\n  zelyra module plan <entry.zyl> <module.zyl|resource-id>\n  zelyra module bundle <entry.zyl> <module.zyl|resource-id> --output <dir> [--docker --compiler-ref <40-character-commit>]\n  zelyra package lock [entry.zyl] [--check|--update]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra outbox <setup|list|requeue|run> [file.zyl] [options]\n  zelyra task <list|run> <main.zyl> [command] [options]\n  zelyra schedule <list|export> <main.zyl> [options]\n  zelyra service <install|change|status|restart|remove> [--port <port>]\n  zelyra db <create|setup|bootstrap|inspect|map|plan|apply|history> <file.zyl>\n\nSchnelleinstieg\n  Geführtes Rechnungstutorial:\n    zelyra --tutorial invoice                 Erstellt Projekt, Datenbank und Schema, startet die Anwendung und öffnet den Browser.\n    Die ausgegebene Anwendungsadresse manuell öffnen, falls kein Browser startet.\n    zelyra editor invoice-tutorial            Öffnet Studio für das Tutorialprojekt.\n  Kleines eigenes Projekt:\n    zelyra init ./mein-projekt                Erstellt ein minimales Projekt ohne Datenbank.\n    cd mein-projekt && zelyra run main.zyl    Startet das Programm direkt.\n    zelyra editor                              Startet Studio im aktuellen Ordner und öffnet den Standardbrowser.\n\nWichtige Befehle\n  init/new  Projektgerüst erstellen; init ist der kurze Einstieg, new bietet Vorlagen und Optionen.\n  check     Datei oder Projekt auf Syntax- und Compilerfehler prüfen.\n  run       Ein Zelyra-Programm direkt ausführen.\n  serve     Eine Webanwendung lokal starten.\n  setup     MariaDB-Projekt vorbereiten; `--all` startet Stack und Schema sichtbar. `.` bedeutet aktuelles Verzeichnis, `./test_a` einen Unterordner.\n  db plan   Schemaänderungen zuerst nur anzeigen; db apply setzt einen geprüften Plan um.\n  db create Gibt CREATE-SQL aus; `db setup` richtet das MariaDB-Schema ein.\n  outbox    Transaktionale Ereignisse einrichten, prüfen und mit Handlern verarbeiten.\n  task      Native Command-Definitionen anzeigen und compilergeprüft ausführen.\n  schedule  Native Zeitpläne anzeigen oder als Cron-Vorschau ausgeben.\n  service   Linux-systemd-Benutzerdienst mit festem Port installieren und verwalten.\n  routes    `zelyra routes main.zyl` listet deklarierte Seiten, APIs und erzeugte Ressourcenrouten; `--format json` liefert maschinenlesbare Ausgabe.\n  reflect   Prüft das Projekt und exportiert Symbole, Schema, Routen, APIs, Forms und Contracts als versioniertes JSON.\n  editor    Startet den lokalen Studio-Server und öffnet den Standardbrowser; ohne Argument gilt der aktuelle Ordner. `--no-open` überspringt den Browserstart.\n  module init Erstellt ein lokales, offline nutzbares Paketgerüst.\n  uninstall Entfernt nach Bestätigung die aktive Binärdatei; paketverwaltete Installationen werden mit dem Paketmanager entfernt.\n\nGetting started\n  Guided invoice tutorial:\n    zelyra --tutorial invoice                 Creates the project, database, and schema, starts the app, and opens the browser.\n    Open the printed application URL manually if no browser starts.\n    zelyra editor invoice-tutorial            Opens Studio for the tutorial project.\n  Small project of your own:\n    zelyra init ./my-project                  Creates a minimal project without a database.\n    cd my-project && zelyra run main.zyl      Runs the program directly.\n    zelyra editor                              Starts Studio in the current folder and opens the default browser.\n\nKey commands\n  init/new  Create a project; init is the short path, new offers templates and options.\n  check     Check a file or project for syntax and compiler errors.\n  run       Execute a Zelyra program directly.\n  serve     Start a web application locally.\n  setup     Prepare a MariaDB project; `--all` visibly starts the stack and applies the schema. `.` is the current folder, `./test_a` a subfolder.\n  db plan   Preview schema changes; db apply applies a reviewed plan.\n  db create Emit CREATE SQL; `db setup` initializes the MariaDB database and schema.\n  outbox    Set up, inspect, and process transactional events with explicit handlers.\n  task      List and run native, compiler-checked command declarations.\n  schedule  List native schedules or print a cron preview.\n  service   Install and manage a Linux systemd user service with a fixed port.\n  routes    `zelyra routes main.zyl` lists declared pages, APIs, and generated resource routes; use `--format json` for machine-readable output.\n  editor    Start the local Studio server and open the default browser; defaults to the current folder. Use `--no-open` to skip browser launch.\n  module init Create a local package starter without network or build scripts.\n  uninstall Remove the active executable after confirmation; use its package manager for managed installs.\n\nColor: set ZELYRA_COLOR=always|never|auto; NO_COLOR disables automatic ANSI output. Key help headings and commands use a terminal-safe palette.", env!("CARGO_PKG_VERSION"))));
+    eprintln!("{}", terminal::help(&format!("Zelyra {}\n\nUsage:\n  zelyra --help\n  zelyra --version\n  zelyra version\n  zelyra update [--check]\n  zelyra uninstall [--yes] [--dry-run]\n  zelyra --tutorial invoice [directory] [--no-start]\n  zelyra new <directory> [--layout standard] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] [--database|--schema|--all] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] --web [--port <port>]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra config <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl> [--entry <function> [--entry-args <JSON-array>]] [--backend ast|mir|bytecode] [--optimize-mir] [--max-steps <n>]\n  zelyra serve <file.zyl> [address]\n  zelyra routes <entry.zyl> [--format human|json]\n  zelyra reflect <entry.zyl> [--format=json|human]\n  zelyra editor [directory] [--port <port>] [--no-open]\n  zelyra module init <directory> --name <package-name> [--version <semver>]\n  zelyra module plan <entry.zyl> <module.zyl|resource-id>\n  zelyra module bundle <entry.zyl> <module.zyl|resource-id> --output <dir> [--docker --compiler-ref <40-character-commit>]\n  zelyra package lock [entry.zyl] [--check|--update]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra outbox <setup|list|requeue|run> [file.zyl] [options]\n  zelyra task <list|run> <main.zyl> [command] [options]\n  zelyra schedule <list|export> <main.zyl> [options]\n  zelyra service <install|change|status|restart|remove> [--port <port>]\n  zelyra db <create|setup|bootstrap|inspect|map|plan|apply|history> <file.zyl>\n\nSchnelleinstieg\n  Geführtes Rechnungstutorial:\n    zelyra --tutorial invoice                 Erstellt Projekt, Datenbank und Schema, startet die Anwendung und öffnet den Browser.\n    Die ausgegebene Anwendungsadresse manuell öffnen, falls kein Browser startet.\n    zelyra editor invoice-tutorial            Öffnet Studio für das Tutorialprojekt.\n  Kleines eigenes Projekt:\n    zelyra init ./mein-projekt                Erstellt ein minimales Projekt ohne Datenbank.\n    cd mein-projekt && zelyra run main.zyl    Startet das Programm direkt.\n    zelyra editor                              Startet Studio im aktuellen Ordner und öffnet den Standardbrowser.\n\nWichtige Befehle\n  init/new  Projektgerüst erstellen; init ist der kurze Einstieg, new bietet Vorlagen und Optionen.\n  check     Datei oder Projekt auf Syntax- und Compilerfehler prüfen.\n  run       Ein Zelyra-Programm direkt ausführen.\n  serve     Eine Webanwendung lokal starten.\n  setup     MariaDB-Projekt vorbereiten; `--all` startet Stack und Schema sichtbar. `.` bedeutet aktuelles Verzeichnis, `./test_a` einen Unterordner.\n  db plan   Schemaänderungen zuerst nur anzeigen; db apply setzt einen geprüften Plan um.\n  db create Gibt CREATE-SQL aus; `db setup` richtet das MariaDB-Schema ein.\n  outbox    Transaktionale Ereignisse einrichten, prüfen und mit Handlern verarbeiten.\n  task      Native Command-Definitionen anzeigen und compilergeprüft ausführen.\n  schedule  Native Zeitpläne anzeigen oder als Cron-Vorschau ausgeben.\n  service   Linux-systemd-Benutzerdienst mit festem Port installieren und verwalten.\n  routes    `zelyra routes main.zyl` listet deklarierte Seiten, APIs und erzeugte Ressourcenrouten; `--format json` liefert maschinenlesbare Ausgabe.\n  reflect   Prüft das Projekt und exportiert Symbole, Schema, Routen, APIs, Forms und Contracts als versioniertes JSON.\n  editor    Startet den lokalen Studio-Server und öffnet den Standardbrowser; ohne Argument gilt der aktuelle Ordner. `--no-open` überspringt den Browserstart.\n  module init Erstellt ein lokales, offline nutzbares Paketgerüst.\n  uninstall Entfernt nach Bestätigung die aktive Binärdatei; paketverwaltete Installationen werden mit dem Paketmanager entfernt.\n\nGetting started\n  Guided invoice tutorial:\n    zelyra --tutorial invoice                 Creates the project, database, and schema, starts the app, and opens the browser.\n    Open the printed application URL manually if no browser starts.\n    zelyra editor invoice-tutorial            Opens Studio for the tutorial project.\n  Small project of your own:\n    zelyra init ./my-project                  Creates a minimal project without a database.\n    cd my-project && zelyra run main.zyl      Runs the program directly.\n    zelyra editor                              Starts Studio in the current folder and opens the default browser.\n\nKey commands\n  init/new  Create a project; init is the short path, new offers templates and options.\n  check     Check a file or project for syntax and compiler errors.\n  run       Execute a Zelyra program directly.\n  serve     Start a web application locally.\n  setup     Prepare a MariaDB project; `--all` visibly starts the stack and applies the schema. `.` is the current folder, `./test_a` a subfolder.\n  db plan   Preview schema changes; db apply applies a reviewed plan.\n  db create Emit CREATE SQL; `db setup` initializes the MariaDB database and schema.\n  outbox    Set up, inspect, and process transactional events with explicit handlers.\n  task      List and run native, compiler-checked command declarations.\n  schedule  List native schedules or print a cron preview.\n  service   Install and manage a Linux systemd user service with a fixed port.\n  routes    `zelyra routes main.zyl` lists declared pages, APIs, and generated resource routes; use `--format json` for machine-readable output.\n  editor    Start the local Studio server and open the default browser; defaults to the current folder. Use `--no-open` to skip browser launch.\n  module init Create a local package starter without network or build scripts.\n  uninstall Remove the active executable after confirmation; use its package manager for managed installs.\n\nColor: set ZELYRA_COLOR=always|never|auto; NO_COLOR disables automatic ANSI output. Key help headings and commands use a terminal-safe palette.", env!("CARGO_PKG_VERSION"))));
 }
 
 fn version_command() -> ExitCode {
@@ -268,6 +269,7 @@ struct ProjectOptions {
     crud_template: bool,
     auth_template: bool,
     business_template: bool,
+    canonical_layout: bool,
     web_port: u16,
     host_port: u16,
     database_host_port: u16,
@@ -786,6 +788,15 @@ fn create_project_with_setup_hint(
         eprintln!("error[E-INIT-001]: directory `{path}` already exists");
         return ExitCode::from(1);
     }
+    if options.canonical_layout
+        && (options.with_mariadb
+            || options.crud_template
+            || options.auth_template
+            || options.business_template)
+    {
+        eprintln!("error[E-INIT-006]: `--layout standard` currently supports the minimal starter; database templates are not yet migrated into the canonical layout");
+        return ExitCode::from(2);
+    }
     let (host_port, database_host_port, port_notes) =
         match resolve_project_host_ports(path, &options) {
             Ok(ports) => ports,
@@ -813,6 +824,7 @@ fn create_project_with_setup_hint(
 name = "zelyra-app"
 version = "{version}"
 zelyra = "0.1"
+{layout_line}
 
 {database_section}
 
@@ -823,7 +835,12 @@ email = false
 console = false
 "#,
         version = env!("CARGO_PKG_VERSION"),
-        database_section = database_section
+        database_section = database_section,
+        layout_line = if options.canonical_layout {
+            "layout = \"standard\""
+        } else {
+            ""
+        }
     );
     let main_template = if options.business_template {
         MARIADB_BUSINESS_TEMPLATE
@@ -841,7 +858,9 @@ console = false
     };
     let preserve_existing_main =
         options.allow_current_directory && directory.join("main.zyl").is_file();
-    let main_source = if options.with_mariadb {
+    let main_source = if options.canonical_layout && !preserve_existing_main {
+        "import \"routes::web\" as web\nimport \"schema::tables\" as schema\nimport \"domain::dashboard::actions\" as dashboard\n\nfn main() {\n    print(dashboard::welcome_message())\n}\n".to_owned()
+    } else if options.with_mariadb {
         let source = main_template.replacen(MARIADB_DATABASE_DECLARATION, "", 1);
         format!("import \"src/database.zyl\" as storage\n\n{source}")
     } else {
@@ -860,6 +879,14 @@ console = false
         ("locales/de.json", "{}\n".to_owned()),
         ("locales/en.json", "{}\n".to_owned()),
     ];
+    if options.canonical_layout {
+        files.extend([
+            ("schema/tables.zyl", "// Declarative table definitions for this project.\n".to_owned()),
+            ("domain/dashboard/actions.zyl", "pub fn welcome_message() -> String {\n    return \"Welcome to your Zelyra project\"\n}\n".to_owned()),
+            ("routes/web.zyl", "page \"/\" {\n    html {\n        <main class=\"z-container\">\n            <h1>Welcome to your Zelyra project</h1>\n            <p>Start building a business application with typed Zelyra modules.</p>\n        </main>\n    }\n}\n".to_owned()),
+            ("assets/.keep", String::new()),
+        ]);
+    }
     if options.with_mariadb && !preserve_existing_main {
         files.push(("src/database.zyl", MARIADB_DATABASE_MODULE.to_owned()));
     }
@@ -1310,6 +1337,16 @@ fn validate_loaded_project(
     path: &str,
     loaded: project::LoadedProject,
 ) -> Result<zelyra_ast::Program, ()> {
+    if let Err(error) = project_layout::validate(path) {
+        diagnostic(
+            &error.path,
+            error.code,
+            &error.message,
+            error.line,
+            error.column,
+        );
+        return Err(());
+    }
     let package_root = Path::new(path)
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
