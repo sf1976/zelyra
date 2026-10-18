@@ -118,10 +118,14 @@ security and compatibility gates stated for that milestone.
 - [ ] **1.2.11 — application module settings and ecosystem parity:** Add
   application-served module settings only with server-side authorization,
   CSRF, schema validation, redaction, and explicit runtime behavior after a
-  change. Prove package/module contracts for settings, effects, jobs, data
-  access, and HostServices across AST, MIR, and Bytecode, or make unsupported
-  paths fail closed with stable diagnostics. Secure `public/`, static assets,
-  and Apache/Nginx forwarded-header and allowed-host behavior with deployment
+  change. Keep outbox listing read-only while reporting a missing table with
+  an actionable, project-specific setup command. Correct Debian/Ubuntu
+  Compose-v2 version detection, load project `.env` database URLs in audit and
+  auth-role commands, and preserve Unix SIGPIPE behavior for piped CLI output.
+  Prove package/module contracts for settings, effects, jobs, data access, and
+  HostServices across AST, MIR, and Bytecode, or make unsupported paths fail
+  closed with stable diagnostics. Secure `public/`, static assets, and
+  Apache/Nginx forwarded-header and allowed-host behavior with deployment
   tests.
 - [✅] **1.2.11 invoice tutorial CSS subtask:** Centralize generated-page,
   CRUD, form, filter, and table styling in Zelyra UI; give the invoice tutorial

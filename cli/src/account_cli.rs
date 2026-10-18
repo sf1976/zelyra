@@ -40,12 +40,35 @@ fn auth_role_tables(path: &str) -> Result<AuthRoleTables, ExitCode> {
     })
 }
 
+pub(super) fn project_database_url(
+    path: &str,
+    program: &zelyra_ast::Program,
+) -> Result<Option<String>, String> {
+    let project_directory = Path::new(path)
+        .parent()
+        .filter(|directory| !directory.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    let database_name = program
+        .databases
+        .first()
+        .map(|database| database.name.as_str());
+    database_url_for_project(project_directory, database_name)
+        .map(|url| url.or_else(|| database_url_from_program(program)))
+}
+
 fn auth_role_database_url(path: &str) -> Result<String, ExitCode> {
     let program = match validate(path) {
         Ok(program) => program,
         Err(()) => return Err(ExitCode::from(1)),
     };
-    match database_url_from_program(&program) {
+    let project_url = match project_database_url(path, &program) {
+        Ok(url) => url,
+        Err(error) => {
+            eprintln!("error[E-ENV-001]: {error}");
+            return Err(ExitCode::from(1));
+        }
+    };
+    match project_url {
         Some(url) if url.starts_with("mariadb://") || url.starts_with("mysql://") => Ok(url),
         Some(_) => {
             eprintln!("error[E-AUTH-016]: role commands require a MariaDB database URL");
@@ -257,7 +280,14 @@ fn audit_project(path: &str) -> Result<(String, String, bool), ExitCode> {
         );
         return Err(ExitCode::from(1));
     };
-    let database_url = match database_url_from_program(&program) {
+    let project_url = match project_database_url(path, &program) {
+        Ok(url) => url,
+        Err(error) => {
+            eprintln!("error[E-ENV-001]: {error}");
+            return Err(ExitCode::from(1));
+        }
+    };
+    let database_url = match project_url {
         Some(url) if url.starts_with("mariadb://") || url.starts_with("mysql://") => url,
         Some(_) => {
             eprintln!("error[E-AUDIT-002]: audit commands require a MariaDB database URL");

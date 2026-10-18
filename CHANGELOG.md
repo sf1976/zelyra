@@ -17,6 +17,13 @@ releases follow Semantic Versioning independently of the language line.
   Filter und mobile Navigation verwenden, das ungenutzte Alt-Stylesheet
   entfernen und im Projekttheme nur Tutorial-Marke sowie Start- und Druckansicht
   belassen. Die Themevorlage des Gerüsts synchron halten.
+- Accept Debian/Ubuntu Docker Compose v2 version strings containing `~` package
+  revisions, resolve audit and auth-role database URLs from the project `.env`,
+  and restore normal Unix SIGPIPE behavior for piped CLI output. / Debian-/
+  Ubuntu-Versionsangaben von Docker Compose v2 mit `~`-Paketrevisionen
+  akzeptieren, Datenbank-URLs für Audit- und Auth-Rollenbefehle aus der
+  Projekt-`.env` laden und das normale Unix-SIGPIPE-Verhalten für
+  weitergeleitete CLI-Ausgaben wiederherstellen.
 
 ## 1.2.10 — 2026-10-18
 
