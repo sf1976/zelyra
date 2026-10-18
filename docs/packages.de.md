@@ -1,13 +1,20 @@
 # Zelyra-Pakete (experimentell)
 
-Dieser Leitfaden beschreibt lokale Offline-Pakete und die experimentelle,
-signierte Registry-Funktion im noch unveröffentlichten 1.1.5-Kandidaten. Der
-lokale Ablauf lädt keine Pakete herunter und führt keine Build-Skripte aus.
-Der Kandidat ergänzt signierte Quellartefakte, ausdrückliches
-Herausgebervertrauen, statische Registry-Indizes, Suche und verifizierte
-Installation exakter Versionen. Separat veröffentlichte transitive Pakete und
-Moduleinstellungsseiten für normale Anwendungen bleiben offen. Projekte ohne
-`[package]` behalten das bisherige Verhalten mit Dateiimporten.
+Dieser Leitfaden beschreibt lokale Offline-Pakete und die seit Zelyra 1.2.5
+veröffentlichte experimentelle Registry-Funktion. Der lokale Ablauf lädt keine
+Pakete herunter und führt keine Build-Skripte aus. Signierte Quellartefakte,
+ausdrückliches Herausgebervertrauen, statische Registry-Indizes, Suche und
+verifizierte Installation exakter Versionen sind verfügbar. Separat
+veröffentlichte transitive Pakete und Moduleinstellungsseiten für normale
+Anwendungen bleiben offen. Projekte ohne `[package]` behalten das bisherige
+Verhalten mit Dateiimporten.
+
+Die Entwicklung für 1.2.6 ergänzt wiederherstellbare Pakettransaktionen. Nach
+einer Unterbrechung zeigt `zelyra package recover` standardmäßig nur den
+Wiederherstellungsplan; `zelyra package recover --apply` stellt den gesicherten
+Manifest-/Lockfile-Stand wieder her und entfernt die in der Transaktion neu
+angelegten Cachepfade. Ein offenes Journal blockiert weitere Paketmutationen.
+Das ist noch keine transitive Registry-Auflösung.
 
 Lokale Pakete sind derzeit Quellcode-Abhängigkeiten und keine installierbaren
 oder über normale Anwendungsseiten verwalteten Module. `zelyra module list`
@@ -108,8 +115,8 @@ vertraut. Sie authentifiziert weder den Herausgeber noch die Herkunft der
 Dateien und macht ein schädliches Paket nicht sicher. `zelyra package lock
 --update` übernimmt bewusst die aktuellen lokalen Dateien als neuen gesperrten
 Stand; prüfe daher Quelle und Diff vor diesem Schritt. Der lokale
-Offline-Paketablauf lädt weiterhin nichts aus dem Netz. Der unveröffentlichte
-1.1.5-Kandidat enthält zusätzlich signierte Quellartefakte, eine ausdrückliche
+Offline-Paketablauf lädt weiterhin nichts aus dem Netz. Seit 1.2.5 gibt es
+zusätzlich signierte Quellartefakte, eine ausdrückliche
 lokale Herausgeber-Vertrauensdatei, einen deterministischen Generator für
 statische Registry-Indizes, Suche und verifizierte Installation exakter
 Versionen. Installation lädt nur nach ausdrücklichem `add` oder `update`;
@@ -235,11 +242,16 @@ MiB Gesamtdownload, fünf Minuten und 16.384 Quell-Dateien begrenzt. Vor dem
 Umschalten werden sämtliche Registryeinträge, Hashes, Signaturen und Pakete
 geprüft. Danach werden Cacheversionen installiert, Manifest und Lock aktualisiert
 und das Gesamtprojekt kompiliert. Bei einem erkannten Fehler werden Manifest,
-Lock und neu installierte Cacheversionen zurückgerollt; vorhandene ältere
-Cacheversionen bleiben erhalten. Ein Prozessabbruch oder Stromausfall ist keine
-dateisystemübergreifend atomare Transaktion: Ein veraltetes Lockfile blockiert
-die Verwendung und muss nach Prüfung des Manifests mit
-`zelyra package lock --update` neu erzeugt werden.
+Lock und neu installierte Cacheversionen wiederhergestellt; vorhandene ältere
+Cacheversionen bleiben erhalten. `add`, `update`, `update --plan` und `remove`
+schreiben vor Änderungen ein lokales Journal. Nach einem Abbruch blockieren
+Paketbefehle, bis `zelyra package recover` geprüft und angewendet wurde. Das
+Journal macht den Ablauf nicht zu einer dateisystemübergreifend atomaren
+Transaktion; bei beschädigtem Journal oder I/O-Fehler bleiben die
+Wiederherstellungsdaten erhalten und Zelyra meldet den Fehler. Eine
+unterbrochene Cachebereinigung legt ein Quarantäneverzeichnis unter `.zelyra/`
+an; `recover` stellt dessen nicht referenzierte Pakete wieder her und
+überschreibt keine vorhandene Cacheversion.
 
 Die Standarddatei heißt `zelyra.trust.toml` im aktuellen Verzeichnis. Mit
 `--file <pfad>` kann eine andere Vertrauensdatei verwaltet oder für die Prüfung

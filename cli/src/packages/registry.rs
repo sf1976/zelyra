@@ -1,6 +1,7 @@
 use super::*;
 use ring::signature::{Ed25519KeyPair, KeyPair, UnparsedPublicKey, ED25519};
 use serde_json::Value;
+use std::fs::File;
 use std::io::Write;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -15,6 +16,9 @@ const MAX_REGISTRY_ARTIFACTS: usize = 10_000;
 const MAX_REGISTRY_BYTES: u64 = 256 * 1024 * 1024;
 const MAX_TRUST_BYTES: u64 = 1024 * 1024;
 const DEFAULT_TRUST_FILE: &str = "zelyra.trust.toml";
+const PACKAGE_TRANSACTION_DIR: &str = ".zelyra/package-transaction";
+const PACKAGE_OPERATION_LOCK: &str = ".zelyra/package-operation.lock";
+const PACKAGE_JOURNAL_VERSION: u64 = 1;
 static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
 
 pub(super) fn command(
@@ -22,6 +26,20 @@ pub(super) fn command(
     mut arguments: impl Iterator<Item = String>,
 ) -> std::process::ExitCode {
     use std::process::ExitCode;
+    let _package_lock = if matches!(action, "trust" | "add" | "update" | "remove" | "cache") {
+        match PackageOperationLock::acquire_current().and_then(|lock| {
+            lock.require_no_pending_transaction()?;
+            Ok(lock)
+        }) {
+            Ok(lock) => Some(lock),
+            Err(error) => {
+                eprintln!("error[E-PKG-003]: {error}");
+                return ExitCode::FAILURE;
+            }
+        }
+    } else {
+        None
+    };
     let result = match action {
         "keygen" => keygen_command(&mut arguments),
         "sign" => sign_command(&mut arguments),
@@ -44,6 +62,7 @@ pub(super) fn command(
         }
         "remove" => remove_command(&mut arguments),
         "cache" => cache_command(&mut arguments),
+        "recover" => recover_command(&mut arguments),
         _ => Err(format!("unknown package action `{action}`")),
     };
     match result {
@@ -56,6 +75,668 @@ pub(super) fn command(
             ExitCode::FAILURE
         }
     }
+}
+
+/// Serializes package mutations across processes. The OS releases this lock if
+/// Zelyra exits unexpectedly, while the journal below preserves transaction
+/// recovery information.
+#[derive(Debug)]
+pub(super) struct PackageOperationLock {
+    _file: File,
+    workspace: PathBuf,
+}
+
+impl PackageOperationLock {
+    pub(super) fn acquire_current() -> Result<Self, String> {
+        let current = std::env::current_dir()
+            .map_err(|error| format!("cannot read current directory: {error}"))?;
+        let workspace = fs::canonicalize(current)
+            .map_err(|error| format!("cannot resolve project directory: {error}"))?;
+        Self::acquire(&workspace)
+    }
+
+    fn acquire(workspace: &Path) -> Result<Self, String> {
+        let lock_path = workspace.join(PACKAGE_OPERATION_LOCK);
+        ensure_no_symlink_path(workspace, &lock_path)?;
+        let parent = lock_path
+            .parent()
+            .ok_or_else(|| "package operation lock has no parent directory".to_owned())?;
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("cannot create package state directory: {error}"))?;
+        ensure_no_symlink_path(workspace, parent)?;
+        let mut options = fs::OpenOptions::new();
+        options.read(true).write(true).create(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600).custom_flags(libc::O_NOFOLLOW);
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::OpenOptionsExt;
+            options.custom_flags(0x0020_0000); // FILE_FLAG_OPEN_REPARSE_POINT
+        }
+        let file = options
+            .open(&lock_path)
+            .map_err(|error| format!("cannot open package operation lock: {error}"))?;
+        let metadata = file
+            .metadata()
+            .map_err(|error| format!("cannot inspect package operation lock: {error}"))?;
+        if !metadata.is_file() {
+            return Err("package operation lock must be a regular file".into());
+        }
+        match file.try_lock() {
+            Ok(()) => {}
+            Err(std::fs::TryLockError::WouldBlock) => {
+                return Err("another Zelyra package operation is active for this project".into())
+            }
+            Err(std::fs::TryLockError::Error(error)) => {
+                return Err(format!("cannot lock package operations: {error}"))
+            }
+        }
+        Ok(Self {
+            _file: file,
+            workspace: workspace.to_path_buf(),
+        })
+    }
+
+    pub(super) fn require_no_pending_transaction(&self) -> Result<(), String> {
+        let transaction_dir = self.workspace.join(PACKAGE_TRANSACTION_DIR);
+        match fs::symlink_metadata(&transaction_dir) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(format!("cannot inspect package recovery journal: {error}")),
+            Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+                Err("package recovery path must be a real directory".into())
+            }
+            Ok(_) => Err("an interrupted package transaction is pending; review `zelyra package recover` before starting another package operation".into()),
+        }
+    }
+}
+
+struct PackageTransaction {
+    workspace: PathBuf,
+    directory: PathBuf,
+    operation: String,
+    cleanup_paths: Vec<String>,
+    phase: &'static str,
+}
+
+impl PackageTransaction {
+    fn prepare(
+        workspace: &Path,
+        operation: &str,
+        original_manifest: &[u8],
+        original_lock: Option<&[u8]>,
+        cleanup_paths: &[PathBuf],
+    ) -> Result<Self, String> {
+        validate_transaction_operation(operation)?;
+        let directory = workspace.join(PACKAGE_TRANSACTION_DIR);
+        let state_root = directory
+            .parent()
+            .ok_or_else(|| "package recovery journal has no state directory".to_owned())?;
+        ensure_no_symlink_path(workspace, state_root)?;
+        fs::create_dir_all(state_root)
+            .map_err(|error| format!("cannot create package state directory: {error}"))?;
+        ensure_no_symlink_path(workspace, state_root)?;
+        ensure_no_symlink_path(workspace, &directory)?;
+        if directory.exists() {
+            return Err(
+                "an interrupted package transaction is pending; run `zelyra package recover` first"
+                    .into(),
+            );
+        }
+        let cleanup_paths = cleanup_paths
+            .iter()
+            .map(|path| package_cleanup_relative_path(workspace, path))
+            .collect::<Result<Vec<_>, _>>()?;
+        fs::create_dir(&directory)
+            .map_err(|error| format!("cannot create package recovery journal: {error}"))?;
+        let prepare_result = (|| {
+            write_new_file(
+                &directory.join("manifest.backup"),
+                original_manifest,
+                0o600,
+                "package manifest backup",
+            )?;
+            if let Some(lock) = original_lock {
+                write_new_file(
+                    &directory.join("lock.backup"),
+                    lock,
+                    0o600,
+                    "package lockfile backup",
+                )?;
+            }
+            let journal = serde_json::json!({
+                "journal_version": PACKAGE_JOURNAL_VERSION,
+                "operation": operation,
+                "phase": "prepared",
+                "has_lock_backup": original_lock.is_some(),
+                "cleanup_paths": cleanup_paths,
+            });
+            let bytes = serde_json::to_vec(&journal)
+                .map_err(|error| format!("cannot encode package recovery journal: {error}"))?;
+            write_new_file(
+                &directory.join("journal.json"),
+                &bytes,
+                0o600,
+                "package recovery journal",
+            )?;
+            sync_directory(&directory)?;
+            if let Some(parent) = directory.parent() {
+                sync_directory(parent)?;
+            }
+            Ok::<(), String>(())
+        })();
+        if let Err(error) = prepare_result {
+            // No project files are changed before prepare returns successfully.
+            let cleanup = fs::remove_dir_all(&directory);
+            return Err(match cleanup {
+                Ok(()) => error,
+                Err(cleanup_error) => format!(
+                    "{error}; incomplete recovery data remains at {} ({cleanup_error})",
+                    directory.display()
+                ),
+            });
+        }
+        Ok(Self {
+            workspace: workspace.to_path_buf(),
+            directory,
+            operation: operation.to_owned(),
+            cleanup_paths,
+            phase: "prepared",
+        })
+    }
+
+    fn commit(&mut self) -> Result<(), String> {
+        let journal_path = self.directory.join("journal.json");
+        let journal = serde_json::json!({
+            "journal_version": PACKAGE_JOURNAL_VERSION,
+            "operation": &self.operation,
+            "phase": "committed",
+            "has_lock_backup": self.directory.join("lock.backup").is_file(),
+            "cleanup_paths": &self.cleanup_paths,
+        });
+        let bytes = serde_json::to_vec(&journal)
+            .map_err(|error| format!("cannot encode committed package journal: {error}"))?;
+        write_atomic(&journal_path, &bytes, 0o600)?;
+        sync_directory(&self.directory)?;
+        self.phase = "committed";
+        self.finish()
+    }
+
+    fn rollback(&mut self) -> Result<(), String> {
+        recover_transaction_impl(&self.workspace, true, false)?;
+        self.phase = "rolled_back";
+        Ok(())
+    }
+
+    fn finish(&mut self) -> Result<(), String> {
+        fs::remove_dir_all(&self.directory)
+            .map_err(|error| format!("cannot remove completed package journal: {error}"))?;
+        if let Some(parent) = self.directory.parent() {
+            sync_directory(parent)?;
+        }
+        Ok(())
+    }
+}
+
+impl Drop for PackageTransaction {
+    fn drop(&mut self) {
+        // A prepared journal intentionally survives unexpected or unhandled
+        // failures. Normal paths call commit or rollback explicitly.
+        let _ = self.phase;
+    }
+}
+
+fn validate_transaction_operation(operation: &str) -> Result<(), String> {
+    if matches!(operation, "add" | "update" | "remove") {
+        Ok(())
+    } else {
+        Err("unsupported package transaction operation".into())
+    }
+}
+
+fn package_cleanup_relative_path(workspace: &Path, path: &Path) -> Result<String, String> {
+    let relative = path
+        .strip_prefix(workspace)
+        .map_err(|_| "package recovery target is outside the project".to_owned())?;
+    let mut components = relative.components();
+    if components.next().and_then(|part| part.as_os_str().to_str()) != Some(".zelyra")
+        || components.next().and_then(|part| part.as_os_str().to_str()) != Some("packages")
+    {
+        return Err("package recovery targets must be under `.zelyra/packages`".into());
+    }
+    let text = relative
+        .to_str()
+        .ok_or_else(|| "package recovery path is not UTF-8".to_owned())?
+        .replace('\\', "/");
+    if !safe_relative_path(&text).is_some() {
+        return Err("package recovery path is not a safe relative path".into());
+    }
+    Ok(text)
+}
+
+fn recover_command(args: &mut impl Iterator<Item = String>) -> Result<String, String> {
+    let mut apply = false;
+    for argument in args {
+        match argument.as_str() {
+            "--apply" if !apply => apply = true,
+            _ => return Err("usage: zelyra package recover [--apply]".into()),
+        }
+    }
+    let lock = PackageOperationLock::acquire_current()?;
+    recover_transaction(&lock.workspace, apply)
+}
+
+fn recover_transaction(workspace: &Path, apply: bool) -> Result<String, String> {
+    recover_transaction_impl(workspace, apply, true)
+}
+
+fn recover_transaction_impl(
+    workspace: &Path,
+    apply: bool,
+    include_cache_quarantines: bool,
+) -> Result<String, String> {
+    let directory = workspace.join(PACKAGE_TRANSACTION_DIR);
+    match fs::symlink_metadata(&directory) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return if include_cache_quarantines {
+                recover_cache_quarantines(workspace, apply)
+            } else {
+                Ok("no interrupted package transaction is pending".into())
+            }
+        }
+        Err(error) => return Err(format!("cannot inspect package recovery journal: {error}")),
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+            return Err("package recovery path must be a real directory".into())
+        }
+        Ok(_) => {}
+    }
+    ensure_no_symlinks_in_tree(&directory)?;
+    let journal_path = directory.join("journal.json");
+    let journal = match read_regular_file(&journal_path, 1024 * 1024, "package recovery journal") {
+        Ok(bytes) => serde_json::from_slice::<Value>(&bytes)
+            .map_err(|error| format!("invalid package recovery journal: {error}"))?,
+        Err(error) if !journal_path.exists() => {
+            validate_journal_storage(&directory, false, false)?;
+            if !apply {
+                return Ok(format!("incomplete package journal contains no project mutation; run `zelyra package recover --apply` to remove {}", directory.display()));
+            }
+            fs::remove_dir_all(&directory).map_err(|cleanup| {
+                format!("{error}; cannot remove incomplete journal: {cleanup}")
+            })?;
+            return Ok("removed an incomplete journal; no project mutation had started".into());
+        }
+        Err(error) => return Err(error),
+    };
+    validate_recovery_journal(&journal)?;
+    let phase = journal
+        .get("phase")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "package recovery journal has no phase".to_owned())?;
+    let has_lock_backup = journal
+        .get("has_lock_backup")
+        .and_then(Value::as_bool)
+        .ok_or_else(|| "package recovery journal has invalid lock backup state".to_owned())?;
+    validate_journal_storage(&directory, true, has_lock_backup)?;
+    if !apply {
+        return Ok(if phase == "committed" {
+            "package transaction is committed; run `zelyra package recover --apply` to remove its completed journal".into()
+        } else {
+            "interrupted package transaction will restore the previous manifest and lockfile and remove its new cache paths; review, then run `zelyra package recover --apply`".into()
+        });
+    }
+    if phase == "prepared" {
+        let manifest = read_regular_file(
+            &directory.join("manifest.backup"),
+            4 * 1024 * 1024,
+            "package manifest backup",
+        )?;
+        let lock_path = workspace.join(LOCKFILE);
+        reject_output_target(&lock_path, "package lockfile")?;
+        let lock = if has_lock_backup {
+            let lock = read_regular_file(
+                &directory.join("lock.backup"),
+                16 * 1024 * 1024,
+                "package lockfile backup",
+            )?;
+            Some(lock)
+        } else {
+            None
+        };
+        let cleanup_targets = journal["cleanup_paths"]
+            .as_array()
+            .expect("validated recovery paths")
+            .iter()
+            .map(|relative| workspace.join(relative.as_str().expect("validated string path")))
+            .collect::<Vec<_>>();
+        for target in &cleanup_targets {
+            ensure_no_symlink_path(workspace, target)?;
+            match fs::symlink_metadata(target) {
+                Ok(metadata) if metadata.file_type().is_symlink() => {
+                    return Err(format!(
+                        "recovery refuses symlinked package path {}",
+                        target.display()
+                    ))
+                }
+                Ok(metadata) if metadata.is_dir() => ensure_no_symlinks_in_tree(target)?,
+                Ok(_) => {
+                    return Err(format!(
+                        "recovery target {} is not a package directory",
+                        target.display()
+                    ))
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => {
+                    return Err(format!("cannot inspect package recovery target: {error}"))
+                }
+            }
+        }
+        write_atomic(&workspace.join(MANIFEST), &manifest, 0o644)?;
+        if let Some(lock) = lock {
+            write_atomic(&lock_path, &lock, 0o644)?;
+        } else if lock_path.exists() {
+            fs::remove_file(&lock_path)
+                .map_err(|error| format!("cannot remove interrupted package lockfile: {error}"))?;
+        }
+        for target in cleanup_targets {
+            if target.is_dir() {
+                fs::remove_dir_all(&target).map_err(|error| {
+                    format!(
+                        "cannot remove interrupted package path {}: {error}",
+                        target.display()
+                    )
+                })?;
+            }
+        }
+    }
+    fs::remove_dir_all(&directory)
+        .map_err(|error| format!("cannot remove recovered package journal: {error}"))?;
+    let transaction_result = if phase == "committed" {
+        "removed the journal for a completed package transaction".into()
+    } else {
+        "restored the previous package manifest and lockfile and removed newly installed package paths".into()
+    };
+    if !include_cache_quarantines {
+        return Ok(transaction_result);
+    }
+    let cache_result = recover_cache_quarantines(workspace, apply)?;
+    if cache_result == "no interrupted package-cache cleanup is pending" {
+        Ok(transaction_result)
+    } else {
+        Ok(format!("{transaction_result}; {cache_result}"))
+    }
+}
+
+fn recover_cache_quarantines(workspace: &Path, apply: bool) -> Result<String, String> {
+    let state_root = workspace.join(".zelyra");
+    match fs::symlink_metadata(&state_root) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok("no interrupted package-cache cleanup is pending".into())
+        }
+        Err(error) => return Err(format!("cannot inspect package state directory: {error}")),
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+            return Err("package state directory must be a real directory".into())
+        }
+        Ok(_) => {}
+    }
+    let mut quarantine_paths = fs::read_dir(&state_root)
+        .map_err(|error| format!("cannot inspect package state directory: {error}"))?
+        .map(|entry| {
+            entry
+                .map(|entry| entry.path())
+                .map_err(|error| format!("cannot inspect package state entry: {error}"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    quarantine_paths.sort();
+    quarantine_paths.retain(|path| {
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.starts_with("package-cache-trash-"))
+    });
+    if quarantine_paths.is_empty() {
+        return Ok("no interrupted package-cache cleanup is pending".into());
+    }
+    let cache_root = state_root.join("packages");
+    let mut recoveries = Vec::<(PathBuf, PathBuf)>::new();
+    let mut empty_quarantines = Vec::new();
+    for quarantine in &quarantine_paths {
+        let recoveries_before = recoveries.len();
+        let metadata = fs::symlink_metadata(quarantine)
+            .map_err(|error| format!("cannot inspect package-cache quarantine: {error}"))?;
+        if metadata.file_type().is_symlink() || !metadata.is_dir() {
+            return Err(format!(
+                "package-cache quarantine {} must be a real directory",
+                quarantine.display()
+            ));
+        }
+        ensure_no_symlinks_in_tree(quarantine)?;
+        let mut package_names = fs::read_dir(quarantine)
+            .map_err(|error| format!("cannot inspect package-cache quarantine: {error}"))?
+            .map(|entry| {
+                entry
+                    .map(|entry| entry.path())
+                    .map_err(|error| format!("cannot inspect quarantined package: {error}"))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        package_names.sort();
+        for name_dir in package_names {
+            let name = name_dir
+                .file_name()
+                .and_then(|name| name.to_str())
+                .ok_or_else(|| "quarantined package name is not UTF-8".to_owned())?;
+            validate_package_name(name).map_err(|error| error.message)?;
+            let metadata = fs::symlink_metadata(&name_dir)
+                .map_err(|error| format!("cannot inspect quarantined package: {error}"))?;
+            if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                return Err(format!(
+                    "quarantined package path {} must be a real directory",
+                    name_dir.display()
+                ));
+            }
+            let mut versions = fs::read_dir(&name_dir)
+                .map_err(|error| format!("cannot inspect quarantined package versions: {error}"))?
+                .map(|entry| {
+                    entry.map(|entry| entry.path()).map_err(|error| {
+                        format!("cannot inspect quarantined package version: {error}")
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            versions.sort();
+            for version_dir in versions {
+                let version = version_dir
+                    .file_name()
+                    .and_then(|version| version.to_str())
+                    .ok_or_else(|| "quarantined package version is not UTF-8".to_owned())?;
+                let parsed = Version::parse(version).map_err(|error| {
+                    format!("invalid quarantined package version `{version}`: {error}")
+                })?;
+                if parsed.to_string() != version {
+                    return Err(format!(
+                        "quarantined package version `{version}` is not normalized SemVer"
+                    ));
+                }
+                let metadata = fs::symlink_metadata(&version_dir).map_err(|error| {
+                    format!("cannot inspect quarantined package version: {error}")
+                })?;
+                if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                    return Err(format!(
+                        "quarantined package version {} must be a real directory",
+                        version_dir.display()
+                    ));
+                }
+                ensure_no_symlinks_in_tree(&version_dir)?;
+                let target = cache_root.join(name).join(version);
+                ensure_no_symlink_path(workspace, &target)?;
+                if target.exists() {
+                    return Err(format!(
+                        "cannot recover quarantined package `{name}` {version}: cache destination already exists"
+                    ));
+                }
+                recoveries.push((version_dir, target));
+            }
+        }
+        if recoveries.len() == recoveries_before {
+            empty_quarantines.push(quarantine.clone());
+        }
+    }
+    if !apply {
+        return Ok(format!(
+            "{} quarantined package version(s) will be restored; run `zelyra package recover --apply`",
+            recoveries.len()
+        ));
+    }
+    let mut restored = Vec::<(PathBuf, PathBuf)>::new();
+    for (source, target) in &recoveries {
+        let parent = target.parent().expect("package cache target has a parent");
+        ensure_no_symlink_path(workspace, parent)?;
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("cannot restore package cache directory: {error}"))?;
+        ensure_no_symlink_path(workspace, parent)?;
+        if let Err(error) = fs::rename(source, target) {
+            let mut rollback_errors = Vec::new();
+            for (original, restored_path) in restored.iter().rev() {
+                if let Err(rollback) = fs::rename(restored_path, original) {
+                    rollback_errors.push(format!("{}: {rollback}", original.display()));
+                }
+            }
+            return Err(if rollback_errors.is_empty() {
+                format!(
+                    "cannot restore quarantined package {}: {error}",
+                    source.display()
+                )
+            } else {
+                format!(
+                    "cannot restore quarantined package {}: {error}; rollback incomplete for {}",
+                    source.display(),
+                    rollback_errors.join(", ")
+                )
+            });
+        }
+        restored.push((source.clone(), target.clone()));
+    }
+    for quarantine in &quarantine_paths {
+        fs::remove_dir_all(quarantine).map_err(|error| {
+            format!(
+                "cannot remove recovered package quarantine {}: {error}",
+                quarantine.display()
+            )
+        })?;
+    }
+    Ok(if recoveries.is_empty() {
+        format!(
+            "removed {} empty package-cache cleanup quarantine(s)",
+            empty_quarantines.len()
+        )
+    } else {
+        format!(
+            "restored {} quarantined package version(s)",
+            recoveries.len()
+        )
+    })
+}
+
+fn validate_journal_storage(
+    directory: &Path,
+    has_journal: bool,
+    has_lock_backup: bool,
+) -> Result<(), String> {
+    let mut expected = BTreeSet::new();
+    let mut allowed = BTreeSet::from(["manifest.backup", "lock.backup"]);
+    if has_journal {
+        expected.insert("manifest.backup");
+        allowed.insert("journal.json");
+        expected.insert("journal.json");
+        if has_lock_backup {
+            expected.insert("lock.backup");
+        }
+    }
+    for entry in fs::read_dir(directory)
+        .map_err(|error| format!("cannot inspect package recovery data: {error}"))?
+    {
+        let path = entry
+            .map_err(|error| format!("cannot inspect package recovery data: {error}"))?
+            .path();
+        let name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| "package recovery file name is not UTF-8".to_owned())?;
+        let metadata = fs::symlink_metadata(&path)
+            .map_err(|error| format!("cannot inspect package recovery file: {error}"))?;
+        if metadata.file_type().is_symlink()
+            || !metadata.is_file()
+            || !allowed.contains(name)
+            || (has_journal && !expected.remove(name))
+        {
+            return Err(format!(
+                "package recovery data contains an unknown or unsafe file: {name}"
+            ));
+        }
+    }
+    if has_journal && !expected.is_empty() {
+        return Err(format!(
+            "package recovery data is incomplete; missing {}",
+            expected.into_iter().collect::<Vec<_>>().join(", ")
+        ));
+    }
+    Ok(())
+}
+
+fn validate_recovery_journal(journal: &Value) -> Result<(), String> {
+    let object = journal
+        .as_object()
+        .ok_or_else(|| "package recovery journal must be a JSON object".to_owned())?;
+    if object.len() != 5
+        || object.get("journal_version").and_then(Value::as_u64) != Some(PACKAGE_JOURNAL_VERSION)
+        || !matches!(
+            object.get("operation").and_then(Value::as_str),
+            Some("add" | "update" | "remove" | "package mutation")
+        )
+        || !matches!(
+            object.get("phase").and_then(Value::as_str),
+            Some("prepared" | "committed")
+        )
+        || object
+            .get("has_lock_backup")
+            .and_then(Value::as_bool)
+            .is_none()
+    {
+        return Err("unsupported or malformed package recovery journal".into());
+    }
+    let paths = object
+        .get("cleanup_paths")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "package recovery journal has no cleanup paths".to_owned())?;
+    if paths.len() > 256 {
+        return Err("package recovery journal exceeds the 256 path limit".into());
+    }
+    let mut unique = BTreeSet::new();
+    for path in paths {
+        let path = path
+            .as_str()
+            .ok_or_else(|| "package recovery path must be a string".to_owned())?;
+        let relative =
+            safe_relative_path(path).ok_or_else(|| "package recovery path is unsafe".to_owned())?;
+        if relative.to_string_lossy().replace('\\', "/") != path
+            || !path.starts_with(".zelyra/packages/")
+            || !unique.insert(path)
+        {
+            return Err("package recovery path is invalid or duplicated".into());
+        }
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn sync_directory(path: &Path) -> Result<(), String> {
+    File::open(path)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|error| format!("cannot sync package transaction directory: {error}"))
+}
+
+#[cfg(not(unix))]
+fn sync_directory(_path: &Path) -> Result<(), String> {
+    Ok(())
 }
 
 fn search_command(args: &mut impl Iterator<Item = String>) -> Result<String, String> {
@@ -368,6 +1049,13 @@ fn remove_command(args: &mut impl Iterator<Item = String>) -> Result<String, Str
     if !entry_path.starts_with(&workspace) || !entry_path.is_file() {
         return Err("project entry resolves outside the workspace".into());
     }
+    let mut transaction = PackageTransaction::prepare(
+        &workspace,
+        "remove",
+        &original_manifest,
+        previous_lock.as_deref(),
+        &[],
+    )?;
     let result = (|| {
         write_atomic(&manifest_path, document.to_string().as_bytes(), 0o644)?;
         let graph = PackageGraph::load(&workspace)
@@ -383,33 +1071,12 @@ fn remove_command(args: &mut impl Iterator<Item = String>) -> Result<String, Str
         Ok::<(), String>(())
     })();
     if let Err(error) = result {
-        let mut rollback_errors = Vec::new();
-        if let Err(rollback) = write_atomic(&manifest_path, &original_manifest, 0o644) {
-            rollback_errors.push(format!("manifest rollback failed: {rollback}"));
-        }
-        match previous_lock {
-            Some(bytes) => {
-                if let Err(rollback) = write_atomic(&lock_path, &bytes, 0o644) {
-                    rollback_errors.push(format!("lockfile rollback failed: {rollback}"));
-                }
-            }
-            None => {
-                if let Err(rollback) = fs::remove_file(&lock_path) {
-                    if rollback.kind() != std::io::ErrorKind::NotFound {
-                        rollback_errors.push(format!("new lockfile cleanup failed: {rollback}"));
-                    }
-                }
-            }
-        }
-        return Err(if rollback_errors.is_empty() {
-            error
-        } else {
-            format!(
-                "{error}; transaction rollback incomplete: {}",
-                rollback_errors.join("; ")
-            )
+        return Err(match transaction.rollback() {
+            Ok(()) => error,
+            Err(recovery) => format!("{error}; package recovery is pending: {recovery}"),
         });
     }
+    transaction.commit()?;
     Ok(format!("removed package dependency `{alias}`; updated zelyra.lock (cached source files were retained)"))
 }
 
@@ -588,14 +1255,45 @@ fn add_command(args: &mut impl Iterator<Item = String>, updating: bool) -> Resul
     }
     let parent = install_root.parent().expect("package install has parent");
     ensure_no_symlink_path(&workspace, parent)?;
-    fs::create_dir_all(parent).map_err(|error| format!("cannot create package store: {error}"))?;
-    ensure_no_symlink_path(&workspace, parent)?;
     let staging = parent.join(format!(".{version_text}.{}.tmp", std::process::id()));
     if staging.exists() {
         return Err("package install staging directory already exists".into());
     }
-    fs::create_dir(&staging)
-        .map_err(|error| format!("cannot create package staging directory: {error}"))?;
+    let lock_path = workspace.join(LOCKFILE);
+    reject_output_target(&lock_path, "package lockfile")?;
+    let previous_lock = match fs::read(&lock_path) {
+        Ok(bytes) => Some(bytes),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(format!("cannot read existing package lockfile: {error}")),
+    };
+    let mut transaction = PackageTransaction::prepare(
+        &workspace,
+        action,
+        &manifest_bytes,
+        previous_lock.as_deref(),
+        &[staging.clone(), install_root.clone()],
+    )?;
+    fs::create_dir_all(parent).map_err(|error| {
+        let rollback = transaction.rollback();
+        format!(
+            "cannot create package store: {error}{}",
+            rollback
+                .err()
+                .map(|error| format!("; recovery failed: {error}"))
+                .unwrap_or_default()
+        )
+    })?;
+    ensure_no_symlink_path(&workspace, parent)?;
+    fs::create_dir(&staging).map_err(|error| {
+        let rollback = transaction.rollback();
+        format!(
+            "cannot create package staging directory: {error}{}",
+            rollback
+                .err()
+                .map(|error| format!("; recovery failed: {error}"))
+                .unwrap_or_default()
+        )
+    })?;
     let materialize_result = (|| {
         for (path, source) in &artifact.files {
             validate_archive_path(path)?;
@@ -612,8 +1310,10 @@ fn add_command(args: &mut impl Iterator<Item = String>, updating: bool) -> Resul
         Ok::<(), String>(())
     })();
     if let Err(error) = materialize_result {
-        let _ = fs::remove_dir_all(&staging);
-        return Err(error);
+        return Err(match transaction.rollback() {
+            Ok(()) => error,
+            Err(recovery) => format!("{error}; package recovery is pending: {recovery}"),
+        });
     }
 
     let dependency_path = relative_install.to_string_lossy().replace('\\', "/");
@@ -633,16 +1333,6 @@ fn add_command(args: &mut impl Iterator<Item = String>, updating: bool) -> Resul
     source["artifact_sha256"] = value(entry.artifact_sha256.clone());
     source_table.insert(&alias, Item::Table(source));
     let new_manifest = document.to_string();
-    let lock_path = workspace.join(LOCKFILE);
-    reject_output_target(&lock_path, "package lockfile")?;
-    let previous_lock = match fs::read(&lock_path) {
-        Ok(bytes) => Some(bytes),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-        Err(error) => {
-            let _ = fs::remove_dir_all(&install_root);
-            return Err(format!("cannot read existing package lockfile: {error}"));
-        }
-    };
     let transaction_result = (|| {
         write_atomic(&manifest_path, new_manifest.as_bytes(), 0o644)?;
         let graph = PackageGraph::load(&workspace)
@@ -653,39 +1343,12 @@ fn add_command(args: &mut impl Iterator<Item = String>, updating: bool) -> Resul
         Ok::<(), String>(())
     })();
     if let Err(error) = transaction_result {
-        let mut rollback_errors = Vec::new();
-        if let Err(rollback) = write_atomic(&manifest_path, &manifest_bytes, 0o644) {
-            rollback_errors.push(format!("manifest rollback failed: {rollback}"));
-        }
-        match previous_lock {
-            Some(bytes) => {
-                if let Err(rollback) = write_atomic(&lock_path, &bytes, 0o644) {
-                    rollback_errors.push(format!("lockfile rollback failed: {rollback}"));
-                }
-            }
-            None => {
-                if let Err(rollback) = fs::remove_file(&lock_path) {
-                    if rollback.kind() != std::io::ErrorKind::NotFound {
-                        rollback_errors.push(format!("new lockfile cleanup failed: {rollback}"));
-                    }
-                }
-            }
-        }
-        if rollback_errors.is_empty() {
-            if let Err(rollback) = fs::remove_dir_all(&install_root) {
-                rollback_errors.push(format!("package rollback failed: {rollback}"));
-            }
-        }
-        return Err(if rollback_errors.is_empty() {
-            error
-        } else {
-            format!(
-                "{error}; transaction rollback incomplete: {}; package store path left for recovery at {}",
-                rollback_errors.join("; "),
-                install_root.display()
-            )
+        return Err(match transaction.rollback() {
+            Ok(()) => error,
+            Err(recovery) => format!("{error}; package recovery is pending: {recovery}"),
         });
     }
+    transaction.commit()?;
     if updating {
         Ok(format!("updated `{alias}` to trusted package {name} {version_text} from {} and updated zelyra.lock; previous cached versions were retained", registry_url))
     } else {
@@ -830,209 +1493,253 @@ fn update_plan_command(args: &mut impl Iterator<Item = String>) -> Result<String
     {
         return Err("package update plan requires existing package dependencies".into());
     }
+    let mut staging_by_alias = BTreeMap::new();
+    let mut cleanup_paths = Vec::with_capacity(specs.len() * 2);
+    for (alias, name, version, _) in &specs {
+        let install_root = workspace
+            .join(".zelyra")
+            .join("packages")
+            .join(name)
+            .join(version);
+        ensure_no_symlink_path(&workspace, &install_root)?;
+        let parent = install_root
+            .parent()
+            .expect("package installation path has a parent");
+        ensure_no_symlink_path(&workspace, parent)?;
+        let staging = parent.join(format!(
+            ".{version}.update-{}-{}",
+            std::process::id(),
+            NEXT_TEMP.fetch_add(1, Ordering::Relaxed)
+        ));
+        ensure_no_symlink_path(&workspace, &staging)?;
+        if staging.exists() {
+            return Err(format!(
+                "package update staging path already exists: {}",
+                staging.display()
+            ));
+        }
+        cleanup_paths.push(staging.clone());
+        if !install_root.exists() {
+            cleanup_paths.push(install_root);
+        }
+        staging_by_alias.insert(alias.clone(), staging);
+    }
+    let mut transaction_journal = PackageTransaction::prepare(
+        &workspace,
+        "update",
+        &original_manifest,
+        Some(&original_lock),
+        &cleanup_paths,
+    )?;
     let mut prepared = Vec::with_capacity(specs.len());
     let mut staged_paths = UpdatePlanStageCleanup::default();
     let mut total_download_bytes = 0_u64;
     let mut total_source_files = 0_usize;
     let deadline = std::time::Instant::now() + Duration::from_secs(300);
-    for (alias, name, version, registry) in specs {
-        let current_path = document
-            .get("dependencies")
-            .and_then(Item::as_table)
-            .and_then(|dependencies| dependencies.get(&alias))
-            .and_then(Item::as_table)
-            .ok_or_else(|| {
-                format!("cannot update `{alias}` because it is not a declared dependency")
-            })?
-            .get("path")
-            .and_then(Item::as_str)
-            .and_then(super::safe_dependency_path)
-            .ok_or_else(|| {
-                format!("dependency `{alias}` does not have a safe local package path")
-            })?;
-        let current_root = super::resolve_dependency_root(&workspace, &workspace, &current_path)
-            .map_err(|error| error.message)?;
-        let current_manifest =
-            read_manifest(&current_root.join(MANIFEST)).map_err(|error| error.message)?;
-        let current_package = current_manifest
-            .get("package")
-            .and_then(toml::Value::as_table)
-            .ok_or_else(|| format!("current dependency `{alias}` has no package identity"))?;
-        let current_name = current_package.get("name").and_then(toml::Value::as_str);
-        if current_name != Some(name.as_str()) {
-            return Err(format!(
-                "dependency alias `{alias}` does not name package `{name}`"
-            ));
-        }
-        let sources = document
+    let update_result = (|| {
+        for (alias, name, version, registry) in specs {
+            let current_path = document
+                .get("dependencies")
+                .and_then(Item::as_table)
+                .and_then(|dependencies| dependencies.get(&alias))
+                .and_then(Item::as_table)
+                .ok_or_else(|| {
+                    format!("cannot update `{alias}` because it is not a declared dependency")
+                })?
+                .get("path")
+                .and_then(Item::as_str)
+                .and_then(super::safe_dependency_path)
+                .ok_or_else(|| {
+                    format!("dependency `{alias}` does not have a safe local package path")
+                })?;
+            let current_root =
+                super::resolve_dependency_root(&workspace, &workspace, &current_path)
+                    .map_err(|error| error.message)?;
+            let current_manifest =
+                read_manifest(&current_root.join(MANIFEST)).map_err(|error| error.message)?;
+            let current_package = current_manifest
+                .get("package")
+                .and_then(toml::Value::as_table)
+                .ok_or_else(|| format!("current dependency `{alias}` has no package identity"))?;
+            let current_name = current_package.get("name").and_then(toml::Value::as_str);
+            if current_name != Some(name.as_str()) {
+                return Err(format!(
+                    "dependency alias `{alias}` does not name package `{name}`"
+                ));
+            }
+            let sources = document
             .get("package_sources")
             .and_then(Item::as_table)
             .and_then(|sources| sources.get(&alias))
             .and_then(Item::as_table)
             .ok_or_else(|| format!("dependency `{alias}` has no trusted registry provenance; remove and add it after review"))?;
-        let old_publisher = sources
-            .get("publisher")
-            .and_then(Item::as_str)
-            .ok_or_else(|| format!("dependency `{alias}` has incomplete registry provenance"))?;
-        let old_key = sources
-            .get("public_key")
-            .and_then(Item::as_str)
-            .ok_or_else(|| format!("dependency `{alias}` has incomplete registry provenance"))?;
+            let old_publisher =
+                sources
+                    .get("publisher")
+                    .and_then(Item::as_str)
+                    .ok_or_else(|| {
+                        format!("dependency `{alias}` has incomplete registry provenance")
+                    })?;
+            let old_key = sources
+                .get("public_key")
+                .and_then(Item::as_str)
+                .ok_or_else(|| {
+                    format!("dependency `{alias}` has incomplete registry provenance")
+                })?;
 
-        let index_bytes = fetch_limited_before(registry.as_str(), 4 * 1024 * 1024, deadline)?;
-        total_download_bytes = total_download_bytes.saturating_add(index_bytes.len() as u64);
-        if total_download_bytes > MAX_REGISTRY_BYTES {
-            return Err("package update plan downloads exceed the 256 MiB total limit".into());
-        }
-        let index: Value = serde_json::from_slice(&index_bytes)
-            .map_err(|error| format!("invalid package registry index: {error}"))?;
-        let entries = parse_registry_index(&index)?;
-        let entry = entries
-            .iter()
-            .find(|entry| entry.name == name && entry.version == version)
-            .ok_or_else(|| format!("registry has no exact release for {name} {version}"))?;
-        let artifact_url = registry
-            .join(&entry.artifact)
-            .map_err(|error| format!("invalid registry artifact URL: {error}"))?;
-        ensure_same_registry_origin(&registry, &artifact_url)?;
-        let bytes = fetch_limited_before(artifact_url.as_str(), MAX_PACKAGE_BYTES, deadline)?;
-        total_download_bytes = total_download_bytes.saturating_add(bytes.len() as u64);
-        if total_download_bytes > MAX_REGISTRY_BYTES {
-            return Err("package update plan downloads exceed the 256 MiB total limit".into());
-        }
-        let artifact_sha256 = format!("sha256:{:x}", Sha256::digest(&bytes));
-        if artifact_sha256 != entry.artifact_sha256 {
-            return Err(format!(
-                "downloaded artifact digest for `{alias}` does not match the registry index"
-            ));
-        }
-        let artifact = verify_artifact(&bytes)?;
-        total_source_files = total_source_files.saturating_add(artifact.files.len());
-        if total_source_files > 16_384 {
-            return Err("package update plan exceeds the 16,384 total source-file limit".into());
-        }
-        if artifact.name != name
-            || artifact.version != version
-            || artifact.publisher != entry.publisher
-            || hex_encode(&artifact.public_key) != entry.public_key
-            || artifact.checksum != entry.checksum
-        {
-            return Err(format!(
-                "registry metadata does not match signed package `{alias}`"
-            ));
-        }
-        if artifact.publisher != old_publisher || hex_encode(&artifact.public_key) != old_key {
-            return Err(format!("package update for `{alias}` changes the trusted publisher or signing key; remove and re-add it after reviewing the new publisher"));
-        }
-        if !trusted_key(&trust_path, &artifact.publisher, &artifact.public_key)? {
-            return Err(format!(
-                "publisher `{}` is no longer trusted for `{alias}`",
-                artifact.publisher
-            ));
-        }
-        validate_package_sources(&artifact.files, &artifact.name, &artifact.version)?;
-
-        let relative_install = PathBuf::from(".zelyra")
-            .join("packages")
-            .join(&name)
-            .join(&version);
-        let install_root = workspace.join(&relative_install);
-        ensure_no_symlink_path(&workspace, &install_root)?;
-        let reused = if install_root.exists() {
-            ensure_no_symlinks_in_tree(&install_root)?;
-            let cached_manifest = read_manifest(&install_root.join(MANIFEST)).map_err(|_| {
-                format!("cached package destination for `{alias}` is not a valid package")
-            })?;
-            let cached_identity = cached_manifest
-                .get("package")
-                .and_then(toml::Value::as_table);
-            let cached_checksum =
-                super::package_checksum(&install_root).map_err(|error| error.message)?;
-            if cached_identity
-                .and_then(|package| package.get("name"))
-                .and_then(toml::Value::as_str)
-                != Some(name.as_str())
-                || cached_identity
-                    .and_then(|package| package.get("version"))
-                    .and_then(toml::Value::as_str)
-                    != Some(version.as_str())
-                || cached_checksum != artifact.checksum
+            let index_bytes = fetch_limited_before(registry.as_str(), 4 * 1024 * 1024, deadline)?;
+            total_download_bytes = total_download_bytes.saturating_add(index_bytes.len() as u64);
+            if total_download_bytes > MAX_REGISTRY_BYTES {
+                return Err("package update plan downloads exceed the 256 MiB total limit".into());
+            }
+            let index: Value = serde_json::from_slice(&index_bytes)
+                .map_err(|error| format!("invalid package registry index: {error}"))?;
+            let entries = parse_registry_index(&index)?;
+            let entry = entries
+                .iter()
+                .find(|entry| entry.name == name && entry.version == version)
+                .ok_or_else(|| format!("registry has no exact release for {name} {version}"))?;
+            let artifact_url = registry
+                .join(&entry.artifact)
+                .map_err(|error| format!("invalid registry artifact URL: {error}"))?;
+            ensure_same_registry_origin(&registry, &artifact_url)?;
+            let bytes = fetch_limited_before(artifact_url.as_str(), MAX_PACKAGE_BYTES, deadline)?;
+            total_download_bytes = total_download_bytes.saturating_add(bytes.len() as u64);
+            if total_download_bytes > MAX_REGISTRY_BYTES {
+                return Err("package update plan downloads exceed the 256 MiB total limit".into());
+            }
+            let artifact_sha256 = format!("sha256:{:x}", Sha256::digest(&bytes));
+            if artifact_sha256 != entry.artifact_sha256 {
+                return Err(format!(
+                    "downloaded artifact digest for `{alias}` does not match the registry index"
+                ));
+            }
+            let artifact = verify_artifact(&bytes)?;
+            total_source_files = total_source_files.saturating_add(artifact.files.len());
+            if total_source_files > 16_384 {
+                return Err(
+                    "package update plan exceeds the 16,384 total source-file limit".into(),
+                );
+            }
+            if artifact.name != name
+                || artifact.version != version
+                || artifact.publisher != entry.publisher
+                || hex_encode(&artifact.public_key) != entry.public_key
+                || artifact.checksum != entry.checksum
             {
                 return Err(format!(
+                    "registry metadata does not match signed package `{alias}`"
+                ));
+            }
+            if artifact.publisher != old_publisher || hex_encode(&artifact.public_key) != old_key {
+                return Err(format!("package update for `{alias}` changes the trusted publisher or signing key; remove and re-add it after reviewing the new publisher"));
+            }
+            if !trusted_key(&trust_path, &artifact.publisher, &artifact.public_key)? {
+                return Err(format!(
+                    "publisher `{}` is no longer trusted for `{alias}`",
+                    artifact.publisher
+                ));
+            }
+            validate_package_sources(&artifact.files, &artifact.name, &artifact.version)?;
+
+            let relative_install = PathBuf::from(".zelyra")
+                .join("packages")
+                .join(&name)
+                .join(&version);
+            let install_root = workspace.join(&relative_install);
+            ensure_no_symlink_path(&workspace, &install_root)?;
+            let reused = if install_root.exists() {
+                ensure_no_symlinks_in_tree(&install_root)?;
+                let cached_manifest =
+                    read_manifest(&install_root.join(MANIFEST)).map_err(|_| {
+                        format!("cached package destination for `{alias}` is not a valid package")
+                    })?;
+                let cached_identity = cached_manifest
+                    .get("package")
+                    .and_then(toml::Value::as_table);
+                let cached_checksum =
+                    super::package_checksum(&install_root).map_err(|error| error.message)?;
+                if cached_identity
+                    .and_then(|package| package.get("name"))
+                    .and_then(toml::Value::as_str)
+                    != Some(name.as_str())
+                    || cached_identity
+                        .and_then(|package| package.get("version"))
+                        .and_then(toml::Value::as_str)
+                        != Some(version.as_str())
+                    || cached_checksum != artifact.checksum
+                {
+                    return Err(format!(
                     "cached package destination for `{alias}` does not match the verified artifact"
                 ));
-            }
-            true
-        } else {
-            false
-        };
-        let staging = if reused {
-            None
-        } else {
-            let parent = install_root.parent().expect("package cache parent exists");
-            ensure_no_symlink_path(&workspace, parent)?;
-            fs::create_dir_all(parent)
-                .map_err(|error| format!("cannot create package cache: {error}"))?;
-            ensure_no_symlink_path(&workspace, parent)?;
-            let staging = parent.join(format!(
-                ".{}.update-{}-{}",
+                }
+                true
+            } else {
+                false
+            };
+            let staging = if reused {
+                None
+            } else {
+                let parent = install_root.parent().expect("package cache parent exists");
+                ensure_no_symlink_path(&workspace, parent)?;
+                fs::create_dir_all(parent)
+                    .map_err(|error| format!("cannot create package cache: {error}"))?;
+                ensure_no_symlink_path(&workspace, parent)?;
+                let staging = staging_by_alias
+                    .get(&alias)
+                    .expect("every update alias has a precomputed staging path")
+                    .clone();
+                ensure_no_symlink_path(&workspace, &staging)?;
+                if staging.exists() {
+                    return Err(format!(
+                        "package update staging path already exists: {}",
+                        staging.display()
+                    ));
+                }
+                fs::create_dir(&staging)
+                    .map_err(|error| format!("cannot stage package `{alias}`: {error}"))?;
+                staged_paths.0.push(staging.clone());
+                for (path, source) in &artifact.files {
+                    if let Err(error) = validate_archive_path(path) {
+                        let _ = fs::remove_dir_all(&staging);
+                        return Err(error);
+                    }
+                    let output = staging.join(path);
+                    if let Err(error) =
+                        fs::create_dir_all(output.parent().expect("archive file has parent"))
+                            .and_then(|()| fs::write(output, source))
+                    {
+                        let _ = fs::remove_dir_all(&staging);
+                        return Err(format!("cannot stage verified package `{alias}`: {error}"));
+                    }
+                }
+                Some(staging)
+            };
+            let dependency = document
+                .get_mut("dependencies")
+                .and_then(Item::as_table_mut)
+                .and_then(|dependencies| dependencies.get_mut(&alias))
+                .and_then(Item::as_table_mut)
+                .expect("dependency was validated above");
+            dependency["path"] = value(relative_install.to_string_lossy().replace('\\', "/"));
+            dependency["version"] = value(format!("={version}"));
+            let source = document
+                .get_mut("package_sources")
+                .and_then(Item::as_table_mut)
+                .and_then(|sources| sources.get_mut(&alias))
+                .and_then(Item::as_table_mut)
+                .expect("package source was validated above");
+            source["registry"] = value(registry.as_str());
+            source["artifact_sha256"] = value(artifact_sha256.clone());
+            prepared.push(PlannedPackageUpdate {
+                alias,
+                name,
                 version,
-                std::process::id(),
-                NEXT_TEMP.fetch_add(1, Ordering::Relaxed)
-            ));
-            if staging.exists() {
-                return Err(format!(
-                    "package update staging path already exists: {}",
-                    staging.display()
-                ));
-            }
-            fs::create_dir(&staging)
-                .map_err(|error| format!("cannot stage package `{alias}`: {error}"))?;
-            staged_paths.0.push(staging.clone());
-            for (path, source) in &artifact.files {
-                if let Err(error) = validate_archive_path(path) {
-                    let _ = fs::remove_dir_all(&staging);
-                    return Err(error);
-                }
-                let output = staging.join(path);
-                if let Err(error) =
-                    fs::create_dir_all(output.parent().expect("archive file has parent"))
-                        .and_then(|()| fs::write(output, source))
-                {
-                    let _ = fs::remove_dir_all(&staging);
-                    return Err(format!("cannot stage verified package `{alias}`: {error}"));
-                }
-            }
-            Some(staging)
-        };
-        let dependency = document
-            .get_mut("dependencies")
-            .and_then(Item::as_table_mut)
-            .and_then(|dependencies| dependencies.get_mut(&alias))
-            .and_then(Item::as_table_mut)
-            .expect("dependency was validated above");
-        dependency["path"] = value(relative_install.to_string_lossy().replace('\\', "/"));
-        dependency["version"] = value(format!("={version}"));
-        let source = document
-            .get_mut("package_sources")
-            .and_then(Item::as_table_mut)
-            .and_then(|sources| sources.get_mut(&alias))
-            .and_then(Item::as_table_mut)
-            .expect("package source was validated above");
-        source["registry"] = value(registry.as_str());
-        source["artifact_sha256"] = value(artifact_sha256.clone());
-        prepared.push(PlannedPackageUpdate {
-            alias,
-            name,
-            version,
-            install_root,
-            staging,
-        });
-    }
-
-    let mut installed = Vec::<PathBuf>::new();
-    let new_manifest = document.to_string();
-    let transaction = (|| {
+                install_root,
+                staging,
+            });
+        }
+        let new_manifest = document.to_string();
         let current_manifest =
             read_regular_file(&manifest_path, 4 * 1024 * 1024, "project manifest")?;
         let current_lock = read_regular_file(&lock_path, 16 * 1024 * 1024, "package lockfile")?;
@@ -1059,7 +1766,6 @@ fn update_plan_command(args: &mut impl Iterator<Item = String>) -> Result<String
                         update.alias
                     )
                 })?;
-                installed.push(update.install_root.clone());
             }
         }
         write_atomic(&manifest_path, new_manifest.as_bytes(), 0o644)?;
@@ -1070,31 +1776,13 @@ fn update_plan_command(args: &mut impl Iterator<Item = String>) -> Result<String
         validate_project_manifest(&workspace, &new_manifest)?;
         Ok::<(), String>(())
     })();
-    if let Err(error) = transaction {
-        let mut rollback_errors = Vec::new();
-        if let Err(rollback) = write_atomic(&manifest_path, &original_manifest, 0o644) {
-            rollback_errors.push(format!("manifest rollback failed: {rollback}"));
-        }
-        if let Err(rollback) = write_atomic(&lock_path, &original_lock, 0o644) {
-            rollback_errors.push(format!("lockfile rollback failed: {rollback}"));
-        }
-        for path in installed.iter().rev() {
-            if let Err(rollback) = fs::remove_dir_all(path) {
-                rollback_errors.push(format!(
-                    "cache rollback failed for {}: {rollback}",
-                    path.display()
-                ));
-            }
-        }
-        return Err(if rollback_errors.is_empty() {
-            error
-        } else {
-            format!(
-                "{error}; update rollback incomplete: {}",
-                rollback_errors.join("; ")
-            )
+    if let Err(error) = update_result {
+        return Err(match transaction_journal.rollback() {
+            Ok(()) => error,
+            Err(recovery) => format!("{error}; package recovery is pending: {recovery}"),
         });
     }
+    transaction_journal.commit()?;
     let summary = prepared
         .iter()
         .map(|update| format!("{}={}/{}", update.alias, update.name, update.version))
@@ -2287,6 +2975,246 @@ mod tests {
         )
         .unwrap();
         root
+    }
+
+    fn temporary_workspace(label: &str) -> PathBuf {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("zelyra-package-{label}-{stamp}"));
+        fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    #[test]
+    fn package_operation_lock_excludes_concurrent_mutations_and_releases_on_drop() {
+        let root = temporary_workspace("operation-lock");
+        let first = PackageOperationLock::acquire(&root).unwrap();
+        assert!(PackageOperationLock::acquire(&root)
+            .unwrap_err()
+            .contains("another Zelyra package operation is active"));
+        drop(first);
+        let second = PackageOperationLock::acquire(&root).unwrap();
+        drop(second);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn interrupted_package_transaction_preview_is_read_only_and_apply_restores_all_state() {
+        let root = temporary_workspace("recovery");
+        let old_manifest = b"[package]\nname = \"app\"\nversion = \"1.0.0\"\n";
+        let old_lock = b"lock_version = 1\n\n[[package]]\nname = \"old\"\n";
+        fs::write(root.join(MANIFEST), old_manifest).unwrap();
+        fs::write(root.join(LOCKFILE), old_lock).unwrap();
+        let installed = root.join(".zelyra/packages/widget/2.0.0");
+        let staging = root.join(".zelyra/packages/widget/.2.0.0.123.tmp");
+        let transaction = PackageTransaction::prepare(
+            &root,
+            "add",
+            old_manifest,
+            Some(old_lock),
+            &[staging.clone(), installed.clone()],
+        )
+        .unwrap();
+        fs::create_dir_all(&installed).unwrap();
+        fs::create_dir_all(&staging).unwrap();
+        fs::write(root.join(MANIFEST), b"new manifest").unwrap();
+        fs::write(root.join(LOCKFILE), b"new lock").unwrap();
+        drop(transaction);
+
+        let preview = recover_transaction(&root, false).unwrap();
+        assert!(preview.contains("will restore"));
+        assert_eq!(fs::read(root.join(MANIFEST)).unwrap(), b"new manifest");
+        assert_eq!(fs::read(root.join(LOCKFILE)).unwrap(), b"new lock");
+        assert!(installed.exists());
+
+        recover_transaction(&root, true).unwrap();
+        assert_eq!(fs::read(root.join(MANIFEST)).unwrap(), old_manifest);
+        assert_eq!(fs::read(root.join(LOCKFILE)).unwrap(), old_lock);
+        assert!(!installed.exists());
+        assert!(!staging.exists());
+        assert!(!root.join(PACKAGE_TRANSACTION_DIR).exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn committed_transaction_recovery_only_removes_the_journal() {
+        let root = temporary_workspace("committed-recovery");
+        let old_manifest = b"old";
+        fs::write(root.join(MANIFEST), old_manifest).unwrap();
+        let transaction =
+            PackageTransaction::prepare(&root, "remove", old_manifest, None, &[]).unwrap();
+        fs::write(root.join(MANIFEST), b"committed manifest").unwrap();
+        let journal_path = root.join(PACKAGE_TRANSACTION_DIR).join("journal.json");
+        let mut journal: Value = serde_json::from_slice(&fs::read(&journal_path).unwrap()).unwrap();
+        journal["phase"] = Value::String("committed".into());
+        write_atomic(&journal_path, &serde_json::to_vec(&journal).unwrap(), 0o600).unwrap();
+        drop(transaction);
+
+        recover_transaction(&root, true).unwrap();
+        assert_eq!(
+            fs::read(root.join(MANIFEST)).unwrap(),
+            b"committed manifest"
+        );
+        assert!(!root.join(PACKAGE_TRANSACTION_DIR).exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn transaction_rollback_does_not_recover_unrelated_cache_quarantines() {
+        let root = temporary_workspace("rollback-isolation");
+        let original = b"original manifest";
+        fs::write(root.join(MANIFEST), original).unwrap();
+        let mut transaction =
+            PackageTransaction::prepare(&root, "add", original, None, &[]).unwrap();
+        fs::write(root.join(MANIFEST), b"partial manifest").unwrap();
+        let quarantined = root.join(".zelyra/package-cache-trash-7-123/widget/2.0.0");
+        fs::create_dir_all(&quarantined).unwrap();
+        fs::write(quarantined.join(MANIFEST), "cache package").unwrap();
+
+        transaction.rollback().unwrap();
+
+        assert_eq!(fs::read(root.join(MANIFEST)).unwrap(), original);
+        assert!(quarantined.join(MANIFEST).is_file());
+        assert!(!root.join(".zelyra/packages/widget/2.0.0").exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn recovery_journal_rejects_paths_outside_the_package_cache() {
+        let journal = serde_json::json!({
+            "journal_version": PACKAGE_JOURNAL_VERSION,
+            "operation": "add",
+            "phase": "prepared",
+            "has_lock_backup": false,
+            "cleanup_paths": [".zelyra/packages/../../outside"],
+        });
+        assert!(validate_recovery_journal(&journal)
+            .unwrap_err()
+            .contains("unsafe"));
+        assert!(package_cleanup_relative_path(
+            Path::new("/tmp/project"),
+            Path::new("/tmp/project/.zelyra/package-operation.lock")
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn package_recovery_restores_a_crash_interrupted_cache_cleanup() {
+        let root = temporary_workspace("cache-recovery");
+        let quarantine = root.join(".zelyra/package-cache-trash-7-123");
+        let removed = quarantine.join("widget/2.0.0");
+        fs::create_dir_all(&removed).unwrap();
+        fs::write(
+            removed.join(MANIFEST),
+            "[package]\nname = \"widget\"\nversion = \"2.0.0\"\n",
+        )
+        .unwrap();
+
+        let preview = recover_cache_quarantines(&root, false).unwrap();
+        assert!(preview.contains("1 quarantined package version"));
+        assert!(removed.exists());
+        assert!(!root.join(".zelyra/packages/widget/2.0.0").exists());
+
+        let recovered = recover_cache_quarantines(&root, true).unwrap();
+        assert!(recovered.contains("restored 1 quarantined package version"));
+        assert!(root
+            .join(".zelyra/packages/widget/2.0.0/zelyra.toml")
+            .is_file());
+        assert!(!quarantine.exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn package_recovery_does_not_overwrite_a_cache_version() {
+        let root = temporary_workspace("cache-recovery-conflict");
+        let quarantine = root.join(".zelyra/package-cache-trash-9-456");
+        let removed = quarantine.join("widget/2.0.0");
+        fs::create_dir_all(&removed).unwrap();
+        fs::write(removed.join(MANIFEST), "quarantined").unwrap();
+        let existing = root.join(".zelyra/packages/widget/2.0.0");
+        fs::create_dir_all(&existing).unwrap();
+
+        let error = recover_cache_quarantines(&root, true).unwrap_err();
+        assert!(error.contains("cache destination already exists"));
+        assert!(removed.join(MANIFEST).is_file());
+        assert!(existing.is_dir());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn package_cache_recovery_refuses_symlinked_quarantine_content() {
+        use std::os::unix::fs::symlink;
+
+        let root = temporary_workspace("cache-recovery-symlink");
+        let quarantine = root.join(".zelyra/package-cache-trash-10-789");
+        let package_dir = quarantine.join("widget");
+        fs::create_dir_all(&package_dir).unwrap();
+        let outside = root.join("outside");
+        fs::create_dir_all(&outside).unwrap();
+        symlink(&outside, package_dir.join("2.0.0")).unwrap();
+
+        let error = recover_cache_quarantines(&root, true).unwrap_err();
+
+        assert!(error.contains("symlink"));
+        assert!(outside.is_dir());
+        assert!(quarantine.exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn package_recovery_preserves_journal_with_unknown_files() {
+        let root = temporary_workspace("recovery-unknown-file");
+        let original = b"original manifest";
+        fs::write(root.join(MANIFEST), original).unwrap();
+        let transaction = PackageTransaction::prepare(&root, "add", original, None, &[]).unwrap();
+        fs::write(
+            root.join(PACKAGE_TRANSACTION_DIR).join("unexpected"),
+            b"preserve",
+        )
+        .unwrap();
+        drop(transaction);
+
+        let error = recover_transaction(&root, true).unwrap_err();
+
+        assert!(error.contains("unknown or unsafe file"));
+        assert_eq!(fs::read(root.join(MANIFEST)).unwrap(), original);
+        assert!(root
+            .join(PACKAGE_TRANSACTION_DIR)
+            .join("journal.json")
+            .is_file());
+        assert!(root
+            .join(PACKAGE_TRANSACTION_DIR)
+            .join("unexpected")
+            .is_file());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn recovery_removes_journals_interrupted_before_any_project_mutation() {
+        for (label, backups) in [
+            ("empty", Vec::<&str>::new()),
+            ("manifest", vec!["manifest.backup"]),
+            ("lock", vec!["lock.backup"]),
+        ] {
+            let root = temporary_workspace(&format!("incomplete-{label}"));
+            let directory = root.join(PACKAGE_TRANSACTION_DIR);
+            fs::create_dir_all(&directory).unwrap();
+            for backup in backups {
+                fs::write(directory.join(backup), b"partial backup").unwrap();
+            }
+
+            let preview = recover_transaction(&root, false).unwrap();
+            assert!(preview.contains("no project mutation"));
+            assert!(directory.exists());
+
+            let applied = recover_transaction(&root, true).unwrap();
+            assert!(applied.contains("no project mutation"));
+            assert!(!directory.exists());
+            fs::remove_dir_all(root).unwrap();
+        }
     }
 
     #[test]

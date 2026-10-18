@@ -276,6 +276,60 @@ fn package_signature_requires_explicit_trust_and_detects_tampering() {
 }
 
 #[test]
+fn package_recover_previews_then_restores_an_interrupted_install() {
+    let root = fixture();
+    let app = root.join("recovery-app");
+    fs::create_dir_all(&app).unwrap();
+    let original_manifest =
+        b"[package]\nname = \"recovery_app\"\nversion = \"1.0.0\"\nentry = \"main.zyl\"\n";
+    let original_lock = b"lock_version = 1\n";
+    fs::write(app.join("zelyra.toml"), original_manifest).unwrap();
+    fs::write(app.join("main.zyl"), "fn main() {}\n").unwrap();
+    fs::write(app.join("zelyra.lock"), original_lock).unwrap();
+    let transaction = app.join(".zelyra/package-transaction");
+    fs::create_dir_all(&transaction).unwrap();
+    fs::write(transaction.join("manifest.backup"), original_manifest).unwrap();
+    fs::write(transaction.join("lock.backup"), original_lock).unwrap();
+    fs::write(
+        transaction.join("journal.json"),
+        r#"{"journal_version":1,"operation":"add","phase":"prepared","has_lock_backup":true,"cleanup_paths":[".zelyra/packages/widget/2.0.0"]}"#,
+    )
+    .unwrap();
+    let installed = app.join(".zelyra/packages/widget/2.0.0");
+    fs::create_dir_all(&installed).unwrap();
+    fs::write(app.join("zelyra.toml"), b"new manifest").unwrap();
+    fs::write(app.join("zelyra.lock"), b"new lock").unwrap();
+
+    let preview = zelyra(&app, &["package", "recover"]);
+    assert!(
+        preview.status.success(),
+        "{}",
+        String::from_utf8_lossy(&preview.stderr)
+    );
+    assert!(String::from_utf8_lossy(&preview.stdout).contains("will restore"));
+    assert_eq!(fs::read(app.join("zelyra.toml")).unwrap(), b"new manifest");
+    assert!(installed.is_dir());
+    let blocked = zelyra(&app, &["package", "lock", "--check"]);
+    assert!(!blocked.status.success());
+    assert!(String::from_utf8_lossy(&blocked.stderr).contains("package recover"));
+
+    let recovered = zelyra(&app, &["package", "recover", "--apply"]);
+    assert!(
+        recovered.status.success(),
+        "{}",
+        String::from_utf8_lossy(&recovered.stderr)
+    );
+    assert_eq!(
+        fs::read(app.join("zelyra.toml")).unwrap(),
+        original_manifest
+    );
+    assert_eq!(fs::read(app.join("zelyra.lock")).unwrap(), original_lock);
+    assert!(!installed.exists());
+    assert!(!transaction.exists());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn keygen_refuses_to_overwrite_a_private_key() {
     let root = fixture();
     let private_key = root.join("publisher.key");

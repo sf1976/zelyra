@@ -1325,13 +1325,23 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> std::proce
     use std::process::ExitCode;
     let Some(action) = arguments.next() else {
         eprintln!(
-            "Usage: zelyra package <lock|keygen|sign|verify|trust|registry|add|update|remove|cache> ..."
+            "Usage: zelyra package <lock|keygen|sign|verify|trust|registry|add|update|remove|cache|recover> ..."
         );
         return ExitCode::from(2);
     };
     if action != "lock" {
         return registry::command(&action, arguments);
     }
+    let _package_lock = match registry::PackageOperationLock::acquire_current().and_then(|lock| {
+        lock.require_no_pending_transaction()?;
+        Ok(lock)
+    }) {
+        Ok(lock) => lock,
+        Err(error) => {
+            eprintln!("error[E-PKG-003]: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
     let mut entry = None;
     let mut mode = None;
     for argument in arguments {
