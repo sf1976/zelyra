@@ -25,7 +25,7 @@ telemetry, explicit effects, portable data, resource discipline, and honest
 proof claims guide every phase. The [manifesto](MANIFESTO.md) states the
 principles; the roadmap below tracks what is actually implemented.
 
-The current stable release is 1.2.15, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.15. **Current milestones** is the source of
+The current stable release is [1.2.17](https://github.com/sf1976/zelyra/releases/tag/v1.2.17). **Current milestones** is the source of
 near-term commitments. Older numbered release sections below are retained as
 historical planning and evidence; they do not by themselves define current
 release targets. Longer-term ideas remain in the post-1.0 evolution section.
@@ -166,14 +166,24 @@ security and compatibility gates stated for that milestone.
   in [`v1.2.15`](https://github.com/sf1976/zelyra/releases/tag/v1.2.15). Other
   work originally grouped under 1.2.15 remains open and is reassigned below;
   Wasm/sidecars remain optional and require their own sandbox/ABI gate.
-- [~] **1.2.16 — composable TableView cells:** Add typed supporting content to
-  displayed columns and explicit non-displayed result fields for row templates.
+- [x] **1.2.16 — composable TableView cells:** Released as
+  [`v1.2.17`](https://github.com/sf1976/zelyra/releases/tag/v1.2.17). Add typed
+  supporting content to displayed columns and explicit non-displayed result
+  fields for row templates.
   The parser, SQL projection checking, web query selection, and safe HTML
   rendering are implemented with positive and negative tests. Workspace tests,
   Clippy, handbook checks, the MariaDB/browser invoice E2E across Chromium,
-  Firefox, and WebKit, and Linux artifact smoke passed. The PR's Windows CI and
-  release workflow remain pending. This does not add arbitrary per-request
-  SQL, a write action, or access to undeclared result fields.
+  Firefox, and WebKit, Linux and Windows builds, and the release workflow passed.
+  This does not add arbitrary per-request SQL, a write action, or access to
+  undeclared result fields.
+- [x] **1.2.17 — optional relations and tenant safety:** Released as
+  [`v1.2.17`](https://github.com/sf1976/zelyra/releases/tag/v1.2.17).
+  Optional table relations map to nullable foreign keys; tenant-scoped
+  relations use composite constraints over tenant and record IDs. MariaDB
+  rejects cross-tenant links even for direct SQL writes. Decimal defaults honor
+  the declared scale. Field names and `Decimal(precision, scale)` were already
+  supported; the `Money` default remains unchanged for compatibility. Workspace
+  and database checks, plus reproducible Linux/Windows release checks, passed.
 - [ ] **1.3.0 — canonical structure and Bytecode default:** Complete the
   opt-in versioned project layout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, and `plugins/`), architecture checks, and safe layout migration

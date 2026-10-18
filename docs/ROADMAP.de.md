@@ -27,7 +27,7 @@ Ressourcendisziplin und ehrliche Beweisaussagen leiten jede Phase. Das
 [Manifest](MANIFESTO.de.md) beschreibt die Prinzipien; die Roadmap kennzeichnet
 den tatsächlich implementierten Stand.
 
-Das aktuelle stabile Release ist 1.2.15 und wurde unter https://github.com/sf1976/zelyra/releases/tag/v1.2.15 veröffentlicht. **Aktuelle Meilensteine** ist die
+Das aktuelle stabile Release ist [1.2.17](https://github.com/sf1976/zelyra/releases/tag/v1.2.17). **Aktuelle Meilensteine** ist die
 verbindliche Übersicht der nächsten Vorhaben. Ältere, nummerierte Release-
 Abschnitte bleiben als historische Planung und Nachweise erhalten; sie legen
 für sich keine aktuellen Releaseziele fest. Langfristige Ideen stehen im
@@ -180,15 +180,27 @@ abgeschlossen.
   veröffentlicht. Weitere ursprünglich 1.2.15 zugeordnete Arbeiten bleiben
   offen und werden unten neu zugeordnet. Wasm/Sidecars bleiben optional und
   benötigen ein eigenes Sandbox-/ABI-Gate.
-- [~] **1.2.16 — komponierbare TableView-Zellen:** Compilergeprüfte
+- [x] **1.2.16 — komponierbare TableView-Zellen:** Als
+  [`v1.2.17`](https://github.com/sf1976/zelyra/releases/tag/v1.2.17) veröffentlicht.
+  Compilergeprüfte
   Zusatzinhalte in angezeigten Spalten und ausdrücklich gewählte, nicht
   angezeigte Ergebnisfelder für Zeilenvorlagen ergänzen. Parser,
   SQL-Projektionsprüfung, Query-Auswahl und sicheres HTML-Rendering sind mit
   positiven und negativen Tests umgesetzt. Workspace-Tests, Clippy,
   Handbuchprüfungen, Invoice-E2E mit MariaDB in Chromium, Firefox und WebKit
-  sowie der Linux-Artefakttest bestanden. Windows-CI und Releaseworkflow stehen
-  noch aus. Es entstehen weder freie SQL-Abfragen noch Schreibaktionen oder
-  Zugriff auf nicht deklarierte Ergebnisfelder.
+  sowie Linux-/Windows-Builds und Releaseworkflow bestanden. Es entstehen
+  weder freie SQL-Abfragen noch Schreibaktionen oder Zugriff auf nicht
+  deklarierte Ergebnisfelder.
+- [x] **1.2.17 — optionale Relationen und Mandantensicherheit:** Veröffentlicht
+  als [`v1.2.17`](https://github.com/sf1976/zelyra/releases/tag/v1.2.17).
+  Optionale Tabellenrelationen werden als nullable Fremdschlüssel abgebildet;
+  mandantengebundene Relationen verwenden zusammengesetzte Constraints über
+  Mandanten- und Datensatz-ID. MariaDB weist mandantenübergreifende
+  Verknüpfungen auch bei direkten SQL-Schreibzugriffen zurück. Decimal-Defaults
+  folgen der deklarierten Skala. Feldnamen und `Decimal(precision, scale)`
+  waren bereits unterstützt; der `Money`-Standard blieb aus
+  Kompatibilitätsgründen unverändert. Workspace- und Datenbanktests sowie
+  reproduzierbare Linux-/Windows-Releaseprüfungen bestanden.
 - [ ] **1.3.0 — kanonische Struktur und Bytecode-Standard:** Das optionale,
   versionierte Projektlayout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, `plugins/`), Architekturprüfungen und eine sichere
