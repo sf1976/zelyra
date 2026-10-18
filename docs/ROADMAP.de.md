@@ -156,9 +156,12 @@ abgeschlossen.
   erstellt ein prüfbares Minimalprojekt mit `routes/`, `domain/`, `schema/`,
   `public/` und `assets/`. `[project].layout = "standard"` aktiviert das
   Profil; `check`, `run` und `serve` verlangen echte, innerhalb des Projekts
-  liegende Ordner. Alte Projekte bleiben unverändert. Datenbankvorlagen,
-  Namespace-Imports, Architekturregeln und sichere Migrationsvorschau fehlen
-  noch; `plugins/` wird bis zu einem abgesicherten Loader zurückgestellt.
+  liegende Ordner. Die bestehende Schreibweise `import
+  "domain::feature::actions" as actions` löst Projektnamensräume unter
+  `schema/`, `domain/` und `routes/` nur in diesem Profil auf; bisherige Importe
+  bleiben unverändert. Alte Projekte bleiben unverändert. Datenbankvorlagen,
+  Architekturregeln und sichere Migrationsvorschau fehlen noch; `plugins/` wird
+  bis zu einem abgesicherten Loader zurückgestellt.
 - [ ] **1.2.14–1.2.15 — Bytecode-Parität und Freigabenachweis:** Verifizierte
   Bytecodesemantik, Hostoperationen, Fuzzing, Differentialtests,
   Ressourcenlimits, Diagnostik sowie Paket-/Deploymentunterstützung ausbauen.

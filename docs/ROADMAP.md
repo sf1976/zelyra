@@ -143,7 +143,9 @@ security and compatibility gates stated for that milestone.
   creates a checkable minimal `routes/`, `domain/`, `schema/`, `public/`, and
   `assets/` tree. `[project].layout = "standard"` opts in; `check`, `run`, and
   `serve` require these roots to be real directories contained in the project.
-  Legacy projects remain unchanged. Database templates, namespace imports,
+  The existing `import "domain::feature::actions" as actions` syntax now
+  resolves project namespaces under `schema/`, `domain/`, and `routes/` only in
+  this profile; legacy imports remain unchanged. Database templates,
   architecture rules, and safe migration preview remain open; `plugins/` is
   deferred until it has a secured loader.
 - [ ] **1.2.14–1.2.15 — Bytecode parity and release proof:** Expand verified

@@ -217,12 +217,26 @@ This minimal starter creates `routes/`, `domain/`, `schema/`, `public/`, and
 `assets/`, and declares `layout = "standard"` in `[project]` in `zelyra.toml`.
 `check`, `run`, and `serve` verify that each root is a real directory inside
 the project. Existing projects without this setting keep legacy behavior.
-This first step supports only the minimal starter: MariaDB templates, automatic
-namespace imports, architecture lint rules, and migration preview are still
-being developed. Source files continue to use explicit file imports; the
-unimplemented `use schema::...` syntax must not be written in applications.
-Setting `strict_architecture = true` currently fails explicitly because those
-rules are not available yet.
+This first step supports only the minimal starter; MariaDB templates,
+architecture lint rules, and migration preview are still being developed.
+Within this profile, the existing import syntax also accepts project namespaces
+that map to Zelyra files without `../../` paths:
+
+~~~zelyra
+import "schema::tables" as schema
+import "domain::invoices::actions" as invoice_actions
+import "routes::web" as web
+~~~
+
+The supported namespace roots are `schema`, `domain`, and `routes`. Each
+segment must be a simple module name and the loader confines resolution to the
+project root. Namespace imports require the opt-in profile; package modules
+continue to use project-relative or `pkg:` imports. Existing explicit file
+imports remain supported. The separate `use schema::...` syntax is not part of
+the language. Under the opt-in standard profile, setting
+`strict_architecture = true` currently fails explicitly because those rules
+are not available yet. A `strict_architecture` key does not change an
+unprofiled legacy project.
 
 ### ✅ Zelyra Setup Assistant (Console and Web)
 

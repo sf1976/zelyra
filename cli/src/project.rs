@@ -60,6 +60,7 @@ struct Module {
 
 struct Loader {
     root: PathBuf,
+    standard_layout: bool,
     sources: Vec<ProjectSource>,
     modules: HashMap<PathBuf, Module>,
     order: Vec<PathBuf>,
@@ -217,6 +218,20 @@ fn load_with_overrides(
         span: Span::default(),
         sources: Box::default(),
     })?;
+    let standard_layout =
+        crate::project_layout::standard_layout_enabled(&root).map_err(|error| ProjectError {
+            code: error.code,
+            message: error.message,
+            path: error.path,
+            span: zelyra_ast::Span {
+                start: 0,
+                end: 0,
+                line: error.line,
+                column: error.column,
+                source_id: 0,
+            },
+            sources: Box::default(),
+        })?;
     if let Some(packages) = &packages {
         // A package without dependencies has no external resolution state to
         // pin; source modules keep their legacy project-local rules.
@@ -233,6 +248,7 @@ fn load_with_overrides(
 
     let mut loader = Loader {
         root,
+        standard_layout,
         sources: Vec::new(),
         modules: HashMap::new(),
         order: Vec::new(),
@@ -708,6 +724,59 @@ impl Loader {
     ) -> Result<PathBuf, ProjectError> {
         if import.path == "zelyra/ui" {
             return Ok(builtin_ui_module_path());
+        }
+        if import.path.contains("::") {
+            if !self.standard_layout {
+                return Err(self.error(
+                    "E-MOD-001",
+                    "namespace imports require `[project].layout = \"standard\"`".into(),
+                    importer.to_owned(),
+                    import.span,
+                ));
+            }
+            if self
+                .packages
+                .as_ref()
+                .and_then(|packages| packages.source_base(importer_path))
+                .is_some()
+            {
+                return Err(self.error(
+                    "E-MOD-001",
+                    "standard-layout namespaces are available only to project source modules; package modules must use project-relative or `pkg:` imports".into(),
+                    importer.to_owned(),
+                    import.span,
+                ));
+            }
+            let mut segments = import.path.split("::");
+            let namespace = segments.next().unwrap_or_default();
+            let allowed_namespace = matches!(namespace, "schema" | "domain" | "routes");
+            let valid_segment = |segment: &str| {
+                !segment.is_empty()
+                    && segment.len() <= 128
+                    && segment
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
+            };
+            let rest = segments.collect::<Vec<_>>();
+            if !allowed_namespace
+                || rest.is_empty()
+                || !valid_segment(namespace)
+                || !rest.iter().all(|segment| valid_segment(segment))
+            {
+                return Err(self.error(
+                    "E-MOD-001",
+                    format!("invalid standard-layout namespace import `{}`; use `schema::`, `domain::`, or `routes::` followed by module names", import.path),
+                    importer.to_owned(),
+                    import.span,
+                ));
+            }
+            let mut target = self.root.clone();
+            target.push(namespace);
+            for segment in rest {
+                target.push(segment);
+            }
+            target.set_extension("zyl");
+            return Ok(target);
         }
         if import.path.starts_with("pkg:") {
             let Some(packages) = &self.packages else {

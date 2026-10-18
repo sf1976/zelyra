@@ -848,7 +848,7 @@ console = false
     let preserve_existing_main =
         options.allow_current_directory && directory.join("main.zyl").is_file();
     let main_source = if options.canonical_layout && !preserve_existing_main {
-        "import \"routes/web.zyl\" as web\nimport \"schema/tables.zyl\" as schema\nimport \"domain/dashboard/actions.zyl\" as dashboard\n\nfn main() {\n    print(dashboard::welcome_message())\n}\n".to_owned()
+        "import \"routes::web\" as web\nimport \"schema::tables\" as schema\nimport \"domain::dashboard::actions\" as dashboard\n\nfn main() {\n    print(dashboard::welcome_message())\n}\n".to_owned()
     } else if options.with_mariadb {
         let source = main_template.replacen(MARIADB_DATABASE_DECLARATION, "", 1);
         format!("import \"src/database.zyl\" as storage\n\n{source}")

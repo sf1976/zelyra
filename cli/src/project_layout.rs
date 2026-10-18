@@ -53,6 +53,9 @@ pub(crate) fn validate(entry_path: &str) -> Result<(), LayoutError> {
         return Ok(());
     };
     let layout = project.get("layout");
+    let Some(layout) = layout else {
+        return Ok(());
+    };
     let strict_item = project.get("strict_architecture");
     let strict = match strict_item {
         Some(item) => item.as_bool().ok_or_else(|| {
@@ -73,9 +76,6 @@ pub(crate) fn validate(entry_path: &str) -> Result<(), LayoutError> {
             strict_item.and_then(toml_edit::Item::span),
         ));
     }
-    let Some(layout) = layout else {
-        return Ok(());
-    };
     let Some(profile) = layout.as_str() else {
         return Err(span_error(
             &config_path,
@@ -162,6 +162,59 @@ pub(crate) fn validate(entry_path: &str) -> Result<(), LayoutError> {
     Ok(())
 }
 
+/// Whether the project opts into the standard layout. This is also used by the
+/// module loader so namespace imports are never enabled for legacy projects.
+pub(crate) fn standard_layout_enabled(root: &std::path::Path) -> Result<bool, LayoutError> {
+    let Some(config_path) = find_config(root) else {
+        return Ok(false);
+    };
+    if fs::symlink_metadata(&config_path).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
+        return Err(LayoutError {
+            path: config_path.display().to_string(),
+            code: "E-LAYOUT-001",
+            message: "project configuration must not be a symbolic link".into(),
+            line: 1,
+            column: 1,
+        });
+    }
+    let config_source = fs::read_to_string(&config_path).map_err(|_| LayoutError {
+        path: config_path.display().to_string(),
+        code: "E-LAYOUT-001",
+        message: "cannot read the project configuration".into(),
+        line: 1,
+        column: 1,
+    })?;
+    let document = config_source.parse::<DocumentMut>().map_err(|error| {
+        span_error(
+            &config_path,
+            &config_source,
+            error.to_string(),
+            error.span(),
+        )
+    })?;
+    let Some(project) = document.get("project").and_then(toml_edit::Item::as_table) else {
+        return Ok(false);
+    };
+    let Some(layout) = project.get("layout") else {
+        return Ok(false);
+    };
+    match layout.as_str() {
+        Some("standard") => Ok(true),
+        Some(profile) => Err(span_error(
+            &config_path,
+            &config_source,
+            format!("unknown project layout `{profile}`; expected `standard`"),
+            layout.span(),
+        )),
+        None => Err(span_error(
+            &config_path,
+            &config_source,
+            "`project.layout` must be the string `standard`".into(),
+            layout.span(),
+        )),
+    }
+}
+
 fn find_config(start: &std::path::Path) -> Option<PathBuf> {
     let mut directory = start;
     loop {
@@ -224,6 +277,14 @@ mod tests {
     fn legacy_projects_do_not_require_layout_directories() {
         let root = project("[project]\nname = \"legacy\"\n");
         assert!(validate(root.join("main.zyl").to_str().unwrap()).is_ok());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn strict_architecture_does_not_change_projects_without_an_opt_in_layout() {
+        let root = project("[project]\nname = \"legacy\"\nstrict_architecture = true\n");
+        assert!(validate(root.join("main.zyl").to_str().unwrap()).is_ok());
+        assert!(!standard_layout_enabled(&root).unwrap());
         fs::remove_dir_all(root).unwrap();
     }
 
