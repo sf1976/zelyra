@@ -688,7 +688,7 @@ fn module_init_creates_a_checkable_local_package_and_never_overwrites() {
     );
     let package_manifest =
         fs::read_to_string(directory.join("packages/small_tools/zelyra.toml")).unwrap();
-    assert!(package_manifest.contains("zelyra = \">=1.1.0, <1.2.0\""));
+    assert!(package_manifest.contains("zelyra = \">=1.2.0, <1.3.0\""));
     assert!(package_manifest.contains("effects = []"));
     assert!(directory.join("packages/small_tools/README.md").is_file());
 
@@ -1158,7 +1158,7 @@ fn checked_in_business_package_example_locks_checks_and_exports_database_provide
     }
     let bundled_billing_manifest =
         fs::read_to_string(output.join("packages/billing/zelyra.toml")).unwrap();
-    assert!(bundled_billing_manifest.contains("zelyra = \">=1.1.0, <1.2.0\""));
+    assert!(bundled_billing_manifest.contains("zelyra = \">=1.1.0, <2.0.0\""));
     let bundled_lock = run(&output, &["package", "lock", "main.zyl", "--check"]);
     assert!(
         bundled_lock.status.success(),

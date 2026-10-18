@@ -27,7 +27,7 @@ Ressourcendisziplin und ehrliche Beweisaussagen leiten jede Phase. Das
 [Manifest](MANIFESTO.de.md) beschreibt die Prinzipien; die Roadmap kennzeichnet
 den tatsächlich implementierten Stand.
 
-Das aktuelle stabile Release ist 1.1.5. **Aktuelle Meilensteine** ist die
+Das aktuelle stabile Release ist 1.2.5. **Aktuelle Meilensteine** ist die
 verbindliche Übersicht der nächsten Vorhaben. Ältere, nummerierte Release-
 Abschnitte bleiben als historische Planung und Nachweise erhalten; sie legen
 für sich keine aktuellen Releaseziele fest. Langfristige Ideen stehen im
@@ -62,24 +62,27 @@ abgeschlossen.
   ist ein Fehler; der Befehl darf nicht still einen anderen Port wählen.
   Projekt, Programmdatei, Arbeitsverzeichnis und sichere Env-Referenzen
   speichern, ohne Geheimniswerte zu kopieren.
-- [ ] **1.2.5 — Integrationsgrundlage:** Mandantenbezogene Abfragen, Forms und
-  Berechtigungen, begrenzte dauerhafte Jobs und koordinierte Zeitpläne sowie
-  die signierte Paketbasis mit explizitem Herausgebervertrauen, exaktem
-  Registry-Abruf und Offline-Locks bereitstellen. Der Paketabschluss wird in
-  1.2.6–1.2.8 gestaffelt; siehe den
+- [x] **1.2.5 — Betriebs- und Paketgrundlagen:** Signierte Quellpakete mit
+  Herausgebervertrauen und exakter Registryauflösung, Linux-systemd-Dienst mit
+  festem Port, residenter Scheduler, `public/`-Auslieferung sowie geprüfte
+  Deployment-Bundles und Laufzeitverbesserungen liefern. Query-HIR,
+  durchgängige typisierte Request-/Form-Pipeline und persistente transaktionale
+  Jobs sind ausdrücklich 1.2.6 zugeordnet; der Paketabschluss bleibt bis 1.2.8
+  gestaffelt. Siehe den
   [Paketökosystem-Plan](release-plans/1.2.5-module-ecosystem.de.md).
   `zelyra service change --port <port>` prüft den Zielport, stoppt den alten
   Dienst, aktualisiert seine Konfiguration und startet ihn neu. Bei Fehlern
   stellt es Konfiguration und Dienst wieder her. `status`, `restart` und
   `remove` ergänzen, sofern der Plattformdienstmanager dies unterstützt.
   Weitere Betriebssysteme erst nach Lifecycle- und Upgrade-Tests unterstützen.
-- [ ] **1.2.6 — vollständige Paketauflösung:** Separat veröffentlichte
-  transitive Paketabhängigkeiten mit exakten Versionen, unabhängig geprüften
-  Herausgebern und Herkunft pro Paket auflösen. Lockfile-Änderungen,
-  Paketcache und Updates müssen nach erkannten Fehlern zurückrollen und nach
-  Prozessabbruch sicher wiederherstellbar sein. Installation, Offline-Build,
-  Update, Entfernung und Docker-Bundle mit mehrstufigem Registrygraphen
-  integrieren und testen.
+- [ ] **1.2.6 — transitive Pakete und persistente Geschäftsabläufe:** Separat
+  veröffentlichte transitive Paketabhängigkeiten mit exakten Versionen,
+  unabhängig geprüften Herausgebern und Herkunft pro Paket auflösen.
+  Lockfile-Änderungen, Paketcache, Updates und Installationen müssen nach
+  Prozessabbruch wiederherstellbar sein. Zusätzlich typisierte Tenant-Query-
+  und Request/Form-Grundlagen sowie eine transaktionale Job-Queue mit
+  Idempotenz, Leases, begrenzten Wiederholungen und Dead-Letter-Zustand
+  implementieren und mit MariaDB-Integrationstests absichern.
 - [ ] **1.2.7 — verwaltbare und wiederverwendbare Module:** Compilergeprüfte
   Moduleinstellungen über normale Anwendungsseiten mit Revisionsprüfung,
   Secret-Redaktion und ohne implizite Capability-Freigabe ermöglichen. Eine
@@ -344,14 +347,13 @@ werden. Details stehen im [Projektlayout-Arbeitsplan](release-plans/1.3.0-projec
   Grundlagen schaffen, `public/` bereitstellen, Produktionsbetrieb sowie
   Apache-/Nginx-Reverse-Proxy dokumentieren und Linux-systemd-Dienste mit
   ausdrücklich festgelegtem Port installieren.
-- [~] **1.2.5 Integration der Geschäftsabläufe:** Begrenzte Mandanten-, Form-
-  und Jobpfade sowie `zelyra service change --port <port>` mit Stopp, Neustart
-  und Rollback fertigstellen. Weitere Serviceplattformen nur mit Lifecycle-
-  Tests ergänzen.
-- [ ] **1.2.6 Paketauflösung und Recovery:** Separat veröffentlichte
-  transitive Abhängigkeiten, pro Paket geprüfte Herkunft, installierbare
-  Updates und Absturz-Recovery mit mehrstufigen Registry-Integrationstests
-  abschließen.
+- [x] **1.2.5 Betriebs- und Paketgrundlagen:** Linux-systemd-Dienst mit
+  ausdrücklich festgelegtem Port, aktivem residenten Scheduler, statischem
+  `public/`-DocumentRoot, signierter Registrybasis und portablen Paket-Bundles
+  implementieren und prüfen. Query-/Request-/Jobpipeline ist 1.2.6 zugeordnet.
+- [ ] **1.2.6 Geschäftsabläufe und Paket-Recovery:** Transitive Pakete und
+  Absturz-Recovery sowie sichere Tenant-Queries, typisierte Request-/Form-
+  Verarbeitung und persistente transaktionale Jobs mit MariaDB-Tests liefern.
 - [ ] **1.2.7 Moduleinstellungen und Integrationen:** Compilergeprüfte
   Einstellungen über Anwendungsseiten bereitstellen und wiederverwendbare
   HostServices-Module mit getesteten CSV-Import-/Exportpaketen liefern.

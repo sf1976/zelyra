@@ -6,7 +6,7 @@ and `invoices` table and exposes one typed query operation. The application
 enables the Database capability; package `effects` ceilings only constrain
 declared effects and do not grant runtime access.
 
-Each package manifest declares `zelyra = ">=1.1.0, <1.2.0"`. The CLI checks
+Each package manifest declares `zelyra = ">=1.1.0, <2.0.0"`. The CLI checks
 this compatibility range before using the package graph, and the requirement
 is covered by the package manifest checksum and lockfile.
 

@@ -11,14 +11,16 @@ for database-backed business and web applications. It brings schema-aware SQL,
 forms, CRUD, views, and application logic together while keeping ordinary code
 and native SQL available.
 
-> **Release 1.1.5 · language compatibility line: 0.1** · [GitHub release](https://github.com/sf1976/zelyra/releases/tag/v1.1.5)
+> **Release 1.2.5 · language compatibility line: 0.1** · [GitHub release](https://github.com/sf1976/zelyra/releases/tag/v1.2.5)
 >
 > Compiler checks and the verifier cover defined scopes. They do not prove arbitrary applications correct. Review the documented support and limits for each workflow before deployment.
 
-Zelyra 1.1.5 adds offline reusable local packages with deterministic locks,
-typed package settings, module planning/bundling, and a tested package starter
-command. See the [1.1.5 release notes](docs/release-notes/1.1.5.en.md) and
-[package guide](docs/packages.en.md). Zelyra 1.1.2 removed the experimental
+Zelyra 1.2.5 adds signed source-package registries with publisher trust, a
+fixed-port Linux systemd service with its resident scheduler, and confined
+static files from `public/`. See the [1.2.5 release notes](docs/release-notes/1.2.5.en.md),
+[package guide](docs/packages.en.md), and [deployment guide](docs/deployment.en.md).
+Zelyra 1.1.5 added the local offline package workflow with deterministic locks
+and typed settings. Zelyra 1.1.2 removed the experimental
 Laravel analyzer and scaffold command; see the [1.1.2 release notes](docs/release-notes/1.1.2.en.md). Zelyra 1.1.1
 includes the Studio fixes described in the
 [1.1.1 release notes](docs/release-notes/1.1.1.en.md). Zelyra 1.1.0 added
@@ -31,11 +33,11 @@ and [implementation inventory](docs/implemented.en.md).
 
 The language compatibility line remains `0.1`; compiler releases do not change it automatically. “Prove correctness” is a design goal: the verifier distinguishes proven, runtime-checked, and unproven scopes, but is not a general-purpose theorem prover.
 
-## What Zelyra 1.1.5 provides
+## What Zelyra 1.2.5 provides
 
 Zelyra connects its language, compiler, database, web application, and Studio in
-one workflow. Release 1.1.5 retains the 1.1.2, 1.1.1, and 1.1.0 capabilities
-and adds the local package workflow:
+one workflow. Release 1.2.5 retains the 1.1.5, 1.1.2, 1.1.1, and 1.1.0
+capabilities and adds operations and package features:
 
 - statically checked business logic and schema-aware SQL;
 - MariaDB as the primary runtime, plus verified MySQL and PostgreSQL workflows;
@@ -57,12 +59,22 @@ and adds the local package workflow:
   isolated Compose volumes, a task-focused home page, date-only invoice input,
   server-assigned invoice numbers, and complete English and German guides;
 - CLI tools for routes, setup, diagnostics, databases, audit, and SMTP;
+- a Linux systemd user service with fixed ports, status/restart/remove, and
+  checked port changes with rollback; ports are never changed automatically;
+- a resident scheduler that runs only in the active installed service,
+  idempotent outbox setup, and `zelyra schedule status` without host cron;
+- signed source packages with explicit publisher trust, registry search, exact
+  updates, lockfile provenance, and portable Docker bundles;
+- static `public/` files with MIME types, GET/HEAD, route precedence, and
+  path/symlink confinement, plus documented Apache/Nginx proxy deployment;
 - offline local packages with SemVer compatibility, deterministic source locks,
   explicit imports, checked package plans/bundles, typed settings, and
   `zelyra module init`; reusable bounded CSV import/export examples;
 - if expressions, record updates, typed lambdas, guarded nested patterns,
   tuples, string interpolation, and opt-in mutable local arrays;
   `--max-steps` stops unbounded evaluation with a source diagnostic;
+- release limits are listed in the [1.2.5 release notes](docs/release-notes/1.2.5.en.md);
+  a general transactional job and query system is not included yet;
 - local text-PDF rendering and checked PDF outbox attachments with byte and
   row limits. The renderer does not preserve CSS layout, images, or charts;
   use browser print for graphical documents.

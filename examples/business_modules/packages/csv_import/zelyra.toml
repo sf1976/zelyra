@@ -1,6 +1,6 @@
 [package]
 name = "csv_import"
 version = "1.0.0"
-zelyra = ">=1.1.0, <1.2.0"
+zelyra = ">=1.1.0, <2.0.0"
 entry = "src/lib.zyl"
 effects = []

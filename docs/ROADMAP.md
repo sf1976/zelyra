@@ -25,7 +25,7 @@ telemetry, explicit effects, portable data, resource discipline, and honest
 proof claims guide every phase. The [manifesto](MANIFESTO.md) states the
 principles; the roadmap below tracks what is actually implemented.
 
-The current stable release is 1.1.5. **Current milestones** is the source of
+The current stable release is 1.2.5. **Current milestones** is the source of
 near-term commitments. Older numbered release sections below are retained as
 historical planning and evidence; they do not by themselves define current
 release targets. Longer-term ideas remain in the post-1.0 evolution section.
@@ -57,23 +57,27 @@ security and compatibility gates stated for that milestone.
   definition (Linux systemd first). A busy port is an error; installation must
   never silently select another port. Persist project, executable, working
   directory, and safe environment references without copying secret values.
-- [ ] **1.2.5 — integration foundation:** Provide tenant-aware query,
-  forms/authorization, bounded durable jobs and coordinated schedules, plus
-  the signed package foundation with explicit publisher trust, exact registry
-  retrieval, and offline locks. Complete the package ecosystem in 1.2.6–1.2.8;
-  see the [package ecosystem plan](release-plans/1.2.5-module-ecosystem.en.md).
+- [x] **1.2.5 — operations and package foundations:** Deliver signed source
+  packages with publisher trust and exact registry resolution, a Linux
+  systemd service with a fixed port, its resident scheduler, static `public/`
+  serving, and verified deployment bundles/runtime improvements. Query HIR, the
+  end-to-end typed request/form pipeline, and persistent transactional jobs
+  move explicitly to 1.2.6; package ecosystem completion remains staged through
+  1.2.8. See the
+  [package ecosystem plan](release-plans/1.2.5-module-ecosystem.en.md).
   `zelyra service change --port <port>`
   validates the new port, stops the old service, updates its configuration,
   and starts the new one; on failure it restores the prior configuration and
   service. Include explicit `status`, `restart`, and `remove` operations where
   the platform service manager supports them. Extend service support to other
   operating systems only with lifecycle and upgrade tests.
-- [ ] **1.2.6 — complete package resolution:** Resolve separately published
-  transitive package dependencies with exact versions, independently verified
-  publishers, and per-package provenance. Lock changes, package cache, and
-  updates must roll back on detected failures and recover safely after process
-  interruption. Integrate and test install, offline build, update, removal,
-  and Docker bundling over a multi-level registry graph.
+- [ ] **1.2.6 — transitive packages and durable business workflows:** Resolve
+  separately published transitive dependencies with exact versions, verified
+  publishers, and per-package provenance. Make lock/cache/install/update
+  recovery safe after process interruption. Also deliver typed tenant-query
+  and request/form foundations plus a transactional durable job queue with
+  idempotency, leases, bounded retries, and dead-letter state, verified against
+  MariaDB.
 - [ ] **1.2.7 — manageable and reusable modules:** Expose compiler-checked
   module settings through ordinary application pages with revision checks,
   secret redaction, and no implicit capability grants. Deliver a stable
@@ -326,13 +330,13 @@ compatibility behavior before changing syntax. See the detailed
   foundations, `public/`, production serving guidance, Apache/Nginx reverse
   proxy examples, and Linux systemd service installation with an explicit
   fixed port.
-- [~] **1.2.5 business workflow integration:** Complete bounded tenant-aware
-  query/form/job slices and `zelyra service change --port <port>` with stop,
-  restart, and rollback behavior. Expand service platforms only with lifecycle
-  tests.
-- [ ] **1.2.6 package resolution and recovery:** Complete separately published
-  transitive dependencies, per-package verified provenance, installable
-  updates, and crash recovery with multi-level registry integration tests.
+- [x] **1.2.5 operations and package foundations:** Fixed-port Linux service,
+  resident scheduler, static `public/`, signed registry foundation, and
+  portable package bundles are implemented and tested. Query/request/job
+  workflows move to 1.2.6.
+- [ ] **1.2.6 durable workflows and package recovery:** Complete separately
+  published transitive dependencies and crash recovery, then tenant-aware
+  query, typed request/form, and transactional durable job slices.
 - [ ] **1.2.7 module settings and integrations:** Provide compiler-checked
   application-page settings and reusable HostServices modules with tested CSV
   import/export packages. Add further providers only after reproducible

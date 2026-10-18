@@ -62,7 +62,7 @@ Eine Anwendung deklariert Identität und lokale Abhängigkeiten in
 name = "invoice_app"
 version = "1.0.0"
 entry = "main.zyl"
-zelyra = ">=1.1.0, <1.2.0"
+zelyra = ">=1.1.0, <2.0.0"
 
 [dependencies.money]
 path = "packages/money"
@@ -74,8 +74,8 @@ seinen Einstieg. `[package]` akzeptiert `name`, `version`, optional `entry`,
 `zelyra` und `effects`; Schreibfehler werden ausdrücklich gemeldet. Das
 optionale Feld `zelyra` ist eine SemVer-Vorgabe, die beim Laden des
 Paketgraphen gegen die Version der laufenden Zelyra-CLI geprüft wird. Zum
-Beispiel akzeptiert `">=1.1.0, <1.2.0"` kompatible 1.1-Versionen und weist
-andere CLI-Versionen zurück, bevor das Paket geprüft oder ausgeführt wird.
+Beispiel akzeptiert `">=1.1.0, <2.0.0"` kompatible 1.x-Versionen und weist
+CLI-Versionen ab 2.0 vor Paketprüfung oder Ausführung zurück.
 Die Vorgabe fließt in die Paketmanifest-Prüfsumme ein; eine Änderung macht das
 Lockfile ungültig. `zelyra module list` zeigt die Vorgabe in der Text- und
 JSON-Übersicht:
@@ -85,7 +85,7 @@ JSON-Übersicht:
 name = "money"
 version = "1.2.3"
 entry = "src/lib.zyl"
-zelyra = ">=1.1.0, <1.2.0"
+zelyra = ">=1.1.0, <2.0.0"
 effects = ["Database(read)"]
 ```
 

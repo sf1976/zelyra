@@ -6,6 +6,44 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+## 1.2.5 — 2026-10-18
+
+- Add a resident Linux systemd user service for Zelyra projects with explicit
+  fixed-port install/change/restart/status/remove operations, readiness checks,
+  occupied-port rejection, and rollback on failed changes. The resident
+  scheduler runs declared schedules only while that project service is active;
+  setup initializes required MariaDB outbox storage idempotently and does not
+  install host cron entries. / Einen residenten Linux-systemd-Benutzerdienst
+  mit ausdrücklich festgelegtem Port, Installations-/Änderungs-/Neustart-/Status-
+  und Entfernungsbefehlen, Bereitschaftsprüfung, Ablehnung belegter Ports und
+  Rollback bei fehlgeschlagenem Wechsel ergänzen. Deklarierte Zeitpläne laufen
+  nur im aktiven Projektdienst; Setup richtet benötigte MariaDB-Outbox-Tabellen
+  idempotent ein und installiert keine Host-Cronjobs.
+- Add a bounded Ed25519-signed source-package registry with explicit publisher
+  trust, exact-version fetch/update, digest and compatibility verification,
+  provenance in `zelyra.lock`, offline use after installation, and portable
+  Docker bundles. / Eine begrenzte Registry signierter Ed25519-Quellpakete mit
+  ausdrücklichem Herausgebervertrauen, exaktem Versionsabruf und -update,
+  Digest- und Kompatibilitätsprüfung, Herkunft in `zelyra.lock`, Offline-Nutzung
+  nach Installation und portablen Docker-Bundles ergänzen.
+- Serve bounded static assets from the generated `public/` directory with
+  route precedence, MIME types, GET/HEAD support, and path/symlink confinement;
+  add deployment guidance for Apache and Nginx reverse proxies. / Begrenzte
+  statische Dateien aus dem generierten Verzeichnis `public/` mit Vorrang
+  deklarierter Routen, MIME-Typen, GET/HEAD und Pfad-/Symlink-Schutz
+  ausliefern; Deploymenthinweise für Apache- und Nginx-Reverse-Proxys ergänzen.
+- Improve Studio's interactive run console, make schedule status observable,
+  and add in-place array-index updates to MIR/Bytecode while keeping AST as the
+  reference backend. / Die interaktive Studio-Programmausgabe und den
+  Zeitplanstatus verbessern sowie In-place-Indexupdates für MIR/Bytecode
+  ergänzen; AST bleibt Referenzbackend.
+- Keep tenant-query HIR, the complete typed request/form lifecycle, and durable
+  transactional jobs in 1.2.6; keep transitive package crash recovery in that
+  release as well. / Tenant-Query-HIR, den vollständigen typisierten
+  Request-/Form-Lifecycle und dauerhafte transaktionale Jobs für 1.2.6
+  vorsehen; auch die Absturz-Wiederherstellung transitive Pakete gehört in
+  dieses Release.
+
 ## 1.1.5 — 2026-10-17
 
 - Add optional `zelyra` SemVer compatibility requirements to local package
@@ -29,22 +67,6 @@ releases follow Semantic Versioning independently of the language line.
   database. / Ein wiederverwendbares, nebenwirkungsfreies Paket `csv_import`
   zum Geschäftsmodule-Beispiel hinzufügen. Es prüft nicht leere Kopfspalten
   und Zeilenbreiten, ohne in eine Datenbank zu schreiben.
-- Add experimental Ed25519-signed source packages, explicit publisher trust,
-  static registry indexes, package search, and exact-version installation and
-  updates. Multi-alias update plans validate all packages before switching the
-  manifest and lock; cache cleanup previews by default and retains versions
-  still used by the lock. Registry downloads are explicit, and installed
-  projects remain usable offline. Separately published transitive dependencies
-  and application-served settings pages remain roadmap work. / Experimentelle
-  Ed25519-Signaturen für Quellpakete, ausdrückliches Herausgebervertrauen,
-  statische Registry-Indizes, Paketsuche sowie Installation und Updates
-  exakter Versionen ergänzen. Mehrfachupdates prüfen erst alle Pakete und
-  schalten dann Manifest und Lockfile um; Cachebereinigung zeigt standardmäßig
-  nur eine Vorschau und erhält noch gesperrte Versionen. Registry-Downloads
-  erfolgen ausdrücklich; installierte Projekte bleiben offline nutzbar.
-  Separat veröffentlichte transitive Abhängigkeiten und Einstellungsseiten
-  bleiben Roadmap-Arbeit.
-
 ## 1.1.2 — 2026-10-17
 
 - Remove the experimental Laravel analyzer and scaffold command from the CLI, current documentation, and shipped tests. Preserve its source and historical reports in a separate archive; this release does not include a Laravel importer. / Den experimentellen Laravel-Analysator und Gerüstbefehl aus CLI, aktueller Dokumentation und Tests entfernen. Quellcode und historische Berichte bleiben separat archiviert; dieses Release enthält keinen Laravel-Importer.

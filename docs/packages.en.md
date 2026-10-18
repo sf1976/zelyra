@@ -57,7 +57,7 @@ An application declares its identity and local dependencies in `zelyra.toml`:
 name = "invoice_app"
 version = "1.0.0"
 entry = "main.zyl"
-zelyra = ">=1.1.0, <1.2.0"
+zelyra = ">=1.1.0, <2.0.0"
 
 [dependencies.money]
 path = "packages/money"
@@ -69,8 +69,8 @@ entry. `[package]` accepts `name`, `version`, optional `entry`, `zelyra`, and
 `effects`, so misspelled settings are reported instead of silently ignored.
 The optional `zelyra` field is a SemVer requirement checked against the running
 Zelyra CLI version whenever the package graph is loaded. For example,
-`">=1.1.0, <1.2.0"` accepts compatible 1.1 releases and rejects other CLI
-versions before the package is checked or run. It is part of the package
+`">=1.1.0, <2.0.0"` accepts compatible 1.x releases and rejects CLI versions
+2.0 and later before the package is checked or run. It is part of the package
 manifest checksum, so changing it makes the lock stale. `zelyra module list`
 includes this requirement in its human and JSON inventories:
 
@@ -79,7 +79,7 @@ includes this requirement in its human and JSON inventories:
 name = "money"
 version = "1.2.3"
 entry = "src/lib.zyl"
-zelyra = ">=1.1.0, <1.2.0"
+zelyra = ">=1.1.0, <2.0.0"
 effects = ["Database(read)"]
 ```
 

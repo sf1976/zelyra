@@ -11,13 +11,18 @@ Business-, Datenbank- und Webanwendungen. Schemaabhängiges SQL, Formulare,
 CRUD, Views und Geschäftslogik greifen ineinander; gewöhnlicher Programmcode
 und natives SQL bleiben jederzeit möglich.
 
-> **Release 1.1.5 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.1.5)
+> **Release 1.2.5 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.2.5)
 >
 > Die Compilerprüfung und der Verifier decken klar abgegrenzte Bereiche ab. Sie beweisen nicht die Korrektheit beliebiger Anwendungen. Prüfe vor dem Einsatz die unterstützten Abläufe und Grenzen in der jeweiligen Dokumentation.
 
-Zelyra 1.1.5 ergänzt offline nutzbare lokale Pakete mit deterministischen
-Lockfiles, typisierten Paketeinstellungen, Modulplanung/-bundles und einem
-geprüften Paketgerüst-Befehl. Siehe die [Release-Notizen 1.1.5](docs/release-notes/1.1.5.de.md) und den [Paketleitfaden](docs/packages.de.md). Zelyra 1.1.2 entfernte den experimentellen Laravel-Analysator und Gerüstbefehl; siehe die [Release-Notizen 1.1.2](docs/release-notes/1.1.2.de.md). Zelyra 1.1.1 enthält die Studio-Korrekturen aus den
+Zelyra 1.2.5 ergänzt signierte Quellpaket-Registries mit Herausgebervertrauen,
+einen Linux-systemd-Dienst mit festem Port und residentem Scheduler sowie
+geschützte statische Dateien aus `public/`. Siehe die
+[Release-Notizen 1.2.5](docs/release-notes/1.2.5.de.md), den
+[Paketleitfaden](docs/packages.de.md) und den
+[Deployment-Leitfaden](docs/deployment.de.md). Zelyra 1.1.5 ergänzte den
+lokalen Offline-Paketablauf mit deterministischen Lockfiles und typisierten
+Paketeinstellungen. Zelyra 1.1.2 entfernte den experimentellen Laravel-Analysator und Gerüstbefehl; siehe die [Release-Notizen 1.1.2](docs/release-notes/1.1.2.de.md). Zelyra 1.1.1 enthält die Studio-Korrekturen aus den
 [Release-Notizen 1.1.1](docs/release-notes/1.1.1.de.md). Zelyra 1.1.0 ergänzte
 ein offlinefähiges, eingebettetes Studio mit Sprachdiensten und einen
 eigenständigen LSP sowie typgeprüfte
@@ -30,11 +35,11 @@ den [Release-Notizen 1.1.0](docs/release-notes/1.1.0.de.md), im
 
 Die Sprachkompatibilitätslinie bleibt `0.1`; Compiler-Releases ändern sie nicht automatisch. „Korrektheit beweisen“ ist ein Entwicklungsziel: Der Verifier unterscheidet geprüfte, zur Laufzeit geprüfte und nicht bewiesene Bereiche, ist aber kein allgemeiner Theorembeweiser.
 
-## Was Zelyra 1.1.5 bietet
+## Was Zelyra 1.2.5 bietet
 
 Zelyra verbindet Sprache, Compiler, Datenbank, Webanwendung und Studio in
-einem Arbeitsablauf. Release 1.1.5 behält die Funktionen aus 1.1.2, 1.1.1 und
-1.1.0 bei und ergänzt den lokalen Paketablauf:
+einem Arbeitsablauf. Release 1.2.5 behält die Funktionen aus 1.1.5, 1.1.2,
+1.1.1 und 1.1.0 bei und ergänzt Betriebs- und Paketfunktionen:
 
 - statisch geprüfte Geschäftslogik und schemaabhängiges SQL;
 - MariaDB als primäre Laufzeit sowie geprüfte MySQL- und PostgreSQL-Abläufe;
@@ -58,6 +63,14 @@ einem Arbeitsablauf. Release 1.1.5 behält die Funktionen aus 1.1.2, 1.1.1 und
   serverseitiger Rechnungsnummer und vollständiger deutscher und englischer
   Quelltexterklärung;
 - CLI-Werkzeuge für Routen, Setup, Diagnose, Datenbank, Audit und SMTP.
+- Linux-systemd-Benutzerdienst mit festen Ports, Status/Neustart/Entfernung und
+  geprüftem Portwechsel mit Rollback; kein automatischer Portwechsel.
+- Residente Zeitpläne ausschließlich im aktiven installierten Dienst,
+  idempotente Outbox-Einrichtung und `zelyra schedule status` ohne Host-Cron.
+- Signierte Quellpakete mit explizitem Herausgebervertrauen, Registry-Suche,
+  exakten Updates, Lockfile-Herkunft und portablen Docker-Bundles.
+- Statische `public/`-Dateien mit MIME-Typen, GET/HEAD, Route-Vorrang und
+  Pfad-/Symlink-Schutz; dokumentierter Apache-/Nginx-Proxybetrieb.
 - Offline-Lokalpakete mit SemVer-Kompatibilität, deterministischen
   Quell-Lockfiles, ausdrücklichen Importen, geprüften Paketplänen/-bundles,
   typisierten Einstellungen und `zelyra module init`; wiederverwendbare,
@@ -65,6 +78,9 @@ einem Arbeitsablauf. Release 1.1.5 behält die Funktionen aus 1.1.2, 1.1.1 und
 - If-Ausdrücke, Record-Updates, typisierte Lambdas, geschützte verschachtelte
   Muster, Tupel, Stringinterpolation und ausdrücklich veränderliche lokale
   Arrays; `--max-steps` stoppt unbeschränkte Auswertung mit quellgenauer Diagnose.
+- Die Grenzen dieses Releases sind in den
+  [Release-Notizen 1.2.5](docs/release-notes/1.2.5.de.md) beschrieben; ein
+  allgemeines transaktionales Job- und Query-System ist noch nicht enthalten.
 - Lokales Text-PDF-Rendering und geprüfte PDF-Outbox-Anhänge mit Größen- und
   Zeilenlimits. Das Renderer-PDF übernimmt keine CSS-Layouts, Bilder oder
   Diagramme; für grafische Ausdrucke bleibt die Browser-Druckansicht verfügbar.
