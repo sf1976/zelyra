@@ -1,0 +1,39 @@
+import "zelyra/ui" as ui
+
+database main {
+    engine: mariadb
+}
+
+table dvds {
+    id: Id primary auto
+    title: String(200) required
+    release_year: Int
+    genre: String(80)
+}
+
+page "/dvds" {
+    load a_dvds = sql<Dvd[]> {
+        SELECT id, title, release_year, genre
+        FROM dvds
+        WHERE title LIKE 'A%'
+        ORDER BY title
+    }
+
+    html {
+        <h1>DVDs</h1>
+        <p>Die Liste und der Dialog verwenden dieselben beim Seitenaufruf geladenen Datensätze.</p>
+        <Dialog
+            title="DVDs mit Anfangsbuchstabe 'A'"
+            open_label="Nur DVDs mit 'A' anzeigen"
+        >
+            <ul>
+                for dvd in a_dvds {
+                    <li>
+                        <strong>{dvd.title}</strong>
+                        ({dvd.release_year}) – {dvd.genre}
+                    </li>
+                }
+            </ul>
+        </Dialog>
+    }
+}

@@ -367,5 +367,6 @@
   "module_settings.enter_integer": "Gib eine ganze Zahl ein.",
   "module_settings.enter_finite_number": "Gib eine endliche Zahl ein.",
   "module_settings.choose_boolean": "Wähle true oder false.",
-  "module_settings.unsupported_type": "Dieser Typ von Moduleinstellung wird vom Webeditor nicht unterstützt."
+  "module_settings.unsupported_type": "Dieser Typ von Moduleinstellung wird vom Webeditor nicht unterstützt.",
+  "ui.dialog.close": "Schließen"
 }

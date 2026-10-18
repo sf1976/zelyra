@@ -367,5 +367,6 @@
   "module_settings.enter_integer": "Enter a whole number.",
   "module_settings.enter_finite_number": "Enter a finite number.",
   "module_settings.choose_boolean": "Choose true or false.",
-  "module_settings.unsupported_type": "This module setting type is not supported by the web editor."
+  "module_settings.unsupported_type": "This module setting type is not supported by the web editor.",
+  "ui.dialog.close": "Close"
 }
