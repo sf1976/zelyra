@@ -714,7 +714,9 @@ fn default_design_system_covers_all_generated_state_families_responsively() {
     }
     assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains("@media (max-width: 900px)"));
     assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains("@media (max-width: 600px)"));
-    assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains(".z-generated-page .zelyra-crud-form-card form"));
+    assert!(
+        ZELYRA_DESIGN_SYSTEM_CSS.contains(":where(html[data-z-ui]) .zelyra-crud-form-card form")
+    );
     assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains(".z-query-controls__fields"));
 }
 
