@@ -351,5 +351,6 @@
   "mfa.try_later": "Try again later.",
   "mfa.setup_again": "Start MFA setup again.",
   "mfa.already_enabled": "MFA is already enabled.",
-  "mfa.not_enabled": "MFA is not enabled."
+  "mfa.not_enabled": "MFA is not enabled.",
+  "ui.dialog.close": "Close"
 }

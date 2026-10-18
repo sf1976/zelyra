@@ -270,7 +270,7 @@ page "/ui/components" {
                         <slot name="first"><p>Die Pfeiltasten wechseln zwischen Tabs.</p></slot>
                         <slot name="second"><p>Ohne JavaScript funktionieren die Sprunglinks und beide Inhalte bleiben sichtbar.</p></slot>
                     </Tabs>
-                    <Dialog id="ui-example-dialog" title="Aktion prüfen" open_label="Dialog öffnen" close_label="Schließen">
+                    <Dialog title="Aktion prüfen" open_label="Dialog öffnen">
                         <p>Escape schließt den nativen Dialog und gibt den Fokus an die öffnende Schaltfläche zurück.</p>
                     </Dialog>
                 </Card>

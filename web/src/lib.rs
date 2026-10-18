@@ -10429,12 +10429,8 @@ fn render_template(
     params: &HashMap<String, String>,
     data: &LoadedRouteData,
 ) -> String {
-    normalize_ui_boolean_attributes(&render_template_fragment(
-        template,
-        params,
-        &data.values,
-        &data.collections,
-    ))
+    let rendered = render_template_fragment(template, params, &data.values, &data.collections, &[]);
+    normalize_ui_boolean_attributes(&ensure_auto_dialog_ids_unique(&rendered))
 }
 
 /// Render an already composed page or view with explicit sample data only.
@@ -10445,12 +10441,207 @@ pub fn render_static_template_preview(
     values: &HashMap<String, String>,
     collections: &HashMap<String, Vec<HashMap<String, String>>>,
 ) -> String {
-    normalize_ui_boolean_attributes(&render_template_fragment(
-        template,
-        values,
-        values,
-        collections,
-    ))
+    let rendered = render_template_fragment(template, values, values, collections, &[]);
+    normalize_ui_boolean_attributes(&ensure_auto_dialog_ids_unique(&rendered))
+}
+
+fn ensure_auto_dialog_ids_unique(html: &str) -> String {
+    let tags = html_tag_ranges(html);
+    let mut explicit_ids = HashSet::new();
+    let mut auto_keys = Vec::<String>::new();
+    for (start, end) in &tags {
+        let tag = &html[*start..*end];
+        let is_auto = [
+            "data-z-dialog-auto",
+            "data-z-dialog-auto-open",
+            "data-z-dialog-auto-title",
+        ]
+        .iter()
+        .any(|name| html_tag_attribute(tag, name).is_some());
+        if !is_auto {
+            if let Some(id) = html_tag_attribute(tag, "id") {
+                explicit_ids.insert(id.to_owned());
+            }
+        }
+        if let Some(key) = html_tag_attribute(tag, "data-z-dialog-auto") {
+            auto_keys.push(key);
+        }
+    }
+    if auto_keys.is_empty() {
+        return html.to_owned();
+    }
+
+    let mut candidates = HashMap::<String, Vec<String>>::new();
+    let mut instances = HashMap::<String, usize>::new();
+    for key in auto_keys {
+        let conflicts = |candidate: &str, used: &HashSet<String>| {
+            [
+                candidate.to_owned(),
+                format!("{candidate}-open"),
+                format!("{candidate}-title"),
+            ]
+            .iter()
+            .any(|id| used.contains(id))
+        };
+        let instance = instances.entry(key.clone()).or_default();
+        let mut candidate = if *instance == 0 {
+            key.clone()
+        } else {
+            format!("{key}-auto-{}", *instance + 1)
+        };
+        let mut suffix = *instance + 2;
+        *instance += 1;
+        while conflicts(&candidate, &explicit_ids) {
+            candidate = format!("{key}-auto-{suffix}");
+            suffix += 1;
+        }
+        explicit_ids.insert(candidate.clone());
+        explicit_ids.insert(format!("{candidate}-open"));
+        explicit_ids.insert(format!("{candidate}-title"));
+        candidates.entry(key).or_default().push(candidate);
+    }
+    if candidates
+        .iter()
+        .all(|(key, values)| values.len() == 1 && values.first() == Some(key))
+    {
+        return html.to_owned();
+    }
+
+    let mut output = String::with_capacity(html.len());
+    let mut cursor = 0;
+    let mut dialog_seen = HashMap::<String, usize>::new();
+    let mut opener_seen = HashMap::<String, usize>::new();
+    let mut title_seen = HashMap::<String, usize>::new();
+    for (start, end) in tags {
+        output.push_str(&html[cursor..start]);
+        let mut tag = html[start..end].to_owned();
+        if let Some(key) = html_tag_attribute(&tag, "data-z-dialog-auto") {
+            let index = dialog_seen.entry(key.clone()).or_default();
+            if let Some(candidate) = candidates.get(&key).and_then(|values| values.get(*index)) {
+                *index += 1;
+                tag = rewrite_auto_dialog_tag(&tag, &key, candidate);
+            }
+        } else if let Some(key) = html_tag_attribute(&tag, "data-z-dialog-auto-open") {
+            let index = opener_seen.entry(key.clone()).or_default();
+            if let Some(candidate) = candidates.get(&key).and_then(|values| values.get(*index)) {
+                *index += 1;
+                tag = rewrite_auto_dialog_tag(&tag, &key, candidate);
+            }
+        } else if let Some(key) = html_tag_attribute(&tag, "data-z-dialog-auto-title") {
+            let index = title_seen.entry(key.clone()).or_default();
+            if let Some(candidate) = candidates.get(&key).and_then(|values| values.get(*index)) {
+                *index += 1;
+                tag = rewrite_auto_dialog_tag(&tag, &key, candidate);
+            }
+        }
+        output.push_str(&tag);
+        cursor = end;
+    }
+    output.push_str(&html[cursor..]);
+    output
+}
+
+fn html_tag_ranges(html: &str) -> Vec<(usize, usize)> {
+    let mut ranges = Vec::new();
+    let mut search_from = 0;
+    while let Some(relative_start) = html[search_from..].find('<') {
+        let start = search_from + relative_start;
+        let mut quote = None;
+        let mut end = None;
+        for (offset, character) in html[start..].char_indices().skip(1) {
+            match (quote, character) {
+                (Some(active), found) if active == found => quote = None,
+                (None, '"' | '\'') => quote = Some(character),
+                (None, '>') => {
+                    end = Some(start + offset + 1);
+                    break;
+                }
+                _ => {}
+            }
+        }
+        let Some(end) = end else { break };
+        ranges.push((start, end));
+        search_from = end;
+    }
+    ranges
+}
+
+fn html_tag_attribute(tag: &str, name: &str) -> Option<String> {
+    let marker = format!("{name}=\"");
+    let mut search_from = 0;
+    while let Some(relative) = tag[search_from..].find(&marker) {
+        let start = search_from + relative;
+        if start == 0 || tag.as_bytes()[start - 1].is_ascii_whitespace() {
+            let value_start = start + marker.len();
+            let end = value_start + tag[value_start..].find('"')?;
+            return Some(tag[value_start..end].to_owned());
+        }
+        search_from = start + marker.len();
+    }
+    None
+}
+
+fn replace_tag_attribute(tag: &str, name: &str, old: &str, new: &str) -> String {
+    let previous = format!("{name}=\"{old}\"");
+    let replacement = format!("{name}=\"{new}\"");
+    tag.replace(&previous, &replacement)
+}
+
+fn rewrite_auto_dialog_tag(tag: &str, key: &str, candidate: &str) -> String {
+    if html_tag_attribute(tag, "data-z-dialog-auto").as_deref() == Some(key) {
+        replace_tag_attribute(
+            &replace_tag_attribute(
+                &replace_tag_attribute(
+                    tag,
+                    "aria-labelledby",
+                    &format!("{key}-title"),
+                    &format!("{candidate}-title"),
+                ),
+                "data-z-dialog-auto",
+                key,
+                candidate,
+            ),
+            "id",
+            key,
+            candidate,
+        )
+    } else if html_tag_attribute(tag, "data-z-dialog-auto-open").as_deref() == Some(key) {
+        replace_tag_attribute(
+            &replace_tag_attribute(
+                &replace_tag_attribute(
+                    &replace_tag_attribute(
+                        tag,
+                        "id",
+                        &format!("{key}-open"),
+                        &format!("{candidate}-open"),
+                    ),
+                    "data-z-dialog-auto-open",
+                    key,
+                    candidate,
+                ),
+                "data-z-dialog-open",
+                key,
+                candidate,
+            ),
+            "aria-controls",
+            key,
+            candidate,
+        )
+    } else if html_tag_attribute(tag, "data-z-dialog-auto-title").as_deref() == Some(key) {
+        replace_tag_attribute(
+            &replace_tag_attribute(
+                tag,
+                "id",
+                &format!("{key}-title"),
+                &format!("{candidate}-title"),
+            ),
+            "data-z-dialog-auto-title",
+            key,
+            candidate,
+        )
+    } else {
+        tag.to_owned()
+    }
 }
 
 fn normalize_ui_boolean_attributes(source: &str) -> String {
@@ -10691,23 +10882,29 @@ fn render_template_fragment(
     params: &HashMap<String, String>,
     values: &HashMap<String, String>,
     collections: &HashMap<String, Vec<HashMap<String, String>>>,
+    loop_path: &[usize],
 ) -> String {
     if let Some(block) = next_template_for_block(template) {
         let Ok(block) = block else {
-            return render_interpolations(template, params, values);
+            let scoped = scope_dialog_auto_ids(template, loop_path);
+            return render_interpolations(&scoped, params, values);
         };
-        let mut rendered = render_interpolations(&template[..block.start], params, values);
+        let prefix = scope_dialog_auto_ids(&template[..block.start], loop_path);
+        let mut rendered = render_interpolations(&prefix, params, values);
         if let Some(rows) = collections.get(&block.collection) {
-            for row in rows {
+            for (index, row) in rows.iter().enumerate() {
                 let mut row_values = values.clone();
                 for (field, value) in row {
                     row_values.insert(format!("{}.{}", block.item, field), value.clone());
                 }
+                let mut row_path = loop_path.to_vec();
+                row_path.push(index);
                 rendered.push_str(&render_template_fragment(
                     &block.body,
                     params,
                     &row_values,
                     collections,
+                    &row_path,
                 ));
             }
         }
@@ -10716,10 +10913,46 @@ fn render_template_fragment(
             params,
             values,
             collections,
+            loop_path,
         ));
         return rendered;
     }
-    render_interpolations(template, params, values)
+    let scoped = scope_dialog_auto_ids(template, loop_path);
+    render_interpolations(&scoped, params, values)
+}
+
+/// Add a deterministic path suffix to auto-generated dialog IDs in a loop
+/// fragment. This is render-local and uses row positions, never process state.
+fn scope_dialog_auto_ids(fragment: &str, loop_path: &[usize]) -> String {
+    if loop_path.is_empty() {
+        return fragment.to_owned();
+    }
+    let suffix = loop_path
+        .iter()
+        .map(usize::to_string)
+        .collect::<Vec<_>>()
+        .join("-");
+    let mut output = String::with_capacity(fragment.len());
+    let mut cursor = 0;
+    for (start, end) in html_tag_ranges(fragment) {
+        output.push_str(&fragment[cursor..start]);
+        let tag = &fragment[start..end];
+        let key = html_tag_attribute(tag, "data-z-dialog-auto")
+            .or_else(|| html_tag_attribute(tag, "data-z-dialog-auto-open"))
+            .or_else(|| html_tag_attribute(tag, "data-z-dialog-auto-title"));
+        if let Some(key) = key {
+            output.push_str(&rewrite_auto_dialog_tag(
+                tag,
+                &key,
+                &format!("{key}-r{suffix}"),
+            ));
+        } else {
+            output.push_str(tag);
+        }
+        cursor = end;
+    }
+    output.push_str(&fragment[cursor..]);
+    output
 }
 
 fn render_interpolations(

@@ -548,13 +548,13 @@ pub component DataTableTools {
 
 pub component Dialog {
     props {
-        id: String
+        id: String?
         title: String
         open_label: String
-        close_label: String
+        close_label: String?
     }
     html {
-        <button class="z-button" type="button" id="{id}-open" data-z-dialog-open="{id}">{open_label}</button>
+        <button class="z-button" type="button" id="{id}-open" data-z-dialog-open="{id}" aria-controls="{id}" aria-haspopup="dialog">{open_label}</button>
         <dialog class="z-dialog" id="{id}" data-z-dialog aria-labelledby="{id}-title" open>
             <div class="z-dialog__header"><h2 id="{id}-title">{title}</h2><button class="z-button" type="button" data-z-dialog-close>{close_label}</button></div>
             <div class="z-dialog__body"><slot /></div>

@@ -3,6 +3,88 @@ use std::net::TcpListener;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[test]
+fn auto_dialog_ids_are_repeatable_and_unique_inside_collection_loops() {
+    let template = r#"
+<ul>
+for dvd in dvds {
+<li><span id="{dvd.collision}"></span>{dvd.title}<button id="z-dialog-auto-0000000000-open" data-z-dialog-auto-open="z-dialog-auto-0000000000" data-z-dialog-open="z-dialog-auto-0000000000" aria-controls="z-dialog-auto-0000000000">Open</button><dialog id="z-dialog-auto-0000000000" data-z-dialog data-z-dialog-auto="z-dialog-auto-0000000000" aria-labelledby="z-dialog-auto-0000000000-title"><h2 id="z-dialog-auto-0000000000-title" data-z-dialog-auto-title="z-dialog-auto-0000000000">DVD</h2><button data-z-dialog-close>Schließen</button><p>{dvd.title}</p></dialog></li>
+}
+</ul>
+"#;
+    let values = HashMap::new();
+    let collections = HashMap::from([(
+        "dvds".to_owned(),
+        vec![
+            HashMap::from([
+                ("title".to_owned(), "A & B".to_owned()),
+                (
+                    "collision".to_owned(),
+                    "z-dialog-auto-0000000000-r0".to_owned(),
+                ),
+            ]),
+            HashMap::from([
+                ("title".to_owned(), "C".to_owned()),
+                ("collision".to_owned(), "dvd-explicit-id".to_owned()),
+            ]),
+        ],
+    )]);
+    let first = render_static_template_preview(template, &values, &collections);
+    let repeated = render_static_template_preview(template, &values, &collections);
+    assert_eq!(
+        first, repeated,
+        "IDs are deterministic per rendered document"
+    );
+    assert_eq!(first.matches("data-z-dialog-auto=\"").count(), 2);
+    let first_id = "z-dialog-auto-0000000000-r0-auto-2";
+    let second_id = "z-dialog-auto-0000000000-r1";
+    assert!(first.contains(&format!("id=\"{first_id}\" data-z-dialog")));
+    assert!(first.contains(&format!(
+        "data-z-dialog-open=\"{first_id}\" aria-controls=\"{first_id}\""
+    )));
+    assert!(first.contains(&format!("aria-labelledby=\"{first_id}-title\"")));
+    assert!(first.contains(&format!("id=\"{second_id}\" data-z-dialog")));
+    assert!(first.contains(&format!(
+        "data-z-dialog-open=\"{second_id}\" aria-controls=\"{second_id}\""
+    )));
+    assert!(first.contains(&format!("aria-labelledby=\"{second_id}-title\"")));
+    assert!(
+        first.contains("id=\"z-dialog-auto-0000000000-r0\""),
+        "explicit conflicting ID remains untouched"
+    );
+    assert!(first.contains("A &amp; B"));
+    assert!(!first.contains("A & B"));
+    let concurrent_template = template.to_owned();
+    let concurrent_values = values.clone();
+    let concurrent_collections = collections.clone();
+    let concurrent = std::thread::spawn(move || {
+        render_static_template_preview(
+            &concurrent_template,
+            &concurrent_values,
+            &concurrent_collections,
+        )
+    });
+    assert_eq!(first, concurrent.join().expect("parallel render completes"));
+
+    let duplicate = r#"<button id="z-dialog-auto-0000000009-open" data-z-dialog-auto-open="z-dialog-auto-0000000009" data-z-dialog-open="z-dialog-auto-0000000009" aria-controls="z-dialog-auto-0000000009">Open</button><dialog id="z-dialog-auto-0000000009" data-z-dialog-auto="z-dialog-auto-0000000009" aria-labelledby="z-dialog-auto-0000000009-title"><h2 id="z-dialog-auto-0000000009-title" data-z-dialog-auto-title="z-dialog-auto-0000000009">Title</h2></dialog>"#;
+    let duplicate = format!("{duplicate}{duplicate}");
+    let duplicate_render = render_static_template_preview(&duplicate, &values, &HashMap::new());
+    assert_eq!(duplicate_render.matches("data-z-dialog-auto=\"").count(), 2);
+    assert!(duplicate_render.contains("id=\"z-dialog-auto-0000000009\" data-z-dialog-auto="));
+    assert!(duplicate_render.contains("id=\"z-dialog-auto-0000000009-auto-2\" data-z-dialog-auto="));
+    assert!(duplicate_render.contains("aria-controls=\"z-dialog-auto-0000000009-auto-2\""));
+    assert!(localize_html(
+        "<button data-zelyra-i18n=\"ui.dialog.close\">Schließen</button>",
+        UiLanguage::English,
+    )
+    .contains(">Close</button>"));
+    assert!(localize_html(
+        "<button data-zelyra-i18n=\"ui.dialog.close\">Schließen</button>",
+        UiLanguage::German,
+    )
+    .contains(">Schließen</button>"));
+}
+
+#[test]
 fn chained_audit_insert_uses_previous_hash_and_sha256() {
     let queries = audit_insert_queries(
         "audit_log",

@@ -211,19 +211,99 @@ try {
   assert.equal(await secondTab.getAttribute("aria-selected"), "true");
   assert.match(await page.getByRole("tabpanel").innerText(), /Sprunglinks und beide Inhalte (?:bleiben )?sichtbar/);
   const openDialog = page.getByRole("button", { name: "Dialog öffnen" });
+  const dialog = page.locator("dialog[data-z-dialog]");
+  const dialogId = await dialog.getAttribute("id");
+  assert.match(dialogId, /^z-dialog-auto-/);
+  assert.equal(await openDialog.getAttribute("aria-controls"), dialogId);
+  assert.equal(await dialog.getAttribute("aria-labelledby"), `${dialogId}-title`);
+  assert.equal(await openDialog.getAttribute("type"), "button");
+  await page.evaluate((id) => {
+    const opener = document.querySelector(`[data-z-dialog-open="${id}"]`);
+    const dialog = document.getElementById(id);
+    const placeholder = document.createComment("restore dialog opener");
+    opener.before(placeholder);
+    const form = document.createElement("form");
+    form.id = "dialog-opener-form-fixture";
+    form.dataset.submissions = "0";
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      form.dataset.submissions = String(Number(form.dataset.submissions) + 1);
+    });
+    form.append(opener);
+    document.body.append(form);
+    const autofocus = document.createElement("button");
+    autofocus.type = "button";
+    autofocus.autofocus = true;
+    autofocus.textContent = "Autofocus fixture";
+    dialog.querySelector(".z-dialog__body").append(autofocus);
+  }, dialogId);
   await openDialog.click();
-  const dialog = page.getByRole("dialog", { name: "Aktion prüfen" });
-  const dialogState = await page.locator("#ui-example-dialog").evaluate((element) => ({
+  const dialogState = await dialog.evaluate((element) => ({
     open: element.open,
     ready: element.dataset.zReady,
     enhanced: element.dataset.zEnhanced,
-    opener: document.querySelector('[data-z-dialog-open="ui-example-dialog"]')?.dataset.zReady,
+    opener: document.querySelector(`[data-z-dialog-open="${element.id}"]`)?.dataset.zReady,
+    focused: document.activeElement?.textContent.trim(),
   }));
   assert.equal(dialogState.open, true, `dialog did not open: ${JSON.stringify({ dialogState, pageErrors })}`);
+  assert.equal(dialogState.focused, "Autofocus fixture", "native autofocus takes precedence over the close button");
+  assert.equal(
+    await page.evaluate((id) => {
+      const opener = document.querySelector(`[data-z-dialog-open="${id}"]`);
+      const dialog = document.getElementById(id);
+      opener.focus();
+      return dialog.contains(document.activeElement);
+    }, dialogId),
+    true,
+    "the modal dialog keeps the background inert to programmatic focus",
+  );
   await page.getByRole("button", { name: "Schließen" }).waitFor();
+  await page.keyboard.press("Tab");
+  const tabState = await page.evaluate(() => ({
+    activeTag: document.activeElement?.tagName,
+    activeId: document.activeElement?.id,
+    insideDialog: Boolean(document.activeElement.closest("dialog")),
+    dialogOpen: document.querySelector("dialog[data-z-dialog]")?.open,
+  }));
+  assert.equal(tabState.insideDialog, true, `native modal keyboard navigation remains inside the dialog: ${JSON.stringify(tabState)}`);
   await page.keyboard.press("Escape");
   await dialog.waitFor({ state: "hidden" });
   assert.equal(await openDialog.evaluate((element) => element === document.activeElement), true, "dialog close returns focus to its opener");
+  assert.equal(await page.locator("#dialog-opener-form-fixture").getAttribute("data-submissions"), "0", "dialog opener does not submit its containing form");
+  await page.evaluate(() => {
+    const form = document.querySelector("#dialog-opener-form-fixture");
+    const opener = form.querySelector("[data-z-dialog-open]");
+    const placeholder = document.createTreeWalker(document.body, NodeFilter.SHOW_COMMENT);
+    let marker;
+    while ((marker = placeholder.nextNode())) {
+      if (marker.data === "restore dialog opener") break;
+    }
+    marker.replaceWith(opener);
+    form.remove();
+    document.querySelector("dialog[data-z-dialog] .z-dialog__body button[autofocus]").remove();
+  });
+  await page.setViewportSize({ width: 360, height: 700 });
+  await dialog.evaluate((element) => {
+    const body = element.querySelector(".z-dialog__body");
+    for (let index = 0; index < 30; index += 1) {
+      const paragraph = document.createElement("p");
+      paragraph.dataset.dialogTestContent = "true";
+      paragraph.textContent = `Long dialog content ${index}`;
+      body.append(paragraph);
+    }
+  });
+  await openDialog.click();
+  const narrowDialog = await dialog.evaluate((element) => ({
+    width: element.getBoundingClientRect().width,
+    viewport: innerWidth,
+    scrollHeight: element.querySelector(".z-dialog__body").scrollHeight,
+    clientHeight: element.querySelector(".z-dialog__body").clientHeight,
+  }));
+  assert.ok(narrowDialog.width <= narrowDialog.viewport, `dialog exceeds a narrow viewport: ${JSON.stringify(narrowDialog)}`);
+  assert.ok(narrowDialog.scrollHeight > narrowDialog.clientHeight, `long dialog content should scroll inside the body: ${JSON.stringify(narrowDialog)}`);
+  await page.keyboard.press("Escape");
+  await page.setViewportSize({ width: 1440, height: 960 });
+  await dialog.evaluate((element) => element.querySelectorAll("p[data-dialog-test-content]").forEach((paragraph) => paragraph.remove()));
   await page.getByRole("button", { name: "Komponentenübersicht drucken" }).click();
   assert.equal(await page.evaluate(() => window.__zelyraPrintCalls), 1, "PrintAction opens the native print flow");
   assert.equal(
@@ -261,7 +341,7 @@ try {
   });
   await noJsPage.goto(`${baseUrl}/ui/components`, { waitUntil: "networkidle" });
   assert.equal(await noJsPage.locator("#invoice-app-navigation").isVisible(), true, "navigation stays visible without JavaScript");
-  assert.equal(await noJsPage.locator("#ui-example-dialog").isVisible(), true, "dialog content stays available without JavaScript");
+  assert.equal(await noJsPage.getByRole("dialog", { name: "Aktion prüfen" }).isVisible(), true, "dialog content stays available without JavaScript");
   assert.equal(await noJsPage.locator(".z-tabs__panel:visible").count(), 2, "tab contents stay visible without JavaScript");
   assert.equal(await noJsPage.getByRole("button", { name: "Komponentenübersicht drucken" }).isVisible(), true);
   await noJsPage.close();

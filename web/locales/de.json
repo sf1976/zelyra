@@ -351,5 +351,6 @@
   "mfa.try_later": "Versuche es später erneut.",
   "mfa.setup_again": "Starte die MFA-Einrichtung erneut.",
   "mfa.already_enabled": "MFA ist bereits aktiviert.",
-  "mfa.not_enabled": "MFA ist nicht aktiviert."
+  "mfa.not_enabled": "MFA ist nicht aktiviert.",
+  "ui.dialog.close": "Schließen"
 }

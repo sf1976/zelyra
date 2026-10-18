@@ -159,8 +159,45 @@ schließendem Komponenten-Tag.
 | `FormActions` | — | Standardinhalt; umbrechender Aktionsbereich |
 | `ErrorSummary` | `title: String` | Standardinhalt mit Fehler-Listeneinträgen; `role="alert"` |
 | `ConfirmationForm` | `action`, `message`, `confirm_label`, `cancel_href: String` | `security`; echtes POST-Formular. Route muss CSRF, Authentifizierung und Rechte prüfen |
-| `Dialog` | `id`, `title`, `open_label`, `close_label: String` | Standardinhalt; nativ, mit JavaScript modal, Escape und Fokusrückgabe; ohne JavaScript offen verfügbar |
+| `Dialog` | `title`, `open_label: String`; `id`, `close_label: String?` | Standardinhalt; automatische deterministische IDs, native modale Bedienung mit Escape und Fokusrückgabe; ohne JavaScript offen verfügbar; Standard für `close_label` ist lokalisiertes „Schließen“ |
 | `ToastRegion`, `Toast` | `Toast`: `message: String`, `appearance: UiAppearance?` | Region hat Standardinhalt; Toast ist eine ergänzende Live-Rückmeldung |
+
+### Dialoge mit sicheren Standardwerten
+
+Für den üblichen Dialog reichen Titel, öffnende Beschriftung und Inhalt:
+
+```zelyra
+<Dialog title="DVDs mit Anfangsbuchstabe 'A'"
+        open_label="Nur DVDs mit 'A' anzeigen">
+    <ul>
+        for dvd in a_dvds {
+            <li><strong>{dvd.title}</strong> ({dvd.release_year}) – {dvd.genre}</li>
+        }
+    </ul>
+</Dialog>
+```
+
+Ein einfacher Server-View unterstützt `for item in collection { ... }` und
+Feldinterpolation. Ein `if len(...)`-Block innerhalb von HTML ist derzeit keine
+View-Syntax; das Beispiel lässt die Liste deshalb bei null Treffern leer.
+Die ausführbare Datenbankbeispielseite steht unter
+[`examples/dvd_dialog/main.zyl`](../examples/dvd_dialog/main.zyl). Ihre `load`
+Abfrage läuft wie andere Seitenabfragen beim Seitenaufruf; das Öffnen des
+Dialogs lädt keine Daten nach.
+
+Ohne `id` vergibt Zelyra anhand der Komponentenreihenfolge reproduzierbare
+IDs. Bei Dialogen innerhalb von `for`-Schleifen kommt der Zeilenindex als
+deterministischer Suffix hinzu. Auslöser, Dialog und Überschrift werden
+automatisch verknüpft. Eine angegebene `id` bleibt unverändert. Ohne
+`close_label` kommt die Beschriftung aus dem bestehenden UI-Lokalisierungskatalog
+(Deutsch: „Schließen“). `id` und `close_label` lassen sich bei Bedarf explizit
+setzen. Die native Schließen-Schaltfläche verwendet `type="button"`, damit sie
+auch innerhalb eines Formulars keine Übermittlung auslöst.
+
+Mit JavaScript wird das native `<dialog>` durch `showModal()` geöffnet. Der
+Browser verwaltet modalen Hintergrund, Escape, Fokusfalle, `autofocus` und die
+Fokusrückgabe. Ohne JavaScript bleibt der Inhalt als offenes Dialogelement
+sichtbar und nutzbar.
 
 ### Daten und Geschäftsdokumente
 
