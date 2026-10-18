@@ -140,7 +140,9 @@ abgeschlossen.
   Anwendungseigene Moduleinstellungen sind mit serverseitiger Autorisierung,
   CSRF, Schemaprüfung, Redaktion und ausdrücklich definiertem Verhalten nach
   Änderungen umgesetzt. Der öffentliche Host-Allowlist- und Forwarded-Header-
-  Vertrag ist dokumentiert und getestet; Apache-/Nginx-Laufzeittests fehlen noch.
+  Vertrag ist dokumentiert und getestet; Nginx lieferte im Loopback-Container
+  statische Dateien aus und leitete Routen weiter. Apache- und TLS-Integrationstests
+  fehlen noch.
   Paket-/Modulverträge für Einstellungen,
   Effekte, Jobs, Datenzugriff und HostServices über AST, MIR und Bytecode
   nachweisen oder nicht unterstützte Pfade in jedem Backend mit stabilen

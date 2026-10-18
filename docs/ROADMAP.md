@@ -130,7 +130,8 @@ security and compatibility gates stated for that milestone.
   Application-served module settings are implemented with server-side authorization,
   CSRF, schema validation, redaction, and explicit runtime behavior after a
   change. The public host allowlist and forwarded-header contract are documented
-  and tested; Apache/Nginx runtime tests remain open. Prove package/module contracts for settings, effects, jobs, data
+  and tested; a loopback Nginx container serves static files and proxies routes,
+  while Apache and TLS integration tests remain open. Prove package/module contracts for settings, effects, jobs, data
   access, and HostServices across AST, MIR, and Bytecode, or make unsupported
   paths fail closed with stable diagnostics. Secure `public/`, static assets,
   and Apache/Nginx forwarded-header and allowed-host behavior with deployment
