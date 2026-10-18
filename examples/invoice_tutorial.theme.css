@@ -107,7 +107,7 @@
 .tutorial-content > section, .tutorial-content > article { margin-block: 1rem; }
 .tutorial-content .zelyra-query-controls { margin-block: 1rem 1.5rem; }
 .tutorial-content .zelyra-query-controls legend { color: #345746; }
-.tutorial-content .z-query-controls__fields { grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); }
+.tutorial-content .z-query-controls__fields { grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); }
 .tutorial-content .zelyra-query-controls label { min-width: 0; color: #52665b; font-size: .78rem; font-weight: 700; }
 .tutorial-content .zelyra-query-controls input,
 .tutorial-content .zelyra-query-controls select { width: 100%; min-width: 0; }
