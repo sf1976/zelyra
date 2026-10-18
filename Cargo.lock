@@ -2202,6 +2202,7 @@ dependencies = [
  "toml_edit",
  "ureq",
  "url",
+ "windows-sys 0.61.2",
  "zelyra-ast",
  "zelyra-database",
  "zelyra-forms",

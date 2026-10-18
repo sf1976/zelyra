@@ -441,11 +441,49 @@ fn atomic_replace(path: &Path, contents: &[u8]) -> std::io::Result<()> {
         return Err(error);
     }
     drop(file);
-    if let Err(error) = fs::rename(&temp, path) {
+    if let Err(error) = replace_file(&temp, path) {
         let _ = fs::remove_file(&temp);
         return Err(error);
     }
     Ok(())
+}
+
+#[cfg(not(windows))]
+fn replace_file(temp: &Path, path: &Path) -> std::io::Result<()> {
+    fs::rename(temp, path)
+}
+
+#[cfg(windows)]
+fn replace_file(temp: &Path, path: &Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::{
+        MoveFileExW, MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH,
+    };
+
+    let source = temp
+        .as_os_str()
+        .encode_wide()
+        .chain(Some(0))
+        .collect::<Vec<_>>();
+    let destination = path
+        .as_os_str()
+        .encode_wide()
+        .chain(Some(0))
+        .collect::<Vec<_>>();
+    // SAFETY: both paths are NUL-terminated UTF-16 buffers alive for this call.
+    // The flags atomically replace the destination and request durable metadata.
+    let result = unsafe {
+        MoveFileExW(
+            source.as_ptr(),
+            destination.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    };
+    if result == 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -534,6 +572,16 @@ mod tests {
         assert!(second.try_lock_exclusive().is_err());
         drop(first);
         second.try_lock_exclusive().unwrap();
+    }
+
+    #[test]
+    fn atomic_settings_replace_updates_an_existing_file() {
+        let state = state();
+        let path = state.root.join(SETTINGS_FILE);
+        fs::write(&path, "old = true\n").unwrap();
+        atomic_replace(&path, b"new = true\n").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "new = true\n");
+        let _ = fs::remove_dir_all(state.root.clone());
     }
 
     #[test]
