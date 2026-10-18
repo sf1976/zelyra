@@ -1689,7 +1689,7 @@ fn validate_program(
     if !validate_components(path, &program) {
         return Err(());
     }
-    if !validate_form_ui_appearances(path, &program) {
+    if !validate_form_properties(path, &program) {
         return Err(());
     }
     let schema = match build_schema(&program) {
@@ -3398,7 +3398,7 @@ fn component_prop_accepts(
     }
 }
 
-fn validate_form_ui_appearances(path: &str, program: &zelyra_ast::Program) -> bool {
+fn validate_form_properties(path: &str, program: &zelyra_ast::Program) -> bool {
     let mut valid = true;
     for form in &program.forms {
         for field in &form.fields {

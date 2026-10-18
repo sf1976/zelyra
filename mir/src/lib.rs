@@ -1824,8 +1824,19 @@ fn verify_expression_kind(
                     .cmp(&right.table)
                     .then_with(|| left.mode.as_str().cmp(right.mode.as_str()))
             });
-            let mut expected_parameter_names =
-                zelyra_database::sql_parameter_names(query).unwrap_or_default();
+            let mut expected_parameter_names = match zelyra_database::sql_parameter_names(query) {
+                Ok(names) => names,
+                Err(error) => {
+                    errors.push(MirError {
+                        code: "E-MIR-VERIFY-004",
+                        message: format!(
+                            "typed SQL query plan has invalid SQL parameters: {error}"
+                        ),
+                        span: expression.span,
+                    });
+                    Vec::new()
+                }
+            };
             let mut actual_parameters = query_plan
                 .parameters
                 .iter()
