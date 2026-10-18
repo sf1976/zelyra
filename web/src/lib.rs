@@ -8701,15 +8701,15 @@ fn render_crud_list_with_actions(
     }
     html.push_str("<form method=\"get\" action=\"");
     html.push_str(&html_escape(&crud.path));
-    html.push_str("\"><fieldset class=\"zelyra-query-controls\"><legend>");
+    html.push_str("\"><fieldset class=\"z-fieldset zelyra-query-controls\"><legend>");
     html.push_str(&tr(language, "query.legend"));
-    html.push_str("</legend><div class=\"z-query-controls__fields\"><label for=\"search\">");
+    html.push_str("</legend><div class=\"z-query-controls__fields\"><div class=\"z-field\"><label for=\"search\">");
     html.push_str(&tr(language, "query.search"));
-    html.push_str("</label><input id=\"search\" name=\"search\" value=\"");
+    html.push_str("</label><input class=\"z-input\" id=\"search\" name=\"search\" value=\"");
     html.push_str(&html_escape(search));
-    html.push_str("\"><label for=\"sort\">");
+    html.push_str("\"></div><div class=\"z-field\"><label for=\"sort\">");
     html.push_str(&tr(language, "query.sort"));
-    html.push_str("</label><select id=\"sort\" name=\"sort\">");
+    html.push_str("</label><select class=\"z-select\" id=\"sort\" name=\"sort\">");
     for column in sort_columns {
         html.push_str("<option value=\"");
         html.push_str(&html_escape(column));
@@ -8723,9 +8723,9 @@ fn render_crud_list_with_actions(
         ));
         html.push_str("</option>");
     }
-    html.push_str("</select><label for=\"order\">");
+    html.push_str("</select></div><div class=\"z-field\"><label for=\"order\">");
     html.push_str(&tr(language, "query.order"));
-    html.push_str("</label><select id=\"order\" name=\"order\">");
+    html.push_str("</label><select class=\"z-select\" id=\"order\" name=\"order\">");
     for (value, key) in [("asc", "query.ascending"), ("desc", "query.descending")] {
         html.push_str("<option value=\"");
         html.push_str(value);
@@ -8737,7 +8737,7 @@ fn render_crud_list_with_actions(
         html.push_str(&tr(language, key));
         html.push_str("</option>");
     }
-    html.push_str("</select>");
+    html.push_str("</select></div>");
     for column in filter_columns {
         let schema_table = crud
             .schema
@@ -8755,7 +8755,7 @@ fn render_crud_list_with_actions(
                 .find(|candidate| candidate.name == storage_column)
         });
         let selected_operator = selected_filter_operator(query_values, column);
-        html.push_str("<label for=\"filter_");
+        html.push_str("<div class=\"z-field\"><label for=\"filter_");
         html.push_str(&html_escape(column));
         html.push_str("__operator\">");
         html.push_str(&html_escape_preserving_locale_references(&field_text(
@@ -8763,7 +8763,7 @@ fn render_crud_list_with_actions(
             "query.filter_operator",
             &crud_column_label(language, &crud.schema, &crud.table, column),
         )));
-        html.push_str("</label><select id=\"filter_");
+        html.push_str("</label><select class=\"z-select\" id=\"filter_");
         html.push_str(&html_escape(column));
         html.push_str("__operator\" name=\"filter_");
         html.push_str(&html_escape(column));
@@ -8785,7 +8785,7 @@ fn render_crud_list_with_actions(
             html.push_str(&tr(language, "query.operator_equal"));
             html.push_str("</option>");
         }
-        html.push_str("</select><label for=\"filter_");
+        html.push_str("</select></div><div class=\"z-field\"><label for=\"filter_");
         html.push_str(&html_escape(column));
         html.push_str("\">");
         html.push_str(&html_escape_preserving_locale_references(&field_text(
@@ -8793,7 +8793,7 @@ fn render_crud_list_with_actions(
             "query.filter_value",
             &crud_column_label(language, &crud.schema, &crud.table, column),
         )));
-        html.push_str("</label><input id=\"filter_");
+        html.push_str("</label><input class=\"z-input\" id=\"filter_");
         html.push_str(&html_escape(column));
         html.push_str("\" name=\"filter_");
         html.push_str(&html_escape(column));
@@ -8804,9 +8804,9 @@ fn render_crud_list_with_actions(
                 .map(String::as_str)
                 .unwrap_or(""),
         ));
-        html.push_str("\">");
+        html.push_str("\"></div>");
     }
-    html.push_str("<button type=\"submit\">");
+    html.push_str("<button class=\"z-button z-button--primary\" type=\"submit\">");
     html.push_str(&tr(language, "query.apply"));
     html.push_str("</button></div></fieldset></form>");
     if rows.is_empty() {

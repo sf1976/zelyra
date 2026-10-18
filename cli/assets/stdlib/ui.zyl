@@ -24,7 +24,7 @@ pub component AppShell {
         <div class="z-app-shell">
             <header class="z-app-shell__header">
                 <slot name="header" />
-                <button class="z-mobile-nav__toggle" type="button" data-z-mobile-nav-toggle aria-controls="{id}-navigation" aria-expanded="false" hidden>{navigation_label}</button>
+                <button class="z-button z-mobile-nav__toggle" type="button" data-z-mobile-nav-toggle aria-controls="{id}-navigation" aria-expanded="false" hidden>{navigation_label}</button>
             </header>
             <aside class="z-app-shell__sidebar">
                 <nav class="z-app-shell__navigation" id="{id}-navigation" aria-label="{navigation_label}">
@@ -261,7 +261,7 @@ pub component MobileNavigation {
     }
     html {
         <div class="z-mobile-nav" data-z-mobile-nav>
-            <button class="z-mobile-nav__toggle" type="button" data-z-mobile-nav-toggle aria-controls="{id}" aria-expanded="false" hidden>{label}</button>
+            <button class="z-button z-mobile-nav__toggle" type="button" data-z-mobile-nav-toggle aria-controls="{id}" aria-expanded="false" hidden>{label}</button>
             <nav class="z-mobile-nav__panel" id="{id}" aria-label="{label}"><slot /></nav>
         </div>
     }

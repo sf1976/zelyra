@@ -119,7 +119,7 @@ geändert werden. Die Beispieldaten behalten `RE-2026-001`.
 
 ### `main.zyl` — Programmeinstieg und Startseite
 
-- Zeile 1 erklärt, dass diese Datei die Fachmodule verbindet und die Startseite enthält.
+- Zeile 1 erklärt, dass diese Datei Fachmodule und Startseite verbindet. Zelyra UI liefert die gemeinsamen CSS-Regeln; projektweite Farben und eigene Gestaltung werden in `zelyra.theme.css` angepasst.
 - Zeile 2 importiert die compilergeprüfte Standardbibliothek `zelyra/ui`; die Komponenten werden in HTML über ihren Namen verwendet. Zeilen 3–8 importieren Datenbank, Layout, Kunden, Artikel, Rechnungen und Übersicht. Die Namen nach `as` sind lokale Modul-Aliase.
 - Zeilen 9–11 deklarieren `GET /`, wählen `InvoiceTutorialShell` und beginnen die HTML-Ausgabe. Die Route `/` ist hier ausdrücklich festgelegt.
 - Zeile 12 öffnet den Hauptbereich. Zeilen 13–14 beginnen das zweispaltige Hero- und Beispielrechnungs-Layout.
@@ -286,8 +286,11 @@ mitkopiert. Beide Vorlagen im Repository werden zusammen gehalten.
 - Das dunkle Theme nutzt angepasste Farbvariablen. Druckregeln blenden
   Navigation und ausdrücklich markierte Aktionen aus.
 
-Die `examples/invoice_tutorial.theme.css` ist die Vorlage, die `zelyra
---tutorial invoice` in das Projekt als `zelyra.theme.css` übernimmt.
+Die allgemeinen Regeln für Seitenrahmen, CRUD-Karten, Formulare, Filter und
+Tabellencontainer liegen zentral in Zelyra UI. Das Projekt-Theme setzt Tokens
+und ergänzt nur Tutorial-Marke, Startseite und Rechnungsdruck.
+`examples/invoice_tutorial.theme.css` ist die synchrone Projekt-Themevorlage,
+die `zelyra --tutorial invoice` als `zelyra.theme.css` übernimmt.
 
 ### `locales/de.json` und `locales/en.json` — lokalisierte Beschriftungen
 

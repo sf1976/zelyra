@@ -115,7 +115,7 @@ the number `RE-2026-001`.
 
 ### `main.zyl` — project entry and home page
 
-- Line 1 says this file connects the business modules and contains the home page.
+- Line 1 says this file connects the business modules and home page. Zelyra UI supplies shared CSS; project-wide colors and custom styling are changed in `zelyra.theme.css`.
 - Line 2 imports the compiler-checked `zelyra/ui` standard library; HTML uses its component names directly. Lines 3–8 import the database, shared layout, customers, items, invoices, and overview as local module aliases.
 - Lines 9–11 declare `GET /`, select `InvoiceTutorialShell`, and begin HTML output. The `/` route is explicit here.
 - Line 12 opens the main area. Lines 13–14 start the two-column hero and sample-invoice layout.
@@ -271,8 +271,11 @@ The two repository copies are kept in sync.
 - The dark theme uses adjusted color variables. Print rules hide navigation
   and explicitly marked actions.
 
-`examples/invoice_tutorial.theme.css` is the template copied by `zelyra
---tutorial invoice` into the project as `zelyra.theme.css`.
+General rules for page frames, CRUD cards, forms, filters, and table containers
+live centrally in Zelyra UI. The project theme sets tokens and adds only the
+tutorial brand, landing page, and invoice-print design.
+`examples/invoice_tutorial.theme.css` is the synchronized project-theme template
+copied by `zelyra --tutorial invoice` as `zelyra.theme.css`.
 
 ### `locales/en.json` and `locales/de.json` — localized labels
 

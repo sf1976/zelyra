@@ -35,6 +35,10 @@ pub(super) fn render_form_with_language(
     language: UiLanguage,
 ) -> String {
     let mut html = String::new();
+    let cards = route.form_view.mode == CrudFormViewMode::Cards;
+    if cards {
+        html.push_str("<section class=\"z-generated-page\">");
+    }
     let form_kind = if route.form.name.ends_with("Create") {
         Some(("form.create_title", "form.create_submit"))
     } else if route.form.name.ends_with("Edit") {
@@ -85,7 +89,6 @@ pub(super) fn render_form_with_language(
         }
         html.push_str("</ul></div>");
     }
-    let cards = route.form_view.mode == CrudFormViewMode::Cards;
     if cards {
         html.push_str("<section class=\"zelyra-crud-form-card\">");
     }
@@ -339,6 +342,7 @@ pub(super) fn render_form_with_language(
     html.push_str(&html_escape_preserving_locale_references(&submit));
     html.push_str("</button></form>");
     if cards {
+        html.push_str("</section>");
         html.push_str("</section>");
     }
     html

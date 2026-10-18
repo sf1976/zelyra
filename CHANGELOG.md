@@ -6,12 +6,17 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
-- Unify invoice tutorial styling across generated overviews, CRUD lists,
-  details, and forms; keep the project theme and scaffold template identical,
-  and replace duplicated hard-coded rules with shared UI theme variables. /
-  Rechnungsübersicht, CRUD-Listen, Details und Formulare im Rechnungstutorial
-  einheitlich gestalten; Projekt-Theme und Gerüstvorlage synchron halten und
-  doppelte feste CSS-Werte durch gemeinsame UI-Themevariablen ersetzen.
+- Move shared generated-page, CRUD, form, filter, and table styling into the
+  bundled Zelyra UI stylesheet; wrap generated CRUD forms in the same page
+  frame, use shared UI classes for filters and mobile navigation, remove the
+  unused legacy stylesheet, and keep only tutorial-specific branding and
+  landing/print design in the project theme. Keep the scaffold theme in sync. /
+  Gemeinsame Gestaltung generierter Seiten, CRUD-Ansichten, Formulare, Filter
+  und Tabellen in das gebündelte Zelyra-UI-Stylesheet verschieben; generierte
+  CRUD-Formulare in denselben Seitenrahmen setzen, gemeinsame UI-Klassen für
+  Filter und mobile Navigation verwenden, das ungenutzte Alt-Stylesheet
+  entfernen und im Projekttheme nur Tutorial-Marke sowie Start- und Druckansicht
+  belassen. Die Themevorlage des Gerüsts synchron halten.
 
 ## 1.2.10 — 2026-10-18
 

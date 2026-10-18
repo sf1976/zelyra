@@ -120,12 +120,13 @@ security and compatibility gates stated for that milestone.
   CSRF, schema validation, redaction, and explicit runtime behavior after a
   change. Prove package/module contracts for settings, effects, jobs, data
   access, and HostServices across AST, MIR, and Bytecode, or make unsupported
-  paths fail closed with stable diagnostics. Give the invoice tutorial one
-  responsive Zelyra UI theme across its table overview, generated CRUD lists,
-  details, and forms; keep the project theme and scaffold template aligned.
-  Secure `public/`, static assets,
+  paths fail closed with stable diagnostics. Secure `public/`, static assets,
   and Apache/Nginx forwarded-header and allowed-host behavior with deployment
   tests.
+- [✅] **1.2.11 invoice tutorial CSS subtask:** Centralize generated-page,
+  CRUD, form, filter, and table styling in Zelyra UI; give the invoice tutorial
+  one responsive design and generated forms the same page frame, with only
+  project-specific design retained in its synchronized theme template.
 - [ ] **1.2.12 — business-platform vertical slices:** Deliver bounded, tested
   state transitions, audit/history, balanced ledger operations,
   reflection/export metadata, health checks, modular bundles, and any
