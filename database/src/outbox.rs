@@ -1317,6 +1317,14 @@ mod tests {
         let worker_id = format!("schedule-worker-test-{suffix}");
         let project_id = "b".repeat(64);
         ensure_mariadb_outbox(&database_url).unwrap();
+        let schema = crate::inspect_mariadb(&database_url).unwrap();
+        assert!(
+            schema
+                .tables
+                .iter()
+                .all(|table| table.name != "_zelyra_outbox"),
+            "runtime-owned outbox tables must not be treated as application schema"
+        );
         let event = OutboxEvent::new(
             &id,
             SCHEDULE_JOB_EVENT_TYPE,
