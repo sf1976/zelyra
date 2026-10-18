@@ -31,11 +31,6 @@
 :where(html[data-z-ui]) .tutorial-brand-mark { display: grid; width: 2.55rem; height: 2.55rem; flex: 0 0 auto; place-items: center; color: #fff; background: linear-gradient(145deg, #27765a, #174534); border-radius: .8rem; font-size: 1.1rem; font-weight: 800; }
 :where(html[data-z-ui]) .tutorial-new-invoice { white-space: nowrap; }
 :where(html[data-z-ui]) .tutorial-content { min-width: 0; padding: 1.25rem clamp(.75rem, 2vw, 2rem) 3rem; }
-:where(html[data-z-ui]) .invoice-home-actions .z-button--success { color: #173f30; background: #d5f39a; border-color: #d5f39a; box-shadow: 0 .5rem 1.25rem rgb(7 29 21 / 18%); }
-:where(html[data-z-ui]) .invoice-home-actions .z-button--success:hover { background: #e2f8b6; border-color: #e2f8b6; }
-:where(html[data-z-ui]) .invoice-home-actions .z-button:not(.z-button--success) { color: #f4faf6; background: transparent; border-color: rgb(255 255 255 / 55%); }
-:where(html[data-z-ui]) .invoice-home-actions .z-button:not(.z-button--success):hover { color: #173f30; background: #fff; }
-:where(html[data-z-ui]) .invoice-workflow .z-grid { row-gap: .75rem; }
 :where(html[data-z-ui]) .invoice-ui-gallery { display: grid; gap: 1rem; }
 :where(html[data-z-ui]) .invoice-ui-gallery > .z-grid { align-items: start; }
 :where(html[data-z-ui]) .invoice-ui-gallery .z-card { height: 100%; }
