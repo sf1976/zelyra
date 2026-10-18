@@ -258,3 +258,10 @@ binding; `ensures` runs at every return with the returned value available as
 `result`. Contract checks consume the normal step budget. They enforce runtime
 conditions but do not constitute formal proofs. The AST interpreter remains
 available as the semantic reference.
+
+The coverage-guided `backend_differential` target extends its existing mutable
+array generator with bounded programs for tuple destructuring and if
+expressions, generic record copy updates, capturing lambdas in `filter`/`map`
+pipelines, and enum payloads with match guards. Regression tests and seeded
+inputs for these four areas compare AST, MIR, and serialized bytecode. This
+expands the tested subset; it does not establish complete backend parity.

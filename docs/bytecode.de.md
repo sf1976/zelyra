@@ -305,3 +305,11 @@ Argumente ausgeführt; Nachbedingungen (`ensures`) laufen bei jeder Rückkehr
 mit dem Rückgabewert in `result`. Die Prüfungen verbrauchen das normale
 Schrittbudget. Sie erzwingen Laufzeitbedingungen, sind aber keine formalen
 Beweise. Der AST-Interpreter bleibt die semantische Referenz. Differentialtests decken Encode/Decode für Enum-Payloads, Option/Result-Konstruktoren, Record-Destrukturierung, verschachtelte Enum-/Option-Payloads, Literale und Wildcards sowie erfolgreiche und abgelehnte Guards ab.
+
+Das coverage-guided Ziel `backend_differential` ergänzt den bisherigen
+Arraymutationsgenerator um begrenzte Programme für Tupel-Destrukturierung und
+If-Ausdrücke, generische Record-Copy-Updates, erfassende Lambdas in
+`filter`/`map`-Pipelines sowie Enum-Payloads mit Match-Guards. Die
+Regressionstests und Startfälle für diese vier Bereiche vergleichen AST, MIR
+und serialisierten Bytecode. Das vergrößert die geprüfte Teilmenge, belegt aber
+keine vollständige Backendparität.
