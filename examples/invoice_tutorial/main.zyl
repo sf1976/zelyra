@@ -1,4 +1,8 @@
-# Connects business modules and the home page; Zelyra UI supplies shared CSS, while project-wide theme changes belong in zelyra.theme.css.
+# Verbindet Module und Startseite. `import "zelyra/ui" as ui` bindet eingebaute
+# UI-Komponenten ein; es ist kein CSS-Import und keine Projektdatei.
+# Das gemeinsame CSS liefert Zelyra UI. Vorhandene Komponentenstile und
+# --z- Design-Tokens änderst du in zelyra.theme.css im Projektordner.
+# Studio öffnet diese Datei über „Projekt-CSS öffnen“ im Datei-Explorer.
 import "zelyra/ui" as ui
 import "src/database.zyl" as storage
 import "src/shell.zyl" as shell

@@ -123,27 +123,28 @@ abgeschlossen.
   versionierte Embedding-API und wird nicht als stabile native ABI oder
   Paket-Pluginvertrag dargestellt. Wiederverwendbare CSV-Import-/Exportpakete
   über unterstützte Backends prüfen. Von Anwendungen ausgelieferte
-  Einstellungsseiten folgen in 1.2.12.
-- [~] **1.2.11 — Tutorial-UI und CLI-Zuverlässigkeit:** Das durchgängige
+  Einstellungsseiten und prozessübergreifende Transaktionen folgen in 1.2.12.
+- [✅] **1.2.11 — Tutorial-UI und CLI-Zuverlässigkeit:** Das durchgängige
   Rechnungstutorial-Design, eine konkrete Hilfe bei fehlender Outbox-Tabelle,
   Debian-/Ubuntu-Erkennung für Compose v2, die Projekt-`.env`-Auflösung für
-  Audit-/Auth-Rollenbefehle sowie normales Unix-SIGPIPE-Verhalten liefern. Der
-  UI-Teilschritt ist umgesetzt; die Gates für das stabile Release laufen. Die
-  weitergehenden Arbeiten an Anwendungseinstellungen, Ökosystemparität und
-  Deployment-Sicherheit werden ausdrücklich auf 1.2.12 verschoben.
+  Audit-/Auth-Rollenbefehle sowie normales Unix-SIGPIPE-Verhalten wurden
+  veröffentlicht. Weitere Layout- und Theme-Editor-Verbesserungen für die
+  Rechnungsvorlage sind 1.2.12 zugeordnet. Anwendungseinstellungen,
+  Ökosystemparität und Deployment-Sicherheit bleiben ebenfalls in 1.2.12.
 - [✅] **1.2.11 CSS-Teilschritt für das Rechnungstutorial:** Seiten-, CRUD-,
   Formular-, Filter- und Tabellenstile zentral in Zelyra UI bündeln; ein
   durchgängiges responsives Tutorialdesign schaffen und generierte Formulare in
-  denselben Seitenrahmen setzen. Im synchronen Projekt-Theme bleiben nur
-  projektspezifische Gestaltungen.
+  denselben Seitenrahmen setzen.
+- [~] **1.2.12 Rechnungstutorial-Feinschliff:** Benutzerdefinierte AppShell-
+  Seiten mit generierten CRUD-Formularen abstimmen, Karten responsiv anordnen
+  und Projekt-Theme-CSS im Studio leicht auffindbar und sicher änderbar machen.
 - [~] **1.2.12 — Anwendungseinstellungen, Ökosystemparität und Geschäftsabläufe:**
   Anwendungseigene Moduleinstellungen sind mit serverseitiger Autorisierung,
   CSRF, Schemaprüfung, Redaktion und ausdrücklich definiertem Verhalten nach
   Änderungen umgesetzt. Der öffentliche Host-Allowlist- und Forwarded-Header-
   Vertrag ist dokumentiert und getestet; Nginx lieferte im Loopback-Container
   statische Dateien aus und leitete Routen weiter. Apache- und TLS-Integrationstests
-  fehlen noch.
-  Paket-/Modulverträge für Einstellungen,
+  fehlen noch. Paket-/Modulverträge für Einstellungen,
   Effekte, Jobs, Datenzugriff und HostServices über AST, MIR und Bytecode
   nachweisen oder nicht unterstützte Pfade in jedem Backend mit stabilen
   Diagnosen geschlossen abweisen. `public/`, statische Assets sowie
