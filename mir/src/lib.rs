@@ -145,6 +145,7 @@ pub enum MirExpressionKind {
         result_type: Type,
         query: String,
         parameters: Vec<(String, LocalId)>,
+        query_plan: zelyra_hir::HirSqlQuery,
     },
     Await(ExpressionId),
     Match {
@@ -387,7 +388,11 @@ pub fn lower(program: &zelyra_ast::Program) -> Result<MirProgram, Vec<MirError>>
             })
             .collect::<Vec<_>>()
     })?;
-    let hir = zelyra_hir::lower(program).map_err(|errors| {
+    let query_types = inferred
+        .iter()
+        .map(|item| (item.span, item.ty.clone()))
+        .collect::<Vec<_>>();
+    let hir = zelyra_hir::lower_with_expression_types(program, &query_types).map_err(|errors| {
         errors
             .into_iter()
             .map(|error| MirError {
@@ -1788,11 +1793,71 @@ fn verify_expression_kind(
                 references.push(arm.value);
             }
         }
-        MirExpressionKind::Sql { query, .. } => {
+        MirExpressionKind::Sql {
+            query,
+            parameters,
+            query_plan,
+            ..
+        } => {
             if let Err(message) = zelyra_runtime::check_scoped_sql(query, &program.scoped_tables) {
                 errors.push(MirError {
                     code: "E-MIR-VERIFY-003",
                     message,
+                    span: expression.span,
+                });
+            }
+            let known_tables = program
+                .database_schema
+                .as_ref()
+                .map(|schema| {
+                    schema
+                        .tables
+                        .iter()
+                        .map(|table| table.name.clone())
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            let (statement, mut tables) =
+                zelyra_database::sql::analyze_table_access(query, &known_tables);
+            tables.sort_by(|left, right| {
+                left.table
+                    .cmp(&right.table)
+                    .then_with(|| left.mode.as_str().cmp(right.mode.as_str()))
+            });
+            let mut expected_parameter_names = match zelyra_database::sql_parameter_names(query) {
+                Ok(names) => names,
+                Err(error) => {
+                    errors.push(MirError {
+                        code: "E-MIR-VERIFY-004",
+                        message: format!(
+                            "typed SQL query plan has invalid SQL parameters: {error}"
+                        ),
+                        span: expression.span,
+                    });
+                    Vec::new()
+                }
+            };
+            let mut actual_parameters = query_plan
+                .parameters
+                .iter()
+                .map(|parameter| (parameter.name.clone(), parameter.local))
+                .collect::<Vec<_>>();
+            expected_parameter_names.sort();
+            actual_parameters.sort_by(|left, right| left.0.cmp(&right.0));
+            let mut lowered_parameters = parameters.clone();
+            lowered_parameters.sort_by(|left, right| left.0.cmp(&right.0));
+            let plan_names = actual_parameters
+                .iter()
+                .map(|(name, _)| name.clone())
+                .collect::<Vec<_>>();
+            if query_plan.statement != statement
+                || query_plan.tables != tables
+                || lowered_parameters != actual_parameters
+                || expected_parameter_names != plan_names
+            {
+                errors.push(MirError {
+                    code: "E-MIR-VERIFY-004",
+                    message: "typed SQL query plan does not match its checked SQL source".into(),
                     span: expression.span,
                 });
             }
@@ -2133,10 +2198,12 @@ impl ProgramBuilder {
                 result_type,
                 query,
                 parameters,
+                plan,
             } => MirExpressionKind::Sql {
                 result_type: result_type.clone(),
                 query: query.clone(),
                 parameters: parameters.clone(),
+                query_plan: plan.clone(),
             },
             HirExprKind::Await(value) => MirExpressionKind::Await(self.expression_id(value)),
             HirExprKind::Match { value, arms } => MirExpressionKind::Match {
@@ -2971,6 +3038,46 @@ mod tests {
                 && error
                     .message
                     .contains("does not match the checked project schema")
+        }));
+    }
+
+    #[test]
+    fn checked_sql_query_plan_reaches_mir_with_typed_parameters() {
+        let source = parse_program(
+            "table invoices { id: Int primary } fn read_invoice(id: Int) -> Int[] uses Database(read) { return sql<Int[]> { SELECT id FROM invoices WHERE id = :id } } fn main() {}",
+        );
+        let mir = lower(&source).expect("well typed SQL lowers to MIR");
+        let sql = mir
+            .expressions
+            .iter()
+            .find(|expression| matches!(expression.kind, MirExpressionKind::Sql { .. }))
+            .expect("MIR contains SQL expression");
+        let MirExpressionKind::Sql { query_plan, .. } = &sql.kind else {
+            unreachable!();
+        };
+        assert_eq!(query_plan.statement, Some("SELECT"));
+        assert_eq!(query_plan.tables.len(), 1);
+        assert_eq!(query_plan.tables[0].table, "invoices");
+        assert_eq!(query_plan.parameters.len(), 1);
+        assert_eq!(query_plan.parameters[0].name, "id");
+        assert_eq!(query_plan.parameters[0].ty, Some(Type::Int));
+
+        let mut tampered = mir;
+        let sql = tampered
+            .expressions
+            .iter_mut()
+            .find(|expression| matches!(expression.kind, MirExpressionKind::Sql { .. }))
+            .expect("MIR contains SQL expression");
+        let MirExpressionKind::Sql { query_plan, .. } = &mut sql.kind else {
+            unreachable!();
+        };
+        query_plan.tables.clear();
+        let errors = verify(&tampered).expect_err("verifier rejects a stale query plan");
+        assert!(errors.iter().any(|error| {
+            error.code == "E-MIR-VERIFY-004"
+                && error
+                    .message
+                    .contains("does not match its checked SQL source")
         }));
     }
 

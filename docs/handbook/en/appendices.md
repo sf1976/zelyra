@@ -122,6 +122,8 @@ page "/items" {
 | `E-VIEW-001` - `E-VIEW-009` | Views & Pages | Error in view interpolation, slots, or data binding | Check slot names and binding data types |
 | `E-VIEW-010` - `E-VIEW-015` | Query controls | Invalid search, sort, pagination, or filter fields | Check declared whitelist (`search`, `sort`, `filter`) |
 | `E-FORM-001` - `E-FORM-004` | Forms | Validation error or invalid form field types | Review form declaration and input payload |
+| `E-FORM-005` - `E-FORM-006` | Form UI | Invalid appearance variant or widget value | Use a documented appearance or widget value |
+| `E-FORM-007` | Form redirect | Redirect is not a safe same-origin absolute path or contains control characters or backslashes | Use a local path such as `/invoices`; external and protocol-relative targets are rejected |
 | `E-CRUD-001` - `E-CRUD-006` | CRUD | Invalid CRUD resource, schema conflict, or layout error | Verify table binding and layout slots |
 | `E-AUTH-001` - `E-AUTH-028` | Authentication | Session, password, or permission conflict | Check roles (`permits`), `requires auth`, and password hashes |
 | `E-AUDIT-001` - `E-AUDIT-010` | Audit trail | Failure in cryptographic hash chain of audit log | Validate checksums and audit table integrity |

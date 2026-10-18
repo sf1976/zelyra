@@ -975,6 +975,57 @@ fn form_validate_covers_valid_and_invalid_inputs_without_database_access() {
 }
 
 #[test]
+fn check_rejects_external_or_header_injecting_form_redirects() {
+    let (directory, path) = temporary_project_source(
+        "form-redirect-local",
+        "form Contact { field email: Email {} action send { redirect \"/done?ok=1\" } } fn main() {}",
+    );
+    let output = Command::new(binary())
+        .args(["check", path.to_str().unwrap()])
+        .output()
+        .expect("check command should run");
+    assert!(
+        output.status.success(),
+        "local redirect should be accepted: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    fs::remove_dir_all(directory).unwrap();
+
+    for (name, target) in [
+        ("external", "https://outside.example/path"),
+        ("protocol-relative", "//outside.example/path"),
+        ("backslash", "/\\outside.example/path"),
+        (
+            "header-injection",
+            "/done\r\nLocation: https://outside.example",
+        ),
+    ] {
+        let source = format!(
+            "form Contact {{ field email: Email {{}} action send {{ redirect {target:?} }} }} fn main() {{}}"
+        );
+        let (directory, path) = temporary_project_source(&format!("form-redirect-{name}"), &source);
+        let output = Command::new(binary())
+            .args(["check", path.to_str().unwrap(), "--format", "json"])
+            .output()
+            .expect("check command should run");
+        assert!(!output.status.success(), "accepted redirect {target:?}");
+        assert!(output.stderr.is_empty());
+        let diagnostics: serde_json::Value = serde_json::from_slice(&output.stdout)
+            .expect("check should return structured diagnostics");
+        assert_eq!(diagnostics["success"], false);
+        assert!(
+            diagnostics["diagnostics"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|diagnostic| diagnostic["code"] == "E-FORM-007"),
+            "missing redirect diagnostic for {target:?}: {diagnostics}"
+        );
+        fs::remove_dir_all(directory).unwrap();
+    }
+}
+
+#[test]
 fn every_documented_cli_command_has_specific_nested_help() {
     let overview = run(&["--help"]);
     assert!(overview.status.success());

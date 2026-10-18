@@ -26,8 +26,11 @@ Version 5 Konsoleneingabe, Version 6 HTTP-Transport und Version 7 Mailzustellung
   versenden.
 - MIR führt die unterstützte Teilmenge eigenständiger `sql<T>`-Abfragen und
   SQL-/Outbox-`transaction { ... }`-Blöcke über den injizierten Datenbankhost aus.
-  HIR löst benannte SQL-Platzhalter auf lexikalische LocalIds auf; der gemeinsame
-  Runtime-Scanner bindet ausschließlich diese erfassten Werte. Transaktionen
+  HIR erfasst SQL-Operation, deterministisch geordnete Tabellenzugriffe und
+  benannte Platzhalter mit lexikalischen LocalIds und inferierten Typen. MIR
+  prüft diesen Plan erneut gegen die SQL-Quelle (`E-MIR-VERIFY-004`); der
+  gemeinsame Runtime-Scanner bindet ausschließlich erfasste Werte. Diese
+  Analysemetadaten vergeben keine Tabellenberechtigungen. Transaktionen
   übergeben alle geprüften SQL-Anweisungen nach gemeinsamer Schema- und
   Speicherprüfung in genau einem `execute_database_batch(..., true)`-Aufruf.
   Datenbank-Capabilities und Projektfreigaben werden vor dem Provideraufruf

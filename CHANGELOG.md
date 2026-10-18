@@ -6,6 +6,24 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+## 1.2.8 — 2026-10-18
+
+- Carry checked SQL operations, deterministic table accesses, bound local IDs,
+  and inferred parameter types from HIR into MIR. The MIR verifier recomputes
+  query metadata from SQL and rejects stale plans with `E-MIR-VERIFY-004`;
+  tenant-scoped raw SQL remains rejected, while the existing authenticated
+  tenant CRUD path remains the supported scoped read/write mechanism. / Geprüfte
+  SQL-Operationen, deterministische Tabellenzugriffe, gebundene LocalIds und
+  inferierte Parametertypen von HIR nach MIR übertragen. Der MIR-Verifier
+  berechnet Metadaten erneut aus dem SQL und weist veraltete Pläne mit
+  `E-MIR-VERIFY-004` ab. Rohes SQL auf tenant-scoped Tabellen bleibt verboten;
+  das vorhandene authentifizierte Tenant-CRUD bleibt der unterstützte Pfad.
+- Reject external, protocol-relative, backslash-containing, or control-character
+  form-action redirects with `E-FORM-007`; accept local absolute paths and
+  query strings. / Externe, protocol-relative sowie Backslash- oder
+  Steuerzeichen enthaltende Formular-Redirects mit `E-FORM-007` abweisen;
+  lokale absolute Pfade und Querystrings akzeptieren.
+
 ## 1.2.7 — 2026-10-18
 
 - Resolve separately published, exact-version package dependencies recursively.

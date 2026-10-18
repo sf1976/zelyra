@@ -122,6 +122,8 @@ page "/items" {
 | `E-VIEW-001` - `E-VIEW-009` | Views & Pages | Fehler in View-Interpolation, Slots oder Datenbindung | Slot-Namen und Datentypen der Page-Bindung prüfen |
 | `E-VIEW-010` - `E-VIEW-015` | Query-Controls | Ungültige Such-, Sortier-, Paginierungs- oder Filterfelder | Deklarierte Whitelist (`search`, `sort`, `filter`) prüfen |
 | `E-FORM-001` - `E-FORM-004` | Formulare | Validierungsfehler oder ungültige Feldtypen | Formular-Deklaration und Eingabedaten anpassen |
+| `E-FORM-005` - `E-FORM-006` | Formular-UI | Ungültige Appearance-Variante oder Widget-Angabe | Einen dokumentierten Appearance- beziehungsweise Widget-Wert verwenden |
+| `E-FORM-007` | Formular-Weiterleitung | Redirect ist kein sicherer lokaler absoluter Pfad desselben Ursprungs oder enthält Steuerzeichen bzw. Backslashes | Einen lokalen Pfad wie `/invoices` verwenden; externe und protocol-relative Ziele werden abgewiesen |
 | `E-CRUD-001` - `E-CRUD-006` | CRUD | Ungültige CRUD-Ressource, Schema-Konflikt oder Layout-Fehler | Tabellenverknüpfung und Layout-Slots prüfen |
 | `E-AUTH-001` - `E-AUTH-028` | Authentifizierung | Session-, Passwort- oder Berechtigungskonflikt | Rollen (`permits`), `requires auth` und Hashes prüfen |
 | `E-AUDIT-001` - `E-AUDIT-010` | Audit-Trail | Fehler in der kryptografischen Hash-Kette des Audit-Logs | Prüfsummen und Audit-Tabelle validieren |

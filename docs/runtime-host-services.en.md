@@ -23,9 +23,12 @@ services, version 4 database services, and version 5 console input, version 6 HT
   and outbox encoder. A fake-host differential test compares the resulting
   outbox entry without sending mail.
 - MIR executes the supported standalone `sql<T>` query subset and SQL/outbox
-  `transaction { ... }` blocks through the injected database host. HIR resolves
-  named SQL placeholders to lexical local IDs; the shared runtime placeholder
-  scanner binds only those captured values. Transactions send all checked SQL
+  `transaction { ... }` blocks through the injected database host. HIR records
+  the SQL operation, deterministically ordered table accesses, and named
+  placeholders with lexical local IDs and inferred types. MIR rechecks this
+  plan against the SQL source (`E-MIR-VERIFY-004`); the shared runtime
+  placeholder scanner binds only the captured values. This analysis metadata
+  does not grant table access. Transactions send all checked SQL
   statements through one `execute_database_batch(..., true)` call after shared
   schema/storage validation; capabilities and project grants are checked before
   provider access. Differential fake-host tests cover query and transaction

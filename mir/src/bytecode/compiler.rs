@@ -1545,6 +1545,7 @@ impl FunctionCompiler<'_> {
                             query,
                             parameters,
                             result_type,
+                            ..
                         } => transaction_operations.push(BytecodeTransactionOperation::Sql(
                             BytecodeSqlStatement {
                                 query: query.clone(),
@@ -1971,6 +1972,7 @@ impl FunctionCompiler<'_> {
                 result_type,
                 query,
                 parameters,
+                ..
             } => self.emit(
                 BytecodeOp::Sql {
                     query,

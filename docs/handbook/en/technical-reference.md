@@ -1054,7 +1054,10 @@ form CustomerCreate -> customers {
 ~~~
 
 Form actions may declare their own authorization. The permission is checked
-when the form is rendered and again before submission.
+when the form is rendered and again before submission. `redirect` accepts only
+safe local absolute paths such as `/customers`; `zelyra check` rejects external
+or protocol-relative targets, backslashes, and control characters with
+`E-FORM-007`.
 
 ## 12. CRUD
 

@@ -27,7 +27,7 @@ Ressourcendisziplin und ehrliche Beweisaussagen leiten jede Phase. Das
 [Manifest](MANIFESTO.de.md) beschreibt die Prinzipien; die Roadmap kennzeichnet
 den tatsächlich implementierten Stand.
 
-Das aktuelle stabile Release ist 1.2.6. **Aktuelle Meilensteine** ist die
+Das aktuelle stabile Release ist 1.2.7 und wurde unter https://github.com/sf1976/zelyra/releases/tag/v1.2.7 veröffentlicht. **Aktuelle Meilensteine** ist die
 verbindliche Übersicht der nächsten Vorhaben. Ältere, nummerierte Release-
 Abschnitte bleiben als historische Planung und Nachweise erhalten; sie legen
 für sich keine aktuellen Releaseziele fest. Langfristige Ideen stehen im
@@ -82,20 +82,31 @@ abgeschlossen.
   vollständige PR-CI bestand auf `abd2dee`; integriert in `main` als `fb330e0`.
   Recovery ist keine dateisystemweit atomare Transaktion. Siehe das
   [Recovery-Arbeitsprotokoll](release-plans/1.2.6-package-recovery.de.md).
-- [~] **1.2.7 — vertrauenswürdige transitive Registry-Pakete:** Auf dem
-  Releasezweig implementiert; Gates und Veröffentlichung stehen aus. Eine
-  dreistufige signierte Paketkette wird installiert, compilergeprüft, offline
-  ausgeführt und gebündelt; Updatepläne lösen den Abschluss ebenfalls auf.
-  Zyklusablehnung lässt den Projektzustand unverändert. `package sign` bleibt
-  offline; Registry-Abhängigkeiten werden nach der Trustprüfung der gesamten
-  Closure compilergeprüft. Das Journal aus 1.2.6 erfasst jeden neuen Staging-
-  und Cachepfad, damit fehlgeschlagene Updates den gesamten Abschluss
-  zurückrollen können.
-- [ ] **1.2.8 — typisierte Query-, Tenant-, Request- und Formpipeline:**
-  Begrenztes Query-HIR und vollständige typisierte Request-/Formverarbeitung
-  einschließlich compilergeprüftem Tenant-Kontext, Validierung, Response- und
-  Redirectverträgen implementieren. AST/MIR/Bytecode müssen übereinstimmen
-  oder mit geschlossener Diagnose abbrechen.
+- [x] **1.2.7 — vertrauenswürdige transitive Registry-Pakete:**
+  Veröffentlicht unter https://github.com/sf1976/zelyra/releases/tag/v1.2.7.
+  Die vollständige PR-CI bestand vor dem Merge; der Release-Workflow baute und
+  attestierte reproduzierbare Linux- und Windows-Artefakte mit geprüften
+  SHA-256-Dateien und SPDX-SBOMs. Eine dreistufige signierte Paketkette wird
+  installiert, compilergeprüft, offline ausgeführt und gebündelt; Updatepläne
+  lösen den Abschluss ebenfalls auf. Zyklusablehnung lässt den Projektzustand
+  unverändert. `package sign` bleibt offline; Registry-Abhängigkeiten werden
+  nach der Trustprüfung der gesamten Closure compilergeprüft. Das Journal aus
+  1.2.6 erfasst jeden neuen Staging- und Cachepfad, damit fehlgeschlagene
+  Updates den gesamten Abschluss zurückrollen können.
+- [~] **1.2.8 — typisierte Query-, Tenant-, Request- und Formpipeline:** Der
+  erste Query-HIR-Schnitt trägt geprüfte SQL-Operation, deterministisch
+  geordnete Tabellenzugriffe, Parameter-Locals und aufgelöste Parametertypen
+  von HIR nach MIR. Der MIR-Verifier berechnet Operations-, Tabellen- und
+  Parametermetadaten erneut aus der SQL-Quelle und weist veraltete Pläne mit
+  `E-MIR-VERIFY-004` ab. Es entsteht keine parallele Query-Syntax. Das
+  vorhandene authentifizierte, generierte CRUD bleibt der unterstützte
+  Tenant-Read-/Write-Pfad; rohes SQL auf scoped Tabellen bleibt in AST, MIR und
+  Bytecode gesperrt. Der vorhandene API-Fehler-/Outputvertrag, typisierte
+  Page-/Form-Eingaben, serverseitige Formularvalidierung, CSRF und Erhalt
+  sicherer Eingaben bleiben der Request-/Form-Pfad. Redirects in Formularaktionen
+  sind statisch auf sichere lokale absolute Pfade desselben Ursprungs begrenzt
+  (`E-FORM-007`). Vollständige Weblaufzeit-Parität in MIR/Bytecode bleibt ein
+  1.3.0-Gate; der HTTP-Server verwendet weiterhin AST.
 - [ ] **1.2.9 — dauerhafte Scheduler-Jobs:** Persistente transaktionale Jobs
   mit Idempotenz, Leases, begrenzten Wiederholungen, Dead-Letter-Status,
   Beobachtbarkeit und ausdrücklichem Scheduler-Dienstlebenszyklus ergänzen.
@@ -382,10 +393,10 @@ werden. Details stehen im [Projektlayout-Arbeitsplan](release-plans/1.3.0-projec
   verteilt.
 - [x] **1.2.6 Paket-Recovery:** Unterbrochene Paketmutationen wiederherstellen;
   Details stehen in den Release-Notizen und im Recovery-Arbeitsprotokoll oben.
-- [~] **1.2.7 vertrauenswürdige transitive Pakete:** Auf dem Releasezweig
-  implementiert; Release-Gates stehen aus. Dreistufiges Add, Updateplan,
-  Offline-Run/Check, Bundle, Provenienz, begrenzte Auflösung und Zyklusrollback
-  sind integriert getestet.
+- [x] **1.2.7 vertrauenswürdige transitive Pakete:** Mit erfolgreicher PR-CI
+  und reproduzierbaren, attestierten Linux-/Windows-Artefakten veröffentlicht.
+  Dreistufiges Add, Updateplan, Offline-Run/Check, Bundle, Provenienz, begrenzte
+  Auflösung und Zyklusrollback sind integriert getestet.
 - [ ] **1.2.8 typisierte Query-/Request-/Forms:** Begrenztes Query-HIR und
   typisierten Tenant-/Request-/Form-Lifecycle für die unterstützten Backends
   abschließen.

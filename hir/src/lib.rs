@@ -22,6 +22,7 @@ impl fmt::Display for ResolveError {
 
 #[derive(Clone, Debug)]
 pub struct HirProgram {
+    pub tables: Vec<TableDef>,
     pub types: Vec<TypeDef>,
     pub records: Vec<RecordDef>,
     pub enums: Vec<EnumDef>,
@@ -198,6 +199,27 @@ pub struct HirExpr {
     pub span: Span,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HirSqlParameter {
+    pub name: String,
+    pub local: LocalId,
+    /// Populated from the successful compiler type pass when available.
+    pub ty: Option<Type>,
+    /// SQL expression span until the scanner provides a token-level span.
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HirSqlQuery {
+    pub statement: Option<&'static str>,
+    pub tables: Vec<zelyra_database::sql::SqlTableAccess>,
+    pub parameters: Vec<HirSqlParameter>,
+}
+
+fn span_key(span: Span) -> (u32, usize, usize) {
+    (span.source_id, span.start, span.end)
+}
+
 #[derive(Clone, Debug)]
 pub enum HirExprKind {
     Int(i64),
@@ -258,6 +280,7 @@ pub enum HirExprKind {
         result_type: Type,
         query: String,
         parameters: Vec<(String, LocalId)>,
+        plan: HirSqlQuery,
     },
     Await(Box<HirExpr>),
     Match {
@@ -282,6 +305,16 @@ pub struct HirMatchExprArm {
 }
 
 pub fn lower(program: &Program) -> Result<HirProgram, Vec<ResolveError>> {
+    lower_with_expression_types(program, &[])
+}
+
+/// Lower the checked source program while retaining compiler-inferred local
+/// types for SQL parameters. `expression_types` must come from the same source
+/// revision and a successful whole-program type check.
+pub fn lower_with_expression_types(
+    program: &Program,
+    expression_types: &[(Span, Type)],
+) -> Result<HirProgram, Vec<ResolveError>> {
     let mut functions_by_name = HashMap::new();
     let mut errors = Vec::new();
     for (index, function) in program.functions.iter().enumerate() {
@@ -302,17 +335,30 @@ pub fn lower(program: &Program) -> Result<HirProgram, Vec<ResolveError>> {
         .iter()
         .map(|definition| definition.name.clone())
         .collect::<HashSet<_>>();
+    let table_names = program
+        .tables
+        .iter()
+        .map(|table| table.name.clone())
+        .collect::<Vec<_>>();
+    let expression_types = expression_types
+        .iter()
+        .map(|(span, ty)| (span_key(*span), ty.clone()))
+        .collect::<HashMap<_, _>>();
     for (index, function) in program.functions.iter().enumerate() {
         let mut resolver = Resolver {
             functions: &functions_by_name,
             enum_names: &enum_names,
+            table_names: &table_names,
+            expression_types: &expression_types,
             errors: Vec::new(),
             scopes: vec![HashMap::new()],
+            local_types: HashMap::new(),
             next_local: 0,
         };
         let mut params = Vec::new();
         for parameter in &function.params {
             let local = resolver.bind(parameter.name.clone(), parameter.span);
+            resolver.local_types.insert(local, parameter.ty.clone());
             params.push(HirParam {
                 name: parameter.name.clone(),
                 ty: parameter.ty.clone(),
@@ -350,6 +396,7 @@ pub fn lower(program: &Program) -> Result<HirProgram, Vec<ResolveError>> {
 
     if errors.is_empty() {
         Ok(HirProgram {
+            tables: program.tables.clone(),
             types: program.types.clone(),
             records: program.records.clone(),
             enums: program.enums.clone(),
@@ -365,8 +412,11 @@ pub fn lower(program: &Program) -> Result<HirProgram, Vec<ResolveError>> {
 struct Resolver<'a> {
     functions: &'a HashMap<String, FunctionId>,
     enum_names: &'a HashSet<String>,
+    table_names: &'a [String],
+    expression_types: &'a HashMap<(u32, usize, usize), Type>,
     errors: Vec<ResolveError>,
     scopes: Vec<HashMap<String, LocalId>>,
+    local_types: HashMap<LocalId, Type>,
     next_local: usize,
 }
 
@@ -400,6 +450,10 @@ impl<'a> Resolver<'a> {
             .rev()
             .find_map(|scope| scope.get(name).copied())
     }
+    fn lookup_type(&self, name: &str) -> Option<Type> {
+        self.lookup(name)
+            .and_then(|local| self.local_types.get(&local).cloned())
+    }
     fn block(&mut self, block: &Block) -> HirBlock {
         self.scopes.push(HashMap::new());
         let statements = block
@@ -422,8 +476,12 @@ impl<'a> Resolver<'a> {
                 mutable,
                 span,
             } => {
+                let inferred_type = self.expression_types.get(&span_key(value.span)).cloned();
                 let value = self.expr(value);
                 let local = self.bind(name.clone(), *span);
+                if let Some(local_type) = ty.clone().or(inferred_type) {
+                    self.local_types.insert(local, local_type);
+                }
                 HirStmt::Let {
                     name: name.clone(),
                     local,
@@ -434,6 +492,7 @@ impl<'a> Resolver<'a> {
                 }
             }
             Stmt::BindOrAssign { name, value, span } => {
+                let inferred_type = self.expression_types.get(&span_key(value.span)).cloned();
                 let value = self.expr(value);
                 if let Some(local) = self.lookup(name) {
                     HirStmt::Assign {
@@ -444,6 +503,9 @@ impl<'a> Resolver<'a> {
                     }
                 } else {
                     let local = self.bind(name.clone(), *span);
+                    if let Some(local_type) = inferred_type {
+                        self.local_types.insert(local, local_type);
+                    }
                     HirStmt::Let {
                         name: name.clone(),
                         local,
@@ -963,15 +1025,20 @@ impl<'a> Resolver<'a> {
                 field: field.clone(),
             },
             ExprKind::Sql { result_type, query } => {
-                let mut parameters = Vec::new();
+                let mut parameters: Vec<HirSqlParameter> = Vec::new();
                 match zelyra_database::sql_parameter_names(query) {
                     Ok(names) => {
                         for name in names {
-                            if parameters.iter().any(|(existing, _)| existing == &name) {
+                            if parameters.iter().any(|existing| existing.name == name) {
                                 continue;
                             }
                             match self.lookup(&name) {
-                                Some(local) => parameters.push((name.clone(), local)),
+                                Some(local) => parameters.push(HirSqlParameter {
+                                    name: name.clone(),
+                                    local,
+                                    ty: self.lookup_type(&name),
+                                    span: expr.span,
+                                }),
                                 None => self.error(
                                     expr.span,
                                     format!("SQL parameter `:{name}` is not available"),
@@ -983,10 +1050,26 @@ impl<'a> Resolver<'a> {
                         self.error(expr.span, format!("could not scan SQL parameters: {error}"))
                     }
                 }
+                let (statement, mut tables) =
+                    zelyra_database::sql::analyze_table_access(query, self.table_names);
+                tables.sort_by(|left, right| {
+                    left.table
+                        .cmp(&right.table)
+                        .then_with(|| left.mode.as_str().cmp(right.mode.as_str()))
+                });
+                let parameter_bindings = parameters
+                    .iter()
+                    .map(|parameter| (parameter.name.clone(), parameter.local))
+                    .collect();
                 HirExprKind::Sql {
                     result_type: result_type.clone(),
                     query: query.clone(),
-                    parameters,
+                    parameters: parameter_bindings,
+                    plan: HirSqlQuery {
+                        statement,
+                        tables,
+                        parameters,
+                    },
                 }
             }
             ExprKind::Await(inner) => HirExprKind::Await(Box::new(self.expr(inner))),
@@ -1055,6 +1138,63 @@ mod tests {
             hir.functions[1].body.statements[0],
             HirStmt::Let { .. }
         ));
+    }
+
+    #[test]
+    fn sql_hir_captures_typed_parameters_and_deterministic_table_accesses() {
+        let program = parse(
+            &lex("table invoices { id: Int primary } fn read(id: Int) -> Int[] { return sql<Int[]> { SELECT id FROM invoices WHERE id = :id } } fn main() {}")
+                .unwrap(),
+        )
+        .unwrap();
+        let hir = lower(&program).unwrap();
+        let HirStmt::Return {
+            value: Some(expression),
+            ..
+        } = &hir.functions[0].body.statements[0]
+        else {
+            panic!("expected a SQL return expression");
+        };
+        let HirExprKind::Sql { plan, .. } = &expression.kind else {
+            panic!("expected SQL HIR");
+        };
+        assert_eq!(plan.statement, Some("SELECT"));
+        assert_eq!(plan.tables.len(), 1);
+        assert_eq!(plan.tables[0].table, "invoices");
+        assert_eq!(
+            plan.tables[0].mode,
+            zelyra_database::sql::SqlAccessMode::Read
+        );
+        assert_eq!(plan.parameters.len(), 1);
+        assert_eq!(plan.parameters[0].name, "id");
+        assert_eq!(plan.parameters[0].ty, Some(Type::Int));
+        assert_eq!(plan.parameters[0].local, hir.functions[0].params[0].local);
+    }
+
+    #[test]
+    fn sql_hir_uses_successful_expression_types_for_inferred_bindings() {
+        let program = parse(
+            &lex("fn read() -> Int[] { id = 5 return sql<Int[]> { SELECT id FROM invoices WHERE id = :id } } fn main() {}")
+                .unwrap(),
+        )
+        .unwrap();
+        let inferred_value_span = match &program.functions[0].body.statements[0] {
+            Stmt::BindOrAssign { value, .. } => value.span,
+            _ => panic!("expected inferred binding"),
+        };
+        let hir =
+            lower_with_expression_types(&program, &[(inferred_value_span, Type::Int)]).unwrap();
+        let HirStmt::Return {
+            value: Some(expression),
+            ..
+        } = &hir.functions[0].body.statements[1]
+        else {
+            panic!("expected a SQL return expression");
+        };
+        let HirExprKind::Sql { plan, .. } = &expression.kind else {
+            panic!("expected SQL HIR");
+        };
+        assert_eq!(plan.parameters[0].ty, Some(Type::Int));
     }
 
     #[test]

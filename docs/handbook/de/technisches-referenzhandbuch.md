@@ -1130,7 +1130,9 @@ form CustomerCreate -> customers {
 
 Formularaktionen können eine eigene Autorisierung deklarieren. Die
 Berechtigung wird beim Anzeigen des Formulars und erneut vor dem Absenden
-geprüft.
+geprüft. `redirect` akzeptiert nur sichere lokale absolute Pfade wie
+`/customers`; externe oder protocol-relative Ziele sowie Backslashes und
+Steuerzeichen weist `zelyra check` mit `E-FORM-007` zurück.
 
 ## 12. CRUD
 

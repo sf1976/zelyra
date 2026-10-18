@@ -1689,7 +1689,7 @@ fn validate_program(
     if !validate_components(path, &program) {
         return Err(());
     }
-    if !validate_form_ui_appearances(path, &program) {
+    if !validate_form_properties(path, &program) {
         return Err(());
     }
     let schema = match build_schema(&program) {
@@ -3398,7 +3398,7 @@ fn component_prop_accepts(
     }
 }
 
-fn validate_form_ui_appearances(path: &str, program: &zelyra_ast::Program) -> bool {
+fn validate_form_properties(path: &str, program: &zelyra_ast::Program) -> bool {
     let mut valid = true;
     for form in &program.forms {
         for field in &form.fields {
@@ -3433,8 +3433,31 @@ fn validate_form_ui_appearances(path: &str, program: &zelyra_ast::Program) -> bo
                 }
             }
         }
+        for action in &form.actions {
+            if let Some(target) = action.redirect.as_deref() {
+                if !valid_local_redirect_target(target) {
+                    diagnostic_with_span(
+                        path,
+                        "E-FORM-007",
+                        &format!(
+                            "form action `{}` redirect must be a local absolute path without control characters or backslashes",
+                            action.name
+                        ),
+                        action.span,
+                    );
+                    valid = false;
+                }
+            }
+        }
     }
     valid
+}
+
+fn valid_local_redirect_target(target: &str) -> bool {
+    target.starts_with('/')
+        && !target.starts_with("//")
+        && !target.contains('\\')
+        && !target.chars().any(char::is_control)
 }
 
 fn template_expressions(html: &str) -> Result<Vec<String>, String> {
