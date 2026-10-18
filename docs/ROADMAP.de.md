@@ -98,7 +98,7 @@ abgeschlossen.
   Parametermetadaten erneut aus der SQL-Quelle und weist veraltete Pläne mit
   `E-MIR-VERIFY-004` ab. Es entsteht keine parallele Query-Syntax; sichere
   scoped Query-Erzeugung ist damit noch nicht vorhanden. Redirects in
-  Formaktionen sind statisch auf sichere gleich-originige absolute Pfade
+  Formaktionen sind statisch auf sichere lokale absolute Pfade desselben Ursprungs
   begrenzt (`E-FORM-007`). Tenant-Kontext, der übrige typisierte
   Request-/Form-Lifecycle, Responseverträge und Backendparität bleiben für
   diesen Meilenstein offen.
