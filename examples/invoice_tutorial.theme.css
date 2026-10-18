@@ -1,11 +1,29 @@
 /*
- * Invoice tutorial project theme. Zelyra UI is the shared framework imported
- * in main.zyl; this file contains project-wide overrides loaded after it.
- * Change the --z- tokens below to update shared colors and sizing. Keep each
- * foreground/background pair together, such as primary/on-primary. Add a
- * scoped selector below to restyle one existing component, for example:
- *   :where(html[data-z-ui]) .z-card { border-radius: 1rem; }
- * No framework file needs to be copied or changed. See siedelmann.com/handbuch.
+ * Zelyra UI theme for the invoice tutorial.
+ *
+ * Zelyra UI is loaded by `import "zelyra/ui" as ui` in main.zyl. Its shared
+ * styles are the default; this project file is loaded afterward and is the
+ * supported place to customize them. Do not edit or copy the framework CSS.
+ *
+ * 1. Change shared design tokens in the html[data-z-ui] block below. For
+ *    readable controls, change foreground/background pairs together, for
+ *    example --z-color-primary and --z-color-on-primary. The UI also provides
+ *    canvas, surface, text, border, focus, link, content-width, and radius
+ *    tokens. These affect every component that uses those tokens.
+ * 2. To change one component, add a selector scoped to the Zelyra UI document.
+ *    Examples (uncomment and adjust as needed):
+ *      :where(html[data-z-ui]) .z-card { border-radius: 1rem; }
+ *      :where(html[data-z-ui]) .z-button { min-height: 2.75rem; }
+ *      :where(html[data-z-ui]) .zelyra-crud-card { box-shadow: none; }
+ * 3. To style your own markup, give it a project class in the .zyl file and
+ *    write that class here. The invoice-home-* rules below are examples.
+ *
+ * The :where(...) scope keeps these overrides low-specificity and prevents
+ * unrelated HTML from being restyled. Add project rules after the tokens;
+ * avoid broad element selectors and !important so themes remain maintainable.
+ * This CSS is public browser content: never place passwords or other secrets
+ * here. More examples: examples/invoice_tutorial/TUTORIAL.de.md and
+ * https://siedelmann.com/handbuch.
  */
 :where(html[data-z-ui]) {
     --z-color-primary: #23654f;
