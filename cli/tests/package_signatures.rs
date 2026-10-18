@@ -186,7 +186,8 @@ fn package_signature_requires_explicit_trust_and_detects_tampering() {
         .unwrap()
         .split_ascii_whitespace()
         .next()
-        .unwrap();
+        .unwrap()
+        .to_owned();
 
     let signed = zelyra(
         &root,
@@ -213,7 +214,7 @@ fn package_signature_requires_explicit_trust_and_detects_tampering() {
 
     let trusted = zelyra(
         &root,
-        &["package", "trust", "add", "example-publisher", public_key],
+        &["package", "trust", "add", "example-publisher", &public_key],
     );
     assert!(
         trusted.status.success(),
@@ -644,6 +645,396 @@ fn package_add_downloads_exact_trusted_release_and_updates_offline_lock() {
     assert!(!app.join(".zelyra/packages/sample/1.2.4").exists());
 
     fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn package_add_resolves_and_installs_a_trusted_three_level_registry_closure() {
+    let root = fixture();
+    let registry = root.join("registry");
+    let app = root.join("app");
+    fs::create_dir_all(&registry).unwrap();
+    fs::create_dir_all(&app).unwrap();
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let registry_url = format!("http://{}/index.json", listener.local_addr().unwrap());
+    let key = root.join("publisher.key");
+    let generated = zelyra(
+        &root,
+        &[
+            "package",
+            "keygen",
+            "--publisher",
+            "chain-publisher",
+            "--output",
+            key.to_str().unwrap(),
+        ],
+    );
+    assert!(
+        generated.status.success(),
+        "{}",
+        String::from_utf8_lossy(&generated.stderr)
+    );
+    let public_key = stdout(&generated)
+        .split("public key: ")
+        .nth(1)
+        .unwrap()
+        .split_ascii_whitespace()
+        .next()
+        .unwrap()
+        .to_owned();
+
+    for (name, version, dependency, source) in [
+        ("third", "1.0.0", None, "pub fn value() -> String { return \"ok\" }\n"),
+        ("second", "1.0.0", Some(("third", "1.0.0")), "import \"pkg:third\" as third\npub fn value() -> String { return third::value() }\n"),
+        ("first", "1.0.0", Some(("second", "1.0.0")), "import \"pkg:second\" as second\npub fn value() -> String { return second::value() }\n"),
+    ] {
+        let package = root.join(format!("{name}-package"));
+        let mut manifest = format!("[package]\nname = {name:?}\nversion = {version:?}\nentry = \"src/lib.zyl\"\n");
+        if let Some((dependency_name, dependency_version)) = dependency {
+            manifest.push_str(&format!("\n[dependencies.{dependency_name}]\nregistry = {registry_url:?}\nname = {dependency_name:?}\nversion = {dependency_version:?}\n"));
+        }
+        fs::create_dir_all(package.join("src")).unwrap();
+        fs::write(package.join("zelyra.toml"), manifest).unwrap();
+        fs::write(package.join("src/lib.zyl"), source).unwrap();
+        let artifact_path = registry.join(format!("{name}-{version}.zpkg"));
+        let signed = zelyra(
+            &root,
+            &["package", "sign", package.to_str().unwrap(), "--publisher", "chain-publisher", "--key", key.to_str().unwrap(), "--output", artifact_path.to_str().unwrap()],
+        );
+        assert!(signed.status.success(), "sign {name}: {}", String::from_utf8_lossy(&signed.stderr));
+    }
+    for (name, dependency, source) in [
+        ("third", None, "pub fn value() -> String { return \"updated\" }\n"),
+        ("second", Some("third"), "import \"pkg:third\" as third\npub fn value() -> String { return third::value() }\n"),
+        ("first", Some("second"), "import \"pkg:second\" as second\npub fn value() -> String { return second::value() }\n"),
+    ] {
+        let package = root.join(format!("{name}-package-v101"));
+        let mut manifest = format!("[package]\nname = {name:?}\nversion = \"1.0.1\"\nentry = \"src/lib.zyl\"\n");
+        if let Some(dependency_name) = dependency {
+            manifest.push_str(&format!("\n[dependencies.{dependency_name}]\nregistry = {registry_url:?}\nname = {dependency_name:?}\nversion = \"1.0.1\"\n"));
+        }
+        fs::create_dir_all(package.join("src")).unwrap();
+        fs::write(package.join("zelyra.toml"), manifest).unwrap();
+        fs::write(package.join("src/lib.zyl"), source).unwrap();
+        let artifact_path = registry.join(format!("{name}-1.0.1.zpkg"));
+        let signed = zelyra(
+            &root,
+            &["package", "sign", package.to_str().unwrap(), "--publisher", "chain-publisher", "--key", key.to_str().unwrap(), "--output", artifact_path.to_str().unwrap()],
+        );
+        assert!(signed.status.success(), "sign {name} 1.0.1: {}", String::from_utf8_lossy(&signed.stderr));
+    }
+    let indexed = zelyra(
+        &root,
+        &["package", "registry", "build", registry.to_str().unwrap()],
+    );
+    assert!(
+        indexed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&indexed.stderr)
+    );
+    fs::write(
+        app.join("zelyra.toml"),
+        "[package]\nname = \"chain_app\"\nversion = \"0.1.0\"\nentry = \"main.zyl\"\n",
+    )
+    .unwrap();
+    fs::write(
+        app.join("main.zyl"),
+        "import \"pkg:first\" as first\nfn main() {}\n",
+    )
+    .unwrap();
+    let trusted = zelyra(
+        &app,
+        &["package", "trust", "add", "chain-publisher", &public_key],
+    );
+    assert!(
+        trusted.status.success(),
+        "{}",
+        String::from_utf8_lossy(&trusted.stderr)
+    );
+
+    let server = thread::spawn(move || {
+        for _ in 0..12 {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+                .unwrap();
+            let mut request = [0_u8; 4096];
+            let count = stream.read(&mut request).unwrap();
+            let request = String::from_utf8_lossy(&request[..count]);
+            let path = request
+                .lines()
+                .next()
+                .unwrap()
+                .split_whitespace()
+                .nth(1)
+                .unwrap();
+            let file = if path == "/index.json" {
+                registry.join("index.json")
+            } else {
+                registry.join(path.trim_start_matches('/'))
+            };
+            let body = fs::read(file).unwrap();
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            )
+            .unwrap();
+            stream.write_all(&body).unwrap();
+        }
+    });
+    let added = zelyra(
+        &app,
+        &[
+            "package",
+            "add",
+            &registry_url,
+            "first",
+            "1.0.0",
+            "--as",
+            "first",
+        ],
+    );
+    assert!(
+        added.status.success(),
+        "{}",
+        String::from_utf8_lossy(&added.stderr)
+    );
+    for name in ["first", "second", "third"] {
+        assert!(app
+            .join(format!(".zelyra/packages/{name}/1.0.0/zelyra.toml"))
+            .is_file());
+    }
+    let manifest: toml::Value =
+        toml::from_str(&fs::read_to_string(app.join("zelyra.toml")).unwrap()).unwrap();
+    assert_eq!(manifest["package_provenance"].as_table().unwrap().len(), 3);
+    let check = zelyra(&app, &["check", "main.zyl"]);
+    assert!(
+        check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&check.stderr)
+    );
+    let lock = zelyra(&app, &["package", "lock", "--check"]);
+    assert!(
+        lock.status.success(),
+        "{}",
+        String::from_utf8_lossy(&lock.stderr)
+    );
+    let ran = zelyra(&app, &["run", "main.zyl"]);
+    assert!(
+        ran.status.success(),
+        "{}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
+    let bundle = root.join("chain-bundle");
+    let bundle_text = bundle.to_string_lossy().into_owned();
+    let bundled = zelyra(
+        &app,
+        &[
+            "module",
+            "bundle",
+            "main.zyl",
+            "pkg:first",
+            "--output",
+            &bundle_text,
+        ],
+    );
+    assert!(
+        bundled.status.success(),
+        "{}",
+        String::from_utf8_lossy(&bundled.stderr)
+    );
+    let bundled_manifest: toml::Value =
+        toml::from_str(&fs::read_to_string(bundle.join("zelyra.toml")).unwrap()).unwrap();
+    assert_eq!(
+        bundled_manifest["package_provenance"]
+            .as_table()
+            .unwrap()
+            .len(),
+        3
+    );
+    let bundled_check = zelyra(&bundle, &["check", "main.zyl"]);
+    assert!(
+        bundled_check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&bundled_check.stderr)
+    );
+    let update_plan = root.join("update.toml");
+    fs::write(
+        &update_plan,
+        format!("[[update]]\nalias = \"first\"\nregistry = {registry_url:?}\nname = \"first\"\nversion = \"1.0.1\"\n"),
+    )
+    .unwrap();
+    let updated = zelyra(
+        &app,
+        &["package", "update", "--plan", update_plan.to_str().unwrap()],
+    );
+    assert!(
+        updated.status.success(),
+        "{}",
+        String::from_utf8_lossy(&updated.stderr)
+    );
+    server.join().unwrap();
+    for name in ["first", "second", "third"] {
+        assert!(app
+            .join(format!(".zelyra/packages/{name}/1.0.1/zelyra.toml"))
+            .is_file());
+    }
+    let after_update = zelyra(&app, &["check", "main.zyl"]);
+    assert!(
+        after_update.status.success(),
+        "{}",
+        String::from_utf8_lossy(&after_update.stderr)
+    );
+    let after_update_lock = zelyra(&app, &["package", "lock", "--check"]);
+    assert!(
+        after_update_lock.status.success(),
+        "{}",
+        String::from_utf8_lossy(&after_update_lock.stderr)
+    );
+}
+
+#[test]
+fn package_add_rejects_registry_cycles_before_mutating_the_project() {
+    let root = fixture();
+    let registry = root.join("cycle-registry");
+    let app = root.join("cycle-app");
+    fs::create_dir_all(&registry).unwrap();
+    fs::create_dir_all(&app).unwrap();
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let registry_url = format!("http://{}/index.json", listener.local_addr().unwrap());
+    let key = root.join("cycle-publisher.key");
+    let generated = zelyra(
+        &root,
+        &[
+            "package",
+            "keygen",
+            "--publisher",
+            "cycle-publisher",
+            "--output",
+            key.to_str().unwrap(),
+        ],
+    );
+    assert!(
+        generated.status.success(),
+        "{}",
+        String::from_utf8_lossy(&generated.stderr)
+    );
+    let public_key = stdout(&generated)
+        .split("public key: ")
+        .nth(1)
+        .unwrap()
+        .split_ascii_whitespace()
+        .next()
+        .unwrap()
+        .to_owned();
+    for (name, dependency) in [("cycle_a", "cycle_b"), ("cycle_b", "cycle_a")] {
+        let package = root.join(name);
+        fs::create_dir_all(package.join("src")).unwrap();
+        fs::write(
+            package.join("zelyra.toml"),
+            format!("[package]\nname = {name:?}\nversion = \"1.0.0\"\nentry = \"src/lib.zyl\"\n\n[dependencies.{dependency}]\nregistry = {registry_url:?}\nname = {dependency:?}\nversion = \"1.0.0\"\n"),
+        )
+        .unwrap();
+        fs::write(
+            package.join("src/lib.zyl"),
+            "pub fn value() -> String { return \"cycle\" }\n",
+        )
+        .unwrap();
+        let artifact = registry.join(format!("{name}.zpkg"));
+        let signed = zelyra(
+            &root,
+            &[
+                "package",
+                "sign",
+                package.to_str().unwrap(),
+                "--publisher",
+                "cycle-publisher",
+                "--key",
+                key.to_str().unwrap(),
+                "--output",
+                artifact.to_str().unwrap(),
+            ],
+        );
+        assert!(
+            signed.status.success(),
+            "{}",
+            String::from_utf8_lossy(&signed.stderr)
+        );
+    }
+    let indexed = zelyra(
+        &root,
+        &["package", "registry", "build", registry.to_str().unwrap()],
+    );
+    assert!(
+        indexed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&indexed.stderr)
+    );
+    fs::write(
+        app.join("zelyra.toml"),
+        "[package]\nname = \"cycle_app\"\nversion = \"0.1.0\"\nentry = \"main.zyl\"\n",
+    )
+    .unwrap();
+    fs::write(app.join("main.zyl"), "fn main() {}\n").unwrap();
+    let trusted = zelyra(
+        &app,
+        &["package", "trust", "add", "cycle-publisher", &public_key],
+    );
+    assert!(
+        trusted.status.success(),
+        "{}",
+        String::from_utf8_lossy(&trusted.stderr)
+    );
+    let original_manifest = fs::read(app.join("zelyra.toml")).unwrap();
+    let server = thread::spawn(move || {
+        for _ in 0..4 {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0_u8; 4096];
+            let count = stream.read(&mut request).unwrap();
+            let request = String::from_utf8_lossy(&request[..count]);
+            let path = request
+                .lines()
+                .next()
+                .unwrap()
+                .split_whitespace()
+                .nth(1)
+                .unwrap();
+            let file = if path == "/index.json" {
+                registry.join("index.json")
+            } else {
+                registry.join(path.trim_start_matches('/'))
+            };
+            let body = fs::read(file).unwrap();
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            )
+            .unwrap();
+            stream.write_all(&body).unwrap();
+        }
+    });
+    let result = zelyra(
+        &app,
+        &[
+            "package",
+            "add",
+            &registry_url,
+            "cycle_a",
+            "1.0.0",
+            "--as",
+            "cycle_a",
+        ],
+    );
+    server.join().unwrap();
+    assert!(!result.status.success());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("dependency cycle"));
+    assert_eq!(
+        fs::read(app.join("zelyra.toml")).unwrap(),
+        original_manifest
+    );
+    assert!(!app.join(".zelyra/packages/cycle_a/1.0.0").exists());
+    assert!(!app.join(".zelyra/packages/cycle_b/1.0.0").exists());
 }
 
 #[test]

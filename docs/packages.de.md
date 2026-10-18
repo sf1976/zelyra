@@ -181,10 +181,29 @@ und Artefaktsignatur gegen `zelyra.trust.toml` und hält Artefaktdownloads auf
 dem Ursprung des Index. Er schreibt ohne Überschreiben nach
 `.zelyra/packages/<name>/<version>`, aktualisiert Manifest und Lockfile mit
 Rollback und vermerkt Registry, Signierer, öffentlichen Schlüssel und
-Artefakt-Hash im `zelyra.lock`. Transitive Abhängigkeiten werden noch nicht
-separat aufgelöst oder geladen. Paketabhängigkeiten müssen bereits im signierten
-Paketverzeichnis enthalten sein. Prüfung und Ausführung installierter Pakete sind
-offline möglich.
+Artefakt-Hash für jedes Paket im `zelyra.lock` sowie in
+`[package_provenance."name@version"]` des Anwendungsmanifests. Ein signiertes
+Paket darf separat veröffentlichte, exakt versionierte Registry-Abhängigkeiten
+deklarieren:
+
+```toml
+[dependencies.text]
+registry = "https://pakete.example.test/index.json"
+name = "text"
+version = "=1.4.2"
+```
+
+`package add` und `package update --plan <datei.toml>` lösen den gesamten
+Abschluss auf. Jeder Herausgeberschlüssel muss vorher ausdrücklich in
+`zelyra.trust.toml` freigegeben sein. Zelyra prüft Indexmetadaten, Digest,
+Signatur, Identität und Version, lehnt Zyklen und widersprüchliche Quellen ab
+und begrenzt den Abschluss auf 128 Artefakte, 256 MiB und fünf Minuten. Der
+vollständige Abschluss wird gemeinsam im lokalen Cache bereitgestellt und das
+gesamte Projekt anschließend compilergeprüft. Pakete und signierte Manifeste
+bleiben unverändert. `package sign` arbeitet offline; bei Registry-Abhängigkeiten
+wird die vollständige Compilerprüfung deshalb erst bei der Installation des
+vertrauensgeprüften Abschlusses ausgeführt. Prüfung, Ausführung und Bundlebau
+funktionieren nach erfolgreicher Installation offline.
 Nach der vorläufigen Lock-Aktualisierung prüft der Installer außerdem das
 gesamte Projekt mit dem Compiler und rollt bei Fehlern zurück. `zelyra module
 bundle` verschiebt Pakete aus dem Cache in portable Pfade unter
