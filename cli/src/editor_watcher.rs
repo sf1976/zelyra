@@ -140,6 +140,7 @@ mod tests {
             run_cancel: Arc::new(AtomicBool::new(false)),
             run_stdin: Arc::new(std::sync::Mutex::new(None)),
             run_output: Arc::new(std::sync::Mutex::new(EditorRunOutput::default())),
+            module_settings_write_lock: Arc::new(std::sync::Mutex::new(())),
         }
     }
 

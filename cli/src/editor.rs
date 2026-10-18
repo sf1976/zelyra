@@ -82,6 +82,7 @@ struct EditorState {
     run_cancel: Arc<AtomicBool>,
     run_stdin: Arc<std::sync::Mutex<Option<std::process::ChildStdin>>>,
     run_output: Arc<std::sync::Mutex<EditorRunOutput>>,
+    module_settings_write_lock: Arc<std::sync::Mutex<()>>,
 }
 
 #[derive(Default)]
@@ -204,6 +205,7 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         run_cancel: Arc::new(AtomicBool::new(false)),
         run_stdin: Arc::new(std::sync::Mutex::new(None)),
         run_output: Arc::new(std::sync::Mutex::new(EditorRunOutput::default())),
+        module_settings_write_lock: Arc::new(std::sync::Mutex::new(())),
     });
     let active = Arc::new(AtomicUsize::new(0));
     editor_watcher::start(Arc::clone(&state));
@@ -5454,6 +5456,7 @@ fn main() {}
             run_cancel: Arc::new(AtomicBool::new(false)),
             run_stdin: Arc::new(std::sync::Mutex::new(None)),
             run_output: Arc::new(std::sync::Mutex::new(EditorRunOutput::default())),
+            module_settings_write_lock: Arc::new(std::sync::Mutex::new(())),
         }
     }
 

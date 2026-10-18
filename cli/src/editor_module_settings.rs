@@ -138,6 +138,10 @@ fn json_to_toml(value: &Value, type_name: &str) -> Result<toml::Value, (u16, Str
 }
 
 pub(super) fn write(state: &EditorState, request: &Value) -> EditorReply {
+    let _write_guard = state
+        .module_settings_write_lock
+        .lock()
+        .map_err(|_| (500, "module settings write lock is unavailable".into()))?;
     if request.to_string().len() > MAX_SETTINGS_BYTES {
         return Err((413, "module settings update exceeds 1 MiB".into()));
     }
@@ -337,6 +341,7 @@ mod tests {
             run_cancel: Arc::new(AtomicBool::new(false)),
             run_stdin: Arc::new(std::sync::Mutex::new(None)),
             run_output: Arc::new(std::sync::Mutex::new(EditorRunOutput::default())),
+            module_settings_write_lock: Arc::new(std::sync::Mutex::new(())),
         }
     }
 
@@ -359,6 +364,8 @@ mod tests {
         .unwrap();
         let saved_json: Value = serde_json::from_str(&saved).unwrap();
         assert_eq!(saved_json["secretValuesIncluded"], false);
+        assert!(!saved.contains("LEDGER_TOKEN"));
+        assert!(!saved.contains("secret-value"));
         let source = fs::read_to_string(state.root.join(SETTINGS_FILE)).unwrap();
         assert!(source.contains("timeout = 30"));
         assert!(source.contains("rate = 2.0"));
@@ -369,6 +376,10 @@ mod tests {
                 .unwrap_err()
                 .0,
             409
+        );
+        assert_eq!(
+            fs::read_to_string(state.root.join(SETTINGS_FILE)).unwrap(),
+            source
         );
         let _ = fs::remove_dir_all(state.root.clone());
     }
@@ -392,6 +403,55 @@ mod tests {
             assert_eq!(read(&state).unwrap_err().0, 422);
             assert_eq!(fs::read_to_string(target).unwrap(), "safe = true\n");
         }
+        let _ = fs::remove_dir_all(state.root.clone());
+    }
+
+    #[test]
+    fn concurrent_settings_saves_with_the_same_revision_cannot_overwrite_each_other() {
+        let state = state();
+        let (_, _, body) = read(&state).unwrap();
+        let revision = serde_json::from_str::<Value>(&body).unwrap()["revision"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let barrier = Arc::new(std::sync::Barrier::new(3));
+        let updates = [
+            json!({"revision":revision,"updates":[
+                {"packagePath":"packages/ledger","name":"timeout","value":30},
+                {"packagePath":"packages/ledger","name":"rate","value":2}
+            ]}),
+            json!({"revision":revision,"updates":[
+                {"packagePath":"packages/ledger","name":"timeout","value":45},
+                {"packagePath":"packages/ledger","name":"rate","value":3}
+            ]}),
+        ];
+        let handles = updates.map(|request| {
+            let state = state.clone();
+            let barrier = barrier.clone();
+            std::thread::spawn(move || {
+                barrier.wait();
+                write(&state, &request)
+                    .map(|_| ())
+                    .map_err(|(status, _)| status)
+            })
+        });
+        barrier.wait();
+        let results = handles.map(|handle| handle.join().unwrap());
+        assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+        assert_eq!(
+            results.iter().filter(|result| **result == Err(409)).count(),
+            1
+        );
+        let saved: toml::Value =
+            toml::from_str(&fs::read_to_string(state.root.join(SETTINGS_FILE)).unwrap()).unwrap();
+        let settings = saved["package_settings"]["packages/ledger"]
+            .as_table()
+            .unwrap();
+        let pair = (
+            settings["timeout"].as_integer().unwrap(),
+            settings["rate"].as_float().unwrap(),
+        );
+        assert!(pair == (30, 2.0) || pair == (45, 3.0));
         let _ = fs::remove_dir_all(state.root.clone());
     }
 }

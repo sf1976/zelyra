@@ -27,7 +27,7 @@ Ressourcendisziplin und ehrliche Beweisaussagen leiten jede Phase. Das
 [Manifest](MANIFESTO.de.md) beschreibt die Prinzipien; die Roadmap kennzeichnet
 den tatsächlich implementierten Stand.
 
-Das aktuelle stabile Release ist 1.2.7 und wurde unter https://github.com/sf1976/zelyra/releases/tag/v1.2.7 veröffentlicht. **Aktuelle Meilensteine** ist die
+Das aktuelle stabile Release ist 1.2.9 und wurde unter https://github.com/sf1976/zelyra/releases/tag/v1.2.9 veröffentlicht. **Aktuelle Meilensteine** ist die
 verbindliche Übersicht der nächsten Vorhaben. Ältere, nummerierte Release-
 Abschnitte bleiben als historische Planung und Nachweise erhalten; sie legen
 für sich keine aktuellen Releaseziele fest. Langfristige Ideen stehen im
@@ -115,18 +115,23 @@ abgeschlossen.
   geleaste Jobs bei Setup oder Dienststart ab. Es werden keine Host-Cronjobs
   installiert; die Zustellung erfolgt mindestens einmal, verpasste Minuten im
   Offlinebetrieb werden nicht nachgeholt.
-- [ ] **1.2.10 — verwaltbare und wiederverwendbare Module:** Compilergeprüfte
-  Moduleinstellungen über normale Anwendungsseiten mit Revisionsprüfung,
-  Secret-Redaktion und ohne implizite Capability-Freigabe ermöglichen. Eine
-  stabile HostServices-Grundlage für wiederverwendbare Datenintegrationen
-  liefern und mindestens CSV-Import/-Export als installierbare, getestete
-  Pakete bereitstellen. Weitere Adapter wie ODBC oder Excel nur mit
-  reproduzierbaren Provider- und Sicherheitsprüfungen aufnehmen.
-- [ ] **1.2.11 — Ökosystem- und Deploymentparität:** Paket- und Modulverträge
-  für Einstellungen, Effekte, Jobs, Datenzugriff und HostServices zwischen AST,
-  MIR und Bytecode nachweisen oder nicht unterstützte Pfade überall mit
-  stabilen Diagnosen geschlossen abweisen. `public/`, statische Assets und
-  Apache-/Nginx-Weiterleitungsheader sowie erlaubte Hosts mit Deploymenttests
+- [~] **1.2.10 — sichere Modulkonfiguration und wiederverwendbare Pakete:**
+  Die geschützte Studio-Seite für compilergeprüfte Paketeinstellungen
+  abschließen: gleichzeitige Speicherungen innerhalb desselben Prozesses
+  serialisieren, veraltete Revisionen abweisen, Geheimnisse redigieren und
+  keine Capability-Freigaben erteilen. HostServices bleibt eine dokumentierte,
+  versionierte Embedding-API und wird nicht als stabile native ABI oder
+  Paket-Pluginvertrag dargestellt. Wiederverwendbare CSV-Import-/Exportpakete
+  über unterstützte Backends prüfen. Von Anwendungen ausgelieferte
+  Einstellungsseiten und prozessübergreifende Transaktionen folgen in 1.2.11.
+- [ ] **1.2.11 — Anwendungseinstellungen und Ökosystemparität:**
+  Von Anwendungen ausgelieferte Moduleinstellungen nur mit serverseitiger
+  Autorisierung, CSRF, Schemaprüfung, Redaktion und ausdrücklich definiertem
+  Verhalten nach Änderungen einführen. Paket-/Modulverträge für Einstellungen,
+  Effekte, Jobs, Datenzugriff und HostServices über AST, MIR und Bytecode
+  nachweisen oder nicht unterstützte Pfade in jedem Backend mit stabilen
+  Diagnosen geschlossen abweisen. `public/`, statische Assets sowie
+  Apache-/Nginx-Weiterleitungsheader und erlaubte Hosts mit Deploymenttests
   absichern.
 - [ ] **1.2.12 — Geschäftsplattform-Vertikalschnitte:** Begrenzte, getestete
   Zustandsübergänge, Audit/Historie, ausgeglichene Ledger-Buchungen,
@@ -420,7 +425,7 @@ werden. Details stehen im [Projektlayout-Arbeitsplan](release-plans/1.3.0-projec
 - [x] **1.2.9 dauerhafte Jobs:** Transaktionale Vorkommen, Leases, begrenzte
   Wiederholungen, Idempotenz, Dead-Letter-Behandlung und Dienstlebenszyklus
   sind umgesetzt; Details stehen im Releaseplan und in den Versionshinweisen.
-- [ ] **1.2.10–1.2.15:** Moduleinstellungen/HostServices, Backendparität,
+- [~] **1.2.10–1.2.15:** Moduleinstellungen/HostServices, Backendparität,
   geprüfte Geschäftsabläufe, kanonische Projektstruktur und Bytecode-Gates
   wie in der Releasefolge am Anfang dieser Roadmap zugeordnet umsetzen.
 - [~] **1.3.0 Interpreterarchitektur — nach den 1.2.0-Grundlagen aktiv:**

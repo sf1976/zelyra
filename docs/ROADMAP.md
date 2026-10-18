@@ -25,7 +25,7 @@ telemetry, explicit effects, portable data, resource discipline, and honest
 proof claims guide every phase. The [manifesto](MANIFESTO.md) states the
 principles; the roadmap below tracks what is actually implemented.
 
-The current stable release is 1.2.7, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.7. **Current milestones** is the source of
+The current stable release is 1.2.9, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.9. **Current milestones** is the source of
 near-term commitments. Older numbered release sections below are retained as
 historical planning and evidence; they do not by themselves define current
 release targets. Longer-term ideas remain in the post-1.0 evolution section.
@@ -107,17 +107,22 @@ security and compatibility gates stated for that milestone.
   `zelyra schedule jobs`. Removed schedules cancel unleased pending jobs during
   setup or service startup. No host cron entries are installed; delivery is
   at-least-once and missed offline minutes are not backfilled.
-- [ ] **1.2.10 — manageable and reusable modules:** Expose compiler-checked
-  module settings through ordinary application pages with revision checks,
-  secret redaction, and no implicit capability grants. Deliver a stable
-  HostServices foundation for reusable data integrations and at least CSV
-  import/export as installable, tested packages. Add ODBC or Excel adapters
-  only with reproducible provider and security tests.
-- [ ] **1.2.11 — ecosystem and deployment parity:** Prove package and module
-  contracts for settings, effects, jobs, data access, and HostServices across
-  AST, MIR, and Bytecode, or make unsupported paths fail closed with stable
-  diagnostics in every backend. Secure `public/`, static assets, and
-  Apache/Nginx forwarded-header and allowed-host behavior with deployment tests.
+- [~] **1.2.10 — safe module configuration and reusable packages:** Complete
+  the protected Studio settings page for compiler-checked package settings,
+  including same-process concurrent-save serialization, stale-revision
+  rejection, secret redaction, and no implicit capability grants. Keep
+  HostServices documented as a versioned embedding API, not a stable native
+  ABI or package plugin contract. Verify reusable CSV import/export packages
+  across supported execution backends. Ordinary application-served settings
+  pages and cross-process settings transactions remain open for 1.2.11.
+- [ ] **1.2.11 — application module settings and ecosystem parity:** Add
+  application-served module settings only with server-side authorization,
+  CSRF, schema validation, redaction, and explicit runtime behavior after a
+  change. Prove package/module contracts for settings, effects, jobs, data
+  access, and HostServices across AST, MIR, and Bytecode, or make unsupported
+  paths fail closed with stable diagnostics. Secure `public/`, static assets,
+  and Apache/Nginx forwarded-header and allowed-host behavior with deployment
+  tests.
 - [ ] **1.2.12 — business-platform vertical slices:** Deliver bounded, tested
   state transitions, audit/history, balanced ledger operations,
   reflection/export metadata, health checks, modular bundles, and any
@@ -396,7 +401,7 @@ compatibility behavior before changing syntax. See the detailed
 - [x] **1.2.9 durable jobs:** Transactional scheduler occurrences, leases,
   bounded retries, idempotency, dead-letter handling, and service lifecycle
   are delivered; see the release plan and 1.2.9 notes.
-- [ ] **1.2.10–1.2.15:** Deliver module settings/HostServices, backend parity,
+- [~] **1.2.10–1.2.15:** Deliver module settings/HostServices, backend parity,
   tested business verticals, canonical project structure, and Bytecode gates as
   assigned in the release sequence at the top of this roadmap.
 - [~] **1.3.0 interpreter architecture — active after 1.2.0 foundations:**
