@@ -108,6 +108,17 @@ If Docker is installed but access to its socket is denied, Zelyra reports a safe
 
 An update consists of two separate parts: updating the compiler in the compiler repository, and verifying your application project. Your `.zyl` files, `zelyra.toml`, and `.env` live in your application project and are never overwritten by `install.sh`.
 
+`zelyra update` replaces only the installed Zelyra executable. It does not
+compile or modify your project. `zelyra build` currently checks the project,
+like `zelyra check`; it does not produce a separate application binary. After
+updating, explicitly check the project with `zelyra check main.zyl`.
+
+The update does not restart a running web server or systemd service. Stop and
+restart a manually started server. For an installed Linux systemd project
+service, run `zelyra service restart` from the project directory. The new
+process then loads the updated Zelyra executable and checks the project source
+again.
+
 #### Update from the Git repository
 
 ~~~bash

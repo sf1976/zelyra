@@ -124,6 +124,17 @@ Compiler im Compiler-Repository und prüfst danach dein eigenes
 Anwendungsprojekt. Deine `.zyl`-Dateien, `zelyra.toml` und `.env` liegen in
 deinem Anwendungsprojekt und werden durch `install.sh` nicht überschrieben.
 
+`zelyra update` aktualisiert nur die installierte Zelyra-Programmdatei. Es
+kompiliert oder verändert dein Projekt nicht. `zelyra build` prüft momentan wie
+`zelyra check` das Projekt; es erzeugt noch kein separates Anwendungs-Binary.
+Prüfe dein Projekt nach dem Update ausdrücklich mit `zelyra check main.zyl`.
+
+Ein bereits laufender Webserver oder systemd-Dienst wird durch das Update
+nicht neu gestartet. Stoppe und starte einen manuell gestarteten Server erneut.
+Für einen installierten Linux-systemd-Projektdienst führe im Projektordner
+`zelyra service restart` aus. Erst der neue Prozess lädt das aktualisierte
+Zelyra-Programm und prüft die Projektquellen erneut.
+
 #### Installation aus dem Git-Repository
 
 Arbeite zuerst im Compiler-Repository. Prüfe lokale Änderungen, bevor du sie
