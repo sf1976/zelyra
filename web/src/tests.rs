@@ -226,6 +226,11 @@ fn form_route() -> FormRoute {
         permissions: Vec::new(),
         csrf: CsrfProtection::new("csrf-token"),
         form_view: CrudFormViewDef::default(),
+        before_form_html: None,
+        after_form_html: None,
+        record_context_fields: Vec::new(),
+        form_context_fields: Vec::new(),
+        field_content_html: HashMap::new(),
         post_only: false,
         audit_table: None,
         audit_event: None,
@@ -513,6 +518,9 @@ fn default_shell_covers_standalone_forms_and_tableviews_but_not_custom_pages() {
         layout_html: None,
         source: "report query".into(),
         columns: Vec::new(),
+        before_content_html: None,
+        after_content_html: None,
+        row_actions: None,
         filters: Vec::new(),
         searchable: false,
         sortable: false,
@@ -3028,6 +3036,9 @@ fn renders_tableview_with_escaped_values_and_pagination_state() {
         layout_html: None,
         source: "SELECT id, name FROM customers".into(),
         columns: vec!["id".into(), "name".into()],
+        before_content_html: None,
+        after_content_html: None,
+        row_actions: None,
         filters: Vec::new(),
         searchable: true,
         sortable: true,
@@ -3065,6 +3076,84 @@ fn renders_tableview_with_escaped_values_and_pagination_state() {
 }
 
 #[test]
+fn renders_crud_page_slots_and_field_content_with_escaped_values_outside_form() {
+    let mut route = form_route();
+    route.before_form_html = Some("<p class=\"before\">{values.name}</p>".into());
+    route.after_form_html = Some("<p class=\"after\">Done</p>".into());
+    route.form_context_fields = vec!["name".into()];
+    route
+        .field_content_html
+        .insert("name".into(), "<small>{values.name}</small>".into());
+    let invalid = vec![FieldError {
+        field: "name".into(),
+        message: "value is required".into(),
+    }];
+    let html = render_form(
+        &route,
+        &HashMap::from([(String::from("name"), "<North>".into())]),
+        &invalid,
+        None,
+    );
+    let before = html.find("class=\"before\"").unwrap();
+    let form = html.find("<form").unwrap();
+    let field_help = html.find("<small>&lt;North&gt;</small>").unwrap();
+    let after = html.find("class=\"after\"").unwrap();
+    let close_form = html.find("</form>").unwrap();
+    assert!(before < form);
+    assert!(field_help < close_form);
+    assert!(after > close_form);
+    assert!(html.contains("<p class=\"before\">&lt;North&gt;</p>"));
+    assert!(html.contains("aria-invalid=\"true\""));
+    assert!(html.contains("<small>&lt;North&gt;</small>"));
+}
+
+#[test]
+fn renders_tableview_row_actions_for_each_row_and_escapes_dynamic_content() {
+    let tableview = TableViewRoute {
+        path: "/views/customers".into(),
+        title: "Customers".into(),
+        layout_html: None,
+        source: "SELECT id, name FROM customers".into(),
+        columns: vec!["id".into(), "name".into()],
+        before_content_html: Some("<p>Before</p>".into()),
+        after_content_html: Some("<p>After</p>".into()),
+        row_actions: Some(("customer".into(), "<button type=\"button\" data-name=\"{customer.name}\" data-z-dialog-auto-open=\"customer-dialog\">Open</button><dialog id=\"z-dialog-auto-0000000000\" data-z-dialog data-z-dialog-auto=\"z-dialog-auto-0000000000\" aria-labelledby=\"z-dialog-auto-0000000000-title\"><h2 id=\"z-dialog-auto-0000000000-title\">Details for {customer.name}</h2></dialog>".into())),
+        filters: Vec::new(),
+        searchable: false,
+        sortable: false,
+        page_size: None,
+        requires_auth: false,
+        permissions: Vec::new(),
+    };
+    let html = render_tableview(
+        &tableview,
+        &[
+            vec!["1".into(), "<North>".into()],
+            vec!["2".into(), "South".into()],
+        ],
+        TableViewRenderState {
+            query_values: &HashMap::new(),
+            search: "",
+            sort: "",
+            order: "ASC",
+            page: 1,
+            per_page: 25,
+        },
+        UiLanguage::English,
+    );
+    assert!(html.contains("<p>Before</p>"));
+    assert!(html.contains("<button type=\"button\" data-name=\"&lt;North&gt;\" data-z-dialog-auto-open=\"customer-dialog-r0\">Open</button>"));
+    assert!(html.contains("data-name=\"South\""));
+    assert!(html.contains("data-z-dialog-auto-open=\"customer-dialog-r0\""));
+    assert!(html.contains("data-z-dialog-auto-open=\"customer-dialog-r1\""));
+    assert!(html.contains("id=\"z-dialog-auto-0000000000-r0\" data-z-dialog data-z-dialog-auto=\"z-dialog-auto-0000000000-r0\""));
+    assert!(html.contains("id=\"z-dialog-auto-0000000000-r1\" data-z-dialog data-z-dialog-auto=\"z-dialog-auto-0000000000-r1\""));
+    assert!(html.contains("Details for &lt;North&gt;"));
+    assert!(html.contains("<th scope=\"col\">Actions</th>"));
+    assert!(html.contains("<p>After</p>"));
+}
+
+#[test]
 fn renders_typed_tableview_filters_and_preserves_state() {
     let tableview = TableViewRoute {
         path: "/views/customers".into(),
@@ -3072,6 +3161,9 @@ fn renders_typed_tableview_filters_and_preserves_state() {
         layout_html: None,
         source: "SELECT id, orders FROM customer_overview".into(),
         columns: vec!["id".into(), "orders".into()],
+        before_content_html: None,
+        after_content_html: None,
+        row_actions: None,
         filters: vec![TableViewFilter {
             name: "orders".into(),
             kind: TableViewFilterKind::Numeric,

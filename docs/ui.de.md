@@ -289,6 +289,13 @@ Eine automatisch erzeugte `tableview` kann dieselbe Layout-Komponente mit
 `layout: BusinessShell` auswählen:
 
 ```zelyra
+table customers {
+    id: Id primary auto
+    name: String(100) required
+    email: Email required
+}
+struct CustomerRow { id: Id name: String(100) email: Email }
+
 tableview CustomerOverview {
     layout: BusinessShell
     source sql<CustomerRow[]> { SELECT id, name FROM customers }
@@ -300,6 +307,94 @@ tableview CustomerOverview {
 Zelyra setzt den erzeugten Seiteninhalt in den normalen Inhalts-Slot des Views
 ein. Das Layout stellt das einzige `<main>`-Element bereit. Ein nicht
 vorhandener Layout-View wird mit `E-VIEW-030` gemeldet.
+
+### Generierte CRUD- und Tableview-Seiten gezielt erweitern
+
+Gemeinsame Formularvorgaben bleiben in `form`; `create` und `edit` können
+Titel, Absende-Schaltfläche und eigene Inhalte für genau ihre jeweilige Route
+überschreiben. Nicht gesetzte Texte übernehmen die gemeinsame Vorgabe und
+danach den CRUD-Standard. `before_form` steht nach Überschrift und Fehlerliste,
+`after_form` direkt nach dem generierten Formular. `field_content` erscheint
+innerhalb des passenden Feldblocks unter dem Steuerelement:
+
+```zelyra
+crud Customer -> customers {
+    view {
+        fields { customer_number name email }
+        form { title: "Kundenkonto" submit: "Speichern" }
+        create {
+            title: "Neues Kundenkonto"
+            before_form {
+                html { <p>Bitte prüfe zuerst, ob der Kunde bereits existiert.</p> }
+            }
+            field_content {
+                customer_number {
+                    html {
+                        <small>Aktuelle Eingabe: {values.customer_number}</small>
+                        <a href="/customers">Kundennummern in der Übersicht prüfen</a>
+                    }
+                }
+            }
+        }
+        edit {
+            submit: "Änderungen speichern"
+            after_form { html { <p>Bearbeitet: {record.name}</p> } }
+        }
+    }
+}
+```
+
+`values.feld` bezeichnet einen typisierten, aktuell im Formular vorhandenen
+Wert. `record.feld` ist nur im Edit-Block verfügbar und ist auf sichere
+Formularfelder begrenzt; IDs, Mandanten-/Besitzerschlüssel und sensible
+Passwort-, Token-, Secret- oder Hashfelder sind nicht verfügbar. Beim ersten
+Aufruf der Edit-Seite enthält `record` die geladenen Formularwerte. Nach einem
+Validierungsfehler enthält es dieselben erhaltenen Eingaben wie `values`,
+damit die Zusatzinhalte den sichtbaren Formularstand erklären. Auf Create gibt
+es kein gespeichertes `record`. Alle dynamischen Werte werden beim HTML-
+Rendering escaped. Eigene Inhaltsbereiche liegen außerhalb des generierten
+`<form>`-Elements; verschachtelte Formulare werden mit
+`E-CRUD-016` abgewiesen. Suche, Speichern, Berechtigungen, CSRF und
+serverseitige Validierung bleiben beim CRUD-System.
+
+Auch eine generierte `tableview` kann Seiteninhalte und eine typisierte
+Aktionszelle je Datenzeile erhalten. Hier funktionieren vorhandene UI-
+Komponenten, darunter Dialoge; automatische Dialog-IDs werden pro Zeile
+eindeutig gemacht:
+
+```zelyra
+tableview CustomerOverview {
+    source sql<CustomerRow[]> { SELECT id, name, email FROM customers }
+    columns { id name email }
+    view {
+        before_content { html { <p>Kundenübersicht mit Kontaktoptionen</p> } }
+        row_actions {
+            item: customer
+            html {
+                <Dialog title="Kundenkontakt" open_label="{customer.name} anzeigen">
+                    <p>{customer.email}</p>
+                </Dialog>
+            }
+        }
+        after_content { html { <a href="/customers/new">Kundenkonto anlegen</a> } }
+    }
+}
+```
+
+In `row_actions` sind nur Eigenschaften des SQL-Ergebnistyps verfügbar, und
+der Renderer verwendet für jede Zeile die angezeigten Tabellenspalten.
+Zusätzliche Inhalte dürfen keine `<form>`-Elemente enthalten. Links navigieren;
+lokale Buttons starten nur unterstützte UI-Interaktionen. Innerhalb von
+`field_content` muss ein eigener Button ausdrücklich `type="button"` haben;
+sonst würde ein Browser ihn als weiteren Submit-Button interpretieren.
+Änderungen an
+Datenbankdaten müssen über vorhandene CSRF- und berechtigungsgeprüfte CRUD-
+Aktionen laufen. Beliebiges CSS/HTML oder freie Klassen werden dadurch nicht
+allgemein statisch geprüft.
+
+Ein vollständiges, compilergeprüftes Beispiel mit Formularhilfen und einem
+Dialog je Tabellenzeile liegt unter
+[`examples/generated_page_customization/main.zyl`](../examples/generated_page_customization/main.zyl).
 
 Die Referenzanwendung `/ui/components` zeigt Zustände, Varianten,
 Formularfelder, responsive Tabelle, Diagramme, Druck und E-Mail-Aktionen.

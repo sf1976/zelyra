@@ -4088,30 +4088,206 @@ fn validate_components(path: &str, program: &zelyra_ast::Program) -> bool {
         }
     }
     for crud in &program.cruds {
-        if let Some(layout_name) = &crud.layout {
-            if let Some(layout) = program.views.iter().find(|view| view.name == *layout_name) {
-                valid &= validate_component_template(
-                    path,
-                    program,
-                    &layout.html,
-                    layout.span.line,
-                    layout.span.column,
-                    &HashMap::new(),
-                );
+        if let Some(table) = program.tables.iter().find(|table| table.name == crud.table) {
+            for (is_edit, page) in [(false, &crud.view.create), (true, &crud.view.edit)] {
+                let Some(table_name) = table
+                    .columns
+                    .first()
+                    .map(|_| singular_type_name(&table.name).unwrap_or_else(|| table.name.clone()))
+                else {
+                    continue;
+                };
+                let mut bindings =
+                    HashMap::from([("values".to_owned(), Type::Named(table_name.clone()))]);
+                let mut allowed = HashSet::new();
+                for column in &table.columns {
+                    let excluded = column.primary_key
+                        || column.auto
+                        || crud.tenant_column.as_deref() == Some(column.name.as_str())
+                        || crud.recipient_column.as_deref() == Some(column.name.as_str())
+                        || crud.unread_column.as_deref() == Some(column.name.as_str())
+                        || crud.expires_column.as_deref() == Some(column.name.as_str())
+                        || crud
+                            .soft_delete
+                            .as_ref()
+                            .is_some_and(|soft| soft.column == column.name)
+                        || (crud.table == "invoices" && column.name == "invoice_number")
+                        || ["password", "secret", "token", "hash"]
+                            .iter()
+                            .any(|part| column.name.to_ascii_lowercase().contains(part));
+                    let selected =
+                        crud.view.fields.is_empty() || crud.view.fields.contains(&column.name);
+                    if !excluded && selected {
+                        allowed.insert(column.name.clone());
+                    }
+                }
+                if is_edit {
+                    bindings.insert("record".to_owned(), Type::Named(table_name));
+                }
+                for (slot_name, html) in [
+                    ("before_form", page.before_form.as_deref()),
+                    ("after_form", page.after_form.as_deref()),
+                ] {
+                    let Some(html) = html else { continue };
+                    valid &= validate_component_template(
+                        path,
+                        program,
+                        html,
+                        page.span.line,
+                        page.span.column,
+                        &bindings,
+                    );
+                    if is_edit {
+                        valid &= validate_record_template_fields(path, html, &allowed, page.span);
+                    }
+                    valid &= validate_record_template_fields_for_root(
+                        path, html, "values", &allowed, page.span,
+                    );
+                    let expanded = expand_view_components(program, html.to_owned());
+                    if html_contains_element(&expanded, "form") {
+                        diagnostic_with_span(path, "E-CRUD-016", &format!("CRUD {slot_name} content must not contain a form; the generated form is managed by CRUD"), page.span);
+                        valid = false;
+                    }
+                }
+                for field in &page.field_content {
+                    if !allowed.contains(&field.field) {
+                        diagnostic_with_span(path, "E-CRUD-018", &format!("field content refers to `{}`, which is not an available generated form field", field.field), field.span);
+                        valid = false;
+                    }
+                    valid &= validate_component_template(
+                        path,
+                        program,
+                        &field.html,
+                        field.span.line,
+                        field.span.column,
+                        &bindings,
+                    );
+                    if is_edit {
+                        valid &= validate_record_template_fields(
+                            path,
+                            &field.html,
+                            &allowed,
+                            field.span,
+                        );
+                    }
+                    valid &= validate_record_template_fields_for_root(
+                        path,
+                        &field.html,
+                        "values",
+                        &allowed,
+                        field.span,
+                    );
+                    if html_contains_element(
+                        &expand_view_components(program, field.html.clone()),
+                        "form",
+                    ) {
+                        diagnostic_with_span(
+                            path,
+                            "E-CRUD-016",
+                            "CRUD field content must not contain a form",
+                            field.span,
+                        );
+                        valid = false;
+                    }
+                    if html_contains_form_submit_button(&expand_view_components(
+                        program,
+                        field.html.clone(),
+                    )) {
+                        diagnostic_with_span(
+                            path,
+                            "E-CRUD-019",
+                            "button in CRUD field content must use type=\"button\"; the generated submit button is managed by CRUD",
+                            field.span,
+                        );
+                        valid = false;
+                    }
+                }
             }
-            for slot in &crud.layout_slots {
-                valid &= validate_component_template(
-                    path,
-                    program,
-                    &slot.html,
-                    slot.span.line,
-                    slot.span.column,
-                    &HashMap::new(),
-                );
+            if let Some(layout_name) = &crud.layout {
+                if let Some(layout) = program.views.iter().find(|view| view.name == *layout_name) {
+                    valid &= validate_component_template(
+                        path,
+                        program,
+                        &layout.html,
+                        layout.span.line,
+                        layout.span.column,
+                        &HashMap::new(),
+                    );
+                }
+                for slot in &crud.layout_slots {
+                    valid &= validate_component_template(
+                        path,
+                        program,
+                        &slot.html,
+                        slot.span.line,
+                        slot.span.column,
+                        &HashMap::new(),
+                    );
+                }
             }
         }
     }
     for tableview in &program.tableviews {
+        for (slot_name, html) in [
+            ("before_content", tableview.view.before_content.as_deref()),
+            ("after_content", tableview.view.after_content.as_deref()),
+        ] {
+            if let Some(html) = html {
+                valid &= validate_component_template(
+                    path,
+                    program,
+                    html,
+                    tableview.span.line,
+                    tableview.span.column,
+                    &HashMap::new(),
+                );
+                if html_contains_element(&expand_view_components(program, html.to_owned()), "form")
+                {
+                    diagnostic_with_span(
+                        path,
+                        "E-VIEW-035",
+                        &format!("tableview {slot_name} content must not contain a form"),
+                        tableview.span,
+                    );
+                    valid = false;
+                }
+            }
+        }
+        if let Some(actions) = &tableview.view.row_actions {
+            let row_type = match &tableview.result_type {
+                Type::Array(inner) => (**inner).clone(),
+                other => other.clone(),
+            };
+            let bindings = HashMap::from([(actions.item.clone(), row_type)]);
+            valid &= validate_component_template(
+                path,
+                program,
+                &actions.html,
+                actions.span.line,
+                actions.span.column,
+                &bindings,
+            );
+            let available = tableview.columns.iter().cloned().collect::<HashSet<_>>();
+            valid &= validate_record_template_fields_for_root(
+                path,
+                &actions.html,
+                &actions.item,
+                &available,
+                actions.span,
+            );
+            if html_contains_element(
+                &expand_view_components(program, actions.html.clone()),
+                "form",
+            ) {
+                diagnostic_with_span(
+                    path,
+                    "E-VIEW-035",
+                    "tableview row_actions content must not contain a form",
+                    actions.span,
+                );
+                valid = false;
+            }
+        }
         if let Some(layout_name) = &tableview.layout {
             if let Some(layout) = program.views.iter().find(|view| view.name == *layout_name) {
                 valid &= validate_component_template(
@@ -4146,6 +4322,181 @@ fn validate_components(path: &str, program: &zelyra_ast::Program) -> bool {
         valid = false;
     }
     valid
+}
+
+fn validate_record_template_fields(
+    path: &str,
+    html: &str,
+    allowed: &HashSet<String>,
+    span: zelyra_ast::Span,
+) -> bool {
+    validate_record_template_fields_for_root(path, html, "record", allowed, span)
+}
+
+fn validate_record_template_fields_for_root(
+    path: &str,
+    html: &str,
+    root: &str,
+    allowed: &HashSet<String>,
+    span: zelyra_ast::Span,
+) -> bool {
+    let expressions = match template_expressions(html) {
+        Ok(values) => values,
+        Err(_) => return false,
+    };
+    let mut valid = true;
+    for expression in expressions {
+        let Some(field) = expression.strip_prefix(&format!("{root}.")) else {
+            continue;
+        };
+        if field.contains('.') || !allowed.contains(field) {
+            diagnostic_with_span(
+                path,
+                "E-CRUD-017",
+                &format!("`{expression}` is not available in this generated-page context"),
+                span,
+            );
+            valid = false;
+        }
+    }
+    valid
+}
+
+fn html_contains_element(html: &str, expected: &str) -> bool {
+    let bytes = html.as_bytes();
+    let mut cursor = 0;
+    while cursor < bytes.len() {
+        let Some(relative) = bytes[cursor..].iter().position(|byte| *byte == b'<') else {
+            break;
+        };
+        cursor += relative + 1;
+        if bytes.get(cursor) == Some(&b'!') || bytes.get(cursor) == Some(&b'?') {
+            continue;
+        }
+        if bytes.get(cursor) == Some(&b'/') {
+            cursor += 1;
+        }
+        let start = cursor;
+        while bytes
+            .get(cursor)
+            .is_some_and(|byte| byte.is_ascii_alphanumeric() || *byte == b'-')
+        {
+            cursor += 1;
+        }
+        if start < cursor && html[start..cursor].eq_ignore_ascii_case(expected) {
+            return true;
+        }
+    }
+    false
+}
+
+fn html_contains_form_submit_button(html: &str) -> bool {
+    let bytes = html.as_bytes();
+    let mut cursor = 0;
+    while cursor < bytes.len() {
+        let Some(relative) = bytes[cursor..].iter().position(|byte| *byte == b'<') else {
+            break;
+        };
+        cursor += relative + 1;
+        let name_start = cursor;
+        while bytes
+            .get(cursor)
+            .is_some_and(|byte| byte.is_ascii_alphanumeric() || *byte == b'-')
+        {
+            cursor += 1;
+        }
+        if name_start == cursor {
+            continue;
+        }
+        let is_button = html[name_start..cursor].eq_ignore_ascii_case("button");
+        let attributes_start = cursor;
+        let mut quote = None;
+        while let Some(byte) = bytes.get(cursor).copied() {
+            if let Some(quote_byte) = quote {
+                if byte == quote_byte {
+                    quote = None;
+                }
+            } else if matches!(byte, b'\'' | b'"') {
+                quote = Some(byte);
+            } else if byte == b'>' {
+                break;
+            }
+            cursor += 1;
+        }
+        if bytes.get(cursor).copied() != Some(b'>') {
+            break;
+        }
+        if is_button {
+            let explicit_button_type =
+                html_has_explicit_button_type(&html[attributes_start..cursor]);
+            if !explicit_button_type {
+                return true;
+            }
+        }
+        cursor += 1;
+    }
+    false
+}
+
+fn html_has_explicit_button_type(attributes: &str) -> bool {
+    let bytes = attributes.as_bytes();
+    let mut cursor = 0;
+    while cursor < bytes.len() {
+        while bytes.get(cursor).is_some_and(u8::is_ascii_whitespace)
+            || bytes.get(cursor) == Some(&b'/')
+        {
+            cursor += 1;
+        }
+        let start = cursor;
+        while bytes
+            .get(cursor)
+            .is_some_and(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b':'))
+        {
+            cursor += 1;
+        }
+        if start == cursor {
+            cursor += 1;
+            continue;
+        }
+        let name = attributes[start..cursor].to_ascii_lowercase();
+        while bytes.get(cursor).is_some_and(u8::is_ascii_whitespace) {
+            cursor += 1;
+        }
+        if bytes.get(cursor) != Some(&b'=') {
+            continue;
+        }
+        cursor += 1;
+        while bytes.get(cursor).is_some_and(u8::is_ascii_whitespace) {
+            cursor += 1;
+        }
+        let value = if bytes
+            .get(cursor)
+            .is_some_and(|byte| matches!(byte, b'\'' | b'"'))
+        {
+            let quote = bytes[cursor];
+            cursor += 1;
+            let start = cursor;
+            while bytes.get(cursor).is_some_and(|byte| *byte != quote) {
+                cursor += 1;
+            }
+            let value = &attributes[start..cursor];
+            cursor += usize::from(bytes.get(cursor) == Some(&quote));
+            value
+        } else {
+            let start = cursor;
+            while bytes
+                .get(cursor)
+                .is_some_and(|byte| !byte.is_ascii_whitespace())
+            {
+                cursor += 1;
+            }
+            &attributes[start..cursor]
+        };
+        if name == "type" {
+            return value.eq_ignore_ascii_case("button");
+        }
+    }
+    false
 }
 
 fn component_dependency_cycle(program: &zelyra_ast::Program) -> Option<Vec<String>> {
@@ -9603,6 +9954,11 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             permissions: Vec::new(),
             csrf,
             form_view: zelyra_ast::CrudFormViewDef::default(),
+            before_form_html: None,
+            after_form_html: None,
+            record_context_fields: Vec::new(),
+            form_context_fields: Vec::new(),
+            field_content_html: HashMap::new(),
             post_only: false,
             audit_table: None,
             audit_event: None,
@@ -9626,6 +9982,36 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                 edit,
                 CrudGenerationContext {
                     layout_html: crud_layout_html(&program, crud),
+                    before_form_html: (if edit {
+                        &crud.view.edit
+                    } else {
+                        &crud.view.create
+                    })
+                    .before_form
+                    .as_deref()
+                    .map(|html| expand_view_components(&program, html.to_owned())),
+                    after_form_html: (if edit {
+                        &crud.view.edit
+                    } else {
+                        &crud.view.create
+                    })
+                    .after_form
+                    .as_deref()
+                    .map(|html| expand_view_components(&program, html.to_owned())),
+                    field_content_html: (if edit {
+                        &crud.view.edit
+                    } else {
+                        &crud.view.create
+                    })
+                    .field_content
+                    .iter()
+                    .map(|entry| {
+                        (
+                            entry.field.clone(),
+                            expand_view_components(&program, entry.html.clone()),
+                        )
+                    })
+                    .collect(),
                     csrf,
                     membership_table: auth_route
                         .as_ref()
@@ -9697,6 +10083,9 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                     action,
                     CrudGenerationContext {
                         layout_html: crud_layout_html(&program, crud),
+                        before_form_html: None,
+                        after_form_html: None,
+                        field_content_html: HashMap::new(),
                         csrf: csrf.clone(),
                         membership_table: auth_route
                             .as_ref()
@@ -9767,6 +10156,22 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             layout_html: tableview_layout_html(&program, tableview),
             source: tableview.source.clone(),
             columns: tableview.columns.clone(),
+            before_content_html: tableview
+                .view
+                .before_content
+                .as_deref()
+                .map(|html| expand_view_components(&program, html.to_owned())),
+            after_content_html: tableview
+                .view
+                .after_content
+                .as_deref()
+                .map(|html| expand_view_components(&program, html.to_owned())),
+            row_actions: tableview.view.row_actions.as_ref().map(|row| {
+                (
+                    row.item.clone(),
+                    expand_view_components(&program, row.html.clone()),
+                )
+            }),
             filters: tableview
                 .filters
                 .iter()
@@ -10019,6 +10424,9 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
 
 struct CrudGenerationContext {
     layout_html: Option<String>,
+    before_form_html: Option<String>,
+    after_form_html: Option<String>,
+    field_content_html: HashMap<String, String>,
     csrf: CsrfProtection,
     membership_table: Option<String>,
     audit_table: Option<String>,
@@ -10166,6 +10574,22 @@ fn generated_crud_form(
     } else {
         format!("/{}/new", crud.table)
     };
+    let form_context_fields: Vec<String> = fields
+        .iter()
+        .filter(|field| {
+            let name = field.name.to_ascii_lowercase();
+            !["password", "secret", "token", "hash"]
+                .iter()
+                .any(|part| name.contains(part))
+                && field.widget.as_deref() != Some("password")
+        })
+        .map(|field| field.name.clone())
+        .collect();
+    let record_context_fields = if edit {
+        form_context_fields.clone()
+    } else {
+        Vec::new()
+    };
     FormRoute {
         path: path.clone(),
         action: path,
@@ -10211,7 +10635,26 @@ fn generated_crud_form(
         requires_auth: crud.requires_auth,
         permissions,
         csrf: context.csrf,
-        form_view: crud.view.form.clone(),
+        form_view: {
+            let page = if edit {
+                &crud.view.edit
+            } else {
+                &crud.view.create
+            };
+            zelyra_ast::CrudFormViewDef {
+                title: page.title.clone().or_else(|| crud.view.form.title.clone()),
+                submit: page
+                    .submit
+                    .clone()
+                    .or_else(|| crud.view.form.submit.clone()),
+                ..crud.view.form.clone()
+            }
+        },
+        before_form_html: context.before_form_html,
+        after_form_html: context.after_form_html,
+        record_context_fields,
+        form_context_fields,
+        field_content_html: context.field_content_html,
         post_only: false,
         audit_table: context.audit_table,
         audit_event: Some(if edit {
@@ -10270,6 +10713,11 @@ fn generated_crud_action(
                 submit: action.label.clone(),
                 ..zelyra_ast::CrudFormViewDef::default()
             },
+            before_form_html: context.before_form_html,
+            after_form_html: context.after_form_html,
+            record_context_fields: Vec::new(),
+            form_context_fields: Vec::new(),
+            field_content_html: HashMap::new(),
             post_only: true,
             audit_table: context.audit_table,
             audit_event: Some(format!("crud.action.{}", action.name)),

@@ -1199,6 +1199,55 @@ the generated edit path against stale submissions; it does not cover writes
 that bypass the form action or establish a general transaction contract for
 the application.
 
+Generated create and edit pages can be extended without taking ownership of
+their routes or persistence. Shared `form` settings remain the defaults, while
+`create` and `edit` can set their own title, submit label, and content around
+the generated form:
+
+~~~zelyra
+crud Customer -> customers {
+    view {
+        fields { name email active }
+        form { title: "Customer" submit: "Save" }
+        create {
+            title: "New customer"
+            before_form {
+                html {
+                    <p>Check for an existing customer first.</p>
+                    <a href="/customers">View customers</a>
+                }
+            }
+            field_content {
+                email {
+                    html { <small>Used for invoice delivery.</small> }
+                }
+            }
+        }
+        edit {
+            after_form {
+                html { <p>Changes are checked when you save.</p> }
+            }
+        }
+    }
+}
+~~~
+
+`create` and `edit` override shared form labels only when a local value is
+provided. `before_form` and `after_form` render outside the HTML form, and
+`field_content` renders below the matching generated field. The current form
+values are available through `values.field`; `record.field` is available only
+on edit and only for fields allowed by the generated form's type and security
+rules. On the initial edit request, it contains loaded form values; after a
+validation error it contains the same preserved input as `values`. On create,
+no persisted record exists. Invalid submissions render the same extension
+points again. The generated form continues to own validation,
+authorization, CSRF protection, and saving. Custom content cannot add a nested
+form; a button inside `field_content` must declare `type="button"` or the
+compiler rejects it with `E-CRUD-019` to prevent accidental submission. The
+matching German and English component reference also documents
+`tableview`'s `before_content`, `after_content`, and per-row action content;
+those actions do not create another persistence path.
+
 Domain actions remain POST-only, parameterized, and protected:
 
 ~~~zelyra

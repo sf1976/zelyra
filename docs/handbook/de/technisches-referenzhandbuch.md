@@ -1298,6 +1298,55 @@ Beispiel mit `name email active`), verlinkt Zelyra in generierten CRUD-Listen
 automatisch das erste angezeigte Feld (`name`) mit der Detailseite des
 Datensatzes. Das gilt sowohl für Tabellen- als auch für Kachel-Layouts.
 
+### Create- und Edit-Seiten erweitern
+
+`form` enthält gemeinsame Texte. Die getrennten `create`- und `edit`-Blöcke
+überschreiben diese Werte jeweils nur auf ihrer eigenen Route. `before_form`
+und `after_form` fügen geprüftes HTML samt vorhandenen Komponenten außerhalb
+des erzeugten Formulars ein. `field_content` platziert Zusatztext, Links oder
+Komponenten direkt unter einem Formularfeld:
+
+~~~zelyra
+crud Customer -> customers {
+    view {
+        fields { customer_number name email }
+        form { title: "Kundenkonto" submit: "Speichern" }
+        create {
+            title: "Neues Kundenkonto"
+            field_content {
+                customer_number {
+                    html {
+                        <small>Aktuelle Eingabe: {values.customer_number}</small>
+                        <a href="/customers">Kundennummern prüfen</a>
+                    }
+                }
+            }
+        }
+        edit {
+            submit: "Änderungen speichern"
+            after_form { html { <p>Bearbeitet: {record.name}</p> } }
+        }
+    }
+}
+~~~
+
+`values.feld` ist der aktuelle typisierte Formularwert. `record.feld` gibt es
+nur im Edit-Kontext und nur für sichere, tatsächlich verfügbare Formularfelder;
+Create hat keinen gespeicherten Datensatz. IDs, Mandanten-/Besitzerschlüssel
+sowie sensible Passwort-, Token-, Secret- und Hash-Felder sind nicht verfügbar.
+Beim ersten Aufruf enthält `record` die geladenen Formularwerte. Nach einem
+Validierungsfehler enthält es dieselben erhaltenen Eingaben wie `values`, damit
+Zusatzinhalte den sichtbaren Formularstand abbilden.
+HTML-Formulare innerhalb eigener Bereiche werden mit `E-CRUD-016` abgewiesen.
+Ein eigener Button innerhalb von `field_content` muss `type="button"` tragen;
+sonst weist der Compiler ihn mit `E-CRUD-019` ab, damit er das generierte
+Formular nicht versehentlich absendet.
+Die CRUD-Route behält Validierung, CSRF, Berechtigungen und Speicherung.
+
+Tableviews unterstützen ebenfalls Inhaltsbereiche und eine typisierte
+`row_actions`-Zelle je Zeile. Die vollständige Syntax mit Dialogbeispiel steht
+in der [UI-Referenz](../../ui.de.md#generierte-crud--und-tableview-seiten-gezielt-erweitern).
+
 🧪 Edit-Formulare, deren Name auf `Edit` endet, enthalten nun einen signierten
 Stand der angezeigten Werte. Beim Absenden sperrt Zelyra die Zeile in derselben
 MariaDB-Transaktion wie Formularaktion und Audit-Einträge. Wurde ein Wert seit

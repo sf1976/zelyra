@@ -1,0 +1,78 @@
+import "zelyra/ui" as ui
+
+table customers {
+    id: Id primary auto
+    name: String required
+    email: Email?
+}
+
+struct CustomerSummary {
+    id: Id
+    name: String
+    email: Email?
+}
+
+crud Customer -> customers {
+    view {
+        fields { name email }
+        form {
+            title: "Customer"
+            submit: "Save"
+        }
+        create {
+            title: "New customer"
+            before_form {
+                html {
+                    <p>Check whether the customer already exists before adding another record.</p>
+                    <a href="/customers">Browse customers</a>
+                }
+            }
+            field_content {
+                email {
+                    html {
+                        <small>Invoice delivery address: {values.email}</small>
+                    }
+                }
+            }
+            after_form {
+                html { <p>After saving, you can update the customer from its detail page.</p> }
+            }
+        }
+        edit {
+            submit: "Save customer changes"
+            field_content {
+                email {
+                    html { <small>Address in this form: {record.email}</small> }
+                }
+            }
+        }
+    }
+    list { name email }
+    search { name email }
+}
+
+tableview CustomerOverview {
+    source sql<CustomerSummary[]> {
+        SELECT id, name, email FROM customers
+    }
+    columns { id name email }
+    view {
+        before_content {
+            html { <p>Contact details for customers in this workspace.</p> }
+        }
+        row_actions {
+            item: customer
+            html {
+                <Dialog title="Customer contact" open_label="Contact {customer.name}">
+                    <p>{customer.email}</p>
+                    <a href="/customers/{customer.id}">Open customer</a>
+                </Dialog>
+            }
+        }
+        after_content {
+            html { <a href="/customers/new">Add a customer</a> }
+        }
+    }
+}
+
+fn main() {}

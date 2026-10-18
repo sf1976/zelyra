@@ -112,8 +112,8 @@ try {
         labelTop: field.querySelector("dt").getBoundingClientRect().top,
         valueTop: field.querySelector("dd").getBoundingClientRect().top,
       }));
-      assert.equal(fieldLayout.columns, 1, `card labels and values should form a clear vertical pair: ${JSON.stringify(fieldLayout)}`);
-      assert.ok(fieldLayout.valueTop >= fieldLayout.labelTop, `card value must stay directly below its label: ${JSON.stringify(fieldLayout)}`);
+      assert.equal(fieldLayout.columns, 2, `desktop card fields should align each label with its value: ${JSON.stringify(fieldLayout)}`);
+      assert.ok(Math.abs(fieldLayout.valueTop - fieldLayout.labelTop) < 4, `card label and value must read as one pair: ${JSON.stringify(fieldLayout)}`);
       if (browserName === "chromium") await assertVisualSnapshot(page, "invoice-items-cards-desktop");
     }
     if (route === "/customers") {

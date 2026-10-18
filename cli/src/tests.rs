@@ -1947,6 +1947,130 @@ fn validates_typed_page_data_field_bindings() {
 }
 
 #[test]
+fn validates_create_edit_contexts_and_custom_tableview_row_actions() {
+    let source = r#"
+        table customers { id: Id primary auto name: String(100) email: Email password_hash: String(255) }
+        crud Customer -> customers {
+            view {
+                fields { name email password_hash }
+                create {
+                    before_form { html { <p>{values.email}</p> } }
+                    field_content { name { html { <a href="/help">Help</a><small>{values.email}</small> } } }
+                }
+                edit {
+                    after_form { html { <p>{record.name}</p> } }
+                }
+            }
+        }
+        tableview Customers {
+            source sql<Customer[]> { SELECT id, name FROM customers }
+            columns { id name }
+            view {
+                row_actions {
+                    item: customer
+                    html { <a href="/customers/{customer.id}">Open</a><button type="button" data-name="{customer.name}">Inspect</button> }
+                }
+            }
+        }
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    assert!(validate_components("generated.zyl", &program));
+}
+
+#[test]
+fn tableview_row_actions_can_use_imported_zelyra_dialog_components() {
+    let directory = std::env::temp_dir().join(format!(
+        "zelyra-tableview-dialog-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&directory).unwrap();
+    let entry = directory.join("main.zyl");
+    fs::write(
+        &entry,
+        r#"
+            import "zelyra/ui" as ui
+            struct CustomerRow { id: Id name: String }
+            tableview Customers {
+                source sql<CustomerRow[]> { SELECT id, name FROM customers }
+                columns { id name }
+                view {
+                    row_actions {
+                        item: customer
+                        html {
+                            <Dialog title="Customer details" open_label="Details">
+                                <p>{customer.name}</p>
+                            </Dialog>
+                        }
+                    }
+                }
+            }
+        "#,
+    )
+    .unwrap();
+
+    let loaded = project::load(entry.to_str().unwrap()).unwrap();
+    assert!(validate_components("main.zyl", &loaded.program));
+    let tableview = &loaded.program.tableviews[0];
+    let actions = tableview.view.row_actions.as_ref().unwrap();
+    let expanded = expand_view_components(&loaded.program, actions.html.clone());
+    assert!(expanded.contains("data-z-dialog"));
+    assert!(expanded.contains("aria-controls="));
+    assert!(expanded.contains("{customer.name}"));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn rejects_saved_record_in_create_and_unavailable_or_sensitive_fields() {
+    let source = r#"
+        table customers { id: Id primary auto name: String(100) password_hash: String(255) }
+        crud Customer -> customers {
+            view {
+                fields { name password_hash }
+                create { before_form { html { <p>{record.name}</p> } } }
+                edit {
+                    after_form { html { <p>{record.id} {record.password_hash}</p> } }
+                    field_content { missing { html { <p>Missing</p> } } }
+                }
+            }
+        }
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    assert!(!validate_components("invalid-context.zyl", &program));
+}
+
+#[test]
+fn rejects_generated_form_nested_in_crud_custom_content() {
+    let source = r#"
+        table customers { id: Id primary auto name: String(100) }
+        crud Customer -> customers { view { create { before_form { html { <form><p>Wrong</p></form> } } } } }
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    assert!(!validate_components("nested-form.zyl", &program));
+
+    let explicit_button = r#"
+        table customers { id: Id primary auto name: String(100) }
+        crud Customer -> customers {
+            view {
+                fields { name }
+                create {
+                    field_content { name { html { <button type="button">Help</button> } } }
+                }
+            }
+        }
+    "#;
+    let program = parse(&lex(explicit_button).unwrap()).unwrap();
+    assert!(validate_components("explicit-button.zyl", &program));
+
+    let implicit_submit = explicit_button.replace(" type=\"button\"", "");
+    let program = parse(&lex(&implicit_submit).unwrap()).unwrap();
+    assert!(!validate_components("implicit-submit.zyl", &program));
+}
+
+#[test]
 fn rejects_unknown_typed_page_data_field() {
     let source = r#"
         table customers { id: Id primary auto name: String(100) }
@@ -3002,6 +3126,9 @@ fn shared_crud_view_fields_drive_list_and_form_defaults() {
         false,
         CrudGenerationContext {
             layout_html: None,
+            before_form_html: None,
+            after_form_html: None,
+            field_content_html: HashMap::new(),
             csrf: CsrfProtection::new("test-csrf"),
             membership_table: None,
             audit_table: None,
@@ -3080,6 +3207,9 @@ fn tenant_crud_forms_hide_and_server_bind_tenant_key() {
             edit,
             CrudGenerationContext {
                 layout_html: None,
+                before_form_html: None,
+                after_form_html: None,
+                field_content_html: HashMap::new(),
                 csrf: CsrfProtection::new("tenant-test-csrf"),
                 membership_table: Some("memberships".into()),
                 audit_table: None,

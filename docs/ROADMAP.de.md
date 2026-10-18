@@ -172,8 +172,12 @@ abgeschlossen.
   begrenzte Zustandsübergänge, Audit/Historie, ausgeglichene Ledger-Buchungen,
   Reflection-/Exportmetadaten, Healthchecks und modulare Bundles mit konkreten
   Integrationstests abschließen. Apache-/TLS-Loopback-Tests und Reverse-Proxy-
-  Konfigurationen werden ebenfalls hier abgeschlossen. Wasm/Sidecars bleiben
-  optional und benötigen ein eigenes Sandbox-/ABI-Gate.
+  Konfigurationen werden ebenfalls hier abgeschlossen. Die CRUD- und
+  Tableview-Oberflächen erhalten komponierbare, typgeprüfte Erweiterungspunkte
+  für Create/Edit, Feldhilfen, Seiteninhalte und zeilenbezogene UI-Aktionen;
+  Routing, Speicherung und Sicherheitsprüfungen bleiben zentral. Dieses
+  Teilpaket ist umgesetzt und getestet; die übrigen 1.2.15-Arbeiten sind offen.
+  Wasm/Sidecars bleiben optional und benötigen ein eigenes Sandbox-/ABI-Gate.
 - [ ] **1.3.0 — kanonische Struktur und Bytecode-Standard:** Das optionale,
   versionierte Projektlayout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, `plugins/`), Architekturprüfungen und eine sichere

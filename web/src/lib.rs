@@ -510,6 +510,15 @@ pub struct FormRoute {
     pub permissions: Vec<String>,
     pub csrf: CsrfProtection,
     pub form_view: CrudFormViewDef,
+    /// Side-specific generated CRUD content rendered outside the form element.
+    pub before_form_html: Option<String>,
+    pub after_form_html: Option<String>,
+    /// Edit-only fields safe to expose through the `record` view binding.
+    pub record_context_fields: Vec<String>,
+    /// Input values may be read by custom CRUD view content using `values.field`.
+    pub form_context_fields: Vec<String>,
+    /// Field-specific HTML content inserted directly below its generated control.
+    pub field_content_html: HashMap<String, String>,
     pub post_only: bool,
     pub audit_table: Option<String>,
     pub audit_event: Option<String>,
@@ -572,6 +581,9 @@ pub struct TableViewRoute {
     pub layout_html: Option<String>,
     pub source: String,
     pub columns: Vec<String>,
+    pub before_content_html: Option<String>,
+    pub after_content_html: Option<String>,
+    pub row_actions: Option<(String, String)>,
     pub filters: Vec<TableViewFilter>,
     pub searchable: bool,
     pub sortable: bool,
@@ -7335,7 +7347,16 @@ fn render_tableview(
     } = state;
     let mut html = String::from("<main class=\"z-generated-page\"><header class=\"z-page-header\"><div class=\"z-page-header__copy\"><h1 class=\"z-page-header__title\">");
     html.push_str(&html_escape(&tableview.title));
-    html.push_str("</h1></div></header><form class=\"z-table-tools\" method=\"get\" action=\"");
+    html.push_str("</h1></div></header>");
+    if let Some(content) = &tableview.before_content_html {
+        html.push_str(&render_interpolations(
+            content,
+            &HashMap::new(),
+            &HashMap::new(),
+        ));
+    }
+    // Keep custom content outside the generated query form.
+    html.push_str("<form class=\"z-table-tools\" method=\"get\" action=\"");
     html.push_str(&html_escape(&tableview.path));
     html.push_str("\"><fieldset class=\"z-fieldset zelyra-query-controls\"><legend>");
     html.push_str(&tr(language, "query.legend"));
@@ -7445,8 +7466,17 @@ fn render_tableview(
             ));
             html.push_str("</th>");
         }
+        if tableview.row_actions.is_some() {
+            html.push_str("<th scope=\"col\">");
+            html.push_str(if language == UiLanguage::German {
+                "Aktionen"
+            } else {
+                "Actions"
+            });
+            html.push_str("</th>");
+        }
         html.push_str("</tr></thead><tbody>");
-        for row in rows {
+        for (row_index, row) in rows.iter().enumerate() {
             html.push_str("<tr>");
             for index in 0..tableview.columns.len() {
                 html.push_str("<td>");
@@ -7461,6 +7491,23 @@ fn render_tableview(
                     value
                 };
                 html.push_str(&html_escape(value));
+                html.push_str("</td>");
+            }
+            if let Some((item, template)) = &tableview.row_actions {
+                let mut row_values = HashMap::new();
+                for (index, column) in tableview.columns.iter().enumerate() {
+                    row_values.insert(
+                        format!("{item}.{column}"),
+                        row.get(index).map(String::as_str).unwrap_or("").to_owned(),
+                    );
+                }
+                html.push_str("<td class=\"z-table__actions\">");
+                let scoped = scope_dialog_auto_ids(template, &[row_index]);
+                html.push_str(&render_interpolations(
+                    &scoped,
+                    &HashMap::new(),
+                    &row_values,
+                ));
                 html.push_str("</td>");
             }
             html.push_str("</tr>");
@@ -7499,7 +7546,15 @@ fn render_tableview(
         )));
         html.push_str(&format!("\">{}</a>", tr(language, "pagination.next")));
     }
-    html.push_str("</nav></main>");
+    html.push_str("</nav>");
+    if let Some(content) = &tableview.after_content_html {
+        html.push_str(&render_interpolations(
+            content,
+            &HashMap::new(),
+            &HashMap::new(),
+        ));
+    }
+    html.push_str("</main>");
     html
 }
 

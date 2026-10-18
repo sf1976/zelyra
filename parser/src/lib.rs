@@ -1137,6 +1137,22 @@ impl<'a> Parser<'a> {
                     }
                     self.expect(TokenKind::RBrace, "`}` after CRUD view form")?;
                 }
+                TokenKind::Ident(name) if name == "create" || name == "edit" => {
+                    let is_create = name == "create";
+                    self.advance();
+                    let page = self.crud_form_page_block(if is_create { "create" } else { "edit" })?;
+                    if is_create {
+                        if view.create.span != Span::default() {
+                            return self.error("duplicate CRUD `create` view block");
+                        }
+                        view.create = page;
+                    } else {
+                        if view.edit.span != Span::default() {
+                            return self.error("duplicate CRUD `edit` view block");
+                        }
+                        view.edit = page;
+                    }
+                }
                 TokenKind::Ident(name) if name == "delete" => {
                     self.advance();
                     self.expect(TokenKind::LBrace, "`{` after CRUD view delete")?;
@@ -1213,7 +1229,7 @@ impl<'a> Parser<'a> {
                 }
                 _ => {
                     return self.error(
-                        "expected `fields`, `list`, `detail`, `form`, `delete`, `loading`, or `error` in CRUD view definition",
+                        "expected `fields`, `list`, `detail`, `form`, `create`, `edit`, `delete`, `loading`, or `error` in CRUD view definition",
                     )
                 }
             }
@@ -1221,6 +1237,87 @@ impl<'a> Parser<'a> {
         }
         self.expect(TokenKind::RBrace, "`}` after CRUD view definition")?;
         Ok(view)
+    }
+
+    fn crud_form_page_block(&mut self, page_name: &str) -> Result<CrudFormPageDef, ParseError> {
+        self.expect(TokenKind::LBrace, "`{` after CRUD page block")?;
+        let start = self.current().span;
+        let mut page = CrudFormPageDef::default();
+        self.skip_newlines();
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            let (property, property_span) = self.ident("CRUD page property or content block")?;
+            match property.as_str() {
+                "title" | "submit" => {
+                    self.expect(TokenKind::Colon, "`:` after CRUD page property")?;
+                    let value = self.string_value("CRUD page text")?;
+                    let target = if property == "title" { &mut page.title } else { &mut page.submit };
+                    if target.replace(value).is_some() {
+                        return self.error(format!("duplicate `{property}` in CRUD {page_name} view"));
+                    }
+                }
+                "before_form" | "after_form" => {
+                    let body = self.crud_page_html_block(&property)?;
+                    let target = if property == "before_form" { &mut page.before_form } else { &mut page.after_form };
+                    if target.replace(body).is_some() {
+                        return self.error(format!("duplicate `{property}` in CRUD {page_name} view"));
+                    }
+                }
+                "field_content" => {
+                    self.expect(TokenKind::LBrace, "`{` after CRUD field_content")?;
+                    self.skip_newlines();
+                    while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                        let (field, span) = self.ident("CRUD field name")?;
+                        self.expect(TokenKind::LBrace, "`{` after field content name")?;
+                        self.skip_newlines();
+                        self.expect(TokenKind::Html, "`html` in CRUD field content")?;
+                        self.expect(TokenKind::LBrace, "`{` after `html`")?;
+                        let html = match self.current().kind.clone() {
+                            TokenKind::HtmlBody(body) => { self.advance(); body }
+                            _ => return self.error("expected HTML body in CRUD field content"),
+                        };
+                        self.expect(TokenKind::RBrace, "`}` after CRUD field HTML")?;
+                        self.skip_newlines();
+                        let end = self.expect(TokenKind::RBrace, "`}` after CRUD field content")?;
+                        if page.field_content.iter().any(|entry| entry.field == field) {
+                            return self.error(format!("duplicate field content for `{field}`"));
+                        }
+                        page.field_content.push(CrudFieldContentDef { field, html, span: span.join(end) });
+                        self.skip_newlines();
+                    }
+                    self.expect(TokenKind::RBrace, "`}` after CRUD field_content")?;
+                }
+                _ => return self.error(format!("expected `title`, `submit`, `before_form`, `after_form`, or `field_content` in CRUD {page_name} view")),
+            }
+            if page.span == Span::default() {
+                page.span = property_span;
+            }
+            self.skip_newlines();
+        }
+        let end = self.expect(TokenKind::RBrace, "`}` after CRUD page block")?;
+        page.span = if start == Span::default() {
+            end
+        } else {
+            start.join(end)
+        };
+        Ok(page)
+    }
+
+    fn crud_page_html_block(&mut self, _name: &str) -> Result<String, ParseError> {
+        self.expect(TokenKind::LBrace, "`{` after CRUD page content")?;
+        self.skip_newlines();
+        self.expect(TokenKind::Html, "`html` in CRUD page content")?;
+        self.expect(TokenKind::LBrace, "`{` after `html`")?;
+        let body = match self.current().kind.clone() {
+            TokenKind::HtmlBody(body) => {
+                self.advance();
+                body
+            }
+            _ => return self.error("expected HTML body in CRUD page content"),
+        };
+        self.expect(TokenKind::RBrace, "`}` after HTML body")?;
+        self.skip_newlines();
+        self.expect(TokenKind::RBrace, "`}` after CRUD page content")?;
+        Ok(body)
     }
 
     fn crud_view_field_block(&mut self) -> Result<Vec<String>, ParseError> {
@@ -1497,6 +1594,7 @@ impl<'a> Parser<'a> {
         let mut result_type = None;
         let mut source = None;
         let mut columns = Vec::new();
+        let mut view = TableViewViewDef::default();
         let mut filters = Vec::new();
         let mut searchable = false;
         let mut sortable = false;
@@ -1522,6 +1620,64 @@ impl<'a> Parser<'a> {
                 };
                 result_type = Some(source_type);
                 source = Some(query);
+            } else if self.at(&TokenKind::View) {
+                self.advance();
+                self.expect(TokenKind::LBrace, "`{` after tableview `view`")?;
+                self.skip_newlines();
+                while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                    let (block_name, block_span) = self.ident("tableview view block")?;
+                    match block_name.as_str() {
+                        "before_content" | "after_content" => {
+                            let body = self.crud_page_html_block(&block_name)?;
+                            let target = if block_name == "before_content" { &mut view.before_content } else { &mut view.after_content };
+                            if target.replace(body).is_some() {
+                                return self.error(format!("duplicate `{block_name}` tableview block"));
+                            }
+                        }
+                        "row_actions" => {
+                            self.expect(TokenKind::LBrace, "`{` after tableview row_actions")?;
+                            let mut item = None;
+                            let mut html = None;
+                            self.skip_newlines();
+                            while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                                let property = if self.at(&TokenKind::Html) {
+                                    "html".to_owned()
+                                } else {
+                                    self.ident("row_actions property")?.0
+                                };
+                                match property.as_str() {
+                                    "item" => {
+                                        self.expect(TokenKind::Colon, "`:` after row_actions item")?;
+                                        item = Some(self.ident("tableview row binding")?.0);
+                                    }
+                                    "html" => {
+                                        self.expect(TokenKind::Html, "`html` in tableview row_actions")?;
+                                        self.expect(TokenKind::LBrace, "`{` after row_actions html")?;
+                                        html = Some(match self.current().kind.clone() {
+                                            TokenKind::HtmlBody(body) => { self.advance(); body }
+                                            _ => return self.error("expected HTML body in tableview row_actions"),
+                                        });
+                                        self.expect(TokenKind::RBrace, "`}` after row_actions HTML")?;
+                                    }
+                                    _ => return self.error("expected `item` or `html` in tableview row_actions"),
+                                }
+                                self.skip_newlines();
+                            }
+                            let end = self.expect(TokenKind::RBrace, "`}` after tableview row_actions")?;
+                            if view.row_actions.is_some() { return self.error("duplicate tableview `row_actions` block"); }
+                            let Some(item) = item else { return self.error("row_actions requires `item`"); };
+                            let Some(html) = html else { return self.error("row_actions requires `html`"); };
+                            view.row_actions = Some(TableViewRowActionsDef {
+                                item,
+                                html,
+                                span: block_span.join(end),
+                            });
+                        }
+                        _ => return self.error("expected `before_content`, `after_content`, or `row_actions` in tableview view"),
+                    }
+                    self.skip_newlines();
+                }
+                self.expect(TokenKind::RBrace, "`}` after tableview view")?;
             } else if self.at(&TokenKind::Columns) {
                 self.advance();
                 self.expect(TokenKind::LBrace, "`{` after `columns`")?;
@@ -1566,7 +1722,7 @@ impl<'a> Parser<'a> {
                 permissions.push(self.string_value("permission")?);
             } else {
                 return self.error(
-                    "expected layout, source, columns, filter, searchable, sortable, paginated, requires auth, or permits in tableview definition",
+                    "expected layout, source, columns, view, filter, searchable, sortable, paginated, requires auth, or permits in tableview definition",
                 );
             }
             self.skip_newlines();
@@ -1587,6 +1743,7 @@ impl<'a> Parser<'a> {
             result_type,
             source,
             columns,
+            view,
             filters,
             searchable,
             sortable,
@@ -5319,6 +5476,84 @@ mod tests {
                 .and_then(|page| page.message.as_deref()),
             Some("The customer could not be updated.")
         );
+    }
+
+    #[test]
+    fn parses_separate_crud_create_edit_content_and_tableview_row_actions() {
+        let source = r#"
+            crud Customer -> customers {
+                view {
+                    form { title: "Customer" submit: "Save" }
+                    create {
+                        title: "New customer"
+                        before_form { html { <p>Before</p> } }
+                        field_content {
+                            email { html { <small>Contact: {values.email}</small> } }
+                        }
+                    }
+                    edit {
+                        submit: "Update"
+                        after_form { html { <p>{record.name}</p> } }
+                    }
+                }
+            }
+            tableview Customers {
+                source sql<Customer[]> { SELECT id, name FROM customers }
+                columns { id name }
+                view {
+                    before_content { html { <p>Heading</p> } }
+                    row_actions {
+                        item: customer
+                        html { <a href="/customers/{customer.id}">Open</a> }
+                    }
+                    after_content { html { <p>Footer</p> } }
+                }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let crud = &program.cruds[0].view;
+        assert_eq!(crud.form.title.as_deref(), Some("Customer"));
+        assert_eq!(crud.create.title.as_deref(), Some("New customer"));
+        assert_eq!(crud.create.field_content[0].field, "email");
+        assert_eq!(crud.edit.submit.as_deref(), Some("Update"));
+        assert!(crud
+            .create
+            .before_form
+            .as_deref()
+            .unwrap()
+            .contains("Before"));
+        assert!(crud
+            .edit
+            .after_form
+            .as_deref()
+            .unwrap()
+            .contains("record.name"));
+        let tableview = &program.tableviews[0];
+        assert!(tableview
+            .view
+            .before_content
+            .as_deref()
+            .unwrap()
+            .contains("Heading"));
+        assert_eq!(
+            tableview.view.row_actions.as_ref().unwrap().item,
+            "customer"
+        );
+        assert!(tableview
+            .view
+            .after_content
+            .as_deref()
+            .unwrap()
+            .contains("Footer"));
+    }
+
+    #[test]
+    fn rejects_duplicate_crud_field_content() {
+        let source = r#"crud Customer -> customers { view { create {
+            field_content { email { html { <p>A</p> } } email { html { <p>B</p> } } }
+        } } }"#;
+        let error = parse(&lex(source).unwrap()).unwrap_err();
+        assert!(error.message.contains("duplicate field content"));
     }
 
     #[test]
