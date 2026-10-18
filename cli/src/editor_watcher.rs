@@ -138,6 +138,8 @@ mod tests {
             active_event_streams: Arc::new(AtomicUsize::new(0)),
             active_runs: Arc::new(AtomicUsize::new(0)),
             run_cancel: Arc::new(AtomicBool::new(false)),
+            run_stdin: Arc::new(std::sync::Mutex::new(None)),
+            run_output: Arc::new(std::sync::Mutex::new(EditorRunOutput::default())),
         }
     }
 

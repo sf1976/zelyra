@@ -80,6 +80,30 @@ struct EditorState {
     active_event_streams: Arc<AtomicUsize>,
     active_runs: Arc<AtomicUsize>,
     run_cancel: Arc<AtomicBool>,
+    run_stdin: Arc<std::sync::Mutex<Option<std::process::ChildStdin>>>,
+    run_output: Arc<std::sync::Mutex<EditorRunOutput>>,
+}
+
+#[derive(Default)]
+struct EditorRunOutput {
+    active: bool,
+    text: String,
+}
+
+struct EditorConsoleRunGuard {
+    stdin: Arc<std::sync::Mutex<Option<std::process::ChildStdin>>>,
+    output: Arc<std::sync::Mutex<EditorRunOutput>>,
+}
+
+impl Drop for EditorConsoleRunGuard {
+    fn drop(&mut self) {
+        if let Ok(mut stdin) = self.stdin.lock() {
+            stdin.take();
+        }
+        if let Ok(mut output) = self.output.lock() {
+            output.active = false;
+        }
+    }
 }
 
 impl Drop for EditorState {
@@ -178,6 +202,8 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         active_event_streams: Arc::new(AtomicUsize::new(0)),
         active_runs: Arc::new(AtomicUsize::new(0)),
         run_cancel: Arc::new(AtomicBool::new(false)),
+        run_stdin: Arc::new(std::sync::Mutex::new(None)),
+        run_output: Arc::new(std::sync::Mutex::new(EditorRunOutput::default())),
     });
     let active = Arc::new(AtomicUsize::new(0));
     editor_watcher::start(Arc::clone(&state));
@@ -511,6 +537,7 @@ fn editor_response(
         ("POST", "canvas-list") => editor_canvas::list(state, &parse_json_body(&request.body)?),
         ("POST", "canvas-render") => editor_canvas::render(state, &parse_json_body(&request.body)?),
         ("GET", "logs") => editor_logs_response(state),
+        ("GET", "run-progress") => editor_run_progress(state),
         ("GET", "database-schema") => database_schema_response(state),
         ("GET", "database-target") => database_target_response(state),
         ("GET", "database-rows") => database_rows_response(state, request),
@@ -558,6 +585,9 @@ fn editor_response(
         ("POST", "typed-hole") => editor_typed_hole(state, &parse_json_body(&request.body)?),
         ("POST", "runtime-profile") => runtime_profile(state, &parse_json_body(&request.body)?),
         ("POST", "run") => run_editor_program(state, &parse_json_body(&request.body)?),
+        ("POST", "run-input") => {
+            submit_editor_console_input(state, &parse_json_body(&request.body)?)
+        }
         ("POST", "cancel-run") => cancel_editor_run(state),
         ("POST", "stop-web-preview") => stop_editor_web_app(state),
         ("POST", "format") => format_editor_file(state, &parse_json_body(&request.body)?),
@@ -4189,15 +4219,19 @@ fn runtime_profile(
     let analysis = language_service::analyze(&entry, &overlays);
     let index = semantic_index::SemanticIndex::from_analysis(&analysis);
     let (recursion_risks, recursion_incomplete) = index.recursion_risks(&analysis);
-    let configured_depth =
-        super::project_max_stack_depth(&entry.to_string_lossy()).map_err(|error| (422, error))?;
+    let runtime_limits =
+        super::project_runtime_limits(&entry.to_string_lossy()).map_err(|error| (422, error))?;
     Ok((
         200,
         "application/json; charset=utf-8",
         json!({
             "path":relative,"version":version,"success":analysis.success,
-            "maxStackDepth":configured_depth.unwrap_or(20),
-            "configured":configured_depth.is_some(),
+            "maxStackDepth":runtime_limits.max_stack_depth.unwrap_or(20),
+            "configured":runtime_limits.max_stack_depth.is_some(),
+            "maxSteps":runtime_limits.max_steps,
+            "schedulerJobTimeoutSeconds":runtime_limits.scheduler_job_timeout_seconds
+                .unwrap_or(task_cli::DEFAULT_SCHEDULER_JOB_TIMEOUT.as_secs()),
+            "schedulerJobTimeoutConfigured":runtime_limits.scheduler_job_timeout_seconds.is_some(),
             "recursionRisks":recursion_risks,"recursionAnalysisIncomplete":recursion_incomplete,
             "diagnostics":analysis.diagnostics,
         })
@@ -4277,21 +4311,48 @@ fn run_editor_program(
     if let Some(steps) = max_steps {
         command.arg("--max-steps").arg(steps.to_string());
     }
+    {
+        let mut output = state
+            .run_output
+            .lock()
+            .map_err(|_| (500, "could not prepare program output".into()))?;
+        output.active = true;
+        output.text.clear();
+    }
+    let _console_run = EditorConsoleRunGuard {
+        stdin: Arc::clone(&state.run_stdin),
+        output: Arc::clone(&state.run_output),
+    };
     let mut child = command
         .current_dir(&state.root)
-        .stdin(Stdio::null())
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|_| (500, "could not start the Zelyra program".into()))?;
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or((500, "could not capture program output".into()))?;
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or((500, "could not capture program errors".into()))?;
+    let Some(stdin) = child.stdin.take() else {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err((500, "could not open program input".into()));
+    };
+    match state.run_stdin.lock() {
+        Ok(mut input) => *input = Some(stdin),
+        Err(_) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err((500, "could not prepare program input".into()));
+        }
+    }
+    let Some(stdout) = child.stdout.take() else {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err((500, "could not capture program output".into()));
+    };
+    let Some(stderr) = child.stderr.take() else {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err((500, "could not capture program errors".into()));
+    };
     let secrets = editor_secret_values(state);
     let stdout_reader = read_editor_output(
         stdout,
@@ -4299,6 +4360,7 @@ fn run_editor_program(
         "program.stdout",
         "info",
         secrets.clone(),
+        Some(Arc::clone(&state.run_output)),
     );
     let stderr_reader = read_editor_output(
         stderr,
@@ -4306,17 +4368,21 @@ fn run_editor_program(
         "program.stderr",
         "error",
         secrets.clone(),
+        None,
     );
     let started = std::time::Instant::now();
     let timeout = Duration::from_secs(15);
     let mut timed_out = false;
     let mut cancelled = false;
     let status = loop {
-        if let Some(status) = child
-            .try_wait()
-            .map_err(|_| (500, "could not read program status".into()))?
-        {
-            break status;
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => {}
+            Err(_) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err((500, "could not read program status".into()));
+            }
         }
         if state.run_cancel.load(Ordering::Acquire) {
             cancelled = true;
@@ -4367,6 +4433,68 @@ fn cancel_editor_run(state: &EditorState) -> Result<(u16, &'static str, String),
         200,
         "application/json; charset=utf-8",
         json!({"cancelRequested":running}).to_string(),
+    ))
+}
+
+fn editor_run_progress(state: &EditorState) -> Result<(u16, &'static str, String), (u16, String)> {
+    let secrets = editor_secret_values(state);
+    let output = state
+        .run_output
+        .lock()
+        .map_err(|_| (500, "could not read program output state".into()))?;
+    Ok((
+        200,
+        "application/json; charset=utf-8",
+        json!({"active":output.active,"text":redact_editor_secrets(output.text.clone(), &secrets)})
+            .to_string(),
+    ))
+}
+
+fn submit_editor_console_input(
+    state: &EditorState,
+    value: &Value,
+) -> Result<(u16, &'static str, String), (u16, String)> {
+    let eof = value.get("eof").and_then(Value::as_bool).unwrap_or(false);
+    let line = value.get("line").and_then(Value::as_str);
+    if eof == line.is_some() {
+        return Err((400, "provide exactly one console line or eof=true".into()));
+    }
+    if let Some(line) = line {
+        if line.len() > 4096 || line.contains(['\r', '\n']) {
+            return Err((
+                400,
+                "console input must be one line of at most 4096 bytes".into(),
+            ));
+        }
+    }
+    let active = state
+        .run_output
+        .lock()
+        .map_err(|_| (500, "could not read program output state".into()))?
+        .active;
+    if !active {
+        return Err((409, "there is no active console program".into()));
+    }
+    let mut input = state
+        .run_stdin
+        .lock()
+        .map_err(|_| (500, "could not access program input".into()))?;
+    let Some(stdin) = input.as_mut() else {
+        return Err((409, "program input has already reached EOF".into()));
+    };
+    if eof {
+        input.take();
+    } else if let Some(line) = line {
+        stdin
+            .write_all(line.as_bytes())
+            .and_then(|()| stdin.write_all(b"\n"))
+            .and_then(|()| stdin.flush())
+            .map_err(|_| (409, "program is no longer accepting console input".into()))?;
+    }
+    Ok((
+        200,
+        "application/json; charset=utf-8",
+        json!({"accepted":true,"eof":eof}).to_string(),
     ))
 }
 
@@ -4498,6 +4626,7 @@ fn start_editor_web_app(
         "preview.stdout",
         "info",
         secrets.clone(),
+        None,
     );
     let stderr_reader = read_editor_output(
         stderr,
@@ -4505,6 +4634,7 @@ fn start_editor_web_app(
         "preview.stderr",
         "error",
         secrets.clone(),
+        None,
     );
     let started = std::time::Instant::now();
 
@@ -4654,6 +4784,7 @@ fn read_editor_output<R: Read + Send + 'static>(
     source: &'static str,
     level: &'static str,
     secrets: Vec<String>,
+    live_console_output: Option<Arc<std::sync::Mutex<EditorRunOutput>>>,
 ) -> std::sync::mpsc::Receiver<(Vec<u8>, bool)> {
     let (sender, receiver) = std::sync::mpsc::channel();
     thread::spawn(move || {
@@ -4666,6 +4797,23 @@ fn read_editor_output<R: Read + Send + 'static>(
             match reader.read(&mut buffer) {
                 Ok(0) | Err(_) => break,
                 Ok(count) => {
+                    if let Some(output) = &live_console_output {
+                        if let Ok(mut output) = output.lock() {
+                            const LIVE_OUTPUT_LIMIT: usize = 65_536;
+                            if output.text.len() < LIVE_OUTPUT_LIMIT {
+                                output
+                                    .text
+                                    .push_str(&String::from_utf8_lossy(&buffer[..count]));
+                                if output.text.len() > LIVE_OUTPUT_LIMIT {
+                                    let mut boundary = LIVE_OUTPUT_LIMIT;
+                                    while !output.text.is_char_boundary(boundary) {
+                                        boundary -= 1;
+                                    }
+                                    output.text.truncate(boundary);
+                                }
+                            }
+                        }
+                    }
                     let remaining = OUTPUT_LIMIT.saturating_sub(captured.len());
                     let retained = count.min(remaining);
                     captured.extend_from_slice(&buffer[..retained]);
@@ -5304,6 +5452,8 @@ fn main() {}
             active_event_streams: Arc::new(AtomicUsize::new(0)),
             active_runs: Arc::new(AtomicUsize::new(0)),
             run_cancel: Arc::new(AtomicBool::new(false)),
+            run_stdin: Arc::new(std::sync::Mutex::new(None)),
+            run_output: Arc::new(std::sync::Mutex::new(EditorRunOutput::default())),
         }
     }
 
@@ -5749,9 +5899,17 @@ fn main() {}
     #[test]
     fn editor_api_requires_session_token() {
         let state = project();
-        let request = request("GET", "/__zelyra/editor/api/tree", &[]);
-        let error = editor_response(&request, &state).expect_err("missing token must fail");
-        assert_eq!(error.0, 403);
+        for path in [
+            "/__zelyra/editor/api/tree",
+            "/__zelyra/editor/api/run-progress",
+        ] {
+            let request = request("GET", path, &[]);
+            let error = editor_response(&request, &state).expect_err("missing token must fail");
+            assert_eq!(
+                error.0, 403,
+                "endpoint {path} must require the session token"
+            );
+        }
         let _ = fs::remove_dir_all(state.root.clone());
     }
 
@@ -6021,6 +6179,7 @@ fn main() {}
             ("DELETE", "/__zelyra/editor/api/file"),
             ("POST", "/__zelyra/editor/api/database-create"),
             ("POST", "/__zelyra/editor/api/database-chart-preview"),
+            ("POST", "/__zelyra/editor/api/run-input"),
         ] {
             let request = request(
                 method,
@@ -6700,7 +6859,7 @@ fn main() {}
         let original = "fn main() {}\n";
         fs::write(
             state.root.join("zelyra.toml"),
-            "[project]\nname = \"runtime-profile\"\n[runtime]\nmax_stack_depth = 100\n",
+            "[project]\nname = \"runtime-profile\"\n[runtime]\nmax_stack_depth = 100\nmax_steps = 24000\nscheduler_job_timeout_seconds = 900\n",
         )
         .unwrap();
         let source = "fn direct() -> Int { return direct() }\nfn main() {}\n";
@@ -6713,6 +6872,9 @@ fn main() {}
         .unwrap();
         let payload: Value = serde_json::from_str(&response.2).unwrap();
         assert_eq!(payload["maxStackDepth"], 100);
+        assert_eq!(payload["maxSteps"], 24000);
+        assert_eq!(payload["schedulerJobTimeoutSeconds"], 900);
+        assert_eq!(payload["schedulerJobTimeoutConfigured"], true);
         assert_eq!(payload["configured"], true);
         assert_eq!(payload["version"], 7);
         assert_eq!(payload["recursionRisks"][0]["kind"], "direct");
@@ -6720,6 +6882,19 @@ fn main() {}
             fs::read_to_string(state.root.join("main.zyl")).unwrap(),
             original
         );
+        fs::write(
+            state.root.join("zelyra.toml"),
+            "[project]\nname = \"runtime-profile\"\n[runtime]\nmax_stack_depth = 100\nmax_steps = 24000\n",
+        )
+        .unwrap();
+        let default_response = runtime_profile(
+            &state,
+            &json!({"path":"main.zyl","source":source,"version":8}),
+        )
+        .unwrap();
+        let default_payload: Value = serde_json::from_str(&default_response.2).unwrap();
+        assert_eq!(default_payload["schedulerJobTimeoutSeconds"], 300);
+        assert_eq!(default_payload["schedulerJobTimeoutConfigured"], false);
         fs::remove_dir_all(state.root.clone()).unwrap();
     }
 
@@ -6743,6 +6918,125 @@ fn main() {}
                 .0,
             400
         );
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn studio_run_accepts_console_lines_and_explicit_eof() {
+        let state = project();
+        fs::write(
+            state.root.join("zelyra.toml"),
+            "name = \"console-test\"\n\n[capabilities]\nconsole = true\n",
+        )
+        .expect("grant console input for the test project");
+        fs::write(
+            state.root.join("main.zyl"),
+            r#"fn main() uses Console {
+    value = read_console("Name: ")
+    match value {
+        Some(name) => { print("Hello " + name) }
+        None => { print("EOF") }
+    }
+}
+"#,
+        )
+        .expect("write interactive program");
+
+        let runner = state.clone();
+        let run = thread::spawn(move || run_editor_program(&runner, &json!({"path":"main.zyl"})));
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            let (_, _, progress) = editor_run_progress(&state).expect("read console prompt");
+            let progress: Value = serde_json::from_str(&progress).expect("parse progress");
+            if progress["active"] == true
+                && progress["text"].as_str().unwrap_or("").contains("Name: ")
+            {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "program did not publish its prompt"
+            );
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(
+            submit_editor_console_input(&state, &json!({"line":"Ada"}))
+                .unwrap()
+                .0,
+            200
+        );
+        let (_, _, body) = run.join().expect("join interactive run").unwrap();
+        let response: Value = serde_json::from_str(&body).expect("parse run response");
+        assert_eq!(response["success"], true);
+        assert!(response["stdout"].as_str().unwrap().contains("Hello Ada"));
+
+        let runner = state.clone();
+        let run = thread::spawn(move || run_editor_program(&runner, &json!({"path":"main.zyl"})));
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            let (_, _, progress) = editor_run_progress(&state).expect("read second console prompt");
+            let progress: Value = serde_json::from_str(&progress).expect("parse progress");
+            if progress["active"] == true
+                && progress["text"].as_str().unwrap_or("").contains("Name: ")
+            {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "second program did not publish its prompt"
+            );
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(
+            submit_editor_console_input(&state, &json!({"eof":true}))
+                .unwrap()
+                .0,
+            200
+        );
+        let (_, _, body) = run.join().expect("join EOF run").unwrap();
+        let response: Value = serde_json::from_str(&body).expect("parse EOF response");
+        assert_eq!(response["success"], true);
+        assert!(response["stdout"].as_str().unwrap().contains("EOF"));
+        assert_eq!(
+            submit_editor_console_input(&state, &json!({"line":"late"}))
+                .unwrap_err()
+                .0,
+            409
+        );
+        assert_eq!(
+            submit_editor_console_input(&state, &json!({"line":"one\ntwo"}))
+                .unwrap_err()
+                .0,
+            400
+        );
+        assert_eq!(
+            submit_editor_console_input(&state, &json!({"line":"x".repeat(4097)}))
+                .unwrap_err()
+                .0,
+            400
+        );
+
+        let runner = state.clone();
+        let run = thread::spawn(move || run_editor_program(&runner, &json!({"path":"main.zyl"})));
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            let (_, _, progress) = editor_run_progress(&state).expect("read cancellable prompt");
+            let progress: Value = serde_json::from_str(&progress).expect("parse progress");
+            if progress["active"] == true
+                && progress["text"].as_str().unwrap_or("").contains("Name: ")
+            {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "cancellable program did not publish its prompt"
+            );
+            thread::sleep(Duration::from_millis(10));
+        }
+        cancel_editor_run(&state).expect("cancel input-blocked console process");
+        let (_, _, body) = run.join().expect("join cancelled console run").unwrap();
+        let response: Value = serde_json::from_str(&body).expect("parse cancelled response");
+        assert_eq!(response["cancelled"], true);
         fs::remove_dir_all(state.root.clone()).unwrap();
     }
 

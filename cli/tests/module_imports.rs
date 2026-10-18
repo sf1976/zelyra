@@ -339,7 +339,8 @@ fn main() { }
     let preview = String::from_utf8_lossy(&preview.stdout);
     assert!(preview.contains("CRON_TZ=Europe/Berlin"));
     assert!(preview.contains("0 * * * *"));
-    assert!(preview.contains("--entry 'heartbeat'"));
+    assert!(preview.contains("schedule trigger"));
+    assert!(preview.contains("--name 'hourly_heartbeat'"));
 
     fs::create_dir_all(directory.join("deploy")).unwrap();
     let written = run(

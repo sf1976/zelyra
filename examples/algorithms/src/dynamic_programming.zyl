@@ -1,0 +1,26 @@
+pub fn fibonacci(value: Int) -> Result<Int, String> {
+    if value < 0 {
+        return Err("Fibonacci index must be non-negative")
+    }
+    if value > 45 {
+        return Err("Fibonacci example is bounded to index 45")
+    }
+    if value <= 1 {
+        return Ok(value)
+    }
+    mutable values: Int[] = [0, 1]
+    for step in 2..value + 1 {
+        next = values[step - 1] + values[step - 2]
+        push_mut(values, next)
+    }
+    return Ok(values[value])
+}
+
+pub fn run() {
+    assert(fibonacci(0) == Ok(0), "first Fibonacci base case")
+    assert(fibonacci(1) == Ok(1), "second Fibonacci base case")
+    assert(fibonacci(10) == Ok(55), "bottom-up dynamic programming computes index ten")
+    assert(fibonacci(-1) == Err("Fibonacci index must be non-negative"), "negative index is rejected")
+    assert(fibonacci(46) == Err("Fibonacci example is bounded to index 45"), "large index is rejected")
+    print("PASS bottom-up Fibonacci: base cases, bounded work and invalid inputs")
+}

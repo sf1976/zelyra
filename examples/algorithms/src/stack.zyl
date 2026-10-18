@@ -1,0 +1,11 @@
+pub fn run() {
+    mutable values: Int[] = []
+    assert(len(values) == 0, "new stack is empty")
+    push_mut(values, 10)
+    push_mut(values, 20)
+    assert(values[len(values) - 1] == 20, "last value is the stack top")
+    assert(pop_mut(values) == Some(20), "pop returns the newest value")
+    assert(pop_mut(values) == Some(10), "pop returns the older value next")
+    assert(pop_mut(values) == None, "popping an empty stack returns None")
+    print("PASS array-backed stack: LIFO order and empty pop")
+}

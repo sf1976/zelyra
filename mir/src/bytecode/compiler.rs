@@ -60,7 +60,7 @@ pub fn compile(program: &MirProgram, entry_name: &str) -> Result<BytecodeProgram
             )
         }) {
             return Err(vec![bytecode_error(
-                "bytecode v19 does not support one or more declared capabilities",
+                "bytecode backend does not support one or more declared capabilities",
                 function.span,
             )]);
         }
@@ -1788,7 +1788,7 @@ impl FunctionCompiler<'_> {
             }
             None => {
                 return Err(vec![bytecode_error(
-                    "bytecode v19 requires a supported, terminated basic block",
+                    "bytecode backend requires a supported, terminated basic block",
                     span,
                 )]);
             }
@@ -2113,7 +2113,7 @@ impl FunctionCompiler<'_> {
                     }
                     _ => {
                         return Err(vec![bytecode_error(
-                            format!("bytecode v19 does not support indexing `{target_type}`"),
+                            format!("bytecode backend does not support indexing `{target_type}`"),
                             span,
                         )]);
                     }
@@ -2739,6 +2739,106 @@ impl FunctionCompiler<'_> {
             MirExpressionKind::Call {
                 name,
                 function: None,
+                args,
+                ..
+            } if name == "push_mut" => {
+                if args.len() != 2 || expression_type != Type::Unit {
+                    return Err(vec![bytecode_error(
+                        "push_mut expects a mutable array and one value and returns Unit",
+                        span,
+                    )]);
+                }
+                let Some(MirExpressionKind::Local(local)) = self
+                    .program
+                    .expressions
+                    .get(args[0].0)
+                    .map(|target| &target.kind)
+                else {
+                    return Err(vec![bytecode_error(
+                        "push_mut must target a mutable array local",
+                        span,
+                    )]);
+                };
+                let local = *local;
+                let Some(Type::Array(element_type)) = self
+                    .program
+                    .expressions
+                    .get(args[0].0)
+                    .map(|target| target.ty.clone())
+                else {
+                    return Err(vec![bytecode_error(
+                        "push_mut target does not have an array type",
+                        span,
+                    )]);
+                };
+                if self.expression_type(args[1], span)? != *element_type {
+                    return Err(vec![bytecode_error(
+                        "push_mut value does not match its array element type",
+                        span,
+                    )]);
+                }
+                self.expression(args[1], active)?;
+                self.emit(
+                    BytecodeOp::ArrayAppend {
+                        local,
+                        element_type: *element_type,
+                    },
+                    span,
+                );
+                self.emit(BytecodeOp::Constant(Value::Unit), span)
+            }
+            MirExpressionKind::Call {
+                name,
+                function: None,
+                args,
+                ..
+            } if name == "pop_mut" => {
+                if args.len() != 1 {
+                    return Err(vec![bytecode_error(
+                        "pop_mut expects one mutable array local",
+                        span,
+                    )]);
+                }
+                let Some(MirExpressionKind::Local(local)) = self
+                    .program
+                    .expressions
+                    .get(args[0].0)
+                    .map(|target| &target.kind)
+                else {
+                    return Err(vec![bytecode_error(
+                        "pop_mut must target a mutable array local",
+                        span,
+                    )]);
+                };
+                let local = *local;
+                let Some(Type::Array(element_type)) = self
+                    .program
+                    .expressions
+                    .get(args[0].0)
+                    .map(|target| target.ty.clone())
+                else {
+                    return Err(vec![bytecode_error(
+                        "pop_mut target does not have an array type",
+                        span,
+                    )]);
+                };
+                if expression_type != Type::Option(element_type.clone()) {
+                    return Err(vec![bytecode_error(
+                        "pop_mut result does not match its array element type",
+                        span,
+                    )]);
+                }
+                self.emit(
+                    BytecodeOp::ArrayPopMut {
+                        local,
+                        element_type: *element_type,
+                    },
+                    span,
+                )
+            }
+            MirExpressionKind::Call {
+                name,
+                function: None,
                 type_args,
                 args,
                 ..
@@ -2759,7 +2859,7 @@ impl FunctionCompiler<'_> {
             unsupported => {
                 return Err(vec![bytecode_error(
                     format!(
-                        "bytecode v19 does not support MIR expression `{}`",
+                        "bytecode backend does not support MIR expression `{}`",
                         mir_expression_name(&unsupported)
                     ),
                     span,
@@ -2875,13 +2975,18 @@ impl FunctionCompiler<'_> {
                     _ => None,
                 },
                 Type::Array(_) if operator == BinaryOp::Add => Some(left.clone()),
+                Type::Array(_) | Type::Option(_) | Type::Result(_, _) | Type::Tuple(_)
+                    if matches!(operator, BinaryOp::Equal | BinaryOp::NotEqual) =>
+                {
+                    Some(Type::Bool)
+                }
                 _ => None,
             }
         };
         supported.ok_or_else(|| {
             vec![bytecode_error(
                 format!(
-                    "bytecode v19 does not support operator {operator:?} for `{left}` and `{right}`"
+                    "bytecode backend does not support operator {operator:?} for `{left}` and `{right}`"
                 ),
                 span,
             )]

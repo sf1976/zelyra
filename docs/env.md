@@ -592,6 +592,11 @@ allowed_commands = ["git"]
 timeout_ms = 5000
 max_output_bytes = 1048576
 
+[runtime]
+max_steps = 100000
+max_stack_depth = 100
+scheduler_job_timeout_seconds = 300
+
 [web]
 allowed_origins = ["http://localhost:5173"]
 allow_credentials = false
@@ -600,6 +605,30 @@ allow_credentials = false
 Diese Bereiche sind keine bequeme Umgehung von Sicherheit: Capabilities,
 Allowlisten, SQL-Prüfungen, CSRF und destruktive Datenbankfreigaben bleiben
 explizit und werden nicht durch `.env` abgeschaltet.
+
+`[runtime].max_steps` ist optional und muss eine positive, für die Plattform
+darstellbare Ganzzahl sein. Ist der Wert nicht gesetzt, begrenzt AST-Ausführung
+über `zelyra run` und normale Webhandler die Auswertungsschritte nicht; MIR und
+Bytecode verwenden bei CLI-Läufen ihr dokumentiertes Budget von 100.000
+Schritten. Ein explizites `zelyra run --max-steps <n>` hat Vorrang vor dem
+Projektwert. Das Projektlimit gilt für `zelyra run`, ausgeführte
+Webhandler sowie Scheduler-Commands, die der integrierte Dienst per `zelyra
+run` startet. Es begrenzt nicht die Laufzeit externer Programme und ersetzt
+keine Netzwerk-, Datenbank- oder Prozess-Timeouts. Es ist keine geheime
+Einstellung; `.env` und Prozessvariablen überschreiben es nicht.
+
+Der bestehende `[runtime].max_stack_depth`-Wert bleibt davon getrennt und
+begrenzt Funktionsaufruftiefe auf Werte von 1 bis 500 (Standard 20).
+
+`[runtime].scheduler_job_timeout_seconds` begrenzt die Wandzeit eines einzelnen
+Handlers im residenten Scheduler auf 1 bis 86.400 Sekunden; Standard sind
+300 Sekunden. Nach Ablauf beendet der Dienst den Handler-Prozess und protokolliert
+den Timeout. Das gilt nur für Zeitpläne im installierten, aktiven Linux-
+systemd-Projektdienst, nicht für manuelle `zelyra task run`-Aufrufe oder normale
+Webhandler. Eine Beendigung kann externe Effekte, die der Handler bereits
+ausgelöst hat, nicht rückgängig machen; der Scheduler wiederholt fehlgeschlagene
+Aufträge derzeit nicht automatisch. Der Wert ist nicht geheim und wird weder
+durch `.env` noch Prozessvariablen überschrieben.
 
 Funktions-SQL kann die engeren Deklarationen `uses Database(read)` für
 `SELECT` und `uses Database(write)` für `INSERT`, `UPDATE` oder `DELETE`
@@ -660,6 +689,20 @@ Ausführung schreibfrei gegen die deklarierte Struktur geprüft. Fehlende Spalte
 falsche Typen und unpassende Zeitpräzision werden mit Fundstelle abgewiesen;
 Metadatenzugriff ist erforderlich. Migrationen bleiben ausdrücklich zu prüfen.
 Es gibt keinen neuen Schalter. Siehe [Datumsregeln](dates.de.md).
+
+## Interne Kennung des Linux-Systemdienstes
+
+`ZELYRA_SYSTEMD_SERVICE_ID` wird ausschließlich in einer von
+`zelyra service install` oder `zelyra service change` erzeugten
+systemd-User-Unit gesetzt. Der Wert ist eine aus dem kanonischen Projektpfad
+abgeleitete Kennung, kein Geheimnis und kein Berechtigungsnachweis. Die Unit
+setzt ihn nach der optionalen Projekt-`.env`, sodass ein dort eingetragener
+Wert die interne Kennung nicht überschreibt. Manuelles Setzen aktiviert den
+Scheduler nicht: Zelyra prüft zusätzlich, dass die zu genau diesem Projekt
+gehörende systemd-Unit tatsächlich aktiv ist. Ohne Kennung oder außerhalb
+dieses Dienstes führt `serve` keine Zeitpläne aus. Betroffen sind
+`zelyra service install|change` und `zelyra serve`; der Linux-Scheduler-
+Integrationstest prüft die Dienstbindung.
 ## Lokale Paket-Einstellungen (experimentell)
 
 `zelyra.settings.toml` speichert nicht geheime Paketwerte unter

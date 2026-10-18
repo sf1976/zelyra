@@ -820,8 +820,8 @@ impl Machine<'_> {
                             span,
                             ..
                         } => {
-                            let mut items = match locals.get(local).cloned() {
-                                Some(Value::Array(items)) => items,
+                            let items_len = match locals.get(local) {
+                                Some(Value::Array(items)) => items.len(),
                                 Some(other) => {
                                     return Err(runtime_error(
                                         *span,
@@ -839,19 +839,35 @@ impl Machine<'_> {
                                 }
                             };
                             let index = self.expression(*index, &mut locals, depth, *span)?;
-                            let index = array_assignment_index(index, items.len(), *span)?;
-                            let value = self.expression(*value, &mut locals, depth, *span)?;
-                            let value = match operation {
-                                ArrayIndexAssignOp::Set => value,
-                                ArrayIndexAssignOp::Add => evaluate_binary(
-                                    items[index].clone(),
-                                    BinaryOp::Add,
-                                    value,
-                                    *span,
-                                )?,
+                            let index = array_assignment_index(index, items_len, *span)?;
+                            let current = if *operation == ArrayIndexAssignOp::Add {
+                                let Some(Value::Array(items)) = locals.get(local) else {
+                                    return Err(runtime_error(
+                                        *span,
+                                        "MIR indexed assignment target changed during evaluation",
+                                    ));
+                                };
+                                Some(items[index].clone())
+                            } else {
+                                None
                             };
-                            items[index] = value;
-                            locals.insert(*local, Value::Array(items));
+                            let value = self.expression(*value, &mut locals, depth, *span)?;
+                            let value = match current {
+                                None => value,
+                                Some(current) => {
+                                    evaluate_binary(current, BinaryOp::Add, value, *span)?
+                                }
+                            };
+                            let Some(Value::Array(items)) = locals.get_mut(local) else {
+                                return Err(runtime_error(
+                                    *span,
+                                    "MIR indexed assignment target changed during evaluation",
+                                ));
+                            };
+                            let element = items.get_mut(index).ok_or_else(|| {
+                                runtime_error(*span, "MIR mutable array index is out of bounds")
+                            })?;
+                            *element = value;
                         }
                         MirInstruction::MatchInit {
                             match_id,
@@ -1407,6 +1423,69 @@ impl Machine<'_> {
                 ..
             } if matches!(name.as_str(), "map" | "filter" | "find" | "reduce") => {
                 self.higher_order_builtin(&name, &args, locals, depth, span)
+            }
+            MirExpressionKind::Call {
+                name,
+                function: None,
+                args,
+                ..
+            } if name == "push_mut" || name == "pop_mut" => {
+                let expected_arity = if name == "push_mut" { 2 } else { 1 };
+                if args.len() != expected_arity {
+                    return Err(runtime_error(
+                        span,
+                        format!("`{name}` expects {expected_arity} argument(s)"),
+                    ));
+                }
+                let Some(MirExpressionKind::Local(local)) = self
+                    .program
+                    .expressions
+                    .get(args[0].0)
+                    .map(|expression| &expression.kind)
+                else {
+                    return Err(runtime_error(
+                        span,
+                        format!("`{name}` requires a mutable array binding"),
+                    ));
+                };
+                let local = *local;
+                let expected_element = self
+                    .program
+                    .expressions
+                    .get(args[0].0)
+                    .and_then(|expression| match &expression.ty {
+                        Type::Array(element) => Some(element.as_ref().clone()),
+                        _ => None,
+                    })
+                    .ok_or_else(|| {
+                        runtime_error(span, format!("`{name}` target is not an array"))
+                    })?;
+                let pushed_value = if name == "push_mut" {
+                    Some(self.expression(args[1], locals, depth, span)?)
+                } else {
+                    None
+                };
+                let Some(Value::Array(values)) = locals.get_mut(&local) else {
+                    return Err(runtime_error(
+                        span,
+                        format!("`{name}` target local is not an initialized array"),
+                    ));
+                };
+                if let Some(value) = pushed_value {
+                    if !runtime_type_matches(&expected_element, &value.ty()) {
+                        return Err(runtime_error(
+                            span,
+                            format!(
+                                "`push_mut` expected `{expected_element}`, found `{}`",
+                                value.ty()
+                            ),
+                        ));
+                    }
+                    values.push(value);
+                    Ok(Value::Unit)
+                } else {
+                    Ok(Value::Option(values.pop().map(Box::new)))
+                }
             }
             MirExpressionKind::Call {
                 name,
@@ -4716,6 +4795,29 @@ fn main() {}
     }
 
     #[test]
+    fn executes_mutable_array_push_and_pop_differentially() {
+        let source = r#"
+fn main() -> Int {
+    mutable values: Int[] = []
+    push_mut(values, 4)
+    push_mut(values, 8)
+    last = pop_mut(values)
+    first = pop_mut(values)
+    empty = pop_mut(values)
+    last_value = match last { Some(value) => value None => 0 }
+    first_value = match first { Some(value) => value None => 0 }
+    if is_none(empty) { return last_value * 10 + first_value }
+    return 0
+}
+"#;
+        let (ast, mir) = program(source);
+        let actual = execute_function(&mir, "main", vec![], ExecutionLimits::default()).unwrap();
+        let expected = zelyra_runtime::execute_function(&ast, "main", vec![], None).unwrap();
+        assert_eq!(actual.value, expected);
+        assert_eq!(actual.value, Value::Int(84));
+    }
+
+    #[test]
     fn executes_enum_payload_match_expressions_with_guards_differentially() {
         let source = "enum Outcome { Draft Paid(Int) } fn main() -> Int { outcome = Outcome::Paid(7) return match outcome { Outcome::Draft => 0 Outcome::Paid(value) if value > 4 => value Outcome::Paid(_) => 1 } }";
         let (ast, mir) = program(source);
@@ -4796,12 +4898,15 @@ fn main() {}
     }
 
     #[test]
-    fn unsupported_builtins_fail_closed() {
-        let (_, mir) = program("fn main() { assert(true) }");
-        let error = execute_function(&mir, "main", vec![], ExecutionLimits::default()).unwrap_err();
-        assert!(error
-            .message
-            .contains("MIR interpreter does not support expression `call`"));
+    fn assertion_builtin_uses_shared_success_and_failure_semantics() {
+        let (_, mir) = program("fn main() { assert(true, \"ok\") }");
+        let success = execute_function(&mir, "main", vec![], ExecutionLimits::default()).unwrap();
+        assert_eq!(success.value, Value::Unit);
+
+        let (_, mir) = program("fn main() { assert(false, \"inventory mismatch\") }");
+        let failure =
+            execute_function(&mir, "main", vec![], ExecutionLimits::default()).unwrap_err();
+        assert_eq!(failure.message, "inventory mismatch");
     }
 
     #[test]

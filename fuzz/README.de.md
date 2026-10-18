@@ -1,8 +1,9 @@
 # Coverage-guided Fuzzing für Zelyra
 
 Dieses isolierte Nightly-Workspace fuzzed Lexer/Parser, SQL-
-Named-Parameter-Binder, Formular-Renderer, HTTP-Request-Parser sowie den
-begrenzten Bytecode-Decoder einschließlich Rundläufen akzeptierter Artefakte.
+Named-Parameter-Binder, Formular-Renderer, HTTP-Request-Parser, den begrenzten
+Bytecode-Decoder einschließlich Rundläufen akzeptierter Artefakte sowie den
+Ergebnisvergleich generierter Arrayprogramme über AST, MIR und Bytecode.
 Das normale Stable-Workspace und dessen Lockdatei bleiben unverändert. CI
 verwendet die festgelegte Version `cargo-fuzz` 0.13.2 und lässt jedes Ziel
 15 Sekunden mit `fuzz/corpus/<target>` laufen.
@@ -20,7 +21,7 @@ Installiere Nightly Rust mit `rust-src`, Clang und `cargo-fuzz` 0.13.2. Starte
 dann:
 
 ```sh
-for target in lexer_parser sql_binder template_renderer http_request bytecode_decode; do
+for target in lexer_parser sql_binder template_renderer http_request bytecode_decode backend_differential; do
   cargo +nightly fuzz run "$target" "fuzz/corpus/$target" -- \
     -max_total_time=60 -max_len=16384 -timeout=5
 done

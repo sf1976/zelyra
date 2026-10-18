@@ -1,0 +1,24 @@
+pub fn factorial(value: Int) -> Result<Int, String> {
+    if value < 0 {
+        return Err("factorial requires a non-negative integer")
+    }
+    if value > 12 {
+        return Err("factorial example is bounded to 12")
+    }
+    if value <= 1 {
+        return Ok(1)
+    }
+    previous = factorial(value - 1)
+    return match previous {
+        Ok(result) => Ok(value * result)
+        Err(reason) => Err(reason)
+    }
+}
+
+pub fn run() {
+    assert(factorial(0) == Ok(1), "zero factorial is one")
+    assert(factorial(5) == Ok(120), "recursive factorial computes a small input")
+    assert(factorial(-1) == Err("factorial requires a non-negative integer"), "negative input is rejected")
+    assert(factorial(13) == Err("factorial example is bounded to 12"), "large input is rejected")
+    print("PASS bounded recursion: factorial base cases, valid input and rejected bounds")
+}

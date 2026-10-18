@@ -174,6 +174,39 @@ fn run_step_budget_is_opt_in_and_reports_a_controlled_runtime_error() {
 }
 
 #[test]
+fn project_runtime_step_budget_limits_all_run_backends_without_cli_override() {
+    let (directory, path) = temporary_project_source(
+        "project-step-budget",
+        "fn main() -> Int { mutable i: Int = 0 while i < 1000 { i = i + 1 } return i }",
+    );
+    fs::write(
+        directory.join("zelyra.toml"),
+        "[project]\nname = \"step-budget\"\n[runtime]\nmax_steps = 30\n",
+    )
+    .unwrap();
+
+    for backend in ["ast", "mir", "bytecode"] {
+        let output = run(&["run", path.to_str().unwrap(), "--backend", backend]);
+        assert!(!output.status.success(), "{backend} unexpectedly succeeded");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("E-RUNTIME-001"), "{backend}: {stderr}");
+        assert!(
+            stderr.contains("execution step budget exceeded (limit 30)"),
+            "{backend}: {stderr}"
+        );
+    }
+
+    let overridden = run(&["run", path.to_str().unwrap(), "--max-steps", "7"]);
+    assert!(!overridden.status.success());
+    let stderr = String::from_utf8_lossy(&overridden.stderr);
+    assert!(
+        stderr.contains("execution step budget exceeded (limit 7)"),
+        "{stderr}"
+    );
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn run_step_budget_keeps_output_written_before_runtime_error() {
     let source = "fn main() { print(\"visible before failure\") loop { } }";
     let (directory, path) = temporary_project_source("step-budget-output", source);
@@ -1102,6 +1135,27 @@ fn main() { }
     let schedule_json: serde_json::Value = serde_json::from_slice(&schedules.stdout).unwrap();
     assert_eq!(schedule_json["schedules"][0]["cron"], "0 8 * * 1-5");
 
+    let config_home = directory.join("isolated-config");
+    fs::create_dir_all(&config_home).unwrap();
+    let status = Command::new(binary())
+        .args(["schedule", "status", path.to_str().unwrap(), "--json"])
+        .env("XDG_CONFIG_HOME", &config_home)
+        .output()
+        .expect("schedule status command should run");
+    assert!(
+        status.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&status.stdout),
+        String::from_utf8_lossy(&status.stderr)
+    );
+    let status_json: serde_json::Value = serde_json::from_slice(&status.stdout).unwrap();
+    assert_eq!(status_json["schema_version"], 1);
+    assert_eq!(status_json["declared_schedule_count"], 1);
+    assert_eq!(status_json["service_installed"], false);
+    assert_eq!(status_json["service_active"], false);
+    assert_eq!(status_json["scheduler_active"], false);
+    assert_eq!(status_json["schedules"][0]["name"], "morning_status");
+
     let execution = run(&["task", "run", path.to_str().unwrap(), "report_status"]);
     assert!(
         execution.status.success(),
@@ -1124,7 +1178,8 @@ fn main() { }
     );
     let cron = String::from_utf8_lossy(&preview.stdout);
     assert!(cron.contains("CRON_TZ=Europe/Berlin\n0 8 * * 1-5"));
-    assert!(cron.contains("--entry 'report_status'"));
+    assert!(cron.contains("schedule trigger"));
+    assert!(cron.contains("--name 'morning_status'"));
     assert!(String::from_utf8_lossy(&preview.stderr).contains("did not install or enable"));
 
     let deploy_dir = directory.join("deploy");
@@ -1459,6 +1514,70 @@ fn mutable_array_example_checks_and_runs() {
 }
 
 #[test]
+fn assertion_builtin_has_the_same_result_on_ast_mir_and_bytecode() {
+    let source = r#"
+fn main() {
+    assert(true, "successful assertion")
+    print("PASS assertion")
+}
+"#;
+    let (directory, path) = temporary_project_source("assertion-backends", source);
+    for backend in ["ast", "mir", "bytecode"] {
+        let output = run(&["run", path.to_str().unwrap(), "--backend", backend]);
+        assert!(
+            output.status.success(),
+            "backend {backend} failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim(),
+            "PASS assertion"
+        );
+    }
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn algorithm_workbench_examples_run_on_all_backends_with_expected_outputs() {
+    let path = example("algorithms/main.zyl");
+    let check = run(&["check", path.to_str().unwrap()]);
+    assert!(
+        check.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&check.stdout),
+        String::from_utf8_lossy(&check.stderr)
+    );
+    let expected = [
+        "PASS insertion sort: empty, single item, duplicates and negative values",
+        "PASS linear search: empty, first, duplicate and missing values",
+        "PASS array-backed stack: LIFO order and empty pop",
+        "PASS bounded recursion: factorial base cases, valid input and rejected bounds",
+        "PASS bottom-up Fibonacci: base cases, bounded work and invalid inputs",
+        "PASS all algorithm examples",
+    ];
+    for backend in ["ast", "mir", "bytecode"] {
+        let execution = run(&["run", path.to_str().unwrap(), "--backend", backend]);
+        assert!(
+            execution.status.success(),
+            "backend {backend} failed; stdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&execution.stdout),
+            String::from_utf8_lossy(&execution.stderr)
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&execution.stdout)
+                .lines()
+                .collect::<Vec<_>>(),
+            expected,
+            "backend {backend} output differs"
+        );
+        assert!(
+            execution.stderr.is_empty(),
+            "backend {backend} wrote stderr"
+        );
+    }
+}
+
+#[test]
 fn help_lists_the_route_inventory_command_and_syntax() {
     let output = run(&["--help"]);
     assert!(output.status.success());
@@ -1773,8 +1892,13 @@ fn language_compatibility_line_is_enforced_and_legacy_projects_stay_supported() 
 #[test]
 fn new_mariadb_project_propagates_the_selected_web_port() {
     let directory = temporary_directory("new-web-port");
-    let database_host_port = free_test_port();
     let web_host_port = free_test_port();
+    let database_host_port = loop {
+        let port = free_test_port();
+        if port != web_host_port {
+            break port;
+        }
+    };
     let output = run(&[
         "new",
         directory.to_str().unwrap(),
@@ -3010,7 +3134,12 @@ fn setup_creates_a_local_env_without_printing_or_overwriting_secrets() {
         "--db-host-port",
         &database_host_port,
     ]);
-    assert!(scaffold.status.success());
+    assert!(
+        scaffold.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&scaffold.stdout),
+        String::from_utf8_lossy(&scaffold.stderr)
+    );
     fs::remove_file(directory.join(".env")).unwrap();
 
     let setup = run(&["setup", directory.to_str().unwrap()]);

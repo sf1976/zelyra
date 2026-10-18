@@ -207,6 +207,74 @@ fn inferred_expression_types_are_not_returned_for_invalid_programs() {
 }
 
 #[test]
+fn expected_types_flow_into_empty_collections_and_result_match_arms() {
+    let source = r#"
+fn as_result(flag: Bool) -> Result<Int, String> {
+    if flag { return Ok(7) }
+    return match Err("no") {
+        Ok(value) => Ok(value)
+        Err(message) => Err(message)
+    }
+}
+fn main() {
+    empty: Int[] = []
+    settings: Map<String, Int> = Map {}
+    failed: Result<Int, String> = Err("invalid")
+    print(as_result(true))
+    print(empty)
+    print(settings)
+    print(failed)
+}
+"#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    let inferred = check_with_inferred_types(&program).unwrap();
+
+    for (expression, start, expected) in [
+        (
+            "[]",
+            source.find("= []").unwrap() + 2,
+            Type::Array(Box::new(Type::Int)),
+        ),
+        (
+            "Map {}",
+            source.find("= Map {}").unwrap() + 2,
+            Type::Map(Box::new(Type::String), Box::new(Type::Int)),
+        ),
+        (
+            "Err(\"invalid\")",
+            source.find("= Err(\"invalid\")").unwrap() + 2,
+            Type::Result(Box::new(Type::Int), Box::new(Type::String)),
+        ),
+        (
+            "Ok(value)",
+            source.find("=> Ok(value)").unwrap() + 3,
+            Type::Result(Box::new(Type::Int), Box::new(Type::String)),
+        ),
+        (
+            "Err(message)",
+            source.find("=> Err(message)").unwrap() + 3,
+            Type::Result(Box::new(Type::Int), Box::new(Type::String)),
+        ),
+    ] {
+        assert!(
+            inferred
+                .iter()
+                .any(|entry| entry.span.start == start && entry.ty == expected),
+            "expected {expression:?} to infer as {expected}"
+        );
+    }
+}
+
+#[test]
+fn expected_collection_and_result_types_reject_mismatched_elements() {
+    let program = parse(&lex(
+        "fn main() { values: Int[] = [1, \"wrong\"] settings: Map<String, Int> = Map { \"key\": \"wrong\" } result: Result<Int, String> = Err(9) }",
+    ).unwrap()).unwrap();
+    let errors = check(&program).expect_err("contextual collection element types must be checked");
+    assert!(errors.iter().any(|error| error.code == "E-TYPE-001"));
+}
+
+#[test]
 fn string_interpolation_type_checks_expressions_and_supports_literal_braces() {
     let source = r#"
 struct Customer { name: String id: Int total: Float }

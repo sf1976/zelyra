@@ -47,13 +47,48 @@ timezone, daylight-saving, and environment-variable behavior; verify these on
 the target host. systemd timers and platform schedulers are also possible
 deployment hosts. Zelyra does not start a resident scheduler by default.
 
+This describes the released 1.1.5 behavior. In the current unreleased 1.2.5
+worktree, `zelyra setup --schema`, `--all`, and `zelyra serve` check schedules
+in `main.zyl` and idempotently ensure the MariaDB outbox for scheduled
+`Email` handlers. Setup does not generate cron rows; it removes old
+Zelyra-managed `.zelyra/schedules.cron` files. Foreign files and symlinks are
+protected. The installed and active Linux systemd user service starts the
+scheduler inside the same `serve` process. It reloads and checks project source
+at every minute boundary, so removed, changed, or currently invalid declarations
+are not executed from stale startup state. Manually started `serve` does not run
+schedules. Schedules use their IANA timezone, defaulting to UTC. At most four
+different schedule handlers run concurrently; a schedule is skipped while its
+previous invocation is still active. Errors and program output go to the
+service's stdout/stderr (typically the systemd journal).
+
+In this worktree, cron output is a reviewable preview only; it does not configure
+external execution. Declared schedules run only inside the installed, active
+Linux systemd service. Zelyra does not install or
+edit user crontabs. It cannot remove old manually installed crontab rows from a
+crontab managed by someone else; the legacy trigger skips inside an active
+service to prevent duplicate execution. The scheduler does not catch up minutes
+missed during downtime and does not yet provide durable distributed leases or
+retries; those belong to the next job-system milestone. `zelyra run` continues
+to read project settings from `.env`.
+
+`zelyra schedule status main.zyl [--json]` reports compiler-checked schedule
+declarations, the project service's installed/active state, and the resulting
+scheduler state. It does not start or change anything. The version 1 JSON
+output includes `platform_service_supported`, `declared_schedule_count`,
+`service_installed`, `service_active`, `scheduler_active`, and schedule
+metadata. On unsupported platforms the service is reported unavailable and
+the scheduler inactive.
+
 The `cron` property uses five numeric fields for minute, hour, day of month,
 month, and day of week. Numbers, `*`, lists, ranges, and `/step` are supported;
 month and weekday names are not supported yet. The field syntax and ranges are
-compiler-checked. Actual trigger behavior belongs to the host scheduler.
-If no timezone is declared, export uses UTC. The compiler checks the shape of
-the timezone name, but does not verify that the target host has the entry.
+compiler-checked. The resident scheduler uses standard cron field ranges; when
+both day-of-month and day-of-week are restricted, either match is sufficient.
+If no timezone is declared, UTC is used. The service scheduler resolves the
+IANA timezone at startup and refuses to start for an unknown zone.
 
-`task run` starts Zelyra again with the declared handler. Normal project checks,
-runtime budgets, and capability grants still apply. Do not put secrets in
-command lines or cron output.
+`schedule trigger` does not execute schedules. It rejects old exported cron
+invocations and reports that the integrated scheduler owns declarations when
+the project service is active. Schedules remain inactive without that service
+as well. Do not put secrets in command lines or cron
+output.

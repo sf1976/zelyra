@@ -13,3 +13,7 @@ zelyra-runtime.workspace = true
 [dev-dependencies]
 zelyra-lexer.workspace = true
 zelyra-parser.workspace = true
+
+[[bench]]
+name = "backend_mutable_arrays"
+harness = false

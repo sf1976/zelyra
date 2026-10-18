@@ -159,9 +159,27 @@ den gewählten Wert als getrennte CLI-Argumente an `zelyra run` weiter. Der
 Server begrenzt parallele Studio-Läufe auf einen; ein Konsolenlauf kann im
 Ausgabefenster abgebrochen werden. Die bisherige Zeitgrenze von 15 Sekunden
 und die Ausgabebegrenzung bleiben zusätzlich wirksam. Eine Budgetüberschreitung
-zeigt die echte `E-RUNTIME-001`-Ausgabe an. Webvorschauen verwenden nicht
-`--max-steps`. Bereits ausgegebene Programmzeilen bleiben auch dann sichtbar,
-wenn der Lauf später mit einem Laufzeitfehler endet.
+zeigt die echte `E-RUNTIME-001`-Ausgabe an. Die Eigenschaften zeigen außerdem
+das Projektlimit aus `[runtime] max_steps` oder weisen darauf hin, dass keines
+gesetzt ist. Dieses TOML-Limit gilt für `zelyra run`, ausgeführte API-Handler
+und geplante Commands; es wird nicht durch `.env` überschrieben. Die statische
+Canvas-Vorschau führt keine Projektfunktionen aus. Bereits ausgegebene
+Programmzeilen bleiben auch dann sichtbar, wenn der Lauf später mit einem
+Laufzeitfehler endet.
+
+### Interaktive Konsoleneingabe
+
+Wenn ein Konsolenprogramm `read_console(prompt)` aufruft, zeigt **Run** die
+Prompt-Ausgabe live an und blendet ein beschriftetes Eingabefeld ein. Mit
+**Eingabe senden** übermittelt Studio genau eine Zeile an denselben laufenden
+Prozess; ein erneuter Aufruf von `read_console` kann die nächste Zeile lesen.
+**Eingabe beenden (EOF)** schließt die Eingabe wie ein Dateiende. **Abbrechen**
+beendet den Lauf. Eine Zeile darf höchstens 4.096 UTF-8-Bytes enthalten und
+keine Zeilenumbrüche enthalten; die bestehende Laufzeitgrenze von 15 Sekunden
+gilt weiterhin. Die Eingabe bleibt lokal im Studio-Prozess und wird nicht in
+Projektdateien oder Logs gespeichert. Ausgaben werden vor Anzeige und Loggen
+gegen erkannte Projektgeheimnisse redigiert. Die CLI-Eingabe über `zelyra run`
+bleibt unverändert verfügbar.
 
 Die Anzeige liest `[runtime] max_stack_depth` aus `zelyra.toml` und zeigt bei
 fehlendem Eintrag den Runtime-Standard 20. Der erlaubte Konfigurationsbereich
@@ -172,6 +190,10 @@ Funktionen meldet Studio die Analyse als unvollständig. Aufrufgraphen können
 keine exakte Rekursionstiefe belegen; Studio zeigt keine erfundene Tiefe oder
 Schrittzahl an. Die angezeigte Laufzeit in Millisekunden stammt aus dem
 tatsächlichen Programmlauf.
+
+Das Runtime-Profil zeigt außerdem `[runtime].scheduler_job_timeout_seconds`.
+Der Standardwert beträgt 300 Sekunden; ein gesetzter Wert begrenzt nur
+Scheduler-Aufträge im installierten, aktiven Linux-systemd-Dienst.
 
 ### Serverseitige PDF-Vorschau
 

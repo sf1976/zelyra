@@ -68,6 +68,29 @@ fn built_in_liveness_endpoint_is_database_free_and_method_bounded() {
 }
 
 #[test]
+fn schedule_probe_is_private_to_the_configured_server_token() {
+    let app = WebApp::new(Vec::new(), Vec::new())
+        .with_schedule_probe_token(Some("random-per-server-secret".into()));
+    let authorized = parse_request(
+        "POST /__zelyra/schedule/probe HTTP/1.1\r\nHost: 127.0.0.1:3000\r\nx-zelyra-schedule-token: random-per-server-secret\r\nContent-Length: 0\r\n\r\n",
+    )
+    .unwrap();
+    assert_eq!(app.dispatch(&authorized).status, 204);
+
+    let missing = parse_request(
+        "POST /__zelyra/schedule/probe HTTP/1.1\r\nHost: 127.0.0.1:3000\r\nContent-Length: 0\r\n\r\n",
+    )
+    .unwrap();
+    assert_eq!(app.dispatch(&missing).status, 404);
+
+    let wrong = parse_request(
+        "POST /__zelyra/schedule/probe HTTP/1.1\r\nHost: 127.0.0.1:3000\r\nx-zelyra-schedule-token: wrong\r\nContent-Length: 0\r\n\r\n",
+    )
+    .unwrap();
+    assert_eq!(app.dispatch(&wrong).status, 404);
+}
+
+#[test]
 fn applies_crud_layout_only_to_html_responses() {
     let response = apply_generated_layout(
         Response::html(200, "<main>CRUD content</main>"),
@@ -1889,6 +1912,165 @@ fn returns_not_found_and_method_errors() {
 }
 
 #[test]
+fn public_files_are_served_as_bytes_with_safe_path_and_method_rules() {
+    let root = std::env::temp_dir().join(format!(
+        "zelyra-public-{}-{}",
+        std::process::id(),
+        AtomicUsize::new(0).fetch_add(1, Ordering::Relaxed)
+    ));
+    fs::create_dir_all(root.join("public/assets")).unwrap();
+    fs::create_dir_all(root.join("public/.well-known/acme-challenge")).unwrap();
+    fs::write(root.join("public/index.html"), "<h1>Static home</h1>").unwrap();
+    fs::write(root.join("public/assets/pixel.png"), [0, 1, 2, 255]).unwrap();
+    fs::write(root.join("public/.env"), "secret=value").unwrap();
+    fs::write(
+        root.join("public/.well-known/acme-challenge/token"),
+        "challenge",
+    )
+    .unwrap();
+    fs::write(root.join("public/declared.html"), "static fallback").unwrap();
+    fs::File::create(root.join("public/large.bin"))
+        .unwrap()
+        .set_len(MAX_PUBLIC_FILE_BYTES + 1)
+        .unwrap();
+    let app = WebApp::new(
+        vec![Route {
+            path: "/declared.html".into(),
+            html: "<h1>Declared route</h1>".into(),
+            query: Vec::new(),
+            page_size: None,
+            sort_columns: Vec::new(),
+            search_columns: Vec::new(),
+            filters: Vec::new(),
+            data: Vec::new(),
+            requires_auth: false,
+            permissions: Vec::new(),
+        }],
+        Vec::new(),
+    )
+    .with_public_dir(&root);
+    let request = |method: &str, path: &str| {
+        parse_request(&format!(
+            "{method} {path} HTTP/1.1\r\nHost: localhost\r\n\r\n"
+        ))
+        .unwrap()
+    };
+
+    let home = app.dispatch(&request("GET", "/"));
+    assert_eq!(home.status, 200);
+    assert_eq!(home.content_type, "text/html; charset=utf-8");
+    assert_eq!(
+        home.body_bytes.as_deref(),
+        Some(b"<h1>Static home</h1>".as_slice())
+    );
+    assert!(home
+        .headers
+        .iter()
+        .any(|(name, value)| name == "Content-Security-Policy"
+            && value.contains("default-src 'self'")));
+
+    let image = app.dispatch(&request("GET", "/assets/pixel.png"));
+    assert_eq!(image.content_type, "image/png");
+    assert_eq!(image.body_bytes.as_deref(), Some([0, 1, 2, 255].as_slice()));
+    assert!(image.to_http_bytes().ends_with(&[0, 1, 2, 255]));
+
+    let head = app.dispatch(&request("HEAD", "/assets/pixel.png"));
+    assert_eq!(head.status, 200);
+    assert!(head.body_bytes.as_deref().unwrap().is_empty());
+    assert!(head
+        .to_http_bytes()
+        .windows(b"Content-Length: 4\r\n".len())
+        .any(|window| window == b"Content-Length: 4\r\n"));
+
+    assert_eq!(
+        app.dispatch(&request("GET", "/%2e%2e/private.txt")).status,
+        404
+    );
+    assert_eq!(
+        app.dispatch(&request("GET", "/assets%2fpixel.png")).status,
+        404
+    );
+    assert_eq!(
+        app.dispatch(&request("POST", "/assets/pixel.png")).status,
+        405
+    );
+    assert_eq!(app.dispatch(&request("GET", "/.env")).status, 404);
+    assert_eq!(
+        app.dispatch(&request("GET", "/.well-known/acme-challenge/token"))
+            .body_bytes
+            .as_deref(),
+        Some(b"challenge".as_slice())
+    );
+    assert_eq!(app.dispatch(&request("GET", "/large.bin")).status, 413);
+    assert!(app
+        .dispatch(&request("GET", "/declared.html"))
+        .body
+        .contains("Declared route"));
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn public_files_reject_symlinks_outside_the_document_root() {
+    use std::os::unix::fs::symlink;
+
+    let root = std::env::temp_dir().join(format!(
+        "zelyra-public-symlink-{}-{}",
+        std::process::id(),
+        AtomicUsize::new(0).fetch_add(1, Ordering::Relaxed)
+    ));
+    fs::create_dir_all(root.join("public")).unwrap();
+    fs::write(root.join("secret.txt"), "private").unwrap();
+    symlink(root.join("secret.txt"), root.join("public/leak.txt")).unwrap();
+    let app = WebApp::new(Vec::new(), Vec::new()).with_public_dir(&root);
+    let request = parse_request("GET /leak.txt HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+
+    assert_eq!(app.dispatch(&request).status, 404);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn public_binary_assets_survive_real_http_serialization() {
+    let root = std::env::temp_dir().join(format!(
+        "zelyra-public-http-{}-{}",
+        std::process::id(),
+        AtomicUsize::new(0).fetch_add(1, Ordering::Relaxed)
+    ));
+    fs::create_dir_all(root.join("public")).unwrap();
+    let image = [0x89, b'P', b'N', b'G', 0, 0xff, 0x80];
+    fs::write(root.join("public/image.png"), image).unwrap();
+    let app = WebApp::new(Vec::new(), Vec::new()).with_public_dir(&root);
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        handle_connection(&mut stream, &app).unwrap();
+    });
+    let mut client = TcpStream::connect(address).unwrap();
+    client
+        .write_all(b"GET /image.png HTTP/1.1\r\nHost: localhost\r\n\r\n")
+        .unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
+    let mut response = Vec::new();
+    client.read_to_end(&mut response).unwrap();
+    server.join().unwrap();
+
+    let separator = response
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .unwrap();
+    let headers = std::str::from_utf8(&response[..separator]).unwrap();
+    assert!(headers.starts_with("HTTP/1.1 200 OK\r\n"));
+    assert!(headers.contains("Content-Type: image/png\r\n"));
+    assert!(headers.contains("Content-Length: 7\r\n"));
+    assert_eq!(&response[separator + 4..], &image);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn parses_request_and_query_string() {
     let request = parse_request(
         "GET /hello/Ada?active=true HTTP/1.1\r\nHost: localhost\r\nAccept: text/html\r\n\r\n",
@@ -2557,6 +2739,25 @@ fn form_appearance_is_separate_from_server_validation_state() {
     assert!(checkbox_html.contains("z-field--checkbox"));
     assert!(checkbox_html.contains("class=\"z-check z-check--warning\""));
     assert!(!checkbox_html.contains("class=\"z-check z-check--warning\" id=\"active\" name=\"active\" type=\"checkbox\" aria-invalid=\"true\""));
+
+    let mut password = route.form.fields[0].clone();
+    password.name = "password".into();
+    password.label = Some("Password".into());
+    password.widget = Some("password".into());
+    route.form.fields.push(password);
+    let mut token = route.form.fields[0].clone();
+    token.name = "api_token".into();
+    token.label = Some("API token".into());
+    route.form.fields.push(token);
+    let submitted = HashMap::from([
+        ("name".into(), "Alice".into()),
+        ("password".into(), "do-not-reflect-this".into()),
+        ("api_token".into(), "also-do-not-reflect-this".into()),
+    ]);
+    let html = render_form(&route, &submitted, &invalid, None);
+    assert!(html.contains("id=\"password\" name=\"password\" type=\"password\" value=\"\""));
+    assert!(!html.contains("do-not-reflect-this"));
+    assert!(!html.contains("also-do-not-reflect-this"));
 
     let mut relation_route = relation_form_route();
     relation_route.form.fields[1].appearance = Some("success".into());
@@ -3898,6 +4099,63 @@ fn form_post_requires_csrf_and_reports_validation_errors() {
         )
         .unwrap();
     assert_eq!(app.dispatch(&cross_origin).status, 403);
+}
+
+#[test]
+fn invalid_form_post_preserves_safe_input_and_redacts_secrets() {
+    let mut route = form_route();
+    route.form.fields.push(zelyra_ast::FormField {
+        name: "email".into(),
+        ty: Some(Type::String),
+        label: Some("Email".into()),
+        placeholder: None,
+        required: true,
+        min_length: None,
+        max: None,
+        min_value: None,
+        max_value: None,
+        choices: Vec::new(),
+        widget: Some("email".into()),
+        appearance: None,
+        readonly: false,
+        span: zelyra_ast::Span::default(),
+    });
+    for name in ["password", "api_token"] {
+        route.form.fields.push(zelyra_ast::FormField {
+            name: name.into(),
+            ty: Some(Type::String),
+            label: Some(name.into()),
+            placeholder: None,
+            required: false,
+            min_length: None,
+            max: None,
+            min_value: None,
+            max_value: None,
+            choices: Vec::new(),
+            widget: (name == "password").then(|| "password".into()),
+            appearance: None,
+            readonly: false,
+            span: zelyra_ast::Span::default(),
+        });
+    }
+    let request = parse_request(
+        "POST /forms/CustomerCreate HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\n\r\n_zelyra_csrf=csrf-token&name=%3Cscript%3Ealert%281%29%3C%2Fscript%3E&email=not-an-email&password=never-render-this&api_token=never-render-this-token",
+    )
+    .unwrap();
+
+    let response = dispatch_form(&route, &request, &HashMap::new(), None, None);
+
+    assert_eq!(response.status, 422);
+    assert!(response
+        .body
+        .contains("value=\"&lt;script&gt;alert(1)&lt;/script&gt;\""));
+    assert!(response.body.contains("value=\"not-an-email\""));
+    assert!(response.body.contains("id=\"email\""));
+    assert!(response.body.contains("aria-invalid=\"true\""));
+    assert!(response.body.contains("type=\"password\" value=\"\""));
+    assert!(!response.body.contains("never-render-this"));
+    assert!(!response.body.contains("never-render-this-token"));
+    assert!(!response.body.contains("<script>alert(1)</script>"));
 }
 
 #[test]

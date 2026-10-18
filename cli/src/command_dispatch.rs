@@ -172,6 +172,9 @@ pub(super) fn run() -> ExitCode {
     if command == "schedule" {
         return task_cli::schedule_command(args);
     }
+    if command == "service" {
+        return service_cli::service_command(args);
+    }
     if command == "editor" {
         return editor::command(args);
     }
@@ -744,7 +747,21 @@ pub(super) fn run() -> ExitCode {
                     .get_or_insert_with(RuntimePolicy::default)
                     .step_budget = Some(step_budget);
             }
-            let database_url = database_url_from_program(&program);
+            let project_directory = std::path::Path::new(&path)
+                .parent()
+                .filter(|directory| !directory.as_os_str().is_empty())
+                .unwrap_or(std::path::Path::new("."));
+            let database_name = program
+                .databases
+                .first()
+                .map(|database| database.name.as_str());
+            let database_url = match database_url_for_project(project_directory, database_name) {
+                Ok(database_url) => database_url,
+                Err(error) => {
+                    diagnostic(&path, "E-ENV-001", &error, 1, 1);
+                    return Err(());
+                }
+            };
             let function_name = entry_function.as_deref().unwrap_or("main");
             let (output, error, return_value) = match run_backend {
                 "ast" => {

@@ -1,0 +1,14 @@
+import "src/sorting.zyl" as sorting
+import "src/search.zyl" as searching
+import "src/stack.zyl" as stack_demo
+import "src/recursion.zyl" as recursion_demo
+import "src/dynamic_programming.zyl" as dp
+
+fn main() {
+    sorting::run()
+    searching::run()
+    stack_demo::run()
+    recursion_demo::run()
+    dp::run()
+    print("PASS all algorithm examples")
+}

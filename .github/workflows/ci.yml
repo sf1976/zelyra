@@ -49,7 +49,7 @@ jobs:
         env:
           CC: clang
         run: |
-          for target in lexer_parser sql_binder template_renderer http_request bytecode_decode; do
+          for target in lexer_parser sql_binder template_renderer http_request bytecode_decode backend_differential; do
             cargo +nightly fuzz run "$target" "fuzz/corpus/$target" -- \
               -max_total_time=15 -max_len=16384 -timeout=5
           done

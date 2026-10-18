@@ -5,8 +5,10 @@ use rand_core::{OsRng, RngCore};
 use ring::hmac;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
+use std::fs;
 use std::io::{self, Read, Write};
 use std::net::{SocketAddr, TcpStream};
+use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use zelyra_ast::{
@@ -50,6 +52,8 @@ pub const ZELYRA_UI_JS_PATH: &str =
 pub const PROJECT_UI_CSS_PATH: &str = "/__zelyra/ui/project.css";
 pub const PROJECT_THEME_CSS_PATH: &str = "/__zelyra/theme.css";
 pub const HEALTH_LIVENESS_PATH: &str = "/__zelyra/health/live";
+pub const SCHEDULE_PROBE_PATH: &str = "/__zelyra/schedule/probe";
+const MAX_PUBLIC_FILE_BYTES: u64 = 32 * 1024 * 1024;
 pub const ACCOUNT_SESSIONS_PATH: &str = "/account/sessions";
 pub const ACCOUNT_SECURITY_PATH: &str = "/account/security";
 pub const LOGIN_MFA_PATH: &str = "/login/mfa";
@@ -211,6 +215,7 @@ pub struct Response {
     pub reason: String,
     pub content_type: String,
     pub body: String,
+    body_bytes: Option<Vec<u8>>,
     pub location: Option<String>,
     pub headers: Vec<(String, String)>,
 }
@@ -222,6 +227,7 @@ impl Response {
             reason: reason_phrase(status).into(),
             content_type: "text/html; charset=utf-8".into(),
             body: body.into(),
+            body_bytes: None,
             location: None,
             headers: Vec::new(),
         }
@@ -233,6 +239,7 @@ impl Response {
             reason: reason_phrase(status).into(),
             content_type: "application/json; charset=utf-8".into(),
             body: body.into(),
+            body_bytes: None,
             location: None,
             headers: Vec::new(),
         }
@@ -244,6 +251,7 @@ impl Response {
             reason: reason_phrase(status).into(),
             content_type: "text/css; charset=utf-8".into(),
             body: body.into(),
+            body_bytes: None,
             location: None,
             headers: Vec::new(),
         }
@@ -255,6 +263,7 @@ impl Response {
             reason: reason_phrase(status).into(),
             content_type: "text/javascript; charset=utf-8".into(),
             body: body.into(),
+            body_bytes: None,
             location: None,
             headers: Vec::new(),
         }
@@ -266,6 +275,7 @@ impl Response {
             reason: reason_phrase(status).into(),
             content_type: "text/plain; charset=utf-8".into(),
             body: String::new(),
+            body_bytes: None,
             location: None,
             headers: Vec::new(),
         }
@@ -289,6 +299,46 @@ impl Response {
         )
     }
 
+    fn to_http_bytes(&self) -> Vec<u8> {
+        let body = self.body_bytes.as_deref().unwrap_or(self.body.as_bytes());
+        let content_length = self
+            .headers
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case("content-length"))
+            .map_or_else(|| body.len().to_string(), |(_, value)| value.clone());
+        let head = format!(
+            "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nReferrer-Policy: same-origin\r\n{}{}Content-Length: {}\r\nConnection: close\r\n\r\n",
+            self.status,
+            self.reason,
+            self.content_type,
+            self.location
+                .as_deref()
+                .map_or(String::new(), |location| format!("Location: {location}\r\n")),
+            self.headers
+                .iter()
+                .filter(|(name, _)| !name.eq_ignore_ascii_case("content-length"))
+                .map(|(name, value)| format!("{name}: {value}\r\n"))
+                .collect::<String>(),
+            content_length,
+        );
+        let mut response = Vec::with_capacity(head.len() + body.len());
+        response.extend_from_slice(head.as_bytes());
+        response.extend_from_slice(body);
+        response
+    }
+
+    fn binary(status: u16, content_type: &str, body: Vec<u8>) -> Self {
+        Self {
+            status,
+            reason: reason_phrase(status).into(),
+            content_type: content_type.into(),
+            body: String::new(),
+            body_bytes: Some(body),
+            location: None,
+            headers: Vec::new(),
+        }
+    }
+
     pub fn redirect(location: impl Into<String>) -> Self {
         let location = location.into();
         let location = if location.contains(['\r', '\n']) {
@@ -301,6 +351,7 @@ impl Response {
             reason: reason_phrase(303).into(),
             content_type: "text/plain; charset=utf-8".into(),
             body: String::new(),
+            body_bytes: None,
             location: Some(location),
             headers: Vec::new(),
         }
@@ -309,6 +360,86 @@ impl Response {
     fn with_header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
         self.headers.push((name.into(), value.into()));
         self
+    }
+}
+
+fn decode_public_path(request_path: &str) -> Option<PathBuf> {
+    let path = request_path.strip_prefix('/')?;
+    let mut decoded_path = PathBuf::new();
+    for segment in path.split('/') {
+        if segment.is_empty() {
+            continue;
+        }
+        let bytes = segment.as_bytes();
+        let mut decoded = Vec::with_capacity(bytes.len());
+        let mut index = 0;
+        while index < bytes.len() {
+            if bytes[index] == b'%' {
+                let high = *bytes.get(index + 1)?;
+                let low = *bytes.get(index + 2)?;
+                decoded.push((public_hex_value(high)? << 4) | public_hex_value(low)?);
+                index += 3;
+            } else {
+                decoded.push(bytes[index]);
+                index += 1;
+            }
+        }
+        let segment = std::str::from_utf8(&decoded).ok()?;
+        if segment.is_empty()
+            || matches!(segment, "." | "..")
+            || (segment.starts_with('.') && segment != ".well-known")
+            || segment.contains(['/', '\\', '\0'])
+            || segment.chars().any(char::is_control)
+        {
+            return None;
+        }
+        decoded_path.push(segment);
+    }
+    Some(decoded_path)
+}
+
+fn public_hex_value(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
+}
+
+fn public_content_type(path: &Path) -> &'static str {
+    match path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "html" | "htm" => "text/html; charset=utf-8",
+        "css" => "text/css; charset=utf-8",
+        "js" | "mjs" => "text/javascript; charset=utf-8",
+        "json" | "map" => "application/json; charset=utf-8",
+        "xml" => "application/xml; charset=utf-8",
+        "txt" => "text/plain; charset=utf-8",
+        "csv" => "text/csv; charset=utf-8",
+        "svg" => "image/svg+xml",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "avif" => "image/avif",
+        "ico" => "image/vnd.microsoft.icon",
+        "pdf" => "application/pdf",
+        "wasm" => "application/wasm",
+        "woff" => "font/woff",
+        "woff2" => "font/woff2",
+        "ttf" => "font/ttf",
+        "otf" => "font/otf",
+        "mp4" => "video/mp4",
+        "webm" => "video/webm",
+        "mp3" => "audio/mpeg",
+        "ogg" => "audio/ogg",
+        _ => "application/octet-stream",
     }
 }
 
@@ -847,6 +978,7 @@ pub struct WebApp {
     pub database_url: Option<String>,
     pub database_capability_granted: Option<bool>,
     pub auth_token: Option<String>,
+    schedule_probe_token: Option<String>,
     pub auth_permissions: Vec<String>,
     pub auth_route: Option<AuthRoute>,
     pub cors_policy: Option<CorsPolicy>,
@@ -854,6 +986,7 @@ pub struct WebApp {
     pub ui_level: UiLevel,
     pub ui_stylesheet_css: Option<String>,
     pub project_theme_css: Option<String>,
+    public_project_root: Option<PathBuf>,
     allowed_hosts: Vec<String>,
     project_ui_catalogs: ProjectUiCatalogs,
     sessions: Arc<Mutex<HashMap<String, Session>>>,
@@ -874,6 +1007,7 @@ impl WebApp {
             database_url: None,
             database_capability_granted: None,
             auth_token: None,
+            schedule_probe_token: None,
             auth_permissions: Vec::new(),
             auth_route: None,
             cors_policy: None,
@@ -881,6 +1015,7 @@ impl WebApp {
             ui_level: UiLevel::default(),
             ui_stylesheet_css: None,
             project_theme_css: None,
+            public_project_root: None,
             allowed_hosts: default_allowed_hosts(),
             project_ui_catalogs: ProjectUiCatalogs::default(),
             sessions: Arc::new(Mutex::new(HashMap::new())),
@@ -905,6 +1040,7 @@ impl WebApp {
             database_url,
             database_capability_granted: None,
             auth_token: None,
+            schedule_probe_token: None,
             auth_permissions: Vec::new(),
             auth_route: None,
             cors_policy: None,
@@ -912,6 +1048,7 @@ impl WebApp {
             ui_level: UiLevel::default(),
             ui_stylesheet_css: None,
             project_theme_css: None,
+            public_project_root: None,
             allowed_hosts: default_allowed_hosts(),
             project_ui_catalogs: ProjectUiCatalogs::default(),
             sessions: Arc::new(Mutex::new(HashMap::new())),
@@ -978,6 +1115,13 @@ impl WebApp {
         self
     }
 
+    /// Configure the private local endpoint used by generated schedule
+    /// triggers to verify that this exact project server is still running.
+    pub fn with_schedule_probe_token(mut self, token: Option<String>) -> Self {
+        self.schedule_probe_token = token;
+        self
+    }
+
     pub fn with_auth_route(mut self, auth_route: AuthRoute) -> Self {
         self.auth_route = Some(auth_route);
         self
@@ -999,6 +1143,13 @@ impl WebApp {
 
     pub fn with_project_theme_css(mut self, css: Option<String>) -> Self {
         self.project_theme_css = css;
+        self
+    }
+
+    /// Enables safe serving of files beneath `<project_root>/public` as a
+    /// fallback after declared application routes have been considered.
+    pub fn with_public_dir(mut self, project_root: impl Into<PathBuf>) -> Self {
+        self.public_project_root = Some(project_root.into());
         self
     }
 
@@ -1155,6 +1306,7 @@ impl WebApp {
         let mut response = if (correlated_request.headers.contains_key("host")
             || request_has_browser_origin_or_session(&correlated_request))
             && !request_host_is_allowed(request, &self.allowed_hosts)
+            && !self.valid_schedule_probe(&correlated_request)
         {
             let title = framework_text_with_catalog(
                 self.ui_language,
@@ -1226,6 +1378,13 @@ impl WebApp {
     }
 
     fn dispatch_inner(&self, request: &Request) -> Response {
+        if request.path == SCHEDULE_PROBE_PATH {
+            return if self.valid_schedule_probe(request) {
+                Response::empty(204).with_header("Cache-Control", "no-store")
+            } else {
+                Response::empty(404).with_header("Cache-Control", "no-store")
+            };
+        }
         if request.path == HEALTH_LIVENESS_PATH {
             return match request.method.as_str() {
                 "GET" => Response::json(200, r#"{"status":"ok"}"#)
@@ -1760,8 +1919,10 @@ impl WebApp {
                 return apply_generated_layout(response, tableview.layout_html.as_deref());
             }
         }
+        let mut declared_route_matched = false;
         for route in &self.routes {
             if match_path(&route.path, &request.path).is_some() {
+                declared_route_matched = true;
                 if self.database_capability_granted == Some(false) && !route.data.is_empty() {
                     return database_capability_denied();
                 }
@@ -1777,13 +1938,107 @@ impl WebApp {
                 break;
             }
         }
-        Router::new(self.routes.clone()).dispatch_with_database_language_and_catalogs(
-            &request.method,
-            &request.target,
-            self.database_url.as_deref(),
-            self.ui_language,
-            &self.project_ui_catalogs,
-        )
+        let response = Router::new(self.routes.clone())
+            .dispatch_with_database_language_and_catalogs(
+                &request.method,
+                &request.target,
+                self.database_url.as_deref(),
+                self.ui_language,
+                &self.project_ui_catalogs,
+            );
+        if matches!(response.status, 404 | 405) && !declared_route_matched {
+            if let Some(static_response) = self.dispatch_public_file(request) {
+                return static_response;
+            }
+        }
+        response
+    }
+
+    fn dispatch_public_file(&self, request: &Request) -> Option<Response> {
+        let project_root = self.public_project_root.as_deref()?;
+        let public_dir = project_root.join("public");
+        let public_metadata = fs::symlink_metadata(&public_dir).ok()?;
+        if public_metadata.file_type().is_symlink() || !public_metadata.is_dir() {
+            return None;
+        }
+        let canonical_public = fs::canonicalize(&public_dir).ok()?;
+        let relative = decode_public_path(&request.path)?;
+        let mut target = canonical_public.clone();
+        for component in relative.components() {
+            let Component::Normal(segment) = component else {
+                return None;
+            };
+            target.push(segment);
+        }
+        if request.path.ends_with('/') || relative.as_os_str().is_empty() {
+            target.push("index.html");
+        }
+        let canonical_target = fs::canonicalize(&target).ok()?;
+        if !canonical_target.starts_with(&canonical_public) {
+            return None;
+        }
+        let metadata = fs::metadata(&canonical_target).ok()?;
+        if !metadata.is_file() {
+            return None;
+        }
+        if metadata.len() > MAX_PUBLIC_FILE_BYTES {
+            return Some(Response::empty(413).with_header("Cache-Control", "no-store"));
+        }
+        if !matches!(request.method.as_str(), "GET" | "HEAD") {
+            return Some(
+                Response::empty(405)
+                    .with_header("Allow", "GET, HEAD")
+                    .with_header("Cache-Control", "no-store"),
+            );
+        }
+        let content_type = public_content_type(&canonical_target);
+        let body = if request.method == "HEAD" {
+            Vec::new()
+        } else {
+            let mut body = Vec::with_capacity(metadata.len() as usize);
+            let file = match fs::File::open(&canonical_target) {
+                Ok(file) => file,
+                Err(_) => return Some(Response::empty(404)),
+            };
+            if file
+                .take(MAX_PUBLIC_FILE_BYTES + 1)
+                .read_to_end(&mut body)
+                .is_err()
+            {
+                return Some(Response::empty(404));
+            }
+            if body.len() as u64 > MAX_PUBLIC_FILE_BYTES {
+                return Some(Response::empty(413).with_header("Cache-Control", "no-store"));
+            }
+            body
+        };
+        let mut response = Response::binary(200, content_type, body);
+        if request.method == "HEAD" {
+            response
+                .headers
+                .push(("Content-Length".into(), metadata.len().to_string()));
+        }
+        let cache = if content_type.starts_with("text/html") {
+            "no-cache"
+        } else {
+            "public, max-age=300"
+        };
+        response
+            .headers
+            .push(("Cache-Control".into(), cache.into()));
+        if content_type.starts_with("text/html") {
+            response.headers.push((
+                "Content-Security-Policy".into(),
+                "default-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+                    .into(),
+            ));
+        } else if content_type == "image/svg+xml" {
+            response.headers.push((
+                "Content-Security-Policy".into(),
+                "default-src 'none'; sandbox".into(),
+            ));
+        }
+        Some(response)
     }
 
     fn api_allowed_methods(&self, path: &str) -> String {
@@ -1806,6 +2061,19 @@ impl WebApp {
             response = response.with_header("X-Zelyra-API-Deprecated", "true");
         }
         response
+    }
+
+    fn valid_schedule_probe(&self, request: &Request) -> bool {
+        if request.path != SCHEDULE_PROBE_PATH || request.method != "POST" {
+            return false;
+        }
+        let Some(expected) = self.schedule_probe_token.as_deref() else {
+            return false;
+        };
+        let Some(candidate) = request.headers.get("x-zelyra-schedule-token") else {
+            return false;
+        };
+        constant_time_equal(expected.as_bytes(), candidate.as_bytes())
     }
 
     fn api_rate_limit_retry_after(&self, api: &ApiRoute, request: &Request) -> Option<u64> {
@@ -10610,7 +10878,7 @@ fn handle_connection_until(
             .headers
             .push(("X-Request-ID".into(), new_request_id()));
     }
-    let response = response.to_http().into_bytes();
+    let response = response.to_http_bytes();
     let mut written_total = 0;
     while written_total < response.len() {
         let remaining = deadline.saturating_duration_since(Instant::now());
