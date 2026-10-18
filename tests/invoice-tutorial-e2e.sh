@@ -152,6 +152,17 @@ if [[ "${theme}" != *"--z-color-primary"* || "${theme}" != *".invoice-home-hero"
   echo "invoice tutorial did not serve its local responsive Zelyra UI theme" >&2
   exit 1
 fi
+for shared_style in \
+  '.tutorial-content > main' \
+  '.tutorial-content .zelyra-crud-card' \
+  '.tutorial-content .zelyra-crud-detail-card' \
+  '.tutorial-content .zelyra-crud-form-card' \
+  '.tutorial-content .z-table-scroll'; do
+  if [[ "${theme}" != *"${shared_style}"* ]]; then
+    echo "invoice tutorial theme is missing the shared page style ${shared_style}" >&2
+    exit 1
+  fi
+done
 if [[ "${theme}" == *"cdn.tabler.io"* || "${theme}" == *"cdn.jsdelivr.net"* ]]; then
   echo "invoice tutorial theme must remain self-hosted" >&2
   exit 1

@@ -59,6 +59,12 @@ Inhalts- und Fußbereich ein wie die übrigen Tutorial-Seiten. `GET /invoices/ne
 separate `page`-Zeile. `zelyra routes main.zyl` zeigt deklarierte und erzeugte
 Routen samt Quelldatei.
 
+Auch die Darstellung bleibt durchgehend gleich: Rechnungsübersicht, Listen,
+Details und Anlege-/Bearbeitungsformulare nutzen denselben Zelyra-UI-Rahmen,
+Abstände, Karten, Filterfelder und Farben. `examples/invoice_tutorial.theme.css`
+und die Projektdatei `zelyra.theme.css` enthalten dieselben Regeln; Änderungen
+am Beispieltheme werden dadurch auch bei neu erzeugten Tutorials übernommen.
+
 Das Feld **Ausgestellt am** verwendet `Date` und nimmt nur ein Datum an. Die
 lokalisierte Formatangabe lautet `JJJJ-MM-TT` beziehungsweise `YYYY-MM-DD`.
 Die Rechnungsnummer wird serverseitig aus der neu erzeugten ID gebildet und

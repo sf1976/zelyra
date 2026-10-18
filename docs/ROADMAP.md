@@ -120,7 +120,10 @@ security and compatibility gates stated for that milestone.
   CSRF, schema validation, redaction, and explicit runtime behavior after a
   change. Prove package/module contracts for settings, effects, jobs, data
   access, and HostServices across AST, MIR, and Bytecode, or make unsupported
-  paths fail closed with stable diagnostics. Secure `public/`, static assets,
+  paths fail closed with stable diagnostics. Give the invoice tutorial one
+  responsive Zelyra UI theme across its table overview, generated CRUD lists,
+  details, and forms; keep the project theme and scaffold template aligned.
+  Secure `public/`, static assets,
   and Apache/Nginx forwarded-header and allowed-host behavior with deployment
   tests.
 - [ ] **1.2.12 — business-platform vertical slices:** Deliver bounded, tested

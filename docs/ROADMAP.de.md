@@ -130,7 +130,10 @@ abgeschlossen.
   Verhalten nach Änderungen einführen. Paket-/Modulverträge für Einstellungen,
   Effekte, Jobs, Datenzugriff und HostServices über AST, MIR und Bytecode
   nachweisen oder nicht unterstützte Pfade in jedem Backend mit stabilen
-  Diagnosen geschlossen abweisen. `public/`, statische Assets sowie
+  Diagnosen geschlossen abweisen. Das Rechnungstutorial erhält ein
+  durchgängiges responsives Zelyra-UI-Theme für Tabellenübersicht, CRUD-Listen,
+  Details und Formulare; Projekt- und Generierungsvorlage bleiben synchron.
+  `public/`, statische Assets sowie
   Apache-/Nginx-Weiterleitungsheader und erlaubte Hosts mit Deploymenttests
   absichern.
 - [ ] **1.2.12 — Geschäftsplattform-Vertikalschnitte:** Begrenzte, getestete

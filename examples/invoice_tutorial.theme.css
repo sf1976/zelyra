@@ -105,25 +105,64 @@
 .invoice-workflow-card-primary { background: linear-gradient(145deg, #f5faef, #fff); border-color: #d8e7d9; }
 .tutorial-footer { padding: 1rem 0; color: #78877f; background: #fff; border-top: 1px solid #e2eae5; font-size: 0.72rem; }
 .tutorial-content > section, .tutorial-content > article { margin-block: 1rem; }
-.tutorial-content .zelyra-query-controls { margin-block: 1rem 1.5rem; }
-.tutorial-content .zelyra-query-controls legend { color: #345746; }
-.tutorial-content .z-query-controls__fields { grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); }
-.tutorial-content .zelyra-query-controls label { min-width: 0; color: #52665b; font-size: .78rem; font-weight: 700; }
-.tutorial-content .zelyra-query-controls input,
-.tutorial-content .zelyra-query-controls select { width: 100%; min-width: 0; }
-.tutorial-content .zelyra-query-controls button { min-height: 2.7rem; align-self: end; padding-inline: 1.1rem; }
+.tutorial-content > main {
+    width: min(100%, var(--z-content-width));
+    min-width: 0;
+    margin: 0 auto 1.5rem;
+    padding: clamp(1rem, 3vw, 1.75rem);
+    border: 1px solid var(--z-color-border);
+    border-radius: var(--z-radius-lg);
+    background: var(--z-color-surface);
+    box-shadow: var(--z-shadow-sm);
+}
+.tutorial-content > main > h1 { margin: 0 0 1.25rem; color: var(--z-color-text); font-size: 1.55rem; line-height: 1.2; }
+.tutorial-content .z-generated-page > .z-page-header { margin-block-end: 1.25rem; }
+.tutorial-content > main > p > a,
+.tutorial-content > main button[type="submit"],
+.tutorial-content .zelyra-pagination > a {
+    display: inline-flex;
+    min-height: var(--z-control-height);
+    align-items: center;
+    justify-content: center;
+    margin: .25rem .4rem .25rem 0;
+    padding: .55rem .9rem;
+    border: 1px solid var(--z-color-border);
+    border-radius: var(--z-radius-sm);
+    background: var(--z-color-surface-raised);
+    color: var(--z-color-text);
+    font-weight: 650;
+    text-decoration: none;
+}
+.tutorial-content > main button[type="submit"] { border-color: var(--z-color-primary); background: var(--z-color-primary); color: var(--z-color-on-primary); cursor: pointer; }
+.tutorial-content > main > p > a:hover,
+.tutorial-content .zelyra-pagination > a:hover { border-color: var(--z-color-primary); background: var(--z-color-primary-soft); }
+.tutorial-content .zelyra-pagination { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-block: 1rem; }
+.tutorial-content .zelyra-query-controls { margin-block: 0 1.25rem; }
 .tutorial-content .zelyra-crud-cards { align-items: stretch; gap: 1rem; margin-block: 1rem 1.5rem; }
 .tutorial-content .zelyra-crud-card {
     display: grid;
     align-content: start;
     gap: .2rem;
     padding: 1.15rem 1.25rem;
-    border-color: #dfe8e3;
-    background: linear-gradient(145deg, #fff, #f8fbf9);
-    box-shadow: 0 .35rem 1.1rem rgb(28 63 47 / 5%);
+    border-color: var(--z-color-border);
+    border-radius: var(--z-radius-md);
+    background: linear-gradient(145deg, var(--z-color-surface), var(--z-color-surface-raised));
+    box-shadow: var(--z-shadow-sm);
     transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
 }
-.tutorial-content .zelyra-crud-card:hover { transform: translateY(-2px); border-color: #b8d2c2; box-shadow: 0 .7rem 1.5rem rgb(28 63 47 / 9%); }
+.tutorial-content .zelyra-crud-card:hover { transform: translateY(-2px); border-color: var(--z-color-primary); box-shadow: var(--z-shadow-md); }
+.tutorial-content .zelyra-crud-detail-card,
+.tutorial-content .zelyra-crud-form-card {
+    border-color: var(--z-color-border);
+    border-radius: var(--z-radius-lg);
+    background: linear-gradient(145deg, var(--z-color-surface), var(--z-color-surface-raised));
+    box-shadow: var(--z-shadow-sm);
+}
+.tutorial-content .zelyra-crud-detail-card { padding: clamp(1rem, 2.5vw, 1.75rem); }
+.tutorial-content .zelyra-crud-detail-card dl { display: grid; grid-template-columns: minmax(8rem, .35fr) minmax(0, 1fr); margin: 0; }
+.tutorial-content .zelyra-crud-detail-card dt,
+.tutorial-content .zelyra-crud-detail-card dd { min-width: 0; margin: 0; padding: .7rem; border-bottom: 1px solid var(--z-color-border); overflow-wrap: anywhere; }
+.tutorial-content .zelyra-crud-detail-card dt { color: var(--z-color-text-muted); font-weight: 650; }
 .tutorial-content .zelyra-crud-card dl {
     display: grid;
     grid-template-columns: minmax(5.5rem, .7fr) minmax(0, 1.3fr);
@@ -131,20 +170,21 @@
     gap: .4rem .75rem;
     padding-block: .65rem;
 }
-.tutorial-content .zelyra-crud-card dl + dl { margin: 0; border-top: 1px solid #e8efeb; }
-.tutorial-content .zelyra-crud-card dt { color: #718278; font-size: .68rem; letter-spacing: .07em; }
-.tutorial-content .zelyra-crud-card dd { margin: 0; color: #263d32; font-size: .9rem; font-weight: 620; }
-.tutorial-content .zelyra-crud-card dd a { color: #205e46; text-decoration-thickness: .08em; text-underline-offset: .18em; }
-.tutorial-content .zelyra-crud-form-card { margin-block: 1rem 2rem; }
+.tutorial-content .zelyra-crud-card dl + dl { margin: 0; border-top: 1px solid var(--z-color-border); }
+.tutorial-content .zelyra-crud-card dt { color: var(--z-color-text-muted); font-size: .68rem; letter-spacing: .07em; }
+.tutorial-content .zelyra-crud-card dd { margin: 0; color: var(--z-color-text); font-size: .9rem; font-weight: 620; }
+.tutorial-content .zelyra-crud-card dd a { color: var(--z-color-link); text-decoration-thickness: .08em; text-underline-offset: .18em; }
+.tutorial-content .zelyra-crud-form-card { margin-block: 1rem 2rem; padding: clamp(1rem, 2.5vw, 1.75rem); }
 .tutorial-content .zelyra-crud-form-card form { display: grid; gap: .8rem 1rem; }
-.tutorial-content .zelyra-crud-form-card form label { color: #344a40; font-size: .88rem; font-weight: 650; }
+.tutorial-content .zelyra-crud-form-card form label { color: var(--z-color-text); font-size: .9rem; font-weight: 650; }
 .tutorial-content .zelyra-crud-form-card .z-field { min-width: 0; }
 .tutorial-content .zelyra-crud-form-card input:not([type="checkbox"]),
 .tutorial-content .zelyra-crud-form-card select,
 .tutorial-content .zelyra-crud-form-card textarea { width: 100%; }
 .tutorial-content table:not(.z-table) { display: block; max-width: 100%; overflow-x: auto; border-radius: 0.65rem; }
-.tutorial-content .z-table-scroll { max-width: 100%; overflow-x: auto; border-radius: 0.65rem; }
-.tutorial-content input:focus, .tutorial-content select:focus, .tutorial-content textarea:focus { border-color: #438469; box-shadow: 0 0 0 0.2rem rgb(67 132 105 / 17%); }
+.tutorial-content .z-table-scroll { max-width: 100%; overflow-x: auto; border: 1px solid var(--z-color-border); border-radius: var(--z-radius-md); background: var(--z-color-surface); box-shadow: var(--z-shadow-sm); }
+.tutorial-content .z-table { min-width: 42rem; }
+.tutorial-content input:focus, .tutorial-content select:focus, .tutorial-content textarea:focus { border-color: var(--z-color-focus); box-shadow: 0 0 0 .2rem color-mix(in srgb, var(--z-color-focus) 17%, transparent); }
 .invoice-totals { max-width: 26rem; margin: 1.5rem 0 1.5rem auto; padding: 1rem 1.2rem; background: #f2f7f3; border: 1px solid #dfe8e3; border-radius: 0.8rem; }
 .invoice-totals p { display: flex; justify-content: space-between; gap: 1rem; margin: 0; padding: 0.55rem 0; border-bottom: 1px solid #dce6e0; }
 .invoice-totals p:last-child { padding-top: 0.85rem; border-bottom: 0; color: #174437; font-size: 1.08rem; font-weight: 750; }
@@ -158,8 +198,10 @@
 @media (max-width: 600px) {
     :where(html[data-z-ui]) .tutorial-new-invoice { padding: .45rem .6rem; font-size: .75rem; }
     :where(html[data-z-ui]) .tutorial-content { padding-inline: .65rem; }
+    :where(html[data-z-ui]) .tutorial-content > main { padding: 1rem .75rem; }
     :where(html[data-z-ui]) .tutorial-content .zelyra-crud-card { padding: .9rem; }
     :where(html[data-z-ui]) .tutorial-content .zelyra-crud-card dl { grid-template-columns: minmax(4.5rem, .75fr) minmax(0, 1.25fr); }
+    :where(html[data-z-ui]) .tutorial-content .zelyra-crud-detail-card dl { grid-template-columns: minmax(0, 1fr); }
     :where(html[data-z-ui]) .invoice-home { padding-top: .25rem; }
     :where(html[data-z-ui]) .invoice-home-hero { min-height: 0; padding: 1.5rem; border-radius: 1rem; }
     :where(html[data-z-ui]) .invoice-home-kicker { gap: .45rem; font-size: .55rem; }

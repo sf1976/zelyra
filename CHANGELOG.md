@@ -6,6 +6,13 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+- Unify invoice tutorial styling across generated overviews, CRUD lists,
+  details, and forms; keep the project theme and scaffold template identical,
+  and replace duplicated hard-coded rules with shared UI theme variables. /
+  Rechnungsübersicht, CRUD-Listen, Details und Formulare im Rechnungstutorial
+  einheitlich gestalten; Projekt-Theme und Gerüstvorlage synchron halten und
+  doppelte feste CSS-Werte durch gemeinsame UI-Themevariablen ersetzen.
+
 ## 1.2.10 — 2026-10-18
 
 - Serialize module-settings writes within one Studio process, reject stale

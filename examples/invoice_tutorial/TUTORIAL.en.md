@@ -252,18 +252,27 @@ the number `RE-2026-001`.
 - Lines 51–59 add a maintenance line. Each `INSERT ... SELECT` uses stored IDs
   and `NOT EXISTS`, so another start does not create duplicate data.
 
-### `zelyra.theme.css` — local appearance
+### `zelyra.theme.css` — one shared appearance
 
-- Line 1 states that this is a Zelyra UI theme override, not a second CSS framework.
-- Lines 2–27 adjust business colors and their contrast pairs, surfaces, focus, content width, and radii within `html[data-z-ui]`.
-- Lines 28–42 style the brand and spacing for tutorial cards, the component gallery, and print actions.
-- Lines 43–60 build the home frame and hero with the business identity, action links, and local example.
-- Lines 61–83 style the sample invoice as a paper card with recipient, date, line items, totals, and link.
-- Lines 84–105 style the feature notes and three workflow cards.
-- Lines 106–114 adjust section spacing, form/table areas, and invoice totals.
-- Lines 116–135 adapt the hero and cards for tablets and narrow screens; below 600 px the workflow becomes one column.
-- Lines 136–191 adapt design tokens and sample cards to explicit dark theme and dark system preference.
-- Lines 192–209 define print rules: header/footer and `z-no-print` actions are hidden; invoice tables remain printable and cards lose shadows.
+This file adapts Zelyra UI to the tutorial's green business style. It is both
+the project theme and the template copied when the invoice tutorial is created.
+The two repository copies are kept in sync.
+
+- The `--z-color-*` variables set colors with their contrast pairs, surfaces,
+  and focus. Corners and content width use Zelyra UI variables.
+- `InvoiceTutorialShell` in `src/shell.zyl` provides the same header,
+  navigation, content area, and footer on every page.
+- One shared content frame styles generated table views, customer, item,
+  invoice, and line-item pages, including their detail and form views.
+- Search and filter fields use Zelyra UI component rules. Cards, details, and
+  forms share the same surfaces, borders, and spacing as the invoice overview.
+- Custom home and invoice-print styles extend the system. Layouts respond to
+  smaller screens; wide tables can scroll within their own area.
+- The dark theme uses adjusted color variables. Print rules hide navigation
+  and explicitly marked actions.
+
+`examples/invoice_tutorial.theme.css` is the template copied by `zelyra
+--tutorial invoice` into the project as `zelyra.theme.css`.
 
 ### `locales/en.json` and `locales/de.json` — localized labels
 
