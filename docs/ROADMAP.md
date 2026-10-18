@@ -25,7 +25,7 @@ telemetry, explicit effects, portable data, resource discipline, and honest
 proof claims guide every phase. The [manifesto](MANIFESTO.md) states the
 principles; the roadmap below tracks what is actually implemented.
 
-The current stable release is 1.2.5. **Current milestones** is the source of
+The current stable release is 1.2.6. **Current milestones** is the source of
 near-term commitments. Older numbered release sections below are retained as
 historical planning and evidence; they do not by themselves define current
 release targets. Longer-term ideas remain in the post-1.0 evolution section.
@@ -60,10 +60,9 @@ security and compatibility gates stated for that milestone.
 - [x] **1.2.5 — operations and package foundations:** Deliver signed source
   packages with publisher trust and exact registry resolution, a Linux
   systemd service with a fixed port, its resident scheduler, static `public/`
-  serving, and verified deployment bundles/runtime improvements. Query HIR, the
-  end-to-end typed request/form pipeline, and persistent transactional jobs
-  move explicitly to 1.2.6; package ecosystem completion remains staged through
-  1.2.8. See the
+  serving, and verified deployment bundles/runtime improvements. Package
+  recovery is delivered in 1.2.6; transitive resolution, typed query/forms,
+  durable jobs, and remaining ecosystem work are staged through 1.2.15. See the
   [package ecosystem plan](release-plans/1.2.5-module-ecosystem.en.md).
   `zelyra service change --port <port>`
   validates the new port, stops the old service, updates its configuration,
@@ -71,32 +70,50 @@ security and compatibility gates stated for that milestone.
   service. Include explicit `status`, `restart`, and `remove` operations where
   the platform service manager supports them. Extend service support to other
   operating systems only with lifecycle and upgrade tests.
-- [~] **1.2.6 — transitive packages and durable business workflows:** A
-  recoverable package-mutation slice is implemented on the active branch:
-  per-project locking, a versioned recovery journal for add/update/remove,
-  preview-first `zelyra package recover`, and restoration of interrupted cache
-  cleanup. Focused tests pass; the full release gate and publication remain
-  open. Still required for this release are separately published transitive
-  dependencies with exact versions, verified publishers, and per-package
-  provenance; typed tenant-query and request/form foundations; and a
-  transactional durable job queue with idempotency, leases, bounded retries,
-  and dead-letter state, verified against MariaDB. The journal is recoverable
-  but not a filesystem-wide atomic transaction.
-- [ ] **1.2.7 — manageable and reusable modules:** Expose compiler-checked
+- [x] **1.2.6 — recoverable package mutations:** Serialize package mutations
+  per project and recover interrupted add/update/remove/cache operations from a
+  versioned journal. `zelyra package recover` previews by default and changes
+  files only with `--apply`; cache cleanup uses validated quarantine paths.
+  Full PR CI passed on `abd2dee` and the change is integrated in `main` as
+  `fb330e0`. Recovery is not a filesystem-wide atomic transaction. See the
+  [recovery work log](release-plans/1.2.6-package-recovery.en.md).
+- [ ] **1.2.7 — trusted transitive registry packages:** Resolve separately
+  published package dependencies with exact versions, independent publisher
+  verification and provenance for every artifact. Verify the complete closure
+  before mutation; preserve offline lock/check/run/bundle behavior and recover
+  interrupted resolution through the 1.2.6 journal.
+- [ ] **1.2.8 — typed query, tenant, request and form pipeline:** Implement
+  bounded query HIR and complete typed request/form handling, including
+  compiler-enforced tenant context, validation, response and redirect
+  contracts. Require AST/MIR/Bytecode agreement or fail-closed diagnostics.
+- [ ] **1.2.9 — durable scheduler jobs:** Add persistent transactional jobs
+  with idempotency, leases, bounded retries, dead-letter state, observability,
+  and explicit scheduler-service lifecycle. Removing a schedule must stop its
+  managed registration; do not install host cron entries implicitly.
+- [ ] **1.2.10 — manageable and reusable modules:** Expose compiler-checked
   module settings through ordinary application pages with revision checks,
   secret redaction, and no implicit capability grants. Deliver a stable
   HostServices foundation for reusable data integrations and at least CSV
   import/export as installable, tested packages. Add ODBC or Excel adapters
   only with reproducible provider and security tests.
-- [ ] **1.2.8 — integrity, backend, and deployment parity:** Prove package and
-  module contracts for settings, effects, jobs, data access, and HostServices
-  across AST, MIR, and Bytecode, or make unsupported paths fail closed with
-  stable diagnostics in every backend. Deliver tested vertical slices for
+- [ ] **1.2.11 — ecosystem and deployment parity:** Prove package and module
+  contracts for settings, effects, jobs, data access, and HostServices across
+  AST, MIR, and Bytecode, or make unsupported paths fail closed with stable
+  diagnostics in every backend. Secure `public/`, static assets, and
+  Apache/Nginx forwarded-header and allowed-host behavior with deployment tests.
+- [ ] **1.2.12 — business-platform vertical slices:** Deliver bounded, tested
   state transitions, audit/history, balanced ledger operations,
-  reflection/export metadata, health checks, and modular bundles. Secure
-  `public/` path confinement, static assets, and Apache/Nginx forwarded-header
-  and allowed-host behavior with deployment tests. This is not a blanket
-  compliance or performance claim.
+  reflection/export metadata, health checks, modular bundles, and any
+  explicitly scoped Wasm or sidecar bridge. Do not make universal compliance
+  or performance claims.
+- [ ] **1.2.13 — canonical project structure:** Complete the opt-in versioned
+  layout (`routes/`, `domain/`, `schema/`, `public/`, `assets/`, and
+  `plugins/`), architecture checks, and safe migration preview. Keep existing
+  projects in legacy mode unless they opt in.
+- [ ] **1.2.14–1.2.15 — Bytecode parity and release proof:** Expand verified
+  Bytecode semantics, host operations, fuzzing, differential tests, resource
+  accounting, diagnostics, and package/deployment support. Fix gaps before the
+  final 1.3.0 gate rather than hiding them behind a backend switch.
 - [ ] **1.3.0 — canonical structure and Bytecode default:** Complete the
   opt-in versioned project layout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, and `plugins/`), architecture checks, and safe layout migration
@@ -173,9 +190,9 @@ These requirements come from the project owner's `/root/5erweiterungen.md` brief
 
 The AST implementation remains the reference, but it is not sufficient by itself: every language or AST semantic added for these extensions must also be safely represented and differentially checked in MIR and bytecode, or fail closed with a clear unsupported diagnostic in that backend.
 
-- [~] **1.2.0–1.3.0 compiler-enforced tenancy and typed queries:** First scope slice: `table ... scoped by tenant_id: TenantId` is parsed and type-checked (`TenantId` must resolve nominally to `Id`; the column must be required). `zelyra check`, AST, MIR verifier/runtime, and bytecode verifier/VM reject raw SQL against these tables; bytecode v24 carries the metadata and checks it against the checked project schema at database execution. Authenticated tenant CRUD remains allowed only with the same scope column. The authorized tenant context, query HIR and safe scoped reads/writes are assigned to 1.2.5; final backend parity is a 1.3.0 gate. Do not claim automatic N+1 prevention without independent evidence.
+- [~] **1.2.0–1.3.0 compiler-enforced tenancy and typed queries:** First scope slice: `table ... scoped by tenant_id: TenantId` is parsed and type-checked (`TenantId` must resolve nominally to `Id`; the column must be required). `zelyra check`, AST, MIR verifier/runtime, and bytecode verifier/VM reject raw SQL against these tables; bytecode v24 carries the metadata and checks it against the checked project schema at database execution. Authenticated tenant CRUD remains allowed only with the same scope column. The authorized tenant context, query HIR and safe scoped reads/writes are assigned to 1.2.8; final backend parity is a 1.3.0 gate. Do not claim automatic N+1 prevention without independent evidence.
 - [~] **1.2.0–1.2.5 request/response and forms:** Existing `Request`, Page/Form/CRUD and CSRF paths are the foundation. Form `widget` values are finite and checked; `password` renders as a password input, and forms do not replay passwords or values from fields named with `password`, `token`, `secret`, or `hash` (`E-FORM-006` rejects invalid widgets). The 422 validation path preserves safe submitted values, escapes them, marks invalid fields, and has an integration test that also verifies secret redaction. A typed handler/middleware/response lifecycle and complete redirect/notice contract remain open; credentials and sensitive input must never be replayed.
-- [~] **1.2.0–1.2.5 durable jobs and scheduler runtime:** Declarative `command`/`schedule` syntax and CLI run/list/export exist. The resident scheduler is integrated into `serve` on the current 1.2.5 work branch and starts only inside the installed, active Linux systemd user service. It reloads the live source at each minute boundary, runs at most four handlers concurrently, and needs no host cron entry. `zelyra schedule status <main.zyl> [--json]` reports declarations and installed/active service state without changing it. CLI help documents that manually starting `serve` does not start the scheduler. `[runtime].max_steps` limits evaluation steps; `[runtime].scheduler_job_timeout_seconds` additionally bounds a scheduler handler's wall-clock runtime (300 seconds by default, 1–86,400) and appears in Studio's runtime budget dialog. On timeout the child process is terminated and the failure is logged. Setup removes old Zelyra-managed cron exports; foreign crontabs are not changed. Durable lease workers, crash/retry/catch-up semantics, and the transactional job contract remain open. The mail outbox alone is not a job system.
+- [~] **1.2.0–1.2.9 durable jobs and scheduler runtime:** Declarative `command`/`schedule` syntax and CLI run/list/export exist. The resident scheduler is integrated into `serve` on the current 1.2.5 work branch and starts only inside the installed, active Linux systemd user service. It reloads the live source at each minute boundary, runs at most four handlers concurrently, and needs no host cron entry. `zelyra schedule status <main.zyl> [--json]` reports declarations and installed/active service state without changing it. CLI help documents that manually starting `serve` does not start the scheduler. `[runtime].max_steps` limits evaluation steps; `[runtime].scheduler_job_timeout_seconds` additionally bounds a scheduler handler's wall-clock runtime (300 seconds by default, 1–86,400) and appears in Studio's runtime budget dialog. On timeout the child process is terminated and the failure is logged. Setup removes old Zelyra-managed cron exports; foreign crontabs are not changed. Durable lease workers, crash/retry/catch-up semantics, and the transactional job contract remain open. The mail outbox alone is not a job system.
 - [~] **1.2.8–1.3.0 Wasm and sidecar bridge:** Versioned HostServices and local locked source packages exist. Sandboxed/versioned Wasm computation and explicitly launched, authenticated local sidecar RPC are assigned to 1.2.8, with cross-backend and release parity in 1.3.0. No stable Rust ABI, auto-download, or implicit capability grant. A local mock integration precedes any real provider claims.
 - [ ] **Cross-backend release gate:** Query, tenant, request, and job semantics must match across AST, MIR, and bytecode or be rejected with explicit unsupported diagnostics. Add security, MariaDB integration, compatibility, offline, and adversarial tests. Do not claim 1.3.0 completion or production readiness until these gates and the detailed plan are satisfied.
 
@@ -337,19 +354,18 @@ compatibility behavior before changing syntax. See the detailed
 - [x] **1.2.5 operations and package foundations:** Fixed-port Linux service,
   resident scheduler, static `public/`, signed registry foundation, and
   portable package bundles are implemented and tested. Query/request/job
-  workflows move to 1.2.6.
-- [ ] **1.2.6 durable workflows and package recovery:** Complete separately
-  published transitive dependencies and crash recovery, then tenant-aware
-  query, typed request/form, and transactional durable job slices.
-- [ ] **1.2.7 module settings and integrations:** Provide compiler-checked
-  application-page settings and reusable HostServices modules with tested CSV
-  import/export packages. Add further providers only after reproducible
-  platform and security tests.
-- [ ] **1.2.8 ecosystem parity and distribution:** Align module/package paths
-  across AST, MIR, and Bytecode or reject them fail-closed with diagnostics.
-  Integrate tested state transitions, audit/history, ledger, reflection,
-  health, bundles, static `public/`, and reverse-proxy security; make no
-  unsupported compliance claims.
+  workflows are now staged across 1.2.7–1.2.9.
+- [x] **1.2.6 package recovery:** Recover interrupted package mutations; see the
+  release note and recovery work log above.
+- [ ] **1.2.7 trusted transitive packages:** Resolve and verify complete exact
+  registry dependency closures, preserving offline and recovery guarantees.
+- [ ] **1.2.8 typed query/request/forms:** Complete bounded query HIR and typed
+  tenant/request/form lifecycle across supported backends.
+- [ ] **1.2.9 durable jobs:** Add transactional scheduler jobs, leases, retries,
+  idempotency, dead-letter handling, and explicit service lifecycle.
+- [ ] **1.2.10–1.2.15:** Deliver module settings/HostServices, backend parity,
+  tested business verticals, canonical project structure, and Bytecode gates as
+  assigned in the release sequence at the top of this roadmap.
 - [~] **1.3.0 interpreter architecture — active after 1.2.0 foundations:**
   Continue typed MIR and the opt-in bytecode VM while keeping AST as the
   reference. The goal is verified Bytecode by default for `run`, `serve`, and

@@ -11,14 +11,15 @@ Business-, Datenbank- und Webanwendungen. Schemaabhängiges SQL, Formulare,
 CRUD, Views und Geschäftslogik greifen ineinander; gewöhnlicher Programmcode
 und natives SQL bleiben jederzeit möglich.
 
-> **Release 1.2.5 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.2.5)
+> **Release 1.2.6 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.2.6)
 >
 > Die Compilerprüfung und der Verifier decken klar abgegrenzte Bereiche ab. Sie beweisen nicht die Korrektheit beliebiger Anwendungen. Prüfe vor dem Einsatz die unterstützten Abläufe und Grenzen in der jeweiligen Dokumentation.
 
-Zelyra 1.2.5 ergänzt signierte Quellpaket-Registries mit Herausgebervertrauen,
-einen Linux-systemd-Dienst mit festem Port und residentem Scheduler sowie
-geschützte statische Dateien aus `public/`. Siehe die
-[Release-Notizen 1.2.5](docs/release-notes/1.2.5.de.md), den
+Zelyra 1.2.6 ergänzt wiederherstellbare Registry-Pakettransaktionen über
+`zelyra package recover`. Es baut auf der signierten Paket-Registry, dem
+Linux-Dienst mit festem Port und residentem Scheduler sowie den geschützten
+statischen Dateien aus `public/` von 1.2.5 auf. Siehe die
+[Release-Notizen 1.2.6](docs/release-notes/1.2.6.de.md), den
 [Paketleitfaden](docs/packages.de.md) und den
 [Deployment-Leitfaden](docs/deployment.de.md). Zelyra 1.1.5 ergänzte den
 lokalen Offline-Paketablauf mit deterministischen Lockfiles und typisierten
@@ -35,11 +36,11 @@ den [Release-Notizen 1.1.0](docs/release-notes/1.1.0.de.md), im
 
 Die Sprachkompatibilitätslinie bleibt `0.1`; Compiler-Releases ändern sie nicht automatisch. „Korrektheit beweisen“ ist ein Entwicklungsziel: Der Verifier unterscheidet geprüfte, zur Laufzeit geprüfte und nicht bewiesene Bereiche, ist aber kein allgemeiner Theorembeweiser.
 
-## Was Zelyra 1.2.5 bietet
+## Was Zelyra 1.2.6 bietet
 
 Zelyra verbindet Sprache, Compiler, Datenbank, Webanwendung und Studio in
-einem Arbeitsablauf. Release 1.2.5 behält die Funktionen aus 1.1.5, 1.1.2,
-1.1.1 und 1.1.0 bei und ergänzt Betriebs- und Paketfunktionen:
+einem Arbeitsablauf. Release 1.2.6 behält die bisherigen Funktionen bei und
+ergänzt die sichere Wiederherstellung von Paketoperationen:
 
 - statisch geprüfte Geschäftslogik und schemaabhängiges SQL;
 - MariaDB als primäre Laufzeit sowie geprüfte MySQL- und PostgreSQL-Abläufe;
@@ -69,6 +70,9 @@ einem Arbeitsablauf. Release 1.2.5 behält die Funktionen aus 1.1.5, 1.1.2,
   idempotente Outbox-Einrichtung und `zelyra schedule status` ohne Host-Cron.
 - Signierte Quellpakete mit explizitem Herausgebervertrauen, Registry-Suche,
   exakten Updates, Lockfile-Herkunft und portablen Docker-Bundles.
+- Serialisierte Paketmutationen mit versioniertem Transaktionsjournal;
+  `zelyra package recover` zeigt eine Vorschau und ändert Dateien erst mit
+  `--apply`.
 - Statische `public/`-Dateien mit MIME-Typen, GET/HEAD, Route-Vorrang und
   Pfad-/Symlink-Schutz; dokumentierter Apache-/Nginx-Proxybetrieb.
 - Offline-Lokalpakete mit SemVer-Kompatibilität, deterministischen
@@ -79,7 +83,7 @@ einem Arbeitsablauf. Release 1.2.5 behält die Funktionen aus 1.1.5, 1.1.2,
   Muster, Tupel, Stringinterpolation und ausdrücklich veränderliche lokale
   Arrays; `--max-steps` stoppt unbeschränkte Auswertung mit quellgenauer Diagnose.
 - Die Grenzen dieses Releases sind in den
-  [Release-Notizen 1.2.5](docs/release-notes/1.2.5.de.md) beschrieben; ein
+  [Release-Notizen 1.2.6](docs/release-notes/1.2.6.de.md) beschrieben; ein
   allgemeines transaktionales Job- und Query-System ist noch nicht enthalten.
 - Lokales Text-PDF-Rendering und geprüfte PDF-Outbox-Anhänge mit Größen- und
   Zeilenlimits. Das Renderer-PDF übernimmt keine CSS-Layouts, Bilder oder

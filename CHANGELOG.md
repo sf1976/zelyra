@@ -6,6 +6,20 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+## 1.2.6 — 2026-10-18
+
+- Make registry package mutations recoverable after interruption with a
+  per-project operation lock, a versioned manifest/lockfile journal, and
+  preview-first `zelyra package recover` with explicit `--apply`. Interrupted
+  cache cleanup is quarantined and restored without overwriting existing
+  packages. Recovery is not a filesystem-wide atomic transaction. /
+  Registry-Paketänderungen nach Unterbrechungen mit projektweiter
+  Operationssperre, versioniertem Manifest-/Lockfile-Journal und
+  vorschauorientiertem `zelyra package recover` mit ausdrücklichem `--apply`
+  wiederherstellbar machen. Unterbrochene Cachebereinigungen werden ohne
+  Überschreiben vorhandener Pakete quarantänisiert und zurückgespielt. Die
+  Recovery ist keine dateisystemweit atomare Transaktion.
+
 ## 1.2.5 — 2026-10-18
 
 - Add a resident Linux systemd user service for Zelyra projects with explicit
@@ -37,12 +51,11 @@ releases follow Semantic Versioning independently of the language line.
   reference backend. / Die interaktive Studio-Programmausgabe und den
   Zeitplanstatus verbessern sowie In-place-Indexupdates für MIR/Bytecode
   ergänzen; AST bleibt Referenzbackend.
-- Keep tenant-query HIR, the complete typed request/form lifecycle, and durable
-  transactional jobs in 1.2.6; keep transitive package crash recovery in that
-  release as well. / Tenant-Query-HIR, den vollständigen typisierten
-  Request-/Form-Lifecycle und dauerhafte transaktionale Jobs für 1.2.6
-  vorsehen; auch die Absturz-Wiederherstellung transitive Pakete gehört in
-  dieses Release.
+- Tenant-query HIR, the complete typed request/form lifecycle, and durable
+  transactional jobs were planned for later releases and are tracked in the
+  current roadmap. / Tenant-Query-HIR, der vollständige typisierte
+  Request-/Form-Lifecycle und dauerhafte transaktionale Jobs wurden für spätere
+  Releases eingeplant und stehen in der aktuellen Roadmap.
 
 ## 1.1.5 — 2026-10-17
 

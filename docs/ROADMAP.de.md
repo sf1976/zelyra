@@ -27,7 +27,7 @@ Ressourcendisziplin und ehrliche Beweisaussagen leiten jede Phase. Das
 [Manifest](MANIFESTO.de.md) beschreibt die Prinzipien; die Roadmap kennzeichnet
 den tatsächlich implementierten Stand.
 
-Das aktuelle stabile Release ist 1.2.5. **Aktuelle Meilensteine** ist die
+Das aktuelle stabile Release ist 1.2.6. **Aktuelle Meilensteine** ist die
 verbindliche Übersicht der nächsten Vorhaben. Ältere, nummerierte Release-
 Abschnitte bleiben als historische Planung und Nachweise erhalten; sie legen
 für sich keine aktuellen Releaseziele fest. Langfristige Ideen stehen im
@@ -65,40 +65,64 @@ abgeschlossen.
 - [x] **1.2.5 — Betriebs- und Paketgrundlagen:** Signierte Quellpakete mit
   Herausgebervertrauen und exakter Registryauflösung, Linux-systemd-Dienst mit
   festem Port, residenter Scheduler, `public/`-Auslieferung sowie geprüfte
-  Deployment-Bundles und Laufzeitverbesserungen liefern. Query-HIR,
-  durchgängige typisierte Request-/Form-Pipeline und persistente transaktionale
-  Jobs sind ausdrücklich 1.2.6 zugeordnet; der Paketabschluss bleibt bis 1.2.8
-  gestaffelt. Siehe den
+  Deployment-Bundles und Laufzeitverbesserungen liefern. Paket-Recovery ist in
+  1.2.6 enthalten; transitive Auflösung, typisierte Query-/Forms, dauerhafte
+  Jobs und die übrige Ökosystemarbeit sind bis 1.2.15 gestaffelt. Siehe den
   [Paketökosystem-Plan](release-plans/1.2.5-module-ecosystem.de.md).
   `zelyra service change --port <port>` prüft den Zielport, stoppt den alten
   Dienst, aktualisiert seine Konfiguration und startet ihn neu. Bei Fehlern
   stellt es Konfiguration und Dienst wieder her. `status`, `restart` und
   `remove` ergänzen, sofern der Plattformdienstmanager dies unterstützt.
   Weitere Betriebssysteme erst nach Lifecycle- und Upgrade-Tests unterstützen.
-- [ ] **1.2.6 — transitive Pakete und persistente Geschäftsabläufe:** Separat
-  veröffentlichte transitive Paketabhängigkeiten mit exakten Versionen,
-  unabhängig geprüften Herausgebern und Herkunft pro Paket auflösen.
-  Lockfile-Änderungen, Paketcache, Updates und Installationen müssen nach
-  Prozessabbruch wiederherstellbar sein. Zusätzlich typisierte Tenant-Query-
-  und Request/Form-Grundlagen sowie eine transaktionale Job-Queue mit
-  Idempotenz, Leases, begrenzten Wiederholungen und Dead-Letter-Zustand
-  implementieren und mit MariaDB-Integrationstests absichern.
-- [ ] **1.2.7 — verwaltbare und wiederverwendbare Module:** Compilergeprüfte
+- [x] **1.2.6 — wiederherstellbare Paketänderungen:** Paketmutationen werden
+  pro Projekt serialisiert; unterbrochene `add`-/`update`-/`remove`- und
+  Cacheoperationen lassen sich über ein versioniertes Journal wiederherstellen.
+  `zelyra package recover` zeigt standardmäßig eine Vorschau und ändert Dateien
+  erst mit `--apply`; Cachebereinigung nutzt geprüfte Quarantänepfade. Die
+  vollständige PR-CI bestand auf `abd2dee`; integriert in `main` als `fb330e0`.
+  Recovery ist keine dateisystemweit atomare Transaktion. Siehe das
+  [Recovery-Arbeitsprotokoll](release-plans/1.2.6-package-recovery.de.md).
+- [ ] **1.2.7 — vertrauenswürdige transitive Registry-Pakete:** Separat
+  veröffentlichte Abhängigkeiten mit exakten Versionen, unabhängiger
+  Herausgeberprüfung und Herkunft je Artefakt auflösen. Den gesamten Abschluss
+  vor jeder Änderung prüfen; Offline-Lock/Check/Run/Bundle erhalten und
+  unterbrochene Auflösung über das Journal aus 1.2.6 wiederherstellen.
+- [ ] **1.2.8 — typisierte Query-, Tenant-, Request- und Formpipeline:**
+  Begrenztes Query-HIR und vollständige typisierte Request-/Formverarbeitung
+  einschließlich compilergeprüftem Tenant-Kontext, Validierung, Response- und
+  Redirectverträgen implementieren. AST/MIR/Bytecode müssen übereinstimmen
+  oder mit geschlossener Diagnose abbrechen.
+- [ ] **1.2.9 — dauerhafte Scheduler-Jobs:** Persistente transaktionale Jobs
+  mit Idempotenz, Leases, begrenzten Wiederholungen, Dead-Letter-Status,
+  Beobachtbarkeit und ausdrücklichem Scheduler-Dienstlebenszyklus ergänzen.
+  Das Entfernen eines Zeitplans muss seine verwaltete Registrierung stoppen;
+  keine impliziten Host-Cronjobs installieren.
+- [ ] **1.2.10 — verwaltbare und wiederverwendbare Module:** Compilergeprüfte
   Moduleinstellungen über normale Anwendungsseiten mit Revisionsprüfung,
   Secret-Redaktion und ohne implizite Capability-Freigabe ermöglichen. Eine
   stabile HostServices-Grundlage für wiederverwendbare Datenintegrationen
   liefern und mindestens CSV-Import/-Export als installierbare, getestete
   Pakete bereitstellen. Weitere Adapter wie ODBC oder Excel nur mit
   reproduzierbaren Provider- und Sicherheitsprüfungen aufnehmen.
-- [ ] **1.2.8 — Integrität, Backend- und Deploymentparität:** Die Paket- und
-  Modulverträge für Einstellungen, Effekte, Jobs, Datenzugriff und
-  HostServices zwischen AST, MIR und Bytecode nachweisen oder nicht
-  unterstützte Pfade überall mit stabilen Diagnosen fail-closed abweisen.
-  Geprüfte vertikale Schnitte für Zustandsübergänge, Audit/Historie,
-  ausgeglichene Ledger-Buchungen, Metadatenexport, Healthchecks und modulare
-  Bundles liefern. `public/`-Pfadbegrenzung, statische Assets sowie
-  Apache-/Nginx-Weiterleitungsheader und erlaubte Hosts mit Deploymenttests
-  absichern. Dies ist keine pauschale Compliance- oder Performancezusage.
+- [ ] **1.2.11 — Ökosystem- und Deploymentparität:** Paket- und Modulverträge
+  für Einstellungen, Effekte, Jobs, Datenzugriff und HostServices zwischen AST,
+  MIR und Bytecode nachweisen oder nicht unterstützte Pfade überall mit
+  stabilen Diagnosen geschlossen abweisen. `public/`, statische Assets und
+  Apache-/Nginx-Weiterleitungsheader sowie erlaubte Hosts mit Deploymenttests
+  absichern.
+- [ ] **1.2.12 — Geschäftsplattform-Vertikalschnitte:** Begrenzte, getestete
+  Zustandsübergänge, Audit/Historie, ausgeglichene Ledger-Buchungen,
+  Reflection-/Exportmetadaten, Healthchecks, modulare Bundles und einen
+  ausdrücklich begrenzten Wasm-/Sidecar-Zugang liefern. Keine universellen
+  Compliance- oder Performanceversprechen.
+- [ ] **1.2.13 — kanonische Projektstruktur:** Das optionale, versionierte
+  Layout (`routes/`, `domain/`, `schema/`, `public/`, `assets/`, `plugins/`),
+  Architekturprüfungen und sichere Migrationsvorschau abschließen. Bestehende
+  Projekte bleiben ohne Opt-in im Legacy-Modus.
+- [ ] **1.2.14–1.2.15 — Bytecode-Parität und Freigabenachweis:** Verifizierte
+  Bytecodesemantik, Hostoperationen, Fuzzing, Differentialtests,
+  Ressourcenlimits, Diagnostik sowie Paket-/Deploymentunterstützung ausbauen.
+  Lücken vor dem finalen 1.3.0-Gate schließen, nicht durch Umschalten verbergen.
 - [ ] **1.3.0 — kanonische Struktur und Bytecode-Standard:** Das optionale,
   versionierte Projektlayout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, `plugins/`), Architekturprüfungen und eine sichere
@@ -168,9 +192,9 @@ Diese Anforderungen stammen aus `/root/5erweiterungen.md` und gehören jetzt zum
 
 Die AST-Implementierung bleibt Referenz, ist aber kein alleiniger Erfüllungsnachweis: Jede dafür ergänzte Sprach- oder AST-Semantik muss auch in MIR und Bytecode sicher abgebildet und differentiell geprüft werden oder im jeweiligen Backend mit einer klaren Unsupported-Diagnose fail-closed scheitern.
 
-- [~] **1.2.0–1.3.0 compilererzwungene Mandantengrenzen und typisierte Abfragen:** Die erste Scope-Stufe parst und prüft `table ... scoped by tenant_id: TenantId` (`TenantId` muss nominal zu `Id` auflösen; die Spalte muss erforderlich sein). `zelyra check`, AST, MIR- und Bytecode-Verifier/Runtime weisen rohes SQL für solche Tabellen fail-closed ab; Bytecode v24 führt die Metadaten und gleicht sie bei DB-Ausführung mit dem geprüften Projektschema ab. Authentifiziertes Tenant-CRUD ist nur mit derselben Scope-Spalte zulässig. Autorisierter Tenant-Kontext, Query-HIR und sichere scoped Reads/Writes gehören zu 1.2.5; Backendparität ist Freigabekriterium von 1.3.0. Keine automatische N+1-Vermeidung ohne unabhängigen Nachweis behaupten.
+- [~] **1.2.0–1.3.0 compilererzwungene Mandantengrenzen und typisierte Abfragen:** Die erste Scope-Stufe parst und prüft `table ... scoped by tenant_id: TenantId` (`TenantId` muss nominal zu `Id` auflösen; die Spalte muss erforderlich sein). `zelyra check`, AST, MIR- und Bytecode-Verifier/Runtime weisen rohes SQL für solche Tabellen fail-closed ab; Bytecode v24 führt die Metadaten und gleicht sie bei DB-Ausführung mit dem geprüften Projektschema ab. Authentifiziertes Tenant-CRUD ist nur mit derselben Scope-Spalte zulässig. Autorisierter Tenant-Kontext, Query-HIR und sichere scoped Reads/Writes gehören zu 1.2.8; Backendparität ist Freigabekriterium von 1.3.0. Keine automatische N+1-Vermeidung ohne unabhängigen Nachweis behaupten.
 - [~] **1.2.0–1.2.5 Request/Response und Forms:** Vorhandene `Request`-, Page/Form/CRUD- und CSRF-Pfade bilden die Grundlage. `widget`-Werte sind endlich geprüft, `password` erzeugt ein Passwortfeld, und Formulare spiegeln Passwörter sowie Werte von Feldern mit `password`-, `token`-, `secret`- oder `hash`-Namen nicht zurück; `E-FORM-006` weist ungültige Widgets ab. Der 422-Validierungspfad erhält sichere Eingaben, escaped sie und markiert fehlerhafte Felder; ein Integrationstest deckt zugleich die Geheimnisredaktion ab. Ein typisierter Handler-/Middleware-/Response-Lebenszyklus und ein vollständiger Redirect-/Meldungsvertrag bleiben offen. Zugangsdaten und sensible Eingaben dürfen niemals wieder ausgegeben werden.
-- [~] **1.2.0–1.2.5 dauerhafte Jobs und Scheduler-Runtime:** Deklarative `command`-/`schedule`-Syntax und CLI-Ausführung/Liste/Export sind vorhanden. Der residente Scheduler ist im aktuellen 1.2.5-Arbeitszweig in `serve` integriert und startet ausschließlich im installierten, aktiven Linux-systemd-Userdienst. Er prüft die aktuelle Quelldatei an jeder Minutengrenze, führt höchstens vier Handler parallel aus und benötigt keinen Host-Cronjob. `zelyra schedule status <main.zyl> [--json]` zeigt Deklarationen und den installierten/aktiven Dienstzustand an, ohne ihn zu verändern. Die CLI-Hilfe dokumentiert, dass manuelles `serve` den Scheduler nicht startet. `[runtime].max_steps` begrenzt Auswertungsschritte; `[runtime].scheduler_job_timeout_seconds` begrenzt zusätzlich die Wandzeit eines Scheduler-Handlers (Standard 300 Sekunden, 1–86.400) und wird im Studio-Budgetdialog angezeigt. Bei Ablauf wird der Kindprozess beendet und der Fehler protokolliert. Setup entfernt alte Zelyra-verwaltete Cron-Exporte; fremde Crontabs werden nicht verändert. Noch offen sind dauerhafte Lease-Worker, Absturz-/Retry-/Catch-up-Semantik und der transaktionale Jobvertrag. Die Mail-Outbox allein ist kein Jobsystem.
+- [~] **1.2.0–1.2.9 dauerhafte Jobs und Scheduler-Runtime:** Deklarative `command`-/`schedule`-Syntax und CLI-Ausführung/Liste/Export sind vorhanden. Der residente Scheduler ist im aktuellen 1.2.5-Arbeitszweig in `serve` integriert und startet ausschließlich im installierten, aktiven Linux-systemd-Userdienst. Er prüft die aktuelle Quelldatei an jeder Minutengrenze, führt höchstens vier Handler parallel aus und benötigt keinen Host-Cronjob. `zelyra schedule status <main.zyl> [--json]` zeigt Deklarationen und den installierten/aktiven Dienstzustand an, ohne ihn zu verändern. Die CLI-Hilfe dokumentiert, dass manuelles `serve` den Scheduler nicht startet. `[runtime].max_steps` begrenzt Auswertungsschritte; `[runtime].scheduler_job_timeout_seconds` begrenzt zusätzlich die Wandzeit eines Scheduler-Handlers (Standard 300 Sekunden, 1–86.400) und wird im Studio-Budgetdialog angezeigt. Bei Ablauf wird der Kindprozess beendet und der Fehler protokolliert. Setup entfernt alte Zelyra-verwaltete Cron-Exporte; fremde Crontabs werden nicht verändert. Noch offen sind dauerhafte Lease-Worker, Absturz-/Retry-/Catch-up-Semantik und der transaktionale Jobvertrag. Die Mail-Outbox allein ist kein Jobsystem.
 - [~] **1.2.8–1.3.0 Wasm- und Sidecar-Brücke:** Versionierte HostServices und lokale gesperrte Quellpakete bestehen. Begrenzte versionierte Wasm-Ausführung und ausdrücklich gestartetes, authentifiziertes lokales Sidecar-RPC gehören zu 1.2.8; Cross-Backend- und Releaseparität gehört zu 1.3.0. Keine stabile Rust-ABI, kein automatischer Download und keine implizite Capability-Freigabe. Einer echten Providerintegration geht ein lokaler Mock voraus.
 - [ ] **Backendübergreifendes Freigabekriterium:** Query-, Tenant-, Request- und Jobsemantik muss in AST, MIR und Bytecode übereinstimmen oder mit expliziter Unsupported-Diagnose abgewiesen werden. Sicherheits-, MariaDB-Integrations-, Kompatibilitäts-, Offline- und adversariale Tests sind erforderlich. 1.3.0 darf erst nach Erfüllung dieser Gates und des Detailplans als abgeschlossen oder produktionsreif gelten.
 
@@ -350,29 +374,22 @@ werden. Details stehen im [Projektlayout-Arbeitsplan](release-plans/1.3.0-projec
 - [x] **1.2.5 Betriebs- und Paketgrundlagen:** Linux-systemd-Dienst mit
   ausdrücklich festgelegtem Port, aktivem residenten Scheduler, statischem
   `public/`-DocumentRoot, signierter Registrybasis und portablen Paket-Bundles
-  implementieren und prüfen. Query-/Request-/Jobpipeline ist 1.2.6 zugeordnet.
-- [~] **1.2.6 Geschäftsabläufe und Paket-Recovery:** Ein Teil zur
-  Wiederherstellung von Paketmutationen ist im aktiven Zweig implementiert:
-  projektweite Operationssperre, versioniertes Journal für `add`, `update` und
-  `remove`, Vorschau mit `zelyra package recover` sowie Wiederherstellung
-  einer unterbrochenen Cachebereinigung. Gezielte Tests sind erfolgreich;
-  vollständige Release-Prüfung und Veröffentlichung stehen noch aus. Für
-  dieses Release fehlen weiterhin separat veröffentlichte transitive Pakete
-  mit exakten Versionen, geprüften Herausgebern und Herkunft je Paket,
-  typisierte Tenant-Query- und Request-/Form-Grundlagen sowie eine
-  transaktionale persistente Jobwarteschlange mit Idempotenz, Leases,
-  begrenzten Wiederholungen und Dead-Letter-Status samt MariaDB-Prüfung. Das
-  Journal ermöglicht Wiederherstellung, aber keine dateisystemweit atomare
-  Transaktion.
-- [ ] **1.2.7 Moduleinstellungen und Integrationen:** Compilergeprüfte
-  Einstellungen über Anwendungsseiten bereitstellen und wiederverwendbare
-  HostServices-Module mit getesteten CSV-Import-/Exportpaketen liefern.
-  Weitere Provider erst nach reproduzierbaren Plattform- und Sicherheitstests.
-- [ ] **1.2.8 Ökosystemparität und Distribution:** Modul-/Paketpfade in AST,
-  MIR und Bytecode angleichen oder fail-closed diagnostizieren. Geprüfte
-  Schnitte für Zustandsübergänge, Audit/Historie, Ledger, Reflection,
-  Healthchecks, Bundles, statisches `public/` und Reverse-Proxy-Sicherheit
-  integrieren; keine unbelegten Compliance-Zusagen.
+  implementieren und prüfen. Query-/Request-/Jobpipeline ist auf 1.2.8/1.2.9
+  verteilt.
+- [x] **1.2.6 Paket-Recovery:** Unterbrochene Paketmutationen wiederherstellen;
+  Details stehen in den Release-Notizen und im Recovery-Arbeitsprotokoll oben.
+- [ ] **1.2.7 vertrauenswürdige transitive Pakete:** Vollständige exakte
+  Registry-Abschlüsse auflösen und prüfen; Offline- und Recovery-Garantien
+  erhalten.
+- [ ] **1.2.8 typisierte Query-/Request-/Forms:** Begrenztes Query-HIR und
+  typisierten Tenant-/Request-/Form-Lifecycle für die unterstützten Backends
+  abschließen.
+- [ ] **1.2.9 dauerhafte Jobs:** Transaktionale Scheduler-Jobs, Leases,
+  Wiederholungen, Idempotenz, Dead-Letter-Behandlung und ausdrücklichen
+  Dienstlebenszyklus ergänzen.
+- [ ] **1.2.10–1.2.15:** Moduleinstellungen/HostServices, Backendparität,
+  geprüfte Geschäftsabläufe, kanonische Projektstruktur und Bytecode-Gates
+  wie in der Releasefolge am Anfang dieser Roadmap zugeordnet umsetzen.
 - [~] **1.3.0 Interpreterarchitektur — nach den 1.2.0-Grundlagen aktiv:**
   Typisierte MIR und die Opt-in-Bytecode-VM weiterentwickeln; der AST bleibt
   Referenz. Geprüfter Bytecode soll erst nach vollständigen Paritäts- und
