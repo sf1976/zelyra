@@ -267,12 +267,29 @@ pub struct TableViewDef {
     pub result_type: Type,
     pub source: String,
     pub columns: Vec<String>,
+    /// Optional safe content rendered around the generated query/table view.
+    pub view: TableViewViewDef,
     pub filters: Vec<String>,
     pub searchable: bool,
     pub sortable: bool,
     pub page_size: Option<u32>,
     pub requires_auth: bool,
     pub permissions: Vec<String>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TableViewViewDef {
+    pub before_content: Option<String>,
+    pub after_content: Option<String>,
+    pub row_actions: Option<TableViewRowActionsDef>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TableViewRowActionsDef {
+    /// Lexical row binding available only inside the action fragment.
+    pub item: String,
+    pub html: String,
     pub span: Span,
 }
 
@@ -392,9 +409,30 @@ pub struct CrudViewDef {
     pub list: CrudListViewDef,
     pub detail: CrudDetailViewDef,
     pub form: CrudFormViewDef,
+    /// Per-route create and edit overrides. Each retains the shared form defaults.
+    pub create: CrudFormPageDef,
+    pub edit: CrudFormPageDef,
     pub delete: CrudDeleteViewDef,
     pub loading: CrudLoadingViewDef,
     pub error: CrudErrorViewDef,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CrudFormPageDef {
+    pub title: Option<String>,
+    pub submit: Option<String>,
+    pub before_form: Option<String>,
+    pub after_form: Option<String>,
+    /// Per-field help or auxiliary content rendered inside the matching field wrapper.
+    pub field_content: Vec<CrudFieldContentDef>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CrudFieldContentDef {
+    pub field: String,
+    pub html: String,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

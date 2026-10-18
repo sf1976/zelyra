@@ -290,6 +290,91 @@ Zelyra inserts the generated page content into the view's default content
 slot. The layout provides the only `<main>` element. A missing layout view
 produces `E-VIEW-030`.
 
+### Extending generated CRUD and tableview pages
+
+Keep shared form defaults in `form`. The `create` and `edit` blocks can
+override the title, submit label, and content for their own generated route.
+Unset labels inherit from `form`, then from CRUD defaults. `before_form` is
+rendered after the page heading and validation summary; `after_form` follows
+the generated form. `field_content` is inserted below the matching generated
+control:
+
+```zelyra
+crud Customer -> customers {
+    view {
+        fields { customer_number name email }
+        form { title: "Customer account" submit: "Save" }
+        create {
+            title: "Create customer account"
+            before_form {
+                html { <p>Check whether this customer already exists.</p> }
+            }
+            field_content {
+                customer_number {
+                    html {
+                        <small>Current input: {values.customer_number}</small>
+                        <a href="/customers">Check customer numbers</a>
+                    }
+                }
+            }
+        }
+        edit {
+            submit: "Save changes"
+            after_form { html { <p>Editing: {record.name}</p> } }
+        }
+    }
+}
+```
+
+`values.field` is a typed value currently present in the form. `record.field`
+is available only in the edit block and limited to safe generated form fields.
+IDs, tenant/owner keys, and sensitive password, token, secret, or hash fields
+are unavailable. On the initial edit request, `record` contains the loaded form
+values. After a validation error, it contains the same preserved input as
+`values`, so custom content reflects the visible form state. Create has no
+saved `record`. Dynamic values are HTML-escaped at render time. Custom content
+sits outside the generated `<form>`; nested forms are rejected with
+`E-CRUD-016`. CRUD continues
+to own routing, persistence, authorization, CSRF, and server-side validation.
+
+A generated `tableview` can also have page content and a typed action cell for
+each row. Existing UI components, including dialogs, work in the row fragment;
+automatic dialog IDs are scoped per rendered row:
+
+```zelyra
+import "zelyra/ui" as ui
+
+tableview CustomerOverview {
+    source sql<CustomerRow[]> { SELECT id, name, email FROM customers }
+    columns { id name email }
+    view {
+        before_content { html { <p>Customer contacts</p> } }
+        row_actions {
+            item: customer
+            html {
+                <Dialog title="Customer contact" open_label="Show {customer.name}">
+                    <p>{customer.email}</p>
+                </Dialog>
+            }
+        }
+        after_content { html { <a href="/customers/new">Create customer</a> } }
+    }
+}
+```
+
+Only SQL result fields are available in `row_actions`; the renderer supplies
+the displayed table columns for each row. Custom fragments may not contain a
+`<form>`. Links navigate, and local buttons only perform supported UI
+interactions. A button inside `field_content` must declare
+`type="button"`; otherwise the browser would treat it as another form submit
+control. Database changes must go through existing CSRF-protected,
+authorized CRUD actions. This does not claim general static checking for
+arbitrary CSS, HTML, or classes.
+
+A complete compiler-checked example with field help and a dialog per table row
+is available at
+[`examples/generated_page_customization/main.zyl`](../examples/generated_page_customization/main.zyl).
+
 The reference application route `/ui/components` demonstrates states,
 variants, form fields, a responsive table, charts, print, and email actions.
 `examples/invoice_tutorial/TUTORIAL.en.md` explains the source; the

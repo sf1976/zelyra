@@ -133,12 +133,12 @@
 .invoice-totals p:last-child { padding-top: 0.85rem; border-bottom: 0; color: #174437; font-size: 1.08rem; font-weight: 750; }
 .invoice-print-source { margin-top: 2rem; }
 
-/* Keep generated record cards readable: each label belongs directly above its value. */
+/* Keep generated record cards calm: one card, with label/value pairs as rows. */
 :where(html[data-z-ui]) .tutorial-content .zelyra-crud-cards { gap: 1rem; }
 :where(html[data-z-ui]) .tutorial-content .zelyra-crud-card {
     align-content: start;
-    gap: 0;
-    padding: .35rem 1.15rem;
+    gap: .1rem;
+    padding: .45rem 1.2rem;
     background: var(--z-color-surface);
     border-color: var(--z-color-border);
     border-radius: .85rem;
@@ -146,16 +146,17 @@
 }
 :where(html[data-z-ui]) .tutorial-content .zelyra-crud-card dl {
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: .28rem;
+    grid-template-columns: minmax(5rem, .82fr) minmax(0, 1.18fr);
+    align-items: baseline;
+    gap: .25rem .9rem;
     min-width: 0;
-    margin: .38rem 0;
-    padding: .62rem .72rem;
-    background: var(--z-color-surface-raised);
-    border: 1px solid var(--z-color-border);
-    border-radius: .62rem;
+    margin: 0;
+    padding: .78rem .1rem;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--z-color-border);
 }
-:where(html[data-z-ui]) .tutorial-content .zelyra-crud-card dl:last-child { margin-bottom: 0; }
+:where(html[data-z-ui]) .tutorial-content .zelyra-crud-card dl:last-child { border-bottom: 0; }
 :where(html[data-z-ui]) .tutorial-content .zelyra-crud-card dt {
     color: var(--z-color-text-muted);
     font-size: .7rem;
@@ -165,16 +166,26 @@
 }
 :where(html[data-z-ui]) .tutorial-content .zelyra-crud-card dd {
     min-width: 0;
+    margin: 0;
     overflow-wrap: anywhere;
     color: var(--z-color-text);
     font-size: .88rem;
     font-weight: 700;
     line-height: 1.4;
+    text-align: right;
 }
 :where(html[data-z-ui]) .tutorial-content .zelyra-crud-card dd a {
     color: var(--z-color-primary);
     text-decoration-thickness: .08em;
     text-underline-offset: .16em;
+}
+@media (max-width: 38rem) {
+    :where(html[data-z-ui]) .tutorial-content .zelyra-crud-card dl {
+        grid-template-columns: minmax(0, 1fr);
+        gap: .2rem;
+        padding: .7rem .1rem;
+    }
+    :where(html[data-z-ui]) .tutorial-content .zelyra-crud-card dd { text-align: left; }
 }
 
 
@@ -235,9 +246,8 @@
 :where(html[data-z-ui][data-z-theme="dark"]) .invoice-workflow-card,
 :where(html[data-z-ui][data-z-theme="dark"]) .tutorial-content .zelyra-crud-card,
 :where(html[data-z-ui][data-z-theme="dark"]) .invoice-totals { background: var(--z-color-surface); color: var(--z-color-text); border-color: var(--z-color-border); }
-:where(html[data-z-ui][data-z-theme="dark"]) .tutorial-content .zelyra-crud-card dl + dl { border-color: var(--z-color-border); }
 :where(html[data-z-ui][data-z-theme="dark"]) .tutorial-content .zelyra-crud-card dt { color: var(--z-color-text-muted); }
-:where(html[data-z-ui][data-z-theme="dark"]) .tutorial-content .zelyra-crud-card dl { border-color: var(--z-color-border); }
+:where(html[data-z-ui][data-z-theme="dark"]) .tutorial-content .zelyra-crud-card dl { border-bottom-color: var(--z-color-border); }
 :where(html[data-z-ui][data-z-theme="dark"]) .tutorial-content .zelyra-crud-card dd { color: var(--z-color-text); }
 :where(html[data-z-ui][data-z-theme="dark"]) .invoice-preview strong,
 :where(html[data-z-ui][data-z-theme="dark"]) .invoice-preview-total,
@@ -252,9 +262,8 @@
     :where(html[data-z-ui][data-z-theme="system"]) .invoice-workflow-card,
     :where(html[data-z-ui][data-z-theme="system"]) .tutorial-content .zelyra-crud-card,
     :where(html[data-z-ui][data-z-theme="system"]) .invoice-totals { background: var(--z-color-surface); color: var(--z-color-text); border-color: var(--z-color-border); }
-    :where(html[data-z-ui][data-z-theme="system"]) .tutorial-content .zelyra-crud-card dl + dl { border-color: var(--z-color-border); }
     :where(html[data-z-ui][data-z-theme="system"]) .tutorial-content .zelyra-crud-card dt { color: var(--z-color-text-muted); }
-    :where(html[data-z-ui][data-z-theme="system"]) .tutorial-content .zelyra-crud-card dl { border-color: var(--z-color-border); }
+    :where(html[data-z-ui][data-z-theme="system"]) .tutorial-content .zelyra-crud-card dl { border-bottom-color: var(--z-color-border); }
     :where(html[data-z-ui][data-z-theme="system"]) .tutorial-content .zelyra-crud-card dd { color: var(--z-color-text); }
     :where(html[data-z-ui][data-z-theme="system"]) .invoice-preview strong,
     :where(html[data-z-ui][data-z-theme="system"]) .invoice-preview-total,

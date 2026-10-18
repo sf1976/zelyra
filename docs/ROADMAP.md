@@ -159,7 +159,11 @@ security and compatibility gates stated for that milestone.
   state transitions, audit/history, balanced ledger operations, reflection and
   export metadata, health checks, and modular bundles with concrete integration
   tests. Complete Apache/TLS loopback tests and reverse-proxy configurations.
-  Wasm/sidecars remain optional and require their own sandbox/ABI gate.
+  Add composable, type-checked extension points to generated CRUD and tableview
+  surfaces for create/edit pages, field help, page content, and row-level UI
+  actions while keeping routing, persistence, and security checks centralized;
+  this subfeature is implemented and tested. The other 1.2.15 work remains
+  open. Wasm/sidecars remain optional and require their own sandbox/ABI gate.
 - [ ] **1.3.0 — canonical structure and Bytecode default:** Complete the
   opt-in versioned project layout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, and `plugins/`), architecture checks, and safe layout migration

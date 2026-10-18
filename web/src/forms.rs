@@ -35,6 +35,28 @@ pub(super) fn render_form_with_language(
     language: UiLanguage,
 ) -> String {
     let mut html = String::new();
+    let mut template_values = values.clone();
+    for (name, value) in values {
+        let safe = route
+            .form
+            .fields
+            .iter()
+            .find(|field| field.name == *name)
+            .is_some_and(|field| {
+                !audit_sensitive_field(name) && input_type(route, field) != "password"
+            });
+        if safe && route.form_context_fields.iter().any(|field| field == name) {
+            template_values.insert(format!("values.{name}"), value.clone());
+        }
+        if safe
+            && route
+                .record_context_fields
+                .iter()
+                .any(|field| field == name)
+        {
+            template_values.insert(format!("record.{name}"), value.clone());
+        }
+    }
     let cards = route.form_view.mode == CrudFormViewMode::Cards;
     if cards {
         html.push_str("<section class=\"z-generated-page\">");
@@ -88,6 +110,13 @@ pub(super) fn render_form_with_language(
             html.push_str("</a></li>");
         }
         html.push_str("</ul></div>");
+    }
+    if let Some(before) = &route.before_form_html {
+        html.push_str(&render_interpolations(
+            before,
+            &HashMap::new(),
+            &template_values,
+        ));
     }
     if cards {
         html.push_str("<section class=\"zelyra-crud-form-card\">");
@@ -327,6 +356,15 @@ pub(super) fn render_form_with_language(
             ));
             html.push_str("</p>");
         }
+        if let Some(content) = route.field_content_html.get(&field.name) {
+            html.push_str("<div class=\"z-field__supplemental\">");
+            html.push_str(&render_interpolations(
+                content,
+                &HashMap::new(),
+                &template_values,
+            ));
+            html.push_str("</div>");
+        }
         html.push_str("</div>");
     }
     html.push_str("<button class=\"z-button z-button--primary\" type=\"submit\">");
@@ -341,6 +379,13 @@ pub(super) fn render_form_with_language(
         .unwrap_or(default_submit);
     html.push_str(&html_escape_preserving_locale_references(&submit));
     html.push_str("</button></form>");
+    if let Some(after) = &route.after_form_html {
+        html.push_str(&render_interpolations(
+            after,
+            &HashMap::new(),
+            &template_values,
+        ));
+    }
     if cards {
         html.push_str("</section>");
         html.push_str("</section>");
