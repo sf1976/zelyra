@@ -1706,7 +1706,7 @@ fn imports_zelyra_ui_and_renders_checked_semantic_appearances() {
     assert!(!html.contains(
         "id=\"reference\" name=\"reference\" type=\"text\" value=\"\" placeholder=\"\" required"
     ));
-    assert!(validate_form_ui_appearances("main.zyl", &loaded.program));
+    assert!(validate_form_properties("main.zyl", &loaded.program));
 
     fs::write(
         &entry,
@@ -1717,14 +1717,14 @@ fn imports_zelyra_ui_and_renders_checked_semantic_appearances() {
     .unwrap();
     let invalid = project::load(entry.to_str().unwrap()).unwrap();
     assert!(!validate_components("main.zyl", &invalid.program));
-    assert!(!validate_form_ui_appearances("main.zyl", &invalid.program));
+    assert!(!validate_form_properties("main.zyl", &invalid.program));
     fs::write(
         &entry,
         r#"form Search { field token: String { widget: hidden } }"#,
     )
     .unwrap();
     let invalid_widget = project::load(entry.to_str().unwrap()).unwrap();
-    assert!(!validate_form_ui_appearances(
+    assert!(!validate_form_properties(
         "main.zyl",
         &invalid_widget.program
     ));

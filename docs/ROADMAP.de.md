@@ -96,12 +96,15 @@ abgeschlossen.
   geordnete Tabellenzugriffe, Parameter-Locals und aufgelöste Parametertypen
   von HIR nach MIR. Der MIR-Verifier berechnet Operations-, Tabellen- und
   Parametermetadaten erneut aus der SQL-Quelle und weist veraltete Pläne mit
-  `E-MIR-VERIFY-004` ab. Es entsteht keine parallele Query-Syntax; sichere
-  scoped Query-Erzeugung ist damit noch nicht vorhanden. Redirects in
-  Formaktionen sind statisch auf sichere lokale absolute Pfade desselben Ursprungs
-  begrenzt (`E-FORM-007`). Tenant-Kontext, der übrige typisierte
-  Request-/Form-Lifecycle, Responseverträge und Backendparität bleiben für
-  diesen Meilenstein offen.
+  `E-MIR-VERIFY-004` ab. Es entsteht keine parallele Query-Syntax. Das
+  vorhandene authentifizierte, generierte CRUD bleibt der unterstützte
+  Tenant-Read-/Write-Pfad; rohes SQL auf scoped Tabellen bleibt in AST, MIR und
+  Bytecode gesperrt. Der vorhandene API-Fehler-/Outputvertrag, typisierte
+  Page-/Form-Eingaben, serverseitige Formularvalidierung, CSRF und Erhalt
+  sicherer Eingaben bleiben der Request-/Form-Pfad. Redirects in Formularaktionen
+  sind statisch auf sichere lokale absolute Pfade desselben Ursprungs begrenzt
+  (`E-FORM-007`). Vollständige Weblaufzeit-Parität in MIR/Bytecode bleibt ein
+  1.3.0-Gate; der HTTP-Server verwendet weiterhin AST.
 - [ ] **1.2.9 — dauerhafte Scheduler-Jobs:** Persistente transaktionale Jobs
   mit Idempotenz, Leases, begrenzten Wiederholungen, Dead-Letter-Status,
   Beobachtbarkeit und ausdrücklichem Scheduler-Dienstlebenszyklus ergänzen.

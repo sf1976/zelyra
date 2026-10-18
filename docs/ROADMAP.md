@@ -90,11 +90,14 @@ security and compatibility gates stated for that milestone.
   ordered table accesses, parameter locals, and resolved parameter types from
   HIR into MIR. The MIR verifier recomputes operation/table/parameter metadata
   from the SQL source and rejects stale plans with `E-MIR-VERIFY-004`. This
-  adds no parallel query syntax and does not yet provide safe scoped query
-  construction. Form-action redirects are now statically constrained to safe
-  same-site absolute paths (`E-FORM-007`). Tenant context, the rest of the typed
-  request/form lifecycle, response contracts, and backend parity remain open
-  for this milestone.
+  adds no parallel query syntax. Existing authenticated generated CRUD remains
+  the supported tenant-scoped read/write path; raw SQL for scoped tables stays
+  rejected in AST, MIR, and bytecode. The current API error/output contract,
+  typed page/form inputs, server-side form validation, CSRF, and safe-value
+  preservation remain the request/form path. Form-action redirects are
+  statically constrained to safe same-origin absolute paths (`E-FORM-007`).
+  Full web-runtime parity in MIR/bytecode remains a 1.3.0 gate; the HTTP server
+  continues to use AST.
 - [ ] **1.2.9 — durable scheduler jobs:** Add persistent transactional jobs
   with idempotency, leases, bounded retries, dead-letter state, observability,
   and explicit scheduler-service lifecycle. Removing a schedule must stop its
