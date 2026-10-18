@@ -222,7 +222,11 @@ fn run_linux_service(action: &str, port: Option<u16>) -> Result<String, String> 
             Ok(String::new())
         }
         "restart" => {
-            systemctl(&["restart", service_name])?;
+            let unit = fs::read(&service_path).map_err(|error| {
+                format!("service is not installed or its unit cannot be read: {error}")
+            })?;
+            let port = current_port(&unit)?;
+            restart_service(service_name, port, systemctl, wait_until_ready)?;
             Ok(format!("restarted {service_name}"))
         }
         "remove" => {
@@ -484,6 +488,21 @@ fn wait_until_ready(service_name: &str, port: u16) -> Result<(), String> {
         }
         thread::sleep(Duration::from_millis(100));
     }
+}
+
+#[cfg(target_os = "linux")]
+fn restart_service<C, W>(
+    service_name: &str,
+    port: u16,
+    mut call: C,
+    mut wait_ready: W,
+) -> Result<(), String>
+where
+    C: FnMut(&[&str]) -> Result<(), String>,
+    W: FnMut(&str, u16) -> Result<(), String>,
+{
+    call(&["restart", service_name])?;
+    wait_ready(service_name, port)
 }
 
 #[cfg(target_os = "linux")]
@@ -782,5 +801,33 @@ mod tests {
             ]
         );
         let _ = fs::remove_dir_all(&directory);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn service_restart_waits_for_the_configured_port_to_be_ready() {
+        let events = std::cell::RefCell::new(Vec::new());
+        restart_service(
+            "zelyra-test.service",
+            3001,
+            |arguments| {
+                events
+                    .borrow_mut()
+                    .push(format!("systemctl {}", arguments.join(" ")));
+                Ok(())
+            },
+            |name, port| {
+                events.borrow_mut().push(format!("ready {name} {port}"));
+                Ok(())
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            events.into_inner(),
+            vec![
+                "systemctl restart zelyra-test.service",
+                "ready zelyra-test.service 3001"
+            ]
+        );
     }
 }
