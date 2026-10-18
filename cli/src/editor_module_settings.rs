@@ -45,9 +45,33 @@ fn contents(path: &Path) -> Result<Vec<u8>, (u16, String)> {
     if metadata.len() > MAX_SETTINGS_BYTES as u64 {
         return Err((413, "module settings file exceeds 1 MiB".into()));
     }
-    let file =
-        fs::File::open(path).map_err(|_| (422, "module settings file could not be read".into()))?;
-    let mut bytes = Vec::with_capacity(metadata.len() as usize);
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        // Open the reparse point itself so the handle metadata check below
+        // rejects it instead of reading through it.
+        options.custom_flags(0x0020_0000);
+    }
+    let file = options
+        .open(path)
+        .map_err(|_| (422, "module settings file could not be read".into()))?;
+    let opened_metadata = file
+        .metadata()
+        .map_err(|_| (422, "module settings file could not be inspected".into()))?;
+    if !opened_metadata.is_file() || opened_metadata.file_type().is_symlink() {
+        return Err((422, "module settings file must be a regular file".into()));
+    }
+    if opened_metadata.len() > MAX_SETTINGS_BYTES as u64 {
+        return Err((413, "module settings file exceeds 1 MiB".into()));
+    }
+    let mut bytes = Vec::with_capacity(opened_metadata.len() as usize);
     file.take((MAX_SETTINGS_BYTES + 1) as u64)
         .read_to_end(&mut bytes)
         .map_err(|_| (422, "module settings file could not be read".into()))?;
