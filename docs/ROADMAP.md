@@ -114,28 +114,29 @@ security and compatibility gates stated for that milestone.
   HostServices documented as a versioned embedding API, not a stable native
   ABI or package plugin contract. Verify reusable CSV import/export packages
   across supported execution backends. Ordinary application-served settings
-  pages and cross-process settings transactions remain open for 1.2.11.
-- [ ] **1.2.11 — application module settings and ecosystem parity:** Add
-  application-served module settings only with server-side authorization,
-  CSRF, schema validation, redaction, and explicit runtime behavior after a
-  change. Keep outbox listing read-only while reporting a missing table with
-  an actionable, project-specific setup command. Correct Debian/Ubuntu
-  Compose-v2 version detection, load project `.env` database URLs in audit and
-  auth-role commands, and preserve Unix SIGPIPE behavior for piped CLI output.
-  Prove package/module contracts for settings, effects, jobs, data access, and
-  HostServices across AST, MIR, and Bytecode, or make unsupported paths fail
-  closed with stable diagnostics. Secure `public/`, static assets, and
-  Apache/Nginx forwarded-header and allowed-host behavior with deployment
-  tests.
+-  pages and cross-process settings transactions move to 1.2.12.
+- [~] **1.2.11 — tutorial UI and CLI reliability:** Release the consistent
+  invoice tutorial design, actionable missing-outbox-table guidance,
+  Debian/Ubuntu Compose-v2 version recognition, project `.env` resolution for
+  audit/auth-role commands, and normal Unix SIGPIPE behavior. The invoice UI
+  styling subtask is implemented; stable-release gates are in progress. The
+  wider application-settings, ecosystem parity, and deployment-security work
+  is explicitly moved to 1.2.12.
 - [✅] **1.2.11 invoice tutorial CSS subtask:** Centralize generated-page,
   CRUD, form, filter, and table styling in Zelyra UI; give the invoice tutorial
   one responsive design and generated forms the same page frame, with only
   project-specific design retained in its synchronized theme template.
-- [ ] **1.2.12 — business-platform vertical slices:** Deliver bounded, tested
-  state transitions, audit/history, balanced ledger operations,
-  reflection/export metadata, health checks, modular bundles, and any
-  explicitly scoped Wasm or sidecar bridge. Do not make universal compliance
-  or performance claims.
+- [ ] **1.2.12 — application settings, ecosystem parity, and business slices:**
+  Add application-served module settings only with server-side authorization,
+  CSRF, schema validation, redaction, and explicit runtime behavior after a
+  change. Prove package/module contracts for settings, effects, jobs, data
+  access, and HostServices across AST, MIR, and Bytecode, or make unsupported
+  paths fail closed with stable diagnostics. Secure `public/`, static assets,
+  and Apache/Nginx forwarded-header and allowed-host behavior with deployment
+  tests. Deliver bounded, tested state transitions, audit/history, balanced
+  ledger operations, reflection/export metadata, health checks, modular
+  bundles, and any explicitly scoped Wasm or sidecar bridge. Make no universal
+  compliance or performance claims.
 - [ ] **1.2.13 — canonical project structure:** Complete the opt-in versioned
   layout (`routes/`, `domain/`, `schema/`, `public/`, `assets/`, and
   `plugins/`), architecture checks, and safe migration preview. Keep existing

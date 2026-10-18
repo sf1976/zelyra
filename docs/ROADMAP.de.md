@@ -123,30 +123,31 @@ abgeschlossen.
   versionierte Embedding-API und wird nicht als stabile native ABI oder
   Paket-Pluginvertrag dargestellt. Wiederverwendbare CSV-Import-/Exportpakete
   über unterstützte Backends prüfen. Von Anwendungen ausgelieferte
-  Einstellungsseiten und prozessübergreifende Transaktionen folgen in 1.2.11.
-- [ ] **1.2.11 — Anwendungseinstellungen und Ökosystemparität:**
-  Von Anwendungen ausgelieferte Moduleinstellungen nur mit serverseitiger
-  Autorisierung, CSRF, Schemaprüfung, Redaktion und ausdrücklich definiertem
-  Verhalten nach Änderungen einführen. Die Outbox-Liste bleibt schreibgeschützt
-  und nennt bei fehlender Tabelle einen passenden Setup-Befehl. Compose-v2-
-  Erkennung für Debian/Ubuntu korrigieren, Datenbank-URLs aus der Projekt-`.env`
-  für Audit- und Auth-Rollenbefehle laden und das Unix-SIGPIPE-Verhalten bei
-  weitergeleiteten CLI-Ausgaben erhalten. Paket- und Modulverträge für
-  Einstellungen, Effekte, Jobs, Datenzugriff und HostServices über AST, MIR und
-  Bytecode nachweisen oder nicht unterstützte Pfade in jedem Backend mit
-  stabilen Diagnosen geschlossen abweisen. `public/`, statische Assets sowie
-  Apache-/Nginx-Weiterleitungsheader und erlaubte Hosts mit Deploymenttests
-  absichern.
+  Einstellungsseiten und prozessübergreifende Transaktionen folgen in 1.2.12.
+- [~] **1.2.11 — Tutorial-UI und CLI-Zuverlässigkeit:** Das durchgängige
+  Rechnungstutorial-Design, eine konkrete Hilfe bei fehlender Outbox-Tabelle,
+  Debian-/Ubuntu-Erkennung für Compose v2, die Projekt-`.env`-Auflösung für
+  Audit-/Auth-Rollenbefehle sowie normales Unix-SIGPIPE-Verhalten liefern. Der
+  UI-Teilschritt ist umgesetzt; die Gates für das stabile Release laufen. Die
+  weitergehenden Arbeiten an Anwendungseinstellungen, Ökosystemparität und
+  Deployment-Sicherheit werden ausdrücklich auf 1.2.12 verschoben.
 - [✅] **1.2.11 CSS-Teilschritt für das Rechnungstutorial:** Seiten-, CRUD-,
   Formular-, Filter- und Tabellenstile zentral in Zelyra UI bündeln; ein
   durchgängiges responsives Tutorialdesign schaffen und generierte Formulare in
   denselben Seitenrahmen setzen. Im synchronen Projekt-Theme bleiben nur
   projektspezifische Gestaltungen.
-- [ ] **1.2.12 — Geschäftsplattform-Vertikalschnitte:** Begrenzte, getestete
-  Zustandsübergänge, Audit/Historie, ausgeglichene Ledger-Buchungen,
-  Reflection-/Exportmetadaten, Healthchecks, modulare Bundles und einen
-  ausdrücklich begrenzten Wasm-/Sidecar-Zugang liefern. Keine universellen
-  Compliance- oder Performanceversprechen.
+- [ ] **1.2.12 — Anwendungseinstellungen, Ökosystemparität und Geschäftsabläufe:**
+  Von Anwendungen ausgelieferte Moduleinstellungen nur mit serverseitiger
+  Autorisierung, CSRF, Schemaprüfung, Redaktion und ausdrücklich definiertem
+  Verhalten nach Änderungen einführen. Paket-/Modulverträge für Einstellungen,
+  Effekte, Jobs, Datenzugriff und HostServices über AST, MIR und Bytecode
+  nachweisen oder nicht unterstützte Pfade in jedem Backend mit stabilen
+  Diagnosen geschlossen abweisen. `public/`, statische Assets sowie
+  Apache-/Nginx-Weiterleitungsheader und erlaubte Hosts mit Deploymenttests
+  absichern. Begrenzte, getestete Zustandsübergänge, Audit/Historie,
+  ausgeglichene Ledger-Buchungen, Reflection-/Exportmetadaten, Healthchecks,
+  modulare Bundles und einen ausdrücklich begrenzten Wasm-/Sidecar-Zugang
+  liefern. Keine universellen Compliance- oder Performanceversprechen.
 - [ ] **1.2.13 — kanonische Projektstruktur:** Das optionale, versionierte
   Layout (`routes/`, `domain/`, `schema/`, `public/`, `assets/`, `plugins/`),
   Architekturprüfungen und sichere Migrationsvorschau abschließen. Bestehende
