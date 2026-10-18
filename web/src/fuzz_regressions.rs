@@ -30,10 +30,10 @@ fn http_parser_and_template_renderer_handle_reproducible_mutations() {
     for input in bounded_mutations::corpus(&seeds, 1024, 12) {
         let first_request = parse_request(&input);
         assert_eq!(first_request, parse_request(&input));
-        let first_render = render_template_fragment(&input, &params, &values, &collections);
+        let first_render = render_template_fragment(&input, &params, &values, &collections, &[]);
         assert_eq!(
             first_render,
-            render_template_fragment(&input, &params, &values, &collections)
+            render_template_fragment(&input, &params, &values, &collections, &[])
         );
     }
 }

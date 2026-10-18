@@ -10967,9 +10967,20 @@ fn render_view_component(
             None if prop.name == "appearance" => render_component_property(html, prop, "default"),
             // A Grid without a column count defaults to one responsive column.
             None if prop.name == "columns" => render_component_property(html, prop, "one"),
+            // Keep the fallback text in the no-JavaScript HTML. The local UI
+            // runtime localizes this marked default from the document lang.
+            None if component.name == "Dialog" && prop.name == "close_label" => {
+                render_component_property(html, prop, "Schließen")
+            }
             None => remove_component_property(html, &prop.name),
         }
     });
+    if component.name == "Dialog" && !attributes.contains_key("close_label") {
+        rendered = rendered.replace(
+            "data-z-dialog-close>",
+            "data-z-dialog-close data-z-dialog-close-default=\"true\" data-zelyra-i18n=\"ui.dialog.close\">",
+        );
+    }
     let slots = slot_invocations(&component.html).expect("view component slots are validated");
     for (index, slot) in slots.into_iter().enumerate() {
         let marker = format!("\u{0}ZELYRA_SLOT_{index}\u{0}");
@@ -11152,6 +11163,7 @@ fn remove_component_property(mut template: String, property: &str) -> String {
 
 fn expand_view_components(program: &zelyra_ast::Program, mut html: String) -> String {
     let expansion_limit = html.len().saturating_mul(4).max(256);
+    let mut next_dialog_id = 0usize;
     for _ in 0..expansion_limit {
         let Ok(invocations) = component_invocations(&html) else {
             break;
@@ -11166,6 +11178,41 @@ fn expand_view_components(program: &zelyra_ast::Program, mut html: String) -> St
         else {
             break;
         };
+        let attributes =
+            component_attributes(&invocation.attributes).expect("view components are validated");
+        if invocation.name == "Dialog" && !attributes.contains_key("id") {
+            let id = loop {
+                let candidate = format!("z-dialog-auto-{next_dialog_id:010}");
+                next_dialog_id += 1;
+                if !html.contains(&format!("id=\"{candidate}\"")) {
+                    break candidate;
+                }
+            };
+            // The marker lets the server-side collection renderer add a
+            // stable loop path to every instance of this call site.
+            let rendered = render_view_component(
+                component,
+                &format!("{} id=\"{}\"", invocation.attributes, id),
+                invocation.body.as_deref(),
+            );
+            let rendered = rendered.replace(
+                &format!("data-z-dialog aria-labelledby=\"{id}-title\""),
+                &format!(
+                    "data-z-dialog data-z-dialog-auto=\"{id}\" aria-labelledby=\"{id}-title\""
+                ),
+            );
+            let rendered = rendered
+                .replace(
+                    &format!("id=\"{id}-open\" data-z-dialog-open=\"{id}\""),
+                    &format!("id=\"{id}-open\" data-z-dialog-auto-open=\"{id}\" data-z-dialog-open=\"{id}\""),
+                )
+                .replace(
+                    &format!("<h2 id=\"{id}-title\">"),
+                    &format!("<h2 id=\"{id}-title\" data-z-dialog-auto-title=\"{id}\">"),
+                );
+            html.replace_range(invocation.start..invocation.end, &rendered);
+            continue;
+        }
         let rendered = render_view_component(
             component,
             &invocation.attributes,

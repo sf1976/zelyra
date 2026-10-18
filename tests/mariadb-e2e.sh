@@ -67,6 +67,14 @@ temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/zelyra-mariadb-e2e.XXXXXX")"
 server_pid=""
 german_server_pid=""
 
+server_base_url_from_log() {
+    local current_url="$1"
+    local server_log="$2"
+    local announced_url
+    announced_url="$(sed -n 's/^Zelyra server listening on \(http:\/\/[^[:space:]]*\).*/\1/p' "${server_log}" | tail -n 1)"
+    printf '%s' "${announced_url:-${current_url}}"
+}
+
 cleanup() {
     if [[ -n "${german_server_pid}" ]]; then
         kill "${german_server_pid}" 2>/dev/null || true
@@ -166,11 +174,13 @@ echo "[4/11] starting Zelyra web server"
 "${zelyra_bin}" serve "${project_file}" "${address}" >"${temp_dir}/server.log" 2>&1 &
 server_pid=$!
 for _ in $(seq 1 30); do
+    base_url="$(server_base_url_from_log "${base_url}" "${temp_dir}/server.log")"
     if curl --silent --show-error --fail "${base_url}/machines" -o "${temp_dir}/health.html"; then
         break
     fi
     sleep 1
 done
+base_url="$(server_base_url_from_log "${base_url}" "${temp_dir}/server.log")"
 if ! curl --silent --show-error --fail "${base_url}/machines" -o "${temp_dir}/health.html"; then
     echo "error: Zelyra web server did not become ready" >&2
     cat "${temp_dir}/server.log" >&2
@@ -479,11 +489,13 @@ verify_ui_mode() {
         >"${server_log}" 2>&1 &
     german_server_pid=$!
     for _ in $(seq 1 30); do
+        mode_url="$(server_base_url_from_log "${mode_url}" "${server_log}")"
         if curl --silent --show-error --fail "${mode_url}/machines" -o "${machines_file}"; then
             break
         fi
         sleep 1
     done
+    mode_url="$(server_base_url_from_log "${mode_url}" "${server_log}")"
     if ! curl --silent --show-error --fail "${mode_url}/machines" -o "${machines_file}"; then
         echo "error: ${mode} Zelyra web server did not become ready" >&2
         cat "${server_log}" >&2
