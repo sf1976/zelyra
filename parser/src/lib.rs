@@ -5125,6 +5125,34 @@ mod tests {
     }
 
     #[test]
+    fn accepts_contextual_database_field_names_and_existing_storage_mapping() {
+        let program = parse(
+            &lex("table invoices { type: String(20) version: Int order: Int group: Int status: String invoice_type: String(20) storage_name \"invoice_category\" }")
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            program.tables[0]
+                .columns
+                .iter()
+                .map(|column| column.name.as_str())
+                .collect::<Vec<_>>(),
+            [
+                "type",
+                "version",
+                "order",
+                "group",
+                "status",
+                "invoice_type"
+            ]
+        );
+        assert_eq!(
+            program.tables[0].columns[5].storage_name.as_deref(),
+            Some("invoice_category")
+        );
+    }
+
+    #[test]
     fn parses_decimal_precision_and_scale_for_table_columns() {
         let program = parse(
             &lex("table invoices { id: Id primary auto total: Decimal(12, 2) required tax: Decimal(8, 4)? }\n").unwrap(),

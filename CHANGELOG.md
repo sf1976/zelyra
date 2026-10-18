@@ -1,5 +1,19 @@
 ## Unreleased
 
+## 1.2.17 — 2026-10-18
+
+- Preserve optional table relations as nullable foreign keys and enforce
+  tenant identity in database constraints with composite foreign keys and a
+  unique `(tenant_id, id)` target key. / Optionale Tabellenrelationen als
+  nullable Fremdschlüssel erhalten und Tenant-Identität mit zusammengesetzten
+  Fremdschlüsseln sowie eindeutigem Zielschlüssel `(tenant_id, id)` auch auf
+  Datenbankebene erzwingen.
+- Keep contextual field names and the existing `storage_name` mapping; retain
+  `Decimal(p,s)` and scale integer defaults without reducing builtin `Money`
+  precision. / Kontextuelle Feldnamen und das vorhandene `storage_name`-Mapping
+  nutzen; `Decimal(p,s)` beibehalten und ganzzahlige Standardwerte an die Skala
+  anpassen, ohne die Präzision von `Money` zu verringern.
+
 ## 1.2.16 — 2026-10-18
 
 - Let TableView templates add compiler-checked supporting content inside a

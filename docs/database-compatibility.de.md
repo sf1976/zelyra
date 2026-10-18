@@ -8,6 +8,33 @@ Server funktioniert, noch ein MySQL-Kompatibilitätsnachweis. MariaDB ist
 Zelyras primäre Laufzeitreferenz. PostgreSQL-Laufzeitparität und MySQL Server
 sind nicht Teil dieser Matrix.
 
+## Relationen und Mandantengrenzen
+
+Optionale Tabellenrelationen wie `customer: Customer?` werden als nullable
+`customer_id`-Spalte mit Fremdschlüssel geplant. Sind Ausgangs- und Zieltabelle
+mit demselben auf `Id` auflösenden Tenant-Identitätstyp scoped, erzeugt der
+Schema-Plan einen zusammengesetzten Schlüssel
+`(tenant_id, customer_id) -> (tenant_id, id)` sowie den erforderlichen
+eindeutigen Zielschlüssel `(tenant_id, id)`. Der Datenbank-Constraint weist
+damit auch direkte SQL-Schreibvorgänge zurück, die einen Datensatz eines
+anderen Mandanten referenzieren. Bei solchen Relationen ist `RESTRICT` der
+explizite Standard; `on_delete set_null` wird abgewiesen, weil dadurch auch der
+erforderliche Tenant-Schlüssel null würde.
+
+Die Feldnamen `type` und `version` sind in Feldpositionen bereits
+kontextbezogen zulässig; `order`, `group` und `status` sind reguläre
+Bezeichner. Ein abweichender physischer SQL-Spaltenname wird mit der
+bestehenden Syntax `storage_name "type"` angegeben. Eine neue `@column`- oder
+`r#`-Syntax ist dafür nicht erforderlich.
+
+`Decimal(precision, scale)` ist bereits unterstützte Tabellensyntax. Bei
+ganzzahligen `default`-Werten wird die deklarierte Skala auch in der DDL
+ausgegeben, zum Beispiel `Decimal(12, 2) default 0` als `DEFAULT 0.00`. Der
+eingebaute Typ `Money` bleibt rückwärtskompatibel bei `DECIMAL(19,4)`; eine
+Änderung auf `(12,2)` würde vorhandene Wertebereiche beschneiden. Die
+Ein-Argument-Form `Decimal(scale)` wird nicht eingeführt, da sie ohne
+festgelegte Präzisionsregel mehrdeutig wäre.
+
 ## Getestete Versionen
 
 | MariaDB-Community-LTS-Reihe | Exakter Test-Image-Tag | Zelyra-Teststatus | Community-Wartung bis* |

@@ -65,9 +65,17 @@ pub struct Column {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ForeignKey {
     pub name: Option<String>,
+    /// First source column, retained for compatibility with existing callers.
     pub column: String,
+    /// Additional source columns for composite foreign keys. Empty for a
+    /// single-column key; otherwise `column` is the first entry.
+    pub columns: Vec<String>,
     pub referenced_table: String,
+    /// First target column, retained for compatibility with existing callers.
     pub referenced_column: String,
+    /// Additional target columns for composite foreign keys. Empty for a
+    /// single-column key; otherwise `referenced_column` is the first entry.
+    pub referenced_columns: Vec<String>,
     pub on_delete: ReferentialAction,
 }
 
@@ -291,22 +299,103 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
                         span: definition.span,
                     });
                 } else {
+                    let target_table = program.tables.iter().find(|target| target.name == relation);
+                    let target_scope = target_table.and_then(|target| target.tenant_scope.as_ref());
+                    let matching_scope_types =
+                        table.tenant_scope.as_ref().zip(target_scope).is_some_and(
+                            |(source, target)| {
+                                // Keep this comparison nominal. Resolving two
+                                // distinct domain aliases down to `Id` here
+                                // would erase the tenant identity boundary.
+                                source.tenant_type == target.tenant_type
+                            },
+                        );
+                    if table.tenant_scope.is_some() && target_scope.is_some() {
+                        if !matching_scope_types {
+                            errors.push(SchemaError {
+                                message: format!(
+                                    "tenant-scoped relation {}.{} connects incompatible tenant identity types",
+                                    table.name, definition.name
+                                ),
+                                span: definition.span,
+                            });
+                        }
+                        if definition.on_delete == Some(ReferentialAction::SetNull) {
+                            errors.push(SchemaError {
+                                message: "`on_delete set_null` cannot be used for a tenant-scoped relation because it would also null the required tenant key".into(),
+                                span: definition.span,
+                            });
+                        }
+                    }
+                    let source_scope_column = table
+                        .tenant_scope
+                        .as_ref()
+                        .filter(|_| matching_scope_types)
+                        .and_then(|scope| {
+                            table
+                                .columns
+                                .iter()
+                                .find(|column| column.name == scope.column)
+                                .map(|column| {
+                                    column
+                                        .storage_name
+                                        .clone()
+                                        .unwrap_or_else(|| scope.column.clone())
+                                })
+                        });
+                    let mut columns = Vec::new();
+                    let mut referenced_columns = Vec::new();
+                    if let (Some(tenant_column), Some(target_scope)) =
+                        (source_scope_column, target_scope)
+                    {
+                        columns.push(tenant_column);
+                        columns.push(storage_name.clone());
+                        let target_scope = target_table
+                            .and_then(|table| {
+                                table
+                                    .columns
+                                    .iter()
+                                    .find(|column| column.name == target_scope.column)
+                                    .map(|column| {
+                                        column
+                                            .storage_name
+                                            .clone()
+                                            .unwrap_or_else(|| target_scope.column.clone())
+                                    })
+                            })
+                            .unwrap_or_else(|| target_scope.column.clone());
+                        referenced_columns.push(target_scope);
+                        referenced_columns.push("id".into());
+                    }
+                    let tenant_scoped_relation = !columns.is_empty();
                     foreign_keys.push(ForeignKey {
                         name: Some(generated_identifier(
                             &format!("fk_{}_{}", table.name, storage_name),
                             backend,
                         )),
                         column: storage_name.clone(),
+                        columns,
                         referenced_table: relation,
                         referenced_column: "id".into(),
-                        on_delete: definition.on_delete.unwrap_or_default(),
+                        referenced_columns,
+                        on_delete: definition.on_delete.unwrap_or_else(|| {
+                            if tenant_scoped_relation {
+                                ReferentialAction::Restrict
+                            } else {
+                                ReferentialAction::default()
+                            }
+                        }),
                     });
                 }
             }
-            let default = definition.default.as_ref().map(default_sql).or_else(|| {
-                (definition.auto && matches!(definition.ty, Type::Timestamp))
-                    .then(|| "CURRENT_TIMESTAMP".into())
-            });
+            let default = definition
+                .default
+                .as_ref()
+                .map(|value| default_sql_for_column(value, definition.decimal_precision))
+                .or_else(|| {
+                    (definition.auto && matches!(definition.ty, Type::Timestamp))
+                        .then(|| "CURRENT_TIMESTAMP".into())
+                });
             let default = default.map(|value| {
                 if value == "CURRENT_TIMESTAMP"
                     && matches!(sql_type.as_str(), "DATETIME(3)" | "TIMESTAMPTZ(3)")
@@ -373,6 +462,7 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
         });
     }
     if errors.is_empty() {
+        ensure_tenant_reference_keys(&mut tables, backend);
         Ok(Schema {
             database: program.databases.first().map(|database| DatabaseConfig {
                 name: database.name.clone(),
@@ -383,6 +473,41 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
         })
     } else {
         Err(errors)
+    }
+}
+
+fn ensure_tenant_reference_keys(tables: &mut [Table], backend: Backend) {
+    let required = tables
+        .iter()
+        .flat_map(|table| table.foreign_keys.iter())
+        .filter(|foreign_key| !foreign_key.columns.is_empty())
+        .map(|foreign_key| {
+            (
+                foreign_key.referenced_table.clone(),
+                foreign_key.referenced_columns.clone(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let mut required = required;
+    required.sort();
+    for (target_name, columns) in required {
+        let Some(target) = tables.iter_mut().find(|table| table.name == target_name) else {
+            continue;
+        };
+        let has_unique_key = target
+            .uniques
+            .iter()
+            .chain(target.indexes.iter().filter(|index| index.unique))
+            .any(|index| index.columns == columns);
+        if !has_unique_key {
+            let name = generated_identifier(&format!("uq_{}_tenant_id", target.name), backend);
+            target.uniques.push(Index {
+                name,
+                columns,
+                unique: true,
+                constraint_owned: true,
+            });
+        }
     }
 }
 
@@ -462,7 +587,11 @@ fn column_mapping(
     type_definitions: &[TypeDef],
     backend: Backend,
 ) -> (String, String, Option<String>) {
-    if let Type::Named(name) = &definition.ty {
+    let resolved = match resolve_type(&definition.ty, type_definitions) {
+        Type::Option(inner) => *inner,
+        resolved => resolved,
+    };
+    if let Type::Named(name) = &resolved {
         if let Some(table) = table_for_type(name, table_names) {
             return (
                 format!("{}_id", definition.name),
@@ -475,10 +604,6 @@ fn column_mapping(
             );
         }
     }
-    let resolved = match resolve_type(&definition.ty, type_definitions) {
-        Type::Option(inner) => *inner,
-        resolved => resolved,
-    };
     let sql_type = match resolved {
         Type::Int => {
             if definition.auto {
@@ -700,6 +825,15 @@ fn default_sql(value: &DefaultValue) -> String {
     }
 }
 
+fn default_sql_for_column(value: &DefaultValue, decimal: Option<(u32, u32)>) -> String {
+    match (value, decimal) {
+        (DefaultValue::Int(integer), Some((_, scale))) if scale > 0 => {
+            format!("{integer}.{}", "0".repeat(scale as usize))
+        }
+        _ => default_sql(value),
+    }
+}
+
 fn quote_identifier(value: &str, backend: Backend) -> String {
     match backend {
         Backend::MariaDb => format!("`{}`", value.replace('`', "``")),
@@ -859,9 +993,9 @@ fn table_create_sql(table: &Table, backend: Backend) -> String {
         format!(
             "CONSTRAINT {} FOREIGN KEY ({}) REFERENCES {} ({}){}",
             quote_identifier(&name, backend),
-            quote_identifier(&foreign_key.column, backend),
+            quoted_identifiers(foreign_key_source_columns(foreign_key), backend),
             quote_identifier(&foreign_key.referenced_table, backend),
-            quote_identifier(&foreign_key.referenced_column, backend),
+            quoted_identifiers(foreign_key_target_columns(foreign_key), backend),
             referential_action_sql(foreign_key.on_delete)
         )
     }));
@@ -918,9 +1052,11 @@ fn column_sql(column: &Column, backend: Backend) -> String {
     if column.primary_key {
         sql.push_str(" PRIMARY KEY");
     }
-    if !column.nullable {
-        sql.push_str(" NOT NULL");
-    }
+    sql.push_str(if column.nullable {
+        " NULL"
+    } else {
+        " NOT NULL"
+    });
     if column.unique {
         sql.push_str(" UNIQUE");
     }
@@ -971,8 +1107,10 @@ pub struct UniqueIndexPreflight {
 pub struct ForeignKeyPreflight {
     pub table: String,
     pub column: String,
+    pub columns: Vec<String>,
     pub referenced_table: String,
     pub referenced_column: String,
+    pub referenced_columns: Vec<String>,
     pub referenced_table_exists: bool,
 }
 
@@ -1325,8 +1463,10 @@ pub fn diff(desired: &Schema, current: &Schema) -> SchemaPlan {
                     plan.foreign_key_preflights.push(ForeignKeyPreflight {
                         table: desired_table.name.clone(),
                         column: foreign_key.column.clone(),
+                        columns: foreign_key.columns.clone(),
                         referenced_table: foreign_key.referenced_table.clone(),
                         referenced_column: foreign_key.referenced_column.clone(),
+                        referenced_columns: foreign_key.referenced_columns.clone(),
                         referenced_table_exists: current_tables
                             .contains_key(foreign_key.referenced_table.as_str()),
                     });
@@ -1766,9 +1906,37 @@ fn foreign_key_actions_equivalent(
 }
 
 fn same_foreign_key_identity(left: &ForeignKey, right: &ForeignKey) -> bool {
-    left.column == right.column
+    foreign_key_source_columns(left) == foreign_key_source_columns(right)
         && left.referenced_table == right.referenced_table
-        && left.referenced_column == right.referenced_column
+        && foreign_key_target_columns(left) == foreign_key_target_columns(right)
+}
+
+fn foreign_key_source_columns(foreign_key: &ForeignKey) -> Vec<&str> {
+    if foreign_key.columns.is_empty() {
+        vec![foreign_key.column.as_str()]
+    } else {
+        foreign_key.columns.iter().map(String::as_str).collect()
+    }
+}
+
+fn foreign_key_target_columns(foreign_key: &ForeignKey) -> Vec<&str> {
+    if foreign_key.referenced_columns.is_empty() {
+        vec![foreign_key.referenced_column.as_str()]
+    } else {
+        foreign_key
+            .referenced_columns
+            .iter()
+            .map(String::as_str)
+            .collect()
+    }
+}
+
+fn quoted_identifiers(columns: Vec<&str>, backend: Backend) -> String {
+    columns
+        .into_iter()
+        .map(|column| quote_identifier(column, backend))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn referential_action_sql(action: ReferentialAction) -> &'static str {
@@ -1792,9 +1960,9 @@ fn add_foreign_key_sql(table: &Table, foreign_key: &ForeignKey, backend: Backend
         "ALTER TABLE {} ADD CONSTRAINT {} FOREIGN KEY ({}) REFERENCES {} ({}){};",
         quote_identifier(&table.name, backend),
         quote_identifier(&name, backend),
-        quote_identifier(&foreign_key.column, backend),
+        quoted_identifiers(foreign_key_source_columns(foreign_key), backend),
         quote_identifier(&foreign_key.referenced_table, backend),
-        quote_identifier(&foreign_key.referenced_column, backend),
+        quoted_identifiers(foreign_key_target_columns(foreign_key), backend),
         referential_action_sql(foreign_key.on_delete)
     )
 }
@@ -2711,16 +2879,49 @@ fn duplicate_value_groups_sql(table: &str, columns: &[String], backend: Backend)
 
 fn foreign_key_orphans_sql(preflight: &ForeignKeyPreflight, backend: Backend) -> String {
     let table = quote_identifier(&preflight.table, backend);
-    let child_column = quote_identifier(&preflight.column, backend);
+    let child_columns = if preflight.columns.is_empty() {
+        vec![preflight.column.as_str()]
+    } else {
+        preflight.columns.iter().map(String::as_str).collect()
+    };
+    let parent_columns = if preflight.referenced_columns.is_empty() {
+        vec![preflight.referenced_column.as_str()]
+    } else {
+        preflight
+            .referenced_columns
+            .iter()
+            .map(String::as_str)
+            .collect()
+    };
+    let child_non_null = child_columns
+        .iter()
+        .map(|column| {
+            format!(
+                "zelyra_child.{} IS NOT NULL",
+                quote_identifier(column, backend)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(" AND ");
     if !preflight.referenced_table_exists {
-        return format!(
-            "SELECT COUNT(*) FROM {table} AS zelyra_child WHERE zelyra_child.{child_column} IS NOT NULL"
-        );
+        return format!("SELECT COUNT(*) FROM {table} AS zelyra_child WHERE {child_non_null}");
     }
     let referenced_table = quote_identifier(&preflight.referenced_table, backend);
-    let referenced_column = quote_identifier(&preflight.referenced_column, backend);
+    let join = child_columns
+        .iter()
+        .zip(parent_columns.iter())
+        .map(|(child, parent)| {
+            format!(
+                "zelyra_child.{} = zelyra_parent.{}",
+                quote_identifier(child, backend),
+                quote_identifier(parent, backend)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(" AND ");
+    let parent_key = quote_identifier(parent_columns[0], backend);
     format!(
-        "SELECT COUNT(*) FROM {table} AS zelyra_child LEFT JOIN {referenced_table} AS zelyra_parent ON zelyra_child.{child_column} = zelyra_parent.{referenced_column} WHERE zelyra_child.{child_column} IS NOT NULL AND zelyra_parent.{referenced_column} IS NULL"
+        "SELECT COUNT(*) FROM {table} AS zelyra_child LEFT JOIN {referenced_table} AS zelyra_parent ON {join} WHERE {child_non_null} AND zelyra_parent.{parent_key} IS NULL"
     )
 }
 
@@ -4759,6 +4960,7 @@ fn parse_mariadb_indexes(schema: &mut Schema, output: &str) -> Result<(), Databa
 }
 
 fn parse_foreign_key_output(schema: &mut Schema, output: &str) -> Result<(), DatabaseError> {
+    let mut parsed: Vec<(String, ForeignKey)> = Vec::new();
     for line in output.lines().filter(|line| !line.trim().is_empty()) {
         let fields = line.split('\t').collect::<Vec<_>>();
         if !matches!(fields.len(), 5 | 6) {
@@ -4766,22 +4968,48 @@ fn parse_foreign_key_output(schema: &mut Schema, output: &str) -> Result<(), Dat
                 message: format!("unexpected foreign-key inspection row: {line}"),
             });
         }
+        let on_delete = fields
+            .get(5)
+            .map_or(Ok(ReferentialAction::NoAction), |action| {
+                parse_referential_action(action)
+            })?;
+        let key = format!("{}\0{}\0{}", fields[0], fields[4], fields[2]);
+        if let Some((_, foreign_key)) = parsed.iter_mut().find(|(existing, _)| *existing == key) {
+            if foreign_key.on_delete != on_delete || foreign_key.referenced_table != fields[2] {
+                return Err(DatabaseError {
+                    message: "database reported inconsistent rows for a foreign-key constraint"
+                        .into(),
+                });
+            }
+            foreign_key.columns.push(fields[1].into());
+            foreign_key.referenced_columns.push(fields[3].into());
+        } else {
+            parsed.push((
+                key,
+                ForeignKey {
+                    name: Some(fields[4].into()),
+                    column: fields[1].into(),
+                    columns: vec![fields[1].into()],
+                    referenced_table: fields[2].into(),
+                    referenced_column: fields[3].into(),
+                    referenced_columns: vec![fields[3].into()],
+                    on_delete,
+                },
+            ));
+        }
+    }
+    for (key, mut foreign_key) in parsed {
+        let table_name = key.split('\0').next().unwrap_or_default();
+        if foreign_key.columns.len() == 1 {
+            foreign_key.columns.clear();
+            foreign_key.referenced_columns.clear();
+        }
         if let Some(table) = schema
             .tables
             .iter_mut()
-            .find(|table| table.name == fields[0])
+            .find(|table| table.name == table_name)
         {
-            table.foreign_keys.push(ForeignKey {
-                name: Some(fields[4].into()),
-                column: fields[1].into(),
-                referenced_table: fields[2].into(),
-                referenced_column: fields[3].into(),
-                on_delete: fields
-                    .get(5)
-                    .map_or(Ok(ReferentialAction::NoAction), |action| {
-                        parse_referential_action(action)
-                    })?,
-            });
+            table.foreign_keys.push(foreign_key);
         }
     }
     Ok(())
@@ -5014,6 +5242,7 @@ fn parse_sqlite_indexes(table: &mut Table, path: &str, output: &str) -> Result<(
 }
 
 fn parse_sqlite_foreign_keys(table: &mut Table, output: &str) -> Result<(), DatabaseError> {
+    let mut parsed: Vec<(String, ForeignKey)> = Vec::new();
     for line in output.lines().filter(|line| !line.trim().is_empty()) {
         let fields = line.split('\t').collect::<Vec<_>>();
         if fields.len() < 5 {
@@ -5021,17 +5250,42 @@ fn parse_sqlite_foreign_keys(table: &mut Table, output: &str) -> Result<(), Data
                 message: format!("unexpected SQLite foreign-key row: {line}"),
             });
         }
-        table.foreign_keys.push(ForeignKey {
-            name: None,
-            column: fields[3].into(),
-            referenced_table: fields[2].into(),
-            referenced_column: fields[4].into(),
-            on_delete: fields
-                .get(6)
-                .map_or(Ok(ReferentialAction::NoAction), |action| {
-                    parse_referential_action(action)
-                })?,
-        });
+        let key = fields[0].to_owned();
+        let on_delete = fields
+            .get(6)
+            .map_or(Ok(ReferentialAction::NoAction), |action| {
+                parse_referential_action(action)
+            })?;
+        if let Some((_, foreign_key)) = parsed.iter_mut().find(|(existing, _)| *existing == key) {
+            if foreign_key.on_delete != on_delete || foreign_key.referenced_table != fields[2] {
+                return Err(DatabaseError {
+                    message: "SQLite reported inconsistent rows for a foreign-key constraint"
+                        .into(),
+                });
+            }
+            foreign_key.columns.push(fields[3].into());
+            foreign_key.referenced_columns.push(fields[4].into());
+        } else {
+            parsed.push((
+                key,
+                ForeignKey {
+                    name: None,
+                    column: fields[3].into(),
+                    columns: vec![fields[3].into()],
+                    referenced_table: fields[2].into(),
+                    referenced_column: fields[4].into(),
+                    referenced_columns: vec![fields[4].into()],
+                    on_delete,
+                },
+            ));
+        }
+    }
+    for (_, mut foreign_key) in parsed {
+        if foreign_key.columns.len() == 1 {
+            foreign_key.columns.clear();
+            foreign_key.referenced_columns.clear();
+        }
+        table.foreign_keys.push(foreign_key);
     }
     Ok(())
 }
@@ -5060,6 +5314,158 @@ mod tests {
     use super::*;
 
     include!("../../tests/support/bounded_mutations.rs");
+
+    #[test]
+    fn optional_scoped_relations_use_nullable_ids_and_composite_tenant_keys() {
+        let source = r#"
+            type TenantId = Id
+            table customers scoped by tenant_id: TenantId {
+                id: Id primary auto
+                tenant_id: TenantId required
+            }
+            table invoices scoped by tenant_id: TenantId {
+                id: Id primary auto
+                tenant_id: TenantId required
+                customer: Customer?
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        let invoices = schema
+            .tables
+            .iter()
+            .find(|table| table.name == "invoices")
+            .unwrap();
+        let customer_id = invoices
+            .columns
+            .iter()
+            .find(|column| column.name == "customer_id")
+            .unwrap();
+        assert_eq!(customer_id.sql_type, "BIGINT");
+        assert!(customer_id.nullable);
+        let relation = &invoices.foreign_keys[0];
+        assert_eq!(relation.name.as_deref(), Some("fk_invoices_customer_id"));
+        assert_eq!(relation.on_delete, ReferentialAction::Restrict);
+        assert_eq!(relation.columns, ["tenant_id", "customer_id"]);
+        assert_eq!(relation.referenced_columns, ["tenant_id", "id"]);
+
+        let customers = schema
+            .tables
+            .iter()
+            .find(|table| table.name == "customers")
+            .unwrap();
+        assert!(customers.uniques.iter().any(|index| {
+            index.name == "uq_customers_tenant_id"
+                && index.unique
+                && index.columns == ["tenant_id", "id"]
+        }));
+        let ddl = schema.create_sql();
+        assert!(ddl.contains("CONSTRAINT `fk_invoices_customer_id` FOREIGN KEY (`tenant_id`, `customer_id`) REFERENCES `customers` (`tenant_id`, `id`) ON DELETE RESTRICT"));
+        assert!(ddl.contains("CONSTRAINT `uq_customers_tenant_id` UNIQUE (`tenant_id`, `id`)"));
+        assert!(ddl.contains("`customer_id` BIGINT NULL"), "{ddl}");
+    }
+
+    #[test]
+    fn scoped_relations_reject_distinct_nominal_tenant_types_and_set_null() {
+        let mismatch = r#"
+            type TenantId = Id
+            type OrganizationId = Id
+            table customers scoped by tenant_id: TenantId {
+                id: Id primary auto
+                tenant_id: TenantId required
+            }
+            table invoices scoped by tenant_id: OrganizationId {
+                id: Id primary auto
+                tenant_id: OrganizationId required
+                customer: Customer?
+            }
+        "#;
+        let program = parse(&lex(mismatch).unwrap()).unwrap();
+        let errors = build_schema(&program).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("incompatible tenant identity types")));
+
+        let set_null = r#"
+            type TenantId = Id
+            table customers scoped by tenant_id: TenantId {
+                id: Id primary auto
+                tenant_id: TenantId required
+            }
+            table invoices scoped by tenant_id: TenantId {
+                id: Id primary auto
+                tenant_id: TenantId required
+                customer: Customer? on_delete set_null
+            }
+        "#;
+        let program = parse(&lex(set_null).unwrap()).unwrap();
+        let errors = build_schema(&program).unwrap_err();
+        assert!(errors.iter().any(|error| error
+            .message
+            .contains("would also null the required tenant key")));
+    }
+
+    #[test]
+    fn inspected_composite_foreign_keys_are_grouped_by_constraint() {
+        let mut schema = Schema {
+            database: None,
+            tables: vec![Table {
+                name: "invoices".into(),
+                tenant_scope_column: None,
+                columns: Vec::new(),
+                foreign_keys: Vec::new(),
+                indexes: Vec::new(),
+                uniques: Vec::new(),
+            }],
+        };
+        parse_foreign_key_output(
+            &mut schema,
+            "invoices\ttenant_id\tcustomers\ttenant_id\tfk_invoices_customer_id\tRESTRICT\ninvoices\tcustomer_id\tcustomers\tid\tfk_invoices_customer_id\tRESTRICT\n",
+        )
+        .unwrap();
+        assert_eq!(schema.tables[0].foreign_keys.len(), 1);
+        assert_eq!(
+            schema.tables[0].foreign_keys[0].columns,
+            ["tenant_id", "customer_id"]
+        );
+        assert_eq!(
+            schema.tables[0].foreign_keys[0].referenced_columns,
+            ["tenant_id", "id"]
+        );
+    }
+
+    #[test]
+    fn explicit_decimal_defaults_follow_the_declared_scale_and_storage_names_map_columns() {
+        let source = r#"
+            table invoices {
+                id: Id primary auto
+                invoice_type: String(20) storage_name "type" required
+                gross_amount: Decimal(12, 2) required default 0
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        let ddl = schema.create_sql();
+        assert!(ddl.contains("`type` VARCHAR(20) NOT NULL"));
+        assert!(ddl.contains("`gross_amount` DECIMAL(12,2) NOT NULL DEFAULT 0.00"));
+    }
+
+    #[test]
+    fn composite_tenant_preflight_checks_both_relation_and_tenant_identity() {
+        let preflight = ForeignKeyPreflight {
+            table: "invoices".into(),
+            column: "customer_id".into(),
+            columns: vec!["tenant_id".into(), "customer_id".into()],
+            referenced_table: "customers".into(),
+            referenced_column: "id".into(),
+            referenced_columns: vec!["tenant_id".into(), "id".into()],
+            referenced_table_exists: true,
+        };
+        assert_eq!(
+            foreign_key_orphans_sql(&preflight, Backend::MariaDb),
+            "SELECT COUNT(*) FROM `invoices` AS zelyra_child LEFT JOIN `customers` AS zelyra_parent ON zelyra_child.`tenant_id` = zelyra_parent.`tenant_id` AND zelyra_child.`customer_id` = zelyra_parent.`id` WHERE zelyra_child.`tenant_id` IS NOT NULL AND zelyra_child.`customer_id` IS NOT NULL AND zelyra_parent.`tenant_id` IS NULL"
+        );
+    }
 
     #[test]
     fn temporal_metadata_rejects_missing_wrong_kind_and_lossy_precision() {
@@ -5511,7 +5917,7 @@ mod tests {
             ReferentialAction::SetNull
         );
         let sql = schema.create_sql();
-        assert!(sql.contains("`approved_by` BIGINT,"), "{sql}");
+        assert!(sql.contains("`approved_by` BIGINT NULL,"), "{sql}");
         assert!(
             sql.contains(
                 "FOREIGN KEY (`approved_by`) REFERENCES `users` (`id`) ON DELETE SET NULL"
@@ -6568,8 +6974,10 @@ mod tests {
                 &ForeignKeyPreflight {
                     table: "child\"data".into(),
                     column: "parent\"id".into(),
+                    columns: Vec::new(),
                     referenced_table: "parent\"data".into(),
                     referenced_column: "id\"value".into(),
+                    referenced_columns: Vec::new(),
                     referenced_table_exists: true,
                 },
                 Backend::Postgres,
@@ -6581,8 +6989,10 @@ mod tests {
                 &ForeignKeyPreflight {
                     table: "machines".into(),
                     column: "department_id".into(),
+                    columns: Vec::new(),
                     referenced_table: "departments".into(),
                     referenced_column: "id".into(),
+                    referenced_columns: Vec::new(),
                     referenced_table_exists: false,
                 },
                 Backend::MariaDb,
@@ -6612,8 +7022,10 @@ mod tests {
             [ForeignKeyPreflight {
                 table: "machines".into(),
                 column: "department_id".into(),
+                columns: Vec::new(),
                 referenced_table: "departments".into(),
                 referenced_column: "id".into(),
+                referenced_columns: Vec::new(),
                 referenced_table_exists: true,
             }]
         );
@@ -7058,7 +7470,7 @@ mod tests {
         );
         let mariadb_sql = mariadb.create_sql();
         assert!(mariadb_sql.contains("`id` BIGINT PRIMARY KEY NOT NULL AUTO_INCREMENT"));
-        assert!(mariadb_sql.contains("`active` BOOLEAN DEFAULT TRUE"));
+        assert!(mariadb_sql.contains("`active` BOOLEAN NULL DEFAULT TRUE"));
         assert!(mariadb_sql
             .contains(") ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_unicode_ci;"));
 
@@ -7070,7 +7482,7 @@ mod tests {
         );
         let sqlite_sql = sqlite.create_sql();
         assert!(sqlite_sql.contains("\"id\" INTEGER PRIMARY KEY AUTOINCREMENT"));
-        assert!(sqlite_sql.contains("\"active\" INTEGER DEFAULT TRUE"));
+        assert!(sqlite_sql.contains("\"active\" INTEGER NULL DEFAULT TRUE"));
         assert!(!sqlite_sql.contains("ENGINE=InnoDB"));
     }
 
