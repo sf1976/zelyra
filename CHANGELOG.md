@@ -6,6 +6,8 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+## 1.2.11 — 2026-10-18
+
 - Move shared generated-page, CRUD, form, filter, and table styling into the
   bundled Zelyra UI stylesheet; wrap generated CRUD forms in the same page
   frame, use shared UI classes for filters and mobile navigation, remove the
