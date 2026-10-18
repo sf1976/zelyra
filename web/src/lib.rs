@@ -23,6 +23,7 @@ mod forms;
 mod http;
 mod i18n;
 mod mfa;
+mod module_settings;
 mod password_reset;
 mod server;
 mod ui;
@@ -37,6 +38,7 @@ use i18n::{
     field_text, framework_text_with_catalog, identifier as locale_identifier, text as locale_text,
     LOCALE_REFERENCE_END, LOCALE_REFERENCE_PARAMETER, LOCALE_REFERENCE_START,
 };
+pub use module_settings::{ModuleSettingsError, ModuleSettingsStore, PATH as MODULE_SETTINGS_PATH};
 pub use password_reset::{PasswordResetMailer, PasswordResetSmtpConfig};
 pub use server::{serve_app, serve_app_listener};
 #[cfg(test)]
@@ -981,6 +983,7 @@ pub struct WebApp {
     schedule_probe_token: Option<String>,
     pub auth_permissions: Vec<String>,
     pub auth_route: Option<AuthRoute>,
+    module_settings_store: Option<Arc<dyn ModuleSettingsStore>>,
     pub cors_policy: Option<CorsPolicy>,
     pub ui_language: UiLanguage,
     pub ui_level: UiLevel,
@@ -1010,6 +1013,7 @@ impl WebApp {
             schedule_probe_token: None,
             auth_permissions: Vec::new(),
             auth_route: None,
+            module_settings_store: None,
             cors_policy: None,
             ui_language: UiLanguage::default(),
             ui_level: UiLevel::default(),
@@ -1043,6 +1047,7 @@ impl WebApp {
             schedule_probe_token: None,
             auth_permissions: Vec::new(),
             auth_route: None,
+            module_settings_store: None,
             cors_policy: None,
             ui_language: UiLanguage::default(),
             ui_level: UiLevel::default(),
@@ -1124,6 +1129,14 @@ impl WebApp {
 
     pub fn with_auth_route(mut self, auth_route: AuthRoute) -> Self {
         self.auth_route = Some(auth_route);
+        self
+    }
+
+    /// Enables the authenticated, server-rendered module settings page at
+    /// `/__zelyra/module-settings`. Access uses the configured auth admin permission;
+    /// without both settings and an auth admin permission the route is hidden.
+    pub fn with_module_settings_store(mut self, store: Arc<dyn ModuleSettingsStore>) -> Self {
+        self.module_settings_store = Some(store);
         self
     }
 
@@ -1211,6 +1224,18 @@ impl WebApp {
                 current_label: tableview.title.clone(),
                 navigation: Vec::new(),
             }
+        } else if request.path == module_settings::PATH
+            && self.module_settings_store.is_some()
+            && self
+                .auth_route
+                .as_ref()
+                .is_some_and(|auth| auth.admin_permission.is_some())
+        {
+            DefaultUiContext {
+                current_path: request.path.clone(),
+                current_label: "Module settings".into(),
+                navigation: Vec::new(),
+            }
         } else if request.path == "/login" && self.auth_route.is_some() {
             DefaultUiContext {
                 current_path: request.path.clone(),
@@ -1277,6 +1302,13 @@ impl WebApp {
                     ACCOUNT_SESSIONS_PATH,
                     "@i18n:auth.self_sessions_title",
                 );
+                if self.module_settings_store.is_some() && auth.admin_permission.is_some() {
+                    add_navigation_link(
+                        &mut context.navigation,
+                        module_settings::PATH,
+                        "@i18n:module_settings.title",
+                    );
+                }
                 if let Some(path) = &auth.admin_path {
                     add_navigation_link(
                         &mut context.navigation,
@@ -1394,6 +1426,9 @@ impl WebApp {
                     .with_header("Allow", "GET, HEAD")
                     .with_header("Cache-Control", "no-store"),
             };
+        }
+        if request.path == module_settings::PATH {
+            return module_settings::dispatch(self, request);
         }
         if request.path == PROJECT_THEME_CSS_PATH {
             return match (&self.project_theme_css, request.method.as_str()) {

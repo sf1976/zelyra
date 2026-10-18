@@ -6,6 +6,17 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+- Add a schema-backed `/__zelyra/module-settings` page to authenticated
+  applications when package settings and `admin_permission` are configured.
+  Protect writes with permission and CSRF checks, redact secret references,
+  validate through the shared project settings store, and require restart for
+  changed values to take effect. / Für authentifizierte Anwendungen bei
+  deklarierten Paketeinstellungen und `admin_permission` eine schemageprüfte
+  Seite `/__zelyra/module-settings` ergänzen. Schreibvorgänge durch Berechtigung
+  und CSRF-Prüfung schützen, Geheimnisreferenzen redigieren, den gemeinsamen
+  Projekteinstellungs-Store validieren lassen und einen Neustart verlangen,
+  damit geänderte Werte wirksam werden.
+
 ## 1.2.11 — 2026-10-18
 
 - Move shared generated-page, CRUD, form, filter, and table styling into the

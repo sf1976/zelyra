@@ -351,5 +351,21 @@
   "mfa.try_later": "Versuche es später erneut.",
   "mfa.setup_again": "Starte die MFA-Einrichtung erneut.",
   "mfa.already_enabled": "MFA ist bereits aktiviert.",
-  "mfa.not_enabled": "MFA ist nicht aktiviert."
+  "mfa.not_enabled": "MFA ist nicht aktiviert.",
+  "module_settings.title": "Moduleinstellungen",
+  "module_settings.description": "Werte werden mit dem deklarierten Schema des jeweiligen Moduls geprüft. Geheimniswerte und Namen der Umgebungsvariablen werden nie angezeigt.",
+  "module_settings.empty_title": "Keine Moduleinstellungen",
+  "module_settings.empty_body": "Dieses Projekt enthält keine lokalen Moduleinstellungsschemas.",
+  "module_settings.environment_name": "Name der Umgebungsvariablen",
+  "module_settings.value": "Wert",
+  "module_settings.secret_help": "Gib den Namen einer Umgebungsvariablen ein. Der Server liest ihren Wert; hier wird er nie angezeigt.",
+  "module_settings.save": "Speichern",
+  "module_settings.clear": "Überschreibung entfernen",
+  "module_settings.restart_note": "Gespeicherte Werte gelten für neue Programmläufe. Starte einen laufenden zelyra-serve-Prozess neu, damit er die Änderungen lädt.",
+  "module_settings.cannot_clear_required": "Erforderliche Einstellungen können nicht entfernt werden.",
+  "module_settings.enter_environment_name": "Gib für diese geheime Einstellung den Namen einer Umgebungsvariablen ein.",
+  "module_settings.enter_integer": "Gib eine ganze Zahl ein.",
+  "module_settings.enter_finite_number": "Gib eine endliche Zahl ein.",
+  "module_settings.choose_boolean": "Wähle true oder false.",
+  "module_settings.unsupported_type": "Dieser Typ von Moduleinstellung wird vom Webeditor nicht unterstützt."
 }

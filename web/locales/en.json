@@ -351,5 +351,21 @@
   "mfa.try_later": "Try again later.",
   "mfa.setup_again": "Start MFA setup again.",
   "mfa.already_enabled": "MFA is already enabled.",
-  "mfa.not_enabled": "MFA is not enabled."
+  "mfa.not_enabled": "MFA is not enabled.",
+  "module_settings.title": "Module settings",
+  "module_settings.description": "Values are checked against each module's declared schema. Secret values and environment-variable references are never displayed.",
+  "module_settings.empty_title": "No module settings",
+  "module_settings.empty_body": "This project has no local module settings schemas.",
+  "module_settings.environment_name": "Environment variable name",
+  "module_settings.value": "Value",
+  "module_settings.secret_help": "Enter the name of an environment variable. Its value is read by the server and is never shown here.",
+  "module_settings.save": "Save",
+  "module_settings.clear": "Clear override",
+  "module_settings.restart_note": "Saved values apply to new program runs. Restart a running zelyra serve process to load changed settings.",
+  "module_settings.cannot_clear_required": "Required settings cannot be cleared.",
+  "module_settings.enter_environment_name": "Enter an environment variable name for this secret setting.",
+  "module_settings.enter_integer": "Enter a whole number.",
+  "module_settings.enter_finite_number": "Enter a finite number.",
+  "module_settings.choose_boolean": "Choose true or false.",
+  "module_settings.unsupported_type": "This module setting type is not supported by the web editor."
 }

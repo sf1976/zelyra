@@ -17,9 +17,40 @@ const SETTINGS_LOCK_RETRY_INTERVAL: Duration = Duration::from_millis(10);
 const MAX_SETTINGS_BYTES: usize = 1024 * 1024;
 static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
 
-fn settings_path(state: &EditorState) -> Result<PathBuf, (u16, String)> {
-    let root = fs::canonicalize(&state.root)
-        .map_err(|_| (422, "project directory is unavailable".into()))?;
+#[derive(Debug)]
+pub(crate) struct ProjectModuleSettingsStore {
+    root: PathBuf,
+    write_lock: std::sync::Mutex<()>,
+}
+
+impl ProjectModuleSettingsStore {
+    pub(crate) fn new(root: impl Into<PathBuf>) -> Self {
+        Self {
+            root: root.into(),
+            write_lock: std::sync::Mutex::new(()),
+        }
+    }
+}
+
+impl zelyra_web::ModuleSettingsStore for ProjectModuleSettingsStore {
+    fn read_json(&self) -> Result<Value, zelyra_web::ModuleSettingsError> {
+        let (_, _, body) = read_at(&self.root)
+            .map_err(|(status, message)| zelyra_web::ModuleSettingsError::new(status, message))?;
+        serde_json::from_str(&body).map_err(|_| {
+            zelyra_web::ModuleSettingsError::new(500, "module settings response is invalid")
+        })
+    }
+
+    fn write_json(&self, update: &Value) -> Result<(), zelyra_web::ModuleSettingsError> {
+        write_at(&self.root, &self.write_lock, update)
+            .map(|_| ())
+            .map_err(|(status, message)| zelyra_web::ModuleSettingsError::new(status, message))
+    }
+}
+
+fn settings_path(root: &Path) -> Result<PathBuf, (u16, String)> {
+    let root =
+        fs::canonicalize(root).map_err(|_| (422, "project directory is unavailable".into()))?;
     let path = root.join(SETTINGS_FILE);
     if fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
         return Err((
@@ -148,14 +179,18 @@ fn revision(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
-fn graph(state: &EditorState) -> Result<Option<crate::packages::PackageGraph>, (u16, String)> {
-    crate::packages::PackageGraph::load(&state.root).map_err(|error| (422, error.message))
+fn graph(root: &Path) -> Result<Option<crate::packages::PackageGraph>, (u16, String)> {
+    crate::packages::PackageGraph::load(root).map_err(|error| (422, error.message))
 }
 
 pub(super) fn read(state: &EditorState) -> EditorReply {
-    let path = settings_path(state)?;
+    read_at(&state.root)
+}
+
+fn read_at(root: &Path) -> EditorReply {
+    let path = settings_path(root)?;
     let bytes = contents(&path)?;
-    let Some(graph) = graph(state)? else {
+    let Some(graph) = graph(root)? else {
         return Ok((200, "application/json; charset=utf-8", json!({"settingsFile": SETTINGS_FILE, "revision": revision(&bytes), "packages": [], "secretValuesIncluded": false}).to_string()));
     };
     let configured: toml::Value = if bytes.is_empty() {
@@ -230,17 +265,24 @@ fn json_to_toml(value: &Value, type_name: &str) -> Result<toml::Value, (u16, Str
 }
 
 pub(super) fn write(state: &EditorState, request: &Value) -> EditorReply {
-    let _write_guard = state
-        .module_settings_write_lock
+    write_at(&state.root, &state.module_settings_write_lock, request)
+}
+
+fn write_at(
+    project_root: &Path,
+    write_lock: &std::sync::Mutex<()>,
+    request: &Value,
+) -> EditorReply {
+    let _write_guard = write_lock
         .lock()
         .map_err(|_| (500, "module settings write lock is unavailable".into()))?;
     if request.to_string().len() > MAX_SETTINGS_BYTES {
         return Err((413, "module settings update exceeds 1 MiB".into()));
     }
-    let root = fs::canonicalize(&state.root)
+    let root = fs::canonicalize(project_root)
         .map_err(|_| (422, "project directory is unavailable".into()))?;
     let _process_lock = acquire_settings_file_lock(&root)?;
-    let path = settings_path(state)?;
+    let path = settings_path(&root)?;
     let before = contents(&path)?;
     if request.get("revision").and_then(Value::as_str) != Some(revision(&before).as_str()) {
         return Err((
@@ -248,7 +290,7 @@ pub(super) fn write(state: &EditorState, request: &Value) -> EditorReply {
             "module settings changed in another editor; reload before saving".into(),
         ));
     }
-    let graph = graph(state)?.ok_or((422, "project does not have a local package graph".into()))?;
+    let graph = graph(&root)?.ok_or((422, "project does not have a local package graph".into()))?;
     let packages = graph
         .inventory()
         .into_iter()
@@ -365,7 +407,7 @@ pub(super) fn write(state: &EditorState, request: &Value) -> EditorReply {
     let written = updated.as_bytes();
     atomic_replace(&path, written)
         .map_err(|_| (500, "module settings could not be saved".into()))?;
-    read(state)
+    read_at(&root)
 }
 
 fn valid_env_name(name: &str) -> bool {
@@ -515,6 +557,27 @@ mod tests {
         fs::write(&target, "").unwrap();
         std::os::unix::fs::symlink(&target, root.join(SETTINGS_LOCK_FILE)).unwrap();
         assert_eq!(acquire_settings_file_lock(&root).unwrap_err().0, 422);
+    }
+
+    #[test]
+    fn application_module_settings_store_uses_the_schema_checked_writer() {
+        let state = state();
+        let store = ProjectModuleSettingsStore::new(state.root.clone());
+        let before = zelyra_web::ModuleSettingsStore::read_json(&store).unwrap();
+        assert_eq!(before["secretValuesIncluded"], false);
+        assert!(!before.to_string().contains("LEDGER_TOKEN"));
+        let revision = before["revision"].as_str().unwrap();
+        zelyra_web::ModuleSettingsStore::write_json(
+            &store,
+            &json!({"revision":revision,"updates":[
+                {"packagePath":"packages/ledger","name":"timeout","value":45}
+            ]}),
+        )
+        .unwrap();
+        let saved = fs::read_to_string(state.root.join(SETTINGS_FILE)).unwrap();
+        assert!(saved.contains("timeout = 45"));
+        assert!(!saved.contains("LEDGER_TOKEN"));
+        let _ = fs::remove_dir_all(state.root.clone());
     }
 
     #[test]
