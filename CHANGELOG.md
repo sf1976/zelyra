@@ -6,6 +6,13 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+- Make the standard UI `Dialog` simpler with optional IDs and close labels,
+  stable per-document IDs (including collection loops), localized defaults, and
+  a responsive native modal with guarded focus boundaries. / Die UI-Dialog-
+  Komponente durch optionale IDs und Schließbeschriftungen, stabile IDs je
+  Dokument (auch in Sammlungs-Schleifen), lokalisierte Standardwerte und ein
+  responsives natives Modal mit abgesicherten Fokusgrenzen vereinfachen.
+
 ## 1.2.11 — 2026-10-18
 
 - Move shared generated-page, CRUD, form, filter, and table styling into the

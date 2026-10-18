@@ -155,8 +155,42 @@ tags.
 | `FormActions` | — | Default content; wrapping action area |
 | `ErrorSummary` | `title: String` | Default content with error list items; `role="alert"` |
 | `ConfirmationForm` | `action`, `message`, `confirm_label`, `cancel_href: String` | `security`; real POST form. The route must enforce CSRF, authentication, and permissions |
-| `Dialog` | `id`, `title`, `open_label`, `close_label: String` | Default content; native, modal with JavaScript, Escape and focus return; available without JavaScript |
+| `Dialog` | `title`, `open_label: String`; `id`, `close_label: String?` | Default content; deterministic automatic IDs, native modal interaction with Escape and focus return; available without JavaScript; `close_label` defaults to localized “Close” |
 | `ToastRegion`, `Toast` | `Toast`: `message: String`, `appearance: UiAppearance?` | Region has default content; toast is an additional live message |
+
+### Dialogs with safe defaults
+
+For a typical dialog, provide only its title, opener label, and content:
+
+```zelyra
+<Dialog title="DVDs starting with 'A'"
+        open_label="Show only DVDs starting with 'A'">
+    <ul>
+        for dvd in a_dvds {
+            <li><strong>{dvd.title}</strong> ({dvd.release_year}) – {dvd.genre}</li>
+        }
+    </ul>
+</Dialog>
+```
+
+A server view currently supports `for item in collection { ... }` and field
+interpolation. An `if len(...)` block inside HTML is not view syntax yet, so the
+list is empty when there are no matches. The runnable database example is
+[`examples/dvd_dialog/main.zyl`](../examples/dvd_dialog/main.zyl). Its `load`
+query runs with the page request; opening the dialog does not fetch data.
+
+When `id` is omitted, Zelyra derives reproducible IDs from component order.
+Dialogs inside `for` loops also receive a deterministic row-index suffix. The
+opener, dialog, and heading are linked automatically. An explicit `id` is
+preserved. If `close_label` is omitted, the existing UI localization catalog
+supplies it (“Close” in English, “Schließen” in German). Both properties can
+still be set explicitly. The native close button has `type="button"`, so it
+does not submit a containing form.
+
+With JavaScript, the native `<dialog>` opens with `showModal()`. The browser
+manages the modal background, Escape, focus containment, `autofocus`, and focus
+return. Without JavaScript, the dialog remains visible and usable as an open
+dialog element.
 
 ### Data and business documents
 
