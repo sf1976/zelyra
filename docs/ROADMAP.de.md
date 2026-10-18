@@ -117,13 +117,13 @@ abgeschlossen.
   Offlinebetrieb werden nicht nachgeholt.
 - [~] **1.2.10 — sichere Modulkonfiguration und wiederverwendbare Pakete:**
   Die geschützte Studio-Seite für compilergeprüfte Paketeinstellungen
-  abschließen: gleichzeitige Speicherungen innerhalb desselben Prozesses
+  abschließen: gleichzeitige Speicherungen prozessübergreifend
   serialisieren, veraltete Revisionen abweisen, Geheimnisse redigieren und
   keine Capability-Freigaben erteilen. HostServices bleibt eine dokumentierte,
   versionierte Embedding-API und wird nicht als stabile native ABI oder
   Paket-Pluginvertrag dargestellt. Wiederverwendbare CSV-Import-/Exportpakete
   über unterstützte Backends prüfen. Von Anwendungen ausgelieferte
-  Einstellungsseiten und prozessübergreifende Transaktionen folgen in 1.2.12.
+  Einstellungsseiten folgen in 1.2.12.
 - [~] **1.2.11 — Tutorial-UI und CLI-Zuverlässigkeit:** Das durchgängige
   Rechnungstutorial-Design, eine konkrete Hilfe bei fehlender Outbox-Tabelle,
   Debian-/Ubuntu-Erkennung für Compose v2, die Projekt-`.env`-Auflösung für

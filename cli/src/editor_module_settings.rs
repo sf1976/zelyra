@@ -2,6 +2,7 @@
 //! Secret values are never read or returned; only environment references may
 //! be written for secret schema fields.
 use super::*;
+use fs2::FileExt;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -9,6 +10,7 @@ use toml_edit::{DocumentMut, Item, Table};
 
 type EditorReply = Result<(u16, &'static str, String), (u16, String)>;
 const SETTINGS_FILE: &str = "zelyra.settings.toml";
+const SETTINGS_LOCK_FILE: &str = ".zelyra.settings.lock";
 const MAX_SETTINGS_BYTES: usize = 1024 * 1024;
 static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
 
@@ -50,6 +52,44 @@ fn contents(path: &Path) -> Result<Vec<u8>, (u16, String)> {
         return Err((413, "module settings file exceeds 1 MiB".into()));
     }
     Ok(bytes)
+}
+
+fn acquire_settings_file_lock(root: &Path) -> Result<fs::File, (u16, String)> {
+    let path = root.join(SETTINGS_LOCK_FILE);
+    if fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
+        return Err((
+            422,
+            "module settings lock must not be a symbolic link".into(),
+        ));
+    }
+    let mut options = OpenOptions::new();
+    options.read(true).write(true).create(true).truncate(false);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options
+            .mode(0o600)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        // Open the reparse point itself so the metadata check below can reject
+        // a link without following it.
+        options.custom_flags(0x0020_0000);
+    }
+    let file = options
+        .open(path)
+        .map_err(|_| (500, "module settings lock could not be opened".into()))?;
+    let metadata = file
+        .metadata()
+        .map_err(|_| (500, "module settings lock could not be inspected".into()))?;
+    if !metadata.is_file() || metadata.file_type().is_symlink() {
+        return Err((422, "module settings lock must be a regular file".into()));
+    }
+    file.lock_exclusive()
+        .map_err(|_| (500, "module settings lock could not be acquired".into()))?;
+    Ok(file)
 }
 
 fn revision(bytes: &[u8]) -> String {
@@ -145,6 +185,9 @@ pub(super) fn write(state: &EditorState, request: &Value) -> EditorReply {
     if request.to_string().len() > MAX_SETTINGS_BYTES {
         return Err((413, "module settings update exceeds 1 MiB".into()));
     }
+    let root = fs::canonicalize(&state.root)
+        .map_err(|_| (422, "project directory is unavailable".into()))?;
+    let _process_lock = acquire_settings_file_lock(&root)?;
     let path = settings_path(state)?;
     let before = contents(&path)?;
     if request.get("revision").and_then(Value::as_str) != Some(revision(&before).as_str()) {
@@ -382,6 +425,32 @@ mod tests {
             source
         );
         let _ = fs::remove_dir_all(state.root.clone());
+    }
+
+    #[test]
+    fn settings_file_lock_serializes_independent_writers() {
+        let state = state();
+        let root = state.root.clone();
+        let first = acquire_settings_file_lock(&root).unwrap();
+        let second = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(root.join(SETTINGS_LOCK_FILE))
+            .unwrap();
+        assert!(second.try_lock_exclusive().is_err());
+        drop(first);
+        second.try_lock_exclusive().unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn settings_file_lock_rejects_symlink() {
+        let state = state();
+        let root = state.root.clone();
+        let target = root.join("lock-target");
+        fs::write(&target, "").unwrap();
+        std::os::unix::fs::symlink(&target, root.join(SETTINGS_LOCK_FILE)).unwrap();
+        assert_eq!(acquire_settings_file_lock(&root).unwrap_err().0, 422);
     }
 
     #[test]

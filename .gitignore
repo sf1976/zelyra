@@ -7,4 +7,5 @@ __pycache__/
 .DS_Store
 .env
 .zelyra/schedules.cron
+.zelyra.settings.lock
 tests/.env.mariadb

@@ -357,16 +357,21 @@ Bytecode bleiben insgesamt experimentelle Backends; diese einzelne Einstellung
 ist kein Nachweis vollständiger Backend-Parität. Zelyra Studio bietet unter
 **Moduleinstellungen** eine geschützte lokale Oberfläche zum Anzeigen und
 Bearbeiten dieser Werte. Nicht geheime Werte werden typisiert geprüft und mit
-Revisionsabgleich atomar gespeichert. Speicherungen innerhalb desselben
-Studio-Prozesses werden serialisiert; eine veraltete Revision erhält HTTP 409
-und überschreibt keine vorherige Speicherung. Unbekannte Felder, ungültige
-Typen und Symlinks werden abgewiesen. Die Oberfläche zeigt keine vorhandenen
+Revisionsabgleich atomar gespeichert. Eine Betriebssystem-Dateisperre in
+`.zelyra.settings.lock` serialisiert Schreibvorgänge kooperierender Studio-
+Instanzen. Die Revision wird erst nach Erhalt der Sperre geprüft; ein
+veralteter Stand erhält HTTP 409 und überschreibt keine neuere Speicherung.
+Die Sperrdatei enthält keine Einstellungswerte; Symlinks an diesem Pfad werden
+abgewiesen. Unbekannte Felder, ungültige Typen und Symlinks in der
+Einstellungsdatei werden ebenfalls abgewiesen. Die Oberfläche zeigt keine vorhandenen
 Geheimniswerte oder gespeicherten Umgebungsvariablennamen an. Für Geheimnisse
 kann eine neue Env-Referenz eingetragen werden; ein leeres Feld lässt die
-bisherige Referenz unverändert. Während der Bearbeitung dieser Datei sollte
-nur ein Studio-Prozess schreiben. Die Verwaltung über normale, von Anwendungen
+bisherige Referenz unverändert. Die Verwaltung über normale, von Anwendungen
 ausgelieferte Zelyra-Seiten sowie sichere Secret-Verwaltung jenseits von
-Prozessumgebungsvariablen bleiben offen.
+Prozessumgebungsvariablen bleiben offen. Eine Änderung wird bei neuen
+Programmausführungen geladen; ein bereits laufender `zelyra serve`-Prozess
+behält die beim Start geladenen Werte und muss für neue Werte neu gestartet
+werden.
 
 Ohne Angabe gilt `main.zyl` für eine Anwendung, wenn diese Datei vorhanden
 ist, sonst `src/lib.zyl` für eine Bibliothek. Paketnamen verwenden kleine

@@ -109,12 +109,12 @@ security and compatibility gates stated for that milestone.
   at-least-once and missed offline minutes are not backfilled.
 - [~] **1.2.10 — safe module configuration and reusable packages:** Complete
   the protected Studio settings page for compiler-checked package settings,
-  including same-process concurrent-save serialization, stale-revision
+  including cross-process concurrent-save serialization, stale-revision
   rejection, secret redaction, and no implicit capability grants. Keep
   HostServices documented as a versioned embedding API, not a stable native
   ABI or package plugin contract. Verify reusable CSV import/export packages
-  across supported execution backends. Ordinary application-served settings
--  pages and cross-process settings transactions move to 1.2.12.
+  across supported execution backends. Application-served settings pages move
+  to 1.2.12.
 - [~] **1.2.11 — tutorial UI and CLI reliability:** Release the consistent
   invoice tutorial design, actionable missing-outbox-table guidance,
   Debian/Ubuntu Compose-v2 version recognition, project `.env` resolution for

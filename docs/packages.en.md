@@ -331,14 +331,17 @@ works with AST, MIR, and bytecode. MIR and bytecode remain experimental overall;
 this setting alone does not establish complete backend parity. Zelyra Studio
 provides a protected local **Module settings** screen to view and edit these
 values. Non-secret values are type-checked and saved atomically with revision
-checks. Saves through the same Studio process are serialized, and a stale
-revision receives HTTP 409 instead of overwriting a prior save. Unknown fields,
-invalid types, and symlinks are rejected. The screen never displays existing
+checks. A project-scoped operating-system lock in `.zelyra.settings.lock`
+serializes saves from cooperating Studio instances. The revision is checked only
+after the lock is acquired; stale data receives HTTP 409 instead of overwriting a
+newer save. The lock file contains no setting values, and symlinks at that path
+are rejected. Unknown fields, invalid types, and symlinks are rejected. The screen never displays existing
 secret values or stored environment-variable names. A new environment
 reference can be entered for a secret; leaving that field blank preserves its
-existing reference. Use one Studio process as the writer while editing this
-settings file. Management through ordinary application-served Zelyra pages and
-secret management beyond process environment variables remain open.
+existing reference. Management through ordinary application-served Zelyra pages and
+secret management beyond process environment variables remain open. New program
+executions load the updated values; an already running `zelyra serve` process
+keeps its startup values and must be restarted to use changes.
 
 If omitted, the entry defaults to `main.zyl` for an application with that file,
 or `src/lib.zyl` for a library. A package name uses lowercase ASCII letters,
