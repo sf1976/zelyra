@@ -375,11 +375,14 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
                         schema,
                         &environment,
                         &program.records,
-                        &record
-                            .fields
-                            .iter()
-                            .map(|field| field.name.clone())
-                            .collect::<Vec<_>>(),
+                        TableViewProjection {
+                            columns: &record
+                                .fields
+                                .iter()
+                                .map(|field| field.name.clone())
+                                .collect::<Vec<_>>(),
+                            row_fields: &[],
+                        },
                         data.span,
                     ));
                     continue;
@@ -401,7 +404,10 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
             schema,
             &HashMap::new(),
             &program.records,
-            &tableview.columns,
+            TableViewProjection {
+                columns: &tableview.columns,
+                row_fields: &tableview.view.row_fields,
+            },
             tableview.span,
         ));
     }
@@ -690,13 +696,18 @@ fn check_query(
     errors
 }
 
+struct TableViewProjection<'a> {
+    columns: &'a [String],
+    row_fields: &'a [String],
+}
+
 fn check_tableview_query(
     query: &str,
     result_type: &Type,
     schema: &Schema,
     environment: &HashMap<String, Type>,
     records: &[zelyra_ast::RecordDef],
-    columns: &[String],
+    projection: TableViewProjection<'_>,
     span: Span,
 ) -> Vec<SqlError> {
     let mut errors = check_query(query, result_type, schema, environment, span);
@@ -709,7 +720,12 @@ fn check_tableview_query(
             });
             if let Some(record) = records.iter().find(|record| record.name == record_name) {
                 errors.extend(check_record_projection(
-                    query, record, columns, schema, span,
+                    query,
+                    record,
+                    projection.columns,
+                    projection.row_fields,
+                    schema,
+                    span,
                 ));
             }
         }
@@ -732,6 +748,7 @@ fn check_record_projection(
     query: &str,
     record: &zelyra_ast::RecordDef,
     columns: &[String],
+    row_fields: &[String],
     schema: &Schema,
     span: Span,
 ) -> Vec<SqlError> {
@@ -784,11 +801,12 @@ fn check_record_projection(
         };
         if !columns
             .iter()
+            .chain(row_fields.iter())
             .any(|column| column.eq_ignore_ascii_case(&normalized))
         {
             errors.push(sql_error(
                 span,
-                format!("tableview result alias `{name}` is not declared as a view column"),
+                format!("tableview result alias `{name}` is not declared as a view or row field"),
             ));
             continue;
         }
@@ -816,6 +834,14 @@ fn check_record_projection(
             errors.push(sql_error(
                 span,
                 format!("tableview column `{column}` is missing from the SQL projection"),
+            ));
+        }
+    }
+    for field in row_fields {
+        if !names.contains(&field.to_ascii_lowercase()) {
+            errors.push(sql_error(
+                span,
+                format!("tableview row field `{field}` is missing from the SQL projection"),
             ));
         }
     }
@@ -1723,6 +1749,28 @@ mod tests {
         .unwrap();
         let result = check_program(&program, &source_schema());
         assert!(result.is_ok(), "{result:?}");
+    }
+
+    #[test]
+    fn accepts_explicit_hidden_tableview_row_fields_and_requires_them_in_sql() {
+        let program = parse(&lex(
+            "struct CustomerOverview { id: Id name: String? email: Email? } tableview Customers { source sql<CustomerOverview[]> { SELECT id, name, email FROM customers } columns { name } view { row_fields { id email } } }",
+        )
+        .unwrap())
+        .unwrap();
+        let result = check_program(&program, &source_schema());
+        assert!(result.is_ok(), "{result:?}");
+
+        let missing = parse(&lex(
+            "struct CustomerOverview { id: Id name: String? email: Email? } tableview Customers { source sql<CustomerOverview[]> { SELECT id, name FROM customers } columns { name } view { row_fields { id email } } }",
+        )
+        .unwrap())
+        .unwrap();
+        let errors = check_program(&missing, &source_schema()).unwrap_err();
+        assert!(errors.iter().any(|error| {
+            error.message.contains("row field `email`")
+                && error.message.contains("missing from the SQL projection")
+        }));
     }
 
     #[test]

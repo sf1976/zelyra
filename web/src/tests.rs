@@ -518,6 +518,8 @@ fn default_shell_covers_standalone_forms_and_tableviews_but_not_custom_pages() {
         layout_html: None,
         source: "report query".into(),
         columns: Vec::new(),
+        row_fields: Vec::new(),
+        column_content: Vec::new(),
         before_content_html: None,
         after_content_html: None,
         row_actions: None,
@@ -3036,6 +3038,8 @@ fn renders_tableview_with_escaped_values_and_pagination_state() {
         layout_html: None,
         source: "SELECT id, name FROM customers".into(),
         columns: vec!["id".into(), "name".into()],
+        row_fields: Vec::new(),
+        column_content: Vec::new(),
         before_content_html: None,
         after_content_html: None,
         row_actions: None,
@@ -3115,6 +3119,8 @@ fn renders_tableview_row_actions_for_each_row_and_escapes_dynamic_content() {
         layout_html: None,
         source: "SELECT id, name FROM customers".into(),
         columns: vec!["id".into(), "name".into()],
+        row_fields: Vec::new(),
+        column_content: Vec::new(),
         before_content_html: Some("<p>Before</p>".into()),
         after_content_html: Some("<p>After</p>".into()),
         row_actions: Some(("customer".into(), "<button type=\"button\" data-name=\"{customer.name}\" data-z-dialog-auto-open=\"customer-dialog\">Open</button><dialog id=\"z-dialog-auto-0000000000\" data-z-dialog data-z-dialog-auto=\"z-dialog-auto-0000000000\" aria-labelledby=\"z-dialog-auto-0000000000-title\"><h2 id=\"z-dialog-auto-0000000000-title\">Details for {customer.name}</h2></dialog>".into())),
@@ -3154,6 +3160,61 @@ fn renders_tableview_row_actions_for_each_row_and_escapes_dynamic_content() {
 }
 
 #[test]
+fn renders_hidden_tableview_row_fields_as_escaped_column_supporting_content() {
+    let tableview = TableViewRoute {
+        path: "/views/items".into(),
+        title: "Items".into(),
+        layout_html: None,
+        source: "SELECT sku, customer_number FROM items".into(),
+        columns: vec!["sku".into()],
+        row_fields: vec!["customer_number".into()],
+        column_content: vec![(
+            "sku".into(),
+            "item".into(),
+            "<small>Customer: {item.customer_number}</small><button type=\"button\" data-z-dialog-auto-open=\"z-dialog-auto-0000000000\" aria-controls=\"z-dialog-auto-0000000000\">Details</button><dialog id=\"z-dialog-auto-0000000000\" data-z-dialog data-z-dialog-auto=\"z-dialog-auto-0000000000\" aria-labelledby=\"z-dialog-auto-0000000000-title\"><h2 id=\"z-dialog-auto-0000000000-title\" data-z-dialog-auto-title=\"z-dialog-auto-0000000000\">{item.customer_number}</h2></dialog>".into(),
+        )],
+        before_content_html: None,
+        after_content_html: None,
+        row_actions: None,
+        filters: Vec::new(),
+        searchable: false,
+        sortable: false,
+        page_size: None,
+        requires_auth: false,
+        permissions: Vec::new(),
+    };
+    assert_eq!(
+        tableview_selected_columns(&tableview),
+        ["sku", "customer_number"]
+    );
+    let html = render_tableview(
+        &tableview,
+        &[
+            vec!["SKU-7".into(), "<Customer 18>".into()],
+            vec!["SKU-8".into(), "Customer 19".into()],
+        ],
+        TableViewRenderState {
+            query_values: &HashMap::new(),
+            search: "",
+            sort: "",
+            order: "ASC",
+            page: 1,
+            per_page: 25,
+        },
+        UiLanguage::English,
+    );
+    assert!(html.contains("<td>SKU-7<small>Customer: &lt;Customer 18&gt;</small><button"));
+    assert!(!html.contains("<td><Customer 18>"));
+    assert!(html.contains("data-z-dialog-auto-open=\"z-dialog-auto-0000000000-r0-0\""));
+    assert!(html.contains("data-z-dialog-auto-open=\"z-dialog-auto-0000000000-r1-0\""));
+    assert!(html.contains("id=\"z-dialog-auto-0000000000-r0-0\""));
+    assert!(html.contains("id=\"z-dialog-auto-0000000000-r1-0\""));
+    assert!(html.contains("id=\"z-dialog-auto-0000000000-r0-0-title\""));
+    assert!(html.contains("aria-labelledby=\"z-dialog-auto-0000000000-r0-0-title\""));
+    assert!(html.contains("&gt;</h2>"));
+}
+
+#[test]
 fn renders_typed_tableview_filters_and_preserves_state() {
     let tableview = TableViewRoute {
         path: "/views/customers".into(),
@@ -3161,6 +3222,8 @@ fn renders_typed_tableview_filters_and_preserves_state() {
         layout_html: None,
         source: "SELECT id, orders FROM customer_overview".into(),
         columns: vec!["id".into(), "orders".into()],
+        row_fields: Vec::new(),
+        column_content: Vec::new(),
         before_content_html: None,
         after_content_html: None,
         row_actions: None,

@@ -2024,6 +2024,44 @@ fn tableview_row_actions_can_use_imported_zelyra_dialog_components() {
 }
 
 #[test]
+fn validates_tableview_hidden_row_fields_and_column_content_context() {
+    let source = r#"
+        struct ItemRow { sku: String customer_number: String }
+        tableview Items {
+            source sql<ItemRow[]> { SELECT sku, customer_number FROM items }
+            columns { sku }
+            view {
+                row_fields { customer_number }
+                column_content {
+                    item: item
+                    sku { html { <small>Customer: {item.customer_number}</small> } }
+                }
+                row_actions {
+                    item: item
+                    html { <a href="/customers/{item.customer_number}">Customer</a> }
+                }
+            }
+        }
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    assert!(validate_components("tableview-content.zyl", &program));
+
+    let invalid = source.replace("row_fields { customer_number }", "row_fields { absent }");
+    let program = parse(&lex(&invalid).unwrap()).unwrap();
+    assert!(!validate_components(
+        "tableview-content-invalid.zyl",
+        &program
+    ));
+
+    let invalid_column = source.replace("sku { html", "unknown { html");
+    let program = parse(&lex(&invalid_column).unwrap()).unwrap();
+    assert!(!validate_components(
+        "tableview-column-invalid.zyl",
+        &program
+    ));
+}
+
+#[test]
 fn rejects_saved_record_in_create_and_unavailable_or_sensitive_fields() {
     let source = r#"
         table customers { id: Id primary auto name: String(100) password_hash: String(255) }

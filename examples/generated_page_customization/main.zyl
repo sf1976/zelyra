@@ -55,10 +55,19 @@ tableview CustomerOverview {
     source sql<CustomerSummary[]> {
         SELECT id, name, email FROM customers
     }
-    columns { id name email }
+    columns { name }
     view {
+        # Keep the record identity and email available to this row's UI while
+        # omitting them as standalone table columns.
+        row_fields { id email }
         before_content {
             html { <p>Contact details for customers in this workspace.</p> }
+        }
+        column_content {
+            item: customer
+            name {
+                html { <small>Email: {customer.email}</small> }
+            }
         }
         row_actions {
             item: customer

@@ -25,7 +25,7 @@ telemetry, explicit effects, portable data, resource discipline, and honest
 proof claims guide every phase. The [manifesto](MANIFESTO.md) states the
 principles; the roadmap below tracks what is actually implemented.
 
-The current stable release is 1.2.13, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.13. **Current milestones** is the source of
+The current stable release is 1.2.15, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.15. **Current milestones** is the source of
 near-term commitments. Older numbered release sections below are retained as
 historical planning and evidence; they do not by themselves define current
 release targets. Longer-term ideas remain in the post-1.0 evolution section.
@@ -153,7 +153,7 @@ security and compatibility gates stated for that milestone.
   effect analysis. The tutorial was tested with sample data in Chromium,
   Firefox, and WebKit. Apache/TLS integration and deeper architecture checks
   continue after this release.
-- [ ] **1.2.15 — business workflows and backend parity:** Prove settings,
+- [x] **1.2.15 — business workflows and backend parity:** Prove settings,
   effects, jobs, data access, and HostServices across supported AST/MIR/Bytecode
   paths, or fail closed with stable diagnostics. Complete CSV modules, bounded
   state transitions, audit/history, balanced ledger operations, reflection and
@@ -161,9 +161,19 @@ security and compatibility gates stated for that milestone.
   tests. Complete Apache/TLS loopback tests and reverse-proxy configurations.
   Add composable, type-checked extension points to generated CRUD and tableview
   surfaces for create/edit pages, field help, page content, and row-level UI
-  actions while keeping routing, persistence, and security checks centralized;
-  this subfeature is implemented and tested. The other 1.2.15 work remains
-  open. Wasm/sidecars remain optional and require their own sandbox/ABI gate.
+  actions while keeping routing, persistence, and security checks centralized.
+  The page-customization subfeature was tested in the merged change and shipped
+  in [`v1.2.15`](https://github.com/sf1976/zelyra/releases/tag/v1.2.15). Other
+  work originally grouped under 1.2.15 remains open and is reassigned below;
+  Wasm/sidecars remain optional and require their own sandbox/ABI gate.
+- [~] **1.2.16 — composable TableView cells:** Add typed supporting content to
+  displayed columns and explicit non-displayed result fields for row templates.
+  The parser, SQL projection checking, web query selection, and safe HTML
+  rendering are implemented with positive and negative tests. Workspace tests,
+  Clippy, handbook checks, the MariaDB/browser invoice E2E across Chromium,
+  Firefox, and WebKit, and Linux artifact smoke passed. The PR's Windows CI and
+  release workflow remain pending. This does not add arbitrary per-request
+  SQL, a write action, or access to undeclared result fields.
 - [ ] **1.3.0 — canonical structure and Bytecode default:** Complete the
   opt-in versioned project layout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, and `plugins/`), architecture checks, and safe layout migration
