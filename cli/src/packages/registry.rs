@@ -641,16 +641,15 @@ fn validate_journal_storage(
     has_journal: bool,
     has_lock_backup: bool,
 ) -> Result<(), String> {
-    let mut expected = if has_journal {
-        BTreeSet::from(["manifest.backup"])
-    } else {
-        BTreeSet::from(["manifest.backup", "lock.backup"])
-    };
+    let mut expected = BTreeSet::new();
+    let mut allowed = BTreeSet::from(["manifest.backup", "lock.backup"]);
     if has_journal {
+        expected.insert("manifest.backup");
+        allowed.insert("journal.json");
         expected.insert("journal.json");
-    }
-    if has_lock_backup {
-        expected.insert("lock.backup");
+        if has_lock_backup {
+            expected.insert("lock.backup");
+        }
     }
     for entry in fs::read_dir(directory)
         .map_err(|error| format!("cannot inspect package recovery data: {error}"))?
@@ -664,13 +663,17 @@ fn validate_journal_storage(
             .ok_or_else(|| "package recovery file name is not UTF-8".to_owned())?;
         let metadata = fs::symlink_metadata(&path)
             .map_err(|error| format!("cannot inspect package recovery file: {error}"))?;
-        if metadata.file_type().is_symlink() || !metadata.is_file() || !expected.remove(name) {
+        if metadata.file_type().is_symlink()
+            || !metadata.is_file()
+            || !allowed.contains(name)
+            || (has_journal && !expected.remove(name))
+        {
             return Err(format!(
                 "package recovery data contains an unknown or unsafe file: {name}"
             ));
         }
     }
-    if !expected.is_empty() {
+    if has_journal && !expected.is_empty() {
         return Err(format!(
             "package recovery data is incomplete; missing {}",
             expected.into_iter().collect::<Vec<_>>().join(", ")
@@ -3159,6 +3162,31 @@ mod tests {
             .join("unexpected")
             .is_file());
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn recovery_removes_journals_interrupted_before_any_project_mutation() {
+        for (label, backups) in [
+            ("empty", Vec::<&str>::new()),
+            ("manifest", vec!["manifest.backup"]),
+            ("lock", vec!["lock.backup"]),
+        ] {
+            let root = temporary_workspace(&format!("incomplete-{label}"));
+            let directory = root.join(PACKAGE_TRANSACTION_DIR);
+            fs::create_dir_all(&directory).unwrap();
+            for backup in backups {
+                fs::write(directory.join(backup), b"partial backup").unwrap();
+            }
+
+            let preview = recover_transaction(&root, false).unwrap();
+            assert!(preview.contains("no project mutation"));
+            assert!(directory.exists());
+
+            let applied = recover_transaction(&root, true).unwrap();
+            assert!(applied.contains("no project mutation"));
+            assert!(!directory.exists());
+            fs::remove_dir_all(root).unwrap();
+        }
     }
 
     #[test]
