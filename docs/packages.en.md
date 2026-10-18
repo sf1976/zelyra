@@ -8,7 +8,7 @@ available. Separately published transitive packages and settings pages for
 ordinary applications remain open. Projects without a `[package]` table keep
 the existing file-import behavior.
 
-The 1.2.6 development work adds recoverable package transactions. After an
+Zelyra 1.2.6 adds recoverable package transactions. After an
 interruption, `zelyra package recover` previews the recovery by default;
 `zelyra package recover --apply` restores the backed-up manifest/lockfile and
 removes cache paths created by the transaction. A pending journal blocks other

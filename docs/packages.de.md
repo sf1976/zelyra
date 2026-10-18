@@ -9,7 +9,7 @@ veröffentlichte transitive Pakete und Moduleinstellungsseiten für normale
 Anwendungen bleiben offen. Projekte ohne `[package]` behalten das bisherige
 Verhalten mit Dateiimporten.
 
-Die Entwicklung für 1.2.6 ergänzt wiederherstellbare Pakettransaktionen. Nach
+Zelyra 1.2.6 ergänzt wiederherstellbare Pakettransaktionen. Nach
 einer Unterbrechung zeigt `zelyra package recover` standardmäßig nur den
 Wiederherstellungsplan; `zelyra package recover --apply` stellt den gesicherten
 Manifest-/Lockfile-Stand wieder her und entfernt die in der Transaktion neu

@@ -11,13 +11,14 @@ for database-backed business and web applications. It brings schema-aware SQL,
 forms, CRUD, views, and application logic together while keeping ordinary code
 and native SQL available.
 
-> **Release 1.2.5 · language compatibility line: 0.1** · [GitHub release](https://github.com/sf1976/zelyra/releases/tag/v1.2.5)
+> **Release 1.2.6 · language compatibility line: 0.1** · [GitHub release](https://github.com/sf1976/zelyra/releases/tag/v1.2.6)
 >
 > Compiler checks and the verifier cover defined scopes. They do not prove arbitrary applications correct. Review the documented support and limits for each workflow before deployment.
 
-Zelyra 1.2.5 adds signed source-package registries with publisher trust, a
-fixed-port Linux systemd service with its resident scheduler, and confined
-static files from `public/`. See the [1.2.5 release notes](docs/release-notes/1.2.5.en.md),
+Zelyra 1.2.6 adds recoverable registry package transactions through
+`zelyra package recover`. It builds on the signed package registry, fixed-port
+Linux service and resident scheduler, and confined `public/` assets from 1.2.5.
+See the [1.2.6 release notes](docs/release-notes/1.2.6.en.md),
 [package guide](docs/packages.en.md), and [deployment guide](docs/deployment.en.md).
 Zelyra 1.1.5 added the local offline package workflow with deterministic locks
 and typed settings. Zelyra 1.1.2 removed the experimental
@@ -33,11 +34,11 @@ and [implementation inventory](docs/implemented.en.md).
 
 The language compatibility line remains `0.1`; compiler releases do not change it automatically. “Prove correctness” is a design goal: the verifier distinguishes proven, runtime-checked, and unproven scopes, but is not a general-purpose theorem prover.
 
-## What Zelyra 1.2.5 provides
+## What Zelyra 1.2.6 provides
 
 Zelyra connects its language, compiler, database, web application, and Studio in
-one workflow. Release 1.2.5 retains the 1.1.5, 1.1.2, 1.1.1, and 1.1.0
-capabilities and adds operations and package features:
+one workflow. Release 1.2.6 retains the previous capabilities and adds safe
+recovery for package operations:
 
 - statically checked business logic and schema-aware SQL;
 - MariaDB as the primary runtime, plus verified MySQL and PostgreSQL workflows;
@@ -65,6 +66,8 @@ capabilities and adds operations and package features:
   idempotent outbox setup, and `zelyra schedule status` without host cron;
 - signed source packages with explicit publisher trust, registry search, exact
   updates, lockfile provenance, and portable Docker bundles;
+- serialized package mutations and a versioned transaction journal; `zelyra
+  package recover` previews recovery and requires `--apply` to change files;
 - static `public/` files with MIME types, GET/HEAD, route precedence, and
   path/symlink confinement, plus documented Apache/Nginx proxy deployment;
 - offline local packages with SemVer compatibility, deterministic source locks,
@@ -73,7 +76,7 @@ capabilities and adds operations and package features:
 - if expressions, record updates, typed lambdas, guarded nested patterns,
   tuples, string interpolation, and opt-in mutable local arrays;
   `--max-steps` stops unbounded evaluation with a source diagnostic;
-- release limits are listed in the [1.2.5 release notes](docs/release-notes/1.2.5.en.md);
+- release limits are listed in the [1.2.6 release notes](docs/release-notes/1.2.6.en.md);
   a general transactional job and query system is not included yet;
 - local text-PDF rendering and checked PDF outbox attachments with byte and
   row limits. The renderer does not preserve CSS layout, images, or charts;
