@@ -39,6 +39,10 @@ fn run_help_describes_the_resident_scheduler_gate() {
 #[test]
 #[cfg(target_os = "linux")]
 fn active_project_service_starts_resident_scheduler_without_cron_export() {
+    let Ok(database_url) = std::env::var("ZELYRA_DB_TIMEOUT_TEST_URL") else {
+        eprintln!("skipping durable scheduler integration: MariaDB test URL is not configured");
+        return;
+    };
     let nonce = NEXT_DIRECTORY.fetch_add(1, Ordering::Relaxed);
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -54,6 +58,7 @@ fn active_project_service_starts_resident_scheduler_without_cron_export() {
         r#"page "/" {
     html { <html><body><main>Schedule test</main></body></html> }
 }
+
 command daily { handler: run_daily }
 schedule daily { command: daily cron: "* * * * *" }
 fn run_daily() { print("daily task executed") }
@@ -107,6 +112,7 @@ fn main() { }
         .current_dir(&project)
         .env("XDG_CONFIG_HOME", &config_home)
         .env("ZELYRA_SYSTEMD_SERVICE_ID", &service_id)
+        .env("DATABASE_URL", &database_url)
         .env("ZELYRA_FAKE_SYSTEMD_ACTIVE", &active_marker)
         .env("PATH", &test_path)
         .stdout(Stdio::piped())
@@ -163,7 +169,37 @@ fn main() { }
     );
     assert!(
         job_executed,
-        "resident scheduler should run the declared command at a minute boundary"
+        "durable worker should run the declared command after enqueue"
+    );
+    let delivery_deadline = Instant::now() + Duration::from_secs(5);
+    let mut jobs_json = serde_json::Value::Null;
+    while Instant::now() < delivery_deadline {
+        let jobs = Command::new(env!("CARGO_BIN_EXE_zelyra"))
+            .args(["schedule", "jobs", "main.zyl", "--json"])
+            .current_dir(&project)
+            .env("DATABASE_URL", &database_url)
+            .output()
+            .expect("inspect durable schedule job");
+        assert!(
+            jobs.status.success(),
+            "{}",
+            String::from_utf8_lossy(&jobs.stderr)
+        );
+        jobs_json = serde_json::from_slice(&jobs.stdout).expect("schedule jobs JSON");
+        if jobs_json["jobs"].as_array().is_some_and(|items| {
+            items
+                .iter()
+                .any(|job| job["schedule"] == "daily" && job["status"] == "delivered")
+        }) {
+            break;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    assert!(
+        jobs_json["jobs"].as_array().is_some_and(|items| items
+            .iter()
+            .any(|job| { job["schedule"] == "daily" && job["status"] == "delivered" })),
+        "durable schedule inspection should show the delivered occurrence: {jobs_json}"
     );
 
     let legacy_trigger = Command::new(env!("CARGO_BIN_EXE_zelyra"))
@@ -213,5 +249,85 @@ fn main() { }
     assert!(stopped_trigger.status.success());
     assert!(String::from_utf8_lossy(&stopped_trigger.stderr)
         .contains("this project's `serve` is not running"));
+    let project_id = {
+        use sha2::{Digest, Sha256};
+        format!(
+            "{:x}",
+            Sha256::digest(
+                project
+                    .join("main.zyl")
+                    .canonicalize()
+                    .expect("canonical project")
+                    .as_os_str()
+                    .to_string_lossy()
+                    .as_bytes()
+            )
+        )
+    };
+    zelyra_database::execute_mariadb_query(
+        &database_url,
+        "DELETE FROM `_zelyra_outbox` WHERE `event_type` = 'zelyra.schedule.command' \
+         AND JSON_UNQUOTE(JSON_EXTRACT(`payload`, '$.project_id')) = :project_id",
+        vec![(
+            "project_id".into(),
+            zelyra_database::QueryValue::String(project_id),
+        )],
+    )
+    .expect("remove durable test occurrences");
+    fs::remove_dir_all(&project).expect("remove temporary project");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn manual_serve_does_not_enqueue_declared_schedules() {
+    let Ok(database_url) = std::env::var("ZELYRA_DB_TIMEOUT_TEST_URL") else {
+        eprintln!("skipping manual scheduler-gate integration: MariaDB test URL is not configured");
+        return;
+    };
+    let nonce = NEXT_DIRECTORY.fetch_add(1, Ordering::Relaxed);
+    let project = std::env::temp_dir().join(format!(
+        "zelyra-manual-schedule-{}-{nonce}",
+        std::process::id()
+    ));
+    fs::create_dir_all(&project).expect("create temporary project");
+    fs::write(
+        project.join("main.zyl"),
+        r#"page "/" { html { <html><body>Manual service fixture</body></html> } }
+command daily { handler: run_daily }
+schedule daily { command: daily cron: "* * * * *" }
+fn run_daily() { print("manual serve must not enqueue this") }
+fn main() { }
+"#,
+    )
+    .expect("write scheduled project");
+    let mut server = Command::new(env!("CARGO_BIN_EXE_zelyra"))
+        .args(["serve", "main.zyl", "127.0.0.1:0"])
+        .current_dir(&project)
+        .env("DATABASE_URL", &database_url)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("start manual server");
+    thread::sleep(Duration::from_secs(2));
+    assert!(server.try_wait().expect("poll manual server").is_none());
+    server.kill().expect("stop manual server");
+    let _ = server.wait();
+    let jobs = Command::new(env!("CARGO_BIN_EXE_zelyra"))
+        .args(["schedule", "jobs", "main.zyl", "--json"])
+        .current_dir(&project)
+        .env("DATABASE_URL", &database_url)
+        .output()
+        .expect("inspect manual server schedule queue");
+    assert!(
+        jobs.status.success(),
+        "{}",
+        String::from_utf8_lossy(&jobs.stderr)
+    );
+    let value: serde_json::Value =
+        serde_json::from_slice(&jobs.stdout).expect("schedule jobs JSON");
+    assert_eq!(
+        value["total"], 0,
+        "manual serve must not enqueue jobs: {value}"
+    );
     fs::remove_dir_all(&project).expect("remove temporary project");
 }

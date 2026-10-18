@@ -5535,7 +5535,7 @@ fn setup_action(path: &str, action: &str, options: &SetupOptions) -> Result<Stri
         }
         messages.push("database schema setup completed".into());
         let entry_path = directory.join("main.zyl");
-        match task_cli::setup_declared_schedules(&entry_path) {
+        match task_cli::setup_declared_schedules(&entry_path, true) {
             Ok(schedule_messages) => messages.extend(schedule_messages),
             Err(error) => {
                 return Err(format!(
@@ -9721,7 +9721,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         capability_grants.as_ref(),
         runtime_policy.as_ref(),
     );
-    match task_cli::setup_declared_schedules(std::path::Path::new(&path)) {
+    match task_cli::setup_declared_schedules(std::path::Path::new(&path), false) {
         Ok(messages) => {
             for message in messages {
                 println!("{message}");
@@ -9752,6 +9752,44 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             .as_deref()
             .is_some_and(service_cli::current_project_service_is_active);
     let _scheduler_thread = if is_managed_service && !program.schedules.is_empty() {
+        if schema.backend() != Backend::MariaDb {
+            diagnostic(
+                &path,
+                "E-TASK-004",
+                "durable project schedules currently require a MariaDB database",
+                1,
+                1,
+            );
+            return ExitCode::from(1);
+        }
+        let scheduler_database_url = match outbox_cli::project_outbox_database_url(&path, &schema) {
+            Ok(Some(url)) => url,
+            Ok(None) => {
+                diagnostic(
+                    &path,
+                    "E-TASK-004",
+                    "durable project schedules require a configured MariaDB database URL",
+                    1,
+                    1,
+                );
+                return ExitCode::from(1);
+            }
+            Err(error) => {
+                diagnostic(&path, "E-TASK-004", &error, 1, 1);
+                return ExitCode::from(1);
+            }
+        };
+        if let Err(error) = zelyra_database::outbox::ensure_mariadb_outbox(&scheduler_database_url)
+        {
+            diagnostic(
+                &path,
+                "E-TASK-004",
+                &format!("cannot initialize durable schedules: {error}"),
+                1,
+                1,
+            );
+            return ExitCode::from(1);
+        }
         let job_timeout = match project_runtime_limits(&path) {
             Ok(limits) => limits
                 .scheduler_job_timeout_seconds
@@ -9762,7 +9800,12 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                 return ExitCode::from(1);
             }
         };
-        match task_cli::start_resident_scheduler(PathBuf::from(&path), &program, job_timeout) {
+        match task_cli::start_resident_scheduler(
+            PathBuf::from(&path),
+            &program,
+            scheduler_database_url,
+            job_timeout,
+        ) {
             Ok(thread) => {
                 println!("Zelyra scheduler is active in the project service; schedules are rechecked each minute");
                 Some(thread)
@@ -9770,6 +9813,14 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             Err(error) => {
                 diagnostic(&path, "E-TASK-004", &error, 1, 1);
                 return ExitCode::from(1);
+            }
+        }
+    } else if is_managed_service {
+        match task_cli::start_stale_schedule_cleanup(PathBuf::from(&path)) {
+            Ok(thread) => Some(thread),
+            Err(error) => {
+                eprintln!("zelyra scheduler: {error}; stale pending jobs may remain until the next `zelyra setup --all`");
+                None
             }
         }
     } else {

@@ -6,7 +6,9 @@ const MANAGED_SCHEDULE_EXPORT_HEADER: &str =
 
 const SCHEDULE_SERVE_STATE_FILE: &str = "serve.json";
 const SCHEDULE_PROBE_PATH: &str = zelyra_web::SCHEDULE_PROBE_PATH;
-const SCHEDULER_MAX_CONCURRENT_JOBS: usize = 4;
+// A single durable worker serializes occurrences for this project, avoiding
+// overlapping runs of the same schedule without a separate lease table.
+const SCHEDULER_MAX_CONCURRENT_JOBS: usize = 1;
 pub(super) const DEFAULT_SCHEDULER_JOB_TIMEOUT: std::time::Duration =
     std::time::Duration::from_secs(300);
 
@@ -16,6 +18,7 @@ pub(super) const DEFAULT_SCHEDULER_JOB_TIMEOUT: std::time::Duration =
 pub(super) fn start_resident_scheduler(
     entry_path: PathBuf,
     program: &zelyra_ast::Program,
+    database_url: String,
     job_timeout: std::time::Duration,
 ) -> Result<std::thread::JoinHandle<()>, String> {
     validate_schedule_timezones(program)?;
@@ -23,89 +26,347 @@ pub(super) fn start_resident_scheduler(
         .canonicalize()
         .map_err(|error| format!("cannot resolve scheduler entry: {error}"))?;
     let entry = entry_path.to_string_lossy().into_owned();
-    let running = Arc::new(Mutex::new(std::collections::HashSet::<String>::new()));
     std::thread::Builder::new()
         .name("zelyra-scheduler".into())
         .spawn(move || {
             let mut source_invalid = false;
+            let mut last_enqueued_minute = None;
+            let worker_database_url = database_url.clone();
+            let worker_entry = entry.clone();
+            for worker_index in 0..SCHEDULER_MAX_CONCURRENT_JOBS {
+                let database_url = worker_database_url.clone();
+                let entry = worker_entry.clone();
+                let worker_name = format!("zelyra-schedule-worker-{worker_index}");
+                let timeout = job_timeout;
+                if let Err(error) = std::thread::Builder::new()
+                    .name(worker_name)
+                    .spawn(move || run_schedule_worker_loop(&entry, &database_url, timeout))
+                {
+                    eprintln!("zelyra scheduler: could not start durable worker: {error}");
+                }
+            }
             loop {
-                sleep_until_next_minute();
-                let now = chrono::Utc::now();
-                let due = match due_schedule_handlers_from_source(&entry, now) {
-                    Ok(due) => {
+                if last_enqueued_minute.is_some() {
+                    sleep_until_next_minute();
+                }
+                let now = chrono::Utc::now().with_second(0).unwrap_or_else(chrono::Utc::now);
+                let minute_key = now.format("%Y-%m-%dT%H:%M:00Z").to_string();
+                if last_enqueued_minute.as_deref() == Some(minute_key.as_str()) {
+                    std::thread::sleep(std::time::Duration::from_secs(2));
+                    last_enqueued_minute = None;
+                    continue;
+                }
+                let current = match validate(&entry) {
+                    Ok(program) => {
                         if source_invalid {
                             eprintln!("zelyra scheduler: project checks passed again; schedule monitoring resumed");
                             source_invalid = false;
                         }
-                        due
+                        program
                     }
-                    Err(error) => {
+                    Err(()) => {
                         if !source_invalid {
-                            eprintln!("zelyra scheduler: {error}; declared jobs are paused until the source is valid");
+                            eprintln!("zelyra scheduler: project compiler checks failed; declared jobs are paused until the source is valid");
                             source_invalid = true;
                         }
+                        std::thread::sleep(std::time::Duration::from_secs(2));
+                        last_enqueued_minute = Some(minute_key);
                         continue;
                     }
                 };
-                for (schedule_name, handler) in due {
-                    let admitted = running
-                        .lock()
-                        .is_ok_and(|mut active| claim_scheduler_job(&mut active, &schedule_name));
-                    if !admitted {
-                        eprintln!("zelyra scheduler: skipped `{schedule_name}` because the worker limit is reached or it is already running");
+                let due = match due_schedule_definitions(&current, now) {
+                    Ok(due) => due,
+                    Err(error) => {
+                        eprintln!("zelyra scheduler: {error}; due occurrences were not queued");
+                        std::thread::sleep(std::time::Duration::from_secs(2));
+                        last_enqueued_minute = Some(minute_key);
                         continue;
                     }
-                    let entry = entry.clone();
-                    let active = Arc::clone(&running);
-                    let worker_name = schedule_name.clone();
-                    let timeout_worker_name = worker_name.clone();
-                    let spawn_result = std::thread::Builder::new()
-                        .name(format!("zelyra-job-{worker_name}"))
-                        .spawn(move || {
-                            eprintln!("zelyra scheduler: starting `{worker_name}` ({handler})");
-                            let result = env::current_exe()
-                                .map_err(|error| error.to_string())
-                                .and_then(|executable| {
-                                    let mut child = Command::new(executable)
-                                        .args(["run", &entry, "--entry", &handler])
-                                        .spawn()
-                                        .map_err(|error| error.to_string())?;
-                                    match wait_for_child_with_timeout(&mut child, job_timeout) {
-                                        Ok(Some(status)) => Ok(status),
-                                        Ok(None) => {
-                                            eprintln!("zelyra scheduler: `{timeout_worker_name}` exceeded its {} second wall-clock limit and was stopped", job_timeout.as_secs());
-                                            Err("scheduler job timed out".to_owned())
-                                        }
-                                        Err(error) => Err(error.to_string()),
-                                    }
-                                });
-                            match result {
-                                Ok(status) if status.success() => {
-                                    eprintln!("zelyra scheduler: `{worker_name}` completed successfully");
-                                }
-                                Ok(status) => {
-                                    eprintln!("zelyra scheduler: `{worker_name}` failed with {status}");
-                                }
-                                Err(error) => {
-                                    eprintln!("zelyra scheduler: `{worker_name}` could not start: {error}");
-                                }
-                            }
-                            if let Ok(mut active) = active.lock() {
-                                active.remove(&worker_name);
-                            }
-                        });
-                    if let Err(error) = spawn_result {
-                        if let Ok(mut active) = running.lock() {
-                            active.remove(&schedule_name);
-                        }
-                        eprintln!("zelyra scheduler: could not start worker `{schedule_name}`: {error}");
+                };
+                let mut enqueue_succeeded = true;
+                for (schedule, handler) in due {
+                    let Some(fingerprint) = schedule_fingerprint(&schedule, &handler) else {
+                        continue;
+                    };
+                    let Some(event_id) = schedule_event_id(&entry, &schedule.name, &minute_key)
+                    else {
+                        eprintln!("zelyra scheduler: could not create a stable occurrence ID");
+                        continue;
+                    };
+                    let event = zelyra_database::outbox::OutboxEvent {
+                        id: event_id,
+                        event_type: zelyra_database::outbox::SCHEDULE_JOB_EVENT_TYPE.into(),
+                        payload_json: serde_json::json!({
+                            "project_id": schedule_project_identity(&entry),
+                            "schedule_name": schedule.name,
+                            "scheduled_at": minute_key,
+                            "fingerprint": fingerprint,
+                        }).to_string(),
+                    };
+                    if let Err(error) = zelyra_database::outbox::enqueue_mariadb_event_once(
+                        &database_url,
+                        &event,
+                    ) {
+                        eprintln!("zelyra scheduler: durable enqueue failed for a declared occurrence: {error}");
+                        enqueue_succeeded = false;
                     }
+                }
+                if enqueue_succeeded {
+                    last_enqueued_minute = Some(minute_key);
+                } else {
+                    last_enqueued_minute = None;
+                    std::thread::sleep(std::time::Duration::from_secs(2));
                 }
             }
         })
         .map_err(|error| format!("cannot start the in-process scheduler: {error}"))
 }
 
+/// Best-effort cleanup runs off the HTTP startup path when an installed
+/// service starts with no schedules. It removes pending, unleased occurrences
+/// left by declarations that have since been removed without blocking a web
+/// application whose database is temporarily unavailable.
+pub(super) fn start_stale_schedule_cleanup(
+    entry_path: PathBuf,
+) -> Result<std::thread::JoinHandle<()>, String> {
+    let entry_path = entry_path
+        .canonicalize()
+        .map_err(|error| format!("cannot resolve scheduler cleanup entry: {error}"))?;
+    std::thread::Builder::new()
+        .name("zelyra-schedule-cleanup".into())
+        .spawn(move || {
+            let entry = entry_path.to_string_lossy().into_owned();
+            let program = match validate(&entry) {
+                Ok(program) if program.schedules.is_empty() => program,
+                Ok(_) => return,
+                Err(()) => {
+                    eprintln!("zelyra scheduler: stale-job cleanup skipped because project compiler checks failed");
+                    return;
+                }
+            };
+            let schema = match build_schema(&program) {
+                Ok(schema) if schema.backend() == Backend::MariaDb => schema,
+                _ => return,
+            };
+            let database_url = match outbox_cli::project_outbox_database_url(&entry, &schema) {
+                Ok(Some(url)) => url,
+                Ok(None) => return,
+                Err(error) => {
+                    eprintln!("zelyra scheduler: stale-job cleanup skipped: {error}");
+                    return;
+                }
+            };
+            let Some(project_id) = schedule_project_identity(&entry) else {
+                eprintln!("zelyra scheduler: stale-job cleanup skipped because project identity is unavailable");
+                return;
+            };
+            if let Err(error) = zelyra_database::outbox::cancel_pending_mariadb_schedule_jobs(
+                &database_url,
+                &project_id,
+            ) {
+                eprintln!("zelyra scheduler: stale-job cleanup could not access the MariaDB outbox: {error}");
+            }
+        })
+        .map_err(|error| format!("cannot start scheduler cleanup thread: {error}"))
+}
+
+fn due_schedule_definitions(
+    program: &zelyra_ast::Program,
+    now_utc: chrono::DateTime<chrono::Utc>,
+) -> Result<Vec<(zelyra_ast::ScheduleDef, String)>, String> {
+    let mut due = Vec::new();
+    for schedule in &program.schedules {
+        let timezone = parse_schedule_timezone(schedule)?;
+        let local = now_utc.with_timezone(&timezone);
+        if !cron_matches_local_minute(&schedule.cron, &local)? {
+            continue;
+        }
+        let command = program
+            .commands
+            .iter()
+            .find(|item| item.name == schedule.command)
+            .ok_or_else(|| format!("schedule `{}` references an unknown command", schedule.name))?;
+        due.push((schedule.clone(), command.handler.clone()));
+    }
+    Ok(due)
+}
+
+fn schedule_fingerprint(schedule: &zelyra_ast::ScheduleDef, handler: &str) -> Option<String> {
+    use sha2::Digest;
+    let input = format!(
+        "{}\0{}\0{}\0{}",
+        schedule.command,
+        schedule.cron,
+        schedule.timezone.as_deref().unwrap_or("UTC"),
+        handler
+    );
+    Some(format!("{:x}", sha2::Sha256::digest(input.as_bytes())))
+}
+
+fn schedule_event_id(entry: &str, schedule_name: &str, minute: &str) -> Option<String> {
+    use sha2::Digest;
+    let canonical = std::path::Path::new(entry).canonicalize().ok()?;
+    let input = format!("{}\0{}\0{}", canonical.display(), schedule_name, minute);
+    Some(format!(
+        "schedule-{:x}",
+        sha2::Sha256::digest(input.as_bytes())
+    ))
+}
+
+fn schedule_project_identity(entry: &str) -> Option<String> {
+    use sha2::Digest;
+    let canonical = std::path::Path::new(entry).canonicalize().ok()?;
+    Some(format!(
+        "{:x}",
+        sha2::Sha256::digest(canonical.as_os_str().to_string_lossy().as_bytes())
+    ))
+}
+
+fn run_schedule_worker_loop(entry: &str, database_url: &str, timeout: std::time::Duration) {
+    let Some(project_id) = schedule_project_identity(entry) else {
+        eprintln!(
+            "zelyra scheduler: cannot determine canonical project identity; durable worker stopped"
+        );
+        return;
+    };
+    let mut handlers = zelyra_database::outbox::OutboxHandlerRegistry::default();
+    let entry = entry.to_owned();
+    let handler_entry = entry.clone();
+    let registered = handlers.register(
+        zelyra_database::outbox::SCHEDULE_JOB_EVENT_TYPE,
+        move |event, context| match execute_schedule_occurrence(
+            &handler_entry,
+            event,
+            context,
+            timeout,
+        ) {
+            Ok(()) => Ok(()),
+            Err(OccurrenceResult::Cancelled) => {
+                context.cancel();
+                Ok(())
+            }
+            Err(OccurrenceResult::Failed) => Err(zelyra_database::outbox::OutboxHandlerFailure),
+        },
+    );
+    if registered.is_err() {
+        eprintln!("zelyra scheduler: could not register schedule handler");
+        return;
+    }
+    loop {
+        let mut random = [0_u8; 32];
+        OsRng.fill_bytes(&mut random);
+        let token = format!(
+            "schedule-worker-{}",
+            random
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        );
+        match zelyra_database::outbox::run_mariadb_outbox_once_for_project(
+            database_url,
+            &handlers,
+            &token,
+            30,
+            &project_id,
+        ) {
+            Ok(zelyra_database::outbox::OutboxWorkerResult::Idle) => {
+                std::thread::sleep(std::time::Duration::from_millis(750));
+            }
+            Ok(result) => eprintln!("zelyra scheduler: durable job result: {result:?}"),
+            Err(error) => {
+                eprintln!("zelyra scheduler: durable worker database error: {error}");
+                std::thread::sleep(std::time::Duration::from_secs(2));
+            }
+        }
+    }
+}
+
+enum OccurrenceResult {
+    Cancelled,
+    Failed,
+}
+
+fn execute_schedule_occurrence(
+    entry: &str,
+    event: &zelyra_database::outbox::OutboxEvent,
+    context: &zelyra_database::outbox::OutboxHandlerContext<'_>,
+    timeout: std::time::Duration,
+) -> Result<(), OccurrenceResult> {
+    let payload: serde_json::Value =
+        serde_json::from_str(&event.payload_json).map_err(|_| OccurrenceResult::Failed)?;
+    let name = payload
+        .get("schedule_name")
+        .and_then(serde_json::Value::as_str)
+        .ok_or(OccurrenceResult::Failed)?;
+    let scheduled_at = payload
+        .get("scheduled_at")
+        .and_then(serde_json::Value::as_str)
+        .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+        .map(|value| value.with_timezone(&chrono::Utc))
+        .ok_or(OccurrenceResult::Failed)?;
+    let fingerprint = payload
+        .get("fingerprint")
+        .and_then(serde_json::Value::as_str)
+        .filter(|value| value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit()))
+        .ok_or(OccurrenceResult::Failed)?;
+    let program = validate(entry).map_err(|_| OccurrenceResult::Cancelled)?;
+    let Some((schedule, handler)) = program.schedules.iter().find_map(|schedule| {
+        (schedule.name == name)
+            .then(|| {
+                let handler = program
+                    .commands
+                    .iter()
+                    .find(|item| item.name == schedule.command)?
+                    .handler
+                    .clone();
+                Some((schedule.clone(), handler))
+            })
+            .flatten()
+    }) else {
+        return Err(OccurrenceResult::Cancelled);
+    };
+    if schedule_fingerprint(&schedule, &handler).as_deref() != Some(fingerprint)
+        || !due_schedule_definitions(&program, scheduled_at)
+            .map_err(|_| OccurrenceResult::Cancelled)?
+            .iter()
+            .any(|(candidate, _)| candidate.name == name)
+    {
+        return Err(OccurrenceResult::Cancelled);
+    }
+    let executable = env::current_exe().map_err(|_| OccurrenceResult::Failed)?;
+    let mut child = Command::new(executable)
+        .args(["run", entry, "--entry", &handler])
+        .spawn()
+        .map_err(|_| OccurrenceResult::Failed)?;
+    let started = std::time::Instant::now();
+    let mut last_renewal = started;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) if status.success() => return Ok(()),
+            Ok(Some(_)) => return Err(OccurrenceResult::Failed),
+            Err(_) => return Err(OccurrenceResult::Failed),
+            Ok(None) => {}
+        }
+        if started.elapsed() >= timeout {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(OccurrenceResult::Failed);
+        }
+        if last_renewal.elapsed() >= std::time::Duration::from_secs(10) {
+            match context.renew_lease() {
+                Ok(true) => last_renewal = std::time::Instant::now(),
+                _ => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(OccurrenceResult::Failed);
+                }
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+}
+
+#[cfg(test)]
 fn wait_for_child_with_timeout(
     child: &mut Child,
     timeout: std::time::Duration,
@@ -132,16 +393,6 @@ fn validate_schedule_timezones(program: &zelyra_ast::Program) -> Result<(), Stri
     Ok(())
 }
 
-fn claim_scheduler_job(
-    active: &mut std::collections::HashSet<String>,
-    schedule_name: &str,
-) -> bool {
-    if active.len() >= SCHEDULER_MAX_CONCURRENT_JOBS || active.contains(schedule_name) {
-        return false;
-    }
-    active.insert(schedule_name.to_owned())
-}
-
 fn parse_schedule_timezone(schedule: &zelyra_ast::ScheduleDef) -> Result<chrono_tz::Tz, String> {
     let name = schedule.timezone.as_deref().unwrap_or("UTC");
     name.parse::<chrono_tz::Tz>().map_err(|_| {
@@ -152,6 +403,7 @@ fn parse_schedule_timezone(schedule: &zelyra_ast::ScheduleDef) -> Result<chrono_
     })
 }
 
+#[cfg(test)]
 fn due_schedule_handlers(
     program: &zelyra_ast::Program,
     now_utc: chrono::DateTime<chrono::Utc>,
@@ -173,6 +425,7 @@ fn due_schedule_handlers(
     Ok(due)
 }
 
+#[cfg(test)]
 fn due_schedule_handlers_from_source(
     entry: &str,
     now_utc: chrono::DateTime<chrono::Utc>,
@@ -581,6 +834,144 @@ pub(super) fn schedule_command(mut args: impl Iterator<Item = String>) -> ExitCo
             }
             ExitCode::SUCCESS
         }
+        "jobs" => {
+            let mut limit = 50usize;
+            let mut offset = 0usize;
+            let mut json_output = false;
+            while let Some(argument) = args.next() {
+                match argument.as_str() {
+                    "--limit" => {
+                        limit = match args.next().and_then(|value| value.parse::<usize>().ok()) {
+                            Some(value)
+                                if (1..=zelyra_database::outbox::MAX_OUTBOX_INSPECTION_LIMIT)
+                                    .contains(&value) =>
+                            {
+                                value
+                            }
+                            _ => {
+                                eprintln!(
+                                    "error[E-TASK-004]: --limit must be between 1 and {}",
+                                    zelyra_database::outbox::MAX_OUTBOX_INSPECTION_LIMIT
+                                );
+                                return ExitCode::from(2);
+                            }
+                        };
+                    }
+                    "--offset" => {
+                        offset = match args.next().and_then(|value| value.parse::<usize>().ok()) {
+                            Some(value)
+                                if value
+                                    <= zelyra_database::outbox::MAX_OUTBOX_INSPECTION_OFFSET =>
+                            {
+                                value
+                            }
+                            _ => {
+                                eprintln!(
+                                    "error[E-TASK-004]: --offset must be at most {}",
+                                    zelyra_database::outbox::MAX_OUTBOX_INSPECTION_OFFSET
+                                );
+                                return ExitCode::from(2);
+                            }
+                        };
+                    }
+                    "--json" if !json_output => json_output = true,
+                    _ => {
+                        schedule_usage();
+                        return ExitCode::from(2);
+                    }
+                }
+            }
+            let Ok(program) = validate(&path) else {
+                return ExitCode::from(1);
+            };
+            let schema = match build_schema(&program) {
+                Ok(schema) => schema,
+                Err(errors) => {
+                    eprintln!(
+                        "error[E-TASK-004]: {}",
+                        errors
+                            .iter()
+                            .map(|error| error.message.as_str())
+                            .collect::<Vec<_>>()
+                            .join("; ")
+                    );
+                    return ExitCode::from(1);
+                }
+            };
+            let database_url = match outbox_cli::project_outbox_database_url(&path, &schema) {
+                Ok(Some(url)) if schema.backend() == Backend::MariaDb => url,
+                Ok(_) => {
+                    eprintln!(
+                        "error[E-TASK-004]: schedule jobs require a configured MariaDB database"
+                    );
+                    return ExitCode::from(1);
+                }
+                Err(error) => {
+                    eprintln!("error[E-TASK-004]: {error}");
+                    return ExitCode::from(1);
+                }
+            };
+            let Some(project_id) = schedule_project_identity(&path) else {
+                eprintln!(
+                    "error[E-TASK-004]: cannot determine canonical schedule project identity"
+                );
+                return ExitCode::from(1);
+            };
+            let page = match zelyra_database::outbox::inspect_mariadb_schedule_jobs_page(
+                &database_url,
+                &project_id,
+                limit,
+                offset,
+            ) {
+                Ok(page) => page,
+                Err(error) => {
+                    eprintln!("error[E-TASK-004]: schedule jobs are unavailable; run `zelyra setup --all`: {error}");
+                    return ExitCode::from(1);
+                }
+            };
+            if json_output {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&json!({
+                        "schema_version": 1,
+                        "total": page.total,
+                        "offset": page.offset,
+                        "jobs": page.events.iter().map(|event| json!({
+                            "id": event.id,
+                            "schedule": event.schedule_name,
+                            "scheduled_at": event.scheduled_at,
+                            "status": event.status,
+                            "attempts": event.attempts,
+                            "created_at": event.created_at,
+                            "available_at": event.available_at,
+                            "lease_until": event.lease_until,
+                            "last_error": event.last_error,
+                            "delivered_at": event.delivered_at,
+                            "exhausted_at": event.exhausted_at,
+                            "cancelled_at": event.cancelled_at,
+                        })).collect::<Vec<_>>(),
+                    }))
+                    .expect("schedule job JSON is serializable")
+                );
+            } else if page.events.is_empty() {
+                println!("No durable schedule jobs (total: {})", page.total);
+            } else {
+                println!("schedule\tscheduled_at\tstatus\tattempts\tavailable_at\tlast_error");
+                for event in page.events {
+                    println!(
+                        "{}\t{}\t{}\t{}\t{}\t{}",
+                        event.schedule_name.as_deref().unwrap_or("?"),
+                        event.scheduled_at.as_deref().unwrap_or("?"),
+                        event.status,
+                        event.attempts,
+                        event.available_at,
+                        event.last_error.as_deref().unwrap_or("-")
+                    );
+                }
+                println!("total: {} (offset: {})", page.total, page.offset);
+            }
+            ExitCode::SUCCESS
+        }
         "export" => {
             let mut format_seen = false;
             let mut output = None;
@@ -798,6 +1189,7 @@ fn read_schedule_serve_state(path: &std::path::Path) -> Result<Option<ScheduleSe
 /// and is refreshed only when Zelyra owns the previous generated file.
 pub(super) fn setup_declared_schedules(
     entry_path: &std::path::Path,
+    cancel_stale_jobs: bool,
 ) -> Result<Vec<String>, String> {
     if !entry_path.is_file() {
         return Ok(Vec::new());
@@ -830,53 +1222,62 @@ pub(super) fn setup_declared_schedules(
     })?;
     let program = loaded.program;
     if program.schedules.is_empty() {
-        return remove_managed_schedule_export(&project_root, "no schedules are declared");
+        let mut messages =
+            remove_managed_schedule_export(&project_root, "no schedules are declared")?;
+        if cancel_stale_jobs {
+            if let Ok(schema) = build_schema(&program) {
+                if schema.backend() == Backend::MariaDb {
+                    if let Some(database_url) =
+                        outbox_cli::project_outbox_database_url(&entry, &schema)?
+                    {
+                        zelyra_database::outbox::ensure_mariadb_outbox(&database_url).map_err(
+                            |error| format!("could not inspect durable schedule jobs: {error}"),
+                        )?;
+                        let project_id = schedule_project_identity(&entry).ok_or_else(|| {
+                            "cannot determine canonical schedule project identity".to_owned()
+                        })?;
+                        zelyra_database::outbox::cancel_pending_mariadb_schedule_jobs(
+                            &database_url,
+                            &project_id,
+                        )
+                        .map_err(|error| {
+                            format!("could not cancel stale schedule jobs: {error}")
+                        })?;
+                        messages.push(
+                            "pending, unleased schedule jobs for this project were cancelled"
+                                .into(),
+                        );
+                    }
+                }
+            }
+        }
+        return Ok(messages);
     }
+    validate_managed_schedule_export(&project_root)?;
 
     let mut messages = Vec::new();
-    let has_mail_schedule = program.schedules.iter().any(|schedule| {
-        let Some(command) = program
-            .commands
-            .iter()
-            .find(|command| command.name == schedule.command)
-        else {
-            return false;
-        };
-        program
-            .functions
-            .iter()
-            .find(|function| function.name == command.handler)
-            .is_some_and(|function| {
-                function
-                    .capabilities
-                    .iter()
-                    .any(|capability| capability == "Email")
-            })
-    });
-    if has_mail_schedule {
-        let schema = build_schema(&program).map_err(|errors| {
-            format!(
-                "cannot prepare the outbox because the project schema is invalid: {}",
-                errors
-                    .iter()
-                    .map(|error| error.message.as_str())
-                    .collect::<Vec<_>>()
-                    .join("; ")
-            )
-        })?;
-        if schema.backend() != Backend::MariaDb {
-            return Err(
-                "scheduled email currently requires a MariaDB project because the outbox backend is MariaDB".into(),
-            );
-        }
-        let database_url =
-            outbox_cli::project_outbox_database_url(&entry, &schema)?.ok_or_else(|| {
-                "scheduled email requires a configured project database URL".to_owned()
-            })?;
-        zelyra_database::outbox::ensure_mariadb_outbox(&database_url)
-            .map_err(|error| format!("could not initialize the scheduled-email outbox: {error}"))?;
-        messages.push("scheduled-email outbox is ready (repeat-safe setup)".into());
+    let schema = build_schema(&program).map_err(|errors| {
+        format!(
+            "cannot prepare durable schedule jobs because the project schema is invalid: {}",
+            errors
+                .iter()
+                .map(|error| error.message.as_str())
+                .collect::<Vec<_>>()
+                .join("; ")
+        )
+    })?;
+    if schema.backend() != Backend::MariaDb {
+        return Err(
+            "durable project schedules currently require MariaDB because the job store uses the MariaDB outbox".into(),
+        );
     }
+    let database_url =
+        outbox_cli::project_outbox_database_url(&entry, &schema)?.ok_or_else(|| {
+            "durable project schedules require a configured MariaDB database URL".to_owned()
+        })?;
+    zelyra_database::outbox::ensure_mariadb_outbox(&database_url)
+        .map_err(|error| format!("could not initialize durable schedule jobs: {error}"))?;
+    messages.push("durable schedule job store is ready (repeat-safe MariaDB outbox setup)".into());
 
     messages.extend(remove_managed_schedule_export(
         &project_root,
@@ -951,6 +1352,46 @@ fn remove_managed_schedule_export(
         "removed obsolete Zelyra schedule export at {}: {reason}",
         export_path.display(),
     )])
+}
+
+fn validate_managed_schedule_export(project_root: &std::path::Path) -> Result<(), String> {
+    let state_directory = project_root.join(".zelyra");
+    match std::fs::symlink_metadata(&state_directory) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+            return Err(format!(
+                "refusing to inspect schedules in unsafe state directory `{}`",
+                state_directory.display()
+            ));
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(format!("cannot inspect scheduler state: {error}")),
+    }
+    let export_path = state_directory.join("schedules.cron");
+    match std::fs::symlink_metadata(&export_path) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
+            return Err(format!(
+                "refusing to remove non-file or symlinked schedule export `{}`",
+                export_path.display()
+            ));
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(format!("cannot inspect schedule export: {error}")),
+    }
+    let existing = std::fs::read(&export_path).map_err(|error| {
+        format!(
+            "cannot read schedule export `{}`: {error}",
+            export_path.display()
+        )
+    })?;
+    if !existing.starts_with(MANAGED_SCHEDULE_EXPORT_HEADER.as_bytes()) {
+        return Err(format!(
+            "schedule export `{}` exists but is not managed by Zelyra; it was left unchanged",
+            export_path.display()
+        ));
+    }
+    Ok(())
 }
 
 fn render_schedule_export(path: &str, program: &zelyra_ast::Program) -> Result<String, String> {
@@ -1174,7 +1615,7 @@ fn task_usage() {
 }
 
 fn schedule_usage() {
-    eprintln!("Usage: zelyra schedule status <main.zyl> [--json] | schedule list <main.zyl> [--json] | schedule export <main.zyl> [--format cron] [--output <project-relative-file>] | schedule trigger <main.zyl> --name <schedule>");
+    eprintln!("Usage: zelyra schedule status <main.zyl> [--json] | schedule list <main.zyl> [--json] | schedule jobs <main.zyl> [--limit <n>] [--offset <n>] [--json] | schedule export <main.zyl> [--format cron] [--output <project-relative-file>] | schedule trigger <main.zyl> --name <schedule>");
 }
 
 #[cfg(test)]
@@ -1250,19 +1691,6 @@ mod tests {
             .expect("valid UTC time")
             .with_timezone(&chrono_tz::UTC);
         assert!(cron_matches_local_minute("60 12 * * 1", &utc).is_err());
-    }
-
-    #[test]
-    fn scheduler_limits_parallel_jobs_and_prevents_overlap_per_schedule() {
-        let mut active = std::collections::HashSet::new();
-        assert!(claim_scheduler_job(&mut active, "one"));
-        assert!(!claim_scheduler_job(&mut active, "one"));
-        assert!(claim_scheduler_job(&mut active, "two"));
-        assert!(claim_scheduler_job(&mut active, "three"));
-        assert!(claim_scheduler_job(&mut active, "four"));
-        assert!(!claim_scheduler_job(&mut active, "five"));
-        active.remove("two");
-        assert!(claim_scheduler_job(&mut active, "five"));
     }
 
     #[test]
@@ -1347,15 +1775,11 @@ fn main() { }
         )
         .expect("write valid scheduled project");
 
-        let first = setup_declared_schedules(&entry).expect("prepare checked schedule");
-        assert_eq!(first.len(), 1);
-        assert!(first[0].contains("active Zelyra service"));
         let export = project.join(".zelyra/schedules.cron");
+        let error = setup_declared_schedules(&entry, true)
+            .expect_err("durable schedules require a configured database");
+        assert!(error.contains("configured MariaDB database URL"));
         assert!(!export.exists(), "setup must not create a host cron entry");
-
-        let second = setup_declared_schedules(&entry).expect("repeat setup safely");
-        assert_eq!(second.len(), 1);
-        assert!(second[0].contains("active Zelyra service"));
 
         std::fs::create_dir(project.join(".zelyra")).expect("create legacy scheduler state");
         std::fs::write(
@@ -1363,21 +1787,19 @@ fn main() { }
             format!("{MANAGED_SCHEDULE_EXPORT_HEADER}\n0 12 * * 6 old-cron-entry\n"),
         )
         .expect("write old Zelyra-owned cron export");
-        let third = setup_declared_schedules(&entry).expect("remove legacy cron export");
-        assert!(third[0].contains("no longer uses project cron exports"));
-        assert!(!export.exists(), "legacy managed cron export is removed");
-
-        std::fs::write(
-            &export,
-            format!("{MANAGED_SCHEDULE_EXPORT_HEADER}\n0 12 * * 6 old-cron-entry\n"),
-        )
-        .expect("restore a legacy export before removing the declaration");
+        let error = setup_declared_schedules(&entry, true)
+            .expect_err("missing database must not remove project state");
+        assert!(error.contains("configured MariaDB database URL"));
+        assert!(
+            export.exists(),
+            "failed setup must preserve the existing file"
+        );
         std::fs::write(
             &entry,
             "command daily { handler: run_daily } fn run_daily() { } fn main() { }",
         )
         .expect("remove schedule declaration");
-        let removed = setup_declared_schedules(&entry).expect("remove stale managed export");
+        let removed = setup_declared_schedules(&entry, true).expect("remove stale managed export");
         assert_eq!(removed.len(), 1);
         assert!(removed[0].contains("no schedules are declared"));
         assert!(!export.exists(), "stale managed schedule export is removed");
@@ -1408,7 +1830,7 @@ fn main() { }
         std::os::unix::fs::symlink(&outside, project.join(".zelyra"))
             .expect("create state-directory symlink");
 
-        let error = setup_declared_schedules(&project.join("main.zyl"))
+        let error = setup_declared_schedules(&project.join("main.zyl"), true)
             .expect_err("reject symlinked scheduler state");
         assert!(error.contains("unsafe state directory"));
         assert!(std::fs::read_dir(&outside)
@@ -1440,8 +1862,8 @@ fn main() { }
         std::fs::write(&export, "# user-managed\nkeep this file\n")
             .expect("write user-owned schedule file");
 
-        let error =
-            setup_declared_schedules(&entry).expect_err("do not remove a user-managed export");
+        let error = setup_declared_schedules(&entry, true)
+            .expect_err("do not remove a user-managed export");
         assert!(error.contains("not managed by Zelyra"));
         assert_eq!(
             std::fs::read_to_string(&export).unwrap(),

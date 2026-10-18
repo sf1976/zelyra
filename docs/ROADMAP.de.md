@@ -107,11 +107,14 @@ abgeschlossen.
   sind statisch auf sichere lokale absolute Pfade desselben Ursprungs begrenzt
   (`E-FORM-007`). Vollständige Weblaufzeit-Parität in MIR/Bytecode bleibt ein
   1.3.0-Gate; der HTTP-Server verwendet weiterhin AST.
-- [ ] **1.2.9 — dauerhafte Scheduler-Jobs:** Persistente transaktionale Jobs
-  mit Idempotenz, Leases, begrenzten Wiederholungen, Dead-Letter-Status,
-  Beobachtbarkeit und ausdrücklichem Scheduler-Dienstlebenszyklus ergänzen.
-  Das Entfernen eines Zeitplans muss seine verwaltete Registrierung stoppen;
-  keine impliziten Host-Cronjobs installieren.
+- [x] **1.2.9 — dauerhafte Scheduler-Jobs:** Der installierte, aktive
+  Linux-systemd-Projektdienst schreibt deterministische Zeitplanvorkommen in
+  die MariaDB-Outbox. Ein serieller Worker prüft aktuelle Deklarationen erneut,
+  erneuert Leases, nutzt begrenzte Wiederholungen und zeigt payloadfreie
+  Zustände über `zelyra schedule jobs`. Entfernte Zeitpläne brechen nicht
+  geleaste Jobs bei Setup oder Dienststart ab. Es werden keine Host-Cronjobs
+  installiert; die Zustellung erfolgt mindestens einmal, verpasste Minuten im
+  Offlinebetrieb werden nicht nachgeholt.
 - [ ] **1.2.10 — verwaltbare und wiederverwendbare Module:** Compilergeprüfte
   Moduleinstellungen über normale Anwendungsseiten mit Revisionsprüfung,
   Secret-Redaktion und ohne implizite Capability-Freigabe ermöglichen. Eine
@@ -209,7 +212,21 @@ Die AST-Implementierung bleibt Referenz, ist aber kein alleiniger Erfüllungsnac
 
 - [~] **1.2.0–1.3.0 compilererzwungene Mandantengrenzen und typisierte Abfragen:** Die erste Scope-Stufe parst und prüft `table ... scoped by tenant_id: TenantId` (`TenantId` muss nominal zu `Id` auflösen; die Spalte muss erforderlich sein). `zelyra check`, AST, MIR- und Bytecode-Verifier/Runtime weisen rohes SQL für solche Tabellen fail-closed ab; Bytecode v24 führt die Metadaten und gleicht sie bei DB-Ausführung mit dem geprüften Projektschema ab. Authentifiziertes Tenant-CRUD ist nur mit derselben Scope-Spalte zulässig. Autorisierter Tenant-Kontext, Query-HIR und sichere scoped Reads/Writes gehören zu 1.2.8; Backendparität ist Freigabekriterium von 1.3.0. Keine automatische N+1-Vermeidung ohne unabhängigen Nachweis behaupten.
 - [~] **1.2.0–1.2.5 Request/Response und Forms:** Vorhandene `Request`-, Page/Form/CRUD- und CSRF-Pfade bilden die Grundlage. `widget`-Werte sind endlich geprüft, `password` erzeugt ein Passwortfeld, und Formulare spiegeln Passwörter sowie Werte von Feldern mit `password`-, `token`-, `secret`- oder `hash`-Namen nicht zurück; `E-FORM-006` weist ungültige Widgets ab. Der 422-Validierungspfad erhält sichere Eingaben, escaped sie und markiert fehlerhafte Felder; ein Integrationstest deckt zugleich die Geheimnisredaktion ab. Ein typisierter Handler-/Middleware-/Response-Lebenszyklus und ein vollständiger Redirect-/Meldungsvertrag bleiben offen. Zugangsdaten und sensible Eingaben dürfen niemals wieder ausgegeben werden.
-- [~] **1.2.0–1.2.9 dauerhafte Jobs und Scheduler-Runtime:** Deklarative `command`-/`schedule`-Syntax und CLI-Ausführung/Liste/Export sind vorhanden. Der residente Scheduler ist im aktuellen 1.2.5-Arbeitszweig in `serve` integriert und startet ausschließlich im installierten, aktiven Linux-systemd-Userdienst. Er prüft die aktuelle Quelldatei an jeder Minutengrenze, führt höchstens vier Handler parallel aus und benötigt keinen Host-Cronjob. `zelyra schedule status <main.zyl> [--json]` zeigt Deklarationen und den installierten/aktiven Dienstzustand an, ohne ihn zu verändern. Die CLI-Hilfe dokumentiert, dass manuelles `serve` den Scheduler nicht startet. `[runtime].max_steps` begrenzt Auswertungsschritte; `[runtime].scheduler_job_timeout_seconds` begrenzt zusätzlich die Wandzeit eines Scheduler-Handlers (Standard 300 Sekunden, 1–86.400) und wird im Studio-Budgetdialog angezeigt. Bei Ablauf wird der Kindprozess beendet und der Fehler protokolliert. Setup entfernt alte Zelyra-verwaltete Cron-Exporte; fremde Crontabs werden nicht verändert. Noch offen sind dauerhafte Lease-Worker, Absturz-/Retry-/Catch-up-Semantik und der transaktionale Jobvertrag. Die Mail-Outbox allein ist kein Jobsystem.
+- [x] **1.2.0–1.2.9 dauerhafte Jobs und Scheduler-Runtime:** Deklarative
+  `command`-/`schedule`-Syntax, Dienstlebenszyklus und dauerhafte Zustellung
+  über MariaDB sind umgesetzt. Nur der aktive installierte Linux-systemd-
+  Projektdienst reiht deterministische Minutenvorkommen ein. Ein serieller
+  Worker prüft den aktuellen Quellstand erneut, erneuert Leases, nutzt
+  begrenzte Wiederholungen/Dead-Letter und zeigt Jobs ohne Payload an.
+  `schedule status` zeigt den Dienstzustand; `schedule jobs` zeigt gespeicherte
+  Vorkommen. Manuelles `serve` startet den Scheduler nicht. `[runtime].max_steps`
+  begrenzt Auswertungsschritte; `[runtime].scheduler_job_timeout_seconds`
+  begrenzt die Handler-Wandzeit (Standard 300 Sekunden, Bereich 1–86.400).
+  Setup und Dienststart brechen nicht geleaste Jobs entfernter Deklarationen
+  ab. Es wird kein Host-Cronjob installiert; fremde Crontabs bleiben unberührt.
+  Die Zustellung erfolgt mindestens einmal. Im Offlinebetrieb verpasste Minuten
+  werden nicht nachgeholt; genau einmalige externe Wirkungen sind nicht
+  garantiert.
 - [~] **1.2.8–1.3.0 Wasm- und Sidecar-Brücke:** Versionierte HostServices und lokale gesperrte Quellpakete bestehen. Begrenzte versionierte Wasm-Ausführung und ausdrücklich gestartetes, authentifiziertes lokales Sidecar-RPC gehören zu 1.2.8; Cross-Backend- und Releaseparität gehört zu 1.3.0. Keine stabile Rust-ABI, kein automatischer Download und keine implizite Capability-Freigabe. Einer echten Providerintegration geht ein lokaler Mock voraus.
 - [ ] **Backendübergreifendes Freigabekriterium:** Query-, Tenant-, Request- und Jobsemantik muss in AST, MIR und Bytecode übereinstimmen oder mit expliziter Unsupported-Diagnose abgewiesen werden. Sicherheits-, MariaDB-Integrations-, Kompatibilitäts-, Offline- und adversariale Tests sind erforderlich. 1.3.0 darf erst nach Erfüllung dieser Gates und des Detailplans als abgeschlossen oder produktionsreif gelten.
 
@@ -400,9 +417,9 @@ werden. Details stehen im [Projektlayout-Arbeitsplan](release-plans/1.3.0-projec
 - [ ] **1.2.8 typisierte Query-/Request-/Forms:** Begrenztes Query-HIR und
   typisierten Tenant-/Request-/Form-Lifecycle für die unterstützten Backends
   abschließen.
-- [ ] **1.2.9 dauerhafte Jobs:** Transaktionale Scheduler-Jobs, Leases,
-  Wiederholungen, Idempotenz, Dead-Letter-Behandlung und ausdrücklichen
-  Dienstlebenszyklus ergänzen.
+- [x] **1.2.9 dauerhafte Jobs:** Transaktionale Vorkommen, Leases, begrenzte
+  Wiederholungen, Idempotenz, Dead-Letter-Behandlung und Dienstlebenszyklus
+  sind umgesetzt; Details stehen im Releaseplan und in den Versionshinweisen.
 - [ ] **1.2.10–1.2.15:** Moduleinstellungen/HostServices, Backendparität,
   geprüfte Geschäftsabläufe, kanonische Projektstruktur und Bytecode-Gates
   wie in der Releasefolge am Anfang dieser Roadmap zugeordnet umsetzen.

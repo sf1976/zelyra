@@ -6,6 +6,20 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+## 1.2.9 — 2026-10-18
+
+- Add durable, project-scoped scheduler occurrences backed by the MariaDB
+  outbox. The active installed Linux systemd service enqueues deterministic
+  occurrences; one worker revalidates current schedules, renews leases, retries
+  failures, and exposes bounded payload-free inspection. Removed schedules
+  cancel unleased pending jobs. Delivery is at-least-once; offline minutes are
+  not backfilled. / Dauerhafte, projektbezogene Scheduler-Vorkommen in der
+  MariaDB-Outbox ergänzen. Der aktive installierte Linux-systemd-Dienst reiht
+  deterministische Vorkommen ein; ein Worker prüft aktuelle Zeitpläne erneut,
+  erneuert Leases, wiederholt Fehler und bietet begrenzte payloadfreie
+  Einsicht. Entfernte Zeitpläne brechen nicht geleaste Jobs ab. Die Zustellung
+  erfolgt mindestens einmal; Offline-Minuten werden nicht nachgeholt.
+
 ## 1.2.8 — 2026-10-18
 
 - Carry checked SQL operations, deterministic table accesses, bound local IDs,

@@ -49,32 +49,36 @@ werden. Für produktive Deployments sind auch systemd-Timer oder Plattform-
 Scheduler mögliche Hosts. Zelyra startet standardmäßig keinen residenten
 Scheduler.
 
-Dies beschreibt das veröffentlichte Verhalten von 1.1.5. Im aktuellen,
-unveröffentlichten 1.2.5-Arbeitsstand prüfen `zelyra setup --schema`,
-`--all` und `zelyra serve` die Zeitpläne aus `main.zyl` und richten für
-geplante `Email`-Handler die MariaDB-Outbox idempotent ein. Das Setup erzeugt
-keine Cron-Zeilen; alte, von Zelyra markierte Dateien
-`.zelyra/schedules.cron` werden entfernt. Fremde Dateien und Symlinks bleiben
-geschützt. Der installierte und aktive Linux-systemd-Userdienst startet den
-Scheduler im selben `serve`-Prozess. Er liest und prüft das Projekt an jeder
-Minutengrenze neu; entfernte, geänderte oder gerade ungültige Deklarationen
-werden deshalb nicht aus einem alten Startzustand ausgeführt. Manuell
-gestartetes `serve` führt keine Zeitpläne aus. Zeitpläne folgen ihrer IANA-
-Zeitzone; ohne Angabe gilt UTC. Höchstens vier unterschiedliche Schedule-
-Handler laufen gleichzeitig; ein weiterer Lauf desselben Handlers wird
-übersprungen, solange er noch aktiv ist. Fehler und Programmausgabe gehen an
-stdout/stderr des Dienstes (bei systemd typischerweise ins Journal).
+Dieser Abschnitt beschreibt den mit 1.2.9 eingeführten dauerhaften Scheduler-
+Implementierung. `zelyra setup --all` legt die MariaDB-Outbox für jeden
+deklarierten Schedule wiederholbar an oder aktualisiert sie. Dafür ist eine
+MariaDB-URL des Projekts erforderlich. Die Outbox speichert weder Handlercode
+noch Zugangsdaten. Alte, von Zelyra markierte Dateien
+`.zelyra/schedules.cron` werden erst nach erfolgreicher Datenbankprüfung
+entfernt; fremde Dateien und Symlinks bleiben geschützt.
 
-Die Cron-Ausgabe ist in diesem Arbeitsstand nur eine prüfbare Vorschau; sie richtet
-keine externe Ausführung ein. Deklarierte Zeitpläne laufen ausschließlich im
-installierten, aktiven Linux-systemd-Dienst.
-Zelyra installiert oder bearbeitet keine Benutzer-Crontab. Frühere manuelle
-Crontab-Zeilen kann Zelyra nicht aus der fremdverwalteten Crontab löschen; der
-Legacy-Trigger wird im aktiven Dienst übersprungen, damit keine doppelte
-Ausführung entsteht. Der Scheduler holt während eines Dienstausfalls verpasste
-Minuten nicht nach und bietet noch keine dauerhafte verteilte Lease- oder
-Retry-Garantie; das gehört in die nächste Jobsystem-Etappe. `zelyra run` liest
-die Einstellungen weiterhin aus der Projekt-`.env`.
+Nur der installierte und aktive Linux-systemd-Userdienst startet den residenten
+Scheduler. Er prüft den aktuellen Projektquelltext an jeder Minutengrenze und
+fügt fällige Vorkommen mit einer deterministischen ID aus Projekt, Schedule
+und UTC-Minute ein. Wiederholte Ticks und Neustarts erzeugen keine Duplikate.
+Ein einzelner dauerhafter Worker verarbeitet die Vorkommen nacheinander, prüft
+den aktuellen Schedule vor dem Start erneut, erneuert seine Datenbank-Lease und
+beachtet `scheduler_job_timeout_seconds`. Entfernte, geänderte oder ungültige
+Deklarationen werden abgebrochen, statt gespeicherten Handlertext auszuführen.
+Fehler werden mit begrenzten Wiederholungen und einem Erschöpft-Status in der
+Outbox behandelt. Manuell gestartetes `serve` führt keine Zeitpläne aus.
+Programmausgabe und Workerfehler stehen in stdout/stderr des Dienstes
+(typischerweise im systemd-Journal).
+
+Die Cron-Ausgabe ist nur eine prüfbare Vorschau; sie richtet keine externe
+Ausführung ein. Zelyra installiert oder bearbeitet keine Benutzer-Crontab und
+kann fremdverwaltete Cronzeilen nicht entfernen. Der Legacy-Trigger führt keine
+Jobs aus. Während eines Dienstausfalls verpasste Minuten werden nicht
+nachgeholt. Die Zustellung erfolgt mindestens einmal: Wenn ein Handler eine
+externe Nebenwirkung ausführt und der Prozess vor der Bestätigung abstürzt, kann
+ein Retry die Nebenwirkung wiederholen. Verwende idempotente Handler oder eine
+eigene Anwendungstransaktion. `zelyra run` liest Einstellungen weiterhin aus
+der Projekt-`.env`.
 
 `zelyra schedule status main.zyl [--json]` zeigt die compilergeprüften
 Zeitpläne, den Installations-/Aktivzustand des Projekt-Dienstes und den daraus
@@ -84,6 +88,12 @@ Ausgabe ist Version 1 und enthält `platform_service_supported`,
 `scheduler_active` und die Zeitplanmetadaten. Auf nicht unterstützten
 Plattformen wird der Dienst als nicht verfügbar und der Scheduler als inaktiv
 gemeldet.
+
+`zelyra schedule jobs main.zyl [--limit 50] [--offset 0] [--json]` zeigt eine
+begrenzte Seite dauerhafter Schedule-Metadaten ohne Job-Payloads. JSON verwendet
+`schema_version: 1`. Ein erschöpfter Job kann nach Prüfung ausdrücklich mit
+`zelyra outbox requeue <event-id> main.zyl` freigegeben werden; dadurch wird er
+nicht sofort ausgeführt.
 
 Ein Schedule mit `cron` verwendet fünf numerische Felder für Minute, Stunde,
 Monatstag, Monat und Wochentag. Unterstützt werden Zahlen, `*`, Listen,

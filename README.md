@@ -62,8 +62,9 @@ recovery for package operations:
 - CLI tools for routes, setup, diagnostics, databases, audit, and SMTP;
 - a Linux systemd user service with fixed ports, status/restart/remove, and
   checked port changes with rollback; ports are never changed automatically;
-- a resident scheduler that runs only in the active installed service,
-  idempotent outbox setup, and `zelyra schedule status` without host cron;
+- a durable MariaDB-backed scheduler that runs only in the active installed
+  Linux service, with idempotent per-minute enqueue, retries, and project-scoped
+  `zelyra schedule jobs` inspection; no host cron is installed;
 - signed source packages with explicit publisher trust, registry search, exact
   updates, lockfile provenance, and portable Docker bundles;
 - serialized package mutations and a versioned transaction journal; `zelyra

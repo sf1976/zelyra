@@ -2271,7 +2271,7 @@ fn generated_mariadb_business_starter_localizes_and_protects_crud_without_databa
             .env("ZELYRA_AUTH_PERMISSIONS", "customers.create")
             .env_remove("DATABASE_URL")
             .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
+            .stderr(std::process::Stdio::piped())
             .spawn()
             .expect("Zelyra business server should start");
 
@@ -2293,7 +2293,7 @@ fn generated_mariadb_business_starter_localizes_and_protects_crud_without_databa
                             .set_read_timeout(Some(Duration::from_secs(2)))
                             .map_err(|error| error.to_string())?;
                         let request = format!(
-                            "GET {path} HTTP/1.1\r\nHost: localhost\r\n{authorization}\r\n"
+                            "GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n{authorization}\r\n"
                         );
                         stream
                             .write_all(request.as_bytes())
@@ -2316,8 +2316,16 @@ fn generated_mariadb_business_starter_localizes_and_protects_crud_without_databa
             Ok::<_, String>(responses)
         })();
         let _ = server.kill();
-        let _ = server.wait();
-        responses.unwrap_or_else(|error| panic!("{error}"))
+        let output = server
+            .wait_with_output()
+            .expect("collect business server output");
+        responses.unwrap_or_else(|error| {
+            panic!(
+                "{error}; server exit: {}; stderr: {}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr)
+            )
+        })
     };
 
     let english = run_requests(
