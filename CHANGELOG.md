@@ -6,6 +6,14 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+## 1.2.10 — 2026-10-18
+
+- Serialize module-settings writes within one Studio process, reject stale
+  revisions with HTTP 409, and verify that secrets stay out of editor
+  responses. / Moduleeinstellungs-Speicherungen innerhalb eines
+  Studio-Prozesses serialisieren, veraltete Revisionen mit HTTP 409 abweisen
+  und prüfen, dass Geheimnisse nicht in Editorantworten gelangen.
+
 ## 1.2.9 — 2026-10-18
 
 - Add durable, project-scoped scheduler occurrences backed by the MariaDB

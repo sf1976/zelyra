@@ -328,7 +328,17 @@ type must exactly match its schema. Other packages' settings are inaccessible.
 Optional fields use their manifest default; secrets come from the referenced
 process environment variable. Runtime debug output redacts values. This access
 works with AST, MIR, and bytecode. MIR and bytecode remain experimental overall;
-this setting alone does not establish complete backend parity. Zelyra Studio provides a protected local **Module settings** screen to view and edit these values. Non-secret values are type-checked and saved atomically with revision checks; unknown fields, invalid types, and symlinks are rejected. The screen never displays existing secret values or stored environment-variable names. A new environment reference can be entered for a secret; leaving that field blank preserves its existing reference. Management through ordinary application-served Zelyra pages and secret management beyond process environment variables remain open.
+this setting alone does not establish complete backend parity. Zelyra Studio
+provides a protected local **Module settings** screen to view and edit these
+values. Non-secret values are type-checked and saved atomically with revision
+checks. Saves through the same Studio process are serialized, and a stale
+revision receives HTTP 409 instead of overwriting a prior save. Unknown fields,
+invalid types, and symlinks are rejected. The screen never displays existing
+secret values or stored environment-variable names. A new environment
+reference can be entered for a secret; leaving that field blank preserves its
+existing reference. Use one Studio process as the writer while editing this
+settings file. Management through ordinary application-served Zelyra pages and
+secret management beyond process environment variables remain open.
 
 If omitted, the entry defaults to `main.zyl` for an application with that file,
 or `src/lib.zyl` for a library. A package name uses lowercase ASCII letters,
