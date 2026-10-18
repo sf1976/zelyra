@@ -25,7 +25,7 @@ telemetry, explicit effects, portable data, resource discipline, and honest
 proof claims guide every phase. The [manifesto](MANIFESTO.md) states the
 principles; the roadmap below tracks what is actually implemented.
 
-The current stable release is 1.2.9, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.9. **Current milestones** is the source of
+The current stable release is 1.2.10, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.10. **Current milestones** is the source of
 near-term commitments. Older numbered release sections below are retained as
 historical planning and evidence; they do not by themselves define current
 release targets. Longer-term ideas remain in the post-1.0 evolution section.
