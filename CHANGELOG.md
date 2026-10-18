@@ -6,6 +6,28 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+## 1.2.7 — 2026-10-18
+
+- Resolve separately published, exact-version package dependencies recursively.
+  Every artifact requires its own explicitly trusted Ed25519 publisher key and
+  matching registry digest. The resolver rejects cycles, conflicting sources,
+  and stale provenance, and caps closures at 128 artifacts, 256 MiB, and five
+  minutes. Add and update-plan transactions journal all staging/cache paths,
+  compiler-check the complete tentative project, and retain offline check/run/
+  bundle behavior. Registry provenance is recorded per package in lockfile v2
+  and the root manifest. Signing remains offline; registry-linked packages get
+  full compiler validation during trusted installation. / Separat
+  veröffentlichte Paketabhängigkeiten mit exakten Versionen werden rekursiv
+  aufgelöst. Jedes Artefakt benötigt einen eigenen ausdrücklich vertrauten
+  Ed25519-Herausgeberschlüssel und den passenden Registry-Hash. Der Resolver
+  weist Zyklen, widersprüchliche Quellen und veraltete Herkunftsdaten zurück
+  und begrenzt den Abschluss auf 128 Artefakte, 256 MiB und fünf Minuten.
+  Add- und Updateplan-Transaktionen protokollieren alle Staging-/Cachepfade im
+  Journal, compilerprüfen das vollständige Zwischenprojekt und erhalten
+  Offline-Check/Run/Bundle. Die Herkunft wird je Paket in Lockfile v2 und dem
+  Wurzelmanifest gespeichert. Signieren bleibt offline; Registry-Pakete werden
+  bei der vertrauensgeprüften Installation vollständig compilergeprüft.
+
 ## 1.2.6 — 2026-10-18
 
 - Make registry package mutations recoverable after interruption with a

@@ -168,10 +168,28 @@ SemVer version, verifies the index digest and signed artifact against
 `zelyra.trust.toml`, and keeps the artifact on the index's origin. It writes
 under `.zelyra/packages/<name>/<version>` without overwriting an existing
 version, updates the dependency manifest and lock transactionally, and records
-registry, signer, public key, and artifact digest in `zelyra.lock`. It does not
-resolve or download dependencies separately. Any package dependencies must
-be included inside the signed package directory and use contained relative paths.
-Installed package checks and execution are offline.
+registry, signer, public key, and artifact digest for every package in
+`zelyra.lock` and `[package_provenance."name@version"]` in the application
+manifest. A signed package may declare separately published, exact-version
+registry dependencies:
+
+```toml
+[dependencies.text]
+registry = "https://packages.example.test/index.json"
+name = "text"
+version = "=1.4.2"
+```
+
+`package add` and `package update --plan <file.toml>` resolve the full closure.
+Each publisher key must already be explicitly trusted in
+`zelyra.trust.toml`. Zelyra checks index metadata, digests, signatures, identity,
+and version; rejects cycles and conflicting sources; and caps a closure at 128
+artifacts, 256 MiB, and five minutes. It stages the complete closure in the
+local cache and compiler-checks the complete project before committing. Signed
+packages and manifests are not rewritten. `package sign` remains offline; for
+registry dependencies, full compiler validation therefore happens only when
+the trusted closure is installed. Checks, execution, and bundle generation work
+offline after successful installation.
 The installer also compiler-checks the project after the tentative lock update
 and rolls back if the new dependency breaks it. `zelyra module bundle` moves
 cache-backed packages into portable `packages/<name>/<version>` paths in the

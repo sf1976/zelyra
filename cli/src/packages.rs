@@ -26,11 +26,24 @@ pub(crate) struct Package {
 }
 
 #[derive(Clone, Debug)]
-struct PackageSource {
+pub(crate) struct PackageSource {
     registry: String,
     publisher: String,
     public_key: String,
     artifact_sha256: String,
+}
+
+#[derive(Clone, Debug)]
+enum DependencySource {
+    Local {
+        path: PathBuf,
+        version: VersionReq,
+    },
+    Registry {
+        registry: String,
+        name: String,
+        version: Version,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -48,6 +61,7 @@ pub(crate) struct PackageGraph {
     workspace_root: PathBuf,
     packages: BTreeMap<String, Package>,
     paths: BTreeMap<PathBuf, String>,
+    registry_provenance: BTreeMap<String, PackageSource>,
     lock_contents: String,
 }
 
@@ -112,6 +126,7 @@ impl PackageGraph {
         if !root_manifest.is_table() || root_manifest.get("package").is_none() {
             return Ok(None);
         }
+        let registry_provenance = parse_registry_provenance(&root_manifest, &manifest_path)?;
 
         // Paths are package-instance identities. Package names alone are not
         // unique when the same library is used at multiple SemVer versions.
@@ -119,6 +134,7 @@ impl PackageGraph {
         let mut paths = BTreeMap::<PathBuf, String>::new();
         let mut pending = vec![(workspace_root.clone(), None::<VersionReq>)];
         let mut seen_roots = HashSet::new();
+        let mut registry_dependencies = BTreeSet::new();
         while let Some((package_root, expected)) = pending.pop() {
             reject_path_symlinks(&workspace_root, &package_root)?;
             let canonical = fs::canonicalize(&package_root).map_err(|error| PackageError {
@@ -261,10 +277,36 @@ impl PackageGraph {
             let sources = parse_package_sources(&manifest, &manifest_path, &dependencies)?;
             let mut resolved_dependencies = BTreeMap::new();
             for (alias, dependency) in &dependencies {
-                let dependency_root =
-                    resolve_dependency_root(&workspace_root, &canonical, &dependency.0)?;
+                let (dependency_root, expected) = match dependency {
+                    DependencySource::Local { path, version } => (
+                        resolve_dependency_root(&workspace_root, &canonical, path)?,
+                        version.clone(),
+                    ),
+                    DependencySource::Registry {
+                        registry,
+                        name,
+                        version,
+                    } => {
+                        let identity = registry_package_identity(name, version);
+                        let provenance = registry_provenance.get(&identity).ok_or_else(|| {
+                            PackageError {
+                                message: format!("registry dependency `{alias}` resolves to {identity}, but the root manifest has no verified package provenance for it"),
+                            }
+                        })?;
+                        if provenance.registry != *registry {
+                            return Err(PackageError {
+                                message: format!("registry dependency `{alias}` names {identity} from a different registry than its recorded provenance"),
+                            });
+                        }
+                        registry_dependencies.insert(identity);
+                        let root = resolve_registry_cache_root(&workspace_root, name, version)?;
+                        let requirement = VersionReq::parse(&format!("={version}"))
+                            .expect("exact package version is a valid requirement");
+                        (root, requirement)
+                    }
+                };
                 resolved_dependencies.insert(alias.clone(), dependency_root.clone());
-                pending.push((dependency_root, Some(dependency.1.clone())));
+                pending.push((dependency_root, Some(expected)));
             }
             let relative_root = canonical
                 .strip_prefix(&workspace_root)
@@ -308,11 +350,37 @@ impl PackageGraph {
             packages.insert(relative_root, package);
         }
         detect_dependency_cycles(&packages)?;
-        let lock_contents = render_lock(&packages);
+        for identity in &registry_dependencies {
+            if !registry_provenance.contains_key(identity) {
+                return Err(PackageError {
+                    message: format!("registry package provenance is missing for {identity}"),
+                });
+            }
+        }
+        // Provenance is part of the resolved graph, not an open-ended trust
+        // annotation. Reject stale entries so the lockfile cannot claim an
+        // artifact which is absent from the installed dependency closure.
+        let reachable_registry_identities = packages
+            .values()
+            .map(|package| registry_package_identity(&package.name, &package.version))
+            .filter(|identity| registry_provenance.contains_key(identity))
+            .collect::<BTreeSet<_>>();
+        if let Some(identity) = registry_provenance
+            .keys()
+            .find(|identity| !reachable_registry_identities.contains(*identity))
+        {
+            return Err(PackageError {
+                message: format!(
+                    "package provenance for {identity} is not used by the resolved package graph"
+                ),
+            });
+        }
+        let lock_contents = render_lock(&packages, &registry_provenance);
         Ok(Some(Self {
             workspace_root,
             packages,
             paths,
+            registry_provenance,
             lock_contents,
         }))
     }
@@ -321,6 +389,37 @@ impl PackageGraph {
         self.packages
             .values()
             .any(|package| !package.dependencies.is_empty())
+    }
+
+    pub(crate) fn registry_provenance_without_root_aliases(
+        &self,
+        excluded_aliases: &BTreeSet<String>,
+    ) -> BTreeMap<String, PackageSource> {
+        let Some(root) = self.packages.get("") else {
+            return BTreeMap::new();
+        };
+        let mut pending = root
+            .dependencies
+            .iter()
+            .filter(|(alias, _)| !excluded_aliases.contains(*alias))
+            .map(|(_, path)| path.clone())
+            .collect::<Vec<_>>();
+        let mut visited = BTreeSet::new();
+        let mut provenance = BTreeMap::new();
+        while let Some(path) = pending.pop() {
+            if !visited.insert(path.clone()) {
+                continue;
+            }
+            let Some(package) = self.packages.get(&path) else {
+                continue;
+            };
+            let identity = registry_package_identity(&package.name, &package.version);
+            if let Some(source) = self.registry_provenance.get(&identity) {
+                provenance.insert(identity, source.clone());
+            }
+            pending.extend(package.dependencies.values().cloned());
+        }
+        provenance
     }
 
     /// Return a deterministic, credential-free package catalogue for project
@@ -822,6 +921,7 @@ impl PackageGraph {
         })?;
         let mut dependencies = toml::map::Map::new();
         let mut package_sources = toml::map::Map::new();
+        let mut package_provenance = toml::map::Map::new();
         for (alias, relative_root) in &root.dependencies {
             let dependency_root = self.workspace_root.join(relative_root);
             let Some(package_key) = self.paths.get(&dependency_root) else {
@@ -879,6 +979,42 @@ impl PackageGraph {
             manifest_table.insert(
                 "package_sources".into(),
                 toml::Value::Table(package_sources),
+            );
+        }
+        for package_key in &included {
+            let package = self.packages.get(package_key).ok_or_else(|| PackageError {
+                message: format!(
+                    "package instance `{package_key}` disappeared from the resolved graph"
+                ),
+            })?;
+            let identity = registry_package_identity(&package.name, &package.version);
+            if let Some(source) = self.registry_provenance.get(&identity) {
+                let mut source_value = toml::map::Map::new();
+                source_value.insert(
+                    "registry".into(),
+                    toml::Value::String(source.registry.clone()),
+                );
+                source_value.insert(
+                    "publisher".into(),
+                    toml::Value::String(source.publisher.clone()),
+                );
+                source_value.insert(
+                    "public_key".into(),
+                    toml::Value::String(source.public_key.clone()),
+                );
+                source_value.insert(
+                    "artifact_sha256".into(),
+                    toml::Value::String(source.artifact_sha256.clone()),
+                );
+                package_provenance.insert(identity, toml::Value::Table(source_value));
+            }
+        }
+        if package_provenance.is_empty() {
+            manifest_table.remove("package_provenance");
+        } else {
+            manifest_table.insert(
+                "package_provenance".into(),
+                toml::Value::Table(package_provenance),
             );
         }
         let root_manifest = toml::to_string_pretty(&manifest).map_err(|error| PackageError {
@@ -1595,10 +1731,50 @@ fn resolve_dependency_root(
     Ok(canonical)
 }
 
+fn resolve_registry_cache_root(
+    workspace_root: &Path,
+    name: &str,
+    version: &Version,
+) -> Result<PathBuf, PackageError> {
+    let candidates = [
+        workspace_root
+            .join(".zelyra")
+            .join("packages")
+            .join(name)
+            .join(version.to_string()),
+        workspace_root
+            .join("packages")
+            .join(name)
+            .join(version.to_string()),
+    ];
+    for candidate in candidates {
+        reject_path_symlinks(workspace_root, &candidate)?;
+        if !candidate.exists() {
+            continue;
+        }
+        let canonical = fs::canonicalize(&candidate).map_err(|error| PackageError {
+            message: format!("cannot resolve cached registry package {name} {version}: {error}"),
+        })?;
+        if !canonical.starts_with(workspace_root) {
+            return Err(PackageError {
+                message: format!("cached registry package {name} {version} resolves outside the project workspace"),
+            });
+        }
+        return Ok(canonical);
+    }
+    Err(PackageError {
+        message: format!("registry dependency {name} {version} is not installed; resolve it with `zelyra package add` or `zelyra package update --plan` while online"),
+    })
+}
+
+fn registry_package_identity(name: &str, version: &Version) -> String {
+    format!("{name}@{version}")
+}
+
 fn parse_dependencies(
     manifest: &toml::Value,
     path: &Path,
-) -> Result<BTreeMap<String, (PathBuf, VersionReq)>, PackageError> {
+) -> Result<BTreeMap<String, DependencySource>, PackageError> {
     let Some(dependencies) = manifest.get("dependencies") else {
         return Ok(BTreeMap::new());
     };
@@ -1611,33 +1787,82 @@ fn parse_dependencies(
         let fields = value.as_table().ok_or_else(|| PackageError {
             message: format!("dependency `{alias}` must use a path and version table"),
         })?;
-        if fields.len() != 2 || !fields.contains_key("path") || !fields.contains_key("version") {
-            return Err(PackageError {
-                message: format!(
-                    "dependency `{alias}` currently supports only explicit `path` and `version` fields"
-                ),
-            });
-        }
-        let dependency_path = fields
-            .get("path")
-            .and_then(toml::Value::as_str)
-            .and_then(safe_dependency_path)
-            .ok_or_else(|| PackageError {
-                message: format!("dependency `{alias}` requires a safe relative path"),
-            })?;
-        let version_text = fields
-            .get("version")
-            .and_then(toml::Value::as_str)
-            .ok_or_else(|| PackageError {
-                message: format!("dependency `{alias}` requires a semver version constraint"),
-            })?;
-        let version = VersionReq::parse(version_text).map_err(|error| PackageError {
-            message: format!("invalid version constraint `{version_text}` for `{alias}`: {error}"),
-        })?;
-        if result
-            .insert(alias.clone(), (dependency_path, version))
-            .is_some()
+        let source = if fields.len() == 2
+            && fields.contains_key("path")
+            && fields.contains_key("version")
         {
+            let dependency_path = fields
+                .get("path")
+                .and_then(toml::Value::as_str)
+                .and_then(safe_dependency_path)
+                .ok_or_else(|| PackageError {
+                    message: format!("dependency `{alias}` requires a safe relative path"),
+                })?;
+            let version_text = fields
+                .get("version")
+                .and_then(toml::Value::as_str)
+                .ok_or_else(|| PackageError {
+                    message: format!("dependency `{alias}` requires a semver version constraint"),
+                })?;
+            let version = VersionReq::parse(version_text).map_err(|error| PackageError {
+                message: format!(
+                    "invalid version constraint `{version_text}` for `{alias}`: {error}"
+                ),
+            })?;
+            DependencySource::Local {
+                path: dependency_path,
+                version,
+            }
+        } else if fields.len() == 3
+            && fields.contains_key("registry")
+            && fields.contains_key("name")
+            && fields.contains_key("version")
+        {
+            let registry = fields
+                .get("registry")
+                .and_then(toml::Value::as_str)
+                .ok_or_else(|| PackageError {
+                    message: format!("registry dependency `{alias}` requires a registry URL"),
+                })?;
+            validate_dependency_registry(registry, alias)?;
+            let name = fields
+                .get("name")
+                .and_then(toml::Value::as_str)
+                .ok_or_else(|| PackageError {
+                    message: format!("registry dependency `{alias}` requires a package name"),
+                })?
+                .to_owned();
+            validate_package_name(&name)?;
+            let version_text = fields
+                .get("version")
+                .and_then(toml::Value::as_str)
+                .ok_or_else(|| PackageError {
+                    message: format!("registry dependency `{alias}` requires an exact version"),
+                })?;
+            let version = Version::parse(version_text.strip_prefix('=').unwrap_or(version_text))
+                .map_err(|error| PackageError {
+                    message: format!(
+                        "invalid exact version `{version_text}` for `{alias}`: {error}"
+                    ),
+                })?;
+            if version.to_string() != version_text.strip_prefix('=').unwrap_or(version_text) {
+                return Err(PackageError {
+                    message: format!(
+                        "registry dependency `{alias}` requires a normalized exact SemVer version"
+                    ),
+                });
+            }
+            DependencySource::Registry {
+                registry: registry.to_owned(),
+                name,
+                version,
+            }
+        } else {
+            return Err(PackageError {
+                message: format!("dependency `{alias}` must use exactly `path` and `version`, or `registry`, `name`, and exact `version`"),
+            });
+        };
+        if result.insert(alias.clone(), source).is_some() {
             return Err(PackageError {
                 message: format!("duplicate dependency alias `{alias}`"),
             });
@@ -1646,10 +1871,34 @@ fn parse_dependencies(
     Ok(result)
 }
 
+fn validate_dependency_registry(registry: &str, alias: &str) -> Result<(), PackageError> {
+    let url = url::Url::parse(registry).map_err(|error| PackageError {
+        message: format!("registry dependency `{alias}` has invalid registry URL: {error}"),
+    })?;
+    let loopback_http = url.scheme() == "http"
+        && url.host_str().is_some_and(|host| {
+            host.eq_ignore_ascii_case("localhost")
+                || host
+                    .parse::<std::net::IpAddr>()
+                    .is_ok_and(|ip| ip.is_loopback())
+        });
+    if (url.scheme() != "https" && !loopback_http)
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err(PackageError {
+            message: format!("registry dependency `{alias}` URL must use HTTPS without credentials, query, or fragment"),
+        });
+    }
+    Ok(())
+}
+
 fn parse_package_sources(
     manifest: &toml::Value,
     path: &Path,
-    dependencies: &BTreeMap<String, (PathBuf, VersionReq)>,
+    dependencies: &BTreeMap<String, DependencySource>,
 ) -> Result<BTreeMap<String, PackageSource>, PackageError> {
     let Some(source_table) = manifest.get("package_sources") else {
         return Ok(BTreeMap::new());
@@ -1744,6 +1993,105 @@ fn parse_package_sources(
             });
         }
         result.insert(alias.clone(), source);
+    }
+    Ok(result)
+}
+
+fn parse_registry_provenance(
+    manifest: &toml::Value,
+    path: &Path,
+) -> Result<BTreeMap<String, PackageSource>, PackageError> {
+    let Some(value) = manifest.get("package_provenance") else {
+        return Ok(BTreeMap::new());
+    };
+    let table = value.as_table().ok_or_else(|| PackageError {
+        message: format!("`{}` [package_provenance] must be a table", path.display()),
+    })?;
+    let mut result = BTreeMap::new();
+    for (identity, value) in table {
+        let (name, version) = identity.rsplit_once('@').ok_or_else(|| PackageError {
+            message: format!("package provenance key `{identity}` must be `name@version`"),
+        })?;
+        validate_package_name(name)?;
+        let parsed_version = Version::parse(version).map_err(|error| PackageError {
+            message: format!("package provenance key `{identity}` has invalid version: {error}"),
+        })?;
+        if parsed_version.to_string() != version
+            || registry_package_identity(name, &parsed_version) != *identity
+        {
+            return Err(PackageError {
+                message: format!(
+                    "package provenance key `{identity}` must use normalized `name@version`"
+                ),
+            });
+        }
+        let fields = value.as_table().ok_or_else(|| PackageError {
+            message: format!("package provenance `{identity}` must be a table"),
+        })?;
+        if fields.len() != 4
+            || fields.keys().any(|key| {
+                !matches!(
+                    key.as_str(),
+                    "registry" | "publisher" | "public_key" | "artifact_sha256"
+                )
+            })
+        {
+            return Err(PackageError {
+                message: format!("package provenance `{identity}` requires exactly registry, publisher, public_key, and artifact_sha256"),
+            });
+        }
+        let get = |field: &str| -> Result<String, PackageError> {
+            fields
+                .get(field)
+                .and_then(toml::Value::as_str)
+                .map(str::to_owned)
+                .ok_or_else(|| PackageError {
+                    message: format!(
+                        "package provenance `{identity}` field `{field}` must be a string"
+                    ),
+                })
+        };
+        let source = PackageSource {
+            registry: get("registry")?,
+            publisher: get("publisher")?,
+            public_key: get("public_key")?,
+            artifact_sha256: get("artifact_sha256")?,
+        };
+        validate_dependency_registry(&source.registry, identity)?;
+        if source.publisher.is_empty()
+            || source.publisher.len() > 64
+            || !source.publisher.bytes().all(|byte| {
+                byte.is_ascii_lowercase()
+                    || byte.is_ascii_digit()
+                    || matches!(byte, b'-' | b'_' | b'.')
+            })
+        {
+            return Err(PackageError {
+                message: format!("package provenance `{identity}` has invalid publisher ID"),
+            });
+        }
+        if source.public_key.len() != 64
+            || !source
+                .public_key
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit())
+            || source.artifact_sha256.len() != 71
+            || !source.artifact_sha256.starts_with("sha256:")
+            || !source.artifact_sha256[7..]
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit())
+        {
+            return Err(PackageError {
+                message: format!(
+                    "package provenance `{identity}` has malformed public key or artifact digest"
+                ),
+            });
+        }
+        if result.insert(identity.clone(), source).is_some() {
+            return Err(PackageError {
+                message: format!("duplicate package provenance key `{identity}`"),
+            });
+        }
     }
     Ok(result)
 }
@@ -1883,8 +2231,12 @@ fn bundle_package_path(path: &str) -> String {
         .unwrap_or_else(|| path.to_owned())
 }
 
-fn render_lock(packages: &BTreeMap<String, Package>) -> String {
-    let mut output = String::from("lock_version = 1\n\n");
+fn render_lock(
+    packages: &BTreeMap<String, Package>,
+    registry_provenance: &BTreeMap<String, PackageSource>,
+) -> String {
+    let lock_version = if registry_provenance.is_empty() { 1 } else { 2 };
+    let mut output = format!("lock_version = {lock_version}\n\n");
     for (index, package) in packages.values().enumerate() {
         if index > 0 {
             output.push('\n');
@@ -1902,6 +2254,16 @@ fn render_lock(packages: &BTreeMap<String, Package>) -> String {
         output.push_str(&format!("dependencies = {:?}\n", dependencies));
         for (alias, source) in &package.sources {
             output.push_str(&format!("\n[package.sources.{:?}]\n", alias));
+            output.push_str(&format!("registry = {:?}\n", source.registry));
+            output.push_str(&format!("publisher = {:?}\n", source.publisher));
+            output.push_str(&format!("public_key = {:?}\n", source.public_key));
+            output.push_str(&format!("artifact_sha256 = {:?}\n", source.artifact_sha256));
+        }
+    }
+    if !registry_provenance.is_empty() {
+        for (identity, source) in registry_provenance {
+            output.push_str("\n[[registry_package]]\n");
+            output.push_str(&format!("identity = {:?}\n", identity));
             output.push_str(&format!("registry = {:?}\n", source.registry));
             output.push_str(&format!("publisher = {:?}\n", source.publisher));
             output.push_str(&format!("public_key = {:?}\n", source.public_key));
