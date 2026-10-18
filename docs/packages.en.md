@@ -4,8 +4,8 @@ This guide covers local offline packages and the experimental registry
 features released in Zelyra 1.2.5. The local workflow does not download packages
 or run build scripts. Signed source artifacts, explicit publisher trust,
 static registry indexes, search, and verified exact-version installation are
-available. Separately published transitive packages and settings pages for
-ordinary applications remain open. Projects without a `[package]` table keep
+available. Separately published transitive packages remain open. Projects
+without a `[package]` table keep
 the existing file-import behavior.
 
 Zelyra 1.2.6 adds recoverable package transactions. After an
@@ -22,8 +22,8 @@ ceilings, and typed setting schemas from package manifests. Values can be
 stored in `zelyra.settings.toml` and read by package code through
 `module_setting<T>`.
 Secrets are supplied only through process-environment references. Studio has a
-protected local settings screen; application-served settings pages and secret
-management beyond that process environment remain open. Reusable
+protected local settings screen. An authenticated application settings page is
+available when the project defines an auth admin permission. Reusable
 business and integration modules (including auth, ODBC, CSV, PDF, and Excel)
 are roadmap goals; the package format alone does not provide those features.
 
@@ -331,14 +331,27 @@ works with AST, MIR, and bytecode. MIR and bytecode remain experimental overall;
 this setting alone does not establish complete backend parity. Zelyra Studio
 provides a protected local **Module settings** screen to view and edit these
 values. Non-secret values are type-checked and saved atomically with revision
-checks. Saves through the same Studio process are serialized, and a stale
-revision receives HTTP 409 instead of overwriting a prior save. Unknown fields,
-invalid types, and symlinks are rejected. The screen never displays existing
+checks. A project-scoped operating-system lock in `.zelyra.settings.lock`
+serializes saves from cooperating Studio instances. The revision is checked only
+after the lock is acquired; stale data receives HTTP 409 instead of overwriting a
+newer save. A busy lock returns HTTP 423 after five seconds. The lock file
+contains no setting values, and symlinks at that path
+are rejected. Unknown fields, invalid types, and symlinks are rejected. The screen never displays existing
 secret values or stored environment-variable names. A new environment
 reference can be entered for a secret; leaving that field blank preserves its
-existing reference. Use one Studio process as the writer while editing this
-settings file. Management through ordinary application-served Zelyra pages and
-secret management beyond process environment variables remain open.
+existing reference. In a running authenticated application,
+`/__zelyra/module-settings` is available only when a package declares settings
+and the auth block defines `admin_permission`. It uses that permission,
+same-origin CSRF validation, schema validation, and revision conflict checks.
+The page shows non-secret values but never displays secret values or stored
+environment-variable references. To add or rotate a secret, the referenced
+variable must already be present in the server process; the page does not
+collect secret material. Missing required settings must be provisioned before
+`zelyra serve` starts, so use Studio or the CLI for initial setup. Saved changes
+take effect on the next run; restart `zelyra serve` to reload them. Secret
+management beyond process environment variables remains open.
+The path is reserved: declaring a conflicting page, API, or auth admin route
+fails during `serve` startup with `E-PKG-SETTINGS-005`.
 
 If omitted, the entry defaults to `main.zyl` for an application with that file,
 or `src/lib.zyl` for a library. A package name uses lowercase ASCII letters,

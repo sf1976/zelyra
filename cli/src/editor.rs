@@ -17,6 +17,7 @@ mod editor_canvas;
 mod editor_capabilities;
 #[path = "editor_module_settings.rs"]
 mod editor_module_settings;
+pub(crate) use editor_module_settings::ProjectModuleSettingsStore;
 #[path = "editor_outbox.rs"]
 mod editor_outbox;
 #[path = "editor_pdf.rs"]

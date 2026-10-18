@@ -12,6 +12,11 @@ Bind Zelyra to loopback. Install the
 `app.example.com`. Do not expose the Zelyra port directly to the Internet. TLS
 terminates at the web server; the proxy must preserve the public `Host` and
 set or overwrite `X-Forwarded-Proto` itself.
+Zelyra validates the original `Host` against `ZELYRA_ALLOWED_HOSTS` and ignores
+`X-Forwarded-Host`; the proxy must preserve the public host in `Host`. The
+application port must be reachable only through that trusted proxy. Never
+append an untrusted client-supplied `X-Forwarded-Proto`: overwrite it at the
+proxy boundary.
 
 ## Apache
 
@@ -85,5 +90,7 @@ when the application port is reachable exclusively through the local proxy.
   reverse-proxy configuration.
 - The examples assume a local Zelyra service on port 3000.
 - Forwarded requests must match the project's host allowlist.
+- `X-Forwarded-Host` does not change the accepted host. The allowlist is
+  checked against the request `Host` header.
 - These examples do not replace testing with your Apache/Nginx version, TLS
   configuration, file permissions, and firewall.

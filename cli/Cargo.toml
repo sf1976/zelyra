@@ -9,6 +9,7 @@ name = "zelyra"
 path = "src/main.rs"
 
 [dependencies]
+fs2.workspace = true
 rand_core.workspace = true
 rpassword = "7"
 semver.workspace = true
@@ -40,3 +41,6 @@ zelyra-forms.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }

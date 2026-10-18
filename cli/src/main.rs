@@ -4589,6 +4589,23 @@ fn project_uses_reserved_ui_asset_route(program: &zelyra_ast::Program) -> Option
     })
 }
 
+fn project_uses_reserved_module_settings_route(program: &zelyra_ast::Program) -> bool {
+    let path = zelyra_web::MODULE_SETTINGS_PATH;
+    program
+        .pages
+        .iter()
+        .any(|page| zelyra_web::route_pattern_matches_path(&page.path, path))
+        || program
+            .apis
+            .iter()
+            .any(|api| zelyra_web::route_pattern_matches_path(&api.path, path))
+        || program.auth.iter().any(|auth| {
+            auth.admin_path
+                .as_deref()
+                .is_some_and(|route| zelyra_web::route_pattern_matches_path(route, path))
+        })
+}
+
 fn project_uses_reserved_health_route(program: &zelyra_ast::Program) -> bool {
     let reserved_path = zelyra_web::HEALTH_LIVENESS_PATH;
     program
@@ -9278,6 +9295,19 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         );
         return ExitCode::from(1);
     }
+    if project_uses_reserved_module_settings_route(&program) {
+        diagnostic(
+            &path,
+            "E-PKG-SETTINGS-005",
+            &format!(
+                "route `{}` is reserved for the authenticated module settings page",
+                zelyra_web::MODULE_SETTINGS_PATH
+            ),
+            1,
+            1,
+        );
+        return ExitCode::from(1);
+    }
     if theme_css.is_some() && project_uses_reserved_theme_route(&program) {
         diagnostic(
             &path,
@@ -9858,6 +9888,28 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     if used_fallback {
         println!("note: {address} is already in use; using free port {actual_address}");
     }
+    let project_root = std::path::Path::new(&path)
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| std::path::Path::new("."));
+    let module_settings_store = match packages::PackageGraph::load(project_root) {
+        Ok(Some(graph))
+            if graph
+                .inventory()
+                .iter()
+                .any(|package| !package.settings.is_empty()) =>
+        {
+            Some(
+                Arc::new(editor::ProjectModuleSettingsStore::new(project_root))
+                    as Arc<dyn zelyra_web::ModuleSettingsStore>,
+            )
+        }
+        Ok(_) => None,
+        Err(error) => {
+            diagnostic(&path, "E-PKG-001", &error.message, 1, 1);
+            return ExitCode::from(1);
+        }
+    };
     println!("Zelyra server listening on http://{actual_address}");
     let app = WebApp::with_database_url(routes, form_routes, database_url_from_program(&program))
         .with_ui_settings(ui_language, ui_level)
@@ -9884,6 +9936,11 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         )
         .with_cruds(crud_routes)
         .with_tableviews(tableview_routes);
+    let app = if let Some(store) = module_settings_store {
+        app.with_module_settings_store(store)
+    } else {
+        app
+    };
     let app = match app.with_allowed_hosts(allowed_hosts) {
         Ok(app) => app,
         Err(error) => {

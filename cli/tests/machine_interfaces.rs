@@ -2032,6 +2032,7 @@ fn serve_loads_project_theme_and_locale_catalogs() {
         <html><head></head><body><div class="zelyra-app"><main><h1 data-zelyra-i18n="app.home_title"></h1><p data-zelyra-i18n="project.greeting"></p></main></div></body></html>
     }
 }
+
 "#,
     )
     .unwrap();
@@ -2103,6 +2104,164 @@ fn serve_loads_project_theme_and_locale_catalogs() {
     assert!(stylesheet.contains("X-Content-Type-Options: nosniff\r\n"));
     assert!(stylesheet.contains("Cache-Control: no-cache\r\n"));
     assert!(stylesheet.ends_with(theme));
+}
+#[test]
+fn serve_mounts_authenticated_package_settings_page_with_the_real_store() {
+    let directory = temporary_directory("serve-module-settings");
+    let packages = directory.join("packages/settings_demo");
+    fs::create_dir_all(packages.join("src")).unwrap();
+    fs::write(
+        directory.join("zelyra.toml"),
+        "[package]\nname = \"settings_app\"\nversion = \"1.0.0\"\nentry = \"main.zyl\"\n\n[capabilities]\ndatabase = true\n\n[dependencies.settings_demo]\npath = \"packages/settings_demo\"\nversion = \"^1.0\"\n",
+    )
+    .unwrap();
+    fs::write(
+        packages.join("zelyra.toml"),
+        "[package]\nname = \"settings_demo\"\nversion = \"1.0.0\"\nentry = \"src/lib.zyl\"\n\n[settings.currency]\ntype = \"String\"\nrequired = false\ndefault = \"EUR\"\n",
+    )
+    .unwrap();
+    fs::write(
+        packages.join("src/lib.zyl"),
+        "pub fn currency() -> String { module_setting<String>(\"currency\") }\n",
+    )
+    .unwrap();
+    let auth_source = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples/auth_crud_api.zyl"),
+    )
+    .unwrap();
+    let source = directory.join("main.zyl");
+    fs::write(
+        &source,
+        format!("import \"pkg:settings_demo\" as settings\n{auth_source}"),
+    )
+    .unwrap();
+    let lock = Command::new(binary())
+        .args(["package", "lock", source.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(
+        lock.status.success(),
+        "{}",
+        String::from_utf8_lossy(&lock.stderr)
+    );
+
+    let address = format!("127.0.0.1:{}", free_test_port());
+    let mut server = Command::new(binary())
+        .args(["serve", source.to_str().unwrap(), &address])
+        .env("ZELYRA_AUTH_TOKEN", "module-settings-test-token")
+        .env("ZELYRA_AUTH_PERMISSIONS", "settings.manage,auth.manage")
+        .env("ZELYRA_ALLOWED_HOSTS", "localhost")
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("Zelyra server should start");
+
+    let send_request = |authorization: Option<&str>| -> Result<String, String> {
+        let socket_address: SocketAddr = address
+            .parse()
+            .map_err(|error| format!("invalid test server address: {error}"))?;
+        for _ in 0..50 {
+            if let Ok(mut stream) =
+                TcpStream::connect_timeout(&socket_address, Duration::from_millis(100))
+            {
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(2)))
+                    .map_err(|error| error.to_string())?;
+                let authorization = authorization
+                    .map(|token| format!("Authorization: Bearer {token}\r\n"))
+                    .unwrap_or_default();
+                stream
+                    .write_all(
+                        format!(
+                            "GET /__zelyra/module-settings HTTP/1.1\r\nHost: localhost\r\n{authorization}Connection: close\r\n\r\n"
+                        )
+                        .as_bytes(),
+                    )
+                    .map_err(|error| error.to_string())?;
+                let mut response = String::new();
+                stream
+                    .read_to_string(&mut response)
+                    .map_err(|error| error.to_string())?;
+                if !response.is_empty() {
+                    return Ok(response);
+                }
+            }
+            std::thread::sleep(Duration::from_millis(40));
+        }
+        Err("Zelyra server did not answer before the test timeout".into())
+    };
+
+    let result = (|| {
+        let denied = send_request(None)?;
+        if !denied.starts_with("HTTP/1.1 401") {
+            return Err(format!(
+                "unauthenticated settings request was not rejected: {denied}"
+            ));
+        }
+        let authorized = send_request(Some("module-settings-test-token"))?;
+        if !authorized.starts_with("HTTP/1.1 200")
+            || !authorized.contains("Module settings")
+            || !authorized.contains("value=\"EUR\"")
+        {
+            return Err(format!(
+                "authenticated settings page was not rendered: {authorized}"
+            ));
+        }
+        let page_body = authorized
+            .split_once("\r\n\r\n")
+            .map(|(_, body)| body)
+            .ok_or_else(|| "settings response had no body separator".to_owned())?;
+        let input_value = |name: &str| -> Result<&str, String> {
+            let marker = format!("name=\"{name}\" value=\"");
+            page_body
+                .split_once(&marker)
+                .and_then(|(_, value)| value.split_once('"'))
+                .map(|(value, _)| value)
+                .ok_or_else(|| format!("settings page omitted hidden field {name}"))
+        };
+        let csrf = input_value("_zelyra_csrf")?;
+        let revision = input_value("revision")?;
+        let post_body = format!(
+            "_zelyra_csrf={csrf}&revision={revision}&package_path=packages%2Fsettings_demo&name=currency&value=USD"
+        );
+        let socket_address: SocketAddr = address
+            .parse()
+            .map_err(|error| format!("invalid test server address: {error}"))?;
+        let mut stream = TcpStream::connect_timeout(&socket_address, Duration::from_secs(1))
+            .map_err(|error| error.to_string())?;
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .map_err(|error| error.to_string())?;
+        stream
+            .write_all(
+                format!(
+                    "POST /__zelyra/module-settings HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\nAuthorization: Bearer module-settings-test-token\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{post_body}",
+                    post_body.len()
+                )
+                .as_bytes(),
+            )
+            .map_err(|error| error.to_string())?;
+        let mut saved = String::new();
+        stream
+            .read_to_string(&mut saved)
+            .map_err(|error| error.to_string())?;
+        if !saved.starts_with("HTTP/1.1 303") {
+            return Err(format!("authorized settings update failed: {saved}"));
+        }
+        let reloaded = send_request(Some("module-settings-test-token"))?;
+        if !reloaded.contains("value=\"USD\"") {
+            return Err(format!("saved setting was not reloaded: {reloaded}"));
+        }
+        Ok::<_, String>(())
+    })();
+    let _ = server.kill();
+    let _ = server.wait();
+    let mut server_stderr = String::new();
+    if let Some(mut stderr) = server.stderr.take() {
+        let _ = stderr.read_to_string(&mut server_stderr);
+    }
+    fs::remove_dir_all(directory).unwrap();
+    result.unwrap_or_else(|error| panic!("{error}\nserver stderr: {server_stderr}"));
 }
 
 #[test]

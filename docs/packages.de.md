@@ -5,8 +5,8 @@ veröffentlichte experimentelle Registry-Funktion. Der lokale Ablauf lädt keine
 Pakete herunter und führt keine Build-Skripte aus. Signierte Quellartefakte,
 ausdrückliches Herausgebervertrauen, statische Registry-Indizes, Suche und
 verifizierte Installation exakter Versionen sind verfügbar. Separat
-veröffentlichte transitive Pakete und Moduleinstellungsseiten für normale
-Anwendungen bleiben offen. Projekte ohne `[package]` behalten das bisherige
+veröffentlichte transitive Pakete bleiben offen. Projekte ohne `[package]`
+behalten das bisherige
 Verhalten mit Dateiimporten.
 
 Zelyra 1.2.6 ergänzt wiederherstellbare Pakettransaktionen. Nach
@@ -24,8 +24,8 @@ Paketmanifesten.
 Konfigurationswerte lassen sich in `zelyra.settings.toml` speichern und
 Paketcode kann sie mit `module_setting<T>` lesen. Geheimnisse werden dabei nur
 als Prozessumgebungsreferenzen eingebunden. Studio enthält eine geschützte
-lokale Einstellungsoberfläche. Von Anwendungen ausgelieferte Einstellungsseiten
-und eine Secret-Verwaltung jenseits dieser Prozessumgebung fehlen noch.
+lokale Einstellungsoberfläche. Eine authentifizierte Moduleinstellungsseite ist
+verfügbar, wenn der Auth-Block eine Adminberechtigung festlegt.
 Wiederverwendbare Geschäfts- und Integrationsmodule (unter anderem Auth,
 ODBC, CSV, PDF und Excel) sind Roadmap-Ziele; das Paketformat allein stellt
 diese Funktionen nicht bereit.
@@ -357,16 +357,31 @@ Bytecode bleiben insgesamt experimentelle Backends; diese einzelne Einstellung
 ist kein Nachweis vollständiger Backend-Parität. Zelyra Studio bietet unter
 **Moduleinstellungen** eine geschützte lokale Oberfläche zum Anzeigen und
 Bearbeiten dieser Werte. Nicht geheime Werte werden typisiert geprüft und mit
-Revisionsabgleich atomar gespeichert. Speicherungen innerhalb desselben
-Studio-Prozesses werden serialisiert; eine veraltete Revision erhält HTTP 409
-und überschreibt keine vorherige Speicherung. Unbekannte Felder, ungültige
-Typen und Symlinks werden abgewiesen. Die Oberfläche zeigt keine vorhandenen
+Revisionsabgleich atomar gespeichert. Eine Betriebssystem-Dateisperre in
+`.zelyra.settings.lock` serialisiert Schreibvorgänge kooperierender Studio-
+Instanzen. Die Revision wird erst nach Erhalt der Sperre geprüft; ein
+veralteter Stand erhält HTTP 409 und überschreibt keine neuere Speicherung.
+Nach fünf Sekunden Wartezeit antwortet eine belegte Sperre mit HTTP 423.
+Die Sperrdatei enthält keine Einstellungswerte; Symlinks an diesem Pfad werden
+abgewiesen. Unbekannte Felder, ungültige Typen und Symlinks in der
+Einstellungsdatei werden ebenfalls abgewiesen. Die Oberfläche zeigt keine vorhandenen
 Geheimniswerte oder gespeicherten Umgebungsvariablennamen an. Für Geheimnisse
 kann eine neue Env-Referenz eingetragen werden; ein leeres Feld lässt die
-bisherige Referenz unverändert. Während der Bearbeitung dieser Datei sollte
-nur ein Studio-Prozess schreiben. Die Verwaltung über normale, von Anwendungen
-ausgelieferte Zelyra-Seiten sowie sichere Secret-Verwaltung jenseits von
-Prozessumgebungsvariablen bleiben offen.
+bisherige Referenz unverändert.
+
+Eine laufende authentifizierte Anwendung stellt `/__zelyra/module-settings`
+bereit, wenn ein Paket Einstellungen deklariert und `admin_permission` im
+Auth-Block gesetzt ist. Die Seite nutzt diese Berechtigung, Same-Origin-CSRF-
+Prüfung, Schema-Validierung und Revisionsabgleich. Nicht geheime Werte werden
+angezeigt; Geheimniswerte und gespeicherte Env-Referenzen bleiben verborgen.
+Zum Eintragen oder Wechseln eines Geheimnisses muss die referenzierte
+Prozessvariable bereits im Serverprozess verfügbar sein; die Seite nimmt kein
+Geheimnis direkt entgegen. Pflichtwerte müssen vor `zelyra serve` eingerichtet
+sein. Für die Ersteinrichtung nutze daher Studio oder CLI. Änderungen gelten
+für neue Programmausführungen; ein laufender Server muss neu gestartet werden.
+Eine Secret-Verwaltung jenseits von Prozessumgebungsvariablen bleibt offen.
+Der Pfad ist reserviert: Eine kollidierende Page-, API- oder Auth-Admin-Route
+führt beim Start von `serve` zu `E-PKG-SETTINGS-005`.
 
 Ohne Angabe gilt `main.zyl` für eine Anwendung, wenn diese Datei vorhanden
 ist, sonst `src/lib.zyl` für eine Bibliothek. Paketnamen verwenden kleine

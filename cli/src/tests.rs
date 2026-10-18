@@ -1200,6 +1200,21 @@ fn project_theme_stylesheet_route_is_reserved_only_by_theme_projects() {
 }
 
 #[test]
+fn project_routes_cannot_shadow_the_builtin_module_settings_page() {
+    let direct = parse(
+        &lex(r#"page "/__zelyra/module-settings" { html { <main>Project page</main> } }"#).unwrap(),
+    )
+    .unwrap();
+    let wildcard =
+        parse(&lex(r#"api POST "/__zelyra/{resource}" { output String }"#).unwrap()).unwrap();
+    let unrelated = parse(&lex("fn main() { }\n").unwrap()).unwrap();
+
+    assert!(project_uses_reserved_module_settings_route(&direct));
+    assert!(project_uses_reserved_module_settings_route(&wildcard));
+    assert!(!project_uses_reserved_module_settings_route(&unrelated));
+}
+
+#[test]
 fn project_routes_cannot_shadow_the_builtin_liveness_endpoint() {
     let direct = parse(
         &lex(r#"page "/__zelyra/health/live" { html { <main>Project page</main> } }"#).unwrap(),

@@ -2,19 +2,55 @@
 //! Secret values are never read or returned; only environment references may
 //! be written for secret schema fields.
 use super::*;
+use fs2::FileExt;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant};
 use toml_edit::{DocumentMut, Item, Table};
 
 type EditorReply = Result<(u16, &'static str, String), (u16, String)>;
 const SETTINGS_FILE: &str = "zelyra.settings.toml";
+const SETTINGS_LOCK_FILE: &str = ".zelyra.settings.lock";
+const SETTINGS_LOCK_TIMEOUT: Duration = Duration::from_secs(5);
+const SETTINGS_LOCK_RETRY_INTERVAL: Duration = Duration::from_millis(10);
 const MAX_SETTINGS_BYTES: usize = 1024 * 1024;
 static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
 
-fn settings_path(state: &EditorState) -> Result<PathBuf, (u16, String)> {
-    let root = fs::canonicalize(&state.root)
-        .map_err(|_| (422, "project directory is unavailable".into()))?;
+#[derive(Debug)]
+pub(crate) struct ProjectModuleSettingsStore {
+    root: PathBuf,
+    write_lock: std::sync::Mutex<()>,
+}
+
+impl ProjectModuleSettingsStore {
+    pub(crate) fn new(root: impl Into<PathBuf>) -> Self {
+        Self {
+            root: root.into(),
+            write_lock: std::sync::Mutex::new(()),
+        }
+    }
+}
+
+impl zelyra_web::ModuleSettingsStore for ProjectModuleSettingsStore {
+    fn read_json(&self) -> Result<Value, zelyra_web::ModuleSettingsError> {
+        let (_, _, body) = read_at(&self.root)
+            .map_err(|(status, message)| zelyra_web::ModuleSettingsError::new(status, message))?;
+        serde_json::from_str(&body).map_err(|_| {
+            zelyra_web::ModuleSettingsError::new(500, "module settings response is invalid")
+        })
+    }
+
+    fn write_json(&self, update: &Value) -> Result<(), zelyra_web::ModuleSettingsError> {
+        write_at(&self.root, &self.write_lock, update)
+            .map(|_| ())
+            .map_err(|(status, message)| zelyra_web::ModuleSettingsError::new(status, message))
+    }
+}
+
+fn settings_path(root: &Path) -> Result<PathBuf, (u16, String)> {
+    let root =
+        fs::canonicalize(root).map_err(|_| (422, "project directory is unavailable".into()))?;
     let path = root.join(SETTINGS_FILE);
     if fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
         return Err((
@@ -40,9 +76,33 @@ fn contents(path: &Path) -> Result<Vec<u8>, (u16, String)> {
     if metadata.len() > MAX_SETTINGS_BYTES as u64 {
         return Err((413, "module settings file exceeds 1 MiB".into()));
     }
-    let file =
-        fs::File::open(path).map_err(|_| (422, "module settings file could not be read".into()))?;
-    let mut bytes = Vec::with_capacity(metadata.len() as usize);
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        // Open the reparse point itself so the handle metadata check below
+        // rejects it instead of reading through it.
+        options.custom_flags(0x0020_0000);
+    }
+    let file = options
+        .open(path)
+        .map_err(|_| (422, "module settings file could not be read".into()))?;
+    let opened_metadata = file
+        .metadata()
+        .map_err(|_| (422, "module settings file could not be inspected".into()))?;
+    if !opened_metadata.is_file() || opened_metadata.file_type().is_symlink() {
+        return Err((422, "module settings file must be a regular file".into()));
+    }
+    if opened_metadata.len() > MAX_SETTINGS_BYTES as u64 {
+        return Err((413, "module settings file exceeds 1 MiB".into()));
+    }
+    let mut bytes = Vec::with_capacity(opened_metadata.len() as usize);
     file.take((MAX_SETTINGS_BYTES + 1) as u64)
         .read_to_end(&mut bytes)
         .map_err(|_| (422, "module settings file could not be read".into()))?;
@@ -52,18 +112,85 @@ fn contents(path: &Path) -> Result<Vec<u8>, (u16, String)> {
     Ok(bytes)
 }
 
+fn acquire_settings_file_lock(root: &Path) -> Result<fs::File, (u16, String)> {
+    acquire_settings_file_lock_with_timeout(root, SETTINGS_LOCK_TIMEOUT)
+}
+
+fn acquire_settings_file_lock_with_timeout(
+    root: &Path,
+    timeout: Duration,
+) -> Result<fs::File, (u16, String)> {
+    let path = root.join(SETTINGS_LOCK_FILE);
+    if fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
+        return Err((
+            422,
+            "module settings lock must not be a symbolic link".into(),
+        ));
+    }
+    let mut options = OpenOptions::new();
+    options.read(true).write(true).create(true).truncate(false);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options
+            .mode(0o600)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        // Open the reparse point itself so the metadata check below can reject
+        // a link without following it.
+        options.custom_flags(0x0020_0000);
+    }
+    let file = options
+        .open(path)
+        .map_err(|_| (500, "module settings lock could not be opened".into()))?;
+    let metadata = file
+        .metadata()
+        .map_err(|_| (500, "module settings lock could not be inspected".into()))?;
+    if !metadata.is_file() || metadata.file_type().is_symlink() {
+        return Err((422, "module settings lock must be a regular file".into()));
+    }
+    let deadline = Instant::now() + timeout;
+    loop {
+        match file.try_lock_exclusive() {
+            Ok(()) => break,
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                if Instant::now() >= deadline {
+                    return Err((
+                        423,
+                        "module settings are being changed by another Studio process; retry shortly"
+                            .into(),
+                    ));
+                }
+                std::thread::sleep(
+                    SETTINGS_LOCK_RETRY_INTERVAL
+                        .min(deadline.saturating_duration_since(Instant::now())),
+                );
+            }
+            Err(_) => return Err((500, "module settings lock could not be acquired".into())),
+        }
+    }
+    Ok(file)
+}
+
 fn revision(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
-fn graph(state: &EditorState) -> Result<Option<crate::packages::PackageGraph>, (u16, String)> {
-    crate::packages::PackageGraph::load(&state.root).map_err(|error| (422, error.message))
+fn graph(root: &Path) -> Result<Option<crate::packages::PackageGraph>, (u16, String)> {
+    crate::packages::PackageGraph::load(root).map_err(|error| (422, error.message))
 }
 
 pub(super) fn read(state: &EditorState) -> EditorReply {
-    let path = settings_path(state)?;
+    read_at(&state.root)
+}
+
+fn read_at(root: &Path) -> EditorReply {
+    let path = settings_path(root)?;
     let bytes = contents(&path)?;
-    let Some(graph) = graph(state)? else {
+    let Some(graph) = graph(root)? else {
         return Ok((200, "application/json; charset=utf-8", json!({"settingsFile": SETTINGS_FILE, "revision": revision(&bytes), "packages": [], "secretValuesIncluded": false}).to_string()));
     };
     let configured: toml::Value = if bytes.is_empty() {
@@ -138,14 +265,24 @@ fn json_to_toml(value: &Value, type_name: &str) -> Result<toml::Value, (u16, Str
 }
 
 pub(super) fn write(state: &EditorState, request: &Value) -> EditorReply {
-    let _write_guard = state
-        .module_settings_write_lock
+    write_at(&state.root, &state.module_settings_write_lock, request)
+}
+
+fn write_at(
+    project_root: &Path,
+    write_lock: &std::sync::Mutex<()>,
+    request: &Value,
+) -> EditorReply {
+    let _write_guard = write_lock
         .lock()
         .map_err(|_| (500, "module settings write lock is unavailable".into()))?;
     if request.to_string().len() > MAX_SETTINGS_BYTES {
         return Err((413, "module settings update exceeds 1 MiB".into()));
     }
-    let path = settings_path(state)?;
+    let root = fs::canonicalize(project_root)
+        .map_err(|_| (422, "project directory is unavailable".into()))?;
+    let _process_lock = acquire_settings_file_lock(&root)?;
+    let path = settings_path(&root)?;
     let before = contents(&path)?;
     if request.get("revision").and_then(Value::as_str) != Some(revision(&before).as_str()) {
         return Err((
@@ -153,7 +290,7 @@ pub(super) fn write(state: &EditorState, request: &Value) -> EditorReply {
             "module settings changed in another editor; reload before saving".into(),
         ));
     }
-    let graph = graph(state)?.ok_or((422, "project does not have a local package graph".into()))?;
+    let graph = graph(&root)?.ok_or((422, "project does not have a local package graph".into()))?;
     let packages = graph
         .inventory()
         .into_iter()
@@ -270,7 +407,7 @@ pub(super) fn write(state: &EditorState, request: &Value) -> EditorReply {
     let written = updated.as_bytes();
     atomic_replace(&path, written)
         .map_err(|_| (500, "module settings could not be saved".into()))?;
-    read(state)
+    read_at(&root)
 }
 
 fn valid_env_name(name: &str) -> bool {
@@ -304,11 +441,49 @@ fn atomic_replace(path: &Path, contents: &[u8]) -> std::io::Result<()> {
         return Err(error);
     }
     drop(file);
-    if let Err(error) = fs::rename(&temp, path) {
+    if let Err(error) = replace_file(&temp, path) {
         let _ = fs::remove_file(&temp);
         return Err(error);
     }
     Ok(())
+}
+
+#[cfg(not(windows))]
+fn replace_file(temp: &Path, path: &Path) -> std::io::Result<()> {
+    fs::rename(temp, path)
+}
+
+#[cfg(windows)]
+fn replace_file(temp: &Path, path: &Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::{
+        MoveFileExW, MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH,
+    };
+
+    let source = temp
+        .as_os_str()
+        .encode_wide()
+        .chain(Some(0))
+        .collect::<Vec<_>>();
+    let destination = path
+        .as_os_str()
+        .encode_wide()
+        .chain(Some(0))
+        .collect::<Vec<_>>();
+    // SAFETY: both paths are NUL-terminated UTF-16 buffers alive for this call.
+    // The flags atomically replace the destination and request durable metadata.
+    let result = unsafe {
+        MoveFileExW(
+            source.as_ptr(),
+            destination.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    };
+    if result == 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -381,6 +556,75 @@ mod tests {
             fs::read_to_string(state.root.join(SETTINGS_FILE)).unwrap(),
             source
         );
+        let _ = fs::remove_dir_all(state.root.clone());
+    }
+
+    #[test]
+    fn settings_file_lock_serializes_independent_writers() {
+        let state = state();
+        let root = state.root.clone();
+        let first = acquire_settings_file_lock(&root).unwrap();
+        let second = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(root.join(SETTINGS_LOCK_FILE))
+            .unwrap();
+        assert!(second.try_lock_exclusive().is_err());
+        drop(first);
+        second.try_lock_exclusive().unwrap();
+    }
+
+    #[test]
+    fn atomic_settings_replace_updates_an_existing_file() {
+        let state = state();
+        let path = state.root.join(SETTINGS_FILE);
+        fs::write(&path, "old = true\n").unwrap();
+        atomic_replace(&path, b"new = true\n").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "new = true\n");
+        let _ = fs::remove_dir_all(state.root.clone());
+    }
+
+    #[test]
+    fn settings_file_lock_times_out_without_waiting_indefinitely() {
+        let state = state();
+        let root = state.root.clone();
+        let held = acquire_settings_file_lock(&root).unwrap();
+        let error =
+            acquire_settings_file_lock_with_timeout(&root, Duration::from_millis(20)).unwrap_err();
+        assert_eq!(error.0, 423);
+        assert!(error.1.contains("retry shortly"));
+        drop(held);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn settings_file_lock_rejects_symlink() {
+        let state = state();
+        let root = state.root.clone();
+        let target = root.join("lock-target");
+        fs::write(&target, "").unwrap();
+        std::os::unix::fs::symlink(&target, root.join(SETTINGS_LOCK_FILE)).unwrap();
+        assert_eq!(acquire_settings_file_lock(&root).unwrap_err().0, 422);
+    }
+
+    #[test]
+    fn application_module_settings_store_uses_the_schema_checked_writer() {
+        let state = state();
+        let store = ProjectModuleSettingsStore::new(state.root.clone());
+        let before = zelyra_web::ModuleSettingsStore::read_json(&store).unwrap();
+        assert_eq!(before["secretValuesIncluded"], false);
+        assert!(!before.to_string().contains("LEDGER_TOKEN"));
+        let revision = before["revision"].as_str().unwrap();
+        zelyra_web::ModuleSettingsStore::write_json(
+            &store,
+            &json!({"revision":revision,"updates":[
+                {"packagePath":"packages/ledger","name":"timeout","value":45}
+            ]}),
+        )
+        .unwrap();
+        let saved = fs::read_to_string(state.root.join(SETTINGS_FILE)).unwrap();
+        assert!(saved.contains("timeout = 45"));
+        assert!(!saved.contains("LEDGER_TOKEN"));
         let _ = fs::remove_dir_all(state.root.clone());
     }
 
