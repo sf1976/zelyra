@@ -977,6 +977,7 @@ mod tests {
                 primary_key: false,
                 auto: false,
                 unique: false,
+                unique_within_tenant: false,
                 default: Some(DefaultValue::String("".into())),
                 on_delete: None,
                 span: Span::default(),

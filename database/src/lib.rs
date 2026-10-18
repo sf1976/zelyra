@@ -142,6 +142,7 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
     let mut tables = Vec::new();
     for table in &program.tables {
         let mut column_names = HashSet::new();
+        let mut column_storage_names = HashMap::new();
         let mut columns = Vec::new();
         let mut foreign_keys = Vec::new();
         for definition in &table.columns {
@@ -248,6 +249,7 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
                 });
                 continue;
             }
+            column_storage_names.insert(definition.name.clone(), storage_name.clone());
             let nullable = !definition.required && !definition.primary_key && !definition.auto;
             if let Some(action) = definition.on_delete {
                 if relation.is_none() {
@@ -434,7 +436,7 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
                 )
             })
             .collect();
-        let uniques = table
+        let mut uniques: Vec<Index> = table
             .uniques
             .iter()
             .filter_map(|index| {
@@ -449,6 +451,57 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
                 )
             })
             .collect();
+        for definition in table
+            .columns
+            .iter()
+            .filter(|definition| definition.unique_within_tenant)
+        {
+            let Some(scope) = table.tenant_scope.as_ref() else {
+                errors.push(SchemaError {
+                    message: "`unique within tenant` requires a table declared with `scoped by`"
+                        .into(),
+                    span: definition.span,
+                });
+                continue;
+            };
+            if definition.unique {
+                errors.push(SchemaError {
+                    message: "a column cannot be both globally `unique` and `unique within tenant`"
+                        .into(),
+                    span: definition.span,
+                });
+                continue;
+            }
+            if scope.column == definition.name {
+                errors.push(SchemaError {
+                    message: "the tenant scope column cannot be `unique within tenant`".into(),
+                    span: definition.span,
+                });
+                continue;
+            }
+            let (Some(tenant_column), Some(value_column)) = (
+                column_storage_names.get(&scope.column),
+                column_storage_names.get(&definition.name),
+            ) else {
+                errors.push(SchemaError {
+                    message: "`unique within tenant` requires both the tenant scope column and constrained column to be declared".into(),
+                    span: definition.span,
+                });
+                continue;
+            };
+            let columns = vec![tenant_column.clone(), value_column.clone()];
+            if !uniques.iter().any(|index: &Index| index.columns == columns) {
+                uniques.push(Index {
+                    name: generated_identifier(
+                        &format!("uq_{}_tenant_{}", table.name, value_column),
+                        backend,
+                    ),
+                    columns,
+                    unique: true,
+                    constraint_owned: true,
+                });
+            }
+        }
         tables.push(Table {
             name: table.name.clone(),
             tenant_scope_column: table
@@ -5403,6 +5456,63 @@ mod tests {
         assert!(errors.iter().any(|error| error
             .message
             .contains("would also null the required tenant key")));
+    }
+
+    #[test]
+    fn unique_within_tenant_builds_a_composite_unique_constraint() {
+        let source = r#"
+            type TenantId = Id
+            table customers scoped by tenant_id: TenantId {
+                id: Id primary auto
+                tenant_id: TenantId required
+                customer_number: String(50) required unique within tenant
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        let customers = schema
+            .tables
+            .iter()
+            .find(|table| table.name == "customers")
+            .unwrap();
+        let unique = customers
+            .uniques
+            .iter()
+            .find(|index| index.columns == ["tenant_id", "customer_number"])
+            .expect("tenant-scoped unique index");
+        assert_eq!(unique.name, "uq_customers_tenant_customer_number");
+        assert!(customers
+            .columns
+            .iter()
+            .all(|column| !(column.name == "customer_number" && column.unique)));
+        assert!(schema.create_sql().contains(
+            "CONSTRAINT `uq_customers_tenant_customer_number` UNIQUE (`tenant_id`, `customer_number`)"
+        ));
+
+        let current_source = source.replace(" unique within tenant", "");
+        let current_program = parse(&lex(&current_source).unwrap()).unwrap();
+        let current_schema = build_schema(&current_program).unwrap();
+        let plan = diff(&schema, &current_schema);
+        assert!(plan.changes.iter().any(|change| {
+            change.sql.contains("(`tenant_id`, `customer_number`)")
+                && change.risk == Risk::RequiresApproval
+        }));
+        assert_eq!(
+            plan.unique_index_preflights[0].columns,
+            ["tenant_id", "customer_number"]
+        );
+    }
+
+    #[test]
+    fn unique_within_tenant_rejects_ambiguous_or_unscoped_declarations() {
+        for source in [
+            "table customers { customer_number: String unique within tenant }",
+            "type TenantId = Id table customers scoped by tenant_id: TenantId { id: Id primary auto tenant_id: TenantId required customer_number: String unique unique within tenant }",
+            "type TenantId = Id table customers scoped by tenant_id: TenantId { id: Id primary auto tenant_id: TenantId required tenant_id: TenantId unique within tenant }",
+        ] {
+            let program = parse(&lex(source).unwrap()).unwrap();
+            assert!(build_schema(&program).is_err(), "should reject: {source}");
+        }
     }
 
     #[test]

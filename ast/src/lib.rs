@@ -647,6 +647,9 @@ pub struct ColumnDef {
     pub primary_key: bool,
     pub auto: bool,
     pub unique: bool,
+    /// Adds a composite unique key over the table's tenant scope and this
+    /// column. Valid only on a table declared with `scoped by`.
+    pub unique_within_tenant: bool,
     pub default: Option<DefaultValue>,
     pub on_delete: Option<ReferentialAction>,
     pub span: Span,

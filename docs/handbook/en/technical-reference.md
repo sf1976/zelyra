@@ -467,6 +467,23 @@ table machines {
 Zelyra recognizes the relationship and can use it for foreign keys, forms, and
 select controls.
 
+On the 1.2.19 work branch, scoped tables can declare a value that is unique
+per tenant:
+
+~~~zelyra
+type TenantId = Id
+table customers scoped by tenant_id: TenantId {
+    id: Id primary auto
+    tenant_id: TenantId required
+    customer_number: String(50) required unique within tenant
+}
+~~~
+
+This creates a composite unique key `(tenant_id, customer_number)`. Plain
+`unique` remains global. The new modifier is not in a published release yet;
+schema plans for existing tables require review and check for duplicate rows
+before applying the new index.
+
 Foreign-key delete behavior can be made explicit on a relation column:
 
 ~~~zelyra

@@ -174,6 +174,32 @@ security and compatibility gates stated for that milestone.
   Firefox, and WebKit, and Linux artifact smoke passed. The PR's Windows CI and
   release workflow remain pending. This does not add arbitrary per-request
   SQL, a write action, or access to undeclared result fields.
+- [x] **1.2.17 — tenant-safe relations:** Optional table relations produce
+  nullable foreign-key columns. Relations between tables with the same tenant
+  identity use a composite `(tenant_id, relation_id) -> (tenant_id, id)` key;
+  incompatible identities and tenant-key `SET NULL` are rejected. The
+  MariaDB end-to-end test checks cross-tenant rejection.
+- [~] **1.2.18 — backend differential coverage:** Expand the bounded MIR and
+  bytecode differential corpus for tuples, conditional expressions, record
+  updates, closures and guarded matches. Experimental backends remain opt-in;
+  this milestone does not imply full language parity.
+- [ ] **1.2.19 — tenant-scoped unique values:** Add `unique within tenant` for
+  scoped tables. It generates a composite unique index, rejects ambiguous
+  declarations, and requires review plus a duplicate-row preflight when
+  changing an existing schema. Existing-row repair remains an explicit
+  operator task.
+- [ ] **1.2.20 — table and form invariants:** Add typed cross-field validation
+  with source-mapped diagnostics and consistent generated CRUD/API checks
+  before database writes. A backend that cannot preserve the checked
+  validation semantics must reject that path.
+- [ ] **1.2.21 — lifecycle guards and row-conditioned CRUD policies:** Add
+  checked update/delete guards and conditional edit/delete permissions, with
+  the same server-side decision used by rendered actions and direct requests.
+  Keep custom actions bound to typed, capability-checked functions.
+- [ ] **1.2.22 — transactional master-detail CRUD:** Add typed child
+  collections, atomic parent/child persistence, declared delete behavior and
+  checked aggregates. The first UI slice must preserve CSRF, tenant scope,
+  authorization, validation and rollback semantics.
 - [ ] **1.3.0 — canonical structure and Bytecode default:** Complete the
   opt-in versioned project layout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, and `plugins/`), architecture checks, and safe layout migration

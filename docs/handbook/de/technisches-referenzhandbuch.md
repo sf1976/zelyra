@@ -517,6 +517,24 @@ table machines {
 Zelyra erkennt die Beziehung zwischen Maschine und Abteilung. Daraus können
 Foreign Keys, Formulare und Auswahlfelder entstehen.
 
+Im Arbeitszweig für Version 1.2.19 können scoped Tabellen Werte deklarieren,
+die je Mandant eindeutig sind:
+
+~~~zelyra
+type TenantId = Id
+table customers scoped by tenant_id: TenantId {
+    id: Id primary auto
+    tenant_id: TenantId required
+    customer_number: String(50) required unique within tenant
+}
+~~~
+
+Daraus entsteht ein zusammengesetzter Unique-Key
+`(tenant_id, customer_number)`. Einfaches `unique` bleibt global. Der neue
+Modifier ist noch nicht in einem Release veröffentlicht; Schema-Pläne für
+bestehende Tabellen verlangen Prüfung und prüfen vorhandene Duplikate vor dem
+Anlegen des Index.
+
 Das Löschverhalten eines Fremdschlüssels kann am Relationsfeld festgelegt
 werden:
 

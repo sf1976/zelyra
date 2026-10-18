@@ -2315,6 +2315,7 @@ impl<'a> Parser<'a> {
         let mut primary_key = false;
         let mut auto = false;
         let mut unique = false;
+        let mut unique_within_tenant = false;
         let mut default = None;
         let mut on_delete = None;
         loop {
@@ -2332,8 +2333,26 @@ impl<'a> Parser<'a> {
                     self.advance();
                 }
                 TokenKind::Unique => {
-                    unique = true;
                     self.advance();
+                    if self.at_word("within") {
+                        self.advance();
+                        let (scope, scope_span) = self.ident("`tenant` after `unique within`")?;
+                        if scope != "tenant" {
+                            return Err(ParseError {
+                                message: "expected `tenant` after `unique within`".into(),
+                                span: scope_span,
+                            });
+                        }
+                        if unique_within_tenant {
+                            return self.error("`unique within tenant` may be specified only once");
+                        }
+                        unique_within_tenant = true;
+                    } else {
+                        if unique {
+                            return self.error("`unique` may be specified only once");
+                        }
+                        unique = true;
+                    }
                 }
                 TokenKind::Default => {
                     self.advance();
@@ -2374,6 +2393,7 @@ impl<'a> Parser<'a> {
             primary_key,
             auto,
             unique,
+            unique_within_tenant,
             default,
             on_delete,
             span,
@@ -5079,6 +5099,18 @@ mod tests {
             program.tables[1].columns[1].on_delete,
             Some(ReferentialAction::SetNull)
         );
+    }
+
+    #[test]
+    fn parses_unique_within_tenant_and_rejects_duplicate_modifiers() {
+        let source = "table customers scoped by tenant_id: TenantId { tenant_id: TenantId required customer_number: String unique within tenant }";
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(program.tables[0].columns[1].unique_within_tenant);
+        assert!(!program.tables[0].columns[1].unique);
+
+        let duplicate = "table customers scoped by tenant_id: TenantId { tenant_id: TenantId required customer_number: String unique within tenant unique within tenant }";
+        let error = parse(&lex(duplicate).unwrap()).unwrap_err();
+        assert!(error.message.contains("may be specified only once"));
     }
 
     #[test]

@@ -843,6 +843,7 @@ fn relation_form_route() -> FormRoute {
             primary_key: false,
             auto: false,
             unique: false,
+            unique_within_tenant: false,
             default: None,
             on_delete: None,
             span: zelyra_ast::Span::default(),

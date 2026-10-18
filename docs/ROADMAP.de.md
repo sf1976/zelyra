@@ -189,6 +189,34 @@ abgeschlossen.
   sowie der Linux-Artefakttest bestanden. Windows-CI und Releaseworkflow stehen
   noch aus. Es entstehen weder freie SQL-Abfragen noch Schreibaktionen oder
   Zugriff auf nicht deklarierte Ergebnisfelder.
+- [x] **1.2.17 — mandantensichere Relationen:** Optionale Tabellenrelationen
+  erzeugen nullable Fremdschlüsselspalten. Relationen zwischen Tabellen mit
+  derselben Mandantenidentität verwenden den zusammengesetzten Schlüssel
+  `(tenant_id, relation_id) -> (tenant_id, id)`; inkompatible Identitäten und
+  `SET NULL` auf dem Mandantenschlüssel werden abgewiesen. Der
+  MariaDB-Ende-zu-Ende-Test prüft die Ablehnung mandantenübergreifender Links.
+- [~] **1.2.18 — Backend-Differentialtests:** Den begrenzten MIR- und
+  Bytecode-Differentialkorpus für Tupel, bedingte Ausdrücke, Record-Updates,
+  Closures und Match-Guards erweitern. Experimentelle Backends bleiben
+  opt-in; dieses Release behauptet keine vollständige Sprachparität.
+- [ ] **1.2.19 — mandantenbezogene eindeutige Werte:** `unique within tenant`
+  für scoped Tabellen ergänzen. Die Syntax erzeugt einen zusammengesetzten
+  Unique-Index, weist mehrdeutige Deklarationen ab und verlangt bei
+  Schemaänderungen Prüfung samt Duplikat-Preflight. Das Beheben bestehender
+  Daten bleibt eine ausdrückliche Betreiberaufgabe.
+- [ ] **1.2.20 — Tabellen- und Formularinvarianten:** Typgeprüfte,
+  feldübergreifende Validierung mit source-mapped Diagnosen und konsistenten
+  Prüfungen vor Datenbankänderungen in generiertem CRUD und APIs ergänzen.
+  Backends, die die geprüfte Semantik nicht erhalten, müssen den Pfad abweisen.
+- [ ] **1.2.21 — Lifecycle-Guards und datensatzabhängige CRUD-Rechte:**
+  Geprüfte Update-/Delete-Guards und bedingte Edit-/Delete-Rechte ergänzen.
+  Gerenderte Aktionen und direkte Requests müssen dieselbe serverseitige
+  Entscheidung verwenden. Eigene Aktionen bleiben an typgeprüfte Funktionen
+  mit Capabilityprüfung gebunden.
+- [ ] **1.2.22 — transaktionales Master-Detail-CRUD:** Typisierte
+  Kinddatensätze, atomare Speicherung von Kopf und Positionen, deklarierte
+  Löschregeln und geprüfte Aggregate ergänzen. Der erste UI-Schnitt muss
+  CSRF, Tenant-Scope, Berechtigungen, Validierung und Rollback bewahren.
 - [ ] **1.3.0 — kanonische Struktur und Bytecode-Standard:** Das optionale,
   versionierte Projektlayout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, `plugins/`), Architekturprüfungen und eine sichere
