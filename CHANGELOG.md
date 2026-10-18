@@ -1,21 +1,5 @@
-# Changelog
-
-All notable changes to the Zelyra compiler and runtime are documented here.
-The language compatibility line remains `0.1`. Compiler and repository
-releases follow Semantic Versioning independently of the language line.
-
 ## Unreleased
 
-- Add a schema-backed `/__zelyra/module-settings` page to authenticated
-  applications when package settings and `admin_permission` are configured.
-  Protect writes with permission and CSRF checks, redact secret references,
-  validate through the shared project settings store, and require restart for
-  changed values to take effect. / Für authentifizierte Anwendungen bei
-  deklarierten Paketeinstellungen und `admin_permission` eine schemageprüfte
-  Seite `/__zelyra/module-settings` ergänzen. Schreibvorgänge durch Berechtigung
-  und CSRF-Prüfung schützen, Geheimnisreferenzen redigieren, den gemeinsamen
-  Projekteinstellungs-Store validieren lassen und einen Neustart verlangen,
-  damit geänderte Werte wirksam werden.
 - Add opt-in `zelyra new --layout standard` for a compiler-checked minimal
   project tree; validate required roots and reject symlinked or escaping
   directories while leaving legacy projects unchanged. Within that profile,
@@ -28,13 +12,37 @@ releases follow Semantic Versioning independently of the language line.
   In diesem Profil löst `import "domain::sales::actions" as sales` Module unter
   `domain/` auf; Schema- und Routennamensräume funktionieren entsprechend.
   Strenge Architekturprüfungen und Datenbankvorlagen bleiben offen.
-- Make the standard UI `Dialog` simpler with optional IDs and close labels,
-  stable per-document IDs (including collection loops), localized defaults, and
-  a responsive native modal with guarded focus boundaries. / Die UI-Dialog-
-  Komponente durch optionale IDs und Schließbeschriftungen, stabile IDs je
-  Dokument (auch in Sammlungs-Schleifen), lokalisierte Standardwerte und ein
-  responsives natives Modal mit abgesicherten Fokusgrenzen vereinfachen.
 
+## 1.2.12 — 2026-10-18
+
+- Add an authenticated `/__zelyra/module-settings` page to applications with
+  declared package settings and `admin_permission`. Writes require permission
+  and same-origin CSRF, use the shared schema validator and settings store,
+  redact secret references, reject stale revisions and unsafe settings files,
+  and require a restart before changed values take effect. / Eine
+  authentifizierte Seite `/__zelyra/module-settings` für Anwendungen mit
+  Paketeinstellungen und `admin_permission` ergänzen. Schreibvorgänge verlangen
+  Berechtigung und Same-Origin-CSRF, verwenden Schema-Prüfung und Settings-Store,
+  redigieren Geheimnisreferenzen, weisen veraltete Revisionen und unsichere
+  Dateien ab und benötigen für Änderungen einen Neustart.
+- Simplify the standard UI `Dialog` with optional IDs and close labels, stable
+  per-document IDs including collection loops, localized defaults, and a
+  responsive native modal with guarded focus boundaries. / Die UI-Dialog-
+  Komponente durch optionale IDs und Schließbeschriftungen, stabile IDs je
+  Dokument (auch in Schleifen), lokalisierte Standardwerte und ein responsives
+  natives Modal mit abgesicherten Fokusgrenzen vereinfachen.
+- Fix responsive Zelyra CRUD styling inside custom application shells and make
+  `zelyra.theme.css` directly accessible in Studio with starter guidance for
+  projects that lack the file. / Responsives Zelyra-CRUD-Styling in eigenen
+  Anwendungslayouts korrigieren und `zelyra.theme.css` im Studio direkt
+  zugänglich machen, einschließlich Starthinweisen für ältere Projekte ohne
+  diese Datei.
+- Stabilize Studio browser coverage for unsaved compiler diagnostics and add
+  integration coverage for authorized application settings, CSRF, revisions,
+  safe persistence, and reverse-proxy host validation. / Studio-Browsertests für
+  ungespeicherte Compilerdiagnosen stabilisieren und Integrationstests für
+  autorisierte Anwendungseinstellungen, CSRF, Revisionen, sichere Speicherung
+  und Reverse-Proxy-Hostprüfung ergänzen.
 
 ## 1.2.11 — 2026-10-18
 

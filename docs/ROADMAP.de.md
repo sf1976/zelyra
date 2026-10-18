@@ -27,7 +27,7 @@ Ressourcendisziplin und ehrliche Beweisaussagen leiten jede Phase. Das
 [Manifest](MANIFESTO.de.md) beschreibt die Prinzipien; die Roadmap kennzeichnet
 den tatsächlich implementierten Stand.
 
-Das aktuelle stabile Release ist 1.2.10 und wurde unter https://github.com/sf1976/zelyra/releases/tag/v1.2.10 veröffentlicht. **Aktuelle Meilensteine** ist die
+Das aktuelle stabile Release ist 1.2.11 und wurde unter https://github.com/sf1976/zelyra/releases/tag/v1.2.11 veröffentlicht. **Aktuelle Meilensteine** ist die
 verbindliche Übersicht der nächsten Vorhaben. Ältere, nummerierte Release-
 Abschnitte bleiben als historische Planung und Nachweise erhalten; sie legen
 für sich keine aktuellen Releaseziele fest. Langfristige Ideen stehen im
@@ -327,6 +327,9 @@ werden. Details stehen im [Projektlayout-Arbeitsplan](release-plans/1.3.0-projec
   Entscheidung nach 1.3.0 auf Basis gemessenen Bedarfs.
 
 ## Aktuelle Meilensteine
+
+- [~] **1.2.12 Anwendungseinstellungen und Tutorial-Feinschliff — Release in Vorbereitung:** Die authentifizierte, CSRF-geschützte und revisionsgeprüfte Einstellungsseite ist mit Schema-Validierung, Geheimnisredaktion und sicheren atomaren Schreibvorgängen integriert. Die Dialog-Standardwerte, der Studio-Zugriff auf `zelyra.theme.css`, responsive Invoice-CRUD-Stile sowie die Integrationstests sind enthalten. PR #108 und seine vollständige CI bestanden; das versionierte Release ist in Vorbereitung. Apache-/TLS-Tests und MIR-/Bytecode-Parität sind ausdrücklich nicht enthalten und bleiben offenen Folgemeilensteinen zugeordnet.
+
 
 - [x] **1.0.5 Studio-Logs:** Studio zeigt ein Logs-Fenster und speichert
   Studio-Start-/Setup-Ereignisse sowie Programm- und Vorschauausgaben als
