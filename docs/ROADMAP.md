@@ -100,10 +100,13 @@ security and compatibility gates stated for that milestone.
   statically constrained to safe same-origin absolute paths (`E-FORM-007`).
   Full web-runtime parity in MIR/bytecode remains a 1.3.0 gate; the HTTP server
   continues to use AST.
-- [ ] **1.2.9 — durable scheduler jobs:** Add persistent transactional jobs
-  with idempotency, leases, bounded retries, dead-letter state, observability,
-  and explicit scheduler-service lifecycle. Removing a schedule must stop its
-  managed registration; do not install host cron entries implicitly.
+- [x] **1.2.9 — durable scheduler jobs:** The installed, active Linux systemd
+  project service writes deterministic scheduled occurrences to the MariaDB
+  outbox. A serialized worker validates current declarations, renews leases,
+  applies bounded retries, and exposes payload-free status through
+  `zelyra schedule jobs`. Removed schedules cancel unleased pending jobs during
+  setup or service startup. No host cron entries are installed; delivery is
+  at-least-once and missed offline minutes are not backfilled.
 - [ ] **1.2.10 — manageable and reusable modules:** Expose compiler-checked
   module settings through ordinary application pages with revision checks,
   secret redaction, and no implicit capability grants. Deliver a stable
@@ -206,7 +209,20 @@ The AST implementation remains the reference, but it is not sufficient by itself
 
 - [~] **1.2.0–1.3.0 compiler-enforced tenancy and typed queries:** First scope slice: `table ... scoped by tenant_id: TenantId` is parsed and type-checked (`TenantId` must resolve nominally to `Id`; the column must be required). `zelyra check`, AST, MIR verifier/runtime, and bytecode verifier/VM reject raw SQL against these tables; bytecode v24 carries the metadata and checks it against the checked project schema at database execution. Authenticated tenant CRUD remains allowed only with the same scope column. The authorized tenant context, query HIR and safe scoped reads/writes are assigned to 1.2.8; final backend parity is a 1.3.0 gate. Do not claim automatic N+1 prevention without independent evidence.
 - [~] **1.2.0–1.2.5 request/response and forms:** Existing `Request`, Page/Form/CRUD and CSRF paths are the foundation. Form `widget` values are finite and checked; `password` renders as a password input, and forms do not replay passwords or values from fields named with `password`, `token`, `secret`, or `hash` (`E-FORM-006` rejects invalid widgets). The 422 validation path preserves safe submitted values, escapes them, marks invalid fields, and has an integration test that also verifies secret redaction. A typed handler/middleware/response lifecycle and complete redirect/notice contract remain open; credentials and sensitive input must never be replayed.
-- [~] **1.2.0–1.2.9 durable jobs and scheduler runtime:** Declarative `command`/`schedule` syntax and CLI run/list/export exist. The resident scheduler is integrated into `serve` on the current 1.2.5 work branch and starts only inside the installed, active Linux systemd user service. It reloads the live source at each minute boundary, runs at most four handlers concurrently, and needs no host cron entry. `zelyra schedule status <main.zyl> [--json]` reports declarations and installed/active service state without changing it. CLI help documents that manually starting `serve` does not start the scheduler. `[runtime].max_steps` limits evaluation steps; `[runtime].scheduler_job_timeout_seconds` additionally bounds a scheduler handler's wall-clock runtime (300 seconds by default, 1–86,400) and appears in Studio's runtime budget dialog. On timeout the child process is terminated and the failure is logged. Setup removes old Zelyra-managed cron exports; foreign crontabs are not changed. Durable lease workers, crash/retry/catch-up semantics, and the transactional job contract remain open. The mail outbox alone is not a job system.
+- [x] **1.2.0–1.2.9 durable jobs and scheduler runtime:** Declarative
+  `command`/`schedule` syntax, service lifecycle, and MariaDB-backed durable
+  delivery are implemented. Only the installed active Linux systemd project
+  service enqueues deterministic per-minute occurrences. A serial worker
+  revalidates current source, renews leases, uses bounded retries/dead-letter
+  handling, and reports jobs without payloads. `schedule status` reports the
+  service state; `schedule jobs` reports durable occurrences. Manual `serve`
+  does not run the scheduler. `[runtime].max_steps` limits evaluation steps;
+  `[runtime].scheduler_job_timeout_seconds` bounds handler wall time (default
+  300 seconds, range 1–86,400). Setup and service startup cancel pending,
+  unleased jobs for removed declarations. No host cron is installed and
+  foreign crontabs are untouched. Delivery is at-least-once; missed offline
+  minutes are not backfilled, and exactly-once external effects are not
+  promised.
 - [~] **1.2.8–1.3.0 Wasm and sidecar bridge:** Versioned HostServices and local locked source packages exist. Sandboxed/versioned Wasm computation and explicitly launched, authenticated local sidecar RPC are assigned to 1.2.8, with cross-backend and release parity in 1.3.0. No stable Rust ABI, auto-download, or implicit capability grant. A local mock integration precedes any real provider claims.
 - [ ] **Cross-backend release gate:** Query, tenant, request, and job semantics must match across AST, MIR, and bytecode or be rejected with explicit unsupported diagnostics. Add security, MariaDB integration, compatibility, offline, and adversarial tests. Do not claim 1.3.0 completion or production readiness until these gates and the detailed plan are satisfied.
 
@@ -377,8 +393,9 @@ compatibility behavior before changing syntax. See the detailed
   cycle rollback have integration coverage.
 - [ ] **1.2.8 typed query/request/forms:** Complete bounded query HIR and typed
   tenant/request/form lifecycle across supported backends.
-- [ ] **1.2.9 durable jobs:** Add transactional scheduler jobs, leases, retries,
-  idempotency, dead-letter handling, and explicit service lifecycle.
+- [x] **1.2.9 durable jobs:** Transactional scheduler occurrences, leases,
+  bounded retries, idempotency, dead-letter handling, and service lifecycle
+  are delivered; see the release plan and 1.2.9 notes.
 - [ ] **1.2.10–1.2.15:** Deliver module settings/HostServices, backend parity,
   tested business verticals, canonical project structure, and Bytecode gates as
   assigned in the release sequence at the top of this roadmap.

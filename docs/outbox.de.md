@@ -28,6 +28,12 @@ Die Liste lässt Ereignisnutzlasten aus. Sie zeigt Ereignis-ID und -Typ,
 Status, Versuchszahl, Zeitstempel und feste redigierte Fehlercodes. Das Limit
 beträgt standardmäßig 50 und muss zwischen 1 und 200 liegen.
 
+Native `schedule`-Deklarationen verwenden diese Tabelle ebenfalls für
+dauerhafte Vorkommen. Ihre Payloads sind intern und werden von `outbox list`
+nicht ausgegeben. `zelyra schedule jobs <main.zyl>` zeigt Zeitplannamen und
+Fälligkeiten auf das aktuelle Projekt beschränkt. Nur der installierte, aktive
+Linux-Projektdienst verarbeitet diese Jobs.
+
 Ein erschöpftes Ereignis kann nach Prüfung durch den Betreiber ausdrücklich
 wieder freigegeben werden:
 

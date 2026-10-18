@@ -265,6 +265,7 @@ pub(super) fn run_outbox_worker(
     let mut delivered = 0usize;
     let mut retried = 0usize;
     let mut exhausted = 0usize;
+    let mut cancelled = 0usize;
     let mut lease_lost = 0usize;
     loop {
         let mut random = [0u8; 32];
@@ -293,6 +294,7 @@ pub(super) fn run_outbox_worker(
             zelyra_database::outbox::OutboxWorkerResult::Delivered { .. } => delivered += 1,
             zelyra_database::outbox::OutboxWorkerResult::RetryScheduled { .. } => retried += 1,
             zelyra_database::outbox::OutboxWorkerResult::Exhausted { .. } => exhausted += 1,
+            zelyra_database::outbox::OutboxWorkerResult::Cancelled { .. } => cancelled += 1,
             zelyra_database::outbox::OutboxWorkerResult::LeaseLost { .. } => lease_lost += 1,
         }
         if once {
@@ -300,7 +302,7 @@ pub(super) fn run_outbox_worker(
         }
     }
     println!(
-        "outbox worker stopped: {delivered} delivered, {retried} retry scheduled, {exhausted} exhausted, {lease_lost} lease lost"
+        "outbox worker stopped: {delivered} delivered, {retried} retry scheduled, {exhausted} exhausted, {cancelled} cancelled, {lease_lost} lease lost"
     );
     ExitCode::SUCCESS
 }
@@ -319,6 +321,7 @@ fn print_events(events: &[zelyra_database::outbox::OutboxEventSummary], json_for
                     "available_at": event.available_at,
                     "lease_until": event.lease_until,
                     "last_error": event.last_error,
+                    "cancelled_at": event.cancelled_at,
                 })
             })
             .collect::<Vec<_>>();

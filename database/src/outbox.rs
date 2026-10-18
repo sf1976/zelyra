@@ -8,6 +8,7 @@
 
 use crate::{execute_mariadb_query, DatabaseError, MariaDbTransaction, Query, QueryValue};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Maximum encoded JSON payload accepted by the current outbox slice.
 /// The larger bound accommodates base64 encoded PDF attachments while keeping
@@ -19,6 +20,8 @@ pub const MAX_DELIVERY_ATTEMPTS: u8 = 8;
 pub const MAX_OUTBOX_INSPECTION_LIMIT: usize = 200;
 /// Offset cap prevents a local inspection request from scanning unbounded pages.
 pub const MAX_OUTBOX_INSPECTION_OFFSET: usize = 1_000_000;
+/// Stable event type used for native declared schedule occurrences.
+pub const SCHEDULE_JOB_EVENT_TYPE: &str = "zelyra.schedule.command";
 const MIN_LEASE_SECONDS: u64 = 5;
 const MAX_LEASE_SECONDS: u64 = 3_600;
 const RETRY_BASE_SECONDS: u64 = 5;
@@ -54,6 +57,11 @@ pub struct OutboxEventSummary {
     pub last_error: Option<String>,
     pub delivered_at: Option<String>,
     pub exhausted_at: Option<String>,
+    pub cancelled_at: Option<String>,
+    /// Safe schedule metadata; absent for non-schedule events.
+    pub schedule_name: Option<String>,
+    /// UTC due-minute timestamp; absent for non-schedule events.
+    pub scheduled_at: Option<String>,
     pub recipient: Option<String>,
     pub attachment_name: Option<String>,
 }
@@ -77,6 +85,7 @@ pub struct OutboxHandlerContext<'a> {
     event_id: &'a str,
     lease_token: &'a str,
     lease_seconds: u64,
+    cancelled: &'a AtomicBool,
 }
 
 impl OutboxHandlerContext<'_> {
@@ -89,6 +98,12 @@ impl OutboxHandlerContext<'_> {
             self.lease_token,
             self.lease_seconds,
         )
+    }
+
+    /// Mark the claimed event as intentionally cancelled after the handler
+    /// determines that its work is stale.
+    pub fn cancel(&self) {
+        self.cancelled.store(true, Ordering::Release);
     }
 }
 
@@ -136,6 +151,7 @@ pub enum OutboxWorkerResult {
     Delivered { event_id: String, attempts: u8 },
     RetryScheduled { event_id: String, attempts: u8 },
     Exhausted { event_id: String, attempts: u8 },
+    Cancelled { event_id: String, attempts: u8 },
     LeaseLost { event_id: String, attempts: u8 },
 }
 
@@ -148,6 +164,35 @@ pub fn run_mariadb_outbox_once(
     lease_token: &str,
     lease_seconds: u64,
 ) -> Result<OutboxWorkerResult, DatabaseError> {
+    run_mariadb_outbox_once_scoped(database_url, handlers, lease_token, lease_seconds, None)
+}
+
+/// Claim and handle one event of the registered types and only for the given
+/// project identity. Schedule services must use this to isolate shared DBs.
+pub fn run_mariadb_outbox_once_for_project(
+    database_url: &str,
+    handlers: &OutboxHandlerRegistry,
+    lease_token: &str,
+    lease_seconds: u64,
+    project_id: &str,
+) -> Result<OutboxWorkerResult, DatabaseError> {
+    validate_project_identity(project_id)?;
+    run_mariadb_outbox_once_scoped(
+        database_url,
+        handlers,
+        lease_token,
+        lease_seconds,
+        Some(project_id),
+    )
+}
+
+fn run_mariadb_outbox_once_scoped(
+    database_url: &str,
+    handlers: &OutboxHandlerRegistry,
+    lease_token: &str,
+    lease_seconds: u64,
+    project_id: Option<&str>,
+) -> Result<OutboxWorkerResult, DatabaseError> {
     let mut event_types = handlers.handlers.keys().cloned().collect::<Vec<_>>();
     event_types.sort();
     let Some(claim) = claim_mariadb_event_for_types(
@@ -155,23 +200,32 @@ pub fn run_mariadb_outbox_once(
         lease_token,
         lease_seconds,
         Some(&event_types),
+        project_id,
     )?
     else {
         return Ok(OutboxWorkerResult::Idle);
     };
     let event_id = claim.event.id.clone();
     let attempts = claim.attempts;
+    let cancelled = AtomicBool::new(false);
     let context = OutboxHandlerContext {
         database_url,
         event_id: &event_id,
         lease_token: &claim.lease_token,
         lease_seconds,
+        cancelled: &cancelled,
     };
     let handled = handlers
         .handlers
         .get(&claim.event.event_type)
         .is_some_and(|handler| handler(&claim.event, &context).is_ok());
     if handled {
+        if cancelled.load(Ordering::Acquire) {
+            if cancel_mariadb_event(database_url, &event_id, &claim.lease_token)? {
+                return Ok(OutboxWorkerResult::Cancelled { event_id, attempts });
+            }
+            return Ok(OutboxWorkerResult::LeaseLost { event_id, attempts });
+        }
         if acknowledge_mariadb_event(database_url, &event_id, &claim.lease_token)? {
             return Ok(OutboxWorkerResult::Delivered { event_id, attempts });
         }
@@ -235,6 +289,7 @@ pub fn ensure_mariadb_outbox(database_url: &str) -> Result<(), DatabaseError> {
             `last_error` VARCHAR(512) NULL,\
             `delivered_at` DATETIME(6) NULL,\
             `exhausted_at` DATETIME(6) NULL,\
+            `cancelled_at` DATETIME(6) NULL,\
             PRIMARY KEY (`event_id`),\
             KEY `idx_zelyra_outbox_pending` (`delivered_at`, `available_at`, `created_at`),\
             CONSTRAINT `chk_zelyra_outbox_payload_json` CHECK (JSON_VALID(`payload`))\
@@ -258,6 +313,26 @@ pub fn ensure_mariadb_outbox(database_url: &str) -> Result<(), DatabaseError> {
         execute_mariadb_query(
             database_url,
             "ALTER TABLE `_zelyra_outbox` ADD COLUMN `exhausted_at` DATETIME(6) NULL AFTER `delivered_at`",
+            Vec::new(),
+        )?;
+    }
+    let column = execute_mariadb_query(
+        database_url,
+        "SELECT COUNT(*) AS `count` FROM information_schema.COLUMNS \
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '_zelyra_outbox' \
+           AND COLUMN_NAME = 'cancelled_at'",
+        Vec::new(),
+    )?;
+    if column
+        .rows
+        .first()
+        .and_then(|row| row.first())
+        .map(String::as_str)
+        == Some("0")
+    {
+        execute_mariadb_query(
+            database_url,
+            "ALTER TABLE `_zelyra_outbox` ADD COLUMN `cancelled_at` DATETIME(6) NULL AFTER `exhausted_at`",
             Vec::new(),
         )?;
     }
@@ -293,6 +368,56 @@ pub fn enqueue_mariadb_event(
     Ok(())
 }
 
+/// Idempotently insert an event under a deterministic event ID. Reusing an ID
+/// with a different type or payload is rejected so a collision or caller bug
+/// cannot silently change the meaning of queued work.
+pub fn enqueue_mariadb_event_once(
+    database_url: &str,
+    event: &OutboxEvent,
+) -> Result<(), DatabaseError> {
+    validate_event_id(&event.id)?;
+    validate_event_type(&event.event_type)?;
+    if event.payload_json.len() > MAX_EVENT_PAYLOAD_BYTES
+        || zelyra_ast::json::parse(&event.payload_json).is_err()
+    {
+        return Err(DatabaseError {
+            message: format!(
+                "outbox event payload must be valid JSON within the {} byte limit",
+                MAX_EVENT_PAYLOAD_BYTES
+            ),
+        });
+    }
+    crate::with_mariadb_transaction(database_url, |transaction| {
+        transaction.execute(&Query {
+            sql: "INSERT INTO `_zelyra_outbox` (`event_id`, `event_type`, `payload`, `created_at`, `available_at`) \
+                 VALUES (:event_id, :event_type, :payload, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6)) \
+                 ON DUPLICATE KEY UPDATE `event_id` = `event_id`"
+                .into(),
+            params: vec![
+                ("event_id".into(), QueryValue::String(event.id.clone())),
+                ("event_type".into(), QueryValue::String(event.event_type.clone())),
+                ("payload".into(), QueryValue::String(event.payload_json.clone())),
+            ],
+        })?;
+        let existing = transaction.execute(&Query {
+            sql: "SELECT `event_type`, `payload` FROM `_zelyra_outbox` WHERE `event_id` = :event_id FOR UPDATE".into(),
+            params: vec![("event_id".into(), QueryValue::String(event.id.clone()))],
+        })?;
+        let Some(row) = existing.rows.first() else {
+            return Err(DatabaseError {
+                message: "database did not retain the deterministic outbox event".into(),
+            });
+        };
+        if row.len() != 2 || row[0] != event.event_type || row[1] != event.payload_json {
+            return Err(DatabaseError {
+                message: "deterministic outbox event ID is already bound to different event data"
+                    .into(),
+            });
+        }
+        Ok(())
+    })
+}
+
 /// Atomically claim the oldest due event whose lease is absent or expired.
 /// `lease_token` must be unique per claim attempt and must not be reused while
 /// any previous claim with that token could still be active. Callers should
@@ -303,7 +428,7 @@ pub fn claim_mariadb_event(
     lease_token: &str,
     lease_seconds: u64,
 ) -> Result<Option<ClaimedOutboxEvent>, DatabaseError> {
-    claim_mariadb_event_for_types(database_url, lease_token, lease_seconds, None)
+    claim_mariadb_event_for_types(database_url, lease_token, lease_seconds, None, None)
 }
 
 fn claim_mariadb_event_for_types(
@@ -311,6 +436,7 @@ fn claim_mariadb_event_for_types(
     lease_token: &str,
     lease_seconds: u64,
     event_types: Option<&[String]>,
+    project_id: Option<&str>,
 ) -> Result<Option<ClaimedOutboxEvent>, DatabaseError> {
     validate_lease_token(lease_token)?;
     validate_lease_duration(lease_seconds)?;
@@ -322,6 +448,9 @@ fn claim_mariadb_event_for_types(
             validate_event_type(event_type)?;
         }
     }
+    if let Some(project_id) = project_id {
+        validate_project_identity(project_id)?;
+    }
     let event_type_filter = event_types.map_or_else(String::new, |types| {
         let placeholders = types
             .iter()
@@ -331,7 +460,8 @@ fn claim_mariadb_event_for_types(
             .join(", ");
         format!(" AND `event_type` IN ({placeholders})")
     });
-    let event_type_params = event_types.map_or_else(Vec::new, |types| {
+    let mut event_type_filter = event_type_filter;
+    let mut event_type_params = event_types.map_or_else(Vec::new, |types| {
         types
             .iter()
             .enumerate()
@@ -343,12 +473,18 @@ fn claim_mariadb_event_for_types(
             })
             .collect::<Vec<_>>()
     });
+    if let Some(project_id) = project_id {
+        event_type_filter
+            .push_str(" AND JSON_UNQUOTE(JSON_EXTRACT(`payload`, '$.project_id')) = :project_id");
+        event_type_params.push(("project_id".into(), QueryValue::String(project_id.into())));
+    }
 
     crate::with_mariadb_transaction(database_url, |transaction| {
         let terminal = transaction.execute(&Query {
             sql: format!(
                 "SELECT `event_id` FROM `_zelyra_outbox` WHERE `delivered_at` IS NULL \
-                   AND `exhausted_at` IS NULL AND `attempts` >= {MAX_DELIVERY_ATTEMPTS} \
+                   AND `exhausted_at` IS NULL AND `cancelled_at` IS NULL \
+                   AND `attempts` >= {MAX_DELIVERY_ATTEMPTS} \
                    AND (`lease_until` IS NULL OR `lease_until` <= UTC_TIMESTAMP(6)) \
                  {event_type_filter} ORDER BY `available_at`, `created_at`, `event_id` LIMIT 1 FOR UPDATE SKIP LOCKED"
             ),
@@ -359,7 +495,7 @@ fn claim_mariadb_event_for_types(
                 transaction.execute(&Query {
                     sql: "UPDATE `_zelyra_outbox` SET `exhausted_at` = UTC_TIMESTAMP(6), \
                           `last_error` = 'attempt_limit' WHERE `event_id` = :event_id \
-                          AND `delivered_at` IS NULL AND `exhausted_at` IS NULL"
+                          AND `delivered_at` IS NULL AND `exhausted_at` IS NULL AND `cancelled_at` IS NULL"
                         .into(),
                     params: vec![("event_id".into(), QueryValue::String(event_id.clone()))],
                 })?;
@@ -368,7 +504,7 @@ fn claim_mariadb_event_for_types(
         let result = transaction.execute(&Query {
             sql: format!(
                 "SELECT `event_id`, `event_type`, `payload`, `attempts` FROM `_zelyra_outbox` \
-                 WHERE `delivered_at` IS NULL AND `exhausted_at` IS NULL \
+                 WHERE `delivered_at` IS NULL AND `exhausted_at` IS NULL AND `cancelled_at` IS NULL \
                    AND `attempts` < {MAX_DELIVERY_ATTEMPTS} \
                    AND `available_at` <= UTC_TIMESTAMP(6) \
                    AND (`lease_until` IS NULL OR `lease_until` <= UTC_TIMESTAMP(6)) \
@@ -410,7 +546,7 @@ fn claim_mariadb_event_for_types(
             sql: "UPDATE `_zelyra_outbox` SET `lease_token` = :lease_token, \
                   `lease_until` = DATE_ADD(UTC_TIMESTAMP(6), INTERVAL :lease_seconds SECOND), \
                   `attempts` = :attempts, `last_error` = NULL \
-                  WHERE `event_id` = :event_id AND `delivered_at` IS NULL"
+                  WHERE `event_id` = :event_id AND `delivered_at` IS NULL AND `cancelled_at` IS NULL"
                 .into(),
             params: vec![
                 ("lease_token".into(), QueryValue::String(lease_token.into())),
@@ -444,7 +580,7 @@ pub fn acknowledge_mariadb_event(
             sql: "UPDATE `_zelyra_outbox` SET `delivered_at` = UTC_TIMESTAMP(6), \
                   `lease_token` = NULL, `lease_until` = NULL, `last_error` = NULL \
                   WHERE `event_id` = :event_id AND `lease_token` = :lease_token \
-                    AND `lease_until` > UTC_TIMESTAMP(6)"
+                    AND `lease_until` > UTC_TIMESTAMP(6) AND `cancelled_at` IS NULL"
                 .into(),
             params: vec![
                 ("event_id".into(), QueryValue::String(event_id.into())),
@@ -490,7 +626,7 @@ pub fn renew_mariadb_event_lease(
                   `lease_until` = GREATEST(`lease_until`, DATE_ADD(UTC_TIMESTAMP(6), INTERVAL :lease_seconds SECOND)) \
                   WHERE `event_id` = :event_id AND `lease_token` = :lease_token \
                     AND `lease_until` > UTC_TIMESTAMP(6) AND `delivered_at` IS NULL \
-                    AND `exhausted_at` IS NULL"
+                    AND `exhausted_at` IS NULL AND `cancelled_at` IS NULL"
                 .into(),
             params: vec![
                 ("lease_seconds".into(), QueryValue::UInt(lease_seconds)),
@@ -501,7 +637,7 @@ pub fn renew_mariadb_event_lease(
         let result = transaction.execute(&Query {
             sql: "SELECT COUNT(*) AS `count` FROM `_zelyra_outbox` WHERE `event_id` = :event_id \
                  AND `lease_token` = :lease_token AND `lease_until` > UTC_TIMESTAMP(6) \
-                 AND `delivered_at` IS NULL AND `exhausted_at` IS NULL"
+                 AND `delivered_at` IS NULL AND `exhausted_at` IS NULL AND `cancelled_at` IS NULL"
                 .into(),
             params: vec![
                 ("event_id".into(), QueryValue::String(event_id.into())),
@@ -537,7 +673,7 @@ pub fn fail_mariadb_event(
                 sql: "UPDATE `_zelyra_outbox` SET `exhausted_at` = UTC_TIMESTAMP(6), \
                       `lease_token` = NULL, `lease_until` = NULL, `last_error` = 'attempt_limit' \
                       WHERE `event_id` = :event_id AND `lease_token` = :lease_token \
-                        AND `lease_until` > UTC_TIMESTAMP(6)"
+                        AND `lease_until` > UTC_TIMESTAMP(6) AND `cancelled_at` IS NULL"
                     .into(),
                 params: vec![
                     ("event_id".into(), QueryValue::String(event_id.into())),
@@ -554,7 +690,7 @@ pub fn fail_mariadb_event(
                       `available_at` = DATE_ADD(UTC_TIMESTAMP(6), INTERVAL :retry_seconds SECOND), \
                       `lease_token` = NULL, `lease_until` = NULL, `last_error` = 'handler_failure' \
                       WHERE `event_id` = :event_id AND `lease_token` = :lease_token \
-                        AND `lease_until` > UTC_TIMESTAMP(6)"
+                        AND `lease_until` > UTC_TIMESTAMP(6) AND `cancelled_at` IS NULL"
                     .into(),
                 params: vec![
                     ("retry_seconds".into(), QueryValue::UInt(retry_seconds)),
@@ -565,7 +701,7 @@ pub fn fail_mariadb_event(
         }
         let result = transaction.execute(&Query {
             sql: "SELECT COUNT(*) AS `count` FROM `_zelyra_outbox` WHERE `event_id` = :event_id \
-                 AND `lease_token` IS NULL AND `delivered_at` IS NULL"
+                 AND `lease_token` IS NULL AND `delivered_at` IS NULL AND `cancelled_at` IS NULL"
                 .into(),
             params: vec![("event_id".into(), QueryValue::String(event_id.into()))],
         })?;
@@ -576,6 +712,92 @@ pub fn fail_mariadb_event(
             .map(String::as_str)
             == Some("1"))
     })
+}
+
+/// Cancel a currently leased event only while the caller still owns its live
+/// lease. Cancelled work is retained for audit and never becomes claimable.
+pub fn cancel_mariadb_event(
+    database_url: &str,
+    event_id: &str,
+    lease_token: &str,
+) -> Result<bool, DatabaseError> {
+    validate_event_id(event_id)?;
+    validate_lease_token(lease_token)?;
+    crate::with_mariadb_transaction(database_url, |transaction| {
+        if !owns_live_lease(transaction, event_id, lease_token)? {
+            return Ok(false);
+        }
+        transaction.execute(&Query {
+            sql: "UPDATE `_zelyra_outbox` SET `cancelled_at` = UTC_TIMESTAMP(6), \
+                  `lease_token` = NULL, `lease_until` = NULL, `last_error` = NULL \
+                  WHERE `event_id` = :event_id AND `lease_token` = :lease_token \
+                    AND `lease_until` > UTC_TIMESTAMP(6) AND `delivered_at` IS NULL \
+                    AND `exhausted_at` IS NULL AND `cancelled_at` IS NULL"
+                .into(),
+            params: vec![
+                ("event_id".into(), QueryValue::String(event_id.into())),
+                ("lease_token".into(), QueryValue::String(lease_token.into())),
+            ],
+        })?;
+        let result = transaction.execute(&Query {
+            sql: "SELECT COUNT(*) AS `count` FROM `_zelyra_outbox` WHERE `event_id` = :event_id \
+                 AND `cancelled_at` IS NOT NULL AND `lease_token` IS NULL"
+                .into(),
+            params: vec![("event_id".into(), QueryValue::String(event_id.into()))],
+        })?;
+        Ok(result
+            .rows
+            .first()
+            .and_then(|row| row.first())
+            .map(String::as_str)
+            == Some("1"))
+    })
+}
+
+/// Cancel pending, currently unleased schedule occurrences for one canonical
+/// project identity. Leased work is left to the worker's source revalidation.
+pub fn cancel_pending_mariadb_schedule_jobs(
+    database_url: &str,
+    project_id: &str,
+) -> Result<(), DatabaseError> {
+    validate_project_identity(project_id)?;
+    let table = execute_mariadb_query(
+        database_url,
+        "SELECT COUNT(*) AS `count` FROM information_schema.TABLES \
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '_zelyra_outbox'",
+        Vec::new(),
+    )?;
+    if table
+        .rows
+        .first()
+        .and_then(|row| row.first())
+        .map(String::as_str)
+        != Some("1")
+    {
+        // Removing schedule declarations from a project that never used the
+        // outbox must not create an internal table outside its source schema.
+        return Ok(());
+    }
+    // Upgrade an existing outbox before using the cancellation state. This is
+    // deliberately after the existence check so setup for schedule-free
+    // projects does not create a table the schema planner will later remove.
+    ensure_mariadb_outbox(database_url)?;
+    execute_mariadb_query(
+        database_url,
+        "UPDATE `_zelyra_outbox` SET `cancelled_at` = UTC_TIMESTAMP(6), `last_error` = NULL \
+         WHERE `event_type` = :event_type AND `delivered_at` IS NULL \
+           AND `exhausted_at` IS NULL AND `cancelled_at` IS NULL \
+           AND `lease_token` IS NULL \
+           AND JSON_UNQUOTE(JSON_EXTRACT(`payload`, '$.project_id')) = :project_id",
+        vec![
+            (
+                "event_type".into(),
+                QueryValue::String(SCHEDULE_JOB_EVENT_TYPE.into()),
+            ),
+            ("project_id".into(), QueryValue::String(project_id.into())),
+        ],
+    )?;
+    Ok(())
 }
 
 /// Explicitly release an exhausted event for operator-approved recovery. Its
@@ -621,6 +843,33 @@ pub fn inspect_mariadb_outbox_page(
     limit: usize,
     offset: usize,
 ) -> Result<OutboxInspectionPage, DatabaseError> {
+    inspect_mariadb_outbox_page_filtered(database_url, limit, offset, None, None)
+}
+
+/// Inspect only durable native schedule jobs without exposing stored payloads.
+pub fn inspect_mariadb_schedule_jobs_page(
+    database_url: &str,
+    project_id: &str,
+    limit: usize,
+    offset: usize,
+) -> Result<OutboxInspectionPage, DatabaseError> {
+    validate_project_identity(project_id)?;
+    inspect_mariadb_outbox_page_filtered(
+        database_url,
+        limit,
+        offset,
+        Some(SCHEDULE_JOB_EVENT_TYPE),
+        Some(project_id),
+    )
+}
+
+fn inspect_mariadb_outbox_page_filtered(
+    database_url: &str,
+    limit: usize,
+    offset: usize,
+    event_type: Option<&str>,
+    project_id: Option<&str>,
+) -> Result<OutboxInspectionPage, DatabaseError> {
     if !(1..=MAX_OUTBOX_INSPECTION_LIMIT).contains(&limit) {
         return Err(DatabaseError {
             message: format!(
@@ -633,10 +882,22 @@ pub fn inspect_mariadb_outbox_page(
             message: format!("outbox inspection offset exceeds {MAX_OUTBOX_INSPECTION_OFFSET}"),
         });
     }
+    let where_clause = match (event_type.is_some(), project_id.is_some()) {
+        (true, true) => " WHERE `event_type` = :event_type AND JSON_UNQUOTE(JSON_EXTRACT(`payload`, '$.project_id')) = :project_id",
+        (true, false) => " WHERE `event_type` = :event_type",
+        (false, true) => " WHERE JSON_UNQUOTE(JSON_EXTRACT(`payload`, '$.project_id')) = :project_id",
+        (false, false) => "",
+    };
+    let mut filter_params = event_type
+        .map(|event_type| vec![("event_type".into(), QueryValue::String(event_type.into()))])
+        .unwrap_or_default();
+    if let Some(project_id) = project_id {
+        filter_params.push(("project_id".into(), QueryValue::String(project_id.into())));
+    }
     let count = execute_mariadb_query(
         database_url,
-        "SELECT COUNT(*) AS `count` FROM `_zelyra_outbox`",
-        Vec::new(),
+        &format!("SELECT COUNT(*) AS `count` FROM `_zelyra_outbox`{where_clause}"),
+        filter_params.clone(),
     )?;
     let total = count
         .rows
@@ -646,10 +907,10 @@ pub fn inspect_mariadb_outbox_page(
         .ok_or_else(|| DatabaseError {
             message: "database returned an invalid outbox count".into(),
         })?;
-    let result = execute_mariadb_query(
-        database_url,
+    let rows_sql = format!(
         "SELECT `event_id`, `event_type`, `attempts`, \
-            CASE WHEN `delivered_at` IS NOT NULL THEN 'delivered' \
+            CASE WHEN `cancelled_at` IS NOT NULL THEN 'cancelled' \
+                 WHEN `delivered_at` IS NOT NULL THEN 'delivered' \
                  WHEN `exhausted_at` IS NOT NULL THEN 'exhausted' \
                  WHEN `lease_until` > UTC_TIMESTAMP(6) THEN 'leased' \
                  WHEN `available_at` > UTC_TIMESTAMP(6) THEN 'retry_wait' \
@@ -660,24 +921,35 @@ pub fn inspect_mariadb_outbox_page(
             COALESCE(`last_error`, '') AS `last_error`, \
             COALESCE(DATE_FORMAT(`delivered_at`, '%Y-%m-%d %H:%i:%s.%f'), '') AS `delivered_at`, \
             COALESCE(DATE_FORMAT(`exhausted_at`, '%Y-%m-%d %H:%i:%s.%f'), '') AS `exhausted_at`, \
+            COALESCE(DATE_FORMAT(`cancelled_at`, '%Y-%m-%d %H:%i:%s.%f'), '') AS `cancelled_at`, \
+            CASE WHEN `event_type` = 'zelyra.schedule.command' THEN \
+                LEFT(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(`payload`, '$.schedule_name')), ''), 128) \
+                ELSE '' END AS `schedule_name`, \
+            CASE WHEN `event_type` = 'zelyra.schedule.command' THEN \
+                LEFT(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(`payload`, '$.scheduled_at')), ''), 32) \
+                ELSE '' END AS `scheduled_at`, \
             CASE WHEN `event_type` = 'zelyra.mail.send' THEN \
                 LEFT(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(`payload`, '$.to')), ''), 254) \
                 ELSE '' END AS `recipient`, \
             CASE WHEN `event_type` = 'zelyra.mail.send' THEN \
                 LEFT(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(`payload`, '$.attachments[0].filename')), ''), 255) \
                 ELSE '' END AS `attachment_name` \
-         FROM `_zelyra_outbox` ORDER BY `created_at` DESC, `event_id` DESC \
-         LIMIT :limit OFFSET :offset",
-        vec![
+         FROM `_zelyra_outbox`{where_clause} ORDER BY `created_at` DESC, `event_id` DESC \
+         LIMIT :limit OFFSET :offset"
+    );
+    let result = execute_mariadb_query(database_url, &rows_sql, {
+        let mut params = filter_params;
+        params.extend([
             ("limit".into(), QueryValue::UInt(limit as u64)),
             ("offset".into(), QueryValue::UInt(offset as u64)),
-        ],
-    )?;
+        ]);
+        params
+    })?;
     let events = result
         .rows
         .into_iter()
         .map(|row| {
-            if row.len() != 12 {
+            if row.len() != 15 {
                 return Err(DatabaseError {
                     message: "database returned an invalid outbox inspection row".into(),
                 });
@@ -702,8 +974,11 @@ pub fn inspect_mariadb_outbox_page(
                 last_error: safe_last_error(&row[7]),
                 delivered_at: (!row[8].is_empty()).then(|| row[8].clone()),
                 exhausted_at: (!row[9].is_empty()).then(|| row[9].clone()),
-                recipient: (!row[10].is_empty()).then(|| row[10].clone()),
-                attachment_name: (!row[11].is_empty()).then(|| row[11].clone()),
+                cancelled_at: (!row[10].is_empty()).then(|| row[10].clone()),
+                schedule_name: safe_schedule_name(&row[11]),
+                scheduled_at: safe_schedule_time(&row[12]),
+                recipient: (!row[13].is_empty()).then(|| row[13].clone()),
+                attachment_name: (!row[14].is_empty()).then(|| row[14].clone()),
             })
         })
         .collect::<Result<Vec<_>, _>>()?;
@@ -712,6 +987,58 @@ pub fn inspect_mariadb_outbox_page(
         offset,
         events,
     })
+}
+
+fn validate_project_identity(project_id: &str) -> Result<(), DatabaseError> {
+    if project_id.len() != 64
+        || !project_id
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(DatabaseError {
+            message: "schedule project identity must be a lowercase SHA-256 digest".into(),
+        });
+    }
+    Ok(())
+}
+
+fn safe_schedule_name(value: &str) -> Option<String> {
+    if value.is_empty()
+        || value.len() > 128
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
+    {
+        return None;
+    }
+    Some(value.to_owned())
+}
+
+fn safe_schedule_time(value: &str) -> Option<String> {
+    let bytes = value.as_bytes();
+    if bytes.len() != 20
+        || bytes[4] != b'-'
+        || bytes[7] != b'-'
+        || bytes[10] != b'T'
+        || bytes[13] != b':'
+        || bytes[16..] != *b":00Z"
+        || ![0..4, 5..7, 8..10, 11..13, 14..16]
+            .into_iter()
+            .all(|range| bytes[range].iter().all(u8::is_ascii_digit))
+    {
+        return None;
+    }
+    let number = |range: std::ops::Range<usize>| {
+        std::str::from_utf8(&bytes[range]).ok()?.parse::<u32>().ok()
+    };
+    if !(1..=12).contains(&number(5..7)?)
+        || !(1..=31).contains(&number(8..10)?)
+        || number(11..13)? > 23
+        || number(14..16)? > 59
+    {
+        return None;
+    }
+    Some(value.to_owned())
 }
 
 fn owns_live_lease(
@@ -730,7 +1057,8 @@ fn live_lease_attempts(
     let result = transaction.execute(&Query {
         sql: "SELECT `attempts` FROM `_zelyra_outbox` WHERE `event_id` = :event_id \
              AND `lease_token` = :lease_token AND `lease_until` > UTC_TIMESTAMP(6) \
-             AND `delivered_at` IS NULL AND `exhausted_at` IS NULL FOR UPDATE"
+             AND `delivered_at` IS NULL AND `exhausted_at` IS NULL \
+             AND `cancelled_at` IS NULL FOR UPDATE"
             .into(),
         params: vec![
             ("event_id".into(), QueryValue::String(event_id.into())),
@@ -970,6 +1298,163 @@ mod tests {
     }
 
     #[test]
+    fn mariadb_schedule_jobs_deduplicate_cancel_and_inspect_without_payloads() {
+        let Ok(database_url) = env::var("ZELYRA_DB_TIMEOUT_TEST_URL") else {
+            eprintln!("skipping MariaDB schedule-job test: test URL is not configured");
+            return;
+        };
+        let _guard = MARIADB_OUTBOX_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let suffix = format!(
+            "{}-{}",
+            std::process::id(),
+            NEXT_TEST_ID.fetch_add(1, Ordering::Relaxed)
+        );
+        let id = format!("schedule-test-{suffix}");
+        let pending_id = format!("schedule-pending-{suffix}");
+        let foreign_id = format!("schedule-foreign-{suffix}");
+        let worker_id = format!("schedule-worker-test-{suffix}");
+        let project_id = "b".repeat(64);
+        ensure_mariadb_outbox(&database_url).unwrap();
+        let schema = crate::inspect_mariadb(&database_url).unwrap();
+        assert!(
+            schema
+                .tables
+                .iter()
+                .all(|table| table.name != "_zelyra_outbox"),
+            "runtime-owned outbox tables must not be treated as application schema"
+        );
+        let event = OutboxEvent::new(
+            &id,
+            SCHEDULE_JOB_EVENT_TYPE,
+            &serde_json::json!({
+                "project_id": project_id,
+                "schedule_name": "weekly_report",
+                "scheduled_at": "2026-10-17T12:00:00Z",
+                "fingerprint": "a".repeat(64),
+                "secret": "must never appear in inspection",
+            }),
+        )
+        .unwrap();
+        enqueue_mariadb_event_once(&database_url, &event).unwrap();
+        enqueue_mariadb_event_once(&database_url, &event).unwrap();
+        let pending = OutboxEvent::new(
+            &pending_id,
+            SCHEDULE_JOB_EVENT_TYPE,
+            &serde_json::json!({
+                "project_id": project_id,
+                "schedule_name": "removed_schedule",
+                "scheduled_at": "2026-10-17T12:01:00Z",
+            }),
+        )
+        .unwrap();
+        enqueue_mariadb_event_once(&database_url, &pending).unwrap();
+        let foreign = OutboxEvent::new(
+            &foreign_id,
+            SCHEDULE_JOB_EVENT_TYPE,
+            &serde_json::json!({
+                "project_id": "c".repeat(64),
+                "schedule_name": "another_project",
+                "scheduled_at": "2026-10-17T12:02:00Z",
+            }),
+        )
+        .unwrap();
+        enqueue_mariadb_event_once(&database_url, &foreign).unwrap();
+        cancel_pending_mariadb_schedule_jobs(&database_url, &project_id).unwrap();
+        let conflicting = OutboxEvent::new(
+            &id,
+            SCHEDULE_JOB_EVENT_TYPE,
+            &serde_json::json!({"schedule_name": "other"}),
+        )
+        .unwrap();
+        assert!(enqueue_mariadb_event_once(&database_url, &conflicting).is_err());
+
+        let page = inspect_mariadb_schedule_jobs_page(&database_url, &project_id, 200, 0).unwrap();
+        let summary = page.events.iter().find(|item| item.id == id).unwrap();
+        assert!(page.events.iter().all(|item| item.id != foreign_id));
+        assert_eq!(summary.schedule_name.as_deref(), Some("weekly_report"));
+        assert_eq!(
+            summary.scheduled_at.as_deref(),
+            Some("2026-10-17T12:00:00Z")
+        );
+        assert_eq!(summary.status, "cancelled");
+        assert!(!requeue_exhausted_mariadb_event(&database_url, &id).unwrap());
+        assert_eq!(
+            page.events
+                .iter()
+                .find(|item| item.id == pending_id)
+                .unwrap()
+                .status,
+            "cancelled"
+        );
+
+        let worker_event = OutboxEvent::new(
+            &worker_id,
+            SCHEDULE_JOB_EVENT_TYPE,
+            &serde_json::json!({
+                "project_id": project_id,
+                "schedule_name": "weekly_report",
+                "scheduled_at": "2026-10-17T12:00:00Z",
+            }),
+        )
+        .unwrap();
+        enqueue_mariadb_event_once(&database_url, &worker_event).unwrap();
+        let mut handlers = OutboxHandlerRegistry::default();
+        handlers
+            .register(SCHEDULE_JOB_EVENT_TYPE, |_, context| {
+                context.cancel();
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(
+            run_mariadb_outbox_once_for_project(
+                &database_url,
+                &handlers,
+                &format!("worker-{suffix}"),
+                30,
+                &project_id,
+            )
+            .unwrap(),
+            OutboxWorkerResult::Cancelled {
+                event_id: worker_id.clone(),
+                attempts: 1,
+            }
+        );
+        let page = inspect_mariadb_schedule_jobs_page(&database_url, &project_id, 200, 0).unwrap();
+        assert_eq!(
+            page.events
+                .iter()
+                .find(|item| item.id == worker_id)
+                .unwrap()
+                .status,
+            "cancelled"
+        );
+        assert_eq!(
+            run_mariadb_outbox_once_for_project(
+                &database_url,
+                &handlers,
+                &format!("worker-{suffix}-again"),
+                30,
+                &project_id
+            )
+            .unwrap(),
+            OutboxWorkerResult::Idle
+        );
+        execute_mariadb_query(
+            &database_url,
+            "DELETE FROM `_zelyra_outbox` WHERE `event_id` IN (:event_id, :pending_id, :foreign_id, :worker_id)",
+            vec![
+                ("event_id".into(), QueryValue::String(id)),
+                ("pending_id".into(), QueryValue::String(pending_id)),
+                ("foreign_id".into(), QueryValue::String(foreign_id)),
+                ("worker_id".into(), QueryValue::String(worker_id)),
+            ],
+        )
+        .unwrap();
+    }
+
+    #[test]
     fn outbox_inspection_redacts_unrecognized_error_values() {
         assert_eq!(safe_last_error(""), None);
         assert_eq!(
@@ -980,6 +1465,25 @@ mod tests {
             safe_last_error("secret\n\u{1b}[31m"),
             Some("unknown".into())
         );
+    }
+
+    #[test]
+    fn schedule_inspection_rejects_untrusted_payload_metadata() {
+        assert_eq!(
+            safe_schedule_name("weekly_report").as_deref(),
+            Some("weekly_report")
+        );
+        assert_eq!(safe_schedule_name("bad\u{1b}name"), None);
+        assert_eq!(
+            safe_schedule_time("2026-10-17T12:00:00Z").as_deref(),
+            Some("2026-10-17T12:00:00Z")
+        );
+        assert_eq!(
+            safe_schedule_time("2026-10-17T12:01:00Z").as_deref(),
+            Some("2026-10-17T12:01:00Z")
+        );
+        assert_eq!(safe_schedule_time("2026-10-17T12:01:30Z"), None);
+        assert_eq!(safe_schedule_time("2026-99-99T99:99:00Z"), None);
     }
 
     #[test]

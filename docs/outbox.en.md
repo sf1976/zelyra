@@ -27,6 +27,11 @@ The listing omits event payloads. It reports event ID and type, status, attempt
 count, timestamps, and fixed redacted error codes. The limit defaults to 50 and
 must be between 1 and 200.
 
+Native `schedule` declarations also use this table for durable occurrences.
+Their payloads are private to Zelyra and are never returned by `outbox list`.
+Use `zelyra schedule jobs <main.zyl>` for project-scoped schedule names and due
+times. Only the installed, active Linux project service handles these jobs.
+
 An exhausted event can be explicitly released after operator review:
 
 ```sh
