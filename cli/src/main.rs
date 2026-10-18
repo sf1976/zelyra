@@ -203,6 +203,9 @@ fn usage() {
     eprintln!(
         "  package cache clean [--apply] previews or removes unreferenced cached package versions"
     );
+    eprintln!(
+        "  package recover [--apply] previews or restores an interrupted package transaction"
+    );
     eprintln!("  package lock [entry.zyl] [--check|--update] resolves local packages and checks or writes zelyra.lock");
     eprintln!("  doctor supports `--env-file <path>` for generated MariaDB projects");
     eprintln!("  setup supports `--database`, `--schema`, `--all`, `--host-port`, `--db-host-port`, and `--web [--port <port>]`");

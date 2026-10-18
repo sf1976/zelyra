@@ -71,13 +71,17 @@ security and compatibility gates stated for that milestone.
   service. Include explicit `status`, `restart`, and `remove` operations where
   the platform service manager supports them. Extend service support to other
   operating systems only with lifecycle and upgrade tests.
-- [ ] **1.2.6 — transitive packages and durable business workflows:** Resolve
-  separately published transitive dependencies with exact versions, verified
-  publishers, and per-package provenance. Make lock/cache/install/update
-  recovery safe after process interruption. Also deliver typed tenant-query
-  and request/form foundations plus a transactional durable job queue with
-  idempotency, leases, bounded retries, and dead-letter state, verified against
-  MariaDB.
+- [~] **1.2.6 — transitive packages and durable business workflows:** A
+  recoverable package-mutation slice is implemented on the active branch:
+  per-project locking, a versioned recovery journal for add/update/remove,
+  preview-first `zelyra package recover`, and restoration of interrupted cache
+  cleanup. Focused tests pass; the full release gate and publication remain
+  open. Still required for this release are separately published transitive
+  dependencies with exact versions, verified publishers, and per-package
+  provenance; typed tenant-query and request/form foundations; and a
+  transactional durable job queue with idempotency, leases, bounded retries,
+  and dead-letter state, verified against MariaDB. The journal is recoverable
+  but not a filesystem-wide atomic transaction.
 - [ ] **1.2.7 — manageable and reusable modules:** Expose compiler-checked
   module settings through ordinary application pages with revision checks,
   secret redaction, and no implicit capability grants. Deliver a stable

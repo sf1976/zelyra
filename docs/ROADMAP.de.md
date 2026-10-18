@@ -351,9 +351,19 @@ werden. Details stehen im [Projektlayout-Arbeitsplan](release-plans/1.3.0-projec
   ausdrücklich festgelegtem Port, aktivem residenten Scheduler, statischem
   `public/`-DocumentRoot, signierter Registrybasis und portablen Paket-Bundles
   implementieren und prüfen. Query-/Request-/Jobpipeline ist 1.2.6 zugeordnet.
-- [ ] **1.2.6 Geschäftsabläufe und Paket-Recovery:** Transitive Pakete und
-  Absturz-Recovery sowie sichere Tenant-Queries, typisierte Request-/Form-
-  Verarbeitung und persistente transaktionale Jobs mit MariaDB-Tests liefern.
+- [~] **1.2.6 Geschäftsabläufe und Paket-Recovery:** Ein Teil zur
+  Wiederherstellung von Paketmutationen ist im aktiven Zweig implementiert:
+  projektweite Operationssperre, versioniertes Journal für `add`, `update` und
+  `remove`, Vorschau mit `zelyra package recover` sowie Wiederherstellung
+  einer unterbrochenen Cachebereinigung. Gezielte Tests sind erfolgreich;
+  vollständige Release-Prüfung und Veröffentlichung stehen noch aus. Für
+  dieses Release fehlen weiterhin separat veröffentlichte transitive Pakete
+  mit exakten Versionen, geprüften Herausgebern und Herkunft je Paket,
+  typisierte Tenant-Query- und Request-/Form-Grundlagen sowie eine
+  transaktionale persistente Jobwarteschlange mit Idempotenz, Leases,
+  begrenzten Wiederholungen und Dead-Letter-Status samt MariaDB-Prüfung. Das
+  Journal ermöglicht Wiederherstellung, aber keine dateisystemweit atomare
+  Transaktion.
 - [ ] **1.2.7 Moduleinstellungen und Integrationen:** Compilergeprüfte
   Einstellungen über Anwendungsseiten bereitstellen und wiederverwendbare
   HostServices-Module mit getesteten CSV-Import-/Exportpaketen liefern.

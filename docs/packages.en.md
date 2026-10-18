@@ -1,12 +1,19 @@
 # Zelyra packages (experimental)
 
-This guide covers local offline packages and the experimental signed registry
-features in the unreleased 1.1.5 candidate. The local workflow does not download
-packages or run build scripts. The candidate adds signed source artifacts,
-explicit publisher trust, static registry indexes, search, and verified exact-
-version installation. Separately published transitive packages and settings
-pages for ordinary applications remain open. Projects without a `[package]`
-table keep the existing file-import behavior.
+This guide covers local offline packages and the experimental registry
+features released in Zelyra 1.2.5. The local workflow does not download packages
+or run build scripts. Signed source artifacts, explicit publisher trust,
+static registry indexes, search, and verified exact-version installation are
+available. Separately published transitive packages and settings pages for
+ordinary applications remain open. Projects without a `[package]` table keep
+the existing file-import behavior.
+
+The 1.2.6 development work adds recoverable package transactions. After an
+interruption, `zelyra package recover` previews the recovery by default;
+`zelyra package recover --apply` restores the backed-up manifest/lockfile and
+removes cache paths created by the transaction. A pending journal blocks other
+package mutations. This does not yet resolve separately published transitive
+registry dependencies.
 
 Local packages are currently source dependencies, not installable modules
 managed through ordinary application pages. `zelyra module list` provides a
@@ -102,8 +109,8 @@ authenticate a publisher, prove where files came from, or make a malicious
 package safe. `zelyra package lock --update` deliberately accepts the current
 local files as the new locked contents, so review the source and diff before
 using that option. The local offline package workflow still does not download
-packages. The unreleased 1.1.5 candidate also implements signed source
-artifacts, an explicit local publisher trust file, a deterministic static
+packages. Since 1.2.5, Zelyra also implements signed source artifacts, an
+explicit local publisher trust file, a deterministic static
 registry index builder, search, and verified installation of exact versions.
 Downloads occur only after an explicit `add` or `update`; checks and program
 execution can then run offline. Separately published transitive dependencies
@@ -218,10 +225,15 @@ The plan is bounded to 128 entries, 256 MiB total download, five minutes, and
 16,384 source files. Before switching versions, Zelyra verifies every registry
 entry, digest, signature, and package. It then installs cache versions, updates
 the manifest and lock, and compiles the complete project. A detected failure
-rolls back the manifest, lock, and newly installed cache versions; old cached
-versions are retained. A process interruption or power loss cannot be one
-filesystem-wide atomic transaction: a stale lock blocks project use and must
-be regenerated with `zelyra package lock --update` after reviewing the manifest.
+restores the manifest, lock, and newly installed cache versions; old cached
+versions are retained. Package `add`, single-package `update`, multi-package
+`update --plan`, and `remove` write a local journal before changing project
+state. After interruption, package commands fail closed until
+`zelyra package recover` is reviewed and applied. The journal is not a
+filesystem-wide atomic transaction; a damaged journal or an I/O failure during
+recovery preserves remaining recovery data and reports the error. An
+interrupted cache cleanup uses a quarantine under `.zelyra/`; `recover` restores
+its unreferenced packages without overwriting an existing cache version.
 
 The default trust file is `zelyra.trust.toml` in the current directory. Use
 `--file <path>` to manage or verify against another trust file. Signed source
