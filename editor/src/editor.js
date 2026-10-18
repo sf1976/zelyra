@@ -234,6 +234,7 @@ const messages = {
     externalReloaded: "Extern geänderte Datei neu geladen: {0}", externalDirty: "{0} wurde außerhalb von Studio geändert. Ungespeicherte Änderungen bleiben erhalten; vor dem Speichern prüfen.", externalMissing: "{0} wurde außerhalb von Studio entfernt. Der geöffnete Puffer bleibt erhalten.",
     externalReloadFailed: "{0} konnte nach einer äußeren Änderung nicht neu geladen werden: {1}",
     canvasButton: "Canvas", canvasTitle: "Statische Zelyra-Vorschau", canvasTarget: "Seite oder View", canvasSample: "Beispieldaten (JSON)", canvasRender: "Vorschau aktualisieren", canvasSource: "Zur Deklaration", canvasComponents: "Erreichbare Komponenten", canvasComponentSource: "Deklaration öffnen", canvasComponentUses: "Verwendung", canvasComponentUseSource: "Verwendung öffnen", canvasFrameTitle: "Statische Canvas-Vorschau", canvasLoading: "Compiler und Renderer erzeugen die Vorschau …", canvasEmpty: "Im Projekt ist keine Seite oder View deklariert.", canvasError: "Vorschau nicht verfügbar: {0}", canvasSampleError: "Beispieldaten müssen ein JSON-Objekt sein.", canvasReady: "Statische Canvas-Vorschau: Hier laufen keine Projektfunktionen oder Skripte. Für die echte Webanwendung oben „Starten“ wählen und danach „Anwendung im Browser öffnen“.", canvasIncomplete: "Die Projektquelle ist nicht vollständig kompilierbar.",
+    projectThemeButton: "Projekt-CSS öffnen", projectThemeCreated: "zelyra.theme.css angelegt und geöffnet.",
     canvasThemeToken: "Theme-Farbe", canvasThemeColor: "Farbwert", canvasThemeApply: "Im Quelltext ändern", canvasThemeMissing: "Für Farbbearbeitung zelyra.theme.css im Projekt anlegen.", canvasThemeNoHex: "Keine unterstützte --z-color-*-Farbe mit hexadezimalem Wert gefunden.", canvasThemeChanged: "Theme-Farbe im ungespeicherten Quelltext geändert. Speichern übernimmt sie ins Projekt.", canvasThemeStale: "Theme-Datei wurde verändert. Farbe erneut auswählen.", canvasThemeError: "Theme-Bearbeitung fehlgeschlagen: {0}",
     runButton: "Starten", runButtonTitle: "main.zyl ausführen oder Webanwendung starten",
     runOutputTitle: "Programmausgabe", runStarting: "Anwendung wird vorbereitet und gestartet …", runSuccess: "Programm erfolgreich beendet", runFailure: "Programm mit Fehler beendet", runTimeout: "Ausführung nach 15 Sekunden beendet", runOutputTruncated: "Die Ausgabe ist auf 64 KiB je Stream begrenzt.", runNoOutput: "Keine Ausgabe.", runStdout: "AUSGABE", runStderr: "FEHLER", runConsoleInput: "Eingabe für read_console", runConsoleSubmit: "Eingabe senden", runConsoleEof: "Eingabe beenden (EOF)", runConsoleSent: "Eingabe wurde übermittelt.", runConsoleError: "Eingabe konnte nicht gesendet werden: {0}", runWebReady: "Webanwendung läuft lokal:", runWebOpen: "Anwendung im Browser öffnen", runWebStop: "Vorschau beenden", runWebStopped: "Lokale Vorschau wurde beendet.",
@@ -344,6 +345,7 @@ const messages = {
     externalReloaded: "Reloaded externally changed file: {0}", externalDirty: "{0} changed outside Studio. Unsaved edits remain; review before saving.", externalMissing: "{0} was removed outside Studio. The open buffer remains.",
     externalReloadFailed: "Could not reload {0} after an external change: {1}",
     canvasButton: "Canvas", canvasTitle: "Static Zelyra preview", canvasTarget: "Page or view", canvasSample: "Sample data (JSON)", canvasRender: "Refresh preview", canvasSource: "Go to declaration", canvasComponents: "Reachable components", canvasComponentSource: "Open declaration", canvasComponentUses: "Usage", canvasComponentUseSource: "Open usage", canvasFrameTitle: "Static Canvas preview", canvasLoading: "Compiler and renderer are preparing the preview …", canvasEmpty: "This project declares no page or view.", canvasError: "Preview unavailable: {0}", canvasSampleError: "Sample data must be a JSON object.", canvasReady: "Static Canvas preview: project functions and scripts do not run here. To run the web application, select Start in the top bar, then Open application in browser.", canvasIncomplete: "The project source does not fully compile.",
+    projectThemeButton: "Open project CSS", projectThemeCreated: "Created and opened zelyra.theme.css.",
     canvasThemeToken: "Theme color", canvasThemeColor: "Color value", canvasThemeApply: "Edit source", canvasThemeMissing: "Create zelyra.theme.css in the project to edit colors.", canvasThemeNoHex: "No supported --z-color-* declaration with a hex value was found.", canvasThemeChanged: "Theme color changed in the unsaved source. Save to apply it to the project.", canvasThemeStale: "Theme file changed. Select the color again.", canvasThemeError: "Theme edit failed: {0}",
     runButton: "Run", runButtonTitle: "Run main.zyl or start the web application",
     runOutputTitle: "Program output", runStarting: "Preparing and starting the application …", runSuccess: "Program finished successfully", runFailure: "Program finished with an error", runTimeout: "Execution stopped after 15 seconds", runOutputTruncated: "Output is limited to 64 KiB per stream.", runNoOutput: "No output.", runStdout: "OUTPUT", runStderr: "ERROR", runConsoleInput: "Input for read_console", runConsoleSubmit: "Send input", runConsoleEof: "End input (EOF)", runConsoleSent: "Input sent.", runConsoleError: "Could not send input: {0}", runWebReady: "Web application is running locally:", runWebOpen: "Open application in browser", runWebStop: "Stop preview", runWebStopped: "Local preview stopped.",
@@ -3928,7 +3930,48 @@ async function createFile() {
   } catch (error) { announce(error.message, "error"); }
 }
 
+async function openProjectTheme() {
+  const path = "zelyra.theme.css";
+  try {
+    await api(`file?path=${encodeURIComponent(path)}`);
+  } catch (error) {
+    if (!error.message.includes("file not found")) { announce(error.message, "error"); return; }
+    const content = `/*
+Projekt-CSS für Zelyra UI
+
+Die Datei wird nach dem eingebauten Zelyra-UI-Stylesheet geladen. Ändere hier
+gezielt vorhandene Komponenten, statt Framework-Dateien oder generiertes CSS
+zu bearbeiten. Regeln unter html[data-z-ui] betreffen nur Zelyra-Oberflächen.
+
+Beispiele:
+- Tokens überschreiben: --z-color-primary und --z-color-on-primary gemeinsam.
+- Vorhandene UI-Komponenten anpassen: .z-button, .z-card, .z-page-header.
+- Eigene Klassen ergänzen und im HTML deiner Seite verwenden.
+- Selektoren möglichst unter :where(html[data-z-ui]) kapseln.
+
+Die UI-Dokumentation steht unter https://siedelmann.com/handbuch.
+Diese Datei ist öffentlich an Browser ausgeliefertes CSS: keine Geheimnisse.
+*/
+:where(html[data-z-ui]) {
+    /* --z-color-primary: #3157a4; */
+    /* --z-color-on-primary: #ffffff; */
+}
+`;
+    try {
+      await api("file", { method: "POST", body: JSON.stringify({ path, content }) });
+      await refreshTree();
+      await openFile(path);
+      announce(t("projectThemeCreated"), "success");
+      return;
+    } catch (createError) {
+      if (!createError.message.includes("file already exists")) { announce(createError.message, "error"); return; }
+    }
+  }
+  await openFile(path);
+}
+
 $("save-button").addEventListener("click", saveActive);
+$("project-theme-button").addEventListener("click", () => void openProjectTheme());
 $("complete-button").addEventListener("click", () => { if (editor) { editor.focus(); startCompletion(editor); } });
 $("rename-file-button").addEventListener("click", renameActiveFile);
 $("semantic-rename-close").addEventListener("click", () => $("semantic-rename-dialog").close());

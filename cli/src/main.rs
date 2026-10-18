@@ -120,11 +120,22 @@ const TABLER_UI_COMPATIBILITY_CSS: &str = r#"
 const MARIADB_DATABASE_DECLARATION: &str = "database main {\n    engine: mariadb\n}\n\n";
 const MARIADB_DATABASE_MODULE: &str = "database main {\n    engine: mariadb\n}\n";
 const PROJECT_THEME_TEMPLATE: &str = r#"/*
-Optional overrides for the selected local stylesheet. This public file is sent
-to browsers; never put passwords, API keys, or private data here.
+Projekt-CSS für Zelyra UI. Diese Datei wird nach dem UI-Stylesheet geladen;
+du kannst hier vorhandene Komponenten anpassen, ohne Framework-Dateien zu ändern.
 
-For a complete replacement choose ZELYRA_UI_STYLESHEET in .env instead.
-Token reference: https://github.com/sf1976/zelyra/blob/main/docs/env.md
+So überschreibst du vorhandene UI-Gestaltung:
+1. Begrenze eigene Regeln auf :where(html[data-z-ui]) oder nutze z- Klassen.
+2. Ändere Farben über --z- Tokens. Primär-Hintergrund und Textfarbe gehören
+   zusammen: --z-color-primary und --z-color-on-primary.
+3. Für einzelne Komponenten kannst du z. B. .z-card oder .z-button ergänzen.
+   Eigene CSS-Klassen kannst du im HTML deiner Zelyra-Seiten verwenden.
+4. Halte Selektoren möglichst spezifitätsarm; !important ist normalerweise
+   nicht nötig. Die UI-Dokumentation steht unter https://siedelmann.com/handbuch.
+
+Für ein vollständig ersetzendes Stylesheet setze ZELYRA_UI_STYLESHEET in .env.
+Diese Datei wird an Browser ausgeliefert: niemals Passwörter, API-Schlüssel
+oder andere private Daten eintragen.
+Token- und Konfigurationsreferenz: https://github.com/sf1976/zelyra/blob/main/docs/env.md
 */
 :where(html[data-z-ui]) {
     /* Pair foreground and background tokens when changing a color. */

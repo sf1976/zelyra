@@ -87,7 +87,7 @@
       for (const button of toggles) {
         const panel = document.getElementById(button.getAttribute("aria-controls"));
         if (!panel) continue;
-        button.hidden = false;
+        button.hidden = !compact;
         if (!compact) {
           delete panel.dataset.zCollapsed;
           button.setAttribute("aria-expanded", "true");

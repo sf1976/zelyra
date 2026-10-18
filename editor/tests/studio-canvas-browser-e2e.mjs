@@ -40,11 +40,6 @@ page "/live" {
 fn main() {}
 `);
   await writeFile(join(project, ".env"), "DATABASE_URL=mariadb://zelyra:zelyra@127.0.0.1:1/zelyra_test\n");
-  await writeFile(join(project, "zelyra.theme.css"), `:where(html[data-z-ui]) {
-  --z-color-primary: #23654f;
-  --z-color-on-primary: #ffffff;
-}
-`);
   const port = await new Promise((resolvePort, reject) => {
     const server = createServer();
     server.once("error", reject);
@@ -73,6 +68,19 @@ fn main() {}
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(url, { waitUntil: "domcontentloaded" });
+  await page.getByRole("button", { name: "Projekt-CSS öffnen" }).click();
+  await page.waitForFunction(() => document.querySelector("#active-file")?.textContent === "zelyra.theme.css");
+  assert.match(await page.locator(".cm-content").textContent(), /Projekt-CSS für Zelyra UI/,
+    "the fixed explorer shortcut should open the documented project theme");
+  await page.locator(".cm-content[contenteditable=true]").click();
+  await page.keyboard.press("Control+a");
+  await page.keyboard.insertText(`:where(html[data-z-ui]) {
+  --z-color-primary: #23654f;
+  --z-color-on-primary: #ffffff;
+}
+`);
+  await page.locator("#save-button").click();
+  await page.waitForFunction(() => document.querySelector("#save-button")?.disabled === true);
   await page.locator('.tree-item.file[title="main.zyl"]').click();
   await page.locator(".cm-content[contenteditable=true]").waitFor();
   await page.locator("#canvas-button").click();

@@ -248,6 +248,13 @@ Path Traversal, Symlinks, Nicht-UTF-8 und Dateien über 512 KiB beim Ersatz-CSS
 bzw. 128 KiB beim Theme werden abgelehnt. Details zu Vorrang, Sicherheit,
 Compose und reservierten URLs stehen in der [Umgebungsreferenz](env.md).
 
+Studio bietet im Projekt-Explorer den festen Zugang **Projekt-CSS öffnen**.
+Er öffnet `zelyra.theme.css` direkt; fehlt die Datei in einem älteren Projekt,
+legt die ausdrückliche Aktion eine kommentierte Vorlage an. Neu erzeugte
+Projekte enthalten die Datei bereits. `import "zelyra/ui" as ui` importiert
+die in Zelyra eingebauten, typisierten UI-Komponenten. Es ist kein CSS-Import
+und deshalb keine Quelldatei im Projektordner.
+
 Ein Projekt-Theme verändert verwandte Farben gemeinsam, etwa
 `--z-color-primary`, `--z-color-on-primary`, `--z-color-primary-hover` und
 `--z-color-primary-soft`. Entsprechend gehören bei Statusfarben jeweils
@@ -257,6 +264,11 @@ Ein Projekt-Theme verändert verwandte Farben gemeinsam, etwa
 Weitere Variablen steuern canvas/surface/text/border/focus/link, Systemschrift,
 Schriftgröße, Abstände, Rundungen, Schatten, Kontrollhöhe, Inhaltsbreite,
 Überlagerungsebenen und Bewegung. Siehe die [Theme-Vorlage](../examples/invoice_tutorial.theme.css).
+Vorhandene Komponenten lassen sich gezielt unter `:where(html[data-z-ui])`
+anpassen, zum Beispiel mit `.z-card` oder `.z-button`. Eigene Klassen können
+weiterhin im Seiten-HTML verwendet werden. Ändere möglichst nur benötigte
+Tokens und halte Vorder- und Hintergrundfarben gemeinsam passend; Framework-
+Dateien müssen dafür nicht kopiert werden.
 
 ## Studio, CRUD und Sicherheit
 
