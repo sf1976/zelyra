@@ -1,5 +1,18 @@
 ## Unreleased
 
+## 1.2.15 — 2026-10-18
+
+- Extend generated CRUD create/edit pages and TableView pages with compiler-
+  checked content regions, field help content, and row actions while preserving
+  generated routing, validation, permissions, CSRF, and persistence. / Generierte
+  CRUD-Anlegen-/Bearbeiten-Seiten und TableView-Seiten um compilergeprüfte
+  Inhaltsbereiche, Feldhinweise und Zeilenaktionen erweitern; Routing,
+  Validierung, Berechtigungen, CSRF und Speicherung bleiben beim CRUD-System.
+- Refresh the invoice tutorial's item cards so field labels and values align
+  consistently within a shared card. / Die Artikelkarten des Rechnungstutorials
+  so überarbeiten, dass Feldbeschriftungen und Werte in einer gemeinsamen Karte
+  klar und einheitlich angeordnet sind.
+
 ## 1.2.14 — 2026-10-18
 
 - Refresh the invoice tutorial with a responsive, unified Zelyra UI theme,
