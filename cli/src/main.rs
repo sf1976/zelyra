@@ -49,6 +49,7 @@ use zelyra_web::{
 static TEST_ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
 
 mod account_cli;
+mod architecture;
 mod auth_reset_limits;
 mod command_dispatch;
 mod database_cli;
@@ -199,6 +200,7 @@ fn usage() {
     eprintln!("  zelyra --tutorial invoice [directory] [--no-start] creates the guided invoice app, starts it, and opens the browser");
     eprintln!("  zelyra editor [directory] [--port <port>] [--no-open] starts local Studio and opens the default browser");
     eprintln!("  zelyra lsp starts the local JSON-RPC language server over stdio");
+    eprintln!("  zelyra migrate-layout --check [entry.zyl] [--format human|json] previews source placement without changing files");
     eprintln!("  zelyra text edit <plan.zedit> [--apply --plan-id sha256:<id>] previews or applies checked text edits");
     eprintln!("  impact focus: use `--symbol <kind:name>` to inspect one known node");
     eprintln!("  module plan: `zelyra module plan <entry.zyl> <module.zyl|resource-id>` previews known dependencies");
@@ -1345,6 +1347,12 @@ fn validate_loaded_project(
             error.line,
             error.column,
         );
+        return Err(());
+    }
+    if let Err(issues) = architecture::validate_project_modules(path, &loaded.modules) {
+        for issue in issues {
+            diagnostic(&issue.path, "E-ARCH-001", &issue.message, 1, 1);
+        }
         return Err(());
     }
     let package_root = Path::new(path)

@@ -2176,6 +2176,25 @@ fn new_standard_layout_generates_a_checkable_project_tree() {
         String::from_utf8_lossy(&executed.stderr)
     );
     assert!(String::from_utf8_lossy(&executed.stdout).contains("Welcome to your Zelyra project"));
+    let migration = Command::new(binary())
+        .args([
+            "migrate-layout",
+            "--check",
+            entry.to_str().unwrap(),
+            "--format",
+            "json",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        migration.status.success(),
+        "{}",
+        String::from_utf8_lossy(&migration.stderr)
+    );
+    let migration_report: serde_json::Value = serde_json::from_slice(&migration.stdout).unwrap();
+    assert_eq!(migration_report["schema_version"], 1);
+    assert_eq!(migration_report["mode"], "read-only-check");
+    assert_eq!(migration_report["summary"]["manual_review"], 0);
     fs::remove_dir_all(directory.join("assets")).unwrap();
     let invalid = Command::new(binary())
         .args(["check", entry.to_str().unwrap(), "--format=json"])
@@ -2184,6 +2203,36 @@ fn new_standard_layout_generates_a_checkable_project_tree() {
     assert!(!invalid.status.success());
     let diagnostics: serde_json::Value = serde_json::from_slice(&invalid.stdout).unwrap();
     assert_eq!(diagnostics["diagnostics"][0]["code"], "E-LAYOUT-002");
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn strict_architecture_rejects_route_declarations_inside_domain_modules() {
+    let directory = temporary_directory("strict-architecture");
+    for path in ["schema", "domain", "routes", "public", "assets"] {
+        fs::create_dir_all(directory.join(path)).unwrap();
+    }
+    fs::write(
+        directory.join("zelyra.toml"),
+        "[project]\nname = \"strict-test\"\nlayout = \"standard\"\nstrict_architecture = true\n",
+    )
+    .unwrap();
+    fs::write(
+        directory.join("main.zyl"),
+        "import \"domain::bad\" as bad\nfn main() {}\n",
+    )
+    .unwrap();
+    fs::write(
+        directory.join("domain/bad.zyl"),
+        "page \"/misplaced\" { html { <p>misplaced</p> } }\n",
+    )
+    .unwrap();
+    let checked = Command::new(binary())
+        .args(["check", directory.join("main.zyl").to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(!checked.status.success());
+    assert!(String::from_utf8_lossy(&checked.stderr).contains("E-ARCH-001"));
     fs::remove_dir_all(directory).unwrap();
 }
 

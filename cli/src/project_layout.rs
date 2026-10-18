@@ -57,24 +57,15 @@ pub(crate) fn validate(entry_path: &str) -> Result<(), LayoutError> {
         return Ok(());
     };
     let strict_item = project.get("strict_architecture");
-    let strict = match strict_item {
-        Some(item) => item.as_bool().ok_or_else(|| {
-            span_error(
+    if let Some(item) = strict_item {
+        if item.as_bool().is_none() {
+            return Err(span_error(
                 &config_path,
                 &config_source,
                 "`project.strict_architecture` must be true or false".into(),
                 item.span(),
-            )
-        })?,
-        None => false,
-    };
-    if strict {
-        return Err(span_error(
-            &config_path,
-            &config_source,
-            "`strict_architecture` checks are not available yet; this option is planned for the 1.3.0 architecture gate".into(),
-            strict_item.and_then(toml_edit::Item::span),
-        ));
+            ));
+        }
     }
     let Some(profile) = layout.as_str() else {
         return Err(span_error(
@@ -215,6 +206,48 @@ pub(crate) fn standard_layout_enabled(root: &std::path::Path) -> Result<bool, La
     }
 }
 
+pub(crate) fn strict_architecture_enabled(root: &std::path::Path) -> Result<bool, LayoutError> {
+    let Some(config_path) = find_config(root) else {
+        return Ok(false);
+    };
+    let source = fs::read_to_string(&config_path).map_err(|_| LayoutError {
+        path: config_path.display().to_string(),
+        code: "E-LAYOUT-001",
+        message: "cannot read the project configuration".into(),
+        line: 1,
+        column: 1,
+    })?;
+    let document = source
+        .parse::<DocumentMut>()
+        .map_err(|error| span_error(&config_path, &source, error.to_string(), error.span()))?;
+    let project = document.get("project").and_then(toml_edit::Item::as_table);
+    let Some(project) = project else {
+        return Ok(false);
+    };
+    match project.get("strict_architecture") {
+        Some(item)
+            if project.get("layout").and_then(toml_edit::Item::as_str) == Some("standard") =>
+        {
+            item.as_bool().ok_or_else(|| {
+                span_error(
+                    &config_path,
+                    &source,
+                    "`project.strict_architecture` must be true or false".into(),
+                    item.span(),
+                )
+            })
+        }
+        Some(item) if item.as_bool().is_none() => Err(span_error(
+            &config_path,
+            &source,
+            "`project.strict_architecture` must be true or false".into(),
+            item.span(),
+        )),
+        Some(_) => Ok(false),
+        None => Ok(false),
+    }
+}
+
 fn find_config(start: &std::path::Path) -> Option<PathBuf> {
     let mut directory = start;
     loop {
@@ -302,7 +335,7 @@ mod tests {
     }
 
     #[test]
-    fn unknown_layout_and_unimplemented_strict_mode_are_explicit_errors() {
+    fn unknown_layout_is_rejected_and_standard_strict_setting_is_valid() {
         let root = project("[project]\nname = \"bad\"\nlayout = \"custom\"\n");
         let error = validate(root.join("main.zyl").to_str().unwrap()).unwrap_err();
         assert_eq!(error.code, "E-LAYOUT-001");
@@ -312,9 +345,10 @@ mod tests {
             "[project]\nname = \"strict\"\nlayout = \"standard\"\nstrict_architecture = true\n",
         )
         .unwrap();
-        let error = validate(root.join("main.zyl").to_str().unwrap()).unwrap_err();
-        assert_eq!(error.code, "E-LAYOUT-001");
-        assert!(error.message.contains("not available yet"));
+        for directory in STANDARD_DIRECTORIES {
+            fs::create_dir_all(root.join(directory)).unwrap();
+        }
+        assert!(validate(root.join("main.zyl").to_str().unwrap()).is_ok());
         fs::remove_dir_all(root).unwrap();
     }
 

@@ -148,6 +148,7 @@ anzeigen kann. Zeitpläne laufen innerhalb von `zelyra serve` nur, wenn das Proj
 
 fn common_german_help(key: &str) -> &'static str {
     match key {
+        "migrate-layout" => "Befehl: zelyra migrate-layout --check [entry.zyl] [--format human|json]\n\nLiefert eine deterministische, nur lesende Vorschau, welche Quelldateien in `schema/`, `domain/` oder `routes/` passen. Gemischte und nicht erkannte Dateien erfordern eine manuelle Entscheidung. Es werden keine Dateien verschoben oder geändert.\n\nBeispiel: zelyra migrate-layout --check main.zyl --format json",
         "impact" => "Befehl: zelyra impact <datei.zyl> [Optionen]\n\nZeigt bekannte Abhängigkeiten und Auswirkungen einer Quelldatei.\n  --format human|json  Ausgabeformat\n  --symbol <art:name>  Auf ein bekanntes Symbol begrenzen\n\nBeispiel: zelyra impact main.zyl --format json\n\nDatenbankzugriff wird nicht benötigt.",
         "context" => "Befehl: zelyra context <datei.zyl> [--format human|json]\n\nGibt strukturierten Compilerkontext für Studio und Werkzeuge aus.\n\nBeispiel: zelyra context main.zyl --format json\n\nDatenbankzugriff wird nicht benötigt.",
         "config" => "Befehl: zelyra config <datei.zyl> [--format human|json]\n\nZeigt die aufgelöste Projektkonfiguration und wirksame Fähigkeiten.\n\nBeispiel: zelyra config main.zyl\n\nGeheimnisse werden nicht als Konfigurationshilfe benötigt.",
@@ -248,6 +249,7 @@ Schedules run inside `zelyra serve` only when that project is running as its ins
 
 fn english_common_help(key: &str) -> &'static str {
     match key {
+        "migrate-layout" => "Command: zelyra migrate-layout --check [entry.zyl] [--format human|json]\n\nPrints a deterministic, read-only preview of which source files fit `schema/`, `domain/`, or `routes/`. Mixed and unrecognized files require a manual decision. No files are moved or modified.\n\nExample: zelyra migrate-layout --check main.zyl --format json",
         "impact" => "Command: zelyra impact <file.zyl> [options]\n\nShow known dependencies and the impact of a source file.\n  --format human|json  Output format\n  --symbol <kind:name> Focus on one known symbol\n\nExample: zelyra impact main.zyl --format json\n\nNo database access required.",
         "context" => "Command: zelyra context <file.zyl> [--format human|json]\n\nOutput structured compiler context for Studio and tooling.\n\nExample: zelyra context main.zyl --format json\n\nNo database access required.",
         "config" => "Command: zelyra config <file.zyl> [--format human|json]\n\nShow resolved project configuration and effective capabilities.\n\nExample: zelyra config main.zyl\n\nConfiguration output does not require secrets.",

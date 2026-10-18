@@ -563,6 +563,9 @@ pub(super) fn run() -> ExitCode {
     if command == "check" {
         return check_command(args);
     }
+    if command == "migrate-layout" {
+        return architecture::migrate_layout(args);
+    }
     if command == "routes" {
         return route_cli::command(args);
     }
