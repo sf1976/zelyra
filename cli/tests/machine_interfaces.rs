@@ -1490,6 +1490,13 @@ fn command_help_explains_options_without_running_the_command() {
     let database_help = String::from_utf8_lossy(&database_group.stdout);
     assert!(database_help.contains("ZELYRA_DATABASE_<NAME>_URL"));
     assert!(database_help.contains("DATABASE_URL"));
+
+    let package = run(&["package", "--help"]);
+    assert!(package.status.success());
+    let package_help = String::from_utf8_lossy(&package.stdout);
+    assert!(package_help.contains("cache clean [--apply]"));
+    assert!(package_help.contains("update --plan <datei.toml>"));
+    assert!(package_help.contains("Statischen Index"));
 }
 
 #[test]
@@ -1513,6 +1520,17 @@ fn command_help_is_available_in_english() {
     let database_help = String::from_utf8_lossy(&database.stdout);
     assert!(database_help.contains("ZELYRA_DATABASE_<NAME>_URL"));
     assert!(database_help.contains("DATABASE_URL"));
+
+    let package = Command::new(binary())
+        .args(["package", "--help"])
+        .env("ZELYRA_LANGUAGE", "en")
+        .output()
+        .expect("package help command should run");
+    assert!(package.status.success());
+    let package_help = String::from_utf8_lossy(&package.stdout);
+    assert!(package_help.contains("cache clean [--apply]"));
+    assert!(package_help.contains("update --plan <file.toml>"));
+    assert!(package_help.contains("Build a static index"));
 }
 
 #[test]
@@ -1796,6 +1814,16 @@ fn new_mariadb_project_propagates_the_selected_web_port() {
     assert!(env_file.contains("ZELYRA_ALLOWED_HOSTS=localhost,127.0.0.1,[::1]"));
     assert!(env_file.contains("# ZELYRA_WEB_PORT=8080"));
     assert!(env_file.contains(&format!("# ZELYRA_HOST_PORT={web_host_port}")));
+    assert!(env_file.contains("# ZELYRA_FEATURE_API=true"));
+    assert!(env_file.contains("# ZELYRA_MFA_ENCRYPTION_KEY="));
+    assert!(env_file.contains("# ZELYRA_SMTP_PASSWORD="));
+    assert!(env_file
+        .contains("# zelyra schedule export main.zyl --format cron --output deploy/zelyra.cron"));
+    assert!(env_file.contains(
+        "# Review deploy/zelyra.cron, then add its appropriate lines with `crontab -e`."
+    ));
+    assert!(!env_file.contains("\nZELYRA_FEATURE_API=true"));
+    assert!(!env_file.contains("\nZELYRA_MFA_ENCRYPTION_KEY="));
     assert!(env_file.contains(&format!("ZELYRA_DB_HOST_PORT={database_host_port}")));
     assert!(!env_file.contains("change-me"));
     assert!(compose.contains(&format!(
@@ -1804,6 +1832,16 @@ fn new_mariadb_project_propagates_the_selected_web_port() {
     assert!(compose.contains(&format!(
         "127.0.0.1:${{ZELYRA_DB_HOST_PORT:-{database_host_port}}}:3306"
     )));
+    for setting in [
+        "ZELYRA_FEATURE_API: ${ZELYRA_FEATURE_API:-true}",
+        "ZELYRA_AUTH_TOKEN: ${ZELYRA_AUTH_TOKEN:-}",
+        "ZELYRA_MFA_ENCRYPTION_KEY: ${ZELYRA_MFA_ENCRYPTION_KEY:-}",
+    ] {
+        assert!(
+            compose.contains(setting),
+            "missing Compose forwarding: {setting}"
+        );
+    }
     fs::remove_dir_all(directory).unwrap();
 }
 

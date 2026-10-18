@@ -1,9 +1,13 @@
-# Lokale Zelyra-Pakete (experimentell)
+# Zelyra-Pakete (experimentell)
 
-Diese unveröffentlichte Arbeit für 1.1.5 ergänzt Offline-Pakete aus lokalen
-Pfaden auf Basis der vorhandenen expliziten Modulimporte. Zelyra lädt keine
-Pakete herunter und führt keine Build-Skripte aus. Projekte ohne `[package]`
-behalten das bisherige Verhalten mit Dateiimporten.
+Dieser Leitfaden beschreibt lokale Offline-Pakete und die experimentelle,
+signierte Registry-Funktion im noch unveröffentlichten 1.1.5-Kandidaten. Der
+lokale Ablauf lädt keine Pakete herunter und führt keine Build-Skripte aus.
+Der Kandidat ergänzt signierte Quellartefakte, ausdrückliches
+Herausgebervertrauen, statische Registry-Indizes, Suche und verifizierte
+Installation exakter Versionen. Separat veröffentlichte transitive Pakete und
+Moduleinstellungsseiten für normale Anwendungen bleiben offen. Projekte ohne
+`[package]` behalten das bisherige Verhalten mit Dateiimporten.
 
 Lokale Pakete sind derzeit Quellcode-Abhängigkeiten und keine installierbaren
 oder über normale Anwendungsseiten verwalteten Module. `zelyra module list`
@@ -103,11 +107,150 @@ Lockfile erkennt Änderungen relativ zu einem Lockfile, dem das Projekt bereits
 vertraut. Sie authentifiziert weder den Herausgeber noch die Herkunft der
 Dateien und macht ein schädliches Paket nicht sicher. `zelyra package lock
 --update` übernimmt bewusst die aktuellen lokalen Dateien als neuen gesperrten
-Stand; prüfe daher Quelle und Diff vor diesem Schritt. Das Paketsystem besitzt
-derzeit keine Registry, Signaturen, Herausgeberidentitäten oder Downloads aus
-dem Netz. Paketobergrenzen für `effects` sind zusätzliche Compilergrenzen; sie
-erteilen oder umgehen weder Anwendungs-Capabilities noch SQL-Prüfungen,
-Contracts oder Laufzeitregeln.
+Stand; prüfe daher Quelle und Diff vor diesem Schritt. Der lokale
+Offline-Paketablauf lädt weiterhin nichts aus dem Netz. Der unveröffentlichte
+1.1.5-Kandidat enthält zusätzlich signierte Quellartefakte, eine ausdrückliche
+lokale Herausgeber-Vertrauensdatei, einen deterministischen Generator für
+statische Registry-Indizes, Suche und verifizierte Installation exakter
+Versionen. Installation lädt nur nach ausdrücklichem `add` oder `update`;
+Checks und Programmausführung bleiben danach offline möglich. Separat
+veröffentlichte transitive Abhängigkeiten bleiben offen. Eine Signatur weist
+nach, dass der
+zugehörige vertrauenswürdige Schlüssel den Artefakt-Hash signiert hat. Sie
+beweist weder, dass der Code sicher ist, noch dass ein Herausgeber
+vertrauenswürdig handelt. Paketobergrenzen für `effects` sind zusätzliche
+Compilergrenzen; sie erteilen oder umgehen weder Anwendungs-Capabilities noch
+SQL-Prüfungen, Contracts oder Laufzeitregeln.
+
+Im aktuellen Entwicklungszweig kann ein Herausgeber einen Schlüssel anlegen
+und ein Quellpaket samt vollständig enthaltenen Paketabhängigkeiten signieren:
+
+```sh
+zelyra package keygen --publisher rechnungsteam --output rechnungsteam.key
+zelyra package sign packages/billing --publisher rechnungsteam \
+  --key rechnungsteam.key --output billing-1.0.0.zpkg
+```
+
+Die private Schlüsseldatei wird ohne Überschreiben angelegt und erhält unter
+Unix nur Rechte für den Eigentümer. Bewahre sie außerhalb des Projekts auf und
+sichere sie geschützt. `keygen` gibt den öffentlichen Schlüssel aus. Eine
+Projektverantwortliche Person muss ihn ausdrücklich hinzufügen, bevor die
+Signatur als vertrauenswürdig gilt:
+
+```sh
+zelyra package trust add rechnungsteam <public-key-hex>
+zelyra package trust list
+zelyra package verify billing-1.0.0.zpkg
+zelyra package registry build ./veroeffentlichte-pakete
+```
+
+`registry build` durchsucht einen echten Verzeichnisbaum ohne Symlinks nach
+`.zpkg`-Dateien, prüft Signatur und Quellprüfsumme und schreibt deterministisch
+eine `index.json`, die statisch gehostet werden kann. Der Index dient nur zur
+Suche und begründet kein Vertrauen: Clients müssen dem Herausgeberschlüssel
+weiterhin ausdrücklich vertrauen. Der Befehl lädt nichts hoch. Artefakte und
+Index müssen gemeinsam mit einem Hostingdienst eigener Wahl veröffentlicht
+werden.
+
+Mit `zelyra package search <index-url> [namensfilter]` lässt sich ein statischer
+Index durchsuchen. Die Ausgabe ist ausdrücklich nicht vertrauenswürdige
+Suchmetadaten; sie fügt keinen Herausgeberschlüssel hinzu und installiert keine
+Quelle. `add` und `update` prüfen weiterhin Signatur, Hash und konfiguriertes
+Herausgebervertrauen, bevor sie das Projekt ändern.
+
+Eine exakte, vertrauenswürdige Version kann in den lokalen Paketspeicher des
+Projekts geladen werden:
+
+```sh
+zelyra package add https://pakete.example.test/index.json rechnung 1.0.0 --as billing
+zelyra package lock --check
+zelyra check main.zyl
+```
+
+Der Installer verlangt HTTPS (unverschlüsseltes HTTP ist nur beim Test über
+Loopback erlaubt), folgt keinen Weiterleitungen, begrenzt Antwortgröße und
+Laufzeit, verlangt eine normalisierte exakte SemVer-Version, prüft Index-Hash
+und Artefaktsignatur gegen `zelyra.trust.toml` und hält Artefaktdownloads auf
+dem Ursprung des Index. Er schreibt ohne Überschreiben nach
+`.zelyra/packages/<name>/<version>`, aktualisiert Manifest und Lockfile mit
+Rollback und vermerkt Registry, Signierer, öffentlichen Schlüssel und
+Artefakt-Hash im `zelyra.lock`. Transitive Abhängigkeiten werden noch nicht
+separat aufgelöst oder geladen. Paketabhängigkeiten müssen bereits im signierten
+Paketverzeichnis enthalten sein. Prüfung und Ausführung installierter Pakete sind
+offline möglich.
+Nach der vorläufigen Lock-Aktualisierung prüft der Installer außerdem das
+gesamte Projekt mit dem Compiler und rollt bei Fehlern zurück. `zelyra module
+bundle` verschiebt Pakete aus dem Cache in portable Pfade unter
+`packages/<name>/<version>`, erhält die Herkunft im Lock und hält das Bundle
+offline ausführbar.
+
+Eine Abhängigkeit wird ausdrücklich mit `zelyra package remove <alias>`
+entfernt. Der Befehl prüft das verbleibende Projekt und aktualisiert
+`zelyra.toml` sowie `zelyra.lock` mit Rollback bei Fehlern. Dateien im Cache
+bleiben erhalten, damit gemeinsam genutzte oder Nutzerdaten nicht ungefragt
+gelöscht werden. Nicht mehr referenzierte Versionen lassen sich erst anzeigen
+und nach ausdrücklicher Prüfung entfernen:
+
+```sh
+zelyra package cache clean
+zelyra package cache clean --apply
+```
+
+Die Bereinigung verweigert ein veraltetes Lockfile und Symlinks im Paketcache,
+erhält alle dort referenzierten Pakete und verschiebt Kandidaten vor dem Löschen
+in ein temporäres Quarantäneverzeichnis. Prüfe zuerst die Vorschau. Scheitert
+das abschließende Löschen, nennt der Befehl den Wiederherstellungspfad.
+
+Ein vorhandener Alias lässt sich ausdrücklich auf eine andere exakte Version
+aktualisieren: `zelyra package update <index-url> <name> <exact-version> --as
+<alias>`. Das neue Artefakt muss dieselbe Paketidentität wie die bisherige
+Abhängigkeit haben und dieselben Vertrauens- und Integritätsprüfungen bestehen
+wie bei `add`. Manifest und Lock werden mit Rollback aktualisiert. Vorherige
+Cacheversionen bleiben bis zum ausdrücklichen Aufruf von
+`zelyra package cache clean --apply` erhalten; es gibt weder SemVer-Bereich noch
+implizite Auswahl der neuesten Version.
+
+Mehrere Aliase lassen sich mit einem expliziten Plan gemeinsam aktualisieren:
+
+```toml
+[[update]]
+alias = "billing"
+registry = "https://packages.example.test/index.json"
+name = "billing"
+version = "1.2.4"
+
+[[update]]
+alias = "reporting"
+registry = "https://packages.example.test/index.json"
+name = "reporting"
+version = "2.0.1"
+```
+
+Speichere die Datei etwa als `updates.toml` und starte
+`zelyra package update --plan updates.toml`. Jeder Alias, jede Paketidentität
+und jede normalisierte exakte SemVer-Version muss eindeutig sein. Pro Alias
+müssen Herausgeber und Signierschlüssel mit dem bereits installierten Paket
+übereinstimmen und aktuell vertraut sein. Der Plan ist auf 128 Einträge, 256
+MiB Gesamtdownload, fünf Minuten und 16.384 Quell-Dateien begrenzt. Vor dem
+Umschalten werden sämtliche Registryeinträge, Hashes, Signaturen und Pakete
+geprüft. Danach werden Cacheversionen installiert, Manifest und Lock aktualisiert
+und das Gesamtprojekt kompiliert. Bei einem erkannten Fehler werden Manifest,
+Lock und neu installierte Cacheversionen zurückgerollt; vorhandene ältere
+Cacheversionen bleiben erhalten. Ein Prozessabbruch oder Stromausfall ist keine
+dateisystemübergreifend atomare Transaktion: Ein veraltetes Lockfile blockiert
+die Verwendung und muss nach Prüfung des Manifests mit
+`zelyra package lock --update` neu erzeugt werden.
+
+Die Standarddatei heißt `zelyra.trust.toml` im aktuellen Verzeichnis. Mit
+`--file <pfad>` kann eine andere Vertrauensdatei verwaltet oder für die Prüfung
+verwendet werden. Signierte Quellartefakte enthalten ausschließlich
+`zelyra.toml` und `.zyl`-Quellen, sind auf 32 MiB und 4.096 Dateien begrenzt
+und unterstützen Paketabhängigkeiten, wenn deren Dateien vollständig im
+Paketverzeichnis enthalten sind und relative Pfade verwenden. Externe Pfad-
+Abhängigkeiten scheitern an der Compilerprüfung. Das versionierte Signaturformat
+bindet Herausgeber-ID, Paketname, exakte Version, Kompatibilitätsmanifest und
+normalisierten Quell-Hash. Entfernte transitive Auflösung, Updates und eine
+veröffentlichte stabile Schnittstelle fehlen noch.
 
 Pakete können Konfigurationsfelder unter `[settings.<name>]` beschreiben:
 
@@ -251,7 +394,11 @@ enthalten. Der erzeugte Docker-Build kompiliert genau diesen Compiler, kopiert
 das Bundle in die Build-Stufe und führt vor dem Runtime-Image
 `zelyra check main.zyl` aus. Ein veralteter oder inkompatibler Compiler-Pin
 bricht daher den Image-Build ab. `complete_deployment` bleibt `false`, bis
-externe Effekte und Betriebsanforderungen geprüft sind.
+externe Effekte und Betriebsanforderungen geprüft sind. Da das Dockerprofil
+`zelyra serve` startet, muss der ausgewählte Abschluss eine Seite, ein Formular,
+CRUD, eine API oder Authentifizierungsrouten enthalten. Ein reines Bibliotheks-
+oder Datenbankmodul wird vor dem Schreiben abgelehnt; bündle dafür die
+vollständige Anwendung oder ein tatsächlich routenhaltiges Modul.
 
 Ein reproduzierbares lokales Lockfile erzeugen und prüfen:
 

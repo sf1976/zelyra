@@ -765,7 +765,7 @@ fn module_init_creates_a_checkable_local_package_and_never_overwrites() {
 
 #[test]
 fn package_imports_cannot_reach_sources_excluded_from_lock_checksums() {
-    for excluded_dir in [".git", "target"] {
+    for excluded_dir in [".git", "target", ".zelyra"] {
         let directory = project(&[
             (
                 "main.zyl",
@@ -816,7 +816,7 @@ fn package_imports_cannot_reach_sources_excluded_from_lock_checksums() {
 
 #[test]
 fn package_entry_cannot_come_from_a_directory_excluded_from_lock_checksums() {
-    for excluded_dir in [".git", "target"] {
+    for excluded_dir in [".git", "target", ".zelyra"] {
         let directory = project(&[
             (
                 "main.zyl",
@@ -1133,7 +1133,7 @@ fn checked_in_business_package_example_locks_checks_and_exports_database_provide
             "module",
             "bundle",
             "main.zyl",
-            "pkg:billing",
+            "main.zyl",
             "--output",
             &output_arg,
             "--docker",
@@ -4802,7 +4802,7 @@ fn package_database_provider_and_business_module_export_as_docker_app() {
     let directory = project(&[
         (
             "main.zyl",
-            "import \"pkg:billing\" as billing\nfn main() uses Database(read) { print(billing::invoice_count()) }\n",
+            "import \"pkg:billing\" as billing\npage \"/\" { html { <h1>Business invoices</h1> } }\nfn main() uses Database(read) { print(billing::invoice_count()) }\n",
         ),
         (
             "zelyra.toml",
@@ -4847,7 +4847,7 @@ fn package_database_provider_and_business_module_export_as_docker_app() {
             "module",
             "bundle",
             "main.zyl",
-            "pkg:billing",
+            "main.zyl",
             "--output",
             &output_arg,
             "--docker",
@@ -4988,4 +4988,41 @@ fn package_database_provider_and_business_module_export_as_docker_app() {
 
     fs::remove_dir_all(directory).unwrap();
     fs::remove_dir_all(output).unwrap();
+}
+
+#[test]
+fn docker_module_bundle_rejects_library_without_a_web_entry() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/ledger.zyl\" as ledger\nfn main() { print(ledger::balance()) }\n",
+        ),
+        ("src/ledger.zyl", "pub fn balance() -> Int { return 42 }\n"),
+    ]);
+    let output = directory.with_extension("library-docker-bundle");
+    let output_arg = output.to_string_lossy().into_owned();
+    let result = run(
+        &directory,
+        &[
+            "module",
+            "bundle",
+            "main.zyl",
+            "src/ledger.zyl",
+            "--output",
+            &output_arg,
+            "--docker",
+            "--compiler-ref",
+            &"a".repeat(40),
+        ],
+    );
+    assert!(!result.status.success());
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(
+        stderr.contains("needs at least one page, form, CRUD resource, API, or auth declaration")
+    );
+    assert!(
+        !output.exists(),
+        "a rejected Docker bundle must not be created"
+    );
+    fs::remove_dir_all(directory).unwrap();
 }

@@ -9,12 +9,20 @@ const baseUrl = process.env.ZELYRA_INVOICE_E2E_URL;
 assert.ok(baseUrl, "ZELYRA_INVOICE_E2E_URL must point to the running tutorial");
 
 async function assertVisualSnapshot(page, name) {
+  const viewport = page.viewportSize();
   await page.evaluate(async () => {
+    if (history.scrollRestoration) history.scrollRestoration = "manual";
     await document.fonts.ready;
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+    await new Promise((resolve) => requestAnimationFrame(resolve));
   });
   await page.waitForTimeout(120);
-  const actualBuffer = await page.screenshot({ fullPage: true, animations: "disabled" });
+  const documentHeight = await page.evaluate(() => document.documentElement.scrollHeight);
+  await page.setViewportSize({ width: viewport.width, height: Math.max(viewport.height, documentHeight) });
+  await page.evaluate(() => window.scrollTo({ top: 0, left: 0, behavior: "instant" }));
+  const actualBuffer = await page.screenshot({ animations: "disabled" });
+  await page.setViewportSize(viewport);
   const baselinePath = new URL(`./visual-baselines/${name}.png`, import.meta.url);
   if (process.env.ZELYRA_UPDATE_VISUAL_BASELINES === "1") {
     await mkdir(new URL("./visual-baselines/", import.meta.url), { recursive: true });

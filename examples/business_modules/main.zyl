@@ -2,6 +2,13 @@ import "pkg:billing" as billing
 import "pkg:csv_export" as csv_export
 import "pkg:csv_import" as csv_import
 
+page "/" {
+    html {
+        <h1>Business module application</h1>
+        <p>Billing, storage, and CSV tools are composed from reusable packages.</p>
+    }
+}
+
 fn csv_demo() {
     rows = [["number", "customer", "note"], ["INV-1", "Acme, Inc.", "Paid\nby transfer"]]
     match csv_export::encode(rows) {

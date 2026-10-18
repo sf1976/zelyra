@@ -8435,7 +8435,7 @@ fn render_crud_list_with_actions(
     html.push_str(&html_escape(&crud.path));
     html.push_str("\"><fieldset class=\"zelyra-query-controls\"><legend>");
     html.push_str(&tr(language, "query.legend"));
-    html.push_str("</legend><label for=\"search\">");
+    html.push_str("</legend><div class=\"z-query-controls__fields\"><label for=\"search\">");
     html.push_str(&tr(language, "query.search"));
     html.push_str("</label><input id=\"search\" name=\"search\" value=\"");
     html.push_str(&html_escape(search));
@@ -8540,7 +8540,7 @@ fn render_crud_list_with_actions(
     }
     html.push_str("<button type=\"submit\">");
     html.push_str(&tr(language, "query.apply"));
-    html.push_str("</button></fieldset></form>");
+    html.push_str("</button></div></fieldset></form>");
     if rows.is_empty() {
         html.push_str("<p>");
         let empty_label = crud

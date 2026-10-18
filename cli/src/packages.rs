@@ -4,6 +4,8 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
+mod registry;
+
 const MANIFEST: &str = "zelyra.toml";
 const LOCKFILE: &str = "zelyra.lock";
 static NEXT_LOCK_TEMP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -16,10 +18,19 @@ pub(crate) struct Package {
     pub(crate) relative_root: String,
     pub(crate) entry: PathBuf,
     pub(crate) dependencies: BTreeMap<String, String>,
+    sources: BTreeMap<String, PackageSource>,
     zelyra_requirement: Option<String>,
     declared_effects: Option<BTreeSet<String>>,
     settings: Vec<PackageSettingSchema>,
     checksum: String,
+}
+
+#[derive(Clone, Debug)]
+struct PackageSource {
+    registry: String,
+    publisher: String,
+    public_key: String,
+    artifact_sha256: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -42,7 +53,7 @@ pub(crate) struct PackageGraph {
 
 pub(crate) struct PackageBundleSupport {
     pub(crate) root_manifest: String,
-    pub(crate) package_files: Vec<String>,
+    pub(crate) package_files: Vec<(String, String)>,
     pub(crate) package_names: Vec<String>,
 }
 
@@ -81,7 +92,7 @@ pub(crate) struct PackageError {
 
 pub(crate) fn is_unhashed_package_path(path: &Path) -> bool {
     path.components().any(|component| {
-        matches!(component, Component::Normal(name) if name == ".git" || name == "target")
+        matches!(component, Component::Normal(name) if name == ".git" || name == "target" || name == ".zelyra")
     })
 }
 
@@ -225,7 +236,7 @@ impl PackageGraph {
             if is_unhashed_package_path(&entry_relative) {
                 return Err(PackageError {
                     message: format!(
-                        "package `{name}` entry may not be inside `.git` or `target`; those directories are excluded from package checksums"
+                        "package `{name}` entry may not be inside `.git`, `target`, or `.zelyra`; those directories are excluded from package checksums"
                     ),
                 });
             }
@@ -247,6 +258,7 @@ impl PackageGraph {
                 });
             }
             let dependencies = parse_dependencies(&manifest, &manifest_path)?;
+            let sources = parse_package_sources(&manifest, &manifest_path, &dependencies)?;
             let mut resolved_dependencies = BTreeMap::new();
             for (alias, dependency) in &dependencies {
                 let dependency_root =
@@ -287,6 +299,7 @@ impl PackageGraph {
                         (alias.clone(), relative)
                     })
                     .collect(),
+                sources,
                 declared_effects,
                 settings,
                 checksum,
@@ -808,6 +821,7 @@ impl PackageGraph {
             message: "workspace package manifest must be a TOML table".into(),
         })?;
         let mut dependencies = toml::map::Map::new();
+        let mut package_sources = toml::map::Map::new();
         for (alias, relative_root) in &root.dependencies {
             let dependency_root = self.workspace_root.join(relative_root);
             let Some(package_key) = self.paths.get(&dependency_root) else {
@@ -826,24 +840,52 @@ impl PackageGraph {
             let mut dependency = toml::map::Map::new();
             dependency.insert(
                 "path".into(),
-                toml::Value::String(package.relative_root.clone()),
+                toml::Value::String(bundle_package_path(&package.relative_root)),
             );
             dependency.insert(
                 "version".into(),
                 toml::Value::String(format!("={}", package.version)),
             );
             dependencies.insert(alias.clone(), toml::Value::Table(dependency));
+            if let Some(source) = root.sources.get(alias) {
+                let mut source_value = toml::map::Map::new();
+                source_value.insert(
+                    "registry".into(),
+                    toml::Value::String(source.registry.clone()),
+                );
+                source_value.insert(
+                    "publisher".into(),
+                    toml::Value::String(source.publisher.clone()),
+                );
+                source_value.insert(
+                    "public_key".into(),
+                    toml::Value::String(source.public_key.clone()),
+                );
+                source_value.insert(
+                    "artifact_sha256".into(),
+                    toml::Value::String(source.artifact_sha256.clone()),
+                );
+                package_sources.insert(alias.clone(), toml::Value::Table(source_value));
+            }
         }
         if dependencies.is_empty() {
             manifest_table.remove("dependencies");
         } else {
             manifest_table.insert("dependencies".into(), toml::Value::Table(dependencies));
         }
+        if package_sources.is_empty() {
+            manifest_table.remove("package_sources");
+        } else {
+            manifest_table.insert(
+                "package_sources".into(),
+                toml::Value::Table(package_sources),
+            );
+        }
         let root_manifest = toml::to_string_pretty(&manifest).map_err(|error| PackageError {
             message: format!("cannot render filtered bundle package manifest: {error}"),
         })?;
 
-        let mut package_files = BTreeSet::<String>::new();
+        let mut package_files = BTreeMap::<String, String>::new();
         for package_key in &included {
             let package = self.packages.get(package_key).ok_or_else(|| PackageError {
                 message: format!(
@@ -852,7 +894,7 @@ impl PackageGraph {
             })?;
             for relative in package_source_files(&package.root)? {
                 let source = package.root.join(&relative);
-                let relative_to_workspace = source
+                let source_relative = source
                     .strip_prefix(&self.workspace_root)
                     .map_err(|_| PackageError {
                         message: format!(
@@ -862,7 +904,18 @@ impl PackageGraph {
                     })?
                     .to_string_lossy()
                     .replace('\\', "/");
-                package_files.insert(relative_to_workspace);
+                let destination_relative = bundle_package_path(&source_relative);
+                if let Some(previous) =
+                    package_files.insert(destination_relative.clone(), source_relative.clone())
+                {
+                    if previous != source_relative {
+                        return Err(PackageError {
+                            message: format!(
+                                "bundle package path collision at `{destination_relative}`"
+                            ),
+                        });
+                    }
+                }
             }
         }
         let package_names = included
@@ -872,7 +925,10 @@ impl PackageGraph {
             .collect();
         Ok(PackageBundleSupport {
             root_manifest,
-            package_files: package_files.into_iter().collect(),
+            package_files: package_files
+                .into_iter()
+                .map(|(destination, source)| (source, destination))
+                .collect(),
             package_names,
         })
     }
@@ -1268,12 +1324,13 @@ fn replace_lockfile_windows(temporary: &Path, target: &Path) -> std::io::Result<
 pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> std::process::ExitCode {
     use std::process::ExitCode;
     let Some(action) = arguments.next() else {
-        eprintln!("Usage: zelyra package lock [entry.zyl] [--check|--update]");
+        eprintln!(
+            "Usage: zelyra package <lock|keygen|sign|verify|trust|registry|add|update|remove|cache> ..."
+        );
         return ExitCode::from(2);
     };
     if action != "lock" {
-        eprintln!("error[E-PKG-001]: unknown package action `{action}`");
-        return ExitCode::from(2);
+        return registry::command(&action, arguments);
     }
     let mut entry = None;
     let mut mode = None;
@@ -1579,6 +1636,108 @@ fn parse_dependencies(
     Ok(result)
 }
 
+fn parse_package_sources(
+    manifest: &toml::Value,
+    path: &Path,
+    dependencies: &BTreeMap<String, (PathBuf, VersionReq)>,
+) -> Result<BTreeMap<String, PackageSource>, PackageError> {
+    let Some(source_table) = manifest.get("package_sources") else {
+        return Ok(BTreeMap::new());
+    };
+    let source_table = source_table.as_table().ok_or_else(|| PackageError {
+        message: format!("`{}` [package_sources] must be a table", path.display()),
+    })?;
+    let mut result = BTreeMap::new();
+    for (alias, value) in source_table {
+        if !dependencies.contains_key(alias) {
+            return Err(PackageError {
+                message: format!("package source metadata refers to unknown dependency `{alias}`"),
+            });
+        }
+        let fields = value.as_table().ok_or_else(|| PackageError {
+            message: format!("package source `{alias}` must be a table"),
+        })?;
+        if fields.len() != 4
+            || fields.keys().any(|key| {
+                !matches!(
+                    key.as_str(),
+                    "registry" | "publisher" | "public_key" | "artifact_sha256"
+                )
+            })
+        {
+            return Err(PackageError {
+                message: format!("package source `{alias}` requires exactly registry, publisher, public_key, and artifact_sha256"),
+            });
+        }
+        let get = |field: &str| -> Result<String, PackageError> {
+            fields
+                .get(field)
+                .and_then(toml::Value::as_str)
+                .map(str::to_owned)
+                .ok_or_else(|| PackageError {
+                    message: format!("package source `{alias}` field `{field}` must be a string"),
+                })
+        };
+        let source = PackageSource {
+            registry: get("registry")?,
+            publisher: get("publisher")?,
+            public_key: get("public_key")?,
+            artifact_sha256: get("artifact_sha256")?,
+        };
+        let url = url::Url::parse(&source.registry).map_err(|error| PackageError {
+            message: format!("package source `{alias}` has invalid registry URL: {error}"),
+        })?;
+        let loopback_http = url.scheme() == "http"
+            && url.host_str().is_some_and(|host| {
+                host.eq_ignore_ascii_case("localhost")
+                    || host
+                        .parse::<std::net::IpAddr>()
+                        .is_ok_and(|ip| ip.is_loopback())
+            });
+        if (url.scheme() != "https" && !loopback_http)
+            || !url.username().is_empty()
+            || url.password().is_some()
+            || url.query().is_some()
+            || url.fragment().is_some()
+        {
+            return Err(PackageError {
+                message: format!("package source `{alias}` registry must be HTTPS without credentials, query, or fragment"),
+            });
+        }
+        if source.publisher.is_empty()
+            || source.publisher.len() > 64
+            || !source.publisher.bytes().all(|byte| {
+                byte.is_ascii_lowercase()
+                    || byte.is_ascii_digit()
+                    || matches!(byte, b'-' | b'_' | b'.')
+            })
+        {
+            return Err(PackageError {
+                message: format!("package source `{alias}` has invalid publisher ID"),
+            });
+        }
+        if source.public_key.len() != 64
+            || !source
+                .public_key
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit())
+            || source.artifact_sha256.len() != 71
+            || !source.artifact_sha256.starts_with("sha256:")
+            || !source.artifact_sha256[7..]
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit())
+        {
+            return Err(PackageError {
+                message: format!(
+                    "package source `{alias}` has malformed public key or artifact digest"
+                ),
+            });
+        }
+        result.insert(alias.clone(), source);
+    }
+    Ok(result)
+}
+
 fn detect_dependency_cycles(packages: &BTreeMap<String, Package>) -> Result<(), PackageError> {
     fn visit<'a>(
         package_key: &'a str,
@@ -1684,7 +1843,7 @@ fn package_source_files(root: &Path) -> Result<Vec<PathBuf>, PackageError> {
             if metadata.is_dir() {
                 if path
                     .file_name()
-                    .is_some_and(|name| name == ".git" || name == "target")
+                    .is_some_and(|name| name == ".git" || name == "target" || name == ".zelyra")
                 {
                     continue;
                 }
@@ -1708,6 +1867,12 @@ fn package_source_files(root: &Path) -> Result<Vec<PathBuf>, PackageError> {
     Ok(files)
 }
 
+fn bundle_package_path(path: &str) -> String {
+    path.strip_prefix(".zelyra/packages/")
+        .map(|relative| format!("packages/{relative}"))
+        .unwrap_or_else(|| path.to_owned())
+}
+
 fn render_lock(packages: &BTreeMap<String, Package>) -> String {
     let mut output = String::from("lock_version = 1\n\n");
     for (index, package) in packages.values().enumerate() {
@@ -1725,6 +1890,13 @@ fn render_lock(packages: &BTreeMap<String, Package>) -> String {
             .map(|(alias, path)| format!("{alias}={path}"))
             .collect::<Vec<_>>();
         output.push_str(&format!("dependencies = {:?}\n", dependencies));
+        for (alias, source) in &package.sources {
+            output.push_str(&format!("\n[package.sources.{:?}]\n", alias));
+            output.push_str(&format!("registry = {:?}\n", source.registry));
+            output.push_str(&format!("publisher = {:?}\n", source.publisher));
+            output.push_str(&format!("public_key = {:?}\n", source.public_key));
+            output.push_str(&format!("artifact_sha256 = {:?}\n", source.artifact_sha256));
+        }
     }
     output
 }
