@@ -128,7 +128,10 @@ abgeschlossen.
   Von Anwendungen ausgelieferte Moduleinstellungen nur mit serverseitiger
   Autorisierung, CSRF, Schemaprüfung, Redaktion und ausdrücklich definiertem
   Verhalten nach Änderungen einführen. Die Outbox-Liste bleibt schreibgeschützt
-  und nennt bei fehlender Tabelle einen passenden Setup-Befehl. Paket- und
+  und nennt bei fehlender Tabelle einen passenden Setup-Befehl. Compose-v2-
+  Erkennung für Debian/Ubuntu korrigieren, Datenbank-URLs aus der Projekt-`.env`
+  für Audit- und Auth-Rollenbefehle laden und das Unix-SIGPIPE-Verhalten bei
+  weitergeleiteten CLI-Ausgaben erhalten. Paket- und
   Modulverträge für Einstellungen, Effekte, Jobs, Datenzugriff und HostServices
   über AST, MIR und Bytecode nachweisen oder nicht unterstützte Pfade in jedem
   Backend mit stabilen Diagnosen geschlossen abweisen. `public/`, statische

@@ -4789,12 +4789,18 @@ fn supported_compose_version(version: &str) -> bool {
             !character.is_ascii_alphanumeric() && !matches!(character, '.' | '-' | '+')
         });
         let token = token.trim_start_matches('v');
-        let normalized = if token.matches('.').count() == 1 {
-            format!("{token}.0")
+        let clean_token = token.split('~').next().unwrap_or(token);
+        let normalized = if clean_token.matches('.').count() == 1 {
+            format!("{clean_token}.0")
         } else {
-            token.to_owned()
+            clean_token.to_owned()
         };
         semver::Version::parse(&normalized).is_ok_and(|version| version.major >= 2)
+            || token
+                .split('.')
+                .next()
+                .and_then(|major| major.parse::<u64>().ok())
+                .is_some_and(|major| major >= 2)
     })
 }
 

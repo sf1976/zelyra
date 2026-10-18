@@ -507,6 +507,52 @@ fn named_database_url_in_env_file_precedes_legacy_url_and_falls_back() {
 }
 
 #[test]
+fn account_commands_resolve_database_url_from_project_env_file() {
+    let _environment = TEST_ENVIRONMENT_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let old_database_url = env::var_os("DATABASE_URL");
+    let old_named_url = env::var_os("ZELYRA_DATABASE_MAIN_URL");
+    env::remove_var("DATABASE_URL");
+    env::remove_var("ZELYRA_DATABASE_MAIN_URL");
+
+    let directory = std::env::temp_dir().join(format!(
+        "zelyra-account-env-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&directory).unwrap();
+    fs::write(
+        directory.join("main.zyl"),
+        "database main { engine: mariadb }\n",
+    )
+    .unwrap();
+    fs::write(
+        directory.join(".env"),
+        "ZELYRA_DATABASE_MAIN_URL=mariadb://project:secret@127.0.0.1:3306/app\n",
+    )
+    .unwrap();
+    let source = fs::read_to_string(directory.join("main.zyl")).unwrap();
+    let program = parse(&lex(&source).unwrap()).unwrap();
+    assert_eq!(
+        account_cli::project_database_url(directory.join("main.zyl").to_str().unwrap(), &program)
+            .unwrap(),
+        Some("mariadb://project:secret@127.0.0.1:3306/app".into())
+    );
+    fs::remove_dir_all(directory).unwrap();
+
+    if let Some(value) = old_database_url {
+        env::set_var("DATABASE_URL", value);
+    }
+    if let Some(value) = old_named_url {
+        env::set_var("ZELYRA_DATABASE_MAIN_URL", value);
+    }
+}
+
+#[test]
 fn project_database_url_expands_the_configured_local_host_port() {
     assert_eq!(
         expand_database_host_port(
@@ -4065,6 +4111,8 @@ fn compose_versions_reject_python_v1_and_accept_current_compose() {
         "2.40",
         "Docker Compose version v2.0.0",
         "2.40.0-desktop.1",
+        "2.40.3+ds1-0ubuntu1~24.04.1",
+        "docker: 2.40.3+ds1-0ubuntu1~24.04.1",
         "v5.6.0",
     ] {
         assert!(supported_compose_version(version), "{version}");
