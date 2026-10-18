@@ -3653,8 +3653,10 @@ fn renders_relationship_labels_in_crud_views() {
                 foreign_keys: vec![zelyra_database::ForeignKey {
                     name: None,
                     column: "department_id".into(),
+                    columns: Vec::new(),
                     referenced_table: "departments".into(),
                     referenced_column: "id".into(),
+                    referenced_columns: Vec::new(),
                     on_delete: zelyra_ast::ReferentialAction::NoAction,
                 }],
                 indexes: Vec::new(),

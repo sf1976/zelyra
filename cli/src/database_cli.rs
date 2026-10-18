@@ -44,9 +44,19 @@ fn print_plan(plan: &zelyra_database::SchemaPlan) {
         );
     }
     for check in &plan.foreign_key_preflights {
+        let columns = if check.columns.is_empty() {
+            check.column.clone()
+        } else {
+            check.columns.join(", ")
+        };
+        let referenced_columns = if check.referenced_columns.is_empty() {
+            check.referenced_column.clone()
+        } else {
+            check.referenced_columns.join(", ")
+        };
         println!(
             "[PREFLIGHT] verify `{}.{}` references existing `{}.{}` values before applying any SQL",
-            check.table, check.column, check.referenced_table, check.referenced_column
+            check.table, columns, check.referenced_table, referenced_columns
         );
     }
     for change in &plan.changes {
@@ -290,8 +300,10 @@ fn schema_plan_preflights_json(plan: &zelyra_database::SchemaPlan) -> Vec<Value>
                 "kind": "foreign_key_values_must_exist",
                 "table": check.table,
                 "column": check.column,
+                "columns": if check.columns.is_empty() { vec![check.column.clone()] } else { check.columns.clone() },
                 "referenced_table": check.referenced_table,
                 "referenced_column": check.referenced_column,
+                "referenced_columns": if check.referenced_columns.is_empty() { vec![check.referenced_column.clone()] } else { check.referenced_columns.clone() },
                 "referenced_table_exists_before_apply": check.referenced_table_exists,
             })
         }))
@@ -1287,19 +1299,34 @@ pub(super) fn database_command(mut args: impl Iterator<Item = String>) -> ExitCo
                 match count_foreign_key_orphans(&url, schema.backend(), check) {
                     Ok(0) => {}
                     Ok(count) => {
+                        let columns = if check.columns.is_empty() {
+                            check.column.clone()
+                        } else {
+                            check.columns.join(", ")
+                        };
+                        let referenced_columns = if check.referenced_columns.is_empty() {
+                            check.referenced_column.clone()
+                        } else {
+                            check.referenced_columns.join(", ")
+                        };
                         eprintln!(
-                            "error[E-DB-005]: cannot add foreign key `{}.{}` because {count} existing row(s) have no matching `{}.{}` value; no schema SQL was applied",
+                            "error[E-DB-005]: cannot add foreign key `{}.{}` because {count} existing row(s) have no matching `{}.{}` key; no schema SQL was applied",
                             check.table,
-                            check.column,
+                            columns,
                             check.referenced_table,
-                            check.referenced_column
+                            referenced_columns
                         );
                         return ExitCode::from(1);
                     }
                     Err(_) => {
+                        let columns = if check.columns.is_empty() {
+                            check.column.clone()
+                        } else {
+                            check.columns.join(", ")
+                        };
                         eprintln!(
                             "error[E-DB-005]: could not verify foreign-key values in `{}.{}`; no schema SQL was applied",
-                            check.table, check.column
+                            check.table, columns
                         );
                         return ExitCode::from(1);
                     }

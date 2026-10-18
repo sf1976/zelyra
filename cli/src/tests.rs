@@ -207,8 +207,10 @@ fn database_map_json_groups_source_tables_and_reports_unmapped_live_tables() {
                 foreign_keys: vec![zelyra_database::ForeignKey {
                     name: None,
                     column: "group_id".into(),
+                    columns: Vec::new(),
                     referenced_table: "customer_groups".into(),
                     referenced_column: "id".into(),
+                    referenced_columns: Vec::new(),
                     on_delete: zelyra_ast::ReferentialAction::NoAction,
                 }],
                 indexes: Vec::new(),
@@ -301,8 +303,10 @@ fn schema_plan_json_is_versioned_deterministic_and_emits_reviewed_reverse_plan()
         .push(zelyra_database::ForeignKeyPreflight {
             table: "customers".into(),
             column: "account_id".into(),
+            columns: Vec::new(),
             referenced_table: "accounts".into(),
             referenced_column: "id".into(),
+            referenced_columns: Vec::new(),
             referenced_table_exists: true,
         });
     let first = schema_plan_json(&desired, &current, &plan);
@@ -318,6 +322,8 @@ fn schema_plan_json_is_versioned_deterministic_and_emits_reviewed_reverse_plan()
         first["preflights"][2]["kind"],
         "foreign_key_values_must_exist"
     );
+    assert_eq!(first["preflights"][2]["columns"][0], "account_id");
+    assert_eq!(first["preflights"][2]["referenced_columns"][0], "id");
     assert_eq!(first["rollback"]["generated"], true);
     assert_eq!(
         first["rollback"]["changes"][0]["description"],

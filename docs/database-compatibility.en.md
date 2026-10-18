@@ -7,6 +7,30 @@ a promise that every SQL feature works on every server, or a MySQL compatibility
 claim. MariaDB is Zelyra's primary runtime reference. PostgreSQL runtime parity
 and MySQL Server are outside this matrix.
 
+## Relations and tenant boundaries
+
+Optional table relations such as `customer: Customer?` are planned as a
+nullable `customer_id` column with a foreign key. When both the source and
+target tables are scoped by the same tenant identity type resolving to `Id`,
+the schema plan creates a composite key
+`(tenant_id, customer_id) -> (tenant_id, id)` and the required unique target
+key `(tenant_id, id)`. The database constraint also rejects direct SQL writes
+that point at another tenant's row. For these relations, `RESTRICT` is the
+explicit default; `on_delete set_null` is rejected because it would also null
+the required tenant key.
+
+The field names `type` and `version` are already accepted contextually in field
+positions; `order`, `group`, and `status` are ordinary identifiers. Use the
+existing `storage_name "type"` syntax when a logical field needs a different
+physical SQL name. A new `@column` or `r#` syntax is not needed for this use.
+
+`Decimal(precision, scale)` is already supported in table declarations. For
+integer `default` values, DDL now preserves the declared scale, for example
+`Decimal(12, 2) default 0` becomes `DEFAULT 0.00`. The builtin `Money` type
+remains backward compatible at `DECIMAL(19,4)`; changing it to `(12,2)` would
+reduce existing value ranges. The one-argument form `Decimal(scale)` is not
+introduced because it is ambiguous without a defined precision rule.
+
 ## Tested versions
 
 | MariaDB Community LTS line | Exact image tag used for tests | Zelyra test status | Community maintenance through* |
