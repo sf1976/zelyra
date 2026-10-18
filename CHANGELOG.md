@@ -1,5 +1,7 @@
 ## Unreleased
 
+## 1.2.13 — 2026-10-18
+
 - Add opt-in `zelyra new --layout standard` for a compiler-checked minimal
   project tree; validate required roots and reject symlinked or escaping
   directories while leaving legacy projects unchanged. Within that profile,
