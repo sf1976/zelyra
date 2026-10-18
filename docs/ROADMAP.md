@@ -25,7 +25,7 @@ telemetry, explicit effects, portable data, resource discipline, and honest
 proof claims guide every phase. The [manifesto](MANIFESTO.md) states the
 principles; the roadmap below tracks what is actually implemented.
 
-The current stable release is 1.2.10, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.10. **Current milestones** is the source of
+The current stable release is 1.2.11, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.11. **Current milestones** is the source of
 near-term commitments. Older numbered release sections below are retained as
 historical planning and evidence; they do not by themselves define current
 release targets. Longer-term ideas remain in the post-1.0 evolution section.
@@ -313,6 +313,9 @@ compatibility behavior before changing syntax. See the detailed
   based on measured need.
 
 ## Current milestones
+
+- [~] **1.2.12 application settings and tutorial polish — release preparation:** The authenticated, CSRF-protected, revision-checked settings page is integrated with schema validation, secret redaction, and safe atomic writes. Dialog defaults, Studio access to `zelyra.theme.css`, responsive invoice CRUD styling, and integration coverage are included. PR #108 and its full CI passed; the versioned release is being prepared. Apache/TLS tests and MIR/Bytecode parity are explicitly out of scope and remain assigned to later milestones.
+
 
 - [x] **1.0.5 Studio logs:** Added the Studio Logs panel and a local JSONL
   store for Studio run/setup events and application or preview output, with
