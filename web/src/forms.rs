@@ -108,7 +108,14 @@ pub(super) fn render_form_with_language(
             .as_deref()
             .map(|label| localize_user_text(language, label))
             .unwrap_or_else(|| localized_identifier_reference(language, &field.name));
-        let value = values.get(&field.name).map(String::as_str).unwrap_or("");
+        // Sensitive values must never be reflected into HTML, including after
+        // a validation error or on an edit form with a stored password hash.
+        let value = if input_type(route, field) == "password" || audit_sensitive_field(&field.name)
+        {
+            ""
+        } else {
+            values.get(&field.name).map(String::as_str).unwrap_or("")
+        };
         let field_errors = errors
             .iter()
             .filter(|error| error.field == field.name)
@@ -394,6 +401,7 @@ pub(super) fn input_type(route: &FormRoute, field: &zelyra_ast::FormField) -> &'
             "checkbox" => "checkbox",
             "date" => "date",
             "time" => "time",
+            "password" => "password",
             _ => "text",
         };
     }

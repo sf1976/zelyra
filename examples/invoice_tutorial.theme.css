@@ -105,8 +105,43 @@
 .invoice-workflow-card-primary { background: linear-gradient(145deg, #f5faef, #fff); border-color: #d8e7d9; }
 .tutorial-footer { padding: 1rem 0; color: #78877f; background: #fff; border-top: 1px solid #e2eae5; font-size: 0.72rem; }
 .tutorial-content > section, .tutorial-content > article { margin-block: 1rem; }
-.tutorial-content form:not(.z-table-tools) { display: grid; gap: 0.85rem; }
-.tutorial-content form label { color: #344a40; font-size: 0.9rem; font-weight: 650; }
+.tutorial-content .zelyra-query-controls { margin-block: 1rem 1.5rem; }
+.tutorial-content .zelyra-query-controls legend { color: #345746; }
+.tutorial-content .z-query-controls__fields { grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); }
+.tutorial-content .zelyra-query-controls label { min-width: 0; color: #52665b; font-size: .78rem; font-weight: 700; }
+.tutorial-content .zelyra-query-controls input,
+.tutorial-content .zelyra-query-controls select { width: 100%; min-width: 0; }
+.tutorial-content .zelyra-query-controls button { min-height: 2.7rem; align-self: end; padding-inline: 1.1rem; }
+.tutorial-content .zelyra-crud-cards { align-items: stretch; gap: 1rem; margin-block: 1rem 1.5rem; }
+.tutorial-content .zelyra-crud-card {
+    display: grid;
+    align-content: start;
+    gap: .2rem;
+    padding: 1.15rem 1.25rem;
+    border-color: #dfe8e3;
+    background: linear-gradient(145deg, #fff, #f8fbf9);
+    box-shadow: 0 .35rem 1.1rem rgb(28 63 47 / 5%);
+    transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+.tutorial-content .zelyra-crud-card:hover { transform: translateY(-2px); border-color: #b8d2c2; box-shadow: 0 .7rem 1.5rem rgb(28 63 47 / 9%); }
+.tutorial-content .zelyra-crud-card dl {
+    display: grid;
+    grid-template-columns: minmax(5.5rem, .7fr) minmax(0, 1.3fr);
+    align-items: baseline;
+    gap: .4rem .75rem;
+    padding-block: .65rem;
+}
+.tutorial-content .zelyra-crud-card dl + dl { margin: 0; border-top: 1px solid #e8efeb; }
+.tutorial-content .zelyra-crud-card dt { color: #718278; font-size: .68rem; letter-spacing: .07em; }
+.tutorial-content .zelyra-crud-card dd { margin: 0; color: #263d32; font-size: .9rem; font-weight: 620; }
+.tutorial-content .zelyra-crud-card dd a { color: #205e46; text-decoration-thickness: .08em; text-underline-offset: .18em; }
+.tutorial-content .zelyra-crud-form-card { margin-block: 1rem 2rem; }
+.tutorial-content .zelyra-crud-form-card form { display: grid; gap: .8rem 1rem; }
+.tutorial-content .zelyra-crud-form-card form label { color: #344a40; font-size: .88rem; font-weight: 650; }
+.tutorial-content .zelyra-crud-form-card .z-field { min-width: 0; }
+.tutorial-content .zelyra-crud-form-card input:not([type="checkbox"]),
+.tutorial-content .zelyra-crud-form-card select,
+.tutorial-content .zelyra-crud-form-card textarea { width: 100%; }
 .tutorial-content table:not(.z-table) { display: block; max-width: 100%; overflow-x: auto; border-radius: 0.65rem; }
 .tutorial-content .z-table-scroll { max-width: 100%; overflow-x: auto; border-radius: 0.65rem; }
 .tutorial-content input:focus, .tutorial-content select:focus, .tutorial-content textarea:focus { border-color: #438469; box-shadow: 0 0 0 0.2rem rgb(67 132 105 / 17%); }
@@ -123,6 +158,8 @@
 @media (max-width: 600px) {
     :where(html[data-z-ui]) .tutorial-new-invoice { padding: .45rem .6rem; font-size: .75rem; }
     :where(html[data-z-ui]) .tutorial-content { padding-inline: .65rem; }
+    :where(html[data-z-ui]) .tutorial-content .zelyra-crud-card { padding: .9rem; }
+    :where(html[data-z-ui]) .tutorial-content .zelyra-crud-card dl { grid-template-columns: minmax(4.5rem, .75fr) minmax(0, 1.25fr); }
     :where(html[data-z-ui]) .invoice-home { padding-top: .25rem; }
     :where(html[data-z-ui]) .invoice-home-hero { min-height: 0; padding: 1.5rem; border-radius: 1rem; }
     :where(html[data-z-ui]) .invoice-home-kicker { gap: .45rem; font-size: .55rem; }
@@ -170,7 +207,11 @@
 :where(html[data-z-ui][data-z-theme="dark"]) .invoice-preview,
 :where(html[data-z-ui][data-z-theme="dark"]) .invoice-highlight,
 :where(html[data-z-ui][data-z-theme="dark"]) .invoice-workflow-card,
+:where(html[data-z-ui][data-z-theme="dark"]) .tutorial-content .zelyra-crud-card,
 :where(html[data-z-ui][data-z-theme="dark"]) .invoice-totals { background: var(--z-color-surface); color: var(--z-color-text); border-color: var(--z-color-border); }
+:where(html[data-z-ui][data-z-theme="dark"]) .tutorial-content .zelyra-crud-card dl + dl { border-color: var(--z-color-border); }
+:where(html[data-z-ui][data-z-theme="dark"]) .tutorial-content .zelyra-crud-card dt { color: var(--z-color-text-muted); }
+:where(html[data-z-ui][data-z-theme="dark"]) .tutorial-content .zelyra-crud-card dd { color: var(--z-color-text); }
 :where(html[data-z-ui][data-z-theme="dark"]) .invoice-preview strong,
 :where(html[data-z-ui][data-z-theme="dark"]) .invoice-preview-total,
 :where(html[data-z-ui][data-z-theme="dark"]) .invoice-highlight strong,
@@ -182,7 +223,11 @@
     :where(html[data-z-ui][data-z-theme="system"]) .invoice-preview,
     :where(html[data-z-ui][data-z-theme="system"]) .invoice-highlight,
     :where(html[data-z-ui][data-z-theme="system"]) .invoice-workflow-card,
+    :where(html[data-z-ui][data-z-theme="system"]) .tutorial-content .zelyra-crud-card,
     :where(html[data-z-ui][data-z-theme="system"]) .invoice-totals { background: var(--z-color-surface); color: var(--z-color-text); border-color: var(--z-color-border); }
+    :where(html[data-z-ui][data-z-theme="system"]) .tutorial-content .zelyra-crud-card dl + dl { border-color: var(--z-color-border); }
+    :where(html[data-z-ui][data-z-theme="system"]) .tutorial-content .zelyra-crud-card dt { color: var(--z-color-text-muted); }
+    :where(html[data-z-ui][data-z-theme="system"]) .tutorial-content .zelyra-crud-card dd { color: var(--z-color-text); }
     :where(html[data-z-ui][data-z-theme="system"]) .invoice-preview strong,
     :where(html[data-z-ui][data-z-theme="system"]) .invoice-preview-total,
     :where(html[data-z-ui][data-z-theme="system"]) .invoice-highlight strong,

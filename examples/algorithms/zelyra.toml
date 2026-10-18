@@ -1,0 +1,6 @@
+[project]
+name = "zelyra_algorithm_workbench"
+
+[runtime]
+max_steps = 20000
+max_stack_depth = 100

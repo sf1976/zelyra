@@ -465,7 +465,7 @@ try {
   assert.equal(await page.locator(".cm-editor").evaluate((element) => getComputedStyle(element).fontSize), "14px", "program output sizing must not alter the code editor font");
   const consoleOutput = await page.locator("#run-output-content").textContent();
   assert.match(consoleOutput, /3/, "Studio Run must display console output");
-  assert.match(consoleOutput, /interactive input|interaktive Eingabe/i, "Studio must explain that stdin is unavailable");
+  assert.equal(await page.locator("#run-console-form").isVisible(), false, "completed runs must hide interactive input controls");
   await page.unroute("**/__zelyra/editor/api/run");
   await page.locator("#run-output-close").click();
 

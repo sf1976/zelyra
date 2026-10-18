@@ -12,7 +12,8 @@ fn builtin_error(span: Span, message: impl Into<String>) -> RuntimeError {
 pub fn is_pure_builtin(name: &str) -> bool {
     matches!(
         name,
-        "Some"
+        "assert"
+            | "Some"
             | "None"
             | "Ok"
             | "Err"
@@ -134,6 +135,27 @@ pub fn execute_pure_builtin(
     span: Span,
 ) -> Result<Value, RuntimeError> {
     match name {
+        "assert" if (1..=2).contains(&arguments.len()) => match arguments.as_slice() {
+            [Value::Bool(true)] | [Value::Bool(true), Value::String(_)] => Ok(Value::Unit),
+            [Value::Bool(false)] => Err(builtin_error(span, "assertion failed")),
+            [Value::Bool(false), Value::String(message)] => {
+                Err(builtin_error(span, message.clone()))
+            }
+            [condition] | [condition, _] if !matches!(condition, Value::Bool(_)) => {
+                Err(builtin_error(span, "`assert` expects a Bool condition"))
+            }
+            [_, message] if !matches!(message, Value::String(_)) => {
+                Err(builtin_error(span, "`assert` message must be a String"))
+            }
+            _ => Err(builtin_error(
+                span,
+                "`assert` expects a Bool condition and an optional String message",
+            )),
+        },
+        "assert" => Err(builtin_error(
+            span,
+            "`assert` expects a Bool condition and an optional String message",
+        )),
         "None" if arguments.is_empty() => Ok(Value::Option(None)),
         "Some" if arguments.len() == 1 => Ok(Value::Option(Some(Box::new(arguments[0].clone())))),
         "Ok" if arguments.len() == 1 => Ok(Value::Result(Ok(Box::new(arguments[0].clone())))),

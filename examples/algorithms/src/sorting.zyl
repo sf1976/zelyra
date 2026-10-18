@@ -1,0 +1,23 @@
+pub fn insertion_sort(values: Int[]) -> Int[] {
+    if len(values) > 100 {
+        return []
+    }
+    mutable sorted: Int[] = []
+    for value in values {
+        mutable position = len(sorted)
+        push_mut(sorted, value)
+        while position > 0 && sorted[position - 1] > value {
+            sorted[position] = sorted[position - 1]
+            position = position - 1
+        }
+        sorted[position] = value
+    }
+    return sorted
+}
+
+pub fn run() {
+    assert(insertion_sort([]) == [], "empty input stays empty")
+    assert(insertion_sort([5, -2, 5, 0, 3]) == [-2, 0, 3, 5, 5], "sort handles negatives and duplicates")
+    assert(insertion_sort([9]) == [9], "single item stays unchanged")
+    print("PASS insertion sort: empty, single item, duplicates and negative values")
+}

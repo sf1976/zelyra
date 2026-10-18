@@ -225,7 +225,12 @@
     <p id="run-output-state" class="run-output-state" role="status"></p>
     <button id="run-output-cancel" type="button" class="run-cancel" data-i18n="runCancel" hidden>Ausführung abbrechen</button>
     <p id="run-output-web-link" class="run-output-state" hidden><a id="run-output-web-url" target="_blank" rel="noopener noreferrer" data-i18n="runWebOpen">Anwendung im Browser öffnen</a> <button id="run-output-web-stop" type="button" data-i18n="runWebStop">Vorschau beenden</button></p>
-    <pre id="run-output-content" class="run-output-content"></pre>
+    <pre id="run-output-content" class="run-output-content" aria-live="polite"></pre>
+    <form id="run-console-form" class="run-console-form" hidden>
+      <label for="run-console-input" data-i18n="runConsoleInput">Eingabe für read_console</label>
+      <div><input id="run-console-input" type="text" autocomplete="off" disabled><button id="run-console-submit" type="submit" disabled data-i18n="runConsoleSubmit">Eingabe senden</button><button id="run-console-eof" type="button" disabled data-i18n="runConsoleEof">Eingabe beenden (EOF)</button></div>
+      <p id="run-console-state" role="status"></p>
+    </form>
     <footer><span>main.zyl</span><kbd>Esc</kbd><span data-i18n="close">Schließen</span></footer>
   </dialog>
   <dialog id="runtime-budget-dialog" class="task-finder runtime-budget-dialog" aria-labelledby="runtime-budget-title">
@@ -238,6 +243,8 @@
       <input id="runtime-budget-number" type="number" min="1" max="100000000" step="1" value="100000" disabled>
       <p data-i18n="runtimeBudgetWebHint">Das Schrittbudget gilt für Konsolenprogramme. Eine Webvorschau verwendet weiterhin ihre eigenen Laufzeitgrenzen.</p>
       <p id="runtime-stack-depth" role="status"></p>
+      <p id="runtime-step-budget" role="status"></p>
+      <p id="runtime-scheduler-timeout" role="status"></p>
       <h3 data-i18n="runtimeRecursionTitle">Mögliche Rekursion</h3>
       <ul id="runtime-recursion-risks"></ul>
       <p id="runtime-profile-note" role="status"></p>

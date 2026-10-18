@@ -77,6 +77,7 @@ page "/status" {
 form CustomerEdit {
     field email: Email { appearance: warning }
     field active: Bool { appearance: success }
+    field password: String { widget: password }
 }
 ```
 
@@ -90,8 +91,11 @@ CSRF-Prüfungen.
 Automatisch erzeugte Formulare übernehmen die Zelyra-UI-Feld-, Fehler-,
 Aktion-, Tabellen- und Seitenklassen. Typen wie `Date`, `Time`, `Email`,
 `Bool` und numerische Werte bestimmen weiterhin die nativen HTML-Eingaben.
-Werte aus zulässigen fehlgeschlagenen Eingaben bleiben erhalten; Passwörter
-werden nicht als Wert zurückgerendert. `required`, `disabled`, `readonly`,
+`widget` ist compilergeprüft und akzeptiert `text`, `email`, `number`, `url`,
+`checkbox`, `date`, `time` oder `password`. Werte aus zulässigen
+fehlgeschlagenen Eingaben bleiben erhalten; Passwortfelder und Felder mit
+Namen, die `password`, `token`, `secret` oder `hash` enthalten, werden nie mit
+ihrem Eingabewert zurückgerendert. `required`, `disabled`, `readonly`,
 CSRF, Escaping, SQL-Bindung und serverseitige Autorisierung stammen aus den
 vorhandenen Laufzeitregeln und werden von der Gestaltung nicht ersetzt.
 

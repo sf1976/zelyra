@@ -6,7 +6,7 @@ and `invoices` table and exposes one typed query operation. The application
 enables the Database capability; package `effects` ceilings only constrain
 declared effects and do not grant runtime access.
 
-Each package manifest declares `zelyra = ">=1.1.0, <1.2.0"`. The CLI checks
+Each package manifest declares `zelyra = ">=1.1.0, <2.0.0"`. The CLI checks
 this compatibility range before using the package graph, and the requirement
 is covered by the package manifest checksum and lockfile.
 
@@ -68,14 +68,15 @@ CSV export output and the importer's valid and malformed inputs across all three
 backends. A consuming application must also configure its allowed roots before
 calling `write_csv`; the package effect declaration alone never grants access.
 
-Validate the dependency graph and build a standalone source bundle for the
-billing package:
+Validate the dependency graph and build a standalone Docker app from the full
+web application. The app imports the reusable billing and storage packages;
+bundling only `pkg:billing` would produce a library without an HTTP route.
 
 ```sh
 cd examples/business_modules
 zelyra package lock main.zyl
 zelyra check main.zyl
-zelyra module bundle main.zyl pkg:billing \
+zelyra module bundle main.zyl main.zyl \
   --output /tmp/zelyra-billing-bundle \
   --docker --compiler-ref <40-character-commit>
 ```

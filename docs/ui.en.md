@@ -75,6 +75,7 @@ page "/status" {
 form CustomerEdit {
     field email: Email { appearance: warning }
     field active: Bool { appearance: success }
+    field password: String { widget: password }
 }
 ```
 
@@ -86,11 +87,13 @@ authorization, or CSRF checks.
 
 Generated forms use Zelyra UI field, error, action, table, and page classes.
 Types such as `Date`, `Time`, `Email`, `Bool`, and numeric values continue to
-select native HTML inputs. Permitted submitted values survive validation
-errors; password inputs are not rendered back with a value. `required`,
-`disabled`, `readonly`, CSRF, escaping, SQL parameter binding, and server-side
-authorization continue to come from the existing runtime rules; styling does
-not replace them.
+select native HTML inputs. The compiler checks `widget` against `text`, `email`,
+`number`, `url`, `checkbox`, `date`, `time`, and `password`. Permitted submitted
+values survive validation errors; password widgets and fields whose names
+contain `password`, `token`, `secret`, or `hash` are never rendered back with
+their submitted value. `required`, `disabled`, `readonly`, CSRF, escaping, SQL
+parameter binding, and server-side authorization continue to come from the
+existing runtime rules; styling does not replace them.
 
 ## Component reference
 

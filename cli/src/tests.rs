@@ -41,6 +41,65 @@ fn compiler_scope_gate_rejects_sql_touching_declared_tenant_tables() {
 }
 
 #[test]
+fn compiler_scope_gate_rejects_tableviews_reading_tenant_tables() {
+    let source = r#"
+        type TenantId = Id
+        table invoices scoped by tenant_id: TenantId {
+            id: Id primary auto
+            tenant_id: TenantId required
+            amount: Decimal required
+        }
+        table customers { id: Id primary auto }
+        struct InvoiceSummary {
+            id: Id
+            amount: Decimal
+        }
+        tableview InvoiceSummaryView {
+            source sql<InvoiceSummary[]> {
+                SELECT i.id, i.amount
+                FROM invoices AS i
+                JOIN customers AS c ON c.id = i.id
+            }
+            columns { id amount }
+        }
+        fn main() {}
+    "#;
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
+    let schema = build_schema(&program).unwrap();
+
+    assert!(
+        !validate_tenant_access_boundaries("main.zyl", &program, &schema),
+        "tableview SQL must not bypass tenant-scoped CRUD boundaries"
+    );
+
+    let unscoped_tableview = r#"
+        type TenantId = Id
+        table invoices scoped by tenant_id: TenantId {
+            id: Id primary auto
+            tenant_id: TenantId required
+        }
+        table customers {
+            id: Id primary auto
+            name: String(100) required
+        }
+        struct CustomerSummary { id: Id name: String }
+        tableview CustomerSummaryView {
+            source sql<CustomerSummary[]> {
+                SELECT id, name FROM customers
+            }
+            columns { id name }
+        }
+        fn main() {}
+    "#;
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(unscoped_tableview).unwrap()).unwrap();
+    let schema = build_schema(&program).unwrap();
+    assert!(
+        validate_tenant_access_boundaries("main.zyl", &program, &schema),
+        "unscoped tableviews should remain available when they read unprotected tables"
+    );
+}
+
+#[test]
 fn project_mail_policy_reads_local_smtp_settings_and_redacts_secrets() {
     let directory = std::env::temp_dir().join(format!(
         "zelyra-mail-policy-{}-{}",
@@ -1112,6 +1171,24 @@ fn project_routes_cannot_shadow_the_builtin_liveness_endpoint() {
 }
 
 #[test]
+fn project_routes_cannot_shadow_the_private_schedule_probe() {
+    let direct = parse(
+        &lex(r#"page "/__zelyra/schedule/probe" { html { <main>Project page</main> } }"#).unwrap(),
+    )
+    .unwrap();
+    let wildcard =
+        parse(&lex(r#"api POST "/__zelyra/{resource}/{action}" { output String }"#).unwrap())
+            .unwrap();
+    let unrelated =
+        parse(&lex(r#"page "/scheduled" { html { <main>Schedule page</main> } }"#).unwrap())
+            .unwrap();
+
+    assert!(project_uses_reserved_schedule_probe_route(&direct));
+    assert!(project_uses_reserved_schedule_probe_route(&wildcard));
+    assert!(!project_uses_reserved_schedule_probe_route(&unrelated));
+}
+
+#[test]
 fn account_session_route_is_reserved_for_authenticated_projects() {
     let auth_page = parse(
         &lex(r#"auth users { table: users }
@@ -1600,6 +1677,7 @@ fn imports_zelyra_ui_and_renders_checked_semantic_appearances() {
             }
             form Search {
                 field number: String { appearance: warning }
+                field password: String { widget: password }
             }
         "#,
     )
@@ -1640,6 +1718,16 @@ fn imports_zelyra_ui_and_renders_checked_semantic_appearances() {
     let invalid = project::load(entry.to_str().unwrap()).unwrap();
     assert!(!validate_components("main.zyl", &invalid.program));
     assert!(!validate_form_ui_appearances("main.zyl", &invalid.program));
+    fs::write(
+        &entry,
+        r#"form Search { field token: String { widget: hidden } }"#,
+    )
+    .unwrap();
+    let invalid_widget = project::load(entry.to_str().unwrap()).unwrap();
+    assert!(!validate_form_ui_appearances(
+        "main.zyl",
+        &invalid_widget.program
+    ));
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -2432,6 +2520,39 @@ fn enforces_scoped_database_effects_in_generated_api_handlers() {
     );
     assert_eq!(allowed.status, 500);
     assert!(!allowed.body.contains("not granted"));
+}
+
+#[test]
+fn project_step_budget_applies_to_executed_api_handlers() {
+    let program = parse(
+        &lex(
+            "api GET \"/bounded\" { handler bounded output Int } fn bounded() -> Int { loop { } } fn main() { }",
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(check_apis(&program).is_ok());
+    let request =
+        zelyra_web::parse_request("GET /bounded HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+    let response = dispatch_api_with_capabilities(
+        &program,
+        &program.apis[0],
+        "bounded",
+        &request,
+        &HashMap::new(),
+        ApiRuntimeContext {
+            database_url: None,
+            capability_grants: None,
+            runtime_policy: Some(&RuntimePolicy {
+                step_budget: Some(30),
+                ..RuntimePolicy::default()
+            }),
+        },
+    );
+    assert_eq!(response.status, 500);
+    assert!(response
+        .body
+        .contains("execution step budget exceeded (limit 30)"));
 }
 
 #[test]
@@ -3350,13 +3471,28 @@ fn project_runtime_policy_reads_and_bounds_max_stack_depth() {
     fs::write(&entry, "fn main() {}\n").unwrap();
     fs::write(
         directory.join("zelyra.toml"),
-        "[project]\nname = \"runtime-policy\"\n\n[runtime]\nmax_stack_depth = 500\n",
+        "[project]\nname = \"runtime-policy\"\n\n[runtime]\nmax_stack_depth = 500\nmax_steps = 12000\nscheduler_job_timeout_seconds = 900\n",
     )
     .unwrap();
     let policy = project_runtime_policy(entry.to_str().unwrap())
         .unwrap()
         .unwrap();
     assert_eq!(policy.max_stack_depth, Some(500));
+    assert_eq!(policy.step_budget, Some(12000));
+    let limits = project_runtime_limits(entry.to_str().unwrap()).unwrap();
+    assert_eq!(limits.scheduler_job_timeout_seconds, Some(900));
+
+    fs::write(directory.join("zelyra.toml"), "[runtime]\nmax_steps = 0\n").unwrap();
+    let error = project_runtime_policy(entry.to_str().unwrap()).unwrap_err();
+    assert!(error.contains("max_steps must be a positive integer"));
+
+    fs::write(
+        directory.join("zelyra.toml"),
+        "[runtime]\nmax_steps = 10\nmax_steps = 20\n",
+    )
+    .unwrap();
+    let error = project_runtime_policy(entry.to_str().unwrap()).unwrap_err();
+    assert!(error.contains("max_steps is configured more than once"));
 
     fs::write(
         directory.join("zelyra.toml"),
@@ -3365,6 +3501,21 @@ fn project_runtime_policy_reads_and_bounds_max_stack_depth() {
     .unwrap();
     let error = project_runtime_policy(entry.to_str().unwrap()).unwrap_err();
     assert!(error.contains("from 1 through 500"));
+
+    fs::write(
+        directory.join("zelyra.toml"),
+        "[runtime]\nscheduler_job_timeout_seconds = 86401\n",
+    )
+    .unwrap();
+    let error = project_runtime_policy(entry.to_str().unwrap()).unwrap_err();
+    assert!(error.contains("scheduler_job_timeout_seconds must be an integer from 1 through 86400"));
+    fs::write(
+        directory.join("zelyra.toml"),
+        "[runtime]\nscheduler_job_timeout_seconds = 30\nscheduler_job_timeout_seconds = 60\n",
+    )
+    .unwrap();
+    let error = project_runtime_policy(entry.to_str().unwrap()).unwrap_err();
+    assert!(error.contains("scheduler_job_timeout_seconds is configured more than once"));
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -3407,6 +3558,7 @@ fn generates_project_with_target_release_version() {
     assert!(dockerfile.contains("COPY . ./"));
     let compose = fs::read_to_string(path.join("docker-compose.mariadb.yml")).unwrap();
     assert!(compose.contains("ZELYRA_UI_STYLESHEET: ${ZELYRA_UI_STYLESHEET:-zelyra}"));
+    assert!(path.join("public/.keep").is_file());
     assert!(path.join("src/.keep").is_file());
     assert!(path.join("locales/de.json").is_file());
     assert!(path.join("locales/en.json").is_file());
@@ -3549,6 +3701,7 @@ fn generated_mariadb_template_uses_selected_web_port() {
     assert!(dockerignore.contains(".env"));
     assert!(dockerignore.contains(".env.*"));
     assert!(gitignore.contains(".env"));
+    assert!(gitignore.contains(".zelyra/schedules.cron"));
 
     fs::remove_dir_all(path).unwrap();
 }
