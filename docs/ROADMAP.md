@@ -25,7 +25,7 @@ telemetry, explicit effects, portable data, resource discipline, and honest
 proof claims guide every phase. The [manifesto](MANIFESTO.md) states the
 principles; the roadmap below tracks what is actually implemented.
 
-The current stable release is 1.2.6. **Current milestones** is the source of
+The current stable release is 1.2.7, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.7. **Current milestones** is the source of
 near-term commitments. Older numbered release sections below are retained as
 historical planning and evidence; they do not by themselves define current
 release targets. Longer-term ideas remain in the post-1.0 evolution section.
@@ -77,14 +77,16 @@ security and compatibility gates stated for that milestone.
   Full PR CI passed on `abd2dee` and the change is integrated in `main` as
   `fb330e0`. Recovery is not a filesystem-wide atomic transaction. See the
   [recovery work log](release-plans/1.2.6-package-recovery.en.md).
-- [~] **1.2.7 — trusted transitive registry packages:** Implemented on the
-  release branch; pending full gates and publication. A three-level signed
-  package closure is installed, compiler-checked, run and bundled offline;
-  update plans resolve the closure, and cycle rejection preserves project
-  state. The signing command remains offline, so full compiler validation for
-  registry-linked packages happens after trusted closure installation. The
-  1.2.6 journal records each new staging and cache path so failed updates can
-  roll back the whole closure.
+- [x] **1.2.7 — trusted transitive registry packages:** Published at
+  https://github.com/sf1976/zelyra/releases/tag/v1.2.7. The full PR CI passed
+  before merge, and the release workflow built and attested reproducible Linux
+  and Windows artifacts with verified SHA-256 sidecars and SPDX SBOMs. A
+  three-level signed package closure is installed, compiler-checked, run and
+  bundled offline; update plans resolve the closure, and cycle rejection
+  preserves project state. The signing command remains offline, so full
+  compiler validation for registry-linked packages happens after trusted
+  closure installation. The 1.2.6 journal records each new staging and cache
+  path so failed updates can roll back the whole closure.
 - [~] **1.2.8 — typed query, tenant, request and form pipeline:** The first
   query-HIR slice now carries the checked SQL operation, deterministically
   ordered table accesses, parameter locals, and resolved parameter types from
@@ -369,9 +371,10 @@ compatibility behavior before changing syntax. See the detailed
   workflows are now staged across 1.2.7–1.2.9.
 - [x] **1.2.6 package recovery:** Recover interrupted package mutations; see the
   release note and recovery work log above.
-- [~] **1.2.7 trusted transitive packages:** Implemented on the release branch;
-  release gates remain. Three-level add, update-plan, offline run/check, bundle,
-  provenance, bounded resolution, and cycle rollback have integration coverage.
+- [x] **1.2.7 trusted transitive packages:** Published with successful PR CI
+  and reproducible, attested Linux/Windows release artifacts. Three-level add,
+  update-plan, offline run/check, bundle, provenance, bounded resolution, and
+  cycle rollback have integration coverage.
 - [ ] **1.2.8 typed query/request/forms:** Complete bounded query HIR and typed
   tenant/request/form lifecycle across supported backends.
 - [ ] **1.2.9 durable jobs:** Add transactional scheduler jobs, leases, retries,
