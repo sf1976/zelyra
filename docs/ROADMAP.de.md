@@ -97,9 +97,11 @@ abgeschlossen.
   von HIR nach MIR. Der MIR-Verifier berechnet Operations-, Tabellen- und
   Parametermetadaten erneut aus der SQL-Quelle und weist veraltete Pläne mit
   `E-MIR-VERIFY-004` ab. Es entsteht keine parallele Query-Syntax; sichere
-  scoped Query-Erzeugung ist damit noch nicht vorhanden. Tenant-Kontext,
-  typisierter Request-/Form-Lifecycle, Response-/Redirectverträge und
-  Backendparität bleiben für diesen Meilenstein offen.
+  scoped Query-Erzeugung ist damit noch nicht vorhanden. Redirects in
+  Formaktionen sind statisch auf sichere gleich-originige absolute Pfade
+  begrenzt (`E-FORM-007`). Tenant-Kontext, der übrige typisierte
+  Request-/Form-Lifecycle, Responseverträge und Backendparität bleiben für
+  diesen Meilenstein offen.
 - [ ] **1.2.9 — dauerhafte Scheduler-Jobs:** Persistente transaktionale Jobs
   mit Idempotenz, Leases, begrenzten Wiederholungen, Dead-Letter-Status,
   Beobachtbarkeit und ausdrücklichem Scheduler-Dienstlebenszyklus ergänzen.

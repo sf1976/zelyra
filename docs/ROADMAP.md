@@ -91,8 +91,10 @@ security and compatibility gates stated for that milestone.
   HIR into MIR. The MIR verifier recomputes operation/table/parameter metadata
   from the SQL source and rejects stale plans with `E-MIR-VERIFY-004`. This
   adds no parallel query syntax and does not yet provide safe scoped query
-  construction. Tenant context, typed request/form lifecycle, response and
-  redirect contracts, and backend parity remain open for this milestone.
+  construction. Form-action redirects are now statically constrained to safe
+  same-site absolute paths (`E-FORM-007`). Tenant context, the rest of the typed
+  request/form lifecycle, response contracts, and backend parity remain open
+  for this milestone.
 - [ ] **1.2.9 — durable scheduler jobs:** Add persistent transactional jobs
   with idempotency, leases, bounded retries, dead-letter state, observability,
   and explicit scheduler-service lifecycle. Removing a schedule must stop its
