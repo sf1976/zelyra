@@ -1,4 +1,12 @@
-/* Invoice tutorial theme: local overrides of Zelyra UI, not a second CSS framework. */
+/*
+ * Invoice tutorial project theme. Zelyra UI is the shared framework imported
+ * in main.zyl; this file contains project-wide overrides loaded after it.
+ * Change the --z- tokens below to update shared colors and sizing. Keep each
+ * foreground/background pair together, such as primary/on-primary. Add a
+ * scoped selector below to restyle one existing component, for example:
+ *   :where(html[data-z-ui]) .z-card { border-radius: 1rem; }
+ * No framework file needs to be copied or changed. See siedelmann.com/handbuch.
+ */
 :where(html[data-z-ui]) {
     --z-color-primary: #23654f;
     --z-color-on-primary: #ffffff;
@@ -49,7 +57,7 @@
 .invoice-home-actions .z-button { min-height: 2.9rem; padding: 0.8rem 1.1rem; border-radius: 0.7rem; font-weight: 750; }
 .invoice-home-actions .z-button--success { color: #173f30; background: #d5f39a; border-color: #d5f39a; box-shadow: 0 0.5rem 1.25rem rgb(7 29 21 / 18%); }
 .invoice-home-actions .z-button--success:hover { background: #e2f8b6; border-color: #e2f8b6; }
-.invoice-home-actions .z-button:not(.z-button--success) { color: #f4faf6; border-color: rgb(255 255 255 / 38%); }
+.invoice-home-actions .z-button:not(.z-button--success) { color: #f4faf6; background: transparent; border-color: rgb(255 255 255 / 48%); }
 .invoice-home-actions .z-button:not(.z-button--success):hover { color: #173f30; background: #fff; }
 .invoice-home-proof { position: relative; z-index: 1; display: flex; align-items: center; gap: 0.55rem; margin-top: 2rem; color: #d4e5dc; font-size: 0.78rem; }
 .invoice-home-check { display: grid; width: 1.2rem; height: 1.2rem; place-items: center; color: #204c3a; background: #d5f39a; border-radius: 50%; font-size: 0.7rem; font-weight: 900; }

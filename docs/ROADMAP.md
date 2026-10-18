@@ -124,8 +124,10 @@ security and compatibility gates stated for that milestone.
   is explicitly moved to 1.2.12.
 - [✅] **1.2.11 invoice tutorial CSS subtask:** Centralize generated-page,
   CRUD, form, filter, and table styling in Zelyra UI; give the invoice tutorial
-  one responsive design and generated forms the same page frame, with only
-  project-specific design retained in its synchronized theme template.
+  one responsive design and generated forms the same page frame. Studio has a
+  fixed explorer shortcut to `zelyra.theme.css`, whose comments explain how to
+  adjust existing UI components and `--z-` tokens; only project-specific design
+  remains in the synchronized theme template.
 - [ ] **1.2.12 — application settings, ecosystem parity, and business slices:**
   Add application-served module settings only with server-side authorization,
   CSRF, schema validation, redaction, and explicit runtime behavior after a

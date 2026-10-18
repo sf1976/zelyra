@@ -205,6 +205,13 @@ CSS or 128 KiB for the project theme are rejected. See the
 [environment reference](env.en.md) for precedence, security, Compose, and
 reserved URLs.
 
+Studio provides a fixed **Open project CSS** action in the project explorer.
+It opens `zelyra.theme.css` directly; if an older project lacks the file, this
+explicit action creates a commented starter template. Newly generated projects
+already include it. `import "zelyra/ui" as ui` imports Zelyra's built-in,
+typed UI components. It is not a CSS import, so it has no source file in the
+project directory.
+
 Project themes should change related color tokens together, for example
 `--z-color-primary`, `--z-color-on-primary`, `--z-color-primary-hover`, and
 `--z-color-primary-soft`. Likewise keep
@@ -214,6 +221,10 @@ Project themes should change related color tokens together, for example
 Other variables control canvas/surface/text/border/focus/link, system fonts,
 font size, spacing, radii, shadows, control height, content width, overlay
 layers, and motion. See the [theme template](../examples/invoice_tutorial.theme.css).
+Existing components can be adjusted under `:where(html[data-z-ui])`, for
+example with `.z-card` or `.z-button`. Custom classes remain available in page
+HTML. Change only the tokens you need and keep foreground/background pairs
+compatible; there is no need to copy framework files.
 
 ## Studio, CRUD, and security
 

@@ -134,7 +134,9 @@ abgeschlossen.
 - [✅] **1.2.11 CSS-Teilschritt für das Rechnungstutorial:** Seiten-, CRUD-,
   Formular-, Filter- und Tabellenstile zentral in Zelyra UI bündeln; ein
   durchgängiges responsives Tutorialdesign schaffen und generierte Formulare in
-  denselben Seitenrahmen setzen. Im synchronen Projekt-Theme bleiben nur
+  denselben Seitenrahmen setzen. Studio bietet einen festen Explorer-Zugang zu
+  `zelyra.theme.css`; die Datei erklärt, wie bestehende UI-Komponenten und
+  `--z-`-Tokens angepasst werden. Im synchronen Projekt-Theme bleiben nur
   projektspezifische Gestaltungen.
 - [ ] **1.2.12 — Anwendungseinstellungen, Ökosystemparität und Geschäftsabläufe:**
   Von Anwendungen ausgelieferte Moduleinstellungen nur mit serverseitiger

@@ -100,8 +100,10 @@
   :where(html[data-z-ui] .zelyra-page-content .zelyra-success, html[data-z-ui] .zelyra-page-content .zelyra-notice) { padding: 1rem; border: 1px solid var(--z-color-success); border-radius: var(--z-radius-md); background: var(--z-color-success-soft); color: var(--z-color-success); }
   :where(html[data-z-ui] .zelyra-page-content .zelyra-error, html[data-z-ui] .zelyra-page-content .zelyra-crud-error, html[data-z-ui] .zelyra-page-content .zelyra-action-error) { padding: 1rem; border: 1px solid var(--z-color-danger); border-radius: var(--z-radius-md); background: var(--z-color-danger-soft); color: var(--z-color-danger); }
   :where(html[data-z-ui] .zelyra-query-controls input, html[data-z-ui] .zelyra-query-controls select) { min-width: min(10rem, 100%); }
-  :where(html[data-z-ui] .zelyra-page-content .zelyra-crud-cards) { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: 1rem; }
-  :where(html[data-z-ui] .zelyra-page-content .zelyra-crud-card, html[data-z-ui] .zelyra-page-content .zelyra-crud-detail-card, html[data-z-ui] .zelyra-page-content .zelyra-crud-form-card, html[data-z-ui] .z-generated-page .zelyra-crud-card, html[data-z-ui] .z-generated-page .zelyra-crud-detail-card, html[data-z-ui] .z-generated-page .zelyra-crud-form-card) {
+  :where(html[data-z-ui]) .zelyra-crud-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: 1rem; margin-block: 1rem; }
+  :where(html[data-z-ui]) .zelyra-crud-card,
+  :where(html[data-z-ui]) .zelyra-crud-detail-card,
+  :where(html[data-z-ui]) .zelyra-crud-form-card {
     min-width: 0;
     padding: 1rem;
     border: 1px solid var(--z-color-border);
@@ -109,28 +111,29 @@
     background: linear-gradient(145deg, var(--z-color-surface), var(--z-color-surface-raised));
     box-shadow: var(--z-shadow-sm);
   }
-  :where(html[data-z-ui] .z-generated-page .zelyra-crud-card) { display: grid; align-content: start; gap: .2rem; }
-  :where(html[data-z-ui] .z-generated-page .zelyra-crud-card dl) {
+  :where(html[data-z-ui]) .zelyra-crud-card { display: grid; align-content: start; gap: .2rem; }
+  :where(html[data-z-ui]) .zelyra-crud-card dl {
     display: grid;
     grid-template-columns: minmax(5.5rem, .7fr) minmax(0, 1.3fr);
     align-items: baseline;
     gap: .4rem .75rem;
     padding-block: .65rem;
   }
-  :where(html[data-z-ui] .z-generated-page .zelyra-crud-card dt) { color: var(--z-color-text-muted); font-size: .75rem; }
-  :where(html[data-z-ui] .z-generated-page .zelyra-crud-card dd) { min-width: 0; margin: 0; overflow-wrap: anywhere; color: var(--z-color-text); font-weight: 650; }
-  :where(html[data-z-ui] .z-generated-page .zelyra-crud-detail-card dl) { display: grid; grid-template-columns: minmax(8rem, .35fr) minmax(0, 1fr); margin: 0; }
-  :where(html[data-z-ui] .z-generated-page .zelyra-crud-detail-card dt, html[data-z-ui] .z-generated-page .zelyra-crud-detail-card dd) {
+  :where(html[data-z-ui]) .zelyra-crud-card dt { color: var(--z-color-text-muted); font-size: .75rem; }
+  :where(html[data-z-ui]) .zelyra-crud-card dd { min-width: 0; margin: 0; overflow-wrap: anywhere; color: var(--z-color-text); font-weight: 650; }
+  :where(html[data-z-ui]) .zelyra-crud-detail-card dl { display: grid; grid-template-columns: minmax(8rem, .35fr) minmax(0, 1fr); margin: 0; }
+  :where(html[data-z-ui]) .zelyra-crud-detail-card dt,
+  :where(html[data-z-ui]) .zelyra-crud-detail-card dd {
     min-width: 0;
     margin: 0;
     padding: .7rem;
     border-bottom: 1px solid var(--z-color-border);
     overflow-wrap: anywhere;
   }
-  :where(html[data-z-ui] .z-generated-page .zelyra-crud-detail-card dt) { color: var(--z-color-text-muted); font-weight: 650; }
-  :where(html[data-z-ui] .z-generated-page .zelyra-crud-form-card) { max-width: 64rem; margin-inline: auto; }
-  :where(html[data-z-ui] .z-generated-page .zelyra-crud-form-card form) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem 1rem; margin: 0; }
-  :where(html[data-z-ui] .z-generated-page .zelyra-crud-form-card form > .z-field) {
+  :where(html[data-z-ui]) .zelyra-crud-detail-card dt { color: var(--z-color-text-muted); font-weight: 650; }
+  :where(html[data-z-ui]) .zelyra-crud-form-card { max-width: 64rem; margin-inline: auto; }
+  :where(html[data-z-ui]) .zelyra-crud-form-card form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem 1rem; margin: 0; }
+  :where(html[data-z-ui]) .zelyra-crud-form-card form > .z-field {
     min-width: 0;
     margin: 0;
     padding: .8rem .9rem;
@@ -138,8 +141,8 @@
     border-radius: var(--z-radius-md);
     background: var(--z-color-surface);
   }
-  :where(html[data-z-ui] .z-generated-page .zelyra-crud-form-card form > .z-button) { grid-column: 1 / -1; justify-self: start; min-width: 9rem; }
-  :where(html[data-z-ui] .z-generated-page .z-table-scroll) { max-width: 100%; overflow-x: auto; border: 1px solid var(--z-color-border); border-radius: var(--z-radius-md); background: var(--z-color-surface); box-shadow: var(--z-shadow-sm); }
+  :where(html[data-z-ui]) .zelyra-crud-form-card form > .z-button { grid-column: 1 / -1; justify-self: start; min-width: 9rem; }
+  :where(html[data-z-ui]) .z-table-scroll { max-width: 100%; overflow-x: auto; border: 1px solid var(--z-color-border); border-radius: var(--z-radius-md); background: var(--z-color-surface); box-shadow: var(--z-shadow-sm); }
   :where(html[data-z-ui] .zelyra-page-content .zelyra-pagination) { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin-block: 1rem; }
   :where(html[data-z-ui] .zelyra-page-content .zelyra-field) { display: grid; gap: .4rem; margin-block: 0 1rem; }
   :where(html[data-z-ui] .zelyra-page-content .zelyra-field input:not([type="checkbox"]), html[data-z-ui] .zelyra-page-content .zelyra-field select, html[data-z-ui] .zelyra-page-content .zelyra-field textarea) { width: min(100%, 36rem); }
@@ -163,8 +166,8 @@
     :where(html[data-z-ui] .zelyra-crud-form-card form > .z-button,
       html[data-z-ui] .zelyra-crud-form-card form > .zelyra-notice) { grid-column: 1; }
     :where(html[data-z-ui] .z-query-controls__fields .z-button) { grid-column: 1 / -1; }
-    :where(html[data-z-ui] .z-generated-page .zelyra-crud-detail-card dl) { grid-template-columns: minmax(0, 1fr); }
-    :where(html[data-z-ui] .z-generated-page .zelyra-crud-form-card form > .z-button) { grid-column: 1; }
+    :where(html[data-z-ui]) .zelyra-crud-detail-card dl { grid-template-columns: minmax(0, 1fr); }
+    :where(html[data-z-ui]) .zelyra-crud-form-card form > .z-button { grid-column: 1; }
   }
   @media print {
     :where(html[data-z-ui]) { --z-color-canvas: #fff; --z-color-surface: #fff; --z-color-text: #000; --z-color-border: #999; color-scheme: light; background: #fff; }
