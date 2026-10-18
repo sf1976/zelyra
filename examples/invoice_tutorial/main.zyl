@@ -151,11 +151,11 @@ page "/" {
                 <div class="invoice-tour-banner-inner">
                     <div class="invoice-tour-banner-text">
                         <span class="invoice-section-kicker" data-zelyra-i18n="invoice.home.code_title">ZELYRA QUELLTEXT-EINBLICK</span>
-                        <h2>Wie funktioniert diese App im Quelltext?</h2>
-                        <p>Verstehe den gesamten Code hinter Kunden, Artikeln, Rechnungen und Auswertungen. Keine versteckten Frameworks, kein Boilerplate.</p>
+                        <h2 data-zelyra-i18n="invoice.home.code_heading">Wie funktioniert diese App im Quelltext?</h2>
+                        <p data-zelyra-i18n="invoice.home.code_description">Verstehe den gesamten Code hinter Kunden, Artikeln, Rechnungen und Auswertungen. Keine versteckten Frameworks, kein Boilerplate.</p>
                     </div>
                     <div class="invoice-tour-banner-action">
-                        <Button label="Interaktive Code-Tour starten →" href="/tour" appearance="success" />
+                        <Button label="Interaktive Code-Tour starten →" href="/tour" appearance="success" translation_key="invoice.home.code_action" />
                     </div>
                 </div>
             </section>
@@ -167,124 +167,124 @@ page "/ui/components" {
     view: InvoiceTutorialShell
     html {
         <section class="invoice-ui-gallery">
-            <PageHeader title="Zelyra UI – Komponenten" description="Geschäftsoberflächen mit geprüften Bausteinen, konsistenten Zuständen und lokal ausgelieferten Assets." />
-            <Alert title="Darstellung und Validierung sind getrennt" appearance="warning">
-                Die gewählte Erscheinung ändert keine Serverprüfung. aria-invalid kommt aus dem tatsächlichen Validierungszustand.
+            <PageHeader title="@i18n:invoice.ui.title" description="@i18n:invoice.ui.description" />
+            <Alert title="@i18n:invoice.ui.validation_title" appearance="warning">
+                <p data-zelyra-i18n="invoice.ui.validation_text">Die gewählte Erscheinung ändert keine Serverprüfung. aria-invalid kommt aus dem tatsächlichen Validierungszustand.</p>
             </Alert>
             <Grid columns="two">
-                <Card title="Semantische Varianten">
+                <Card title="@i18n:invoice.ui.variants">
                     <Stack>
                         <Inline>
-                            <Badge text="Standard" appearance="default" />
-                            <Badge text="Erfolgreich" appearance="success" />
-                            <Badge text="Prüfen" appearance="warning" />
-                            <Badge text="Fehler" appearance="danger" />
+                            <Badge text="@i18n:invoice.ui.default" appearance="default" />
+                            <Badge text="@i18n:invoice.ui.success" appearance="success" />
+                            <Badge text="@i18n:invoice.ui.warning" appearance="warning" />
+                            <Badge text="@i18n:invoice.ui.danger" appearance="danger" />
                         </Inline>
-                        <Button label="Bericht öffnen" href="/views/invoicedashboard" appearance="success" />
-                        <Button label="Aktion ohne Formularübermittlung" appearance="default" />
+                        <Button label="@i18n:invoice.ui.open_report" href="/views/invoicedashboard" appearance="success" />
+                        <Button label="@i18n:invoice.ui.non_submit" appearance="default" />
                     </Stack>
                 </Card>
-                <Card title="Formularzustände">
-                    <TextField id="ui-reference" name="reference" label="Referenz" appearance="success" required="true">
-                        <slot name="hint">Die Gestaltung success markiert keinen Validierungserfolg.</slot>
+                <Card title="@i18n:invoice.ui.form_states">
+                    <TextField id="ui-reference" name="reference" label="@i18n:invoice.ui.reference" appearance="success" required="true">
+                        <slot name="hint"><span data-zelyra-i18n="invoice.ui.appearance_hint">Die Gestaltung success markiert keinen Validierungserfolg.</span></slot>
                     </TextField>
-                    <EmailField id="ui-email" name="email" label="E-Mail" appearance="danger" invalid="true">
-                        <slot name="error">Diese Meldung wird vom Server geliefert.</slot>
+                    <EmailField id="ui-email" name="email" label="@i18n:invoice.ui.email" appearance="danger" invalid="true">
+                        <slot name="error"><span data-zelyra-i18n="invoice.ui.server_error">Diese Meldung wird vom Server geliefert.</span></slot>
                     </EmailField>
                     <form method="get" action="/ui/components">
-                        <TextField id="ui-filter" name="filter" label="Beispielfilter" placeholder="z. B. offene Rechnungen" />
-                        <FormActions><SubmitButton label="GET-Formular absenden" appearance="success" /></FormActions>
+                        <TextField id="ui-filter" name="filter" label="@i18n:invoice.ui.sample_filter" placeholder="@i18n:invoice.ui.filter_placeholder" />
+                        <FormActions><SubmitButton label="@i18n:invoice.ui.submit_get" appearance="success" /></FormActions>
                     </form>
                 </Card>
             </Grid>
-            <Card title="Weitere native Formularfelder">
-                <Fieldset legend="Auftrag erfassen">
+            <Card title="@i18n:invoice.ui.native_fields">
+                <Fieldset legend="@i18n:invoice.ui.order_legend">
                     <Grid columns="two">
-                        <DateField id="ui-date" name="issued_at" label="Rechnungsdatum" required="true">
-                            <slot name="hint">Der Browser zeigt den lokalen Datumsauswahldialog.</slot>
+                        <DateField id="ui-date" name="issued_at" label="@i18n:invoice.ui.invoice_date" required="true">
+                            <slot name="hint"><span data-zelyra-i18n="invoice.ui.date_hint">Der Browser zeigt den lokalen Datumsauswahldialog.</span></slot>
                         </DateField>
-                        <NumberField id="ui-quantity" name="quantity" label="Menge" value="1" min="1" step="1" required="true" />
-                        <SelectField id="ui-status" name="status" label="Status">
-                            <option value="draft">Entwurf</option>
-                            <option value="open">Offen</option>
-                            <option value="paid">Bezahlt</option>
+                        <NumberField id="ui-quantity" name="quantity" label="@i18n:invoice.ui.quantity" value="1" min="1" step="1" required="true" />
+                        <SelectField id="ui-status" name="status" label="@i18n:invoice.ui.status">
+                            <option value="draft" data-zelyra-i18n="invoice.ui.draft">Entwurf</option>
+                            <option value="open" data-zelyra-i18n="invoice.ui.open">Offen</option>
+                            <option value="paid" data-zelyra-i18n="invoice.ui.paid">Bezahlt</option>
                         </SelectField>
-                        <Textarea id="ui-note" name="note" label="Notiz" rows="3" />
+                        <Textarea id="ui-note" name="note" label="@i18n:invoice.ui.note" rows="3" />
                     </Grid>
-                    <RadioGroup legend="Versandart">
-                        <RadioField id="ui-delivery-email" name="delivery" value="email" label="E-Mail" checked="true" />
-                        <RadioField id="ui-delivery-post" name="delivery" value="post" label="Post" />
+                    <RadioGroup legend="@i18n:invoice.ui.delivery">
+                        <RadioField id="ui-delivery-email" name="delivery" value="email" label="@i18n:invoice.ui.email" checked="true" />
+                        <RadioField id="ui-delivery-post" name="delivery" value="post" label="@i18n:invoice.ui.post" />
                     </RadioGroup>
                     <Inline>
-                        <CheckboxField id="ui-copy" name="copy" value="yes" label="Kopie ablegen" checked="true" />
-                        <SwitchField id="ui-reminder" name="reminder" label="Zahlungserinnerung aktivieren" appearance="warning" />
+                        <CheckboxField id="ui-copy" name="copy" value="yes" label="@i18n:invoice.ui.copy" checked="true" />
+                        <SwitchField id="ui-reminder" name="reminder" label="@i18n:invoice.ui.reminder" appearance="warning" />
                     </Inline>
-                    <RadioGroup legend="Ausgabeformat">
-                        <RadioField id="ui-format-pdf" name="format" value="pdf" label="PDF-Ansicht" checked="true" appearance="success" />
-                        <RadioField id="ui-format-paper" name="format" value="paper" label="Papierdruck" appearance="default" />
+                    <RadioGroup legend="@i18n:invoice.ui.output_format">
+                        <RadioField id="ui-format-pdf" name="format" value="pdf" label="@i18n:invoice.ui.pdf_view" checked="true" appearance="success" />
+                        <RadioField id="ui-format-paper" name="format" value="paper" label="@i18n:invoice.ui.paper_print" appearance="default" />
                     </RadioGroup>
                 </Fieldset>
             </Card>
-            <Card title="Responsive Datentabelle">
-                <DataTable caption="Beispielhafte Rechnungen">
-                    <slot name="head"><tr><th scope="col">Nummer</th><th scope="col">Kunde</th><th scope="col">Status</th><th scope="col">Aktion</th></tr></slot>
-                    <slot name="body"><tr><th scope="row">RE-2026-001</th><td>Beispiel GmbH</td><td><Badge text="Offen" appearance="warning" /></td><td><Link href="/views/invoicedashboard" label="Ansehen" /></td></tr></slot>
+            <Card title="@i18n:invoice.ui.responsive_table">
+                <DataTable caption="@i18n:invoice.ui.sample_invoices">
+                    <slot name="head"><tr><th scope="col" data-zelyra-i18n="invoice.ui.number">Nummer</th><th scope="col" data-zelyra-i18n="invoice.ui.customer">Kunde</th><th scope="col" data-zelyra-i18n="invoice.ui.status">Status</th><th scope="col" data-zelyra-i18n="invoice.ui.action">Aktion</th></tr></slot>
+                    <slot name="body"><tr><th scope="row">RE-2026-001</th><td>Beispiel GmbH</td><td><Badge text="@i18n:invoice.ui.open" appearance="warning" /></td><td><Link href="/views/invoicedashboard" label="@i18n:invoice.ui.view" /></td></tr></slot>
                 </DataTable>
             </Card>
             <Grid columns="two">
-                <BarChart title="Umsatz nach Monat" description="Beispielwerte; zugängliche Balken und Zahlenwerte.">
-                    <ChartBar label="Januar" value="74" max="100" />
-                    <ChartBar label="Februar" value="52" max="100" />
-                    <ChartBar label="März" value="91" max="100" />
+                <BarChart title="@i18n:invoice.ui.revenue_month" description="@i18n:invoice.ui.chart_description">
+                    <ChartBar label="@i18n:invoice.ui.january" value="74" max="100" />
+                    <ChartBar label="@i18n:invoice.ui.february" value="52" max="100" />
+                    <ChartBar label="@i18n:invoice.ui.march" value="91" max="100" />
                 </BarChart>
-                <DonutChart id="invoice-paid-share" title="Bezahlte Rechnungen" description="Anteil an allen Beispielrechnungen" percentage="68">
-                    <slot name="data"><p>68 Prozent bezahlt · 32 Prozent offen</p></slot>
+                <DonutChart id="invoice-paid-share" title="@i18n:invoice.ui.paid_invoices" description="@i18n:invoice.ui.paid_description" percentage="68">
+                    <slot name="data"><p data-zelyra-i18n="invoice.ui.paid_data">68 Prozent bezahlt · 32 Prozent offen</p></slot>
                 </DonutChart>
             </Grid>
             <Grid columns="two">
-                <LineChart id="invoice-monthly-line" title="Rechnungsvolumen" description="Monatliche Beispielwerte; die Tabelle ist die Textalternative." points="5,45 35,28 65,34 95,10">
-                    <slot name="data"><table><caption>Rechnungsvolumen nach Monat</caption><thead><tr><th scope="col">Monat</th><th scope="col">Rechnungen</th></tr></thead><tbody><tr><th scope="row">Januar</th><td>8</td></tr><tr><th scope="row">Februar</th><td>14</td></tr><tr><th scope="row">März</th><td>12</td></tr><tr><th scope="row">April</th><td>24</td></tr></tbody></table></slot>
+                <LineChart id="invoice-monthly-line" title="@i18n:invoice.ui.invoice_volume" description="@i18n:invoice.ui.volume_description" points="5,45 35,28 65,34 95,10">
+                    <slot name="data"><table><caption data-zelyra-i18n="invoice.ui.volume_caption">Rechnungsvolumen nach Monat</caption><thead><tr><th scope="col" data-zelyra-i18n="invoice.ui.month">Monat</th><th scope="col" data-zelyra-i18n="invoice.ui.invoices">Rechnungen</th></tr></thead><tbody><tr><th scope="row" data-zelyra-i18n="invoice.ui.january">Januar</th><td>8</td></tr><tr><th scope="row" data-zelyra-i18n="invoice.ui.february">Februar</th><td>14</td></tr><tr><th scope="row" data-zelyra-i18n="invoice.ui.march">März</th><td>12</td></tr><tr><th scope="row" data-zelyra-i18n="invoice.ui.april">April</th><td>24</td></tr></tbody></table></slot>
                 </LineChart>
-                <Card title="Fortschritt und Navigation">
-                    <Progress label="Monatsziel erreicht" value="68" max="100" />
-                    <Breadcrumbs label="Beispielpfad"><li><a href="/">Start</a></li><li><a href="/invoices">Rechnungen</a></li><li aria-current="page">Auswertung</li></Breadcrumbs>
-                    <Pagination label="Beispielseiten"><a class="z-button" href="/invoices?page=1">1</a><a class="z-button" href="/invoices?page=2">2</a></Pagination>
+                <Card title="@i18n:invoice.ui.progress_navigation">
+                    <Progress label="@i18n:invoice.ui.monthly_goal" value="68" max="100" />
+                    <Breadcrumbs label="@i18n:invoice.ui.breadcrumb"><li><a href="/" data-zelyra-i18n="invoice.ui.home">Start</a></li><li><a href="/invoices" data-zelyra-i18n="invoice.ui.invoices">Rechnungen</a></li><li aria-current="page" data-zelyra-i18n="invoice.ui.analytics">Auswertung</li></Breadcrumbs>
+                    <Pagination label="@i18n:invoice.ui.pagination"><a class="z-button" href="/invoices?page=1">1</a><a class="z-button" href="/invoices?page=2">2</a></Pagination>
                 </Card>
             </Grid>
             <Grid columns="two">
-                <Card title="Zustände, Gruppen und Details">
-                    <EmptyState id="ui-no-overdue" title="Keine überfälligen Rechnungen" description="Alle offenen Rechnungen liegen innerhalb ihrer Zahlungsfrist.">
-                        <slot name="actions"><Button label="Rechnungen ansehen" href="/invoices" /></slot>
+                <Card title="@i18n:invoice.ui.states_groups">
+                    <EmptyState id="ui-no-overdue" title="@i18n:invoice.ui.no_overdue" description="@i18n:invoice.ui.no_overdue_description">
+                        <slot name="actions"><Button label="@i18n:invoice.ui.view_invoices" href="/invoices" /></slot>
                     </EmptyState>
-                    <LoadingState label="Bericht wird vorbereitet …" />
-                    <ErrorState title="Bericht nicht verfügbar" message="Die gespeicherten Rechnungsdaten bleiben erhalten.">
-                        <slot name="actions"><Button label="Erneut versuchen" href="/views/invoicedashboard" /></slot>
+                    <LoadingState label="@i18n:invoice.ui.loading" />
+                    <ErrorState title="@i18n:invoice.ui.report_unavailable" message="@i18n:invoice.ui.data_preserved">
+                        <slot name="actions"><Button label="@i18n:invoice.ui.try_again" href="/views/invoicedashboard" /></slot>
                     </ErrorState>
-                    <ToastRegion><Toast message="Änderungen wurden lokal vorgemerkt." appearance="success" /></ToastRegion>
-                    <ButtonGroup><Button label="Primäraktion" appearance="success" /><Button label="Abbrechen" href="/ui/components" /></ButtonGroup>
-                    <Disclosure summary="Weitere Hinweise"><p>Native Details-Elemente bleiben ohne JavaScript bedienbar.</p></Disclosure>
-                    <Dropdown label="Weitere Ansichten"><Link href="/customers" label="Kunden" /><Link href="/items" label="Artikel" /></Dropdown>
+                    <ToastRegion><Toast message="@i18n:invoice.ui.queued" appearance="success" /></ToastRegion>
+                    <ButtonGroup><Button label="@i18n:invoice.ui.primary_action" appearance="success" /><Button label="@i18n:invoice.ui.cancel" href="/ui/components" /></ButtonGroup>
+                    <Disclosure summary="@i18n:invoice.ui.more_notes"><p data-zelyra-i18n="invoice.ui.details_no_js">Native Details-Elemente bleiben ohne JavaScript bedienbar.</p></Disclosure>
+                    <Dropdown label="@i18n:invoice.ui.more_views"><Link href="/customers" label="@i18n:invoice.nav.customers" /><Link href="/items" label="@i18n:invoice.nav.items" /></Dropdown>
                 </Card>
-                <Card title="Tastaturbedienbare Tabs und Dialog">
-                    <Tabs id="ui-reference-tabs" first_label="Zusammenfassung" second_label="Hinweise">
-                        <slot name="first"><p>Die Pfeiltasten wechseln zwischen Tabs.</p></slot>
-                        <slot name="second"><p>Ohne JavaScript funktionieren die Sprunglinks und beide Inhalte bleiben sichtbar.</p></slot>
+                <Card title="@i18n:invoice.ui.tabs_dialog">
+                    <Tabs id="ui-reference-tabs" first_label="@i18n:invoice.ui.summary" second_label="@i18n:invoice.ui.hints">
+                        <slot name="first"><p data-zelyra-i18n="invoice.ui.tabs_arrows">Die Pfeiltasten wechseln zwischen Tabs.</p></slot>
+                        <slot name="second"><p data-zelyra-i18n="invoice.ui.tabs_no_js">Ohne JavaScript funktionieren die Sprunglinks und beide Inhalte bleiben sichtbar.</p></slot>
                     </Tabs>
-                    <Dialog title="Aktion prüfen" open_label="Dialog öffnen">
-                        <p>Escape schließt den nativen Dialog und gibt den Fokus an die öffnende Schaltfläche zurück.</p>
+                    <Dialog title="@i18n:invoice.ui.confirm_action" open_label="@i18n:invoice.ui.open_dialog">
+                        <p data-zelyra-i18n="invoice.ui.dialog_escape">Escape schließt den nativen Dialog und gibt den Fokus an die öffnende Schaltfläche zurück.</p>
                     </Dialog>
                 </Card>
             </Grid>
             <Grid columns="two">
-                <Disclosure summary="Mehr über Druck und PDF">
-                    <p>Die Druckansicht verwendet den Browserdialog. Dort kann „Als PDF speichern“ gewählt werden. Zelyra erzeugt hier keine eigene PDF-Datei.</p>
+                <Disclosure summary="@i18n:invoice.ui.print_pdf">
+                    <p data-zelyra-i18n="invoice.ui.print_pdf_text">Die Druckansicht verwendet den Browserdialog. Dort kann „Als PDF speichern“ gewählt werden. Zelyra erzeugt hier keine eigene PDF-Datei.</p>
                 </Disclosure>
-                <Card title="Weiterleiten per E-Mail">
-                    <p>Diese Aktion öffnet den lokalen E-Mail-Client. Serverseitige Nachrichten werden ausdrücklich über mail_queue und den Outbox-Worker zugestellt.</p>
-                    <EmailLink recipient="rechnung@example.test" subject="RE 2026&001" body="Rechnung RE 2026&001" label="E-Mail-Entwurf öffnen" />
+                <Card title="@i18n:invoice.ui.email_forward">
+                    <p data-zelyra-i18n="invoice.ui.email_text">Diese Aktion öffnet den lokalen E-Mail-Client. Serverseitige Nachrichten werden ausdrücklich über mail_queue und den Outbox-Worker zugestellt.</p>
+                    <EmailLink recipient="rechnung@example.test" subject="RE 2026&001" body="Rechnung RE 2026&001" label="@i18n:invoice.ui.email_draft" />
                 </Card>
             </Grid>
-            <div class="z-no-print"><PrintAction label="Komponentenübersicht drucken" /></div>
+            <div class="z-no-print"><PrintAction label="@i18n:invoice.ui.print_gallery" /></div>
         </section>
     }
 }

@@ -357,17 +357,28 @@ Rendering escaped. Eigene Inhaltsbereiche liegen außerhalb des generierten
 `E-CRUD-016` abgewiesen. Suche, Speichern, Berechtigungen, CSRF und
 serverseitige Validierung bleiben beim CRUD-System.
 
-Auch eine generierte `tableview` kann Seiteninhalte und eine typisierte
-Aktionszelle je Datenzeile erhalten. Hier funktionieren vorhandene UI-
-Komponenten, darunter Dialoge; automatische Dialog-IDs werden pro Zeile
-eindeutig gemacht:
+Auch eine generierte `tableview` kann Seiteninhalte, zusätzliche Inhalte in
+einer Datenzelle und eine typisierte Aktionszelle je Datenzeile erhalten.
+`row_fields` benennt ausdrücklich Ergebnisfelder, die eine Vorlage verwenden,
+die aber keine eigene Tabellenspalte erhalten sollen. Suche, Filter und
+Sortierung verwenden weiterhin nur die in `columns`, `filter` und den
+Sortiereinstellungen freigegebenen Felder. Vorhandene UI-Komponenten,
+darunter Dialoge, funktionieren auch in einer Datenzelle; automatisch
+vergebene Dialog-IDs werden pro Zeile und Zelle eindeutig gemacht:
 
 ```zelyra
 tableview CustomerOverview {
     source sql<CustomerRow[]> { SELECT id, name, email FROM customers }
-    columns { id name email }
+    columns { name }
     view {
         before_content { html { <p>Kundenübersicht mit Kontaktoptionen</p> } }
+        row_fields { id email }
+        column_content {
+            item: customer
+            name {
+                html { <small>{customer.email}</small> }
+            }
+        }
         row_actions {
             item: customer
             html {
@@ -381,9 +392,13 @@ tableview CustomerOverview {
 }
 ```
 
-In `row_actions` sind nur Eigenschaften des SQL-Ergebnistyps verfügbar, und
-der Renderer verwendet für jede Zeile die angezeigten Tabellenspalten.
-Zusätzliche Inhalte dürfen keine `<form>`-Elemente enthalten. Links navigieren;
+Die SQL-Projektion muss alle angezeigten und ausdrücklich in `row_fields`
+benannten Eigenschaften liefern. Im Bindungsobjekt sind nur `columns` und
+`row_fields` verfügbar. `column_content` muss auf eine angezeigte Spalte
+verweisen; ein fehlendes oder unpassendes Feld wird vom Compiler abgewiesen.
+Der Renderer wählt die benannten Zusatzfelder zwar für die jeweilige Zeile
+aus, zeigt sie aber nicht als separate Spalten an. Zusätzliche Inhalte dürfen
+keine `<form>`-Elemente enthalten. Links navigieren;
 lokale Buttons starten nur unterstützte UI-Interaktionen. Innerhalb von
 `field_content` muss ein eigener Button ausdrücklich `type="button"` haben;
 sonst würde ein Browser ihn als weiteren Submit-Button interpretieren.

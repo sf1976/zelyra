@@ -42,12 +42,15 @@ Ohne `--output` schreibt der Export eine Cron-Vorschau nach stdout. Mit
 `--output` wird die Vorschau als neue, projektinterne Datei geschrieben; der
 Export überschreibt keine vorhandene Datei und folgt keinen Symlinks aus dem
 Projekt heraus. Das Zielverzeichnis muss bereits vorhanden sein. Beide Formen
-installieren und aktivieren keinen Scheduler. `CRON_TZ` wird in der Vorschau ausgegeben, aber
-Cron-Implementierungen unterscheiden sich bei Zeitzonen, Sommerzeit und
-Umgebungsvariablen; diese Eigenschaften müssen auf dem Zielsystem geprüft
-werden. Für produktive Deployments sind auch systemd-Timer oder Plattform-
-Scheduler mögliche Hosts. Zelyra startet standardmäßig keinen residenten
-Scheduler.
+installieren oder aktivieren keinen Host-Cronjob. `CRON_TZ` wird in der
+Vorschau ausgegeben, aber Cron-Implementierungen unterscheiden sich bei
+Zeitzonen, Sommerzeit und Umgebungsvariablen; diese Eigenschaften müssen auf
+dem Zielsystem geprüft werden. Zelyras eigener residenter Scheduler läuft
+ausschließlich im installierten und aktiven Linux-systemd-Benutzerdienst des
+Projekts. Ein manuell gestartetes `zelyra serve` führt deklarierte Zeitpläne
+nicht aus. Für externe Deployments bleiben systemd-Timer oder Plattform-
+Scheduler mögliche Alternativen; die Cron-Vorschau muss dort bewusst geprüft
+und aktiviert werden.
 
 Dieser Abschnitt beschreibt den mit 1.2.9 eingeführten dauerhaften Scheduler-
 Implementierung. `zelyra setup --all` legt die MariaDB-Outbox für jeden

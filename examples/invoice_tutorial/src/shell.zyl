@@ -17,6 +17,7 @@ pub view InvoiceTutorialShell {
                             <span class="tutorial-brand-mark" aria-hidden="true">Z</span>
                             <span><strong>Rechnungsbüro</strong><small data-zelyra-i18n="invoice.nav.subtitle">Create invoices with ease</small></span>
                         </a>
+                        <button class="z-button tutorial-theme-toggle" type="button" data-z-theme-toggle data-z-theme-toggle-label hidden aria-label="Darstellung wechseln">Darstellung wechseln</button>
                         <Dialog title="Quelltext verstehen" open_label="ⓘ Quelltext erklärt">
                             <div class="tutorial-source-help">
                                 <p data-zelyra-i18n="invoice.source.intro">Diese Hilfe erklärt, welche Zelyra-Dateien die aktuelle Anwendung aufbauen. Die Links der Navigation öffnen echte Seiten; einige entstehen automatisch aus Deklarationen.</p>

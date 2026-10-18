@@ -337,18 +337,29 @@ sits outside the generated `<form>`; nested forms are rejected with
 `E-CRUD-016`. CRUD continues
 to own routing, persistence, authorization, CSRF, and server-side validation.
 
-A generated `tableview` can also have page content and a typed action cell for
-each row. Existing UI components, including dialogs, work in the row fragment;
-automatic dialog IDs are scoped per rendered row:
+A generated `tableview` can also have page content, supporting content inside
+a data cell, and a typed action cell for each row. `row_fields` explicitly
+selects result fields that templates may use without displaying each as a
+separate table column. Search, filters, and sorting still use only the fields
+enabled by `columns`, `filter`, and the sort configuration. Existing UI
+components, including dialogs, work inside a data cell; automatic dialog IDs
+are unique per rendered row and cell:
 
 ```zelyra
 import "zelyra/ui" as ui
 
 tableview CustomerOverview {
     source sql<CustomerRow[]> { SELECT id, name, email FROM customers }
-    columns { id name email }
+    columns { name }
     view {
         before_content { html { <p>Customer contacts</p> } }
+        row_fields { id email }
+        column_content {
+            item: customer
+            name {
+                html { <small>{customer.email}</small> }
+            }
+        }
         row_actions {
             item: customer
             html {
@@ -362,9 +373,12 @@ tableview CustomerOverview {
 }
 ```
 
-Only SQL result fields are available in `row_actions`; the renderer supplies
-the displayed table columns for each row. Custom fragments may not contain a
-`<form>`. Links navigate, and local buttons only perform supported UI
+The SQL projection must return every displayed field and every explicitly
+listed `row_fields` entry. Templates can access only `columns` and
+`row_fields`. `column_content` must target a displayed column; unknown targets
+or fields are compiler errors. The renderer selects the named supplemental
+fields for each row but does not display them as separate columns. Custom
+fragments may not contain a `<form>`. Links navigate, and local buttons only perform supported UI
 interactions. A button inside `field_content` must declare
 `type="button"`; otherwise the browser would treat it as another form submit
 control. Database changes must go through existing CSRF-protected,

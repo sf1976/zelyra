@@ -1623,6 +1623,8 @@ impl<'a> Parser<'a> {
             } else if self.at(&TokenKind::View) {
                 self.advance();
                 self.expect(TokenKind::LBrace, "`{` after tableview `view`")?;
+                let mut row_fields_seen = false;
+                let mut column_content_seen = false;
                 self.skip_newlines();
                 while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
                     let (block_name, block_span) = self.ident("tableview view block")?;
@@ -1633,6 +1635,65 @@ impl<'a> Parser<'a> {
                             if target.replace(body).is_some() {
                                 return self.error(format!("duplicate `{block_name}` tableview block"));
                             }
+                        }
+                        "row_fields" => {
+                            if row_fields_seen {
+                                return self.error("duplicate tableview `row_fields` block");
+                            }
+                            row_fields_seen = true;
+                            self.expect(TokenKind::LBrace, "`{` after tableview row_fields")?;
+                            let mut fields = Vec::new();
+                            self.skip_newlines();
+                            while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                                let (field, _) = self.ident("tableview row field")?;
+                                if fields.contains(&field) {
+                                    return self.error(format!("duplicate tableview row field `{field}`"));
+                                }
+                                fields.push(field);
+                                self.skip_newlines();
+                            }
+                            self.expect(TokenKind::RBrace, "`}` after tableview row_fields")?;
+                            view.row_fields = fields;
+                        }
+                        "column_content" => {
+                            if column_content_seen {
+                                return self.error("duplicate tableview `column_content` block");
+                            }
+                            column_content_seen = true;
+                            self.expect(TokenKind::LBrace, "`{` after tableview column_content")?;
+                            self.skip_newlines();
+                            let (property, property_span) = self.ident("tableview column content binding property")?;
+                            if property != "item" {
+                                return self.error("expected `item: <binding>` in tableview column_content");
+                            }
+                            self.expect(TokenKind::Colon, "`:` after tableview column content row binding")?;
+                            let item = self.ident("tableview column content row binding")?.0;
+                            self.skip_newlines();
+                            while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                                let (column, column_span) = self.ident("tableview column name")?;
+                                self.expect(TokenKind::LBrace, "`{` after tableview column name")?;
+                                self.skip_newlines();
+                                self.expect(TokenKind::Html, "`html` in tableview column content")?;
+                                self.expect(TokenKind::LBrace, "`{` after `html`")?;
+                                let html = match self.current().kind.clone() {
+                                    TokenKind::HtmlBody(body) => { self.advance(); body }
+                                    _ => return self.error("expected HTML body in tableview column content"),
+                                };
+                                self.expect(TokenKind::RBrace, "`}` after tableview column HTML")?;
+                                self.skip_newlines();
+                                let end = self.expect(TokenKind::RBrace, "`}` after tableview column content")?;
+                                if view.column_content.iter().any(|entry| entry.column == column) {
+                                    return self.error(format!("duplicate tableview column content for `{column}`"));
+                                }
+                                view.column_content.push(TableViewColumnContentDef {
+                                    column,
+                                    item: item.clone(),
+                                    html,
+                                    span: property_span.join(end).join(column_span),
+                                });
+                                self.skip_newlines();
+                            }
+                            self.expect(TokenKind::RBrace, "`}` after tableview column_content")?;
                         }
                         "row_actions" => {
                             self.expect(TokenKind::LBrace, "`{` after tableview row_actions")?;
@@ -1673,7 +1734,7 @@ impl<'a> Parser<'a> {
                                 span: block_span.join(end),
                             });
                         }
-                        _ => return self.error("expected `before_content`, `after_content`, or `row_actions` in tableview view"),
+                        _ => return self.error("expected `before_content`, `after_content`, `row_fields`, `column_content`, or `row_actions` in tableview view"),
                     }
                     self.skip_newlines();
                 }
@@ -5498,10 +5559,15 @@ mod tests {
                 }
             }
             tableview Customers {
-                source sql<Customer[]> { SELECT id, name FROM customers }
-                columns { id name }
+                source sql<Customer[]> { SELECT id, name, email FROM customers }
+                columns { name }
                 view {
                     before_content { html { <p>Heading</p> } }
+                    row_fields { id email }
+                    column_content {
+                        item: customer
+                        name { html { <small>{customer.email}</small> } }
+                    }
                     row_actions {
                         item: customer
                         html { <a href="/customers/{customer.id}">Open</a> }
@@ -5539,6 +5605,12 @@ mod tests {
             tableview.view.row_actions.as_ref().unwrap().item,
             "customer"
         );
+        assert_eq!(tableview.view.row_fields, ["id", "email"]);
+        assert_eq!(tableview.view.column_content[0].column, "name");
+        assert_eq!(tableview.view.column_content[0].item, "customer");
+        assert!(tableview.view.column_content[0]
+            .html
+            .contains("customer.email"));
         assert!(tableview
             .view
             .after_content

@@ -32,6 +32,11 @@
       button.setAttribute("aria-label", german
         ? `Farbschema aktiv: ${themeNames[theme]}`
         : `Color theme active: ${themeNames[theme]}`);
+      if (button.hasAttribute("data-z-theme-toggle-label")) {
+        button.textContent = german
+          ? `Farbschema: ${themeNames[theme]}`
+          : `Theme: ${themeNames[theme]}`;
+      }
     });
   }
 
@@ -65,7 +70,7 @@
       button.hidden = false;
       bind(button, "click", () => {
         const current = document.documentElement.dataset.zTheme || "system";
-        setTheme(current === "system" ? "dark" : current === "dark" ? "light" : "system");
+        setTheme(current === "dark" ? "light" : "dark");
       });
     });
     root.querySelectorAll("[data-z-density-toggle]").forEach((button) => {

@@ -1900,7 +1900,9 @@ fn invoice_tutorial_component_gallery_renders_its_charts_and_accessible_tables()
     assert!(html.contains("<figure class=\"z-chart z-chart--bar\">"));
     assert!(html.contains("<figure class=\"z-chart z-chart--line\">"));
     assert!(html.contains("<figure class=\"z-chart z-chart--donut\">"));
-    assert!(html.contains("<caption>Rechnungsvolumen nach Monat</caption>"));
+    assert!(html.contains(
+        "<caption data-zelyra-i18n=\"invoice.ui.volume_caption\">Rechnungsvolumen nach Monat</caption>"
+    ));
     assert!(html.contains("<dialog class=\"z-dialog\""));
 }
 
@@ -2021,6 +2023,44 @@ fn tableview_row_actions_can_use_imported_zelyra_dialog_components() {
     assert!(expanded.contains("aria-controls="));
     assert!(expanded.contains("{customer.name}"));
     fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn validates_tableview_hidden_row_fields_and_column_content_context() {
+    let source = r#"
+        struct ItemRow { sku: String customer_number: String }
+        tableview Items {
+            source sql<ItemRow[]> { SELECT sku, customer_number FROM items }
+            columns { sku }
+            view {
+                row_fields { customer_number }
+                column_content {
+                    item: item
+                    sku { html { <small>Customer: {item.customer_number}</small> } }
+                }
+                row_actions {
+                    item: item
+                    html { <a href="/customers/{item.customer_number}">Customer</a> }
+                }
+            }
+        }
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    assert!(validate_components("tableview-content.zyl", &program));
+
+    let invalid = source.replace("row_fields { customer_number }", "row_fields { absent }");
+    let program = parse(&lex(&invalid).unwrap()).unwrap();
+    assert!(!validate_components(
+        "tableview-content-invalid.zyl",
+        &program
+    ));
+
+    let invalid_column = source.replace("sku { html", "unknown { html");
+    let program = parse(&lex(&invalid_column).unwrap()).unwrap();
+    assert!(!validate_components(
+        "tableview-column-invalid.zyl",
+        &program
+    ));
 }
 
 #[test]
@@ -2184,6 +2224,30 @@ fn component_string_properties_are_html_escaped() {
         rendered.trim(),
         "<h1>&lt;script&gt;alert(1)&lt;/script&gt; &amp; &#39;quoted&#39;</h1>"
     );
+}
+
+#[test]
+fn component_properties_resolve_explicit_project_locale_references() {
+    let source = r#"
+        component LocalizedHeader {
+            props { title: String }
+            html { <h1>{title}</h1> }
+        }
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    assert!(validate_components("localized.zyl", &program));
+    let rendered = render_view_component(
+        &program.components[0],
+        "title=\"@i18n:invoice.ui.title\"",
+        None,
+    );
+    assert_eq!(
+        rendered.trim(),
+        "<h1>\u{e000}zelyra-locale:invoice.ui.title\u{e001}</h1>"
+    );
+
+    let invalid = render_view_component(&program.components[0], "title=\"@i18n:bad key\"", None);
+    assert_eq!(invalid.trim(), "<h1>@i18n:bad key</h1>");
 }
 
 #[test]

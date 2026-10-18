@@ -282,7 +282,20 @@ pub struct TableViewDef {
 pub struct TableViewViewDef {
     pub before_content: Option<String>,
     pub after_content: Option<String>,
+    /// Explicit result fields available only to the row templates below.
+    pub row_fields: Vec<String>,
+    pub column_content: Vec<TableViewColumnContentDef>,
     pub row_actions: Option<TableViewRowActionsDef>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TableViewColumnContentDef {
+    /// Name of a declared display column whose cell receives this content.
+    pub column: String,
+    /// Lexical result-row binding available only inside this fragment.
+    pub item: String,
+    pub html: String,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

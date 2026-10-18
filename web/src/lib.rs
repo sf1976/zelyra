@@ -581,6 +581,10 @@ pub struct TableViewRoute {
     pub layout_html: Option<String>,
     pub source: String,
     pub columns: Vec<String>,
+    /// Explicit result fields selected for row templates but not displayed.
+    pub row_fields: Vec<String>,
+    /// Additional escaped row content keyed by displayed column.
+    pub column_content: Vec<(String, String, String)>,
     pub before_content_html: Option<String>,
     pub after_content_html: Option<String>,
     pub row_actions: Option<(String, String)>,
@@ -7206,8 +7210,8 @@ fn dispatch_tableview(
     if source.is_empty() {
         return Response::html(500, "<h1>500 Internal Server Error</h1>");
     }
-    let select_columns = tableview
-        .columns
+    let query_columns = tableview_selected_columns(tableview);
+    let select_columns = query_columns
         .iter()
         .map(|column| {
             format!(
@@ -7345,6 +7349,7 @@ fn render_tableview(
         page,
         per_page,
     } = state;
+    let query_columns = tableview_selected_columns(tableview);
     let mut html = String::from("<main class=\"z-generated-page\"><header class=\"z-page-header\"><div class=\"z-page-header__copy\"><h1 class=\"z-page-header__title\">");
     html.push_str(&html_escape(&tableview.title));
     html.push_str("</h1></div></header>");
@@ -7491,11 +7496,33 @@ fn render_tableview(
                     value
                 };
                 html.push_str(&html_escape(value));
+                if let Some((_, item, template)) = tableview
+                    .column_content
+                    .iter()
+                    .find(|(column, _, _)| column == &tableview.columns[index])
+                {
+                    let mut row_values = HashMap::new();
+                    for (field_index, field) in query_columns.iter().enumerate() {
+                        row_values.insert(
+                            format!("{item}.{field}"),
+                            row.get(field_index)
+                                .map(String::as_str)
+                                .unwrap_or("")
+                                .to_owned(),
+                        );
+                    }
+                    let scoped = scope_dialog_auto_ids(template, &[row_index, index]);
+                    html.push_str(&render_interpolations(
+                        &scoped,
+                        &HashMap::new(),
+                        &row_values,
+                    ));
+                }
                 html.push_str("</td>");
             }
             if let Some((item, template)) = &tableview.row_actions {
                 let mut row_values = HashMap::new();
-                for (index, column) in tableview.columns.iter().enumerate() {
+                for (index, column) in query_columns.iter().enumerate() {
                     row_values.insert(
                         format!("{item}.{column}"),
                         row.get(index).map(String::as_str).unwrap_or("").to_owned(),
@@ -7556,6 +7583,15 @@ fn render_tableview(
     }
     html.push_str("</main>");
     html
+}
+
+fn tableview_selected_columns(tableview: &TableViewRoute) -> Vec<&str> {
+    tableview
+        .columns
+        .iter()
+        .chain(tableview.row_fields.iter())
+        .map(String::as_str)
+        .collect()
 }
 
 fn tableview_page_url(

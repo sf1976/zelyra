@@ -78,6 +78,23 @@ try {
   assert.match(css, /\.invoice-preview-grand-total/);
   assert.match(css, /max-width: 991px/);
   assert.match(await page.locator("h1").innerText(), /Vom ersten Kunden bis zur fertigen Rechnung\.|From the first customer to the finished invoice\./);
+  assert.equal(await page.locator("html").getAttribute("lang"), "de", "the generated tutorial defaults to the German project catalog");
+  assert.equal(await page.getByRole("button", { name: /Farbschema aktiv/ }).count(), 1, "the shared tutorial shell exposes a working theme control");
+  await page.evaluate(() => window.ZelyraUI.setTheme("light"));
+  assert.equal(await page.getByRole("button", { name: /Farbschema aktiv/ }).innerText(), "Farbschema: hell", "the selected light theme is visible in the control");
+  await page.getByRole("button", { name: /Farbschema aktiv/ }).click();
+  assert.equal(await page.locator("html").getAttribute("data-z-theme"), "dark", "the visible control switches from light to dark");
+  assert.equal(await page.getByRole("button", { name: /Farbschema aktiv/ }).innerText(), "Farbschema: dunkel");
+  const darkHome = await page.evaluate(() => ({
+    canvas: getComputedStyle(document.documentElement).getPropertyValue("--z-color-canvas").trim(),
+    preview: getComputedStyle(document.querySelector(".invoice-preview")).backgroundColor,
+    label: getComputedStyle(document.querySelector(".invoice-preview-eyebrow")).color,
+  }));
+  assert.notEqual(darkHome.canvas, "#f4f7f6", "dark mode must replace the project light canvas token");
+  assert.notEqual(darkHome.preview, "rgb(255, 255, 255)", "dark mode must restyle the invoice preview surface");
+  assert.notEqual(darkHome.label, "rgb(135, 149, 142)", "dark mode must restyle muted invoice labels");
+  await page.getByRole("button", { name: /Farbschema aktiv/ }).click();
+  assert.equal(await page.locator("html").getAttribute("data-z-theme"), "light", "the visible control switches back to light");
   assert.equal(await page.locator(".invoice-home .invoice-workflow-card").count(), 3);
   assert.equal(await page.locator(".invoice-preview-number").innerText(), "RE-2026-001");
   assert.match(await page.locator(".invoice-preview").innerText(), /354,62 €|€354\.62/);
@@ -200,6 +217,10 @@ try {
   if (browserName === "chromium") await assertVisualSnapshot(page, "invoice-create-form-desktop");
 
   const galleryResponse = await page.goto(`${baseUrl}/ui/components`, { waitUntil: "networkidle" });
+  assert.equal(await page.locator(".invoice-ui-gallery h1").innerText(), "Zelyra UI – Komponenten", "component gallery heading comes from the German locale catalog");
+  assert.equal(await page.locator(".invoice-ui-gallery h2").first().innerText(), "Darstellung und Validierung sind getrennt", "component titles are resolved from the project locale catalog");
+  assert.equal(await page.getByLabel("Referenz").count(), 1, "component field labels come from the project locale catalog");
+  assert.equal(await page.getByRole("option", { name: "Bezahlt" }).count(), 1, "native option labels come from the project locale catalog");
   const chartCount = await page.locator(".z-chart").count();
   assert.equal(chartCount, 3, `the overview should include bar, line, and donut charts (HTTP ${galleryResponse.status()}): ${(await page.locator("body").innerText()).slice(0, 700)}`);
   assert.equal(await page.locator(".invoice-ui-gallery table caption").count(), 2, "chart/table values should have text alternatives and captions");
@@ -225,6 +246,44 @@ try {
     [],
     "axe-core found WCAG A/AA violations in the component gallery",
   );
+  const themeToggle = page.getByRole("button", { name: /Farbschema aktiv/ });
+  await page.evaluate(() => window.ZelyraUI.setTheme("light"));
+  const lightButtonStyles = await page.evaluate(() => [...document.querySelectorAll(".z-button, .z-input, .z-badge")].map((element) => ({
+    className: element.className,
+    color: getComputedStyle(element).color,
+    background: getComputedStyle(element).backgroundColor,
+    border: getComputedStyle(element).borderColor,
+  })));
+  await themeToggle.click();
+  assert.equal(await page.locator("html").getAttribute("data-z-theme"), "dark", "the header control switches the component gallery to dark mode");
+  await page.waitForTimeout(250); // Let the documented token-color transition finish before contrast checks.
+  await page.waitForFunction(() =>
+    getComputedStyle(document.documentElement).getPropertyValue("--z-color-canvas").trim() === "#141a22" &&
+    getComputedStyle(document.querySelector(".invoice-ui-gallery .z-button--success")).backgroundColor === "rgb(155, 216, 184)"
+  );
+  const darkAccessibility = await page.evaluate(async () => axe.run(document, {
+    runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"] },
+  }));
+  const darkButtonStyles = await page.evaluate(() => [...document.querySelectorAll(".z-button, .z-input, .z-badge")].map((element) => ({
+    className: element.className,
+    color: getComputedStyle(element).color,
+    background: getComputedStyle(element).backgroundColor,
+    border: getComputedStyle(element).borderColor,
+  })));
+  assert.equal(darkButtonStyles.length, lightButtonStyles.length, "all gallery controls remain styled in both themes");
+  assert.notDeepEqual(darkButtonStyles, lightButtonStyles, "component buttons, fields, and badges must receive dark-theme colors");
+  assert.deepEqual(
+    darkAccessibility.violations.map(({ id, impact, description, nodes }) => ({
+      id,
+      impact,
+      description,
+      nodes: nodes.map(({ target, failureSummary }) => ({ target, failureSummary })),
+    })),
+    [],
+    `axe-core found WCAG A/AA violations in the dark component gallery: ${JSON.stringify(darkButtonStyles)}`,
+  );
+  await themeToggle.click();
+  assert.equal(await page.locator("html").getAttribute("data-z-theme"), "light", "the header control switches back to light mode");
   const firstTab = page.getByRole("tab", { name: "Zusammenfassung" });
   const secondTab = page.getByRole("tab", { name: "Hinweise" });
   await firstTab.waitFor();

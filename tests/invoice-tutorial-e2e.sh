@@ -12,6 +12,26 @@ if [[ -z "${database_url}" || "${database_url}" != mariadb://* ]]; then
   exit 2
 fi
 
+python3 - <<'PY_LOCALES'
+import json
+import re
+from pathlib import Path
+root = Path("examples/invoice_tutorial")
+source = (root / "main.zyl").read_text()
+gallery = source.split('page "/ui/components" {', 1)[1].split('\npage "/tour" {', 1)[0]
+keys = set(re.findall(r'@i18n:(invoice\.ui\.[A-Za-z0-9_.]+)', gallery))
+keys.update(re.findall(r'data-zelyra-i18n="(invoice\.ui\.[A-Za-z0-9_.]+)"', gallery))
+if not keys:
+    raise SystemExit("component gallery has no locale references")
+catalogs = {language: json.loads((root / f"locales/{language}.json").read_text()) for language in ("de", "en")}
+for language, catalog in catalogs.items():
+    missing = sorted(keys - catalog.keys())
+    if missing:
+        raise SystemExit(f"{language}.json is missing component-galley keys: {missing}")
+if set(catalogs["de"]) != set(catalogs["en"]):
+    raise SystemExit("invoice tutorial locale catalogs must have identical keys")
+PY_LOCALES
+
 temporary_root="$(mktemp -d)"
 server_pid=""
 editor_pid=""
@@ -39,7 +59,7 @@ trap cleanup EXIT
 
 project="${temporary_root}/invoice"
 "${binary}" --tutorial invoice "${project}" --no-start
-DATABASE_URL="${database_url}" ZELYRA_DATABASE_MAIN_URL="${database_url}" \
+DATABASE_URL="${database_url}" ZELYRA_DATABASE_MAIN_URL="${database_url}" ZELYRA_LANGUAGE=de \
   "${binary}" db setup "${project}/main.zyl"
 # Reapplying the unchanged tutorial schema must not propose destructive
 # DECIMAL changes caused by MariaDB's default DECIMAL(10,0) metadata.
@@ -142,6 +162,18 @@ for route in / /customers /items /invoices /invoice_lines /invoices/new /views/i
        ("${body}" == *"From the first customer to the finished invoice."* && "${body}" == *"Open invoice overview"* && "${body}" == *"€354.62"*) ) ]]; then
     echo "invoice tutorial landing page did not render its workflow" >&2
     python3 -c 'import re,sys; s=sys.stdin.read(); s=s[s.find("invoice-home"):]; print(re.sub(r"<[^>]+>", " ", s)[:1200])' <<<"${body}" >&2
+    exit 1
+  fi
+  if [[ "${route}" == "/" && "${body}" != *'lang="de"'* ]]; then
+    echo "invoice tutorial did not select the German project locale" >&2
+    exit 1
+  fi
+  if [[ "${route}" == "/" && "${body}" != *'data-z-theme-toggle-label'* ]]; then
+    echo "invoice tutorial did not render the theme control" >&2
+    exit 1
+  fi
+  if [[ "${route}" == "/" && "${body}" != *'Wie funktioniert diese App im Quelltext?'* ]]; then
+    echo "invoice tutorial did not render the localized home-page code explanation" >&2
     exit 1
   fi
 done

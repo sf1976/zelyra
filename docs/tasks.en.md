@@ -41,11 +41,14 @@ zelyra schedule export main.zyl --format cron --output deploy/zelyra.cron
 Without `--output`, export prints a cron preview to stdout. With `--output`, it
 writes a new project-local file; it refuses to replace an existing file and
 rejects symlinked directories that resolve outside the project. The target
-directory must already exist. Neither form installs or enables a scheduler.
-The preview uses `CRON_TZ`, but cron implementations differ in
-timezone, daylight-saving, and environment-variable behavior; verify these on
-the target host. systemd timers and platform schedulers are also possible
-deployment hosts. Zelyra does not start a resident scheduler by default.
+directory must already exist. Neither form installs or enables a host cron
+job. The preview uses `CRON_TZ`, but cron implementations differ in timezone,
+daylight-saving, and environment-variable behavior; verify these on the
+target host. Zelyra's resident scheduler runs only inside the project's
+installed and active Linux systemd user service. A manually started
+`zelyra serve` does not execute declared schedules. For external deployments,
+systemd timers and platform schedulers remain possible alternatives; review
+and enable the cron preview there deliberately.
 
 This section describes the durable scheduler introduced in 1.2.9. The normal
 `zelyra setup --all` path creates or upgrades the MariaDB outbox for any

@@ -4267,7 +4267,12 @@ fn validate_components(path: &str, program: &zelyra_ast::Program) -> bool {
                 actions.span.column,
                 &bindings,
             );
-            let available = tableview.columns.iter().cloned().collect::<HashSet<_>>();
+            let available = tableview
+                .columns
+                .iter()
+                .chain(tableview.view.row_fields.iter())
+                .cloned()
+                .collect::<HashSet<_>>();
             valid &= validate_record_template_fields_for_root(
                 path,
                 &actions.html,
@@ -4287,6 +4292,85 @@ fn validate_components(path: &str, program: &zelyra_ast::Program) -> bool {
                 );
                 valid = false;
             }
+        }
+        if let Some(result_fields) = tableview_template_fields(&tableview.result_type, program) {
+            let mut selected = tableview.columns.iter().cloned().collect::<HashSet<_>>();
+            for field in &tableview.view.row_fields {
+                if selected.contains(field) {
+                    diagnostic_with_span(
+                        path,
+                        "E-VIEW-036",
+                        &format!("tableview row field `{field}` is already a displayed column"),
+                        tableview.span,
+                    );
+                    valid = false;
+                } else if !result_fields.contains(&field.as_str()) {
+                    diagnostic_with_span(
+                        path,
+                        "E-VIEW-036",
+                        &format!("tableview row field `{field}` does not exist in its result type"),
+                        tableview.span,
+                    );
+                    valid = false;
+                } else {
+                    selected.insert(field.clone());
+                }
+            }
+            for content in &tableview.view.column_content {
+                if !tableview.columns.contains(&content.column) {
+                    diagnostic_with_span(
+                        path,
+                        "E-VIEW-036",
+                        &format!(
+                            "tableview column content targets undeclared display column `{}`",
+                            content.column
+                        ),
+                        content.span,
+                    );
+                    valid = false;
+                }
+                let row_type = match &tableview.result_type {
+                    Type::Array(inner) | Type::Option(inner) => (**inner).clone(),
+                    other => other.clone(),
+                };
+                let bindings = HashMap::from([(content.item.clone(), row_type)]);
+                valid &= validate_component_template(
+                    path,
+                    program,
+                    &content.html,
+                    content.span.line,
+                    content.span.column,
+                    &bindings,
+                );
+                valid &= validate_record_template_fields_for_root(
+                    path,
+                    &content.html,
+                    &content.item,
+                    &selected,
+                    content.span,
+                );
+                if html_contains_element(
+                    &expand_view_components(program, content.html.clone()),
+                    "form",
+                ) {
+                    diagnostic_with_span(
+                        path,
+                        "E-VIEW-035",
+                        "tableview column_content must not contain a form",
+                        content.span,
+                    );
+                    valid = false;
+                }
+            }
+        } else if !tableview.view.row_fields.is_empty() || !tableview.view.column_content.is_empty()
+        {
+            diagnostic_with_span(
+                path,
+                "E-VIEW-036",
+                "tableview row fields and column content require a named result record",
+                tableview.span,
+            );
+            valid = false;
         }
         if let Some(layout_name) = &tableview.layout {
             if let Some(layout) = program.views.iter().find(|view| view.name == *layout_name) {
@@ -9398,6 +9482,49 @@ fn tableview_result_fields<'a>(
         })
 }
 
+fn tableview_template_fields<'a>(
+    result_type: &'a zelyra_ast::Type,
+    program: &'a zelyra_ast::Program,
+) -> Option<Vec<&'a str>> {
+    let result_type = match result_type {
+        zelyra_ast::Type::Array(inner) | zelyra_ast::Type::Option(inner) => inner.as_ref(),
+        other => other,
+    };
+    let zelyra_ast::Type::Named(name) = result_type else {
+        return None;
+    };
+    let normalized = name.to_ascii_lowercase();
+    let plural = if normalized.ends_with('y') {
+        format!("{}ies", &normalized[..normalized.len() - 1])
+    } else {
+        format!("{normalized}s")
+    };
+    if let Some(table) = program
+        .tables
+        .iter()
+        .find(|table| table.name == normalized || table.name == plural)
+    {
+        return Some(
+            table
+                .columns
+                .iter()
+                .map(|column| column.name.as_str())
+                .collect(),
+        );
+    }
+    program
+        .records
+        .iter()
+        .find(|record| record.name == *name)
+        .map(|record| {
+            record
+                .fields
+                .iter()
+                .map(|field| field.name.as_str())
+                .collect()
+        })
+}
+
 fn tableview_filter_kind(
     result_type: &Type,
     column: &str,
@@ -10156,6 +10283,19 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             layout_html: tableview_layout_html(&program, tableview),
             source: tableview.source.clone(),
             columns: tableview.columns.clone(),
+            row_fields: tableview.view.row_fields.clone(),
+            column_content: tableview
+                .view
+                .column_content
+                .iter()
+                .map(|content| {
+                    (
+                        content.column.clone(),
+                        content.item.clone(),
+                        expand_view_components(&program, content.html.clone()),
+                    )
+                })
+                .collect(),
             before_content_html: tableview
                 .view
                 .before_content
@@ -11675,6 +11815,34 @@ fn render_component_property(
     }
     if value.starts_with('{') && value.ends_with('}') {
         template.replace(&placeholder, value)
+    } else if matches!(
+        prop.name.as_str(),
+        "title"
+            | "description"
+            | "label"
+            | "caption"
+            | "legend"
+            | "summary"
+            | "text"
+            | "message"
+            | "first_label"
+            | "second_label"
+            | "open_label"
+            | "close_label"
+            | "placeholder"
+            | "navigation_label"
+    ) {
+        if let Some(key) = value.strip_prefix("@i18n:").filter(|key| {
+            !key.is_empty()
+                && key
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.'))
+        }) {
+            let reference = format!("\u{e000}zelyra-locale:{key}\u{e001}");
+            template.replace(&placeholder, &reference)
+        } else {
+            template.replace(&placeholder, &html_escape(value))
+        }
     } else {
         template.replace(&placeholder, &html_escape(value))
     }

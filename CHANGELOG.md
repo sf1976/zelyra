@@ -1,5 +1,19 @@
 ## Unreleased
 
+## 1.2.16 — 2026-10-18
+
+- Let TableView templates add compiler-checked supporting content inside a
+  displayed cell and explicitly select non-displayed row fields for those
+  fragments or row actions. / TableView-Vorlagen können compilergeprüfte
+  Zusatzinhalte in einer angezeigten Zelle darstellen und ausdrücklich
+  unsichtbare Ergebnisfelder für Zelleninhalte und Zeilenaktionen auswählen.
+- Localize invoice tutorial page and component text through the project
+  catalogs and expose the saved system/light/dark switch in the shared header;
+  cover both themes with browser accessibility checks. / Seiten- und
+  Komponententexte des Rechnungstutorials werden über Projektkataloge
+  lokalisiert; der gespeicherte System-/Hell-/Dunkel-Umschalter im gemeinsamen
+  Kopf wird ergänzt. Browserprüfungen decken beide Themes ab.
+
 ## 1.2.15 — 2026-10-18
 
 - Extend generated CRUD create/edit pages and TableView pages with compiler-
