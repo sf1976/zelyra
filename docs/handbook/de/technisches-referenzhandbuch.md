@@ -242,6 +242,29 @@ auf Linux ein absoluter Pfad ab dem Dateisystemstamm. Existiert stattdessen
 **Automatische Portvergabe bei Konflikten:**
 Sind die Standardports `3000` (Web) oder `3306` (MariaDB) auf dem Rechner belegt, ermitteln `zelyra new`, `zelyra init` und `zelyra setup` automatisch den nächsten freien Host-Port und tragen ihn in die neue `.env` ein. Mit den optionalen Flags `--web-port <p>`, `--host-port <p>` und `--db-host-port <p>` können Ports verbindlich vorgegeben werden.
 
+### Standardordner ausdrücklich aktivieren
+
+Neue Projekte können das schrittweise eingeführte Standardlayout aktivieren:
+
+~~~bash
+zelyra new rechnungsbuero --layout standard
+cd rechnungsbuero
+zelyra check main.zyl
+zelyra run main.zyl
+~~~
+
+Dieses Minimalprojekt erstellt `routes/`, `domain/`, `schema/`, `public/` und
+`assets/` und setzt in `[project]` der `zelyra.toml` `layout = "standard"`.
+`check`, `run` und `serve` prüfen, dass jeder dieser Stammordner ein echtes
+Verzeichnis innerhalb des Projekts ist. Projekte ohne diese Einstellung
+bleiben im bisherigen Modus. Dieser erste Schritt unterstützt nur die
+Minimalvorlage: MariaDB-Vorlagen, automatische Namespace-Imports,
+Architekturregeln und Migrationsvorschau werden noch entwickelt. Quelldateien
+verwenden weiterhin ausdrückliche Dateiimporte; die noch nicht unterstützte
+Syntax `use schema::...` darf noch nicht verwendet werden.
+`strict_architecture = true` wird ausdrücklich abgewiesen, solange diese
+Regeln fehlen.
+
 ### ✅ Zelyra-Setup-Assistent (Konsole und Browser)
 
 `zelyra setup` bietet konsistente Einrichtungsaktionen sowohl über die Befehlszeile als auch über eine benutzerfreundliche Weboberfläche:

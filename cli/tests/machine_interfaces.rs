@@ -2021,6 +2021,62 @@ fn new_mariadb_project_propagates_the_selected_web_port() {
 }
 
 #[test]
+fn new_standard_layout_generates_a_checkable_project_tree() {
+    let directory = temporary_directory("new-standard-layout");
+    let created = Command::new(binary())
+        .args(["new", directory.to_str().unwrap(), "--layout", "standard"])
+        .output()
+        .unwrap();
+    assert!(
+        created.status.success(),
+        "{}",
+        String::from_utf8_lossy(&created.stderr)
+    );
+    let expected_files = [
+        "schema/tables.zyl",
+        "domain/dashboard/actions.zyl",
+        "routes/web.zyl",
+        "assets/.keep",
+        "public/.keep",
+    ];
+    for file in expected_files {
+        assert!(directory.join(file).is_file(), "missing {file}");
+    }
+    let manifest = fs::read_to_string(directory.join("zelyra.toml")).unwrap();
+    assert!(manifest.contains("layout = \"standard\""));
+
+    let entry = directory.join("main.zyl");
+    let checked = Command::new(binary())
+        .args(["check", entry.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(
+        checked.status.success(),
+        "{}",
+        String::from_utf8_lossy(&checked.stderr)
+    );
+    let executed = Command::new(binary())
+        .args(["run", entry.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(
+        executed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&executed.stderr)
+    );
+    assert!(String::from_utf8_lossy(&executed.stdout).contains("Welcome to your Zelyra project"));
+    fs::remove_dir_all(directory.join("assets")).unwrap();
+    let invalid = Command::new(binary())
+        .args(["check", entry.to_str().unwrap(), "--format=json"])
+        .output()
+        .unwrap();
+    assert!(!invalid.status.success());
+    let diagnostics: serde_json::Value = serde_json::from_slice(&invalid.stdout).unwrap();
+    assert_eq!(diagnostics["diagnostics"][0]["code"], "E-LAYOUT-002");
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn serve_loads_project_theme_and_locale_catalogs() {
     let directory = temporary_directory("serve-theme");
     fs::create_dir_all(&directory).unwrap();

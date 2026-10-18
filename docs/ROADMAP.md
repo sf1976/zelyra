@@ -139,10 +139,13 @@ security and compatibility gates stated for that milestone.
   ledger operations, reflection/export metadata, health checks, modular
   bundles, and any explicitly scoped Wasm or sidecar bridge. Make no universal
   compliance or performance claims.
-- [ ] **1.2.13 — canonical project structure:** Complete the opt-in versioned
-  layout (`routes/`, `domain/`, `schema/`, `public/`, `assets/`, and
-  `plugins/`), architecture checks, and safe migration preview. Keep existing
-  projects in legacy mode unless they opt in.
+- [~] **1.2.13 — canonical project structure:** `zelyra new --layout standard`
+  creates a checkable minimal `routes/`, `domain/`, `schema/`, `public/`, and
+  `assets/` tree. `[project].layout = "standard"` opts in; `check`, `run`, and
+  `serve` require these roots to be real directories contained in the project.
+  Legacy projects remain unchanged. Database templates, namespace imports,
+  architecture rules, and safe migration preview remain open; `plugins/` is
+  deferred until it has a secured loader.
 - [ ] **1.2.14–1.2.15 — Bytecode parity and release proof:** Expand verified
   Bytecode semantics, host operations, fuzzing, differential tests, resource
   accounting, diagnostics, and package/deployment support. Fix gaps before the

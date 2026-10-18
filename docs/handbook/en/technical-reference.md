@@ -202,6 +202,28 @@ Linux, `/machine-management` is an absolute path from the filesystem root. If
 **Automatic Port Selection on Conflict:**
 If default ports `3000` (web) or `3306` (MariaDB) are occupied, `zelyra new`, `zelyra init`, and `zelyra setup` automatically select the next free host ports and record them in `.env`. The optional `--web-port <p>`, `--host-port <p>`, and `--db-host-port <p>` flags enforce exact ports.
 
+### Opt in to the standard project folders
+
+New projects can opt into the incremental standard layout:
+
+~~~bash
+zelyra new billing-app --layout standard
+cd billing-app
+zelyra check main.zyl
+zelyra run main.zyl
+~~~
+
+This minimal starter creates `routes/`, `domain/`, `schema/`, `public/`, and
+`assets/`, and declares `layout = "standard"` in `[project]` in `zelyra.toml`.
+`check`, `run`, and `serve` verify that each root is a real directory inside
+the project. Existing projects without this setting keep legacy behavior.
+This first step supports only the minimal starter: MariaDB templates, automatic
+namespace imports, architecture lint rules, and migration preview are still
+being developed. Source files continue to use explicit file imports; the
+unimplemented `use schema::...` syntax must not be written in applications.
+Setting `strict_architecture = true` currently fails explicitly because those
+rules are not available yet.
+
 ### ✅ Zelyra Setup Assistant (Console and Web)
 
 `zelyra setup` provides unified setup actions across CLI and browser:
