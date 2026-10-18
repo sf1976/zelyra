@@ -1230,9 +1230,6 @@ pub(super) fn setup_declared_schedules(
                     if let Some(database_url) =
                         outbox_cli::project_outbox_database_url(&entry, &schema)?
                     {
-                        zelyra_database::outbox::ensure_mariadb_outbox(&database_url).map_err(
-                            |error| format!("could not inspect durable schedule jobs: {error}"),
-                        )?;
                         let project_id = schedule_project_identity(&entry).ok_or_else(|| {
                             "cannot determine canonical schedule project identity".to_owned()
                         })?;

@@ -761,6 +761,27 @@ pub fn cancel_pending_mariadb_schedule_jobs(
     project_id: &str,
 ) -> Result<(), DatabaseError> {
     validate_project_identity(project_id)?;
+    let table = execute_mariadb_query(
+        database_url,
+        "SELECT COUNT(*) AS `count` FROM information_schema.TABLES \
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '_zelyra_outbox'",
+        Vec::new(),
+    )?;
+    if table
+        .rows
+        .first()
+        .and_then(|row| row.first())
+        .map(String::as_str)
+        != Some("1")
+    {
+        // Removing schedule declarations from a project that never used the
+        // outbox must not create an internal table outside its source schema.
+        return Ok(());
+    }
+    // Upgrade an existing outbox before using the cancellation state. This is
+    // deliberately after the existence check so setup for schedule-free
+    // projects does not create a table the schema planner will later remove.
+    ensure_mariadb_outbox(database_url)?;
     execute_mariadb_query(
         database_url,
         "UPDATE `_zelyra_outbox` SET `cancelled_at` = UTC_TIMESTAMP(6), `last_error` = NULL \
