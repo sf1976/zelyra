@@ -142,7 +142,10 @@ pub(super) fn outbox_command(mut args: impl Iterator<Item = String>) -> ExitCode
                 ExitCode::SUCCESS
             }
             Err(error) => {
-                eprintln!("error[E-OUTBOX-005]: {error}");
+                eprintln!(
+                    "{}",
+                    describe_outbox_inspection_error(&error.message, &path)
+                );
                 ExitCode::from(1)
             }
         },
@@ -165,6 +168,29 @@ pub(super) fn outbox_command(mut args: impl Iterator<Item = String>) -> ExitCode
             }
         },
         _ => unreachable!("action was validated above"),
+    }
+}
+
+pub(super) fn describe_outbox_inspection_error(error: &str, source_path: &str) -> String {
+    if error.contains("1146") && error.contains("_zelyra_outbox") {
+        let source_path = shell_command_argument(source_path);
+        format!(
+            "error[E-OUTBOX-005]: the MariaDB outbox table is missing\nhint: from the project directory, run `zelyra outbox setup {source_path}` once, then retry `zelyra outbox list`"
+        )
+    } else {
+        format!("error[E-OUTBOX-005]: {error}")
+    }
+}
+
+fn shell_command_argument(value: &str) -> String {
+    if !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"_./-".contains(&byte))
+    {
+        value.to_owned()
+    } else {
+        format!("'{}'", value.replace('\'', "'\\''"))
     }
 }
 

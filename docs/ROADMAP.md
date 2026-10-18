@@ -118,11 +118,12 @@ security and compatibility gates stated for that milestone.
 - [ ] **1.2.11 — application module settings and ecosystem parity:** Add
   application-served module settings only with server-side authorization,
   CSRF, schema validation, redaction, and explicit runtime behavior after a
-  change. Prove package/module contracts for settings, effects, jobs, data
-  access, and HostServices across AST, MIR, and Bytecode, or make unsupported
-  paths fail closed with stable diagnostics. Secure `public/`, static assets,
-  and Apache/Nginx forwarded-header and allowed-host behavior with deployment
-  tests.
+  change. Keep outbox listing read-only while reporting a missing table with
+  an actionable, project-specific setup command. Prove package/module
+  contracts for settings, effects, jobs, data access, and HostServices across
+  AST, MIR, and Bytecode, or make unsupported paths fail closed with stable
+  diagnostics. Secure `public/`, static assets, and Apache/Nginx
+  forwarded-header and allowed-host behavior with deployment tests.
 - [ ] **1.2.12 — business-platform vertical slices:** Deliver bounded, tested
   state transitions, audit/history, balanced ledger operations,
   reflection/export metadata, health checks, modular bundles, and any

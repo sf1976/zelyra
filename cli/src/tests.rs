@@ -1340,6 +1340,30 @@ fn outbox_cli_rejects_invalid_inspection_options_before_loading_a_project() {
 }
 
 #[test]
+fn outbox_list_explains_how_to_create_a_missing_internal_table() {
+    let missing = outbox_cli::describe_outbox_inspection_error(
+        "MySqlError { ERROR 1146 (42S02): Table 'zelyra_app._zelyra_outbox' doesn't exist }",
+        "main.zyl",
+    );
+    assert!(missing.contains("error[E-OUTBOX-005]: the MariaDB outbox table is missing"));
+    assert!(missing.contains("zelyra outbox setup main.zyl"));
+    assert!(!missing.contains("MySqlError"));
+
+    let spaced_path = outbox_cli::describe_outbox_inspection_error(
+        "ERROR 1146 (42S02): Table '_zelyra_outbox' doesn't exist",
+        "invoice tutorial/main.zyl",
+    );
+    assert!(spaced_path.contains("zelyra outbox setup 'invoice tutorial/main.zyl'"));
+
+    let connection = outbox_cli::describe_outbox_inspection_error(
+        "ERROR 1045 (28000): access denied",
+        "main.zyl",
+    );
+    assert!(connection.contains("error[E-OUTBOX-005]: ERROR 1045"));
+    assert!(!connection.contains("zelyra outbox setup"));
+}
+
+#[test]
 fn outbox_cli_requires_an_explicit_handler_for_run() {
     let arguments = ["run".to_owned()];
     assert_eq!(

@@ -17,6 +17,10 @@ Projektordner ausführen:
 zelyra outbox setup main.zyl
 ```
 
+Meldet `zelyra outbox list`, dass `_zelyra_outbox` fehlt, führe den
+Einrichtungsbefehl einmal für dieselbe Projektdatei aus. Das Auflisten bleibt
+schreibgeschützt und legt Datenbanktabellen nicht stillschweigend an.
+
 Zeige bis zu 200 Zeilen mit Betreiber-Metadaten an:
 
 ```sh
