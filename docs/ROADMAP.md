@@ -85,10 +85,14 @@ security and compatibility gates stated for that milestone.
   registry-linked packages happens after trusted closure installation. The
   1.2.6 journal records each new staging and cache path so failed updates can
   roll back the whole closure.
-- [ ] **1.2.8 — typed query, tenant, request and form pipeline:** Implement
-  bounded query HIR and complete typed request/form handling, including
-  compiler-enforced tenant context, validation, response and redirect
-  contracts. Require AST/MIR/Bytecode agreement or fail-closed diagnostics.
+- [~] **1.2.8 — typed query, tenant, request and form pipeline:** The first
+  query-HIR slice now carries the checked SQL operation, deterministically
+  ordered table accesses, parameter locals, and resolved parameter types from
+  HIR into MIR. The MIR verifier recomputes operation/table/parameter metadata
+  from the SQL source and rejects stale plans with `E-MIR-VERIFY-004`. This
+  adds no parallel query syntax and does not yet provide safe scoped query
+  construction. Tenant context, typed request/form lifecycle, response and
+  redirect contracts, and backend parity remain open for this milestone.
 - [ ] **1.2.9 — durable scheduler jobs:** Add persistent transactional jobs
   with idempotency, leases, bounded retries, dead-letter state, observability,
   and explicit scheduler-service lifecycle. Removing a schedule must stop its

@@ -91,11 +91,15 @@ abgeschlossen.
   Closure compilergeprüft. Das Journal aus 1.2.6 erfasst jeden neuen Staging-
   und Cachepfad, damit fehlgeschlagene Updates den gesamten Abschluss
   zurückrollen können.
-- [ ] **1.2.8 — typisierte Query-, Tenant-, Request- und Formpipeline:**
-  Begrenztes Query-HIR und vollständige typisierte Request-/Formverarbeitung
-  einschließlich compilergeprüftem Tenant-Kontext, Validierung, Response- und
-  Redirectverträgen implementieren. AST/MIR/Bytecode müssen übereinstimmen
-  oder mit geschlossener Diagnose abbrechen.
+- [~] **1.2.8 — typisierte Query-, Tenant-, Request- und Formpipeline:** Der
+  erste Query-HIR-Schnitt trägt geprüfte SQL-Operation, deterministisch
+  geordnete Tabellenzugriffe, Parameter-Locals und aufgelöste Parametertypen
+  von HIR nach MIR. Der MIR-Verifier berechnet Operations-, Tabellen- und
+  Parametermetadaten erneut aus der SQL-Quelle und weist veraltete Pläne mit
+  `E-MIR-VERIFY-004` ab. Es entsteht keine parallele Query-Syntax; sichere
+  scoped Query-Erzeugung ist damit noch nicht vorhanden. Tenant-Kontext,
+  typisierter Request-/Form-Lifecycle, Response-/Redirectverträge und
+  Backendparität bleiben für diesen Meilenstein offen.
 - [ ] **1.2.9 — dauerhafte Scheduler-Jobs:** Persistente transaktionale Jobs
   mit Idempotenz, Leases, begrenzten Wiederholungen, Dead-Letter-Status,
   Beobachtbarkeit und ausdrücklichem Scheduler-Dienstlebenszyklus ergänzen.

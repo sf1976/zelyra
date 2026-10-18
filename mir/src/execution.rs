@@ -1312,6 +1312,7 @@ impl Machine<'_> {
                 result_type,
                 query,
                 parameters,
+                ..
             } => self.execute_sql(&query, &result_type, &parameters, locals, span),
             MirExpressionKind::Call {
                 name,
