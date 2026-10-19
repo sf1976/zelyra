@@ -1,14 +1,14 @@
 use super::*;
-use rustyline::{
-    completion::{Completer, Pair},
-    error::ReadlineError,
-    highlight::Highlighter,
-    hint::Hinter,
-    history::DefaultHistory,
-    validate::Validator,
-    Context, Editor, Helper,
+use reedline::{
+    Completer, CompletionResult, DefaultCompleter, FileBackedHistory, Highlighter, History,
+    HistoryItem, HistoryItemId, Prompt, PromptEditMode, PromptHistorySearch, Reedline, SearchQuery,
+    Signal, StyledText, ValidationResult, Validator,
 };
-use std::io::{self, BufRead, IsTerminal};
+use std::{
+    borrow::Cow,
+    io::{self, BufRead, IsTerminal},
+    sync::{Arc, Mutex},
+};
 
 pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     let mut entry = "main.zyl".to_owned();
@@ -117,59 +117,50 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     let mut continuation = String::new();
     let mut exit_code = ExitCode::SUCCESS;
     if interactive {
-        let mut editor = match Editor::<ConsoleHelper, DefaultHistory>::new() {
-            Ok(editor) => editor,
-            Err(error) => {
-                eprintln!("error[E-REPL-002]: cannot initialize terminal editor: {error}");
-                return ExitCode::from(1);
-            }
-        };
-        editor.set_helper(Some(ConsoleHelper {
-            words: session.completion_candidates(),
-        }));
-        let history_path =
-            env::var_os("HOME").map(|home| PathBuf::from(home).join(".zelyra_history"));
+        let words = Arc::new(Mutex::new(session.completion_candidates()));
+        let history_path = env::var_os("HOME")
+            .or_else(|| env::var_os("USERPROFILE"))
+            .map(|home| PathBuf::from(home).join(".zelyra_history"));
+        let history = history_path.as_ref().and_then(|path| {
+            FileBackedHistory::with_file(10_000, path.clone())
+                .ok()
+                .map(|history| Box::new(FilteredHistory(history)) as Box<dyn History>)
+        });
+        let mut editor = Reedline::create()
+            .with_completer(Box::new(ConsoleCompleter(words.clone())))
+            .with_highlighter(Box::new(ConsoleHighlighter))
+            .with_validator(Box::new(ConsoleValidator));
+        if let Some(history) = history {
+            editor = editor.with_history(history);
+        }
         if let Some(path) = &history_path {
             #[cfg(unix)]
             if path.exists() {
                 use std::os::unix::fs::PermissionsExt;
                 let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
             }
-            let _ = editor.load_history(path);
         }
+        let prompt = ConsolePrompt;
         loop {
-            if let Some(helper) = editor.helper_mut() {
-                helper.words = session.completion_candidates();
+            if let Ok(mut candidates) = words.lock() {
+                *candidates = session.completion_candidates();
             }
-            let prompt = if continuation.is_empty() {
-                ">> "
-            } else {
-                "... "
-            };
-            match editor.readline(prompt) {
-                Ok(line) => {
-                    if history_safe(&line) {
-                        let _ = editor.add_history_entry(line.as_str());
+            match editor.read_line(&prompt) {
+                Ok(Signal::Success(line)) => {
+                    // Reedline reports deliberately filtered history writes via this slot.
+                    // Consume it so a skipped secret never leaves stale editor state.
+                    let _ = editor.take_history_save_error();
+                    match handle_meta(&line, &mut session, &entry, &mut exit_code) {
+                        Some(true) => break,
+                        Some(false) => continue,
+                        None => {}
                     }
-                    if continuation.is_empty() {
-                        match handle_meta(&line, &mut session, &entry, &mut exit_code) {
-                            Some(true) => break,
-                            Some(false) => continue,
-                            None => {}
-                        }
-                    }
-                    continuation.push_str(&line);
-                    continuation.push('\n');
-                    if input_complete(&continuation) {
-                        evaluate(&continuation, &mut session);
-                        continuation.clear();
-                    }
+                    evaluate(&line, &mut session);
                 }
-                Err(ReadlineError::Interrupted) => {
-                    continuation.clear();
-                    println!("^C");
-                }
-                Err(ReadlineError::Eof) => break,
+                Ok(Signal::CtrlC) => println!("^C"),
+                Ok(Signal::CtrlD) => break,
+                Ok(Signal::ExternalBreak(_)) | Ok(Signal::HostCommand(_)) => {}
+                Ok(_) => {}
                 Err(error) => {
                     eprintln!("error[E-REPL-002]: {error}");
                     exit_code = ExitCode::from(1);
@@ -177,8 +168,8 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
                 }
             }
         }
+        let _ = editor.sync_history();
         if let Some(path) = history_path {
-            let _ = editor.save_history(&path);
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
@@ -219,46 +210,103 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     exit_code
 }
 
-struct ConsoleHelper {
-    words: Vec<String>,
-}
-impl Completer for ConsoleHelper {
-    type Candidate = Pair;
-    fn complete(
-        &self,
-        line: &str,
-        position: usize,
-        _: &Context<'_>,
-    ) -> rustyline::Result<(usize, Vec<Pair>)> {
-        let prefix = &line[..position];
-        let start = prefix
-            .rfind(|character: char| !(character.is_ascii_alphanumeric() || character == '_'))
-            .map_or(0, |index| index + 1);
-        let fragment = &prefix[start..];
-        Ok((
-            start,
-            self.words
-                .iter()
-                .filter(|word| word.starts_with(fragment))
-                .map(|word| Pair {
-                    display: word.clone(),
-                    replacement: word.clone(),
-                })
-                .collect(),
-        ))
+struct ConsoleCompleter(Arc<Mutex<Vec<String>>>);
+impl Completer for ConsoleCompleter {
+    fn complete(&mut self, line: &str, position: usize) -> CompletionResult {
+        let mut completer = DefaultCompleter::default();
+        if let Ok(words) = self.0.lock() {
+            completer.insert(words.clone());
+        }
+        completer.complete(line, position)
     }
 }
-impl Hinter for ConsoleHelper {
-    type Hint = String;
-}
-impl Highlighter for ConsoleHelper {
-    fn highlight<'line>(&self, line: &'line str, _: usize) -> std::borrow::Cow<'line, str> {
-        if env::var_os("NO_COLOR").is_some()
+
+struct ConsoleHighlighter;
+impl Highlighter for ConsoleHighlighter {
+    fn highlight(&self, line: &str, _: usize) -> StyledText {
+        let mut styled = StyledText::new();
+        let rendered = if env::var_os("NO_COLOR").is_some()
             || env::var("ZELYRA_COLOR").is_ok_and(|mode| mode.eq_ignore_ascii_case("never"))
         {
-            return std::borrow::Cow::Borrowed(line);
+            line.to_owned()
+        } else {
+            colorize_input(line)
+        };
+        styled.push((nu_ansi_term::Style::new(), rendered));
+        styled
+    }
+}
+
+struct ConsoleValidator;
+impl Validator for ConsoleValidator {
+    fn validate(&self, line: &str) -> ValidationResult {
+        if input_complete(line) {
+            ValidationResult::Complete
+        } else {
+            ValidationResult::Incomplete
         }
-        std::borrow::Cow::Owned(colorize_input(line))
+    }
+}
+
+struct ConsolePrompt;
+impl Prompt for ConsolePrompt {
+    fn render_prompt_left(&self) -> Cow<'_, str> {
+        Cow::Borrowed("")
+    }
+    fn render_prompt_right(&self) -> Cow<'_, str> {
+        Cow::Borrowed("")
+    }
+    fn render_prompt_indicator(&self, _: PromptEditMode) -> Cow<'_, str> {
+        Cow::Borrowed(">> ")
+    }
+    fn render_prompt_multiline_indicator(&self) -> Cow<'_, str> {
+        Cow::Borrowed("... ")
+    }
+    fn render_prompt_history_search_indicator(&self, _: PromptHistorySearch) -> Cow<'_, str> {
+        Cow::Borrowed("history search: ")
+    }
+}
+
+struct FilteredHistory(FileBackedHistory);
+impl History for FilteredHistory {
+    fn save(&mut self, item: HistoryItem) -> reedline::Result<HistoryItem> {
+        if history_safe(&item.command_line) {
+            self.0.save(item)
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "sensitive input omitted from history",
+            )
+            .into())
+        }
+    }
+    fn load(&self, id: HistoryItemId) -> reedline::Result<HistoryItem> {
+        self.0.load(id)
+    }
+    fn count(&self, query: SearchQuery) -> reedline::Result<i64> {
+        self.0.count(query)
+    }
+    fn search(&self, query: SearchQuery) -> reedline::Result<Vec<HistoryItem>> {
+        self.0.search(query)
+    }
+    fn update(
+        &mut self,
+        id: HistoryItemId,
+        updater: &dyn Fn(HistoryItem) -> HistoryItem,
+    ) -> reedline::Result<()> {
+        self.0.update(id, updater)
+    }
+    fn clear(&mut self) -> reedline::Result<()> {
+        self.0.clear()
+    }
+    fn delete(&mut self, id: HistoryItemId) -> reedline::Result<()> {
+        self.0.delete(id)
+    }
+    fn sync(&mut self) -> io::Result<()> {
+        self.0.sync()
+    }
+    fn session(&self) -> Option<reedline::HistorySessionId> {
+        self.0.session()
     }
 }
 
@@ -323,9 +371,6 @@ fn colorize_input(line: &str) -> String {
     }
     output
 }
-impl Validator for ConsoleHelper {}
-impl Helper for ConsoleHelper {}
-
 fn handle_meta(
     line: &str,
     session: &mut zelyra_runtime::ReplSession,
@@ -486,7 +531,9 @@ fn history_safe(input: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{colorize_input, history_safe, input_complete, pretty_value};
+    use super::{colorize_input, history_safe, input_complete, pretty_value, FilteredHistory};
+    use reedline::{FileBackedHistory, History, HistoryItem};
+    use std::fs;
     use zelyra_runtime::Value;
 
     #[test]
@@ -501,6 +548,30 @@ mod tests {
         assert!(history_safe("x + 2"));
         assert!(!history_safe("secret = \"value\""));
         assert!(!history_safe("sql { SELECT 'credential' }"));
+    }
+
+    #[test]
+    fn filtered_history_never_persists_sensitive_input() {
+        let path = std::env::temp_dir().join(format!(
+            "zelyra-repl-history-{}-{}.txt",
+            std::process::id(),
+            std::thread::current().name().unwrap_or("test")
+        ));
+        let _ = fs::remove_file(&path);
+        let mut history = FilteredHistory(FileBackedHistory::with_file(10, path.clone()).unwrap());
+        assert!(history
+            .save(HistoryItem::from_command_line(
+                "password = \"secret-value\""
+            ))
+            .is_err());
+        history
+            .save(HistoryItem::from_command_line("1 + 2"))
+            .unwrap();
+        history.sync().unwrap();
+        let contents = fs::read_to_string(&path).unwrap();
+        assert!(!contents.contains("secret-value"));
+        assert!(contents.contains("1 + 2"));
+        let _ = fs::remove_file(path);
     }
 
     #[test]
