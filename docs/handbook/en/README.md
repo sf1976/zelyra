@@ -19,7 +19,7 @@ program and ending with a database-backed web application.
 Create a new local learning project for customers, items, and invoices with
 [`zelyra --tutorial invoice`](../../tutorials/invoice.en.md).
 
-> **Project status:** Zelyra 1.1.0 is the current stable release; the language compatibility line remains `0.1`. Database tutorials require Compose v2 or newer. See the [roadmap](../../ROADMAP.md) and [1.1.0 release notes](../../release-notes/1.1.0.en.md).
+> **Project status:** Zelyra 1.2.24 / 1.2.25 is the current stable release; the language compatibility line remains `0.1`. Database tutorials require Compose v2 or newer. See the [roadmap](../../ROADMAP.md) and [release notes](../../release-notes/1.2.24.en.md).
 
 Zelyra combines static type checking and clear diagnostics with
 compiler-checked database and web declarations. The platform includes

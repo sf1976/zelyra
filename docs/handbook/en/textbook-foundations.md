@@ -20,7 +20,7 @@ Zelyra breaks through this fragmentation: you define your data models, business 
 ### 3. Understandable explanation without unnecessary jargon
 A **programming language** is a precise set of rules and instructions. It allows you to give unambiguous commands to a computer. Computers are extraordinarily fast, but they have no innate common sense: if an instruction is ambiguous or an unhandled condition occurs, the application either crashes or produces critical bugs.
 
-**Zelyra** is a modern, statically typed language. "Statically typed" means that before a program ever runs, the Zelyra compiler rigorously inspects whether all components fit together correctly. If a function expects text but you accidentally pass it a number, Zelyra alerts you immediately at compile time—before your code ever reaches a server or end user.
+**Zelyra** is a statically typed language. This means the compiler checks types during compilation and can report certain type mismatches before execution. Which additional rules it checks depends on the implemented checking scope; this does not guarantee that a program is error-free.
 
 At the same time, Zelyra is **database- and web-centric**:
 - A table schema (`table`) is not an isolated SQL migration file, but a first-class language element.
@@ -38,21 +38,6 @@ fn main() {
 }
 ```
 
-Single-line comments start with `#`. A block comment starts and ends with a
-line containing only `##`. Block comments cannot nest; if the closing line is
-missing, the lexer reports an error:
-
-```zelyra
-##
-The compiler ignores this whole region.
-It can span multiple lines.
-##
-```
-
-The older `//` spelling remains accepted for compatibility. New Zelyra code
-should use `#` and `##`. See [`examples/comments.zyl`](../../../examples/comments.zyl)
-for a complete example.
-
 To give this program more modular structure, we can break the task down into a reusable function:
 
 ```zelyra
@@ -66,16 +51,34 @@ fn main() {
 }
 ```
 
+### Comments: `#` and `##`
+
+`#` starts a line comment, either at the start of a line or after a statement, and continues to the end of that line. A block comment is enclosed by two `##` delimiters. Each delimiter stands alone on its own line; the content may span multiple lines. Block comments do not nest. Inside a string, `#` is ordinary text.
+
+```zelyra
+# A line comment
+##
+This text is a block comment.
+It can span multiple lines.
+##
+fn main() {
+    print("Hello") # Comment after a statement
+    print("# remains visible inside the string")
+}
+```
+
+Existing `//` comments remain compatible. Use `#` in new examples. The compact spelling `## text ##` on one line does not start a multiline block in the documented lexer; use the standalone delimiters shown above.
+
 ### 5. Typical errors and their causes
 - **Error:** Placing a semicolon at the end of a line (as in Java, C++, or PHP).
   *Cause:* In Zelyra, line breaks cleanly delimit statements. Redundant semicolons clutter the code.
-- **Error:** Assuming Zelyra is merely a library, framework, or lightweight scripting layer.
-  *Cause:* Zelyra is an independent compiled language with its own type system, static analysis, and verification pipeline.
+- **Error:** Mistaking Zelyra for a framework or configuration language.
+  *Cause:* Zelyra has its own syntax and type system. Its compiler translates and checks Zelyra programs; the runtime and project tools complement the language for supported use cases.
 
 ### 6. Key takeaways
 1. Zelyra unifies data models, business logic, and user interfaces within a single cohesive language.
 2. What you mean is explicitly written in the code: no hidden magic, no implicit null values.
-3. The compiler acts as your verification partner: it catches bugs early, before they can cause damage in production.
+3. The compiler reports detected syntax and type errors before execution. Runtime errors and cases outside its checks can still occur.
 
 ### 7. Exercises
 - **Level 1 (Easy):** Modify the greeting program so that it prints your own first name and hometown.
@@ -89,8 +92,8 @@ Create a file named `tasks_start.zyl` that cleanly prints the system name and ve
 ```zelyra
 fn main() {
     system_name = "Zelyra TaskManager"
-    version = "0.1.50"
-    print(system_name + " (Version " + version + ") started.")
+    app_version = "0.9.9"
+    print(system_name + " (Version " + app_version + ") started.")
 }
 ```
 
@@ -216,7 +219,7 @@ fn main() {
 ### 1. What will I learn in this chapter?
 - System requirements for the Zelyra development environment on Linux, macOS, and Windows.
 - Platform-specific Docker setup and verification with `docker compose version`.
-- How to install Zelyra from source (`./install.sh` / `install.ps1`) or the stable release archive (`--release v1.1.0`).
+- How to install Zelyra from source (`./install.sh` / `install.ps1`) or the release archive (`--release v1.0.7`).
 - Complete compiler version query with `zelyra --version` and environment diagnosis with `zelyra doctor`.
 - The integrated, token-protected web setup assistant (`zelyra setup --web`).
 - Typical permission and port conflicts (such as Docker socket permissions and automatic port selection).
@@ -241,15 +244,17 @@ git clone https://github.com/sf1976/zelyra.git
 cd zelyra
 ./install.sh
 ```
+
 Or directly as a precompiled release archive without Rust:
 ```bash
-./install.sh --release v1.1.0
+./install.sh --release v1.0.7
 ```
+
 On Windows (PowerShell):
 ```powershell
 git clone https://github.com/sf1976/zelyra.git
 Set-Location zelyra
-.\install.ps1 -Release v1.1.0
+.\install.ps1 -Release v1.0.7
 ```
 
 **Step 2: Verify version and help**
@@ -257,17 +262,8 @@ Set-Location zelyra
 zelyra --version
 zelyra --help
 ```
+
 `zelyra --version` outputs the full compiler and package version (for example, `zelyra 1.0.7`). The language compatibility line remains 0.1.
-
-Remove a user-owned installation with `zelyra uninstall`. Inspect the target
-first with `zelyra uninstall --dry-run`. Package-manager-owned installations
-must be removed through that package manager; see the
-[uninstall guide](../../uninstall.en.md).
-
-The invoice tutorial and other Docker projects require Docker Compose v2
-or newer. The legacy Python `docker-compose` v1 is unsupported. On Linux, install
-the Compose plugin and verify it with `docker compose version`. See the
-[Docker installation guide](https://docs.docker.com/engine/install/).
 
 **Step 3: Verify Docker Compose (for MariaDB projects)**
 ```bash
@@ -278,6 +274,7 @@ docker compose version
 ```bash
 zelyra doctor
 ```
+
 This command analyzes environment paths, ports, and tools. Use `zelyra doctor --json` for structured machine-readable output.
 
 **Step 5: Guided Web Setup Assistant (Optional)**
@@ -285,7 +282,15 @@ In any MariaDB project directory, start the visual assistant:
 ```bash
 zelyra setup --web
 ```
+
 Zelyra opens a local HTTP server on `127.0.0.1:3030` with a random, single-use security token. There, you can generate your `.env` configuration, start the MariaDB container, and apply database schemas with one click.
+
+`zelyra setup` prepares the MariaDB environment. A minimal project created
+with `zelyra init` without `--mariadb` runs directly with
+`zelyra run main.zyl` and does not need this setup step. Paths are interpreted
+literally: after `mkdir test_a`, `./test_a` points to that directory, while
+`/test_a` on Linux means a directory directly under the filesystem root. If
+only the relative directory exists, the CLI suggests that correction.
 
 ### 5. Typical errors and their causes
 - **Error:** `zelyra: command not found`
@@ -298,7 +303,7 @@ Zelyra opens a local HTTP server on `127.0.0.1:3030` with a random, single-use s
 ### 6. Key takeaways
 1. The Zelyra CLI bundles compiler, runner, form checker, web server, and setup assistant in a single tool.
 2. `docker compose version` and `zelyra doctor` verify the health of your environment at any time.
-3. The stable release can be installed without Rust using `--release v1.1.0`.
+3. The release can be installed without Rust using `--release v1.0.7`.
 4. `zelyra setup --web` provides an intuitive, browser-based initial setup with a secure one-time token.
 
 ### 7. Exercises
@@ -361,6 +366,7 @@ crud = true
 auth = true
 audit = true
 ```
+
 If source code uses a disabled surface, the compiler reports `E-FEATURE-001`. You can inspect the effective configuration at any time without exposing secrets:
 ```bash
 zelyra config main.zyl
@@ -380,15 +386,11 @@ zelyra new taskmanager-web --mariadb
 cd taskmanager-web
 ```
 
-Newly generated MariaDB projects place the database declaration in
-`src/database.zyl` and explicitly import that module from `main.zyl`. This
-separates ownership in the source tree, but does not provide multiple named
-connections; the runtime still uses one project-wide `DATABASE_URL`.
-
 **First-time setup in one command:**
 ```bash
 zelyra setup --all
 ```
+
 This creates a protected `.env`, starts the MariaDB containers, and applies the schema.
 
 **Inspect effective project configuration:**
@@ -406,6 +408,18 @@ zelyra run main.zyl
 ```bash
 zelyra fmt main.zyl
 ```
+
+Other documented CLI commands used during development:
+
+```bash
+zelyra verify main.zyl
+zelyra db plan main.zyl
+zelyra editor
+```
+
+`zelyra verify` runs the supported contract and invariant checks; Chapter 19 explains their scope. `zelyra db plan` shows proposed schema changes. Review the plan before applying changes with `zelyra db apply`; Chapter 24 describes the workflow. `zelyra editor` starts Zelyra Studio.
+
+The current CLI reference lists neither a `zelyra test` subcommand nor separate `zelyrac build` or `zelyra lsp` programs. Write assertions with `assert(...)` in an executable `.zyl` file and run it with `zelyra run`; the reference does not document a dedicated test runner.
 
 ### 5. Typical errors and their causes
 - **Error:** Creating files without the `.zyl` extension.
@@ -447,6 +461,7 @@ fn main() {
     show_menu()
 }
 ```
+
 Check with `zelyra check main.zyl` and run with `zelyra run main.zyl`.
 
 ### 9. Summary
@@ -462,8 +477,6 @@ Check with `zelyra check main.zyl` and run with `zelyra run main.zyl`.
 ---
 
 # PART II – LANGUAGE FUNDAMENTALS
-
----
 
 ## Chapter 5: Values and Data Types
 
@@ -484,10 +497,10 @@ Every value in Zelyra possesses a definite type. You can either specify the type
 
 ```zelyra
 fn main() {
-    // Explicit type annotation: Name followed by colon and type
+    # Explicit type annotation: Name followed by colon and type
     count: Int = 10
 
-    // Automatic type inference: Zelyra immediately detects that this is a String
+    # Automatic type inference: Zelyra immediately detects that this is a String
     task_name = "Important Meeting"
 
     print(task_name)
@@ -498,12 +511,11 @@ The core data types in Zelyra:
 - **`Int`**: 64-bit signed integers, e.g., `-5`, `0`, `42`.
 - **`UInt`**: Unsigned integers (`>= 0`), ideal for record IDs and positive counters.
 - **`Float`**: Floating-point numbers for scientific calculations, e.g., `3.1415`.
-- **`Decimal`**: Fixed-point values with nine fractional digits and exact base-10 arithmetic. Write values as `decimal("19.99")`; values with more than nine fractional digits are rejected. Division truncates toward zero when it produces more than nine fractional digits. JSON stores Decimal as a string to preserve precision.
+- **`Decimal`**: Fixed-point values created with `decimal("0.10")`, with nine fractional digits. Base-10 arithmetic is supported; excess precision, overflow, and division by zero are rejected. Define business rounding rules for money explicitly.
 - **`Bool`**: Boolean values representing truth. Exactly two states exist: `true` or `false`.
 - **`String`**: UTF-8 character text enclosed in double quotation marks: `"Hello World"`.
 - **`Char`**: Individual characters enclosed in single quotation marks: `'A'`, `'z'`.
 - **`Unit`**: Represents "no meaningful value", analogous to `void` in other languages. When a function only performs side effects and returns nothing, its type is `Unit`.
-- **`Date`, `Time`, `Duration`, `Bytes`**: Create dates and times with `date("2026-10-11")` and `time("09:30:00")`, durations with `duration_ms(1500)`, and bytes with `bytes([65, 66])`. Runtime constructors validate these values, and JSON round trips preserve them.
 
 ### 4. Small, progressive examples
 
@@ -547,7 +559,7 @@ fn main() {
     task_id: Int = 1
     task_name: String = "Verify database schema"
     is_done: Bool = false
-    priority: Int = 1 // 1 = high, 2 = medium, 3 = low
+    priority: Int = 1 # 1 = high, 2 = medium, 3 = low
 
     print("Task #" + "1" + ": " + task_name)
     if is_done {
@@ -594,6 +606,7 @@ Think of a variable as a labeled box stored in computer memory:
       print(task_name)
   }
   ```
+
   You place the text `"Tax Return"` into the box labeled `task_name` and seal it. Nobody is permitted to replace the content of that box. Any code reading the box can rely on its contents remaining invariant.
 
 - **Mutable Variable (`mutable`):**
@@ -604,6 +617,7 @@ Think of a variable as a labeled box stored in computer memory:
       print(counter)
   }
   ```
+
   Here, the box remains unsealed. You are allowed to remove the current value and replace it with a new one.
 
 **Scope and Lifetimes:**
@@ -615,7 +629,7 @@ Variables exist exclusively within the block `{ ... }` in which they are declare
 ```zelyra
 fn main() {
     project = "Zelyra Core"
-    // project = "New Project" // ERROR: Compiler blocks assignment to immutable variable!
+    # project = "New Project" // ERROR: Compiler blocks assignment to immutable variable!
     print(project)
 }
 ```
@@ -626,7 +640,7 @@ fn main() {
     mutable open_tasks = 5
     print(open_tasks)
 
-    // One task has been completed:
+    # One task has been completed:
     open_tasks = open_tasks - 1
     print(open_tasks)
 }
@@ -641,7 +655,7 @@ fn main() {
         print(local_var)
         print(scope_var)
     }
-    // print(local_var) // ERROR: `local_var` no longer exists outside the block!
+    # print(local_var) // ERROR: `local_var` no longer exists outside the block!
 }
 ```
 
@@ -670,12 +684,12 @@ fn main() {
     print("Start: Tasks to complete: ")
     print(open_count)
 
-    // First task completed:
+    # First task completed:
     open_count = open_count - 1
     print("Intermediate count: Still open:")
     print(open_count)
 
-    // Second task completed:
+    # Second task completed:
     open_count = open_count - 1
     print("Final count: Still open:")
     print(open_count)
@@ -729,31 +743,24 @@ Software does not merely store static values; it computes results, compares fact
 - `||` (OR): Evaluates to `true` if **at least one** side is `true`.
 - `!` (NOT): Inverts a truth value (`!true == false`).
 
-**Pipeline operator (new in 1.0.3):** `|>` passes the left expression as the
-first argument to the next function call. It can make a chain easier to read:
-`value |> trim() |> to_lower()`.
-
 ### 4. Small, progressive examples
 
 ```zelyra
 fn main() {
-    // Arithmetic
+    # Arithmetic
     base_time = 60
     buffer_time = 15
     total_time = base_time + buffer_time
     print(total_time)
 
-    // Comparison
+    # Comparison
     is_long = total_time > 60
     print(is_long)
 
-    // Logical combination
+    # Logical combination
     has_buffer = buffer_time > 0
     is_critical = total_time > 120 && !has_buffer
     print(is_critical)
-
-    cleaned_text = "  zelyra 1.0.3  " |> text_trim() |> text_to_upper()
-    print(cleaned_text)
 }
 ```
 
@@ -782,10 +789,10 @@ fn main() {
     is_done = false
     is_blocked = false
 
-    // A task is overdue if days < 0 and it is not yet completed
+    # A task is overdue if days < 0 and it is not yet completed
     is_overdue = days_remaining < 0 && !is_done
 
-    // High urgency: Overdue and not blocked by other tasks
+    # High urgency: Overdue and not blocked by other tasks
     requires_attention = is_overdue && !is_blocked
 
     print("Task overdue?")
@@ -971,6 +978,7 @@ Without conditional branching, software would be as rigid as a music box cylinde
       check_result(75)
   }
   ```
+
 - **`match`:** When evaluating a value against multiple known cases, `match` is far cleaner and more readable than sprawling `if / else if` cascades. In Zelyra, the compiler verifies that all possible cases are covered (exhaustiveness):
   ```zelyra
   fn show_status(status_code: Int) {
@@ -986,6 +994,7 @@ Without conditional branching, software would be as rigid as a music box cylinde
       show_status(2)
   }
   ```
+
   The underscore `_` is the **wildcard pattern**: it matches all remaining values that were not explicitly listed.
 
 ### 4. Small, progressive examples
@@ -1016,26 +1025,6 @@ fn evaluate_priority(level: Int) -> String {
 fn main() {
     print(evaluate_priority(1))
     print(evaluate_priority(2))
-}
-```
-
-**Flat `else if` cascade (new in 1.0.3):**
-```zelyra
-fn evaluate_priority(score: Int) -> String {
-    if score >= 90 {
-        return "VERY URGENT"
-    } else if score >= 70 {
-        return "NORMAL"
-    } else if score >= 40 {
-        return "LOW"
-    } else {
-        return "UNKNOWN"
-    }
-}
-
-fn main() {
-    print(evaluate_priority(95))
-    print(evaluate_priority(50))
 }
 ```
 
@@ -1137,6 +1126,7 @@ Zelyra supports three primary loop forms:
        }
    }
    ```
+
 2. **`while condition`:** Continues execution as long as the condition evaluates to `true`. Useful when the exact number of iterations is not known in advance.
 3. **`loop`:** A continuous loop that runs indefinitely until an inner `break` statement is encountered.
 
@@ -1177,17 +1167,18 @@ fn main() {
 fn main() {
     for num in [1, 2, 3, 4, 5] {
         if num == 2 {
-            // Skip the number 2:
+            # Skip the number 2:
             continue
         }
         if num == 4 {
-            // Abort completely at 4:
+            # Abort completely at 4:
             break
         }
         print(num)
     }
 }
 ```
+
 *Output:* Prints `1` and `3`!
 
 ### 5. Typical errors and their causes
@@ -1273,6 +1264,7 @@ fn main() {
     print(add(2, 3))
 }
 ```
+
 If a function has no return value because it merely performs an action (such as printing a line of text to the console), its return type is `Unit` (and can simply be omitted):
 ```zelyra
 fn print_separator() {
@@ -1491,8 +1483,6 @@ fn main() {
 
 ---
 
-<a id="chapter-13-collections-lists-and-dictionaries-arrays-and-maps"></a>
-
 ## Chapter 13: Collections, Lists, and Dictionaries (Arrays & Maps)
 
 ### 1. What will I learn in this chapter?
@@ -1531,7 +1521,7 @@ Zelyra provides powerful built-in functions for arrays:
 A `Map` maps each unique key (*Key*) to exactly one corresponding value (*Value*).
 - **Type notation:** `Map<KeyType, ValueType>`, for example `Map<String, Int>` or `Map<String, String>`.
 - **Literal syntax:** `Map { "key": value }`
-- **Key types:** All scalar types (`String`, `Int`, `Id`, etc.) are permitted.
+- **Key types:** The documented types are `Int`, `UInt`, `String`, `Bool`, `Char`, and `Timestamp`. JSON requires String keys.
 
 ```zelyra
 fn main() {
@@ -1579,22 +1569,23 @@ fn main() {
         "Tea": 2
     }
     
-    // Add a new item
+    # Add a new item
     mutable current_prices = put(prices, "Cake", 4)
-    // Update existing price
+    # Update existing price
     current_prices = put(current_prices, "Coffee", 4)
     
-    // Safely query using match
+    # Safely query using match
     match get(current_prices, "Coffee") {
         Some(price) => {
-            print("Coffee price: " + str(price) + " Euro")
+            print("Coffee price in Euro:")
+            print(price)
         }
         None => {
             print("Item not found.")
         }
     }
     
-    // Output all keys
+    # Output all keys
     print(keys(current_prices))
 }
 ```
@@ -1607,21 +1598,8 @@ fn main() {
         "notifications": false
     }
     
-    if has_key(settings, "dark_mode") {
-        print("Dark mode setting is configured.")
-    }
-}
-```
-
-**Example 5: Map fallbacks and entries (new in 1.0.3)**
-`get_or` returns a fallback for a missing key. `entries` returns an array of
-key-value tuples that a `for` loop can destructure into typed variables.
-```zelyra
-fn main() {
-    prices: Map<String, Int> = Map { "Coffee": 3 "Tea": 2 }
-    print(get_or(prices, "Cake", 0))
-    for (item, price) in entries(prices) {
-        print(item + ": " + to_string(price) + " Euro")
+    if contains(settings, "dark_mode") {
+        print("Dark mode setting is explicitly configured.")
     }
 }
 ```
@@ -1632,7 +1610,7 @@ fn main() {
 - **Error:** Treating `map.get("key")` as a raw value without unwrapping the `Option`.
   *Cause:* Zelyra guarantees compile-time safety. Because a key might not be in the dictionary, the compiler forces you to handle `Some` and `None` using `match` or default values.
 - **Error:** Using non-scalar types (such as arrays) as Map keys.
-  *Cause:* Map keys must be scalar types (`String`, `Int`, `Id`) to guarantee deterministic comparison and JSON serialization.
+  *Cause:* Map keys must use a supported comparable type (`Int`, `UInt`, `String`, `Bool`, `Char`, `Timestamp`). JSON supports only String keys.
 
 ### 6. Key takeaways
 1. Arrays in Zelyra are strictly homogeneous: `Int[]`, `String[]`, `Bool[]`.
@@ -1652,7 +1630,8 @@ Build a priority lookup table for our task management system:
 fn show_priority(priorities: Map<String, Int>, task_name: String) {
     match get(priorities, task_name) {
         Some(level) => {
-            print("Priority for " + task_name + ": Level " + str(level))
+            print("Priority for " + task_name + ":")
+            print(level)
         }
         None => {
             print("No priority registered for: " + task_name)
@@ -1690,6 +1669,7 @@ fn main() {
 In this chapter, you will learn:
 - How to create your own domain-specific data types.
 - What nominal types (`type TaskId = Id`) are and how they prevent accidental ID confusion.
+- What enum and sum types mean, and which variants are currently built into Zelyra.
 - How records are defined in Zelyra as a `table` with attributes (`id: Id primary auto`).
 - Why strong typing fundamentally elevates software quality.
 
@@ -1698,7 +1678,7 @@ In fragile software architectures, almost everything is represented as a primiti
 
 ### 3. Understandable explanation without unnecessary jargon
 Custom data types allow you to model real-world concepts accurately:
-1. **Nominal Type Aliases:**
+1. **Domain Type Aliases:**
    ```zelyra
    type TaskId = Id
 
@@ -1706,8 +1686,12 @@ Custom data types allow you to model real-world concepts accurately:
        print("Type alias TaskId active")
    }
    ```
-   This gives `TaskId` its own distinct type identity.
-2. **Tables as Structured Data Types:**
+
+   The alias gives the ID a domain name. It has no separate runtime identity; business rules need validation within the actual supported checking scope.
+2. **Enum and sum types:**
+
+   An enum describes a value that must be one of a fixed set of named variants. A variant may also carry a value; this is why enums are often called sum types. The general concept can be sketched as `enum State { Draft, Active, Archived }`, but this is **conceptual notation, not supported Zelyra source syntax**. User-defined enum declarations are outside the current documented language surface. Zelyra does provide the built-in sum types `Option<T>` and `Result<T, E>`; use `match` to handle their alternatives.
+3. **Tables as Structured Data Types:**
    ```zelyra
    table tasks {
        id: Id primary auto
@@ -1719,6 +1703,7 @@ Custom data types allow you to model real-world concepts accurately:
        print("Table schema defined")
    }
    ```
+
    This schema does not merely specify a database table; in Zelyra, it simultaneously declares the in-memory data type for a task!
 
 ### 4. Small, progressive examples
@@ -1818,389 +1803,30 @@ In this chapter, you will learn:
 - How a standard Zelyra project is structured on disk.
 - The central role of the `zelyra.toml` project configuration manifest.
 - How to separate code into logical concerns (schema, business logic, views).
-- How `import` connects multiple source files in a project graph.
-- The remaining limits of modules and individual CLI tools.
+- How the Zelyra CLI verifies and builds cohesive multi-file projects.
+- The current development status and roadmap for modules and imports.
 
 ### 2. Why is this topic important?
 When starting out, it is tempting to write an entire program in a single file. However, as your task management application expands—incorporating database tables, dozens of business functions, web forms, and validation rules—navigating a monolithic 2,000-line file becomes unmanageable. Professional software engineering demands structuring code so that every team member can locate schemas, business logic, and UI definitions instantly.
 
 ### 3. Understandable explanation without unnecessary jargon
-A project has a clear directory layout. `zelyra.toml` contains project
-metadata and capability grants; `main.zyl` is the entry file. Use `import` to
-connect other files to the project graph. Commands such as `check`, `build`,
-`run`, `serve`, `context`, `verify`, `impact`, and database tools can process
-that graph.
+A professional Zelyra project follows a clean, standardized directory layout:
+- `zelyra.toml`: The birth certificate and configuration manifest of the project. It declares the package name, version, and security capabilities.
+- `src/schema.zyl`: Contains all table declarations (`table`) and custom domain types.
+- `src/main.zyl`: Contains the primary entry point (`fn main()`) and application orchestration.
 
 ```toml
-[project]
+[package]
 name = "task_planner"
-version = "1.0.4"
-zelyra = "0.1"
+version = "0.1.0"
+authors = ["Developer <dev@example.com>"]
 
 [capabilities]
+filesystem = false
 database = true
-network = false
-console = false
 ```
 
-**Module support in Zelyra 1.0.4:** multi-file projects use
-`import "src/math.zyl" as math`. The module model is available but still has
-documented limits: each project graph allows at most one database
-configuration; `fmt` and `edit` process only the named file; SQLite tableviews
-and complete source attribution for some diagnostics are not available.
-`zelyra module plan` previews dependencies, but does not create an isolated
-module or deployment package. The supported syntax is:
-
-~~~zelyra
-import "src/math.zyl" as math
-
-fn main() {
-    print(math::add(2, 3))
-}
-~~~
-
-The imported file must declare `pub fn add(...)`; functions are private by
-default. Paths are relative to the entry file's directory. The project loader
-rejects cycles and paths outside the project root,
-and keep type, capability, and contract checks active. Imported files may
-currently contain functions, type aliases, records, tables, tableviews, pages,
-named views, typed components, and one
-project-wide database connection definition. Database configuration is
-composed into the application and is not accessed through the import alias;
-only one database definition is allowed in the complete project graph. The
-generated MariaDB Docker project also copies the conventional `src/` directory
-into the runtime image, so imported Zelyra files stored under `src/` can be
-loaded in the container. This is not an export of an individual module or an
-independently configurable database module; credentials still belong only in
-local runtime configuration, never in source files.
-Imported tables join the application's shared physical schema. Their names
-are global SQL identifiers, not module-qualified names, and duplicate table
-names are rejected. Tableviews, views, and components are composed from
-imported files under their declared, unqualified names. Views and components
-are private by default; use `pub view` and `pub component` to export them.
-Cross-module page/CRUD layout references and recognized component tags in
-page, view, component, and CRUD slot HTML require a direct or transitive import
-path to the owner. Private UI references report `E-MOD-007`; missing edges
-report `E-MOD-020`. Component discovery scans known tag names in HTML text and
-is not a full HTML or namespace analysis. Imported
-pages join the application's route set; overlapping page
-patterns are rejected with their source location. Forms, CRUD declarations,
-API routes, and authentication definitions also compose from imported files.
-API handler references and types resolve in their owning module, and auth
-tables are validated against the shared schema.
-Function, type, and
-record declarations are private by default; tables and the database
-definition are included by importing their file. Public records cannot expose
-private field types.
-The database module is ordinary project configuration, not a separately named
-database service: the current runtime supports only one configured database
-for the composed application. The runnable example is in
-`examples/modules/`.
-`check`, `build`, `run`, `serve`, `context`, `verify`, `impact`, and database
-commands load the project graph. Database commands build the schema from the
-composed declarations; some schema diagnostics still lack complete module
-source attribution. `serve` can compose imported pages, MariaDB-backed
-tableviews, views, components, forms, CRUD resources, API routes, and
-authentication configuration into the application;
-the tableview query
-runtime does not yet execute against SQLite. `context --format=json` reports
-the deterministically sorted module graph, import edges, and the currently
-supported public functions, types, records, views, and components per file under
-`modules[].exports`. Module entries also include the import alias and
-project-relative source path. Imported tables, tableviews, pages, views,
-components, forms, CRUD declarations, API routes, and authentication
-definitions appear with their source path in
-`span.file`. This
-export list is an introspection aid, not a complete package or deployment
-manifest. UI exports still do not define a complete namespace system.
-Some template diagnostics still need more complete per-module source
-attribution. `verify` also checks the linked graph, but
-does not yet attribute results to individual module source files. `impact`
-analyzes the linked graph and marks spans with their source file. `fmt` and
-`edit` still process only the explicitly named source file. This module support is part of the stable 1.0.4 release; the limits above still apply.
-
-The experimental dependency preview for future module exports is:
-
-~~~sh
-zelyra module plan main.zyl src/invoices.zyl
-~~~
-
-You can also start the preview from a supported application resource instead
-of a source file. Quote IDs containing spaces so the CLI receives one
-argument:
-
-~~~sh
-zelyra module plan examples/modules/main.zyl 'page:/invoices'
-~~~
-
-Supported resource roots are `page:<path>`, `api:<METHOD> <path>`,
-`crud:<name>`, `form:<name>`, and `tableview:<name>`. The plan starts from the
-resource's owning source module and follows its known dependency closure; all
-declarations in that source module remain part of the preview. This is not yet
-an extracted resource-only application or a deployable unit.
-The plan lists all recognized declarations in each included source file under
-`modules[].declarations`, in stable sorted order. This makes functions, types,
-records, and application resources co-located in the selected source visible.
-`declaration_closure` separately reports the selected resource and declarations
-reachable through the current static impact graph. Its `edges` show known
-language and type references, such as API input/output types, function
-signatures, records, and type aliases. `configuration_edges` reports database
-configuration separately. `database.configurations` lists each database
-declaration in the closure with its name, backend, logical database name,
-source file, and current runtime variable `DATABASE_URL`. The plan also marks
-`connection_model` as `single-project-wide-connection` and
-`supports_multiple_connections` as `false`. A declaration therefore describes
-schema/backend configuration; it is not yet a separately addressable database
-interface. Credentials are not included in the plan.
-`runtime_effects.effects` lists explicitly declared function capabilities in
-the included source modules. `deployment_readiness.blockers` identifies
-undeclared file scopes, outbound network contracts, process dependencies,
-environment variable names, and unresolved static references. `ready` remains
-`false`; implicit resource effects are not fully modeled, and this is not a
-complete deployment proof.
-For included auth modules with `reset_tokens`,
-`external_service_contracts` describes the public base URL, SMTP settings, the
-encrypted outbox key, secret variable names, and at-least-once delivery. Docker
-bundles expose corresponding `.env.example` fields with the existing
-`implicit_tls`/465 default and never copy credentials. Contract version 1 also
-reports the 30-second retry delay and that duplicate delivery is possible.
-The template shows how to generate a stable outbox key. This service contract
-does not make the source or deployment closure complete.
-`additional_declarations_in_included_source_files` lists code that
-is present only because an included source file contains it. This analyzes only
-the known graph: `complete` remains `false`, and unrecognized dependencies may
-be missing.
-
-The read-only, deterministic JSON preview follows explicit imports and
-references currently recognized by the static impact graph. These include
-known page-to-view and page-to-component references, page and form/CRUD-action
-SQL-to-table edges, API-handler-to-function edges, named function calls inside
-form/CRUD actions, and type references from API fields, function signatures
-and bodies (including explicit local types, record literals, and SQL result
-types), records, type aliases, table columns, and typed fields on forms, form
-actions, and CRUD actions; protected-resource-to-authentication,
-authentication-to-table, recognized table relations, and database
-configuration. Unresolved references appear in
-`unresolved_references`. `database.configurations` identifies declarations in
-the closure with their backend, logical database name, source file, and current
-runtime variable `DATABASE_URL`. The plan reports
-`connection_model: "single-project-wide-connection"` and
-`supports_multiple_connections: false`: multiple independently configurable
-connections and a named database interface are not implemented. Credentials
-are not included. Dynamic or unmodeled dependencies, assets, runtime
-configuration, external services, and Docker artifacts are not included.
-`complete_deployment` remains explicitly `false`; the command does not export
-or run an application. Action calls are statically detected by their resolved
-function names; this does not make the analysis complete.
-
-SQL table edges also carry `access`: `read`, `write`, `read_write`, or
-`unknown`. The observer recognizes known unqualified table names in the simple
-`SELECT`, `INSERT`, `UPDATE`, and `DELETE` forms covered by the analyzer. For
-`INSERT ... SELECT`, it reports a write to the target table and a read from
-the source table. Complex joined `UPDATE`/`DELETE` forms are conservatively
-marked `unknown`. Unrecognized SQL forms and tables that cannot be mapped to
-the project's known tables may be absent from the analysis. These values
-describe observed dependencies; they do not enforce permissions or schema
-ownership and do not make the graph complete. `schema_ownership` reports the
-source file of a table declaration as `inferred_owner_module`; `enforced` and
-`ownership_enforced` are explicitly `false`.
-
-The compiler now also checks recognized cross-module table edges: a module
-using a table through SQL, CRUD, forms, table views, authentication, or a table
-relation must directly or transitively import the module that declares that
-table. Otherwise `zelyra check` reports `E-MOD-019`; for recognized SQL access,
-the diagnostic also lists `read`/`write` modes. Tables declared in `main.zyl`
-are not implicitly visible to imported modules: a child cannot import the
-entry module back. Put shared tables in a dedicated schema module and import
-it from both the entry point and each consumer.
-
-A database consumer also needs an import edge to the database provider module.
-Modules with database functions (`uses Database`), data-loading pages,
-tableviews, forms, CRUD, or authentication must import the provider directly or
-transitively. Importing database configuration only in `main.zyl` does not
-inherit it sideways into other modules. Otherwise, `zelyra check` reports
-`E-MOD-022`. If the `database` declaration is still in the entry file, move it
-to a dedicated file such as `src/database.zyl` and import that module wherever
-database functionality is used. This is a checked source dependency; it does
-not create multiple runtime connections or MariaDB permissions.
-
-Zelyra 1.0.4 also checks module-specific table grants.
-The owner can declare them directly on the table:
-
-~~~zelyra
-table customers {
-    id: Id primary auto
-    name: String(100) required
-    access {
-        read: ["src/reports.zyl"]
-        write: ["src/importer.zyl"]
-        read_write: ["src/customer_admin.zyl"]
-    }
-}
-~~~
-
-Paths are exact project-relative `.zyl` file paths. A consumer must still
-import the owner module and also appear in the matching list. `read` allows
-recognized reads, `write` allows recognized writes, and `read_write` allows
-both. A combined SQL access needs either `read_write` or separate read and
-write grants. `unknown` SQL access requires `read_write`; CRUD, form, and
-authentication resources also require `read_write`. Without a matching grant,
-`zelyra check` reports `E-MOD-021`; a missing import edge still reports
-`E-MOD-019`.
-
-These grants are compiler contracts for recognized dependencies, not MariaDB
-`GRANT` statements or database-account security. Unrecognized SQL forms may
-still escape analysis; schema-change permissions are not checked, and
-`schema_ownership.enforced` remains `false`. A grant path that does not match
-exactly authorizes nothing; the error appears when a consumer attempts access.
-The machine-readable module plan exposes recognized grants and incomplete
-analysis in `table_access_contract`.
-
-The next experimental step is `zelyra module bundle`:
-
-The [invoice and inventory Docker acceptance guide](../../module-docker-acceptance.en.md)
-describes the repeatable test of the combined application and both exports,
-including separate credentials and negative permission checks.
-
-~~~sh
-zelyra module bundle examples/modules/main.zyl 'page:/invoices' --output ../invoices-bundle --dry-run
-~~~
-
-With `--dry-run`, the command emits a JSON plan listing every relative file
-name and its full destination path. It also states that no secrets are copied
-and no destination files are published. The requested output directory is not
-created; internally, Zelyra builds a temporary package, checks it with
-`zelyra check`, and removes it afterward. The plan remains experimental and
-`source_closure_complete: true` is reported only when the dependency plan has no unresolved references and the generated entry passes `zelyra check`. `complete_deployment` remains `false` because runtime and operational requirements are reviewed separately.
-
-For the actual export, omit `--dry-run`:
-
-~~~sh
-zelyra module bundle examples/modules/main.zyl 'page:/invoices' --output ../invoices-bundle
-~~~
-
-It materializes the source files known to the plan in a new output directory,
-generates an entry file that imports those modules and supplies the required
-empty `fn main()`, validates the result with `zelyra check`, and only publishes
-the directory after that check succeeds. It also copies
-`zelyra.toml`, `zelyra.theme.css`, and JSON locale catalogs when present. An
-existing destination, unresolved reference, or dependency on the original
-entry is rejected. The selected source file is included in full.
-If the checked project graph contains multiple database declarations, planning
-stops with `E-DB-001` before any bundle files are written. Only one
-project-wide `DATABASE_URL` connection is currently implemented.
-
-The result is explicitly only an experimental source bundle:
-`zelyra.bundle.json` records source-closure evidence and keeps
-`complete_deployment` at `false`. It contains no Docker/Compose files, compiler
-binary, database service, or `.env`; credentials are not copied. Running it
-still requires a compatible Zelyra build, external runtime configuration, and
-MariaDB when applicable. This is not yet an independent Docker export.
-The manifest also carries the plan's declared `runtime_effects`, explicit
-`external_service_contracts`, and `deployment_readiness` blockers so operators
-can see modeled effects that still need runtime configuration. A `ready: false`
-status and the two false completeness flags do not turn this experimental
-bundle into a complete deployment description.
-
-An experimental Docker package can additionally be generated:
-
-~~~sh
-zelyra module bundle examples/modules/main.zyl 'page:/invoices' --output ../invoices-docker --docker --compiler-ref 0123456789012345678901234567890123456789
-~~~
-
-`--compiler-ref` must be a full 40-character commit that contains the required
-module syntax. The generated Docker build fetches exactly that compiler commit
-from the public Zelyra repository and builds its runtime CLI. Compose starts
-the extracted application; MariaDB is not included. `.env.example` contains
-only placeholders and an empty `DATABASE_URL`. Copy it to `.env` and configure
-the database connection there if the application needs one. Credentials are
-neither copied nor built into the image.
-When the selected module needs MariaDB, the image installs the currently
-required `mariadb-client`; the database itself remains external. The runtime
-packages selected for the image are listed in `docker.runtime_packages` in
-the manifest.
-Each exported Compose package has its own `.env.example` and, after the local
-copy, an independently configurable `DATABASE_URL`. This is one connection
-per running application unit, not a database module with multiple named
-connections inside one process. The manifest records this limited scope as
-`docker.database_connection_scope: "per_exported_compose_project"`.
-
-This Docker package is still not a complete module export:
-`source_closure_complete` records the checked source closure;
-`complete_deployment` remains `false` because runtime and asset requirements are not fully proven.
-A successful `zelyra check` is not that proof. The Docker end-to-end test
-exports two CRUD resources from separate source files into separate Compose
-projects. Each package gets its own `DATABASE_URL`, separately provisioned
-schema, and least-privilege MariaDB account. The apps complete writable CRUD
-and fail negative database-permission checks. This is bounded evidence for
-these test resources, not proof that complete business modules or arbitrary
-projects can be extracted. Shared schema ownership and cross-module database
-access are not supported by this experimental bundle. Inspect its manifest and
-resolve the listed runtime requirements before use.
-
-Imported UI resources can be used by a page in the entry file. The alias
-includes the file; view and component names are currently unqualified in HTML:
-
-~~~zelyra
-// src/ui.zyl
-component Banner {
-    props {
-        title: String
-    }
-    html {
-        <header><strong>{title}</strong></header>
-    }
-}
-
-view Shell {
-    html {
-        <html><body><Banner title="Invoices" /><main><slot /></main></body></html>
-    }
-}
-~~~
-
-~~~zelyra
-// main.zyl
-import "src/ui.zyl" as ui
-
-page "/" {
-    view: Shell
-    html {
-        <p>This page uses imported UI resources.</p>
-    }
-}
-~~~
-
-Run `zelyra serve main.zyl` to render the linked project. The complete example
-with logic and database modules is in `examples/modules/`.
-It also contains `src/invoice_admin.zyl` with an imported form and CRUD
-resource. Check and run it with `zelyra check examples/modules/main.zyl` and
-`zelyra run examples/modules/main.zyl` (output: `25`). The experimental plan
-for the admin module is:
-
-~~~sh
-zelyra module plan examples/modules/main.zyl src/invoice_admin.zyl
-~~~
-
-It shows the form/CRUD dependency on the invoice table and the separate
-database configuration file. It is still not a Docker export.
-
-A module can export a domain record for another module to use in a function
-signature:
-
-~~~zelyra
-pub struct Money {
-    cents: Int
-}
-~~~
-
-~~~zelyra
-import "src/money.zyl" as money
-
-pub fn total() -> money::Money {
-    return money::Money { cents: 2500 }
-}
-~~~
+*Language compatibility note:* Zelyra supports explicit project-relative imports such as `import "src/models.zyl" as models`. These imports connect source files inside one project; they do not provide a package registry or dynamic runtime imports. The dependency graph and deployment closure remain experimental and may be incomplete. The language compatibility line remains 0.1.
 
 ### 4. Small, progressive examples
 
@@ -2226,10 +1852,8 @@ fn main() {
 In `zelyra.toml`, you explicitly configure which system resources the project is allowed to request. If your application accesses a database, `database = true` must be enabled under `[capabilities]`.
 
 ### 5. Typical errors and their causes
-- **Error:** Using an imported declaration from another module without `pub`.
-  *Cause:* Functions, types, records, views, and components are private by
-  default. Export required declarations explicitly and account for the module
-  model's documented limits.
+- **Error:** Attempting to use an `import` syntax from other languages such as Python, JavaScript, or Rust.
+  *Cause:* Zelyra uses project-relative imports such as `import "src/models.zyl" as models`. Access supported public declarations through the module name; there is no package registry.
 - **Error:** Deleting `zelyra.toml` or executing CLI commands from outside the project root directory.
   *Cause:* Commands like `zelyra run` look for `zelyra.toml` in the current working directory to configure capabilities and compilation paths.
 
@@ -2240,7 +1864,7 @@ In `zelyra.toml`, you explicitly configure which system resources the project is
 
 ### 7. Exercises
 - **Level 1 (Easy):** Generate a new project skeleton using `zelyra new task_app` and explore the generated files.
-- **Level 2 (Medium):** Update `zelyra.toml` with a project description and set a suitable project version, for example `1.0.5`.
+- **Level 2 (Medium):** Update `zelyra.toml` with a project description and increment the version number to `0.3.0`.
 - **Level 3 (Challenging):** Write an application structured into three separate functions handling initialization, business processing, and output reporting.
 
 ### 8. Practical project task: Task Management – Project Structure
@@ -2266,14 +1890,13 @@ fn main() {
 
 ### 9. Summary
 - Projects are configured and secured via `zelyra.toml`.
-- Zelyra 1.0.4 processes imported source files as one project graph.
-- The module model has documented limits; an import does not create an independent package.
-- Organizing files into folders helps readers, but does not by itself connect modules.
+- Zelyra evaluates project files as a cohesive, strongly typed whole.
+- Modular architecture ensures sustainable scalability and seamless team collaboration.
 
 ### 10. Self-check review questions
 1. Which file contains the metadata and capability definitions of a Zelyra project?
 2. Why is decoupling the data schema from execution logic recommended?
-3. What should you consider when exporting functions and UI resources from a module?
+3. How does the Zelyra CLI compile and verify an entire project at once?
 
 # PART IV – SAFETY AND ERROR HANDLING
 
@@ -2303,7 +1926,7 @@ In software engineering, we distinguish between four fundamental classes of erro
 **Example 1: Typical syntax error (and reading compiler output)**
 When you write clean, matching brackets:
 ```zelyra
-// Syntactically correct:
+# Syntactically correct:
 fn correct_brackets() {
     print("All brackets are closed.")
 }
@@ -2707,7 +2330,7 @@ In this chapter, you will learn:
 - How Zelyra's verification tool (`zelyra verify`) formally proves function contracts.
 - How to design and structure assertion-based test suites.
 - The philosophy of *Test-Driven Development* (TDD).
-- An outlook on Zelyra's future integrated test framework.
+- How assertions and project-specific test runners work, and which test commands the current CLI provides.
 
 ### 2. Why is this topic important?
 Manual testing—clicking around in a browser or manually calling functions—is tedious, inconsistent, and error-prone. As software grows in complexity, even minor modifications in one subsystem inevitably introduce regressions in seemingly unrelated modules. Automated tests act as an automated safety net, proving that existing business logic continues to function according to specification days, months, and years into the future.
@@ -2717,14 +2340,24 @@ Quality assurance in Zelyra rests on two powerful pillars:
 1. **Formal Contract Verification with `zelyra verify`:**
    The compiler mathematically checks whether preconditions and postconditions (`requires`, `ensures`) hold under all possible valid inputs.
 2. **Automated Assertion Testing:**
-   You write concise test routines that supply sample inputs to your business functions and verify that the actual output matches the expected outcome.
+   Test routines supply sample inputs to business functions and compare actual results with expected outcomes. The built-in `assert(condition, message)` check reports a failure when its condition is false.
 
-*Roadmap Note:* The built-in CLI test framework (`zelyra test`) is scheduled on the Zelyra roadmap for Phase 11/12. In Zelyra 0.1, automated quality assurance is conducted using `zelyra check`, `zelyra verify`, and structured test-runner entry points.
-`// [Placeholder: Zelyra Test Framework - realized in 0.1 via verify and test runners; see Roadmap Phase 11]`
+The current CLI reference does not list a `zelyra test` subcommand. Keep
+project-specific test routines in an executable `.zyl` file and run them with
+`zelyra run <file.zyl>`. Use `zelyra check` before execution and
+`zelyra verify` for the supported formal contract checks.
 
 ### 4. Small, progressive examples
 
-**Example 1: A lightweight assertion helper**
+**Example 1: A direct assertion**
+~~~zelyra
+fn main() {
+    result = 6 * 7
+    assert(result == 42, "Expected the multiplication result to be 42")
+}
+~~~
+
+**Example 2: A lightweight assertion helper**
 ```zelyra
 fn assert_test(test_name: String, condition: Bool) {
     if condition {
@@ -2744,7 +2377,7 @@ fn main() {
 }
 ```
 
-**Example 2: Testing Option return values**
+**Example 3: Testing Option return values**
 ```zelyra
 fn is_adult(age: Int) -> Option<Bool> {
     if age < 0 {
@@ -2770,7 +2403,7 @@ fn main() {
 }
 ```
 
-**Example 3: Protecting logic with formal contract verification**
+**Example 4: Protecting logic with formal contract verification**
 ```zelyra
 fn calculate_overtime(hours: Int, regular_hours: Int) -> Int
     requires { hours >= 0 && regular_hours >= 0 }
@@ -2846,7 +2479,6 @@ In this chapter, you will learn:
 - How to create, read, list, and delete text files using Zelyra.
 - Why file operations in Zelyra strictly require the `uses FileSystem` capability.
 - The most important standard library functions: `read_text`, `write_text`, `delete_file`, and `list_dir`.
-- How the Result variants return expected file and JSON errors.
 - How to persist task lists to disk as files.
 
 ### 2. Why is this topic important?
@@ -2914,78 +2546,6 @@ fn main() uses FileSystem {
 }
 ```
 
-**Example 4: Path helpers and file metadata (new in 1.0.3)**
-Pure path operations do not access the filesystem. File queries require the
-`FileSystem` capability and stay within the project's allowed paths.
-```zelyra
-fn inspect_file(folder: String, filename: String) uses FileSystem {
-    path = path_join(folder, filename)
-    print("Path: " + path)
-    print("Filename: " + path_filename(path))
-    print("Extension: " + path_extension(path))
-    if file_exists(path) {
-        match file_size(path) {
-            Ok(bytes) => { print("Size: " + to_string(bytes) + " bytes") }
-            Err(message) => { print("Could not read size: " + message) }
-        }
-    }
-}
-
-fn main() uses FileSystem {
-    inspect_file(".", "zelyra.toml")
-}
-```
-
-**Example 5: Handling JSON and file errors**
-
-`read_text` and `json_decode` report failures as runtime errors. Use
-`read_text_result`, `write_text_result`, and `json_decode_result<T>` when an
-application should handle a missing or damaged file and continue:
-
-```zelyra
-struct Settings {
-    theme: String
-}
-
-fn load_theme() uses FileSystem {
-    match read_text_result("settings.json") {
-        Ok(text) => {
-            match json_decode_result<Settings>(text) {
-                Ok(settings) => { print("Theme: " + settings.theme) }
-                Err(message) => { print("Invalid JSON file: " + message) }
-            }
-        }
-        Err(message) => { print("Could not read file: " + message) }
-    }
-}
-
-fn main() uses FileSystem {
-    load_theme()
-}
-```
-
-Missing project grants and denied capabilities remain security errors. The
-Result variants catch ordinary path, read, write, and JSON errors.
-
-Safe text-file changes also have `write_text_new_result`,
-`atomic_write_text_result`, `append_text_result`, `copy_file_new_result`,
-`rename_file_result`, and `delete_file_result`. `write_text_new_result` creates
-files exclusively and reports a conflict if the destination already exists.
-`atomic_write_text_result` first writes a temporary file in the same directory
-and replaces the destination only after the write succeeds. Rename and copy
-also refuse to overwrite an existing destination. File operations stay inside
-the root directories allowed by the project configuration.
-
-`text_contains` searches for a literal string. `text_replace_result` replaces
-all occurrences of a non-empty search string; `text_split_result` splits on a
-non-empty separator and preserves empty parts at the start or end. These
-functions operate on UTF-8 strings and do not interpret the search text as a
-regular expression.
-
-A complete multi-file notes manager with backups, an action log, restore, and
-automated tests is in
-[`examples/notes_manager`](../../../examples/notes_manager/README.md).
-
 ### 5. Typical errors and their causes
 - **Error:** Calling `read_text` or `write_text` without declaring `uses FileSystem`.
   *Cause:* Zelyra's capability system (`E-CAP-001`) prevents any unauthorized access to secondary storage.
@@ -2996,7 +2556,6 @@ automated tests is in
 1. Any function interacting with the file system must declare `uses FileSystem`.
 2. `write_text` creates a new file or completely overwrites an existing one.
 3. `read_text` returns the entire contents of a file as a `String`.
-4. `*_result` functions make expected failures ordinary `Err` values.
 
 ### 7. Exercises (Level 1 Easy, Level 2 Medium, Level 3 Challenging)
 - **Level 1 (Easy):** Write a program that writes a greeting message into `hello.txt`.
@@ -3033,7 +2592,6 @@ fn main() uses FileSystem {
 ### 1. What will I learn in this chapter?
 In this chapter, you will learn:
 - How to retrieve current timestamps with `now()` (`uses Clock`).
-- How `format_timestamp` renders a timestamp as a UTC date and time.
 - How to generate pseudo-random values using `random_int(min, max)` (`uses Random`).
 - How to serialize data structures into universal JSON with `json_encode`.
 - How to parse JSON strings back into strongly typed structures using `json_decode<T>`.
@@ -3049,7 +2607,7 @@ Virtually every real-world application requires handling temporal events: When w
 ```zelyra
 fn show_time() uses Clock {
     current_time = now()
-    print(format_timestamp(current_time))
+    print("Current system time recorded")
 }
 
 fn main() uses Clock {
@@ -3094,42 +2652,6 @@ fn main() {
     ids: Int[] = [101, 102, 103]
     json_text = export_ids_as_json(ids)
     print("JSON output: " + json_text)
-}
-```
-
-**Example 4: Calendar arithmetic and date comparisons (new in 1.0.3)**
-`date_diff_days(first, second)` returns `first - second` in calendar days.
-```zelyra
-fn calculate_deadline() {
-    deadline = date_add_days(date("2026-10-01"), 14)
-    today = date("2026-10-14")
-    remaining = date_diff_days(deadline, today)
-    print("Days remaining: " + to_string(remaining))
-    if is_after(today, deadline) {
-        print("Deadline passed")
-    } else {
-        print("Deadline not passed")
-    }
-}
-
-fn main() {
-    calculate_deadline()
-}
-```
-
-**Example 5: Hashing and web encodings (new in 1.0.3)**
-Only UUID generation requires `Random`; hashing and encodings are local
-operations.
-```zelyra
-fn security_helpers() uses Random {
-    print(uuid_v4())
-    print(hash_sha256("sample"))
-    print(base64_encode("Zelyra data"))
-    print(url_encode("Customer & Partner Ltd"))
-}
-
-fn main() uses Random {
-    security_helpers()
 }
 ```
 
