@@ -11366,29 +11366,52 @@ fn generated_api_routes(
             let api_version = api.version.clone();
             let api_deprecated = api.deprecated;
             let api_rate_limit = api.rate_limit;
-            Some(
-                ApiRoute::new(
-                    api.method.clone(),
-                    api.path.clone(),
-                    move |request, path_params| {
-                        dispatch_api_with_capabilities(
-                            &program,
-                            &api,
-                            &handler,
-                            request,
-                            path_params,
-                            ApiRuntimeContext {
-                                database_url: database_url.as_deref(),
-                                capability_grants: capability_grants.as_ref(),
-                                runtime_policy: runtime_policy.as_ref(),
-                                table_validation_functions: &table_validation_functions,
-                            },
-                        )
-                    },
+            let api_method = api.method.clone();
+            let api_path = api.path.clone();
+            let tenant_scope = api.validates_table.as_ref().and_then(|table_name| {
+                program
+                    .tables
+                    .iter()
+                    .find(|table| &table.name == table_name)
+                    .and_then(|table| table.tenant_scope.as_ref())
+                    .map(|scope| scope.column.clone())
+            });
+            let route_handler =
+                move |request: &zelyra_web::Request,
+                      path_params: &HashMap<String, String>,
+                      verified_tenant_id: Option<i64>| {
+                    dispatch_api_with_capabilities(
+                        &program,
+                        &api,
+                        &handler,
+                        request,
+                        path_params,
+                        ApiRuntimeContext {
+                            database_url: database_url.as_deref(),
+                            capability_grants: capability_grants.as_ref(),
+                            runtime_policy: runtime_policy.as_ref(),
+                            table_validation_functions: &table_validation_functions,
+                            verified_tenant_id,
+                        },
+                    )
+                };
+            let route = if let Some(tenant_column) = tenant_scope {
+                ApiRoute::new_with_tenant_context(
+                    api_method,
+                    api_path,
+                    tenant_column,
+                    route_handler,
                 )
-                .with_auth(requires_auth, permissions)
-                .with_metadata(api_version, api_deprecated, api_rate_limit),
-            )
+            } else {
+                ApiRoute::new(api_method, api_path, move |request, path_params| {
+                    route_handler(request, path_params, None)
+                })
+            };
+            Some(route.with_auth(requires_auth, permissions).with_metadata(
+                api_version,
+                api_deprecated,
+                api_rate_limit,
+            ))
         })
         .collect()
 }
@@ -11415,6 +11438,7 @@ fn dispatch_api(
             capability_grants: None,
             runtime_policy: None,
             table_validation_functions: &table_validation_functions,
+            verified_tenant_id: None,
         },
     )
 }
@@ -11425,6 +11449,7 @@ struct ApiRuntimeContext<'a> {
     capability_grants: Option<&'a HashSet<String>>,
     runtime_policy: Option<&'a RuntimePolicy>,
     table_validation_functions: &'a [zelyra_ast::TableValidationFunction],
+    verified_tenant_id: Option<i64>,
 }
 
 fn dispatch_api_with_capabilities(
@@ -11467,10 +11492,38 @@ fn dispatch_api_with_capabilities(
     } else {
         parse_api_url_values(&request.body)
     };
+    let trusted_tenant_column = api.validates_table.as_ref().and_then(|table_name| {
+        program
+            .tables
+            .iter()
+            .find(|table| &table.name == table_name)
+            .and_then(|table| {
+                table
+                    .tenant_scope
+                    .as_ref()
+                    .and_then(|scope| table.columns.iter().find(|c| c.name == scope.column))
+            })
+    });
     let mut values = match values {
         Ok(values) => values,
         Err(error) => return api_error_response(400, "BadRequest", &error.to_string()),
     };
+    if let Some(column) = trusted_tenant_column {
+        if values.contains_key(&column.name) || path_params.contains_key(&column.name) {
+            return api_error_response(
+                400,
+                "BadRequest",
+                "tenant key must come from verified session membership, not request or path input",
+            );
+        }
+        let Some(tenant_id) = context.verified_tenant_id else {
+            return api_error_response(403, "Forbidden", "verified tenant context is required");
+        };
+        values.insert(
+            column.name.clone(),
+            serde_json::Value::Number(tenant_id.into()),
+        );
+    }
     for (name, value) in path_params {
         values.insert(name.clone(), serde_json::Value::String(value.clone()));
     }
@@ -11492,13 +11545,22 @@ fn dispatch_api_with_capabilities(
             Err(error) => return api_error_response(400, "BadRequest", &error),
         }
     }
+    if trusted_tenant_column.is_some() {
+        arguments.push(RuntimeValue::Int(
+            context.verified_tenant_id.expect("checked above"),
+        ));
+    }
     if let Some(table_name) = &api.validates_table {
-        let submitted = api
+        let mut submitted = api
             .input
             .iter()
             .zip(&arguments)
             .map(|(field, value)| (field.name.clone(), value.clone()))
             .collect::<HashMap<_, _>>();
+        if let (Some(column), Some(tenant_id)) = (trusted_tenant_column, context.verified_tenant_id)
+        {
+            submitted.insert(column.name.clone(), RuntimeValue::Int(tenant_id));
+        }
         match zelyra_web::validate_table_runtime_values(
             program,
             context.table_validation_functions,

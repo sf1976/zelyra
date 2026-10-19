@@ -27,7 +27,7 @@ Ressourcendisziplin und ehrliche Beweisaussagen leiten jede Phase. Das
 [Manifest](MANIFESTO.de.md) beschreibt die Prinzipien; die Roadmap kennzeichnet
 den tatsächlich implementierten Stand.
 
-Das aktuelle stabile Release ist 1.2.15 und wurde unter https://github.com/sf1976/zelyra/releases/tag/v1.2.15 veröffentlicht. **Aktuelle Meilensteine** ist die
+Das aktuelle stabile Release ist 1.2.22 und wurde unter https://github.com/sf1976/zelyra/releases/tag/v1.2.22 veröffentlicht. **Aktuelle Meilensteine** ist die
 verbindliche Übersicht der nächsten Vorhaben. Ältere, nummerierte Release-
 Abschnitte bleiben als historische Planung und Nachweise erhalten; sie legen
 für sich keine aktuellen Releaseziele fest. Langfristige Ideen stehen im
@@ -228,15 +228,23 @@ abgeschlossen.
   Auswerter. Eigene Aktionen bleiben an typgeprüfte
   Funktionen mit Capabilityprüfung gebunden. Siehe das
   [Arbeitsprotokoll 1.2.21](release-plans/1.2.21-crud-lifecycle-policies.de.md).
-- [~] **1.2.22 — transaktionales Master-Detail-CRUD:** Eine typisierte
-  `has_many`-Relation wird geprüft und auf Create/Edit als begrenzte,
-  serverseitig gerenderte Zeilen dargestellt. Eltern-/Kindschreibvorgänge,
-  Kindinvarianten und Aggregatberechnung teilen eine Transaktion. MariaDB-E2E
-  deckt ungültigen Submit mit Rollback, Anlegen, Bearbeiten/Neuberechnung und
-  Schema-Cascade ab. Mehrere Kindrelationen und mehr als 50 Zeilen pro Submit
-  sind noch nicht unterstützt. Umfang und Prüfung bereits vorhandener
-  Mandanten-, Invarianten- und Lifecycle-Funktionen
-  stehen im [Arbeitsplan 1.2.22](release-plans/1.2.22-business-invariants-and-master-detail.de.md).
+- [x] **1.2.22 — transaktionales Master-Detail-CRUD (veröffentlicht):**
+  Eine typisierte `has_many`-Relation wird geprüft und auf Create/Edit als
+  begrenzte, serverseitig gerenderte Zeilen dargestellt. Eltern-/Kindschreib-
+  vorgänge, Kindinvarianten und Aggregatberechnung teilen eine Transaktion.
+  MariaDB-E2E deckt ungültigen Submit mit Rollback, Anlegen,
+  Bearbeiten/Neuberechnung und Schema-Cascade ab. Mehrere Kindrelationen und
+  mehr als 50 Zeilen pro Submit sind nicht unterstützt. Siehe den
+  [Arbeitsplan 1.2.22](release-plans/1.2.22-business-invariants-and-master-detail.de.md).
+- [~] **1.2.23 — authentifizierte Mandanten-API-Invarianten:** `validates`
+  bindet Regeln mandantengebundener Tabellen nur in authentifizierten APIs mit
+  aktiver Mitgliedschaftstabelle. Zelyra weist Mandantenschlüssel in
+  Request-Eingaben ab, prüft die Auswahl gegen Sitzung und Mitgliedschaften,
+  wertet Regeln mit dem verifizierten Mandanten aus und übergibt ihn als letzten
+  typisierten Handlerparameter. Fehlender oder nicht autorisierter Kontext
+  bricht vor dem Handler ab. Geprüft werden deklarierte Eingaben, nicht beliebige
+  Handler-Transformationen oder rohe SQL-Schreibzugriffe. Siehe den
+  [Arbeitsplan 1.2.23](release-plans/1.2.23-scoped-api-validation.en.md).
 - [ ] **1.3.0 — kanonische Struktur und Bytecode-Standard:** Das optionale,
   versionierte Projektlayout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, `plugins/`), Architekturprüfungen und eine sichere

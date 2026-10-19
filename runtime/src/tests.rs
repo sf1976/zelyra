@@ -1779,17 +1779,44 @@ fn api_table_validation_requires_safe_boundary_and_matching_contract() {
     let scoped = parse(
         &lex(r#"
             type TenantId = Id
+            auth users { table: users memberships: tenant_memberships }
             table invoices scoped by tenant_id: TenantId { id: Id primary auto tenant_id: TenantId required amount: Int required validate { amount > 0: "Invalid amount" } }
-            api POST "/invoices" { handler create_invoice validates invoices input { tenant_id: TenantId amount: Int } output Result<Int, String> errors { 422 ValidationError: String } }
+            api POST "/invoices" { requires auth handler create_invoice validates invoices input { amount: Int } output Result<Int, String> errors { 422 ValidationError: String } }
+            fn create_invoice(amount: Int, tenant_id: TenantId) -> Result<Int, String> { return Ok(amount) }
+            fn main() { }
+        "#).unwrap(),
+    ).unwrap();
+    check_apis(&scoped).expect("authenticated APIs receive verified tenant scope separately");
+
+    let forged_scope = parse(
+        &lex(r#"
+            type TenantId = Id
+            auth users { table: users memberships: tenant_memberships }
+            table invoices scoped by tenant_id: TenantId { id: Id primary auto tenant_id: TenantId required amount: Int required validate { amount > 0: "Invalid amount" } }
+            api POST "/invoices" { requires auth handler create_invoice validates invoices input { tenant_id: TenantId amount: Int } output Result<Int, String> errors { 422 ValidationError: String } }
             fn create_invoice(tenant_id: TenantId, amount: Int) -> Result<Int, String> { return Ok(amount) }
             fn main() { }
         "#).unwrap(),
     ).unwrap();
-    let errors =
-        check_apis(&scoped).expect_err("tenant scope cannot come from untrusted API input");
+    let errors = check_apis(&forged_scope).expect_err("client tenant keys must be rejected");
     assert!(errors
         .iter()
-        .any(|error| error.message.contains("authenticated tenant context")));
+        .any(|error| error.message.contains("must not accept tenant key")));
+
+    let missing_auth = parse(
+        &lex(r#"
+            type TenantId = Id
+            auth users { table: users memberships: tenant_memberships }
+            table invoices scoped by tenant_id: TenantId { id: Id primary auto tenant_id: TenantId required amount: Int required validate { amount > 0: "Invalid amount" } }
+            api POST "/invoices" { handler create_invoice validates invoices input { amount: Int } output Result<Int, String> errors { 422 ValidationError: String } }
+            fn create_invoice(amount: Int, tenant_id: TenantId) -> Result<Int, String> { return Ok(amount) }
+            fn main() { }
+        "#).unwrap(),
+    ).unwrap();
+    let errors = check_apis(&missing_auth).expect_err("scoped validation requires authentication");
+    assert!(errors
+        .iter()
+        .any(|error| error.message.contains("requires `requires auth`")));
 
     let missing_contract = parse(
         &lex(r#"

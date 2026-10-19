@@ -124,6 +124,7 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
                 });
             }
         }
+        let mut trusted_tenant_column = None;
         if let Some(table_name) = &api.validates_table {
             if api.handler.is_none() {
                 errors.push(ApiDiagnostic {
@@ -149,13 +150,42 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
                     span: api.span,
                 });
             }
-            if table.tenant_scope.is_some() {
-                errors.push(ApiDiagnostic {
-                    message: format!(
-                        "API table validation for scoped table `{table_name}` requires an authenticated tenant context, which this API route does not currently expose"
-                    ),
-                    span: api.span,
-                });
+            if let Some(scope) = &table.tenant_scope {
+                if !api.requires_auth {
+                    errors.push(ApiDiagnostic {
+                        message: format!(
+                            "API table validation for scoped table `{table_name}` requires `requires auth`"
+                        ),
+                        span: api.span,
+                    });
+                } else if !program
+                    .auth
+                    .iter()
+                    .any(|auth| auth.membership_table.is_some())
+                {
+                    errors.push(ApiDiagnostic {
+                        message: format!(
+                            "API table validation for scoped table `{table_name}` requires an auth declaration with `memberships`"
+                        ),
+                        span: api.span,
+                    });
+                }
+                let tenant_column = table
+                    .columns
+                    .iter()
+                    .find(|column| column.name == scope.column);
+                if let Some(column) = tenant_column {
+                    trusted_tenant_column = Some(column);
+                    if api.input.iter().any(|field| field.name == column.name) {
+                        errors.push(ApiDiagnostic {
+                            message: format!(
+                                "scoped API must not accept tenant key `{}` from request input; Zelyra supplies it from verified membership context",
+                                column.name
+                            ),
+                            span: api.span,
+                        });
+                    }
+                }
             }
             if table.validations.is_empty() {
                 errors.push(ApiDiagnostic {
@@ -163,7 +193,14 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
                     span: api.span,
                 });
             }
-            for column in table.columns.iter().filter(|column| !column.auto) {
+            for column in table.columns.iter().filter(|column| {
+                !column.auto
+                    && Some(column.name.as_str())
+                        != table
+                            .tenant_scope
+                            .as_ref()
+                            .map(|scope| scope.column.as_str())
+            }) {
                 let Some(input) = api.input.iter().find(|field| field.name == column.name) else {
                     if !matches!(column.ty, Type::Option(_)) && column.default.is_none() {
                         errors.push(ApiDiagnostic {
@@ -231,12 +268,14 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
                 });
                 continue;
             }
-            if function.params.len() != api.input.len() {
+            let expected_count = api.input.len() + usize::from(trusted_tenant_column.is_some());
+            if function.params.len() != expected_count {
                 errors.push(ApiDiagnostic {
                     message: format!(
-                        "API handler `{handler}` expects {} input field(s), but the API declares {}",
+                        "API handler `{handler}` expects {} parameter(s), but the API declares {} request input field(s){}",
                         function.params.len(),
-                        api.input.len()
+                        api.input.len(),
+                        if trusted_tenant_column.is_some() { " plus one verified tenant parameter" } else { "" }
                     ),
                     span: api.span,
                 });
@@ -250,6 +289,19 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
                         ),
                         span: field.span,
                     });
+                }
+            }
+            if let Some(column) = trusted_tenant_column {
+                if let Some(parameter) = function.params.get(api.input.len()) {
+                    if parameter.name != column.name || parameter.ty != column.ty {
+                        errors.push(ApiDiagnostic {
+                            message: format!(
+                                "API handler final parameter must be verified tenant `{}` with type `{}`",
+                                column.name, column.ty
+                            ),
+                            span: parameter.span,
+                        });
+                    }
                 }
             }
             if function.return_type.as_ref() != Some(&api.output) {

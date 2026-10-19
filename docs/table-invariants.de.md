@@ -51,10 +51,36 @@ api POST "/invoices" {
 }
 ~~~
 
-Die Bindung ist derzeit auf POST, PUT und PATCH sowie Tabellen ohne
-Mandantenscope beschränkt. Für scoped Tabellen verweigert der Compiler die
-Bindung, solange die API-Laufzeit keinen verifizierten Mandantenkontext an die
-Prüfung übergeben kann. Die Prüfung ist keine Datenbank-Constraint: Rohe SQL-
-Schreibzugriffe und andere nicht gebundene Handler umgehen sie. Invarianten,
+Für eine Tabelle mit Mandantenscope muss die API `requires auth` angeben und
+ein `auth`-Block eine aktive Mitgliedschaftstabelle konfigurieren. Der
+Mandantenschlüssel gehört nicht in den API-`input`-Block. Zelyra prüft den
+optionalen `tenant_id`-Auswahlschlüssel gegen die authentifizierte Sitzung und
+aktive Mitgliedschaften, übergibt den geprüften Mandanten an die Regelprüfung
+und als letzten Handlerparameter mit dem Namen und Typ der deklarierten
+Mandantenspalte:
+
+```zelyra
+type TenantId = Id
+
+api POST "/api/invoice-check" {
+    requires auth
+    handler check_invoice
+    validates invoices
+    input { amount: Int }
+    output Result<TenantId, String>
+    errors { 422 ValidationError: String }
+}
+
+fn check_invoice(amount: Int, tenant_id: TenantId) -> Result<TenantId, String> {
+    return Ok(tenant_id)
+}
+```
+
+Ein vom Client übergebener Mandantenschlüssel im Request-Body wird abgewiesen.
+Fehlende, widersprüchliche und nicht autorisierte Mandantenauswahl scheitert
+vor dem Handler. Die Prüfung umfasst nur deklarierte Eingaben und den
+verifizierten Mandantenkontext. Sie ist keine Datenbank-Constraint: Rohe SQL-
+Schreibzugriffe und nicht gebundene Handler sind nicht erfasst. Invarianten,
 die für jeden Schreiber gelten müssen, benötigen weiterhin passende
-Datenbank-Constraints.
+Datenbank-Constraints. Ein vollständiges compilergeprüftes Beispiel steht in
+[`examples/tenant_api_validation.zyl`](../examples/tenant_api_validation.zyl).
