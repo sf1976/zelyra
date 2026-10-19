@@ -1790,12 +1790,18 @@ api POST "/invoices" {
 }
 ~~~
 
-Diese Bindung ist für POST, PUT und PATCH verfügbar. Tabellen mit
-Mandantenscope werden abgewiesen, bis die API-Laufzeit einen verifizierten
-Tenant-Kontext bereitstellt. Die Prüfung deckt die eingereichten Werte ab,
-nicht nachfolgende Handler-Transformationen oder direkte SQL-Schreibzugriffe.
-Für Invarianten, die für jeden Schreiber gelten müssen, sind weiterhin
-Datenbank-Constraints erforderlich.
+Diese Bindung ist für POST, PUT und PATCH verfügbar. Bei einer Tabelle mit
+Mandantenscope muss die API `requires auth` deklarieren und der Projekt-
+Auth-Block aktive Mandantenmitgliedschaften konfigurieren. Der Mandantenschlüssel
+darf nicht als Client-Eingabe deklariert werden: Zelyra leitet ihn aus der
+authentifizierten Sitzung ab und übergibt ihn als letzten typisierten
+Handlerparameter. Ein Mandantenschlüssel im Request-Body wird abgewiesen; die
+Auswahl wird vor dem Handler gegen aktive Mitgliedschaften geprüft. Siehe das
+[vollständige API-Beispiel](../../../examples/tenant_api_validation.zyl).
+Geprüft werden Eingabewerte und verifizierter Mandantenkontext, nicht spätere
+Handler-Transformationen oder rohe SQL-Schreibzugriffe. Für Invarianten, die
+für jeden Schreiber gelten müssen, sind weiterhin Datenbank-Constraints
+erforderlich.
 
 Browserzugriff ist standardmäßig deaktiviert. Wenn ein separates Frontend
 eine API aufrufen soll, werden exakte Origins in der Projektkonfiguration

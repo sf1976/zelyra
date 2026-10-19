@@ -48,8 +48,36 @@ api POST "/invoices" {
 }
 ~~~
 
-This binding currently supports POST, PUT, and PATCH for tables without a
-tenant scope. The compiler rejects scoped tables until the API runtime can pass
-a verified tenant context to the rule evaluation. This is not a database
-constraint: raw SQL writes and other unbound handlers are not covered. Use
-database constraints for invariants that must hold for every writer.
+For a scoped table, declare `requires auth`, and configure an `auth` block with
+an active membership table. Do not put the tenant key in the API `input` block.
+Zelyra resolves the optional `tenant_id` selector against the authenticated
+session and active memberships, inserts the verified tenant value into rule
+evaluation, and passes it as the handler's final parameter using the declared
+tenant-column name and type:
+
+```zelyra
+type TenantId = Id
+
+api POST "/api/invoice-check" {
+    requires auth
+    handler check_invoice
+    validates invoices
+    input { amount: Int }
+    output Result<TenantId, String>
+    errors { 422 ValidationError: String }
+}
+
+fn check_invoice(amount: Int, tenant_id: TenantId) -> Result<TenantId, String> {
+    return Ok(tenant_id)
+}
+```
+
+If a caller supplies the tenant key in the request body, Zelyra rejects the
+request. Missing, conflicting, or unauthorized tenant selectors fail before
+the handler. Tenant validation still covers only the declared input and
+verified tenant context. It is not a database constraint: raw SQL writes and
+unbound handlers are not covered. Use database constraints for invariants that
+must hold for every writer.
+
+A complete compiler-checked example is available in
+[`examples/tenant_api_validation.zyl`](../examples/tenant_api_validation.zyl).

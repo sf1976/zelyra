@@ -446,6 +446,12 @@ jobs:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
           ZELYRA_BIN: target/debug/zelyra
         run: ./tests/mariadb-tenant-crud-e2e.sh
+      - name: Run authenticated tenant-scoped API validation integration test
+        env:
+          DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+          ZELYRA_E2E_DB_PASSWORD: root
+          ZELYRA_BIN: target/debug/zelyra
+        run: ./tests/mariadb-tenant-api-validation-e2e.sh
       - name: Create isolated CRUD policy test database
         env:
           MYSQL_PWD: root

@@ -25,7 +25,7 @@ telemetry, explicit effects, portable data, resource discipline, and honest
 proof claims guide every phase. The [manifesto](MANIFESTO.md) states the
 principles; the roadmap below tracks what is actually implemented.
 
-The current stable release is 1.2.15, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.15. **Current milestones** is the source of
+The current stable release is 1.2.22, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.22. **Current milestones** is the source of
 near-term commitments. Older numbered release sections below are retained as
 historical planning and evidence; they do not by themselves define current
 release targets. Longer-term ideas remain in the post-1.0 evolution section.
@@ -212,14 +212,21 @@ security and compatibility gates stated for that milestone.
   declared rules skip that evaluator.
   Keep custom actions bound to typed, capability-checked functions. See the
   [1.2.21 work log](release-plans/1.2.21-crud-lifecycle-policies.en.md).
-- [~] **1.2.22 — transactional master-detail CRUD:** A typed `has_many`
-  collection is checked and rendered as bounded server-side rows on Create
-  and Edit. Parent/child writes, child invariants, and aggregate recomputation
-  share one transaction. MariaDB E2E covers invalid-submit rollback, create,
-  edit/recompute, and schema cascade. Multiple child collections and more than
-  50 rows per submit remain unsupported. Scope and the audit of implemented
-  tenant, invariant and lifecycle features are recorded in the
+- [x] **1.2.22 — transactional master-detail CRUD (released):** A typed
+  `has_many` collection is checked and rendered as bounded server-side rows on
+  Create/Edit. Parent/child writes, child invariants, and aggregate
+  recomputation share one transaction. MariaDB E2E covers invalid-submit
+  rollback, create, edit/recompute, and schema cascade. Multiple child
+  collections and more than 50 rows per submit remain unsupported. See the
   [1.2.22 work plan](release-plans/1.2.22-business-invariants-and-master-detail.en.md).
+- [~] **1.2.23 — authenticated tenant-scoped API invariants:** `validates`
+  binds scoped table rules only on authenticated APIs with a configured active
+  membership table. Zelyra rejects tenant keys from request input, resolves the
+  selected tenant against the session and memberships, evaluates the rule with
+  that verified tenant, and passes it as a typed final handler parameter.
+  Missing or unauthorized context fails before the handler. This validates
+  declared inputs, not arbitrary handler transformations or raw SQL writes.
+  See the [1.2.23 plan](release-plans/1.2.23-scoped-api-validation.en.md).
 - [ ] **1.3.0 — canonical structure and Bytecode default:** Complete the
   opt-in versioned project layout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, and `plugins/`), architecture checks, and safe layout migration

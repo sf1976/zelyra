@@ -1627,6 +1627,32 @@ fn dispatches_typed_api_routes_through_a_handler() {
 }
 
 #[test]
+fn tenant_api_route_fails_closed_without_authentication_configuration() {
+    let called = Arc::new(AtomicUsize::new(0));
+    let called_by_handler = called.clone();
+    let route = ApiRoute::new_with_tenant_context(
+        "POST",
+        "/scoped",
+        "tenant_id",
+        move |_request, _parameters, _tenant_id| {
+            called_by_handler.fetch_add(1, Ordering::SeqCst);
+            Response::json(200, "{}")
+        },
+    )
+    .with_auth(false, Vec::new());
+    assert!(
+        route.requires_auth,
+        "tenant context cannot disable authentication"
+    );
+    let app = WebApp::new(Vec::new(), Vec::new()).with_apis(vec![route]);
+    let request =
+        parse_request("POST /scoped HTTP/1.1\r\nHost: localhost\r\nContent-Length: 2\r\n\r\n{}")
+            .unwrap();
+    assert_eq!(app.dispatch(&request).status, 401);
+    assert_eq!(called.load(Ordering::SeqCst), 0);
+}
+
+#[test]
 fn request_correlation_id_is_validated_propagated_and_returned_once() {
     let app = WebApp::new(Vec::new(), Vec::new()).with_apis(vec![ApiRoute::new(
         "GET",

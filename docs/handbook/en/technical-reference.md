@@ -1658,11 +1658,16 @@ api POST "/invoices" {
 }
 ~~~
 
-This binding supports POST, PUT, and PATCH. Tables with tenant scope are
-rejected until the API runtime can provide a verified tenant context. The
-check covers submitted values, not later handler transformations or direct
-SQL writes. Database constraints are still required for invariants that must
-hold for every writer.
+This binding supports POST, PUT, and PATCH. For a tenant-scoped table, the API
+must declare `requires auth`, and the project auth block must configure active
+tenant memberships. Do not declare the scoped key in client input: Zelyra
+resolves it from the authenticated session and passes it as the handler's
+final typed parameter. Request-body tenant keys are rejected, and the selector
+is checked against active memberships before the handler. See the complete
+[tenant API example](../../../examples/tenant_api_validation.zyl). Validation
+covers submitted values and verified tenant context, not later handler
+transformations or raw SQL writes. Database constraints remain necessary for
+invariants that must hold for every writer.
 
 Browser access is disabled by default. Enable exact origins in the project
 configuration when a separate frontend needs to call an API:

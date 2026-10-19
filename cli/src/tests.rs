@@ -2937,6 +2937,7 @@ fn enforces_scoped_database_effects_in_generated_api_handlers() {
             capability_grants: Some(&no_grants),
             runtime_policy: None,
             table_validation_functions: &[],
+            verified_tenant_id: None,
         },
     );
     assert_eq!(denied.status, 500);
@@ -2955,10 +2956,113 @@ fn enforces_scoped_database_effects_in_generated_api_handlers() {
             capability_grants: Some(&read_grant),
             runtime_policy: None,
             table_validation_functions: &[],
+            verified_tenant_id: None,
         },
     );
     assert_eq!(allowed.status, 500);
     assert!(!allowed.body.contains("not granted"));
+}
+
+#[test]
+fn scoped_api_validation_uses_only_verified_tenant_context() {
+    let program = parse(
+        &lex(r#"
+                type TenantId = Id
+                auth users { table: users memberships: tenant_memberships }
+                table invoices scoped by tenant_id: TenantId {
+                    id: Id primary auto
+                    tenant_id: TenantId required
+                    amount: Int required
+                    invoice_date: Date required
+                    due_date: Date?
+                    validate {
+                        amount > 0: "Amount must be positive."
+                        match due_date {
+                            Some(due) => due >= invoice_date
+                            None => true
+                        }: "Due date must not precede invoice date."
+                    }
+                }
+                api POST "/api/check" {
+                    requires auth
+                    handler check
+                    validates invoices
+                    input { amount: Int invoice_date: Date due_date: Date? }
+                    output Result<TenantId, String>
+                    errors { 422 ValidationError: String }
+                }
+                fn check(amount: Int, invoice_date: Date, due_date: Date?, tenant_id: TenantId) -> Result<TenantId, String> {
+                    return Ok(tenant_id)
+                }
+                fn main() {}
+            "#)
+        .unwrap(),
+    )
+    .unwrap();
+    check_apis(&program).expect("scoped API and handler contract should type-check");
+    let (lowered_program, table_validation_functions) =
+        zelyra_ast::lower_table_validation_functions(&program);
+    let api = &program.apis[0];
+    let request = |body: &str| {
+        zelyra_web::parse_request(&format!(
+            "POST /api/check HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+            body.len(), body
+        ))
+        .unwrap()
+    };
+    let context = |verified_tenant_id| ApiRuntimeContext {
+        database_url: None,
+        capability_grants: None,
+        runtime_policy: None,
+        table_validation_functions: &table_validation_functions,
+        verified_tenant_id,
+    };
+
+    let valid = dispatch_api_with_capabilities(
+        &lowered_program,
+        api,
+        "check",
+        &request(r#"{"amount":100,"invoice_date":"2026-10-20","due_date":"2026-10-21"}"#),
+        &HashMap::new(),
+        context(Some(41)),
+    );
+    assert_eq!(valid.status, 200, "{}", valid.body);
+    assert_eq!(valid.body, "41");
+
+    let forged = dispatch_api_with_capabilities(
+        &lowered_program,
+        api,
+        "check",
+        &request(
+            r#"{"amount":100,"invoice_date":"2026-10-20","due_date":"2026-10-21","tenant_id":42}"#,
+        ),
+        &HashMap::new(),
+        context(Some(41)),
+    );
+    assert_eq!(forged.status, 400);
+
+    let invalid = dispatch_api_with_capabilities(
+        &lowered_program,
+        api,
+        "check",
+        &request(r#"{"amount":100,"invoice_date":"2026-10-20","due_date":"2026-10-19"}"#),
+        &HashMap::new(),
+        context(Some(41)),
+    );
+    assert_eq!(invalid.status, 422);
+    assert!(invalid
+        .body
+        .contains("Due date must not precede invoice date."));
+
+    let missing_context = dispatch_api_with_capabilities(
+        &lowered_program,
+        api,
+        "check",
+        &request(r#"{"amount":100,"invoice_date":"2026-10-20","due_date":"2026-10-21"}"#),
+        &HashMap::new(),
+        context(None),
+    );
+    assert_eq!(missing_context.status, 403);
 }
 
 #[test]
@@ -2987,6 +3091,7 @@ fn project_step_budget_applies_to_executed_api_handlers() {
                 ..RuntimePolicy::default()
             }),
             table_validation_functions: &[],
+            verified_tenant_id: None,
         },
     );
     assert_eq!(response.status, 500);

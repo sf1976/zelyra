@@ -1,0 +1,74 @@
+type TenantId = Id
+
+auth users {
+    table: users
+    sessions: auth_sessions
+    permissions: user_permissions
+    memberships: tenant_memberships
+}
+
+table users {
+    id: Id primary auto
+    email: Email required unique
+    password_hash: String(255) required
+    active: Bool default true
+}
+
+table auth_sessions {
+    id: Id primary auto
+    user: User required
+    token_hash: String(64) required unique
+    expires_at: Timestamp required
+}
+
+table user_permissions {
+    id: Id primary auto
+    user_id: Int required
+    permission: String(100) required
+}
+
+table tenant_memberships {
+    id: Id primary auto
+    user_id: Int required
+    tenant_id: TenantId required
+    active: Bool required
+}
+
+table invoices scoped by tenant_id: TenantId {
+    id: Id primary auto
+    tenant_id: TenantId required
+    amount: Int required
+    invoice_date: Date required
+    due_date: Date?
+    validate {
+        amount > 0: "Der Rechnungsbetrag muss positiv sein."
+        match due_date {
+            Some(due) => due >= invoice_date
+            None => true
+        }: "Das Fälligkeitsdatum darf nicht vor dem Rechnungsdatum liegen."
+    }
+}
+
+api POST "/api/invoice-check" {
+    requires auth
+    handler check_invoice
+    validates invoices
+    input {
+        amount: Int
+        invoice_date: Date
+        due_date: Date?
+    }
+    output Result<TenantId, String>
+    errors {
+        422 ValidationError: String
+    }
+}
+
+fn check_invoice(amount: Int, invoice_date: Date, due_date: Date?, tenant_id: TenantId) -> Result<TenantId, String> {
+    if amount > 0 {
+        return Ok(tenant_id)
+    }
+    return Err("Ungültiger Betrag")
+}
+
+fn main() {}

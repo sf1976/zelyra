@@ -137,7 +137,7 @@ fn valid_origin(origin: &str) -> bool {
         && !origin.ends_with('/')
 }
 
-type ApiHandler = dyn Fn(&Request, &HashMap<String, String>) -> Response + Send + Sync;
+type ApiHandler = dyn Fn(&Request, &HashMap<String, String>, Option<i64>) -> Response + Send + Sync;
 
 #[derive(Clone)]
 pub struct ApiRoute {
@@ -148,6 +148,8 @@ pub struct ApiRoute {
     pub version: Option<String>,
     pub deprecated: bool,
     pub rate_limit: Option<zelyra_ast::ApiRateLimit>,
+    /// Tenant key supplied only from a verified authenticated membership.
+    pub tenant_column: Option<String>,
     handler: Arc<ApiHandler>,
 }
 
@@ -171,6 +173,7 @@ impl fmt::Debug for ApiRoute {
             .field("version", &self.version)
             .field("deprecated", &self.deprecated)
             .field("rate_limit", &self.rate_limit)
+            .field("tenant_column", &self.tenant_column)
             .finish_non_exhaustive()
     }
 }
@@ -189,12 +192,37 @@ impl ApiRoute {
             version: None,
             deprecated: false,
             rate_limit: None,
+            tenant_column: None,
+            handler: Arc::new(move |request, path_params, _tenant_id| {
+                handler(request, path_params)
+            }),
+        }
+    }
+
+    pub fn new_with_tenant_context(
+        method: impl Into<String>,
+        path: impl Into<String>,
+        tenant_column: impl Into<String>,
+        handler: impl Fn(&Request, &HashMap<String, String>, Option<i64>) -> Response
+            + Send
+            + Sync
+            + 'static,
+    ) -> Self {
+        Self {
+            method: method.into(),
+            path: path.into(),
+            requires_auth: true,
+            permissions: Vec::new(),
+            version: None,
+            deprecated: false,
+            rate_limit: None,
+            tenant_column: Some(tenant_column.into()),
             handler: Arc::new(handler),
         }
     }
 
     pub fn with_auth(mut self, requires_auth: bool, permissions: Vec<String>) -> Self {
-        self.requires_auth = requires_auth;
+        self.requires_auth = requires_auth || self.tenant_column.is_some();
         self.permissions = permissions;
         self
     }
@@ -1666,9 +1694,30 @@ impl WebApp {
                 ) {
                     return self.apply_api_metadata(api, self.apply_api_cors(request, response));
                 }
+                let tenant_context = match resolve_tenant_context(
+                    self,
+                    api.tenant_column.as_deref(),
+                    request,
+                    self.database_url.as_deref(),
+                ) {
+                    Ok(context) => context,
+                    Err(status) => {
+                        return self.apply_api_metadata(
+                            api,
+                            self.apply_api_cors(request, tenant_resolution_error(status)),
+                        )
+                    }
+                };
                 return self.apply_api_metadata(
                     api,
-                    self.apply_api_cors(request, (api.handler)(request, &path_params)),
+                    self.apply_api_cors(
+                        request,
+                        (api.handler)(
+                            request,
+                            &path_params,
+                            tenant_context.map(|context| context.tenant_id),
+                        ),
+                    ),
                 );
             }
         }
