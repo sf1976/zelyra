@@ -2542,6 +2542,35 @@ fn table_validation_rules_are_typechecked_in_a_pure_table_field_scope() {
 }
 
 #[test]
+fn crud_row_policies_are_typechecked_against_table_fields() {
+    let valid = parse(
+        &lex(r#"
+            table invoices { id: Id primary auto status: String required locked: Bool required }
+            crud Invoice -> invoices {
+                permits edit "invoices.manage" when status == "draft"
+                guard delete when locked == true { error: "Locked invoices cannot be deleted." }
+            }
+            fn main() { }
+        "#)
+        .unwrap(),
+    )
+    .unwrap();
+    check(&valid).expect("CRUD policy predicates must type-check against their row");
+
+    let invalid = parse(
+        &lex(r#"
+            table invoices { status: String required }
+            crud Invoice -> invoices { guard edit when status > 0 { error: "bad" } }
+            fn main() { }
+        "#)
+        .unwrap(),
+    )
+    .unwrap();
+    let errors = check(&invalid).expect_err("row policy with mismatched operand types must fail");
+    assert!(errors.iter().any(|error| error.code == "E-TYPE-001"));
+}
+
+#[test]
 fn table_validation_check_does_not_clone_unrelated_deep_function_bodies() {
     let expression = std::iter::repeat_n("1", 5_000)
         .collect::<Vec<_>>()

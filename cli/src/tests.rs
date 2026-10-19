@@ -2070,6 +2070,44 @@ fn validates_tableview_hidden_row_fields_and_column_content_context() {
 }
 
 #[test]
+fn validates_policy_scoped_tableview_actions_against_complete_crud_rows() {
+    let source = r#"
+        table invoices {
+            id: Id primary auto
+            status: String(20) required
+            locked: Bool required
+        }
+        struct Invoice { id: Id status: String locked: Bool }
+        crud Invoice -> invoices {
+            guard edit when locked == true { error: "Locked" }
+            guard delete when locked == true { error: "Locked" }
+        }
+        tableview InvoiceRows {
+            source sql<Invoice[]> { SELECT id, status, locked FROM invoices }
+            columns { status }
+            view {
+                row_fields { id locked }
+                row_actions {
+                    item: invoice
+                    crud: Invoice
+                    edit { html { <a href="/invoices/{invoice.id}/edit">Edit</a> } }
+                    delete { html { <button type="button">Delete</button> } }
+                }
+            }
+        }
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    assert!(validate_components("policy-tableview.zyl", &program));
+
+    let incomplete = source.replace("row_fields { id locked }", "row_fields { id }");
+    let program = parse(&lex(&incomplete).unwrap()).unwrap();
+    assert!(!validate_components(
+        "policy-tableview-incomplete.zyl",
+        &program
+    ));
+}
+
+#[test]
 fn rejects_saved_record_in_create_and_unavailable_or_sensitive_fields() {
     let source = r#"
         table customers { id: Id primary auto name: String(100) password_hash: String(255) }

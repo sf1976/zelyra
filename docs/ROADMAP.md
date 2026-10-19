@@ -197,10 +197,18 @@ security and compatibility gates stated for that milestone.
   HTTP 422 error. Scoped API bindings are rejected until a verified tenant
   context is available, and raw SQL writes are not covered. See
   [`table-invariants.en.md`](table-invariants.en.md).
-- [ ] **1.2.21 — lifecycle guards and row-conditioned CRUD policies:** Add
-  checked update/delete guards and conditional edit/delete permissions, with
-  the same server-side decision used by rendered actions and direct requests.
-  Keep custom actions bound to typed, capability-checked functions.
+- [~] **1.2.21 — lifecycle guards and row-conditioned CRUD policies:** The
+  parser and type checker now lower row conditions to ordinary typed Boolean
+  functions. Edit guards and conditional permissions are evaluated for edit
+  forms, including again under the edit transaction's row lock; delete guards
+  and permissions are checked inside the delete transaction. Detail-page edit
+  links and explicitly scoped TableView edit/delete slots use the same
+  evaluator. TableView operation slots must name their CRUD model and select
+  the complete typed row; incomplete policy rows are rejected by the compiler.
+  MariaDB direct-request and row-lock race coverage now runs in the CI workflow;
+  local tests pass, while the full external PR-CI result remains pending.
+  Keep custom actions bound to typed, capability-checked functions. See the
+  [1.2.21 work log](release-plans/1.2.21-crud-lifecycle-policies.en.md).
 - [ ] **1.2.22 — transactional master-detail CRUD:** Add typed child
   collections, atomic parent/child persistence, declared delete behavior and
   checked aggregates. The first UI slice must preserve CSRF, tenant scope,
