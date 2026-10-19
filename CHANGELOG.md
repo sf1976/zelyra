@@ -1,5 +1,31 @@
 ## Unreleased
 
+## 1.2.21 — 2026-10-19
+
+- Add checked table invariants to declarative forms and generated CRUD writes,
+  plus explicit table validation for unscoped POST/PUT/PATCH API inputs. Failed
+  checks return the declared validation message before persistence. Scoped API
+  validation remains unavailable without a verified tenant context; raw SQL
+  writes are outside this validation path. / Tabelleninvarianten für
+  deklarative Formulare und generierte CRUD-Schreibvorgänge sowie ausdrücklich
+  gebundene Validierung unscoped POST-/PUT-/PATCH-API-Eingaben ergänzen.
+  Fehlgeschlagene Prüfungen liefern die deklarierte Meldung vor dem Speichern.
+  Scoped APIs bleiben ohne geprüften Tenant-Kontext ausgeschlossen; rohe
+  SQL-Schreibvorgänge liegen außerhalb dieses Validierungspfads.
+- Add row-conditioned CRUD edit/delete permissions and lifecycle guards. The
+  server checks edit POSTs under a row lock and delete requests inside the
+  mutation transaction; detail views and explicitly model-bound TableView
+  actions use the same policy evaluator. / Datensatzabhängige CRUD-Rechte und
+  Lifecycle-Guards für Bearbeiten und Löschen ergänzen. Edit-POSTs werden unter
+  Zeilensperre und Löschanfragen innerhalb der Mutationstransaktion geprüft;
+  Detailseiten und ausdrücklich modellgebundene TableView-Aktionen verwenden
+  denselben Policy-Auswerter.
+- Resolve relation-typed form values such as `Department` as database identity
+  values during invariant checks, and skip invariant evaluation for tables
+  without declared rules. / Relationsfelder wie `Department` bei
+  Invariantenprüfungen als Datenbank-Identitäten auswerten und Tabellen ohne
+  deklarierte Regeln von der Invariantenprüfung ausnehmen.
+
 ## 1.2.17 — 2026-10-18
 
 - Preserve optional table relations as nullable foreign keys and enforce

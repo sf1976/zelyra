@@ -188,7 +188,8 @@ security and compatibility gates stated for that milestone.
   declarations, and requires review plus a duplicate-row preflight when
   changing an existing schema. Existing-row repair remains an explicit
   operator task.
-- [~] **1.2.20 — table and form invariants:** Add typed cross-field validation
+- [~] **1.2.20 — table and form invariants (released in 1.2.21):** Add typed
+  cross-field validation
   with source-mapped diagnostics and consistent generated CRUD/API checks
   before database writes. A backend that cannot preserve the checked
   validation semantics must reject that path.
@@ -197,7 +198,7 @@ security and compatibility gates stated for that milestone.
   HTTP 422 error. Scoped API bindings are rejected until a verified tenant
   context is available, and raw SQL writes are not covered. See
   [`table-invariants.en.md`](table-invariants.en.md).
-- [~] **1.2.21 — lifecycle guards and row-conditioned CRUD policies:** The
+- [x] **1.2.21 — lifecycle guards and row-conditioned CRUD policies:** The
   parser and type checker now lower row conditions to ordinary typed Boolean
   functions. Edit guards and conditional permissions are evaluated for edit
   forms, including again under the edit transaction's row lock; delete guards
@@ -205,8 +206,10 @@ security and compatibility gates stated for that milestone.
   links and explicitly scoped TableView edit/delete slots use the same
   evaluator. TableView operation slots must name their CRUD model and select
   the complete typed row; incomplete policy rows are rejected by the compiler.
-  MariaDB direct-request and row-lock race coverage now runs in the CI workflow;
-  local tests pass, while the full external PR-CI result remains pending.
+  MariaDB direct-request and row-lock race coverage runs in the CI workflow;
+  local tests and the merged PR's complete external CI passed. Relation values
+  are also resolved correctly in table-invariant checks, and tables without
+  declared rules skip that evaluator.
   Keep custom actions bound to typed, capability-checked functions. See the
   [1.2.21 work log](release-plans/1.2.21-crud-lifecycle-policies.en.md).
 - [ ] **1.2.22 — transactional master-detail CRUD:** Add typed child
