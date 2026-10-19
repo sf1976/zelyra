@@ -3039,6 +3039,89 @@ pub struct QueryResult {
     pub column_types: Vec<QueryColumnType>,
 }
 
+/// Credentials extracted from a supported database connection URL.
+/// The password is kept out of diagnostic formatting and command arguments.
+#[derive(Clone, PartialEq, Eq)]
+pub struct ParsedDatabaseCredentials {
+    pub backend: Backend,
+    pub host: String,
+    pub port: u16,
+    pub user: String,
+    pub password: Option<String>,
+    pub database: String,
+}
+
+impl ParsedDatabaseCredentials {
+    pub fn parse(database_url: &str) -> Result<Self, DatabaseError> {
+        let url = url::Url::parse(database_url).map_err(|_| DatabaseError {
+            message: "database URL is invalid".into(),
+        })?;
+        let backend = match url.scheme() {
+            "mysql" | "mariadb" => Backend::MariaDb,
+            "postgres" | "postgresql" => Backend::Postgres,
+            other => {
+                return Err(DatabaseError {
+                    message: format!("database console does not support URL scheme `{other}`"),
+                })
+            }
+        };
+        let default_port = match backend {
+            Backend::MariaDb => 3306,
+            Backend::Postgres => 5432,
+            Backend::Sqlite => unreachable!(),
+        };
+        let host = url.host_str().ok_or_else(|| DatabaseError {
+            message: "database URL has no host".into(),
+        })?;
+        let database = url.path().trim_start_matches('/');
+        if database.is_empty() {
+            return Err(DatabaseError {
+                message: "database URL has no database name".into(),
+            });
+        }
+        Ok(Self {
+            backend,
+            host: host.to_owned(),
+            port: url.port().unwrap_or(default_port),
+            user: percent_decode_url_component(url.username())?,
+            password: url
+                .password()
+                .map(percent_decode_url_component)
+                .transpose()?,
+            database: percent_decode_url_component(database)?,
+        })
+    }
+}
+
+fn percent_decode_url_component(value: &str) -> Result<String, DatabaseError> {
+    let bytes = value.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' {
+            if index + 2 >= bytes.len() {
+                return Err(DatabaseError {
+                    message: "database URL contains invalid percent encoding".into(),
+                });
+            }
+            let hex =
+                std::str::from_utf8(&bytes[index + 1..index + 3]).map_err(|_| DatabaseError {
+                    message: "database URL contains invalid percent encoding".into(),
+                })?;
+            decoded.push(u8::from_str_radix(hex, 16).map_err(|_| DatabaseError {
+                message: "database URL contains invalid percent encoding".into(),
+            })?);
+            index += 3;
+        } else {
+            decoded.push(bytes[index]);
+            index += 1;
+        }
+    }
+    String::from_utf8(decoded).map_err(|_| DatabaseError {
+        message: "database URL contains invalid UTF-8 encoding".into(),
+    })
+}
+
 #[derive(Clone, Debug)]
 pub struct Query {
     pub sql: String,
@@ -3077,7 +3160,7 @@ pub fn execute_postgres_query(
     let (sql, params) = prepare_postgres_query(&query)?;
     let settings = MariaDbTimeouts::from_env()?;
     let tls = MariaDbTlsSettings::from_env()?;
-    execute_postgres_batch(database_url, settings, tls, &[(sql, params)], false)
+    execute_postgres_batch(database_url, settings, tls, &[(sql, params)], false, false)
         .map(|mut results| results.pop().unwrap_or_default())
 }
 
@@ -3097,7 +3180,66 @@ pub fn execute_postgres_queries(
     }
     let settings = MariaDbTimeouts::from_env()?;
     let tls = MariaDbTlsSettings::from_env()?;
-    execute_postgres_batch(database_url, settings, tls, &prepared, transaction)
+    execute_postgres_batch(database_url, settings, tls, &prepared, transaction, false)
+}
+
+/// Executes one query in a database-enforced read-only transaction.
+pub fn execute_read_only_query(
+    database_url: &str,
+    sql: &str,
+    params: Vec<(String, QueryValue)>,
+) -> Result<QueryResult, DatabaseError> {
+    if is_postgres_url(database_url) {
+        let query = Query {
+            sql: sql.into(),
+            params,
+        };
+        let prepared = vec![prepare_postgres_query(&query)?];
+        let settings = MariaDbTimeouts::from_env()?;
+        let tls = MariaDbTlsSettings::from_env()?;
+        return execute_postgres_batch(database_url, settings, tls, &prepared, true, true)
+            .map(|mut results| results.pop().unwrap_or_default());
+    }
+    execute_mariadb_queries_with_options(
+        database_url,
+        &[Query {
+            sql: sql.into(),
+            params,
+        }],
+        true,
+        true,
+    )
+    .map(|mut results| results.pop().unwrap_or_default())
+}
+
+/// Executes one explicitly authorized mutation in a transaction and returns
+/// its result. The caller must make the opt-in visible to the operator.
+pub fn execute_transactional_query(
+    database_url: &str,
+    sql: &str,
+    params: Vec<(String, QueryValue)>,
+) -> Result<QueryResult, DatabaseError> {
+    if is_postgres_url(database_url) {
+        let query = Query {
+            sql: sql.into(),
+            params,
+        };
+        let prepared = vec![prepare_postgres_query(&query)?];
+        let settings = MariaDbTimeouts::from_env()?;
+        let tls = MariaDbTlsSettings::from_env()?;
+        return execute_postgres_batch(database_url, settings, tls, &prepared, true, false)
+            .map(|mut results| results.pop().unwrap_or_default());
+    }
+    execute_mariadb_queries_with_options(
+        database_url,
+        &[Query {
+            sql: sql.into(),
+            params,
+        }],
+        true,
+        false,
+    )
+    .map(|mut results| results.pop().unwrap_or_default())
 }
 
 fn execute_postgres_batch(
@@ -3106,17 +3248,18 @@ fn execute_postgres_batch(
     tls: MariaDbTlsSettings,
     prepared: &[(String, Vec<Box<dyn PostgresToSql + Sync>>)],
     transaction: bool,
+    read_only: bool,
 ) -> Result<Vec<QueryResult>, DatabaseError> {
     let pool = postgres_pool(database_url, settings, tls)?;
     let pool_wait = postgres_pool_wait_timeout(settings)?;
     match &pool {
         PostgresPool::Plain(pool) => {
             let mut client = pool.get_timeout(pool_wait).map_err(postgres_pool_error)?;
-            execute_postgres_prepared_batch(&mut client, settings, prepared, transaction)
+            execute_postgres_prepared_batch(&mut client, settings, prepared, transaction, read_only)
         }
         PostgresPool::Tls(pool) => {
             let mut client = pool.get_timeout(pool_wait).map_err(postgres_pool_error)?;
-            execute_postgres_prepared_batch(&mut client, settings, prepared, transaction)
+            execute_postgres_prepared_batch(&mut client, settings, prepared, transaction, read_only)
         }
     }
 }
@@ -3147,10 +3290,15 @@ fn execute_postgres_prepared_batch(
     settings: MariaDbTimeouts,
     prepared: &[(String, Vec<Box<dyn PostgresToSql + Sync>>)],
     transaction: bool,
+    read_only: bool,
 ) -> Result<Vec<QueryResult>, DatabaseError> {
     if transaction {
         client
-            .batch_execute("BEGIN")
+            .batch_execute(if read_only {
+                "BEGIN READ ONLY"
+            } else {
+                "BEGIN"
+            })
             .map_err(postgres_driver_error)?;
     }
     let mut results = Vec::with_capacity(prepared.len());
@@ -3566,6 +3714,18 @@ pub fn execute_mariadb_queries_in_transaction(
     execute_mariadb_queries_on_pool(&pool, settings, queries, transaction)
 }
 
+fn execute_mariadb_queries_with_options(
+    database_url: &str,
+    queries: &[Query],
+    transaction: bool,
+    read_only: bool,
+) -> Result<Vec<QueryResult>, DatabaseError> {
+    let settings = MariaDbTimeouts::from_env()?;
+    let tls = MariaDbTlsSettings::from_env()?;
+    let pool = mariadb_pool(database_url, settings, tls)?;
+    execute_mariadb_queries_on_pool_options(&pool, settings, queries, transaction, read_only)
+}
+
 /// A single connection inside a MariaDB transaction. The value cannot escape
 /// the closure passed to `with_mariadb_transaction`.
 pub struct MariaDbTransaction<'a> {
@@ -3669,6 +3829,16 @@ fn execute_mariadb_queries_on_pool(
     queries: &[Query],
     transaction: bool,
 ) -> Result<Vec<QueryResult>, DatabaseError> {
+    execute_mariadb_queries_on_pool_options(pool, settings, queries, transaction, false)
+}
+
+fn execute_mariadb_queries_on_pool_options(
+    pool: &MariaDbPool,
+    settings: MariaDbTimeouts,
+    queries: &[Query],
+    transaction: bool,
+    read_only: bool,
+) -> Result<Vec<QueryResult>, DatabaseError> {
     let prepared = queries
         .iter()
         .map(prepare_mariadb_query)
@@ -3679,7 +3849,12 @@ fn execute_mariadb_queries_on_pool(
 
     let mut connection = acquire_mariadb_connection(pool, settings)?;
     if transaction {
-        if let Err(error) = connection.connection.query_drop("START TRANSACTION") {
+        let begin = if read_only {
+            "START TRANSACTION READ ONLY"
+        } else {
+            "START TRANSACTION"
+        };
+        if let Err(error) = connection.connection.query_drop(begin) {
             connection.discard = true;
             return Err(mariadb_driver_error(error));
         }
@@ -5367,6 +5542,28 @@ mod tests {
     use super::*;
 
     include!("../../tests/support/bounded_mutations.rs");
+
+    #[test]
+    fn parses_database_console_credentials_without_losing_percent_encoded_values() {
+        let parsed = ParsedDatabaseCredentials::parse(
+            "mysql://sales%40app:p%40ss%2Fword@db.example:3307/invoice%20suite",
+        )
+        .unwrap();
+        assert_eq!(parsed.backend, Backend::MariaDb);
+        assert_eq!(parsed.host, "db.example");
+        assert_eq!(parsed.port, 3307);
+        assert_eq!(parsed.user, "sales@app");
+        assert_eq!(parsed.password.as_deref(), Some("p@ss/word"));
+        assert_eq!(parsed.database, "invoice suite");
+    }
+
+    #[test]
+    fn postgres_console_credentials_use_default_port() {
+        let parsed =
+            ParsedDatabaseCredentials::parse("postgresql://user:secret@localhost/app").unwrap();
+        assert_eq!(parsed.backend, Backend::Postgres);
+        assert_eq!(parsed.port, 5432);
+    }
 
     #[test]
     fn optional_scoped_relations_use_nullable_ids_and_composite_tenant_keys() {

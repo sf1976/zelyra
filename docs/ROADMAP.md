@@ -240,16 +240,32 @@ security and compatibility gates stated for that milestone.
   two collections, an invalid second collection with full rollback, and edit
   replacement without cross-parent access. See the
   [1.2.24 work plan](release-plans/1.2.24-multiple-crud-children.en.md).
-- [ ] **1.2.25 — typed CRUD domain actions:** Add a checked execution context
+- [~] **1.2.25 — native database console and query commands:** Add host client
+  passthrough for MariaDB/MySQL and PostgreSQL, credential lookup from the
+  project's named database URL and `.env`, and direct single-statement queries
+  with table/JSON/CSV output. Queries default to database-enforced read-only
+  transactions; mutation is a visible opt-in. Tenant ids bind only to explicit
+  parameters and never imply automatic row filtering. See the
+  [1.2.25 work plan](release-plans/1.2.25-db-cli-console-query.en.md).
+- [ ] **1.2.26 — interactive language console:** Add an incremental AST
+  interpreter session with persistent typed bindings, line continuation,
+  recoverable diagnostics, safe project context, and explicit AST/Bytecode
+  backend selection only where the selected backend supports equivalent
+  semantics. Sandbox writes inside a database transaction and roll them back
+  on exit unless `--persist` is explicit. Do not expose a `:commit` or
+  `:rollback` command until the runtime can hold and rotate a genuine database
+  transaction across inputs. The console must preserve compiler, capability,
+  contract, step-budget, and stack-depth checks.
+- [ ] **1.2.27 — typed CRUD domain actions:** Add a checked execution context
   for action statements with explicit row, authenticated user, and verified
   tenant values. Reuse the language type/effect checker, require explicit
   permissions, support transaction-safe SQL plus allowlisted typed calls, and
   evaluate an action guard while holding the target row lock. Retain one
-  transaction for business writes and audit insertion. Use the existing
+  transaction for business writes and audit insertion. Use existing
   `hash_sha256` and `now()` spellings and their capability rules; PDF rendering
   and mail outbox calls must follow their existing transaction and attachment
   restrictions. No implicit `crypto::` namespace or raw SQL interpolation.
-- [ ] **1.2.26 — bounded secure file upload foundation (subject to design
+- [ ] **1.2.28 — bounded secure file upload foundation (subject to design
   gate):** Specify and test multipart size limits, file metadata types,
   content validation, tenant ownership, private storage outside `public/`,
   authorized downloads, rollback cleanup, and backup/delete behavior before

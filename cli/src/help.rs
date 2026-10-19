@@ -32,6 +32,8 @@ fn help_text(command: &str, arguments: &[String], german: bool) -> Option<&'stat
         ("db", "setup", _) => "db-setup",
         ("db", "bootstrap", _) => "db-bootstrap",
         ("db", "history", _) => "db-history",
+        ("db", "console", _) => "db-console",
+        ("db", "query", _) => "db-query",
         ("auth", "hash-password", _) => "auth-hash-password",
         ("auth", "role", _) => "auth-role",
         ("auth", "role-permission", _) => "auth-role-permission",
@@ -96,7 +98,7 @@ fn help_text(command: &str, arguments: &[String], german: bool) -> Option<&'stat
 
 fn german_help(key: &str) -> &'static str {
     match key {
-        "db" => "Befehle: zelyra db <create|setup|bootstrap|inspect|map|plan|apply|history> <datei.zyl>
+        "db" => "Befehle: zelyra db <create|setup|bootstrap|inspect|map|plan|apply|history|console|query> <datei.zyl>
 
 Verwaltet das in Zelyra deklarierte Datenbankschema. `plan` zeigt Änderungen zuerst nur an; `apply` wendet einen geprüften Plan an.
 
@@ -118,6 +120,8 @@ Die verfügbaren Operationen und ihre Grenzen:
   plan       Schemaänderungen vorschauen, ohne die Datenbank zu ändern
   apply      Geprüften Schemaänderungsplan anwenden
   history    Journalisierte MariaDB-/MySQL-Migrationen anzeigen
+  console    MariaDB-/MySQL- oder PostgreSQL-Client mit Projektverbindung starten
+  query      Einzelne SQL-Abfrage als Tabelle, JSON oder CSV ausgeben
 
 Eine benannte Verbindung hat Vorrang vor `DATABASE_URL`. Zugangsdaten werden nicht in der Hilfe ausgegeben.",
         "fmt" => "Befehl: zelyra fmt <datei.zyl> [--check]\n\nFormatiert eine Zelyra-Datei kanonisch.\n  --check  Prüft, ob die Datei bereits formatiert ist; schreibt nichts.\n\nBeispiele:\n  zelyra fmt main.zyl\n  zelyra fmt src/rechnungen.zyl --check\n\nDatenbank: nicht erforderlich.",
@@ -142,6 +146,8 @@ anzeigen kann. Zeitpläne laufen innerhalb von `zelyra serve` nur, wenn das Proj
         "db-create" => "Befehl: zelyra db create <datei.zyl>\n\nGibt das geprüfte CREATE-SQL für die deklarierten Tabellen aus. Der Befehl verbindet sich nicht mit einer Datenbank und legt weder die Datenbank noch Tabellen an.\n\nBeispiel:\n  zelyra db create main.zyl\n  zelyra db create main.zyl > schema.sql\n\nZum Anlegen der MariaDB- oder MySQL-Datenbank und Einrichten des Schemas: `zelyra db setup main.zyl`. Für ein lokales MariaDB-Docker-Projekt: `zelyra setup . --all`.",
         "db-setup" | "db-bootstrap" => "Befehl: zelyra db setup|bootstrap <datei.zyl>\n\nMariaDB und MySQL: legt die deklarierte Datenbank bei Bedarf an und richtet das Schema ein. SQLite: initialisiert die konfigurierte Datei und Tabellen. PostgreSQL: `setup` wird nicht unterstützt; verwende `zelyra db apply`. Prüfe vorher mit `zelyra db plan`, welche Änderungen anstehen.\n\nBeispiele:\n  zelyra db plan main.zyl\n  zelyra db setup main.zyl\n\nBenötigt die konfigurierte Projektdatenbank.",
         "db-history" => "Befehl: zelyra db history <datei.zyl> [--format text|json]\n\nZeigt den Fortschritt journalisierter MariaDB- und MySQL-Schemamigrationen.\n\nBeispiel:\n  zelyra db history main.zyl\n\nBenötigt die konfigurierte MariaDB- oder MySQL-Projektdatenbank.",
+        "db-console" => "Befehl: zelyra db console [datei.zyl]\n\nStartet den installierten MariaDB-/MySQL- oder PostgreSQL-Client mit der Projektverbindung. Zugangsdaten kommen aus der Prozessumgebung oder der Projekt-.env. Passwörter werden über MYSQL_PWD oder PGPASSWORD übertragen, nicht als Kommandozeilenargument.\n\nBeispiel: zelyra db console main.zyl\n\nDer passende Client muss im PATH installiert sein.",
+        "db-query" => "Befehl: zelyra db query <datei.zyl> <SQL> [--format table|json|csv] [--tenant <id>] [--limit <n>] [--allow-mutation]\n\nFührt eine SQL-Anweisung aus. Standardmäßig läuft sie in einer schreibgeschützten Transaktion. --allow-mutation erlaubt transaktionale INSERT-, UPDATE-, DELETE- und REPLACE-Anweisungen; DDL wird abgewiesen. --tenant bindet den ausdrücklich geschriebenen :tenant_id-Parameter und ergänzt keine Mandantenfilter.\n\nBeispiel: zelyra db query main.zyl \"SELECT count(*) AS total FROM invoices\" --format json\n\nBenötigt die konfigurierte Projektdatenbank.",
         _ => common_german_help(key),
     }
 }
@@ -190,14 +196,14 @@ fn common_german_help(key: &str) -> &'static str {
         "text-edit" => "Befehl: zelyra text edit <plan.zedit> [--apply --plan-id sha256:<id>]\n\nLiest einen strukturierten Änderungsplan mit Regex-Regeln. Standardmäßig werden nur Vorschau und Prüfsumme ausgegeben; Dateien bleiben unverändert.\n\nAnwenden:\n  zelyra text edit change.zedit\n  zelyra text edit change.zedit --apply --plan-id sha256:<id-aus-der-vorschau>\n\nJede Regel prüft ihre erwartete Trefferzahl. Der Plan muss innerhalb des Projekts liegen; Symlinks und sich überschneidende Regeln werden abgewiesen.",
         "update" => "Befehl: zelyra update [--check]\n\nPrüft auf ein neueres veröffentlichtes Zelyra-Release oder installiert es.\n  --check  Nur Version prüfen; nichts installieren\n\nBeispiele:\n  zelyra update --check\n  zelyra update",
         "uninstall" => "Befehl: zelyra uninstall [--yes] [--dry-run]\n\nEntfernt nur die aktuell ausgeführte Zelyra-Binärdatei. Projekte, Einstellungen, Logs und Datenbanken bleiben erhalten. Weitere Zelyra-Kopien im PATH werden angezeigt und nicht entfernt. Paketverwaltete Installationen müssen mit dem jeweiligen Paketmanager entfernt werden.\n\nOptionen:\n  --yes, -y  Entfernung ohne interaktive Rückfrage bestätigen\n  --dry-run  Ziel anzeigen, ohne Dateien zu ändern\n\nBeispiele:\n  zelyra uninstall --dry-run\n  zelyra uninstall",
-        "tutorial" | "check" | "routes" | "init" | "new" | "setup" | "setup-web" | "editor" | "run" | "serve" | "db-plan" | "db-apply" | "db-map" | "db-inspect" | "db-create" | "db-setup" | "db-bootstrap" | "db-history" => unreachable!(),
+        "tutorial" | "check" | "routes" | "init" | "new" | "setup" | "setup-web" | "editor" | "run" | "serve" | "db-plan" | "db-apply" | "db-map" | "db-inspect" | "db-create" | "db-setup" | "db-bootstrap" | "db-history" | "db-console" | "db-query" => unreachable!(),
         _ => "Für diesen Befehl gibt es noch keine ausführliche Hilfe. `zelyra --help` zeigt die Befehlsübersicht.",
     }
 }
 
 fn english_help(key: &str) -> &'static str {
     match key {
-        "db" => "Commands: zelyra db <create|setup|bootstrap|inspect|map|plan|apply|history> <file.zyl>
+        "db" => "Commands: zelyra db <create|setup|bootstrap|inspect|map|plan|apply|history|console|query> <file.zyl>
 
 Manage the database schema declared by a Zelyra project. `plan` previews changes; `apply` applies a reviewed plan.
 
@@ -219,6 +225,8 @@ Available operations and their limits:
   plan       Preview schema changes without modifying the database
   apply      Apply a reviewed schema change plan
   history    Inspect journaled MariaDB/MySQL migrations
+  console    Start the MariaDB/MySQL or PostgreSQL client with project credentials
+  query      Run one SQL query and print table, JSON, or CSV output
 
 A named connection takes precedence over `DATABASE_URL`. Help never prints credentials.",
         "fmt" => "Command: zelyra fmt <file.zyl> [--check]\n\nFormat a Zelyra source file canonically.\n  --check  Check whether the file is formatted; do not write changes.\n\nExamples:\n  zelyra fmt main.zyl\n  zelyra fmt src/invoices.zyl --check\n\nNo database access required.",
@@ -243,6 +251,8 @@ Schedules run inside `zelyra serve` only when that project is running as its ins
         "db-create" => "Command: zelyra db create <file.zyl>\n\nEmit checked CREATE SQL for the declared tables. This command does not connect to a database and does not create the database or tables.\n\nExample:\n  zelyra db create main.zyl\n  zelyra db create main.zyl > schema.sql\n\nTo create the MariaDB or MySQL database and apply its schema, run `zelyra db setup main.zyl`. For a local MariaDB Docker project, run `zelyra setup . --all`.",
         "db-setup" | "db-bootstrap" => "Command: zelyra db setup|bootstrap <file.zyl>\n\nMariaDB and MySQL: create the declared database if needed and apply its schema. SQLite: initialize the configured file and tables. PostgreSQL: `setup` is unsupported; use `zelyra db apply`. Review pending changes first with `zelyra db plan`.\n\nExamples:\n  zelyra db plan main.zyl\n  zelyra db setup main.zyl\n\nRequires the configured project database.",
         "db-history" => "Command: zelyra db history <file.zyl> [--format text|json]\n\nShow the progress of journaled MariaDB and MySQL schema migrations.\n\nExample: zelyra db history main.zyl\n\nRequires the configured MariaDB or MySQL project database.",
+        "db-console" => "Command: zelyra db console [file.zyl]\n\nStart the installed MariaDB/MySQL or PostgreSQL client with the project connection. Credentials are resolved from the process environment or project .env. Passwords are passed through MYSQL_PWD or PGPASSWORD, not as command-line arguments.\n\nExample: zelyra db console main.zyl\n\nThe matching client must be installed in PATH.",
+        "db-query" => "Command: zelyra db query <file.zyl> <SQL> [--format table|json|csv] [--tenant <id>] [--limit <n>] [--allow-mutation]\n\nRun one SQL statement. It uses a read-only transaction by default. --allow-mutation permits transactional INSERT, UPDATE, DELETE, and REPLACE; DDL is rejected. --tenant binds an explicit :tenant_id parameter and does not add tenant filters.\n\nExample: zelyra db query main.zyl \"SELECT count(*) AS total FROM invoices\" --format json\n\nRequires the configured project database.",
         _ => english_common_help(key),
     }
 }
@@ -290,7 +300,7 @@ fn english_common_help(key: &str) -> &'static str {
         "text-edit" => "Command: zelyra text edit <plan.zedit> [--apply --plan-id sha256:<id>]\n\nRead a structured change plan with regex rules. By default, print only a preview and plan digest; source files remain unchanged.\n\nApply a reviewed plan:\n  zelyra text edit change.zedit\n  zelyra text edit change.zedit --apply --plan-id sha256:<id-from-preview>\n\nEach rule checks its expected match count. Plans must stay inside the project; symlinks and overlapping rules are rejected.",
         "update" => "Command: zelyra update [--check]\n\nCheck for a newer published Zelyra release or install it.\n  --check  Check the version only; do not install\n\nExamples:\n  zelyra update --check\n  zelyra update",
         "uninstall" => "Command: zelyra uninstall [--yes] [--dry-run]\n\nRemove only the currently running Zelyra executable. Projects, settings, logs, and databases are kept. Other Zelyra copies on PATH are shown and left untouched. Package-managed installations must be removed with their package manager.\n\nOptions:\n  --yes, -y  Confirm without an interactive prompt\n  --dry-run  Show the target without changing files\n\nExamples:\n  zelyra uninstall --dry-run\n  zelyra uninstall",
-        "tutorial" | "check" | "routes" | "fmt" | "init" | "new" | "setup" | "setup-web" | "editor" | "run" | "serve" | "db-plan" | "db-apply" | "db-map" | "db-inspect" | "db-create" | "db-setup" | "db-bootstrap" | "db-history" => unreachable!(),
+        "tutorial" | "check" | "routes" | "fmt" | "init" | "new" | "setup" | "setup-web" | "editor" | "run" | "serve" | "db-plan" | "db-apply" | "db-map" | "db-inspect" | "db-create" | "db-setup" | "db-bootstrap" | "db-history" | "db-console" | "db-query" => unreachable!(),
         _ => "Detailed help is not available for this command yet. Run `zelyra --help` for the command overview.",
     }
 }

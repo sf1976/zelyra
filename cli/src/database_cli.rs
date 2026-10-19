@@ -968,6 +968,12 @@ pub(super) fn database_command(mut args: impl Iterator<Item = String>) -> ExitCo
     };
     let path = args.next().unwrap_or_else(|| "main.zyl".into());
     let remaining_args = args.collect::<Vec<_>>();
+    if subcommand == "console" {
+        return database_console(&path, &remaining_args);
+    }
+    if subcommand == "query" {
+        return database_query(&path, &remaining_args);
+    }
     let allow_risky = remaining_args.iter().any(|arg| arg == "--allow-risky");
     let allow_destructive = remaining_args
         .iter()
@@ -1380,6 +1386,796 @@ pub(super) fn database_command(mut args: impl Iterator<Item = String>) -> ExitCo
             database_usage();
             ExitCode::from(2)
         }
+    }
+}
+
+fn project_database_url(path: &str) -> Result<String, String> {
+    let project = load_project(path).map_err(|_| "project could not be loaded".to_owned())?;
+    let database_name = project
+        .program
+        .databases
+        .first()
+        .map(|database| database.name.as_str());
+    let entry = std::path::Path::new(path);
+    let directory = entry
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| std::path::Path::new("."));
+    let directory = std::fs::canonicalize(directory)
+        .map_err(|error| format!("could not resolve project directory: {error}"))?;
+    database_url_for_project(&directory, database_name)?
+        .ok_or_else(|| "DATABASE_URL is not configured for this project".to_owned())
+}
+
+fn database_console(path: &str, args: &[String]) -> ExitCode {
+    if !args.is_empty() {
+        database_usage();
+        return ExitCode::from(2);
+    }
+    let url = match project_database_url(path) {
+        Ok(url) => url,
+        Err(error) => {
+            eprintln!("error[E-CLI-DB-002]: {error}");
+            return ExitCode::from(1);
+        }
+    };
+    let credentials = match zelyra_database::ParsedDatabaseCredentials::parse(&url) {
+        Ok(credentials) => credentials,
+        Err(error) => {
+            eprintln!("error[E-CLI-DB-002]: {error}");
+            return ExitCode::from(1);
+        }
+    };
+    let (binary, arguments) = match credentials.backend {
+        Backend::MariaDb => {
+            let Some(binary) = find_executable(&["mariadb", "mysql"]) else {
+                eprintln!("error[E-CLI-DB-001]: database client binary 'mariadb' or 'mysql' not found in PATH. Install the client or run inside the container.");
+                return ExitCode::from(1);
+            };
+            (
+                binary,
+                vec![
+                    "--host".into(),
+                    credentials.host,
+                    "--port".into(),
+                    credentials.port.to_string(),
+                    "--user".into(),
+                    credentials.user,
+                    "--database".into(),
+                    credentials.database,
+                ],
+            )
+        }
+        Backend::Postgres => {
+            let Some(binary) = find_executable(&["psql"]) else {
+                eprintln!("error[E-CLI-DB-001]: database client binary 'psql' not found in PATH. Install the PostgreSQL client or run inside the container.");
+                return ExitCode::from(1);
+            };
+            (
+                binary,
+                vec![
+                    "-h".into(),
+                    credentials.host,
+                    "-p".into(),
+                    credentials.port.to_string(),
+                    "-U".into(),
+                    credentials.user,
+                    "-d".into(),
+                    credentials.database,
+                ],
+            )
+        }
+        Backend::Sqlite => unreachable!("credential parser does not return SQLite"),
+    };
+    let mut command = std::process::Command::new(binary);
+    command
+        .args(arguments)
+        .stdin(std::process::Stdio::inherit())
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit());
+    match credentials.backend {
+        Backend::MariaDb => {
+            if let Some(password) = credentials.password {
+                command.env("MYSQL_PWD", password);
+            }
+        }
+        Backend::Postgres => {
+            if let Some(password) = credentials.password {
+                command.env("PGPASSWORD", password);
+            }
+        }
+        Backend::Sqlite => {}
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        let error = command.exec();
+        eprintln!("error[E-CLI-DB-001]: failed to start database client: {error}");
+        ExitCode::from(1)
+    }
+    #[cfg(not(unix))]
+    {
+        match command.status() {
+            Ok(status) => ExitCode::from(status.code().unwrap_or(1).clamp(0, 255) as u8),
+            Err(error) => {
+                eprintln!("error[E-CLI-DB-001]: failed to start database client: {error}");
+                ExitCode::from(1)
+            }
+        }
+    }
+}
+
+fn find_executable(candidates: &[&str]) -> Option<std::path::PathBuf> {
+    env::split_paths(&env::var_os("PATH")?)
+        .flat_map(|directory| candidates.iter().map(move |name| directory.join(name)))
+        .find(|path| {
+            if !path.is_file() {
+                return false;
+            }
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                fs::metadata(path).is_ok_and(|metadata| metadata.permissions().mode() & 0o111 != 0)
+            }
+            #[cfg(not(unix))]
+            {
+                true
+            }
+        })
+}
+
+fn database_query(path: &str, args: &[String]) -> ExitCode {
+    let mut sql = None;
+    let mut format = "table";
+    let mut tenant = None;
+    let mut limit = None;
+    let mut allow_mutation = false;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--format" => {
+                let Some(value) = args.get(index + 1) else {
+                    database_usage();
+                    return ExitCode::from(2);
+                };
+                format = value;
+                index += 2;
+            }
+            "--tenant" => {
+                let Some(value) = args.get(index + 1) else {
+                    database_usage();
+                    return ExitCode::from(2);
+                };
+                tenant = Some(value.clone());
+                index += 2;
+            }
+            "--limit" => {
+                let Some(value) = args
+                    .get(index + 1)
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .filter(|value| *value > 0)
+                else {
+                    eprintln!("error[E-CLI-DB-003]: --limit requires a positive integer");
+                    return ExitCode::from(2);
+                };
+                limit = Some(value);
+                index += 2;
+            }
+            "--allow-mutation" => {
+                allow_mutation = true;
+                index += 1;
+            }
+            value if value.starts_with("--format=") => {
+                format = &value[9..];
+                index += 1;
+            }
+            value if value.starts_with("--tenant=") => {
+                tenant = Some(value[9..].to_owned());
+                index += 1;
+            }
+            value if value.starts_with("--limit=") => {
+                limit = value[8..].parse::<u64>().ok().filter(|value| *value > 0);
+                if limit.is_none() {
+                    eprintln!("error[E-CLI-DB-003]: --limit requires a positive integer");
+                    return ExitCode::from(2);
+                }
+                index += 1;
+            }
+            value if value.starts_with('-') => {
+                eprintln!("error[E-CLI-DB-003]: unknown option `{value}`");
+                return ExitCode::from(2);
+            }
+            value if sql.is_none() => {
+                sql = Some(value.to_owned());
+                index += 1;
+            }
+            _ => {
+                database_usage();
+                return ExitCode::from(2);
+            }
+        }
+    }
+    if !matches!(format, "table" | "json" | "csv") {
+        eprintln!("error[E-CLI-DB-003]: --format must be table, json, or csv");
+        return ExitCode::from(2);
+    }
+    let Some(mut sql) = sql else {
+        database_usage();
+        return ExitCode::from(2);
+    };
+    if !single_sql_statement(&sql) {
+        eprintln!("error[E-CLI-DB-004]: db query accepts exactly one SQL statement");
+        return ExitCode::from(2);
+    }
+    if !allow_mutation && !read_only_statement(&sql) {
+        eprintln!("error[E-CLI-DB-004]: only SELECT, WITH, SHOW, DESCRIBE, and EXPLAIN queries are allowed by default; pass --allow-mutation to opt in");
+        return ExitCode::from(1);
+    }
+    if allow_mutation && !read_only_statement(&sql) && !transactional_dml_statement(&sql) {
+        eprintln!("error[E-CLI-DB-004]: db query supports transactional INSERT, UPDATE, DELETE, and REPLACE mutations; use `db apply` or `db console` for DDL and other administrative statements");
+        return ExitCode::from(1);
+    }
+    if let Some(limit) = limit {
+        if allow_mutation {
+            eprintln!("error[E-CLI-DB-003]: --limit is only supported for read-only queries");
+            return ExitCode::from(2);
+        }
+        let statement = strip_sql_terminator(&sql);
+        sql = format!("SELECT * FROM (\n{statement}\n) AS _zelyra_query_limit LIMIT {limit}");
+    }
+    if tenant.is_some() && !has_named_parameter(&sql, "tenant_id") {
+        eprintln!("error[E-CLI-DB-005]: --tenant requires an explicit :tenant_id placeholder; it does not add row filtering automatically");
+        return ExitCode::from(2);
+    }
+    let params = tenant
+        .map(|value| {
+            let parsed = value
+                .parse::<i64>()
+                .map(zelyra_database::QueryValue::Int)
+                .unwrap_or(zelyra_database::QueryValue::String(value));
+            vec![("tenant_id".to_owned(), parsed)]
+        })
+        .unwrap_or_default();
+    let url = match project_database_url(path) {
+        Ok(url) => url,
+        Err(error) => {
+            eprintln!("error[E-CLI-DB-002]: {error}");
+            return ExitCode::from(1);
+        }
+    };
+    let result = if allow_mutation {
+        zelyra_database::execute_transactional_query(&url, &sql, params)
+    } else {
+        zelyra_database::execute_read_only_query(&url, &sql, params)
+    };
+    match result {
+        Ok(result) => {
+            print_query_result(&result, format);
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("error[E-CLI-DB-006]: {error}");
+            ExitCode::from(1)
+        }
+    }
+}
+
+fn read_only_statement(sql: &str) -> bool {
+    let first = first_sql_keyword(sql);
+    let upper = sql.to_ascii_uppercase();
+    matches!(
+        first.as_str(),
+        "SELECT" | "WITH" | "SHOW" | "DESCRIBE" | "DESC" | "EXPLAIN"
+    ) && ![
+        "INTO OUTFILE",
+        "INTO DUMPFILE",
+        "FOR UPDATE",
+        "LOCK IN SHARE MODE",
+        "LOAD_FILE(",
+    ]
+    .iter()
+    .any(|unsafe_clause| upper.contains(unsafe_clause))
+}
+
+fn transactional_dml_statement(sql: &str) -> bool {
+    matches!(
+        first_sql_keyword(sql).as_str(),
+        "INSERT" | "UPDATE" | "DELETE" | "REPLACE"
+    )
+}
+
+fn first_sql_keyword(sql: &str) -> String {
+    sql.trim_start()
+        .split(|character: char| !character.is_ascii_alphabetic())
+        .next()
+        .unwrap_or("")
+        .to_ascii_uppercase()
+}
+
+fn single_sql_statement(sql: &str) -> bool {
+    let bytes = sql.as_bytes();
+    let (mut index, mut quote, mut line_comment, mut block_comment) = (0, None, false, false);
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if line_comment {
+            if byte == b'\n' {
+                line_comment = false;
+            }
+            index += 1;
+            continue;
+        }
+        if block_comment {
+            if byte == b'*' && bytes.get(index + 1) == Some(&b'/') {
+                block_comment = false;
+                index += 2;
+            } else {
+                index += 1;
+            }
+            continue;
+        }
+        if let Some(delimiter) = quote {
+            if byte == delimiter {
+                if bytes.get(index + 1) == Some(&delimiter) {
+                    index += 2;
+                } else {
+                    quote = None;
+                    index += 1;
+                }
+            } else if byte == b'\\' && matches!(delimiter, b'\'' | b'"') {
+                index = (index + 2).min(bytes.len());
+            } else {
+                index += 1;
+            }
+            continue;
+        }
+        if byte == b'-' && bytes.get(index + 1) == Some(&b'-') {
+            line_comment = true;
+            index += 2;
+            continue;
+        }
+        if byte == b'/' && bytes.get(index + 1) == Some(&b'*') {
+            block_comment = true;
+            index += 2;
+            continue;
+        }
+        if matches!(byte, b'\'' | b'"' | b'`') {
+            quote = Some(byte);
+            index += 1;
+            continue;
+        }
+        if byte == b';' {
+            return only_sql_trivia(&bytes[index + 1..]);
+        }
+        index += 1;
+    }
+    quote.is_none() && !block_comment
+}
+
+fn strip_sql_terminator(sql: &str) -> String {
+    let bytes = sql.as_bytes();
+    let (mut index, mut quote, mut line_comment, mut block_comment) = (0, None, false, false);
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if line_comment {
+            if byte == b'\n' {
+                line_comment = false;
+            }
+            index += 1;
+            continue;
+        }
+        if block_comment {
+            if byte == b'*' && bytes.get(index + 1) == Some(&b'/') {
+                block_comment = false;
+                index += 2;
+            } else {
+                index += 1;
+            }
+            continue;
+        }
+        if let Some(delimiter) = quote {
+            if byte == delimiter {
+                if bytes.get(index + 1) == Some(&delimiter) {
+                    index += 2;
+                } else {
+                    quote = None;
+                    index += 1;
+                }
+            } else if byte == b'\\' && matches!(delimiter, b'\'' | b'"') {
+                index = (index + 2).min(bytes.len());
+            } else {
+                index += 1;
+            }
+            continue;
+        }
+        if byte == b'-' && bytes.get(index + 1) == Some(&b'-') {
+            line_comment = true;
+            index += 2;
+            continue;
+        }
+        if byte == b'/' && bytes.get(index + 1) == Some(&b'*') {
+            block_comment = true;
+            index += 2;
+            continue;
+        }
+        if matches!(byte, b'\'' | b'"' | b'`') {
+            quote = Some(byte);
+            index += 1;
+            continue;
+        }
+        if byte == b';' {
+            return sql[..index].trim().to_owned();
+        }
+        index += 1;
+    }
+    sql.trim().to_owned()
+}
+
+fn has_named_parameter(sql: &str, name: &str) -> bool {
+    let bytes = sql.as_bytes();
+    let (mut index, mut quote, mut line_comment, mut block_comment) = (0, None, false, false);
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if line_comment {
+            if byte == b'\n' {
+                line_comment = false;
+            }
+            index += 1;
+            continue;
+        }
+        if block_comment {
+            if byte == b'*' && bytes.get(index + 1) == Some(&b'/') {
+                block_comment = false;
+                index += 2;
+            } else {
+                index += 1;
+            }
+            continue;
+        }
+        if let Some(delimiter) = quote {
+            if byte == delimiter {
+                if bytes.get(index + 1) == Some(&delimiter) {
+                    index += 2;
+                } else {
+                    quote = None;
+                    index += 1;
+                }
+            } else if byte == b'\\' && matches!(delimiter, b'\'' | b'"') {
+                index = (index + 2).min(bytes.len());
+            } else {
+                index += 1;
+            }
+            continue;
+        }
+        if byte == b'-' && bytes.get(index + 1) == Some(&b'-') {
+            line_comment = true;
+            index += 2;
+            continue;
+        }
+        if byte == b'/' && bytes.get(index + 1) == Some(&b'*') {
+            block_comment = true;
+            index += 2;
+            continue;
+        }
+        if matches!(byte, b'\'' | b'"' | b'`') {
+            quote = Some(byte);
+            index += 1;
+            continue;
+        }
+        if byte == b':'
+            && bytes.get(index.wrapping_sub(1)) != Some(&b':')
+            && bytes.get(index + 1).is_some_and(u8::is_ascii_alphabetic)
+        {
+            let begin = index + 1;
+            index = begin + 1;
+            while bytes
+                .get(index)
+                .is_some_and(|byte| byte.is_ascii_alphanumeric() || *byte == b'_')
+            {
+                index += 1;
+            }
+            if &sql[begin..index] == name {
+                return true;
+            }
+            continue;
+        }
+        index += 1;
+    }
+    false
+}
+
+fn only_sql_trivia(bytes: &[u8]) -> bool {
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index].is_ascii_whitespace() {
+            index += 1;
+        } else if bytes[index] == b'-' && bytes.get(index + 1) == Some(&b'-') {
+            index += 2;
+            while index < bytes.len() && bytes[index] != b'\n' {
+                index += 1;
+            }
+        } else if bytes[index] == b'/' && bytes.get(index + 1) == Some(&b'*') {
+            index += 2;
+            let Some(end) = bytes[index..].windows(2).position(|pair| pair == b"*/") else {
+                return false;
+            };
+            index += end + 2;
+        } else {
+            return false;
+        }
+    }
+    true
+}
+
+fn print_query_result(result: &zelyra_database::QueryResult, format: &str) {
+    match format {
+        "json" => {
+            let rows = result
+                .rows
+                .iter()
+                .enumerate()
+                .map(|(row_index, row)| {
+                    let mut object = serde_json::Map::new();
+                    for (column_index, value) in row.iter().enumerate() {
+                        let null = result
+                            .nulls
+                            .get(row_index)
+                            .and_then(|values| values.get(column_index))
+                            .copied()
+                            .unwrap_or(false);
+                        let kind = result
+                            .column_types
+                            .get(column_index)
+                            .copied()
+                            .unwrap_or(zelyra_database::QueryColumnType::Text);
+                        let json = if null {
+                            Value::Null
+                        } else {
+                            query_cell_json(value, kind)
+                        };
+                        let name = result
+                            .columns
+                            .get(column_index)
+                            .cloned()
+                            .unwrap_or_else(|| format!("column{}", column_index + 1));
+                        let mut unique_name = name.clone();
+                        let mut suffix = 2;
+                        while object.contains_key(&unique_name) {
+                            unique_name = format!("{name}#{suffix}");
+                            suffix += 1;
+                        }
+                        object.insert(unique_name, json);
+                    }
+                    Value::Object(object)
+                })
+                .collect::<Vec<_>>();
+            println!("{}", Value::Array(rows));
+        }
+        "csv" => {
+            print!("{}", format_query_csv(result));
+        }
+        _ => print_ascii_table(result),
+    }
+}
+
+fn query_cell_json(value: &str, kind: zelyra_database::QueryColumnType) -> Value {
+    use zelyra_database::QueryColumnType as T;
+    match kind {
+        T::Integer => value
+            .parse::<i64>()
+            .map_or_else(|_| Value::String(value.to_owned()), |v| json!(v)),
+        T::Decimal | T::Float => serde_json::from_str::<serde_json::Number>(value)
+            .map(Value::Number)
+            .unwrap_or_else(|_| Value::String(value.to_owned())),
+        T::Bool => match value {
+            "1" | "true" | "TRUE" => Value::Bool(true),
+            "0" | "false" | "FALSE" => Value::Bool(false),
+            _ => Value::String(value.to_owned()),
+        },
+        T::Json => serde_json::from_str(value).unwrap_or_else(|_| Value::String(value.to_owned())),
+        _ => Value::String(value.to_owned()),
+    }
+}
+
+fn csv_field(value: &str) -> String {
+    if value
+        .bytes()
+        .any(|byte| matches!(byte, b',' | b'"' | b'\r' | b'\n'))
+    {
+        format!("\"{}\"", value.replace('"', "\"\""))
+    } else {
+        value.to_owned()
+    }
+}
+
+fn format_query_csv(result: &zelyra_database::QueryResult) -> String {
+    let mut output = String::new();
+    output.push_str(
+        &result
+            .columns
+            .iter()
+            .map(|value| csv_field(value))
+            .collect::<Vec<_>>()
+            .join(","),
+    );
+    output.push_str("\r\n");
+    for (row_index, row) in result.rows.iter().enumerate() {
+        let fields = row
+            .iter()
+            .enumerate()
+            .map(|(column_index, value)| {
+                let is_null = result
+                    .nulls
+                    .get(row_index)
+                    .and_then(|nulls| nulls.get(column_index))
+                    .copied()
+                    .unwrap_or(false);
+                if is_null {
+                    String::new()
+                } else {
+                    csv_field(value)
+                }
+            })
+            .collect::<Vec<_>>();
+        output.push_str(&fields.join(","));
+        output.push_str("\r\n");
+    }
+    output
+}
+
+fn print_ascii_table(result: &zelyra_database::QueryResult) {
+    let widths = (0..result.columns.len())
+        .map(|column| {
+            std::iter::once(result.columns[column].len())
+                .chain(
+                    result
+                        .rows
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(row_index, row)| {
+                            row.get(column).map(|value| {
+                                if result
+                                    .nulls
+                                    .get(row_index)
+                                    .and_then(|nulls| nulls.get(column))
+                                    .copied()
+                                    .unwrap_or(false)
+                                {
+                                    4
+                                } else {
+                                    value.chars().count()
+                                }
+                            })
+                        }),
+                )
+                .max()
+                .unwrap_or(0)
+        })
+        .collect::<Vec<_>>();
+    let border = format!(
+        "+{}+",
+        widths
+            .iter()
+            .map(|width| "-".repeat(width + 2))
+            .collect::<Vec<_>>()
+            .join("+")
+    );
+    println!("{border}");
+    print_table_row(&result.columns, &widths);
+    println!("{border}");
+    for (row_index, row) in result.rows.iter().enumerate() {
+        let display_row = row
+            .iter()
+            .enumerate()
+            .map(|(column_index, value)| {
+                if result
+                    .nulls
+                    .get(row_index)
+                    .and_then(|nulls| nulls.get(column_index))
+                    .copied()
+                    .unwrap_or(false)
+                {
+                    "NULL".to_owned()
+                } else {
+                    value.clone()
+                }
+            })
+            .collect::<Vec<_>>();
+        print_table_row(&display_row, &widths);
+    }
+    println!("{border}");
+}
+
+fn print_table_row(row: &[String], widths: &[usize]) {
+    print!("|");
+    for (index, width) in widths.iter().enumerate() {
+        let value = row.get(index).map(String::as_str).unwrap_or("");
+        print!(" {value:<width$} |", width = width);
+    }
+    println!();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn accepts_one_statement_with_trailing_semicolon_and_quoted_semicolons() {
+        assert!(single_sql_statement(
+            "SELECT ';' AS value; -- trailing comment"
+        ));
+        assert!(single_sql_statement("SELECT 1 /* ; */;"));
+        assert!(!single_sql_statement("SELECT 1; DROP TABLE users"));
+    }
+
+    #[test]
+    fn default_query_allowlist_is_read_oriented() {
+        assert!(read_only_statement("SELECT 1"));
+        assert!(read_only_statement(
+            "WITH rows AS (SELECT 1) SELECT * FROM rows"
+        ));
+        assert!(read_only_statement("SHOW TABLES"));
+        assert!(!read_only_statement("DELETE FROM users"));
+        assert!(!read_only_statement("UPDATE users SET active = false"));
+        assert!(!read_only_statement("SELECT id FROM users FOR UPDATE"));
+        assert!(transactional_dml_statement("INSERT INTO users VALUES (1)"));
+        assert!(!transactional_dml_statement("DROP TABLE users"));
+    }
+
+    #[test]
+    fn tenant_parameter_detection_ignores_sql_literals_and_comments() {
+        assert!(has_named_parameter(
+            "SELECT * FROM t WHERE tenant_id = :tenant_id",
+            "tenant_id"
+        ));
+        assert!(!has_named_parameter("SELECT ':tenant_id'", "tenant_id"));
+        assert!(!has_named_parameter(
+            "SELECT 1 -- :tenant_id\n",
+            "tenant_id"
+        ));
+        assert!(!has_named_parameter("SELECT 1::integer", "tenant_id"));
+    }
+
+    #[test]
+    fn limit_wrapper_removes_only_the_statement_terminator() {
+        assert_eq!(
+            strip_sql_terminator("SELECT ';' AS value; -- done"),
+            "SELECT ';' AS value"
+        );
+    }
+
+    #[test]
+    fn csv_fields_follow_rfc4180_quoting_rules() {
+        assert_eq!(csv_field("simple"), "simple");
+        assert_eq!(csv_field("a,b"), "\"a,b\"");
+        assert_eq!(csv_field("a\"b"), "\"a\"\"b\"");
+        assert_eq!(csv_field("a\nb"), "\"a\nb\"");
+    }
+
+    #[test]
+    fn csv_output_uses_crlf_and_represents_sql_null_as_empty() {
+        let result = zelyra_database::QueryResult {
+            columns: vec!["name".into(), "note".into()],
+            rows: vec![vec!["a,b".into(), "\\N".into()]],
+            nulls: vec![vec![false, true]],
+            column_types: Vec::new(),
+        };
+        assert_eq!(format_query_csv(&result), "name,note\r\n\"a,b\",\r\n");
+    }
+
+    #[test]
+    fn json_values_retain_scalar_types_and_text() {
+        assert_eq!(
+            query_cell_json("1", zelyra_database::QueryColumnType::Integer),
+            json!(1)
+        );
+        assert_eq!(
+            query_cell_json("12.50", zelyra_database::QueryColumnType::Decimal),
+            serde_json::from_str::<Value>("12.50").unwrap()
+        );
+        assert_eq!(
+            query_cell_json("hello", zelyra_database::QueryColumnType::Text),
+            json!("hello")
+        );
     }
 }
 
