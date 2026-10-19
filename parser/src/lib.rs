@@ -823,6 +823,7 @@ impl<'a> Parser<'a> {
         let mut delete_permissions = Vec::new();
         let mut conditional_permissions = Vec::new();
         let mut guards = Vec::new();
+        let mut children = Vec::new();
         let mut actions = Vec::new();
 
         if self.at(&TokenKind::LBrace) {
@@ -934,12 +935,22 @@ impl<'a> Parser<'a> {
                     TokenKind::Ident(name) if name == "guard" => {
                         guards.push(self.crud_guard_definition()?);
                     }
+                    TokenKind::Ident(name) if name == "has_many" => {
+                        let child = self.crud_child_relation_definition()?;
+                        if children.iter().any(|existing: &zelyra_ast::CrudChildRelationDef| existing.name == child.name) {
+                            return Err(ParseError {
+                                message: format!("duplicate CRUD child relation `{}`", child.name),
+                                span: child.span,
+                            });
+                        }
+                        children.push(child);
+                    }
                     TokenKind::Action => {
                         actions.push(self.form_action()?);
                     }
                     _ => {
                         return self.error(
-                            "expected title, layout, slots, tenant, recipient, unread, expires, list, search, filter, view, requires auth, permits, or action in CRUD definition",
+                            "expected title, layout, slots, tenant, recipient, unread, expires, list, search, filter, view, requires auth, permits, guard, has_many, or action in CRUD definition",
                         )
                     }
                 }
@@ -968,6 +979,7 @@ impl<'a> Parser<'a> {
                 delete_permissions,
                 conditional_permissions,
                 guards,
+                children,
                 actions,
                 span: start.join(end),
             });
@@ -995,8 +1007,105 @@ impl<'a> Parser<'a> {
             delete_permissions,
             conditional_permissions,
             guards,
+            children,
             actions,
             span: start.join(table_span),
+        })
+    }
+
+    fn crud_child_relation_definition(
+        &mut self,
+    ) -> Result<zelyra_ast::CrudChildRelationDef, ParseError> {
+        let (_, start) = self.ident("`has_many`")?;
+        let (name, _) = self.ident("child collection name")?;
+        self.expect(TokenKind::Colon, "`:` after child collection name")?;
+        let (model, _) = self.ident("child model name")?;
+        self.expect(TokenKind::LBrace, "`{` after child model")?;
+        let mut foreign_key = None;
+        let mut order_by = None;
+        let mut descending = false;
+        let mut on_delete = None;
+        let mut aggregates = Vec::new();
+        self.skip_newlines();
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            let (property, property_span) = self.ident("child relation property")?;
+            match property.as_str() {
+                "foreign_key" => {
+                    self.expect(TokenKind::Colon, "`:` after `foreign_key`")?;
+                    if foreign_key.replace(self.ident("child foreign-key field")?.0).is_some() {
+                        return Err(ParseError { message: "duplicate `foreign_key` in CRUD child relation".into(), span: property_span });
+                    }
+                }
+                "order_by" => {
+                    self.expect(TokenKind::Colon, "`:` after `order_by`")?;
+                    let (column, _) = self.ident("child ordering field")?;
+                    if order_by.replace(column).is_some() {
+                        return Err(ParseError { message: "duplicate `order_by` in CRUD child relation".into(), span: property_span });
+                    }
+                    let direction = self.ident("`asc` or `desc` after child ordering field")?.0;
+                    descending = match direction.as_str() {
+                        "asc" => false,
+                        "desc" => true,
+                        _ => return self.error("child ordering direction must be `asc` or `desc`"),
+                    };
+                }
+                "cascade" => {
+                    self.expect(TokenKind::Colon, "`:` after `cascade`")?;
+                    let value = self.ident("`delete` or `restrict` after `cascade`")?.0;
+                    let action = match value.as_str() {
+                        "delete" => zelyra_ast::ReferentialAction::Cascade,
+                        "restrict" => zelyra_ast::ReferentialAction::Restrict,
+                        _ => return self.error("CRUD child cascade must be `delete` or `restrict`"),
+                    };
+                    if on_delete.replace(action).is_some() {
+                        return Err(ParseError { message: "duplicate `cascade` in CRUD child relation".into(), span: property_span });
+                    }
+                }
+                "aggregates" => {
+                    self.expect(TokenKind::LBrace, "`{` after `aggregates`")?;
+                    self.skip_newlines();
+                    while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                        let (target, target_span) = self.ident("aggregate target column")?;
+                        self.expect(TokenKind::Colon, "`:` after aggregate target")?;
+                        let (function, function_span) = self.ident("aggregate function `sum`")?;
+                        if function != "sum" {
+                            return Err(ParseError { message: "supported CRUD aggregate function is `sum`".into(), span: function_span });
+                        }
+                        self.expect(TokenKind::LParen, "`(` after aggregate function")?;
+                        let expression = self.expression()?;
+                        let end = self.expect(TokenKind::RParen, "`)` after aggregate expression")?;
+                        if aggregates.iter().any(|entry: &zelyra_ast::CrudAggregateDef| entry.target == target) {
+                            return Err(ParseError { message: format!("duplicate aggregate target `{target}`"), span: target_span });
+                        }
+                        aggregates.push(zelyra_ast::CrudAggregateDef {
+                            target,
+                            expression,
+                            span: target_span.join(end),
+                        });
+                        self.skip_newlines();
+                    }
+                    self.expect(TokenKind::RBrace, "`}` after child aggregates")?;
+                }
+                _ => return self.error("expected `foreign_key`, `order_by`, `cascade`, or `aggregates` in CRUD child relation"),
+            }
+            self.skip_newlines();
+        }
+        let end = self.expect(TokenKind::RBrace, "`}` after CRUD child relation")?;
+        let Some(foreign_key) = foreign_key else {
+            return Err(ParseError {
+                message: "CRUD child relation requires `foreign_key`".into(),
+                span: start.join(end),
+            });
+        };
+        Ok(zelyra_ast::CrudChildRelationDef {
+            name,
+            model,
+            foreign_key,
+            order_by,
+            descending,
+            on_delete,
+            aggregates,
+            span: start.join(end),
         })
     }
 
@@ -5561,6 +5670,60 @@ mod tests {
         assert_eq!(program.cruds.len(), 1);
         assert_eq!(program.cruds[0].name, "Machine");
         assert_eq!(program.cruds[0].table, "machines");
+    }
+
+    #[test]
+    fn parses_typed_crud_child_collection_and_aggregates() {
+        let source = r#"
+            crud Invoice -> invoices {
+                has_many items: InvoiceItem {
+                    foreign_key: invoice_id
+                    order_by: position asc
+                    cascade: delete
+                    aggregates {
+                        net_amount: sum(total_net)
+                        tax_amount: sum(total_gross - total_net)
+                    }
+                }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let child = &program.cruds[0].children[0];
+        assert_eq!(child.name, "items");
+        assert_eq!(child.model, "InvoiceItem");
+        assert_eq!(child.foreign_key, "invoice_id");
+        assert_eq!(child.order_by.as_deref(), Some("position"));
+        assert!(!child.descending);
+        assert_eq!(
+            child.on_delete,
+            Some(zelyra_ast::ReferentialAction::Cascade)
+        );
+        assert_eq!(child.aggregates.len(), 2);
+        assert_eq!(child.aggregates[1].target, "tax_amount");
+        assert!(child.span.start < child.span.end);
+    }
+
+    #[test]
+    fn rejects_duplicate_crud_child_and_aggregate_declarations() {
+        let duplicate_child = r#"crud Invoice -> invoices {
+            has_many items: InvoiceItem { foreign_key: invoice_id }
+            has_many items: InvoiceItem { foreign_key: invoice_id }
+        }"#;
+        assert!(parse(&lex(duplicate_child).unwrap())
+            .unwrap_err()
+            .message
+            .contains("duplicate CRUD child relation"));
+
+        let duplicate_aggregate = r#"crud Invoice -> invoices {
+            has_many items: InvoiceItem {
+                foreign_key: invoice_id
+                aggregates { net_amount: sum(total_net) net_amount: sum(total_gross) }
+            }
+        }"#;
+        assert!(parse(&lex(duplicate_aggregate).unwrap())
+            .unwrap_err()
+            .message
+            .contains("duplicate aggregate target"));
     }
 
     #[test]

@@ -1445,6 +1445,37 @@ Wenn eine Auth-Definition eine Audit-Tabelle angibt, schreiben CRUD-Erstellen,
 Ereignisse in derselben MariaDB-Transaktion. Passwörter, Tokens, Geheimnisse
 und Hashes werden aus Änderungsdetails entfernt.
 
+### Master-Detail-Formulare mit `has_many`
+
+🧪 Ein CRUD kann auf Create und Edit eine direkte Kinddatensammlung erzeugen.
+Das Kindmodell muss einen Fremdschlüssel zum CRUD-Elternmodell deklarieren.
+Die Zeilen werden serverseitig gerendert; pro Submit sind höchstens 50 Zeilen
+zulässig. Kind-IDs, Elternfremdschlüssel und Tenant-Schlüssel werden nicht aus
+dem Browser übernommen.
+
+~~~zelyra
+crud Invoice -> invoices {
+    view { fields { invoice_date } }
+
+    has_many items: InvoiceItem {
+        foreign_key: invoice_id
+        order_by: position asc
+        cascade: delete
+        aggregates {
+            net_amount: sum(total_net)
+            gross_amount: sum(total_gross)
+        }
+    }
+}
+~~~
+
+Eltern- und Kindschreibvorgänge, Kindtabellen-Invarianten und
+Aggregataktualisierungen laufen in einer Transaktion. Bei Edit werden die
+vorhandenen Kinder zum Elternsatz geladen und beim Speichern atomar ersetzt.
+Das Schema bestimmt das Löschverhalten. Diese Version unterstützt eine direkte
+Kinddatensammlung pro CRUD; mehrere oder verschachtelte Sammlungen sowie
+clientseitig maßgebliche Aggregate werden nicht unterstützt.
+
 ## 13. Authentifizierung und Berechtigungen
 
 🧪 Zelyra unterstützt Argon2-Login, persistente MariaDB-Sessions, Logout,

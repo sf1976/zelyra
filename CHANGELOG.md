@@ -1,5 +1,17 @@
 ## Unreleased
 
+## 1.2.22 — 2026-10-19
+
+- Add compiler-checked direct `has_many` child collections to generated CRUD
+  Create/Edit forms, with bounded accessible rows, child-specific validation,
+  and transactional parent/child writes and aggregate recomputation. One child
+  collection and at most 50 rows per submission are supported. / Generierten
+  CRUD-Create-/Edit-Formularen compilergeprüfte direkte `has_many`-
+  Kinddatensammlungen mit barrierearmen, begrenzten Zeilen,
+  kindbezogener Validierung sowie transaktionalem Speichern und
+  Aggregatberechnung hinzufügen. Eine Kinddatensammlung und höchstens 50
+  Zeilen pro Submit werden unterstützt.
+
 ## 1.2.21 — 2026-10-19
 
 - Add checked table invariants to declarative forms and generated CRUD writes,
