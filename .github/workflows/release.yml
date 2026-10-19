@@ -59,6 +59,9 @@ on:
       - 'docs/release-notes/1.0.7.de.md'
       - 'docs/release-notes/1.1.5.*.md'
       - 'docs/release-plans/1.1.5.*.md'
+      - 'docs/release-plans/1.2.21-crud-lifecycle-policies.*.md'
+      - 'docs/release-notes/1.2.21.en.md'
+      - 'docs/release-notes/1.2.21.de.md'
       - 'docs/packages.*.md'
       - 'docs/handbook/en/textbook-foundations.md'
       - 'docs/handbook/de/lehrbuch-grundlagen.md'
@@ -371,6 +374,8 @@ jobs:
             ${{ needs.validate.outputs.release_tag == 'v1.1.5' && 'Install on Linux/macOS: `./install.sh --release v1.1.5`. Install on Windows: `.\install.ps1 -Release v1.1.5`. Release assets and SHA-256 files are attached below.' || '' }}
             ${{ needs.validate.outputs.release_tag == 'v1.1.2' && 'The experimental Laravel analyzer and scaffold command have been removed from the CLI and current documentation. This release does not include a Laravel importer. See the [English release notes](https://github.com/sf1976/zelyra/blob/v1.1.2/docs/release-notes/1.1.2.en.md).' || '' }}
             ${{ needs.validate.outputs.release_tag == 'v1.1.2' && 'Install on Linux/macOS: `./install.sh --release v1.1.2`. Install on Windows: `.\install.ps1 -Release v1.1.2`. Linux and Windows archives include SHA-256 sidecars and SPDX SBOMs.' || '' }}
+            ${{ needs.validate.outputs.release_tag == 'v1.2.21' && 'Typed table invariants for forms, generated CRUD and explicitly bound unscoped APIs; row-conditioned CRUD edit/delete policies checked against stored records and under mutation locks. Scoped API validation and raw SQL writes remain outside these invariant checks. See [English release notes](https://github.com/sf1976/zelyra/blob/v1.2.21/docs/release-notes/1.2.21.en.md). Linux and Windows archives include SHA-256 sidecars and SPDX SBOMs.' || '' }}
+            ${{ needs.validate.outputs.release_tag == 'v1.2.21' && 'Install on Linux/macOS: `./install.sh --release v1.2.21`. Install on Windows: `.\install.ps1 -Release v1.2.21`. Release assets and SHA-256 files are attached below.' || '' }}
 
             ## Zelyra ${{ needs.validate.outputs.release_tag }} (Deutsch)
 
@@ -386,6 +391,8 @@ jobs:
             ${{ needs.validate.outputs.release_tag == 'v1.1.5' && 'Installation unter Linux/macOS: `./install.sh --release v1.1.5`. Installation unter Windows: `.\install.ps1 -Release v1.1.5`. Release-Artefakte und SHA-256-Dateien sind unten angehängt.' || '' }}
             ${{ needs.validate.outputs.release_tag == 'v1.1.2' && 'Der experimentelle Laravel-Analysator und Gerüstbefehl wurden aus CLI und aktueller Dokumentation entfernt. Dieses Release enthält keinen Laravel-Importer. Siehe die [deutschen Release-Hinweise](https://github.com/sf1976/zelyra/blob/v1.1.2/docs/release-notes/1.1.2.de.md).' || '' }}
             ${{ needs.validate.outputs.release_tag == 'v1.1.2' && 'Installation unter Linux/macOS: `./install.sh --release v1.1.2`. Installation unter Windows: `.\install.ps1 -Release v1.1.2`. Linux- und Windows-Archive enthalten SHA-256-Dateien und SPDX-SBOMs.' || '' }}
+            ${{ needs.validate.outputs.release_tag == 'v1.2.21' && 'Typgeprüfte Tabelleninvarianten für Formulare, generiertes CRUD und ausdrücklich gebundene unscoped APIs; datensatzabhängige Bearbeiten-/Löschen-Rechte werden am gespeicherten Datensatz und unter Mutationssperren geprüft. Scoped API-Validierung und rohe SQL-Schreibvorgänge liegen weiterhin außerhalb dieser Prüfungen. Siehe die [deutschen Release-Hinweise](https://github.com/sf1976/zelyra/blob/v1.2.21/docs/release-notes/1.2.21.de.md). Linux- und Windows-Archive enthalten SHA-256-Dateien und SPDX-SBOMs.' || '' }}
+            ${{ needs.validate.outputs.release_tag == 'v1.2.21' && 'Installation unter Linux/macOS: `./install.sh --release v1.2.21`. Installation unter Windows: `.\install.ps1 -Release v1.2.21`. Release-Artefakte und SHA-256-Dateien sind unten angehängt.' || '' }}
 
             ${{ needs.validate.outputs.release_tag == 'v0.3.0' && 'No independent human onboarding study was conducted for 0.3.0. The project owner explicitly deferred it to 0.4.0; this is not usability evidence. See the [decision record](https://github.com/sf1976/zelyra/blob/v0.3.0/docs/release-readiness/0.3.0-human-gate-decision.en.md).' || '' }}
 

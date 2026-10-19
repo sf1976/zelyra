@@ -204,14 +204,15 @@ abgeschlossen.
   Unique-Index, weist mehrdeutige Deklarationen ab und verlangt bei
   Schemaänderungen Prüfung samt Duplikat-Preflight. Das Beheben bestehender
   Daten bleibt eine ausdrückliche Betreiberaufgabe.
-- [~] **1.2.20 — Tabellen- und Formularinvarianten:** Typgeprüfte,
-  feldübergreifende Validierung mit source-mapped Diagnosen und konsistenten
-  Prüfungen vor Datenbankänderungen in generiertem CRUD und APIs ergänzen.
-  Backends, die die geprüfte Semantik nicht erhalten, müssen den Pfad abweisen.
-  Der aktuelle Branch prüft deklarative Formulare und generiertes CRUD vor
-  Schreibaktionen; die Bindung beliebiger APIs an Tabellen ist noch offen.
+- [~] **1.2.20 — Tabellen- und Formularinvarianten (in 1.2.21 veröffentlicht):**
+  Typgeprüfte, feldübergreifende Validierung mit source-mapped Diagnosen und
+  konsistenten Prüfungen vor Datenbankänderungen in generiertem CRUD und APIs
+  ergänzen. Backends, die die geprüfte Semantik nicht erhalten, müssen den Pfad
+  abweisen. Deklarative Formulare und generiertes CRUD prüfen Regeln vor
+  Schreibaktionen; scoped API-Bindungen bleiben ohne geprüften Tenant-Kontext
+  ausgeschlossen und rohe SQL-Schreibvorgänge sind nicht abgedeckt.
   Siehe [`table-invariants.de.md`](table-invariants.de.md).
-- [~] **1.2.21 — Lifecycle-Guards und datensatzabhängige CRUD-Rechte:**
+- [x] **1.2.21 — Lifecycle-Guards und datensatzabhängige CRUD-Rechte:**
   Parser und Typprüfung senken Datensatzbedingungen jetzt auf gewöhnliche,
   typgeprüfte Bool-Funktionen ab. Edit-Guards und bedingte Rechte werden beim
   Öffnen des Formulars und erneut unter der Zeilensperre der Edit-Transaktion
@@ -221,8 +222,10 @@ abgeschlossen.
   TableView-Slots müssen ihr CRUD-Modell nennen und die vollständige typisierte
   Zeile auswählen; unvollständige Policy-Zeilen weist der Compiler ab.
   MariaDB-Integrationstests für direkte Requests und die Zeilensperren-Race-Case
-  laufen jetzt im CI-Workflow; lokal sind sie bestanden, der vollständige
-  externe PR-CI-Lauf steht noch aus. Eigene Aktionen bleiben an typgeprüfte
+  laufen im CI-Workflow; lokale Tests und die vollständige externe CI des
+  zusammengeführten PRs waren erfolgreich. Relationswerte werden außerdem bei
+  Tabelleninvarianten korrekt aufgelöst; Tabellen ohne Regeln überspringen den
+  Auswerter. Eigene Aktionen bleiben an typgeprüfte
   Funktionen mit Capabilityprüfung gebunden. Siehe das
   [Arbeitsprotokoll 1.2.21](release-plans/1.2.21-crud-lifecycle-policies.de.md).
 - [ ] **1.2.22 — transaktionales Master-Detail-CRUD:** Typisierte
