@@ -766,6 +766,38 @@ cannot determine whether a statement interrupted while running partially
 changed the schema. The reserved history table is omitted from normal schema
 inspection.
 
+### Direct database queries and database console
+
+`zelyra db console` starts the matching MariaDB/MySQL or PostgreSQL client on
+the host. Zelyra resolves the connection from `ZELYRA_DATABASE_<NAME>_URL`,
+then `DATABASE_URL`, checking the process environment before the project
+`.env`. Passwords are passed to the client through `MYSQL_PWD` or `PGPASSWORD`,
+never as command-line arguments. The client program must be installed locally.
+
+~~~bash
+zelyra db console src/main.zyl
+~~~
+
+For one-off queries, `db query` uses a database-enforced read-only transaction
+by default. `--allow-mutation` is an explicit opt-in; the single query then
+runs transactionally and commits. Multiple SQL statements in one invocation
+are rejected.
+
+~~~bash
+zelyra db query src/main.zyl "SELECT id, email FROM customers" --format table
+zelyra db query src/main.zyl "SELECT count(*) AS total FROM customers" --format json
+zelyra db query src/main.zyl "SELECT id, name FROM customers" --format csv --limit 100
+zelyra db query src/main.zyl "SELECT id FROM invoices WHERE tenant_id = :tenant_id" --tenant 42
+~~~
+
+`--format` supports `table`, `json`, and RFC 4180 CSV. `--limit` bounds the
+returned rows by wrapping the query. `--tenant` binds only the explicit
+`:tenant_id` placeholder; it does not add a tenant predicate or make arbitrary
+SQL tenant-safe. `--allow-mutation` enables transactional `INSERT`, `UPDATE`,
+`DELETE`, and `REPLACE` statements. DDL and administrative SQL are rejected
+here because database DDL may commit implicitly; use `db apply` or the
+interactive client console for those operations.
+
 For MariaDB, `db setup` and its `db bootstrap` alias first try to create the
 database and then apply the generated schema. `DATABASE_URL` therefore needs
 administrative privileges for that operation. An application user with limited

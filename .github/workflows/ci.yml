@@ -341,6 +341,21 @@ jobs:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
           ZELYRA_BIN: target/debug/zelyra
         run: ./tests/mariadb-e2e.sh
+      - name: Run database CLI console integration test
+        env:
+          ZELYRA_DB_CLI_TEST_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+          ZELYRA_BIN: target/debug/zelyra
+        run: ./tests/cli-db-console.sh
+      - name: Run database CLI query integration test
+        env:
+          ZELYRA_DB_CLI_TEST_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+          ZELYRA_BIN: target/debug/zelyra
+        run: ./tests/cli-db-query.sh
+      - name: Run PostgreSQL CLI integration test
+        env:
+          ZELYRA_DB_CLI_POSTGRES_TEST_URL: postgresql://zelyra_ci:zelyra_ci@127.0.0.1:5432/zelyra_ci
+          ZELYRA_BIN: target/debug/zelyra
+        run: ./tests/cli-db-postgres.sh
       - name: Run SQLite schema integration test
         env:
           ZELYRA_BIN: target/debug/zelyra

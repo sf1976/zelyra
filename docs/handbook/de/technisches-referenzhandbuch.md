@@ -836,6 +836,41 @@ letzten Prüfpunkt; bei einem Abbruch während eines SQL-Befehls kann er nicht
 feststellen, ob das Schema teilweise geändert wurde. Die reservierte
 Verlaufstabelle erscheint nicht in der normalen Schemaansicht.
 
+### Direkte Datenbankabfragen und Datenbankkonsole
+
+`zelyra db console` startet den passenden MariaDB-/MySQL- oder PostgreSQL-
+Client auf dem Host. Zelyra löst die Verbindung über
+`ZELYRA_DATABASE_<NAME>_URL`, danach über `DATABASE_URL`, jeweils zuerst aus
+der Prozessumgebung und dann aus der Projekt-`.env`. Passwörter werden über
+`MYSQL_PWD` beziehungsweise `PGPASSWORD` an den Client übergeben und nicht als
+Argument angezeigt. Das Clientprogramm muss lokal installiert sein.
+
+~~~bash
+zelyra db console src/main.zyl
+~~~
+
+Für einzelne Abfragen gibt `db query` standardmäßig eine schreibgeschützte
+Datenbanktransaktion vor. `--allow-mutation` ist eine ausdrückliche Freigabe;
+die einzelne Abfrage wird dann transaktional ausgeführt und festgeschrieben.
+Mehrere SQL-Anweisungen in einem Aufruf sind nicht erlaubt.
+
+~~~bash
+zelyra db query src/main.zyl "SELECT id, email FROM customers" --format table
+zelyra db query src/main.zyl "SELECT count(*) AS total FROM customers" --format json
+zelyra db query src/main.zyl "SELECT id, name FROM customers" --format csv --limit 100
+zelyra db query src/main.zyl "SELECT id FROM invoices WHERE tenant_id = :tenant_id" --tenant 42
+~~~
+
+`--format` unterstützt `table`, `json` und RFC-4180-CSV. `--limit` begrenzt
+die ausgegebenen Zeilen durch eine umschließende Abfrage. `--tenant` bindet
+nur den ausdrücklich geschriebenen Parameter `:tenant_id`; die Option ergänzt
+keine Mandantenbedingung und macht beliebiges SQL nicht automatisch
+mandantensicher. Für Schreibzugriffe muss `--allow-mutation` bewusst ergänzt
+werden. Damit sind transaktionale `INSERT`-, `UPDATE`-, `DELETE`- und
+`REPLACE`-Anweisungen möglich. DDL und administrative SQL-Befehle werden hier
+abgewiesen, weil Datenbank-DDL je nach Engine implizit Transaktionen festschreibt;
+verwende dafür `db apply` oder die interaktive Clientkonsole.
+
 `db setup` und sein Alias `db bootstrap` versuchen bei MariaDB zuerst die
 Datenbank anzulegen und wenden anschließend das generierte Schema an. Dafür
 braucht `DATABASE_URL` administrative Rechte. Ein gewöhnlicher
