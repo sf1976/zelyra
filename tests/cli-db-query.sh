@@ -44,7 +44,7 @@ EOF
 json_output="$("${zelyra_bin}" db query "${project}/main.zyl" "SELECT count(*) AS total FROM items" --format json)"
 [[ "${json_output}" == '[{"total":1}]' ]]
 table_output="$("${zelyra_bin}" db query "${project}/main.zyl" "SELECT id, name FROM items" --format table)"
-[[ "${table_output}" == *"| 1  | a,b |"* ]]
+[[ "${table_output}" == *"| 1  | a,b  |"* ]]
 limited_output="$("${zelyra_bin}" db query "${project}/main.zyl" "SELECT id, name FROM items ORDER BY id" --format json --limit 1)"
 [[ "${limited_output}" == '[{"id":1,"name":"a,b"}]' ]]
 tenant_output="$("${zelyra_bin}" db query "${project}/main.zyl" "SELECT :tenant_id AS tenant_id" --tenant 42 --format json)"
