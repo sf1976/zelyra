@@ -247,7 +247,7 @@ abgeschlossen.
   [`v1.2.23`](https://github.com/sf1976/zelyra/releases/tag/v1.2.23); PR- und
   Release-Workflows waren erfolgreich. Siehe den
   [Arbeitsplan 1.2.23](release-plans/1.2.23-scoped-api-validation.en.md).
-- [~] **1.2.24 — mehrere transaktionale CRUD-Kindkollektionen (Release-Artefakte werden erstellt):** Den
+- [x] **1.2.24 — mehrere transaktionale CRUD-Kindkollektionen (veröffentlicht):** Den
   typisierten `has_many`-Pfad von einer auf mehrere benannte Kollektionen pro
   Create/Edit erweitern. Eltern- und Kindwerte vor dem Schreiben prüfen, alle
   deklarierten Kollektionen in derselben Datenbanktransaktion speichern oder
@@ -258,6 +258,8 @@ abgeschlossen.
   bei ungültiger zweiter Kollektion und Bearbeiten ohne Zugriff auf fremde
   Eltern belegen. Siehe den
   [Arbeitsplan 1.2.24](release-plans/1.2.24-multiple-crud-children.en.md).
+  Veröffentlicht als [`v1.2.24`](https://github.com/sf1976/zelyra/releases/tag/v1.2.24);
+  Linux- und Windows-Pakete, SHA-256-Dateien und SPDX-SBOMs sind verfügbar.
 - [~] **1.2.25 — native Datenbankkonsole und Abfragebefehle:** Native
   Clientweiterleitung für MariaDB/MySQL und PostgreSQL, Verbindungsauflösung
   aus benannten Projekt-URLs und `.env` sowie direkte Einzelabfragen mit

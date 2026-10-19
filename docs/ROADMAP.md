@@ -229,7 +229,7 @@ security and compatibility gates stated for that milestone.
   Released as [`v1.2.23`](https://github.com/sf1976/zelyra/releases/tag/v1.2.23);
   the full PR and release workflows passed. See the
   [1.2.23 plan](release-plans/1.2.23-scoped-api-validation.en.md).
-- [~] **1.2.24 — multiple transactional CRUD child collections (release artifacts building):** Extend the
+- [x] **1.2.24 — multiple transactional CRUD child collections (released):** Extend the
   existing typed `has_many` path from one child collection to multiple named
   collections on Create/Edit. Validate all parent and child values before
   writing, then save or replace every declared collection in the same database
@@ -240,6 +240,8 @@ security and compatibility gates stated for that milestone.
   two collections, an invalid second collection with full rollback, and edit
   replacement without cross-parent access. See the
   [1.2.24 work plan](release-plans/1.2.24-multiple-crud-children.en.md).
+  Released as [`v1.2.24`](https://github.com/sf1976/zelyra/releases/tag/v1.2.24);
+  Linux and Windows packages, SHA-256 sidecars, and SPDX SBOMs are available.
 - [~] **1.2.25 — native database console and query commands:** Add host client
   passthrough for MariaDB/MySQL and PostgreSQL, credential lookup from the
   project's named database URL and `.env`, and direct single-statement queries
