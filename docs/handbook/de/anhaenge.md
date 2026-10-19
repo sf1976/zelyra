@@ -149,6 +149,9 @@ page "/items" {
 | `zelyra init` | `[--mariadb]` | Initialisiert das aktuelle Verzeichnis als Zelyra-Projekt |
 | `zelyra check <file.zyl>` | `[--format json]` | Prüft Syntax, Typen, Verträge und Capabilities statisch |
 | `zelyra run <file.zyl>` | | Kompiliert und führt ein Zelyra-Programm aus |
+| `zelyra console [entry.zyl]` | `[--sandbox|--persist] [--tenant <id>]` | Startet die interaktive AST-Sprachkonsole; MariaDB/MySQL-Schreibvorgänge werden standardmäßig zurückgerollt |
+| `zelyra db console [file.zyl]` | | Startet den nativen Datenbankclient mit Projektverbindung |
+| `zelyra db query <file.zyl> <SQL>` | `[--format table|json|csv]` | Führt eine geprüfte Abfrage standardmäßig schreibgeschützt aus |
 | `zelyra serve <file.zyl>` | `[host:port]` | Startet den integrierten HTTP-Webserver |
 | `zelyra module plan <entry> <module-or-resource>` | | Experimentelle, schreibgeschützte Vorschau bekannter Modulabhängigkeiten |
 | `zelyra module bundle <entry> <module-or-resource>` | `--output <dir> [--dry-run] [--docker --compiler-ref <commit>]` | Exportiert ein geprüftes experimentelles Paket oder zeigt vorher einen JSON-Dateiplan; kein Vollständigkeitsnachweis |
@@ -173,6 +176,8 @@ page "/items" {
 | `zelyra form validate <file> <Form>` | | Prüft Formulare mit Testwerten auf der Konsole |
 | `zelyra context <file.zyl>` | `[--format json]` | Gibt den semantischen Quellcode-Kontext für Tools aus |
 | `zelyra module plan <entry> <module-or-resource-id>` | | Zeigt bekannte Quellabhängigkeiten und deklarierte Laufzeiteffekte; Blocker bleiben sichtbar, kein Deploymentexport |
+
+Weitere REPL-Befehle, Transaktionsgrenzen und Einschränkungen: [Sprachkonsole](../../language-console.de.md).
 
 ---
 

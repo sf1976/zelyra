@@ -52,6 +52,7 @@ impl Interpreter<'_> {
                         call_depth_limit: self.call_depth_limit,
                         call_depth: 0,
                         database_url: self.database_url.clone(),
+                        database_transaction: self.database_transaction.clone(),
                         storage_schema: self.storage_schema.clone(),
                         storage_checked: self.storage_checked,
                         scoped_tables: self.scoped_tables.clone(),

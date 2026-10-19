@@ -56,6 +56,8 @@ pub(super) struct AstInterpreter<'program> {
     pub(super) call_depth_limit: usize,
     pub(super) call_depth: usize,
     pub(super) database_url: Option<String>,
+    pub(super) database_transaction:
+        Option<Arc<Mutex<zelyra_database::MariaDbInteractiveTransaction>>>,
     pub(super) storage_schema: Result<zelyra_database::Schema, Vec<zelyra_database::SchemaError>>,
     pub(super) storage_checked: bool,
     pub(super) scoped_tables: Vec<String>,

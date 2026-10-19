@@ -1,0 +1,10 @@
+# Start with: zelyra console examples/language_console.zyl
+# Then try: welcome("Stefan")
+
+fn welcome(name: String) -> String {
+    return "Willkommen, " + name + "!"
+}
+
+fn main() {
+    print("Die Sprachkonsole ist bereit.")
+}

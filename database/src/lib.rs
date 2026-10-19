@@ -4813,6 +4813,186 @@ fn mariadb_pool_acquisition_message(detail: &str) -> &'static str {
     }
 }
 
+/// A MariaDB/MySQL connection held inside one open transaction. Dropping an
+/// unfinished session always rolls the transaction back before returning the
+/// connection to the pool.
+pub struct MariaDbInteractiveTransaction {
+    connection: Option<r2d2::PooledConnection<MariaDbConnectionManager>>,
+    mysql: bool,
+    settings: MariaDbTimeouts,
+    finished: bool,
+}
+
+impl MariaDbInteractiveTransaction {
+    /// Start a transaction that remains open across multiple console inputs.
+    pub fn begin(database_url: &str) -> Result<Self, DatabaseError> {
+        let settings = MariaDbTimeouts::from_env()?;
+        let tls = MariaDbTlsSettings::from_env()?;
+        let pool = mariadb_pool(database_url, settings, tls)?;
+        let mut connection = acquire_mariadb_connection(&pool, settings)?;
+        if let Err(error) = connection.connection.query_drop("START TRANSACTION") {
+            connection.discard = true;
+            return Err(mariadb_driver_error(error));
+        }
+        Ok(Self {
+            mysql: connection.mysql,
+            connection: Some(connection),
+            settings,
+            finished: false,
+        })
+    }
+
+    /// Execute one compiler-checked statement on the held connection.
+    pub fn execute(&mut self, query: &Query) -> Result<QueryResult, DatabaseError> {
+        let connection = self.connection.as_mut().ok_or_else(|| DatabaseError {
+            message: "interactive database transaction is no longer active".into(),
+        })?;
+        if let Some(remaining) = remaining_query_budget()? {
+            let seconds = remaining
+                .as_secs_f64()
+                .min(f64::from(self.settings.query_seconds));
+            if seconds < 0.001 {
+                return Err(DatabaseError {
+                    message: "request deadline exceeded before database statement".into(),
+                });
+            }
+            let timeout_sql = mysql_timeout_statement(self.mysql, seconds)?;
+            connection
+                .connection
+                .query_drop(timeout_sql)
+                .map_err(mariadb_driver_error)?;
+        }
+        let (sql, parameters) = prepare_mariadb_query(query)?;
+        execute_prepared_mariadb_query(&mut connection.connection, &sql, parameters)
+    }
+
+    /// Execute a logical transaction block atomically inside the console's
+    /// outer transaction using a savepoint.
+    pub fn execute_batch(&mut self, queries: &[Query]) -> Result<Vec<QueryResult>, DatabaseError> {
+        self.connection
+            .as_mut()
+            .ok_or_else(|| DatabaseError {
+                message: "interactive database transaction is no longer active".into(),
+            })?
+            .connection
+            .query_drop("SAVEPOINT _zelyra_repl_batch")
+            .map_err(mariadb_driver_error)?;
+        let mut results = Vec::with_capacity(queries.len());
+        for query in queries {
+            match self.execute(query) {
+                Ok(result) => results.push(result),
+                Err(error) => {
+                    if let Some(connection) = self.connection.as_mut() {
+                        let _ = connection
+                            .connection
+                            .query_drop("ROLLBACK TO SAVEPOINT _zelyra_repl_batch");
+                        let _ = connection
+                            .connection
+                            .query_drop("RELEASE SAVEPOINT _zelyra_repl_batch");
+                    }
+                    return Err(error);
+                }
+            }
+        }
+        self.connection
+            .as_mut()
+            .ok_or_else(|| DatabaseError {
+                message: "interactive database transaction is no longer active".into(),
+            })?
+            .connection
+            .query_drop("RELEASE SAVEPOINT _zelyra_repl_batch")
+            .map_err(mariadb_driver_error)?;
+        Ok(results)
+    }
+
+    /// Mark the beginning of one console input so runtime failures can undo
+    /// that input without discarding earlier successful inputs.
+    pub fn begin_input(&mut self) -> Result<(), DatabaseError> {
+        self.connection
+            .as_mut()
+            .ok_or_else(|| DatabaseError {
+                message: "interactive database transaction is no longer active".into(),
+            })?
+            .connection
+            .query_drop("SAVEPOINT _zelyra_repl_input")
+            .map_err(mariadb_driver_error)
+    }
+
+    /// Release the savepoint for a successfully evaluated console input.
+    pub fn finish_input(&mut self) -> Result<(), DatabaseError> {
+        self.connection
+            .as_mut()
+            .ok_or_else(|| DatabaseError {
+                message: "interactive database transaction is no longer active".into(),
+            })?
+            .connection
+            .query_drop("RELEASE SAVEPOINT _zelyra_repl_input")
+            .map_err(mariadb_driver_error)
+    }
+
+    /// Roll back only the current input after a parse/runtime failure.
+    pub fn rollback_input(&mut self) -> Result<(), DatabaseError> {
+        let connection = self.connection.as_mut().ok_or_else(|| DatabaseError {
+            message: "interactive database transaction is no longer active".into(),
+        })?;
+        connection
+            .connection
+            .query_drop("ROLLBACK TO SAVEPOINT _zelyra_repl_input")
+            .map_err(mariadb_driver_error)?;
+        connection
+            .connection
+            .query_drop("RELEASE SAVEPOINT _zelyra_repl_input")
+            .map_err(mariadb_driver_error)
+    }
+
+    /// Commit the current transaction explicitly.
+    pub fn commit(&mut self) -> Result<(), DatabaseError> {
+        let connection = self.connection.as_mut().ok_or_else(|| DatabaseError {
+            message: "interactive database transaction is no longer active".into(),
+        })?;
+        if let Err(error) = connection.connection.query_drop("COMMIT") {
+            connection.discard = true;
+            return Err(mariadb_driver_error(error));
+        }
+        if let Err(error) = connection.connection.query_drop("START TRANSACTION") {
+            connection.discard = true;
+            return Err(mariadb_driver_error(error));
+        }
+        self.finished = false;
+        Ok(())
+    }
+
+    /// Roll back the current transaction explicitly.
+    pub fn rollback(&mut self) -> Result<(), DatabaseError> {
+        let connection = self.connection.as_mut().ok_or_else(|| DatabaseError {
+            message: "interactive database transaction is no longer active".into(),
+        })?;
+        if let Err(error) = connection.connection.query_drop("ROLLBACK") {
+            connection.discard = true;
+            return Err(mariadb_driver_error(error));
+        }
+        if let Err(error) = connection.connection.query_drop("START TRANSACTION") {
+            connection.discard = true;
+            return Err(mariadb_driver_error(error));
+        }
+        self.finished = false;
+        Ok(())
+    }
+}
+
+impl Drop for MariaDbInteractiveTransaction {
+    fn drop(&mut self) {
+        if self.finished {
+            return;
+        }
+        if let Some(connection) = self.connection.as_mut() {
+            if connection.connection.query_drop("ROLLBACK").is_err() {
+                connection.discard = true;
+            }
+        }
+    }
+}
+
 fn run_mariadb(
     database_url: &str,
     query: &str,

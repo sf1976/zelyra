@@ -149,7 +149,12 @@ page "/items" {
 | `zelyra init` | `[--mariadb]` | Initializes current directory as Zelyra project |
 | `zelyra check <file.zyl>` | `[--format json]` | Statically checks syntax, types, contracts, and capabilities |
 | `zelyra run <file.zyl>` | | Compiles and executes a Zelyra program |
+| `zelyra console [entry.zyl]` | `[--sandbox|--persist] [--tenant <id>]` | Starts the interactive AST language console; MariaDB/MySQL writes roll back by default |
+| `zelyra db console [file.zyl]` | | Starts the native database client with project credentials |
+| `zelyra db query <file.zyl> <SQL>` | `[--format table|json|csv]` | Runs a checked query read-only by default |
 | `zelyra serve <file.zyl>` | `[host:port]` | Starts the built-in HTTP web server |
+See the [language console guide](../../language-console.en.md) for REPL commands, transaction boundaries, and limitations.
+
 | `zelyra module plan <entry> <module-or-resource>` | | Experimental read-only preview of known module dependencies |
 | `zelyra module bundle <entry> <module-or-resource>` | `--output <dir> [--dry-run] [--docker --compiler-ref <commit>]` | Writes a checked experimental bundle or previews its JSON file plan; not a completeness claim |
 | | `--docker --compiler-ref <40-character-commit>` | Generates Dockerfile, Compose app, and `.env.example`; closure remains incomplete |
@@ -173,6 +178,8 @@ page "/items" {
 | `zelyra form validate <file> <Form>` | | Tests forms with sample values on console |
 | `zelyra context <file.zyl>` | `[--format json]` | Emits semantic source context for developer tools |
 | `zelyra module plan <entry> <module-or-resource-id>` | | Shows known source dependencies and declared runtime effects; readiness blockers remain and it is not a deployment export |
+
+See the [language console guide](../../language-console.en.md) for REPL commands, transaction boundaries, and limitations.
 
 ---
 
